@@ -62,7 +62,12 @@ export function PendingApprovalsPanel({
   // 결정 진행 중인 요청 id — 더블클릭/중복 결정 방지 / Ids being decided, to disable buttons.
   const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
 
+  // 목록 열람 권한 — 서버 게이트(오너/승인자/sysadmin)와 동일. 없으면 조회 자체를 건너뛴다:
+  // 403 → 토스트 → 부모 상태 변경 → 이펙트 deps(콜백 아이덴티티) 재실행의 무한 재요청 루프 방지 (QA).
+  const canList = isOwner || isApprover;
+
   const reload = useCallback(async () => {
+    if (!canList) return;
     try {
       const rows = await listApprovalRequests(mapIdNum);
       setRequests(rows);
@@ -70,26 +75,31 @@ export function PendingApprovalsPanel({
     } catch (err) {
       onToast({ id: genId(), message: humanizeApiError(err, t) });
     }
-  }, [mapIdNum, onToast, onCountChange, t]);
+  }, [canList, mapIdNum, onToast, onCountChange, t]);
 
-  // 초기 로드 — active 가드로 언마운트 후 setState 방지 / Initial load with an unmount guard.
+  // 초기 로드 — active 가드로 언마운트 후 setState 방지. 실패는 조용히(벨 폴링 선례) —
+  // 초기 조회 에러 토스트는 위 루프의 연료가 된다 / Initial load; silent on failure.
   useEffect(() => {
     let active = true;
     void (async () => {
+      if (!canList) {
+        if (active) onCountChange?.(0);
+        return;
+      }
       try {
         const rows = await listApprovalRequests(mapIdNum);
         if (active) {
           setRequests(rows);
           onCountChange?.(countPending(rows));
         }
-      } catch (err) {
-        if (active) onToast({ id: genId(), message: humanizeApiError(err, t) });
+      } catch {
+        // 일시 실패/권한 경합 — 다음 상호작용(reload)에서 회복
       }
     })();
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast, onCountChange, t]);
+  }, [canList, mapIdNum, onCountChange]);
 
   const handleDecide = useCallback(
     async (requestId: number, decision: "approve" | "reject") => {

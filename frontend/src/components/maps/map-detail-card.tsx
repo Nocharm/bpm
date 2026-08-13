@@ -583,13 +583,19 @@ export function MapDetailCard({
                     // opacity/pointer-events(display 토글 아님) — 부서/그룹 행은 상위에 tabIndex가
                     // 없어 group-focus-within만으론 못 열림, 버튼 자체가 Tab 순서에 남아 있어야
                     // focus:opacity-100로 직접 도달 가능(display:none은 Tab에서 완전히 제외됨).
-                    className="absolute inset-0 flex items-center justify-center rounded-sm border border-error bg-surface px-1.5 py-0.5 text-fine text-error opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-error/10 focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
+                    // 버튼은 투명 히트영역(래퍼=라인박스 24px), 실제 필은 배지와 동일 지오메트리의
+                    // 내부 span — inset-0을 필에 직접 주면 상하 6px 커져 R5-1 위반.
+                    className="absolute inset-0 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-150 focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRemoveMember(perm);
                     }}
                   >
-                    {t("perm.removePill")}
+                    <span
+                      className={`rounded-sm border border-error bg-surface px-1.5 py-0.5 text-fine text-error transition-colors hover:bg-error/10 ${ROLE_PILL_WIDTH_CLASS}`}
+                    >
+                      {t("perm.removePill")}
+                    </span>
                   </button>
                 )}
               </span>

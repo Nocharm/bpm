@@ -7,12 +7,11 @@ import { ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-import { getMap, getMe, setDevUser } from "@/lib/api";
+import { getMap, getMe, listApprovers, setDevUser } from "@/lib/api";
 import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS, storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
 import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
@@ -127,9 +126,23 @@ export default function SettingsPage() {
   // Dev 유저 전환 모달 / Dev user switcher state.
   const [showDevSwitcher, setShowDevSwitcher] = useState(false);
 
-  // 현재 mock 유저 + 권한 상태 / Current mock user and permission state.
+  // 현재 mock 유저 / Current mock user.
   const currentMockUser = useCurrentMockUser();
-  const permState = usePermissions();
+
+  // 실제 맵 승인자 목록(서버 진실) — mock permState는 실서버 승인자를 몰라 결재 대기 탭이
+  // 승인자에게 안 뜨던 결함 교정 (QA C-3) / Real map approvers; mock store never knew them.
+  const [mapApprovers, setMapApprovers] = useState<string[]>([]);
+  useEffect(() => {
+    let active = true;
+    void listApprovers(Number(mapIdStr))
+      .then((ids) => {
+        if (active) setMapApprovers(ids);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [mapIdStr]);
 
   // 유효 역할 — 서버 산정 my_role 단일 소스(클라 재계산 폐기), sysadmin은 owner /
   // Effective role from server my_role (no client recompute); sysadmin = owner.
@@ -156,7 +169,7 @@ export default function SettingsPage() {
   // Pending approvals tab: visible only to map approvers or sysadmin.
   const canDecide =
     currentMockUser !== null &&
-    (currentMockUser.isSysadmin || isApprover(permState, currentMockUser.id, mapIdStr));
+    (currentMockUser.isSysadmin || mapApprovers.includes(currentMockUser.id));
 
   // 결재 대기 탭 노출 — 승인자/sysadmin OR 오너(rename/sp 결정권자) (설계 §C)
   const canSeeApprovals = canDecide || isOwner;

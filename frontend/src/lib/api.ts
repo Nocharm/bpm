@@ -194,7 +194,10 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
-let devUser: string | null = null;
+// 부트 시 localStorage에서 즉시 시드 — 페이지 init의 setDevUser보다 먼저 도는 폴러
+// (InboxBadge 등)의 첫 요청이 기본 유저로 나가는 레이스 방지 (QA C-5).
+let devUser: string | null =
+  typeof window === "undefined" ? null : window.localStorage.getItem("bpm.devUser");
 
 export function setDevUser(loginId: string | null): void {
   devUser = loginId;
