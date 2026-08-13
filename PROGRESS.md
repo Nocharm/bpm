@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 거버넌스 R4: 가시성 UX (feat/governance-r4)
 - 승인자 관리 모달 우측 상단에 맵 현재 가시성 배지 추가(Globe/Lock 아이콘, perm.visibilityPublic/perm.visibilityPrivate i18n).
+- U2 동봉 픽커 재설계: pill 행 → 라벨("Visibility"/"공개 범위") + 우측 드롭다운(Globe/Lock/ChevronDown, current 옵션엔 리터럴 "Current" 필). 3 사용처(에디터·패널·셀프 게시 팝오버) 배선 무변경, `perm.visibilityCurrent`는 `visibility-control.tsx`가 여전히 써서 유지.
 
 ## 2026-08-13 — 거버넌스 R3: 후속 정비 6건 (feat/governance-r3 → dev 머지)
 - R2 리뷰 이월분 정비: SP ⓘ 클릭이 접힘 토글 안 함(stopPropagation) · SP 등록 409 문구 i18n(`apiError.spDesignationPending`) · `stageRoleChange`로 원복 선택 시 staged op 소거(no-op 스택 방지, 협업자 패널 — 맵 카드는 role 변경 UI 없음) · 결재 대기 카운트에서 동봉 행 제외(`isBundledRow`, 목록 표시는 유지).
