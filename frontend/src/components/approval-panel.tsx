@@ -120,7 +120,7 @@ export function ApprovalPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 체크아웃 탭 — 워크플로 상태 헤더 위. draft/rejected에서만(그 외 비어 있어 숨김). 기본 접힘. */}
+      {/* 체크아웃 탭 — 워크플로 상태 헤더 위. draft에서만(그 외 비어 있어 숨김). 기본 접힘. */}
       {showCheckout && (
         <CheckoutPanel
           workflow={workflow}

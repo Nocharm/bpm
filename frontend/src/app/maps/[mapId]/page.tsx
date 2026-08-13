@@ -9402,20 +9402,29 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </span>
                         )}
                       </button>
-                      {(editorApprovalsSectionOpen || inspectorClosingKeys.has("editorApprovals")) && (
-                        <div className={inspectorClosingKeys.has("editorApprovals") ? "accordion-close" : "accordion-open"}>
-                          <div className="mt-2">
-                            <PendingApprovalsPanel
-                              mapId={String(mapId)}
-                              isOwner={myRole === "owner"}
-                              isApprover={isApprover || isSysadmin}
-                              onCountChange={setEditorApprovalsCount}
-                              onDecided={() => void refreshWorkflow()}
-                              onToast={(item) => showToast(item.message)}
-                            />
-                          </div>
+                      {/* 항상 마운트 — PendingApprovalsPanel의 마운트 fetch가 배지(editorApprovalsCount)의
+                          유일한 소스라 접힌 채로 언마운트하면 배지가 0에서 멈춘다. 완전히 닫힌 상태는
+                          display:none(hidden)로 마운트만 유지, 접히는 중엔 accordion-close 고스트 애니 재생. */}
+                      <div
+                        className={
+                          editorApprovalsSectionOpen
+                            ? "accordion-open"
+                            : inspectorClosingKeys.has("editorApprovals")
+                              ? "accordion-close"
+                              : "hidden"
+                        }
+                      >
+                        <div className="mt-2">
+                          <PendingApprovalsPanel
+                            mapId={String(mapId)}
+                            isOwner={myRole === "owner"}
+                            isApprover={isApprover || isSysadmin}
+                            onCountChange={setEditorApprovalsCount}
+                            onDecided={() => void refreshWorkflow()}
+                            onToast={(item) => showToast(item.message)}
+                          />
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* 드래프트 CTA — 옛 버전 행 자리, editor+ 전용·현재가 draft가 아닐 때만 (R6 W2) */}
