@@ -23,6 +23,7 @@ import {
   type Group,
   type PrincipalType,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -50,11 +51,6 @@ const PRINCIPAL_TABS: { id: PrincipalType; labelKey: MessageKey }[] = [
 function principalLabel(type: PrincipalType, t: (key: MessageKey) => string): string {
   const entry = PRINCIPAL_TABS.find((candidate) => candidate.id === type);
   return entry ? t(entry.labelKey) : type;
-}
-
-/** 실패 메시지 추출 — 코드베이스 공통 관례(err instanceof Error ? err.message : String(err)). */
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 /** org_path → 한글 부서명. coverage-depts API는 경로 문자열만 주므로 디렉터리에서 조인. */
@@ -148,7 +144,7 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
       if (err instanceof ApiError && err.status === 409) {
         onToast?.(t("dashboard.accessDuplicate"));
       } else {
-        onToast?.(describeError(err));
+        onToast?.(humanizeApiError(err, t));
       }
     }
   }
@@ -158,7 +154,7 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
       await deleteDashboardPermission(permissionId);
       setPermissions((prev) => prev.filter((row) => row.id !== permissionId));
     } catch (err) {
-      onToast?.(describeError(err));
+      onToast?.(humanizeApiError(err, t));
     }
   }
 
@@ -170,7 +166,7 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
       onToast?.(t("dashboard.coverageSaved"));
       onCoverageChange?.();
     } catch (err) {
-      onToast?.(describeError(err));
+      onToast?.(humanizeApiError(err, t));
     }
   }
 

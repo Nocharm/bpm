@@ -49,7 +49,7 @@ interface VersionsPublishPanelProps {
   /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 픽커를 숨긴다 / Owner-only bundle option. */
   canBundle: boolean;
   /** 액션 실패(403/409/422) 토스트 / Toast for action failures. */
-  onToast?: (msg: string) => void;
+  onToast?: (msg: string, tone?: "error") => void;
   /** 액션 성공 후 호출 — 동봉 가시성 변경이 맵 레벨 상태(visibility)를 바꿀 수 있어 호스트가 재조회하도록 신호 / Notify host after a successful action, since bundled visibility changes affect map-level state. */
   onChanged?: () => void;
 }
@@ -153,7 +153,7 @@ interface VersionRowProps {
   visibility: "public" | "private";
   canBundle: boolean;
   nameById: Map<string, string>;
-  onToast?: (msg: string) => void;
+  onToast?: (msg: string, tone?: "error") => void;
   onChanged?: () => void;
 }
 
@@ -180,9 +180,9 @@ function VersionRow({
       const next = await getWorkflowState(versionId);
       setWf(next);
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : String(err));
+      onToast?.(humanizeApiError(err, t), "error");
     }
-  }, [versionId, onToast]);
+  }, [versionId, onToast, t]);
 
   useEffect(() => {
     let active = true;
@@ -191,13 +191,13 @@ function VersionRow({
         const next = await getWorkflowState(versionId);
         if (active) setWf(next);
       } catch (err) {
-        if (active) onToast?.(err instanceof Error ? err.message : String(err));
+        if (active) onToast?.(humanizeApiError(err, t), "error");
       }
     })();
     return () => {
       active = false;
     };
-  }, [versionId, onToast]);
+  }, [versionId, onToast, t]);
 
   // 액션 실행 헬퍼 — 호출 후 워크플로 재조회, 실패 시 토스트 / Run an action, then refetch; surface failures.
   // 성공 시 onChanged로 호스트에 알림 — 동봉 가시성 변경이 맵 레벨 visibility를 바꿔 이 행 밖의 상태(VisibilityControl 등)도 재조회돼야 함.
@@ -209,7 +209,7 @@ function VersionRow({
         await reload();
         onChanged?.();
       } catch (err) {
-        onToast?.(humanizeApiError(err, t));
+        onToast?.(humanizeApiError(err, t), "error");
       } finally {
         setBusy(false);
       }

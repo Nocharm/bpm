@@ -16,6 +16,7 @@ import {
   getDirectory,
   postDeptRemap,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -171,7 +172,7 @@ export function DepartmentTable() {
           ),
         );
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) => setError(humanizeApiError(err, t)));
     // active 기준 부서(피커·한글명 보강) — 퇴직자만 남은 부서는 여기 안 온다
     getDirectory()
       .then((dir) => setDirDepts(dir.departments))
@@ -179,7 +180,7 @@ export function DepartmentTable() {
     getDeptRemap()
       .then(setMissingRefs)
       .catch(() => setMissingRefs([]));
-  }, [reloadKey]);
+  }, [reloadKey, t]);
 
   const applyRemap = async (fromPath: string) => {
     const toPath = remapTargets[fromPath];
@@ -193,7 +194,7 @@ export function DepartmentTable() {
       );
       setReloadKey((k) => k + 1);
     } catch (err) {
-      setRemapMsg(err instanceof Error ? err.message : "remap failed");
+      setRemapMsg(humanizeApiError(err, t));
     } finally {
       setRemapBusy(false);
     }

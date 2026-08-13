@@ -922,8 +922,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const removeToast = useCallback((id: string) => {
     setToasts((cur) => cur.filter((toast) => toast.id !== id));
   }, []);
-  const showToast = useCallback((message: string) => {
-    setToasts((cur) => [{ id: genId(), message }, ...cur]);
+  const showToast = useCallback((message: string, tone?: "error") => {
+    setToasts((cur) => [{ id: genId(), message, tone }, ...cur]);
   }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -1598,10 +1598,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setSaveState("error");
       // 실패 상세는 상단 배너로 노출 — 다음 저장 성공까지 유지
-      setSaveErrorDetail(err instanceof Error ? err.message : String(err));
+      setSaveErrorDetail(humanizeApiError(err, t));
       throw err;
     }
-  }, [versionId, readOnly, refreshFullGraph]);
+  }, [versionId, readOnly, refreshFullGraph, t]);
 
   const scheduleAutoSave = useCallback(() => {
     // 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
@@ -1798,7 +1798,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       showToast(t("csvImport.applied"));
     } catch (err) {
       // 프리뷰를 유지한 채 실패만 알린다 — 다시 Apply 하거나 Cancel 할 수 있다 (423/409)
-      showToast(err instanceof Error ? err.message : t("err.save"));
+      showToast(humanizeApiError(err, t), "error");
     }
   }, [versionId, csvOutcome, csvKeepRemoved, setNodes, setEdges, setGroups, refreshFullGraph, showToast, t]);
 
@@ -2160,7 +2160,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           if (err instanceof ApiError && err.status === 403) {
             setAccessDenied(true); // 권한 없음 — 에러 문자열 대신 안내 모달
           } else {
-            setStatus(err instanceof Error ? err.message : t("err.loadMap"));
+            setStatus(humanizeApiError(err, t));
           }
         }
       }
@@ -2426,7 +2426,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.loadCanvas"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     })();
@@ -2477,7 +2477,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSearchIndex(0);
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.search"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     })();
@@ -2549,7 +2549,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       checkoutMineRef.current = state.mine;
       setCheckout(state);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.forceCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   }, [versionId, t]);
 
@@ -2593,7 +2593,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await createComment(versionId, selectedId, body);
         await refreshComments();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.addComment"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [versionId, selectedId, refreshComments, t],
@@ -2605,7 +2605,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await updateComment(comment.id, !comment.resolved);
         await refreshComments();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.toggleComment"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [refreshComments, t],
@@ -2617,9 +2617,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await deleteComment(comment.id);
         await refreshComments();
       } catch (err) {
-        setStatus(
-          err instanceof Error ? err.message : t("err.deleteComment"),
-        );
+        setStatus(humanizeApiError(err, t));
       }
     },
     [refreshComments, t],
@@ -2654,7 +2652,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await saveCurrentScope();
     } catch (err) {
       // 저장 실패(예: 시작/끝 노드 없음)는 상단 배너 대신 토스트로 안내 (#7)
-      showToast(err instanceof Error ? err.message : t("err.save"));
+      showToast(humanizeApiError(err, t), "error");
     }
   }, [getSaveBlockers, saveCurrentScope, showToast, t]);
 
@@ -2670,7 +2668,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : t("err.save"));
+        showToast(humanizeApiError(err, t), "error");
         return;
       }
       // 동봉 선택은 오픈 시점에 리셋 — dismiss(Escape/바깥클릭/닫기) 경로는 confirm과 달리 값을 지우지
@@ -2760,7 +2758,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         try {
           await saveCurrentScope();
         } catch (err) {
-          setStatus(err instanceof Error ? err.message : t("err.save"));
+          setStatus(humanizeApiError(err, t));
           return;
         }
       }
@@ -2805,7 +2803,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.save"));
+        setStatus(humanizeApiError(err, t));
         return;
       }
       setActiveIndex(index);
@@ -2872,7 +2870,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.save"));
+        setStatus(humanizeApiError(err, t));
         return;
       }
       setVersionId(nextVersionId);
@@ -2929,8 +2927,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         setActiveIndex(0);
       } catch (err) {
         // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
-        const msg = err instanceof Error ? err.message : "";
-        showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
+        const isDraftConflict = err instanceof ApiError && err.status === 409;
+        showToast(isDraftConflict ? t("err.versionDraftExists") : t("err.createVersion"), "error");
       }
     } else {
       try {
@@ -2938,7 +2936,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const detail = await getMap(mapId);
         setVersions(detail.versions);
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+        setStatus(humanizeApiError(err, t));
       }
     }
   };
@@ -2963,7 +2961,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2976,7 +2974,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await requestCheckout(versionId);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2986,7 +2984,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await decideCheckoutRequest(requestId, approve);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.decideCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2995,7 +2993,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await withdrawCheckoutRequest(requestId);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -3009,7 +3007,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setTransferTarget(others[0]?.id ?? "");
       setTransferOpen(true);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -3021,7 +3019,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await transferCheckout(versionId, transferTarget);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -3037,7 +3035,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.republish"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -4929,7 +4927,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.exportPng"));
+      setStatus(humanizeApiError(err, t));
     }
   }, [buildExportFileName, t]);
 
@@ -5044,7 +5042,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // word 맵은 fit-to-page 끔 → 도형 정확히 1.5×3cm(스프레드 시 페이지 초과 가능).
       exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""), !isWordMap);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.exportWord"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -5069,7 +5067,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         console.warn("word-doc generated stamp failed", err),
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Complete document generation failed");
+      setStatus(humanizeApiError(err, t));
     }
   };
 

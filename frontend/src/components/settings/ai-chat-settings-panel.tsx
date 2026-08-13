@@ -5,11 +5,12 @@ import { Database, Lightbulb, Power } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { getAppSettings, putAppSettings, type AppSettings } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
 interface AiChatSettingsPanelProps {
-  onToast?: (message: string) => void;
+  onToast?: (message: string, tone?: "error") => void;
 }
 
 export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
@@ -61,7 +62,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
       setAppSettings(next);
       onToast?.(t("aiLog.limitsSaved"));
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
+      onToast?.(humanizeApiError(err, t), "error");
     } finally {
       setBusy(false);
     }
@@ -76,7 +77,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
       setAppSettings(next);
       onToast?.(next.ai_access_disabled ? "AI access disabled" : "AI access enabled");
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
+      onToast?.(humanizeApiError(err, t), "error");
     } finally {
       setBusy(false);
     }
@@ -96,7 +97,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
       setTipsDraft(next.ai_chat_tips.join("\n"));
       onToast?.(t("aiLog.tipsSaved"));
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : t("aiLog.error"));
+      onToast?.(humanizeApiError(err, t), "error");
     } finally {
       setBusy(false);
     }

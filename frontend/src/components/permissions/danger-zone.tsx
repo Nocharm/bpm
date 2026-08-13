@@ -14,6 +14,7 @@ import {
   transferMapOwner,
   type MapPermission,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
@@ -24,7 +25,7 @@ interface DangerZoneProps {
   /** 현재 유저 id / Current user id. */
   currentUserId: string;
   /** 토스트 발행 콜백 / Callback to show a toast. */
-  onToast: (msg: string) => void;
+  onToast: (msg: string, tone?: "error") => void;
 }
 
 // 문자열 치환 헬퍼 / Simple string substitution helper.
@@ -55,13 +56,13 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
         const rows = await listMapPermissions(mapIdNum);
         if (active) setPerms(rows);
       } catch (err) {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t), "error");
       }
     })();
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   // 표시명 해석 — mock 시드 사용 / Resolve display name from mock seed.
   const userName = useCallback(
@@ -92,7 +93,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
       // 이전 후 자신의 역할은 editor로 강등 — 설정 화면을 떠나 편집기로 / Demoted to editor: leave settings.
       router.push(`/maps/${mapId}`);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
       setShowTransferModal(false);
     }
   }
@@ -104,7 +105,7 @@ export function DangerZone({ mapId, currentUserId, onToast }: DangerZoneProps) {
       setShowDeleteModal(false);
       router.push("/");
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
       setShowDeleteModal(false);
     }
   }

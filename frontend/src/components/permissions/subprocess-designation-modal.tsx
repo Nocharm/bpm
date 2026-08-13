@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
@@ -72,12 +73,12 @@ export function SubprocessDesignationModal({
         setPreviews(next);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, [publishedVersionId]);
+  }, [publishedVersionId, t]);
 
   // placeholder는 표시 전용(저장 안 됨) — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김
   function getPreviewText(field: SpParamField): string | undefined {
@@ -96,7 +97,7 @@ export function SubprocessDesignationModal({
       const total = sumParamField(graphRef.current, field);
       setForm((prev) => ({ ...prev, [field]: total }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
     } finally {
       setSumming(false);
     }
@@ -122,7 +123,7 @@ export function SubprocessDesignationModal({
       });
       onSaved(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
       setSaving(false);
     }
   }

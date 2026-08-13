@@ -36,7 +36,7 @@ interface SubprocessInspectorCardProps {
   disabledReason: string | null; // canManage=false일 때 비활성 사유(i18n 처리된 문자열, 표시용)
   // disabledReason의 구분값 — 문자열 비교 대신 이걸로 분기(R10)
   disabledReasonKind?: "needPublished" | "ownerOnly" | null;
-  onToast?: (message: string) => void;
+  onToast?: (message: string, tone?: "error") => void;
   // 지정/해제 성공 후 — page.tsx가 usage를 재조회해 Subprocess 탭 노출을 동기화
   onDesignationChange?: () => void;
   // needPublished 사유일 때 "게시본 가기" 버튼 — page.tsx의 switchVersion 위임(R10)
@@ -177,7 +177,7 @@ export function SubprocessInspectorCard({
       onToast?.(t("perm.sp.removed"));
       onDesignationChange?.();
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : String(err));
+      onToast?.(humanizeApiError(err, t), "error");
     } finally {
       setSaving(false);
       setShowUndesignate(false);
