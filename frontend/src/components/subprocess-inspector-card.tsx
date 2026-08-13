@@ -4,7 +4,7 @@
 // 지정은 다른 맵이 이 맵을 서브프로세스 노드로 연결(임베드)하기 위한 절차 — 노트로 안내.
 // 변경은 게시된 버전이 열린 상태에서 오너·관리자만 가능(비활성 시 사유 노트 표시).
 
-import { ChevronRight, Info, Workflow } from "lucide-react";
+import { ArrowRight, BadgeCheck, ChevronRight, Info, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -252,7 +252,8 @@ export function SubprocessInspectorCard({
             </div>
           )}
 
-          <div className="mt-2 flex gap-1.5">
+          {/* 액션 행 — 좌측 지정/수정+해제, 우측(ml-auto) 사유별 액션(R10에서 이동, R6 W4). 버튼이 항상 있어 행 자체가 앵커. */}
+          <div className="mt-2 flex items-center gap-1.5">
             {designated ? (
               <>
                 <button
@@ -278,58 +279,69 @@ export function SubprocessInspectorCard({
               <button
                 type="button"
                 data-id="sp-inspector-designate"
-                className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 onClick={openModal}
                 disabled={!canManage || saving}
               >
+                <Workflow size={14} strokeWidth={1.5} />
                 {t("perm.sp.designate")}
               </button>
             )}
-          </div>
 
-          {/* 비활성 사유 — 버튼은 항상 표시하되 왜 안 되는지 노트로 안내 + 사유별 액션(R10) */}
-          {!canManage && disabledReason && (
-            <div data-id="sp-inspector-reason" className="mt-1.5 flex items-center justify-between gap-2">
-              <p className="text-fine text-ink-tertiary">{disabledReason}</p>
-
-              {disabledReasonKind === "needPublished" && publishedVersionId !== null && onGoToPublished && (
-                <button
-                  type="button"
-                  data-id="sp-go-published"
-                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
-                  onClick={() => onGoToPublished(publishedVersionId)}
-                >
-                  {t("inbox.sp.goPublished")}
-                </button>
-              )}
-
-              {disabledReasonKind === "ownerOnly" &&
-                !designated &&
-                (spPending ? (
-                  <Tooltip content={`${spPending.requested_by} · ${formatKstShort(spPending.created_at)}`}>
-                    <span className="inline-flex">
-                      <button
-                        type="button"
-                        data-id="sp-request-registration"
-                        className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
-                        disabled
-                      >
-                        {t("sp.request.pendingLabel")}
-                      </button>
-                    </span>
-                  </Tooltip>
-                ) : (
+            {!canManage && disabledReason && (
+              <>
+                {disabledReasonKind === "needPublished" && publishedVersionId !== null && onGoToPublished && (
                   <button
                     type="button"
-                    data-id="sp-request-registration"
-                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
-                    onClick={() => void handleRequestRegistration()}
-                    disabled={spRequestBusy}
+                    data-id="sp-go-published"
+                    className="ml-auto inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
+                    onClick={() => onGoToPublished(publishedVersionId)}
                   >
-                    {t("sp.request.ctaSelf")}
+                    <ArrowRight size={14} strokeWidth={1.5} />
+                    {t("inbox.sp.goPublished")}
                   </button>
-                ))}
-            </div>
+                )}
+
+                {disabledReasonKind === "ownerOnly" &&
+                  !designated &&
+                  (spPending ? (
+                    <Tooltip
+                      content={`${spPending.requested_by} · ${formatKstShort(spPending.created_at)}`}
+                      className="ml-auto"
+                    >
+                      <span className="inline-flex">
+                        <button
+                          type="button"
+                          data-id="sp-request-registration"
+                          className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+                          disabled
+                        >
+                          <BadgeCheck size={14} strokeWidth={1.5} />
+                          {t("sp.request.pendingLabel")}
+                        </button>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <button
+                      type="button"
+                      data-id="sp-request-registration"
+                      className="ml-auto inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+                      onClick={() => void handleRequestRegistration()}
+                      disabled={spRequestBusy}
+                    >
+                      <BadgeCheck size={14} strokeWidth={1.5} />
+                      {t("sp.request.ctaSelf")}
+                    </button>
+                  ))}
+              </>
+            )}
+          </div>
+
+          {/* 비활성 사유 — 순수 노트(버튼은 위 액션 행으로 이동, R6 W4) */}
+          {!canManage && disabledReason && (
+            <p data-id="sp-inspector-reason" className="mt-1.5 text-fine text-ink-tertiary">
+              {disabledReason}
+            </p>
           )}
           {spRequestError && (
             <p data-id="sp-request-error" className="mt-1 text-fine text-error">
