@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyStagedOps, removeStagedOp, upsertStagedOp, type StagedOp } from "./permission-staging";
+import { applyStagedOps, removeStagedOp, stageRoleChange, upsertStagedOp, type StagedOp } from "./permission-staging";
 import { addMapPermission, changeMapPermission, removeMapPermission } from "./api";
 
 // 외부 API만 모킹 — 스택 적립/실행 로직은 실코드 경로로 검증 (self-publish.test.ts 스타일 참고).
@@ -49,6 +49,29 @@ describe("upsertStagedOp", () => {
     const second = upsertStagedOp(first, { kind: "change", permissionId: 5, toRole: "viewer" });
 
     expect(second).toEqual([{ kind: "change", permissionId: 5, toRole: "viewer" }]);
+  });
+});
+
+describe("stageRoleChange", () => {
+  it("toRole이 currentRole과 같으면 기존 change op를 소거한다(no-op 재선택)", () => {
+    const ops: StagedOp[] = [{ kind: "change", permissionId: 5, toRole: "editor" }];
+    const next = stageRoleChange(ops, 5, "viewer", "viewer");
+
+    expect(next).toEqual([]);
+  });
+
+  it("staged remove 상태에서 currentRole을 다시 선택하면 remove도 소거된다", () => {
+    const ops: StagedOp[] = [{ kind: "remove", permissionId: 5 }];
+    const next = stageRoleChange(ops, 5, "viewer", "viewer");
+
+    expect(next).toEqual([]);
+  });
+
+  it("다른 role이면 upsert와 동일하게 change op를 적립한다", () => {
+    const ops: StagedOp[] = [];
+    const next = stageRoleChange(ops, 5, "editor", "viewer");
+
+    expect(next).toEqual([{ kind: "change", permissionId: 5, toRole: "editor" }]);
   });
 });
 

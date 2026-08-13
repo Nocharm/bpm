@@ -4,6 +4,10 @@ import type { MessageKey } from "./i18n-messages";
 
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
+// checkout/submit 2종 모두 이 문구로 시작 (backend app/routers/versions.py:289,565).
+// 체크아웃 폴 effect(page.tsx)가 이 특정 409를 감지해 폴링을 중지하는 데도 재사용 — 문자열은 이 한 곳뿐.
+export const PERMISSION_PENDING_DETAIL_PREFIX = "your permission change is pending approval";
+
 // 서버 detail 원문(영어, 고정 프리픽스) → i18n 시맨틱 키. 전방일치이므로 접미사가 붙는 detail도 커버.
 const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
   ["a visibility change request is already pending", "apiError.visibilityPending"],
@@ -14,10 +18,10 @@ const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
   // decide/withdraw 2종 모두 이 문구로 시작 (backend app/routers/permissions.py:569,605)
   ["bundled with a version submission", "apiError.bundledWithVersion"],
   ["collaborator is in an active version workflow", "apiError.activeWorkflow"],
-  // checkout/submit 2종 모두 이 문구로 시작 (backend app/routers/versions.py:289,565)
-  ["your permission change is pending approval", "apiError.permissionPending"],
+  [PERMISSION_PENDING_DETAIL_PREFIX, "apiError.permissionPending"],
   ["sync throttled", "apiError.syncThrottled"],
   ["only the owner can bundle", "apiError.ownerOnlyBundle"],
+  ["a designation request is already pending", "apiError.spDesignationPending"],
 ];
 
 export function humanizeApiError(err: unknown, t: TFunc): string {

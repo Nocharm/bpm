@@ -221,9 +221,11 @@ export function SubprocessInspectorCard({
           <Workflow size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
           <span className="truncate">{t("inspector.spTitle")}</span>
           {/* 연결 절차 안내 — 호버 툴팁(제목 옆) */}
-          <Tooltip content={t("inspector.spNoteFull")}>
-            <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          </Tooltip>
+          <span onClick={(e) => e.stopPropagation()}>
+            <Tooltip content={t("inspector.spNoteFull")}>
+              <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            </Tooltip>
+          </span>
         </span>
         {/* 지정 상태 뱃지 — 영어 고정(승인상태 뱃지 규칙과 동일). 접힘 상태에서도 항상 보임(헤더는 항상 렌더) */}
         {designated ? (

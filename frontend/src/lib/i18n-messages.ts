@@ -1268,7 +1268,6 @@ const en = {
   "perm.createDialog.collaboratorRoleViewer": "Viewer",
   "perm.createDialog.collaboratorRoleEditor": "Editor",
   "perm.createDialog.clickToToggleRole": "Click to change role (viewer/editor)",
-  "perm.createDialog.collaboratorRoleViewerDisabled": "Viewer (public map already grants view access)",
   "perm.createDialog.addBtn": "Add",
   "perm.createDialog.approversLabel": "Required approvers (≥1)",
   "perm.createDialog.approversHint": "At least one approver required before creating.",
@@ -1601,6 +1600,7 @@ const en = {
   "apiError.permissionPending": "Your permission change is still pending approval.",
   "apiError.syncThrottled": "Sync was throttled — please try again shortly.",
   "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
+  "apiError.spDesignationPending": "A registration request is already pending for this map.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -2869,7 +2869,6 @@ const ko: Record<MessageKey, string> = {
   "perm.createDialog.collaboratorRoleViewer": "Viewer",
   "perm.createDialog.collaboratorRoleEditor": "Editor",
   "perm.createDialog.clickToToggleRole": "클릭하여 권한 변경 (뷰어/편집자)",
-  "perm.createDialog.collaboratorRoleViewerDisabled": "뷰어 (공개 맵은 기본 열람 가능)",
   "perm.createDialog.addBtn": "추가",
   "perm.createDialog.approversLabel": "결재자 (1명 이상 필수)",
   "perm.createDialog.approversHint": "맵 생성 전 결재자를 1명 이상 지정해야 합니다.",
@@ -3200,6 +3199,7 @@ const ko: Record<MessageKey, string> = {
   "apiError.permissionPending": "권한 변경이 아직 승인 대기 중입니다.",
   "apiError.syncThrottled": "동기화가 제한되었습니다 — 잠시 후 다시 시도하세요.",
   "apiError.ownerOnlyBundle": "맵 소유자만 버전 제출과 함께 묶을 수 있습니다.",
+  "apiError.spDesignationPending": "이미 이 맵의 등록 요청이 승인 대기 중입니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
