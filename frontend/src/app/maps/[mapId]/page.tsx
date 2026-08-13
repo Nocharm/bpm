@@ -62,6 +62,7 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { StatusBadge } from "@/components/status-badge";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
@@ -6474,6 +6475,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [edgeStyleSectionOpen, setEdgeStyleSectionOpen] = useState(false);
   const { closingKeys: inspectorClosingKeys, beginClose: beginInspectorClose, cancelClose: cancelInspectorClose } =
     useClosingKeys<string>();
+  // 승인 탭 접힘 섹션 — 결재 대기는 기본 접힘, 워크플로는 기본 펼침(R6 W2). 위 accordion 인스턴스를
+  // 키("editorApprovals"/"approvalWorkflow")로 공유.
+  const [editorApprovalsSectionOpen, setEditorApprovalsSectionOpen] = useState(false);
+  const [approvalWorkflowSectionOpen, setApprovalWorkflowSectionOpen] = useState(true);
 
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
@@ -9370,32 +9375,134 @@ function MapEditor({ mapId }: { mapId: number }) {
                   </div>
                 }
                 approvalSlot={
-                  // R5c 승인 탭 — 워크플로 + 타임라인. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
+                  // R5c 승인 탭. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
+                  // R6 W2: 결재 대기를 최상단으로 재배치·드래프트 CTA 신설(옛 버전 행 자리)·워크플로는 접힘 섹션(기본 펼침)으로 래핑
                   <div className="flex flex-col gap-4">
-                    {currentVersion && (
-                    <ApprovalPanel
-                      status={currentVersion.status}
-                      workflow={workflow}
-                      isCheckoutHolder={checkout?.mine ?? false}
-                      isApprover={isApprover}
-                      isSubmitter={isSubmitter}
-                      canWithdraw={canWithdraw}
-                      hasApproved={hasApproved}
-                      canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
-                      onSubmit={(at) => void handleSubmitForApproval(at)}
-                      onApprove={() => setApproveConfirmOpen(true)}
-                      onReject={() => setRejectOpen(true)}
-                      onPublish={() => setPublishConfirmOpen(true)}
-                      onWithdraw={() => setWithdrawConfirmOpen(true)}
-                      onManageApprovers={() => setManagingApprovers(true)}
-                      username={username}
-                      canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
-                      onDecideCheckout={(requestId, approve) =>
-                        void handleDecideCheckout(requestId, approve)
-                      }
-                      onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
-                    />
+                    {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 최상단·기본 접힘 (R8, R6 W2 재배치) */}
+                    <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
+                      <button
+                        type="button"
+                        aria-expanded={editorApprovalsSectionOpen}
+                        onClick={() => {
+                          if (editorApprovalsSectionOpen) beginInspectorClose("editorApprovals");
+                          else cancelInspectorClose("editorApprovals");
+                          setEditorApprovalsSectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${editorApprovalsSectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine font-semibold text-ink">{t("perm.tabPendingApprovals")}</span>
+                        {editorApprovalsCount > 0 && (
+                          <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
+                            {editorApprovalsCount}
+                          </span>
+                        )}
+                      </button>
+                      {(editorApprovalsSectionOpen || inspectorClosingKeys.has("editorApprovals")) && (
+                        <div className={inspectorClosingKeys.has("editorApprovals") ? "accordion-close" : "accordion-open"}>
+                          <div className="mt-2">
+                            <PendingApprovalsPanel
+                              mapId={String(mapId)}
+                              isOwner={myRole === "owner"}
+                              isApprover={isApprover || isSysadmin}
+                              onCountChange={setEditorApprovalsCount}
+                              onDecided={() => void refreshWorkflow()}
+                              onToast={(item) => showToast(item.message)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 드래프트 CTA — 옛 버전 행 자리, editor+ 전용·현재가 draft가 아닐 때만 (R6 W2) */}
+                    {currentVersion && isEditorRole && currentVersion.status !== "draft" && (
+                      <button
+                        type="button"
+                        data-id="approval-draft-cta"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent bg-accent-tint/40 px-3 py-2 text-caption text-accent hover:bg-accent-tint"
+                        onClick={() => {
+                          if (hasDraft) {
+                            const draft = versions.find((v) => v.status === "draft");
+                            if (draft) void switchVersion(draft.id);
+                          } else {
+                            handleCreateVersion();
+                          }
+                        }}
+                      >
+                        {hasDraft ? (
+                          <>
+                            <PencilLine size={14} strokeWidth={1.5} />
+                            {t("approval.goDraftCta")}
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={14} strokeWidth={1.5} />
+                            {t("approval.createDraftCta")}
+                          </>
+                        )}
+                      </button>
                     )}
+
+                    {/* 승인 워크플로 — 접힘 섹션(기본 펼침, 탭의 본론), 내부 ApprovalPanel은 무변경(래핑만) (R6 W2) */}
+                    {currentVersion && (
+                      <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
+                        <button
+                          type="button"
+                          aria-expanded={approvalWorkflowSectionOpen}
+                          onClick={() => {
+                            if (approvalWorkflowSectionOpen) beginInspectorClose("approvalWorkflow");
+                            else cancelInspectorClose("approvalWorkflow");
+                            setApprovalWorkflowSectionOpen((v) => !v);
+                          }}
+                          className="flex w-full items-center gap-1.5 text-left"
+                        >
+                          <ChevronRight
+                            size={14}
+                            strokeWidth={1.5}
+                            className={`shrink-0 transition-transform ${approvalWorkflowSectionOpen ? "rotate-90" : ""}`}
+                          />
+                          <span className="text-fine font-semibold text-ink">{t("approval.workflowSection")}</span>
+                          {/* 상태 배지 — 접힌 상태에서도 한눈에 보이도록 헤더 행에 (R6 W2 리뷰 수정) */}
+                          <span className="ml-auto">
+                            <StatusBadge status={currentVersion.status} />
+                          </span>
+                        </button>
+                        {(approvalWorkflowSectionOpen || inspectorClosingKeys.has("approvalWorkflow")) && (
+                          <div className={inspectorClosingKeys.has("approvalWorkflow") ? "accordion-close" : "accordion-open"}>
+                            <div className="mt-2">
+                              <ApprovalPanel
+                                status={currentVersion.status}
+                                workflow={workflow}
+                                isCheckoutHolder={checkout?.mine ?? false}
+                                isApprover={isApprover}
+                                isSubmitter={isSubmitter}
+                                canWithdraw={canWithdraw}
+                                hasApproved={hasApproved}
+                                canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
+                                onSubmit={(at) => void handleSubmitForApproval(at)}
+                                onApprove={() => setApproveConfirmOpen(true)}
+                                onReject={() => setRejectOpen(true)}
+                                onPublish={() => setPublishConfirmOpen(true)}
+                                onWithdraw={() => setWithdrawConfirmOpen(true)}
+                                onManageApprovers={() => setManagingApprovers(true)}
+                                username={username}
+                                canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
+                                onDecideCheckout={(requestId, approve) =>
+                                  void handleDecideCheckout(requestId, approve)
+                                }
+                                onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
+                                hideHeader
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}
                     <SubprocessInspectorCard
                       mapId={mapId}
@@ -9414,28 +9521,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onGoToVersion={(id) => void switchVersion(id)}
                       currentVersionId={versionId}
                     />
-                    {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 기본 접힘 (R8) */}
-                    <details data-id="editor-approvals-section" className="group rounded-md border border-hairline px-3 py-2">
-                      <summary className="flex cursor-pointer list-none items-center gap-1 text-fine font-semibold text-ink [&::-webkit-details-marker]:hidden">
-                        <ChevronRight size={12} strokeWidth={1.5} className="transition-transform group-open:rotate-90" />
-                        {t("perm.tabPendingApprovals")}
-                        {editorApprovalsCount > 0 && (
-                          <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
-                            {editorApprovalsCount}
-                          </span>
-                        )}
-                      </summary>
-                      <div className="mt-2">
-                        <PendingApprovalsPanel
-                          mapId={String(mapId)}
-                          isOwner={myRole === "owner"}
-                          isApprover={isApprover || isSysadmin}
-                          onCountChange={setEditorApprovalsCount}
-                          onDecided={() => void refreshWorkflow()}
-                          onToast={(item) => showToast(item.message)}
-                        />
-                      </div>
-                    </details>
                   </div>
                 }
                 activitySlot={
