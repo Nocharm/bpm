@@ -5,6 +5,7 @@
 
 ## 2026-08-14 — 승인 워크플로 코멘트 + 에러 인간화 설계 스펙 (dev 직접)
 - **설계 확정·문서화**: `docs/superpowers/specs/2026-08-14-approval-comments-design.md` — ① Group A(~50곳) 원시 JSON 에러 humanizeApiError 전수 스윕(폴백에만 HTTP 코드) ② 거절 배너 재디자인(거절자 필+사유) ③ 전이 모달 4종 선택 코멘트(`VersionEvent.note` 재사용, 스키마 무변경 — 바로철회 시 자동 동반 삭제) ④ 버전 카드 코멘트 보기 모달(클릭점→중앙 확대, 바깥 mousedown 닫힘) ⑤ 받은함 거절 사유 유실 버그 픽스(`ApprovalRequest.decision_reason` 컬럼). 구현은 `feat/approval-comments` 워크트리에서.
+- **구현 플랜**: `docs/superpowers/plans/2026-08-14-approval-comments.md` — 9태스크(TDD·태스크당 커밋·게이트 명시). 실측 보강: 받은함 비버전 거절은 사유 입력란 자체가 부재(`isVersion` 게이트)·approve 이벤트는 승인자별 기록·에러 틴트는 `border-error/40 bg-error/10` 기존 패턴 재사용.
 
 ## 2026-08-14 — QA 문서 정비: ai 2건 삭제·dev-vs-main 로컬 검증·alarm-audit 재검증 부기 (dev 직접)
 - **ai-connectivity-test·ai-real-model-smoke 삭제**(사용자 확인 완료분) + `docs/README.md`·`.env.example` 참조 정리.
