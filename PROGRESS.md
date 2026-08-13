@@ -14,6 +14,7 @@
 - **R8 FE**: 에디터 승인 탭 맨 아래에 결재 대기 접이식 섹션 추가(기본 접힘, `data-id="editor-approvals-section"`) — 설정 화면 C2와 동일한 `PendingApprovalsPanel` 재사용, pending>0일 때 카운트 필 표시. 신규 state `editorApprovalsCount`. 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
 - **R9 FE**: SP ⓘ 안내 문단을 헤더 타이틀 옆 호버 툴팁(`Tooltip` content)으로 이동(인스펙터 카드·Subprocess 탭 2표면) + 인스펙터 카드 본문(attr 행·액션 버튼·사유)을 접이식 전환(기본 접힘, sessionStorage `bpm.inspector.spOpen` — 카드 3마운트 공유로 탭 간 상태 유지, editor-left-sidebar 하이드레이션 패턴 재사용). 미사용화된 `inspector.spNote` i18n 키 제거(`spNoteFull`은 툴팁 content로 재사용). 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
 - **R10 FE**: 인스펙터 SP reason 행에 사유별 액션 버튼 2종 — `disabledReasonKind`(문자열 비교 대신 kind 분기, 카드 3마운트 동일 적용) 신설로 needPublished는 "게시본 가기"(`switchVersion` 위임), ownerOnly+미지정은 "등록 요청하기"(`createSpDesignationRequest(mapId, mapId)` 자기 맵 발원, pending이면 disabled+`Tooltip`으로 요청자·시각(`formatKstShort`) 안내). 409/에러는 `humanizeApiError`로 카드 내 인라인 표시. 신규 i18n 키 `sp.request.ctaSelf`/`sp.request.pendingLabel`(기존 `sp.request.cta`/`pending`은 다른 표면·문구라 재사용 안 함). 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
+- **R7 최종 게이트 + QA R2 섹션**: 전체 R1~R6 통과 후 QA 피드백 반영 검증 체크리스트 R2 섹션 16항목 추가 — pending 마커 다유저 표시·409 복구 UI·상호 배제·스택 저장/취소·role 팝오버 플래시·에디터 승인 탭·SP 안내 툴팁·SP 액션 버튼 등. 게이트 최종: BE pytest 1042·ruff 0 / FE vitest 617·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv → dev 머지)
 - **인원 동기화 로딩**: sync 버튼 Loader2 스피너 + busy가 후속 재조회까지 커버(재조회 실패는 err.message로 전파 — 삼킴 제거).
