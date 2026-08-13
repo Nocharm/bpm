@@ -84,6 +84,49 @@ def _grant(map_id: int, user_id: str, role: str) -> None:
     asyncio.run(_run())
 
 
+def _grant_id(map_id: int, principal_id: str) -> int:
+    """권한 행 id 조회 — R2 뮤텍스 테스트에서 대상 grant 를 특정."""
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            return await session.scalar(
+                select(MapPermission.id).where(
+                    MapPermission.map_id == map_id,
+                    MapPermission.principal_id == principal_id,
+                )
+            )
+
+    return asyncio.run(_run())  # type: ignore[return-value]
+
+
+def _seed_pending_downgrade(
+    map_id: int, permission_id: int, principal_id: str, *, requested_by: str
+) -> None:
+    """다운그레이드 pending 요청 직접 시드 — R2 정방향 뮤텍스가 체크아웃 보유자 대상 PATCH 를
+    막으므로, '체크아웃 보유 + 본인 다운그레이드 pending' 동시 상태는 ORM 으로 우회해 만든다."""
+
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                ApprovalRequest(
+                    map_id=map_id,
+                    kind="permission_downgrade",
+                    payload={
+                        "permission_id": permission_id,
+                        "principal_type": "user",
+                        "principal_id": principal_id,
+                        "from_role": "editor",
+                        "to_role": "viewer",
+                    },
+                    requested_by=requested_by,
+                    status="pending",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_run())
+
+
 def _seed_spare_version(map_id: int) -> None:
     """'마지막 버전은 삭제 불가' 가드 회피용 여분 버전 (API 는 게시 후에만 생성 허용)."""
 
@@ -718,3 +761,67 @@ def test_delete_version_sweeps_bundle(client: TestClient) -> None:
         json={"to_visibility": "public"},
     )
     assert resp.status_code == 201
+
+
+# ── R2: 동봉 가시성 공개 + 워크플로 상호 배제(역방향) ──────────
+
+
+def test_workflow_state_exposes_bundled_visibility(client: TestClient) -> None:
+    """동봉 제출 후 GET workflow 는 bundled_visibility 를 3필드로 노출, 동봉 없으면 null."""
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+
+    before = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert before["bundled_visibility"] is None
+
+    _checkout(client, version_id)
+    resp = client.post(
+        f"/api/versions/{version_id}/submit",
+        json={"to_visibility": "public"},
+    )
+    assert resp.status_code == 200
+
+    after = client.get(f"/api/versions/{version_id}/workflow").json()
+    assert after["bundled_visibility"] == {
+        "from_visibility": "private",
+        "to_visibility": "public",
+        "requested_by": "local-dev",
+    }
+
+
+def test_checkout_blocked_when_own_downgrade_pending(client: TestClient, enforce: None) -> None:
+    """actor 본인 grant 에 pending 다운그레이드가 있으면 체크아웃 차단 — 상호 배제 역방향."""
+    _act_as("owner.u")
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _grant(map_id, "ed.u", "editor")
+    _grant(map_id, "actor.ed", "editor")
+
+    _act_as("actor.ed")
+    gid = _grant_id(map_id, "ed.u")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is True
+
+    _act_as("ed.u")
+    resp = client.post(f"/api/versions/{version_id}/checkout", json={})
+    assert resp.status_code == 409
+    assert "pending approval" in resp.text.lower()
+
+
+def test_submit_blocked_when_own_downgrade_pending(client: TestClient, enforce: None) -> None:
+    """같은 상태에서 제출도 차단 — 체크아웃은 pending 생성 전에 확보(정방향 뮤텍스 회피 위해
+    다운그레이드는 ORM 시드)."""
+    _act_as("owner.u")
+    map_id, version_id = _create_map(client, visibility="private")
+    _set_approvers(client, map_id, ["a"])
+    _grant(map_id, "ed.u", "editor")
+
+    _act_as("ed.u")
+    _checkout(client, version_id)
+
+    gid = _grant_id(map_id, "ed.u")
+    _seed_pending_downgrade(map_id, gid, "ed.u", requested_by="owner.u")
+
+    resp = client.post(f"/api/versions/{version_id}/submit", json={})
+    assert resp.status_code == 409
+    assert "pending approval" in resp.text.lower()

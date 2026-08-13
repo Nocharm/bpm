@@ -4,6 +4,8 @@
 // 상태 머신: draft/rejected→submit(pending)→approve(전원 만장일치)→approved→publish(published) | reject→rejected | withdraw→draft.
 // 서버 진실: 각 버전 행이 GET /versions/{id}/workflow 로 상태를 읽고, 액션 후 워크플로를 재조회한다(낙관적 갱신 금지).
 // 게이팅은 워크플로 상태 + (approvers/submitted_by ↔ currentUserId)에서 파생하되, 서버가 최종 게이트(403/409)다.
+// 전이 확인은 에디터와 동일한 5종 공용 다이얼로그(components/version/) 경유 — 이전엔 패널만 자체 ConfirmDialog/직행/
+// PromptDialog를 써서 승인요청 시 승인자 목록·동봉 가시성 변경이 안 보이는 등 표면 드리프트가 있었다(원 신고 건).
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle, XCircle, Send, Upload, Undo2 } from "lucide-react";
@@ -11,6 +13,7 @@ import { CheckCircle, XCircle, Send, Upload, Undo2 } from "lucide-react";
 import type { VersionSummary, WorkflowState } from "@/lib/api";
 import {
   approveVersion,
+  getDirectory,
   getMap,
   getWorkflowState,
   publishVersion,
@@ -18,12 +21,18 @@ import {
   submitVersion,
   withdrawVersion,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
-import { PromptDialog } from "@/components/prompt-dialog";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
+import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
+import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
+import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
+import { RejectDialog } from "@/components/version/reject-dialog";
+import { buildBundledVisibilityLines } from "@/components/version/approver-status-lines";
 
 // ── 타입 / Types ─────────────────────────────────────────────
 
@@ -37,7 +46,7 @@ interface VersionsPublishPanelProps {
   canEdit: boolean;
   /** 현재 맵 가시성 — 승인요청 동봉 옵션의 대상(반대값) 계산용 / Current map visibility, for the bundle-option target. */
   visibility: "public" | "private";
-  /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 체크박스를 숨긴다 / Owner-only bundle option. */
+  /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 픽커를 숨긴다 / Owner-only bundle option. */
   canBundle: boolean;
   /** 액션 실패(403/409/422) 토스트 / Toast for action failures. */
   onToast?: (msg: string) => void;
@@ -62,6 +71,9 @@ export function VersionsPublishPanel({
   // 버전 목록 — props 없으면 getMap으로 내부 fetch / Fetch internally only when prop is absent.
   const [fetchedVersions, setFetchedVersions] = useState<VersionSummary[]>([]);
   const [loading, setLoading] = useState(!versionsProp);
+  // login_id → 표시 이름 캐시 — 승인자/요청자 이름 공개(원 신고 건: 패널이 승인자를 안 보여줬다).
+  // 협업자 패널과 동일 패턴(getDirectory 1회, 실패 시 login id 폴백).
+  const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     // versionsProp이 있으면 fetch 불필요 / Skip fetch when versions are provided by parent.
@@ -82,6 +94,18 @@ export function VersionsPublishPanel({
       active = false;
     };
   }, [mapId, versionsProp]);
+
+  useEffect(() => {
+    let alive = true;
+    void getDirectory()
+      .then((dir) => {
+        if (alive) setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // props 우선, 없으면 내부 fetch 결과 / Prefer prop; fall back to internal fetch result.
   const versions = versionsProp ?? fetchedVersions;
@@ -104,10 +128,12 @@ export function VersionsPublishPanel({
           key={version.id}
           versionId={version.id}
           label={version.label}
+          versions={versions}
           currentUserId={currentUserId}
           canEdit={canEdit}
           visibility={visibility}
           canBundle={canBundle}
+          nameById={nameById}
           onToast={onToast}
           onChanged={onChanged}
         />
@@ -121,10 +147,12 @@ export function VersionsPublishPanel({
 interface VersionRowProps {
   versionId: number;
   label: string;
+  versions: VersionSummary[];
   currentUserId: string;
   canEdit: boolean;
   visibility: "public" | "private";
   canBundle: boolean;
+  nameById: Map<string, string>;
   onToast?: (msg: string) => void;
   onChanged?: () => void;
 }
@@ -132,10 +160,12 @@ interface VersionRowProps {
 function VersionRow({
   versionId,
   label,
+  versions,
   currentUserId,
   canEdit,
   visibility,
   canBundle,
+  nameById,
   onToast,
   onChanged,
 }: VersionRowProps) {
@@ -179,22 +209,24 @@ function VersionRow({
         await reload();
         onChanged?.();
       } catch (err) {
-        onToast?.(err instanceof Error ? err.message : String(err));
+        onToast?.(humanizeApiError(err, t));
       } finally {
         setBusy(false);
       }
     },
-    [reload, onToast, onChanged],
+    [reload, onToast, onChanged, t],
   );
 
-  // 반려 모달 표시 — 훅이라 조기 반환 위에 둔다(rules-of-hooks)
-  const [rejecting, setRejecting] = useState(false);
-  // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 (에디터 승인 탭과 동일 플로우)
+  // 전이 확인 모달 상태 — 에디터와 동일한 5종 공용 다이얼로그(항상 모달 경유, 동봉 유무 무관).
   const [selfPublishAt, setSelfPublishAt] = useState<{ x: number; y: number } | null>(null);
-  // 승인요청 확인 모달(비셀프 승인자 경로) + 가시성 변경 동봉 체크박스 상태 — 에디터와 동일 플로우
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
-  const [bundleVisibility, setBundleVisibility] = useState(false);
-  const bundleTargetVis: "public" | "private" = visibility === "public" ? "private" : "public";
+  const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  // 승인요청/셀프게시에 동봉할 가시성 변경 선택 — VisibilityBundlePicker가 직접 값 제공(체크박스 대체).
+  const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
 
   if (wf === null) {
     return (
@@ -210,12 +242,10 @@ function VersionRow({
   const isSubmitter = wf.submitted_by === currentUserId;
   // 이번 사이클에 본인이 이미 승인했는지 / Whether this user already approved this cycle.
   const hasApproved = wf.approvals.includes(currentUserId);
-
-  // 반려 — 사유 필수(서버 RejectIn min_length=1). 네이티브 prompt 대신 플로팅 모달(빈 값 제출 비활성).
-  function submitReject(reason: string) {
-    setRejecting(false);
-    void runAction(() => rejectVersion(versionId, reason));
-  }
+  // 회수 모달 핸드오프용 제출자 — 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출(에디터와 동일).
+  const withdrawSubmitter = wf.submitted_by ?? null;
+  // 게시 확인의 만료 경고 대상 — 맵 내 현재 게시본(에디터와 동일 계산).
+  const priorPublished = versions.find((v) => v.status === "published") ?? null;
 
   return (
     <div className="flex items-center gap-3 rounded-sm border border-hairline bg-surface px-3 py-2.5">
@@ -242,6 +272,9 @@ function VersionRow({
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-50"
             onClick={(event) => {
+              // 동봉 선택은 오픈 시점에 리셋 — dismiss 경로는 confirm과 달리 값을 지우지 않으므로,
+              // 이전 취소된 선택이 다음 오픈에 미리 선택된 채로 남아 의도치 않은 동봉을 유발할 수 있다.
+              setBundleValue(null);
               // 승인자가 본인 1인이면 클릭 지점에 셀프 게시 제안 — No/닫기는 기존 제출 플로우.
               if (isSoleSelfApprover(wf.approvers, currentUserId)) {
                 setSelfPublishAt({ x: event.clientX, y: event.clientY });
@@ -262,7 +295,7 @@ function VersionRow({
               type="button"
               disabled={busy}
               className="flex items-center gap-1 rounded-sm border border-added px-2 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-50"
-              onClick={() => void runAction(() => approveVersion(versionId))}
+              onClick={() => setApproveConfirmOpen(true)}
             >
               <CheckCircle size={16} strokeWidth={1.5} />
               {t("perm.version.approve")}
@@ -295,7 +328,7 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-accent px-2 py-1 text-fine text-accent hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => void runAction(() => publishVersion(versionId))}
+            onClick={() => setPublishConfirmOpen(true)}
           >
             <Upload size={16} strokeWidth={1.5} />
             {t("perm.version.publish")}
@@ -313,7 +346,7 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => void runAction(() => withdrawVersion(versionId))}
+            onClick={() => setWithdrawConfirmOpen(true)}
           >
             <Undo2 size={16} strokeWidth={1.5} />
             {t("perm.version.withdraw")}
@@ -325,74 +358,108 @@ function VersionRow({
       {selfPublishAt && (
         <SelfPublishPopover
           position={selfPublishAt}
-          onYes={(bundle) => {
+          onYes={() => {
             setSelfPublishAt(null);
-            void runAction(() =>
-              runSelfPublishChain(versionId, bundle ? bundleTargetVis : undefined),
-            );
+            void runAction(() => runSelfPublishChain(versionId, bundleValue ?? undefined));
+            setBundleValue(null);
           }}
           onNo={() => {
+            // 직행 submit 대신 SubmitConfirmDialog로 — 에디터와 동일 플로우(승인자 목록 노출 + 동봉 재선택 가능).
             setSelfPublishAt(null);
-            void runAction(() => submitVersion(versionId));
+            setBundleValue(null);
+            setSubmitConfirmOpen(true);
           }}
-          onClose={() => setSelfPublishAt(null)}
-          bundleLabel={
-            canBundle
-              ? t("approval.bundleVisibility", {
-                  target:
-                    bundleTargetVis === "public"
-                      ? t("perm.visibilityPublic")
-                      : t("perm.visibilityPrivate"),
-                })
-              : undefined
+          onClose={() => {
+            setSelfPublishAt(null);
+            // dismiss(Escape/바깥클릭)는 confirm 경로와 달리 값을 지우지 않아, 다음 오픈에 픽커가
+            // 미리 선택된 채로 뜰 수 있다 — belt and braces로 여기서도 리셋.
+            setBundleValue(null);
+          }}
+          bundleSlot={
+            canBundle ? (
+              <VisibilityBundlePicker current={visibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
           }
         />
       )}
       {submitConfirmOpen && (
-        <ConfirmDialog
-          icon={<Send size={28} strokeWidth={1.5} />}
-          title={t("approval.submitConfirmTitle")}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <SubmitConfirmDialog
+          workflow={wf}
+          nameById={nameById}
+          subtitle={label}
+          bundleSlot={
+            canBundle ? (
+              <VisibilityBundlePicker current={visibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
+          }
           onConfirm={() => {
-            const vis = bundleVisibility ? bundleTargetVis : undefined;
             setSubmitConfirmOpen(false);
-            setBundleVisibility(false);
-            void runAction(() => submitVersion(versionId, vis));
+            void runAction(() => submitVersion(versionId, bundleValue ?? undefined));
+            setBundleValue(null);
           }}
           onClose={() => {
             setSubmitConfirmOpen(false);
-            setBundleVisibility(false);
+            setBundleValue(null);
           }}
-        >
-          {canBundle && (
-            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
-              <input
-                type="checkbox"
-                data-id="panel-submit-bundle-visibility"
-                checked={bundleVisibility}
-                onChange={(e) => setBundleVisibility(e.target.checked)}
-              />
-              {t("approval.bundleVisibility", {
-                target:
-                  bundleTargetVis === "public"
-                    ? t("perm.visibilityPublic")
-                    : t("perm.visibilityPrivate"),
-              })}
-            </label>
-          )}
-        </ConfirmDialog>
+        />
+      )}
+      {approveConfirmOpen && (
+        <ApproveConfirmDialog
+          workflow={wf}
+          nameById={nameById}
+          username={currentUserId}
+          subtitle={label}
+          extraLines={buildBundledVisibilityLines(wf, nameById, t)}
+          onConfirm={() => {
+            setApproveConfirmOpen(false);
+            void runAction(() => approveVersion(versionId));
+          }}
+          onClose={() => setApproveConfirmOpen(false)}
+        />
+      )}
+      {publishConfirmOpen && (
+        <PublishConfirmDialog
+          subtitle={label}
+          priorPublished={priorPublished}
+          onConfirm={() => {
+            setPublishConfirmOpen(false);
+            void runAction(() => publishVersion(versionId));
+          }}
+          onClose={() => setPublishConfirmOpen(false)}
+        />
+      )}
+      {withdrawConfirmOpen && (
+        <WithdrawConfirmDialog
+          workflow={wf}
+          nameById={nameById}
+          username={currentUserId}
+          subtitle={label}
+          withdrawSubmitter={withdrawSubmitter}
+          onConfirm={() => {
+            setWithdrawConfirmOpen(false);
+            void runAction(() => withdrawVersion(versionId));
+          }}
+          onClose={() => setWithdrawConfirmOpen(false)}
+        />
       )}
       {rejecting && (
-        <PromptDialog
-          title={t("perm.version.reject")}
-          label={t("perm.version.rejectReasonPrompt")}
-          placeholder={t("perm.version.rejectReasonPrompt")}
-          confirmLabel={t("perm.version.reject")}
-          cancelLabel={t("common.cancel")}
-          multiline
-          onConfirm={submitReject}
-          onClose={() => setRejecting(false)}
+        <RejectDialog
+          workflow={wf}
+          nameById={nameById}
+          username={currentUserId}
+          subtitle={label}
+          reason={rejectReason}
+          onReasonChange={setRejectReason}
+          onConfirm={() => {
+            const reason = rejectReason.trim();
+            setRejecting(false);
+            setRejectReason("");
+            void runAction(() => rejectVersion(versionId, reason));
+          }}
+          onClose={() => {
+            setRejecting(false);
+            setRejectReason("");
+          }}
         />
       )}
     </div>

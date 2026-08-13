@@ -181,6 +181,13 @@ PrincipalType = Literal["user", "department", "group"]
 Role = Literal["viewer", "editor", "owner"]
 
 
+class PendingChangeOut(BaseModel):
+    """행에 걸린 pending 다운그레이드 요약 — to_role None = 제거 요청 (R2)."""
+
+    to_role: str | None
+    requested_by: str
+
+
 class PermissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -189,6 +196,7 @@ class PermissionOut(BaseModel):
     principal_id: str
     role: str
     granted_by: str
+    pending_change: PendingChangeOut | None = None
 
 
 class PermissionCreate(BaseModel):
@@ -535,6 +543,14 @@ class DashboardTimeseriesOut(BaseModel):
     points: list[DashboardTimeseriesPointOut]
 
 
+class BundledVisibilityOut(BaseModel):
+    """버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)."""
+
+    from_visibility: str
+    to_visibility: str
+    requested_by: str
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -558,6 +574,8 @@ class WorkflowStateOut(BaseModel):
     pending_checkout_request: PendingCheckoutRequestOut | None = None
     # 이 버전의 모든 미결 점유 요청 — 요청자 복수 (점유권 탭)
     pending_checkout_requests: list[PendingCheckoutRequestOut] = []
+    # 이 버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)
+    bundled_visibility: BundledVisibilityOut | None = None
 
 
 class SubmitIn(BaseModel):

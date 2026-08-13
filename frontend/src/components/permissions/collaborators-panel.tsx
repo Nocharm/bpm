@@ -2,22 +2,19 @@
 
 // 협업자 관리 패널 — 서버 권한 목록 조회·역할 변경·제거·추가 (실 API) /
 // Collaborators panel wired to the real Layer-2 permissions API.
-// 서버가 진실: 모든 변경은 API 호출 후 목록을 재조회해 반영한다. 다운그레이드/에디터제거는
-// pending 응답을 받으면 역할을 즉시 바꾸지 않고 "승인 대기"만 표시한다(낙관적 갱신 금지).
+// 편집은 즉시 적용되지 않는다 — 화면상 스택(permission-staging)에 적립되고 Save를 눌러야 일괄 실행,
+// Cancel이면 폐기된다(R2 QA 피드백). 서버가 진실인 pending 마커(perm.pending_change)는 그대로 유지 —
+// 그건 서버 상태, 스택 태그는 아직 서버에 보내지 않은 로컬 의도라 별개다.
 // 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹(Layer 4 Task 4). /
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { useCallback, useEffect, useState } from "react";
-import { LockKeyhole, X } from "lucide-react";
+import { Loader2, LockKeyhole, X } from "lucide-react";
 
 import {
-  addMapPermission,
-  changeMapPermission,
   getDirectory,
-  listApprovers,
   listGroups,
   listMapPermissions,
-  removeMapPermission,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -25,7 +22,9 @@ import {
   type MapRole,
   type PrincipalType,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
+import { applyStagedOps, upsertStagedOp, removeStagedOp, type StagedOp } from "@/lib/permission-staging";
 
 import { AddCollaborator } from "./add-collaborator";
 import { PrincipalIcon } from "./principal-picker";
@@ -71,17 +70,21 @@ function CollaboratorRow({
   currentUserId,
   canEdit,
   isPending,
+  stagedOp,
   viewerGrantDisabled,
   dirUsers,
   dirDepts,
   groups,
   onChangeRole,
   onRemove,
+  onCancelStaged,
 }: {
   perm: ApiPermission;
   currentUserId: string;
   canEdit: boolean;
   isPending: boolean;
+  /** 이 행을 겨냥한 스택 op(change/remove) — 있으면 서버 반영 전 로컬 예정 표시 / staged local intent for this row, if any. */
+  stagedOp?: StagedOp & { kind: "change" | "remove" };
   /** 퍼블릭 맵이면 viewer 선택지 숨김 — 단, 현재 역할이 viewer면 표시(editor로 교정 가능) /
    * Public map: hide viewer option (unless this grant is already viewer, so it can be fixed to editor). */
   viewerGrantDisabled?: boolean;
@@ -90,6 +93,7 @@ function CollaboratorRow({
   groups: Group[];
   onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
   onRemove: (perm: ApiPermission) => void;
+  onCancelStaged: (op: StagedOp) => void;
 }) {
   const { t } = useI18n();
   const principalType = perm.principal_type as PrincipalType;
@@ -107,9 +111,16 @@ function CollaboratorRow({
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
   const isSelf = principalType === "user" && perm.principal_id === currentUserId;
   const controlsDisabled = !canEdit || isOwner || isSelf;
+  // 요청자 표시명 — 실 디렉터리 우선, 없으면 login id 폴백 / requester display name.
+  const pendingChange = perm.pending_change;
+  const pendingByName = pendingChange
+    ? dirUsers.find((u) => u.id === pendingChange.requested_by)?.name ?? pendingChange.requested_by
+    : "";
+  const stagedRemove = stagedOp?.kind === "remove";
+  const stagedChange = stagedOp?.kind === "change" ? stagedOp : null;
 
   return (
-    <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt">
+    <div className={`flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt ${stagedRemove ? "opacity-60" : ""}`}>
       {/* 유형 아이콘 / Type icon */}
       <PrincipalIcon type={principalType} />
 
@@ -128,14 +139,14 @@ function CollaboratorRow({
       </span>
 
       {/* 역할 뱃지 or 드롭다운 / Role badge or dropdown */}
-      {isOwner || isPending ? (
+      {isOwner || isPending || stagedRemove ? (
         <RoleBadge role={role} pending={isPending} />
       ) : controlsDisabled ? (
         <RoleBadge role={role} />
       ) : (
         <select
           className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
-          value={role}
+          value={stagedChange?.toRole ?? role}
           onChange={(e) => onChangeRole(perm, e.target.value as MapRole)}
         >
           {/* 퍼블릭 맵은 viewer 선택지 숨김 — 단 기존 viewer는 표시(editor로 교정 가능) */}
@@ -146,8 +157,41 @@ function CollaboratorRow({
         </select>
       )}
 
+      {/* 상세 태그 — 서버 진실(pending_change)일 때만, staged remove 여부와 무관하게 항상 렌더
+          (하드 제약: R2 서버-진실 마커는 스택 태그와 별개로 유지) / detail tag only once server-confirmed,
+          rendered unconditionally regardless of any staged op on this row. */}
+      {pendingChange && (
+        <span
+          className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+          title={t("perm.pending.by", { name: pendingByName })}
+        >
+          {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+        </span>
+      )}
+
+      {/* 스택 태그 — 로컬 예정(change/remove), 개별 취소 X / staged tag with per-row cancel */}
+      {stagedOp && (
+        <span className="flex items-center gap-1">
+          <span
+            className={`rounded-sm border px-1.5 py-0.5 text-fine ${stagedRemove ? "border-error text-error" : "border-changed text-changed"}`}
+          >
+            {stagedChange
+              ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
+              : t("perm.staged.remove")}
+          </span>
+          <button
+            type="button"
+            title={t("perm.staged.cancel")}
+            className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+            onClick={() => onCancelStaged(stagedOp)}
+          >
+            <X size={12} strokeWidth={1.5} />
+          </button>
+        </span>
+      )}
+
       {/* 제거 버튼 / Remove button */}
-      {!isOwner && !controlsDisabled && (
+      {!isOwner && !controlsDisabled && !stagedRemove && (
         <button
           type="button"
           title={t("perm.removeButton")}
@@ -174,11 +218,6 @@ export function CollaboratorsPanel({
 
   // 서버 권한 목록 / Server-sourced permissions list.
   const [perms, setPerms] = useState<ApiPermission[]>([]);
-  // 다운그레이드/제거 요청이 pending 인 permission id 집합 — mutation 응답에서 채움.
-  // 서버 진실(역할 미변경)은 perms 가 그대로 유지하고, 이 집합은 "승인 대기" 배지만 구동한다.
-  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
-  // 맵의 지정 승인자 login_id 목록 — 다운그레이드가 지연될 때 "누가 승인 가능한지" 안내에 사용.
-  const [approverIds, setApproverIds] = useState<string[]>([]);
   // 초기 로드 중 — 데이터 도착 전 "협업자 없음" 대신 스켈레톤 표시 (F8).
   const [loading, setLoading] = useState(true);
 
@@ -190,20 +229,26 @@ export function CollaboratorsPanel({
   // Real active groups for group collaborator options and display names.
   const [groups, setGroups] = useState<Group[]>([]);
 
-  // 승인 권한자 표시명 — 지정 승인자 login_id → 디렉터리 표시명, 없으면 안내 문구(시스템 관리자 포함).
-  const approverDisplayNames =
-    approverIds.length > 0
-      ? approverIds.map((id) => dirUsers.find((u) => u.id === id)?.name ?? id).join(", ")
-      : t("perm.approversNone");
+  // 편집 스택 — 화면에 쌓인 add/change/remove, Save 전까지 서버에 반영되지 않는다 (R2 QA 피드백).
+  const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
+  const [savingStaged, setSavingStaged] = useState(false);
+  // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+
+  // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
+  useEffect(() => {
+    if (!lastAddedKey) return;
+    document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [lastAddedKey]);
 
   const reload = useCallback(async () => {
     try {
       const rows = await listMapPermissions(mapIdNum);
       setPerms(rows);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t));
     }
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   // 초기 로드 — 인라인 async + active 가드(언마운트 후 setState 방지) /
   // Initial load: inline async with an active guard (avoids set-state-after-unmount).
@@ -211,21 +256,19 @@ export function CollaboratorsPanel({
     let active = true;
     void (async () => {
       try {
-        const [rows, dir, groupRows, approvers] = await Promise.all([
+        const [rows, dir, groupRows] = await Promise.all([
           listMapPermissions(mapIdNum),
           getDirectory(),
           listGroups(),
-          listApprovers(mapIdNum),
         ]);
         if (active) {
           setPerms(rows);
           setDirUsers(dir.users);
           setDirDepts(dir.departments);
           setGroups(groupRows);
-          setApproverIds(approvers);
         }
       } catch (err) {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t));
       } finally {
         if (active) setLoading(false);
       }
@@ -233,62 +276,61 @@ export function CollaboratorsPanel({
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
-  const handleAdd = useCallback(
-    async (
-      principalType: PrincipalType,
-      principalId: string,
-      role: "viewer" | "editor",
-    ) => {
-      try {
-        await addMapPermission(mapIdNum, principalType, principalId, role);
-        await reload();
-      } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [mapIdNum, reload, onToast],
-  );
+  // 편집 액션은 즉시 API를 부르지 않고 스택에 적립만 — Save에서 일괄 실행 (trivial setState라 plain
+  // function으로: React Compiler가 useCallback 수동 deps와 어긋나면 빌드가 깨진다, frontend/AGENTS.md).
+  function handleAdd(principalType: PrincipalType, principalId: string, role: "viewer" | "editor") {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "add", principalType, principalId, role }));
+    setLastAddedKey(`${principalType}:${principalId}`);
+    window.setTimeout(() => setLastAddedKey(null), 1200); // 플래시 애니메이션 후 리셋(재추가 시 재발화)
+  }
 
-  const handleChangeRole = useCallback(
-    async (perm: ApiPermission, toRole: MapRole) => {
-      try {
-        const result = await changeMapPermission(mapIdNum, perm.id, toRole);
-        if (result.pending) {
-          // 지연 — 역할 미변경. "승인 대기" 표시 + 승인 권한자 안내 / Pending: show badge + who can approve.
-          setPendingIds((prev) => new Set(prev).add(perm.id));
-          onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
-        } else {
-          await reload();
-        }
-      } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [mapIdNum, reload, onToast, t, approverDisplayNames],
-  );
+  function handleChangeRole(perm: ApiPermission, toRole: MapRole) {
+    if (toRole === "owner") return; // select는 viewer/editor만 제공 — 방어적 가드
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "change", permissionId: perm.id, toRole }));
+  }
 
-  const handleRemove = useCallback(
-    async (perm: ApiPermission) => {
-      try {
-        const result = await removeMapPermission(mapIdNum, perm.id);
-        if (result.pending) {
-          // 에디터 제거는 승인 지연 — 행 유지, "승인 대기" + 승인 권한자 안내 / Gated: keep row, show who can approve.
-          setPendingIds((prev) => new Set(prev).add(perm.id));
-          onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
-        } else {
-          await reload();
-        }
-      } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [mapIdNum, reload, onToast, t, approverDisplayNames],
-  );
+  function handleRemove(perm: ApiPermission) {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "remove", permissionId: perm.id }));
+  }
 
-  // 이미 부여된 principalId 집합 (피커 제외용) / Set of already-granted principalIds.
-  const excludeIds = new Set(perms.map((p) => p.principal_id));
+  function handleCancelStaged(op: StagedOp) {
+    setStagedOps((ops) => removeStagedOp(ops, op));
+  }
+
+  // Save — 스택을 일괄 실행하고 결과를 토스트로, 성공분은 재조회로 반영 후 스택 클리어.
+  // 개별 실패는 전체를 막지 않는다(R1 상호배제 409 등도 failed로만 수집).
+  async function handleSaveStaged() {
+    setSavingStaged(true);
+    try {
+      const result = await applyStagedOps(mapIdNum, stagedOps);
+      const summary = t("perm.staged.result", {
+        applied: result.applied,
+        pending: result.pending,
+        failed: result.failed.length,
+      });
+      const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+      onToast(failureText ? `${summary} — ${failureText}` : summary);
+      setStagedOps([]);
+      await reload();
+    } finally {
+      setSavingStaged(false);
+    }
+  }
+
+  function handleCancelAllStaged() {
+    setStagedOps([]); // 저장 안 하면 작업 취소 — 서버 호출 없이 스택만 비움
+  }
+
+  const stagedAdds = stagedOps.filter((op): op is StagedOp & { kind: "add" } => op.kind === "add");
+  // 이미 부여된 principalId + 스택에 추가 예정인 principalId (피커 제외용) — 안 그러면 재선택 시
+  // 고스트 행은 그대로인데 스택 role만 조용히 덮어써져 헷갈린다 / also exclude staged-add principals.
+  const excludeIds = new Set([...perms.map((p) => p.principal_id), ...stagedAdds.map((op) => op.principalId)]);
+  const stagedByPermId = new Map<number, StagedOp & { kind: "change" | "remove" }>();
+  for (const op of stagedOps) {
+    if (op.kind !== "add") stagedByPermId.set(op.permissionId, op);
+  }
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -331,15 +373,49 @@ export function CollaboratorsPanel({
           perm={perm}
           currentUserId={currentUserId}
           canEdit={canEdit}
-          isPending={pendingIds.has(perm.id)}
+          isPending={perm.pending_change != null}
+          stagedOp={stagedByPermId.get(perm.id)}
           viewerGrantDisabled={viewerGrantDisabled}
           dirUsers={dirUsers}
           dirDepts={dirDepts}
           groups={groups}
           onChangeRole={handleChangeRole}
           onRemove={handleRemove}
+          onCancelStaged={handleCancelStaged}
         />
       ))}
+
+      {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그 + 개별 취소 X /
+          Staged "to add" rows — dashed ghost row with a tag and a per-row cancel. */}
+      {stagedAdds.map((op) => {
+        const addKey = `${op.principalType}:${op.principalId}`;
+        return (
+        <div
+          key={`add:${addKey}`}
+          data-id={`staged-add-${addKey}`}
+          className={`flex items-center gap-2 rounded-sm border border-dashed border-hairline px-2 py-1.5 ${
+            lastAddedKey === addKey ? "motion-safe:animate-[picker-flash_1200ms_ease-in-out]" : ""
+          }`}
+        >
+          <PrincipalIcon type={op.principalType} />
+          <span className="min-w-0 flex-1 truncate text-caption text-ink">
+            {resolvePrincipalName(op.principalType, op.principalId, dirUsers, dirDepts, groups)}
+          </span>
+          <span className="rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+            {t("perm.staged.add")}
+          </span>
+          <RoleBadge role={op.role} />
+          <button
+            type="button"
+            title={t("perm.staged.cancel")}
+            className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+            onClick={() => handleCancelStaged(op)}
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+        );
+      })}
 
       {/* 협업자 추가 폼 — 편집자 이상만 / Add form for editor+ only */}
       {canEdit && (
@@ -351,6 +427,31 @@ export function CollaboratorsPanel({
           groups={groups}
           onAdd={handleAdd}
         />
+      )}
+
+      {/* Save/Cancel — 스택에 쌓인 게 있을 때만 노출 / Save/Cancel bar, shown only while ops are staged */}
+      {stagedOps.length > 0 && (
+        <div className="mt-2 flex items-center justify-end gap-2 border-t border-hairline pt-2">
+          <button
+            type="button"
+            data-id="perm-staged-cancel"
+            disabled={savingStaged}
+            className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+            onClick={handleCancelAllStaged}
+          >
+            {t("perm.staged.cancel")}
+          </button>
+          <button
+            type="button"
+            data-id="perm-staged-save"
+            disabled={savingStaged}
+            className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={() => void handleSaveStaged()}
+          >
+            {savingStaged && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
+            {t("perm.staged.save")}
+          </button>
+        </div>
       )}
     </div>
   );

@@ -1208,3 +1208,99 @@ def test_sysadmin_queue_excludes_soft_deleted(client: TestClient, enforce: None)
     act_as(SYSADMIN)
     ids = [r["id"] for r in client.get("/api/approval-requests").json()]
     assert req["id"] not in ids
+
+
+# ── R2: pending 노출 + 워크플로 상호 배제 ──────────────────────
+
+
+def test_permissions_list_exposes_pending_change(client: TestClient, enforce: None) -> None:
+    """GET permissions 는 대상 행에 pending_change(to_role·requested_by) 를 노출, 나머지는 null.
+    제거 요청(to_role=None)도 동일하게 반영된다."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+            ("user", "other.ed", "editor"),
+        ]
+    )
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert r.status_code == 200 and r.json()["pending"] is True
+
+    act_as("owner.u")
+    listed = client.get(f"/api/maps/{map_id}/permissions").json()
+    by_principal = {p["principal_id"]: p for p in listed}
+    assert by_principal["ed"]["pending_change"] == {
+        "to_role": "viewer",
+        "requested_by": "actor.ed",
+    }
+    assert by_principal["other.ed"]["pending_change"] is None
+    assert by_principal["owner.u"]["pending_change"] is None
+
+    # 제거 요청 — to_role null
+    gid2 = grant_id(map_id, "other.ed")
+    act_as("actor.ed")
+    r2 = client.delete(f"/api/maps/{map_id}/permissions/{gid2}")
+    assert r2.status_code == 200 and r2.json()["pending"] is True
+
+    act_as("owner.u")
+    listed2 = client.get(f"/api/maps/{map_id}/permissions").json()
+    by_principal2 = {p["principal_id"]: p for p in listed2}
+    assert by_principal2["other.ed"]["pending_change"] == {
+        "to_role": None,
+        "requested_by": "actor.ed",
+    }
+
+
+def test_downgrade_blocked_for_checkout_holder(client: TestClient, enforce: None) -> None:
+    """대상 유저가 draft 버전을 체크아웃 중이면 권한 변경 차단 — 지연·오너 즉시 모두 409."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    vid = first_version_id(map_id)
+
+    async def _checkout_ed(session) -> None:
+        v = await session.get(MapVersion, vid)
+        v.checked_out_by = "ed"
+        v.checked_out_at = _now()
+
+    _seed(_checkout_ed)
+
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    deferred = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert deferred.status_code == 409
+
+    act_as("owner.u")
+    immediate = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
+    assert immediate.status_code == 409
+
+
+def test_downgrade_blocked_for_submitter(client: TestClient, enforce: None) -> None:
+    """대상 유저가 pending 버전의 제출자면 권한 제거 차단."""
+    map_id = seed_map(
+        grants=[
+            ("user", "owner.u", "owner"),
+            ("user", "actor.ed", "editor"),
+            ("user", "ed", "editor"),
+        ]
+    )
+    vid = first_version_id(map_id)
+
+    async def _submit_by_ed(session) -> None:
+        v = await session.get(MapVersion, vid)
+        v.status = "pending"
+        v.submitted_by = "ed"
+
+    _seed(_submit_by_ed)
+
+    gid = grant_id(map_id, "ed")
+    act_as("actor.ed")
+    r = client.delete(f"/api/maps/{map_id}/permissions/{gid}")
+    assert r.status_code == 409

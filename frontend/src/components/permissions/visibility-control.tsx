@@ -7,12 +7,14 @@
 import { useEffect, useState } from "react";
 
 import {
+  ApiError,
   getPendingVisibilityRequest,
   requestVisibilityChange,
   withdrawApprovalRequest,
   type ApprovalRequest,
   type MapSummary,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
 type Visibility = MapSummary["visibility"];
@@ -58,7 +60,19 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
       if (req.status === "pending") setPendingReq(req);
       onToast(t("perm.visibilityToastRequested"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      // 409(이미 다른 pending 요청 존재) — 그 요청을 재조회해 마커+철회 버튼으로 즉시 복구 (막다른 상태 방지)
+      if (err instanceof ApiError && err.status === 409) {
+        try {
+          const existing = await getPendingVisibilityRequest(mapIdNum);
+          if (existing) {
+            setPendingReq(existing);
+            setStaged(visibility);
+          }
+        } catch {
+          // 재조회 실패는 무시 — 토스트만 노출
+        }
+      }
+      onToast(humanizeApiError(err, t));
     }
   }
 
@@ -70,7 +84,7 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
       setStaged(visibility);
       onToast(t("perm.visibilityToastWithdrawn"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t));
     }
   }
 
@@ -117,14 +131,24 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
               ? t("perm.visibilityPreviewPublic")
               : t("perm.visibilityPreviewPrivate")}
           </p>
-          <button
-            type="button"
-            data-id="visibility-apply"
-            className="self-start rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus"
-            onClick={() => void handleApply()}
-          >
-            {t("perm.visibilityApply")}
-          </button>
+          <div className="flex items-center gap-2 self-start">
+            <button
+              type="button"
+              data-id="visibility-apply"
+              className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              onClick={() => void handleApply()}
+            >
+              {t("perm.visibilityApply")}
+            </button>
+            <button
+              type="button"
+              data-id="visibility-cancel"
+              className="rounded-sm border border-hairline px-3 py-1 text-caption text-ink hover:bg-surface-alt"
+              onClick={() => setStaged(visibility)}
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
         </div>
       )}
 

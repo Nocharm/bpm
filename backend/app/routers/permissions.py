@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
-from app.models import ApprovalRequest, MapPermission, ProcessMap, _now
+from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
 from app.permissions import logic
 from app.permissions.access import assert_map_role, get_effective_role
 from app.permissions.deps import (
@@ -25,6 +25,7 @@ from app.schemas import (
     ApprovalRequestOut,
     DecisionIn,
     OwnerTransferIn,
+    PendingChangeOut,
     PermissionCreate,
     PermissionOut,
     PermissionPatch,
@@ -55,6 +56,33 @@ async def _assert_owner_or_approver(
     raise HTTPException(status_code=403, detail="owner, approver, or sysadmin only")
 
 
+async def _assert_user_not_in_workflow(
+    session: AsyncSession, map_id: int, grant: MapPermission
+) -> None:
+    """대상 유저가 진행 중 버전 워크플로 참여자면 권한 변경 차단 (R2 상호 배제).
+
+    (a) 편집 가능 상태 버전의 체크아웃 보유자 (b) pending/approved 버전의 제출자.
+    """
+    if grant.principal_type != "user":
+        return
+    versions = await session.scalars(
+        select(MapVersion).where(MapVersion.map_id == map_id)
+    )
+    blocked = any(
+        (v.checked_out_by == grant.principal_id and workflow.is_editable_status(v.status))
+        or (
+            v.submitted_by == grant.principal_id
+            and v.status in (workflow.PENDING, workflow.APPROVED)
+        )
+        for v in versions.all()
+    )
+    if blocked:
+        raise HTTPException(
+            status_code=409,
+            detail="collaborator is in an active version workflow — resolve the checkout or approval first",
+        )
+
+
 # ── A. Collaborators ──────────────────────────────────────────
 
 
@@ -67,14 +95,36 @@ async def _assert_owner_or_approver(
 )
 async def list_permissions(
     map_id: int, session: AsyncSession = Depends(get_session)
-) -> list[MapPermission]:
+) -> list[PermissionOut]:
     await _get_map_or_404(session, map_id)
     rows = await session.scalars(
         select(MapPermission)
         .where(MapPermission.map_id == map_id)
         .order_by(MapPermission.id)
     )
-    return list(rows.all())
+    # 맵의 pending 다운그레이드를 벌크 1쿼리로 가져와 permission_id 로 인덱스 (맵당 소량)
+    pending_rows = await session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "permission_downgrade",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    pending_by_permission_id = {r.payload.get("permission_id"): r for r in pending_rows.all()}
+    result = []
+    for grant in rows.all():
+        req = pending_by_permission_id.get(grant.id)
+        pending_change = (
+            PendingChangeOut(to_role=req.payload.get("to_role"), requested_by=req.requested_by)
+            if req is not None
+            else None
+        )
+        result.append(
+            PermissionOut.model_validate(grant).model_copy(
+                update={"pending_change": pending_change}
+            )
+        )
+    return result
 
 
 @router.post(
@@ -150,6 +200,7 @@ async def update_permission(
         raise HTTPException(
             status_code=409, detail="owner grant changes go through owner transfer"
         )
+    await _assert_user_not_in_workflow(session, map_id, grant)
     new_role = payload.role
     if new_role == "owner":
         raise HTTPException(
@@ -217,6 +268,7 @@ async def delete_permission(
         raise HTTPException(
             status_code=409, detail="owner grant removal goes through owner transfer"
         )
+    await _assert_user_not_in_workflow(session, map_id, grant)
     # 오너(=sysadmin 포함)는 editor 제거 승인 없이 즉시 삭제
     actor_role = await get_effective_role(session, user, map_id)
     if logic.requires_downgrade_approval(grant.role, None) and actor_role != "owner":

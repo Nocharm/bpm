@@ -11,6 +11,7 @@ import {
   listApprovalRequests,
   type ApprovalRequest,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import type { ToastItem } from "@/components/toast-stack";
 import { genId } from "@/lib/id";
@@ -62,9 +63,9 @@ export function PendingApprovalsPanel({
       setRequests(rows);
       onCountChange?.(countPending(rows));
     } catch (err) {
-      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      onToast({ id: genId(), message: humanizeApiError(err, t) });
     }
-  }, [mapIdNum, onToast, onCountChange]);
+  }, [mapIdNum, onToast, onCountChange, t]);
 
   // 초기 로드 — active 가드로 언마운트 후 setState 방지 / Initial load with an unmount guard.
   useEffect(() => {
@@ -77,13 +78,13 @@ export function PendingApprovalsPanel({
           onCountChange?.(countPending(rows));
         }
       } catch (err) {
-        if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+        if (active) onToast({ id: genId(), message: humanizeApiError(err, t) });
       }
     })();
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast, onCountChange]);
+  }, [mapIdNum, onToast, onCountChange, t]);
 
   const handleDecide = useCallback(
     async (requestId: number, decision: "approve" | "reject") => {
@@ -101,7 +102,7 @@ export function PendingApprovalsPanel({
               : t("perm.approvals.toastRejected"),
         });
       } catch (err) {
-        onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+        onToast({ id: genId(), message: humanizeApiError(err, t) });
       } finally {
         setDecidingIds((prev) => {
           const next = new Set(prev);

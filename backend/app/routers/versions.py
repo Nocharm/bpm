@@ -23,6 +23,7 @@ from app.models import (
     CheckoutRequest,
     Edge,
     Group,
+    MapPermission,
     MapVersion,
     Node,
     ProcessMap,
@@ -31,6 +32,7 @@ from app.models import (
     _now,
 )
 from app.schemas import (
+    BundledVisibilityOut,
     CheckoutIn,
     CheckoutOut,
     CheckoutTransferIn,
@@ -281,6 +283,11 @@ async def acquire_checkout(
         raise HTTPException(
             status_code=409, detail=f"version is {version.status} — not editable"
         )
+    if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="your permission change is pending approval — cannot take checkout",
+        )
 
     now = now_kst()
     if is_locked_by_other(version, user, now):
@@ -469,6 +476,16 @@ async def get_workflow_state(
             .order_by(VersionEvent.id.desc())
             .limit(1)
         )
+    bundled = await _find_bundled_visibility(session, version_id)
+    bundled_visibility = (
+        BundledVisibilityOut(
+            from_visibility=bundled.payload.get("from_visibility"),
+            to_visibility=bundled.payload.get("to_visibility"),
+            requested_by=bundled.requested_by,
+        )
+        if bundled is not None
+        else None
+    )
     return WorkflowStateOut(
         version_id=version_id,
         version_number=version.version_number,
@@ -483,6 +500,7 @@ async def get_workflow_state(
         checkout_from=version.checked_out_from if active else None,
         pending_checkout_request=pending_outs[-1] if pending_outs else None,
         pending_checkout_requests=pending_outs,
+        bundled_visibility=bundled_visibility,
     )
 
 
@@ -499,6 +517,27 @@ async def _find_bundled_visibility(
     return next(
         (r for r in rows.all() if r.payload.get("version_id") == version_id), None
     )
+
+
+async def _find_own_pending_downgrade(
+    session: AsyncSession, map_id: int, user: str
+) -> ApprovalRequest | None:
+    """호출자 본인 grant 에 걸린 pending 다운그레이드 — 워크플로 상호 배제 역방향 (R2).
+
+    permissions 모듈 헬퍼를 함수-로컬 import(순환 회피, _apply_request 선례).
+    """
+    grant = await session.scalar(
+        select(MapPermission).where(
+            MapPermission.map_id == map_id,
+            MapPermission.principal_type == "user",
+            MapPermission.principal_id == user,
+        )
+    )
+    if grant is None:
+        return None
+    from app.routers.permissions import _find_pending_downgrade
+
+    return await _find_pending_downgrade(session, map_id, grant.id)
 
 
 @router.post("/versions/{version_id}/submit", response_model=VersionOut)
@@ -520,6 +559,11 @@ async def submit_version(
     now = now_kst()
     if not (is_checkout_active(version, now) and version.checked_out_by == user):
         raise HTTPException(status_code=403, detail="only the checkout holder can submit")
+    if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="your permission change is pending approval — cannot submit",
+        )
 
     approvers = await workflow.load_active_approvers(session, version.map_id)
     if not approvers:

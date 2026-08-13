@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -62,6 +62,7 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
 import { formatVersionMarker } from "@/lib/version-name";
@@ -71,10 +72,16 @@ import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
-import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
-import { WithdrawHandoff } from "@/components/withdraw-handoff";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
+import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
+import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
+import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
+import { RejectDialog } from "@/components/version/reject-dialog";
+import { buildBundledVisibilityLines } from "@/components/version/approver-status-lines";
+import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -199,6 +206,7 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
 import { getStaleSectionNodeIds } from "@/lib/word-map-home";
@@ -961,8 +969,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
   // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
-  // 승인요청에 가시성 변경 동봉 여부(체크박스) — 게시 시 함께 적용.
-  const [bundleVisibility, setBundleVisibility] = useState(false);
+  // 승인요청/셀프게시에 동봉할 가시성 변경 선택(VisibilityBundlePicker) — null이면 미동봉.
+  const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
   // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 / Self-publish prompt at click point.
   const [selfPublishPrompt, setSelfPublishPrompt] = useState<{ x: number; y: number } | null>(null);
   // 승인/게시/회수/거절 확인 다이얼로그 — 전이 액션 통일 모달 / transition confirm modals.
@@ -971,6 +979,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 승인 탭 하단 결재 대기 섹션 pending 개수 — summary 카운트 필용 (R8)
+  const [editorApprovalsCount, setEditorApprovalsCount] = useState(0);
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
@@ -1175,6 +1185,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     : currentVersion?.status !== "published"
       ? t("inspector.spNeedPublishedOpen")
       : t("inspector.spOwnerOnly");
+  // disabledReason과 동일 분기의 구분값 — 카드가 문자열 비교 없이 사유별 액션(게시본 가기/등록 요청)을 분기 (R10)
+  const spDisabledReasonKind: "needPublished" | "ownerOnly" | null = spCanManage
+    ? null
+    : currentVersion?.status !== "published"
+      ? "needPublished"
+      : "ownerOnly";
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
@@ -1185,43 +1201,13 @@ function MapEditor({ mapId }: { mapId: number }) {
   const approvalInFlight = versions.some(
     (v) => v.status === "pending" || v.status === "approved",
   );
-  // 승인자별 상태 라인 — 승인/거절/회수 모달 공용. 본인은 하이라이트(accent), 승인 완료는 Check.
-  // 승인자 행 — 이름(좌, 본인 하이라이트) + 상태 영어 뱃지(우측 끝). 상태는 로케일 무관 영어 고정.
-  // 반려자(rejected_by)는 Rejected 우선 — 승인했다 거절해도 'Approved'로 남지 않게.
-  const rejectedBy = workflow?.rejected_by ?? null;
-  const approverStatusLines: ConfirmLine[] = (workflow?.approvers ?? []).map((id) => {
-    const rejected = id === rejectedBy;
-    const approved = !rejected && (workflow?.approvals ?? []).includes(id);
-    const isMe = id === username;
-    const name = nameById.get(id) ?? id;
-    const icon = rejected ? (
-      <X size={14} strokeWidth={1.5} />
-    ) : approved ? (
-      <Check size={14} strokeWidth={1.5} />
-    ) : (
-      <User size={14} strokeWidth={1.5} />
-    );
-    return {
-      icon,
-      text: `${name}${isMe ? ` (${t("approval.you")})` : ""}`,
-      tone: isMe ? "accent" : approved ? "ink" : "muted",
-      highlight: isMe,
-      badge: rejected
-        ? { text: "Rejected", tone: "warn" as const }
-        : { text: approved ? "Approved" : "Pending", tone: approved ? "approved" : "pending" },
-    };
-  });
   // 전이 모달 공용 서브타이틀 — 어떤 버전인지(마커+라벨). 삭제 모달의 맵이름 자리와 동일 역할.
   const versionSubtitle = currentVersion
     ? `${formatVersionMarker(currentVersion, versions)} · ${currentVersion.label}`
     : undefined;
   // 회수 모달 핸드오프용 제출자 — 회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출.
   const withdrawSubmitter = currentVersion?.submitted_by ?? null;
-  // 승인요청 동봉 옵션의 목표 가시성 — 현재값의 반대.
-  const bundleTargetVis: "public" | "private" =
-    mapVisibility === "public" ? "private" : "public";
-  // 가시성 동봉은 오너 전용(서버 403). 로드 전 myRole=null 이면 숨겨 — mapVisibility 기본값 기준의
-  // 잘못된 목표값이 잠깐 노출되는 것도 함께 막힌다.
+  // 가시성 동봉은 오너 전용(서버 403) — VisibilityBundlePicker 자체를 비오너에겐 전달하지 않는다.
   const canBundleVisibility = myRole === "owner";
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
@@ -2512,7 +2498,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setCheckout(state);
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.checkout"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     };
@@ -2658,6 +2644,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(err instanceof Error ? err.message : t("err.save"));
         return;
       }
+      // 동봉 선택은 오픈 시점에 리셋 — dismiss(Escape/바깥클릭/닫기) 경로는 confirm과 달리 값을 지우지
+      // 않으므로, 이전 취소된 선택이 다음 오픈에 미리 선택된 채로 남아 의도치 않은 동봉을 유발할 수 있다.
+      setBundleValue(null);
       // 승인자가 본인 1인이면 클릭 지점에 셀프 게시(승인요청→승인→게시) 제안 — No/닫기는 기존 플로우.
       if (at && username !== null && isSoleSelfApprover(workflow?.approvers ?? [], username)) {
         setSelfPublishPrompt(at);
@@ -3032,15 +3021,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 전체 버전 재로딩 — 게시 시 직전 published→expired 반영(우측에 published 2개 방지).
         const detail = await getMap(mapId);
         setVersions(detail.versions);
-        // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 bundleTargetVis 소스도 갱신 — 안 하면 다음 동봉 계산이 구 값 기준.
+        // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 픽커의 current 소스도 갱신 — 안 하면 다음 동봉 선택이 구 값 기준.
         setMapVisibility(detail.visibility);
-        // 동봉 체크박스 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
+        // 동봉 픽커 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
         setMyRole(detail.my_role);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.workflow"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [versionId, mapId, refreshWorkflow, t],
@@ -4208,7 +4197,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       void createLinkNodeAt(linkedMapId, mapName, pinned, position);
     },
-    [readOnly, reactFlow, createLinkNodeAt],
+    // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
+    // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -9024,8 +9015,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     mapId={mapId}
                     canManage={spCanManage}
                     disabledReason={spDisabledReason}
+                    disabledReasonKind={spDisabledReasonKind}
                     onToast={showToast}
                     onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                    onGoToPublished={(id) => void switchVersion(id)}
                   />
                 }
                 subprocessTabSlot={
@@ -9116,8 +9109,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       mapId={mapId}
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
                     <div className="flex gap-1.5">
                       <button
@@ -9326,8 +9321,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       mapId={mapId}
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
                     <MapDetailCard
                       mapId={mapId}
@@ -9337,6 +9334,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onGoToVersion={(id) => void switchVersion(id)}
                       currentVersionId={versionId}
                     />
+                    {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 기본 접힘 (R8) */}
+                    <details data-id="editor-approvals-section" className="group rounded-md border border-hairline px-3 py-2">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-fine font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                        <ChevronRight size={12} strokeWidth={1.5} className="transition-transform group-open:rotate-90" />
+                        {t("perm.tabPendingApprovals")}
+                        {editorApprovalsCount > 0 && (
+                          <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
+                            {editorApprovalsCount}
+                          </span>
+                        )}
+                      </summary>
+                      <div className="mt-2">
+                        <PendingApprovalsPanel
+                          mapId={String(mapId)}
+                          isOwner={myRole === "owner"}
+                          isApprover={isApprover || isSysadmin}
+                          onCountChange={setEditorApprovalsCount}
+                          onDecided={() => void refreshWorkflow()}
+                          onToast={(item) => showToast(item.message)}
+                        />
+                      </div>
+                    </details>
                   </div>
                 }
                 activitySlot={
@@ -9534,89 +9553,59 @@ function MapEditor({ mapId }: { mapId: number }) {
       {selfPublishPrompt && (
         <SelfPublishPopover
           position={selfPublishPrompt}
-          onYes={(bundle) => {
+          onYes={() => {
             setSelfPublishPrompt(null);
-            void runTransition((id) =>
-              runSelfPublishChain(id, bundle ? bundleTargetVis : undefined),
-            );
+            void runTransition((id) => runSelfPublishChain(id, bundleValue ?? undefined));
+            setBundleValue(null);
           }}
           onNo={() => {
             setSelfPublishPrompt(null);
+            setBundleValue(null);
             setSubmitConfirmOpen(true);
           }}
-          onClose={() => setSelfPublishPrompt(null)}
-          bundleLabel={
-            canBundleVisibility
-              ? t("approval.bundleVisibility", {
-                  target:
-                    bundleTargetVis === "public"
-                      ? t("perm.visibilityPublic")
-                      : t("perm.visibilityPrivate"),
-                })
-              : undefined
+          onClose={() => {
+            setSelfPublishPrompt(null);
+            // dismiss(Escape/바깥클릭)는 confirm 경로와 달리 값을 지우지 않아, 다음 오픈에 픽커가
+            // 미리 선택된 채로 뜰 수 있다 — belt and braces로 여기서도 리셋.
+            setBundleValue(null);
+          }}
+          bundleSlot={
+            canBundleVisibility ? (
+              <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
           }
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
       {submitConfirmOpen && (
-        <ConfirmDialog
-          icon={<Send size={28} strokeWidth={1.5} />}
-          title={t("approval.submitConfirmTitle")}
-          message={versionSubtitle}
-          lines={
-            (workflow?.approvers ?? []).length > 0
-              ? (workflow?.approvers ?? []).map((id) => ({
-                  icon: <User size={14} strokeWidth={1.5} />,
-                  text: nameById.get(id) ?? id,
-                }))
-              : [
-                  {
-                    icon: <User size={14} strokeWidth={1.5} />,
-                    text: t("approval.noApprovers"),
-                    tone: "muted" as const,
-                  },
-                ]
+        <SubmitConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          subtitle={versionSubtitle}
+          bundleSlot={
+            canBundleVisibility ? (
+              <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
           }
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            const vis = bundleVisibility ? bundleTargetVis : undefined;
-            setBundleVisibility(false);
-            void runTransition((id) => submitVersion(id, vis));
+            void runTransition((id) => submitVersion(id, bundleValue ?? undefined));
+            setBundleValue(null);
           }}
           onClose={() => {
             setSubmitConfirmOpen(false);
-            setBundleVisibility(false);
+            setBundleValue(null);
           }}
-        >
-          {canBundleVisibility && (
-            <label className="flex cursor-pointer items-center gap-2 self-start text-caption text-ink">
-              <input
-                type="checkbox"
-                data-id="submit-bundle-visibility"
-                checked={bundleVisibility}
-                onChange={(e) => setBundleVisibility(e.target.checked)}
-              />
-              {t("approval.bundleVisibility", {
-                target:
-                  bundleTargetVis === "public"
-                    ? t("perm.visibilityPublic")
-                    : t("perm.visibilityPrivate"),
-              })}
-            </label>
-          )}
-        </ConfirmDialog>
+        />
       )}
-      {/* 승인 확인 */}
+      {/* 승인 확인 — 동봉 가시성 변경이 있으면 승인자에게 공개(원 신고 건) */}
       {approveConfirmOpen && (
-        <ConfirmDialog
-          icon={<Check size={28} strokeWidth={1.5} />}
-          title={t("approval.approveConfirmTitle")}
-          message={versionSubtitle}
-          lines={approverStatusLines}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <ApproveConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          extraLines={buildBundledVisibilityLines(workflow, nameById, t)}
           onConfirm={() => {
             setApproveConfirmOpen(false);
             void runTransition(approveVersion);
@@ -9626,26 +9615,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       )}
       {/* 게시 확인 — 현재 게시본이 만료됨을 안내 */}
       {publishConfirmOpen && (
-        <ConfirmDialog
-          icon={<Upload size={28} strokeWidth={1.5} />}
-          title={t("approval.publishConfirmTitle")}
-          message={versionSubtitle}
-          lines={(() => {
-            const prior = versions.find((v) => v.status === "published");
-            return prior
-              ? [
-                  {
-                    icon: <Info size={14} strokeWidth={1.5} />,
-                    text: t("approval.publishExpireLine", {
-                      name: `v${prior.version_number ?? "?"} · ${prior.label}`,
-                    }),
-                    tone: "error" as const,
-                  },
-                ]
-              : undefined;
-          })()}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <PublishConfirmDialog
+          subtitle={versionSubtitle}
+          priorPublished={versions.find((v) => v.status === "published") ?? null}
           onConfirm={() => {
             setPublishConfirmOpen(false);
             void runTransition(publishVersion);
@@ -9655,24 +9627,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       )}
       {/* 회수 확인 — 기존 승인 초기화 안내 */}
       {withdrawConfirmOpen && (
-        <ConfirmDialog
-          icon={<Undo2 size={28} strokeWidth={1.5} />}
-          title={t("approval.withdrawConfirmTitle")}
-          message={versionSubtitle}
-          banner={
-            <WithdrawHandoff
-              submitterName={
-                withdrawSubmitter
-                  ? (nameById.get(withdrawSubmitter) ?? withdrawSubmitter)
-                  : t("checkout.none")
-              }
-              youName={t("approval.you")}
-              transfers={!!withdrawSubmitter && withdrawSubmitter !== username}
-            />
-          }
-          sections={approverStatusLines.length ? [approverStatusLines] : undefined}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <WithdrawConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          withdrawSubmitter={withdrawSubmitter}
           onConfirm={() => {
             setWithdrawConfirmOpen(false);
             void runTransition(withdrawVersion);
@@ -9682,20 +9642,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       )}
       {/* 거절 — 사유 입력창 유지, 디자인 통일 */}
       {rejectOpen && (
-        <ConfirmDialog
-          icon={<X size={28} strokeWidth={1.5} />}
-          danger
-          title={t("wf.rejectTitle")}
-          message={versionSubtitle}
-          lines={approverStatusLines}
-          input={{
-            value: rejectReason,
-            onChange: setRejectReason,
-            placeholder: t("wf.rejectReason"),
-          }}
-          confirmDisabled={rejectReason.trim().length === 0}
-          confirmLabel={t("wf.reject")}
-          cancelLabel={t("common.cancel")}
+        <RejectDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          reason={rejectReason}
+          onReasonChange={setRejectReason}
           onConfirm={() => {
             const reason = rejectReason.trim();
             setRejectOpen(false);
