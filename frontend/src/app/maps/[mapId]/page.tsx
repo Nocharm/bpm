@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, UserRound, X, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -222,6 +222,7 @@ import { genId } from "@/lib/id";
 import { displayToSavedX } from "@/lib/inline-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
@@ -331,6 +332,15 @@ const NODE_TYPE_ICONS: Record<string, LucideIcon> = {
   decision: Diamond,
   start: Circle,
   end: CircleDot,
+};
+
+// 노드 디스플레이 토글 항목별 아이콘 — 인스펙터 맵 탭 접힘 섹션에서 라벨 왼쪽에 표시
+const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
+  assignee: UserRound,
+  department: Building2,
+  system: Server,
+  url: Link,
+  params: SlidersHorizontal,
 };
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -6458,6 +6468,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     [displayFields],
   );
 
+  // 맵 탭의 노드 디스플레이/엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요),
+  // 두 섹션이 키("nodeDisplay"/"edgeStyle")로 하나의 accordion-close 고스트 렌더를 공유.
+  const [nodeDisplaySectionOpen, setNodeDisplaySectionOpen] = useState(false);
+  const [edgeStyleSectionOpen, setEdgeStyleSectionOpen] = useState(false);
+  const { closingKeys: inspectorClosingKeys, beginClose: beginInspectorClose, cancelClose: cancelInspectorClose } =
+    useClosingKeys<string>();
+
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
   const startRename = useCallback(
@@ -9045,161 +9062,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
                 }
                 mapTabSlot={
-                  // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
-                  <div className="flex flex-col gap-4">
-                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    <div className="rounded-md border border-hairline p-3">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
-                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
-                      </div>
-                      {NODE_DISPLAY_TOGGLES.map((field) => {
-                        const on = displayFields.includes(field);
-                        const labelKey =
-                          field === "assignee"
-                            ? "field.assignee"
-                            : field === "department"
-                              ? "field.department"
-                              : field === "system"
-                                ? "field.system"
-                                : field === "url"
-                                  ? "field.url"
-                                  : "field.params";
-                        return (
-                          <div
-                            key={field}
-                            className="flex items-center justify-between py-1 text-caption text-ink-secondary"
-                          >
-                            <span>{t(labelKey)}</span>
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={on}
-                              aria-label={t(labelKey)}
-                              onClick={() => toggleDisplayField(field)}
-                              className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                                on ? "bg-accent" : "bg-border-strong"
-                              }`}
-                            >
-                              <span
-                                className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                                  on ? "left-3.5" : "left-0.5"
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div>
-                      <div className="mb-1 text-fine text-ink-tertiary">
-                        <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
-                        {t("inspector.mapWide")}
-                      </div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {([
-                          ["default", "edgeStyle.curve", Spline],
-                          ["smoothstep", "edgeStyle.step", CornerDownRight],
-                          ["straight", "edgeStyle.straight", Slash],
-                        ] as const).map(([value, labelKey, Icon]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            disabled={readOnly}
-                            title={t(labelKey)}
-                            aria-label={t(labelKey)}
-                            onClick={() => {
-                              setEdgeStyle(value);
-                              window.localStorage.setItem("bpm.edgeStyle", value);
-                            }}
-                            className={`flex items-center justify-center rounded-sm border py-2 ${
-                              edgeStyle === value
-                                ? "border-accent bg-accent-tint text-accent"
-                                : "border-hairline text-ink-secondary hover:bg-surface-alt"
-                            }`}
-                          >
-                            <Icon size={18} strokeWidth={1.5} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      disabledReasonKind={spDisabledReasonKind}
-                      onToast={showToast}
-                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
-                      onGoToPublished={(id) => void switchVersion(id)}
-                    />
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        data-id="export-png"
-                        onClick={() => void handleExportPng()}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <Download size={16} strokeWidth={1.5} />
-                        {t("inspector.exportPng")}
-                      </button>
-                      <button
-                        type="button"
-                        data-id="export-excel"
-                        onClick={() => setExcelExportOpen(true)}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <FileSpreadsheet size={16} strokeWidth={1.5} />
-                        {t("inspector.exportExcel")}
-                      </button>
-                      <button
-                        type="button"
-                        data-id="export-csv"
-                        onClick={handleExportCsv}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <FileDown size={16} strokeWidth={1.5} />
-                        {t("inspector.exportCsv")}
-                      </button>
-                    </div>
-                    {isWordMap && (
-                      <>
-                        <button
-                          type="button"
-                          data-id="inspector-generate-complete-doc"
-                          onClick={() => completeDocPickerRef.current?.click()}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          Generate complete document
-                        </button>
-                        <button
-                          type="button"
-                          data-id="inspector-export-word"
-                          onClick={handleExportWord}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          {t("inspector.exportWord")}
-                        </button>
-                        <input
-                          ref={completeDocPickerRef}
-                          type="file"
-                          accept=".docx"
-                          className="hidden"
-                          onChange={handleCompleteDocPicked}
-                        />
-                      </>
-                    )}
-                  </div>
-                }
-                approvalSlot={
-                  // R5c 승인 탭 — 버전 풀네임 라벨 + 축소 pill(전환) + 우측 아이콘(생성/이름/삭제) + 워크플로 + 타임라인
-                  // 점유권 이전·편집권한 요청·만료본 재게시 매트릭스 + 모달은 백엔드(버전번호·만료·점유권 API) 후 새 세션에서 추가
+                  // R5b/R6 W1 맵 탭 — 버전 선택(승인 탭에서 이동) + 가시성·소유자·협업자·설명(narrow)
+                  // + 노드 표시 토글(접힘) + 엣지 스타일(접힘, 아이콘) + PNG
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-2">
-                      {/* 버전 필(전환) — 승인 탭 좌상단 (풀네임 텍스트 라벨 제거) */}
+                      {/* 버전 필(전환) — 맵 탭 최상단으로 이동 (R6 W1, 승인 탭에서 옮김) */}
                       <VersionPill
                         versions={versions}
                         versionId={versionId}
@@ -9311,6 +9178,200 @@ function MapEditor({ mapId }: { mapId: number }) {
                         )}
                       </div>
                     </div>
+                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
+                    <div data-id="inspector-node-display-section" className="rounded-md border border-hairline p-3">
+                      <button
+                        type="button"
+                        aria-expanded={nodeDisplaySectionOpen}
+                        onClick={() => {
+                          if (nodeDisplaySectionOpen) beginInspectorClose("nodeDisplay");
+                          else cancelInspectorClose("nodeDisplay");
+                          setNodeDisplaySectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={14}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${nodeDisplaySectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
+                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
+                      </button>
+                      {(nodeDisplaySectionOpen || inspectorClosingKeys.has("nodeDisplay")) && (
+                        <div className={inspectorClosingKeys.has("nodeDisplay") ? "accordion-close" : "accordion-open"}>
+                          <div className="mt-1">
+                            {NODE_DISPLAY_TOGGLES.map((field) => {
+                              const on = displayFields.includes(field);
+                              const Icon = NODE_DISPLAY_ICONS[field];
+                              const labelKey =
+                                field === "assignee"
+                                  ? "field.assignee"
+                                  : field === "department"
+                                    ? "field.department"
+                                    : field === "system"
+                                      ? "field.system"
+                                      : field === "url"
+                                        ? "field.url"
+                                        : "field.params";
+                              return (
+                                <div
+                                  key={field}
+                                  className="flex items-center justify-between py-1 text-caption text-ink-secondary"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Icon size={14} strokeWidth={1.5} className="text-ink-muted" />
+                                    {t(labelKey)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={on}
+                                    aria-label={t(labelKey)}
+                                    onClick={() => toggleDisplayField(field)}
+                                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                      on ? "bg-accent" : "bg-border-strong"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                        on ? "left-3.5" : "left-0.5"
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div data-id="inspector-edge-style-section">
+                      <button
+                        type="button"
+                        aria-expanded={edgeStyleSectionOpen}
+                        onClick={() => {
+                          if (edgeStyleSectionOpen) beginInspectorClose("edgeStyle");
+                          else cancelInspectorClose("edgeStyle");
+                          setEdgeStyleSectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={14}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${edgeStyleSectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine text-ink-tertiary">
+                          <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
+                          {t("inspector.mapWide")}
+                        </span>
+                      </button>
+                      {(edgeStyleSectionOpen || inspectorClosingKeys.has("edgeStyle")) && (
+                        <div className={inspectorClosingKeys.has("edgeStyle") ? "accordion-close" : "accordion-open"}>
+                          <div className="mt-1 grid grid-cols-3 gap-1.5">
+                            {([
+                              ["default", "edgeStyle.curve", Spline],
+                              ["smoothstep", "edgeStyle.step", CornerDownRight],
+                              ["straight", "edgeStyle.straight", Slash],
+                            ] as const).map(([value, labelKey, Icon]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                disabled={readOnly}
+                                title={t(labelKey)}
+                                aria-label={t(labelKey)}
+                                onClick={() => {
+                                  setEdgeStyle(value);
+                                  window.localStorage.setItem("bpm.edgeStyle", value);
+                                }}
+                                className={`flex items-center justify-center rounded-sm border py-2 ${
+                                  edgeStyle === value
+                                    ? "border-accent bg-accent-tint text-accent"
+                                    : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                                }`}
+                              >
+                                <Icon size={18} strokeWidth={1.5} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
+                      onToast={showToast}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
+                    />
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        data-id="export-png"
+                        onClick={() => void handleExportPng()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPng")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-excel"
+                        onClick={() => setExcelExportOpen(true)}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileSpreadsheet size={16} strokeWidth={1.5} />
+                        {t("inspector.exportExcel")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-csv"
+                        onClick={handleExportCsv}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileDown size={16} strokeWidth={1.5} />
+                        {t("inspector.exportCsv")}
+                      </button>
+                    </div>
+                    {isWordMap && (
+                      <>
+                        <button
+                          type="button"
+                          data-id="inspector-generate-complete-doc"
+                          onClick={() => completeDocPickerRef.current?.click()}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          Generate complete document
+                        </button>
+                        <button
+                          type="button"
+                          data-id="inspector-export-word"
+                          onClick={handleExportWord}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          {t("inspector.exportWord")}
+                        </button>
+                        <input
+                          ref={completeDocPickerRef}
+                          type="file"
+                          accept=".docx"
+                          className="hidden"
+                          onChange={handleCompleteDocPicked}
+                        />
+                      </>
+                    )}
+                  </div>
+                }
+                approvalSlot={
+                  // R5c 승인 탭 — 워크플로 + 타임라인. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
+                  <div className="flex flex-col gap-4">
                     {currentVersion && (
                     <ApprovalPanel
                       status={currentVersion.status}
