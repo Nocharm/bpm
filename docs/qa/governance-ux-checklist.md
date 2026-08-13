@@ -1,7 +1,7 @@
 # 거버넌스 UX 확장 검증 체크리스트 (feat/governance-ux)
 
-> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉) + R4 가시성 UX + R5 Remove 필 폴리시.
-> 자동 게이트: BE pytest 1042·ruff 0 / FE vitest 620·lint 0 error(1 warning)·tsc 0·build OK — 이 문서는 **사용자 실사용 검증**용. 항목당 1~2분.
+> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉) + R4 가시성 UX + R5 Remove 필 폴리시 + R6 인스펙터 재정비.
+> 자동 게이트: BE pytest 1042·ruff 0 / FE vitest 620·lint 1 warning·tsc 0·build OK — 이 문서는 **사용자 실사용 검증**용. 항목당 1~2분.
 
 ## 준비
 
@@ -101,6 +101,16 @@ DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys .venv/bin/uvicorn app.main:
 - [ ] **R5-2 인스펙터 행 단위 hover 스코프**: 에디터 우측 인스펙터 Map 탭(허용 인원 아코디언, `<details className="group">`로 감싼 표면)에서 한 행에만 hover → **그 행만** Remove 필로 전환되고 나머지 행은 그대로(전 행 동시 스왑 없음).
 - [ ] **R5-3 비호버 시 필 우측 정렬 일치**: 비호버 상태에서 Owner/Editor/Viewer 필이 모두 같은 고정폭으로 우측 정렬이 일치(오너 행만 삐져나오는 등의 어긋남 없음. 오우닝 부서 행의 Editor 필은 별도 잠금 행이라 예외).
 - [ ] **R5-4 제거 예정 태그의 소속 줄 재배치**: 멤버를 제거 예정으로 적립하면 권한 필은 1행에 그대로 유지되고, 2행(좌측 소속/부서 줄과 같은 높이 대역)에 같은 크기의 빨간 staged 필이 노출된다. 행 hover/focus 시에만 그 우측 취소 X가 페이드 인하며(기본은 공간만 예약), 나타날 때 옆 필이나 레이아웃이 밀리지 않는다.
+
+## R6 (인스펙터 재정비)
+
+- [ ] **R6-1 노드 디스플레이 기본 접힘 + 항목 아이콘**: 에디터 우측 Map 탭 → 노드 디스플레이 섹션이 **기본 접힘** 상태로 표시 → 헤더 클릭 시 ChevronRight가 회전하며 accordion 애니로 펼쳐짐 → 각 토글(assignee/department/system/url/params)의 왼쪽에 아이콘(사람/건물/서버/링크/슬라이더, 14px) 표시. (O/E)
+- [ ] **R6-2 엣지 스타일 기본 접힘 + 아코디언**: 에디터 우측 Map 탭 → 엣지 스타일 섹션이 **기본 접힘** 상태로 표시 → 헤더 클릭 시 ChevronRight 회전+accordion으로 펼침. (O/E)
+- [ ] **R6-3 버전 선택 행이 맵 탭 최상단**: 에디터 우측 탭 → **Map 탭** 상단에 버전 선택 행(VersionPill + 우측 아이콘 클러스터) 표시 → **Approval 탭**에는 없음. (O/E)
+- [ ] **R6-4 승인 탭 순서 + 드래프트 CTA 두 상태**: 에디터 우측 Approval 탭 → 순서가 ① 결재 대기 섹션(최상단, 기본 접힘) ② **드래프트 CTA 행** ③ 워크플로(기본 펼침) ④ SP ⑤ 타임라인 순 → **드래프트 有일 때** CTA는 "승인을 위해 드래프트로 전환"(`FileEdit` 아이콘), **無일 때** "승인을 위해 드래프트 생성"(`Plus` 아이콘) → **현재가 draft 상태**이면 CTA 미노출. (O/E)
+- [ ] **R6-5 체크아웃 UI draft 전용**: 워크플로 섹션 → Checkout 버튼이 **draft 상태에서만 표시**, rejected 상태에는 미표시. (O/E)
+- [ ] **R6-6 협업자 개인 목록 3.3행 클램프 + 전체 펼치기**: 맵 상세 카드(또는 인스펙터 Map 탭) → 멤버 목록의 **개인(user) 그룹**이 **3.3행으로 클램프**, 4명 이상일 때 하단에 "전체 펼치기 (N)" 버튼 노출 → 클릭 시 클램프 해제 + accordion 확장 → 버튼이 "접기"로 토글 → 재클릭 시 원상복귀(부서/그룹 그룹·오너 섹션은 클램프 적용 안 함). (O/E/V)
+- [ ] **R6-7 SP 카드 버튼 행 재배치 + 아이콘**: 우측 SP 카드 → 액션 버튼이 **한 행**에 통합, 좌측에 "Designate as subprocess"(`Workflow` 아이콘, 14px), 우측 정렬으로 ① kind==="needPublished"면 "게시본 가기"(`ArrowRight` 아이콘) 또는 ② kind==="ownerOnly"&&!designated이면 "등록 요청"(`BadgeCheck` 아이콘) → canManage=false인 경우에도 버튼 행 자체는 유지(좌측 비우고 우측 버튼만) → 그 **아래에는 reason 노트만 표시**(버튼 없음). (O/E/V)
 
 ## 회귀 스팟 (기존 기능 무손상 확인)
 
