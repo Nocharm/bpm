@@ -206,7 +206,7 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
-import { humanizeApiError } from "@/lib/api-errors";
+import { humanizeApiError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
 import { getStaleSectionNodeIds } from "@/lib/word-map-home";
@@ -2488,6 +2488,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     let active = true;
+    // 본인 권한 변경이 pending이면 acquire-checkout이 영구 409 — 인터벌을 클로저 변수로 들고
+    // catch에서 감지 시 정지(재시도 스팸 제거). stopped는 첫 poll(인터벌 설정 전) 실패 시
+    // 인터벌 생성 자체를 생략하는 가드.
+    let stopped = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     const poll = async () => {
       try {
         const state = await acquireCheckout(versionId);
@@ -2497,16 +2502,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         checkoutMineRef.current = state.mine;
         setCheckout(state);
       } catch (err) {
-        if (active) {
-          setStatus(humanizeApiError(err, t));
+        if (!active) {
+          return;
+        }
+        setStatus(humanizeApiError(err, t));
+        if (getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX)) {
+          stopped = true;
+          if (intervalId !== null) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
         }
       }
     };
-    void poll();
-    const interval = setInterval(() => void poll(), CHECKOUT_POLL_MS);
+    void poll().then(() => {
+      if (active && !stopped) {
+        intervalId = setInterval(() => void poll(), CHECKOUT_POLL_MS);
+      }
+    });
     return () => {
       active = false;
-      clearInterval(interval);
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
       checkoutMineRef.current = false;
     };
   }, [versionId, versions, isEditorRole, t]);

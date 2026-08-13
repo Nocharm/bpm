@@ -7,6 +7,7 @@
 - **T1 UI 정기간식**: SP 안내 ⓘ 클릭 시 접힘/펼침 토글 차단(`stopPropagation`) + SP 등록 409 메시지 i18n화(`apiError.spDesignationPending`, "이미 이 맵의 등록 요청이 승인 대기 중입니다.").
 - **T2 로직 정합**: `stageRoleChange`로 원복 선택(현재 role 재선택) 시 staged change/remove를 소거해 no-op 스택 쌓임 방지(협업자 패널 적용 — 맵 상세 카드는 role 변경 UI 자체가 없어 해당 없음). `PendingApprovalsPanel` 결재 대기 카운트는 버전 동봉 visibility_change 행(`isBundledRow`) 제외(목록 표시는 유지).
 - **T3 새 맵 모달 협업자 팝오버 통일**: `RolePopover`를 `add-collaborator.tsx`→`role-popover.tsx`로 추출(named export, 무변화 리팩터) 후 `create-map-dialog.tsx`도 공용 — 우측 role select+정적 Editor 라벨(`pendingCollabRole`) 폐기, `PrincipalPicker` 클릭 좌표로 클릭 위치 팝오버 2-step(퍼블릭은 Viewer 숨김·Editor만) + 방금 추가된 행 `picker-flash`+scrollIntoView(`lastAddedKey`, collaborators-panel.tsx 패턴 재사용). 고아화된 `perm.createDialog.collaboratorRoleViewerDisabled` i18n 키 제거(en/ko 사용처 0 확인).
+- **T4 체크아웃 폴 중지**: 본인 권한 변경 pending 409(`getApiErrorDetail`+`PERMISSION_PENDING_DETAIL_PREFIX` — `api-errors.ts` 신규 export, DETAIL_PREFIX_MAP과 단일 소스 공유) 감지 시 체크아웃 폴 인터벌 정지(첫 poll 실패는 인터벌 생성 자체 생략, `stopped` 플래그). 편집 게이팅 코드 리뷰: `readOnly`는 `checkout.mine===false`에서만 강제되고 `checkout===null`(미보유/영구 실패)에서는 isViewer·statusLocksEditing 없이는 강제되지 않음 — 기존 동작, 스코프 밖(배선 추가 안 함, 후속 후보로 기록).
 
 ## 2026-08-13 — 거버넌스 R2: QA 피드백 반영 (feat/governance-r2 → dev 머지)
 - **pending 가시성·복구**: 행 단위 pending 노출(`PermissionOut.pending_change`·`WorkflowStateOut.bundled_visibility`)로 요청자 아닌 유저에게도 승인 대기 태그(→role·요청자) 표시. `lib/api-errors.ts` `humanizeApiError`(서버 detail 전방일치 10종→i18n) 16개 catch 지점 — 409도 pending 재조회로 마커·철회 버튼 복구(막다른 상태 제거).
