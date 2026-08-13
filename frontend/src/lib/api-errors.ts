@@ -1,5 +1,5 @@
 // ApiError → 사람이 읽는 문구. 알려진 서버 detail은 i18n으로, 미지는 detail 원문(코드 프리픽스 제거)으로.
-import { getApiErrorDetail } from "./api";
+import { ApiError, getApiErrorDetail } from "./api";
 import type { MessageKey } from "./i18n-messages";
 
 type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string;
@@ -27,5 +27,12 @@ const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
 export function humanizeApiError(err: unknown, t: TFunc): string {
   const detail = getApiErrorDetail(err);
   const hit = DETAIL_PREFIX_MAP.find(([prefix]) => detail.startsWith(prefix));
-  return hit ? t(hit[1]) : detail;
+  if (hit) return t(hit[1]);
+  if (err instanceof ApiError) {
+    // 미매핑 폴백 — 현장 제보용 상태코드 꼬리표. detail 파싱 실패(비 JSON 응답)면 원문 대신 일반 문구.
+    return detail !== err.message
+      ? `${detail} (HTTP ${err.status})`
+      : t("apiError.requestFailed", { status: err.status });
+  }
+  return detail;
 }

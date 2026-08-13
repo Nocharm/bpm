@@ -1612,6 +1612,7 @@ const en = {
   "apiError.syncThrottled": "Sync was throttled — please try again shortly.",
   "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
   "apiError.spDesignationPending": "A registration request is already pending for this map.",
+  "apiError.requestFailed": "Request failed (HTTP {status})",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -3221,6 +3222,7 @@ const ko: Record<MessageKey, string> = {
   "apiError.syncThrottled": "동기화가 제한되었습니다 — 잠시 후 다시 시도하세요.",
   "apiError.ownerOnlyBundle": "맵 소유자만 버전 제출과 함께 묶을 수 있습니다.",
   "apiError.spDesignationPending": "이미 이 맵의 등록 요청이 승인 대기 중입니다.",
+  "apiError.requestFailed": "요청이 실패했습니다 (HTTP {status})",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };
