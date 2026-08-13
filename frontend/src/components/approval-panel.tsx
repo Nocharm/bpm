@@ -35,6 +35,9 @@ interface ApprovalPanelProps {
   canDecideCheckout?: boolean;
   onDecideCheckout?: (requestId: number, approve: boolean) => void;
   onWithdrawCheckout?: (requestId: number) => void;
+  // 래핑 섹션(page.tsx 승인 워크플로 접힘 헤더)이 제목+상태배지를 대신 그릴 때 내부 헤더 생략
+  // — 동일 텍스트 중복 렌더 방지 (R6 W2 리뷰 수정).
+  hideHeader?: boolean;
 }
 
 const STEPS: { key: string; labelKey: MessageKey }[] = [
@@ -78,6 +81,7 @@ export function ApprovalPanel({
   canDecideCheckout = false,
   onDecideCheckout,
   onWithdrawCheckout,
+  hideHeader = false,
 }: ApprovalPanelProps) {
   const { t } = useI18n();
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
@@ -109,14 +113,14 @@ export function ApprovalPanel({
   const isExpired = status === "expired";
   // 점유권 탭 조작 가능 상태 — draft에서만(그 외 view-only). 점유 이동(요청/이전/결정)은 draft 전용.
   const checkoutInteractive = status === "draft";
-  // 체크아웃 탭 노출 — draft/rejected에서만(pending/approved/published/expired는 비어 있어 숨김).
-  const showCheckout = status === "draft" || status === "rejected";
+  // 체크아웃 탭 노출 — draft에서만(그 외 상태는 비어 있어 숨김). rejected는 R6 W2에서 제외(사용자 지시).
+  const showCheckout = status === "draft";
   const resolve = (id: string): string => nameById.get(id) ?? id;
   const pendingNames = approvers.filter((id) => !approvals.has(id)).map(resolve);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 체크아웃 탭 — 워크플로 상태 헤더 위. draft/rejected에서만(그 외 비어 있어 숨김). 기본 접힘. */}
+      {/* 체크아웃 탭 — 워크플로 상태 헤더 위. draft에서만(그 외 비어 있어 숨김). 기본 접힘. */}
       {showCheckout && (
         <CheckoutPanel
           workflow={workflow}
@@ -129,11 +133,13 @@ export function ApprovalPanel({
         />
       )}
 
-      {/* 헤더 — 승인 워크플로 + 상태 배지 */}
-      <div className="flex items-center justify-between">
-        <span className="text-fine text-ink-tertiary">{t("approval.workflowTitle")}</span>
-        <StatusBadge status={status} />
-      </div>
+      {/* 헤더 — 승인 워크플로 + 상태 배지. hideHeader=true면 생략(래핑 섹션 헤더가 대신 그림, R6 W2) */}
+      {!hideHeader && (
+        <div className="flex items-center justify-between">
+          <span className="text-fine text-ink-tertiary">{t("approval.workflowTitle")}</span>
+          <StatusBadge status={status} />
+        </div>
+      )}
 
       {/* 스테퍼 — 제출 → 검토 → 게시. 만료(expired) 시 전체 비활성 + "Expired" 워터마크 */}
       <div className="relative">
