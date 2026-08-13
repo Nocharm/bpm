@@ -5,6 +5,7 @@
 
 ## 2026-08-13 — 거버넌스 R2: QA 피드백 반영 (feat/governance-r2)
 - **R1 백엔드**: `PermissionOut.pending_change`(행 단위 pending 다운그레이드 노출)·`WorkflowStateOut.bundled_visibility`(동봉 가시성 공개) + 워크플로 상호 배제(정방향: 체크아웃 보유자·pending/approved 제출자 대상 권한 변경 차단[오너 직접 적용 포함] / 역방향: 본인 pending 다운그레이드 시 체크아웃·제출 차단). 게이트: BE pytest 1042·ruff 0.
+- **R2 FE**: `pending_change` 기반 서버 진실 pending 마커(collaborators-panel·map-detail-card 두 표면, role→role+요청자 상세 태그) · `lib/api-errors.ts`(`humanizeApiError` — 서버 detail 전방일치 10종 → i18n, 미지는 원문) 13개 catch 지점 적용 · visibility 409는 pending 재조회로 마커+철회 버튼 복구(막다른 상태 방지) + 스테이징 미리보기에 Cancel 버튼. 게이트: FE vitest 610·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv → dev 머지)
 - **인원 동기화 로딩**: sync 버튼 Loader2 스피너 + busy가 후속 재조회까지 커버(재조회 실패는 err.message로 전파 — 삼킴 제거).

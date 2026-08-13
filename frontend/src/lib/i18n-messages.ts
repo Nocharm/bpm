@@ -1189,6 +1189,9 @@ const en = {
   "perm.removeButton": "Remove",
   "perm.toastGated": "Approval request sent.",
   "perm.toastGatedBy": "Approval pending — can be approved by: {names}",
+  "perm.pending.tag": "Approval pending",
+  "perm.pending.removed": "removed",
+  "perm.pending.by": "requested by {name}",
   "perm.approversNone": "a designated approver or a system admin",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "Back to editor",
@@ -1579,6 +1582,17 @@ const en = {
   "framework.importColAction": "Action",
   "framework.importColDetail": "Detail",
   "framework.importTruncated": "Showing the first 500 rows (errors and warnings first).",
+  // ── API 에러 메시지(humanizeApiError, lib/api-errors.ts) — 알려진 서버 detail 전방일치 매핑 ──
+  "apiError.visibilityPending": "A visibility change is already pending approval.",
+  "apiError.grantPending": "A change to this permission is already pending approval.",
+  "apiError.noApprovers": "This map has no approvers assigned.",
+  "apiError.visibilityUnchanged": "Visibility is already set to that value.",
+  "apiError.grantExists": "This collaborator already has a permission grant.",
+  "apiError.bundledWithVersion": "This request is decided together with the version approval.",
+  "apiError.activeWorkflow": "This collaborator is part of an active version workflow — resolve it first.",
+  "apiError.permissionPending": "Your permission change is still pending approval.",
+  "apiError.syncThrottled": "Sync was throttled — please try again shortly.",
+  "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -2769,6 +2783,9 @@ const ko: Record<MessageKey, string> = {
   "perm.removeButton": "제거",
   "perm.toastGated": "승인 요청을 보냈습니다.",
   "perm.toastGatedBy": "승인 대기 — 승인 가능: {names}",
+  "perm.pending.tag": "승인 대기",
+  "perm.pending.removed": "제거",
+  "perm.pending.by": "{name} 요청",
   "perm.approversNone": "지정 승인자 또는 시스템 관리자",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "편집기로 돌아가기",
@@ -3157,6 +3174,17 @@ const ko: Record<MessageKey, string> = {
   "framework.importColAction": "동작",
   "framework.importColDetail": "상세",
   "framework.importTruncated": "최대 500행만 표시합니다(오류·경고 우선).",
+  // ── API 에러 메시지(humanizeApiError, lib/api-errors.ts) — 알려진 서버 detail 전방일치 매핑 ──
+  "apiError.visibilityPending": "이미 승인 대기 중인 공개 범위 변경 요청이 있습니다.",
+  "apiError.grantPending": "이 권한에 대한 변경이 이미 승인 대기 중입니다.",
+  "apiError.noApprovers": "이 맵에 지정된 승인자가 없습니다.",
+  "apiError.visibilityUnchanged": "이미 해당 공개 범위로 설정되어 있습니다.",
+  "apiError.grantExists": "이미 권한이 부여된 협업자입니다.",
+  "apiError.bundledWithVersion": "이 요청은 버전 승인과 함께 결정됩니다.",
+  "apiError.activeWorkflow": "이 협업자는 진행 중인 버전 워크플로에 포함되어 있습니다 — 먼저 해결하세요.",
+  "apiError.permissionPending": "권한 변경이 아직 승인 대기 중입니다.",
+  "apiError.syncThrottled": "동기화가 제한되었습니다 — 잠시 후 다시 시도하세요.",
+  "apiError.ownerOnlyBundle": "맵 소유자만 버전 제출과 함께 묶을 수 있습니다.",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

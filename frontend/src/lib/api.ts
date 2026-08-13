@@ -675,6 +675,8 @@ export interface WorkflowState {
   pending_checkout_request?: PendingCheckoutRequest | null;
   // 미결 점유 요청 전체(요청자 복수)
   pending_checkout_requests?: PendingCheckoutRequest[];
+  // 이 버전과 함께 결정될 pending 가시성 변경(제출 시 번들) — R3 UI 대상, 타입만 선반영
+  bundled_visibility?: { from_visibility: string; to_visibility: string; requested_by: string } | null;
 }
 
 export interface Me {
@@ -884,6 +886,8 @@ export interface MapPermission {
   principal_id: string;
   role: string;
   granted_by: string;
+  // 서버 진실 pending 마커 — 다른 유저가 낸 다운그레이드/제거 요청도 조회 즉시 보이도록 (session-local 아님)
+  pending_change?: { to_role: string | null; requested_by: string } | null;
 }
 
 // PATCH/DELETE 응답 봉투 — 다운그레이드/에디터제거는 즉시 적용 대신 pending 요청.

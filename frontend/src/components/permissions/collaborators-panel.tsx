@@ -25,6 +25,7 @@ import {
   type MapRole,
   type PrincipalType,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
 import { AddCollaborator } from "./add-collaborator";
@@ -107,6 +108,11 @@ function CollaboratorRow({
   // 자기 자신 행은 역할/제거 비활성 / Disable controls on own row.
   const isSelf = principalType === "user" && perm.principal_id === currentUserId;
   const controlsDisabled = !canEdit || isOwner || isSelf;
+  // 요청자 표시명 — 실 디렉터리 우선, 없으면 login id 폴백 / requester display name.
+  const pendingChange = perm.pending_change;
+  const pendingByName = pendingChange
+    ? dirUsers.find((u) => u.id === pendingChange.requested_by)?.name ?? pendingChange.requested_by
+    : "";
 
   return (
     <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-surface-alt">
@@ -129,7 +135,18 @@ function CollaboratorRow({
 
       {/* 역할 뱃지 or 드롭다운 / Role badge or dropdown */}
       {isOwner || isPending ? (
-        <RoleBadge role={role} pending={isPending} />
+        <span className="flex items-center gap-1">
+          <RoleBadge role={role} pending={isPending} />
+          {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 / detail tag only once server-confirmed */}
+          {pendingChange && (
+            <span
+              className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+              title={t("perm.pending.by", { name: pendingByName })}
+            >
+              {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+            </span>
+          )}
+        </span>
       ) : controlsDisabled ? (
         <RoleBadge role={role} />
       ) : (
@@ -201,9 +218,9 @@ export function CollaboratorsPanel({
       const rows = await listMapPermissions(mapIdNum);
       setPerms(rows);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t));
     }
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   // 초기 로드 — 인라인 async + active 가드(언마운트 후 setState 방지) /
   // Initial load: inline async with an active guard (avoids set-state-after-unmount).
@@ -225,7 +242,7 @@ export function CollaboratorsPanel({
           setApproverIds(approvers);
         }
       } catch (err) {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t));
       } finally {
         if (active) setLoading(false);
       }
@@ -233,7 +250,7 @@ export function CollaboratorsPanel({
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   const handleAdd = useCallback(
     async (
@@ -245,10 +262,10 @@ export function CollaboratorsPanel({
         await addMapPermission(mapIdNum, principalType, principalId, role);
         await reload();
       } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
+        onToast(humanizeApiError(err, t));
       }
     },
-    [mapIdNum, reload, onToast],
+    [mapIdNum, reload, onToast, t],
   );
 
   const handleChangeRole = useCallback(
@@ -259,11 +276,13 @@ export function CollaboratorsPanel({
           // 지연 — 역할 미변경. "승인 대기" 표시 + 승인 권한자 안내 / Pending: show badge + who can approve.
           setPendingIds((prev) => new Set(prev).add(perm.id));
           onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
+          // pending_change를 서버에서 즉시 채워 상세 태그가 이 세션에도 바로 보이도록 (재조회 전엔 배지만 보임)
+          await reload();
         } else {
           await reload();
         }
       } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
+        onToast(humanizeApiError(err, t));
       }
     },
     [mapIdNum, reload, onToast, t, approverDisplayNames],
@@ -277,11 +296,13 @@ export function CollaboratorsPanel({
           // 에디터 제거는 승인 지연 — 행 유지, "승인 대기" + 승인 권한자 안내 / Gated: keep row, show who can approve.
           setPendingIds((prev) => new Set(prev).add(perm.id));
           onToast(t("perm.toastGatedBy", { names: approverDisplayNames }));
+          // pending_change를 서버에서 즉시 채워 상세 태그가 이 세션에도 바로 보이도록 (재조회 전엔 배지만 보임)
+          await reload();
         } else {
           await reload();
         }
       } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
+        onToast(humanizeApiError(err, t));
       }
     },
     [mapIdNum, reload, onToast, t, approverDisplayNames],
@@ -331,7 +352,7 @@ export function CollaboratorsPanel({
           perm={perm}
           currentUserId={currentUserId}
           canEdit={canEdit}
-          isPending={pendingIds.has(perm.id)}
+          isPending={perm.pending_change != null || pendingIds.has(perm.id)}
           viewerGrantDisabled={viewerGrantDisabled}
           dirUsers={dirUsers}
           dirDepts={dirDepts}

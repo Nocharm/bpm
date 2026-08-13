@@ -45,6 +45,7 @@ import {
   type MapPermission,
   type PrincipalType,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
@@ -237,11 +238,13 @@ export function MapDetailCard({
       const result = await removeMapPermission(mapId, perm.id);
       if (result.pending) {
         setPendingIds((prev) => new Set(prev).add(perm.id));
+        // pending_change를 서버에서 즉시 채워 상세 태그가 이 세션에도 바로 보이도록 (재조회 전엔 배지만 보임)
+        setLocalReloadKey((k) => k + 1);
       } else {
         setLocalReloadKey((k) => k + 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
     }
   }
 
@@ -254,7 +257,7 @@ export function MapDetailCard({
       await addMapPermission(mapId, principalType, principalId, role);
       setLocalReloadKey((k) => k + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
     }
   }
 
@@ -308,12 +311,12 @@ export function MapDetailCard({
         }
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, [mapId, loginId, reloadKey, localReloadKey]);
+  }, [mapId, loginId, reloadKey, localReloadKey, t]);
 
   if (error) {
     return <p className="p-4 text-caption text-error">{error}</p>;
@@ -805,7 +808,22 @@ export function MapDetailCard({
                               </span>
                             </span>
                             <span className="flex items-center gap-1">
-                              <RoleBadge role={perm.role as MapRole} pending={pendingIds.has(perm.id)} />
+                              <RoleBadge
+                                role={perm.role as MapRole}
+                                pending={perm.pending_change != null || pendingIds.has(perm.id)}
+                              />
+                              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
+                              {perm.pending_change && (
+                                <span
+                                  className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                                  title={t("perm.pending.by", {
+                                    name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                                  })}
+                                >
+                                  {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} ·{" "}
+                                  {t("perm.pending.tag")}
+                                </span>
+                              )}
                               {canManageMembers && perm.role !== "owner" && (
                                 <button
                                   type="button"
