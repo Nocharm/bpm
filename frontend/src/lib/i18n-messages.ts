@@ -1196,6 +1196,13 @@ const en = {
   "perm.approversNone": "a designated approver or a system admin",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "Back to editor",
+  // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
+  "perm.staged.add": "To add",
+  "perm.staged.change": "Change",
+  "perm.staged.remove": "To remove",
+  "perm.staged.save": "Save changes",
+  "perm.staged.cancel": "Discard",
+  "perm.staged.result": "{applied} applied · {pending} pending approval · {failed} failed",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "Approvers",
   "perm.approversHint": "Approvers must all approve before a version can be published.",
@@ -2789,6 +2796,13 @@ const ko: Record<MessageKey, string> = {
   "perm.approversNone": "지정 승인자 또는 시스템 관리자",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "편집기로 돌아가기",
+  // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
+  "perm.staged.add": "추가 예정",
+  "perm.staged.change": "변경 예정",
+  "perm.staged.remove": "제거 예정",
+  "perm.staged.save": "변경 저장",
+  "perm.staged.cancel": "취소",
+  "perm.staged.result": "{applied}건 적용 · {pending}건 승인 대기 · {failed}건 실패",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "결재자",
   "perm.approversHint": "모든 결재자가 승인해야 버전을 게시할 수 있습니다.",

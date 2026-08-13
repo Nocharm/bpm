@@ -32,12 +32,10 @@ import {
 } from "lucide-react";
 
 import {
-  addMapPermission,
   getDirectory,
   getMap,
   listGroups,
   listMapPermissions,
-  removeMapPermission,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -61,6 +59,7 @@ import {
   formatTitleWithPosition,
 } from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
+import { applyStagedOps, removeStagedOp, upsertStagedOp, type StagedOp } from "@/lib/permission-staging";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
@@ -210,8 +209,9 @@ export function MapDetailCard({
   const [dirUsersRaw, setDirUsersRaw] = useState<DirectoryUser[]>([]);
   const [dirDeptsRaw, setDirDeptsRaw] = useState<DirectoryDept[]>([]);
   const [groupsRaw, setGroupsRaw] = useState<Group[]>([]);
-  // 다운그레이드/제거 승인 대기 permission id — RoleBadge pending 배지 (협업자 패널과 대칭, 세션-로컬)
-  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
+  const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
+  const [savingStaged, setSavingStaged] = useState(false);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -232,33 +232,44 @@ export function MapDetailCard({
   const collapseVersions = () => setExpandedVersions(new Set());
   const collapseMembers = () => setExpandedMembers(new Set());
 
-  // 멤버 제거 — 승인 지연이면 행 유지 + pending 배지, 즉시 적용이면 재조회 (협업자 패널과 동일 규칙)
-  async function handleRemoveMember(perm: MapPermission) {
+  // 멤버 제거/추가는 즉시 API를 부르지 않고 스택에 적립만 — Save에서 일괄 실행 (trivial setState라 plain
+  // function으로: React Compiler가 useCallback 수동 deps와 어긋나면 빌드가 깨진다, frontend/AGENTS.md).
+  function handleRemoveMember(perm: MapPermission) {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "remove", permissionId: perm.id }));
+  }
+
+  function handleAddMember(principalType: PrincipalType, principalId: string, role: "viewer" | "editor") {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "add", principalType, principalId, role }));
+  }
+
+  function handleCancelStaged(op: StagedOp) {
+    setStagedOps((ops) => removeStagedOp(ops, op));
+  }
+
+  // Save — 스택을 일괄 실행. 실패가 있을 때만 error state로 표시(기존 catch(err) 관례와 동일 채널) —
+  // 성공/승인대기는 재조회(reload)의 최신 목록·pending 배지로 이미 반영된다.
+  async function handleSaveStaged() {
+    setSavingStaged(true);
     try {
-      const result = await removeMapPermission(mapId, perm.id);
-      if (result.pending) {
-        setPendingIds((prev) => new Set(prev).add(perm.id));
-        // pending_change를 서버에서 즉시 채워 상세 태그가 이 세션에도 바로 보이도록 (재조회 전엔 배지만 보임)
-        setLocalReloadKey((k) => k + 1);
-      } else {
-        setLocalReloadKey((k) => k + 1);
+      const result = await applyStagedOps(mapId, stagedOps);
+      if (result.failed.length > 0) {
+        const summary = t("perm.staged.result", {
+          applied: result.applied,
+          pending: result.pending,
+          failed: result.failed.length,
+        });
+        const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+        setError(`${summary} — ${failureText}`);
       }
-    } catch (err) {
-      setError(humanizeApiError(err, t));
+      setStagedOps([]);
+      setLocalReloadKey((k) => k + 1);
+    } finally {
+      setSavingStaged(false);
     }
   }
 
-  async function handleAddMember(
-    principalType: PrincipalType,
-    principalId: string,
-    role: "viewer" | "editor",
-  ) {
-    try {
-      await addMapPermission(mapId, principalType, principalId, role);
-      setLocalReloadKey((k) => k + 1);
-    } catch (err) {
-      setError(humanizeApiError(err, t));
-    }
+  function handleCancelAllStaged() {
+    setStagedOps([]); // 저장 안 하면 작업 취소 — 서버 호출 없이 스택만 비움
   }
 
   useEffect(() => {
@@ -340,6 +351,12 @@ export function MapDetailCard({
   // 멤버 추가/제거 편집 게이트 — 백엔드 기준 editor+ (sysadmin은 서버 my_role이 owner로 해석됨)
   const canManageMembers =
     detail !== null && (detail.my_role === "editor" || detail.my_role === "owner");
+
+  // 편집 스택 파생 — 추가 예정 목록 + permissionId별 remove 예정 조회(협업자 패널과 동일 규칙, C4).
+  const stagedAdds = stagedOps.filter((op): op is StagedOp & { kind: "add" } => op.kind === "add");
+  const stagedRemoveIds = new Set(
+    stagedOps.filter((op): op is StagedOp & { kind: "remove" } => op.kind === "remove").map((op) => op.permissionId),
+  );
 
   // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
   // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
@@ -747,6 +764,8 @@ export function MapDetailCard({
                             </span>
                           );
                         }
+                        // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
+                        const stagedRemove = stagedRemoveIds.has(perm.id);
                         return (
                           <Fragment key={perm.id}>
                           {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
@@ -786,7 +805,7 @@ export function MapDetailCard({
                               perm.principal_type === "user"
                                 ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border"
                                 : ""
-                            } ${
+                            } ${stagedRemove ? "opacity-60" : ""} ${
                               isMine(perm)
                                 ? "border-accent bg-accent/10"
                                 : related
@@ -810,7 +829,7 @@ export function MapDetailCard({
                             <span className="flex items-center gap-1">
                               <RoleBadge
                                 role={perm.role as MapRole}
-                                pending={perm.pending_change != null || pendingIds.has(perm.id)}
+                                pending={perm.pending_change != null}
                               />
                               {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
                               {perm.pending_change && (
@@ -824,7 +843,26 @@ export function MapDetailCard({
                                   {t("perm.pending.tag")}
                                 </span>
                               )}
-                              {canManageMembers && perm.role !== "owner" && (
+                              {/* 스택 제거 태그 — 로컬 예정, 개별 취소 X (C4) */}
+                              {stagedRemove && (
+                                <span className="flex items-center gap-1">
+                                  <span className="rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                                    {t("perm.staged.remove")}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    title={t("perm.staged.cancel")}
+                                    className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCancelStaged({ kind: "remove", permissionId: perm.id });
+                                    }}
+                                  >
+                                    <X size={12} strokeWidth={1.5} />
+                                  </button>
+                                </span>
+                              )}
+                              {canManageMembers && perm.role !== "owner" && !stagedRemove && (
                                 <button
                                   type="button"
                                   data-id={`map-detail-remove-member-${perm.id}`}
@@ -832,7 +870,7 @@ export function MapDetailCard({
                                   className="rounded-xs p-0.5 text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error group-hover:opacity-100"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    void handleRemoveMember(perm);
+                                    handleRemoveMember(perm);
                                   }}
                                 >
                                   <X size={12} strokeWidth={1.5} />
@@ -848,16 +886,85 @@ export function MapDetailCard({
                 })}
               </div>
             )}
+            {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그 + 개별 취소 X (C4) /
+                Staged "to add" rows — dashed ghost row with a tag and a per-row cancel. */}
+            {stagedAdds.map((op) => {
+              const name =
+                op.principalType === "user"
+                  ? nameById.get(op.principalId) ?? op.principalId
+                  : op.principalType === "group"
+                    ? groupNameById.get(op.principalId) ?? op.principalId
+                    : formatDeptName(op.principalId, lang, koreanDeptByPath);
+              const Icon =
+                op.principalType === "user"
+                  ? User
+                  : op.principalType === "group"
+                    ? UsersRound
+                    : LEVEL_ICONS[deptLevelRank(deptLeaf(op.principalId))] ?? Building2;
+              return (
+                <div
+                  key={`add:${op.principalType}:${op.principalId}`}
+                  className="flex items-center justify-between gap-2 rounded-sm border border-dashed border-hairline py-1.5 pl-1.5 pr-2.5"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-muted">
+                      <Icon size={22} strokeWidth={1.5} />
+                    </span>
+                    <span className="truncate">{name}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+                      {t("perm.staged.add")}
+                    </span>
+                    <RoleBadge role={op.role} />
+                    <button
+                      type="button"
+                      title={t("perm.staged.cancel")}
+                      className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                      onClick={() => handleCancelStaged(op)}
+                    >
+                      <X size={12} strokeWidth={1.5} />
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
             {canManageMembers && members !== null && (
               <div data-id="map-detail-add-member">
                 <AddCollaborator
                   dirUsers={dirUsersRaw}
                   dirDepts={dirDeptsRaw}
                   groups={groupsRaw}
-                  excludeIds={new Set(members.map((m) => m.principal_id))}
+                  excludeIds={
+                    new Set([...members.map((m) => m.principal_id), ...stagedAdds.map((op) => op.principalId)])
+                  }
                   viewerGrantDisabled={detail?.visibility === "public"}
-                  onAdd={(pt, pid, role) => void handleAddMember(pt, pid, role)}
+                  onAdd={handleAddMember}
                 />
+              </div>
+            )}
+            {/* Save/Cancel — 스택에 쌓인 게 있을 때만 노출 / Save/Cancel bar, shown only while ops are staged */}
+            {stagedOps.length > 0 && (
+              <div className="mt-2 flex items-center justify-end gap-2 border-t border-hairline pt-2">
+                <button
+                  type="button"
+                  data-id="perm-staged-cancel"
+                  disabled={savingStaged}
+                  className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+                  onClick={handleCancelAllStaged}
+                >
+                  {t("perm.staged.cancel")}
+                </button>
+                <button
+                  type="button"
+                  data-id="perm-staged-save"
+                  disabled={savingStaged}
+                  className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                  onClick={() => void handleSaveStaged()}
+                >
+                  {savingStaged && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
+                  {t("perm.staged.save")}
+                </button>
               </div>
             )}
           </div>
