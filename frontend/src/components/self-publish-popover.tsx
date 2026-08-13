@@ -3,7 +3,7 @@
 // 셀프 게시 확인 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점(마우스 근처)에 뜨는 소형 Yes/No.
 // Yes = 승인요청→승인→게시 일괄, No = 기존 승인요청 확인 플로우 계속, 바깥 클릭·Escape = 취소.
 
-import { useEffect, useState } from "react";
+import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Upload } from "lucide-react";
 
@@ -14,12 +14,13 @@ import { useI18n } from "@/lib/i18n";
 interface SelfPublishPopoverProps {
   /** 클릭 지점 — 이 자리에(화면 안으로 클램프) 띄운다 (동선 최소화). */
   position: { x: number; y: number };
-  /** Yes 클릭 — 동봉 체크박스 상태(bundleLabel 미지정 시 항상 false)를 함께 전달. */
-  onYes: (bundleVisibility: boolean) => void;
+  // 동봉 값은 bundleSlot을 렌더하는 호출측이 자체 state로 들고 있다가 이 콜백에서 읽는다
+  // (팝오버는 매 오픈마다 새로 마운트되므로 내부 state를 둘 이유가 없다).
+  onYes: () => void;
   onNo: () => void;
   onClose: () => void;
-  /** 지정 시 Yes/No 버튼 위에 가시성 동봉 체크박스 렌더. */
-  bundleLabel?: string;
+  /** 지정 시 Yes/No 버튼 위에 가시성 동봉 선택 UI(VisibilityBundlePicker) 렌더. */
+  bundleSlot?: ReactNode;
 }
 
 export function SelfPublishPopover({
@@ -27,10 +28,9 @@ export function SelfPublishPopover({
   onYes,
   onNo,
   onClose,
-  bundleLabel,
+  bundleSlot,
 }: SelfPublishPopoverProps) {
   const { t } = useI18n();
-  const [bundleVisibility, setBundleVisibility] = useState(false);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -40,9 +40,9 @@ export function SelfPublishPopover({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // 동봉 체크박스 행(≈36px)이 붙으면 팝오버가 그만큼 높아진다 — 클램프 추정치도 함께 키워야
-  // 화면 하단에서 잘리지 않는다.
-  const { left, top } = clampToViewport(position.x, position.y, 256, bundleLabel ? 148 : 112);
+  // 동봉 픽커(제목 캡션 + pill 행, 체크박스 한 줄보다 큼)가 붙으면 팝오버가 그만큼 높아진다 —
+  // 클램프 추정치도 함께 키워야 화면 하단에서 잘리지 않는다(실측 근사치).
+  const { left, top } = clampToViewport(position.x, position.y, 256, bundleSlot ? 176 : 112);
 
   return createPortal(
     <ModalBackdrop
@@ -61,23 +61,13 @@ export function SelfPublishPopover({
           {t("approval.selfPublishTitle")}
         </p>
         <p className="mt-1 text-caption text-ink-secondary">{t("approval.selfPublishBody")}</p>
-        {bundleLabel && (
-          <label className="mt-2 flex cursor-pointer items-center gap-2 text-caption text-ink">
-            <input
-              type="checkbox"
-              data-id="self-publish-bundle"
-              checked={bundleVisibility}
-              onChange={(event) => setBundleVisibility(event.target.checked)}
-            />
-            {bundleLabel}
-          </label>
-        )}
+        {bundleSlot && <div className="mt-2">{bundleSlot}</div>}
         <div className="mt-2.5 flex gap-1.5">
           <button
             type="button"
             data-id="self-publish-yes"
             className="flex-1 rounded-sm border border-accent px-2 py-1 text-caption text-accent hover:bg-accent-tint"
-            onClick={() => onYes(bundleVisibility)}
+            onClick={onYes}
           >
             {t("approval.selfPublishYes")}
           </button>
