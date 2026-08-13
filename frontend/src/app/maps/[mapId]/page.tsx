@@ -1184,6 +1184,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     : currentVersion?.status !== "published"
       ? t("inspector.spNeedPublishedOpen")
       : t("inspector.spOwnerOnly");
+  // disabledReason과 동일 분기의 구분값 — 카드가 문자열 비교 없이 사유별 액션(게시본 가기/등록 요청)을 분기 (R10)
+  const spDisabledReasonKind: "needPublished" | "ownerOnly" | null = spCanManage
+    ? null
+    : currentVersion?.status !== "published"
+      ? "needPublished"
+      : "ownerOnly";
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
@@ -9008,8 +9014,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     mapId={mapId}
                     canManage={spCanManage}
                     disabledReason={spDisabledReason}
+                    disabledReasonKind={spDisabledReasonKind}
                     onToast={showToast}
                     onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                    onGoToPublished={(id) => void switchVersion(id)}
                   />
                 }
                 subprocessTabSlot={
@@ -9100,8 +9108,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       mapId={mapId}
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
                     <div className="flex gap-1.5">
                       <button
@@ -9310,8 +9320,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       mapId={mapId}
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
                     <MapDetailCard
                       mapId={mapId}

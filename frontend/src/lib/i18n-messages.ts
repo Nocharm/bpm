@@ -1157,6 +1157,9 @@ const en = {
   "sp.request.pending": "Registration requested",
   "sp.request.withdraw": "Withdraw",
   "sp.request.withdrawn": "Registration request withdrawn",
+  // 인스펙터 reason 행 전용 — sp.request.cta/pending과 문구·역할이 달라 별도 키(R10, report 참고)
+  "sp.request.ctaSelf": "Request registration",
+  "sp.request.pendingLabel": "Requested — pending",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "Map Settings",
   "perm.tabCollaborators": "Collaborators",
@@ -2758,6 +2761,8 @@ const ko: Record<MessageKey, string> = {
   "sp.request.pending": "등록 요청됨",
   "sp.request.withdraw": "철회",
   "sp.request.withdrawn": "등록 요청을 철회했습니다",
+  "sp.request.ctaSelf": "등록 요청하기",
+  "sp.request.pendingLabel": "등록 요청 중",
   // ── 권한 관리 설정 화면 / Permission management settings screen ──
   "perm.settingsTitle": "맵 설정",
   "perm.tabCollaborators": "협업자",

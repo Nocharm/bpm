@@ -7,13 +7,23 @@
 import { ChevronRight, Info, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { deleteSubprocessDesignation, getMap, type MapDetail } from "@/lib/api";
+import {
+  ApiError,
+  createSpDesignationRequest,
+  deleteSubprocessDesignation,
+  getMap,
+  getPendingSpDesignationRequest,
+  type ApprovalRequest,
+  type MapDetail,
+} from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
 import { Tooltip } from "@/components/tooltip";
+import { formatKstShort } from "@/lib/datetime";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 
@@ -23,18 +33,24 @@ const SP_OPEN_KEY = "bpm.inspector.spOpen";
 interface SubprocessInspectorCardProps {
   mapId: number;
   canManage: boolean; // 게시 버전 열림 && (오너 || sysadmin)
-  disabledReason: string | null; // canManage=false일 때 비활성 사유(i18n 처리된 문자열)
+  disabledReason: string | null; // canManage=false일 때 비활성 사유(i18n 처리된 문자열, 표시용)
+  // disabledReason의 구분값 — 문자열 비교 대신 이걸로 분기(R10)
+  disabledReasonKind?: "needPublished" | "ownerOnly" | null;
   onToast?: (message: string) => void;
   // 지정/해제 성공 후 — page.tsx가 usage를 재조회해 Subprocess 탭 노출을 동기화
   onDesignationChange?: () => void;
+  // needPublished 사유일 때 "게시본 가기" 버튼 — page.tsx의 switchVersion 위임(R10)
+  onGoToPublished?: (versionId: number) => void;
 }
 
 export function SubprocessInspectorCard({
   mapId,
   canManage,
   disabledReason,
+  disabledReasonKind,
   onToast,
   onDesignationChange,
+  onGoToPublished,
 }: SubprocessInspectorCardProps) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
@@ -56,6 +72,10 @@ export function SubprocessInspectorCard({
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  // 등록 요청(kind==="ownerOnly" && 미지정) 전용 — pending 조회 결과·발송 상태(R10)
+  const [spPending, setSpPending] = useState<ApprovalRequest | null>(null);
+  const [spRequestBusy, setSpRequestBusy] = useState(false);
+  const [spRequestError, setSpRequestError] = useState<string | null>(null);
   useEffect(() => {
     const stored = window.sessionStorage.getItem(SP_OPEN_KEY);
     if (stored !== null) {
@@ -83,9 +103,50 @@ export function SubprocessInspectorCard({
     };
   }, [mapId]);
 
+  // designated는 훅 의존값이라 조기 return보다 앞에 계산(detail 로드 전엔 false 취급)
+  const designated = detail !== null && detail.sp_designated_at != null;
+
+  // 미지정+ownerOnly일 때만 등록 요청 pending 조회 — 그 외 분기는 요청 버튼 자체가 안 보이므로 생략
+  useEffect(() => {
+    if (disabledReasonKind !== "ownerOnly" || designated) return;
+    let active = true;
+    void getPendingSpDesignationRequest(mapId)
+      .then((req) => {
+        if (active) setSpPending(req);
+      })
+      .catch(() => {
+        // 조회 실패 — 버튼만 노출, 클릭 시 서버가 재검증
+      });
+    return () => {
+      active = false;
+    };
+  }, [mapId, disabledReasonKind, designated]);
+
+  const handleRequestRegistration = async () => {
+    setSpRequestBusy(true);
+    setSpRequestError(null);
+    try {
+      // 발원=자기 맵(from_map_id=mapId) — 카드가 보고 있는 맵 자신의 지정을 오너에게 요청
+      const created = await createSpDesignationRequest(mapId, mapId);
+      setSpPending(created);
+      onToast?.(t("library.requestSent"));
+    } catch (err) {
+      setSpRequestError(humanizeApiError(err, t));
+      if (err instanceof ApiError && err.status === 409) {
+        // 이미 대기 중인 요청 — 최신 상태로 갱신해 pending 뷰로 전환
+        try {
+          setSpPending(await getPendingSpDesignationRequest(mapId));
+        } catch {
+          // 재조회 실패 — 에러 문구만 유지
+        }
+      }
+    } finally {
+      setSpRequestBusy(false);
+    }
+  };
+
   if (!detail) return null;
 
-  const designated = detail.sp_designated_at != null;
   const publishedVersionId = detail.versions
     .filter((version) => version.status === "published")
     .reduce<number | null>((max, version) => (max === null || version.id > max ? version.id : max), null);
@@ -224,10 +285,53 @@ export function SubprocessInspectorCard({
             )}
           </div>
 
-          {/* 비활성 사유 — 버튼은 항상 표시하되 왜 안 되는지 노트로 안내 */}
+          {/* 비활성 사유 — 버튼은 항상 표시하되 왜 안 되는지 노트로 안내 + 사유별 액션(R10) */}
           {!canManage && disabledReason && (
-            <p data-id="sp-inspector-reason" className="mt-1.5 text-fine text-ink-tertiary">
-              {disabledReason}
+            <div data-id="sp-inspector-reason" className="mt-1.5 flex items-center justify-between gap-2">
+              <p className="text-fine text-ink-tertiary">{disabledReason}</p>
+
+              {disabledReasonKind === "needPublished" && publishedVersionId !== null && onGoToPublished && (
+                <button
+                  type="button"
+                  data-id="sp-go-published"
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
+                  onClick={() => onGoToPublished(publishedVersionId)}
+                >
+                  {t("inbox.sp.goPublished")}
+                </button>
+              )}
+
+              {disabledReasonKind === "ownerOnly" &&
+                !designated &&
+                (spPending ? (
+                  <Tooltip content={`${spPending.requested_by} · ${formatKstShort(spPending.created_at)}`}>
+                    <span className="inline-flex">
+                      <button
+                        type="button"
+                        data-id="sp-request-registration"
+                        className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+                        disabled
+                      >
+                        {t("sp.request.pendingLabel")}
+                      </button>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <button
+                    type="button"
+                    data-id="sp-request-registration"
+                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+                    onClick={() => void handleRequestRegistration()}
+                    disabled={spRequestBusy}
+                  >
+                    {t("sp.request.ctaSelf")}
+                  </button>
+                ))}
+            </div>
+          )}
+          {spRequestError && (
+            <p data-id="sp-request-error" className="mt-1 text-fine text-error">
+              {spRequestError}
             </p>
           )}
         </>
