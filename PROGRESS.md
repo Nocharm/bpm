@@ -11,6 +11,7 @@
 - **R4 FE**: 권한 편집(추가/변경/제거)을 두 표면(collaborators-panel·map-detail-card)에서 즉시적용→화면 스택 적립+Save 일괄실행/Cancel 폐기로 전환(`lib/permission-staging.ts` — upsert/removeStagedOp/applyStagedOps, 사용자 지시). 스택 태그(추가 예정 고스트행·변경 예정 {from}→{to}·제거 예정 톤다운, 행별 개별취소)는 R2 서버진실 pending 마커와 별개 병존. Save 결과는 패널=토스트/카드=error state(실패 있을 때만). 게이트: FE vitest 614·lint 0 error·tsc 0·build OK.
 - **R5 FE**: 맵 탭 협업자 `<details>` 기본 펼침(`open` 속성). `map-detail-card.tsx` 멤버 행 렌더(펼침/hover/pending·staged 태그)를 `renderMemberRow` 단일 함수로 추출해 오우닝 부서 블록 바로 아래 신설 오너 섹션(`home.memberOwner`)과 기존 MEMBER_GROUPS 루프(user 그룹은 owner 제외)가 공유 — owner 행 편집 불가 불변식은 기존 `canManageMembers && perm.role !== "owner"` 가드로 별도 분기 없이 유지. 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
 - **R6 FE**: 협업자 추가 피커 개편 — 우측 role 사전선택 드롭다운 폐기, 목록 클릭 지점(Enter는 입력창 하단 폴백) 기준 `RolePopover`(클램프+바깥클릭/Esc 취소)로 Viewer/Editor 2-step 선택(퍼블릭 맵도 Editor만으로 2-step 유지, 사용자 지시). `PrincipalPicker.onSelect`에 optional `coords` 2번째 인자 + `highlightId` prop 추가(하위호환, 8개 호출처 무변경). 두 호스트(협업자 패널·맵 카드)의 staged-add 고스트 행에 `lastAddedKey` 기반 플래시(`picker-flash` keyframes 재사용, 1.2s)+`scrollIntoView({block:"nearest"})`. 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
+- **R8 FE**: 에디터 승인 탭 맨 아래에 결재 대기 접이식 섹션 추가(기본 접힘, `data-id="editor-approvals-section"`) — 설정 화면 C2와 동일한 `PendingApprovalsPanel` 재사용, pending>0일 때 카운트 필 표시. 신규 state `editorApprovalsCount`. 게이트: FE vitest 617·lint 0 error·tsc 0·build OK.
 
 ## 2026-08-13 — 관리자 UX: 동기화 로딩·테이블 CSV (feat/admin-sync-csv → dev 머지)
 - **인원 동기화 로딩**: sync 버튼 Loader2 스피너 + busy가 후속 재조회까지 커버(재조회 실패는 err.message로 전파 — 삼킴 제거).

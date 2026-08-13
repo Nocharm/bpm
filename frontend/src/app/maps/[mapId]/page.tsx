@@ -62,6 +62,7 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
 import { formatVersionMarker } from "@/lib/version-name";
@@ -977,6 +978,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 승인 탭 하단 결재 대기 섹션 pending 개수 — summary 카운트 필용 (R8)
+  const [editorApprovalsCount, setEditorApprovalsCount] = useState(0);
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
@@ -9318,6 +9321,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onGoToVersion={(id) => void switchVersion(id)}
                       currentVersionId={versionId}
                     />
+                    {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 기본 접힘 (R8) */}
+                    <details data-id="editor-approvals-section" className="group rounded-md border border-hairline px-3 py-2">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-fine font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                        <ChevronRight size={12} strokeWidth={1.5} className="transition-transform group-open:rotate-90" />
+                        {t("perm.tabPendingApprovals")}
+                        {editorApprovalsCount > 0 && (
+                          <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
+                            {editorApprovalsCount}
+                          </span>
+                        )}
+                      </summary>
+                      <div className="mt-2">
+                        <PendingApprovalsPanel
+                          mapId={String(mapId)}
+                          isOwner={myRole === "owner"}
+                          isApprover={isApprover || isSysadmin}
+                          onCountChange={setEditorApprovalsCount}
+                          onDecided={() => void refreshWorkflow()}
+                          onToast={(item) => showToast(item.message)}
+                        />
+                      </div>
+                    </details>
                   </div>
                 }
                 activitySlot={
