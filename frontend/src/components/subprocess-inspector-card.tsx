@@ -4,7 +4,7 @@
 // 지정은 다른 맵이 이 맵을 서브프로세스 노드로 연결(임베드)하기 위한 절차 — 노트로 안내.
 // 변경은 게시된 버전이 열린 상태에서 오너·관리자만 가능(비활성 시 사유 노트 표시).
 
-import { Info, Workflow } from "lucide-react";
+import { ChevronRight, Info, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { deleteSubprocessDesignation, getMap, type MapDetail } from "@/lib/api";
@@ -13,8 +13,12 @@ import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
+import { Tooltip } from "@/components/tooltip";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
+
+// 카드 접힘 — 기본 접힘, 세션 동안 유지(sessionStorage) + 탭 간(에디터 노드/맵/승인탭 3마운트) 공유.
+const SP_OPEN_KEY = "bpm.inspector.spOpen";
 
 interface SubprocessInspectorCardProps {
   mapId: number;
@@ -51,6 +55,19 @@ export function SubprocessInspectorCard({
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(SP_OPEN_KEY);
+    if (stored !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setOpen(stored === "1"); // one-time hydration restore from sessionStorage
+    }
+  }, []);
+  const toggleOpen = () => {
+    const next = !open;
+    window.sessionStorage.setItem(SP_OPEN_KEY, next ? "1" : "0");
+    setOpen(next);
+  };
 
   useEffect(() => {
     let active = true;
@@ -127,83 +144,93 @@ export function SubprocessInspectorCard({
 
   return (
     <section data-id="sp-inspector-card" className="rounded-md border border-hairline bg-surface-alt/50 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
-          <Workflow size={14} strokeWidth={1.5} className="text-accent" />
-          {t("inspector.spTitle")}
+      <button
+        type="button"
+        data-id="sp-inspector-toggle"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 text-left"
+        onClick={toggleOpen}
+      >
+        <span className="flex min-w-0 items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
+          <ChevronRight
+            size={12}
+            strokeWidth={1.5}
+            className={`shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+          />
+          <Workflow size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+          <span className="truncate">{t("inspector.spTitle")}</span>
+          {/* 연결 절차 안내 — 호버 툴팁(제목 옆) */}
+          <Tooltip content={t("inspector.spNoteFull")}>
+            <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          </Tooltip>
         </span>
-        {/* 지정 상태 뱃지 — 영어 고정(승인상태 뱃지 규칙과 동일) */}
+        {/* 지정 상태 뱃지 — 영어 고정(승인상태 뱃지 규칙과 동일). 접힘 상태에서도 항상 보임(헤더는 항상 렌더) */}
         {designated ? (
-          <span className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
+          <span className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
             Designated
           </span>
         ) : (
-          <span className="rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary">
+          <span className="shrink-0 rounded-xs border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary">
             Not designated
           </span>
         )}
-      </div>
+      </button>
 
-      {designated && (
-        <div className="mb-2 flex flex-col">
-          {attrRows.map((row) => (
-            <div key={row.label} className="flex items-center justify-between gap-2 py-0.5">
-              <span className="shrink-0 text-fine text-ink-secondary">{row.label}</span>
-              <span className="min-w-0 truncate text-fine text-ink">{row.value || "—"}</span>
+      {open && (
+        <>
+          {designated && (
+            <div className="mt-2 flex flex-col">
+              {attrRows.map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-2 py-0.5">
+                  <span className="shrink-0 text-fine text-ink-secondary">{row.label}</span>
+                  <span className="min-w-0 truncate text-fine text-ink">{row.value || "—"}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      {/* 연결 절차 노트 — 한 줄 요약, 전체 설명은 툴팁 (batch2 ⑤) */}
-      <p
-        title={t("inspector.spNoteFull")}
-        className="mb-2 flex items-start gap-1.5 rounded-sm bg-surface px-2 py-1.5 text-fine leading-snug text-ink-tertiary"
-      >
-        <Info size={12} strokeWidth={1.6} className="mt-px shrink-0" />
-        {t("inspector.spNote")}
-      </p>
+          <div className="mt-2 flex gap-1.5">
+            {designated ? (
+              <>
+                <button
+                  type="button"
+                  data-id="sp-inspector-edit"
+                  className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                  onClick={openModal}
+                  disabled={!canManage || saving}
+                >
+                  {t("perm.sp.edit")}
+                </button>
+                <button
+                  type="button"
+                  data-id="sp-inspector-remove"
+                  className="rounded-sm border border-error/40 px-2.5 py-1 text-fine text-error hover:bg-error/10 disabled:opacity-40"
+                  onClick={() => setShowUndesignate(true)}
+                  disabled={!canManage || saving}
+                >
+                  {t("perm.sp.undesignate")}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                data-id="sp-inspector-designate"
+                className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                onClick={openModal}
+                disabled={!canManage || saving}
+              >
+                {t("perm.sp.designate")}
+              </button>
+            )}
+          </div>
 
-      <div className="flex gap-1.5">
-        {designated ? (
-          <>
-            <button
-              type="button"
-              data-id="sp-inspector-edit"
-              className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              onClick={openModal}
-              disabled={!canManage || saving}
-            >
-              {t("perm.sp.edit")}
-            </button>
-            <button
-              type="button"
-              data-id="sp-inspector-remove"
-              className="rounded-sm border border-error/40 px-2.5 py-1 text-fine text-error hover:bg-error/10 disabled:opacity-40"
-              onClick={() => setShowUndesignate(true)}
-              disabled={!canManage || saving}
-            >
-              {t("perm.sp.undesignate")}
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            data-id="sp-inspector-designate"
-            className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            onClick={openModal}
-            disabled={!canManage || saving}
-          >
-            {t("perm.sp.designate")}
-          </button>
-        )}
-      </div>
-
-      {/* 비활성 사유 — 버튼은 항상 표시하되 왜 안 되는지 노트로 안내 */}
-      {!canManage && disabledReason && (
-        <p data-id="sp-inspector-reason" className="mt-1.5 text-fine text-ink-tertiary">
-          {disabledReason}
-        </p>
+          {/* 비활성 사유 — 버튼은 항상 표시하되 왜 안 되는지 노트로 안내 */}
+          {!canManage && disabledReason && (
+            <p data-id="sp-inspector-reason" className="mt-1.5 text-fine text-ink-tertiary">
+              {disabledReason}
+            </p>
+          )}
+        </>
       )}
 
       {showModal && (
