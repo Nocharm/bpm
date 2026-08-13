@@ -1,6 +1,6 @@
 # 거버넌스 UX 확장 검증 체크리스트 (feat/governance-ux)
 
-> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉) + R4 가시성 UX.
+> 설계: [`docs/design/2026-08-08-governance-ux-design.md`](../design/2026-08-08-governance-ux-design.md) · 4페이즈(P0 라이프사이클 대칭화 → C 승인 탭 통합 → B 카드 멤버 편집 → A 게시 동봉) + R4 가시성 UX + R5 Remove 필 폴리시.
 > 자동 게이트: BE pytest 1042·ruff 0 / FE vitest 620·lint 0 error(1 warning)·tsc 0·build OK — 이 문서는 **사용자 실사용 검증**용. 항목당 1~2분.
 
 ## 준비
@@ -92,8 +92,15 @@ DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys .venv/bin/uvicorn app.main:
 - [ ] **R4-1 승인자 모달 우측 위 가시성 배지**: 에디터 승인 탭에서 승인자 관리 모달 열기 → 헤더 타이틀 옆 우측 위에 현재 맵 가시성(Globe/Lock 아이콘 + "Public"/"Private") 배지 표시. (설정 화면 승인자 카드는 별도 표면 — 배지 없음이 정상.)
 - [ ] **R4-2 동봉 UI 드롭다운(3표면)**: 에디터 승인요청 모달·설정 Request approval 모달·셀프 게시 팝오버의 동봉 UI → 라벨 "공개 범위"(EN "Visibility") + 우측 드롭다운(Globe/Lock 아이콘+현재값 라벨+ChevronDown) → 클릭 시 메뉴(Private/Public 옵션, 현재 값 옆에 "Current" 필 리터럴) → 옵션 선택 시 적용·메뉴 닫힘. 재클릭 또는 현재값 재선택 시 해제 null.
 - [ ] **R4-3 인스펙터 맵 탭 가시성 3:1 + 승인자 정보 모달**: 우측 사이드바 Map 탭 가시성 섹션 → Private/Public 버튼 비율 3:1(현재 활성 버튼이 3배 넓음) → O만 비활성 버튼 클릭 가능(E는 정적) → pending 있으면 필 표시 → O가 비활성 버튼 클릭 → ConfirmDialog(타이틀 "공개 범위 변경"·현재→대상 화살표 표시·승인자 이름 필 목록·안내 문구) → 승인자 0명이면 안내 경고 + confirm 비활성 → 확인하면 `requestVisibilityChange` → 성공 시 pending 갱신·모달 닫힘.
-- [ ] **R4-4 멤버 행 제거 hover 스왑**: 맵 상세 카드(또는 에디터 Map 탭)의 협업자 멤버 행 → 기본 권한 배지(Viewer/Editor) → **행 hover 시** 같은 자리에 빨간 Remove 필로 스왑 → 클릭하면 제거 예정 스택 태그가 적립되고(즉시 적용 아님) **Save** 시 반영(오너는 즉시 적용, 에디터의 editor 제거는 승인 대기 배지). 오우닝 부서·오너 행에는 Remove 스왑 없음.
+- [ ] **R4-4 멤버 행 제거 hover 페이드 전환**: 맵 상세 카드(또는 에디터 Map 탭)의 협업자 멤버 행 → 기본 권한 배지(Viewer/Editor) → **행 hover 시** 같은 자리·같은 크기에서 X 아이콘 없이 색·문구만 빨간 Remove 필로 페이드 전환 → 클릭하면 제거 예정 스택 태그가 적립되고(즉시 적용 아님) **Save** 시 반영(오너는 즉시 적용, 에디터의 editor 제거는 승인 대기 배지). 오우닝 부서·오너 행에는 Remove 스왑 없음.
 - [ ] **R4-5 협업자 패널 X 정렬 교정**: 설정 협업자 패널의 제거 X 버튼 → hover 시만 표시로 전환(공간 비차지 — `absolute opacity-0 group-hover:opacity-100`) → 행 select/badge 우측 정렬이 제거·편집 모두 일치(우측 패딩 공통 부여).
+
+## R5 (Remove 필 폴리시)
+
+- [ ] **R5-1 스왑 전후 필 크기·위치 완전 동일**: 맵 상세 카드(또는 인스펙터 Map 탭)의 removable 멤버 행에서 hover/focus로 역할 배지 ↔ Remove 필 전환 시 좌우상하 어느 방향으로도 크기·위치가 변하지 않고(비호버 필과 같은 박스 — 승인 대기 배지 행은 그 배지 폭 그대로) 페이드로만 바뀐다.
+- [ ] **R5-2 인스펙터 행 단위 hover 스코프**: 에디터 우측 인스펙터 Map 탭(허용 인원 아코디언, `<details className="group">`로 감싼 표면)에서 한 행에만 hover → **그 행만** Remove 필로 전환되고 나머지 행은 그대로(전 행 동시 스왑 없음).
+- [ ] **R5-3 비호버 시 필 우측 정렬 일치**: 비호버 상태에서 Owner/Editor/Viewer 필이 모두 같은 고정폭으로 우측 정렬이 일치(오너 행만 삐져나오는 등의 어긋남 없음. 오우닝 부서 행의 Editor 필은 별도 잠금 행이라 예외).
+- [ ] **R5-4 제거 예정 태그의 소속 줄 재배치**: 멤버를 제거 예정으로 적립하면 권한 필은 1행에 그대로 유지되고, 2행(좌측 소속/부서 줄과 같은 높이 대역)에 같은 크기의 빨간 staged 필이 노출된다. 행 hover/focus 시에만 그 우측 취소 X가 페이드 인하며(기본은 공간만 예약), 나타날 때 옆 필이나 레이아웃이 밀리지 않는다.
 
 ## 회귀 스팟 (기존 기능 무손상 확인)
 

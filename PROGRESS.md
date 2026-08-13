@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-13 — 거버넌스 R5: 멤버 행 Remove 필 폴리시 (feat/governance-r5)
+- **크기 불변 페이드 스왑**: 진범 3종 동시 해결 — wrapper `min-w-[72px]` 폐기(RoleBadge 자체에 신설 `className` prop으로 고정폭 `w-[60px]` 부여, Owner/Editor/Viewer/Remove EN 실측 최대 57.2px+여유), `invisible` 토글→`opacity`+`transition-opacity duration-150` 페이드, Remove 오버레이 X 아이콘 제거(문구만). 브라우저 실측: 스왑 전후 pill bounding box 완전 동일(0px 이동), 우측 정렬(right=1312) 전 역할 일치.
+- **인스펙터 전 행 동시 스왑 수정**: 행 루트 `group`→named `group/member`(부서 restNode 필 포함 3곳 이행) — 인스펙터 `<details className="group">` 조상 누수 차단. 브라우저 실측: 인스펙터 Map 탭에서 1행만 hover 시 나머지 6행 opacity 그대로 0(스왑 없음).
+- **제거 예정 태그 재배치**: 우측 클러스터 `flex-col items-end`로 2행 분리 — 1행 권한 필(staged여도 유지)+상세 태그, 2행(소속 줄 높이대) staged 필+취소 X(공간 항상 예약, hover/focus 페이드 인). EN `perm.staged.remove` "To remove"(70.2px)→"Remove"(57.2px, N=60에 안 들어가 축약 — 설정 협업자 패널은 고정폭이 아니라 부작용 없음).
+- QA `docs/qa/governance-ux-checklist.md` R4-4 문구 교정(X 아이콘 없음·페이드·크기 불변) + `## R5` 4항목 신설. 게이트: FE vitest 620·lint 0 error(1 warning)·tsc 0·build OK(백엔드 무변경).
+
 ## 2026-08-13 — 거버넌스 R4: 가시성 UX 4건 (feat/governance-r4 → dev 머지)
 - **승인자 모달 가시성 배지**: 승인자 관리 모달 우측 상단에 현재 가시성 배지(Globe/Lock, 라이브 state 스레딩).
 - **동봉 픽커 드롭다운화**: pill 행 → "공개 범위"(EN "Visibility") 라벨 + 우측 드롭다운(아이콘·current 옵션에 리터럴 "Current" 필). 계약 불변(재선택=해제 포함) — 3표면 배선 무변경. `perm.visibilityCurrent`는 visibility-control 사용처 잔존으로 유지.

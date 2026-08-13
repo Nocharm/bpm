@@ -65,6 +65,11 @@ import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
 const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
 
+// 역할/Remove 필 고정폭 — Owner/Editor/Viewer/Remove(EN 기준 최장, Pretendard text-fine 12px 실측
+// 57.2px)에 여유를 둔 값. RoleBadge와 Remove/staged 필이 전부 이 폭을 공유해야 hover 스왑 시
+// 크기가 바뀌지 않는다(governance-r5 V1, R5-1). pending 배지는 문구가 길어 예외(콘텐츠 폭 유지).
+const ROLE_PILL_WIDTH_CLASS = "w-[60px] inline-flex items-center justify-center text-center whitespace-nowrap";
+
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "user", labelKey: "home.memberUser" },
@@ -488,7 +493,7 @@ export function MapDetailCard({
         <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
           <Users size={11} strokeWidth={1.5} className="shrink-0" />
           {count}
-          {parent && <span className="hidden truncate group-hover:inline">· {parent}</span>}
+          {parent && <span className="hidden truncate group-hover/member:inline">· {parent}</span>}
         </span>
       );
     }
@@ -519,7 +524,9 @@ export function MapDetailCard({
           }
           onMouseLeave={perm.principal_type === "department" ? () => setHoveredPath(null) : undefined}
           // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
-          className={`group flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
+          // named group — 인스펙터가 이 카드를 <details className="group ...">로 감싸므로(map-inspector-tab.tsx),
+          // 이름 없는 group을 쓰면 그 조상까지 호버 시 전 행이 동시에 스왑된다(governance-r5 V1, R5-2).
+          className={`group/member flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
             perm.principal_type === "user" ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border" : ""
           } ${stagedRemove ? "opacity-60" : ""} ${
             isMine(perm)
@@ -539,55 +546,68 @@ export function MapDetailCard({
               {restNode}
             </span>
           </span>
-          <span className="flex items-center gap-1">
-            {/* 역할 필 자리 — hover/focus 시 같은 자리·같은 크기의 빨간 Remove 필로 스왑 (U4).
-                min-w는 "Remove ×" 실측폭(69.2px, Pretendard 12px) 기준 — Viewer/Editor 필이 더 좁아
-                호버 시 잘리는 것 방지(버튼은 absolute라 이 wrapper 폭에 맞춰 늘어나지 않는다). */}
-            <span
-              className={`relative inline-flex items-center justify-center ${removable ? "min-w-[72px]" : ""}`}
-            >
-              <span className={removable ? "group-hover:invisible group-focus-within:invisible" : ""}>
-                <RoleBadge role={perm.role as MapRole} pending={perm.pending_change != null} />
-              </span>
-              {removable && (
-                <button
-                  type="button"
-                  data-id={`map-detail-remove-member-${perm.id}`}
-                  aria-label="Remove member"
-                  // opacity/pointer-events(display 토글 아님) — 부서/그룹 행은 상위에 tabIndex가
-                  // 없어 group-focus-within만으론 못 열림, 버튼 자체가 Tab 순서에 남아 있어야
-                  // focus:opacity-100로 직접 도달 가능(display:none은 Tab에서 완전히 제외됨).
-                  className="absolute inset-0 flex items-center justify-center gap-0.5 rounded-sm border border-error bg-surface text-fine text-error opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-error/10 focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveMember(perm);
-                  }}
+          <span className="flex flex-col items-end gap-0.5">
+            <span className="flex items-center gap-1">
+              {/* 역할 필 자리 — hover/focus 시 같은 자리·같은 크기의 빨간 Remove 필로 페이드 전환 (U4, R5-1/R5-3).
+                  RoleBadge 자체가 ROLE_PILL_WIDTH_CLASS로 고정폭이라 이 wrapper는 배지 크기에 자동으로
+                  맞춰지고, absolute inset-0 오버레이도 그 폭을 그대로 물려받는다(별도 min-w 불필요). */}
+              <span className="relative inline-flex items-center justify-center">
+                <span
+                  className={
+                    removable
+                      ? "transition-opacity duration-150 group-hover/member:opacity-0 group-focus-within/member:opacity-0"
+                      : ""
+                  }
                 >
-                  {t("perm.removePill")} <X size={10} strokeWidth={1.5} />
-                </button>
+                  <RoleBadge
+                    role={perm.role as MapRole}
+                    pending={perm.pending_change != null}
+                    className={perm.pending_change ? "" : ROLE_PILL_WIDTH_CLASS}
+                  />
+                </span>
+                {removable && (
+                  <button
+                    type="button"
+                    data-id={`map-detail-remove-member-${perm.id}`}
+                    aria-label="Remove member"
+                    // opacity/pointer-events(display 토글 아님) — 부서/그룹 행은 상위에 tabIndex가
+                    // 없어 group-focus-within만으론 못 열림, 버튼 자체가 Tab 순서에 남아 있어야
+                    // focus:opacity-100로 직접 도달 가능(display:none은 Tab에서 완전히 제외됨).
+                    className="absolute inset-0 flex items-center justify-center rounded-sm border border-error bg-surface px-1.5 py-0.5 text-fine text-error opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-error/10 focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveMember(perm);
+                    }}
+                  >
+                    {t("perm.removePill")}
+                  </button>
+                )}
+              </span>
+              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
+              {perm.pending_change && (
+                <span
+                  className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                  title={t("perm.pending.by", {
+                    name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                  })}
+                >
+                  {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                </span>
               )}
             </span>
-            {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
-            {perm.pending_change && (
-              <span
-                className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-                title={t("perm.pending.by", {
-                  name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                })}
-              >
-                {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-              </span>
-            )}
-            {/* 스택 제거 태그 — 로컬 예정, 개별 취소 X (C4) */}
+            {/* 스택 제거 태그 — 좌측 소속(부서) 줄과 같은 높이 대역에 오도록 2번째 줄로 배치 (C4, R5-4).
+                취소 X는 항상 공간을 점유(opacity-0)하다가 행 hover/focus 시에만 페이드 인 — 레이아웃 안 밀림. */}
             {stagedRemove && (
               <span className="flex items-center gap-1">
-                <span className="rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                <span
+                  className={`rounded-sm border border-error px-1.5 py-0.5 text-fine text-error ${ROLE_PILL_WIDTH_CLASS}`}
+                >
                   {t("perm.staged.remove")}
                 </span>
                 <button
                   type="button"
                   title={t("perm.staged.cancel")}
-                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  className="rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleCancelStaged({ kind: "remove", permissionId: perm.id });
