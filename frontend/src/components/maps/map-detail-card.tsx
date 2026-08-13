@@ -367,6 +367,214 @@ export function MapDetailCard({
       orgPath !== "" &&
       (orgPath === perm.principal_id || orgPath.startsWith(`${perm.principal_id}/`)));
 
+  // 오너 행 — 오우닝 부서 블록 바로 아래 별도 섹션으로 노출(R2 QA 피드백). user 그룹 루프에서는 제외된다.
+  const ownerRows = members?.filter((m) => m.principal_type === "user" && m.role === "owner") ?? [];
+
+  // 멤버 행 렌더 — user/department/group 그룹 루프와 오너 섹션이 공유하는 단일 경로 (중복 최소화).
+  // owner 행도 이 경로를 타지만 canManageMembers && perm.role !== "owner" 가드가 편집 어포던스(X 버튼)만
+  // 자연히 걸러낸다 — owner-row 보호 불변식(B/R4)은 별도 분기 없이 유지된다.
+  function renderMemberRow(perm: MapPermission, showRoleBoundary: boolean) {
+    // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
+    const related =
+      hoveredPath !== null &&
+      perm.principal_type === "department" &&
+      perm.principal_id !== hoveredPath &&
+      (hoveredPath.startsWith(`${perm.principal_id}/`) ||
+        perm.principal_id.startsWith(`${hoveredPath}/`));
+    // 유저 펼침 — 클릭 토글(여러 개 동시) (H2c)
+    const memberOpen = perm.principal_type === "user" && expandedMembers.has(perm.principal_id);
+    // 행 내용 — 유저=이름/부서(클릭 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
+    let nameLine: ReactNode;
+    let restNode: ReactNode = null;
+    if (perm.principal_type === "user") {
+      const enName = nameById.get(perm.principal_id) ?? perm.principal_id;
+      const krName = koreanNameById.get(perm.principal_id) ?? "";
+      // 언어 토글: ko=한글(없으면 영문), en=영문. 반대 언어는 펼침 필로.
+      nameLine = lang === "ko" ? krName || enName : enName;
+      const altName = lang === "ko" ? (krName ? enName : "") : krName;
+      const path = orgPathById.get(perm.principal_id) ?? "";
+      const title = titleById.get(perm.principal_id) ?? "";
+      const levelPaths = buildOrgPathChain(path).reverse(); // 작은→큰 / leaf→root
+      restNode = (
+        <>
+          {/* 평소: 말단 부서 (펼치면 숨김) */}
+          {path && !memberOpen && (
+            <span className="block truncate text-fine text-ink-tertiary">
+              {formatDeptName(path, lang, koreanDeptByPath)}
+            </span>
+          )}
+          {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
+          <span
+            className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+              memberOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
+          >
+            <span className="overflow-hidden">
+              {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
+              <span className="mt-1 flex flex-col items-start gap-1">
+                {altName && (
+                  <span
+                    data-id="member-alt-name"
+                    className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary"
+                  >
+                    {altName}
+                  </span>
+                )}
+                <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
+                  {perm.principal_id}
+                </span>
+                {title && (
+                  <span className="rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
+                    {title}
+                  </span>
+                )}
+                {levelPaths.map((lv) => (
+                  <span
+                    key={lv}
+                    className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
+                  >
+                    {formatDeptName(lv, lang, koreanDeptByPath)}
+                  </span>
+                ))}
+              </span>
+            </span>
+          </span>
+        </>
+      );
+    } else if (perm.principal_type === "group") {
+      nameLine = groupNameById.get(perm.principal_id) ?? perm.principal_id;
+      const g = groupInfo.get(perm.principal_id);
+      if (g) {
+        const status = t(
+          g.status === "pending"
+            ? "home.groupPending"
+            : g.status === "rejected"
+              ? "home.groupRejected"
+              : "home.groupActive",
+        );
+        restNode = (
+          <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+            <Users size={11} strokeWidth={1.5} className="shrink-0" />
+            {g.count}
+            <span className="truncate">· {status}</span>
+          </span>
+        );
+      }
+    } else {
+      nameLine = formatDeptName(perm.principal_id, lang, koreanDeptByPath);
+      const count = [...orgPathById.values()].filter(
+        (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
+      ).length;
+      // 상위 경로 — 루트 부서면 자기 자신 (기존 동작 유지)
+      const chain = buildOrgPathChain(perm.principal_id);
+      const parent = (chain.length > 1 ? chain.slice(0, -1) : chain)
+        .map((p) => formatDeptName(p, lang, koreanDeptByPath))
+        .join(" › ");
+      restNode = (
+        <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+          <Users size={11} strokeWidth={1.5} className="shrink-0" />
+          {count}
+          {parent && <span className="hidden truncate group-hover:inline">· {parent}</span>}
+        </span>
+      );
+    }
+    // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
+    const stagedRemove = stagedRemoveIds.has(perm.id);
+    return (
+      <Fragment key={perm.id}>
+        {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
+        {showRoleBoundary && <div aria-hidden className="my-0.5 border-t border-hairline" />}
+        <div
+          role={perm.principal_type === "user" ? "button" : undefined}
+          tabIndex={perm.principal_type === "user" ? 0 : undefined}
+          onClick={perm.principal_type === "user" ? () => toggleMember(perm.principal_id) : undefined}
+          onKeyDown={
+            perm.principal_type === "user"
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleMember(perm.principal_id);
+                  }
+                }
+              : undefined
+          }
+          onMouseEnter={
+            perm.principal_type === "department" ? () => setHoveredPath(perm.principal_id) : undefined
+          }
+          onMouseLeave={perm.principal_type === "department" ? () => setHoveredPath(null) : undefined}
+          // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
+          className={`group flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
+            perm.principal_type === "user" ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border" : ""
+          } ${stagedRemove ? "opacity-60" : ""} ${
+            isMine(perm)
+              ? "border-accent bg-accent/10"
+              : related
+                ? "border-accent-tint-border bg-accent-tint/40"
+                : "border-hairline bg-surface"
+          }`}
+        >
+          <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
+              <MemberIcon perm={perm} isMe={perm.principal_type === "user" && perm.principal_id === loginId} />
+            </span>
+            {/* 1줄: 이름/말단/그룹 · 이하: 부서/펼침 (H2c) */}
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate">{nameLine}</span>
+              {restNode}
+            </span>
+          </span>
+          <span className="flex items-center gap-1">
+            <RoleBadge role={perm.role as MapRole} pending={perm.pending_change != null} />
+            {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
+            {perm.pending_change && (
+              <span
+                className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                title={t("perm.pending.by", {
+                  name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                })}
+              >
+                {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+              </span>
+            )}
+            {/* 스택 제거 태그 — 로컬 예정, 개별 취소 X (C4) */}
+            {stagedRemove && (
+              <span className="flex items-center gap-1">
+                <span className="rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                  {t("perm.staged.remove")}
+                </span>
+                <button
+                  type="button"
+                  title={t("perm.staged.cancel")}
+                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCancelStaged({ kind: "remove", permissionId: perm.id });
+                  }}
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
+              </span>
+            )}
+            {canManageMembers && perm.role !== "owner" && !stagedRemove && (
+              <button
+                type="button"
+                data-id={`map-detail-remove-member-${perm.id}`}
+                aria-label="Remove member"
+                className="rounded-xs p-0.5 text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error group-hover:opacity-100"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveMember(perm);
+                }}
+              >
+                <X size={12} strokeWidth={1.5} />
+              </button>
+            )}
+          </span>
+        </div>
+      </Fragment>
+    );
+  }
+
   const body = (
     <>
       {!only && (
@@ -621,6 +829,14 @@ export function MapDetailCard({
                 </div>
               </div>
             )}
+            {/* 오너 섹션 — 오우닝 부서 블록 바로 아래, user 그룹보다 우선 노출 (R2 QA 피드백).
+                renderMemberRow 재사용 — 편집 어포던스는 owner-row 가드로 자연히 빠진다(X 버튼 없음). */}
+            {ownerRows.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="text-fine text-ink-tertiary">{t("home.memberOwner")}</p>
+                {ownerRows.map((perm) => renderMemberRow(perm, false))}
+              </div>
+            )}
             {only !== "members" && (
               <div className="flex items-center justify-between gap-2">
                 <p className="text-fine uppercase tracking-wide text-ink-tertiary">{t("home.members")}</p>
@@ -643,7 +859,10 @@ export function MapDetailCard({
             ) : (
               <div className="flex flex-col gap-3">
                 {MEMBER_GROUPS.map((g) => {
-                  const unsorted = members.filter((m) => m.principal_type === g.type);
+                  // 오너는 별도 섹션(오우닝 부서 블록 아래)에서 렌더 — user 그룹에서는 제외 (R2 QA 피드백)
+                  const unsorted = members.filter(
+                    (m) => m.principal_type === g.type && (g.type !== "user" || m.role !== "owner"),
+                  );
                   if (unsorted.length === 0) return null;
                   // 역할 우선(owner→editor→viewer), 같은 역할 안에서 부서는 레벨 순 —
                   // sort는 stable이라 그 외는 원순서 유지 (batch2 ④)
@@ -658,229 +877,9 @@ export function MapDetailCard({
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
-                      {rows.map((perm, i) => {
-                        // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
-                        const related =
-                          hoveredPath !== null &&
-                          perm.principal_type === "department" &&
-                          perm.principal_id !== hoveredPath &&
-                          (hoveredPath.startsWith(`${perm.principal_id}/`) ||
-                            perm.principal_id.startsWith(`${hoveredPath}/`));
-                        // 유저 펼침 — 클릭 토글(여러 개 동시) (H2c)
-                        const memberOpen =
-                          perm.principal_type === "user" && expandedMembers.has(perm.principal_id);
-                        // 행 내용 — 유저=이름/부서(클릭 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
-                        let nameLine: ReactNode;
-                        let restNode: ReactNode = null;
-                        if (perm.principal_type === "user") {
-                          const enName = nameById.get(perm.principal_id) ?? perm.principal_id;
-                          const krName = koreanNameById.get(perm.principal_id) ?? "";
-                          // 언어 토글: ko=한글(없으면 영문), en=영문. 반대 언어는 펼침 필로.
-                          nameLine = lang === "ko" ? krName || enName : enName;
-                          const altName = lang === "ko" ? (krName ? enName : "") : krName;
-                          const path = orgPathById.get(perm.principal_id) ?? "";
-                          const title = titleById.get(perm.principal_id) ?? "";
-                          const levelPaths = buildOrgPathChain(path).reverse(); // 작은→큰 / leaf→root
-                          restNode = (
-                            <>
-                              {/* 평소: 말단 부서 (펼치면 숨김) */}
-                              {path && !memberOpen && (
-                                <span className="block truncate text-fine text-ink-tertiary">
-                                  {formatDeptName(path, lang, koreanDeptByPath)}
-                                </span>
-                              )}
-                              {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
-                              <span
-                                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                                  memberOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                                }`}
-                              >
-                                <span className="overflow-hidden">
-                                  {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
-                                  <span className="mt-1 flex flex-col items-start gap-1">
-                                    {altName && (
-                                      <span
-                                        data-id="member-alt-name"
-                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary"
-                                      >
-                                        {altName}
-                                      </span>
-                                    )}
-                                    <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
-                                      {perm.principal_id}
-                                    </span>
-                                    {title && (
-                                      <span className="rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
-                                        {title}
-                                      </span>
-                                    )}
-                                    {levelPaths.map((lv) => (
-                                      <span
-                                        key={lv}
-                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
-                                      >
-                                        {formatDeptName(lv, lang, koreanDeptByPath)}
-                                      </span>
-                                    ))}
-                                  </span>
-                                </span>
-                              </span>
-                            </>
-                          );
-                        } else if (perm.principal_type === "group") {
-                          nameLine = groupNameById.get(perm.principal_id) ?? perm.principal_id;
-                          const g = groupInfo.get(perm.principal_id);
-                          if (g) {
-                            const status = t(
-                              g.status === "pending"
-                                ? "home.groupPending"
-                                : g.status === "rejected"
-                                  ? "home.groupRejected"
-                                  : "home.groupActive",
-                            );
-                            restNode = (
-                              <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
-                                <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                                {g.count}
-                                <span className="truncate">· {status}</span>
-                              </span>
-                            );
-                          }
-                        } else {
-                          nameLine = formatDeptName(perm.principal_id, lang, koreanDeptByPath);
-                          const count = [...orgPathById.values()].filter(
-                            (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
-                          ).length;
-                          // 상위 경로 — 루트 부서면 자기 자신 (기존 동작 유지)
-                          const chain = buildOrgPathChain(perm.principal_id);
-                          const parent = (chain.length > 1 ? chain.slice(0, -1) : chain)
-                            .map((p) => formatDeptName(p, lang, koreanDeptByPath))
-                            .join(" › ");
-                          restNode = (
-                            <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
-                              <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                              {count}
-                              {parent && <span className="hidden truncate group-hover:inline">· {parent}</span>}
-                            </span>
-                          );
-                        }
-                        // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
-                        const stagedRemove = stagedRemoveIds.has(perm.id);
-                        return (
-                          <Fragment key={perm.id}>
-                          {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
-                          {i > 0 && rows[i - 1].role !== perm.role && (
-                            <div aria-hidden className="my-0.5 border-t border-hairline" />
-                          )}
-                          <div
-                            role={perm.principal_type === "user" ? "button" : undefined}
-                            tabIndex={perm.principal_type === "user" ? 0 : undefined}
-                            onClick={
-                              perm.principal_type === "user"
-                                ? () => toggleMember(perm.principal_id)
-                                : undefined
-                            }
-                            onKeyDown={
-                              perm.principal_type === "user"
-                                ? (e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      toggleMember(perm.principal_id);
-                                    }
-                                  }
-                                : undefined
-                            }
-                            onMouseEnter={
-                              perm.principal_type === "department"
-                                ? () => setHoveredPath(perm.principal_id)
-                                : undefined
-                            }
-                            onMouseLeave={
-                              perm.principal_type === "department"
-                                ? () => setHoveredPath(null)
-                                : undefined
-                            }
-                            // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
-                            className={`group flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
-                              perm.principal_type === "user"
-                                ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border"
-                                : ""
-                            } ${stagedRemove ? "opacity-60" : ""} ${
-                              isMine(perm)
-                                ? "border-accent bg-accent/10"
-                                : related
-                                  ? "border-accent-tint-border bg-accent-tint/40"
-                                  : "border-hairline bg-surface"
-                            }`}
-                          >
-                            <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
-                                <MemberIcon
-                                  perm={perm}
-                                  isMe={perm.principal_type === "user" && perm.principal_id === loginId}
-                                />
-                              </span>
-                              {/* 1줄: 이름/말단/그룹 · 이하: 부서/펼침 (H2c) */}
-                              <span className="flex min-w-0 flex-col leading-tight">
-                                <span className="truncate">{nameLine}</span>
-                                {restNode}
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <RoleBadge
-                                role={perm.role as MapRole}
-                                pending={perm.pending_change != null}
-                              />
-                              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
-                              {perm.pending_change && (
-                                <span
-                                  className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-                                  title={t("perm.pending.by", {
-                                    name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                                  })}
-                                >
-                                  {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} ·{" "}
-                                  {t("perm.pending.tag")}
-                                </span>
-                              )}
-                              {/* 스택 제거 태그 — 로컬 예정, 개별 취소 X (C4) */}
-                              {stagedRemove && (
-                                <span className="flex items-center gap-1">
-                                  <span className="rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
-                                    {t("perm.staged.remove")}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    title={t("perm.staged.cancel")}
-                                    className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleCancelStaged({ kind: "remove", permissionId: perm.id });
-                                    }}
-                                  >
-                                    <X size={12} strokeWidth={1.5} />
-                                  </button>
-                                </span>
-                              )}
-                              {canManageMembers && perm.role !== "owner" && !stagedRemove && (
-                                <button
-                                  type="button"
-                                  data-id={`map-detail-remove-member-${perm.id}`}
-                                  aria-label="Remove member"
-                                  className="rounded-xs p-0.5 text-ink-tertiary opacity-0 transition-opacity duration-150 hover:bg-surface-alt hover:text-error group-hover:opacity-100"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveMember(perm);
-                                  }}
-                                >
-                                  <X size={12} strokeWidth={1.5} />
-                                </button>
-                              )}
-                            </span>
-                          </div>
-                          </Fragment>
-                        );
-                      })}
+                      {rows.map((perm, i) =>
+                        renderMemberRow(perm, i > 0 && rows[i - 1].role !== perm.role),
+                      )}
                     </div>
                   );
                 })}
