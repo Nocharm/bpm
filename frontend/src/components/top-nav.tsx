@@ -385,17 +385,25 @@ export function TopNav() {
           nav.scrollWidth는 오염되므로 오버플로 검증은 가시 rect 기반이어야 한다.
           w-max 필수(T3 실측 발견): absolute+left-0만 있고 right가 없으면 containing block(nav 전체
           폭)에 대해 shrink-to-fit 계산되어, 좁은 뷰포트에서 자연폭이 nav 폭으로 클램프되어
-          과소측정된다(진동 유발 위험) — width:max-content로 뷰포트 무관 고정. */}
-      {([0, 1, 2, 3] as const).map((s) => (
-        <div
-          key={s}
-          ref={[measure0Ref, measure1Ref, measure2Ref, measure3Ref][s]}
-          aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 flex w-max items-center"
-        >
-          <NavMeasureRow stage={s} lang={lang} userName={userName} activeIdx={tabIndex} loggedIn={user !== null} t={t} />
-        </div>
-      ))}
+          과소측정된다(진동 유발 위험) — width:max-content로 뷰포트 무관 고정.
+          클리핑 래퍼 필수(코드리뷰 발견, T3 후속): w-max로 자연폭을 살리면 좁은 뷰포트에서 S0 클론이
+          nav보다 넓어지고, visibility:hidden 박스도 조상의 스크롤 가능 오버플로엔 반영돼(페인트만
+          숨김) 문서에 실제 가로 스크롤이 생긴다. nav 자체엔 overflow-hidden 금지 — 유저메뉴/벨
+          드롭다운이 nav 40px 박스 아래로 나가야 한다. 대신 전용 래퍼(absolute inset-0
+          overflow-hidden)로 클론 4개만 nav 크기에 시각적으로 가둔다. 클론 각자의 scrollWidth는
+          자기 박스 자체의 내재 크기라 조상의 overflow-hidden 클리핑과 무관 — 측정치는 그대로 정확
+          (실측 확인 완료). */}
+      <div aria-hidden className="pointer-events-none invisible absolute inset-0 overflow-hidden">
+        {([0, 1, 2, 3] as const).map((s) => (
+          <div
+            key={s}
+            ref={[measure0Ref, measure1Ref, measure2Ref, measure3Ref][s]}
+            className="absolute left-0 top-0 flex w-max items-center"
+          >
+            <NavMeasureRow stage={s} lang={lang} userName={userName} activeIdx={tabIndex} loggedIn={user !== null} t={t} />
+          </div>
+        ))}
+      </div>
     </nav>
   );
 }

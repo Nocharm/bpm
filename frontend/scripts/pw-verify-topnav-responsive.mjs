@@ -1,6 +1,7 @@
 // 상단 네비 4단계 반응형 실구동 검증 — top-nav.tsx가 폭 실측 기반(pickDisplayStage)으로
 // S0(현행) → S1(탭 비활성 아이콘만) → S2(피드백 아이콘만) → S3(언어 1버튼) → S4(이름→User 아이콘)
-// 순으로 누적 강등되며, 줄바꿈·좌우그룹 충돌·가로 넘침 없이 전환되는지 확인 (Task 3, T9 교훈 준수).
+// 순으로 누적 강등되며, 줄바꿈·좌우그룹 충돌·가로 넘침·문서 오버플로 없이 전환되는지 확인
+// (Task 3, T9 교훈 준수). 문서 오버플로 체크는 코드리뷰 발견 픽스(측정 복제 클리핑 래퍼) 회귀 가드.
 //
 // 실행 (frontend/ 에서): node scripts/pw-verify-topnav-responsive.mjs
 // 전제: backend :8000 + frontend :3000 기동, playwright-core 설치.
@@ -88,7 +89,21 @@ async function measure(label) {
     overflowPx <= 1,
     `overflowPx=${overflowPx.toFixed(2)} navRight=${navRect.right.toFixed(1)} maxRight=${maxRight.toFixed(1)}`,
   );
-  return { count: data.visible.length, midYs, overflowPx, collisionPx };
+  // 문서 오버플로 가드(코드리뷰 발견) — w-max로 자연폭을 살린 측정 복제(S0~S3)는 visibility:hidden이라
+  // 페인트는 안 되지만 조상의 스크롤 가능 오버플로엔 반영된다. nav 자체엔 overflow-hidden을 걸 수
+  // 없으므로(유저메뉴·벨 드롭다운이 nav 아래로 나가야 함) 전용 클리핑 래퍼로 복제만 가뒀는지, 그
+  // 결과 문서 전체에 실제 가로 스크롤이 생기지 않는지 확인한다.
+  const doc = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  const docOverflowPx = doc.scrollWidth - doc.innerWidth;
+  check(
+    `${label}: no document horizontal overflow (clip wrapper contains the w-max clones)`,
+    docOverflowPx <= 0,
+    `docScrollWidth=${doc.scrollWidth} innerWidth=${doc.innerWidth} overflowPx=${docOverflowPx}`,
+  );
+  return { count: data.visible.length, midYs, overflowPx, collisionPx, docOverflowPx };
 }
 
 async function shot(name) {

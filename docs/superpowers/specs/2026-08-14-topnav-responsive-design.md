@@ -65,6 +65,16 @@ export function pickDisplayStage(available: number, stageWidths: number[], margi
   (오버플로 없음, scrollWidth 사용 금지 — 복제 오염) ③ 1440=S0(탭 라벨 3개 가시)·760=S4(이름
   아이콘) 앵커 단언 + 중간 폭은 ①②만(단계는 언어별 상이 허용) ④ 각 조합 스크린샷.
 - 전체 게이트(FE vitest/tsc/lint/build · BE 무변경).
+- **검증 정정(T3 실측)**: 실 시드 콘텐츠(admin.sys="System Admin", 표준 EN/KO 라벨)는 760px에서
+  S1로 충분(피드백 라벨·언어 2버튼·이름 텍스트가 아직 안 밀림) — 앵커를 760=S1로 정정, S4는 보조
+  600px 케이스로 검증(avail<~644px 부터 S4, 760px 시점엔 미도달). pickDisplayStage의 "필요한
+  만큼만 강등" 설계와 일치 — 버그 아님. 같은 실측 과정에서 진짜 버그 2건 발견·수정: 벨 플레이스홀더
+  12px 과대측정(진짜 padding 없는 실 버튼과 불일치), 복제 4개의 `absolute left-0`(right 미지정)가
+  containing block(nav 전체폭) 기준 shrink-to-fit로 좁은 뷰포트에서 자연폭을 클램프 — `w-max`로
+  고정. 코드리뷰 후속: `w-max`가 자연폭을 살리며 좁은 뷰포트에서 S0 클론이 nav보다 넓어져 문서
+  가로 스크롤을 유발할 수 있음이 드러나 전용 클리핑 래퍼(`absolute inset-0 overflow-hidden`,
+  nav 자체엔 미적용 — 드롭다운이 nav 아래로 나가야 함)로 복제만 가두고, 검증 스크립트에
+  `document.documentElement.scrollWidth <= innerWidth` 가드를 추가.
 
 ## 6. 리스크·한계
 
