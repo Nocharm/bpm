@@ -8,7 +8,6 @@ import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
-  Building,
   Building2,
   Copy,
   Crown,
@@ -16,13 +15,10 @@ import {
   Globe,
   Hand,
   Hourglass,
-  House,
-  Landmark,
   Loader2,
   Lock,
   Network,
   PencilLine,
-  Puzzle,
   RotateCcw,
   Settings,
   Trash2,
@@ -50,6 +46,7 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
+import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
@@ -99,25 +96,6 @@ const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "group", labelKey: "home.memberGroup" },
 ];
 
-// 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
-function deptLeaf(orgPath: string): string {
-  const parts = orgPath.split("/");
-  return parts[parts.length - 1] || orgPath;
-}
-
-// 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
-function deptLevelRank(leaf: string): number {
-  const s = leaf.toLowerCase();
-  if (s.includes("센터") || s.includes("center")) return 0;
-  if (s.includes("팀") || s.includes("team")) return 2;
-  if (s.includes("그룹") || s.includes("group")) return 3;
-  if (s.includes("파트") || s.includes("part")) return 4;
-  return 1; // 담당(Department) / 그 외 기본
-}
-
-// 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
-const LEVEL_ICONS = [Landmark, Building2, Building, House, Puzzle];
-
 // 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
 // 접힌 카드 2줄 높이 기준 확대(22px) — 컨테이너가 세로 중앙 정렬 (member-card design 2026-07-09)
 function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
@@ -138,8 +116,7 @@ function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
     return <User size={22} strokeWidth={1.5} />;
   }
   if (perm.principal_type === "group") return <UsersRound size={22} strokeWidth={1.5} />;
-  const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
-  return <Icon size={22} strokeWidth={1.5} />;
+  return <DeptLevelIcon leaf={deptLeaf(perm.principal_id)} size={22} />;
 }
 
 // 멤버 컬럼 고스트 — 권한·디렉터리·그룹 로딩 동안 우측 컬럼 폭을 미리 차지해,
@@ -957,10 +934,7 @@ export function MapDetailCard({
                 <div className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5">
                   <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
-                      {(() => {
-                        const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(owningDeptPath))] ?? Building2;
-                        return <Icon size={22} strokeWidth={1.5} />;
-                      })()}
+                      <DeptLevelIcon leaf={deptLeaf(owningDeptPath)} size={22} />
                     </span>
                     <span className="flex min-w-0 flex-col leading-tight">
                       <span className="truncate">{formatDeptName(owningDeptPath, lang, koreanDeptByPath)}</span>
@@ -1069,12 +1043,14 @@ export function MapDetailCard({
                   : op.principalType === "group"
                     ? groupNameById.get(op.principalId) ?? op.principalId
                     : formatDeptName(op.principalId, lang, koreanDeptByPath);
-              const Icon =
-                op.principalType === "user"
-                  ? User
-                  : op.principalType === "group"
-                    ? UsersRound
-                    : LEVEL_ICONS[deptLevelRank(deptLeaf(op.principalId))] ?? Building2;
+              const iconNode =
+                op.principalType === "user" ? (
+                  <User size={22} strokeWidth={1.5} />
+                ) : op.principalType === "group" ? (
+                  <UsersRound size={22} strokeWidth={1.5} />
+                ) : (
+                  <DeptLevelIcon leaf={deptLeaf(op.principalId)} size={22} />
+                );
               const addKey = `${op.principalType}:${op.principalId}`;
               return (
                 <div
@@ -1086,7 +1062,7 @@ export function MapDetailCard({
                 >
                   <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-muted">
-                      <Icon size={22} strokeWidth={1.5} />
+                      {iconNode}
                     </span>
                     <span className="truncate">{name}</span>
                   </span>

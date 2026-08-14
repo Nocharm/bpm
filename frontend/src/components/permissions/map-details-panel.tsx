@@ -295,6 +295,7 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
             groups={[]}
             excludeIds={new Set(owningDept ? [owningDept] : [])}
             deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+            deptTreeBrowse
             onSelect={(opt) => void handlePickOwning(opt)}
           />
         )}
