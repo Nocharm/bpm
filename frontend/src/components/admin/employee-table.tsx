@@ -15,6 +15,7 @@ import {
   type EmployeeRow,
   type SyncSummary,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
@@ -69,7 +70,7 @@ function ExposedPositionsCard() {
       setDraft(new Set(next.exposed_positions));
       setMsg(t("admin.exposedPositionsSaved"));
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "save failed");
+      setMsg(humanizeApiError(err, t));
     } finally {
       setBusy(false);
     }
@@ -152,7 +153,7 @@ export function EmployeeTable() {
       );
       setRows(await listEmployees());
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "sync failed");
+      setMsg(humanizeApiError(err, t));
     } finally {
       setBusy(false);
     }

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Download, Loader2, Table2, Trash2 } from "lucide-react";
 
 import { exportDbTableCsv, getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { downloadCsv } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
 
@@ -66,12 +67,12 @@ export function TableViewer() {
         if (active) setTables(info);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   // 필터 입력 디바운스 → query (+ page 1 리셋) / Debounce filter; reset to page 1.
   useEffect(() => {
@@ -110,7 +111,7 @@ export function TableViewer() {
         setError(null);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       })
       .finally(() => {
         loadingRef.current = false;
@@ -118,7 +119,7 @@ export function TableViewer() {
     return () => {
       active = false;
     };
-  }, [selected, page, sort, order, query, refreshTick]);
+  }, [selected, page, sort, order, query, refreshTick, t]);
 
   // 테이블 pill 선택 — 누적/정렬/필터 초기화 / Pick a table; reset accumulation, sort, filter.
   const selectTable = (name: string) => {
@@ -154,7 +155,7 @@ export function TableViewer() {
       const csv = await exportDbTableCsv(selected, { sort: sort ?? undefined, order, q: query || undefined });
       downloadCsv(`${selected}.csv`, csv);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
     } finally {
       setExporting(false);
     }

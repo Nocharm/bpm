@@ -25,6 +25,7 @@ import {
   type DirectoryDept,
   type Group,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -324,7 +325,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           onCreated(true);
           setError(
             err instanceof Error
-              ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`
+              ? `${t("csvImport.mapCreatedImportFailed")} — ${humanizeApiError(err, t)}`
               : t("csvImport.mapCreatedImportFailed"),
           );
           setSubmitting(false);
@@ -347,11 +348,11 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         onCreated(true);
         setError(
           err instanceof Error
-            ? `${t("perm.createDialog.partialFailure")} — ${err.message}`
+            ? `${t("perm.createDialog.partialFailure")} — ${humanizeApiError(err, t)}`
             : t("perm.createDialog.partialFailure"),
         );
       } else {
-        setError(err instanceof Error ? err.message : t("err.createMap"));
+        setError(humanizeApiError(err, t));
       }
       setSubmitting(false);
     }

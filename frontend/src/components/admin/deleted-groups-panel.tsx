@@ -8,6 +8,7 @@ import { PlayCircle, RotateCcw } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedGroups, restoreGroup, type Group } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -17,7 +18,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // 백엔드 GROUP_RETENTION(routers/groups.py)과 일치 — 변경 시 양쪽 함께 / mirrors backend GROUP_RETENTION.
 const RETENTION_DAYS = 7;
 
-export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void }) {
+export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string, tone?: "error") => void }) {
   const { t } = useI18n();
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -43,12 +44,12 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
         if (active) setGroups(rows);
       })
       .catch((err) => {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t), "error");
       });
     return () => {
       active = false;
     };
-  }, [onToast, reloadKey]);
+  }, [onToast, reloadKey, t]);
 
   const handleRestore = async (group: Group) => {
     try {
@@ -56,7 +57,7 @@ export function DeletedGroupsPanel({ onToast }: { onToast: (msg: string) => void
       onToast(t("trash.groupRestored"));
       setReloadKey((k) => k + 1);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   };
 

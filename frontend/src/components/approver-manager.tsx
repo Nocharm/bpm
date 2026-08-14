@@ -15,6 +15,7 @@ import {
   type DirectoryUser,
 } from "@/lib/api";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
 interface ApproverManagerProps {
@@ -73,7 +74,7 @@ export function ApproverManager({ mapId, visibility, onClose, onSaved }: Approve
       onSaved(saved);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.approvers"));
+      setError(humanizeApiError(err, t));
     }
   };
 

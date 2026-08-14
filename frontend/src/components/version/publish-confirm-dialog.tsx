@@ -12,6 +12,8 @@ interface PublishConfirmDialogProps {
   subtitle?: string;
   // 현재 게시본 — 있으면 확인 시 만료됨을 경고, null이면 첫 게시.
   priorPublished: VersionSummary | null;
+  comment: string;
+  onCommentChange: (value: string) => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -19,6 +21,8 @@ interface PublishConfirmDialogProps {
 export function PublishConfirmDialog({
   subtitle,
   priorPublished,
+  comment,
+  onCommentChange,
   onConfirm,
   onClose,
 }: PublishConfirmDialogProps) {
@@ -40,6 +44,7 @@ export function PublishConfirmDialog({
       title={t("approval.publishConfirmTitle")}
       message={subtitle}
       lines={lines}
+      input={{ value: comment, onChange: onCommentChange, placeholder: t("wf.commentPlaceholder") }}
       confirmLabel={t("common.confirm")}
       cancelLabel={t("common.cancel")}
       onConfirm={onConfirm}

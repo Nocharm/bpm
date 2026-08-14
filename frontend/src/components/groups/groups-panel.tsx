@@ -25,6 +25,7 @@ import {
   type Group,
   type GroupStatus,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -89,8 +90,8 @@ export function GroupsPanel() {
   // 토스트 / Toast state
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  function addToast(message: string) {
-    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  function addToast(message: string, tone?: "error") {
+    setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
   }
 
   function dismissToast(id: string) {
@@ -106,9 +107,9 @@ export function GroupsPanel() {
     try {
       setGroups(await listGroups());
     } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err));
+      addToast(humanizeApiError(err, t), "error");
     }
-  }, []);
+  }, [t]);
 
   // 초기 로드 — 그룹 목록 + 디렉터리 / Initial load: groups + directory.
   useEffect(() => {
@@ -122,13 +123,13 @@ export function GroupsPanel() {
           setDirDepts(dir.departments);
         }
       } catch (err) {
-        if (active) addToast(err instanceof Error ? err.message : String(err));
+        if (active) addToast(humanizeApiError(err, t), "error");
       }
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   // 이름 중복 실시간 검사 — 디바운스 후 서버 조회(전역 중복 금지). 빈 입력/판정전은 null.
   useEffect(() => {
@@ -264,7 +265,7 @@ export function GroupsPanel() {
       closeDialog();
       await reloadGroups();
     } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err));
+      addToast(humanizeApiError(err, t), "error");
     } finally {
       setSubmitting(false);
     }

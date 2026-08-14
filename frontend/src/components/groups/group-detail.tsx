@@ -19,6 +19,7 @@ import {
   type Group,
   type GroupMember,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import type { Department, User as MockUser } from "@/lib/mock/permissions-types";
@@ -209,7 +210,7 @@ export function GroupDetail({
   // 멤버 추가 다이얼로그는 부모가 제어(버튼은 카드 헤더 GroupActions에 있음) / add-member dialog controlled by parent.
   addMemberOpen: boolean;
   onAddMemberClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, tone?: "error") => void;
 }) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
@@ -299,7 +300,7 @@ export function GroupDetail({
           : t("perm.group.toastMembersAdded", { n: targets.length }),
       );
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -318,7 +319,7 @@ export function GroupDetail({
       }
       onToast(t("perm.group.toastMemberRemoved"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -331,7 +332,7 @@ export function GroupDetail({
       onGroupChange(updated);
       onToast(t("perm.group.toastManagersUpdated"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 

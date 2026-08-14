@@ -298,7 +298,7 @@ export default function InboxPage() {
         await decideCheckoutRequest(a.id, approve);
       } else {
         try {
-          await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+          await decideApprovalRequest(a.id, approve ? "approve" : "reject", approve ? undefined : reason.trim() || undefined);
           if (a.title === "map_rename")
             pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
           if (a.title === "sp_designation" && !approve)
@@ -830,6 +830,7 @@ function ApprovalDetail({
   const [spDetail, setSpDetail] = useState<MapDetail | null>(null);
 
   const isVersion = approval.kind === "version_approval";
+  const isApprovalRequest = approval.kind === "approval_request";
   const versionId = approval.version_id;
   const isSpDesignation = approval.kind === "approval_request" && approval.title === "sp_designation";
 
@@ -1074,11 +1075,11 @@ function ApprovalDetail({
           message={subtitle}
           lines={isVersion ? approverLines : undefined}
           input={
-            isVersion
+            isVersion || isApprovalRequest
               ? {
                   value: rejectReason,
                   onChange: setRejectReason,
-                  placeholder: t("wf.rejectReason"),
+                  placeholder: isVersion ? t("wf.rejectReason") : t("wf.commentPlaceholder"),
                 }
               : undefined
           }

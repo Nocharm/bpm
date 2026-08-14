@@ -8,6 +8,7 @@ import { PlayCircle, RotateCcw } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
 import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -17,7 +18,7 @@ const HOUR_MS = 60 * 60 * 1000;
 // 백엔드 RECOVERY_WINDOW(routers/maps.py)와 일치 — 변경 시 양쪽 함께 / mirrors backend RECOVERY_WINDOW.
 const RETENTION_DAYS = 7;
 
-export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }) {
+export function DeletedMapsPanel({ onToast }: { onToast: (msg: string, tone?: "error") => void }) {
   const { t } = useI18n();
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0); // 복구 후 재조회 트리거
@@ -44,12 +45,12 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
         if (active) setMaps(rows);
       })
       .catch((err) => {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t), "error");
       });
     return () => {
       active = false;
     };
-  }, [onToast, reloadKey]);
+  }, [onToast, reloadKey, t]);
 
   const handleRestore = async (id: number) => {
     try {
@@ -57,7 +58,7 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string) => void }
       onToast(t("trash.restored"));
       setReloadKey((k) => k + 1);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   };
 

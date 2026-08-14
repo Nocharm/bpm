@@ -659,7 +659,11 @@ const en = {
   "wf.rejectReason": "Reason",
   "wf.rejectConfirm": "Reject",
   "wf.rejectCancel": "Cancel",
-  "wf.rejectedBanner": "Rejected: {reason}",
+  "wf.rejectedLabel": "Rejected",
+  "wf.commentPlaceholder": "Add a comment (optional)",
+  "wf.commentsTitle": "Comments — {label}",
+  "wf.commentsEmpty": "No comments yet.",
+  "wf.viewComments": "View comments",
   "err.workflow": "Workflow action failed",
   "approvers.manage": "Manage approvers",
   "approvers.title": "Approvers",
@@ -1612,6 +1616,7 @@ const en = {
   "apiError.syncThrottled": "Sync was throttled — please try again shortly.",
   "apiError.ownerOnlyBundle": "Only the map owner can bundle this with a version submission.",
   "apiError.spDesignationPending": "A registration request is already pending for this map.",
+  "apiError.requestFailed": "Request failed (HTTP {status})",
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -2274,7 +2279,11 @@ const ko: Record<MessageKey, string> = {
   "wf.rejectReason": "사유",
   "wf.rejectConfirm": "반려",
   "wf.rejectCancel": "취소",
-  "wf.rejectedBanner": "반려됨: {reason}",
+  "wf.rejectedLabel": "Rejected",
+  "wf.commentPlaceholder": "코멘트 입력 (선택)",
+  "wf.commentsTitle": "코멘트 — {label}",
+  "wf.commentsEmpty": "아직 코멘트가 없습니다.",
+  "wf.viewComments": "코멘트 보기",
   "err.workflow": "워크플로우 작업 실패",
   "approvers.manage": "승인자 관리",
   "approvers.title": "승인자",
@@ -3221,6 +3230,7 @@ const ko: Record<MessageKey, string> = {
   "apiError.syncThrottled": "동기화가 제한되었습니다 — 잠시 후 다시 시도하세요.",
   "apiError.ownerOnlyBundle": "맵 소유자만 버전 제출과 함께 묶을 수 있습니다.",
   "apiError.spDesignationPending": "이미 이 맵의 등록 요청이 승인 대기 중입니다.",
+  "apiError.requestFailed": "요청이 실패했습니다 (HTTP {status})",
 };
 
 export const messages: Record<Lang, Record<MessageKey, string>> = { en, ko };

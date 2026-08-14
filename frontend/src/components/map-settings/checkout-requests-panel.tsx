@@ -14,6 +14,7 @@ import {
   type CheckoutRequestQueue,
   type DirectoryUser,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { genId } from "@/lib/id";
@@ -53,9 +54,9 @@ export function CheckoutRequestsPanel({ mapId, onDecided, onToast }: Props) {
       const rows = await getPendingCheckoutRequests(mapIdNum);
       setRequests(rows);
     } catch (err) {
-      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
     }
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   useEffect(() => {
     let active = true;
@@ -64,13 +65,13 @@ export function CheckoutRequestsPanel({ mapId, onDecided, onToast }: Props) {
         const rows = await getPendingCheckoutRequests(mapIdNum);
         if (active) setRequests(rows);
       } catch (err) {
-        if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+        if (active) onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
       }
     })();
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   const handleDecide = useCallback(
     async (requestId: number, approve: boolean) => {
@@ -85,7 +86,7 @@ export function CheckoutRequestsPanel({ mapId, onDecided, onToast }: Props) {
           message: approve ? t("perm.checkout.toastApproved") : t("perm.checkout.toastRejected"),
         });
       } catch (err) {
-        onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+        onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
       } finally {
         setDecidingIds((prev) => {
           const next = new Set(prev);
