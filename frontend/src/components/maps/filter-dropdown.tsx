@@ -6,6 +6,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
+import type { FilterDisplayMode } from "@/lib/filter-display";
+
 interface FilterOption {
   value: string;
   label: string;
@@ -20,6 +22,7 @@ export function FilterDropdown({
   selected,
   onToggle,
   dataId,
+  display = "full",
 }: {
   label: string;
   // 버튼 선행 아이콘 / button leading icon.
@@ -28,6 +31,8 @@ export function FilterDropdown({
   selected: Set<string>;
   onToggle: (value: string) => void;
   dataId?: string;
+  // 버튼 표시 단계 — full(아이콘+라벨) / label(라벨만) / icon(아이콘만, title로 라벨 보완). 기본 full(기존 동작 유지).
+  display?: FilterDisplayMode;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -44,20 +49,21 @@ export function FilterDropdown({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
         data-id={dataId}
         aria-expanded={open}
-        className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-1 text-caption transition-colors ${
+        title={label}
+        className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2.5 py-1 text-caption transition-colors ${
           count > 0
             ? "border-accent-tint-border bg-accent-tint text-accent"
             : "border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink"
         }`}
         onClick={() => setOpen((v) => !v)}
       >
-        {icon}
-        {count > 0 ? `${label} · ${count}` : label}
+        {display !== "label" && icon}
+        {display !== "icon" ? (count > 0 ? `${label} · ${count}` : label) : count > 0 ? `· ${count}` : null}
         <ChevronDown
           size={14}
           strokeWidth={1.5}
