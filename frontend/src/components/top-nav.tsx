@@ -93,7 +93,9 @@ function NavMeasureRow({
               <MessageSquare size={14} strokeWidth={1.5} />
             </span>
           ))}
-        <span className="inline-flex p-1.5">
+        {/* 실 NotificationBell 버튼은 패딩 없이 아이콘만(`flex items-center`) — 복제도 동일 폭으로 맞춘다
+            (이전엔 p-1.5로 12px 과대측정, 강등이 실제보다 일찍 트리거됨) */}
+        <span className="inline-flex items-center">
           <Bell size={16} strokeWidth={1.5} />
         </span>
         <span className="rounded-sm px-2 py-1 text-caption">{loggedIn ? userName : t("nav.login")}</span>
@@ -380,13 +382,16 @@ export function TopNav() {
       <FeedbackSidePanel open={feedbackOpen} onClose={closeFeedbackPanel} />
       {/* 측정 복제 S0~S3 — 좌그룹+스페이서+우그룹 한 줄 자연폭. 비상호작용 스팬만(클론이
           폴링·포커스를 만들면 안 됨), 뱃지/벨은 정적 플레이스홀더. T9 교훈: 이 복제들 때문에
-          nav.scrollWidth는 오염되므로 오버플로 검증은 가시 rect 기반이어야 한다. */}
+          nav.scrollWidth는 오염되므로 오버플로 검증은 가시 rect 기반이어야 한다.
+          w-max 필수(T3 실측 발견): absolute+left-0만 있고 right가 없으면 containing block(nav 전체
+          폭)에 대해 shrink-to-fit 계산되어, 좁은 뷰포트에서 자연폭이 nav 폭으로 클램프되어
+          과소측정된다(진동 유발 위험) — width:max-content로 뷰포트 무관 고정. */}
       {([0, 1, 2, 3] as const).map((s) => (
         <div
           key={s}
           ref={[measure0Ref, measure1Ref, measure2Ref, measure3Ref][s]}
           aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 flex items-center"
+          className="pointer-events-none invisible absolute left-0 top-0 flex w-max items-center"
         >
           <NavMeasureRow stage={s} lang={lang} userName={userName} activeIdx={tabIndex} loggedIn={user !== null} t={t} />
         </div>
