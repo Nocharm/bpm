@@ -104,6 +104,9 @@ export default function MapListPage() {
   const filterRowRef = useRef<HTMLDivElement | null>(null);
   const measureFullRef = useRef<HTMLDivElement | null>(null);
   const measureLabelRef = useRef<HTMLDivElement | null>(null);
+  // Clear 버튼(필터 활성 시만 렌더)도 같은 행의 가용폭을 갉아먹는다 — 측정에서 빼지 않으면
+  // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
+  const clearBtnRef = useRef<HTMLButtonElement | null>(null);
   const [filterMode, setFilterMode] = useState<FilterDisplayMode>("full");
 
   const showToast = useCallback((message: string) => {
@@ -255,17 +258,25 @@ export default function MapListPage() {
     }
   }, []);
 
-  // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible)의 자연폭 vs 행 가용폭. i18n/뷰 전환은
-  // 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는 라이브 행 폭이 모드에
-  // 따라 변해도 복제 폭은 불변이라 진동하지 않는다.
+  // Clear 필 노출 조건 — JSX(아래)와 effect deps 양쪽이 같은 식을 참조(중복 방지 겸 clearBtnRef
+  // mount/unmount 시 effect 재실행 트리거).
+  const hasActiveFilter =
+    statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0;
+
+  // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible) 2종의 자연폭 vs 행 가용폭(Clear 필 폭
+  // 차감). i18n/뷰 전환은 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는
+  // 라이브 행 폭이 모드에 따라 변해도 복제 폭은 불변이라 진동하지 않는다.
   useEffect(() => {
     const row = filterRowRef.current;
     const full = measureFullRef.current;
     const label = measureLabelRef.current;
     if (!row || !full || !label) return;
     const update = () => {
+      const clear = clearBtnRef.current;
+      // Clear가 뜨면 같은 행의 gap(1.5=6px)만큼 더 먹는다 — 폭+간격을 가용폭에서 미리 뺀다.
+      const available = row.clientWidth - (clear ? clear.offsetWidth + 6 : 0);
       setFilterMode(
-        pickFilterDisplayMode(row.clientWidth, {
+        pickFilterDisplayMode(available, {
           full: full.scrollWidth,
           label: label.scrollWidth,
         }),
@@ -277,11 +288,18 @@ export default function MapListPage() {
     ro.observe(row);
     ro.observe(full);
     ro.observe(label);
+    if (clearBtnRef.current) ro.observe(clearBtnRef.current);
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [homeView, lang]); // 필 개수·언어가 복제 폭을 바꾸는 유이한 축
+    // 필 개수·언어 외에 maps.length도 의존성에 포함 — 맵 목록이 비동기로 도착하기 전엔
+    // visibleMaps.length===0이라 WelcomePlaceholder가 렌더되어 필터 행 자체가 마운트되지 않고
+    // (row/full/label ref가 null) 이 effect가 조기 반환한다. maps 도착 후 필터 행이 처음
+    // 마운트될 때 effect를 다시 돌려야 ResizeObserver가 비로소 붙는다 — 없으면 filterMode가
+    // 초기값 "full"에 영원히 고정되고(관측된 실측 버그, T9), 그 뒤 리사이즈도 못 잡는다.
+    // hasActiveFilter는 clearBtnRef가 새로 마운트/언마운트될 때 observer를 다시 붙이기 위함.
+  }, [homeView, lang, maps.length, hasActiveFilter]);
 
   // 검색·필터 저장 — 변경 시 session에 기록. 마운트 첫 실행은 skip(초기 default가 저장값 덮어쓰기 방지).
   const saveSkip = useRef(true);
@@ -812,8 +830,9 @@ export default function MapListPage() {
                     onToggleSp={() => {}}
                   />
                 </div>
-                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0) && (
+                {hasActiveFilter && (
                   <button
+                    ref={clearBtnRef}
                     type="button"
                     data-id="home-filter-clear"
                     className="ml-auto text-fine text-accent hover:underline"
