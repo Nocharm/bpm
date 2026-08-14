@@ -7377,7 +7377,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             >
               <XCircle size={16} strokeWidth={1.5} className="shrink-0" />
               <span className="text-caption-strong">{t("wf.rejectedLabel")}</span>
-              {workflow?.rejected_by && workflow.status === "rejected" && (
+              {workflow?.rejected_by && workflow.version_id === currentVersion.id && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-error/40 bg-surface px-1.5 py-0.5 text-fine">
                   <User size={12} strokeWidth={1.5} />
                   {nameById.get(workflow.rejected_by) ?? workflow.rejected_by}
