@@ -15,6 +15,7 @@ import {
   Eye,
   Globe,
   Hand,
+  Hourglass,
   House,
   Landmark,
   Loader2,
@@ -29,6 +30,7 @@ import {
   Users,
   UsersRound,
   X,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -36,6 +38,7 @@ import {
   getMap,
   listGroups,
   listMapPermissions,
+  withdrawApprovalRequest,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -49,6 +52,7 @@ import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
+import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -59,7 +63,13 @@ import {
   formatTitleWithPosition,
 } from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
-import { applyStagedOps, removeStagedOp, upsertStagedOp, type StagedOp } from "@/lib/permission-staging";
+import {
+  applyStagedOps,
+  forecastStagedOp,
+  removeStagedOp,
+  upsertStagedOp,
+  type StagedOp,
+} from "@/lib/permission-staging";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
@@ -265,6 +275,18 @@ export function MapDetailCard({
 
   function handleCancelStaged(op: StagedOp) {
     setStagedOps((ops) => removeStagedOp(ops, op));
+  }
+
+  // 본인이 낸 승인 대기 요청 회수 — 서버 마커(pending_change)를 직접 지우므로 저장 핸들러와 동일한
+  // 재조회 경로(localReloadKey)로 반영. 카드엔 onToast가 없어 에러는 기존 stagedSaveError 배너로.
+  async function handleWithdrawPending(perm: MapPermission) {
+    if (!perm.pending_change) return;
+    try {
+      await withdrawApprovalRequest(perm.pending_change.request_id);
+      setLocalReloadKey((k) => k + 1);
+    } catch (err) {
+      setStagedSaveError(humanizeApiError(err, t));
+    }
   }
 
   // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
@@ -510,7 +532,7 @@ export function MapDetailCard({
     // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
     const stagedRemove = stagedRemoveIds.has(perm.id);
     // 옛 X버튼과 동일 조건 — 역할 필 자리에 hover/focus 시 Remove 필로 스왑 (U4).
-    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove;
+    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove && !perm.pending_change;
     return (
       <Fragment key={perm.id}>
         {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
@@ -569,11 +591,7 @@ export function MapDetailCard({
                       : ""
                   }
                 >
-                  <RoleBadge
-                    role={perm.role as MapRole}
-                    pending={perm.pending_change != null}
-                    className={perm.pending_change ? "" : ROLE_PILL_WIDTH_CLASS}
-                  />
+                  <RoleBadge role={perm.role as MapRole} className={ROLE_PILL_WIDTH_CLASS} />
                 </span>
                 {removable && (
                   <button
@@ -599,39 +617,61 @@ export function MapDetailCard({
                   </button>
                 )}
               </span>
-              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
+              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만.
+                  본인이 낸 요청이면 호버 시 회수(Withdraw)로 스왑 / hover-swaps to Withdraw for the requester. */}
               {perm.pending_change && (
-                <span
-                  className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-                  title={t("perm.pending.by", {
-                    name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                  })}
-                >
-                  {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-                </span>
+                perm.pending_change.requested_by === loginId ? (
+                  <HoverSwapPill
+                    dataId={`map-detail-pending-withdraw-${perm.id}`}
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                    swapLabel={t("perm.pending.withdraw")}
+                    onActivate={() => void handleWithdrawPending(perm)}
+                    className="max-w-full"
+                    base={
+                      <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+                        {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                      </span>
+                    }
+                  />
+                ) : (
+                  <span
+                    className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                  >
+                    {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                  </span>
+                )
               )}
             </span>
             {/* 스택 제거 태그 — 좌측 소속(부서) 줄과 같은 높이 대역에 오도록 2번째 줄로 배치 (C4, R5-4).
-                취소 X는 항상 공간을 점유(opacity-0)하다가 행 hover/focus 시에만 페이드 인 — 레이아웃 안 밀림. */}
+                예고 아이콘(즉시/승인)을 달고, 호버 시 같은 자리 Cancel 필로 스왑 (HoverSwapPill). */}
             {stagedRemove && (
-              <span className="flex items-center gap-1">
-                <span
-                  className={`rounded-sm border border-error px-1.5 py-0.5 text-fine text-error ${ROLE_PILL_WIDTH_CLASS}`}
-                >
-                  {t("perm.staged.remove")}
-                </span>
-                <button
-                  type="button"
-                  title={t("perm.staged.cancel")}
-                  className="rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCancelStaged({ kind: "remove", permissionId: perm.id });
-                  }}
-                >
-                  <X size={12} strokeWidth={1.5} />
-                </button>
-              </span>
+              <HoverSwapPill
+                dataId={`map-detail-staged-cancel-${perm.id}`}
+                title={t(
+                  forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval"
+                    ? "perm.staged.forecastApproval"
+                    : "perm.staged.forecastInstant",
+                )}
+                swapLabel={t("perm.staged.cancelPill")}
+                onActivate={() => handleCancelStaged({ kind: "remove", permissionId: perm.id })}
+                base={
+                  // ROLE_PILL_WIDTH_CLASS는 고정 w-[60px]라 아이콘+문구가 넘친다 — 이 필에서만
+                  // min-w-[60px]로 완화(공유 상수는 불변, brief Step 4 주의사항).
+                  <span className="inline-flex min-w-[60px] items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                    {forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval" ? (
+                      <Hourglass size={12} strokeWidth={1.5} />
+                    ) : (
+                      <Zap size={12} strokeWidth={1.5} />
+                    )}
+                    {t("perm.staged.remove")}
+                  </span>
+                }
+              />
             )}
           </span>
         </div>
@@ -1010,18 +1050,19 @@ export function MapDetailCard({
                     <span className="truncate">{name}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
-                      {t("perm.staged.add")}
-                    </span>
+                    <HoverSwapPill
+                      dataId={`map-detail-staged-add-cancel-${addKey}`}
+                      title={t("perm.staged.forecastInstant")}
+                      swapLabel={t("perm.staged.cancelPill")}
+                      onActivate={() => handleCancelStaged(op)}
+                      base={
+                        <span className="inline-flex items-center gap-1 rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+                          <Zap size={12} strokeWidth={1.5} />
+                          {t("perm.staged.add")}
+                        </span>
+                      }
+                    />
                     <RoleBadge role={op.role} />
-                    <button
-                      type="button"
-                      title={t("perm.staged.cancel")}
-                      className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-                      onClick={() => handleCancelStaged(op)}
-                    >
-                      <X size={12} strokeWidth={1.5} />
-                    </button>
                   </span>
                 </div>
               );
