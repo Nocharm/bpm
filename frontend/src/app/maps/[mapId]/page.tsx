@@ -9513,6 +9513,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               <ApprovalPanel
                                 status={currentVersion.status}
                                 workflow={workflow}
+                                events={currentVersion.events}
                                 isCheckoutHolder={checkout?.mine ?? false}
                                 isApprover={isApprover}
                                 isSubmitter={isSubmitter}
