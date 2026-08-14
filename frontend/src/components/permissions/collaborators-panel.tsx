@@ -237,7 +237,7 @@ function CollaboratorRow({
           opacity 토글이라 Tab 포커스는 유지되고 focus:/group-focus-within:로 키보드 사용자도 도달 가능. /
           Remove button: absolute + opacity-hover so it reserves no flex space; opacity (not display)
           keeps it tab-reachable, revealed via focus:/group-focus-within: for keyboard users. */}
-      {!isOwner && !controlsDisabled && !stagedRemove && (
+      {!isOwner && !controlsDisabled && !stagedRemove && !isPending && (
         <button
           type="button"
           title={t("perm.removeButton")}
