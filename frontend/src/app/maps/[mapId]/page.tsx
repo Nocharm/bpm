@@ -79,6 +79,7 @@ import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-d
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
 import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { VersionSwitchConfirm } from "@/components/version/version-switch-confirm";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -2885,6 +2886,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [saveCurrentScope, mapName, t],
   );
+
+  // 타임라인 '이 버전으로 가기' — 편집 중이면 VersionPill과 동일한 전환 확인 모달을 거친다 (feedback 2026-08-14)
+  const [goVersionPrompt, setGoVersionPrompt] = useState<VersionSummary | null>(null);
+  const requestGoToVersion = (id: number) => {
+    if (id === versionId) return;
+    const target = versions.find((v) => v.id === id);
+    if (!target) return;
+    if (!readOnly) setGoVersionPrompt(target);
+    else void switchVersion(id);
+  };
 
   // 네이티브 prompt/confirm 대신 플로팅 모달 — 버전 생성/이름변경 입력, 삭제 확인.
   const [versionDialog, setVersionDialog] = useState<{ mode: "create" | "rename" } | null>(null);
@@ -9552,7 +9563,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       only="versions"
                       showFooter={false}
                       reloadKey={versionsReloadKey}
-                      onGoToVersion={(id) => void switchVersion(id)}
+                      onGoToVersion={requestGoToVersion}
                       currentVersionId={versionId}
                     />
                   </div>
@@ -9871,6 +9882,18 @@ function MapEditor({ mapId }: { mapId: number }) {
             setRejectOpen(false);
             setRejectReason("");
           }}
+        />
+      )}
+      {/* 타임라인 go-to 전환 확인 — VersionPill과 동일 모달(편집 중 미저장 안내) */}
+      {goVersionPrompt && (
+        <VersionSwitchConfirm
+          label={goVersionPrompt.label}
+          onConfirm={() => {
+            const id = goVersionPrompt.id;
+            setGoVersionPrompt(null);
+            void switchVersion(id);
+          }}
+          onClose={() => setGoVersionPrompt(null)}
         />
       )}
       {branchPrompt && (

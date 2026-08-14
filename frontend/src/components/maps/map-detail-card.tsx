@@ -52,6 +52,7 @@ import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
 import { OrgInfoModal } from "@/components/org-info-modal";
+import { PersonInfoPopup } from "@/components/person-hover-card";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
@@ -206,6 +207,7 @@ export function MapDetailCard({
   const [personMenu, setPersonMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [orgMenu, setOrgMenu] = useState<{ path: string; x: number; y: number } | null>(null);
   const [orgInfo, setOrgInfo] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
+  const [personInfo, setPersonInfo] = useState<{ id: string; x: number; y: number } | null>(null);
   // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
   const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
   // 호버한 부서(팀)의 org_path — 상위/하위 팀 하이라이트 + 상위 소속 노출 (H2) / hovered dept path.
@@ -598,7 +600,8 @@ export function MapDetailCard({
           // named group — 인스펙터가 이 카드를 <details className="group ...">로 감싸므로(map-inspector-tab.tsx),
           // 이름 없는 group을 쓰면 그 조상까지 호버 시 전 행이 동시에 스왑된다(governance-r5 V1, R5-2).
           className={`group/member flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
-            perm.principal_type === "user" ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border" : ""
+            // 부서 행도 우클릭 메뉴가 생겨 인물 행과 같은 호버 어포던스(링·포인터) 적용 — 그룹 행만 제외
+            perm.principal_type !== "group" ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border" : ""
           } ${stagedRemove ? "opacity-60" : ""} ${
             isMine(perm)
               ? "border-accent bg-accent/10"
@@ -960,7 +963,7 @@ export function MapDetailCard({
               <div data-id="map-detail-owning-member" className="flex flex-col gap-1">
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
                 <div
-                  className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5"
+                  className="flex cursor-pointer items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5 transition-colors hover:ring-1 hover:ring-accent-tint-border"
                   // 부서 행과 같은 카드로 인식됨 — 우클릭 조직 정보 동일 적용 (feedback 2026-08-14)
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1289,6 +1292,11 @@ export function MapDetailCard({
                 window.location.href = `mysingleim://token=&ids=${personMenu.id}`;
               },
             },
+            {
+              label: t("person.info"),
+              icon: User,
+              onSelect: () => setPersonInfo({ id: personMenu.id, x: personMenu.x, y: personMenu.y }),
+            },
           ]}
         />
       )}
@@ -1312,6 +1320,13 @@ export function MapDetailCard({
           koreanDeptByPath={koreanDeptByPath}
           origin={orgInfo.origin}
           onClose={() => setOrgInfo(null)}
+        />
+      )}
+      {personInfo && (
+        <PersonInfoPopup
+          userId={personInfo.id}
+          position={{ x: personInfo.x, y: personInfo.y }}
+          onClose={() => setPersonInfo(null)}
         />
       )}
     </div>
