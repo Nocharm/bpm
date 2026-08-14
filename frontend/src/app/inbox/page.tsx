@@ -1071,7 +1071,7 @@ function ApprovalDetail({
           message={subtitle}
           banner={
             isVersion && submitComment ? (
-              <RequesterCommentBanner submitterName={approval.requester} comment={submitComment} />
+              <RequesterCommentBanner authorName={approval.requester} comment={submitComment} />
             ) : undefined
           }
           lines={isVersion ? approverLines : undefined}
@@ -1092,6 +1092,11 @@ function ApprovalDetail({
           danger
           title={t("wf.rejectTitle")}
           message={subtitle}
+          banner={
+            isVersion && submitComment ? (
+              <RequesterCommentBanner authorName={approval.requester} comment={submitComment} />
+            ) : undefined
+          }
           lines={isVersion ? approverLines : undefined}
           input={
             isVersion || isApprovalRequest

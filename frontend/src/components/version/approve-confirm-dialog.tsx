@@ -48,7 +48,7 @@ export function ApproveConfirmDialog({
       banner={
         submitComment ? (
           <RequesterCommentBanner
-            submitterName={
+            authorName={
               workflow?.submitted_by
                 ? (nameById.get(workflow.submitted_by) ?? workflow.submitted_by)
                 : undefined

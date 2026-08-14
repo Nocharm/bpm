@@ -6,8 +6,9 @@ import { type ReactNode } from "react";
 import { Send, User } from "lucide-react";
 
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
+import { RequesterCommentBanner } from "@/components/version/requester-comment-banner";
 import { useI18n } from "@/lib/i18n";
-import { type WorkflowState } from "@/lib/api";
+import { type VersionEvent, type WorkflowState } from "@/lib/api";
 
 interface SubmitConfirmDialogProps {
   workflow: WorkflowState | null;
@@ -15,6 +16,8 @@ interface SubmitConfirmDialogProps {
   subtitle?: string;
   // 승인요청에 동봉할 옵션 UI(예: 가시성 변경 체크박스) — 호출자가 렌더한 JSX를 그대로 주입.
   bundleSlot?: ReactNode;
+  // 최신 반려 이벤트 — 반려 기록이 있으면 재요청 맥락으로 이전 반려 사유·반려자 배너 노출.
+  previousRejection?: VersionEvent | null;
   comment: string;
   onCommentChange: (value: string) => void;
   onConfirm: () => void;
@@ -26,6 +29,7 @@ export function SubmitConfirmDialog({
   nameById,
   subtitle,
   bundleSlot,
+  previousRejection,
   comment,
   onCommentChange,
   onConfirm,
@@ -51,6 +55,15 @@ export function SubmitConfirmDialog({
       icon={<Send size={28} strokeWidth={1.5} />}
       title={t("approval.submitConfirmTitle")}
       message={subtitle}
+      banner={
+        previousRejection?.note ? (
+          <RequesterCommentBanner
+            kind="rejection"
+            authorName={nameById.get(previousRejection.actor) ?? previousRejection.actor}
+            comment={previousRejection.note}
+          />
+        ) : undefined
+      }
       lines={lines}
       input={{ value: comment, onChange: onCommentChange, placeholder: t("wf.commentPlaceholder") }}
       confirmLabel={t("common.confirm")}

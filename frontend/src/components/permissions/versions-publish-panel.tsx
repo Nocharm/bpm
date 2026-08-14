@@ -30,7 +30,7 @@ import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
-import { findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -429,6 +429,7 @@ function VersionRow({
           workflow={wf}
           nameById={nameById}
           subtitle={label}
+          previousRejection={findLatestRejection(events)}
           bundleSlot={
             canBundle ? (
               <VisibilityBundlePicker current={visibility} value={bundleValue} onChange={setBundleValue} />
@@ -500,6 +501,7 @@ function VersionRow({
           nameById={nameById}
           username={currentUserId}
           subtitle={label}
+          submitComment={findLatestSubmitComment(events)}
           reason={rejectReason}
           onReasonChange={setRejectReason}
           onConfirm={() => {

@@ -78,7 +78,7 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
-import { findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -9782,6 +9782,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           workflow={workflow}
           nameById={nameById}
           subtitle={versionSubtitle}
+          previousRejection={findLatestRejection(currentVersion?.events)}
           bundleSlot={
             canBundleVisibility ? (
               <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
@@ -9857,6 +9858,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           nameById={nameById}
           username={username}
           subtitle={versionSubtitle}
+          submitComment={findLatestSubmitComment(currentVersion?.events)}
           reason={rejectReason}
           onReasonChange={setRejectReason}
           onConfirm={() => {
