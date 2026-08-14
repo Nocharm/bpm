@@ -186,6 +186,8 @@ class PendingChangeOut(BaseModel):
 
     to_role: str | None
     requested_by: str
+    # 요청자 본인 철회(DELETE /approval-requests/{id})용 — 에디터는 맵 승인요청 목록을 못 읽는다
+    request_id: int
 
 
 class PermissionOut(BaseModel):
