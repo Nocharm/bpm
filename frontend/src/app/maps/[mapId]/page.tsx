@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, UserRound, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -7370,8 +7370,20 @@ function MapEditor({ mapId }: { mapId: number }) {
             </span>
           )}
           {currentVersion?.status === "rejected" && currentVersion.reject_reason && (
-            <span className="text-caption text-error">
-              {t("wf.rejectedBanner", { reason: currentVersion.reject_reason })}
+            <span
+              data-id="wf-rejected-banner"
+              className="flex max-w-96 items-center gap-1.5 rounded-sm border border-error/40 bg-error/10 px-2 py-1 text-caption text-error"
+              title={currentVersion.reject_reason}
+            >
+              <XCircle size={16} strokeWidth={1.5} className="shrink-0" />
+              <span className="text-caption-strong">{t("wf.rejectedLabel")}</span>
+              {workflow?.rejected_by && workflow.status === "rejected" && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-error/40 bg-surface px-1.5 py-0.5 text-fine">
+                  <User size={12} strokeWidth={1.5} />
+                  {nameById.get(workflow.rejected_by) ?? workflow.rejected_by}
+                </span>
+              )}
+              <span className="truncate">{currentVersion.reject_reason}</span>
             </span>
           )}
           {!isViewer && checkout?.mine && (
