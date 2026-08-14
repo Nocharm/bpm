@@ -22,7 +22,16 @@ export function deptLevelRank(leaf: string): number {
 // 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
 const LEVEL_ICONS = [Landmark, Building2, Building, House, Puzzle];
 
-export function DeptLevelIcon({ leaf, size = 14 }: { leaf: string; size?: number }) {
+export function DeptLevelIcon({
+  leaf,
+  size = 14,
+  className = "",
+}: {
+  leaf: string;
+  size?: number;
+  /** 색·shrink 등 아이콘 wrapper 클래스 — 기본 빈 문자열(카드 기존 사용처는 currentColor 상속, 무변경). */
+  className?: string;
+}) {
   const Icon = LEVEL_ICONS[deptLevelRank(leaf)] ?? Building2;
-  return <Icon size={size} strokeWidth={1.5} />;
+  return <Icon size={size} strokeWidth={1.5} className={className} />;
 }

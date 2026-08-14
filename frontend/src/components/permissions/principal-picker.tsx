@@ -307,7 +307,11 @@ export function PrincipalPicker({
                     setQuery("");
                   }}
                 >
-                  {treeRow ? <DeptLevelIcon leaf={deptLeaf(opt.principalId)} /> : <PrincipalIcon type={opt.principalType} />}
+                  {treeRow ? (
+                    <DeptLevelIcon leaf={deptLeaf(opt.principalId)} className="shrink-0 text-ink-tertiary" />
+                  ) : (
+                    <PrincipalIcon type={opt.principalType} />
+                  )}
                   {(() => {
                     const koreanRanges: MatchRange[] =
                       matches.find((m) => m.field === "koreanName")?.ranges ?? [];
