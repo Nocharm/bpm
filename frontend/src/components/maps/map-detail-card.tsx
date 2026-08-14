@@ -567,7 +567,14 @@ export function MapDetailCard({
         <div
           role={perm.principal_type === "user" ? "button" : undefined}
           tabIndex={perm.principal_type === "user" ? 0 : undefined}
-          onClick={perm.principal_type === "user" ? () => toggleMember(perm.principal_id) : undefined}
+          // 유저=아코디언 토글 · 부서=펼침이 없어 좌클릭도 우클릭과 동일한 조직 정보 메뉴 (feedback 2026-08-14)
+          onClick={
+            perm.principal_type === "user"
+              ? () => toggleMember(perm.principal_id)
+              : perm.principal_type === "department"
+                ? (e) => setOrgMenu({ path: perm.principal_id, x: e.clientX, y: e.clientY })
+                : undefined
+          }
           onKeyDown={
             perm.principal_type === "user"
               ? (e) => {
@@ -964,7 +971,8 @@ export function MapDetailCard({
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
                 <div
                   className="flex cursor-pointer items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5 transition-colors hover:ring-1 hover:ring-accent-tint-border"
-                  // 부서 행과 같은 카드로 인식됨 — 우클릭 조직 정보 동일 적용 (feedback 2026-08-14)
+                  // 부서 행과 같은 카드로 인식됨 — 좌클릭도 우클릭과 동일한 조직 정보 메뉴 (feedback 2026-08-14)
+                  onClick={(e) => setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY })}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY });

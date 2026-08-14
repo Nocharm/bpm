@@ -11,6 +11,7 @@ import { Building2, ChevronRight, MessageCircle } from "lucide-react";
 import { clampToViewport } from "@/lib/clamp-viewport";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
+import { formatTitleWithPosition } from "@/lib/korean-dept";
 
 const OPEN_DELAY_MS = 700; // hover 의도 판정 — 스치는 이동엔 안 뜬다
 const CLOSE_DELAY_MS = 120; // 트리거→카드 포인터 이동 유예
@@ -47,6 +48,14 @@ function PersonCardContent({ userId }: { userId: string }) {
           <span className="min-w-0 truncate text-fine text-ink-tertiary">{secondaryName}</span>
         )}
       </p>
+      {/* 직급 · 보직(노출 허용된 보직만 — 서버 allowlist) — 멤버 행 펼침 필과 동일 표기 규칙 */}
+      {formatTitleWithPosition(user?.title ?? "", user?.position ?? "") && (
+        <p className="mt-1">
+          <span className="inline-flex rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
+            {formatTitleWithPosition(user?.title ?? "", user?.position ?? "")}
+          </span>
+        </p>
+      )}
       {/* 아이디 + 사내 메신저 열기(mysingleim 프로토콜) */}
       <p className="mt-1 flex items-center justify-between gap-2">
         <span className="min-w-0 truncate text-fine text-ink-secondary">{userId}</span>
