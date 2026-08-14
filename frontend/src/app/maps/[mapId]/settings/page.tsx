@@ -397,6 +397,7 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
+                      isOwner={isOwner}
                       onToast={showToast}
                       viewerGrantDisabled={isPublic}
                       owningDepartment={owningDepartment}

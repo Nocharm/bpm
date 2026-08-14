@@ -1206,6 +1206,8 @@ const en = {
   "perm.pending.tag": "Approval pending",
   "perm.pending.removed": "removed",
   "perm.pending.by": "requested by {name}",
+  "perm.pending.withdraw": "Withdraw",
+  "perm.pending.withdrawDone": "Request withdrawn",
   "perm.noCollaborators": "No collaborators yet.",
   "perm.backToEditor": "Back to editor",
   // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
@@ -1215,6 +1217,9 @@ const en = {
   "perm.staged.remove": "Remove",
   "perm.staged.save": "Save changes",
   "perm.staged.cancel": "Discard",
+  "perm.staged.cancelPill": "Cancel",
+  "perm.staged.forecastInstant": "Applies immediately on save",
+  "perm.staged.forecastApproval": "Needs approval after save",
   "perm.staged.result": "{applied} applied · {pending} pending approval · {failed} failed",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "Approvers",
@@ -2818,6 +2823,8 @@ const ko: Record<MessageKey, string> = {
   "perm.pending.tag": "승인 대기",
   "perm.pending.removed": "제거",
   "perm.pending.by": "{name} 요청",
+  "perm.pending.withdraw": "회수",
+  "perm.pending.withdrawDone": "요청을 회수했습니다",
   "perm.noCollaborators": "협업자가 없습니다.",
   "perm.backToEditor": "편집기로 돌아가기",
   // ── 권한 편집 스택(Save/Cancel 일괄 적용) / Staged permission edits (batch save/cancel) ──
@@ -2826,6 +2833,9 @@ const ko: Record<MessageKey, string> = {
   "perm.staged.remove": "제거 예정",
   "perm.staged.save": "변경 저장",
   "perm.staged.cancel": "취소",
+  "perm.staged.cancelPill": "취소",
+  "perm.staged.forecastInstant": "저장 시 즉시 적용",
+  "perm.staged.forecastApproval": "저장 시 승인 필요",
   "perm.staged.result": "{applied}건 적용 · {pending}건 승인 대기 · {failed}건 실패",
   // ── 결재자(Approvers) / Approvers tab ──
   "perm.approversTitle": "결재자",
