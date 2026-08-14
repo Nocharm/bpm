@@ -202,17 +202,18 @@ export function ApprovalPanel({
                       index + 1
                     )}
                   </span>
+                  {/* 라벨 — 태그 필 형식, 전 단계 동일 사이즈·색상만 강조 (feedback 2026-08-14) */}
                   <span
-                    className={`${active ? "text-caption-strong" : "text-fine"} ${
+                    className={`rounded-full border px-1.5 py-0.5 text-fine ${
                       isExpired
-                        ? "text-ink-tertiary"
+                        ? "border-divider text-ink-tertiary"
                         : active
-                          ? "text-accent"
+                          ? "border-accent/40 bg-accent-tint text-accent"
                           : errorStep
-                            ? "text-error"
+                            ? "border-error/40 bg-error/10 text-error"
                             : done
-                              ? "text-ink"
-                              : "text-ink-tertiary"
+                              ? "border-hairline bg-surface-alt text-ink"
+                              : "border-hairline text-ink-tertiary"
                     }`}
                   >
                     {t(step.labelKey)}
@@ -306,7 +307,11 @@ export function ApprovalPanel({
               return (
                 <li key={id} className="flex items-center gap-2">
                   {/* 이름·아바타 — 인물 카드(호버 0.7초/클릭 즉시: 직급·보직·부서·메신저) */}
-                  <PersonHoverCard userId={id} className="flex min-w-0 flex-1 items-center gap-2">
+                  <PersonHoverCard
+                    userId={id}
+                    // 반투명 회색 음영 — 호버 가능한 영역임을 표시 (feedback 2026-08-14)
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-sm hover:bg-ink/5"
+                  >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-fine font-semibold text-accent">
                       {name.slice(0, 1).toUpperCase()}
                     </span>

@@ -195,7 +195,16 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
       onMouseLeave={scheduleClose}
       onClick={(event) => {
         event.stopPropagation();
-        openNow();
+        // 토글 — 열려 있으면 클릭으로 닫기
+        if (pos !== null) {
+          if (closeTimer.current !== null) {
+            window.clearTimeout(closeTimer.current);
+            closeTimer.current = null;
+          }
+          setPos(null);
+        } else {
+          openNow();
+        }
       }}
     >
       {children}
