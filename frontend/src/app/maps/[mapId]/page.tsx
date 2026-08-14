@@ -78,6 +78,7 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { findLatestSubmitComment } from "@/components/version/requester-comment-banner";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -204,6 +205,7 @@ import {
   type SubprocessRef,
   type SubprocessUsage,
   type VersionGraph,
+  type VersionDetail,
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
@@ -733,7 +735,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const { t } = useI18n();
   const router = useRouter();
   const [mapName, setMapName] = useState("");
-  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  // getMap 상세만 넣으므로 VersionDetail — 승인 모달의 제출 코멘트가 events를 읽는다.
+  const [versions, setVersions] = useState<VersionDetail[]>([]);
   // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [versionId, setVersionId] = useState<number | null>(null);
@@ -9805,6 +9808,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           username={username}
           subtitle={versionSubtitle}
           extraLines={buildBundledVisibilityLines(workflow, nameById, t)}
+          submitComment={findLatestSubmitComment(currentVersion?.events)}
           comment={transitionComment}
           onCommentChange={setTransitionComment}
           onConfirm={() => {

@@ -30,6 +30,7 @@ import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { findLatestSubmitComment } from "@/components/version/requester-comment-banner";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -453,6 +454,7 @@ function VersionRow({
           username={currentUserId}
           subtitle={label}
           extraLines={buildBundledVisibilityLines(wf, nameById, t)}
+          submitComment={findLatestSubmitComment(events)}
           comment={transitionComment}
           onCommentChange={setTransitionComment}
           onConfirm={() => {
