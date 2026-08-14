@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyStagedOps, removeStagedOp, stageRoleChange, upsertStagedOp, type StagedOp } from "./permission-staging";
+import { applyStagedOps, forecastStagedOp, removeStagedOp, stageRoleChange, upsertStagedOp, type StagedOp } from "./permission-staging";
 import { addMapPermission, changeMapPermission, removeMapPermission } from "./api";
 
 // 외부 API만 모킹 — 스택 적립/실행 로직은 실코드 경로로 검증 (self-publish.test.ts 스타일 참고).
@@ -117,5 +117,31 @@ describe("applyStagedOps", () => {
     expect(addMock).toHaveBeenCalledWith(42, "user", "u1", "viewer");
     expect(changeMock).toHaveBeenCalledWith(42, 2, "editor");
     expect(removeMock).toHaveBeenCalledWith(42, 3);
+  });
+});
+
+describe("forecastStagedOp", () => {
+  it("add는 항상 instant", () => {
+    expect(
+      forecastStagedOp({ kind: "add", principalType: "user", principalId: "u1", role: "editor" }, undefined, false),
+    ).toBe("instant");
+  });
+
+  it("viewer→editor 승격은 instant", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "editor" }, "viewer", false)).toBe("instant");
+  });
+
+  it("editor→viewer 다운그레이드는 approval", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "viewer" }, "editor", false)).toBe("approval");
+  });
+
+  it("editor 제거는 approval, viewer 제거는 instant", () => {
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "editor", false)).toBe("approval");
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "viewer", false)).toBe("instant");
+  });
+
+  it("오너 actor는 전부 instant", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "viewer" }, "editor", true)).toBe("instant");
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "editor", true)).toBe("instant");
   });
 });

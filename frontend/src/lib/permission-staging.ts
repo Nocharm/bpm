@@ -78,3 +78,18 @@ export async function applyStagedOps(mapId: number, ops: StagedOp[]): Promise<St
   }
   return result;
 }
+
+// 이 op가 저장 시 즉시 적용될지 승인 대기로 갈지 예측 — BE 판정의 FE 미러.
+// ⚠️ backend/app/permissions/logic.py requires_downgrade_approval + routers/permissions.py의
+// actor_role=owner 즉시 적용 규칙과 동치 유지(양쪽 수정 시 동기화). 어긋나도 표시만 틀리고
+// 실동작 진실은 서버 응답(mutation.pending)이다.
+export function forecastStagedOp(
+  op: StagedOp,
+  grantRole: string | undefined,
+  actorIsOwner: boolean,
+): "instant" | "approval" {
+  if (actorIsOwner || op.kind === "add") return "instant";
+  if (grantRole !== "editor") return "instant";
+  if (op.kind === "remove") return "approval";
+  return op.toRole === "viewer" ? "approval" : "instant";
+}
