@@ -6,10 +6,13 @@
 
 import { useState } from "react";
 
-import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
+import { CommentHistoryModal } from "@/components/version/comment-history-modal";
+import { PersonHoverCard } from "@/components/person-hover-card";
 import { formatKst } from "@/lib/datetime";
+import { useDirectory } from "@/lib/directory";
 import { formatVersionMarker } from "@/lib/version-name";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -68,6 +71,9 @@ function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon
 // created_at(ISO) → "YYYY-MM-DD HH:mm" KST.
 const formatStamp = formatKst;
 
+// nameById 미제공 시 모달에 넘길 공유 빈 맵 — 렌더마다 새 Map 생성 방지.
+const EMPTY_NAME_MAP = new Map<string, string>();
+
 export function VersionTimeline({
   versions,
   nameById,
@@ -87,10 +93,21 @@ export function VersionTimeline({
   // 현재 보고 있는 버전 — 그 카드엔 버튼 숨김.
   currentVersionId?: number | null;
 }) {
-  const { t } = useI18n();
-  const nameOf = (id: string) => nameById?.get(id) ?? id;
+  const { t, lang } = useI18n();
+  const users = useDirectory();
+  // 언어설정 기준 표시명 — ko는 한글명(없으면 영문 폴백), en은 영문. 디렉터리 로딩 전엔 nameById 폴백.
+  const nameOf = (id: string) => {
+    const user = users.get(id);
+    const english = user?.name || nameById?.get(id) || id;
+    return lang === "ko" ? user?.korean_name || english : english;
+  };
   // 최근 3개만 기본 노출 — 나머지는 더보기로 접어둠 (2026-07-11 요청)
   const [showAll, setShowAll] = useState(false);
+  // 코멘트 이력 모달 — 클릭한 버전 + 클릭 지점(등장 애니 시작점). 설정 패널과 동일 모달 재사용.
+  const [commentsFor, setCommentsFor] = useState<{
+    version: VersionDetail;
+    origin: { x: number; y: number };
+  } | null>(null);
   const ordered = [...versions].reverse(); // idx 0 = 최신 = Current
   const visibleVersions = showAll ? ordered : ordered.slice(0, 3);
   const hiddenCount = ordered.length - 3;
@@ -125,6 +142,8 @@ export function VersionTimeline({
         });
         const node = nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
+        // 코멘트(note) 있는 이벤트 수 — 0건이면 버튼 숨김(설정 패널과 동일 규칙)
+        const commentCount = version.events.filter((evt) => evt.note).length;
         const open = expandedIds.has(version.id);
         // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
         const cardBg =
@@ -211,7 +230,26 @@ export function VersionTimeline({
                     );
                   })()}
                 </span>
-                <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {commentCount > 0 && (
+                    <button
+                      type="button"
+                      data-id={`version-timeline-comments-${version.id}`}
+                      title={t("wf.viewComments")}
+                      // 카드 호버 시에만 노출 — 평상시 헤더 밀도 유지 (feedback 2026-08-14)
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
+                      onClick={(e) => {
+                        // 카드 펼침 토글로 번지지 않게 — 기존 "이 버전으로 가기" 버튼과 동일 패턴
+                        e.stopPropagation();
+                        setCommentsFor({ version, origin: { x: e.clientX, y: e.clientY } });
+                      }}
+                    >
+                      <MessageSquare size={14} strokeWidth={1.5} />
+                      {commentCount}
+                    </button>
+                  )}
+                  <span className="text-fine text-ink-tertiary">{formatStamp(version.created_at)}</span>
+                </span>
               </div>
 
               {events.length > 0 && (
@@ -282,9 +320,13 @@ export function VersionTimeline({
                               <td className="text-ink">
                                 <span className="flex min-w-0 items-baseline gap-1">
                                   <span className="max-w-[7rem] truncate">{nameOf(evt.actor)}</span>
-                                  <span className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary">
+                                  {/* 아이디 hover 0.7초 → 인물 카드(이름 한/영·메신저·조직 경로) */}
+                                  <PersonHoverCard
+                                    userId={evt.actor}
+                                    className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary"
+                                  >
                                     {evt.actor}
-                                  </span>
+                                  </PersonHoverCard>
                                 </span>
                               </td>
                               {dateSpan > 0 && (
@@ -323,6 +365,15 @@ export function VersionTimeline({
         >
           {showAll ? t("home.verShowLess") : t("home.verShowMore", { count: hiddenCount })}
         </button>
+      )}
+      {commentsFor && (
+        <CommentHistoryModal
+          label={commentsFor.version.label}
+          events={commentsFor.version.events}
+          nameById={nameById ?? EMPTY_NAME_MAP}
+          origin={commentsFor.origin}
+          onClose={() => setCommentsFor(null)}
+        />
       )}
     </div>
   );

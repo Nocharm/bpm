@@ -231,11 +231,23 @@ class ApprovalRequestOut(BaseModel):
     status: str
     decided_by: str | None
     decided_at: datetime | None
+    decision_reason: str | None = None
     created_at: datetime
+
+
+def _normalize_comment(value: str | None) -> str | None:
+    """공백만 있는 코멘트는 없음으로 — 이벤트 note에 빈 문자열이 남지 않게."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
+    reason: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("reason")(classmethod(lambda cls, v: _normalize_comment(v)))
 
 
 # ── 사용자 그룹 관리 (Layer 4 Task 3b) ──────────────────────────
@@ -581,9 +593,20 @@ class WorkflowStateOut(BaseModel):
 
 
 class SubmitIn(BaseModel):
-    """버전 승인요청 동봉 옵션 — 가시성 변경을 버전 결정에 편승 (governance A)."""
+    """버전 승인요청 동봉 옵션 — 가시성 편승 + 선택 코멘트 (governance A · spec 2026-08-14)."""
 
     to_visibility: Literal["public", "private"] | None = None
+    comment: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("comment")(classmethod(lambda cls, v: _normalize_comment(v)))
+
+
+class CommentIn(BaseModel):
+    """전이 선택 코멘트(approve/publish/withdraw 공용) — VersionEvent.note로 기록."""
+
+    comment: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("comment")(classmethod(lambda cls, v: _normalize_comment(v)))
 
 
 class RejectIn(BaseModel):

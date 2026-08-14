@@ -15,6 +15,7 @@ import {
   setApprovers,
   type DirectoryUser,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { usePermissions } from "@/lib/mock/permissions";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
@@ -26,8 +27,8 @@ interface ApproversPanelProps {
   isOwner: boolean;
   /** 승인 진행 중(pending/approved) — true면 변경 금지(백엔드 409와 동일) / lock edits mid-approval. */
   underApproval?: boolean;
-  /** 토스트 발행 콜백 / Callback to show a toast message. */
-  onToast: (msg: string) => void;
+  /** 토스트 발행 콜백 — 이 패널의 onToast는 실패 안내 전용 / Callback to show a toast; used only for failures here. */
+  onToast: (msg: string, tone?: "error") => void;
 }
 
 export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast }: ApproversPanelProps) {
@@ -74,9 +75,9 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
     try {
       setApproverIds(await listApprovers(mapIdNum));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   // 초기 로드 — 인라인 async + active 가드 / Initial load: inline async with an active guard.
   useEffect(() => {
@@ -86,7 +87,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
         const ids = await listApprovers(mapIdNum);
         if (active) setApproverIds(ids);
       } catch (err) {
-        if (active) onToast(err instanceof Error ? err.message : String(err));
+        if (active) onToast(humanizeApiError(err, t), "error");
       } finally {
         if (active) setLoading(false);
       }
@@ -94,7 +95,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
     return () => {
       active = false;
     };
-  }, [mapIdNum, onToast]);
+  }, [mapIdNum, onToast, t]);
 
   // 결재자 0 경고 — 목록 비어있음 기준(서버엔 active 개념 없음, Layer 4) /
   // Active-0 warning is now list-emptiness (server has no active concept yet — Layer 4).
@@ -109,10 +110,10 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
         await setApprovers(mapIdNum, newIds);
         await reload();
       } catch (err) {
-        onToast(err instanceof Error ? err.message : String(err));
+        onToast(humanizeApiError(err, t), "error");
       }
     },
-    [approverIds, mapIdNum, reload, onToast],
+    [approverIds, mapIdNum, reload, onToast, t],
   );
 
   return (
@@ -208,7 +209,7 @@ export function ApproversPanel({ mapId, isOwner, underApproval = false, onToast 
                   await setApprovers(mapIdNum, [...approverIds, opt.principalId]);
                   await reload();
                 } catch (err) {
-                  onToast(err instanceof Error ? err.message : String(err));
+                  onToast(humanizeApiError(err, t), "error");
                 }
               })();
             }}

@@ -35,6 +35,7 @@ import {
   type AiChatTurn,
   type AiProposal,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { createLocalMessage, toChatMessage, toPayload, type ChatMessage } from "@/lib/chat-sessions";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
@@ -69,7 +70,7 @@ interface AiChatPanelProps {
   onGraphProposal: (proposal: AiProposal) => void;
   onOpsProposal: (proposal: AiProposal) => void;
   onHighlightNode: (nodeId: string) => void;
-  onToast?: (message: string) => void;
+  onToast?: (message: string, tone?: "error") => void;
   // graph/ops 제안 미리보기 — 캔버스에 미리 적용된 상태를 채팅 내 카드로 커밋/취소.
   aiPreviewActive?: boolean;
   onCommitPreview?: () => void;
@@ -379,7 +380,7 @@ export function AiChatPanel({
         // 서버 미저장 에러 표시 — 새로고침하면 사라지는 게 의도
         setMessages((prev) => [
           ...prev,
-          createLocalMessage("assistant", err instanceof Error ? err.message : t("ai.error")),
+          createLocalMessage("assistant", humanizeApiError(err, t)),
         ]);
       }
     } finally {
@@ -900,7 +901,7 @@ export function AiChatPanel({
                 refreshSessions();
               })
               .catch((err: unknown) =>
-                onToast?.(err instanceof Error ? err.message : t("ai.error")),
+                onToast?.(humanizeApiError(err, t), "error"),
               );
           }}
           onClose={() => setDeleteTarget(null)}

@@ -245,6 +245,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     // 서버 detail(검증 실패 사유 등)을 메시지에 포함 — 진단 용이
     const detail = await response.text().catch(() => "");
+    // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
+    console.error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`, detail);
     throw new ApiError(
       `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
       response.status,
@@ -807,6 +809,8 @@ export async function exportDbTableCsv(
   const response = await fetch(`/api${path}`, { headers });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
+    // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
+    console.error(`API GET ${path} failed: ${response.status}`, detail);
     throw new ApiError(
       `API GET ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
       response.status,
@@ -823,15 +827,22 @@ export function getWorkflowState(versionId: number): Promise<WorkflowState> {
 export function submitVersion(
   versionId: number,
   toVisibility?: "public" | "private",
+  comment?: string,
 ): Promise<VersionSummary> {
+  const body: Record<string, string> = {};
+  if (toVisibility) body.to_visibility = toVisibility;
+  if (comment) body.comment = comment;
   return request<VersionSummary>(`/versions/${versionId}/submit`, {
     method: "POST",
-    ...(toVisibility ? { body: JSON.stringify({ to_visibility: toVisibility }) } : {}),
+    ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
   });
 }
 
-export function approveVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/approve`, { method: "POST" });
+export function approveVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/approve`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
 export function rejectVersion(
@@ -844,12 +855,18 @@ export function rejectVersion(
   });
 }
 
-export function publishVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/publish`, { method: "POST" });
+export function publishVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/publish`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
-export function withdrawVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/withdraw`, { method: "POST" });
+export function withdrawVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/withdraw`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
 // 만료 버전 재게시 — 새 draft 반환 / Republish expired version (creates a new draft)
@@ -911,6 +928,7 @@ export interface ApprovalRequest {
   status: string;
   decided_by: string | null;
   decided_at: string | null;
+  decision_reason: string | null;
   created_at: string;
 }
 
@@ -1004,10 +1022,11 @@ export function listPendingApprovalRequests(): Promise<ApprovalRequest[]> {
 export function decideApprovalRequest(
   requestId: number,
   decision: "approve" | "reject",
+  reason?: string,
 ): Promise<ApprovalRequest> {
   return request<ApprovalRequest>(`/approval-requests/${requestId}/decide`, {
     method: "POST",
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({ decision, ...(reason ? { reason } : {}) }),
   });
 }
 

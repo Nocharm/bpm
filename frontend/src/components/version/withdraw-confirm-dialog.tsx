@@ -17,6 +17,10 @@ interface WithdrawConfirmDialogProps {
   subtitle?: string;
   // 회수 대상 버전의 제출자 — 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출.
   withdrawSubmitter: string | null;
+  // 서버가 코멘트를 무시하는 무기록 경로(pending·승인 0건)에선 입력란 자체를 숨긴다.
+  showCommentInput: boolean;
+  comment: string;
+  onCommentChange: (value: string) => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -27,6 +31,9 @@ export function WithdrawConfirmDialog({
   username,
   subtitle,
   withdrawSubmitter,
+  showCommentInput,
+  comment,
+  onCommentChange,
   onConfirm,
   onClose,
 }: WithdrawConfirmDialogProps) {
@@ -47,6 +54,11 @@ export function WithdrawConfirmDialog({
         />
       }
       sections={approverStatusLines.length ? [approverStatusLines] : undefined}
+      input={
+        showCommentInput
+          ? { value: comment, onChange: onCommentChange, placeholder: t("wf.commentPlaceholder") }
+          : undefined
+      }
       confirmLabel={t("common.confirm")}
       cancelLabel={t("common.cancel")}
       onConfirm={onConfirm}

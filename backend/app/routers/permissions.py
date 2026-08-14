@@ -577,7 +577,10 @@ async def decide_approval_request(
     req.decided_at = _now()
     if payload.decision == "reject":
         req.status = "rejected"
-        await _notify_permission_decision(session, req, outcome="rejected")
+        req.decision_reason = payload.reason
+        await _notify_permission_decision(
+            session, req, outcome="rejected", reason=payload.reason
+        )
         await session.commit()
         await session.refresh(req)
         return req
@@ -693,9 +696,10 @@ async def _notify_permission_request(
 
 
 async def _notify_permission_decision(
-    session: AsyncSession, req: ApprovalRequest, *, outcome: str
+    session: AsyncSession, req: ApprovalRequest, *, outcome: str, reason: str | None = None
 ) -> None:
-    """승인/반려 결과 → 요청자에게 벨 알림 (design 2026-07-16)."""
+    """승인/반려 결과 → 요청자에게 벨 알림 (design 2026-07-16). 거절 사유는 말미 ': {reason}' 동봉."""
+    suffix = f": {reason}" if reason else ""
     if req.kind == "map_rename":
         from_name = req.payload.get("from_name", "")
         to_name = req.payload.get("to_name", "")
@@ -704,7 +708,7 @@ async def _notify_permission_decision(
             [req.requested_by],
             type=f"rename_{outcome}",
             map_id=req.map_id,
-            message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}",
+            message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}{suffix}",
         )
         return
     if req.kind == "sp_designation":
@@ -714,7 +718,9 @@ async def _notify_permission_decision(
             [req.requested_by],
             type=f"sp_designation_{outcome}",
             map_id=req.map_id,
-            message=f"Your subprocess registration request for '{map_name}' was {outcome}",
+            message=(
+                f"Your subprocess registration request for '{map_name}' was {outcome}{suffix}"
+            ),
         )
         return
     found_map = await session.get(ProcessMap, req.map_id)
@@ -724,7 +730,7 @@ async def _notify_permission_decision(
         [req.requested_by],
         type=f"permission_{outcome}",
         map_id=req.map_id,
-        message=f"Your request on '{map_name}' was {outcome}",
+        message=f"Your request on '{map_name}' was {outcome}{suffix}",
     )
 
 

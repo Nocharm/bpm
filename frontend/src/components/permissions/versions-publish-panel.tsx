@@ -8,9 +8,9 @@
 // PromptDialog를 써서 승인요청 시 승인자 목록·동봉 가시성 변경이 안 보이는 등 표면 드리프트가 있었다(원 신고 건).
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, XCircle, Send, Upload, Undo2 } from "lucide-react";
+import { CheckCircle, MessageSquare, XCircle, Send, Upload, Undo2 } from "lucide-react";
 
-import type { VersionSummary, WorkflowState } from "@/lib/api";
+import type { VersionDetail, VersionEvent, VersionSummary, WorkflowState } from "@/lib/api";
 import {
   approveVersion,
   getDirectory,
@@ -27,8 +27,10 @@ import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
+import { CommentHistoryModal } from "@/components/version/comment-history-modal";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
 import { RejectDialog } from "@/components/version/reject-dialog";
@@ -49,7 +51,7 @@ interface VersionsPublishPanelProps {
   /** 오너 여부 — 가시성 동봉은 오너 전용(서버 403)이라 비오너에겐 픽커를 숨긴다 / Owner-only bundle option. */
   canBundle: boolean;
   /** 액션 실패(403/409/422) 토스트 / Toast for action failures. */
-  onToast?: (msg: string) => void;
+  onToast?: (msg: string, tone?: "error") => void;
   /** 액션 성공 후 호출 — 동봉 가시성 변경이 맵 레벨 상태(visibility)를 바꿀 수 있어 호스트가 재조회하도록 신호 / Notify host after a successful action, since bundled visibility changes affect map-level state. */
   onChanged?: () => void;
 }
@@ -69,11 +71,15 @@ export function VersionsPublishPanel({
   const { t } = useI18n();
 
   // 버전 목록 — props 없으면 getMap으로 내부 fetch / Fetch internally only when prop is absent.
-  const [fetchedVersions, setFetchedVersions] = useState<VersionSummary[]>([]);
+  // VersionDetail로 events까지 보존 — 코멘트 이력 모달이 각 버전의 전이 이벤트를 참조.
+  const [fetchedVersions, setFetchedVersions] = useState<VersionDetail[]>([]);
   const [loading, setLoading] = useState(!versionsProp);
   // login_id → 표시 이름 캐시 — 승인자/요청자 이름 공개(원 신고 건: 패널이 승인자를 안 보여줬다).
   // 협업자 패널과 동일 패턴(getDirectory 1회, 실패 시 login id 폴백).
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
+  // 액션(승인/게시/반려 등) 후 이벤트 목록을 재조회하기 위한 트리거 — 행의 워크플로 재조회와
+  // 별개로, 방금 남긴 코멘트가 모달에 바로 보이려면 fetchedVersions(events 포함)도 갱신돼야 한다.
+  const [eventsReloadKey, setEventsReloadKey] = useState(0);
 
   useEffect(() => {
     // versionsProp이 있으면 fetch 불필요 / Skip fetch when versions are provided by parent.
@@ -93,7 +99,7 @@ export function VersionsPublishPanel({
     return () => {
       active = false;
     };
-  }, [mapId, versionsProp]);
+  }, [mapId, versionsProp, eventsReloadKey]);
 
   useEffect(() => {
     let alive = true;
@@ -134,8 +140,12 @@ export function VersionsPublishPanel({
           visibility={visibility}
           canBundle={canBundle}
           nameById={nameById}
+          events={versionsProp ? undefined : fetchedVersions.find((v) => v.id === version.id)?.events}
           onToast={onToast}
-          onChanged={onChanged}
+          onChanged={() => {
+            setEventsReloadKey((k) => k + 1);
+            onChanged?.();
+          }}
         />
       ))}
     </div>
@@ -153,7 +163,9 @@ interface VersionRowProps {
   visibility: "public" | "private";
   canBundle: boolean;
   nameById: Map<string, string>;
-  onToast?: (msg: string) => void;
+  /** 이 버전의 전이 이벤트 — 코멘트 이력 모달용. props 버전 목록 사용 시엔 events가 없어 버튼 미노출. */
+  events?: VersionEvent[];
+  onToast?: (msg: string, tone?: "error") => void;
   onChanged?: () => void;
 }
 
@@ -166,6 +178,7 @@ function VersionRow({
   visibility,
   canBundle,
   nameById,
+  events,
   onToast,
   onChanged,
 }: VersionRowProps) {
@@ -180,9 +193,9 @@ function VersionRow({
       const next = await getWorkflowState(versionId);
       setWf(next);
     } catch (err) {
-      onToast?.(err instanceof Error ? err.message : String(err));
+      onToast?.(humanizeApiError(err, t), "error");
     }
-  }, [versionId, onToast]);
+  }, [versionId, onToast, t]);
 
   useEffect(() => {
     let active = true;
@@ -191,13 +204,13 @@ function VersionRow({
         const next = await getWorkflowState(versionId);
         if (active) setWf(next);
       } catch (err) {
-        if (active) onToast?.(err instanceof Error ? err.message : String(err));
+        if (active) onToast?.(humanizeApiError(err, t), "error");
       }
     })();
     return () => {
       active = false;
     };
-  }, [versionId, onToast]);
+  }, [versionId, onToast, t]);
 
   // 액션 실행 헬퍼 — 호출 후 워크플로 재조회, 실패 시 토스트 / Run an action, then refetch; surface failures.
   // 성공 시 onChanged로 호스트에 알림 — 동봉 가시성 변경이 맵 레벨 visibility를 바꿔 이 행 밖의 상태(VisibilityControl 등)도 재조회돼야 함.
@@ -209,7 +222,7 @@ function VersionRow({
         await reload();
         onChanged?.();
       } catch (err) {
-        onToast?.(humanizeApiError(err, t));
+        onToast?.(humanizeApiError(err, t), "error");
       } finally {
         setBusy(false);
       }
@@ -225,8 +238,13 @@ function VersionRow({
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 4종 전이 모달(submit/approve/publish/withdraw) 공용 코멘트 입력 — 동시에 하나만 열리므로 상태 1개로 공유.
+  const [transitionComment, setTransitionComment] = useState("");
   // 승인요청/셀프게시에 동봉할 가시성 변경 선택 — VisibilityBundlePicker가 직접 값 제공(체크박스 대체).
   const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
+  // 코멘트 이력 모달 — 열림 트리거인 클릭 지점(등장 애니메이션 시작점)을 상태로 보관.
+  const [commentsOrigin, setCommentsOrigin] = useState<{ x: number; y: number } | null>(null);
+  const commentCount = (events ?? []).filter((e) => e.note).length;
 
   if (wf === null) {
     return (
@@ -264,6 +282,19 @@ function VersionRow({
 
       {/* 액션 버튼 — 상태·역할별 조건부 / Action buttons: conditional on status and role */}
       <div className="flex items-center gap-1.5">
+        {/* 코멘트 있는 이벤트가 하나라도 있으면 이력 모달 열기 버튼 노출 / Shown only when at least one event has a comment. */}
+        {commentCount > 0 && (
+          <button
+            type="button"
+            data-id={`version-comments-open-${versionId}`}
+            title={t("wf.viewComments")}
+            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+            onClick={(event) => setCommentsOrigin({ x: event.clientX, y: event.clientY })}
+          >
+            <MessageSquare size={16} strokeWidth={1.5} />
+            {commentCount}
+          </button>
+        )}
         {/* draft / rejected → editor+는 승인 요청(submit) 가능. 서버가 체크아웃 보유자·승인자 존재 검증 /
             editor+ can request approval (submit); server gates checkout holder + approvers-present */}
         {(status === "draft" || status === "rejected") && canEdit && (
@@ -280,6 +311,7 @@ function VersionRow({
                 setSelfPublishAt({ x: event.clientX, y: event.clientY });
                 return;
               }
+              setTransitionComment("");
               setSubmitConfirmOpen(true);
             }}
           >
@@ -295,7 +327,10 @@ function VersionRow({
               type="button"
               disabled={busy}
               className="flex items-center gap-1 rounded-sm border border-added px-2 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-50"
-              onClick={() => setApproveConfirmOpen(true)}
+              onClick={() => {
+                setTransitionComment("");
+                setApproveConfirmOpen(true);
+              }}
             >
               <CheckCircle size={16} strokeWidth={1.5} />
               {t("perm.version.approve")}
@@ -328,7 +363,10 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-accent px-2 py-1 text-fine text-accent hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => setPublishConfirmOpen(true)}
+            onClick={() => {
+              setTransitionComment("");
+              setPublishConfirmOpen(true);
+            }}
           >
             <Upload size={16} strokeWidth={1.5} />
             {t("perm.version.publish")}
@@ -346,7 +384,10 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => setWithdrawConfirmOpen(true)}
+            onClick={() => {
+              setTransitionComment("");
+              setWithdrawConfirmOpen(true);
+            }}
           >
             <Undo2 size={16} strokeWidth={1.5} />
             {t("perm.version.withdraw")}
@@ -367,6 +408,7 @@ function VersionRow({
             // 직행 submit 대신 SubmitConfirmDialog로 — 에디터와 동일 플로우(승인자 목록 노출 + 동봉 재선택 가능).
             setSelfPublishAt(null);
             setBundleValue(null);
+            setTransitionComment("");
             setSubmitConfirmOpen(true);
           }}
           onClose={() => {
@@ -387,14 +429,17 @@ function VersionRow({
           workflow={wf}
           nameById={nameById}
           subtitle={label}
+          previousRejection={findLatestRejection(events)}
           bundleSlot={
             canBundle ? (
               <VisibilityBundlePicker current={visibility} value={bundleValue} onChange={setBundleValue} />
             ) : undefined
           }
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            void runAction(() => submitVersion(versionId, bundleValue ?? undefined));
+            void runAction(() => submitVersion(versionId, bundleValue ?? undefined, transitionComment.trim() || undefined));
             setBundleValue(null);
           }}
           onClose={() => {
@@ -410,9 +455,12 @@ function VersionRow({
           username={currentUserId}
           subtitle={label}
           extraLines={buildBundledVisibilityLines(wf, nameById, t)}
+          submitComment={findLatestSubmitComment(events)}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setApproveConfirmOpen(false);
-            void runAction(() => approveVersion(versionId));
+            void runAction(() => approveVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setApproveConfirmOpen(false)}
         />
@@ -421,9 +469,11 @@ function VersionRow({
         <PublishConfirmDialog
           subtitle={label}
           priorPublished={priorPublished}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setPublishConfirmOpen(false);
-            void runAction(() => publishVersion(versionId));
+            void runAction(() => publishVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setPublishConfirmOpen(false)}
         />
@@ -435,9 +485,12 @@ function VersionRow({
           username={currentUserId}
           subtitle={label}
           withdrawSubmitter={withdrawSubmitter}
+          showCommentInput={wf.status === "rejected" || wf.approvals.length >= 1}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setWithdrawConfirmOpen(false);
-            void runAction(() => withdrawVersion(versionId));
+            void runAction(() => withdrawVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setWithdrawConfirmOpen(false)}
         />
@@ -448,6 +501,7 @@ function VersionRow({
           nameById={nameById}
           username={currentUserId}
           subtitle={label}
+          submitComment={findLatestSubmitComment(events)}
           reason={rejectReason}
           onReasonChange={setRejectReason}
           onConfirm={() => {
@@ -460,6 +514,15 @@ function VersionRow({
             setRejecting(false);
             setRejectReason("");
           }}
+        />
+      )}
+      {commentsOrigin && (
+        <CommentHistoryModal
+          label={label}
+          events={events ?? []}
+          nameById={nameById}
+          origin={commentsOrigin}
+          onClose={() => setCommentsOrigin(null)}
         />
       )}
     </div>

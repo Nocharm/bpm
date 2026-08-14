@@ -557,6 +557,8 @@ class ApprovalRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 거절 사유(선택) — 결정 코멘트. 요청 내용(payload)과 분리 보관 (spec 2026-08-14)
+    decision_reason: Mapped[str | None] = mapped_column(String(500), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

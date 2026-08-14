@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
 import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/org-tree";
@@ -109,8 +110,8 @@ export default function MapListPage() {
   const clearBtnRef = useRef<HTMLButtonElement | null>(null);
   const [filterMode, setFilterMode] = useState<FilterDisplayMode>("full");
 
-  const showToast = useCallback((message: string) => {
-    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  const showToast = useCallback((message: string, tone?: "error") => {
+    setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -145,7 +146,7 @@ export default function MapListPage() {
     try {
       setMaps(await listMaps());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.loadMaps"));
+      setError(humanizeApiError(err, t));
     }
   }, [t]);
 
@@ -159,7 +160,7 @@ export default function MapListPage() {
         }
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : t("err.loadMaps"));
+          setError(humanizeApiError(err, t));
         }
       }
     })();
@@ -385,7 +386,7 @@ export default function MapListPage() {
         await refresh();
         showToast(t("home.deletedToast")); // 휴지통 이동 + 복구 안내 (DL)
       } catch (err) {
-        setError(err instanceof Error ? err.message : t("err.deleteMap"));
+        setError(humanizeApiError(err, t));
       }
     },
     [refresh, showToast, t],
@@ -413,7 +414,7 @@ export default function MapListPage() {
         showToast(t("home.copyCreated"));
         window.setTimeout(() => setHighlightId(null), 2500); // 쉬머 후 해제
       } catch (err) {
-        setCopyError(err instanceof Error ? err.message : String(err));
+        setCopyError(humanizeApiError(err, t));
       }
     },
     [copyTarget, refresh, showToast, t],
@@ -1021,7 +1022,7 @@ export default function MapListPage() {
                 showToast("Document re-imported.");
               })
               .catch((err) => {
-                showToast(err instanceof Error ? err.message : "Re-import failed.");
+                showToast(humanizeApiError(err, t), "error");
               });
           }}
         />

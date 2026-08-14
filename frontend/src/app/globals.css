@@ -219,6 +219,29 @@ button:not(:disabled):active {
   }
 }
 
+/* 코멘트 이력 모달 — 클릭 지점에서 화면 중앙으로 확대되며 등장 (spec 2026-08-14 §5.4).
+   시작 오프셋은 카드 인라인 CSS 변수 --from-dx/--from-dy(클릭점 − 뷰포트 중앙)로 주입. */
+@keyframes comment-modal-in {
+  from {
+    opacity: 0;
+    transform: translate(var(--from-dx, 0px), var(--from-dy, 0px)) scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.comment-modal-in {
+  animation: comment-modal-in 350ms var(--ease-overshoot);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-modal-in {
+    animation: none;
+  }
+}
+
 /* 홈 아코디언 펼침(부서·업무 체계) — 드러나는 영역이 0→콘텐츠 높이로 자라며 아래 행을 밀어낸다
    (즉시 등장 "뿅" 방지, 시선이 성장하는 영역을 따라가게). grid 0fr→1fr 트릭이라 높이 측정이 필요 없다.
    overflow는 keyframe 안에서만 hidden(비애니메이션 속성은 재생 중에만 적용) — 종료 후엔 카드

@@ -11,6 +11,7 @@ import {
   getMap,
   type MapDetail,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   SubprocessDesignationModal,
@@ -22,7 +23,7 @@ import { useI18n } from "@/lib/i18n";
 
 interface SubprocessDesignationPanelProps {
   mapId: string;
-  onToast: (message: string) => void;
+  onToast: (message: string, tone?: "error") => void;
 }
 
 export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesignationPanelProps) {
@@ -56,7 +57,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
         if (active) setDetail(d);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     void getDirectory()
       .then((dir) => {
@@ -70,7 +71,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     return () => {
       active = false;
     };
-  }, [mapId]);
+  }, [mapId, t]);
 
   if (!detail) {
     return error ? (
@@ -117,7 +118,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
       onToast(t("perm.sp.removed"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     } finally {
       setSaving(false);
       setShowUndesignate(false);

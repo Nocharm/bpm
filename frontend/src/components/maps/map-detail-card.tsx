@@ -17,6 +17,7 @@ import {
   Hourglass,
   Loader2,
   Lock,
+  MessageCircle,
   Network,
   PencilLine,
   RotateCcw,
@@ -49,6 +50,8 @@ import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
+import { ContextMenu } from "@/components/context-menu";
+import { OrgInfoModal } from "@/components/org-info-modal";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
@@ -199,6 +202,10 @@ export function MapDetailCard({
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
   // org_path → 확정 한글 부서명(dept_info) — 이름과 같은 규칙으로 부서도 언어 토글 (없으면 영문 폴백)
   const [koreanDeptByPath, setKoreanDeptByPath] = useState<Map<string, string>>(new Map());
+  // 우클릭 컨텍스트 메뉴 — 인물 행=메신저 보내기 · 부서/오우닝=조직 정보 (feedback 2026-08-14)
+  const [personMenu, setPersonMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [orgMenu, setOrgMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const [orgInfo, setOrgInfo] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
   // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
   const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
   // 호버한 부서(팀)의 org_path — 상위/하위 팀 하이라이트 + 상위 소속 노출 (H2) / hovered dept path.
@@ -573,6 +580,20 @@ export function MapDetailCard({
             perm.principal_type === "department" ? () => setHoveredPath(perm.principal_id) : undefined
           }
           onMouseLeave={perm.principal_type === "department" ? () => setHoveredPath(null) : undefined}
+          // 우클릭 — 인물=메신저 보내기 · 부서=조직 정보. 그룹 행은 메뉴 없음.
+          onContextMenu={
+            perm.principal_type === "user"
+              ? (e) => {
+                  e.preventDefault();
+                  setPersonMenu({ id: perm.principal_id, x: e.clientX, y: e.clientY });
+                }
+              : perm.principal_type === "department"
+                ? (e) => {
+                    e.preventDefault();
+                    setOrgMenu({ path: perm.principal_id, x: e.clientX, y: e.clientY });
+                  }
+                : undefined
+          }
           // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
           // named group — 인스펙터가 이 카드를 <details className="group ...">로 감싸므로(map-inspector-tab.tsx),
           // 이름 없는 group을 쓰면 그 조상까지 호버 시 전 행이 동시에 스왑된다(governance-r5 V1, R5-2).
@@ -791,6 +812,13 @@ export function MapDetailCard({
               data-id="map-detail-owning-dept"
               title={t("perm.owningDept.title")}
               className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+              // 오우닝 부서 카드 우클릭 — 조직 정보 메뉴 (feedback 2026-08-14)
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (detail.owning_department) {
+                  setOrgMenu({ path: detail.owning_department, x: e.clientX, y: e.clientY });
+                }
+              }}
             >
               <Building2 size={12} strokeWidth={1.5} />
               {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
@@ -931,7 +959,14 @@ export function MapDetailCard({
             {owningDeptPath && (
               <div data-id="map-detail-owning-member" className="flex flex-col gap-1">
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
-                <div className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5">
+                <div
+                  className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5"
+                  // 부서 행과 같은 카드로 인식됨 — 우클릭 조직 정보 동일 적용 (feedback 2026-08-14)
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
                       <DeptLevelIcon leaf={deptLeaf(owningDeptPath)} size={22} />
@@ -1238,6 +1273,45 @@ export function MapDetailCard({
             onDelete(detail.id);
           }}
           onClose={() => setConfirmDelete(false)}
+        />
+      )}
+      {personMenu && (
+        <ContextMenu
+          x={personMenu.x}
+          y={personMenu.y}
+          onClose={() => setPersonMenu(null)}
+          items={[
+            {
+              label: t("person.sendMessenger"),
+              icon: MessageCircle,
+              onSelect: () => {
+                // 사내 메신저 프로토콜 — 설치된 환경에서 해당 인원 대화창이 열린다
+                window.location.href = `mysingleim://token=&ids=${personMenu.id}`;
+              },
+            },
+          ]}
+        />
+      )}
+      {orgMenu && (
+        <ContextMenu
+          x={orgMenu.x}
+          y={orgMenu.y}
+          onClose={() => setOrgMenu(null)}
+          items={[
+            {
+              label: t("org.infoMenu"),
+              icon: Building2,
+              onSelect: () => setOrgInfo({ path: orgMenu.path, origin: { x: orgMenu.x, y: orgMenu.y } }),
+            },
+          ]}
+        />
+      )}
+      {orgInfo && (
+        <OrgInfoModal
+          orgPath={orgInfo.path}
+          koreanDeptByPath={koreanDeptByPath}
+          origin={orgInfo.origin}
+          onClose={() => setOrgInfo(null)}
         />
       )}
     </div>

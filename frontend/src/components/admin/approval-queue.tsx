@@ -35,6 +35,7 @@ import {
   type DirectoryUser,
   type Group,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -147,9 +148,9 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       setPendingCheckouts(checkouts);
       onCountChange?.(groups.length + requests.length + checkouts.length);
     } catch (err) {
-      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
     }
-  }, [onToast, onCountChange]);
+  }, [onToast, onCountChange, t]);
 
   useEffect(() => {
     let active = true;
@@ -167,13 +168,13 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
           onCountChange?.(groups.length + requests.length + checkouts.length);
         }
       } catch (err) {
-        if (active) onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+        if (active) onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
       }
     })();
     return () => {
       active = false;
     };
-  }, [onToast, onCountChange]);
+  }, [onToast, onCountChange, t]);
 
   const items: QueueItem[] = [
     ...pendingGroups.map((g) => ({ key: `g${g.id}`, kind: "group_create" as const, group: g })),
@@ -209,7 +210,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       });
       await reload();
     } catch (err) {
-      onToast({ id: genId(), message: err instanceof Error ? err.message : String(err) });
+      onToast({ id: genId(), message: humanizeApiError(err, t), tone: "error" });
     } finally {
       setDecidingKeys((prev) => {
         const next = new Set(prev);

@@ -89,6 +89,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("employees", "dept_code", "VARCHAR(100)"),
     # EDW 부서장 직책(FRNM) — AD employeeNumber 매핑으로 갱신 (설계 2026-08-11 §4)
     ("employees", "position", "VARCHAR(100)"),
+    # 승인요청 거절 사유 — 받은함 거절 코멘트 (spec 2026-08-14)
+    ("approval_requests", "decision_reason", "VARCHAR(500)"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

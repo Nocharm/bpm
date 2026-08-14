@@ -28,6 +28,7 @@ import {
   withdrawGroup,
   type Group,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 
@@ -44,7 +45,7 @@ export function GroupActions({
   onGroupGone?: () => void; // 삭제/철회로 그룹이 사라졌을 때
   onReRequest?: (group: Group) => void; // 거절 그룹 재신청 — 부모가 생성 모달 프리필
   onAddMember?: () => void; // 멤버 추가 — 부모가 피커 다이얼로그를 연다 (사이클 버튼과 같이 위치)
-  onToast: (msg: string) => void;
+  onToast: (msg: string, tone?: "error") => void;
 }) {
   const { t } = useI18n();
   const currentUser = useCurrentMockUser();
@@ -74,7 +75,7 @@ export function GroupActions({
       onToast(t("perm.group.toastDeleted"));
       onGroupGone?.();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -84,7 +85,7 @@ export function GroupActions({
       onToast(t("perm.group.toastWithdrawn"));
       onGroupGone?.();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -93,7 +94,7 @@ export function GroupActions({
       onGroupChange(await deactivateGroup(groupIdNum));
       onToast(t("perm.group.toastDeactivated"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -102,7 +103,7 @@ export function GroupActions({
       onGroupChange(await reactivateGroup(groupIdNum));
       onToast(t("perm.group.toastReactivated"));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 
@@ -117,7 +118,7 @@ export function GroupActions({
       onToast(t("perm.group.toastRenamed"));
       setRenaming(false);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : String(err));
+      onToast(humanizeApiError(err, t), "error");
     }
   }
 

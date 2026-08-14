@@ -32,6 +32,7 @@ import {
   type EligibleAssignees,
   type VersionGraph,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -370,7 +371,7 @@ export function NodeSummaryModal({
       setDraft("");
       setAdding(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("summary.addError"));
+      setError(humanizeApiError(err, t));
     } finally {
       setSubmitting(false);
     }

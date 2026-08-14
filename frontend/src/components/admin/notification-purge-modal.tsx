@@ -10,6 +10,7 @@ import {
   purgeNotifications,
   type NotificationPurgeGroup,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
@@ -50,12 +51,12 @@ export function NotificationPurgeModal({
         setChecked(new Set(data.map(keyOf))); // 기본 전체 선택
       })
       .catch((err) => {
-        if (alive) setError(err instanceof Error ? err.message : String(err));
+        if (alive) setError(humanizeApiError(err, t));
       });
     return () => {
       alive = false;
     };
-  }, [from, to]);
+  }, [from, to, t]);
 
   const toggle = (key: string) => {
     setChecked((prev) => {
@@ -79,7 +80,7 @@ export function NotificationPurgeModal({
       onClose();
     } catch (err) {
       if (!aliveRef.current) return;
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
       setBusy(false);
     }
   };
