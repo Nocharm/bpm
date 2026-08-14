@@ -280,7 +280,7 @@ export function MapDetailCard({
     setStagedSaveError(null);
     setSavingStaged(true);
     try {
-      const result = await applyStagedOps(mapId, stagedOps);
+      const result = await applyStagedOps(mapId, stagedOps, new Map((members ?? []).map((m) => [m.id, m])));
       if (result.failed.length > 0) {
         const summary = t("perm.staged.result", {
           applied: result.applied,

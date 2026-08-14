@@ -7,6 +7,8 @@ import {
   changeMapPermission,
   getApiErrorDetail,
   removeMapPermission,
+  type ApprovalRequest,
+  type MapPermission,
   type PrincipalType,
 } from "@/lib/api";
 
@@ -48,32 +50,62 @@ export function stageRoleChange(
   return upsertStagedOp(ops, { kind: "change", permissionId, toRole });
 }
 
+export interface AppliedOpRecord {
+  op: StagedOp;
+  outcome: "applied" | "pending" | "failed";
+  createdPermission?: MapPermission;
+  approvalRequest?: ApprovalRequest;
+  prev?: { principalType: PrincipalType; principalId: string; role: string };
+  message?: string;
+}
+
 export interface StagedResult {
   applied: number;
   pending: number;
   failed: { op: StagedOp; message: string }[];
+  records: AppliedOpRecord[];
 }
 
 // 스택을 순차 실행 — 한 op의 실패가 나머지를 막지 않는다(R1 상호배제 409 등은 개별 실패로만 남음).
 // 실패 메시지는 서버 detail 원문(getApiErrorDetail) — 호출측이 humanizeApiError로 사람이 읽는 문구로 변환한다.
-export async function applyStagedOps(mapId: number, ops: StagedOp[]): Promise<StagedResult> {
-  const result: StagedResult = { applied: 0, pending: 0, failed: [] };
+export async function applyStagedOps(
+  mapId: number,
+  ops: StagedOp[],
+  permsById?: Map<number, MapPermission>,
+): Promise<StagedResult> {
+  const result: StagedResult = { applied: 0, pending: 0, failed: [], records: [] };
   for (const op of ops) {
+    // change/remove 역방향(되돌리기) 재료 — 저장 직전 스냅샷. add는 서버 생성물이 재료.
+    const prevPerm = op.kind === "add" ? undefined : permsById?.get(op.permissionId);
+    const prev = prevPerm
+      ? {
+          principalType: prevPerm.principal_type as PrincipalType,
+          principalId: prevPerm.principal_id,
+          role: prevPerm.role,
+        }
+      : undefined;
     try {
       if (op.kind === "add") {
-        await addMapPermission(mapId, op.principalType, op.principalId, op.role);
+        const created = await addMapPermission(mapId, op.principalType, op.principalId, op.role);
         result.applied += 1;
-      } else if (op.kind === "change") {
-        const mutation = await changeMapPermission(mapId, op.permissionId, op.toRole);
-        if (mutation.pending) result.pending += 1;
-        else result.applied += 1;
+        result.records.push({ op, outcome: "applied", createdPermission: created });
       } else {
-        const mutation = await removeMapPermission(mapId, op.permissionId);
-        if (mutation.pending) result.pending += 1;
-        else result.applied += 1;
+        const mutation =
+          op.kind === "change"
+            ? await changeMapPermission(mapId, op.permissionId, op.toRole)
+            : await removeMapPermission(mapId, op.permissionId);
+        if (mutation.pending) {
+          result.pending += 1;
+          result.records.push({ op, outcome: "pending", approvalRequest: mutation.approval_request, prev });
+        } else {
+          result.applied += 1;
+          result.records.push({ op, outcome: "applied", prev });
+        }
       }
     } catch (err) {
-      result.failed.push({ op, message: getApiErrorDetail(err) });
+      const message = getApiErrorDetail(err);
+      result.failed.push({ op, message });
+      result.records.push({ op, outcome: "failed", message });
     }
   }
   return result;

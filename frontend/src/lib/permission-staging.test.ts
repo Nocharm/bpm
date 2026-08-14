@@ -118,6 +118,47 @@ describe("applyStagedOps", () => {
     expect(changeMock).toHaveBeenCalledWith(42, 2, "editor");
     expect(removeMock).toHaveBeenCalledWith(42, 3);
   });
+
+  it("records에 op별 결과·생성물·prev 스냅샷을 담는다", async () => {
+    const created = { id: 9, principal_type: "user", principal_id: "u1", role: "editor", granted_by: "me" };
+    addMock.mockResolvedValue(created as never);
+    changeMock.mockResolvedValue({ pending: false, permission: {} } as never);
+    removeMock.mockResolvedValue({
+      pending: true,
+      approval_request: { id: 77, status: "pending" },
+    } as never);
+    const perms = new Map([
+      [1, { id: 1, principal_type: "user", principal_id: "v1", role: "viewer", granted_by: "x" }],
+      [2, { id: 2, principal_type: "user", principal_id: "e2", role: "editor", granted_by: "x" }],
+    ]);
+    const ops: StagedOp[] = [
+      { kind: "add", principalType: "user", principalId: "u1", role: "editor" },
+      { kind: "change", permissionId: 1, toRole: "editor" },
+      { kind: "remove", permissionId: 2 },
+    ];
+
+    const result = await applyStagedOps(7, ops, perms as never);
+
+    expect(result.records).toHaveLength(3);
+    expect(result.records[0]).toMatchObject({ outcome: "applied", createdPermission: { id: 9 } });
+    expect(result.records[1]).toMatchObject({
+      outcome: "applied",
+      prev: { principalType: "user", principalId: "v1", role: "viewer" },
+    });
+    expect(result.records[2]).toMatchObject({
+      outcome: "pending",
+      approvalRequest: { id: 77 },
+      prev: { principalType: "user", principalId: "e2", role: "editor" },
+    });
+  });
+
+  it("실패 op는 records에 failed+message로 남는다", async () => {
+    addMock.mockRejectedValue(new Error("409 conflict"));
+    const result = await applyStagedOps(7, [
+      { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
+    ]);
+    expect(result.records[0]).toMatchObject({ outcome: "failed", message: "409 conflict" });
+  });
 });
 
 describe("forecastStagedOp", () => {

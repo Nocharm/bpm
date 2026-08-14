@@ -317,7 +317,7 @@ export function CollaboratorsPanel({
   async function handleSaveStaged() {
     setSavingStaged(true);
     try {
-      const result = await applyStagedOps(mapIdNum, stagedOps);
+      const result = await applyStagedOps(mapIdNum, stagedOps, new Map(perms.map((p) => [p.id, p])));
       const summary = t("perm.staged.result", {
         applied: result.applied,
         pending: result.pending,
