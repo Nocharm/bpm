@@ -69,7 +69,7 @@ function NavMeasureRow({
               <span key={tab.href} className="inline-flex items-center justify-center rounded-xs px-2.5 py-1">
                 <Icon size={14} strokeWidth={1.5} />
                 {(stage === 0 || active) && <span className="ml-1 max-w-28">{t(tab.labelKey)}</span>}
-                {tab.href === "/inbox" && <span className="inline-block h-4 w-4" />}
+                {tab.href === "/inbox" && <span className="inline-block h-4 min-w-[1.125rem]" />}
               </span>
             );
           })}
@@ -102,7 +102,8 @@ function NavMeasureRow({
         <div className="inline-flex items-center rounded-sm border border-hairline bg-surface-alt p-0.5 text-fine">
           {stage < 3
             ? (["ko", "en"] as const).map((code) => (
-                <span key={code} className="rounded-xs px-1.5 py-0.5">
+                // 라이브 활성 버튼은 font-semibold — 폭 관련 클래스라 클론도 대칭(활성 언어만)
+                <span key={code} className={"rounded-xs px-1.5 py-0.5" + (lang === code ? " font-semibold" : "")}>
                   {code === "ko" ? t("nav.langKo") : t("nav.langEn")}
                 </span>
               ))
@@ -279,6 +280,7 @@ export function TopNav() {
             <Tooltip label={t("feedback.button")}>
               <button
                 type="button"
+                aria-label={t("feedback.button")}
                 onClick={openFeedbackPanel}
                 className="inline-flex rounded-sm border border-hairline p-1.5 text-accent hover:bg-accent-tint"
               >
@@ -301,6 +303,7 @@ export function TopNav() {
           <div ref={menuRef} className="relative">
             <button
               type="button"
+              aria-label={user.name}
               className="rounded-sm px-2 py-1 text-caption text-ink hover:bg-surface-alt"
               onClick={() => setOpen((v) => !v)}
             >
@@ -353,6 +356,7 @@ export function TopNav() {
             <Tooltip label={t(lang === "ko" ? "nav.langSwitchEn" : "nav.langSwitchKo")}>
               <button
                 type="button"
+                aria-label={t(lang === "ko" ? "nav.langSwitchEn" : "nav.langSwitchKo")}
                 className="rounded-xs bg-accent-tint px-1.5 py-0.5 font-semibold text-accent"
                 onClick={() => setLang(lang === "ko" ? "en" : "ko")}
               >
