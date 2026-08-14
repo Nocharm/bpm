@@ -23,6 +23,7 @@ import {
   Network,
   PencilLine,
   Puzzle,
+  RotateCcw,
   Settings,
   Trash2,
   TriangleAlert,
@@ -54,6 +55,7 @@ import { VersionTimeline } from "@/components/maps/version-timeline";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
+import { UndoLastApplyModal } from "@/components/permissions/undo-last-apply-modal";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -68,8 +70,10 @@ import {
   forecastStagedOp,
   removeStagedOp,
   upsertStagedOp,
+  type AppliedOpRecord,
   type StagedOp,
 } from "@/lib/permission-staging";
+import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
@@ -239,6 +243,10 @@ export function MapDetailCard({
   const [stagedSaveError, setStagedSaveError] = useState<string | null>(null);
   // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
   const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+  // 되돌리기 — 직전 저장 1회분 records. 메모리만(페이지 이탈 시 소멸, 영속 안 함) — 패널과 대칭.
+  const [lastApply, setLastApply] = useState<AppliedOpRecord[] | null>(null);
+  const [undoOpen, setUndoOpen] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -312,6 +320,8 @@ export function MapDetailCard({
         const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
         setStagedSaveError(`${summary} — ${failureText}`);
       }
+      const kept = result.records.filter((r) => r.outcome !== "failed");
+      setLastApply(kept.length > 0 ? kept : null);
       setStagedOps([]);
       setLocalReloadKey((k) => k + 1);
     } finally {
@@ -420,6 +430,37 @@ export function MapDetailCard({
 
   // 오너 행 — 오우닝 부서 블록 바로 아래 별도 섹션으로 노출(R2 QA 피드백). user 그룹 루프에서는 제외된다.
   const ownerRows = members?.filter((m) => m.principal_type === "user" && m.role === "owner") ?? [];
+
+  // 되돌리기 모달의 이름 해석 — 스택 추가행(위 stagedAdds 렌더)과 동일 소스(nameById/groupNameById/formatDeptName).
+  function resolveUndoName(type: PrincipalType, id: string): string {
+    if (type === "user") return nameById.get(id) ?? id;
+    if (type === "group") return groupNameById.get(id) ?? id;
+    return formatDeptName(id, lang, koreanDeptByPath);
+  }
+
+  // 직전 저장 1회분의 역방향을 실행 — 카드엔 onToast가 없어 성공 표기는 저장 핸들러와 동일하게
+  // 실패시에만 stagedSaveError 배너로(성공/승인대기는 재조회 반영만, 저장 결과 표기와 일관되게).
+  async function handleUndoConfirm() {
+    if (!lastApply) return;
+    setUndoBusy(true);
+    try {
+      const summary = await executeUndoPlan(mapId, buildUndoPlan(lastApply, isOwner));
+      if (summary.failed.length > 0) {
+        const text = t("perm.undo.result", {
+          done: summary.done,
+          pending: summary.pending,
+          failed: summary.failed.length,
+        });
+        const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+        setStagedSaveError(`${text} — ${failureText}`);
+      }
+      setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
+      setUndoOpen(false);
+      setLocalReloadKey((k) => k + 1);
+    } finally {
+      setUndoBusy(false);
+    }
+  }
 
   // 멤버 행 렌더 — user/department/group 그룹 루프와 오너 섹션이 공유하는 단일 경로 (중복 최소화).
   // owner 행도 이 경로를 타지만 canManageMembers && perm.role !== "owner" 가드가 편집 어포던스(X 버튼)만
@@ -1104,6 +1145,31 @@ export function MapDetailCard({
                   {t("perm.staged.save")}
                 </button>
               </div>
+            )}
+            {/* 되돌리기 — 스택이 비어 있고 직전 저장분이 있을 때만(Save 바와 배타적, 동시 노출 안 함) /
+                Undo bar: only when the stack is empty and a last apply exists (never coexists with Save bar). */}
+            {stagedOps.length === 0 && lastApply && (
+              <div className="mt-2 flex items-center justify-end border-t border-hairline pt-2">
+                <button
+                  type="button"
+                  data-id="perm-undo-last"
+                  title={t("perm.undo.buttonTitle")}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setUndoOpen(true)}
+                >
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  {t("perm.undo.button")}
+                </button>
+              </div>
+            )}
+            {undoOpen && lastApply && (
+              <UndoLastApplyModal
+                items={buildUndoPlan(lastApply, isOwner)}
+                resolveName={resolveUndoName}
+                busy={undoBusy}
+                onClose={() => setUndoOpen(false)}
+                onConfirm={() => void handleUndoConfirm()}
+              />
             )}
             {/* 부분 실패 배너 — Save 시점엔 stagedOps가 이미 비워지므로 위 바와 독립 조건.
                 dismissible: 리마운트 없이도 X로 닫아 카드 나머지를 계속 쓸 수 있어야 한다 (최종 리뷰 픽스). */}
