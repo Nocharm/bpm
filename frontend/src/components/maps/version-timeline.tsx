@@ -10,7 +10,9 @@ import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MessageSquare, Mo
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
+import { PersonHoverCard } from "@/components/person-hover-card";
 import { formatKst } from "@/lib/datetime";
+import { useDirectory } from "@/lib/directory";
 import { formatVersionMarker } from "@/lib/version-name";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -91,8 +93,14 @@ export function VersionTimeline({
   // 현재 보고 있는 버전 — 그 카드엔 버튼 숨김.
   currentVersionId?: number | null;
 }) {
-  const { t } = useI18n();
-  const nameOf = (id: string) => nameById?.get(id) ?? id;
+  const { t, lang } = useI18n();
+  const users = useDirectory();
+  // 언어설정 기준 표시명 — ko는 한글명(없으면 영문 폴백), en은 영문. 디렉터리 로딩 전엔 nameById 폴백.
+  const nameOf = (id: string) => {
+    const user = users.get(id);
+    const english = user?.name || nameById?.get(id) || id;
+    return lang === "ko" ? user?.korean_name || english : english;
+  };
   // 최근 3개만 기본 노출 — 나머지는 더보기로 접어둠 (2026-07-11 요청)
   const [showAll, setShowAll] = useState(false);
   // 코멘트 이력 모달 — 클릭한 버전 + 클릭 지점(등장 애니 시작점). 설정 패널과 동일 모달 재사용.
@@ -311,9 +319,13 @@ export function VersionTimeline({
                               <td className="text-ink">
                                 <span className="flex min-w-0 items-baseline gap-1">
                                   <span className="max-w-[7rem] truncate">{nameOf(evt.actor)}</span>
-                                  <span className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary">
+                                  {/* 아이디 hover 0.7초 → 인물 카드(이름 한/영·메신저·조직 경로) */}
+                                  <PersonHoverCard
+                                    userId={evt.actor}
+                                    className="max-w-[5rem] shrink-0 truncate text-[10px] text-ink-tertiary"
+                                  >
                                     {evt.actor}
-                                  </span>
+                                  </PersonHoverCard>
                                 </span>
                               </td>
                               {dateSpan > 0 && (
