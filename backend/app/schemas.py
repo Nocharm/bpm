@@ -233,6 +233,14 @@ class ApprovalRequestOut(BaseModel):
     created_at: datetime
 
 
+def _normalize_comment(value: str | None) -> str | None:
+    """공백만 있는 코멘트는 없음으로 — 이벤트 note에 빈 문자열이 남지 않게."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
     reason: str | None = Field(None, max_length=500)
@@ -580,14 +588,6 @@ class WorkflowStateOut(BaseModel):
     pending_checkout_requests: list[PendingCheckoutRequestOut] = []
     # 이 버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)
     bundled_visibility: BundledVisibilityOut | None = None
-
-
-def _normalize_comment(value: str | None) -> str | None:
-    """공백만 있는 코멘트는 없음으로 — 이벤트 note에 빈 문자열이 남지 않게."""
-    if value is None:
-        return None
-    stripped = value.strip()
-    return stripped or None
 
 
 class SubmitIn(BaseModel):

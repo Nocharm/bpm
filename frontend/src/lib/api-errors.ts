@@ -9,6 +9,7 @@ type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string
 export const PERMISSION_PENDING_DETAIL_PREFIX = "your permission change is pending approval";
 
 // 서버 detail 원문(영어, 고정 프리픽스) → i18n 시맨틱 키. 전방일치이므로 접미사가 붙는 detail도 커버.
+// ⚠️ 401/403을 낼 수 있는 detail을 여기 추가하면 settings 페이지의 토스트 억제 필터(maps/[mapId]/settings/page.tsx showToast)와 어긋난다 — 매핑 히트는 '(HTTP 40x)' 꼬리표가 없어 필터를 우회한다. 추가 시 그 필터를 함께 점검할 것.
 const DETAIL_PREFIX_MAP: [string, MessageKey][] = [
   ["a visibility change request is already pending", "apiError.visibilityPending"],
   ["a change request for this grant is already pending", "apiError.grantPending"],

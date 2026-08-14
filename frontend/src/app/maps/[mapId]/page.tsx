@@ -9434,7 +9434,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             isApprover={isApprover || isSysadmin}
                             onCountChange={setEditorApprovalsCount}
                             onDecided={() => void refreshWorkflow()}
-                            onToast={(item) => showToast(item.message)}
+                            onToast={(item) => showToast(item.message, item.tone)}
                           />
                         </div>
                       </div>

@@ -85,3 +85,17 @@ def test_blank_comment_normalized_to_none(client: TestClient) -> None:
 
     submitted = [e for e in _events(client, map_id, version_id) if e["event_type"] == "submitted"]
     assert submitted and submitted[-1]["note"] is None
+
+
+def test_withdraw_after_rejection_records_comment(client: TestClient) -> None:
+    """반려(was_rejected) 후 회수 — 회수 코멘트는 신규 기록, 반려 사유는 그대로 보존."""
+    map_id, version_id = _create_map_with_version(client)
+    _submit(client, map_id, version_id)
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "needs work"})
+
+    ok = client.post(f"/api/versions/{version_id}/withdraw", json={"comment": "reworking"})
+
+    assert ok.status_code == 200
+    events = _events(client, map_id, version_id)
+    assert next(e for e in events if e["event_type"] == "withdrawn")["note"] == "reworking"
+    assert next(e for e in events if e["event_type"] == "rejected")["note"] == "needs work"

@@ -682,6 +682,8 @@ async def approve_version(
             VersionApproval.approver == user,
         )
     )
+    # 동일 승인자의 재승인은 no-op — 이번 요청의 코멘트는 의도적으로 버려진다.
+    # UI는 !hasApproved로 재승인 버튼을 가리므로 이 경로는 API 직접 호출로만 도달.
     if existing is None:
         session.add(VersionApproval(version_id=version_id, approver=user))
         await session.flush()
