@@ -9,12 +9,13 @@
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, LockKeyhole, X } from "lucide-react";
+import { Hourglass, Loader2, LockKeyhole, RotateCcw, X, Zap } from "lucide-react";
 
 import {
   getDirectory,
   listGroups,
   listMapPermissions,
+  withdrawApprovalRequest,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -26,16 +27,21 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import {
   applyStagedOps,
+  forecastStagedOp,
   upsertStagedOp,
   removeStagedOp,
   stageRoleChange,
+  type AppliedOpRecord,
   type StagedOp,
 } from "@/lib/permission-staging";
+import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
 
 import { AddCollaborator } from "./add-collaborator";
+import { HoverSwapPill } from "./hover-swap-pill";
 import { PrincipalIcon } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
 import { SkeletonRows } from "./loading-skeleton";
+import { UndoLastApplyModal } from "./undo-last-apply-modal";
 
 interface CollaboratorsPanelProps {
   mapId: string;
@@ -43,6 +49,8 @@ interface CollaboratorsPanelProps {
   currentUserId: string;
   /** 편집 가능 여부 (editor 이상만 true) / Whether controls are enabled. */
   canEdit: boolean;
+  /** 현재 유저가 이 맵의 오너인지 — forecastStagedOp 예측에 사용 / Owner status, feeds forecastStagedOp. */
+  isOwner: boolean;
   /** 토스트 발행 콜백 / Callback to show a toast message. */
   onToast: (msg: string) => void;
   /** 공개 맵이면 viewer 그랜트 비활성 — 전원 열람 가능 / Disable viewer role when map is public. */
@@ -78,12 +86,14 @@ function CollaboratorRow({
   isPending,
   stagedOp,
   viewerGrantDisabled,
+  actorIsOwner,
   dirUsers,
   dirDepts,
   groups,
   onChangeRole,
   onRemove,
   onCancelStaged,
+  onWithdrawPending,
 }: {
   perm: ApiPermission;
   currentUserId: string;
@@ -94,12 +104,15 @@ function CollaboratorRow({
   /** 퍼블릭 맵이면 viewer 선택지 숨김 — 단, 현재 역할이 viewer면 표시(editor로 교정 가능) /
    * Public map: hide viewer option (unless this grant is already viewer, so it can be fixed to editor). */
   viewerGrantDisabled?: boolean;
+  /** 현재 유저가 이 맵의 오너인지 — forecastStagedOp의 즉시적용/승인 예측에 사용 / Owner status for forecast. */
+  actorIsOwner: boolean;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   groups: Group[];
   onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
   onRemove: (perm: ApiPermission) => void;
   onCancelStaged: (op: StagedOp) => void;
+  onWithdrawPending: (perm: ApiPermission) => void;
 }) {
   const { t } = useI18n();
   const principalType = perm.principal_type as PrincipalType;
@@ -124,6 +137,7 @@ function CollaboratorRow({
     : "";
   const stagedRemove = stagedOp?.kind === "remove";
   const stagedChange = stagedOp?.kind === "change" ? stagedOp : null;
+  const forecast = stagedOp ? forecastStagedOp(stagedOp, perm.role, actorIsOwner) : "instant";
 
   return (
     // relative+group+pr-8 — 제거 X는 absolute라 공간을 차지하지 않는다, 공통 pr로 오너/본인(뱃지)
@@ -150,7 +164,7 @@ function CollaboratorRow({
 
       {/* 역할 뱃지 or 드롭다운 / Role badge or dropdown */}
       {isOwner || isPending || stagedRemove ? (
-        <RoleBadge role={role} pending={isPending} />
+        <RoleBadge role={role} />
       ) : controlsDisabled ? (
         <RoleBadge role={role} />
       ) : (
@@ -171,40 +185,59 @@ function CollaboratorRow({
           (하드 제약: R2 서버-진실 마커는 스택 태그와 별개로 유지) / detail tag only once server-confirmed,
           rendered unconditionally regardless of any staged op on this row. */}
       {pendingChange && (
-        <span
-          className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-          title={t("perm.pending.by", { name: pendingByName })}
-        >
-          {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-        </span>
+        pendingChange.requested_by === currentUserId ? (
+          <HoverSwapPill
+            dataId={`perm-pending-withdraw-${perm.id}`}
+            title={t("perm.pending.by", { name: pendingByName })}
+            swapLabel={t("perm.pending.withdraw")}
+            onActivate={() => onWithdrawPending(perm)}
+            base={
+              <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+                {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+              </span>
+            }
+          />
+        ) : (
+          <span
+            className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+            title={t("perm.pending.by", { name: pendingByName })}
+          >
+            {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+          </span>
+        )
       )}
 
-      {/* 스택 태그 — 로컬 예정(change/remove), 개별 취소 X / staged tag with per-row cancel */}
+      {/* 스택 태그 — 로컬 예정(change/remove), 호버 시 Cancel로 스왑 / staged tag, hover-swaps to Cancel */}
       {stagedOp && (
-        <span className="flex items-center gap-1">
-          <span
-            className={`rounded-sm border px-1.5 py-0.5 text-fine ${stagedRemove ? "border-error text-error" : "border-changed text-changed"}`}
-          >
-            {stagedChange
-              ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
-              : t("perm.staged.remove")}
-          </span>
-          <button
-            type="button"
-            title={t("perm.staged.cancel")}
-            className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-            onClick={() => onCancelStaged(stagedOp)}
-          >
-            <X size={12} strokeWidth={1.5} />
-          </button>
-        </span>
+        <HoverSwapPill
+          dataId={`perm-staged-cancel-${perm.id}`}
+          title={t(forecast === "approval" ? "perm.staged.forecastApproval" : "perm.staged.forecastInstant")}
+          swapLabel={t("perm.staged.cancelPill")}
+          onActivate={() => onCancelStaged(stagedOp)}
+          base={
+            <span
+              className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                stagedRemove ? "border-error text-error" : "border-changed text-changed"
+              }`}
+            >
+              {forecast === "approval" ? (
+                <Hourglass size={12} strokeWidth={1.5} />
+              ) : (
+                <Zap size={12} strokeWidth={1.5} />
+              )}
+              {stagedChange
+                ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
+                : t("perm.staged.remove")}
+            </span>
+          }
+        />
       )}
 
       {/* 제거 버튼 — absolute+hover라 flex 공간을 차지하지 않는다(정렬 교정, U4). display 아닌
           opacity 토글이라 Tab 포커스는 유지되고 focus:/group-focus-within:로 키보드 사용자도 도달 가능. /
           Remove button: absolute + opacity-hover so it reserves no flex space; opacity (not display)
           keeps it tab-reachable, revealed via focus:/group-focus-within: for keyboard users. */}
-      {!isOwner && !controlsDisabled && !stagedRemove && (
+      {!isOwner && !controlsDisabled && !stagedRemove && !isPending && (
         <button
           type="button"
           title={t("perm.removeButton")}
@@ -222,6 +255,7 @@ export function CollaboratorsPanel({
   mapId,
   currentUserId,
   canEdit,
+  isOwner,
   onToast,
   viewerGrantDisabled = false,
   owningDepartment,
@@ -247,6 +281,10 @@ export function CollaboratorsPanel({
   const [savingStaged, setSavingStaged] = useState(false);
   // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
   const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+  // 되돌리기 — 직전 저장 1회분 records. 메모리만(페이지 이탈 시 소멸, 영속 안 함).
+  const [lastApply, setLastApply] = useState<AppliedOpRecord[] | null>(null);
+  const [undoOpen, setUndoOpen] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
 
   // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
   useEffect(() => {
@@ -312,12 +350,24 @@ export function CollaboratorsPanel({
     setStagedOps((ops) => removeStagedOp(ops, op));
   }
 
+  // 본인이 낸 승인 대기 요청 회수 — 서버 마커(pending_change)를 직접 지우므로 즉시 재조회.
+  async function handleWithdrawPending(perm: ApiPermission) {
+    if (!perm.pending_change) return;
+    try {
+      await withdrawApprovalRequest(perm.pending_change.request_id);
+      onToast(t("perm.pending.withdrawDone"));
+      await reload();
+    } catch (err) {
+      onToast(humanizeApiError(err, t));
+    }
+  }
+
   // Save — 스택을 일괄 실행하고 결과를 토스트로, 성공분은 재조회로 반영 후 스택 클리어.
   // 개별 실패는 전체를 막지 않는다(R1 상호배제 409 등도 failed로만 수집).
   async function handleSaveStaged() {
     setSavingStaged(true);
     try {
-      const result = await applyStagedOps(mapIdNum, stagedOps);
+      const result = await applyStagedOps(mapIdNum, stagedOps, new Map(perms.map((p) => [p.id, p])));
       const summary = t("perm.staged.result", {
         applied: result.applied,
         pending: result.pending,
@@ -325,6 +375,8 @@ export function CollaboratorsPanel({
       });
       const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
       onToast(failureText ? `${summary} — ${failureText}` : summary);
+      const kept = result.records.filter((r) => r.outcome !== "failed");
+      setLastApply(kept.length > 0 ? kept : null);
       setStagedOps([]);
       await reload();
     } finally {
@@ -334,6 +386,27 @@ export function CollaboratorsPanel({
 
   function handleCancelAllStaged() {
     setStagedOps([]); // 저장 안 하면 작업 취소 — 서버 호출 없이 스택만 비움
+  }
+
+  // 직전 저장 1회분의 역방향을 실행 — 1회성이라 성공/부분실패 무관하게 재저장 전까지 다시 못 부른다.
+  async function handleUndoConfirm() {
+    if (!lastApply) return;
+    setUndoBusy(true);
+    try {
+      const summary = await executeUndoPlan(mapIdNum, buildUndoPlan(lastApply, isOwner));
+      const text = t("perm.undo.result", {
+        done: summary.done,
+        pending: summary.pending,
+        failed: summary.failed.length,
+      });
+      const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+      onToast(failureText ? `${text} — ${failureText}` : text);
+      setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
+      setUndoOpen(false);
+      await reload();
+    } finally {
+      setUndoBusy(false);
+    }
   }
 
   const stagedAdds = stagedOps.filter((op): op is StagedOp & { kind: "add" } => op.kind === "add");
@@ -389,17 +462,19 @@ export function CollaboratorsPanel({
           isPending={perm.pending_change != null}
           stagedOp={stagedByPermId.get(perm.id)}
           viewerGrantDisabled={viewerGrantDisabled}
+          actorIsOwner={isOwner}
           dirUsers={dirUsers}
           dirDepts={dirDepts}
           groups={groups}
           onChangeRole={handleChangeRole}
           onRemove={handleRemove}
           onCancelStaged={handleCancelStaged}
+          onWithdrawPending={(p) => void handleWithdrawPending(p)}
         />
       ))}
 
-      {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그 + 개별 취소 X /
-          Staged "to add" rows — dashed ghost row with a tag and a per-row cancel. */}
+      {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그(호버 시 Cancel로 스왑) /
+          Staged "to add" rows — dashed ghost row with a hover-to-cancel tag. */}
       {stagedAdds.map((op) => {
         const addKey = `${op.principalType}:${op.principalId}`;
         return (
@@ -414,18 +489,19 @@ export function CollaboratorsPanel({
           <span className="min-w-0 flex-1 truncate text-caption text-ink">
             {resolvePrincipalName(op.principalType, op.principalId, dirUsers, dirDepts, groups)}
           </span>
-          <span className="rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
-            {t("perm.staged.add")}
-          </span>
+          <HoverSwapPill
+            dataId={`perm-staged-add-cancel-${addKey}`}
+            title={t("perm.staged.forecastInstant")}
+            swapLabel={t("perm.staged.cancelPill")}
+            onActivate={() => handleCancelStaged(op)}
+            base={
+              <span className="inline-flex items-center gap-1 rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+                <Zap size={12} strokeWidth={1.5} />
+                {t("perm.staged.add")}
+              </span>
+            }
+          />
           <RoleBadge role={op.role} />
-          <button
-            type="button"
-            title={t("perm.staged.cancel")}
-            className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-            onClick={() => handleCancelStaged(op)}
-          >
-            <X size={16} strokeWidth={1.5} />
-          </button>
         </div>
         );
       })}
@@ -465,6 +541,32 @@ export function CollaboratorsPanel({
             {t("perm.staged.save")}
           </button>
         </div>
+      )}
+
+      {/* 되돌리기 — 스택이 비어 있고 직전 저장분이 있을 때만(Save 바와 배타적, 동시 노출 안 함) /
+          Undo bar: only when the stack is empty and a last apply exists (never coexists with Save bar). */}
+      {stagedOps.length === 0 && lastApply && (
+        <div className="mt-2 flex items-center justify-end border-t border-hairline pt-2">
+          <button
+            type="button"
+            data-id="perm-undo-last"
+            title={t("perm.undo.buttonTitle")}
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+            onClick={() => setUndoOpen(true)}
+          >
+            <RotateCcw size={14} strokeWidth={1.5} />
+            {t("perm.undo.button")}
+          </button>
+        </div>
+      )}
+      {undoOpen && lastApply && (
+        <UndoLastApplyModal
+          items={buildUndoPlan(lastApply, isOwner)}
+          resolveName={(type, id) => resolvePrincipalName(type, id, dirUsers, dirDepts, groups)}
+          busy={undoBusy}
+          onClose={() => setUndoOpen(false)}
+          onConfirm={() => void handleUndoConfirm()}
+        />
       )}
     </div>
   );

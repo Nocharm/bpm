@@ -907,7 +907,7 @@ export interface MapPermission {
   role: string;
   granted_by: string;
   // 서버 진실 pending 마커 — 다른 유저가 낸 다운그레이드/제거 요청도 조회 즉시 보이도록 (session-local 아님)
-  pending_change?: { to_role: string | null; requested_by: string } | null;
+  pending_change?: { to_role: string | null; requested_by: string; request_id: number } | null;
 }
 
 // PATCH/DELETE 응답 봉투 — 다운그레이드/에디터제거는 즉시 적용 대신 pending 요청.

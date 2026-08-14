@@ -115,7 +115,11 @@ async def list_permissions(
     for grant in rows.all():
         req = pending_by_permission_id.get(grant.id)
         pending_change = (
-            PendingChangeOut(to_role=req.payload.get("to_role"), requested_by=req.requested_by)
+            PendingChangeOut(
+                to_role=req.payload.get("to_role"),
+                requested_by=req.requested_by,
+                request_id=req.id,
+            )
             if req is not None
             else None
         )

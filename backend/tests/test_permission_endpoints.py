@@ -1214,7 +1214,7 @@ def test_sysadmin_queue_excludes_soft_deleted(client: TestClient, enforce: None)
 
 
 def test_permissions_list_exposes_pending_change(client: TestClient, enforce: None) -> None:
-    """GET permissions 는 대상 행에 pending_change(to_role·requested_by) 를 노출, 나머지는 null.
+    """GET permissions 는 대상 행에 pending_change(to_role·requested_by·request_id) 를 노출, 나머지는 null.
     제거 요청(to_role=None)도 동일하게 반영된다."""
     map_id = seed_map(
         grants=[
@@ -1228,6 +1228,7 @@ def test_permissions_list_exposes_pending_change(client: TestClient, enforce: No
     act_as("actor.ed")
     r = client.patch(f"/api/maps/{map_id}/permissions/{gid}", json={"role": "viewer"})
     assert r.status_code == 200 and r.json()["pending"] is True
+    req_id = r.json()["approval_request"]["id"]
 
     act_as("owner.u")
     listed = client.get(f"/api/maps/{map_id}/permissions").json()
@@ -1235,6 +1236,7 @@ def test_permissions_list_exposes_pending_change(client: TestClient, enforce: No
     assert by_principal["ed"]["pending_change"] == {
         "to_role": "viewer",
         "requested_by": "actor.ed",
+        "request_id": req_id,
     }
     assert by_principal["other.ed"]["pending_change"] is None
     assert by_principal["owner.u"]["pending_change"] is None
@@ -1244,6 +1246,7 @@ def test_permissions_list_exposes_pending_change(client: TestClient, enforce: No
     act_as("actor.ed")
     r2 = client.delete(f"/api/maps/{map_id}/permissions/{gid2}")
     assert r2.status_code == 200 and r2.json()["pending"] is True
+    req_id2 = r2.json()["approval_request"]["id"]
 
     act_as("owner.u")
     listed2 = client.get(f"/api/maps/{map_id}/permissions").json()
@@ -1251,6 +1254,7 @@ def test_permissions_list_exposes_pending_change(client: TestClient, enforce: No
     assert by_principal2["other.ed"]["pending_change"] == {
         "to_role": None,
         "requested_by": "actor.ed",
+        "request_id": req_id2,
     }
 
 

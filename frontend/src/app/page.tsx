@@ -5,15 +5,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, CircleDot, CircleSlash2, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert, Workflow } from "lucide-react";
+import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
+import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
 import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
-import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { WORD_FEATURES_ENABLED } from "@/lib/features";
 import { splitMapsByMode } from "@/lib/word-map-home";
 import { genId } from "@/lib/id";
@@ -23,9 +23,9 @@ import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
-import { FilterDropdown } from "@/components/maps/filter-dropdown";
 import { FrameworkTree } from "@/components/maps/framework-tree";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
+import { HomeFilterPills } from "@/components/maps/home-filter-pills";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
@@ -36,14 +36,11 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
-// 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
-const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
-
 // 좌측 접힘 상태 영속 키 — 검색·필터(sessionStorage, 새로고침 시 초기화)와 달리 새로고침에도 유지한다.
 const TREE_STATE_KEY = "bpm.home.tree";
 
 export default function MapListPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
@@ -102,6 +99,16 @@ export default function MapListPage() {
   const [recentEntries, setRecentEntries] = useState<RecentMapEntry[]>([]);
   // "/" 단축키로 포커스할 검색 input / search input focused by the "/" hotkey.
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // 필터 필 3단계 반응형(full/label/icon) — 실측 폭 기반, 측정 복제(absolute invisible) 2종의
+  // 자연폭을 행 가용폭과 비교해 판정한다 (Task 8).
+  const filterRowRef = useRef<HTMLDivElement | null>(null);
+  const measureFullRef = useRef<HTMLDivElement | null>(null);
+  const measureLabelRef = useRef<HTMLDivElement | null>(null);
+  // Clear 버튼(필터 활성 시만 렌더)도 같은 행의 가용폭을 갉아먹는다 — 측정에서 빼지 않으면
+  // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
+  const clearBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterDisplayMode>("full");
 
   const showToast = useCallback((message: string, tone?: "error") => {
     setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
@@ -251,6 +258,49 @@ export default function MapListPage() {
       /* 손상된 저장값 무시 */
     }
   }, []);
+
+  // Clear 필 노출 조건 — JSX(아래)와 effect deps 양쪽이 같은 식을 참조(중복 방지 겸 clearBtnRef
+  // mount/unmount 시 effect 재실행 트리거).
+  const hasActiveFilter =
+    statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0;
+
+  // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible) 2종의 자연폭 vs 행 가용폭(Clear 필 폭
+  // 차감). i18n/뷰 전환은 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는
+  // 라이브 행 폭이 모드에 따라 변해도 복제 폭은 불변이라 진동하지 않는다.
+  useEffect(() => {
+    const row = filterRowRef.current;
+    const full = measureFullRef.current;
+    const label = measureLabelRef.current;
+    if (!row || !full || !label) return;
+    const update = () => {
+      const clear = clearBtnRef.current;
+      // Clear가 뜨면 같은 행의 gap(1.5=6px)만큼 더 먹는다 — 폭+간격을 가용폭에서 미리 뺀다.
+      const available = row.clientWidth - (clear ? clear.offsetWidth + 6 : 0);
+      setFilterMode(
+        pickFilterDisplayMode(available, {
+          full: full.scrollWidth,
+          label: label.scrollWidth,
+        }),
+      );
+    };
+    // 최초 산정은 렌더 커밋 후로 이연 — 이펙트 본문 동기 setState 린트 회피(react-hooks/set-state-in-effect).
+    const raf = requestAnimationFrame(update);
+    const ro = new ResizeObserver(update);
+    ro.observe(row);
+    ro.observe(full);
+    ro.observe(label);
+    if (clearBtnRef.current) ro.observe(clearBtnRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+    // 필 개수·언어 외에 maps.length도 의존성에 포함 — 맵 목록이 비동기로 도착하기 전엔
+    // visibleMaps.length===0이라 WelcomePlaceholder가 렌더되어 필터 행 자체가 마운트되지 않고
+    // (row/full/label ref가 null) 이 effect가 조기 반환한다. maps 도착 후 필터 행이 처음
+    // 마운트될 때 effect를 다시 돌려야 ResizeObserver가 비로소 붙는다 — 없으면 filterMode가
+    // 초기값 "full"에 영원히 고정되고(관측된 실측 버그, T9), 그 뒤 리사이즈도 못 잡는다.
+    // hasActiveFilter는 clearBtnRef가 새로 마운트/언마운트될 때 observer를 다시 붙이기 위함.
+  }, [homeView, lang, maps.length, hasActiveFilter]);
 
   // 검색·필터 저장 — 변경 시 session에 기록. 마운트 첫 실행은 skip(초기 default가 저장값 덮어쓰기 방지).
   const saveSkip = useRef(true);
@@ -697,22 +747,16 @@ export default function MapListPage() {
                 ))}
               </div>
               {/* 상태·권한 필터 — 멀티셀렉트 드롭다운(가시성과 AND), Clear는 우측끝 (H1 개정) */}
-              <div data-id="home-filter-row" className="flex shrink-0 items-center gap-1.5">
-                <FilterDropdown
-                  label={t("home.filterStatus")}
-                  dataId="home-status-filter"
-                  icon={<CircleDot size={14} strokeWidth={1.5} />}
-                  options={STATUS_ORDER.map((s) => ({
-                    value: s,
-                    label: t(VERSION_STATUS_LABEL[s]),
-                    icon: (
-                      <span
-                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full border ${VERSION_STATUS_STYLE[s]}`}
-                      />
-                    ),
-                  }))}
-                  selected={statusFilter}
-                  onToggle={(v) =>
+              <div
+                data-id="home-filter-row"
+                ref={filterRowRef}
+                className="relative flex min-w-0 items-center gap-1.5"
+              >
+                <HomeFilterPills
+                  display={filterMode}
+                  homeView={homeView}
+                  statusFilter={statusFilter}
+                  onToggleStatus={(v) =>
                     setStatusFilter((prev) => {
                       const next = new Set(prev);
                       if (next.has(v)) next.delete(v);
@@ -720,18 +764,8 @@ export default function MapListPage() {
                       return next;
                     })
                   }
-                />
-                <FilterDropdown
-                  label={t("home.filterRole")}
-                  dataId="home-role-filter"
-                  icon={<ShieldCheck size={14} strokeWidth={1.5} />}
-                  options={[
-                    { value: "owner", label: t("perm.roleOwner"), icon: <Crown size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                    { value: "editor", label: t("perm.roleEditor"), icon: <PencilLine size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                    { value: "viewer", label: t("perm.roleViewer"), icon: <Eye size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                  ]}
-                  selected={permFilter}
-                  onToggle={(v) =>
+                  permFilter={permFilter}
+                  onTogglePerm={(v) =>
                     setPermFilter((prev) => {
                       const next = new Set(prev);
                       if (next.has(v)) next.delete(v);
@@ -739,60 +773,67 @@ export default function MapListPage() {
                       return next;
                     })
                   }
+                  owningFilter={owningFilter}
+                  onToggleOwning={(v) =>
+                    setOwningFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
+                  spFilter={spFilter}
+                  onToggleSp={(v) =>
+                    setSpFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
                 />
-                {homeView === "departments" && (
-                  <>
-                    <FilterDropdown
-                      label={t("home.filterOwning")}
-                      dataId="home-owning-filter"
-                      icon={<Building2 size={14} strokeWidth={1.5} />}
-                      options={[
-                        {
-                          value: "missing",
-                          label: t("home.owningMissingOption"),
-                          icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                        },
-                      ]}
-                      selected={owningFilter}
-                      onToggle={(v) =>
-                        setOwningFilter((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(v)) next.delete(v);
-                          else next.add(v);
-                          return next;
-                        })
-                      }
-                    />
-                    <FilterDropdown
-                      label={t("home.filterSp")}
-                      dataId="home-sp-filter"
-                      icon={<Workflow size={14} strokeWidth={1.5} />}
-                      options={[
-                        {
-                          value: "sp",
-                          label: t("home.spOption"),
-                          icon: <Workflow size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                        },
-                        {
-                          value: "non_sp",
-                          label: t("home.spNonOption"),
-                          icon: <CircleSlash2 size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                        },
-                      ]}
-                      selected={spFilter}
-                      onToggle={(v) =>
-                        setSpFilter((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(v)) next.delete(v);
-                          else next.add(v);
-                          return next;
-                        })
-                      }
-                    />
-                  </>
-                )}
-                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0) && (
+                {/* 측정 복제 — 보이지 않게 자연폭만 잰다(absolute라 레이아웃 불참여, dataId 없음) */}
+                <div
+                  ref={measureFullRef}
+                  aria-hidden
+                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
+                >
+                  <HomeFilterPills
+                    display="full"
+                    measureOnly
+                    homeView={homeView}
+                    statusFilter={statusFilter}
+                    onToggleStatus={() => {}}
+                    permFilter={permFilter}
+                    onTogglePerm={() => {}}
+                    owningFilter={owningFilter}
+                    onToggleOwning={() => {}}
+                    spFilter={spFilter}
+                    onToggleSp={() => {}}
+                  />
+                </div>
+                <div
+                  ref={measureLabelRef}
+                  aria-hidden
+                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
+                >
+                  <HomeFilterPills
+                    display="label"
+                    measureOnly
+                    homeView={homeView}
+                    statusFilter={statusFilter}
+                    onToggleStatus={() => {}}
+                    permFilter={permFilter}
+                    onTogglePerm={() => {}}
+                    owningFilter={owningFilter}
+                    onToggleOwning={() => {}}
+                    spFilter={spFilter}
+                    onToggleSp={() => {}}
+                  />
+                </div>
+                {hasActiveFilter && (
                   <button
+                    ref={clearBtnRef}
                     type="button"
                     data-id="home-filter-clear"
                     className="ml-auto text-fine text-accent hover:underline"

@@ -506,7 +506,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
               groups={[]}
               excludeIds={new Set<string>()}
               deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
-              myDeptsFirst
+              deptTreeBrowse
               onSelect={applyOwningDept}
             />
           ) : (

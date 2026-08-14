@@ -8,21 +8,19 @@ import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
-  Building,
   Building2,
   Copy,
   Crown,
   Eye,
   Globe,
   Hand,
-  House,
-  Landmark,
+  Hourglass,
   Loader2,
   Lock,
   MessageCircle,
   Network,
   PencilLine,
-  Puzzle,
+  RotateCcw,
   Settings,
   Trash2,
   TriangleAlert,
@@ -30,6 +28,7 @@ import {
   Users,
   UsersRound,
   X,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -37,6 +36,7 @@ import {
   getMap,
   listGroups,
   listMapPermissions,
+  withdrawApprovalRequest,
   type DirectoryDept,
   type DirectoryUser,
   type Group,
@@ -47,13 +47,16 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
+import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
 import { OrgInfoModal } from "@/components/org-info-modal";
 import { PersonInfoPopup } from "@/components/person-hover-card";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
+import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
+import { UndoLastApplyModal } from "@/components/permissions/undo-last-apply-modal";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -63,7 +66,15 @@ import {
   formatTitleWithPosition,
 } from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
-import { applyStagedOps, removeStagedOp, upsertStagedOp, type StagedOp } from "@/lib/permission-staging";
+import {
+  applyStagedOps,
+  forecastStagedOp,
+  removeStagedOp,
+  upsertStagedOp,
+  type AppliedOpRecord,
+  type StagedOp,
+} from "@/lib/permission-staging";
+import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
@@ -89,25 +100,6 @@ const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "group", labelKey: "home.memberGroup" },
 ];
 
-// 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
-function deptLeaf(orgPath: string): string {
-  const parts = orgPath.split("/");
-  return parts[parts.length - 1] || orgPath;
-}
-
-// 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
-function deptLevelRank(leaf: string): number {
-  const s = leaf.toLowerCase();
-  if (s.includes("센터") || s.includes("center")) return 0;
-  if (s.includes("팀") || s.includes("team")) return 2;
-  if (s.includes("그룹") || s.includes("group")) return 3;
-  if (s.includes("파트") || s.includes("part")) return 4;
-  return 1; // 담당(Department) / 그 외 기본
-}
-
-// 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
-const LEVEL_ICONS = [Landmark, Building2, Building, House, Puzzle];
-
 // 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
 // 접힌 카드 2줄 높이 기준 확대(22px) — 컨테이너가 세로 중앙 정렬 (member-card design 2026-07-09)
 function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
@@ -128,8 +120,7 @@ function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
     return <User size={22} strokeWidth={1.5} />;
   }
   if (perm.principal_type === "group") return <UsersRound size={22} strokeWidth={1.5} />;
-  const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
-  return <Icon size={22} strokeWidth={1.5} />;
+  return <DeptLevelIcon leaf={deptLeaf(perm.principal_id)} size={22} />;
 }
 
 // 멤버 컬럼 고스트 — 권한·디렉터리·그룹 로딩 동안 우측 컬럼 폭을 미리 차지해,
@@ -238,6 +229,10 @@ export function MapDetailCard({
   const [stagedSaveError, setStagedSaveError] = useState<string | null>(null);
   // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
   const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+  // 되돌리기 — 직전 저장 1회분 records. 메모리만(페이지 이탈 시 소멸, 영속 안 함) — 패널과 대칭.
+  const [lastApply, setLastApply] = useState<AppliedOpRecord[] | null>(null);
+  const [undoOpen, setUndoOpen] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
@@ -276,6 +271,18 @@ export function MapDetailCard({
     setStagedOps((ops) => removeStagedOp(ops, op));
   }
 
+  // 본인이 낸 승인 대기 요청 회수 — 서버 마커(pending_change)를 직접 지우므로 저장 핸들러와 동일한
+  // 재조회 경로(localReloadKey)로 반영. 카드엔 onToast가 없어 에러는 기존 stagedSaveError 배너로.
+  async function handleWithdrawPending(perm: MapPermission) {
+    if (!perm.pending_change) return;
+    try {
+      await withdrawApprovalRequest(perm.pending_change.request_id);
+      setLocalReloadKey((k) => k + 1);
+    } catch (err) {
+      setStagedSaveError(humanizeApiError(err, t));
+    }
+  }
+
   // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
   useEffect(() => {
     if (!lastAddedKey) return;
@@ -289,7 +296,7 @@ export function MapDetailCard({
     setStagedSaveError(null);
     setSavingStaged(true);
     try {
-      const result = await applyStagedOps(mapId, stagedOps);
+      const result = await applyStagedOps(mapId, stagedOps, new Map((members ?? []).map((m) => [m.id, m])));
       if (result.failed.length > 0) {
         const summary = t("perm.staged.result", {
           applied: result.applied,
@@ -299,6 +306,8 @@ export function MapDetailCard({
         const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
         setStagedSaveError(`${summary} — ${failureText}`);
       }
+      const kept = result.records.filter((r) => r.outcome !== "failed");
+      setLastApply(kept.length > 0 ? kept : null);
       setStagedOps([]);
       setLocalReloadKey((k) => k + 1);
     } finally {
@@ -407,6 +416,37 @@ export function MapDetailCard({
 
   // 오너 행 — 오우닝 부서 블록 바로 아래 별도 섹션으로 노출(R2 QA 피드백). user 그룹 루프에서는 제외된다.
   const ownerRows = members?.filter((m) => m.principal_type === "user" && m.role === "owner") ?? [];
+
+  // 되돌리기 모달의 이름 해석 — 스택 추가행(위 stagedAdds 렌더)과 동일 소스(nameById/groupNameById/formatDeptName).
+  function resolveUndoName(type: PrincipalType, id: string): string {
+    if (type === "user") return nameById.get(id) ?? id;
+    if (type === "group") return groupNameById.get(id) ?? id;
+    return formatDeptName(id, lang, koreanDeptByPath);
+  }
+
+  // 직전 저장 1회분의 역방향을 실행 — 카드엔 onToast가 없어 성공 표기는 저장 핸들러와 동일하게
+  // 실패시에만 stagedSaveError 배너로(성공/승인대기는 재조회 반영만, 저장 결과 표기와 일관되게).
+  async function handleUndoConfirm() {
+    if (!lastApply) return;
+    setUndoBusy(true);
+    try {
+      const summary = await executeUndoPlan(mapId, buildUndoPlan(lastApply, isOwner));
+      if (summary.failed.length > 0) {
+        const text = t("perm.undo.result", {
+          done: summary.done,
+          pending: summary.pending,
+          failed: summary.failed.length,
+        });
+        const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+        setStagedSaveError(`${text} — ${failureText}`);
+      }
+      setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
+      setUndoOpen(false);
+      setLocalReloadKey((k) => k + 1);
+    } finally {
+      setUndoBusy(false);
+    }
+  }
 
   // 멤버 행 렌더 — user/department/group 그룹 루프와 오너 섹션이 공유하는 단일 경로 (중복 최소화).
   // owner 행도 이 경로를 타지만 canManageMembers && perm.role !== "owner" 가드가 편집 어포던스(X 버튼)만
@@ -519,7 +559,7 @@ export function MapDetailCard({
     // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
     const stagedRemove = stagedRemoveIds.has(perm.id);
     // 옛 X버튼과 동일 조건 — 역할 필 자리에 hover/focus 시 Remove 필로 스왑 (U4).
-    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove;
+    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove && !perm.pending_change;
     return (
       <Fragment key={perm.id}>
         {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
@@ -593,11 +633,7 @@ export function MapDetailCard({
                       : ""
                   }
                 >
-                  <RoleBadge
-                    role={perm.role as MapRole}
-                    pending={perm.pending_change != null}
-                    className={perm.pending_change ? "" : ROLE_PILL_WIDTH_CLASS}
-                  />
+                  <RoleBadge role={perm.role as MapRole} className={ROLE_PILL_WIDTH_CLASS} />
                 </span>
                 {removable && (
                   <button
@@ -623,39 +659,61 @@ export function MapDetailCard({
                   </button>
                 )}
               </span>
-              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만 */}
+              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만.
+                  본인이 낸 요청이면 호버 시 회수(Withdraw)로 스왑 / hover-swaps to Withdraw for the requester. */}
               {perm.pending_change && (
-                <span
-                  className="rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-                  title={t("perm.pending.by", {
-                    name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                  })}
-                >
-                  {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-                </span>
+                perm.pending_change.requested_by === loginId ? (
+                  <HoverSwapPill
+                    dataId={`map-detail-pending-withdraw-${perm.id}`}
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                    swapLabel={t("perm.pending.withdraw")}
+                    onActivate={() => void handleWithdrawPending(perm)}
+                    className="max-w-full"
+                    base={
+                      <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+                        {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                      </span>
+                    }
+                  />
+                ) : (
+                  <span
+                    className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                  >
+                    {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                  </span>
+                )
               )}
             </span>
             {/* 스택 제거 태그 — 좌측 소속(부서) 줄과 같은 높이 대역에 오도록 2번째 줄로 배치 (C4, R5-4).
-                취소 X는 항상 공간을 점유(opacity-0)하다가 행 hover/focus 시에만 페이드 인 — 레이아웃 안 밀림. */}
+                예고 아이콘(즉시/승인)을 달고, 호버 시 같은 자리 Cancel 필로 스왑 (HoverSwapPill). */}
             {stagedRemove && (
-              <span className="flex items-center gap-1">
-                <span
-                  className={`rounded-sm border border-error px-1.5 py-0.5 text-fine text-error ${ROLE_PILL_WIDTH_CLASS}`}
-                >
-                  {t("perm.staged.remove")}
-                </span>
-                <button
-                  type="button"
-                  title={t("perm.staged.cancel")}
-                  className="rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCancelStaged({ kind: "remove", permissionId: perm.id });
-                  }}
-                >
-                  <X size={12} strokeWidth={1.5} />
-                </button>
-              </span>
+              <HoverSwapPill
+                dataId={`map-detail-staged-cancel-${perm.id}`}
+                title={t(
+                  forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval"
+                    ? "perm.staged.forecastApproval"
+                    : "perm.staged.forecastInstant",
+                )}
+                swapLabel={t("perm.staged.cancelPill")}
+                onActivate={() => handleCancelStaged({ kind: "remove", permissionId: perm.id })}
+                base={
+                  // ROLE_PILL_WIDTH_CLASS는 고정 w-[60px]라 아이콘+문구가 넘친다 — 이 필에서만
+                  // min-w-[60px]로 완화(공유 상수는 불변, brief Step 4 주의사항).
+                  <span className="inline-flex min-w-[60px] items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                    {forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval" ? (
+                      <Hourglass size={12} strokeWidth={1.5} />
+                    ) : (
+                      <Zap size={12} strokeWidth={1.5} />
+                    )}
+                    {t("perm.staged.remove")}
+                  </span>
+                }
+              />
             )}
           </span>
         </div>
@@ -914,10 +972,7 @@ export function MapDetailCard({
                 >
                   <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
-                      {(() => {
-                        const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(owningDeptPath))] ?? Building2;
-                        return <Icon size={22} strokeWidth={1.5} />;
-                      })()}
+                      <DeptLevelIcon leaf={deptLeaf(owningDeptPath)} size={22} />
                     </span>
                     <span className="flex min-w-0 flex-col leading-tight">
                       <span className="truncate">{formatDeptName(owningDeptPath, lang, koreanDeptByPath)}</span>
@@ -1026,12 +1081,14 @@ export function MapDetailCard({
                   : op.principalType === "group"
                     ? groupNameById.get(op.principalId) ?? op.principalId
                     : formatDeptName(op.principalId, lang, koreanDeptByPath);
-              const Icon =
-                op.principalType === "user"
-                  ? User
-                  : op.principalType === "group"
-                    ? UsersRound
-                    : LEVEL_ICONS[deptLevelRank(deptLeaf(op.principalId))] ?? Building2;
+              const iconNode =
+                op.principalType === "user" ? (
+                  <User size={22} strokeWidth={1.5} />
+                ) : op.principalType === "group" ? (
+                  <UsersRound size={22} strokeWidth={1.5} />
+                ) : (
+                  <DeptLevelIcon leaf={deptLeaf(op.principalId)} size={22} />
+                );
               const addKey = `${op.principalType}:${op.principalId}`;
               return (
                 <div
@@ -1043,23 +1100,24 @@ export function MapDetailCard({
                 >
                   <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-muted">
-                      <Icon size={22} strokeWidth={1.5} />
+                      {iconNode}
                     </span>
                     <span className="truncate">{name}</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
-                      {t("perm.staged.add")}
-                    </span>
+                    <HoverSwapPill
+                      dataId={`map-detail-staged-add-cancel-${addKey}`}
+                      title={t("perm.staged.forecastInstant")}
+                      swapLabel={t("perm.staged.cancelPill")}
+                      onActivate={() => handleCancelStaged(op)}
+                      base={
+                        <span className="inline-flex items-center gap-1 rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+                          <Zap size={12} strokeWidth={1.5} />
+                          {t("perm.staged.add")}
+                        </span>
+                      }
+                    />
                     <RoleBadge role={op.role} />
-                    <button
-                      type="button"
-                      title={t("perm.staged.cancel")}
-                      className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-error"
-                      onClick={() => handleCancelStaged(op)}
-                    >
-                      <X size={12} strokeWidth={1.5} />
-                    </button>
                   </span>
                 </div>
               );
@@ -1101,6 +1159,31 @@ export function MapDetailCard({
                   {t("perm.staged.save")}
                 </button>
               </div>
+            )}
+            {/* 되돌리기 — 스택이 비어 있고 직전 저장분이 있을 때만(Save 바와 배타적, 동시 노출 안 함) /
+                Undo bar: only when the stack is empty and a last apply exists (never coexists with Save bar). */}
+            {stagedOps.length === 0 && lastApply && (
+              <div className="mt-2 flex items-center justify-end border-t border-hairline pt-2">
+                <button
+                  type="button"
+                  data-id="perm-undo-last"
+                  title={t("perm.undo.buttonTitle")}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setUndoOpen(true)}
+                >
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  {t("perm.undo.button")}
+                </button>
+              </div>
+            )}
+            {undoOpen && lastApply && (
+              <UndoLastApplyModal
+                items={buildUndoPlan(lastApply, isOwner)}
+                resolveName={resolveUndoName}
+                busy={undoBusy}
+                onClose={() => setUndoOpen(false)}
+                onConfirm={() => void handleUndoConfirm()}
+              />
             )}
             {/* 부분 실패 배너 — Save 시점엔 stagedOps가 이미 비워지므로 위 바와 독립 조건.
                 dismissible: 리마운트 없이도 X로 닫아 카드 나머지를 계속 쓸 수 있어야 한다 (최종 리뷰 픽스). */}
