@@ -236,7 +236,8 @@ export function VersionTimeline({
                       type="button"
                       data-id={`version-timeline-comments-${version.id}`}
                       title={t("wf.viewComments")}
-                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
+                      // 카드 호버 시에만 노출 — 평상시 헤더 밀도 유지 (feedback 2026-08-14)
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
                       onClick={(e) => {
                         // 카드 펼침 토글로 번지지 않게 — 기존 "이 버전으로 가기" 버튼과 동일 패턴
                         e.stopPropagation();

@@ -42,6 +42,21 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
 
   const user = users.get(userId);
 
+  const openNow = () => {
+    if (openTimer.current !== null) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setOrgOpen(false);
+    setPos(clampToViewport(rect.left, rect.bottom + 6, 264, 170));
+  };
+
   const scheduleOpen = () => {
     if (closeTimer.current !== null) {
       window.clearTimeout(closeTimer.current);
@@ -50,10 +65,7 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
     if (pos !== null || openTimer.current !== null) return;
     openTimer.current = window.setTimeout(() => {
       openTimer.current = null;
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setOrgOpen(false);
-      setPos(clampToViewport(rect.left, rect.bottom + 6, 264, 170));
+      openNow();
     }, OPEN_DELAY_MS);
   };
 
@@ -90,7 +102,17 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
       : leafFromPath || user?.department || "";
 
   return (
-    <span ref={triggerRef} className={className} onMouseEnter={scheduleOpen} onMouseLeave={scheduleClose}>
+    <span
+      ref={triggerRef}
+      // 호버 어포던스 + 클릭 즉시 열림(0.7초 대기 생략). 부모가 클릭 토글 카드여도 번지지 않게 차단.
+      className={`${className ?? ""} cursor-pointer transition-colors duration-150 hover:text-accent`}
+      onMouseEnter={scheduleOpen}
+      onMouseLeave={scheduleClose}
+      onClick={(event) => {
+        event.stopPropagation();
+        openNow();
+      }}
+    >
       {children}
       {pos !== null &&
         createPortal(
@@ -100,6 +122,10 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
             style={{ left: pos.left, top: pos.top }}
             onMouseEnter={cancelClose}
             onMouseLeave={scheduleClose}
+            // 포털이어도 React 트리로는 트리거의 조상(클릭 토글 카드 등)으로 이벤트가 버블링 — 전부 차단.
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
           >
             {/* 이름 — 주 언어 타이틀 + 보조 언어 이름 */}
             <p className="flex items-baseline gap-1.5">

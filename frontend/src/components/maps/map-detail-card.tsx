@@ -901,7 +901,14 @@ export function MapDetailCard({
             {owningDeptPath && (
               <div data-id="map-detail-owning-member" className="flex flex-col gap-1">
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
-                <div className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5">
+                <div
+                  className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5"
+                  // 부서 행과 같은 카드로 인식됨 — 우클릭 조직 정보 동일 적용 (feedback 2026-08-14)
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
                       {(() => {
