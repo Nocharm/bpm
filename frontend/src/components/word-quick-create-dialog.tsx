@@ -1,7 +1,7 @@
 "use client";
 
 // Word 맵 빠른 생성 — 파싱 결과에서 이름만 확인, 오우닝 부서=내 org_path·승인자=본인 자동.
-// 설계: docs/design/2026-07-24-word-map-lifecycle-design.md §3. 영어 하드코딩(word-create-modal 관례).
+// 설계: 2026-07-24-word-map-lifecycle-design.md §3. 영어 하드코딩(word-create-modal 관례).
 import { useRef, useState } from "react";
 
 import { FileText, X } from "lucide-react";
@@ -9,6 +9,8 @@ import { FileText, X } from "lucide-react";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import type { WordCreateOutcome } from "@/components/word-create-modal";
 import { createMap, setApprovers, type MapDetail } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
+import { useI18n } from "@/lib/i18n";
 
 interface WordQuickCreateDialogProps {
   outcome: WordCreateOutcome;
@@ -29,6 +31,7 @@ export function WordQuickCreateDialog({
   onCreated,
   onPartialCreate,
 }: WordQuickCreateDialogProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(outcome.docName.replace(/\.docx$/i, ""));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export function WordQuickCreateDialog({
       if (createdRef.current !== null) {
         onPartialCreate?.();
       }
-      setError(err instanceof Error ? err.message : "Failed to create map.");
+      setError(humanizeApiError(err, t));
       setSubmitting(false);
     }
   };

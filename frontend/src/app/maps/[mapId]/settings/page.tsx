@@ -7,12 +7,11 @@ import { ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-import { getMap, getMe, setDevUser } from "@/lib/api";
+import { getMap, getMe, listApprovers, setDevUser } from "@/lib/api";
 import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS, storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
-import { isApprover, usePermissions } from "@/lib/mock/permissions";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
 import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
@@ -115,10 +114,12 @@ export default function SettingsPage() {
 
   // 토스트 상태 / Toast state.
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  function showToast(message: string) {
-    // 읽기 전용(viewer 등)은 권한 엔드포인트 로드 시 403/401 다발 — 예상된 접근 거부는 토스트 미노출 (B2).
-    if (/failed: 40[13]/.test(message)) return;
-    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  function showToast(message: string, tone?: "error") {
+    // 읽기 전용(viewer 등)은 권한 로드 시 401/403 다발 — 예상된 접근 거부는 토스트 미노출 (B2).
+    // 인간화 후 포맷('(HTTP 403)' 꼬리표)과 미스윕 원시 포맷('failed: 403') 둘 다 매칭.
+    // ⚠️ 포맷 결합 주의: 매핑된 i18n 에러는 꼬리표가 없어 이 필터를 우회한다(api-errors.ts DETAIL_PREFIX_MAP 주석 참조). status 기반 전환은 후속 결정.
+    if (/failed: 40[13]/.test(message) || /\(HTTP 40[13]\)$/.test(message)) return;
+    setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
   }
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -127,9 +128,23 @@ export default function SettingsPage() {
   // Dev 유저 전환 모달 / Dev user switcher state.
   const [showDevSwitcher, setShowDevSwitcher] = useState(false);
 
-  // 현재 mock 유저 + 권한 상태 / Current mock user and permission state.
+  // 현재 mock 유저 / Current mock user.
   const currentMockUser = useCurrentMockUser();
-  const permState = usePermissions();
+
+  // 실제 맵 승인자 목록(서버 진실) — mock permState는 실서버 승인자를 몰라 결재 대기 탭이
+  // 승인자에게 안 뜨던 결함 교정 (QA C-3) / Real map approvers; mock store never knew them.
+  const [mapApprovers, setMapApprovers] = useState<string[]>([]);
+  useEffect(() => {
+    let active = true;
+    void listApprovers(Number(mapIdStr))
+      .then((ids) => {
+        if (active) setMapApprovers(ids);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [mapIdStr]);
 
   // 유효 역할 — 서버 산정 my_role 단일 소스(클라 재계산 폐기), sysadmin은 owner /
   // Effective role from server my_role (no client recompute); sysadmin = owner.
@@ -156,7 +171,13 @@ export default function SettingsPage() {
   // Pending approvals tab: visible only to map approvers or sysadmin.
   const canDecide =
     currentMockUser !== null &&
-    (currentMockUser.isSysadmin || isApprover(permState, currentMockUser.id, mapIdStr));
+    (currentMockUser.isSysadmin || mapApprovers.includes(currentMockUser.id));
+
+  // 결재 대기 탭 노출 — 승인자/sysadmin OR 오너(rename/sp 결정권자) (설계 §C)
+  const canSeeApprovals = canDecide || isOwner;
+
+  // 결재 대기 pending 카운트 — 좌측 레일 배지 (패널 onCountChange가 갱신)
+  const [approvalsCount, setApprovalsCount] = useState(0);
 
   // 점유권 요청 탭 — 소유자 또는 sysadmin만 표시 (보유자는 에디터 승인탭에서 처리) /
   // Checkout requests tab: owner or sysadmin only (holder acts via editor approval tab).
@@ -165,7 +186,7 @@ export default function SettingsPage() {
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
   const visibleTabs = ALL_TABS.filter(
     (tab) =>
-      (tab.id !== "approvals" || canDecide) &&
+      (tab.id !== "approvals" || canSeeApprovals) &&
       (tab.id !== "checkout" || canDecideCheckout) &&
       // 서브프로세스 지정은 오너 전용 섹션 / Subprocess designation is owner-only.
       (tab.id !== "subprocess" || isOwner),
@@ -297,7 +318,7 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               type="button"
-              className={`rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
+              className={`flex items-center rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                 activeSection === tab.id
                   ? "bg-accent-tint text-accent"
                   : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
@@ -309,6 +330,14 @@ export default function SettingsPage() {
               }
             >
               {t(tab.labelKey)}
+              {tab.id === "approvals" && approvalsCount > 0 && (
+                <span
+                  data-id="settings-approvals-count"
+                  className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent"
+                >
+                  {approvalsCount}
+                </span>
+              )}
             </button>
           ))}
 
@@ -370,6 +399,7 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
+                      isOwner={isOwner}
                       onToast={showToast}
                       viewerGrantDisabled={isPublic}
                       owningDepartment={owningDepartment}
@@ -393,7 +423,10 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       currentUserId={currentMockUser.id}
                       canEdit={canEdit}
+                      visibility={visibility}
+                      canBundle={isOwner}
                       onToast={showToast}
+                      onChanged={() => void refreshMap()}
                     />
                   ) : tab.id === "danger" ? (
                     isOwner ? (
@@ -407,17 +440,20 @@ export default function SettingsPage() {
                         {t("perm.dangerReadOnly")}
                       </p>
                     )
-                  ) : tab.id === "approvals" && canDecide ? (
+                  ) : tab.id === "approvals" && canSeeApprovals ? (
                     <PendingApprovalsPanel
                       mapId={mapIdStr}
+                      isOwner={isOwner}
+                      isApprover={canDecide}
+                      onCountChange={setApprovalsCount}
                       onDecided={() => void refreshMap()}
-                      onToast={(item) => showToast(item.message)}
+                      onToast={(item) => showToast(item.message, item.tone)}
                     />
                   ) : tab.id === "checkout" && canDecideCheckout ? (
                     <CheckoutRequestsPanel
                       mapId={mapIdStr}
                       onDecided={() => void refreshMap()}
-                      onToast={(item) => showToast(item.message)}
+                      onToast={(item) => showToast(item.message, item.tone)}
                     />
                   ) : null}
                 </section>

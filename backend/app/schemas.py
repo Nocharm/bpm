@@ -93,6 +93,9 @@ class SubprocessDesignationIn(BaseModel):
     url_label: str = Field(default="", max_length=100)
     # 지정 설명 — 자유 텍스트, 선택 (design 2026-07-17)
     description: str = Field(default="")
+    # L6 Input/Output — 자유 텍스트, 길이 캡 없음 (design 2026-08-08)
+    input: str = Field(default="")
+    output: str = Field(default="")
 
     @field_validator("department")
     @classmethod
@@ -114,7 +117,7 @@ class SubprocessDesignationIn(BaseModel):
         text = value.strip()
         return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
 
-    @field_validator("description", mode="after")
+    @field_validator("description", "input", "output", mode="after")
     @classmethod
     def _trim_description(cls, value: str) -> str:
         return value.strip()
@@ -178,6 +181,15 @@ PrincipalType = Literal["user", "department", "group"]
 Role = Literal["viewer", "editor", "owner"]
 
 
+class PendingChangeOut(BaseModel):
+    """행에 걸린 pending 다운그레이드 요약 — to_role None = 제거 요청 (R2)."""
+
+    to_role: str | None
+    requested_by: str
+    # 요청자 본인 철회(DELETE /approval-requests/{id})용 — 에디터는 맵 승인요청 목록을 못 읽는다
+    request_id: int
+
+
 class PermissionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -186,6 +198,7 @@ class PermissionOut(BaseModel):
     principal_id: str
     role: str
     granted_by: str
+    pending_change: PendingChangeOut | None = None
 
 
 class PermissionCreate(BaseModel):
@@ -218,11 +231,23 @@ class ApprovalRequestOut(BaseModel):
     status: str
     decided_by: str | None
     decided_at: datetime | None
+    decision_reason: str | None = None
     created_at: datetime
+
+
+def _normalize_comment(value: str | None) -> str | None:
+    """공백만 있는 코멘트는 없음으로 — 이벤트 note에 빈 문자열이 남지 않게."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
+    reason: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("reason")(classmethod(lambda cls, v: _normalize_comment(v)))
 
 
 # ── 사용자 그룹 관리 (Layer 4 Task 3b) ──────────────────────────
@@ -532,6 +557,14 @@ class DashboardTimeseriesOut(BaseModel):
     points: list[DashboardTimeseriesPointOut]
 
 
+class BundledVisibilityOut(BaseModel):
+    """버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)."""
+
+    from_visibility: str
+    to_visibility: str
+    requested_by: str
+
+
 class WorkflowStateOut(BaseModel):
     version_id: int
     # 게시 시 부여된 버전 번호 — 미게시 초안은 None
@@ -555,6 +588,25 @@ class WorkflowStateOut(BaseModel):
     pending_checkout_request: PendingCheckoutRequestOut | None = None
     # 이 버전의 모든 미결 점유 요청 — 요청자 복수 (점유권 탭)
     pending_checkout_requests: list[PendingCheckoutRequestOut] = []
+    # 이 버전에 동봉된 가시성 변경 요약 — 승인자 모달 공개용 (R2)
+    bundled_visibility: BundledVisibilityOut | None = None
+
+
+class SubmitIn(BaseModel):
+    """버전 승인요청 동봉 옵션 — 가시성 편승 + 선택 코멘트 (governance A · spec 2026-08-14)."""
+
+    to_visibility: Literal["public", "private"] | None = None
+    comment: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("comment")(classmethod(lambda cls, v: _normalize_comment(v)))
+
+
+class CommentIn(BaseModel):
+    """전이 선택 코멘트(approve/publish/withdraw 공용) — VersionEvent.note로 기록."""
+
+    comment: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("comment")(classmethod(lambda cls, v: _normalize_comment(v)))
 
 
 class RejectIn(BaseModel):
@@ -607,6 +659,14 @@ class MapOut(BaseModel):
     # 개정 라이프사이클 타임스탬프 — 홈 word 행·상세 카드 표시용 (design 2026-07-24 §5)
     doc_imported_at: datetime | None = None
     doc_generated_at: datetime | None = None
+    # 컨설턴트 체계 소속 — category_id 존재가 소속 판정, consultant_code는 임포트 출처 (design 2026-08-08)
+    category_id: int | None = None
+    # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
+    category_path: str | None = None
+    consultant_code: str | None = None
+    # L6 Input/Output — 자유 텍스트
+    sp_input: str | None = None
+    sp_output: str | None = None
 
     @field_validator("sp_duration", mode="after")
     @classmethod
@@ -626,6 +686,101 @@ class MapOut(BaseModel):
 
 class MapDetailOut(MapOut):
     versions: list[VersionDetailOut]
+
+
+class CategoryNodeOut(BaseModel):
+    """카테고리 트리 1노드 — lazy 자식 조회 응답 (design 2026-08-08 §6)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    name: str
+    level: int
+    sort_order: int
+    child_count: int = 0  # 직계 자식 카테고리 수
+    map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
+
+
+class CategoryCreateIn(BaseModel):
+    """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+    parent_id: int | None = None
+    code: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+        | None
+    ) = None
+
+
+class CategoryUpdateIn(BaseModel):
+    """카테고리 부분 갱신 — name·parent_id(이동)·sort_order.
+
+    parent_id는 `model_fields_set`으로 "미전송 vs null" 구분 필수 — null=루트로 이동,
+    필드 자체 부재=이동 없음(라우터에서 판정, 스키마 레벨에선 둘 다 None으로 보임).
+    """
+
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+        | None
+    ) = None
+    parent_id: int | None = None
+    sort_order: int | None = None
+
+
+class CategoryMapsOut(BaseModel):
+    """카테고리 1노드에 직접 연결된 맵 페이지 — 비가시 맵은 hidden으로만 집계(name 미노출)."""
+
+    total: int
+    hidden: int
+    maps: list[MapOut]
+
+
+class MapCategoryIn(BaseModel):
+    # 체계 카테고리 연결/해제 — null=해제, 존재 검증은 라우터에서 (design 2026-08-08)
+    category_id: int | None = None
+
+
+class FrameworkTransferIn(BaseModel):
+    # 체계 슬롯(category_id+consultant_code) 이양 대상 맵 (design 2026-08-08)
+    to_map_id: int
+
+
+class FrameworkImportIn(BaseModel):
+    """웹 JSON 대량 임포트 요청 — categories.json/maps.jsonl과 동일 구조를 인라인으로 받는다.
+
+    구조 검증은 scripts.consultant_canonical(parse_categories/parse_map_objs)이 담당 —
+    여기서는 raw dict 그대로 통과시킨다(brief §2).
+    """
+
+    categories: list[dict[str, Any]] = []
+    maps: list[dict[str, Any]] = []
+    apply: bool = False
+    label: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+
+class FrameworkImportRow(BaseModel):
+    """임포트 리포트 1행 — action∈created/updated/unchanged/error/warning (ImportReport.rows 미러)."""
+
+    code: str
+    action: str
+    detail: str = ""
+
+
+class FrameworkImportOut(BaseModel):
+    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated).
+
+    summary는 ImportReport.counts()(created/updated/unchanged/error, 0인 키는 없음)에 라우터가
+    "warning" 키를 별도로 더한 것 — counts()는 CLI 요약용이라 warning을 집계 제외하지만, 이 카운트를
+    빼면 rows가 500행에서 잘릴 때 FE가 undercount하므로 잘리기 전 전체 기준으로 채운다.
+    """
+
+    applied: bool
+    summary: dict[str, int]
+    rows: list[FrameworkImportRow]
+    truncated: bool
 
 
 class NodeIn(BaseModel):
@@ -1015,31 +1170,39 @@ class EmployeeOut(BaseModel):
     is_sysadmin: bool = False
 
 
-class KoreanNameEntryIn(BaseModel):
-    """임포트 항목 — 이름 필수, 그룹(dept) 선택. max_length 200 = VARCHAR(200) 초과 DataError 방지."""
-
-    name: Annotated[str, StringConstraints(max_length=200)]
-    dept: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class KoreanNamesImportIn(BaseModel):
-    """한글이름 일괄 등록 — mode: skip(기존 값 보유 유저 건너뜀) | overwrite(덮어씀)."""
-
-    mode: Literal["skip", "overwrite"]
-    entries: dict[str, KoreanNameEntryIn]
-
-
-class KoreanNamesImportOut(BaseModel):
-    updated: int
-    skipped: int
-    unknown: list[str]
-
-
 class SyncSummaryOut(BaseModel):
+    """HR 전체 동기화 요약 (design 2026-08-10 §5-9). aborted_reason 있으면 DB 무변경 중단."""
+
     scanned: int
     upserted: int
-    excluded: int
-    purged: int  # 전체 동기화에서 삭제된 스테일 ad 행 수 (2026-07-09)
+    deactivated: int
+    deleted: int
+    skipped: int
+    org_mismatches: int
+    truncated_levels: int
+    departments_upserted: int
+    title_refreshed: int | None = None
+    position_refreshed: int | None = None
+    position_unmatched: int | None = None
+    position_unmatched_sample: list[str] = []  # 미매칭 EMPID 샘플(≤10) — 사번 포맷 진단
+    aborted_reason: str | None = None
+
+
+class HrSyncPreviewOut(BaseModel):
+    """이행 드라이런 리포트 (design 2026-08-10 §9) — 샘플 리스트는 50개 캡."""
+
+    scanned: int
+    skipped: int
+    would_upsert: int
+    would_deactivate: int
+    would_delete: int
+    org_mismatches: int
+    truncated_levels: int
+    korean_overwrites: int
+    new_login_ids: list[str]
+    delete_login_ids: list[str]
+    case_mismatches: list[str]
+    orphan_dept_paths: list[str]
 
 
 # ── 관리 콘솔 API (sysadmin-only, Layer 4 Task 0b) ──────────────────────────
@@ -1063,26 +1226,7 @@ class AdminDeptOut(BaseModel):
 
     name: str          # leaf segment (display label)
     org_levels: list[str]  # full path levels root→leaf (variable depth)
-    korean_name: str = ""  # dept_info 조인 — 어드민 임포트 전용 (2026-07-09)
-    manager: str = ""
-
-
-class DeptInfoEntryIn(BaseModel):
-    """부서 임포트 항목 — 빈 필드는 미기입(기존 보존). max_length 200 = VARCHAR(200) 초과 방지."""
-
-    korean_name: Annotated[str, StringConstraints(max_length=200)] = ""
-    manager: Annotated[str, StringConstraints(max_length=200)] = ""
-
-
-class DeptInfoImportIn(BaseModel):
-    """부서 한글명·부서장 일괄 등록 — 키는 영문 부서명(리프), 비어있지 않은 필드만 덮어씀."""
-
-    entries: dict[str, DeptInfoEntryIn]
-
-
-class DeptInfoImportOut(BaseModel):
-    updated: int
-    unknown: list[str]  # 현존 부서와 매칭 실패한 부서명
+    korean_name: str = ""  # departments.name_ko (2026-08-11 dept_info→departments 전환)
 
 
 class DeptRemapItemOut(BaseModel):
@@ -1091,6 +1235,7 @@ class DeptRemapItemOut(BaseModel):
     path: str
     map_grants: int      # 이 경로를 참조하는 맵 부서 권한 행 수
     group_members: int   # 이 경로를 참조하는 그룹 부서 멤버 행 수
+    owning_maps: int = 0  # 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
 
 
 class DeptRemapIn(BaseModel):
@@ -1103,6 +1248,7 @@ class DeptRemapIn(BaseModel):
 class DeptRemapOut(BaseModel):
     map_grants: int
     group_members: int
+    owning_maps: int = 0
 
 
 class AdminDirectoryOut(BaseModel):
@@ -1123,6 +1269,7 @@ class DirectoryUserOut(BaseModel):
     role: str = "user"  # admin | user — 로컬 로그인 피커에서 관리자 식별용
     korean_name: str = ""  # 멤버 카드 한/영 토글용
     korean_dept: str = ""  # 담당자 피커 한글 부서 검색용
+    position: str = ""  # 노출 직책(allowlist 필터, 아니면 빈 문자열) — 멤버 카드 title 병기 (설계 2026-08-11 §5·§6)
 
 
 class EligibleApproverOut(DirectoryUserOut):
@@ -1136,8 +1283,7 @@ class DirectoryDeptOut(BaseModel):
 
     id: str       # org_path ("l1/l2/l3" or leaf segment)
     name: str     # leaf segment (display label)
-    korean_name: str = ""  # dept_info 조인(리프명 키) — 피커 한/영 표시·검색 (2026-07-09)
-    manager: str = ""
+    korean_name: str = ""  # departments.name_ko(리프명 키) — 피커 한/영 표시·검색 (2026-08-11 dept_info→departments 전환)
 
 
 class DirectoryOut(BaseModel):
@@ -1149,7 +1295,6 @@ class DeptInfoValueOut(BaseModel):
     """부서 부가정보 값 — dept_infos 맵 원소 (키는 영문 부서명)."""
 
     korean_name: str = ""
-    manager: str = ""
 
 
 class EligibleAssigneesOut(BaseModel):
@@ -1157,7 +1302,7 @@ class EligibleAssigneesOut(BaseModel):
 
     users: list[DirectoryUserOut]
     departments: list[str]
-    # 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
+    # 부서명 → 한글 부서명 (departments.name_ko 보유 부서만) — 부서 셀렉트 검색·한/영 표시용
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
@@ -1167,7 +1312,7 @@ AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
 class AppSettingsOut(BaseModel):
-    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한."""
+    """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한 + 노출 직책 allowlist."""
 
     ai_chat_tips: list[str]
     ai_chat_max_sessions_per_map: int
@@ -1175,6 +1320,10 @@ class AppSettingsOut(BaseModel):
     ai_chat_retention_days: int
     # 관리자 런타임 AI 차단 — true면 env AI_ENABLED와 무관하게 전 AI 표면 503 (2026-07-30)
     ai_access_disabled: bool = False
+    # 부서장으로 노출할 EDW 직책(FRNM) allowlist — /api/me manager_ids 산출 기준 (설계 2026-08-11 §5)
+    exposed_positions: list[str] = []
+    # employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
+    available_positions: list[str] = []
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -1187,6 +1336,8 @@ class AppSettingsUpdate(BaseModel):
     ai_chat_max_messages_per_session: int | None = Field(default=None, ge=10, le=2000)
     ai_chat_retention_days: int | None = Field(default=None, ge=7, le=3650)
     ai_access_disabled: bool | None = None
+    # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
+    exposed_positions: list[str] | None = Field(default=None, max_length=50)
 
 
 class AiPromptOut(BaseModel):

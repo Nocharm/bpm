@@ -79,6 +79,18 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "doc_generated_at", "TIMESTAMP"),
     # 인터뷰 word 변환 모드 — interview_sessions는 개발서버에 기존재라 자동 ALTER 필요 (design 2026-07-26 §2)
     ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'normal'"),
+    # 컨설턴트 체계 수용 (design 2026-08-08) — process_categories는 신규 테이블이라 create_all이 처리.
+    # 기존 DB의 consultant_code 유니크는 ALTER로 못 걸어 앱 계층(코드 기준 업서트)이 보장한다.
+    ("process_maps", "category_id", "INTEGER"),
+    ("process_maps", "consultant_code", "VARCHAR(200)"),
+    ("process_maps", "sp_input", "TEXT"),
+    ("process_maps", "sp_output", "TEXT"),
+    # HR 웹훅 동기화 — deptCode 미러 (design 2026-08-10 §3)
+    ("employees", "dept_code", "VARCHAR(100)"),
+    # EDW 부서장 직책(FRNM) — AD employeeNumber 매핑으로 갱신 (설계 2026-08-11 §4)
+    ("employees", "position", "VARCHAR(100)"),
+    # 승인요청 거절 사유 — 받은함 거절 코멘트 (spec 2026-08-14)
+    ("approval_requests", "decision_reason", "VARCHAR(500)"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
@@ -169,6 +181,19 @@ def _widen_interview_message_kind(conn: Connection) -> None:
     conn.execute(text("ALTER TABLE interview_messages ALTER COLUMN kind TYPE VARCHAR(20)"))
 
 
+def _relax_employees_email_not_null(conn: Connection) -> None:
+    """employees.email 모델 제거(design 2026-08-10 §3) 후속 — 운영 Postgres 컬럼이 NOT NULL(서버 default 없음)이라
+    ORM INSERT가 email을 안 보내면 즉사. 물리 드랍 없이 NULL 허용 완화만. sqlite는 ALTER 불가 → 로컬 reset_db로 흡수."""
+    if conn.dialect.name != "postgresql":
+        return
+    inspector = inspect(conn)
+    if "employees" not in inspector.get_table_names():
+        return
+    cols = {c["name"]: c for c in inspector.get_columns("employees")}
+    if "email" in cols and not cols["email"].get("nullable", True):
+        conn.execute(text("ALTER TABLE employees ALTER COLUMN email DROP NOT NULL"))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
@@ -177,7 +202,12 @@ async def init_models() -> None:
         await conn.run_sync(_add_missing_indexes)
     # 정리성 보강 스텝은 트랜잭션 분리 + 비치명 — Postgres는 트랜잭션 내 오류가 이후 문장까지
     # 오염시키고, 스키마 보강 실패가 서비스 전체 기동을 막아선 안 된다(락이 1차 방어라 축소 동작 가능).
-    for step in (_enforce_interview_seq_unique, _sweep_orphan_kb_chunks, _widen_interview_message_kind):
+    for step in (
+        _enforce_interview_seq_unique,
+        _sweep_orphan_kb_chunks,
+        _widen_interview_message_kind,
+        _relax_employees_email_not_null,
+    ):
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(step)

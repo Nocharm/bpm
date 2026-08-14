@@ -1,53 +1,11 @@
-# 설계 기록 (Design Specs) — 분야별 인덱스
+# 설계 기록 (Design Specs)
 
-기능별 설계 스냅샷(날짜별). 각 문서는 당시 결정의 근거·불변식 기록. **코드 주석(`// 설계: docs/design/…`)이 정확한 경로로 참조**하므로 파일을 옮기거나 이름을 바꾸면 그 참조도 함께 갱신해야 한다(`git grep "docs/design/"`). 현재 살아있는 명세는 `docs/spec.md`, 진행 로그는 `PROGRESS.md`.
+기능별 설계 스냅샷(날짜별). **main에 머지된 기능의 스냅샷은 폐기한다** — git history가 보존하므로 저장소에는 아직 소비될 문서만 남긴다(2026-08-12 정리, `rules/common/documentation.md`). 살아있는 명세는 `docs/spec.md`, 진행 로그는 `PROGRESS.md`.
 
-## 에디터 · 캔버스
-- [편집 모드 개선 5종](2026-07-17-editor-improvements-design.md) — 노드복사·SP 링크유일성·설명·Shift 축고정 등
-- [인라인 펼침 드래그/좌표 버그 핸드오프](2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md) — 프리즈·축고정·복제 드리프트
+남은 문서가 코드 주석(`// 설계: docs/design/…`)에서 참조되는 동안은 옮기거나 삭제할 때 `git grep "docs/design/"`으로 참조를 함께 정리한다. 폐기된 스냅샷의 주석 참조는 경로 없이 파일명만 남겨뒀다(git history에서 조회).
 
-## 서브프로세스 (Call Activity)
-- [서브프로세스 워크플로 2건 개선](2026-07-16-subprocess-workflow-improvements-design.md)
-- [서브프로세스 플레이스홀더](2026-07-19-subprocess-placeholder-design.md) — 미등록 링크·등록요청·즉시생성
+## 유지 중 (아직 소비될 문서)
 
-## 노드 파라미터 · 내보내기
-- [숫자 파라미터 5종 + Excel/CSV 내보내기](2026-07-11-numeric-params-excel-csv-export-design.md)
-- [SP 파라미터 + Σ 합산 + duration 표시형(1h30m)](2026-07-11-sp-params-sum-duration-format-design.md)
-- [노드 파라미터 재정의 — 회당 단가 + 비용 통화 2필드](2026-07-13-node-params-redefinition-design.md)
-- [Excel 출력 1안 — 구조 노드 정리·분기 주석](2026-07-17-excel-export-format-v1-design.md)
-- [Excel 출력 2안 — WBS 레벨 컬럼·형식 선택 모달](2026-07-17-excel-export-wbs-v2-design.md)
-- [Word 도형 순서도 내보내기](2026-07-11-word-export-design.md)
-- [Word 맵 섹션 링크 — 문서 내부 하이퍼링크 순서도](2026-07-18-word-map-section-linking-design.md) — 섹션=서브프로세스 대체·read-only 북마크 파서·앵커 링크(진행 중)
-- [Word 맵 — 맵 탭 분리 표현·생성 분기·라이프사이클](2026-07-24-word-map-lifecycle-design.md) — 문서 부속 산출물 정체성·홈 섹션 분리·자동값 생성·개정 타임스탬프·승격 복사
-
-## CSV
-- [CSV로 새 맵 만들기 + 클립보드 복사 수정](2026-07-10-csv-create-flow-design.md)
-- [CSV 임포트 — 이름 기준 머지](2026-07-10-csv-import-merge-design.md)
-
-## AI
-- [AI 권한 게이트 + 제안 페이로드 저장](2026-07-10-ai-gate-payload-design.md)
-- [AI graph 제안 CSV 병합 파이프라인](2026-07-11-ai-graph-merge-design.md)
-- [AI 사용량 계측·집계 + 매뉴얼 섹션 선별](2026-07-11-ai-usage-manual-select-design.md)
-- [AI 컨설턴트 인터뷰 모드](2026-07-23-ai-consultant-interview-design.md) — 풀스크린 인터뷰·스테이지 엔진·선택지 병렬 생성·지식기반/RAG(P1~P3)
-- [Word 맵 AI 컨설턴트 — 문서→순서도 변환 모드](2026-07-26-word-map-ai-consultant-design.md) — word 전용 3스테이지·섹션 매핑 계약(앵커 검증·라벨 재구성)·카탈로그+원본 업로드
-- [인터뷰 속도·타이밍 재설계](2026-07-27-interview-speed-redesign-design.md) — 턴=인터뷰어 1콜·그리기는 draw 이벤트로 응축·델타 드래프팅·facts 아웃라인·맵 기준 배지
-- [인터뷰 패스트트랙 — 문서 첨부만으로 바로 그리기](2026-07-29-interview-fast-track-design.md) — 인사말 보기 진입·범위 제안 1콜·결정적 fast-forward(AI 0콜)·기존 multi draw 재사용·어체 간결화
-- [AI 프롬프트 관리(sysadmin)](2026-08-04-ai-prompts-admin-design.md) — 프롬프트 7종 DB 오버라이드(`ai_prompts` 테이블)·행 없으면 코드 기본값·설정 탭 편집/프리뷰/복원
-
-## 권한 · 워크플로 · 맵
-- [맵 필수 필드 '오우닝 부서'](2026-07-10-owning-department-design.md)
-- [맵 이름 변경 승인 워크플로](2026-07-18-map-rename-workflow-design.md)
-- [알림 통합·삭제(퍼지)·100개 한도](2026-07-16-notification-purge-design.md)
-- [새 맵 생성 시 Start·End 자동 시드](2026-07-16-new-map-start-end-seed-design.md)
-
-## 대시보드
-- [운영 대시보드 — 실운영 화면 + 접근 권한](2026-07-11-dashboard-design.md)
-
-## UI · 홈 · 디렉터리
-- [홈 부서 목록 재조정(개정)](2026-08-04-home-dept-list-revision-design.md) — 위 문서 §2를 대체. main 들여쓰기 트리로 회귀 + 카운트 태그·펼친 부서 태그 숨김/톤다운·맵 보유 부서를 풀폭 그룹 박스로 묶음
-- [홈 부서 가시성·시인성 개선](2026-08-04-home-dept-visibility-design.md) — 부서명 고정폭 필 체인(단일자식 병합)·카드 풀폭 통일·sticky 경로 헤더·최근접속 호버 반전·접힘 상태 영속 (**§2는 위 개정판으로 대체됨**)
-- [메인 탭 UX 리프레시](2026-07-17-main-tabs-ux-design.md)
-- [멤버 카드 아이콘 톤·조직 레벨 아이콘](2026-07-09-member-card-icons-design.md)
-- [UI 개선 배치 2 (7항목)](2026-07-09-ui-batch2-design.md)
-- [Hotfix UI 6](2026-07-10-hotfix-ui-6-design.md)
-- [매뉴얼 버튼 일관화 + `/manual` 드롭다운](2026-07-16-manual-buttons-rearrange-design.md)
+- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — canonical 계약(§4)·임포트 파이프라인. **Phase 3(실스키마 어댑터)이 이 계약을 소비** — 컨설턴트 스키마 확정 대기.
+- [거버넌스 UX 확장 A/B/C](2026-08-08-governance-ux-design.md) — 설계 승인·**미구현** 트랙. 이양 후 오너 대량 발생 전 구현 목표.
+- [인라인 펼침 드래그/좌표 버그 핸드오프](2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md) — 미해결 버그 핸드오프(보류 중).

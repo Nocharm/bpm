@@ -18,6 +18,13 @@ Open a map to enter the editor. The top bar holds the version selector, **New ve
 | Drag on empty canvas | Box-select nodes |
 | Right-click | Context menu (node, edge, or canvas) |
 
+### The right inspector — Map / Approval tabs
+
+Selecting a node shows that node's properties in the inspector; with nothing selected, two tabs appear: **Map** and **Approval**.
+
+- **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and a manage icon. The canvas display options — **Node display** (what each node shows) and **Edge style** — are accordions collapsed by default. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
+- **Approval tab** — from top to bottom: **Pending Approvals** (this map's pending requests — count badge, collapsed by default) → a draft CTA (**Switch to draft for approval** when a draft exists, **Create draft for approval** otherwise) → the **Approval workflow** section (collapsible, with a status badge in its header even while collapsed) → the **Subprocess** designation card → the version card list. See section 7 and the Getting Around manual for running an approval.
+
 ---
 
 ## 2. Nodes and Connections
@@ -121,6 +128,7 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 - **Add as link node** links an existing map from the process library. New links **follow the latest published version by default**; you can pin a specific version instead. When a newer published version appears, the node offers **Update to latest**.
 - The subprocess list also opens from the right-click menu or the **`S` shortcut**, and search supports Korean chosung matching. **A map already linked in this map cannot be added twice.**
 - By default only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee, system, duration, cost, headcount, and a **description** optional) — these show live on every node linking the map.
+- With the published version open, the owner or an admin can also manage designation from the editor inspector's **Subprocess** card (same card on the Map and Approval tabs — body collapsed by default, with an ⓘ hover note in the header). The **Designate as subprocess** button shares its row with contextual buttons on the right — **Go to published version** while you're viewing a non-published version, and **Request registration** (ask the owner) when you're not the owner.
 - A link node pointing to an **undesignated** map shows a warning badge and is locked until the map is designated.
 - **Deep view:** double-click a subprocess node to drill into the child map in a stacked overlay with breadcrumbs — the embedded content is **read-only**. `Esc` goes up one level.
 - If you lack permission on the linked map, the node shows **No access**.
@@ -159,6 +167,17 @@ You can link a map that is **not yet designated** as a placeholder first, and so
   - **no duplicate** end names
   - no invalid branching — plain nodes have a **single output** (multiple outputs only on Decision nodes)
 - Editing is possible only while the version is a draft (#Draft / #Rejected) and you hold the **checkout**. If someone else is editing or an approval is in progress, the canvas locks read-only (see the Getting Around manual for versions and approval).
+- The checkout request/transfer UI lives in the **Checkout** card of the Approval tab's **Approval workflow** panel and is interactive **only on a draft**. A rejected version shows no checkout UI — **Withdraw** returns it to draft and hands the checkout back to you automatically.
+- While a change that lowers your own permission is pending approval, checkout and submitting for approval are refused ("Your permission change is still pending approval."). Once the request is decided, refresh or switch versions to continue.
+
+### Running an approval from the Approval tab
+
+The approval process itself (who approves, publish and expiry rules) is covered in the Getting Around manual. What you see in the editor inspector, in short:
+
+- **Approval workflow panel** — each approver gets an **Approved / Pending / Rejected** tag pill; hovering a pill opens a tooltip with the decision time and comment. Hover or click an approver's name to open their person card. The panel also shows a progress pill (**n/m approved**), a **Waiting on** pill, the rejection reason line, and a bundled visibility pill ("Visibility change bundled → …"). Submission context (submitter, time, comment) appears only behind a hover icon ("Submitted by …"). The stepper at the top (**Submit → Review → Publish**) uses the same tag-pill style for its step labels.
+- **Comments on transitions** — the submit, approve, publish, and withdraw dialogs take an optional comment ("Add a comment (optional)"), and the reject dialog takes a reason (**Reason**). Approve and reject dialogs show the requester's submit comment (**Requester comment**) banner, and the submit dialog shows the latest rejection (**Previous rejection**) banner when there is one.
+- **Comment history** — the speech-bubble count button on a version card (hidden at zero) opens that version's comment history modal. **Right-click** a version card for **Go to this version** (goes through the switch-confirmation dialog while you're editing) and **View comments**.
+- **Rejection banner** — opening a rejected version shows an error-tinted banner at the top of the editor: a **Rejected** chip, the rejecter's pill, and the reason.
 
 ---
 
@@ -247,4 +266,4 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-*Business Process Map — Editing Maps · Updated 2026-07-19*
+*Business Process Map — Editing Maps · Updated 2026-08-14*

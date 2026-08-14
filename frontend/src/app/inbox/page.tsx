@@ -62,6 +62,10 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { ActivityDigest } from "@/components/activity-digest";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
+import {
+  findLatestSubmitComment,
+  RequesterCommentBanner,
+} from "@/components/version/requester-comment-banner";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
@@ -298,7 +302,7 @@ export default function InboxPage() {
         await decideCheckoutRequest(a.id, approve);
       } else {
         try {
-          await decideApprovalRequest(a.id, approve ? "approve" : "reject");
+          await decideApprovalRequest(a.id, approve ? "approve" : "reject", approve ? undefined : reason.trim() || undefined);
           if (a.title === "map_rename")
             pushToast(t(approve ? "inbox.toast.renameApproved" : "inbox.toast.renameRejected"));
           if (a.title === "sp_designation" && !approve)
@@ -338,6 +342,8 @@ export default function InboxPage() {
         headcount: spModal.detail.sp_headcount ?? "",
         url: spModal.detail.sp_url ?? "",
         urlLabel: spModal.detail.sp_url_label ?? "",
+        input: spModal.detail.sp_input ?? "",
+        output: spModal.detail.sp_output ?? "",
         description: spModal.detail.sp_description ?? "",
       }
     : null;
@@ -828,10 +834,14 @@ function ApprovalDetail({
   const [spDetail, setSpDetail] = useState<MapDetail | null>(null);
 
   const isVersion = approval.kind === "version_approval";
+  const isApprovalRequest = approval.kind === "approval_request";
   const versionId = approval.version_id;
   const isSpDesignation = approval.kind === "approval_request" && approval.title === "sp_designation";
 
-  // 버전 승인 — 승인자 현황(누가 승인/대기/반려) 조회
+  // 버전 승인 — 요청자(제출자)의 제출 코멘트. 승인 모달 배너로 공개.
+  const [submitComment, setSubmitComment] = useState<string | null>(null);
+
+  // 버전 승인 — 승인자 현황(누가 승인/대기/반려) + 제출 코멘트(맵 상세의 이벤트) 조회
   useEffect(() => {
     if (!isVersion || versionId === null) return;
     let alive = true;
@@ -840,10 +850,17 @@ function ApprovalDetail({
         if (alive) setWorkflow(data);
       })
       .catch(() => {});
+    getMap(approval.map_id)
+      .then((detail) => {
+        if (!alive) return;
+        const version = detail.versions.find((v) => v.id === versionId);
+        setSubmitComment(findLatestSubmitComment(version?.events));
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [isVersion, versionId]);
+  }, [isVersion, versionId, approval.map_id]);
 
   // sp_designation — 대상 맵 상세(게시본·sp_* 프리필). 실패는 조용히(버튼 비활성 유지)
   useEffect(() => {
@@ -1052,6 +1069,11 @@ function ApprovalDetail({
           icon={<Check size={28} strokeWidth={1.5} />}
           title={t("approval.approveConfirmTitle")}
           message={subtitle}
+          banner={
+            isVersion && submitComment ? (
+              <RequesterCommentBanner authorName={approval.requester} comment={submitComment} />
+            ) : undefined
+          }
           lines={isVersion ? approverLines : undefined}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
@@ -1070,13 +1092,18 @@ function ApprovalDetail({
           danger
           title={t("wf.rejectTitle")}
           message={subtitle}
+          banner={
+            isVersion && submitComment ? (
+              <RequesterCommentBanner authorName={approval.requester} comment={submitComment} />
+            ) : undefined
+          }
           lines={isVersion ? approverLines : undefined}
           input={
-            isVersion
+            isVersion || isApprovalRequest
               ? {
                   value: rejectReason,
                   onChange: setRejectReason,
-                  placeholder: t("wf.rejectReason"),
+                  placeholder: isVersion ? t("wf.rejectReason") : t("wf.commentPlaceholder"),
                 }
               : undefined
           }

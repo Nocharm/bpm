@@ -696,9 +696,32 @@ def test_draw_seed_only_graph_skips_keep_current(client: TestClient, monkeypatch
 
 
 def test_turn_prompt_includes_dept_catalog(client: TestClient, monkeypatch) -> None:
-    """턴의 인터뷰어 프롬프트에 eligible 부서 후보 목록이 주입된다 (실사용 피드백 2026-07-28)."""
+    """턴의 인터뷰어 프롬프트에 eligible 부서 후보 목록이 주입된다 (실사용 피드백 2026-07-28).
+
+    conftest의 owning.anchor는 active=False 의도 시드(공지 수신자 오염 방지)라 Task 7의
+    active 필터로 eligible 후보에서 빠진다 — 여기선 별도 active 직원으로 앵커 부서를 시딩한다.
+    """
     _enable_ai(monkeypatch)
     state = _iv_session(client)
+
+    async def _seed_active_anchor() -> None:
+        from app.models import Employee
+
+        async with SessionLocal() as session:
+            if await session.get(Employee, "owning.anchor.active") is None:
+                session.add(
+                    Employee(
+                        login_id="owning.anchor.active",
+                        name="Owning Anchor Active",
+                        source="local",
+                        active=True,
+                        org_l1="Owning Anchor Division",
+                        department="Owning Anchor Division",
+                    )
+                )
+                await session.commit()
+
+    asyncio.run(_seed_active_anchor())
     captured: dict = {}
 
     async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:

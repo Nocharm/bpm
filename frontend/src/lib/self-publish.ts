@@ -9,9 +9,13 @@ export function isSoleSelfApprover(approvers: string[], userId: string): boolean
 }
 
 // submit→approve→publish 순차 실행 — 마지막 publish 결과 반환(runTransition 계약과 동일).
+// toVisibility 지정 시 submit에 가시성 변경을 동봉(승인자 셀프 1인 체인에서도 가시성 변경 요청 가능).
 // 중간 실패는 그대로 전파해 호출부 토스트/재조회 경로를 태운다.
-export async function runSelfPublishChain(versionId: number): Promise<VersionSummary> {
-  await submitVersion(versionId);
+export async function runSelfPublishChain(
+  versionId: number,
+  toVisibility?: "public" | "private",
+): Promise<VersionSummary> {
+  await submitVersion(versionId, toVisibility);
   await approveVersion(versionId);
   return publishVersion(versionId);
 }

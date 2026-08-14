@@ -23,6 +23,7 @@ import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
 import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
 import { AiChatSettingsPanel } from "@/components/settings/ai-chat-settings-panel";
 import { AiPromptsPanel } from "@/components/settings/ai-prompts-panel";
+import { FrameworkPanel } from "@/components/admin/framework-panel";
 import { KbManagePanel } from "@/components/settings/kb-manage-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
@@ -41,7 +42,8 @@ type TabId =
   | "kb"
   | "aiChat"
   | "aiPrompts"
-  | "dashboard";
+  | "dashboard"
+  | "framework";
 type Access = "everyone" | "admin" | "sysadmin" | "dashboard";
 
 interface Category {
@@ -72,6 +74,12 @@ const CATEGORIES: Category[] = [
       { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
     ],
+  },
+  {
+    // 컨설턴트 업무 체계 카테고리 관리(Phase 2) — 트리 CRUD + 대량 임포트(임포트 UI는 Task 4)
+    labelKey: "admin.catFramework",
+    access: "sysadmin",
+    tabs: [{ id: "framework", labelKey: "framework.adminTab" }],
   },
   {
     labelKey: "admin.catDatabase",
@@ -242,6 +250,9 @@ export default function SettingsPage() {
               </p>
             ))}
           {current === "depts" && <DepartmentTable />}
+          {current === "framework" && (
+            <FrameworkPanel onToast={(message) => showToast({ id: genId(), message })} />
+          )}
           {current === "tables" && <TableViewer />}
           {current === "trash" && (
             <div className="flex flex-col gap-8">

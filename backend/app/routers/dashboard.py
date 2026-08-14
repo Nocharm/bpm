@@ -17,7 +17,6 @@ from app.models import (
     Comment,
     DashboardCoverageDept,
     DashboardPermission,
-    DeptInfo,
     Employee,
     LoginRecord,
     MapVersion,
@@ -26,6 +25,7 @@ from app.models import (
     UserGroup,
     VersionEvent,
 )
+from app.orgchart import load_dept_index
 from app.permissions.deps import require_dashboard_viewer
 from app.permissions.logic import belongs_to_department
 from app.schemas import (
@@ -166,9 +166,10 @@ async def _resolve_display_name(
         emp = await session.get(Employee, principal_id)
         return emp.name if emp else principal_id
     if principal_type == "department":
+        # 리프 세그먼트는 새니타이즈된 경로에서 옴 — name_ko 맵(동일 새니타이즈 키)으로 조회
         leaf = principal_id.rsplit("/", maxsplit=1)[-1]
-        info = await session.get(DeptInfo, leaf)
-        return info.korean_name if info and info.korean_name else leaf
+        index = await load_dept_index(session)
+        return index.name_ko_by_name.get(leaf) or leaf
     if principal_type == "group":
         group = await session.get(UserGroup, int(principal_id)) if principal_id.isdigit() else None
         return group.name if group else principal_id
@@ -322,10 +323,7 @@ async def get_dashboard_summary(
             )
         ).all()
     ]
-    korean = {
-        info.department: info.korean_name
-        for info in (await session.scalars(select(DeptInfo))).all()
-    }
+    korean = (await load_dept_index(session)).name_ko_by_name
     coverage_rows: list[DashboardCoverageRowOut] = []
     for path in dept_paths:
         owned = [

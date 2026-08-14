@@ -78,6 +78,12 @@ export interface MapSummary {
   // 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
   doc_imported_at?: string | null;
   doc_generated_at?: string | null;
+  // 컨설턴트 업무 체계 카테고리 연결 — null=미연결(레거시). category_path는 응답 시 서버가 조립(비영속) (Phase 2)
+  category_id?: number | null;
+  category_path?: string | null;
+  consultant_code?: string | null;
+  sp_input?: string | null;
+  sp_output?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -188,7 +194,10 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
-let devUser: string | null = null;
+// 부트 시 localStorage에서 즉시 시드 — 페이지 init의 setDevUser보다 먼저 도는 폴러
+// (InboxBadge 등)의 첫 요청이 기본 유저로 나가는 레이스 방지 (QA C-5).
+let devUser: string | null =
+  typeof window === "undefined" ? null : window.localStorage.getItem("bpm.devUser");
 
 export function setDevUser(loginId: string | null): void {
   devUser = loginId;
@@ -236,6 +245,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     // 서버 detail(검증 실패 사유 등)을 메시지에 포함 — 진단 용이
     const detail = await response.text().catch(() => "");
+    // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
+    console.error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`, detail);
     throw new ApiError(
       `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
       response.status,
@@ -298,8 +309,8 @@ export interface EligibleAssignees {
     korean_dept?: string;
   }[];
   departments: string[];
-  // 부서명 → 한글 부서명·부서장 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
-  dept_infos?: Record<string, { korean_name?: string; manager?: string }>;
+  // 부서명 → 한글 부서명 (dept_info 보유 부서만) — 부서 셀렉트 검색·한/영 표시
+  dept_infos?: Record<string, { korean_name?: string }>;
 }
 export function getEligibleAssignees(versionId: number): Promise<EligibleAssignees> {
   return request<EligibleAssignees>(`/versions/${versionId}/eligible-assignees`);
@@ -393,6 +404,8 @@ export interface SubprocessDesignationBody {
   headcount?: string;
   url?: string;
   url_label?: string;
+  input?: string;
+  output?: string;
   description?: string;
 }
 
@@ -667,6 +680,8 @@ export interface WorkflowState {
   pending_checkout_request?: PendingCheckoutRequest | null;
   // 미결 점유 요청 전체(요청자 복수)
   pending_checkout_requests?: PendingCheckoutRequest[];
+  // 이 버전과 함께 결정될 pending 가시성 변경(제출 시 번들) — R3 UI 대상, 타입만 선반영
+  bundled_visibility?: { from_visibility: string; to_visibility: string; requested_by: string } | null;
 }
 
 export interface Me {
@@ -714,29 +729,21 @@ export function listEmployees(): Promise<EmployeeRow[]> {
 export interface SyncSummary {
   scanned: number;
   upserted: number;
-  excluded: number;
-  // 전체 동기화에서 삭제된 스테일 ad 행 수(비활성·퇴사·제외 대상)
-  purged: number;
+  deactivated: number;
+  deleted: number;
+  skipped: number;
+  org_mismatches: number;
+  truncated_levels: number;
+  departments_upserted: number;
+  title_refreshed: number | null;
+  position_refreshed: number | null;
+  position_unmatched: number | null;
+  position_unmatched_sample: string[]; // 미매칭 EMPID 샘플(≤10) — 사번 포맷 진단
+  aborted_reason: string | null;
 }
 
 export function syncEmployees(): Promise<SyncSummary> {
   return request<SyncSummary>("/employees/sync", { method: "POST" });
-}
-
-export interface KoreanNamesImportSummary {
-  updated: number;
-  skipped: number;
-  unknown: string[];
-}
-
-export function importKoreanNames(
-  mode: "skip" | "overwrite",
-  entries: Record<string, { name: string; dept: string }>,
-): Promise<KoreanNamesImportSummary> {
-  return request<KoreanNamesImportSummary>("/employees/korean-names", {
-    method: "PUT",
-    body: JSON.stringify({ mode, entries }),
-  });
 }
 
 // ── 어드민 테이블 뷰어 (sysadmin 전용, 읽기전용) / Admin table viewer ──
@@ -780,16 +787,62 @@ export function getDbTable(name: string, query: TableQuery = {}): Promise<TableD
   );
 }
 
+// 전체 행 CSV 내보내기(페이징 없음) — text/csv 원문 그대로 반환, JSON 파싱 금지.
+// request()를 그대로 쓰지 않는 이유: request<T>는 항상 response.json()을 반환해 raw text와 계약이 다름 —
+// 베이스 URL·인증 헤더 규칙만 미러하는 별도 함수로 분리(기존 request의 다수 호출부 계약은 건드리지 않음).
+export async function exportDbTableCsv(
+  name: string,
+  query: Pick<TableQuery, "sort" | "order" | "q"> = {},
+): Promise<string> {
+  const params = new URLSearchParams();
+  if (query.sort) params.set("sort", query.sort);
+  if (query.order) params.set("order", query.order);
+  if (query.q) params.set("q", query.q);
+  const qs = params.toString();
+  const path = `/admin/tables/${encodeURIComponent(name)}/export${qs ? `?${qs}` : ""}`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
+    console.error(`API GET ${path} failed: ${response.status}`, detail);
+    throw new ApiError(
+      `API GET ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return response.text();
+}
+
 export function getWorkflowState(versionId: number): Promise<WorkflowState> {
   return request<WorkflowState>(`/versions/${versionId}/workflow`);
 }
 
-export function submitVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/submit`, { method: "POST" });
+export function submitVersion(
+  versionId: number,
+  toVisibility?: "public" | "private",
+  comment?: string,
+): Promise<VersionSummary> {
+  const body: Record<string, string> = {};
+  if (toVisibility) body.to_visibility = toVisibility;
+  if (comment) body.comment = comment;
+  return request<VersionSummary>(`/versions/${versionId}/submit`, {
+    method: "POST",
+    ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
+  });
 }
 
-export function approveVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/approve`, { method: "POST" });
+export function approveVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/approve`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
 export function rejectVersion(
@@ -802,12 +855,18 @@ export function rejectVersion(
   });
 }
 
-export function publishVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/publish`, { method: "POST" });
+export function publishVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/publish`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
-export function withdrawVersion(versionId: number): Promise<VersionSummary> {
-  return request<VersionSummary>(`/versions/${versionId}/withdraw`, { method: "POST" });
+export function withdrawVersion(versionId: number, comment?: string): Promise<VersionSummary> {
+  return request<VersionSummary>(`/versions/${versionId}/withdraw`, {
+    method: "POST",
+    ...(comment ? { body: JSON.stringify({ comment }) } : {}),
+  });
 }
 
 // 만료 버전 재게시 — 새 draft 반환 / Republish expired version (creates a new draft)
@@ -847,6 +906,8 @@ export interface MapPermission {
   principal_id: string;
   role: string;
   granted_by: string;
+  // 서버 진실 pending 마커 — 다른 유저가 낸 다운그레이드/제거 요청도 조회 즉시 보이도록 (session-local 아님)
+  pending_change?: { to_role: string | null; requested_by: string; request_id: number } | null;
 }
 
 // PATCH/DELETE 응답 봉투 — 다운그레이드/에디터제거는 즉시 적용 대신 pending 요청.
@@ -867,6 +928,7 @@ export interface ApprovalRequest {
   status: string;
   decided_by: string | null;
   decided_at: string | null;
+  decision_reason: string | null;
   created_at: string;
 }
 
@@ -933,6 +995,18 @@ export function requestVisibilityChange(
   });
 }
 
+// pending 가시성 요청 조회 — 설정 마운트 시 pending 마커 복원 (없으면 null).
+export function getPendingVisibilityRequest(
+  mapId: number,
+): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/visibility-requests/pending`);
+}
+
+// 본인 pending 승인 요청 철회 — permission_downgrade/visibility_change 전용 (204).
+export function withdrawApprovalRequest(requestId: number): Promise<void> {
+  return request<void>(`/approval-requests/${requestId}`, { method: "DELETE" });
+}
+
 // 맵의 승인 요청 목록 — collaborators 패널의 pending 다운그레이드 표시에 사용.
 export function listApprovalRequests(mapId: number): Promise<ApprovalRequest[]> {
   return request<ApprovalRequest[]>(`/maps/${mapId}/approval-requests`);
@@ -948,10 +1022,11 @@ export function listPendingApprovalRequests(): Promise<ApprovalRequest[]> {
 export function decideApprovalRequest(
   requestId: number,
   decision: "approve" | "reject",
+  reason?: string,
 ): Promise<ApprovalRequest> {
   return request<ApprovalRequest>(`/approval-requests/${requestId}/decide`, {
     method: "POST",
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({ decision, ...(reason ? { reason } : {}) }),
   });
 }
 
@@ -1013,6 +1088,10 @@ export interface AppSettings {
   ai_chat_max_messages_per_session: number; // 보존 상한 — 대화당 메시지 수
   ai_chat_retention_days: number; // 마지막 활동 후 보관 일수
   ai_access_disabled: boolean; // 관리자 런타임 AI 차단 — GPU 서버 점검용 (2026-07-30)
+  // 부서장으로 노출할 EDW 직책(FRNM) allowlist — /me manager_ids 산출 기준 (design 2026-08-11 §5)
+  exposed_positions: string[];
+  // employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
+  available_positions: string[];
   updated_by: string | null;
   updated_at: string | null;
 }
@@ -1028,6 +1107,7 @@ export function putAppSettings(patch: {
   ai_chat_max_messages_per_session?: number;
   ai_chat_retention_days?: number;
   ai_access_disabled?: boolean;
+  exposed_positions?: string[];
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",
@@ -1282,13 +1362,13 @@ export interface DirectoryUser {
   role?: string;     // admin | user — 로컬 로그인 피커 관리자 식별
   korean_name?: string; // 한글 이름 — 서버 기본 "" (member-card design 2026-07-09)
   korean_dept?: string; // 한글 부서명 — 피커 검색 키워드 파생 (picker-korean-search design 2026-07-09)
+  position?: string; // 노출 직책(exposed_positions allowlist로 서버가 필터) (design 2026-08-11 §5)
 }
 
 export interface DirectoryDept {
   id: string;        // org_path string (e.g. "Management Support Division/Procurement Office")
   name: string;      // leaf segment
   korean_name: string; // dept_info 조인(리프명 키) — 없으면 ""
-  manager: string;
 }
 
 export interface Directory {
@@ -1468,43 +1548,28 @@ export interface AdminDept {
   name: string;        // leaf segment
   org_levels: string[];
   korean_name: string; // dept_info 임포트값 — 없으면 ""
-  manager: string;
-}
-
-export interface DeptInfoImportSummary {
-  updated: number;
-  unknown: string[];
 }
 
 export interface DeptRemapItem {
   path: string;         // 현 조직에 없는 org_path (조직개편 잔재)
   map_grants: number;   // 이 경로를 참조하는 맵 부서 권한 수
   group_members: number; // 이 경로를 참조하는 그룹 부서 멤버 수
+  owning_maps: number;  // 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
 }
 
-/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버 집계. */
+/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버·오우닝 맵 집계. */
 export function getDeptRemap(): Promise<DeptRemapItem[]> {
   return request<DeptRemapItem[]>("/admin/dept-remap");
 }
 
-/** sysadmin 전용 — from_path 참조 전부를 현존 to_path로 일괄 이동(중복은 병합). */
+/** sysadmin 전용 — from_path 참조 전부(권한·그룹 멤버·오우닝)를 현존 to_path로 일괄 이동(중복은 병합). */
 export function postDeptRemap(
   fromPath: string,
   toPath: string,
-): Promise<{ map_grants: number; group_members: number }> {
+): Promise<{ map_grants: number; group_members: number; owning_maps: number }> {
   return request("/admin/dept-remap", {
     method: "POST",
     body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
-  });
-}
-
-/** sysadmin 전용 — 부서 한글명·부서장 일괄 등록 (키: 영문 리프 부서명, 빈 필드는 기존 보존). */
-export function importDeptInfo(
-  entries: Record<string, { korean_name: string; manager: string }>,
-): Promise<DeptInfoImportSummary> {
-  return request<DeptInfoImportSummary>("/admin/dept-info", {
-    method: "PUT",
-    body: JSON.stringify({ entries }),
   });
 }
 
@@ -2138,4 +2203,115 @@ export function deleteAiChatSession(sessionId: number): Promise<void> {
 
 export function getAiModels(): Promise<{ models: string[] }> {
   return request<{ models: string[] }>("/ai/models");
+}
+
+// ── 컨설턴트 업무 체계 카테고리 (Phase 2) ──────────────
+
+export interface CategoryNode {
+  id: number;
+  code: string;
+  name: string;
+  level: number;
+  sort_order: number;
+  child_count: number;
+  // 서브트리 누적(직속 아님) — backend가 역-레벨 순회로 산정 (Task 1)
+  map_count: number;
+}
+
+export interface CategoryMaps {
+  total: number;
+  hidden: number;
+  maps: MapSummary[];
+}
+
+// parentId 생략 시 루트(최상위 레벨) 자식 목록
+export function listCategoryNodes(parentId?: number): Promise<CategoryNode[]> {
+  const qs = parentId === undefined ? "" : `?parent_id=${parentId}`;
+  return request<CategoryNode[]>(`/categories/nodes${qs}`);
+}
+
+export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Promise<CategoryMaps> {
+  return request<CategoryMaps>(`/categories/${categoryId}/maps?offset=${offset}&limit=${limit}`);
+}
+
+// 조상 체인 루트→자신 — 캐스케이드 셀렉트를 기존 연결 카테고리로 시딩할 때 사용 (fix round 1 #2).
+export function getCategoryChain(categoryId: number): Promise<CategoryNode[]> {
+  return request<CategoryNode[]>(`/categories/${categoryId}/chain`);
+}
+
+// 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.
+export function putMapCategory(mapId: number, categoryId: number | null): Promise<MapDetail> {
+  return request<MapDetail>(`/maps/${mapId}/category`, {
+    method: "PUT",
+    body: JSON.stringify({ category_id: categoryId }),
+  });
+}
+
+// 체계 슬롯(category_id+consultant_code) 이양 — source→target, source는 해제. 양쪽 owner 필요(서버 가드).
+export function postFrameworkTransfer(
+  mapId: number,
+  toMapId: number,
+): Promise<{ from_map_id: number; to_map_id: number }> {
+  return request(`/maps/${mapId}/framework-transfer`, {
+    method: "POST",
+    body: JSON.stringify({ to_map_id: toMapId }),
+  });
+}
+
+// 카테고리 생성(sysadmin) — parent_id 미지정 시 루트(L1). code 미지정 시 서버가 `ui-{uuid8}` 자동 채번.
+export function createCategory(body: {
+  name: string;
+  parent_id?: number | null;
+  code?: string;
+}): Promise<CategoryNode> {
+  return request<CategoryNode>("/categories", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// 카테고리 부분 갱신(sysadmin) — 이름·이동(parent_id)·정렬. parent_id는 body에 키 자체가 있어야
+// "이동"으로 처리된다(서버 model_fields_set 판정) — 이동 없음이면 키를 아예 넣지 않는다.
+export function updateCategory(
+  id: number,
+  body: { name?: string; parent_id?: number | null; sort_order?: number },
+): Promise<CategoryNode> {
+  return request<CategoryNode>(`/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// 카테고리 삭제(sysadmin) — 자식/연결 맵이 있으면 서버가 409.
+export function deleteCategory(id: number): Promise<void> {
+  return request<void>(`/categories/${id}`, { method: "DELETE" });
+}
+
+export interface FrameworkImportRow {
+  code: string;
+  action: string;
+  detail: string;
+}
+
+export interface FrameworkImportResult {
+  applied: boolean;
+  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음) — created/updated/unchanged/error는
+  // backend ImportReport.counts() 미러, warning은 counts()가 제외하는 대신 라우터가 rows 전체
+  // (500행 캡 이전) 기준으로 별도 채운다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
+  summary: Record<string, number>;
+  rows: FrameworkImportRow[];
+  truncated: boolean;
+}
+
+// 웹 JSON 대량 임포트(sysadmin) — apply=false는 dry-run 미리보기, categories/maps는 CLI 임포터와 동일 raw 구조.
+export function importFramework(body: {
+  categories: unknown[];
+  maps: unknown[];
+  apply: boolean;
+  label?: string;
+}): Promise<FrameworkImportResult> {
+  return request<FrameworkImportResult>("/categories/import", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

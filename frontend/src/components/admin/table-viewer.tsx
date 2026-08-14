@@ -5,9 +5,11 @@
 // 데이터: GET /api/admin/tables(이름+행수), /api/admin/tables/{name}(서버측 정렬/필터/페이징).
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, Table2, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, Loader2, Table2, Trash2 } from "lucide-react";
 
-import { getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
+import { exportDbTableCsv, getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
+import { downloadCsv } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
 
 import { NotificationPurgeModal } from "./notification-purge-modal";
@@ -42,6 +44,7 @@ export function TableViewer() {
   const [filterInput, setFilterInput] = useState("");
   const [query, setQuery] = useState(""); // debounced filter applied to fetch
   const [refreshTick, setRefreshTick] = useState(0); // 퍼지 등 page 불변 갱신 강제 트리거 — setPage(1) no-op(이미 1) 대응
+  const [exporting, setExporting] = useState(false);
 
   // notifications 전용 기간 퍼지 — 다른 테이블에선 노출되지 않음 (selected === "notifications" 가드)
   const [purgeFrom, setPurgeFrom] = useState("");
@@ -64,12 +67,12 @@ export function TableViewer() {
         if (active) setTables(info);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [t]);
 
   // 필터 입력 디바운스 → query (+ page 1 리셋) / Debounce filter; reset to page 1.
   useEffect(() => {
@@ -108,7 +111,7 @@ export function TableViewer() {
         setError(null);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       })
       .finally(() => {
         loadingRef.current = false;
@@ -116,7 +119,7 @@ export function TableViewer() {
     return () => {
       active = false;
     };
-  }, [selected, page, sort, order, query, refreshTick]);
+  }, [selected, page, sort, order, query, refreshTick, t]);
 
   // 테이블 pill 선택 — 누적/정렬/필터 초기화 / Pick a table; reset accumulation, sort, filter.
   const selectTable = (name: string) => {
@@ -142,6 +145,20 @@ export function TableViewer() {
     }
     setPage(1);
     setLoadedPage(0);
+  };
+
+  // 현재 정렬/필터로 전체 행 CSV 내보내기(페이징 없음) / Export all rows with current sort+filter.
+  const onExport = async () => {
+    if (!selected || exporting) return;
+    setExporting(true);
+    try {
+      const csv = await exportDbTableCsv(selected, { sort: sort ?? undefined, order, q: query || undefined });
+      downloadCsv(`${selected}.csv`, csv);
+    } catch (err) {
+      setError(humanizeApiError(err, t));
+    } finally {
+      setExporting(false);
+    }
   };
 
   // 하단 80px 도달 시 다음 페이지 append (loadingRef로 중복 방지) / Load next page near bottom.
@@ -215,6 +232,20 @@ export function TableViewer() {
                 value={filterInput}
                 onChange={(e) => setFilterInput(e.target.value)}
               />
+              <button
+                type="button"
+                data-id="table-viewer-export-csv"
+                disabled={exporting}
+                onClick={onExport}
+                className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-ink-secondary hover:bg-surface-alt hover:text-ink disabled:opacity-40"
+              >
+                {exporting ? (
+                  <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />
+                ) : (
+                  <Download size={14} strokeWidth={1.5} />
+                )}
+                {t("admin.exportCsv")}
+              </button>
               {total > 0 && (
                 <span className="shrink-0 text-fine text-ink-tertiary">
                   {t("db.rowsTotalShown", { total, loaded })}

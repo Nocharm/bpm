@@ -13,19 +13,24 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessMap, UserGroup, UserGroupMember, _now
+from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
+from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
+    assert_map_role,
     get_effective_role,
     get_eligible_users,
     get_user_active_group_ids,
 )
 from app.permissions.deps import require_map_role
+from app.routers.categories import build_category_paths
 from app.routers.versions import clone_graph
 from app.schemas import (
     ApprovalRequestOut,
     DirectoryUserOut,
     EligibleApproverOut,
+    FrameworkTransferIn,
+    MapCategoryIn,
     MapCopy,
     MapCreate,
     MapDetailOut,
@@ -94,27 +99,12 @@ async def _assert_unique_name(
 
 
 async def _assert_known_department(session: AsyncSession, dept_path: str) -> None:
-    """오우닝 부서는 실제 조직 경로여야 한다 — 직원 org 레벨의 전 prefix와 대조, 아니면 422.
+    """오우닝 부서는 실제 조직 경로여야 한다 — resolver 유효 경로 프리픽스와 대조, 아니면 422.
 
-    directory.py의 부서 목록과 같은 규약(각 깊이 슬라이스의 "/" 조인). active 여부는 무관.
+    피커(directory)와 같은 소스(orgchart.load_valid_org_prefixes) — org 컬럼 인라인 조합을 쓰면
+    체인 해석과 어긋나 피커에서 고른 값이 여기서 거부된다 (9910 검증 적발). active 여부는 무관.
     """
-    rows = (
-        await session.execute(
-            select(
-                Employee.org_l1,
-                Employee.org_l2,
-                Employee.org_l3,
-                Employee.org_l4,
-                Employee.org_l5,
-            )
-        )
-    ).all()
-    known: set[str] = set()
-    for levels in rows:
-        parts = [lv for lv in levels if lv]
-        for i in range(1, len(parts) + 1):
-            known.add("/".join(parts[:i]))
-    if dept_path not in known:
+    if dept_path not in await load_valid_org_prefixes(session):
         raise HTTPException(status_code=422, detail=f"unknown department: {dept_path}")
 
 
@@ -136,6 +126,14 @@ async def list_maps(
         ).all()
     )
     is_admin = logic.is_sysadmin(user)
+    # 카테고리 트리 전체를 1회 로드(수천 행) → id별 "L1/.../연결노드" 경로 dict (design 2026-08-08)
+    category_paths = build_category_paths(
+        (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            )
+        ).all()
+    )
     # 맵별 최신 버전(최대 id) 상태·id — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
     latest_status: dict[int, str] = {}
     latest_vid: dict[int, int] = {}
@@ -211,6 +209,7 @@ async def list_maps(
         m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0
         m.member_count = member_count.get(m.id, 0)
         m.owner_name = owner_name.get(m.created_by) if m.created_by else None
+        m.category_path = category_paths.get(m.category_id) if m.category_id else None
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
@@ -219,9 +218,7 @@ async def list_maps(
 
     emp = await session.get(Employee, user)
     emp_org_path = (
-        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-        if emp is not None
-        else ""
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
     )
     # 사용자에게 걸린 권한 행 전체(맵별로 묶어 메모리 판정)
     perm_rows = (
@@ -416,15 +413,14 @@ async def list_eligible_approvers(
 ) -> list[EligibleApproverOut]:
     """승인자 지정 후보 — 맵 조회권한(viewer+) 보유 직원만 (AP). 담당자 후보와 동일 자격."""
     eligible = await get_eligible_users(session, map_id)
+    dept_index = await load_dept_index(session)  # 다수 루프 — 인덱스 1회 로드 후 재사용
     return [
         EligibleApproverOut(
             id=e.login_id,
             name=e.name or e.login_id,
             department=e.department or "",
             # 소속 경로(센터/부서/팀/그룹/파트) — 승인자 카드 표시용 (ST)
-            org_path=logic.org_path(
-                e.org_l1, e.org_l2, e.org_l3, e.org_l4, e.org_l5, e.department or ""
-            ),
+            org_path=resolve_org_path(e, dept_index),
             korean_name=e.korean_name,
             korean_dept=e.korean_dept,
         )
@@ -488,31 +484,39 @@ async def list_editors(
 
         if dept_patterns:
             # department 멤버: 모든 직원의 org_path로 판정 (belongs_to_department 재사용)
-            all_emps = list((await session.scalars(select(Employee))).all())
+            # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
+            all_emps = list(
+                (await session.scalars(select(Employee).where(Employee.active.is_(True)))).all()
+            )
+            dept_index = await load_dept_index(session)  # 다수 루프 — 인덱스 1회 로드 후 재사용
             for emp in all_emps:
-                org = logic.org_path(
-                    emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department or ""
-                )
+                org = resolve_org_path(emp, dept_index)
                 if any(logic.belongs_to_department(org, d) for d in dept_patterns):
                     login_ids.add(emp.login_id)
 
     if not login_ids:
         return []
 
+    # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
     emp_map: dict[str, Employee] = {
         e.login_id: e
         for e in (
-            await session.scalars(select(Employee).where(Employee.login_id.in_(login_ids)))
+            await session.scalars(
+                select(Employee).where(
+                    Employee.active.is_(True), Employee.login_id.in_(login_ids)
+                )
+            )
         ).all()
     }
     return [
         DirectoryUserOut(
             id=lid,
-            name=emp_map[lid].name if lid in emp_map else lid,
-            department=emp_map[lid].department or "" if lid in emp_map else "",
-            korean_name=emp_map[lid].korean_name if lid in emp_map else "",
+            name=emp_map[lid].name,
+            department=emp_map[lid].department or "",
+            korean_name=emp_map[lid].korean_name,
         )
         for lid in sorted(login_ids)
+        if lid in emp_map  # 퇴직자·소멸 계정은 점유권 이전 후보에서 제외 (design 2026-08-10 §7)
     ]
 
 
@@ -535,6 +539,15 @@ async def get_map(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
     found_map.my_role = await get_effective_role(session, user, map_id)
+    if found_map.category_id is not None:
+        category_paths = build_category_paths(
+            (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                )
+            ).all()
+        )
+        found_map.category_path = category_paths.get(found_map.category_id)
     return found_map
 
 
@@ -902,6 +915,87 @@ async def set_owning_department(
 
 
 @router.put(
+    "/{map_id}/category",
+    response_model=MapDetailOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def set_map_category(
+    map_id: int,
+    payload: MapCategoryIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> ProcessMap:
+    """체계 카테고리 연결/해제 — 모든 레벨 허용, null=해제. owner/sysadmin 전용 (design 2026-08-08)."""
+    found_map = await session.get(
+        ProcessMap,
+        map_id,
+        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+    )
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if payload.category_id is not None:
+        category = await session.get(ProcessCategory, payload.category_id)
+        if category is None:
+            raise HTTPException(
+                status_code=404, detail=f"category {payload.category_id} not found"
+            )
+    found_map.category_id = payload.category_id
+    await session.commit()
+    await session.refresh(found_map, attribute_names=["versions"])
+    for version in found_map.versions:
+        await session.refresh(version, attribute_names=["events"])
+    found_map.my_role = await get_effective_role(session, user, map_id)
+    if found_map.category_id is not None:
+        category_paths = build_category_paths(
+            (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                )
+            ).all()
+        )
+        found_map.category_path = category_paths.get(found_map.category_id)
+    return found_map
+
+
+@router.post(
+    "/{map_id}/framework-transfer",
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def transfer_framework_slot(
+    map_id: int,
+    payload: FrameworkTransferIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> dict[str, int]:
+    """체계 슬롯(category_id+consultant_code)을 source→target으로 이전, source는 해제한다.
+
+    가드: sysadmin이거나 두 맵 모두의 owner (design 2026-08-08). 알림 없음 — 최소 스코프.
+    """
+    source = await session.get(ProcessMap, map_id)
+    if source is None or source.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    target = await session.get(ProcessMap, payload.to_map_id)
+    if target is None or target.deleted_at is not None:
+        raise HTTPException(
+            status_code=404, detail=f"map {payload.to_map_id} not found"
+        )
+    # source의 owner 여부는 경로 의존성(require_map_role)이 이미 검증 — target은 별도 검증
+    await assert_map_role(session, user, payload.to_map_id, "owner")
+    if source.category_id is None:
+        raise HTTPException(status_code=409, detail="source map has no framework slot")
+    if target.category_id is not None or target.consultant_code is not None:
+        raise HTTPException(
+            status_code=409, detail="target map already has a framework slot"
+        )
+    target.category_id = source.category_id
+    target.consultant_code = source.consultant_code
+    source.category_id = None
+    source.consultant_code = None
+    await session.commit()
+    return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
+
+
+@router.put(
     "/{map_id}/subprocess-designation",
     response_model=MapOut,
     dependencies=[Depends(require_map_role("owner"))],
@@ -938,6 +1032,8 @@ async def designate_subprocess(
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     found_map.sp_description = payload.description or None
+    found_map.sp_input = payload.input or None
+    found_map.sp_output = payload.output or None
     found_map.sp_changed_by = user
     found_map.sp_changed_at = now_kst()
     if was_new:

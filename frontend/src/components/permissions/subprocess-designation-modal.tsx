@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ParamInput } from "@/components/param-input";
@@ -26,6 +27,8 @@ export interface DesignationForm {
   headcount: string;
   url: string;
   urlLabel: string;
+  input: string;
+  output: string;
   description: string;
 }
 
@@ -70,12 +73,12 @@ export function SubprocessDesignationModal({
         setPreviews(next);
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, [publishedVersionId]);
+  }, [publishedVersionId, t]);
 
   // placeholder는 표시 전용(저장 안 됨) — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김
   function getPreviewText(field: SpParamField): string | undefined {
@@ -94,7 +97,7 @@ export function SubprocessDesignationModal({
       const total = sumParamField(graphRef.current, field);
       setForm((prev) => ({ ...prev, [field]: total }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
     } finally {
       setSumming(false);
     }
@@ -114,11 +117,13 @@ export function SubprocessDesignationModal({
         headcount: form.headcount,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
+        input: form.input.trim(),
+        output: form.output.trim(),
         description: form.description.trim(),
       });
       onSaved(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(humanizeApiError(err, t));
       setSaving(false);
     }
   }
@@ -204,6 +209,24 @@ export function SubprocessDesignationModal({
               value={form.urlLabel}
               disabled={form.url.trim() === ""}
               onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.input")}</span>
+            <input
+              data-id="subprocess-designation-input"
+              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              value={form.input}
+              onChange={(e) => setForm((prev) => ({ ...prev, input: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.output")}</span>
+            <input
+              data-id="subprocess-designation-output"
+              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              value={form.output}
+              onChange={(e) => setForm((prev) => ({ ...prev, output: e.target.value }))}
             />
           </div>
           <div className="flex flex-col gap-1 border-t border-divider py-1">

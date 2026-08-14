@@ -81,6 +81,12 @@ services:
       SYSTEM_ADMIN_LOGIN_IDS: ${SYSTEM_ADMIN_LOGIN_IDS:-}
       # BPM 시스템 관리자 loginId(콤마 구분) — 누락 시 서버에 sysadmin 부재(auth ON에선 전원 비관리자)
       BPM_SYSADMINS: ${BPM_SYSADMINS:-}
+      # 사내 n8n HR 웹훅 동기화 (design 2026-08-10) — 비우면 동기화 비활성(.env로 주입, 시크릿 포함)
+      N8N_HR_URL: ${N8N_HR_URL:-}
+      N8N_HR_TOKEN: ${N8N_HR_TOKEN:-}
+      N8N_POSITION_URL: ${N8N_POSITION_URL:-}
+      HR_SYNC_INTERVAL_HOURS: ${HR_SYNC_INTERVAL_HOURS:-24}
+      HR_SYNC_DELETE_CAP_PCT: ${HR_SYNC_DELETE_CAP_PCT:-20}
     depends_on:
       db:
         condition: service_healthy

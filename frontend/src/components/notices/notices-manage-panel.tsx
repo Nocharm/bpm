@@ -9,6 +9,7 @@ import { deleteNotice, listNoticesManage, type NoticeItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { ExportCsvButton } from "@/components/admin/export-csv-button";
 import { MarkdownView } from "@/components/markdown-view";
 import { Pagination } from "@/components/pagination";
 import { Tooltip } from "@/components/tooltip";
@@ -91,6 +92,22 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
   const safePage = Math.min(page, pageCount);
   const pageItems = notices.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
+  // 화면 표와 동일 컬럼·값(같은 formatter) — 페이징 무관 전체 notices 기준
+  const getExportRows = (): string[][] => [
+    [
+      t("noticeAdmin.colStatus"),
+      t("noticeAdmin.colTitle"),
+      t("noticeAdmin.colImportance"),
+      t("noticeAdmin.colPeriod"),
+    ],
+    ...notices.map((n) => [
+      t(STATUS_LABEL[deriveStatus(n, nowMs)]),
+      n.title,
+      t(n.importance === "important" ? "notices.filterImportant" : "notices.filterNormal"),
+      `${dateOnly(n.starts_at)} ~ ${n.ends_at ? dateOnly(n.ends_at) : t("notices.unlimited")}`,
+    ]),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
@@ -100,14 +117,22 @@ export function NoticesManagePanel({ onToast }: { onToast: (message: string) => 
             {t("noticeAdmin.summary", { total: notices.length, active: live })}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing("new")}
-          className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-        >
-          <Plus size={16} strokeWidth={1.5} />
-          {t("noticeAdmin.new")}
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportCsvButton
+            dataId="notices-export-csv"
+            filename={`bpm-notices-${new Date().toISOString().slice(0, 10)}.csv`}
+            getRows={getExportRows}
+            disabled={notices.length === 0}
+          />
+          <button
+            type="button"
+            onClick={() => setEditing("new")}
+            className="inline-flex items-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+          >
+            <Plus size={16} strokeWidth={1.5} />
+            {t("noticeAdmin.new")}
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-md border border-hairline">

@@ -91,6 +91,28 @@ class AiChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class ProcessCategory(Base):
+    """컨설턴트 체계 카테고리(L1~L5) 트리 — code 기준 멱등 업서트, 빈 카테고리도 행으로 존재.
+
+    설계: docs/design/2026-08-08-consultant-hierarchy-design.md §2.1
+    """
+
+    __tablename__ = "process_categories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), unique=True)
+    name: Mapped[str] = mapped_column(String(300))
+    level: Mapped[int] = mapped_column(Integer)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_categories.id"), default=None
+    )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class ProcessMap(Base):
     __tablename__ = "process_maps"
 
@@ -148,6 +170,16 @@ class ProcessMap(Base):
     doc_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 컨설턴트 체계 (design 2026-08-08) — 체계 소속 판정=category_id 존재, 출처=consultant_code.
+    # category_id는 모든 레벨 허용(리프=L6 업무 맵, 비-리프=오버뷰 맵 대표).
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_categories.id"), default=None
+    )
+    # L6 멱등 업서트 키 — 임포트된 맵만 non-null. 레거시 DB는 유니크 제약 없이 앱 계층에서 보장.
+    consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
+    # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
+    sp_input: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_output: Mapped[str | None] = mapped_column(Text, default=None)
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"
@@ -449,7 +481,7 @@ class Employee(Base):
     login_id: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), default="")
     title: Mapped[str] = mapped_column(String(100), default="")
-    source: Mapped[str] = mapped_column(String(10), default="ad")  # ad | local
+    source: Mapped[str] = mapped_column(String(10), default="ad")  # ad | local | hr
     role: Mapped[str] = mapped_column(String(10), default="user")  # admin | user
     org_l1: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l2: Mapped[str | None] = mapped_column(String(200), default=None)
@@ -457,9 +489,12 @@ class Employee(Base):
     org_l4: Mapped[str | None] = mapped_column(String(200), default=None)
     org_l5: Mapped[str | None] = mapped_column(String(200), default=None)
     department: Mapped[str] = mapped_column(String(200), default="")
-    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2; email from mail attr.
+    # AD-derived fields (Task 2) — active from userAccountControl bit 0x2.
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    email: Mapped[str] = mapped_column(String(200), default="")
+    # HR deptCode — departments.dept_code 느슨 참조 (design 2026-08-10 §3). AD 시절 행은 NULL.
+    dept_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    # EDW 직책(FRNM) — 부서장 목록 행만, 그 외 NULL. AD employeeNumber 매핑으로 갱신 (설계 2026-08-11 §4)
+    position: Mapped[str | None] = mapped_column(String(100), default=None)
     # 한글이름·한글그룹 — AD 미제공. 어드민 JSON 임포트로만 채운다(spec 2026-07-09). sync 미간섭.
     korean_name: Mapped[str] = mapped_column(String(200), default="")
     korean_dept: Mapped[str] = mapped_column(String(200), default="")
@@ -469,14 +504,19 @@ class Employee(Base):
     )
 
 
-class DeptInfo(Base):
-    """부서 부가정보 — 영문 부서명(리프) 키. AD 미제공 필드(한글 부서명·부서장), 어드민 JSON 임포트로만 채운다."""
+class Department(Base):
+    """HR 조직도 미러 — kind=departments 응답 그대로, dept_code 키.
 
-    __tablename__ = "dept_info"
+    이번 범위 소비처 없음(조직도 트리 후속 기반). 설계: 2026-08-10-hr-webhook-directory-design.md §3.
+    """
 
-    department: Mapped[str] = mapped_column(String(200), primary_key=True)
-    korean_name: Mapped[str] = mapped_column(String(200), default="")
-    manager: Mapped[str] = mapped_column(String(200), default="")
+    __tablename__ = "departments"
+
+    dept_code: Mapped[str] = mapped_column(String(100), primary_key=True)
+    parent_dept_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    level: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(300), default="")
+    name_ko: Mapped[str] = mapped_column(String(300), default="")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
     )
@@ -517,6 +557,8 @@ class ApprovalRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 거절 사유(선택) — 결정 코멘트. 요청 내용(payload)과 분리 보관 (spec 2026-08-14)
+    decision_reason: Mapped[str | None] = mapped_column(String(500), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

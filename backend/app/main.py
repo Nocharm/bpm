@@ -1,5 +1,7 @@
 """FastAPI app entrypoint — routes are mounted under /api (nginx pass-through)."""
 
+import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -7,19 +9,21 @@ from fastapi import Depends, FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.app_settings import is_ai_access_enabled
+from app.app_settings import get_exposed_positions, is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
-from app.db import get_session, init_models
-from app.models import DeptInfo, Employee, LoginRecord
+from app.db import SessionLocal, get_session, init_models
+from app.models import Employee, LoginRecord
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions.access import can_view_dashboard_db
-from app.permissions.logic import is_sysadmin, org_path
+from app.permissions.logic import is_sysadmin
 from app.routers import (
     admin,
     ai,
     ai_prompts,
     ai_sessions,
     app_settings,
+    categories,
     embed,
     approvers,
     checkout,
@@ -44,6 +48,27 @@ from app.routers import (
 from app.schemas import MeOut
 from app.settings import settings
 
+logger = logging.getLogger(__name__)
+
+
+async def _run_hr_sync_loop() -> None:
+    """내장 HR 동기화 스케줄러 — sleep-first(첫 자동 실행은 1주기 후, 배포 직후 실동기화는 수동 절차 §9)."""
+    from app.hr import service as hr_service
+
+    interval = settings.hr_sync_interval_hours * 3600
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            async with SessionLocal() as session:
+                summary = await hr_service.run_full_sync(session)
+                logger.info("scheduled HR sync: %s", summary)
+        except hr_service.SyncTooSoon:
+            pass  # 수동 sync 직후 겹침 — 다음 주기로
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001 -- 주기 실패가 프로세스를 죽이면 안 됨
+            logger.exception("scheduled HR sync failed — retrying next interval")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -51,11 +76,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 로컬(인증 OFF)은 임시 유저 5명 시드 — role별 테스트용
     if not settings.auth_enabled:
         from app.ad.service import seed_local_employees
-        from app.db import SessionLocal
 
         async with SessionLocal() as session:
             await seed_local_employees(session)
+    hr_task: asyncio.Task | None = None
+    if settings.hr_enabled and settings.hr_sync_interval_hours > 0:
+        hr_task = asyncio.create_task(_run_hr_sync_loop())
     yield
+    if hr_task is not None:
+        hr_task.cancel()
 
 
 app = FastAPI(title="BPM API", lifespan=lifespan)
@@ -64,6 +93,7 @@ app.include_router(ai.router)
 app.include_router(ai_sessions.router)
 app.include_router(app_settings.router)
 app.include_router(ai_prompts.router)
+app.include_router(categories.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
 app.include_router(versions.router)
@@ -96,12 +126,14 @@ async def get_me(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MeOut:
-    # 인증 ON + LDAP 설정 시 로그인 시점 1인 동기화 (로컬은 skip)
-    if settings.auth_enabled and settings.ldap_enabled:
-        from app.ad.service import sync_one
+    # 인증 ON + HR 웹훅 설정 시 로그인 시점 1인 동기화 — 하루 1회 스로틀은 서비스가 담당 (design §6)
+    if settings.auth_enabled and settings.hr_enabled:
+        from app.hr.service import sync_one
 
         await sync_one(session, login_id)
     emp = await session.get(Employee, login_id)
+    # departments 체인 우선 해석 — Task 4의 manager 체인도 같은 인덱스를 재사용한다.
+    dept_index = await load_dept_index(session)
     # 로그인/활동 기록 — 현황조사용. /me는 앱 로드(새 탭·새로고침·토큰갱신)마다 호출되므로
     # 하루 1건으로 중복제거(KST 기준 자정 이후 기록 없을 때만 추가) = "그날 접속" 단위.
     day_start = now_kst().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -113,25 +145,32 @@ async def get_me(
     if already is None:
         session.add(LoginRecord(login_id=login_id, name=emp.name if emp else None))
         await session.commit()
-    # 내 상위 부서장 체인 — org 레벨(리프→루트) 순으로 dept_info.manager 수집, 본인·빈값 제외
+    # 나의 관리자 — 부서 체인(리프→루트)의 노출 직책 보유자 (설계 2026-08-11 §5)
     manager_ids: list[str] = []
-    if emp:
-        level_names = [
-            lv for lv in (emp.org_l5, emp.org_l4, emp.org_l3, emp.org_l2, emp.org_l1) if lv
-        ]
-        if level_names:
-            infos = {
-                d.department: d.manager
-                for d in (
-                    await session.scalars(
-                        select(DeptInfo).where(DeptInfo.department.in_(level_names))
+    if emp and emp.dept_code and emp.dept_code in dept_index.by_code:
+        chain_codes: list[str] = []
+        cur: str | None = emp.dept_code
+        while cur is not None and cur in dept_index.by_code and cur not in chain_codes and len(chain_codes) < 15:
+            chain_codes.append(cur)
+            cur = dept_index.by_code[cur][1]
+        exposed = set(await get_exposed_positions(session))
+        if exposed:
+            leader_rows = (
+                await session.execute(
+                    select(Employee.login_id, Employee.dept_code).where(
+                        Employee.dept_code.in_(chain_codes),
+                        Employee.position.in_(exposed),
+                        Employee.active.is_(True),
                     )
-                ).all()
-            }
-            for name in level_names:
-                manager = infos.get(name, "")
-                if manager and manager != login_id and manager not in manager_ids:
-                    manager_ids.append(manager)
+                )
+            ).all()
+            leaders_by_code: dict[str, list[str]] = {}
+            for lid, dcode in leader_rows:
+                leaders_by_code.setdefault(dcode, []).append(lid)
+            for code in chain_codes:
+                for lid in sorted(leaders_by_code.get(code, [])):
+                    if lid != login_id and lid not in manager_ids:
+                        manager_ids.append(lid)
     return MeOut(
         username=login_id,
         ai_enabled=await is_ai_access_enabled(session),  # env AND 관리자 차단 플래그
@@ -141,11 +180,7 @@ async def get_me(
         role=emp.role if emp else "user",
         department=emp.department if emp else "",
         # 부서 소속 판정용 org_path(루트→리프) — 프론트 멤버 하이라이트(HM-2)
-        org_path=(
-            org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-            if emp
-            else ""
-        ),
+        org_path=resolve_org_path(emp, dept_index) if emp else "",
         is_sysadmin=is_sysadmin(login_id),
         can_view_dashboard=await can_view_dashboard_db(session, login_id),
         manager_ids=manager_ids,

@@ -17,6 +17,7 @@ from app.models import (
     UserGroup,
     UserGroupMember,
 )
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 
 
@@ -64,9 +65,7 @@ async def get_effective_role(
 
     emp = await session.get(Employee, login_id)
     emp_org_path = (
-        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-        if emp is not None
-        else ""
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
     )
 
     perm_rows = (
@@ -125,7 +124,14 @@ async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employe
     데이터(grants·approvers·group 멤버십)는 1회씩만 로드하고 직원별로 순수 effective_role 재사용.
     """
     found_map = await session.get(ProcessMap, map_id)
-    employees = list((await session.scalars(select(Employee).order_by(Employee.name))).all())
+    # 퇴직자(active=false) 제외 — HR 전환 후 행이 잔류 (design 2026-08-10 §7)
+    employees = list(
+        (
+            await session.scalars(
+                select(Employee).where(Employee.active.is_(True)).order_by(Employee.name)
+            )
+        ).all()
+    )
     if found_map is not None and found_map.visibility == "public":
         return employees
 
@@ -157,11 +163,10 @@ async def get_eligible_users(session: AsyncSession, map_id: int) -> list[Employe
             .where(UserGroup.status == "active")
         )
     ).all()
+    dept_index = await load_dept_index(session)
     eligible: list[Employee] = []
     for emp in employees:
-        emp_org_path = logic.org_path(
-            emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department
-        )
+        emp_org_path = resolve_org_path(emp, dept_index)
         group_ids: set[str] = set()
         for gid, member_type, member_id in member_rows:
             if member_type == "user" and member_id == emp.login_id:
@@ -190,9 +195,7 @@ async def can_view_dashboard_db(session: AsyncSession, login_id: str) -> bool:
 
     emp = await session.get(Employee, login_id)
     emp_org_path = (
-        logic.org_path(emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5, emp.department)
-        if emp is not None
-        else ""
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
     )
     rows = (
         await session.execute(

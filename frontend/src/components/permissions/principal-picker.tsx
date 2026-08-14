@@ -3,12 +3,14 @@
 // 협업자 추가용 피커 — 사용자/부서/그룹을 초성 포함 검색 후 선택 /
 // Principal picker: search users/departments/groups (with hangul chosung) and select one.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Building2, Search, User, Users, X } from "lucide-react";
 
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
+import { deptLeaf, DeptLevelIcon } from "@/components/maps/dept-level-icon";
+import { buildDeptBrowseRows, type DeptBrowseRow } from "@/lib/dept-browse";
 import { computeDropdownPlacement, type DropdownPlacement } from "@/lib/dropdown-placement";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
@@ -23,8 +25,6 @@ export interface PrincipalOption {
   department?: string;
   /** 한글명 — 유저는 korean_name, 부서는 dept_info 확정 한글 부서명. 표시 토글·검색 겸용 */
   koreanName?: string;
-  /** 부서 항목 전용 — 부서장(검색 키워드, 표시 없음) */
-  manager?: string;
   /** 부서 항목 전용 — 소속 유저들의 distinct 한글부서(검색 키워드) */
   koreanKeywords?: string[];
 }
@@ -41,11 +41,14 @@ interface PrincipalPickerProps {
   deptKoreanKeywords?: Map<string, string[]>;
   /** 브라우즈(빈 검색) 시 내 상위 부서장들을 맨 위로 — 승인자 피커용. 검색 랭킹은 불변. */
   managersFirst?: boolean;
-  /** 브라우즈(빈 검색) 시 내 소속 부서 체인을 맨 위로(작은 단위=깊은 org_path 먼저) — 오우닝 부서 피커용. 검색 랭킹은 불변. */
-  myDeptsFirst?: boolean;
+  /** 부서 전용 피커의 브라우즈를 조직도 트리로 — 내 체인 최대 3 고정 + 들여쓰기 DFS (오우닝 피커용). */
+  deptTreeBrowse?: boolean;
   /** 빈 검색(브라우즈) 시 최상단 고정할 user principalId — 오우닝 부서 리더 노출용. 검색 랭킹은 불변. */
   pinnedIds?: Set<string>;
-  onSelect: (option: PrincipalOption) => void;
+  /** 클릭 좌표(마우스 경로)를 함께 전달 — Enter 경로는 생략(undefined), 소비측은 입력창 rect로 폴백. */
+  onSelect: (option: PrincipalOption, coords?: { x: number; y: number }) => void;
+  /** `${principalType}:${principalId}` — 일치하는 옵션 행에 선택 효과(팝오버가 열린 동안 어떤 이름이 눌렸는지 표시). */
+  highlightId?: string | null;
 }
 
 // 피커가 제안하는 후보 목록 / Build candidate list from seed data.
@@ -70,7 +73,6 @@ function buildOptions(
     principalId: d.id,
     displayName: d.name,
     koreanName: d.korean_name ?? "",
-    manager: d.manager ?? "",
     koreanKeywords: deptKoreanKeywords?.get(d.id) ?? [],
   }));
   const groupOpts: PrincipalOption[] = groups
@@ -93,9 +95,10 @@ export function PrincipalPicker({
   userDepartments,
   deptKoreanKeywords,
   managersFirst,
-  myDeptsFirst,
+  deptTreeBrowse,
   pinnedIds,
   onSelect,
+  highlightId,
 }: PrincipalPickerProps) {
   const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
@@ -143,6 +146,8 @@ export function PrincipalPicker({
   // 검색 한정: 유저=이름+아이디 / 부서·그룹=부서명·그룹명(displayName)만.
   // 유저를 소속 부서/그룹으로 매칭하지 않음 — "AI dev" 검색 시 그룹원들이 결과를 채워
   // 정작 'AI dev' 그룹이 유저 무더기에 묻히는 노이즈 방지. 한글그룹명은 부서 항목만 매칭.
+  // deptTreeBrowse 브라우즈의 행 메타(들여쓰기 depth·pinned) — 렌더에서 principalId로 조회.
+  const deptBrowseRows = new Map<string, DeptBrowseRow>();
   const hits = query.trim()
     ? filterByQuery(all, query, (o) =>
         o.principalType === "user"
@@ -154,41 +159,37 @@ export function PrincipalPicker({
           : [
               { field: "name", text: o.displayName },
               ...(o.koreanName ? [{ field: "koreanName", text: o.koreanName }] : []),
-              ...(o.manager ? [{ field: "manager", text: o.manager }] : []),
               ...(o.koreanKeywords ?? []).map((k) => ({ field: "koreanDept", text: k })),
             ],
       )
-    : (() => {
-        const browse = managersFirst
-          ? sortManagersFirst(
-              all,
-              (o) => (o.principalType === "user" ? o.principalId : null),
-              managerIds,
-            )
-          : myDeptsFirst && me?.orgPath
-            ? (() => {
-                // 내 소속 부서 체인을 맨 위로 — 작은 단위(깊은 org_path)부터. 검색 랭킹엔 불개입.
-                const depth = (p: string) => p.split("/").length;
-                const isMine = (o: PrincipalOption) =>
-                  o.principalType === "department" && isMyDept(o.principalId);
-                const mine = all
-                  .filter(isMine)
-                  .sort((a, b) => depth(b.principalId) - depth(a.principalId));
-                return [...mine, ...all.filter((o) => !isMine(o))];
-              })()
+    : deptTreeBrowse
+      ? buildDeptBrowseRows(
+          all.filter((o) => o.principalType === "department"),
+          me?.orgPath ?? null,
+        ).map((row) => {
+          deptBrowseRows.set(row.option.principalId, row);
+          return { item: row.option, matches: [] as { field: string; ranges: MatchRange[] }[] };
+        })
+      : (() => {
+          const browse = managersFirst
+            ? sortManagersFirst(
+                all,
+                (o) => (o.principalType === "user" ? o.principalId : null),
+                managerIds,
+              )
             : all;
-        // 핀 고정 — 오우닝 부서 리더 등은 검색 없이도 맨 위 (안정 파티션)
-        const pinnedFirst = pinnedIds?.size
-          ? [
-              ...browse.filter((o) => o.principalType === "user" && pinnedIds.has(o.principalId)),
-              ...browse.filter((o) => !(o.principalType === "user" && pinnedIds.has(o.principalId))),
-            ]
-          : browse;
-        return pinnedFirst.map((item) => ({
-          item,
-          matches: [] as { field: string; ranges: MatchRange[] }[],
-        }));
-      })();
+          // 핀 고정 — 오우닝 부서 리더 등은 검색 없이도 맨 위 (안정 파티션)
+          const pinnedFirst = pinnedIds?.size
+            ? [
+                ...browse.filter((o) => o.principalType === "user" && pinnedIds.has(o.principalId)),
+                ...browse.filter((o) => !(o.principalType === "user" && pinnedIds.has(o.principalId))),
+              ]
+            : browse;
+          return pinnedFirst.map((item) => ({
+            item,
+            matches: [] as { field: string; ranges: MatchRange[] }[],
+          }));
+        })();
   // 검색도 캡 없이 전량 노출 — 25개씩 증분 렌더가 DOM 부하를 막는다(~5000명).
   // 부서·그룹 매치는 이름이 비슷한 유저 무더기에 밀리지 않게, 최고 랭크 1개를 스코어 무시하고 맨 위로 고정.
   let ordered = hits;
@@ -199,6 +200,11 @@ export function PrincipalPicker({
     }
   }
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(ordered, query);
+  // deptTreeBrowse 구분선 위치 — 마지막 pinned 행 바로 다음(트리 섹션 첫 행). pinned 0개면 -1(구분선 없음).
+  const deptTreeDividerIdx =
+    deptTreeBrowse && !query.trim()
+      ? visible.findIndex((h) => !(deptBrowseRows.get(h.item.principalId)?.pinned ?? false))
+      : -1;
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     // Esc — 검색어 비우고 포커스 해제(blur) → 펼쳐진 목록 닫힘 (항목 유무와 무관)
@@ -280,93 +286,105 @@ export function PrincipalPicker({
           {visible.map(({ item: opt, matches }, idx) => {
             const nameRanges: MatchRange[] = matches.find((m) => m.field === "name")?.ranges ?? [];
             const idRanges: MatchRange[] = matches.find((m) => m.field === "id")?.ranges ?? [];
+            const optKey = `${opt.principalType}:${opt.principalId}`;
+            const isHighlighted = highlightId === optKey;
+            const treeRow = deptTreeBrowse && !query.trim() ? deptBrowseRows.get(opt.principalId) : undefined;
             return (
-              <button
-                key={`${opt.principalType}:${opt.principalId}`}
-                type="button"
-                className={`flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt ${
-                  active === idx ? "bg-surface-alt" : ""
-                }`}
-                onMouseEnter={() => setActive(idx)}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onSelect(opt);
-                  setQuery("");
-                }}
-              >
-                <PrincipalIcon type={opt.principalType} />
-                {(() => {
-                  const koreanRanges: MatchRange[] =
-                    matches.find((m) => m.field === "koreanName")?.ranges ?? [];
-                  // 유저·부서 동일 규칙 — 한글명 보유 시 lang에 따라 주/보조 전환 (그룹은 한글명 없음)
-                  const hasKr = !!opt.koreanName;
-                  const primaryKr = hasKr && lang === "ko";
-                  return (
-                    <span className="min-w-0 truncate">
-                      {primaryKr ? (
-                        <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
-                      ) : (
-                        <Highlight text={opt.displayName} ranges={nameRanges} />
-                      )}
-                      {/* 반대 언어 보조 — 한글 보유 유저만 */}
-                      {hasKr && (
-                        <span className="ml-1 text-fine text-ink-tertiary">
-                          (
-                          {primaryKr ? (
-                            <Highlight text={opt.displayName} ranges={nameRanges} />
-                          ) : (
-                            <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
-                          )}
-                          )
-                        </span>
-                      )}
-                      {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
-                      {opt.principalType === "user" && (
-                        <span className="ml-1.5 text-fine text-ink-tertiary">
-                          <Highlight text={opt.principalId} ranges={idRanges} />
-                          {opt.department ? ` · ${opt.department}` : ""}
-                        </span>
-                      )}
-                      {opt.principalType !== "user" && opt.department && (
-                        <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
-                      )}
-                    </span>
-                  );
-                })()}
-                {(() => {
-                  // 내 상위 부서장 → Manager, 내 소속 부서(체인) → My Dept — 약한 하이라이트 필
-                  const isPinnedLead =
-                    opt.principalType === "user" && (pinnedIds?.has(opt.principalId) ?? false);
-                  const isManager =
-                    opt.principalType === "user" && managerSet.has(opt.principalId);
-                  const isMine =
-                    opt.principalType === "department" && isMyDept(opt.principalId);
-                  const label = isPinnedLead
-                    ? t("perm.principalDeptLead")
-                    : isManager
-                      ? t("perm.principalManager")
-                      : isMine
-                        ? t("perm.principalMyDept")
-                        : t(
-                            opt.principalType === "user"
-                              ? "perm.principalUser"
-                              : opt.principalType === "department"
-                                ? "perm.principalDept"
-                                : "perm.principalGroup",
-                          );
-                  return (
-                    <span
-                      className={`ml-auto shrink-0 text-fine ${
-                        isPinnedLead || isManager || isMine
-                          ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent"
-                          : "text-ink-tertiary"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  );
-                })()}
-              </button>
+              <Fragment key={optKey}>
+                {idx === deptTreeDividerIdx && deptTreeDividerIdx > 0 && (
+                  <div aria-hidden className="my-1 border-t border-hairline" />
+                )}
+                <button
+                  type="button"
+                  style={treeRow ? { paddingLeft: 12 + (treeRow.pinned ? 0 : treeRow.depth * 14) } : undefined}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-caption text-ink hover:bg-surface-alt ${
+                    active === idx ? "bg-surface-alt" : ""
+                  } ${isHighlighted ? "ring-1 ring-accent bg-accent-tint/40" : ""}`}
+                  onMouseEnter={() => setActive(idx)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    onSelect(opt, { x: e.clientX, y: e.clientY });
+                    setQuery("");
+                  }}
+                >
+                  {treeRow ? (
+                    <DeptLevelIcon leaf={deptLeaf(opt.principalId)} className="shrink-0 text-ink-tertiary" />
+                  ) : (
+                    <PrincipalIcon type={opt.principalType} />
+                  )}
+                  {(() => {
+                    const koreanRanges: MatchRange[] =
+                      matches.find((m) => m.field === "koreanName")?.ranges ?? [];
+                    // 유저·부서 동일 규칙 — 한글명 보유 시 lang에 따라 주/보조 전환 (그룹은 한글명 없음)
+                    const hasKr = !!opt.koreanName;
+                    const primaryKr = hasKr && lang === "ko";
+                    return (
+                      <span className="min-w-0 truncate">
+                        {primaryKr ? (
+                          <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                        ) : (
+                          <Highlight text={opt.displayName} ranges={nameRanges} />
+                        )}
+                        {/* 반대 언어 보조 — 한글 보유 유저만 */}
+                        {hasKr && (
+                          <span className="ml-1 text-fine text-ink-tertiary">
+                            (
+                            {primaryKr ? (
+                              <Highlight text={opt.displayName} ranges={nameRanges} />
+                            ) : (
+                              <Highlight text={opt.koreanName ?? ""} ranges={koreanRanges} />
+                            )}
+                            )
+                          </span>
+                        )}
+                        {/* 사용자: 아이디 · 부서 노출 (SR-2) */}
+                        {opt.principalType === "user" && (
+                          <span className="ml-1.5 text-fine text-ink-tertiary">
+                            <Highlight text={opt.principalId} ranges={idRanges} />
+                            {opt.department ? ` · ${opt.department}` : ""}
+                          </span>
+                        )}
+                        {opt.principalType !== "user" && opt.department && (
+                          <span className="ml-1.5 text-fine text-ink-tertiary">{opt.department}</span>
+                        )}
+                      </span>
+                    );
+                  })()}
+                  {(() => {
+                    // 내 상위 부서장 → Manager, 내 소속 부서(체인) → My Dept — 약한 하이라이트 필
+                    const isPinnedLead =
+                      opt.principalType === "user" && (pinnedIds?.has(opt.principalId) ?? false);
+                    const isManager =
+                      opt.principalType === "user" && managerSet.has(opt.principalId);
+                    const isMine =
+                      opt.principalType === "department" && isMyDept(opt.principalId);
+                    const label = isPinnedLead
+                      ? t("perm.principalDeptLead")
+                      : isManager
+                        ? t("perm.principalManager")
+                        : isMine
+                          ? t("perm.principalMyDept")
+                          : t(
+                              opt.principalType === "user"
+                                ? "perm.principalUser"
+                                : opt.principalType === "department"
+                                  ? "perm.principalDept"
+                                  : "perm.principalGroup",
+                            );
+                    return (
+                      <span
+                        className={`ml-auto shrink-0 text-fine ${
+                          isPinnedLead || isManager || isMine
+                            ? "rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+                            : "text-ink-tertiary"
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
+                </button>
+              </Fragment>
             );
           })}
           {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}

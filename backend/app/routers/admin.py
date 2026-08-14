@@ -4,23 +4,30 @@
 Admin console directory — richer fields than /api/directory, sysadmin-gated.
 """
 
+import json
 from datetime import date, datetime, time, timedelta
+from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy import String, Text, and_, asc, cast, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
-from app.models import Base, DeptInfo, Employee, MapPermission, Notification, UserGroupMember
+from app.models import Base, Employee, MapPermission, Notification, ProcessMap, UserGroupMember
+from app.orgchart import (
+    has_org_info,
+    load_dept_index,
+    load_valid_org_prefixes,
+    resolve_org_path,
+)
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
     AdminDirectoryOut,
     AdminUserOut,
-    DeptInfoImportIn,
-    DeptInfoImportOut,
     DeptRemapIn,
     DeptRemapItemOut,
     DeptRemapOut,
@@ -37,6 +44,9 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 
+# CSV 내보내기 배치 크기 — 전체를 리스트로 모으지 않고 이 단위로 fetch/yield (메모리 바운드).
+EXPORT_BATCH_SIZE = 500
+
 
 @router.get("/users", response_model=AdminDirectoryOut)
 async def get_admin_users(
@@ -52,14 +62,17 @@ async def get_admin_users(
         raise HTTPException(status_code=403, detail="sysadmin required")
 
     rows = (await session.scalars(select(Employee).order_by(Employee.login_id))).all()
+    dept_index = await load_dept_index(session)
 
     users: list[AdminUserOut] = []
     # Track distinct leaf org-paths for department list.
-    # Key = tuple of non-null levels (unique leaf path); value = list[str] of levels.
+    # Key = tuple of levels (unique leaf path); value = list[str] of levels.
     seen_leaves: dict[tuple[str, ...], list[str]] = {}
 
     for emp in rows:
-        levels = [lv for lv in (emp.org_l1, emp.org_l2, emp.org_l3, emp.org_l4, emp.org_l5) if lv is not None]
+        # resolver 경로(departments 체인 우선, org 컬럼 폴백) → 세그먼트 리스트. 빈 경로는 [] (design 2026-08-11 §3)
+        path = resolve_org_path(emp, dept_index)
+        levels = path.split("/") if path else []
         users.append(
             AdminUserOut(
                 login_id=emp.login_id,
@@ -73,23 +86,21 @@ async def get_admin_users(
                 korean_dept=emp.korean_dept,
             )
         )
-        if levels:
+        # 부서 목록은 active + 조직 정보 실재 직원 경로만 — 퇴사자 스테일 경로와
+        # org 전무 직원의 department 단독 경로가 트리 밖 고아 노드로 샌다 (2026-08 9910 적발)
+        if levels and emp.active and has_org_info(emp, dept_index):
             key = tuple(levels)
             if key not in seen_leaves:
                 seen_leaves[key] = levels
 
-    # dept_info 조인 — 임포트된 한글 부서명·부서장 (리프명 키)
-    infos = {d.department: d for d in (await session.scalars(select(DeptInfo))).all()}
     departments = []
     for levels in sorted(seen_leaves.values(), key=lambda lv: lv):
         leaf = levels[-1] if levels else ""
-        info = infos.get(leaf)
         departments.append(
             AdminDeptOut(
                 name=leaf,
                 org_levels=levels,
-                korean_name=info.korean_name if info else "",
-                manager=info.manager if info else "",
+                korean_name=dept_index.name_ko_by_name.get(leaf, ""),
             )
         )
 
@@ -103,18 +114,8 @@ def _require_sysadmin(login_id: str) -> None:
 
 
 async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
-    """현 employees org 레벨에서 파생되는 모든 경로 프리픽스 — /api/directory 파생과 동일 규약."""
-    rows = (
-        await session.execute(
-            select(Employee.org_l1, Employee.org_l2, Employee.org_l3, Employee.org_l4, Employee.org_l5)
-        )
-    ).all()
-    paths: set[str] = set()
-    for level_row in rows:
-        levels = [lv for lv in level_row if lv is not None]
-        for i in range(1, len(levels) + 1):
-            paths.add("/".join(levels[:i]))
-    return paths
+    """현 조직 유효 경로 프리픽스 — orgchart 공용 헬퍼 위임. remap은 active 부서만(퇴직자만 남은 부서 제외)."""
+    return await load_valid_org_prefixes(session, active_only=True)
 
 
 @router.get("/dept-remap", response_model=list[DeptRemapItemOut])
@@ -122,7 +123,7 @@ async def list_missing_dept_refs(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[DeptRemapItemOut]:
-    """sysadmin 전용 — 현 조직에 없는 부서 경로를 참조 중인 맵 권한·그룹 멤버 집계 (조직개편 잔재)."""
+    """sysadmin 전용 — 현 조직에 없는 부서 경로를 참조 중인 맵 권한·그룹 멤버·오우닝 맵 집계 (조직개편 잔재)."""
     _require_sysadmin(login_id)
     valid = await _load_valid_org_paths(session)
     grant_counts = dict(
@@ -143,12 +144,23 @@ async def list_missing_dept_refs(
             )
         ).all()
     )
-    missing = sorted((set(grant_counts) | set(member_counts)) - valid)
+    # 오우닝 부서 참조 — 홈 "내 부서" 트리가 이 값으로 묶이므로 이관 대상에서 빠지면 맵이 미아가 된다
+    owning_counts = dict(
+        (
+            await session.execute(
+                select(ProcessMap.owning_department, func.count())
+                .where(ProcessMap.owning_department.is_not(None))
+                .group_by(ProcessMap.owning_department)
+            )
+        ).all()
+    )
+    missing = sorted((set(grant_counts) | set(member_counts) | set(owning_counts)) - valid)
     return [
         DeptRemapItemOut(
             path=path,
             map_grants=grant_counts.get(path, 0),
             group_members=member_counts.get(path, 0),
+            owning_maps=owning_counts.get(path, 0),
         )
         for path in missing
     ]
@@ -160,9 +172,10 @@ async def remap_dept_refs(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> DeptRemapOut:
-    """sysadmin 전용 — from_path를 참조하는 맵 권한·그룹 멤버를 to_path(현존 경로)로 일괄 이동.
+    """sysadmin 전용 — from_path를 참조하는 맵 권한·그룹 멤버·오우닝 부서를 to_path(현존 경로)로 일괄 이동.
 
     대상에 같은 부서 행이 이미 있으면 병합 — 맵 권한은 높은 역할 유지, 그룹 멤버는 중복 제거.
+    오우닝은 단일 컬럼 치환(소프트삭제 맵 포함 — 복구 시 일관성 유지).
     """
     _require_sysadmin(login_id)
     valid = await _load_valid_org_paths(session)
@@ -217,55 +230,18 @@ async def remap_dept_refs(
             member.member_id = payload.to_path
         moved_members += 1
 
+    owning_maps = (
+        await session.scalars(
+            select(ProcessMap).where(ProcessMap.owning_department == payload.from_path)
+        )
+    ).all()
+    for m in owning_maps:
+        m.owning_department = payload.to_path
+
     await session.commit()
-    return DeptRemapOut(map_grants=moved_grants, group_members=moved_members)
-
-
-@router.put("/dept-info", response_model=DeptInfoImportOut)
-async def import_dept_info(
-    payload: DeptInfoImportIn,
-    login_id: str = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> DeptInfoImportOut:
-    """부서 한글명·부서장 일괄 등록 — 현존 부서만 반영, 미존재는 unknown.
-
-    현존 판정에 org_l1~l5를 모두 포함한다: 조직도 tree는 본부·실까지 담고, 상위 레벨
-    dept_info가 있어야 /api/me의 상위 부서장 체인과 피커의 상위 부서 한글 검색이 산다.
-    """
-    _require_sysadmin(login_id)
-    rows = await session.execute(
-        select(
-            Employee.org_l1,
-            Employee.org_l2,
-            Employee.org_l3,
-            Employee.org_l4,
-            Employee.org_l5,
-            Employee.department,
-        ).distinct()
+    return DeptRemapOut(
+        map_grants=moved_grants, group_members=moved_members, owning_maps=len(owning_maps)
     )
-    known = {name for row in rows for name in row if name}
-    updated = 0
-    unknown: list[str] = []
-    for dept_name, entry in payload.entries.items():
-        korean = entry.korean_name.strip()
-        manager = entry.manager.strip()
-        if not korean and not manager:
-            continue  # 둘 다 빈 항목은 통째로 무시 — 삭제 기능 아님
-        if dept_name not in known:
-            unknown.append(dept_name)
-            continue
-        info = await session.get(DeptInfo, dept_name)
-        if info is None:
-            info = DeptInfo(department=dept_name)
-            session.add(info)
-        # 빈 필드는 미기입 — 기존 값을 지우지 않는다 (korean-names의 dept 보존 규칙과 동일)
-        if korean:
-            info.korean_name = korean
-        if manager:
-            info.manager = manager
-        updated += 1
-    await session.commit()
-    return DeptInfoImportOut(updated=updated, unknown=unknown)
 
 
 @router.get("/tables", response_model=list[TableInfoOut])
@@ -336,8 +312,110 @@ async def read_table(
     stmt = stmt.limit(size).offset((page - 1) * size)
 
     result = (await session.execute(stmt)).mappings().all()
-    rows = [dict(row) for row in result]
+    rows = [{k: _render_cell(v) for k, v in row.items()} for row in result]
     return TableDataOut(columns=columns, rows=rows, total=total, page=page, size=size)
+
+
+def _render_cell(value: object) -> object:
+    """행 값 → JSON 직렬화 가능 값. 바이너리(kb_chunks.embedding 등)는 크기 표시로 대체 — 500 방지."""
+    if isinstance(value, (bytes, memoryview)):
+        return f"<binary {len(value)} bytes>"
+    return value
+
+
+def _escape_csv_cell(value: str) -> str:
+    """CSV 셀 이스케이프 — FE `lib/csv.ts` escapeCsvCell과 동치(byte-for-byte) 유지 필수.
+
+    1) 수식 인젝션 가드: `=`/`+`/`-`/`@`/TAB/CR로 시작하면 `'` 1개 접두(Excel/Sheets가 수식으로 안 읽음).
+    2) 쉼표·따옴표·CR·LF 포함 시에만 `"..."` 인용, 내부 `"`는 `""`로 이중화.
+    """
+    guarded = f"'{value}" if value[:1] in ("=", "+", "-", "@", "\t", "\r") else value
+    if any(ch in guarded for ch in (",", '"', "\r", "\n")):
+        return '"' + guarded.replace('"', '""') + '"'
+    return guarded
+
+
+def _stringify_csv_value(value: object) -> str:
+    """CSV 셀 값 → 문자열. JSON 컬럼(dict/list)은 json.dumps, bool은 소문자 true/false —
+    뷰어(JSON.stringify) 출력과 동치 유지(`_render_cell`의 JSON 직렬화 경로는 건드리지 않음)."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _build_csv_row(values: list[object]) -> str:
+    """값 리스트 → CRLF로 끝나는 한 줄 CSV(각 셀은 `_stringify_csv_value`+`_escape_csv_cell`로 변환)."""
+    cells = [_escape_csv_cell(_stringify_csv_value(v)) for v in values]
+    return ",".join(cells) + "\r\n"
+
+
+@router.get("/tables/{name}/export")
+async def export_table_csv(
+    name: str,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    sort: str | None = Query(None),
+    order: str = Query("asc"),
+    q: str | None = Query(None),
+) -> StreamingResponse:
+    """sysadmin 전용 — 선택 테이블 전체 행을 CSV로 스트리밍(읽기전용, 페이징 없음).
+
+    read_table과 동일한 게이트·테이블명 검증·정렬/필터를 적용하되 전체 행을 낸다.
+    BOM은 붙이지 않음(FE downloadCsv가 접두 — 이중 BOM 방지). 500행 배치 fetch로 메모리 바운드.
+    """
+    _require_sysadmin(login_id)
+
+    # 테이블명 검증 — 메타데이터에 있는 테이블만 (임의 SQL 차단) / validate against metadata.
+    table = Base.metadata.tables.get(name)
+    if table is None:
+        raise HTTPException(status_code=404, detail="unknown table")
+
+    columns = [c.name for c in table.columns]
+
+    # 필터 — 문자열 컬럼에 대해서만 ILIKE(OR). q는 바인드 파라미터 / text-column ILIKE, q is bound.
+    where = None
+    if q:
+        text_cols = [c for c in table.columns if isinstance(c.type, (String, Text))]
+        if text_cols:
+            where = or_(*[cast(c, String).ilike(f"%{q}%") for c in text_cols])
+
+    stmt = select(table)
+    if where is not None:
+        stmt = stmt.where(where)
+    # 정렬 — sort 컬럼은 실제 컬럼만 허용, 아니면 PK(없으면 무정렬) / validate sort col.
+    # PK를 항상 타이브레이커로 덧붙인다 — sort 컬럼에 동값이 많으면(예: role) OFFSET 배치마다
+    # DB가 동값 그룹 내 순서를 다르게 낼 수 있어, 배치 경계에서 행이 중복되거나 누락된다.
+    if sort and sort in columns:
+        col = table.c[sort]
+        sort_expr = desc(col) if order == "desc" else asc(col)
+        stmt = stmt.order_by(sort_expr, *table.primary_key.columns)
+    elif table.primary_key.columns:
+        stmt = stmt.order_by(*table.primary_key.columns)
+
+    async def _stream_rows() -> AsyncIterator[str]:
+        yield _build_csv_row(columns)
+        offset = 0
+        while True:
+            batch = (
+                await session.execute(stmt.limit(EXPORT_BATCH_SIZE).offset(offset))
+            ).mappings().all()
+            if not batch:
+                break
+            for row in batch:
+                yield _build_csv_row([_render_cell(row[c]) for c in columns])
+            if len(batch) < EXPORT_BATCH_SIZE:
+                break
+            offset += EXPORT_BATCH_SIZE
+
+    return StreamingResponse(
+        _stream_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}.csv"'},
+    )
 
 
 def _build_kst_range(from_date: date, to_date: date) -> tuple[datetime, datetime]:

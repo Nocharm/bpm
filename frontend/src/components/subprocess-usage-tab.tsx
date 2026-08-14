@@ -7,6 +7,7 @@ import { ArrowUpRight, Info, Workflow } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode } from "react";
 
+import { Tooltip } from "@/components/tooltip";
 import { UserPill } from "@/components/user-pill";
 import { type SubprocessUsage } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
@@ -30,6 +31,10 @@ export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
           <span className="flex items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
             <Workflow size={14} strokeWidth={1.5} className="text-accent" />
             {t("inspector.spUsageMetaTitle")}
+            {/* 임베드는 항상 최신 게시본을 따른다는 안내 — 호버 툴팁(제목 옆) */}
+            <Tooltip content={t("inspector.spUsageFollowsLatest")}>
+              <Info size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+            </Tooltip>
           </span>
           {/* 지정 상태 뱃지 — 영어 고정(승인상태 뱃지 규칙과 동일) */}
           <span className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent">
@@ -58,11 +63,6 @@ export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
             </MetaRow>
           )}
         </div>
-        {/* 지정은 버전을 박제하지 않는다 — 임베드가 항상 최신 게시본을 따른다는 안내 */}
-        <p className="mt-2 flex items-start gap-1.5 rounded-sm bg-surface px-2 py-1.5 text-fine leading-snug text-ink-tertiary">
-          <Info size={12} strokeWidth={1.6} className="mt-px shrink-0" />
-          {t("inspector.spUsageFollowsLatest")}
-        </p>
       </section>
 
       {/* 역참조 목록 — 이 맵을 서브프로세스로 연결한 부모 맵(라이브 버전 기준) */}

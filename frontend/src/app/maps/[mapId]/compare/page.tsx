@@ -64,6 +64,7 @@ import {
   targetHandleId,
   type AppNode,
 } from "@/lib/canvas";
+import { humanizeApiError } from "@/lib/api-errors";
 import type { ChangedField } from "@/lib/diff";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { exportFramedPng } from "@/lib/export";
@@ -1216,7 +1217,7 @@ function applyLoadError(
   if (err instanceof ApiError && err.status === 403) {
     setAccessDenied(true);
   } else {
-    setLoadError(err instanceof Error ? err.message : t("err.loadMap"));
+    setLoadError(humanizeApiError(err, t));
   }
 }
 

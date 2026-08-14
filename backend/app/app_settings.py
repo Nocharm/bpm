@@ -7,6 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AppSetting
 from app.settings import settings
 
+EXPOSED_POSITIONS_KEY = "exposed_positions"
+# 부서장으로 노출할 EDW 직책(FRNM) — 설정 화면에서 교체. 빈 목록 저장 = 전부 비노출(의도 허용).
+DEFAULT_EXPOSED_POSITIONS = ["그룹장", "파트장", "팀장", "센터장"]
+
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
 AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
 AI_CHAT_MAX_MESSAGES_KEY = "ai_chat_max_messages_per_session"
@@ -42,6 +46,23 @@ DEFAULT_AI_CHAT_TIPS = [
     "노드를 더블클릭하면 이름을 바로 수정할 수 있습니다.",
     "편집이 잠긴 버전에서는 AI가 도움말 답변만 제공합니다.",
 ]
+
+
+async def get_exposed_positions(session: AsyncSession) -> list[str]:
+    """노출 직책 allowlist — 행 부재/파싱 불가면 기본값, 저장된 빈 목록은 그대로 존중.
+
+    (get_ai_chat_tips와 달리 빈 목록을 기본값으로 되돌리지 않는다 — 전부 비노출은 유효한 관리자 의도.)
+    """
+    row = await session.get(AppSetting, EXPOSED_POSITIONS_KEY)
+    if row is None:
+        return list(DEFAULT_EXPOSED_POSITIONS)
+    try:
+        stored = json.loads(row.value)
+    except ValueError:
+        return list(DEFAULT_EXPOSED_POSITIONS)
+    if not isinstance(stored, list):
+        return list(DEFAULT_EXPOSED_POSITIONS)
+    return [v.strip() for v in stored if isinstance(v, str) and v.strip()]
 
 
 async def get_ai_chat_tips(session: AsyncSession) -> list[str]:

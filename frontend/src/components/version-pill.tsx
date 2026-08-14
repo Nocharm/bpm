@@ -2,11 +2,11 @@
 
 // 상단바 버전 pill — 현재 버전 라벨(accent) + 드롭다운. 즉시 전환하지 않고 확인 모달을 거친다.
 // 편집 화면(isEditing)이면 모달에 미저장 변경 손실 안내를 함께 노출.
-import { AlertTriangle, ArrowLeftRight, Check, ChevronDown, CornerDownRight, GitBranch } from "lucide-react";
+import { Check, ChevronDown, CornerDownRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { type VersionSummary } from "@/lib/api";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { VersionSwitchConfirm } from "@/components/version/version-switch-confirm";
 import { useI18n } from "@/lib/i18n";
 import { formatVersionMarker } from "@/lib/version-name";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
@@ -147,15 +147,8 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
         </>
       )}
       {pending && (
-        <ConfirmDialog
-          icon={<GitBranch size={28} strokeWidth={1.5} />}
-          title={t("editor.confirmSwitchTitle")}
-          lines={[
-            { icon: <ArrowLeftRight size={14} strokeWidth={1.5} />, text: t("editor.confirmSwitchBody", { label: pending.label }) },
-            { icon: <AlertTriangle size={14} strokeWidth={1.5} />, text: t("editor.unsavedNotice"), tone: "error" },
-          ]}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <VersionSwitchConfirm
+          label={pending.label}
           onConfirm={() => {
             const id = pending.id;
             setPending(null);

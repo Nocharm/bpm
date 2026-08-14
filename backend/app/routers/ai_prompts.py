@@ -1,4 +1,4 @@
-"""AI 프롬프트 관리 API — sysadmin이 시스템 프롬프트를 열람·오버라이드·기본값 복원 (설계: docs/design/2026-08-04-ai-prompts-admin-design.md)."""
+"""AI 프롬프트 관리 API — sysadmin이 시스템 프롬프트를 열람·오버라이드·기본값 복원 (설계: 2026-08-04-ai-prompts-admin-design.md)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select

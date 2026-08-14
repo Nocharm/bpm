@@ -1,0 +1,188 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { applyStagedOps, forecastStagedOp, removeStagedOp, stageRoleChange, upsertStagedOp, type StagedOp } from "./permission-staging";
+import { addMapPermission, changeMapPermission, removeMapPermission } from "./api";
+
+// 외부 API만 모킹 — 스택 적립/실행 로직은 실코드 경로로 검증 (self-publish.test.ts 스타일 참고).
+vi.mock("./api", () => ({
+  addMapPermission: vi.fn(),
+  changeMapPermission: vi.fn(),
+  removeMapPermission: vi.fn(),
+  getApiErrorDetail: (err: unknown) => (err instanceof Error ? err.message : String(err)),
+}));
+
+const addMock = vi.mocked(addMapPermission);
+const changeMock = vi.mocked(changeMapPermission);
+const removeMock = vi.mocked(removeMapPermission);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("upsertStagedOp", () => {
+  it("같은 permissionId의 change를 2회 적립하면 최신 값 1개만 남는다", () => {
+    const ops: StagedOp[] = [];
+    const first = upsertStagedOp(ops, { kind: "change", permissionId: 5, toRole: "editor" });
+    const second = upsertStagedOp(first, { kind: "change", permissionId: 5, toRole: "viewer" });
+
+    expect(second).toEqual([{ kind: "change", permissionId: 5, toRole: "viewer" }]);
+  });
+
+  it("다른 대상의 op는 별개로 누적된다", () => {
+    const ops: StagedOp[] = [{ kind: "add", principalType: "user", principalId: "u1", role: "viewer" }];
+    const next = upsertStagedOp(ops, { kind: "remove", permissionId: 9 });
+
+    expect(next).toHaveLength(2);
+  });
+
+  it("같은 permissionId에 change 후 remove — remove만 남는다(낡은 change가 얹혀가지 않음)", () => {
+    const ops: StagedOp[] = [];
+    const first = upsertStagedOp(ops, { kind: "change", permissionId: 5, toRole: "editor" });
+    const second = upsertStagedOp(first, { kind: "remove", permissionId: 5 });
+
+    expect(second).toEqual([{ kind: "remove", permissionId: 5 }]);
+  });
+
+  it("같은 permissionId에 remove 후 change — change만 남는다", () => {
+    const ops: StagedOp[] = [];
+    const first = upsertStagedOp(ops, { kind: "remove", permissionId: 5 });
+    const second = upsertStagedOp(first, { kind: "change", permissionId: 5, toRole: "viewer" });
+
+    expect(second).toEqual([{ kind: "change", permissionId: 5, toRole: "viewer" }]);
+  });
+});
+
+describe("stageRoleChange", () => {
+  it("toRole이 currentRole과 같으면 기존 change op를 소거한다(no-op 재선택)", () => {
+    const ops: StagedOp[] = [{ kind: "change", permissionId: 5, toRole: "editor" }];
+    const next = stageRoleChange(ops, 5, "viewer", "viewer");
+
+    expect(next).toEqual([]);
+  });
+
+  it("staged remove 상태에서 currentRole을 다시 선택하면 remove도 소거된다", () => {
+    const ops: StagedOp[] = [{ kind: "remove", permissionId: 5 }];
+    const next = stageRoleChange(ops, 5, "viewer", "viewer");
+
+    expect(next).toEqual([]);
+  });
+
+  it("다른 role이면 upsert와 동일하게 change op를 적립한다", () => {
+    const ops: StagedOp[] = [];
+    const next = stageRoleChange(ops, 5, "editor", "viewer");
+
+    expect(next).toEqual([{ kind: "change", permissionId: 5, toRole: "editor" }]);
+  });
+});
+
+describe("removeStagedOp", () => {
+  it("행별 개별 취소 — 대상 op만 스택에서 제거", () => {
+    const ops: StagedOp[] = [
+      { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
+      { kind: "remove", permissionId: 9 },
+    ];
+    const next = removeStagedOp(ops, { kind: "remove", permissionId: 9 });
+
+    expect(next).toEqual([{ kind: "add", principalType: "user", principalId: "u1", role: "viewer" }]);
+  });
+
+  it("add 취소 — 아직 서버에 없는 행이라 스택에서 걷어내는 것만으로 취소된다", () => {
+    const ops: StagedOp[] = [
+      { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
+      { kind: "remove", permissionId: 9 },
+    ];
+    const next = removeStagedOp(ops, { kind: "add", principalType: "user", principalId: "u1", role: "viewer" });
+
+    expect(next).toEqual([{ kind: "remove", permissionId: 9 }]);
+  });
+});
+
+describe("applyStagedOps", () => {
+  it("applied/pending/failed을 집계하고 한 op의 실패가 나머지를 막지 않는다", async () => {
+    addMock.mockResolvedValue({ id: 1 } as never);
+    changeMock.mockResolvedValue({ pending: true } as never);
+    removeMock.mockRejectedValue(new Error("grant already exists"));
+
+    const ops: StagedOp[] = [
+      { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
+      { kind: "change", permissionId: 2, toRole: "editor" },
+      { kind: "remove", permissionId: 3 },
+    ];
+
+    const result = await applyStagedOps(42, ops);
+
+    expect(result.applied).toBe(1);
+    expect(result.pending).toBe(1);
+    expect(result.failed).toEqual([{ op: ops[2], message: "grant already exists" }]);
+    expect(addMock).toHaveBeenCalledWith(42, "user", "u1", "viewer");
+    expect(changeMock).toHaveBeenCalledWith(42, 2, "editor");
+    expect(removeMock).toHaveBeenCalledWith(42, 3);
+  });
+
+  it("records에 op별 결과·생성물·prev 스냅샷을 담는다", async () => {
+    const created = { id: 9, principal_type: "user", principal_id: "u1", role: "editor", granted_by: "me" };
+    addMock.mockResolvedValue(created as never);
+    changeMock.mockResolvedValue({ pending: false, permission: {} } as never);
+    removeMock.mockResolvedValue({
+      pending: true,
+      approval_request: { id: 77, status: "pending" },
+    } as never);
+    const perms = new Map([
+      [1, { id: 1, principal_type: "user", principal_id: "v1", role: "viewer", granted_by: "x" }],
+      [2, { id: 2, principal_type: "user", principal_id: "e2", role: "editor", granted_by: "x" }],
+    ]);
+    const ops: StagedOp[] = [
+      { kind: "add", principalType: "user", principalId: "u1", role: "editor" },
+      { kind: "change", permissionId: 1, toRole: "editor" },
+      { kind: "remove", permissionId: 2 },
+    ];
+
+    const result = await applyStagedOps(7, ops, perms as never);
+
+    expect(result.records).toHaveLength(3);
+    expect(result.records[0]).toMatchObject({ outcome: "applied", createdPermission: { id: 9 } });
+    expect(result.records[1]).toMatchObject({
+      outcome: "applied",
+      prev: { principalType: "user", principalId: "v1", role: "viewer" },
+    });
+    expect(result.records[2]).toMatchObject({
+      outcome: "pending",
+      approvalRequest: { id: 77 },
+      prev: { principalType: "user", principalId: "e2", role: "editor" },
+    });
+  });
+
+  it("실패 op는 records에 failed+message로 남는다", async () => {
+    addMock.mockRejectedValue(new Error("409 conflict"));
+    const result = await applyStagedOps(7, [
+      { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
+    ]);
+    expect(result.records[0]).toMatchObject({ outcome: "failed", message: "409 conflict" });
+  });
+});
+
+describe("forecastStagedOp", () => {
+  it("add는 항상 instant", () => {
+    expect(
+      forecastStagedOp({ kind: "add", principalType: "user", principalId: "u1", role: "editor" }, undefined, false),
+    ).toBe("instant");
+  });
+
+  it("viewer→editor 승격은 instant", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "editor" }, "viewer", false)).toBe("instant");
+  });
+
+  it("editor→viewer 다운그레이드는 approval", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "viewer" }, "editor", false)).toBe("approval");
+  });
+
+  it("editor 제거는 approval, viewer 제거는 instant", () => {
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "editor", false)).toBe("approval");
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "viewer", false)).toBe("instant");
+  });
+
+  it("오너 actor는 전부 instant", () => {
+    expect(forecastStagedOp({ kind: "change", permissionId: 1, toRole: "viewer" }, "editor", true)).toBe("instant");
+    expect(forecastStagedOp({ kind: "remove", permissionId: 1 }, "editor", true)).toBe("instant");
+  });
+});

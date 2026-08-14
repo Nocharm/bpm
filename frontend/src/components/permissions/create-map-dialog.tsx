@@ -25,6 +25,7 @@ import {
   type DirectoryDept,
   type Group,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -36,6 +37,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
+import { RolePopover } from "@/components/permissions/role-popover";
 import type { WordCreateOutcome } from "@/components/word-create-modal";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
@@ -85,7 +87,7 @@ interface Props {
 }
 
 export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const currentUser = useCurrentMockUser();
 
   // ── 실 디렉터리 + active 그룹 — 마운트 시 1회 조회 (Layer 4 Task 0/4) /
@@ -121,25 +123,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
   }));
-  // 부서장은 login_id로만 저장된다(dept_info.manager) — 부서를 부서장 "이름"으로도 찾을 수 있게
-  // 디렉터리로 한/영 이름을 해석해 검색 텍스트에 합친다. 표시엔 쓰이지 않고 검색 키워드 전용.
-  const userById = new Map(dirUsers.map((u) => [u.id, u]));
-  const pickerDepts: Department[] = dirDepts.map((d) => {
-    const head = d.manager ? userById.get(d.manager) : undefined;
-    const managerKeywords = [d.manager, head?.name, head?.korean_name]
-      .filter(Boolean)
-      .join(" ");
-    return {
-      id: d.id,
-      code: "",
-      name: d.name,
-      orgLevels: [],
-      parentId: null,
-      rawDn: "",
-      korean_name: d.korean_name,
-      manager: managerKeywords,
-    };
-  });
+  const pickerDepts: Department[] = dirDepts.map((d) => ({
+    id: d.id,
+    code: "",
+    name: d.name,
+    orgLevels: [],
+    parentId: null,
+    rawDn: "",
+    korean_name: d.korean_name,
+  }));
 
   // ── 폼 상태 / form state ──
   // CSV로 만들 때는 파일명(확장자 제외)을 이름·설명 기본값으로
@@ -160,13 +152,20 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const [visibility, setVisibility] = useState<MapVisibility>("private");
   const [collaborators, setCollaborators] = useState<CollaboratorEntry[]>([]);
   const [approvers, setApprovers] = useState<ApproverEntry[]>([]);
-  const [pendingCollabRole, setPendingCollabRole] = useState<"viewer" | "editor">("viewer");
+  // 협업자 피커 wrapper — Enter 경로(좌표 없음) 폴백: 입력창 하단 기준으로 역할 팝오버를 띄운다 (T3, add-collaborator.tsx와 동일 패턴).
+  const collabPickerWrapRef = useRef<HTMLDivElement>(null);
+  // 클릭(또는 Enter)된 협업자 후보 — 역할 팝오버가 열린 동안의 로컬 의도. 역할 선택 시 로컬 append 후 소거.
+  const [pendingPick, setPendingPick] = useState<{ option: PrincipalOption; x: number; y: number } | null>(
+    null,
+  );
+  // 방금 추가된 협업자 행 — 해당 행에 플래시 강조(1.2s 후 자연 소멸, collaborators-panel.tsx의 lastAddedKey 패턴 재사용).
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
   const router = useRouter();
-  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path, manager=리더 login_id)
+  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path)
   const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
   const autoLeaderRef = useRef<string | null>(null);
@@ -182,19 +181,19 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     }
   }, [owningDept]);
 
+  // 방금 추가된 협업자 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용 (T3, collaborators-panel.tsx와 동일 패턴).
+  useEffect(() => {
+    if (!lastAddedKey) return;
+    document.querySelector(`[data-id="create-collab-row-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [lastAddedKey]);
+
   // 공개범위 적용 — 승인자 후보군이 바뀌므로(public=전원 열람) 이미 고른 승인자를 초기화.
   // plain 함수 — React Compiler 자동 메모(수동 useCallback이 setter 추론과 충돌).
   const applyVisibilityChange = (v: MapVisibility) => {
     setVisibility(v);
-    // 후보군 변경 → 승인자 초기화. 오우닝 부서 리더 자동 추가분은 다시 심는다(양쪽 후보군에서 유효).
-    const leader = owningDept?.manager ? userById.get(owningDept.manager) : undefined;
-    setApprovers(
-      leader ? [{ key: genId(), userId: leader.id, displayName: leader.name }] : [],
-    );
-    autoLeaderRef.current = leader?.id ?? null;
-    if (v === "public" && pendingCollabRole === "viewer") {
-      setPendingCollabRole("editor");
-    }
+    // 후보군 변경 → 승인자 초기화.
+    setApprovers([]);
+    autoLeaderRef.current = null;
   };
 
   // ── 공개범위 변경 — 승인자가 이미 있으면 초기화 안내 모달, 없으면 바로 적용 ──
@@ -207,9 +206,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     }
   };
 
-  // ── 협업자 추가 — 드롭다운에서 선택(클릭/Enter) 즉시 현재 역할로 추가(별도 Add 버튼 없음) ──
-  const addCollaborator = (opt: PrincipalOption) => {
-    const role: MapRole = visibility === "public" ? "editor" : pendingCollabRole;
+  // ── 협업자 추가 — 역할 팝오버에서 Viewer/Editor 선택 시 로컬 스테이징 리스트에 append(맵 생성 전, 서버 호출 없음) ──
+  // (T3) 우측 role select 대신 클릭 위치 팝오버 2-step — add-collaborator.tsx의 RolePopover 공용.
+  const addCollaborator = (opt: PrincipalOption, role: "viewer" | "editor") => {
     setCollaborators((prev) =>
       prev.some((c) => c.principalId === opt.principalId)
         ? prev // 중복 방지 / dedup
@@ -224,6 +223,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             },
           ],
     );
+    const addKey = `${opt.principalType}:${opt.principalId}`;
+    setLastAddedKey(addKey);
+    window.setTimeout(() => setLastAddedKey(null), 1200); // 플래시 애니메이션 후 리셋(재추가 시 재발화)
   };
 
   // 오우닝 부서 선택 — 리더를 승인자로 자동 추가(제거 가능), 이전 자동분은 교체
@@ -231,16 +233,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     const dept = dirDepts.find((d) => d.id === opt.principalId);
     if (!dept) return;
     const removeId = autoLeaderRef.current;
-    const leader = dept.manager ? userById.get(dept.manager) : undefined;
     const kept = removeId ? approvers.filter((a) => a.userId !== removeId) : approvers;
-    // 자동 추가로 기록하는 건 실제로 추가했을 때만 — 수동 추가분을 auto로 오인해 clear 시 지우는 버그 방지
-    const shouldAdd = leader !== undefined && !kept.some((a) => a.userId === leader.id);
-    setApprovers(
-      shouldAdd
-        ? [...kept, { key: genId(), userId: leader.id, displayName: leader.name }]
-        : kept,
-    );
-    autoLeaderRef.current = shouldAdd ? leader.id : null;
+    setApprovers(kept);
+    autoLeaderRef.current = null;
     setOwningDept(dept);
     setFlashApprovers(true);
     window.setTimeout(() => setFlashApprovers(false), 850); // 애니메이션 후 리셋(재선택 시 재발화)
@@ -330,7 +325,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           onCreated(true);
           setError(
             err instanceof Error
-              ? `${t("csvImport.mapCreatedImportFailed")} — ${err.message}`
+              ? `${t("csvImport.mapCreatedImportFailed")} — ${humanizeApiError(err, t)}`
               : t("csvImport.mapCreatedImportFailed"),
           );
           setSubmitting(false);
@@ -353,11 +348,11 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         onCreated(true);
         setError(
           err instanceof Error
-            ? `${t("perm.createDialog.partialFailure")} — ${err.message}`
+            ? `${t("perm.createDialog.partialFailure")} — ${humanizeApiError(err, t)}`
             : t("perm.createDialog.partialFailure"),
         );
       } else {
-        setError(err instanceof Error ? err.message : t("err.createMap"));
+        setError(humanizeApiError(err, t));
       }
       setSubmitting(false);
     }
@@ -378,6 +373,13 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const collabExcludeIds = new Set(
     collaborators.map((c) => c.principalId).concat(currentUser ? [currentUser.id] : []),
   );
+
+  // ── 역할 팝오버에 표시할 후보 이름 — lang에 따라 한글/영문 주표시 전환 (add-collaborator.tsx와 동일 규칙) ──
+  const pendingCollabName = pendingPick
+    ? lang === "ko" && pendingPick.option.koreanName
+      ? pendingPick.option.koreanName
+      : pendingPick.option.displayName
+    : "";
 
   // ── 승인자 후보 (AP, 생성 시점엔 맵이 없어 클라 산정) ──
   // public=전원 열람이라 모든 직원 후보. private=생성자 + 선택한 협업자(user) +
@@ -411,8 +413,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         })
         .map((u) => u.id)
     : [];
-  const owningLeaderId =
-    owningDept?.manager && userById.has(owningDept.manager) ? owningDept.manager : null;
+  // 오우닝 부서 리더 자동 핀 — DirectoryDept.manager 폐기로 상시 null (design 2026-08-11 §5 후속)
+  const owningLeaderId: string | null = null;
   const approverEligibleIds = new Set<string>([
     ...(currentUser ? [currentUser.id] : []),
     ...collaborators.filter((c) => c.principalType === "user").map((c) => c.principalId),
@@ -504,7 +506,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
               groups={[]}
               excludeIds={new Set<string>()}
               deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
-              myDeptsFirst
+              deptTreeBrowse
               onSelect={applyOwningDept}
             />
           ) : (
@@ -632,7 +634,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           </div>
         )}
 
-        {/* 초기 협업자 / initial collaborators — promote 모드에선 UI 숨김(설계: docs/design/2026-07-24-word-map-lifecycle-design.md §6) */}
+        {/* 초기 협업자 / initial collaborators — promote 모드에선 UI 숨김(설계: 2026-07-24-word-map-lifecycle-design.md §6) */}
         {!promote && (
           <div className="flex flex-col gap-1.5">
             <span className="text-caption text-ink-secondary">
@@ -640,39 +642,38 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             </span>
             {/* 목록을 피커 위로 표시(드롭다운이 아래로 열려도 실시간 추가가 안 가려지게) — col-reverse: DOM은 picker→list, 화면은 list 위 */}
             <div className="flex flex-col-reverse gap-1.5">
-            {/* picker + role — 선택한 역할로 드롭다운 선택 즉시 추가(Add 버튼 없음). items-start로 드롭다운 플로팅 시 역할 컨트롤 안 늘어남 */}
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <PrincipalPicker
-                  users={pickerUsers}
-                  departments={pickerDepts}
-                  groups={toPickerGroups(groups)}
-                  excludeIds={collabExcludeIds}
-                  userDepartments={userDepartments}
-                  deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
-                  onSelect={addCollaborator}
-                />
-              </div>
-              {/* 역할 선택 — public이면 editor 1옵션이라 드롭다운 대신 정적 표시(화살표 없음, PV) */}
-              {visibility === "public" ? (
-                <span
-                  className="rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary"
-                  title={t("perm.createDialog.collaboratorRoleViewerDisabled")}
-                >
-                  {t("perm.createDialog.collaboratorRoleEditor")}
-                </span>
-              ) : (
-                <select
-                  className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none"
-                  value={pendingCollabRole}
-                  onChange={(e) => setPendingCollabRole(e.target.value as "viewer" | "editor")}
-                  disabled={submitting}
-                >
-                  <option value="viewer">{t("perm.createDialog.collaboratorRoleViewer")}</option>
-                  <option value="editor">{t("perm.createDialog.collaboratorRoleEditor")}</option>
-                </select>
-              )}
+            {/* picker — 선택(클릭/Enter) 시 클릭 위치(또는 입력창 하단 폴백)에 역할 팝오버 2-step (T3, add-collaborator.tsx와 공용 RolePopover) */}
+            <div ref={collabPickerWrapRef}>
+              <PrincipalPicker
+                users={pickerUsers}
+                departments={pickerDepts}
+                groups={toPickerGroups(groups)}
+                excludeIds={collabExcludeIds}
+                userDepartments={userDepartments}
+                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsers)}
+                highlightId={
+                  pendingPick ? `${pendingPick.option.principalType}:${pendingPick.option.principalId}` : null
+                }
+                onSelect={(opt, coords) => {
+                  const fallback = collabPickerWrapRef.current?.getBoundingClientRect();
+                  const { x, y } = coords ?? { x: fallback?.left ?? 0, y: fallback?.bottom ?? 0 };
+                  setPendingPick({ option: opt, x, y });
+                }}
+              />
             </div>
+            {pendingPick && (
+              <RolePopover
+                name={pendingCollabName}
+                x={pendingPick.x}
+                y={pendingPick.y}
+                viewerGrantDisabled={visibility === "public"}
+                onPick={(role) => {
+                  addCollaborator(pendingPick.option, role);
+                  setPendingPick(null);
+                }}
+                onCancel={() => setPendingPick(null)}
+              />
+            )}
             {/* 추가된 협업자 목록 — 높이 고정(~3.5행)·내부 스크롤로 모달 크기 불변(추가해도 안 늘어남) /
                 fixed ~3.5-row scroll area so the modal stays the same size as collaborators stack. */}
             <ul className="scroll-soft flex h-[7.5rem] flex-col gap-1">
@@ -694,10 +695,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                     </span>
                   </li>
                 )}
-                {collaborators.map((c) => (
+                {collaborators.map((c) => {
+                  const addKey = `${c.principalType}:${c.principalId}`;
+                  return (
                   <li
                     key={c.key}
-                    className="animate-item-in flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink"
+                    data-id={`create-collab-row-${addKey}`}
+                    className={`animate-item-in flex shrink-0 items-center gap-2 rounded-sm border border-hairline px-2 py-1 text-caption text-ink ${
+                      lastAddedKey === addKey ? "motion-safe:animate-[picker-flash_1200ms_ease-in-out]" : ""
+                    }`}
                   >
                     <PrincipalIcon type={c.principalType} />
                     <span className="flex-1 truncate">{c.displayName}</span>
@@ -723,7 +729,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                       <X size={16} strokeWidth={1.5} />
                     </button>
                   </li>
-                ))}
+                  );
+                })}
                 {/* 수동 추가한 협업자가 없을 때 회색 안내문구 — 박스 중앙. 오우닝 부서 잠금 행과 무관 */}
                 {collaborators.length === 0 && (
                   <li

@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X, Globe, Lock } from "lucide-react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
@@ -15,15 +15,17 @@ import {
   type DirectoryUser,
 } from "@/lib/api";
 import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/principal-picker";
+import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
 interface ApproverManagerProps {
   mapId: number;
+  visibility: "public" | "private";
   onClose: () => void;
   onSaved: (approvers: string[]) => void;
 }
 
-export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProps) {
+export function ApproverManager({ mapId, visibility, onClose, onSaved }: ApproverManagerProps) {
   const { t } = useI18n();
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -72,7 +74,7 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
       onSaved(saved);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.approvers"));
+      setError(humanizeApiError(err, t));
     }
   };
 
@@ -86,9 +88,18 @@ export function ApproverManager({ mapId, onClose, onSaved }: ApproverManagerProp
         className="flex w-96 flex-col gap-2 rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
-        <div>
-          <p className="text-body-strong text-ink">{t("approvers.title")}</p>
-          <p className="mt-0.5 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-body-strong text-ink">{t("approvers.title")}</p>
+            <p className="mt-0.5 text-fine text-ink-tertiary">{t("approvers.hint")}</p>
+          </div>
+          <span
+            data-id="approver-manager-visibility"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary"
+          >
+            {visibility === "public" ? <Globe size={12} strokeWidth={1.5} /> : <Lock size={12} strokeWidth={1.5} />}
+            {t(visibility === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+          </span>
         </div>
 
         {/* 선택된 승인자 목록 — 피커 위(드롭다운이 아래로 열려도 실시간 추가가 가려지지 않게) */}

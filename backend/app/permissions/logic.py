@@ -21,7 +21,10 @@ def is_downgrade(from_role: str | None, to_role: str | None) -> bool:
 
 
 def requires_downgrade_approval(from_role: str | None, to_role: str | None) -> bool:
-    """editor → viewer/제거만 승인 게이트 (설계 §4③, mock parity)."""
+    """editor → viewer/제거만 승인 게이트 (설계 §4③, mock parity).
+
+    ⚠️ FE 미러: frontend/src/lib/permission-staging.ts forecastStagedOp — 규칙 수정 시 동기화.
+    """
     return from_role == "editor" and (to_role == "viewer" or to_role is None)
 
 

@@ -50,10 +50,20 @@ describe("runSelfPublishChain", () => {
     const result = await runSelfPublishChain(7);
 
     expect(calls).toEqual(["submit", "approve", "publish"]);
-    expect(submitMock).toHaveBeenCalledWith(7);
+    expect(submitMock).toHaveBeenCalledWith(7, undefined);
     expect(approveMock).toHaveBeenCalledWith(7);
     expect(publishMock).toHaveBeenCalledWith(7);
     expect(result).toBe(published);
+  });
+
+  it("toVisibility 지정 시 submit에 가시성 변경을 동봉", async () => {
+    submitMock.mockResolvedValue({ id: 7, status: "pending" } as never);
+    approveMock.mockResolvedValue({ id: 7, status: "approved" } as never);
+    publishMock.mockResolvedValue({ id: 7, status: "published" } as never);
+
+    await runSelfPublishChain(7, "public");
+
+    expect(submitMock).toHaveBeenCalledWith(7, "public");
   });
 
   it("중간 단계 실패 시 이후 단계를 호출하지 않고 에러 전파", async () => {

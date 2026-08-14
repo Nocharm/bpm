@@ -1,5 +1,5 @@
 # Behavioral Guidelines (Karpathy-inspired)
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+Behavioral guidelines to reduce common LLM coding mistakes. Tuned for the Claude 5 family (Fable 5 primary, Opus 5 occasional): behaviors the models handle near-natively stay as one-line reminders — cheap insurance for Opus — while blanket ask-first instructions that conflict with autonomous operation are removed; the ask-vs-proceed table in §1 is the single arbiter for when to ask.
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
@@ -8,10 +8,8 @@ Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-s
 **Don't assume. Don't hide confusion. Surface tradeoffs.**
 
 Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
+- State your assumptions explicitly. If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
 
 **When to ask vs proceed:**
 - Ambiguity changes the outcome (API shape, data model, user-facing behavior) → ask first.

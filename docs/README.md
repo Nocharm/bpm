@@ -12,9 +12,9 @@
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
 ## QA · 검증 ([`qa/`](qa/))
+- [`qa/governance-ux-checklist.md`](qa/governance-ux-checklist.md) — 거버넌스 UX 4페이즈(P0 라이프사이클·C 승인 탭·B 카드 멤버·A 게시 동봉) 사용자 실검증 체크리스트.
+- [`qa/dev-vs-main-checklist.md`](qa/dev-vs-main-checklist.md) — dev↔main 미반영 3묶음(컨설턴트 체계·HR 웹훅·조직 기준 전환)의 배포 순서·서버 확인 항목·백로그 12건.
 - [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.
-- [`qa/ai-connectivity-test.md`](qa/ai-connectivity-test.md) — AI(LLM) 연결성 점검 절차.
-- [`qa/ai-real-model-smoke.md`](qa/ai-real-model-smoke.md) — AI 실모델 스모크 테스트.
 
 ## 매뉴얼 ([`manual/`](manual/))
 - 사용자 매뉴얼 — 일반([EN](manual/user-manual-general-en.md)·[KO](manual/user-manual-general-ko.md)) / 편집([EN](manual/user-manual-editing-en.md)·[KO](manual/user-manual-editing-ko.md))
@@ -24,10 +24,12 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-기능별 설계 스냅샷(날짜별). 분야별 목록은 design 인덱스 참고. 버전 수명주기 요약([`design/version-lifecycle-summary.md`](design/version-lifecycle-summary.md))도 여기.
+아직 소비될 설계 문서만 유지(컨설턴트 계약·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
-- [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md)
+- [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md)
+- [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
+[`samples/consultant-delivery-sample/`](samples/consultant-delivery-sample/) — 컨설턴트 canonical 전달물 샘플(`categories.json`+`maps.jsonl`, `scripts/import_consultant.py` 입력).

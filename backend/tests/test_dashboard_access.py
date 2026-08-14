@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
-from app.models import DashboardPermission, Employee
+from app.models import DashboardPermission, Department, Employee
 from app.permissions.logic import can_view_dashboard
 from app.settings import settings
 
@@ -134,6 +134,16 @@ def test_permission_crud_roundtrip(client: TestClient) -> None:
     assert client.delete(f"/api/dashboard/permissions/{row_id}").status_code == 204
     after = client.get("/api/dashboard/permissions").json()
     assert all(r["id"] != row_id for r in after)
+
+
+def test_department_permission_display_name_uses_departments_ko(client: TestClient) -> None:
+    """department principal의 display_name은 departments.name_ko 소스
+    (2026-08-11 dept_info→departments 전환)."""
+    _seed([Department(dept_code="DASH-D1", name="Dash Display Dept", name_ko="대시보드부서")])
+    body = {"principal_type": "department", "principal_id": "Dash Display Dept"}
+    created = client.post("/api/dashboard/permissions", json=body)
+    assert created.status_code == 201
+    assert created.json()["display_name"] == "대시보드부서"
 
 
 def test_permission_settings_require_sysadmin(

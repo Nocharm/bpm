@@ -1,7 +1,7 @@
 "use client";
 
 // 홈 Word documents 섹션 — word 맵(문서 부속 산출물)을 조직도 밖 문서 중심 평면 목록으로 분리 표시.
-// 설계: docs/design/2026-07-24-word-map-lifecycle-design.md §2. word 표면은 영어 하드코딩(word-create-modal 관례).
+// 설계: 2026-07-24-word-map-lifecycle-design.md §2. word 표면은 영어 하드코딩(word-create-modal 관례).
 import { ArrowUpRight, ChevronDown, ChevronRight, FileText, Plus, RefreshCw } from "lucide-react";
 
 import type { MapSummary } from "@/lib/api";

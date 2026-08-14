@@ -8,25 +8,27 @@ import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import {
   ArrowUpRight,
-  Building,
   Building2,
   Copy,
   Crown,
   Eye,
   Globe,
   Hand,
-  House,
-  Landmark,
+  Hourglass,
   Loader2,
   Lock,
+  MessageCircle,
+  Network,
   PencilLine,
-  Puzzle,
+  RotateCcw,
   Settings,
   Trash2,
   TriangleAlert,
   User,
   Users,
   UsersRound,
+  X,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -34,21 +36,62 @@ import {
   getMap,
   listGroups,
   listMapPermissions,
+  withdrawApprovalRequest,
+  type DirectoryDept,
+  type DirectoryUser,
+  type Group,
   type MapDetail,
   type MapPermission,
+  type PrincipalType,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
+import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
+import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { VersionTimeline } from "@/components/maps/version-timeline";
+import { ContextMenu } from "@/components/context-menu";
+import { OrgInfoModal } from "@/components/org-info-modal";
+import { PersonInfoPopup } from "@/components/person-hover-card";
+import { AddCollaborator } from "@/components/permissions/add-collaborator";
+import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
+import { UndoLastApplyModal } from "@/components/permissions/undo-last-apply-modal";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
-import { buildKoreanDeptByPath, buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
+import {
+  buildKoreanDeptByPath,
+  buildOrgPathChain,
+  formatDeptName,
+  formatTitleWithPosition,
+} from "@/lib/korean-dept";
 import type { MapRole } from "@/lib/mock/permissions";
+import {
+  applyStagedOps,
+  forecastStagedOp,
+  removeStagedOp,
+  upsertStagedOp,
+  type AppliedOpRecord,
+  type StagedOp,
+} from "@/lib/permission-staging";
+import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
 import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
 const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
+
+// 역할/Remove 필 고정폭 — Owner/Editor/Viewer/Remove(EN 기준 최장, Pretendard text-fine 12px 실측
+// 57.2px)에 여유를 둔 값. RoleBadge와 Remove/staged 필이 전부 이 폭을 공유해야 hover 스왑 시
+// 크기가 바뀌지 않는다(governance-r5 V1, R5-1). pending 배지는 문구가 길어 예외(콘텐츠 폭 유지).
+const ROLE_PILL_WIDTH_CLASS = "w-[60px] inline-flex items-center justify-center text-center whitespace-nowrap";
+
+// 개인(user) 그룹 1차 클램프 — 3.3행만 보이고 나머지는 내부 스크롤(전체 펼치기 버튼으로 해제, W3).
+// 행 높이 50px = 아이콘 h-9(36px, 텍스트 2줄보다 큰 지배 요소) + py-1.5(12px) + border(2px) 실측 합산,
+// 행 간격 4px(gap-1). 3.3행 = 3행 온전 + 4행째 살짝 잘림("더 있음" 암시, 홈 3.5클램프 선례와 동일 의도).
+const MEMBERS_ROW_HEIGHT_PX = 50;
+const MEMBERS_CLAMP_MAX_HEIGHT_PX = MEMBERS_ROW_HEIGHT_PX * 3.3 + 4 * 3;
+// 클램프 발동 임계 — 이 개수 이하면 클램프도 버튼도 없다(홈 ClampedList와 동일 규칙).
+const MEMBERS_CLAMP_VISIBLE = 3;
 
 // 멤버 그룹 표시 순서 — 개인 → 팀 → 유저 그룹 / member group order: individuals, teams, user groups.
 const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
@@ -56,25 +99,6 @@ const MEMBER_GROUPS: { type: string; labelKey: MessageKey }[] = [
   { type: "department", labelKey: "home.memberDept" },
   { type: "group", labelKey: "home.memberGroup" },
 ];
-
-// 부서 org_path("A/B/C")의 말단 세그먼트만 / leaf segment of a dept org_path (HM-3).
-function deptLeaf(orgPath: string): string {
-  const parts = orgPath.split("/");
-  return parts[parts.length - 1] || orgPath;
-}
-
-// 조직 레벨 순위(낮을수록 위): 센터 > 담당(Department) > 팀 > 그룹 > 파트. 이름 접미사로 판별(KO/EN). (HM-3)
-function deptLevelRank(leaf: string): number {
-  const s = leaf.toLowerCase();
-  if (s.includes("센터") || s.includes("center")) return 0;
-  if (s.includes("팀") || s.includes("team")) return 2;
-  if (s.includes("그룹") || s.includes("group")) return 3;
-  if (s.includes("파트") || s.includes("part")) return 4;
-  return 1; // 담당(Department) / 그 외 기본
-}
-
-// 조직 레벨별 아이콘 — 센터/담당/팀/그룹/파트 (deptLevelRank 순서) (HM)
-const LEVEL_ICONS = [Landmark, Building2, Building, House, Puzzle];
 
 // 멤버 행 아이콘 — 부서는 레벨별, 그룹은 UsersRound, 유저는 User(본인이면 'me' 배지) (HM)
 // 접힌 카드 2줄 높이 기준 확대(22px) — 컨테이너가 세로 중앙 정렬 (member-card design 2026-07-09)
@@ -96,8 +120,7 @@ function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
     return <User size={22} strokeWidth={1.5} />;
   }
   if (perm.principal_type === "group") return <UsersRound size={22} strokeWidth={1.5} />;
-  const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(perm.principal_id))] ?? Building2;
-  return <Icon size={22} strokeWidth={1.5} />;
+  return <DeptLevelIcon leaf={deptLeaf(perm.principal_id)} size={22} />;
 }
 
 // 멤버 컬럼 고스트 — 권한·디렉터리·그룹 로딩 동안 우측 컬럼 폭을 미리 차지해,
@@ -141,6 +164,8 @@ interface MapDetailCardProps {
   onGoToVersion?: (id: number) => void;
   // 현재 보고 있는 버전 — 그 카드엔 "이 버전으로 가기" 숨김.
   currentVersionId?: number | null;
+  // 카테고리 연결/해제/이양 성공 알림 — 홈 FrameworkTree 캐시 무효화용(page.tsx만 전달, fix round 1 #1).
+  onFrameworkChanged?: () => void;
 }
 
 export function MapDetailCard({
@@ -152,6 +177,7 @@ export function MapDetailCard({
   only,
   reloadKey,
   onGoToVersion,
+  onFrameworkChanged,
   currentVersionId,
 }: MapDetailCardProps) {
   const { t, lang } = useI18n();
@@ -177,15 +203,41 @@ export function MapDetailCard({
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
   // org_path → 확정 한글 부서명(dept_info) — 이름과 같은 규칙으로 부서도 언어 토글 (없으면 영문 폴백)
   const [koreanDeptByPath, setKoreanDeptByPath] = useState<Map<string, string>>(new Map());
+  // 우클릭 컨텍스트 메뉴 — 인물 행=메신저 보내기 · 부서/오우닝=조직 정보 (feedback 2026-08-14)
+  const [personMenu, setPersonMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [orgMenu, setOrgMenu] = useState<{ path: string; x: number; y: number } | null>(null);
+  const [orgInfo, setOrgInfo] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
+  const [personInfo, setPersonInfo] = useState<{ id: string; x: number; y: number } | null>(null);
   // 그룹 id → {구성원수, 상태} — 그룹 멤버 2번째 줄 (H2) / group id → {count, status}.
   const [groupInfo, setGroupInfo] = useState<Map<string, { count: number; status: string }>>(new Map());
   // 호버한 부서(팀)의 org_path — 상위/하위 팀 하이라이트 + 상위 소속 노출 (H2) / hovered dept path.
   const [hoveredPath, setHoveredPath] = useState<string | null>(null);
   // 삭제 확인 다이얼로그 표시 여부 / delete confirm dialog visibility.
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 카테고리 연결/이양 모달 표시 여부 (Phase 2) / framework assign modal visibility.
+  const [frameworkModalOpen, setFrameworkModalOpen] = useState(false);
+  // 모달 성공 시 내부 재조회 트리거 — 부모의 reloadKey 없이도 detail을 최신화 (기존 reloadKey 패턴과 동일 기법).
+  const [localReloadKey, setLocalReloadKey] = useState(0);
+  // B: 카드 내 멤버 추가 피커용 raw 디렉터리/그룹 (파생 Map과 별도 보존)
+  const [dirUsersRaw, setDirUsersRaw] = useState<DirectoryUser[]>([]);
+  const [dirDeptsRaw, setDirDeptsRaw] = useState<DirectoryDept[]>([]);
+  const [groupsRaw, setGroupsRaw] = useState<Group[]>([]);
+  // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
+  const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
+  const [savingStaged, setSavingStaged] = useState(false);
+  // 스택 저장 부분 실패 — 배너 채널(카드 전체를 죽이는 fatal error와 분리, 최종 리뷰 픽스 아래 참고).
+  const [stagedSaveError, setStagedSaveError] = useState<string | null>(null);
+  // 방금 적립된 add op — 해당 고스트 행에 플래시 강조. 1.2s 후 자연 소멸 (R2 QA 피드백).
+  const [lastAddedKey, setLastAddedKey] = useState<string | null>(null);
+  // 되돌리기 — 직전 저장 1회분 records. 메모리만(페이지 이탈 시 소멸, 영속 안 함) — 패널과 대칭.
+  const [lastApply, setLastApply] = useState<AppliedOpRecord[] | null>(null);
+  const [undoOpen, setUndoOpen] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
   // 펼친 버전·멤버 — 클릭 토글, 여러 개 동시 / expanded version & member ids (click-toggle).
   const [expandedVersions, setExpandedVersions] = useState<Set<number>>(new Set());
   const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set());
+  // 개인(user) 그룹 3.3행 클램프 해제 여부 — 컴포넌트 state만, 영속 불요(W3).
+  const [membersUserExpanded, setMembersUserExpanded] = useState(false);
   const toggleVersion = (id: number) =>
     setExpandedVersions((prev) => {
       const next = new Set(prev);
@@ -203,6 +255,70 @@ export function MapDetailCard({
   const collapseVersions = () => setExpandedVersions(new Set());
   const collapseMembers = () => setExpandedMembers(new Set());
 
+  // 멤버 제거/추가는 즉시 API를 부르지 않고 스택에 적립만 — Save에서 일괄 실행 (trivial setState라 plain
+  // function으로: React Compiler가 useCallback 수동 deps와 어긋나면 빌드가 깨진다, frontend/AGENTS.md).
+  function handleRemoveMember(perm: MapPermission) {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "remove", permissionId: perm.id }));
+  }
+
+  function handleAddMember(principalType: PrincipalType, principalId: string, role: "viewer" | "editor") {
+    setStagedOps((ops) => upsertStagedOp(ops, { kind: "add", principalType, principalId, role }));
+    setLastAddedKey(`${principalType}:${principalId}`);
+    window.setTimeout(() => setLastAddedKey(null), 1200); // 플래시 애니메이션 후 리셋(재추가 시 재발화)
+  }
+
+  function handleCancelStaged(op: StagedOp) {
+    setStagedOps((ops) => removeStagedOp(ops, op));
+  }
+
+  // 본인이 낸 승인 대기 요청 회수 — 서버 마커(pending_change)를 직접 지우므로 저장 핸들러와 동일한
+  // 재조회 경로(localReloadKey)로 반영. 카드엔 onToast가 없어 에러는 기존 stagedSaveError 배너로.
+  async function handleWithdrawPending(perm: MapPermission) {
+    if (!perm.pending_change) return;
+    try {
+      await withdrawApprovalRequest(perm.pending_change.request_id);
+      setLocalReloadKey((k) => k + 1);
+    } catch (err) {
+      setStagedSaveError(humanizeApiError(err, t));
+    }
+  }
+
+  // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
+  useEffect(() => {
+    if (!lastAddedKey) return;
+    document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [lastAddedKey]);
+
+  // Save — 스택을 일괄 실행. 실패가 있을 때만 배너로 표시(fatal error state와는 별도 채널) — 부분 실패는
+  // 이 브랜치가 의도적으로 만드는 정상 플로우 결과(R1 상호배제 409, 강등 승인대기 409)라 카드 전체를 죽이면
+  // 안 되고 복구 가능해야 한다(최종 리뷰 픽스). 성공/승인대기는 재조회(reload)의 최신 목록·pending 배지로 이미 반영된다.
+  async function handleSaveStaged() {
+    setStagedSaveError(null);
+    setSavingStaged(true);
+    try {
+      const result = await applyStagedOps(mapId, stagedOps, new Map((members ?? []).map((m) => [m.id, m])));
+      if (result.failed.length > 0) {
+        const summary = t("perm.staged.result", {
+          applied: result.applied,
+          pending: result.pending,
+          failed: result.failed.length,
+        });
+        const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+        setStagedSaveError(`${summary} — ${failureText}`);
+      }
+      const kept = result.records.filter((r) => r.outcome !== "failed");
+      setLastApply(kept.length > 0 ? kept : null);
+      setStagedOps([]);
+      setLocalReloadKey((k) => k + 1);
+    } finally {
+      setSavingStaged(false);
+    }
+  }
+
+  function handleCancelAllStaged() {
+    setStagedOps([]); // 저장 안 하면 작업 취소 — 서버 호출 없이 스택만 비움
+  }
+
   useEffect(() => {
     let active = true;
     void getMap(mapId)
@@ -219,9 +335,14 @@ export function MapDetailCard({
             if (!active) return;
             setMembers(perms);
             setMembersStatus("ready");
+            setDirUsersRaw(dir.users);
+            setDirDeptsRaw(dir.departments);
+            setGroupsRaw(groups);
             setNameById(new Map(dir.users.map((u) => [u.id, u.name])));
             setKoreanNameById(new Map(dir.users.map((u) => [u.id, u.korean_name ?? ""])));
-            setTitleById(new Map(dir.users.map((u) => [u.id, u.title ?? ""])));
+            setTitleById(
+              new Map(dir.users.map((u) => [u.id, formatTitleWithPosition(u.title ?? "", u.position ?? "")])),
+            );
             setOrgPathById(new Map(dir.users.map((u) => [u.id, u.org_path ?? ""])));
             setKoreanDeptByPath(buildKoreanDeptByPath(dir.departments, dir.users));
             setGroupInfo(
@@ -248,12 +369,12 @@ export function MapDetailCard({
         }
       })
       .catch((err) => {
-        if (active) setError(err instanceof Error ? err.message : String(err));
+        if (active) setError(humanizeApiError(err, t));
       });
     return () => {
       active = false;
     };
-  }, [mapId, loginId, reloadKey]);
+  }, [mapId, loginId, reloadKey, localReloadKey, t]);
 
   if (error) {
     return <p className="p-4 text-caption text-error">{error}</p>;
@@ -274,6 +395,15 @@ export function MapDetailCard({
   const isOwner = detail.my_role === "owner";
   // 오우닝 부서 org_path — 멤버 컬럼에 협업 부서 행처럼 노출(인스펙터/상세 공용). const라 클로저 내 narrowing 유지.
   const owningDeptPath = detail.owning_department;
+  // 멤버 추가/제거 편집 게이트 — 백엔드 기준 editor+ (sysadmin은 서버 my_role이 owner로 해석됨)
+  const canManageMembers =
+    detail !== null && (detail.my_role === "editor" || detail.my_role === "owner");
+
+  // 편집 스택 파생 — 추가 예정 목록 + permissionId별 remove 예정 조회(협업자 패널과 동일 규칙, C4).
+  const stagedAdds = stagedOps.filter((op): op is StagedOp & { kind: "add" } => op.kind === "add");
+  const stagedRemoveIds = new Set(
+    stagedOps.filter((op): op is StagedOp & { kind: "remove" } => op.kind === "remove").map((op) => op.permissionId),
+  );
 
   // 나의 소속(직접 user / 내 그룹 / 내 부서) 여부 — 하이라이트 / is this grant "mine"?
   // 부서: org_path 정확일치 또는 prefix("…/") 경계 (belongs_to_department 규약, HM-2).
@@ -284,10 +414,351 @@ export function MapDetailCard({
       orgPath !== "" &&
       (orgPath === perm.principal_id || orgPath.startsWith(`${perm.principal_id}/`)));
 
+  // 오너 행 — 오우닝 부서 블록 바로 아래 별도 섹션으로 노출(R2 QA 피드백). user 그룹 루프에서는 제외된다.
+  const ownerRows = members?.filter((m) => m.principal_type === "user" && m.role === "owner") ?? [];
+
+  // 되돌리기 모달의 이름 해석 — 스택 추가행(위 stagedAdds 렌더)과 동일 소스(nameById/groupNameById/formatDeptName).
+  function resolveUndoName(type: PrincipalType, id: string): string {
+    if (type === "user") return nameById.get(id) ?? id;
+    if (type === "group") return groupNameById.get(id) ?? id;
+    return formatDeptName(id, lang, koreanDeptByPath);
+  }
+
+  // 직전 저장 1회분의 역방향을 실행 — 카드엔 onToast가 없어 성공 표기는 저장 핸들러와 동일하게
+  // 실패시에만 stagedSaveError 배너로(성공/승인대기는 재조회 반영만, 저장 결과 표기와 일관되게).
+  async function handleUndoConfirm() {
+    if (!lastApply) return;
+    setUndoBusy(true);
+    try {
+      const summary = await executeUndoPlan(mapId, buildUndoPlan(lastApply, isOwner));
+      if (summary.failed.length > 0) {
+        const text = t("perm.undo.result", {
+          done: summary.done,
+          pending: summary.pending,
+          failed: summary.failed.length,
+        });
+        const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
+        setStagedSaveError(`${text} — ${failureText}`);
+      }
+      setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
+      setUndoOpen(false);
+      setLocalReloadKey((k) => k + 1);
+    } finally {
+      setUndoBusy(false);
+    }
+  }
+
+  // 멤버 행 렌더 — user/department/group 그룹 루프와 오너 섹션이 공유하는 단일 경로 (중복 최소화).
+  // owner 행도 이 경로를 타지만 canManageMembers && perm.role !== "owner" 가드가 편집 어포던스(X 버튼)만
+  // 자연히 걸러낸다 — owner-row 보호 불변식(B/R4)은 별도 분기 없이 유지된다.
+  function renderMemberRow(perm: MapPermission, showRoleBoundary: boolean) {
+    // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
+    const related =
+      hoveredPath !== null &&
+      perm.principal_type === "department" &&
+      perm.principal_id !== hoveredPath &&
+      (hoveredPath.startsWith(`${perm.principal_id}/`) ||
+        perm.principal_id.startsWith(`${hoveredPath}/`));
+    // 유저 펼침 — 클릭 토글(여러 개 동시) (H2c)
+    const memberOpen = perm.principal_type === "user" && expandedMembers.has(perm.principal_id);
+    // 행 내용 — 유저=이름/부서(클릭 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
+    let nameLine: ReactNode;
+    let restNode: ReactNode = null;
+    if (perm.principal_type === "user") {
+      const enName = nameById.get(perm.principal_id) ?? perm.principal_id;
+      const krName = koreanNameById.get(perm.principal_id) ?? "";
+      // 언어 토글: ko=한글(없으면 영문), en=영문. 반대 언어는 펼침 필로.
+      nameLine = lang === "ko" ? krName || enName : enName;
+      const altName = lang === "ko" ? (krName ? enName : "") : krName;
+      const path = orgPathById.get(perm.principal_id) ?? "";
+      const title = titleById.get(perm.principal_id) ?? "";
+      const levelPaths = buildOrgPathChain(path).reverse(); // 작은→큰 / leaf→root
+      restNode = (
+        <>
+          {/* 평소: 말단 부서 (펼치면 숨김) */}
+          {path && !memberOpen && (
+            <span className="block truncate text-fine text-ink-tertiary">
+              {formatDeptName(path, lang, koreanDeptByPath)}
+            </span>
+          )}
+          {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
+          <span
+            className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+              memberOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
+          >
+            <span className="overflow-hidden">
+              {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
+              <span className="mt-1 flex flex-col items-start gap-1">
+                {altName && (
+                  <span
+                    data-id="member-alt-name"
+                    className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary"
+                  >
+                    {altName}
+                  </span>
+                )}
+                <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
+                  {perm.principal_id}
+                </span>
+                {title && (
+                  <span className="rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
+                    {title}
+                  </span>
+                )}
+                {levelPaths.map((lv) => (
+                  <span
+                    key={lv}
+                    className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
+                  >
+                    {formatDeptName(lv, lang, koreanDeptByPath)}
+                  </span>
+                ))}
+              </span>
+            </span>
+          </span>
+        </>
+      );
+    } else if (perm.principal_type === "group") {
+      nameLine = groupNameById.get(perm.principal_id) ?? perm.principal_id;
+      const g = groupInfo.get(perm.principal_id);
+      if (g) {
+        const status = t(
+          g.status === "pending"
+            ? "home.groupPending"
+            : g.status === "rejected"
+              ? "home.groupRejected"
+              : "home.groupActive",
+        );
+        restNode = (
+          <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+            <Users size={11} strokeWidth={1.5} className="shrink-0" />
+            {g.count}
+            <span className="truncate">· {status}</span>
+          </span>
+        );
+      }
+    } else {
+      nameLine = formatDeptName(perm.principal_id, lang, koreanDeptByPath);
+      const count = [...orgPathById.values()].filter(
+        (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
+      ).length;
+      // 상위 경로 — 루트 부서면 자기 자신 (기존 동작 유지)
+      const chain = buildOrgPathChain(perm.principal_id);
+      const parent = (chain.length > 1 ? chain.slice(0, -1) : chain)
+        .map((p) => formatDeptName(p, lang, koreanDeptByPath))
+        .join(" › ");
+      restNode = (
+        <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+          <Users size={11} strokeWidth={1.5} className="shrink-0" />
+          {count}
+          {parent && <span className="hidden truncate group-hover/member:inline">· {parent}</span>}
+        </span>
+      );
+    }
+    // 스택에 이 행을 겨냥한 제거 예정이 있는지 — 있으면 톤다운 + 태그 + 개별 취소 (C4).
+    const stagedRemove = stagedRemoveIds.has(perm.id);
+    // 옛 X버튼과 동일 조건 — 역할 필 자리에 hover/focus 시 Remove 필로 스왑 (U4).
+    const removable = canManageMembers && perm.role !== "owner" && !stagedRemove && !perm.pending_change;
+    return (
+      <Fragment key={perm.id}>
+        {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
+        {showRoleBoundary && <div aria-hidden className="my-0.5 border-t border-hairline" />}
+        <div
+          role={perm.principal_type === "user" ? "button" : undefined}
+          tabIndex={perm.principal_type === "user" ? 0 : undefined}
+          // 유저=아코디언 토글 · 부서=펼침이 없어 좌클릭도 우클릭과 동일한 조직 정보 메뉴 (feedback 2026-08-14)
+          onClick={
+            perm.principal_type === "user"
+              ? () => toggleMember(perm.principal_id)
+              : perm.principal_type === "department"
+                ? (e) => setOrgMenu({ path: perm.principal_id, x: e.clientX, y: e.clientY })
+                : undefined
+          }
+          onKeyDown={
+            perm.principal_type === "user"
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleMember(perm.principal_id);
+                  }
+                }
+              : undefined
+          }
+          onMouseEnter={
+            perm.principal_type === "department" ? () => setHoveredPath(perm.principal_id) : undefined
+          }
+          onMouseLeave={perm.principal_type === "department" ? () => setHoveredPath(null) : undefined}
+          // 우클릭 — 인물=메신저 보내기 · 부서=조직 정보. 그룹 행은 메뉴 없음.
+          onContextMenu={
+            perm.principal_type === "user"
+              ? (e) => {
+                  e.preventDefault();
+                  setPersonMenu({ id: perm.principal_id, x: e.clientX, y: e.clientY });
+                }
+              : perm.principal_type === "department"
+                ? (e) => {
+                    e.preventDefault();
+                    setOrgMenu({ path: perm.principal_id, x: e.clientX, y: e.clientY });
+                  }
+                : undefined
+          }
+          // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
+          // named group — 인스펙터가 이 카드를 <details className="group ...">로 감싸므로(map-inspector-tab.tsx),
+          // 이름 없는 group을 쓰면 그 조상까지 호버 시 전 행이 동시에 스왑된다(governance-r5 V1, R5-2).
+          className={`group/member flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
+            // 부서 행도 우클릭 메뉴가 생겨 인물 행과 같은 호버 어포던스(링·포인터) 적용 — 그룹 행만 제외
+            perm.principal_type !== "group" ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border" : ""
+          } ${stagedRemove ? "opacity-60" : ""} ${
+            isMine(perm)
+              ? "border-accent bg-accent/10"
+              : related
+                ? "border-accent-tint-border bg-accent-tint/40"
+                : "border-hairline bg-surface"
+          }`}
+        >
+          <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
+              <MemberIcon perm={perm} isMe={perm.principal_type === "user" && perm.principal_id === loginId} />
+            </span>
+            {/* 1줄: 이름/말단/그룹 · 이하: 부서/펼침 (H2c) */}
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate">{nameLine}</span>
+              {restNode}
+            </span>
+          </span>
+          <span className="flex flex-col items-end gap-0.5">
+            <span className="flex items-center gap-1">
+              {/* 역할 필 자리 — hover/focus 시 같은 자리·같은 크기의 빨간 Remove 필로 페이드 전환 (U4, R5-1/R5-3).
+                  RoleBadge 자체가 ROLE_PILL_WIDTH_CLASS로 고정폭이라 이 wrapper는 배지 크기에 자동으로
+                  맞춰지고, absolute inset-0 오버레이도 그 폭을 그대로 물려받는다(별도 min-w 불필요). */}
+              <span className="relative inline-flex items-center justify-center">
+                <span
+                  className={
+                    removable
+                      ? "transition-opacity duration-150 group-hover/member:opacity-0 group-focus-within/member:opacity-0"
+                      : ""
+                  }
+                >
+                  <RoleBadge role={perm.role as MapRole} className={ROLE_PILL_WIDTH_CLASS} />
+                </span>
+                {removable && (
+                  <button
+                    type="button"
+                    data-id={`map-detail-remove-member-${perm.id}`}
+                    aria-label="Remove member"
+                    // opacity/pointer-events(display 토글 아님) — 부서/그룹 행은 상위에 tabIndex가
+                    // 없어 group-focus-within만으론 못 열림, 버튼 자체가 Tab 순서에 남아 있어야
+                    // focus:opacity-100로 직접 도달 가능(display:none은 Tab에서 완전히 제외됨).
+                    // 버튼은 투명 히트영역(래퍼=라인박스 24px), 실제 필은 배지와 동일 지오메트리의
+                    // 내부 span — inset-0을 필에 직접 주면 상하 6px 커져 R5-1 위반.
+                    className="absolute inset-0 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-150 focus:pointer-events-auto focus:opacity-100 group-hover/member:pointer-events-auto group-hover/member:opacity-100 group-focus-within/member:pointer-events-auto group-focus-within/member:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveMember(perm);
+                    }}
+                  >
+                    <span
+                      className={`rounded-sm border border-error bg-surface px-1.5 py-0.5 text-fine text-error transition-colors hover:bg-error/10 ${ROLE_PILL_WIDTH_CLASS}`}
+                    >
+                      {t("perm.removePill")}
+                    </span>
+                  </button>
+                )}
+              </span>
+              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만.
+                  본인이 낸 요청이면 호버 시 회수(Withdraw)로 스왑 / hover-swaps to Withdraw for the requester. */}
+              {perm.pending_change && (
+                perm.pending_change.requested_by === loginId ? (
+                  <HoverSwapPill
+                    dataId={`map-detail-pending-withdraw-${perm.id}`}
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                    swapLabel={t("perm.pending.withdraw")}
+                    onActivate={() => void handleWithdrawPending(perm)}
+                    className="max-w-full"
+                    base={
+                      <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
+                        {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                      </span>
+                    }
+                  />
+                ) : (
+                  <span
+                    className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
+                    title={t("perm.pending.by", {
+                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
+                    })}
+                  >
+                    {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
+                  </span>
+                )
+              )}
+            </span>
+            {/* 스택 제거 태그 — 좌측 소속(부서) 줄과 같은 높이 대역에 오도록 2번째 줄로 배치 (C4, R5-4).
+                예고 아이콘(즉시/승인)을 달고, 호버 시 같은 자리 Cancel 필로 스왑 (HoverSwapPill). */}
+            {stagedRemove && (
+              <HoverSwapPill
+                dataId={`map-detail-staged-cancel-${perm.id}`}
+                title={t(
+                  forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval"
+                    ? "perm.staged.forecastApproval"
+                    : "perm.staged.forecastInstant",
+                )}
+                swapLabel={t("perm.staged.cancelPill")}
+                onActivate={() => handleCancelStaged({ kind: "remove", permissionId: perm.id })}
+                base={
+                  // ROLE_PILL_WIDTH_CLASS는 고정 w-[60px]라 아이콘+문구가 넘친다 — 이 필에서만
+                  // min-w-[60px]로 완화(공유 상수는 불변, brief Step 4 주의사항).
+                  <span className="inline-flex min-w-[60px] items-center justify-center gap-1 whitespace-nowrap rounded-sm border border-error px-1.5 py-0.5 text-fine text-error">
+                    {forecastStagedOp({ kind: "remove", permissionId: perm.id }, perm.role, isOwner) === "approval" ? (
+                      <Hourglass size={12} strokeWidth={1.5} />
+                    ) : (
+                      <Zap size={12} strokeWidth={1.5} />
+                    )}
+                    {t("perm.staged.remove")}
+                  </span>
+                }
+              />
+            )}
+          </span>
+        </div>
+      </Fragment>
+    );
+  }
+
   const body = (
     <>
       {!only && (
         <>
+      {/* 업무 체계 카테고리 — 경로가 있으면 최상단 전용 행(긴 L1~L5 경로가 우측 필 무리를 키워
+          타이틀이 세로로 쥐어짜지는 것 방지), 없으면 오너의 연결 유령 필만 기존 우측 무리에 유지 */}
+      {detail.category_path && (
+        <div className="flex text-fine">
+          {isOwner ? (
+            <button
+              type="button"
+              data-id="map-detail-category"
+              title={detail.category_path}
+              className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+              onClick={() => setFrameworkModalOpen(true)}
+            >
+              <Network size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="min-w-0 truncate">{detail.category_path}</span>
+            </button>
+          ) : (
+            <span
+              data-id="map-detail-category"
+              title={detail.category_path}
+              className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+            >
+              <Network size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="min-w-0 truncate">{detail.category_path}</span>
+            </span>
+          )}
+        </div>
+      )}
       {/* 헤더 — 좌: 타이틀 / 우: 공개·역할·오우닝 부서 필 (Open 버튼 제거 — 열기는 카드 타이틀 링크) */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -351,6 +822,13 @@ export function MapDetailCard({
               data-id="map-detail-owning-dept"
               title={t("perm.owningDept.title")}
               className="inline-flex items-center gap-1 rounded-full bg-accent-tint px-2 py-0.5 text-accent"
+              // 오우닝 부서 카드 우클릭 — 조직 정보 메뉴 (feedback 2026-08-14)
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (detail.owning_department) {
+                  setOrgMenu({ path: detail.owning_department, x: e.clientX, y: e.clientY });
+                }
+              }}
             >
               <Building2 size={12} strokeWidth={1.5} />
               {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
@@ -364,6 +842,18 @@ export function MapDetailCard({
               <TriangleAlert size={12} strokeWidth={1.5} />
               {t("home.owningMissingBadge")}
             </span>
+          )}
+          {/* 업무 체계 연결 유령 필(미연결 오너 전용) — 연결된 경로 필은 위 최상단 행으로 이동 (Phase 2) */}
+          {isOwner && !detail.category_path && (
+            <button
+              type="button"
+              data-id="map-detail-category"
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-hairline px-2 py-0.5 text-ink-tertiary hover:border-accent hover:text-accent"
+              onClick={() => setFrameworkModalOpen(true)}
+            >
+              <Network size={12} strokeWidth={1.5} />
+              {t("home.frameworkAssign")}
+            </button>
           )}
         </div>
       </div>
@@ -396,6 +886,41 @@ export function MapDetailCard({
           <span className="text-ink-tertiary">{t("home.descEmpty")}</span>
         )}
       </div>
+
+      {/* 지정 I/O — sp_input/sp_output 중 하나라도 있으면 노출 (Phase 2) */}
+      {(detail.sp_input || detail.sp_output) && (
+        <div
+          data-id="map-detail-io"
+          className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
+        >
+          {detail.sp_input && (
+            <p>
+              <span className="text-ink-tertiary">{t("home.ioInput")}: </span>
+              {detail.sp_input}
+            </p>
+          )}
+          {detail.sp_output && (
+            <p>
+              <span className="text-ink-tertiary">{t("home.ioOutput")}: </span>
+              {detail.sp_output}
+            </p>
+          )}
+        </div>
+      )}
+
+      {frameworkModalOpen && (
+        <FrameworkAssignModal
+          mapId={detail.id}
+          currentCategoryId={detail.category_id}
+          currentPath={detail.category_path}
+          hasConsultantCode={Boolean(detail.consultant_code)}
+          onClose={() => setFrameworkModalOpen(false)}
+          onChanged={() => {
+            setLocalReloadKey((n) => n + 1);
+            onFrameworkChanged?.();
+          }}
+        />
+      )}
         </>
       )}
 
@@ -444,13 +969,18 @@ export function MapDetailCard({
             {owningDeptPath && (
               <div data-id="map-detail-owning-member" className="flex flex-col gap-1">
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.title")}</p>
-                <div className="flex items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5">
+                <div
+                  className="flex cursor-pointer items-start justify-between gap-2 rounded-sm border border-accent-tint-border bg-accent-tint/40 py-1.5 pl-1.5 pr-2.5 transition-colors hover:ring-1 hover:ring-accent-tint-border"
+                  // 부서 행과 같은 카드로 인식됨 — 좌클릭도 우클릭과 동일한 조직 정보 메뉴 (feedback 2026-08-14)
+                  onClick={(e) => setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY })}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setOrgMenu({ path: owningDeptPath, x: e.clientX, y: e.clientY });
+                  }}
+                >
                   <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
-                      {(() => {
-                        const Icon = LEVEL_ICONS[deptLevelRank(deptLeaf(owningDeptPath))] ?? Building2;
-                        return <Icon size={22} strokeWidth={1.5} />;
-                      })()}
+                      <DeptLevelIcon leaf={deptLeaf(owningDeptPath)} size={22} />
                     </span>
                     <span className="flex min-w-0 flex-col leading-tight">
                       <span className="truncate">{formatDeptName(owningDeptPath, lang, koreanDeptByPath)}</span>
@@ -462,6 +992,14 @@ export function MapDetailCard({
                   </span>
                   <RoleBadge role="editor" />
                 </div>
+              </div>
+            )}
+            {/* 오너 섹션 — 오우닝 부서 블록 바로 아래, user 그룹보다 우선 노출 (R2 QA 피드백).
+                renderMemberRow 재사용 — 편집 어포던스는 owner-row 가드로 자연히 빠진다(X 버튼 없음). */}
+            {ownerRows.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <p className="text-fine text-ink-tertiary">{t("home.memberOwner")}</p>
+                {ownerRows.map((perm) => renderMemberRow(perm, false))}
               </div>
             )}
             {only !== "members" && (
@@ -486,7 +1024,10 @@ export function MapDetailCard({
             ) : (
               <div className="flex flex-col gap-3">
                 {MEMBER_GROUPS.map((g) => {
-                  const unsorted = members.filter((m) => m.principal_type === g.type);
+                  // 오너는 별도 섹션(오우닝 부서 블록 아래)에서 렌더 — user 그룹에서는 제외 (R2 QA 피드백)
+                  const unsorted = members.filter(
+                    (m) => m.principal_type === g.type && (g.type !== "user" || m.role !== "owner"),
+                  );
                   if (unsorted.length === 0) return null;
                   // 역할 우선(owner→editor→viewer), 같은 역할 안에서 부서는 레벨 순 —
                   // sort는 stable이라 그 외는 원순서 유지 (batch2 ④)
@@ -498,183 +1039,176 @@ export function MapDetailCard({
                           deptLevelRank(deptLeaf(b.principal_id))
                       : 0;
                   });
+                  const rowNodes = rows.map((perm, i) =>
+                    renderMemberRow(perm, i > 0 && rows[i - 1].role !== perm.role),
+                  );
+                  // 개인 그룹만 3.3행 클램프 대상 — 부서/그룹 그룹·오너 섹션은 클램프 없음 (W3).
+                  const clampable = g.type === "user" && rows.length > MEMBERS_CLAMP_VISIBLE;
                   return (
                     <div key={g.type} className="flex flex-col gap-1">
                       <p className="text-fine text-ink-tertiary">{t(g.labelKey)}</p>
-                      {rows.map((perm, i) => {
-                        // 호버한 팀의 상위/하위 팀이면 하이라이트 (멤버수 중복 인지) (H2)
-                        const related =
-                          hoveredPath !== null &&
-                          perm.principal_type === "department" &&
-                          perm.principal_id !== hoveredPath &&
-                          (hoveredPath.startsWith(`${perm.principal_id}/`) ||
-                            perm.principal_id.startsWith(`${hoveredPath}/`));
-                        // 유저 펼침 — 클릭 토글(여러 개 동시) (H2c)
-                        const memberOpen =
-                          perm.principal_type === "user" && expandedMembers.has(perm.principal_id);
-                        // 행 내용 — 유저=이름/부서(클릭 시 아이디·타이틀·부서레벨 펼침) · 부서=말단/구성원수(호버 시 상위) · 그룹=id/구성원수·상태 (H2c)
-                        let nameLine: ReactNode;
-                        let restNode: ReactNode = null;
-                        if (perm.principal_type === "user") {
-                          const enName = nameById.get(perm.principal_id) ?? perm.principal_id;
-                          const krName = koreanNameById.get(perm.principal_id) ?? "";
-                          // 언어 토글: ko=한글(없으면 영문), en=영문. 반대 언어는 펼침 필로.
-                          nameLine = lang === "ko" ? krName || enName : enName;
-                          const altName = lang === "ko" ? (krName ? enName : "") : krName;
-                          const path = orgPathById.get(perm.principal_id) ?? "";
-                          const title = titleById.get(perm.principal_id) ?? "";
-                          const levelPaths = buildOrgPathChain(path).reverse(); // 작은→큰 / leaf→root
-                          restNode = (
-                            <>
-                              {/* 평소: 말단 부서 (펼치면 숨김) */}
-                              {path && !memberOpen && (
-                                <span className="block truncate text-fine text-ink-tertiary">
-                                  {formatDeptName(path, lang, koreanDeptByPath)}
-                                </span>
-                              )}
-                              {/* 펼침: 아이디·타이틀·부서 레벨(작은→큰)을 필로 — 괄호 없이 (H2c) */}
-                              <span
-                                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                                  memberOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                                }`}
-                              >
-                                <span className="overflow-hidden">
-                                  {/* 아이디·타이틀·부서 레벨을 각 1행씩 — 배경 투명, 테두리는 하이라이트(me) 행에서도 보이게 divider (H2c) */}
-                                  <span className="mt-1 flex flex-col items-start gap-1">
-                                    {altName && (
-                                      <span
-                                        data-id="member-alt-name"
-                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary"
-                                      >
-                                        {altName}
-                                      </span>
-                                    )}
-                                    <span className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-secondary">
-                                      {perm.principal_id}
-                                    </span>
-                                    {title && (
-                                      <span className="rounded-xs border border-accent-tint-border px-1.5 py-0.5 text-fine text-accent">
-                                        {title}
-                                      </span>
-                                    )}
-                                    {levelPaths.map((lv) => (
-                                      <span
-                                        key={lv}
-                                        className="rounded-xs border border-ink-tertiary/40 px-1.5 py-0.5 text-fine text-ink-tertiary"
-                                      >
-                                        {formatDeptName(lv, lang, koreanDeptByPath)}
-                                      </span>
-                                    ))}
-                                  </span>
-                                </span>
-                              </span>
-                            </>
-                          );
-                        } else if (perm.principal_type === "group") {
-                          nameLine = groupNameById.get(perm.principal_id) ?? perm.principal_id;
-                          const g = groupInfo.get(perm.principal_id);
-                          if (g) {
-                            const status = t(
-                              g.status === "pending"
-                                ? "home.groupPending"
-                                : g.status === "rejected"
-                                  ? "home.groupRejected"
-                                  : "home.groupActive",
-                            );
-                            restNode = (
-                              <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
-                                <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                                {g.count}
-                                <span className="truncate">· {status}</span>
-                              </span>
-                            );
-                          }
-                        } else {
-                          nameLine = formatDeptName(perm.principal_id, lang, koreanDeptByPath);
-                          const count = [...orgPathById.values()].filter(
-                            (p) => p === perm.principal_id || p.startsWith(`${perm.principal_id}/`),
-                          ).length;
-                          // 상위 경로 — 루트 부서면 자기 자신 (기존 동작 유지)
-                          const chain = buildOrgPathChain(perm.principal_id);
-                          const parent = (chain.length > 1 ? chain.slice(0, -1) : chain)
-                            .map((p) => formatDeptName(p, lang, koreanDeptByPath))
-                            .join(" › ");
-                          restNode = (
-                            <span className="flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
-                              <Users size={11} strokeWidth={1.5} className="shrink-0" />
-                              {count}
-                              {parent && <span className="hidden truncate group-hover:inline">· {parent}</span>}
-                            </span>
-                          );
-                        }
-                        return (
-                          <Fragment key={perm.id}>
-                          {/* 역할 클러스터 경계 — 회색 가로선 구분 (batch2 ④) */}
-                          {i > 0 && rows[i - 1].role !== perm.role && (
-                            <div aria-hidden className="my-0.5 border-t border-hairline" />
-                          )}
+                      {clampable ? (
+                        <>
                           <div
-                            role={perm.principal_type === "user" ? "button" : undefined}
-                            tabIndex={perm.principal_type === "user" ? 0 : undefined}
-                            onClick={
-                              perm.principal_type === "user"
-                                ? () => toggleMember(perm.principal_id)
-                                : undefined
-                            }
-                            onKeyDown={
-                              perm.principal_type === "user"
-                                ? (e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      toggleMember(perm.principal_id);
-                                    }
-                                  }
-                                : undefined
-                            }
-                            onMouseEnter={
-                              perm.principal_type === "department"
-                                ? () => setHoveredPath(perm.principal_id)
-                                : undefined
-                            }
-                            onMouseLeave={
-                              perm.principal_type === "department"
-                                ? () => setHoveredPath(null)
-                                : undefined
-                            }
-                            // 유저 행=클릭 토글(펼침) · 부서=호버(상위/관련 팀) (H2c/H2)
-                            className={`group flex items-start justify-between gap-2 rounded-sm border py-1.5 pl-1.5 pr-2.5 transition-colors ${
-                              perm.principal_type === "user"
-                                ? "cursor-pointer hover:ring-1 hover:ring-accent-tint-border"
-                                : ""
-                            } ${
-                              isMine(perm)
-                                ? "border-accent bg-accent/10"
-                                : related
-                                  ? "border-accent-tint-border bg-accent-tint/40"
-                                  : "border-hairline bg-surface"
-                            }`}
+                            data-id="map-detail-members-scroll"
+                            className="clamp-size flex flex-col gap-1 overflow-x-hidden overflow-y-auto"
+                            style={{
+                              maxHeight: membersUserExpanded
+                                ? "max-content"
+                                : `${MEMBERS_CLAMP_MAX_HEIGHT_PX}px`,
+                            }}
                           >
-                            <span className="flex min-w-0 items-start gap-1.5 text-caption text-ink">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center self-start text-ink-muted">
-                                <MemberIcon
-                                  perm={perm}
-                                  isMe={perm.principal_type === "user" && perm.principal_id === loginId}
-                                />
-                              </span>
-                              {/* 1줄: 이름/말단/그룹 · 이하: 부서/펼침 (H2c) */}
-                              <span className="flex min-w-0 flex-col leading-tight">
-                                <span className="truncate">{nameLine}</span>
-                                {restNode}
-                              </span>
-                            </span>
-                            <RoleBadge role={perm.role as MapRole} />
+                            {rowNodes}
                           </div>
-                          </Fragment>
-                        );
-                      })}
+                          <button
+                            type="button"
+                            data-id="map-detail-members-expand"
+                            aria-expanded={membersUserExpanded}
+                            onClick={() => setMembersUserExpanded((v) => !v)}
+                            className="w-full rounded-sm py-1 text-center text-fine text-accent hover:bg-divider hover:underline"
+                          >
+                            {membersUserExpanded
+                              ? t("home.membersCollapse")
+                              : t("home.membersShowAll", { count: rows.length })}
+                          </button>
+                        </>
+                      ) : (
+                        rowNodes
+                      )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {/* 스택에 적립된 추가 예정 — 고스트 행(점선 테두리) + 태그 + 개별 취소 X (C4) /
+                Staged "to add" rows — dashed ghost row with a tag and a per-row cancel. */}
+            {stagedAdds.map((op) => {
+              const name =
+                op.principalType === "user"
+                  ? nameById.get(op.principalId) ?? op.principalId
+                  : op.principalType === "group"
+                    ? groupNameById.get(op.principalId) ?? op.principalId
+                    : formatDeptName(op.principalId, lang, koreanDeptByPath);
+              const iconNode =
+                op.principalType === "user" ? (
+                  <User size={22} strokeWidth={1.5} />
+                ) : op.principalType === "group" ? (
+                  <UsersRound size={22} strokeWidth={1.5} />
+                ) : (
+                  <DeptLevelIcon leaf={deptLeaf(op.principalId)} size={22} />
+                );
+              const addKey = `${op.principalType}:${op.principalId}`;
+              return (
+                <div
+                  key={`add:${addKey}`}
+                  data-id={`staged-add-${addKey}`}
+                  className={`flex items-center justify-between gap-2 rounded-sm border border-dashed border-hairline py-1.5 pl-1.5 pr-2.5 ${
+                    lastAddedKey === addKey ? "motion-safe:animate-[picker-flash_1200ms_ease-in-out]" : ""
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 text-caption text-ink">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center text-ink-muted">
+                      {iconNode}
+                    </span>
+                    <span className="truncate">{name}</span>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <HoverSwapPill
+                      dataId={`map-detail-staged-add-cancel-${addKey}`}
+                      title={t("perm.staged.forecastInstant")}
+                      swapLabel={t("perm.staged.cancelPill")}
+                      onActivate={() => handleCancelStaged(op)}
+                      base={
+                        <span className="inline-flex items-center gap-1 rounded-sm border border-added px-1.5 py-0.5 text-fine text-added">
+                          <Zap size={12} strokeWidth={1.5} />
+                          {t("perm.staged.add")}
+                        </span>
+                      }
+                    />
+                    <RoleBadge role={op.role} />
+                  </span>
+                </div>
+              );
+            })}
+            {canManageMembers && members !== null && (
+              <div data-id="map-detail-add-member">
+                <AddCollaborator
+                  dirUsers={dirUsersRaw}
+                  dirDepts={dirDeptsRaw}
+                  groups={groupsRaw}
+                  excludeIds={
+                    new Set([...members.map((m) => m.principal_id), ...stagedAdds.map((op) => op.principalId)])
+                  }
+                  viewerGrantDisabled={detail?.visibility === "public"}
+                  onAdd={handleAddMember}
+                />
+              </div>
+            )}
+            {/* Save/Cancel — 스택에 쌓인 게 있을 때만 노출 / Save/Cancel bar, shown only while ops are staged */}
+            {stagedOps.length > 0 && (
+              <div className="mt-2 flex items-center justify-end gap-2 border-t border-hairline pt-2">
+                <button
+                  type="button"
+                  data-id="perm-staged-cancel"
+                  disabled={savingStaged}
+                  className="rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+                  onClick={handleCancelAllStaged}
+                >
+                  {t("perm.staged.cancel")}
+                </button>
+                <button
+                  type="button"
+                  data-id="perm-staged-save"
+                  disabled={savingStaged}
+                  className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                  onClick={() => void handleSaveStaged()}
+                >
+                  {savingStaged && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
+                  {t("perm.staged.save")}
+                </button>
+              </div>
+            )}
+            {/* 되돌리기 — 스택이 비어 있고 직전 저장분이 있을 때만(Save 바와 배타적, 동시 노출 안 함) /
+                Undo bar: only when the stack is empty and a last apply exists (never coexists with Save bar). */}
+            {stagedOps.length === 0 && lastApply && (
+              <div className="mt-2 flex items-center justify-end border-t border-hairline pt-2">
+                <button
+                  type="button"
+                  data-id="perm-undo-last"
+                  title={t("perm.undo.buttonTitle")}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setUndoOpen(true)}
+                >
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  {t("perm.undo.button")}
+                </button>
+              </div>
+            )}
+            {undoOpen && lastApply && (
+              <UndoLastApplyModal
+                items={buildUndoPlan(lastApply, isOwner)}
+                resolveName={resolveUndoName}
+                busy={undoBusy}
+                onClose={() => setUndoOpen(false)}
+                onConfirm={() => void handleUndoConfirm()}
+              />
+            )}
+            {/* 부분 실패 배너 — Save 시점엔 stagedOps가 이미 비워지므로 위 바와 독립 조건.
+                dismissible: 리마운트 없이도 X로 닫아 카드 나머지를 계속 쓸 수 있어야 한다 (최종 리뷰 픽스). */}
+            {stagedSaveError && (
+              <div
+                data-id="perm-staged-error"
+                className="mt-2 flex items-start justify-between gap-2 rounded-sm border border-hairline bg-surface px-2 py-1.5 text-fine text-error"
+              >
+                <span className="min-w-0 flex-1">{stagedSaveError}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="shrink-0 rounded-sm p-0.5 text-error hover:bg-surface-alt"
+                  onClick={() => setStagedSaveError(null)}
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
               </div>
             )}
           </div>
@@ -750,6 +1284,57 @@ export function MapDetailCard({
             onDelete(detail.id);
           }}
           onClose={() => setConfirmDelete(false)}
+        />
+      )}
+      {personMenu && (
+        <ContextMenu
+          x={personMenu.x}
+          y={personMenu.y}
+          onClose={() => setPersonMenu(null)}
+          items={[
+            {
+              label: t("person.sendMessenger"),
+              icon: MessageCircle,
+              onSelect: () => {
+                // 사내 메신저 프로토콜 — 설치된 환경에서 해당 인원 대화창이 열린다
+                window.location.href = `mysingleim://token=&ids=${personMenu.id}`;
+              },
+            },
+            {
+              label: t("person.info"),
+              icon: User,
+              onSelect: () => setPersonInfo({ id: personMenu.id, x: personMenu.x, y: personMenu.y }),
+            },
+          ]}
+        />
+      )}
+      {orgMenu && (
+        <ContextMenu
+          x={orgMenu.x}
+          y={orgMenu.y}
+          onClose={() => setOrgMenu(null)}
+          items={[
+            {
+              label: t("org.infoMenu"),
+              icon: Building2,
+              onSelect: () => setOrgInfo({ path: orgMenu.path, origin: { x: orgMenu.x, y: orgMenu.y } }),
+            },
+          ]}
+        />
+      )}
+      {orgInfo && (
+        <OrgInfoModal
+          orgPath={orgInfo.path}
+          koreanDeptByPath={koreanDeptByPath}
+          origin={orgInfo.origin}
+          onClose={() => setOrgInfo(null)}
+        />
+      )}
+      {personInfo && (
+        <PersonInfoPopup
+          userId={personInfo.id}
+          position={{ x: personInfo.x, y: personInfo.y }}
+          onClose={() => setPersonInfo(null)}
         />
       )}
     </div>

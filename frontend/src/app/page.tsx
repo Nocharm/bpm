@@ -5,14 +5,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, Building2, ChevronDown, CircleDot, Crown, Eye, FileUp, PencilLine, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
+import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
 import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
+import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
 import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps } from "@/lib/org-tree";
 import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
-import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { WORD_FEATURES_ENABLED } from "@/lib/features";
 import { splitMapsByMode } from "@/lib/word-map-home";
 import { genId } from "@/lib/id";
@@ -22,8 +23,9 @@ import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
-import { FilterDropdown } from "@/components/maps/filter-dropdown";
+import { FrameworkTree } from "@/components/maps/framework-tree";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
+import { HomeFilterPills } from "@/components/maps/home-filter-pills";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
@@ -34,14 +36,11 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
-// 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
-const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
-
 // 좌측 접힘 상태 영속 키 — 검색·필터(sessionStorage, 새로고침 시 초기화)와 달리 새로고침에도 유지한다.
 const TREE_STATE_KEY = "bpm.home.tree";
 
 export default function MapListPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
@@ -70,6 +69,8 @@ export default function MapListPage() {
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set());
   const [permFilter, setPermFilter] = useState<Set<string>>(new Set());
   const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
+  // SP 지정 여부 필터 — "sp"(지정됨)/"non_sp"(미지정), 비면 전체 (sp_designated_at 기준)
+  const [spFilter, setSpFilter] = useState<Set<string>>(new Set());
   // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
   const [copyTarget, setCopyTarget] = useState<{ id: number; name: string } | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -87,6 +88,11 @@ export default function MapListPage() {
   const [wordOpen, setWordOpen] = useState(true);
   // "조직도 트리 자체를 조작"했는지 — My부서/Word/미지정 토글과 구분해 시드 재실행 여부를 가른다 (아래 writeTree).
   const [treeTouched, setTreeTouched] = useState(false);
+  // 좌측 컬럼 뷰 — 부서 트리(기존) ↔ 업무 체계(Framework, Phase 2 lazy 카테고리 트리)
+  const [homeView, setHomeView] = useState<"departments" | "framework">("departments");
+  // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkTree key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
+  const [frameworkVersion, setFrameworkVersion] = useState(0);
+  const handleFrameworkChanged = () => setFrameworkVersion((v) => v + 1);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
   // recent-opened cache (loaded after mount) — used to pin recent-opened matches on top in search mode.
@@ -94,8 +100,18 @@ export default function MapListPage() {
   // "/" 단축키로 포커스할 검색 input / search input focused by the "/" hotkey.
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const showToast = useCallback((message: string) => {
-    setToasts((prev) => [{ id: genId(), message }, ...prev]);
+  // 필터 필 3단계 반응형(full/label/icon) — 실측 폭 기반, 측정 복제(absolute invisible) 2종의
+  // 자연폭을 행 가용폭과 비교해 판정한다 (Task 8).
+  const filterRowRef = useRef<HTMLDivElement | null>(null);
+  const measureFullRef = useRef<HTMLDivElement | null>(null);
+  const measureLabelRef = useRef<HTMLDivElement | null>(null);
+  // Clear 버튼(필터 활성 시만 렌더)도 같은 행의 가용폭을 갉아먹는다 — 측정에서 빼지 않으면
+  // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
+  const clearBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterDisplayMode>("full");
+
+  const showToast = useCallback((message: string, tone?: "error") => {
+    setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -105,17 +121,24 @@ export default function MapListPage() {
   const seededOrg = useRef(false);
 
   // 접힘 상태 저장 — 의존성 이펙트로 저장하면 StrictMode 재마운트에서 초기 default가 저장값을 덮어쓴다.
-  // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: docs/design/2026-08-04-home-dept-visibility-design.md §4).
+  // 반드시 토글 핸들러에서 다음 값을 계산해 넘긴다 (설계: 2026-08-04-home-dept-visibility-design.md §4).
   // C1 시드는 사용자 행동이 아니므로 저장하지 않는다 — 미조작 사용자는 매 진입 같은 규칙으로 재계산된다.
   // touched는 "조직도 트리 자체를 편집"했을 때만 true(OrgAccordion onToggle/onCollapseAll) — My부서/Word/
   // 미지정 토글은 트리를 바꾸지 않으므로 touched를 그대로 이어받아 저장만 하고 래치하지 않는다. 그래야
   // 내 부서 맵이 없는 유저가 트리와 무관한 토글만 건드려도 진입할 때마다 시드가 계속 재계산된다.
-  const writeTree = (org: Set<string>, fav: boolean, word: boolean, unassigned: boolean, touched: boolean = false) => {
+  const writeTree = (
+    org: Set<string>,
+    fav: boolean,
+    word: boolean,
+    unassigned: boolean,
+    touched: boolean = false,
+    view: "departments" | "framework",
+  ) => {
     if (touched) seededOrg.current = true;
     setTreeTouched(touched);
     window.localStorage.setItem(
       TREE_STATE_KEY,
-      JSON.stringify({ orgOpen: [...org], fav, word, unassigned, touched }),
+      JSON.stringify({ orgOpen: [...org], fav, word, unassigned, touched, view }),
     );
   };
 
@@ -123,7 +146,7 @@ export default function MapListPage() {
     try {
       setMaps(await listMaps());
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("err.loadMaps"));
+      setError(humanizeApiError(err, t));
     }
   }, [t]);
 
@@ -137,7 +160,7 @@ export default function MapListPage() {
         }
       } catch (err) {
         if (active) {
-          setError(err instanceof Error ? err.message : t("err.loadMaps"));
+          setError(humanizeApiError(err, t));
         }
       }
     })();
@@ -163,7 +186,7 @@ export default function MapListPage() {
         return;
       }
       const s = JSON.parse(raw) as {
-        orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown; touched?: unknown;
+        orgOpen?: unknown; fav?: unknown; word?: unknown; unassigned?: unknown; touched?: unknown; view?: unknown;
       };
       if (Array.isArray(s.orgOpen)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -172,6 +195,7 @@ export default function MapListPage() {
       if (typeof s.fav === "boolean") setFavOpen(s.fav);
       if (typeof s.word === "boolean") setWordOpen(s.word);
       if (typeof s.unassigned === "boolean") setUnassignedOpen(s.unassigned);
+      if (s.view === "departments" || s.view === "framework") setHomeView(s.view);
       if (typeof s.touched === "boolean") {
         setTreeTouched(s.touched);
         // orgOpen 존재 자체는 더 이상 근거가 아니다 — 조직도 트리를 실제로 조작한 적 있을 때만 시드를 막는다.
@@ -209,6 +233,7 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
+        sp?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -226,10 +251,56 @@ export default function MapListPage() {
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
       }
+      if (Array.isArray(s.sp)) {
+        setSpFilter(new Set(s.sp.filter((x): x is string => x === "sp" || x === "non_sp")));
+      }
     } catch {
       /* 손상된 저장값 무시 */
     }
   }, []);
+
+  // Clear 필 노출 조건 — JSX(아래)와 effect deps 양쪽이 같은 식을 참조(중복 방지 겸 clearBtnRef
+  // mount/unmount 시 effect 재실행 트리거).
+  const hasActiveFilter =
+    statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0;
+
+  // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible) 2종의 자연폭 vs 행 가용폭(Clear 필 폭
+  // 차감). i18n/뷰 전환은 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는
+  // 라이브 행 폭이 모드에 따라 변해도 복제 폭은 불변이라 진동하지 않는다.
+  useEffect(() => {
+    const row = filterRowRef.current;
+    const full = measureFullRef.current;
+    const label = measureLabelRef.current;
+    if (!row || !full || !label) return;
+    const update = () => {
+      const clear = clearBtnRef.current;
+      // Clear가 뜨면 같은 행의 gap(1.5=6px)만큼 더 먹는다 — 폭+간격을 가용폭에서 미리 뺀다.
+      const available = row.clientWidth - (clear ? clear.offsetWidth + 6 : 0);
+      setFilterMode(
+        pickFilterDisplayMode(available, {
+          full: full.scrollWidth,
+          label: label.scrollWidth,
+        }),
+      );
+    };
+    // 최초 산정은 렌더 커밋 후로 이연 — 이펙트 본문 동기 setState 린트 회피(react-hooks/set-state-in-effect).
+    const raf = requestAnimationFrame(update);
+    const ro = new ResizeObserver(update);
+    ro.observe(row);
+    ro.observe(full);
+    ro.observe(label);
+    if (clearBtnRef.current) ro.observe(clearBtnRef.current);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+    // 필 개수·언어 외에 maps.length도 의존성에 포함 — 맵 목록이 비동기로 도착하기 전엔
+    // visibleMaps.length===0이라 WelcomePlaceholder가 렌더되어 필터 행 자체가 마운트되지 않고
+    // (row/full/label ref가 null) 이 effect가 조기 반환한다. maps 도착 후 필터 행이 처음
+    // 마운트될 때 effect를 다시 돌려야 ResizeObserver가 비로소 붙는다 — 없으면 filterMode가
+    // 초기값 "full"에 영원히 고정되고(관측된 실측 버그, T9), 그 뒤 리사이즈도 못 잡는다.
+    // hasActiveFilter는 clearBtnRef가 새로 마운트/언마운트될 때 observer를 다시 붙이기 위함.
+  }, [homeView, lang, maps.length, hasActiveFilter]);
 
   // 검색·필터 저장 — 변경 시 session에 기록. 마운트 첫 실행은 skip(초기 default가 저장값 덮어쓰기 방지).
   const saveSkip = useRef(true);
@@ -246,9 +317,10 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
+        sp: [...spFilter],
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, spFilter]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -314,7 +386,7 @@ export default function MapListPage() {
         await refresh();
         showToast(t("home.deletedToast")); // 휴지통 이동 + 복구 안내 (DL)
       } catch (err) {
-        setError(err instanceof Error ? err.message : t("err.deleteMap"));
+        setError(humanizeApiError(err, t));
       }
     },
     [refresh, showToast, t],
@@ -342,7 +414,7 @@ export default function MapListPage() {
         showToast(t("home.copyCreated"));
         window.setTimeout(() => setHighlightId(null), 2500); // 쉬머 후 해제
       } catch (err) {
-        setCopyError(err instanceof Error ? err.message : String(err));
+        setCopyError(humanizeApiError(err, t));
       }
     },
     [copyTarget, refresh, showToast, t],
@@ -387,10 +459,28 @@ export default function MapListPage() {
           permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
         const owningOk =
           owningFilter.size === 0 || (owningFilter.has("missing") && !m.owning_department);
-        return visOk && statusOk && permOk && owningOk;
+        const spOk =
+          spFilter.size === 0 ||
+          (spFilter.has("sp") && !!m.sp_designated_at) ||
+          (spFilter.has("non_sp") && !m.sp_designated_at);
+        return visOk && statusOk && permOk && owningOk && spOk;
       }),
-    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, spFilter],
   );
+
+  // Framework 뷰 카드 필터 — filteredMaps 술어의 부분집합(가시성·상태·역할만, owning/SP는 부서 뷰 전용).
+  // 트리는 lazy 서버 fetch라 filteredMaps를 못 쓰고 술어를 넘겨 로드된 카드에만 적용한다.
+  const frameworkFilterActive = visFilter !== "all" || statusFilter.size > 0 || permFilter.size > 0;
+  const frameworkFilterMap = frameworkFilterActive
+    ? (m: MapSummary) => {
+        const visOk = visFilter === "all" || m.visibility === visFilter;
+        const statusOk =
+          statusFilter.size === 0 ||
+          (m.latest_version_status !== null && statusFilter.has(m.latest_version_status));
+        const permOk = permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
+        return visOk && statusOk && permOk;
+      }
+    : null;
 
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
   const mapHits = useMemo(
@@ -494,6 +584,7 @@ export default function MapListPage() {
                 onCopy={handleCopyOpen}
                 onPromote={(id, name) => setPromoteTarget({ id, name })}
                 onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
+                onFrameworkChanged={handleFrameworkChanged}
               />
             </div>
           )}
@@ -600,6 +691,32 @@ export default function MapListPage() {
           <>
             {/* 좌측 리스트 컬럼 — 상단에 검색·필터탭(같은 폭), 아래 리스트 (#5) */}
             <div className="flex min-h-0 min-w-[18rem] flex-1 flex-col gap-2">
+              {/* 뷰 토글 — 부서 트리 ↔ 업무 체계(Framework, Phase 2). 가시성 필터 세그먼트(아래) 스타일 복제 */}
+              <div
+                data-id="home-view-toggle"
+                className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+              >
+                {(["departments", "framework"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={homeView === v}
+                    className={`flex-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                      homeView === v
+                        ? "bg-accent-tint text-accent"
+                        : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    }`}
+                    onClick={() => {
+                      setHomeView(v);
+                      writeTree(orgOpen, favOpen, wordOpen, unassignedOpen, treeTouched, v);
+                    }}
+                  >
+                    {t(v === "departments" ? "home.viewDepartments" : "home.viewFramework")}
+                  </button>
+                ))}
+              </div>
+              {/* 검색·가시성·상태·역할 필터는 두 뷰 공용 — owning/SP 필터만 부서 뷰 전용(선별 이식).
+                  검색 입력 시 뷰와 무관하게 아래 공용 플랫 검색 리스트로 전환된다. */}
               <SearchBox
                 value={mapQuery}
                 onChange={setMapQuery}
@@ -630,22 +747,16 @@ export default function MapListPage() {
                 ))}
               </div>
               {/* 상태·권한 필터 — 멀티셀렉트 드롭다운(가시성과 AND), Clear는 우측끝 (H1 개정) */}
-              <div data-id="home-filter-row" className="flex shrink-0 items-center gap-1.5">
-                <FilterDropdown
-                  label={t("home.filterStatus")}
-                  dataId="home-status-filter"
-                  icon={<CircleDot size={14} strokeWidth={1.5} />}
-                  options={STATUS_ORDER.map((s) => ({
-                    value: s,
-                    label: t(VERSION_STATUS_LABEL[s]),
-                    icon: (
-                      <span
-                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full border ${VERSION_STATUS_STYLE[s]}`}
-                      />
-                    ),
-                  }))}
-                  selected={statusFilter}
-                  onToggle={(v) =>
+              <div
+                data-id="home-filter-row"
+                ref={filterRowRef}
+                className="relative flex min-w-0 items-center gap-1.5"
+              >
+                <HomeFilterPills
+                  display={filterMode}
+                  homeView={homeView}
+                  statusFilter={statusFilter}
+                  onToggleStatus={(v) =>
                     setStatusFilter((prev) => {
                       const next = new Set(prev);
                       if (next.has(v)) next.delete(v);
@@ -653,18 +764,8 @@ export default function MapListPage() {
                       return next;
                     })
                   }
-                />
-                <FilterDropdown
-                  label={t("home.filterRole")}
-                  dataId="home-role-filter"
-                  icon={<ShieldCheck size={14} strokeWidth={1.5} />}
-                  options={[
-                    { value: "owner", label: t("perm.roleOwner"), icon: <Crown size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                    { value: "editor", label: t("perm.roleEditor"), icon: <PencilLine size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                    { value: "viewer", label: t("perm.roleViewer"), icon: <Eye size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" /> },
-                  ]}
-                  selected={permFilter}
-                  onToggle={(v) =>
+                  permFilter={permFilter}
+                  onTogglePerm={(v) =>
                     setPermFilter((prev) => {
                       const next = new Set(prev);
                       if (next.has(v)) next.delete(v);
@@ -672,20 +773,8 @@ export default function MapListPage() {
                       return next;
                     })
                   }
-                />
-                <FilterDropdown
-                  label={t("home.filterOwning")}
-                  dataId="home-owning-filter"
-                  icon={<Building2 size={14} strokeWidth={1.5} />}
-                  options={[
-                    {
-                      value: "missing",
-                      label: t("home.owningMissingOption"),
-                      icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
-                    },
-                  ]}
-                  selected={owningFilter}
-                  onToggle={(v) =>
+                  owningFilter={owningFilter}
+                  onToggleOwning={(v) =>
                     setOwningFilter((prev) => {
                       const next = new Set(prev);
                       if (next.has(v)) next.delete(v);
@@ -693,9 +782,58 @@ export default function MapListPage() {
                       return next;
                     })
                   }
+                  spFilter={spFilter}
+                  onToggleSp={(v) =>
+                    setSpFilter((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(v)) next.delete(v);
+                      else next.add(v);
+                      return next;
+                    })
+                  }
                 />
-                {(statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0) && (
+                {/* 측정 복제 — 보이지 않게 자연폭만 잰다(absolute라 레이아웃 불참여, dataId 없음) */}
+                <div
+                  ref={measureFullRef}
+                  aria-hidden
+                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
+                >
+                  <HomeFilterPills
+                    display="full"
+                    measureOnly
+                    homeView={homeView}
+                    statusFilter={statusFilter}
+                    onToggleStatus={() => {}}
+                    permFilter={permFilter}
+                    onTogglePerm={() => {}}
+                    owningFilter={owningFilter}
+                    onToggleOwning={() => {}}
+                    spFilter={spFilter}
+                    onToggleSp={() => {}}
+                  />
+                </div>
+                <div
+                  ref={measureLabelRef}
+                  aria-hidden
+                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
+                >
+                  <HomeFilterPills
+                    display="label"
+                    measureOnly
+                    homeView={homeView}
+                    statusFilter={statusFilter}
+                    onToggleStatus={() => {}}
+                    permFilter={permFilter}
+                    onTogglePerm={() => {}}
+                    owningFilter={owningFilter}
+                    onToggleOwning={() => {}}
+                    spFilter={spFilter}
+                    onToggleSp={() => {}}
+                  />
+                </div>
+                {hasActiveFilter && (
                   <button
+                    ref={clearBtnRef}
                     type="button"
                     data-id="home-filter-clear"
                     className="ml-auto text-fine text-accent hover:underline"
@@ -704,14 +842,15 @@ export default function MapListPage() {
                       setPermFilter(new Set());
                       setVisFilter("all");
                       setOwningFilter(new Set());
+                      setSpFilter(new Set());
                     }}
                   >
                     {t("home.filterClear")}
                   </button>
                 )}
               </div>
-              {mapHits.length === 0 ? (
-                /* 필터/검색 결과 없음 */
+              {isSearching && mapHits.length === 0 ? (
+                /* 검색 결과 없음(두 뷰 공용) */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
                   {t("home.empty")}
                 </div>
@@ -727,6 +866,14 @@ export default function MapListPage() {
                   )}
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
+              ) : homeView === "framework" ? (
+                // Framework 브라우즈 — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
+                <FrameworkTree key={frameworkVersion} renderCard={renderCard} filterMap={frameworkFilterMap} />
+              ) : mapHits.length === 0 ? (
+                /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
+                <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
+                  {t("home.empty")}
+                </div>
               ) : (
                 /* 브라우즈 — 나의 부서 즐겨찾기 + Word 문서 섹션 + 조직도 아코디언.
                    Word 섹션은 조직도 위 고정 — 트리 아래에 두면 스크롤 밖으로 묻혀 발견 불가(사용자 피드백). */
@@ -738,7 +885,7 @@ export default function MapListPage() {
                     onToggle={() => {
                       const next = !favOpen;
                       setFavOpen(next);
-                      writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched);
+                      writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched, homeView);
                     }}
                     selectedId={effectiveSelected}
                     onSelect={setSelectedId}
@@ -751,7 +898,7 @@ export default function MapListPage() {
                       onToggle={() => {
                         const next = !wordOpen;
                         setWordOpen(next);
-                        writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched);
+                        writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched, homeView);
                       }}
                       selectedId={effectiveSelected}
                       onSelect={setSelectedId}
@@ -774,13 +921,13 @@ export default function MapListPage() {
                         for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
                       }
                       setOrgOpen(next);
-                      writeTree(next, favOpen, wordOpen, unassignedOpen, true);
+                      writeTree(next, favOpen, wordOpen, unassignedOpen, true, homeView);
                     }}
                     onCollapseAll={() => {
                       const next = new Set<string>();
                       setOrgOpen(next);
                       setUnassignedOpen(false);
-                      writeTree(next, favOpen, wordOpen, false, true);
+                      writeTree(next, favOpen, wordOpen, false, true, homeView);
                     }}
                     selectedId={effectiveSelected}
                     highlightId={highlightId}
@@ -789,7 +936,7 @@ export default function MapListPage() {
                     onToggleUnassigned={() => {
                       const next = !unassignedOpen;
                       setUnassignedOpen(next);
-                      writeTree(orgOpen, favOpen, wordOpen, next, treeTouched);
+                      writeTree(orgOpen, favOpen, wordOpen, next, treeTouched, homeView);
                     }}
                     renderCard={renderCard}
                   />
@@ -811,6 +958,7 @@ export default function MapListPage() {
                   onCopy={handleCopyOpen}
                   onPromote={(id, name) => setPromoteTarget({ id, name })}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
+                  onFrameworkChanged={handleFrameworkChanged}
                 />
               ) : (
                 <HomeDashboard maps={processMaps} onSelect={setSelectedId} />
@@ -874,7 +1022,7 @@ export default function MapListPage() {
                 showToast("Document re-imported.");
               })
               .catch((err) => {
-                showToast(err instanceof Error ? err.message : "Re-import failed.");
+                showToast(humanizeApiError(err, t), "error");
               });
           }}
         />

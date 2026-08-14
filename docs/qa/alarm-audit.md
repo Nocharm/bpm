@@ -2,6 +2,14 @@
 
 기준: main `ed15440` (2026-07-16, 브랜치 `worktree-alarm-audit`). 읽기 전용 감사 — 코드 변경 없음.
 
+> ⚠️ **2026-08-14 재검증(dev 기준) — 이 감사 이후 §7·§9의 핵심 결론이 코드로 해소됨.** 이 문서는 ed15440 시점 스냅샷으로 유지하되, 현행과 다른 지점은 아래를 정본으로 본다:
+> - **벨 알림 사용자 삭제 이제 존재** — `DELETE /api/notifications/{id}` + `POST /bulk-delete` (`notifications.py:66,82`). §7-2 "삭제 경로 없음" 판정은 당시 한정.
+> - **인당 보존 상한 100** — `NOTIFICATION_CAP=100`, `create_notifications`가 초과분을 읽음 여부 무관 오래된 순으로 트리밍 (`workflow.py:43`). §9-1 무한 누적·§9-3 retention 후보는 해소.
+> - **sysadmin 퍼지** — `GET /api/admin/notifications/purge-preview` + `POST /api/admin/notifications/purge` (`admin.py:428,456`).
+> - **type 6종 → 18종** — 거버넌스(permission_requested/approved/rejected/superseded)·rename(map_renamed/rename_requested/rename_superseded)·SP(sp_designation_requested/approved·subprocess_registered)·checkout(checkout_requested/checkout_rejected) 추가. §1의 "checkout은 inbox에만(벨 알림 없음)" 비대칭도 해소.
+> - `create_notifications`는 **async 전환** (§4의 동기 서술과 상이).
+> - §8 매뉴얼 보정·§9 잔여(인덱스 부재·GET 전건 반환)는 별도 확인 필요 — 이번 재검증 범위 밖.
+
 목적 2가지:
 1. **명확화** — "알람"이라 불리는 기능의 실체(서브시스템·데이터 모델·API·생성 이벤트·읽음 규칙·UI 표면)를 코드 근거로 확정.
 2. **퍼지(삭제) 분류** — 알림 레코드가 삭제·정리되는 **모든** 경로를 전수 분류하고, 존재하지 않는 경로는 "없음"으로 확정.

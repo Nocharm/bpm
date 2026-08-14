@@ -23,7 +23,7 @@ BPM_SYSADMINS=admin.sys,jane.doe
 
 - You are treated as **Owner on every map** — manage collaborators, approvers, visibility, versions, and deletion anywhere.
 - **Force checkout** — only a sysadmin can take an active editing lock from another user.
-- Admin-only consoles under **Settings**: Notices, Employees, Permissions, Database, Approval Queue.
+- Admin-only consoles under **Settings**: Notices, Employees & Departments, Framework, Database, Approval Queue.
 - Moderation authority: user-group approval, feedback replies and status, global trash, manual publishing.
 
 ---
@@ -37,9 +37,10 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Notices** | Settings → Content | Create, edit, and delete announcements |
 | **Manual** | Settings → Content | Edit and publish the in-app manual (see section 11) |
 | **AI chat** | Settings → Content | Retention-cap settings, chat loading-tips management (see section 12) |
-| **Employees** | Settings → Directory | Org directory table, **Sync all from AD** |
-| **Permissions** | Settings → Permissions | Departments and Users tabs, sysadmin tags |
-| **Tables** | Settings → Database | Read-only DB browser (incl. login records) |
+| **Employees** | Settings → Directory | Org directory table — HR-webhook full sync, sysadmin tags, CSV export |
+| **Departments** | Settings → Directory | Org-basis department table, department remap, CSV export |
+| **Framework** | Settings → Framework | Work-framework category management and JSON import — pilot stage (see section 13) |
+| **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
 | **Dashboard** | Settings → Analytics | Operational metrics from the live database — access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
@@ -56,6 +57,7 @@ Create and manage announcements shown on every user's **Notices** tab.
 3. Check **Notify all users on publish** to push a notification to everyone's Inbox.
 
 - Users only see notices whose posting period is currently active; the admin list shows all of them.
+- The admin notice list can be downloaded in full with the **Export CSV** button — same columns as the screen, Excel-compatible (BOM), with a formula-injection guard.
 - Editing a notice takes effect immediately. **Deleting is a hard delete** — it is permanently removed on the spot, with no trash and no recovery (unlike the 7-day trash for maps and groups). However, if "Notify all users on publish" was checked, the bell notifications already sent stay in place even after the notice is deleted.
 
 > **Tip:** Notice bodies render with the same Markdown viewer as this manual — headings, tables, code blocks, and `#tag` pills all work.
@@ -89,6 +91,7 @@ Group creation is request-based: any user can file a group request, but it only 
 - **Group creation** requests.
 - **Permission downgrade** requests (removing or demoting an editor).
 - **Visibility change** requests (Public ↔ Private).
+- **Checkout transfer** requests (taking over another user's active editing lock).
 
 Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view.
 
@@ -100,15 +103,24 @@ Each entry shows the requester and context; decide with Approve / Reject (reject
 
 **Settings → Directory → Employees** shows the org directory the app uses for assignees, collaborators, and approver pickers.
 
-- The table includes organization levels and each user's sysadmin flag.
-- **Sync all from AD** refreshes the directory from Active Directory. Run it when people join, move, or leave.
+- The source for people and the org chart is the **n8n HR webhook** (replacing the old AD sync) — a full sync refreshes both employees and the **departments table**, while AD (LDAP) has been reduced to a **title-enrichment-only** pass.
+- The table includes organization levels, employment status (active/inactive), and each user's sysadmin tag.
+- **Full sync** — run it manually with the sync button on the Employees tab (still labeled **Sync all from AD**). While running, the button shows a spinner with **Syncing…** and stays disabled until the sync and the follow-up list reload finish. On completion a scanned · upserted · deactivated · deleted · skipped summary is shown. Consecutive runs are throttled to one per 5 minutes.
+- **Automatic sync** — a built-in scheduler repeats the full sync every `HR_SYNC_INTERVAL_HOURS` (default 24 hours, 0 = off). Independently, each user is single-synced once per day on login.
+- **Departures** — people reported inactive by HR are not deleted; they are marked **active=false** (status: inactive) and automatically excluded from pickers and the directory.
+- **Sync safeguards** — ① **Dry-run preview**: `POST /api/employees/sync-preview` (sysadmin API) returns the would-be upsert/deactivate/delete counts and sample lists without touching the DB — check it before the first migration or a large reorg. ② **Deletion-ratio cap**: if a single sync would delete more than `HR_SYNC_DELETE_CAP_PCT` (default 20%) of the managed rows, the whole sync aborts.
+- Korean names and Korean departments are now filled directly by the HR webhook, so the old import tools (Korean name import, department info import) have been removed. The email field was also removed from the model — the directory stores no email addresses.
 - Assignee pickers in the editor resolve against this directory — a stale directory means missing people in pickers.
+- **CSV export** — the **Export CSV** button on the Employees and Departments tables downloads all rows with the same columns as the screen. Files are Excel-compatible (BOM included) with a formula-injection guard.
 
-Import tools fill in the Korean names and department info that AD doesn't provide:
+### Departments and Department Heads
 
-- **Korean name import** — upload employees' Korean names by CSV. Download the schema and the current data (missing only / a sample / a random 50 / all) to prepare it, and choose **skip / overwrite** on conflicts. Used for Korean-name display in pickers and member cards.
-- **Department info import** — upload departments' Korean names and department heads. Used for Korean department search in pickers and for showing the department-head chain.
-- **Department remap** — move an employee to a different department. The **department table** shows the list of org departments.
+**Settings → Directory → Departments** shows the **departments table**, the org basis (the old dept_info is gone) — the org chart and department-path resolution are both based on this table.
+
+- Review the department list (name, Korean department, headcount) and export it as CSV.
+- **Department-head determination** — heads are determined from EDW position (FRNM) data collected via webhook and shown with a **Manager** tag on the department-head chain. The position pass only runs when both the EDW webhook (`N8N_POSITION_URL`) and AD (employee-number mapping) are configured.
+- **Exposed positions** — a card on the Employees tab lets you check which collected EDW titles are shown as a person's position across the app (defaults: 그룹장·파트장·팀장·센터장). This is an app setting saved from the screen, not an env variable.
+- **Missing departments remap** — department paths that disappeared in a reorg but are still referenced by map permissions, group members, or map owning departments appear on the Departments tab; reassign each to a current department.
 
 ---
 
@@ -117,6 +129,7 @@ Import tools fill in the Korean names and department info that AD doesn't provid
 **Settings → Database → Tables** is a read-only browser over the backend database with server-side paging, sorting, and filtering.
 
 - Use it for spot checks — it never writes.
+- **CSV export** (sysadmin only) — the **Export CSV** button in the header downloads **all rows** with the current sort and filter applied, streamed from the server (no paging). Excel compatibility (BOM) and the formula-injection guard match the admin-table exports.
 - **Login records** live in the `login_records` table: one row per user per day, written on first authentication of the day. This is the audit view for "who used the app when".
 - **Notification retention**: `notifications` keeps only the **most recent 100 rows per person**, a fixed policy (not adjustable) — overflow is auto-deleted oldest-first, regardless of read state, whenever a new notification arrives.
 
@@ -205,7 +218,18 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-## 13. Configuration Reference
+## 13. Framework Management
+
+> The work framework is still at a **pilot stage** — its screens and data may change.
+
+**Settings → Framework → Categories & import** (sysadmin only) manages the work-framework category tree.
+
+- **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted.
+- **Bulk JSON import** — upload `categories.json` and `maps.jsonl`, check the impact with **Dry run** (created / updated / unchanged / errors / warnings), then **Apply**. The import is idempotent — re-running the same files is safe.
+
+---
+
+## 14. Configuration Reference
 
 | Variable | Where | Effect |
 | --- | --- | --- |
@@ -214,10 +238,16 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | Enable the Keycloak login flow in the UI |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | Enforce RBAC locally even with auth off |
 | `MANUAL_URL` | `.env` (compose) | Manual-site button on the editor toolbar — hidden when empty |
+| `N8N_HR_URL` | backend `.env` | n8n HR webhook URL (single source for people and org chart) — sync activates only with the token set too |
+| `N8N_HR_TOKEN` | backend `.env` | HR webhook X-API-Key secret — shared with the EDW position webhook |
+| `N8N_POSITION_URL` | backend `.env` | EDW department-head position webhook — empty disables position collection |
+| `HR_SYNC_INTERVAL_HOURS` | backend `.env` | Built-in HR sync scheduler interval (hours). Default 24, 0 = off — keep it at 0 for the first migration and raise it after the preview and a manual sync check out |
+| `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | Full-sync deletion cap (% of managed rows). Default 20, 0 = guard off |
 
 - Environment changes require a backend restart (`--reload` does not re-read `.env`).
 - Keycloak endpoints and all deployment-specific values come from `.env` — never hardcoded.
+- The **Exposed positions** list is not an env variable — it is saved from the card on **Settings → Directory → Employees** (see section 7).
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-07-19*
+*Business Process Map — Administrator Manual · updated 2026-08-14*

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, Info, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Send, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, Upload, User, X, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -62,6 +62,8 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { StatusBadge } from "@/components/status-badge";
+import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
 import { formatVersionMarker } from "@/lib/version-name";
@@ -71,10 +73,18 @@ import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
-import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
-import { WithdrawHandoff } from "@/components/withdraw-handoff";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
+import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
+import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
+import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { VersionSwitchConfirm } from "@/components/version/version-switch-confirm";
+import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
+import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
+import { RejectDialog } from "@/components/version/reject-dialog";
+import { buildBundledVisibilityLines } from "@/components/version/approver-status-lines";
+import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
@@ -196,9 +206,11 @@ import {
   type SubprocessRef,
   type SubprocessUsage,
   type VersionGraph,
+  type VersionDetail,
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
+import { humanizeApiError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
 import { getStaleSectionNodeIds } from "@/lib/word-map-home";
@@ -214,6 +226,7 @@ import { genId } from "@/lib/id";
 import { displayToSavedX } from "@/lib/inline-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
@@ -323,6 +336,15 @@ const NODE_TYPE_ICONS: Record<string, LucideIcon> = {
   decision: Diamond,
   start: Circle,
   end: CircleDot,
+};
+
+// 노드 디스플레이 토글 항목별 아이콘 — 인스펙터 맵 탭 접힘 섹션에서 라벨 왼쪽에 표시
+const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
+  assignee: UserRound,
+  department: Building2,
+  system: Server,
+  url: Link,
+  params: SlidersHorizontal,
 };
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -714,7 +736,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const { t } = useI18n();
   const router = useRouter();
   const [mapName, setMapName] = useState("");
-  const [versions, setVersions] = useState<VersionSummary[]>([]);
+  // getMap 상세만 넣으므로 VersionDetail — 승인 모달의 제출 코멘트가 events를 읽는다.
+  const [versions, setVersions] = useState<VersionDetail[]>([]);
   // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [versionId, setVersionId] = useState<number | null>(null);
@@ -805,6 +828,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [sectionsOpen, setSectionsOpen] = useState(false);
   const [wordReimportOpen, setWordReimportOpen] = useState(false);
   const [mapMode, setMapMode] = useState<string>("normal");
+  // 승인요청 모달의 가시성 동봉 옵션이 반대값을 계산하려면 현재 가시성이 필요 — getMap 로드 시 채움.
+  const [mapVisibility, setMapVisibility] = useState<"public" | "private">("private");
   const [docName, setDocName] = useState<string>("");
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
   const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
@@ -901,8 +926,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const removeToast = useCallback((id: string) => {
     setToasts((cur) => cur.filter((toast) => toast.id !== id));
   }, []);
-  const showToast = useCallback((message: string) => {
-    setToasts((cur) => [{ id: genId(), message }, ...cur]);
+  const showToast = useCallback((message: string, tone?: "error") => {
+    setToasts((cur) => [{ id: genId(), message, tone }, ...cur]);
   }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -959,6 +984,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [republishConfirmOpen, setRepublishConfirmOpen] = useState(false);
   // 승인 요청 확인 다이얼로그 — 승인자 목록 확인 후 제출 / Submit confirm listing approvers.
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  // 승인요청/셀프게시에 동봉할 가시성 변경 선택(VisibilityBundlePicker) — null이면 미동봉.
+  const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
   // 셀프 게시 팝오버 — 승인자가 본인 1인일 때 승인요청 클릭 지점에 표시 / Self-publish prompt at click point.
   const [selfPublishPrompt, setSelfPublishPrompt] = useState<{ x: number; y: number } | null>(null);
   // 승인/게시/회수/거절 확인 다이얼로그 — 전이 액션 통일 모달 / transition confirm modals.
@@ -967,6 +994,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 4종 전이 모달(submit/approve/publish/withdraw) 공용 코멘트 입력 — 동시에 하나만 열리므로 상태 1개로 공유.
+  const [transitionComment, setTransitionComment] = useState("");
+  // 승인 탭 하단 결재 대기 섹션 pending 개수 — summary 카운트 필용 (R8)
+  const [editorApprovalsCount, setEditorApprovalsCount] = useState(0);
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
 
@@ -1171,6 +1202,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     : currentVersion?.status !== "published"
       ? t("inspector.spNeedPublishedOpen")
       : t("inspector.spOwnerOnly");
+  // disabledReason과 동일 분기의 구분값 — 카드가 문자열 비교 없이 사유별 액션(게시본 가기/등록 요청)을 분기 (R10)
+  const spDisabledReasonKind: "needPublished" | "ownerOnly" | null = spCanManage
+    ? null
+    : currentVersion?.status !== "published"
+      ? "needPublished"
+      : "ownerOnly";
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
   // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
@@ -1181,38 +1218,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   const approvalInFlight = versions.some(
     (v) => v.status === "pending" || v.status === "approved",
   );
-  // 승인자별 상태 라인 — 승인/거절/회수 모달 공용. 본인은 하이라이트(accent), 승인 완료는 Check.
-  // 승인자 행 — 이름(좌, 본인 하이라이트) + 상태 영어 뱃지(우측 끝). 상태는 로케일 무관 영어 고정.
-  // 반려자(rejected_by)는 Rejected 우선 — 승인했다 거절해도 'Approved'로 남지 않게.
-  const rejectedBy = workflow?.rejected_by ?? null;
-  const approverStatusLines: ConfirmLine[] = (workflow?.approvers ?? []).map((id) => {
-    const rejected = id === rejectedBy;
-    const approved = !rejected && (workflow?.approvals ?? []).includes(id);
-    const isMe = id === username;
-    const name = nameById.get(id) ?? id;
-    const icon = rejected ? (
-      <X size={14} strokeWidth={1.5} />
-    ) : approved ? (
-      <Check size={14} strokeWidth={1.5} />
-    ) : (
-      <User size={14} strokeWidth={1.5} />
-    );
-    return {
-      icon,
-      text: `${name}${isMe ? ` (${t("approval.you")})` : ""}`,
-      tone: isMe ? "accent" : approved ? "ink" : "muted",
-      highlight: isMe,
-      badge: rejected
-        ? { text: "Rejected", tone: "warn" as const }
-        : { text: approved ? "Approved" : "Pending", tone: approved ? "approved" : "pending" },
-    };
-  });
   // 전이 모달 공용 서브타이틀 — 어떤 버전인지(마커+라벨). 삭제 모달의 맵이름 자리와 동일 역할.
   const versionSubtitle = currentVersion
     ? `${formatVersionMarker(currentVersion, versions)} · ${currentVersion.label}`
     : undefined;
   // 회수 모달 핸드오프용 제출자 — 회수 대상은 제출 시 체크아웃이 해제돼 보유자가 늘 없으므로 제출자를 노출.
   const withdrawSubmitter = currentVersion?.submitted_by ?? null;
+  // 가시성 동봉은 오너 전용(서버 403) — VisibilityBundlePicker 자체를 비오너에겐 전달하지 않는다.
+  const canBundleVisibility = myRole === "owner";
   // 점유권 매트릭스 파생 / checkout role matrix
   const isHolder =
     !!username &&
@@ -1591,10 +1604,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setSaveState("error");
       // 실패 상세는 상단 배너로 노출 — 다음 저장 성공까지 유지
-      setSaveErrorDetail(err instanceof Error ? err.message : String(err));
+      setSaveErrorDetail(humanizeApiError(err, t));
       throw err;
     }
-  }, [versionId, readOnly, refreshFullGraph]);
+  }, [versionId, readOnly, refreshFullGraph, t]);
 
   const scheduleAutoSave = useCallback(() => {
     // 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지
@@ -1791,7 +1804,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       showToast(t("csvImport.applied"));
     } catch (err) {
       // 프리뷰를 유지한 채 실패만 알린다 — 다시 Apply 하거나 Cancel 할 수 있다 (423/409)
-      showToast(err instanceof Error ? err.message : t("err.save"));
+      showToast(humanizeApiError(err, t), "error");
     }
   }, [versionId, csvOutcome, csvKeepRemoved, setNodes, setEdges, setGroups, refreshFullGraph, showToast, t]);
 
@@ -2111,6 +2124,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwner(detail.created_by);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
+        setMapVisibility(detail.visibility);
         setDocName(detail.doc_name ?? "");
         setDocSections(detail.doc_sections ?? []);
         setVersions(detail.versions);
@@ -2152,7 +2166,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           if (err instanceof ApiError && err.status === 403) {
             setAccessDenied(true); // 권한 없음 — 에러 문자열 대신 안내 모달
           } else {
-            setStatus(err instanceof Error ? err.message : t("err.loadMap"));
+            setStatus(humanizeApiError(err, t));
           }
         }
       }
@@ -2418,7 +2432,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.loadCanvas"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     })();
@@ -2469,7 +2483,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSearchIndex(0);
       } catch (err) {
         if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.search"));
+          setStatus(humanizeApiError(err, t));
         }
       }
     })();
@@ -2491,6 +2505,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     let active = true;
+    // 본인 권한 변경이 pending이면 acquire-checkout이 영구 409 — 인터벌을 클로저 변수로 들고
+    // catch에서 감지 시 정지(재시도 스팸 제거). stopped는 첫 poll(인터벌 설정 전) 실패 시
+    // 인터벌 생성 자체를 생략하는 가드.
+    let stopped = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     const poll = async () => {
       try {
         const state = await acquireCheckout(versionId);
@@ -2500,16 +2519,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         checkoutMineRef.current = state.mine;
         setCheckout(state);
       } catch (err) {
-        if (active) {
-          setStatus(err instanceof Error ? err.message : t("err.checkout"));
+        if (!active) {
+          return;
+        }
+        setStatus(humanizeApiError(err, t));
+        if (getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX)) {
+          stopped = true;
+          if (intervalId !== null) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
         }
       }
     };
-    void poll();
-    const interval = setInterval(() => void poll(), CHECKOUT_POLL_MS);
+    void poll().then(() => {
+      if (active && !stopped) {
+        intervalId = setInterval(() => void poll(), CHECKOUT_POLL_MS);
+      }
+    });
     return () => {
       active = false;
-      clearInterval(interval);
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
       checkoutMineRef.current = false;
     };
   }, [versionId, versions, isEditorRole, t]);
@@ -2523,7 +2555,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       checkoutMineRef.current = state.mine;
       setCheckout(state);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.forceCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   }, [versionId, t]);
 
@@ -2567,7 +2599,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await createComment(versionId, selectedId, body);
         await refreshComments();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.addComment"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [versionId, selectedId, refreshComments, t],
@@ -2579,7 +2611,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await updateComment(comment.id, !comment.resolved);
         await refreshComments();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.toggleComment"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [refreshComments, t],
@@ -2591,9 +2623,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         await deleteComment(comment.id);
         await refreshComments();
       } catch (err) {
-        setStatus(
-          err instanceof Error ? err.message : t("err.deleteComment"),
-        );
+        setStatus(humanizeApiError(err, t));
       }
     },
     [refreshComments, t],
@@ -2628,7 +2658,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await saveCurrentScope();
     } catch (err) {
       // 저장 실패(예: 시작/끝 노드 없음)는 상단 배너 대신 토스트로 안내 (#7)
-      showToast(err instanceof Error ? err.message : t("err.save"));
+      showToast(humanizeApiError(err, t), "error");
     }
   }, [getSaveBlockers, saveCurrentScope, showToast, t]);
 
@@ -2644,14 +2674,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : t("err.save"));
+        showToast(humanizeApiError(err, t), "error");
         return;
       }
+      // 동봉 선택은 오픈 시점에 리셋 — dismiss(Escape/바깥클릭/닫기) 경로는 confirm과 달리 값을 지우지
+      // 않으므로, 이전 취소된 선택이 다음 오픈에 미리 선택된 채로 남아 의도치 않은 동봉을 유발할 수 있다.
+      setBundleValue(null);
       // 승인자가 본인 1인이면 클릭 지점에 셀프 게시(승인요청→승인→게시) 제안 — No/닫기는 기존 플로우.
       if (at && username !== null && isSoleSelfApprover(workflow?.approvers ?? [], username)) {
         setSelfPublishPrompt(at);
         return;
       }
+      setTransitionComment("");
       setSubmitConfirmOpen(true);
     },
     [getSaveBlockers, saveCurrentScope, showToast, t, username, workflow],
@@ -2731,7 +2765,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         try {
           await saveCurrentScope();
         } catch (err) {
-          setStatus(err instanceof Error ? err.message : t("err.save"));
+          setStatus(humanizeApiError(err, t));
           return;
         }
       }
@@ -2776,7 +2810,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.save"));
+        setStatus(humanizeApiError(err, t));
         return;
       }
       setActiveIndex(index);
@@ -2843,7 +2877,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         await saveCurrentScope();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.save"));
+        setStatus(humanizeApiError(err, t));
         return;
       }
       setVersionId(nextVersionId);
@@ -2852,6 +2886,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [saveCurrentScope, mapName, t],
   );
+
+  // 타임라인 '이 버전으로 가기' — 편집 중이면 VersionPill과 동일한 전환 확인 모달을 거친다 (feedback 2026-08-14)
+  const [goVersionPrompt, setGoVersionPrompt] = useState<VersionSummary | null>(null);
+  const requestGoToVersion = (id: number) => {
+    if (id === versionId) return;
+    const target = versions.find((v) => v.id === id);
+    if (!target) return;
+    if (!readOnly) setGoVersionPrompt(target);
+    else void switchVersion(id);
+  };
 
   // 네이티브 prompt/confirm 대신 플로팅 모달 — 버전 생성/이름변경 입력, 삭제 확인.
   const [versionDialog, setVersionDialog] = useState<{ mode: "create" | "rename" } | null>(null);
@@ -2900,8 +2944,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         setActiveIndex(0);
       } catch (err) {
         // 진행 중 드래프트가 있으면 새 버전 생성 차단(409) — 토스트로 안내 (request #11)
-        const msg = err instanceof Error ? err.message : "";
-        showToast(msg.includes("409") ? t("err.versionDraftExists") : t("err.createVersion"));
+        const isDraftConflict = err instanceof ApiError && err.status === 409;
+        showToast(isDraftConflict ? t("err.versionDraftExists") : t("err.createVersion"), "error");
       }
     } else {
       try {
@@ -2909,7 +2953,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const detail = await getMap(mapId);
         setVersions(detail.versions);
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.renameVersion"));
+        setStatus(humanizeApiError(err, t));
       }
     }
   };
@@ -2934,7 +2978,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.deleteVersion"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2947,7 +2991,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await requestCheckout(versionId);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2957,7 +3001,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await decideCheckoutRequest(requestId, approve);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.decideCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2966,7 +3010,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await withdrawCheckoutRequest(requestId);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.requestCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2980,7 +3024,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setTransferTarget(others[0]?.id ?? "");
       setTransferOpen(true);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -2992,7 +3036,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       await transferCheckout(versionId, transferTarget);
       await refreshWorkflow();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.transferCheckout"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -3008,7 +3052,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setScopes([{ kind: "root", title: mapName }]);
       setActiveIndex(0);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.republish"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -3021,11 +3065,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 전체 버전 재로딩 — 게시 시 직전 published→expired 반영(우측에 published 2개 방지).
         const detail = await getMap(mapId);
         setVersions(detail.versions);
+        // 동봉 가시성 변경(셀프 게시 체인 포함)이 서버에 반영된 뒤 픽커의 current 소스도 갱신 — 안 하면 다음 동봉 선택이 구 값 기준.
+        setMapVisibility(detail.visibility);
+        // 동봉 픽커 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
+        setMyRole(detail.my_role);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : t("err.workflow"));
+        setStatus(humanizeApiError(err, t));
       }
     },
     [versionId, mapId, refreshWorkflow, t],
@@ -4193,7 +4241,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       void createLinkNodeAt(linkedMapId, mapName, pinned, position);
     },
-    [readOnly, reactFlow, createLinkNodeAt],
+    // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
+    // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -4894,7 +4944,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     try {
       await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.exportPng"));
+      setStatus(humanizeApiError(err, t));
     }
   }, [buildExportFileName, t]);
 
@@ -5009,7 +5059,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // word 맵은 fit-to-page 끔 → 도형 정확히 1.5×3cm(스프레드 시 페이지 초과 가능).
       exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""), !isWordMap);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : t("err.exportWord"));
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -5034,7 +5084,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         console.warn("word-doc generated stamp failed", err),
       );
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Complete document generation failed");
+      setStatus(humanizeApiError(err, t));
     }
   };
 
@@ -6434,6 +6484,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     [displayFields],
   );
 
+  // 맵 탭의 노드 디스플레이/엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요),
+  // 두 섹션이 키("nodeDisplay"/"edgeStyle")로 하나의 accordion-close 고스트 렌더를 공유.
+  const [nodeDisplaySectionOpen, setNodeDisplaySectionOpen] = useState(false);
+  const [edgeStyleSectionOpen, setEdgeStyleSectionOpen] = useState(false);
+  const { closingKeys: inspectorClosingKeys, beginClose: beginInspectorClose, cancelClose: cancelInspectorClose } =
+    useClosingKeys<string>();
+  // 승인 탭 접힘 섹션 — 결재 대기는 기본 접힘, 워크플로는 기본 펼침(R6 W2). 위 accordion 인스턴스를
+  // 키("editorApprovals"/"approvalWorkflow")로 공유.
+  const [editorApprovalsSectionOpen, setEditorApprovalsSectionOpen] = useState(false);
+  const [approvalWorkflowSectionOpen, setApprovalWorkflowSectionOpen] = useState(true);
+
   const cancelRename = useCallback(() => setEditingNodeId(null), []);
   // 타이틀 더블클릭 → 이름 편집 진입 (이름 외 영역 더블클릭은 요약창)
   const startRename = useCallback(
@@ -7326,8 +7387,20 @@ function MapEditor({ mapId }: { mapId: number }) {
             </span>
           )}
           {currentVersion?.status === "rejected" && currentVersion.reject_reason && (
-            <span className="text-caption text-error">
-              {t("wf.rejectedBanner", { reason: currentVersion.reject_reason })}
+            <span
+              data-id="wf-rejected-banner"
+              className="flex max-w-96 items-center gap-1.5 rounded-sm border border-error/40 bg-error/10 px-2 py-1 text-caption text-error"
+              title={currentVersion.reject_reason}
+            >
+              <XCircle size={16} strokeWidth={1.5} className="shrink-0" />
+              <span className="text-caption-strong">{t("wf.rejectedLabel")}</span>
+              {workflow?.rejected_by && workflow.version_id === currentVersion.id && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-error/40 bg-surface px-1.5 py-0.5 text-fine">
+                  <User size={12} strokeWidth={1.5} />
+                  {nameById.get(workflow.rejected_by) ?? workflow.rejected_by}
+                </span>
+              )}
+              <span className="truncate">{currentVersion.reject_reason}</span>
             </span>
           )}
           {!isViewer && checkout?.mine && (
@@ -7363,6 +7436,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           {managingApprovers && (
             <ApproverManager
               mapId={mapId}
+              visibility={mapVisibility}
               onClose={() => setManagingApprovers(false)}
               onSaved={() => void refreshWorkflow()}
             />
@@ -9009,8 +9083,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     mapId={mapId}
                     canManage={spCanManage}
                     disabledReason={spDisabledReason}
+                    disabledReasonKind={spDisabledReasonKind}
                     onToast={showToast}
                     onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                    onGoToPublished={(id) => void switchVersion(id)}
                   />
                 }
                 subprocessTabSlot={
@@ -9018,159 +9094,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                   spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
                 }
                 mapTabSlot={
-                  // R5b 맵 탭 — 가시성·소유자·협업자·설명(narrow) + 노드 표시 토글 + 엣지 스타일(아이콘) + PNG
-                  <div className="flex flex-col gap-4">
-                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    <div className="rounded-md border border-hairline p-3">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
-                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
-                      </div>
-                      {NODE_DISPLAY_TOGGLES.map((field) => {
-                        const on = displayFields.includes(field);
-                        const labelKey =
-                          field === "assignee"
-                            ? "field.assignee"
-                            : field === "department"
-                              ? "field.department"
-                              : field === "system"
-                                ? "field.system"
-                                : field === "url"
-                                  ? "field.url"
-                                  : "field.params";
-                        return (
-                          <div
-                            key={field}
-                            className="flex items-center justify-between py-1 text-caption text-ink-secondary"
-                          >
-                            <span>{t(labelKey)}</span>
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={on}
-                              aria-label={t(labelKey)}
-                              onClick={() => toggleDisplayField(field)}
-                              className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                                on ? "bg-accent" : "bg-border-strong"
-                              }`}
-                            >
-                              <span
-                                className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                                  on ? "left-3.5" : "left-0.5"
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div>
-                      <div className="mb-1 text-fine text-ink-tertiary">
-                        <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
-                        {t("inspector.mapWide")}
-                      </div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {([
-                          ["default", "edgeStyle.curve", Spline],
-                          ["smoothstep", "edgeStyle.step", CornerDownRight],
-                          ["straight", "edgeStyle.straight", Slash],
-                        ] as const).map(([value, labelKey, Icon]) => (
-                          <button
-                            key={value}
-                            type="button"
-                            disabled={readOnly}
-                            title={t(labelKey)}
-                            aria-label={t(labelKey)}
-                            onClick={() => {
-                              setEdgeStyle(value);
-                              window.localStorage.setItem("bpm.edgeStyle", value);
-                            }}
-                            className={`flex items-center justify-center rounded-sm border py-2 ${
-                              edgeStyle === value
-                                ? "border-accent bg-accent-tint text-accent"
-                                : "border-hairline text-ink-secondary hover:bg-surface-alt"
-                            }`}
-                          >
-                            <Icon size={18} strokeWidth={1.5} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      onToast={showToast}
-                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
-                    />
-                    <div className="flex gap-1.5">
-                      <button
-                        type="button"
-                        data-id="export-png"
-                        onClick={() => void handleExportPng()}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <Download size={16} strokeWidth={1.5} />
-                        {t("inspector.exportPng")}
-                      </button>
-                      <button
-                        type="button"
-                        data-id="export-excel"
-                        onClick={() => setExcelExportOpen(true)}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <FileSpreadsheet size={16} strokeWidth={1.5} />
-                        {t("inspector.exportExcel")}
-                      </button>
-                      <button
-                        type="button"
-                        data-id="export-csv"
-                        onClick={handleExportCsv}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                      >
-                        <FileDown size={16} strokeWidth={1.5} />
-                        {t("inspector.exportCsv")}
-                      </button>
-                    </div>
-                    {isWordMap && (
-                      <>
-                        <button
-                          type="button"
-                          data-id="inspector-generate-complete-doc"
-                          onClick={() => completeDocPickerRef.current?.click()}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          Generate complete document
-                        </button>
-                        <button
-                          type="button"
-                          data-id="inspector-export-word"
-                          onClick={handleExportWord}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          {t("inspector.exportWord")}
-                        </button>
-                        <input
-                          ref={completeDocPickerRef}
-                          type="file"
-                          accept=".docx"
-                          className="hidden"
-                          onChange={handleCompleteDocPicked}
-                        />
-                      </>
-                    )}
-                  </div>
-                }
-                approvalSlot={
-                  // R5c 승인 탭 — 버전 풀네임 라벨 + 축소 pill(전환) + 우측 아이콘(생성/이름/삭제) + 워크플로 + 타임라인
-                  // 점유권 이전·편집권한 요청·만료본 재게시 매트릭스 + 모달은 백엔드(버전번호·만료·점유권 API) 후 새 세션에서 추가
+                  // R5b/R6 W1 맵 탭 — 버전 선택(승인 탭에서 이동) + 가시성·소유자·협업자·설명(narrow)
+                  // + 노드 표시 토글(접힘) + 엣지 스타일(접힘, 아이콘) + PNG
                   <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-2">
-                      {/* 버전 필(전환) — 승인 탭 좌상단 (풀네임 텍스트 라벨 제거) */}
+                      {/* 버전 필(전환) — 맵 탭 최상단으로 이동 (R6 W1, 승인 탭에서 옮김) */}
                       <VersionPill
                         versions={versions}
                         versionId={versionId}
@@ -9282,44 +9210,361 @@ function MapEditor({ mapId }: { mapId: number }) {
                         )}
                       </div>
                     </div>
-                    {currentVersion && (
-                    <ApprovalPanel
-                      status={currentVersion.status}
-                      workflow={workflow}
-                      isCheckoutHolder={checkout?.mine ?? false}
-                      isApprover={isApprover}
-                      isSubmitter={isSubmitter}
-                      canWithdraw={canWithdraw}
-                      hasApproved={hasApproved}
-                      canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
-                      onSubmit={(at) => void handleSubmitForApproval(at)}
-                      onApprove={() => setApproveConfirmOpen(true)}
-                      onReject={() => setRejectOpen(true)}
-                      onPublish={() => setPublishConfirmOpen(true)}
-                      onWithdraw={() => setWithdrawConfirmOpen(true)}
-                      onManageApprovers={() => setManagingApprovers(true)}
-                      username={username}
-                      canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
-                      onDecideCheckout={(requestId, approve) =>
-                        void handleDecideCheckout(requestId, approve)
-                      }
-                      onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
+                    <MapInspectorTab mapId={mapId} readOnly={readOnly} />
+                    <div data-id="inspector-node-display-section" className="rounded-md border border-hairline p-3">
+                      <button
+                        type="button"
+                        aria-expanded={nodeDisplaySectionOpen}
+                        onClick={() => {
+                          if (nodeDisplaySectionOpen) beginInspectorClose("nodeDisplay");
+                          else cancelInspectorClose("nodeDisplay");
+                          setNodeDisplaySectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={14}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${nodeDisplaySectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
+                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
+                      </button>
+                      {(nodeDisplaySectionOpen || inspectorClosingKeys.has("nodeDisplay")) && (
+                        <div className={inspectorClosingKeys.has("nodeDisplay") ? "accordion-close" : "accordion-open"}>
+                          <div className="mt-1">
+                            {NODE_DISPLAY_TOGGLES.map((field) => {
+                              const on = displayFields.includes(field);
+                              const Icon = NODE_DISPLAY_ICONS[field];
+                              const labelKey =
+                                field === "assignee"
+                                  ? "field.assignee"
+                                  : field === "department"
+                                    ? "field.department"
+                                    : field === "system"
+                                      ? "field.system"
+                                      : field === "url"
+                                        ? "field.url"
+                                        : "field.params";
+                              return (
+                                <div
+                                  key={field}
+                                  className="flex items-center justify-between py-1 text-caption text-ink-secondary"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <Icon size={14} strokeWidth={1.5} className="text-ink-muted" />
+                                    {t(labelKey)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={on}
+                                    aria-label={t(labelKey)}
+                                    onClick={() => toggleDisplayField(field)}
+                                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                      on ? "bg-accent" : "bg-border-strong"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
+                                        on ? "left-3.5" : "left-0.5"
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div data-id="inspector-edge-style-section">
+                      <button
+                        type="button"
+                        aria-expanded={edgeStyleSectionOpen}
+                        onClick={() => {
+                          if (edgeStyleSectionOpen) beginInspectorClose("edgeStyle");
+                          else cancelInspectorClose("edgeStyle");
+                          setEdgeStyleSectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={14}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${edgeStyleSectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine text-ink-tertiary">
+                          <span className="font-semibold text-ink">{t("inspector.edgeStyle")}</span> ·{" "}
+                          {t("inspector.mapWide")}
+                        </span>
+                      </button>
+                      {(edgeStyleSectionOpen || inspectorClosingKeys.has("edgeStyle")) && (
+                        <div className={inspectorClosingKeys.has("edgeStyle") ? "accordion-close" : "accordion-open"}>
+                          <div className="mt-1 grid grid-cols-3 gap-1.5">
+                            {([
+                              ["default", "edgeStyle.curve", Spline],
+                              ["smoothstep", "edgeStyle.step", CornerDownRight],
+                              ["straight", "edgeStyle.straight", Slash],
+                            ] as const).map(([value, labelKey, Icon]) => (
+                              <button
+                                key={value}
+                                type="button"
+                                disabled={readOnly}
+                                title={t(labelKey)}
+                                aria-label={t(labelKey)}
+                                onClick={() => {
+                                  setEdgeStyle(value);
+                                  window.localStorage.setItem("bpm.edgeStyle", value);
+                                }}
+                                className={`flex items-center justify-center rounded-sm border py-2 ${
+                                  edgeStyle === value
+                                    ? "border-accent bg-accent-tint text-accent"
+                                    : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                                }`}
+                              >
+                                <Icon size={18} strokeWidth={1.5} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
+                      onToast={showToast}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        data-id="export-png"
+                        onClick={() => void handleExportPng()}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <Download size={16} strokeWidth={1.5} />
+                        {t("inspector.exportPng")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-excel"
+                        onClick={() => setExcelExportOpen(true)}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileSpreadsheet size={16} strokeWidth={1.5} />
+                        {t("inspector.exportExcel")}
+                      </button>
+                      <button
+                        type="button"
+                        data-id="export-csv"
+                        onClick={handleExportCsv}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                      >
+                        <FileDown size={16} strokeWidth={1.5} />
+                        {t("inspector.exportCsv")}
+                      </button>
+                    </div>
+                    {isWordMap && (
+                      <>
+                        <button
+                          type="button"
+                          data-id="inspector-generate-complete-doc"
+                          onClick={() => completeDocPickerRef.current?.click()}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          Generate complete document
+                        </button>
+                        <button
+                          type="button"
+                          data-id="inspector-export-word"
+                          onClick={handleExportWord}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                        >
+                          <FileText size={16} strokeWidth={1.5} />
+                          {t("inspector.exportWord")}
+                        </button>
+                        <input
+                          ref={completeDocPickerRef}
+                          type="file"
+                          accept=".docx"
+                          className="hidden"
+                          onChange={handleCompleteDocPicked}
+                        />
+                      </>
                     )}
+                  </div>
+                }
+                approvalSlot={
+                  // R5c 승인 탭. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
+                  // R6 W2: 결재 대기를 최상단으로 재배치·드래프트 CTA 신설(옛 버전 행 자리)·워크플로는 접힘 섹션(기본 펼침)으로 래핑
+                  <div className="flex flex-col gap-4">
+                    {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 최상단·기본 접힘 (R8, R6 W2 재배치) */}
+                    <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
+                      <button
+                        type="button"
+                        aria-expanded={editorApprovalsSectionOpen}
+                        onClick={() => {
+                          if (editorApprovalsSectionOpen) beginInspectorClose("editorApprovals");
+                          else cancelInspectorClose("editorApprovals");
+                          setEditorApprovalsSectionOpen((v) => !v);
+                        }}
+                        className="flex w-full items-center gap-1.5 text-left"
+                      >
+                        <ChevronRight
+                          size={12}
+                          strokeWidth={1.5}
+                          className={`shrink-0 transition-transform ${editorApprovalsSectionOpen ? "rotate-90" : ""}`}
+                        />
+                        <span className="text-fine font-semibold text-ink">{t("perm.tabPendingApprovals")}</span>
+                        {editorApprovalsCount > 0 && (
+                          <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-fine text-on-accent">
+                            {editorApprovalsCount}
+                          </span>
+                        )}
+                      </button>
+                      {/* 항상 마운트 — PendingApprovalsPanel의 마운트 fetch가 배지(editorApprovalsCount)의
+                          유일한 소스라 접힌 채로 언마운트하면 배지가 0에서 멈춘다. 완전히 닫힌 상태는
+                          display:none(hidden)로 마운트만 유지, 접히는 중엔 accordion-close 고스트 애니 재생. */}
+                      <div
+                        className={
+                          editorApprovalsSectionOpen
+                            ? "accordion-open"
+                            : inspectorClosingKeys.has("editorApprovals")
+                              ? "accordion-close"
+                              : "hidden"
+                        }
+                      >
+                        <div className="mt-2">
+                          <PendingApprovalsPanel
+                            mapId={String(mapId)}
+                            isOwner={myRole === "owner"}
+                            isApprover={isApprover || isSysadmin}
+                            onCountChange={setEditorApprovalsCount}
+                            onDecided={() => void refreshWorkflow()}
+                            onToast={(item) => showToast(item.message, item.tone)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 드래프트 CTA — 옛 버전 행 자리, editor+ 전용·현재가 draft가 아닐 때만 (R6 W2) */}
+                    {currentVersion && isEditorRole && currentVersion.status !== "draft" && (
+                      <button
+                        type="button"
+                        data-id="approval-draft-cta"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-accent bg-accent-tint/40 px-3 py-2 text-caption text-accent hover:bg-accent-tint"
+                        onClick={() => {
+                          if (hasDraft) {
+                            const draft = versions.find((v) => v.status === "draft");
+                            if (draft) void switchVersion(draft.id);
+                          } else {
+                            handleCreateVersion();
+                          }
+                        }}
+                      >
+                        {hasDraft ? (
+                          <>
+                            <PencilLine size={14} strokeWidth={1.5} />
+                            {t("approval.goDraftCta")}
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={14} strokeWidth={1.5} />
+                            {t("approval.createDraftCta")}
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* 승인 워크플로 — 접힘 섹션(기본 펼침, 탭의 본론), 내부 ApprovalPanel은 무변경(래핑만) (R6 W2) */}
+                    {currentVersion && (
+                      <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
+                        <button
+                          type="button"
+                          aria-expanded={approvalWorkflowSectionOpen}
+                          onClick={() => {
+                            if (approvalWorkflowSectionOpen) beginInspectorClose("approvalWorkflow");
+                            else cancelInspectorClose("approvalWorkflow");
+                            setApprovalWorkflowSectionOpen((v) => !v);
+                          }}
+                          className="flex w-full items-center gap-1.5 text-left"
+                        >
+                          <ChevronRight
+                            size={14}
+                            strokeWidth={1.5}
+                            className={`shrink-0 transition-transform ${approvalWorkflowSectionOpen ? "rotate-90" : ""}`}
+                          />
+                          <span className="text-fine font-semibold text-ink">{t("approval.workflowSection")}</span>
+                          {/* 상태 배지 — 접힌 상태에서도 한눈에 보이도록 헤더 행에 (R6 W2 리뷰 수정) */}
+                          <span className="ml-auto">
+                            <StatusBadge status={currentVersion.status} />
+                          </span>
+                        </button>
+                        {(approvalWorkflowSectionOpen || inspectorClosingKeys.has("approvalWorkflow")) && (
+                          <div className={inspectorClosingKeys.has("approvalWorkflow") ? "accordion-close" : "accordion-open"}>
+                            <div className="mt-2">
+                              <ApprovalPanel
+                                status={currentVersion.status}
+                                workflow={workflow}
+                                events={currentVersion.events}
+                                isCheckoutHolder={checkout?.mine ?? false}
+                                isApprover={isApprover}
+                                isSubmitter={isSubmitter}
+                                canWithdraw={canWithdraw}
+                                hasApproved={hasApproved}
+                                canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
+                                onSubmit={(at) => void handleSubmitForApproval(at)}
+                                onApprove={() => {
+                                  setTransitionComment("");
+                                  setApproveConfirmOpen(true);
+                                }}
+                                onReject={() => setRejectOpen(true)}
+                                onPublish={() => {
+                                  setTransitionComment("");
+                                  setPublishConfirmOpen(true);
+                                }}
+                                onWithdraw={() => {
+                                  setTransitionComment("");
+                                  setWithdrawConfirmOpen(true);
+                                }}
+                                onManageApprovers={() => setManagingApprovers(true)}
+                                username={username}
+                                canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
+                                onDecideCheckout={(requestId, approve) =>
+                                  void handleDecideCheckout(requestId, approve)
+                                }
+                                onWithdrawCheckout={(requestId) => void handleWithdrawCheckout(requestId)}
+                                hideHeader
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}
                     <SubprocessInspectorCard
                       mapId={mapId}
                       canManage={spCanManage}
                       disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
                     />
                     <MapDetailCard
                       mapId={mapId}
                       only="versions"
                       showFooter={false}
                       reloadKey={versionsReloadKey}
-                      onGoToVersion={(id) => void switchVersion(id)}
+                      onGoToVersion={requestGoToVersion}
                       currentVersionId={versionId}
                     />
                   </div>
@@ -9521,132 +9766,113 @@ function MapEditor({ mapId }: { mapId: number }) {
           position={selfPublishPrompt}
           onYes={() => {
             setSelfPublishPrompt(null);
-            void runTransition(runSelfPublishChain);
+            void runTransition((id) => runSelfPublishChain(id, bundleValue ?? undefined));
+            setBundleValue(null);
           }}
           onNo={() => {
             setSelfPublishPrompt(null);
+            setBundleValue(null);
+            setTransitionComment("");
             setSubmitConfirmOpen(true);
           }}
-          onClose={() => setSelfPublishPrompt(null)}
+          onClose={() => {
+            setSelfPublishPrompt(null);
+            // dismiss(Escape/바깥클릭)는 confirm 경로와 달리 값을 지우지 않아, 다음 오픈에 픽커가
+            // 미리 선택된 채로 뜰 수 있다 — belt and braces로 여기서도 리셋.
+            setBundleValue(null);
+          }}
+          bundleSlot={
+            canBundleVisibility ? (
+              <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
+          }
         />
       )}
       {/* 승인 요청 확인 — 현재 설정된 승인자 목록 노출 */}
       {submitConfirmOpen && (
-        <ConfirmDialog
-          icon={<Send size={28} strokeWidth={1.5} />}
-          title={t("approval.submitConfirmTitle")}
-          message={versionSubtitle}
-          lines={
-            (workflow?.approvers ?? []).length > 0
-              ? (workflow?.approvers ?? []).map((id) => ({
-                  icon: <User size={14} strokeWidth={1.5} />,
-                  text: nameById.get(id) ?? id,
-                }))
-              : [
-                  {
-                    icon: <User size={14} strokeWidth={1.5} />,
-                    text: t("approval.noApprovers"),
-                    tone: "muted" as const,
-                  },
-                ]
+        <SubmitConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          subtitle={versionSubtitle}
+          previousRejection={findLatestRejection(currentVersion?.events)}
+          bundleSlot={
+            canBundleVisibility ? (
+              <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
+            ) : undefined
           }
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            void runTransition(submitVersion);
+            void runTransition((id) => submitVersion(id, bundleValue ?? undefined, transitionComment.trim() || undefined));
+            setBundleValue(null);
           }}
-          onClose={() => setSubmitConfirmOpen(false)}
+          onClose={() => {
+            setSubmitConfirmOpen(false);
+            setBundleValue(null);
+          }}
         />
       )}
-      {/* 승인 확인 */}
+      {/* 승인 확인 — 동봉 가시성 변경이 있으면 승인자에게 공개(원 신고 건) */}
       {approveConfirmOpen && (
-        <ConfirmDialog
-          icon={<Check size={28} strokeWidth={1.5} />}
-          title={t("approval.approveConfirmTitle")}
-          message={versionSubtitle}
-          lines={approverStatusLines}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <ApproveConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          extraLines={buildBundledVisibilityLines(workflow, nameById, t)}
+          submitComment={findLatestSubmitComment(currentVersion?.events)}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setApproveConfirmOpen(false);
-            void runTransition(approveVersion);
+            void runTransition((id) => approveVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setApproveConfirmOpen(false)}
         />
       )}
       {/* 게시 확인 — 현재 게시본이 만료됨을 안내 */}
       {publishConfirmOpen && (
-        <ConfirmDialog
-          icon={<Upload size={28} strokeWidth={1.5} />}
-          title={t("approval.publishConfirmTitle")}
-          message={versionSubtitle}
-          lines={(() => {
-            const prior = versions.find((v) => v.status === "published");
-            return prior
-              ? [
-                  {
-                    icon: <Info size={14} strokeWidth={1.5} />,
-                    text: t("approval.publishExpireLine", {
-                      name: `v${prior.version_number ?? "?"} · ${prior.label}`,
-                    }),
-                    tone: "error" as const,
-                  },
-                ]
-              : undefined;
-          })()}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <PublishConfirmDialog
+          subtitle={versionSubtitle}
+          priorPublished={versions.find((v) => v.status === "published") ?? null}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setPublishConfirmOpen(false);
-            void runTransition(publishVersion);
+            void runTransition((id) => publishVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setPublishConfirmOpen(false)}
         />
       )}
       {/* 회수 확인 — 기존 승인 초기화 안내 */}
       {withdrawConfirmOpen && (
-        <ConfirmDialog
-          icon={<Undo2 size={28} strokeWidth={1.5} />}
-          title={t("approval.withdrawConfirmTitle")}
-          message={versionSubtitle}
-          banner={
-            <WithdrawHandoff
-              submitterName={
-                withdrawSubmitter
-                  ? (nameById.get(withdrawSubmitter) ?? withdrawSubmitter)
-                  : t("checkout.none")
-              }
-              youName={t("approval.you")}
-              transfers={!!withdrawSubmitter && withdrawSubmitter !== username}
-            />
-          }
-          sections={approverStatusLines.length ? [approverStatusLines] : undefined}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
+        <WithdrawConfirmDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          withdrawSubmitter={withdrawSubmitter}
+          showCommentInput={workflow?.status === "rejected" || (workflow?.approvals.length ?? 0) >= 1}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setWithdrawConfirmOpen(false);
-            void runTransition(withdrawVersion);
+            void runTransition((id) => withdrawVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setWithdrawConfirmOpen(false)}
         />
       )}
       {/* 거절 — 사유 입력창 유지, 디자인 통일 */}
       {rejectOpen && (
-        <ConfirmDialog
-          icon={<X size={28} strokeWidth={1.5} />}
-          danger
-          title={t("wf.rejectTitle")}
-          message={versionSubtitle}
-          lines={approverStatusLines}
-          input={{
-            value: rejectReason,
-            onChange: setRejectReason,
-            placeholder: t("wf.rejectReason"),
-          }}
-          confirmDisabled={rejectReason.trim().length === 0}
-          confirmLabel={t("wf.reject")}
-          cancelLabel={t("common.cancel")}
+        <RejectDialog
+          workflow={workflow}
+          nameById={nameById}
+          username={username}
+          subtitle={versionSubtitle}
+          submitComment={findLatestSubmitComment(currentVersion?.events)}
+          reason={rejectReason}
+          onReasonChange={setRejectReason}
           onConfirm={() => {
             const reason = rejectReason.trim();
             setRejectOpen(false);
@@ -9657,6 +9883,18 @@ function MapEditor({ mapId }: { mapId: number }) {
             setRejectOpen(false);
             setRejectReason("");
           }}
+        />
+      )}
+      {/* 타임라인 go-to 전환 확인 — VersionPill과 동일 모달(편집 중 미저장 안내) */}
+      {goVersionPrompt && (
+        <VersionSwitchConfirm
+          label={goVersionPrompt.label}
+          onConfirm={() => {
+            const id = goVersionPrompt.id;
+            setGoVersionPrompt(null);
+            void switchVersion(id);
+          }}
+          onClose={() => setGoVersionPrompt(null)}
         />
       )}
       {branchPrompt && (
