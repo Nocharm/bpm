@@ -50,16 +50,17 @@ The right side of the home screen shows a **status dashboard** — a map-status 
 ### Finding maps
 
 - **Org tree (left)** — browse maps by department through an accordion tree. **My department** is pinned to the top as a favorite.
+- The toggle above the list switches between the **Departments** view and the **Framework** view — a company-wide process-classification tree for browsing maps, currently in a pilot stage.
 - **Recently opened** shows the maps you last worked on — use **Show more** / **Collapse** to expand and collapse the band.
 - **All maps** lists everything you can see. Press `/` or use the search box (**Search maps**) to filter by name.
-- Filter chips narrow the list by **Status** (Draft / Pending / Approved / Rejected / Published) and by your **Role**. **Clear filters** resets them.
-- Click a card to open the **detail panel**: owner, **owning department**, node count, allowed members (Individuals / Teams / User groups), and the full version history (Created, Submitted, Approved, Rejected, Published, Withdrawn). Maps designated as subprocesses carry an **SP badge**.
+- Filter chips narrow the list by **Status** (Draft / Pending / Approved / Rejected / Published) and by your **Role**. **Clear filters** resets them. On narrow screens the filter pills shrink automatically (full label → short label → icon).
+- Click a card to open the **detail panel**: owner, **owning department**, node count, allowed members (Individuals / Teams / User groups), and the full version history (Created, Submitted, Approved, Rejected, Published, Withdrawn). Maps designated as subprocesses carry an **SP badge**. Each version entry supports a right-click menu (**Go to this version** · **View comments**) and a comment-bubble button (section 3), and with edit access you can add or remove collaborators right on the card — the same staged Save / Undo flow as Settings, with the owner and owning-department rows protected (section 5).
 
 ### Creating a map
 
 1. Click **New map**.
 2. Enter a name and description, and choose **Visibility** (Public / Private).
-3. Set the **owning department** (required) — it must be a real org department, and people in it always hold Editor access to this map. The picker lists **your own department chain first** (smallest unit on top).
+3. Set the **owning department** (required) — it must be a real org department, and people in it always hold Editor access to this map. The picker browses the **org tree** with indentation, with your own departments pinned to the top.
 4. Optionally add **initial collaborators** — individuals, teams, or user groups, each as Viewer or Editor. An invite hint appears while the list is empty.
 5. Add **at least one approver** — a map cannot be created without one.
 
@@ -71,6 +72,12 @@ New maps come with **Start and End nodes pre-seeded**, so you can draw the flow 
 
 - **Copy** duplicates a whole map under a new (unique) name.
 - **Delete** moves the map to the trash. You can restore it within **7 days** from **Settings → Scheduled deletion**; after that it is permanently purged.
+
+### People cards and org info
+
+- Hover briefly (0.7 s) over — or click — a name in version histories, approver lists, or allowed members to open the **person card**: Korean/English names, title and position, home department with its org path, and an **Open messenger** button. Right-clicking a name offers **Send message** and **Info**.
+- Click a department card (including the owning department) in the allowed-members list — left or right click both work — to open the **org info modal**: its members (**Members**), a **Sub-organizations** accordion, and the path at the top for moving up the hierarchy. The right-click menu on a department row offers **Org info**.
+- Name display follows your **language setting** — Korean names come first when the UI is in Korean, falling back to the English name when no Korean name exists.
 
 ---
 
@@ -101,14 +108,18 @@ A map holds multiple **versions** (As-Is, To-Be, or free labels). A new version 
 ### From draft to published
 
 1. Make sure **approvers are assigned** (Map Settings → Approvers) — you cannot submit for approval without them.
-2. **Submit for approval** — the version becomes #Pending and locks, and all approvers are notified.
-3. Approvers **Approve** or **Reject** (rejection requires a reason). Approval is **unanimous** — every approver must approve.
-4. **Publish** the approved version. The previously published version automatically becomes #Expired.
-5. **Withdraw** returns a Pending or Approved version to draft (approvals reset) — only the **submitter** can do this. A Rejected version can also be withdrawn by the map owner or a sysadmin, and whoever withdraws it gets the checkout (edit lock). **Republish** creates a fresh draft from a published or expired version to run the cycle again.
+2. **Submit for approval** — the confirmation dialog lists the approvers who will review, and you can leave an optional comment ("Add a comment (optional)"). If the version was previously rejected, a **Previous rejection** banner with the reason appears in the dialog. On submit the version becomes #Pending and locks, and all approvers are notified.
+3. Approvers **Approve** or **Reject** — the approve/reject dialogs show the submitter's **Requester comment** banner, and a rejection requires a **Reason**. The reason is shown on the version and appended to the rejection notification sent to the submitter. Approval is **unanimous** — every approver must approve.
+4. **Publish** the approved version (optional comment). The previously published version automatically becomes #Expired.
+5. **Withdraw** returns a Pending or Approved version to draft (approvals reset) — only the **submitter** can do this. A Rejected version can also be withdrawn by the map owner or a sysadmin, and whoever withdraws it gets the checkout (edit lock). The withdraw dialog also takes an optional comment — but withdrawing a pending version **before any decision** (no approvals, no rejection) removes that submission record from the history along with its comment. **Republish** creates a fresh draft from a published or expired version to run the cycle again.
+
+> **Stage comments and comment history:** comments left in the submit / approve / publish / withdraw dialogs are stored with the version history. Versions that have comments show a **speech-bubble count button** on the version cards (Map Settings → Versions) and on the version timeline (home detail panel and the inspector's map tab) — hidden at zero — which opens that version's **Comments** modal. Right-clicking a version entry also offers **Go to this version** and **View comments**.
+
+> **Bundling a visibility change (owner only):** the map owner can attach a visibility change to the submission via the **Visibility** dropdown in the submit dialog — a "Visibility will change: … → …" line announces it, and the change applies the moment the version is published. If the version is rejected, withdrawn, or deleted, the bundled change closes with it. The bundled request appears in pending-approvals lists only as a read-only **"Decided with version approval"** row and cannot be decided separately.
 
 > **Self-publish (when you are the only approver):** if the approver list is **just you**, clicking Submit shows a **"Publish now?" Yes/No popover**. **Yes** runs submit → approve → publish in one click; **No** submits normally (pending review). Works the same in the editor and in Map Settings → Versions.
 
-The **approval dashboard** at the bottom of the right inspector shows the stepper (Submit → Review → Publish), each approver's check state, and the available actions. If this map is designated as a subprocess, the approval tab also shows its **designation card** (status and representative attributes).
+The **approval dashboard** at the bottom of the right inspector shows the stepper (Submit → Review → Publish), each approver's check state, and the available actions. If this map is designated as a subprocess, the approval tab also shows its **designation card** (status and representative attributes). The approval tab and Map Settings → Pending Approvals also consolidate this map's **decision queue** — visibility changes, permission downgrades, map renames, and subprocess registrations, each row with **Approve / Reject**. The **Inbox** tab in the top bar carries a badge with the number of items waiting on you.
 
 ---
 
@@ -129,13 +140,13 @@ Open **Compare** from the editor top bar (requires at least one published versio
 Open **Map Settings** from the editor. Tabs:
 
 - **Details** — name and description. **Renaming applies immediately only for the owner (or an admin)** — when an editor changes the name, a **rename request** is created and sent to the owner's Inbox; a "pending" badge shows until it is decided, and you can withdraw your own request. If the owner renames directly, any pending request is resolved automatically.
-- **Owning department** — assign or change the map's owning department (Owner / sysadmin only). Its members automatically get Editor access, and changing the department moves that derived Editor access with it.
-- **Collaborators** — add individuals, teams, or user groups as Viewer / Editor. Removing or downgrading an editor may require approval.
+- **Owning department** — assign or change the map's owning department (Owner / sysadmin only). Its members automatically get Editor access, and changing the department moves that derived Editor access with it. The picker browses the **org tree** with indentation, with your own departments pinned to the top.
+- **Collaborators** — add individuals, teams, or user groups as Viewer / Editor. Changes are **staged** (To add / Change / Remove pills) and applied together with **Save changes**, or dropped entirely with **Discard**. Each pill carries a forecast icon: **instant on save** (⚡ Zap, "Applies immediately on save") or **needs approval** (Hourglass, "Needs approval after save") — adds and changes to Viewer grants apply instantly, while **removing an Editor or downgrading one to Viewer goes through approval** (the owner applies everything instantly). Changes awaiting approval stay on the row as an **Approval pending** tag (with the requester's name), visible to everyone; hover your own request to withdraw it in place with the **Withdraw** pill. Duplicate requests overlapping a pending one are blocked, and the owner applying a change directly closes the pending request automatically. Right after saving, the **Undo** button reverts that one save (a confirmation modal lists each item with its forecast icon; leaving the page discards the chance).
 - **Approvers** — manage the approver list (locked while a version is under approval).
-- **Visibility** — Public / Private. Changing visibility **requires approval** and shows "Awaiting approval" until decided.
+- **Visibility** — Public / Private. Picking the other value shows an impact preview (e.g., going public removes existing viewer grants on approval) and an **Apply change** confirmation step. The change **requires approval** — the editor inspector's dialog lists the **approvers who can decide** ("Approvers who can decide") and blocks the change while the map has no approvers. It shows **Approval pending** until decided, with **Withdraw request** to pull it back.
 - **Subprocess designation** — designate this map so it can be used as a subprocess of other maps, and set its representative attributes (department required; assignee/system/duration/cost/headcount/**description** optional). The designated values show live on every node that links this map. **Designation requires a published version.**
 - **Versions** — per-version workflow actions (submit for approval, publish, withdraw…).
-- **Pending Approvals** / **Checkout Requests** — decide requests targeted at this map.
+- **Pending Approvals** / **Checkout Requests** — decide requests targeted at this map. The Pending Approvals tab gathers all four kinds — visibility change, permission downgrade, map rename, subprocess registration — for per-row **Approve / Reject**; requests bundled with a version submission appear only as a read-only **"Decided with version approval"** row.
 - **Danger Zone** — **Transfer Ownership** (you become an editor) and **Delete map** (Owner only).
 
 ---
@@ -148,7 +159,7 @@ The **Notices** tab lists currently active announcements. Filter by All / Import
 
 ### Inbox
 
-- **Approvals** tab — your personal review queue: version approvals, checkout transfers, permission / visibility requests, **map renames**, and **subprocess registration requests**. Approve or reject (with a reason) inline; **Open map** jumps to the source. Checkout transfers and permission/visibility changes also show their requests and outcomes on the Notifications tab. With nothing selected, the right pane shows an **activity digest**.
+- **Approvals** tab — your personal review queue: version approvals, checkout transfers, permission / visibility requests, **map renames**, and **subprocess registration requests**. Approve or reject (with a reason) inline; **Open map** jumps to the source. The **Inbox** tab in the top bar carries a badge with your pending count (refreshed periodically). When a version is rejected, the rejection notification carries the reason at the end. Checkout transfers and permission/visibility changes also show their requests and outcomes on the Notifications tab. With nothing selected, the right pane shows an **activity digest**.
 - **Handling a subprocess registration request (owner)** — when someone links your map as an unregistered placeholder and requests registration, a **"Subprocess registration" card** arrives (showing who asked and from which map). **Designate & approve** opens the designation form (department required) — **saving it approves the request** and notifies the requester. Use **Go to published version** to review the map first; a map with **no published version cannot be designated yet** and shows a publish-first notice. **Reject** declines without a reason and notifies the requester.
 - **Bell** — the bell icon top right refreshes every **5 seconds**. Clicking an item jumps to the **Notifications tab** and opens it (marking it read); you can also mark read or delete (X) an item directly from the bell. Version-approval progress, checkout transfer requests/approvals/rejections, and permission/visibility change requests/approvals/rejections all arrive here.
 - **Notifications** tab — unlike the bell, this **loads once when you open the page** (no auto-refresh — refresh the page for the latest). Besides **Mark all read**, a category filter (All/Version/Checkout/Permission/Notice), and per-item delete (X), it supports **selection mode** to check and delete several at once, **delete read notifications**, and **delete before a date** (before that date's midnight). All three bulk actions go through a confirmation dialog, and **every deletion is permanent**.
@@ -179,7 +190,8 @@ Groups let you grant map access to several people in one step.
 - **The canvas won't save.** Check the save checklist: one start node, one primary end, unique end names, and no multi-output plain nodes. (For details, see "Saving and Validation" in the **Editing Maps** manual.)
 - **I can't enter cost in both KRW and USD.** A per-run cost uses a single currency — clear one, then enter the other.
 - **A linked subprocess is locked.** That map is not **designated** as a subprocess yet. Use **Request registration** in the node inspector to ask its owner, or — if it's your map — publish it and designate it in Map Settings.
+- **Why can't I change a collaborator's permission?** If that person holds the checkout or submitted the version for approval, permission changes against them are blocked until the active version workflow is resolved. Conversely, while a downgrade of your own permission is pending approval, checkout and submission are blocked for you.
 
 ---
 
-*Business Process Map — Getting Around · Updated 2026-07-19*
+*Business Process Map — Getting Around · Updated 2026-08-14*
