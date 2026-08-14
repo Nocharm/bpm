@@ -10,6 +10,7 @@ import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MessageSquare, Mo
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
+import { ContextMenu } from "@/components/context-menu";
 import { PersonHoverCard } from "@/components/person-hover-card";
 import { formatKst } from "@/lib/datetime";
 import { useDirectory } from "@/lib/directory";
@@ -108,6 +109,12 @@ export function VersionTimeline({
     version: VersionDetail;
     origin: { x: number; y: number };
   } | null>(null);
+  // 버전 카드 우클릭 메뉴 — 이 버전으로 가기 · 코멘트 보기 (feedback 2026-08-14)
+  const [cardMenu, setCardMenu] = useState<{
+    version: VersionDetail;
+    x: number;
+    y: number;
+  } | null>(null);
   const ordered = [...versions].reverse(); // idx 0 = 최신 = Current
   const visibleVersions = showAll ? ordered : ordered.slice(0, 3);
   const hiddenCount = ordered.length - 3;
@@ -148,8 +155,8 @@ export function VersionTimeline({
         // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
         const cardBg =
           idx === 0
-            ? "bg-accent-tint/30 group-hover:bg-accent-tint/50"
-            : "bg-surface group-hover:bg-surface-alt";
+            ? "bg-accent-tint/30 group-hover/vercard:bg-accent-tint/50"
+            : "bg-surface group-hover/vercard:bg-surface-alt";
         return (
           <div key={version.id} className="relative flex gap-2.5">
             <span
@@ -162,13 +169,19 @@ export function VersionTimeline({
               tabIndex={0}
               aria-expanded={open}
               onClick={() => onToggle(version.id)}
+              // 우클릭 — 이 버전으로 가기·코멘트 보기 메뉴 (feedback 2026-08-14)
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setCardMenu({ version, x: e.clientX, y: e.clientY });
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   onToggle(version.id);
                 }
               }}
-              className={`group min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
+              // 네임드 그룹 — 인스펙터의 <details class="group"> 조상과 충돌해 호버 리빌이 오작동하던 것 교정(R5-2와 동일 함정)
+              className={`group/vercard min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
                 idx === 0
                   ? "border-accent-tint-border bg-accent-tint/30 hover:bg-accent-tint/50"
                   : "border-hairline bg-surface hover:bg-surface-alt"
@@ -196,13 +209,13 @@ export function VersionTimeline({
                         <span
                           className={`pointer-events-none col-start-1 row-start-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-fine transition-opacity duration-700 ease-smooth ${
                             VERSION_STATUS_STYLE[version.status]
-                          } ${canGo || showHint ? "group-hover:opacity-0" : ""}`}
+                          } ${canGo || showHint ? "group-hover/vercard:opacity-0" : ""}`}
                         >
                           {t(VERSION_STATUS_LABEL[version.status])}
                         </span>
                         {canGo && onGoToVersion && (
                           /* 페이드는 래퍼(700ms), 버튼 자체의 색 호버는 분리해 빠릿하게(150ms) */
-                          <span className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity duration-700 ease-smooth group-hover:pointer-events-auto group-hover:opacity-100">
+                          <span className="pointer-events-none col-start-1 row-start-1 opacity-0 transition-opacity duration-700 ease-smooth group-hover/vercard:pointer-events-auto group-hover/vercard:opacity-100">
                             <button
                               type="button"
                               data-id={`version-go-${version.id}`}
@@ -220,7 +233,7 @@ export function VersionTimeline({
                         {showHint && (
                           <span
                             data-id={`version-hint-${version.id}`}
-                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-700 ease-smooth group-hover:opacity-100"
+                            className="pointer-events-none col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-700 ease-smooth group-hover/vercard:opacity-100"
                           >
                             <MousePointerClick size={12} strokeWidth={1.5} />
                             {t("home.verClickHint")}
@@ -237,7 +250,7 @@ export function VersionTimeline({
                       data-id={`version-timeline-comments-${version.id}`}
                       title={t("wf.viewComments")}
                       // 카드 호버 시에만 노출 — 평상시 헤더 밀도 유지 (feedback 2026-08-14)
-                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
+                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover/vercard:opacity-100"
                       onClick={(e) => {
                         // 카드 펼침 토글로 번지지 않게 — 기존 "이 버전으로 가기" 버튼과 동일 패턴
                         e.stopPropagation();
@@ -373,6 +386,32 @@ export function VersionTimeline({
           nameById={nameById ?? EMPTY_NAME_MAP}
           origin={commentsFor.origin}
           onClose={() => setCommentsFor(null)}
+        />
+      )}
+      {cardMenu && (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          onClose={() => setCardMenu(null)}
+          items={[
+            {
+              label: t("home.goToVersion"),
+              icon: ArrowRight,
+              // 현재 보는 버전이거나 전환 핸들러 없는 표면(설정 등)이면 비활성
+              disabled: !onGoToVersion || cardMenu.version.id === currentVersionId,
+              onSelect: () => onGoToVersion?.(cardMenu.version.id),
+            },
+            {
+              label: t("wf.viewComments"),
+              icon: MessageSquare,
+              disabled: cardMenu.version.events.filter((evt) => evt.note).length === 0,
+              onSelect: () =>
+                setCommentsFor({
+                  version: cardMenu.version,
+                  origin: { x: cardMenu.x, y: cardMenu.y },
+                }),
+            },
+          ]}
         />
       )}
     </div>
