@@ -15,6 +15,8 @@ interface SubmitConfirmDialogProps {
   subtitle?: string;
   // 승인요청에 동봉할 옵션 UI(예: 가시성 변경 체크박스) — 호출자가 렌더한 JSX를 그대로 주입.
   bundleSlot?: ReactNode;
+  comment: string;
+  onCommentChange: (value: string) => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -24,6 +26,8 @@ export function SubmitConfirmDialog({
   nameById,
   subtitle,
   bundleSlot,
+  comment,
+  onCommentChange,
   onConfirm,
   onClose,
 }: SubmitConfirmDialogProps) {
@@ -48,6 +52,7 @@ export function SubmitConfirmDialog({
       title={t("approval.submitConfirmTitle")}
       message={subtitle}
       lines={lines}
+      input={{ value: comment, onChange: onCommentChange, placeholder: t("wf.commentPlaceholder") }}
       confirmLabel={t("common.confirm")}
       cancelLabel={t("common.cancel")}
       onConfirm={onConfirm}

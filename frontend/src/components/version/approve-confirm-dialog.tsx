@@ -16,6 +16,8 @@ interface ApproveConfirmDialogProps {
   subtitle?: string;
   // 동봉 공개 라인(가시성 변경 등) — 승인자 상태 라인 뒤에 이어붙는다.
   extraLines?: ConfirmLine[];
+  comment: string;
+  onCommentChange: (value: string) => void;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -26,6 +28,8 @@ export function ApproveConfirmDialog({
   username,
   subtitle,
   extraLines,
+  comment,
+  onCommentChange,
   onConfirm,
   onClose,
 }: ApproveConfirmDialogProps) {
@@ -38,6 +42,7 @@ export function ApproveConfirmDialog({
       title={t("approval.approveConfirmTitle")}
       message={subtitle}
       lines={combined}
+      input={{ value: comment, onChange: onCommentChange, placeholder: t("wf.commentPlaceholder") }}
       confirmLabel={t("common.confirm")}
       cancelLabel={t("common.cancel")}
       onConfirm={onConfirm}

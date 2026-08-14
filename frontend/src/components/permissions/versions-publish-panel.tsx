@@ -225,6 +225,8 @@ function VersionRow({
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 4종 전이 모달(submit/approve/publish/withdraw) 공용 코멘트 입력 — 동시에 하나만 열리므로 상태 1개로 공유.
+  const [transitionComment, setTransitionComment] = useState("");
   // 승인요청/셀프게시에 동봉할 가시성 변경 선택 — VisibilityBundlePicker가 직접 값 제공(체크박스 대체).
   const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
 
@@ -280,6 +282,7 @@ function VersionRow({
                 setSelfPublishAt({ x: event.clientX, y: event.clientY });
                 return;
               }
+              setTransitionComment("");
               setSubmitConfirmOpen(true);
             }}
           >
@@ -295,7 +298,10 @@ function VersionRow({
               type="button"
               disabled={busy}
               className="flex items-center gap-1 rounded-sm border border-added px-2 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-50"
-              onClick={() => setApproveConfirmOpen(true)}
+              onClick={() => {
+                setTransitionComment("");
+                setApproveConfirmOpen(true);
+              }}
             >
               <CheckCircle size={16} strokeWidth={1.5} />
               {t("perm.version.approve")}
@@ -328,7 +334,10 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-accent px-2 py-1 text-fine text-accent hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => setPublishConfirmOpen(true)}
+            onClick={() => {
+              setTransitionComment("");
+              setPublishConfirmOpen(true);
+            }}
           >
             <Upload size={16} strokeWidth={1.5} />
             {t("perm.version.publish")}
@@ -346,7 +355,10 @@ function VersionRow({
             type="button"
             disabled={busy}
             className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-50"
-            onClick={() => setWithdrawConfirmOpen(true)}
+            onClick={() => {
+              setTransitionComment("");
+              setWithdrawConfirmOpen(true);
+            }}
           >
             <Undo2 size={16} strokeWidth={1.5} />
             {t("perm.version.withdraw")}
@@ -367,6 +379,7 @@ function VersionRow({
             // 직행 submit 대신 SubmitConfirmDialog로 — 에디터와 동일 플로우(승인자 목록 노출 + 동봉 재선택 가능).
             setSelfPublishAt(null);
             setBundleValue(null);
+            setTransitionComment("");
             setSubmitConfirmOpen(true);
           }}
           onClose={() => {
@@ -392,9 +405,11 @@ function VersionRow({
               <VisibilityBundlePicker current={visibility} value={bundleValue} onChange={setBundleValue} />
             ) : undefined
           }
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            void runAction(() => submitVersion(versionId, bundleValue ?? undefined));
+            void runAction(() => submitVersion(versionId, bundleValue ?? undefined, transitionComment.trim() || undefined));
             setBundleValue(null);
           }}
           onClose={() => {
@@ -410,9 +425,11 @@ function VersionRow({
           username={currentUserId}
           subtitle={label}
           extraLines={buildBundledVisibilityLines(wf, nameById, t)}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setApproveConfirmOpen(false);
-            void runAction(() => approveVersion(versionId));
+            void runAction(() => approveVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setApproveConfirmOpen(false)}
         />
@@ -421,9 +438,11 @@ function VersionRow({
         <PublishConfirmDialog
           subtitle={label}
           priorPublished={priorPublished}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setPublishConfirmOpen(false);
-            void runAction(() => publishVersion(versionId));
+            void runAction(() => publishVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setPublishConfirmOpen(false)}
         />
@@ -435,9 +454,12 @@ function VersionRow({
           username={currentUserId}
           subtitle={label}
           withdrawSubmitter={withdrawSubmitter}
+          showCommentInput={wf.status === "rejected" || wf.approvals.length >= 1}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setWithdrawConfirmOpen(false);
-            void runAction(() => withdrawVersion(versionId));
+            void runAction(() => withdrawVersion(versionId, transitionComment.trim() || undefined));
           }}
           onClose={() => setWithdrawConfirmOpen(false)}
         />

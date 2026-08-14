@@ -990,6 +990,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [withdrawConfirmOpen, setWithdrawConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  // 4종 전이 모달(submit/approve/publish/withdraw) 공용 코멘트 입력 — 동시에 하나만 열리므로 상태 1개로 공유.
+  const [transitionComment, setTransitionComment] = useState("");
   // 승인 탭 하단 결재 대기 섹션 pending 개수 — summary 카운트 필용 (R8)
   const [editorApprovalsCount, setEditorApprovalsCount] = useState(0);
   // login_id → 표시 이름 캐시 (점유자 이름 표시용) / name resolution cache for checkout holder display
@@ -2679,6 +2681,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setSelfPublishPrompt(at);
         return;
       }
+      setTransitionComment("");
       setSubmitConfirmOpen(true);
     },
     [getSaveBlockers, saveCurrentScope, showToast, t, username, workflow],
@@ -9503,10 +9506,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 hasApproved={hasApproved}
                                 canManageApprovers={(isMapOwner || isSysadmin) && !approvalInFlight}
                                 onSubmit={(at) => void handleSubmitForApproval(at)}
-                                onApprove={() => setApproveConfirmOpen(true)}
+                                onApprove={() => {
+                                  setTransitionComment("");
+                                  setApproveConfirmOpen(true);
+                                }}
                                 onReject={() => setRejectOpen(true)}
-                                onPublish={() => setPublishConfirmOpen(true)}
-                                onWithdraw={() => setWithdrawConfirmOpen(true)}
+                                onPublish={() => {
+                                  setTransitionComment("");
+                                  setPublishConfirmOpen(true);
+                                }}
+                                onWithdraw={() => {
+                                  setTransitionComment("");
+                                  setWithdrawConfirmOpen(true);
+                                }}
                                 onManageApprovers={() => setManagingApprovers(true)}
                                 username={username}
                                 canDecideCheckout={isHolder || myRole === "owner" || isSysadmin}
@@ -9745,6 +9757,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           onNo={() => {
             setSelfPublishPrompt(null);
             setBundleValue(null);
+            setTransitionComment("");
             setSubmitConfirmOpen(true);
           }}
           onClose={() => {
@@ -9771,9 +9784,11 @@ function MapEditor({ mapId }: { mapId: number }) {
               <VisibilityBundlePicker current={mapVisibility} value={bundleValue} onChange={setBundleValue} />
             ) : undefined
           }
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setSubmitConfirmOpen(false);
-            void runTransition((id) => submitVersion(id, bundleValue ?? undefined));
+            void runTransition((id) => submitVersion(id, bundleValue ?? undefined, transitionComment.trim() || undefined));
             setBundleValue(null);
           }}
           onClose={() => {
@@ -9790,9 +9805,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           username={username}
           subtitle={versionSubtitle}
           extraLines={buildBundledVisibilityLines(workflow, nameById, t)}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setApproveConfirmOpen(false);
-            void runTransition(approveVersion);
+            void runTransition((id) => approveVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setApproveConfirmOpen(false)}
         />
@@ -9802,9 +9819,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         <PublishConfirmDialog
           subtitle={versionSubtitle}
           priorPublished={versions.find((v) => v.status === "published") ?? null}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setPublishConfirmOpen(false);
-            void runTransition(publishVersion);
+            void runTransition((id) => publishVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setPublishConfirmOpen(false)}
         />
@@ -9817,9 +9836,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           username={username}
           subtitle={versionSubtitle}
           withdrawSubmitter={withdrawSubmitter}
+          showCommentInput={workflow?.status === "rejected" || (workflow?.approvals.length ?? 0) >= 1}
+          comment={transitionComment}
+          onCommentChange={setTransitionComment}
           onConfirm={() => {
             setWithdrawConfirmOpen(false);
-            void runTransition(withdrawVersion);
+            void runTransition((id) => withdrawVersion(id, transitionComment.trim() || undefined));
           }}
           onClose={() => setWithdrawConfirmOpen(false)}
         />
