@@ -12,6 +12,7 @@
 - **Task 5 완료**: Group A 원시 에러 표면 전수 스윕(28파일) — `humanizeApiError(err, t)` 전환, 토스트 헬퍼(`showToast`/`addToast`)·다수 패널 `onToast` prop을 `(msg, tone?)`로 확장해 에러만 `"error"` 톤 부여(성공 토스트는 무톤 유지 — 브리프의 호스트측 일괄 하드코딩 래핑은 성공 토스트까지 에러로 잘못 물들여 편차로 개별 call-site 톤 스레딩 채택), settings 페이지 401/403 억제 정규식에 인간화 포맷 매칭 추가. 검증 스크립트 잔존 2건은 의도된 예외(`lib/api.ts` 구현부·테스트 목). 게이트: lint 0 error·tsc 0·vitest 620/620·build OK.
 - **Task 6 완료**: 거절 배너 재디자인 — `XCircle` 아이콘(16px) + `wf.rejectedLabel` 텍스트 + 거절자 필(User 12px, 테두리·배경·텍스트 기존 에러 톤 재사용) + 사유 truncate + title tooltip. i18n 키 변경(`wf.rejectedBanner` 제거, `wf.rejectedLabel: "Rejected"` 추가 en/ko). 방어: `workflow.status === "rejected"` 조건. 게이트: lint 0 error·tsc 0·build OK.
 - **Task 7 완료**: 전이 모달 4종(submit/approve/publish/withdraw)에 선택 코멘트 textarea(`ConfirmDialog.input` 재사용) + 에디터·설정 패널 두 마운트 전부 배선(공용 `transitionComment` 상태, 오픈 지점 10곳 전부 리셋), withdraw는 무기록 바로철회(pending·승인 0건) 시 `showCommentInput`으로 입력란 숨김. 받은함 반려 다이얼로그 입력 게이트를 `isVersion || isApprovalRequest`로 확장(승인요청은 선택 사유)해 `decideApprovalRequest` reject 사유 유실 버그 해소. 게이트: lint 0 error·tsc 0·vitest 620/620·build OK.
+- **Task 8 완료**: 버전 카드 "코멘트 보기" 모달(`comment-history-modal.tsx`, 클릭점→중앙 확대 `comment-modal-in`·바깥 mousedown 즉시 닫힘) — 설정 패널 내부 fetch를 `VersionDetail[]`로 전환해 이벤트 보존, `eventsReloadKey`로 액션 후 이벤트 재조회. 게이트: lint 0 error·tsc 0·vitest 620/620·build OK.
 
 ## 2026-08-14 — QA 문서 정비: ai 2건 삭제·dev-vs-main 로컬 검증·alarm-audit 재검증 부기 (dev 직접)
 - **ai-connectivity-test·ai-real-model-smoke 삭제**(사용자 확인 완료분) + `docs/README.md`·`.env.example` 참조 정리.

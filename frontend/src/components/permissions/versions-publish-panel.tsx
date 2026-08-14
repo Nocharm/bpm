@@ -8,9 +8,9 @@
 // PromptDialog를 써서 승인요청 시 승인자 목록·동봉 가시성 변경이 안 보이는 등 표면 드리프트가 있었다(원 신고 건).
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, XCircle, Send, Upload, Undo2 } from "lucide-react";
+import { CheckCircle, MessageSquare, XCircle, Send, Upload, Undo2 } from "lucide-react";
 
-import type { VersionSummary, WorkflowState } from "@/lib/api";
+import type { VersionDetail, VersionEvent, VersionSummary, WorkflowState } from "@/lib/api";
 import {
   approveVersion,
   getDirectory,
@@ -27,6 +27,7 @@ import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { StatusBadge } from "@/components/status-badge";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
+import { CommentHistoryModal } from "@/components/version/comment-history-modal";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
@@ -69,11 +70,15 @@ export function VersionsPublishPanel({
   const { t } = useI18n();
 
   // 버전 목록 — props 없으면 getMap으로 내부 fetch / Fetch internally only when prop is absent.
-  const [fetchedVersions, setFetchedVersions] = useState<VersionSummary[]>([]);
+  // VersionDetail로 events까지 보존 — 코멘트 이력 모달이 각 버전의 전이 이벤트를 참조.
+  const [fetchedVersions, setFetchedVersions] = useState<VersionDetail[]>([]);
   const [loading, setLoading] = useState(!versionsProp);
   // login_id → 표시 이름 캐시 — 승인자/요청자 이름 공개(원 신고 건: 패널이 승인자를 안 보여줬다).
   // 협업자 패널과 동일 패턴(getDirectory 1회, 실패 시 login id 폴백).
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
+  // 액션(승인/게시/반려 등) 후 이벤트 목록을 재조회하기 위한 트리거 — 행의 워크플로 재조회와
+  // 별개로, 방금 남긴 코멘트가 모달에 바로 보이려면 fetchedVersions(events 포함)도 갱신돼야 한다.
+  const [eventsReloadKey, setEventsReloadKey] = useState(0);
 
   useEffect(() => {
     // versionsProp이 있으면 fetch 불필요 / Skip fetch when versions are provided by parent.
@@ -93,7 +98,7 @@ export function VersionsPublishPanel({
     return () => {
       active = false;
     };
-  }, [mapId, versionsProp]);
+  }, [mapId, versionsProp, eventsReloadKey]);
 
   useEffect(() => {
     let alive = true;
@@ -134,8 +139,12 @@ export function VersionsPublishPanel({
           visibility={visibility}
           canBundle={canBundle}
           nameById={nameById}
+          events={versionsProp ? undefined : fetchedVersions.find((v) => v.id === version.id)?.events}
           onToast={onToast}
-          onChanged={onChanged}
+          onChanged={() => {
+            setEventsReloadKey((k) => k + 1);
+            onChanged?.();
+          }}
         />
       ))}
     </div>
@@ -153,6 +162,8 @@ interface VersionRowProps {
   visibility: "public" | "private";
   canBundle: boolean;
   nameById: Map<string, string>;
+  /** 이 버전의 전이 이벤트 — 코멘트 이력 모달용. props 버전 목록 사용 시엔 events가 없어 버튼 미노출. */
+  events?: VersionEvent[];
   onToast?: (msg: string, tone?: "error") => void;
   onChanged?: () => void;
 }
@@ -166,6 +177,7 @@ function VersionRow({
   visibility,
   canBundle,
   nameById,
+  events,
   onToast,
   onChanged,
 }: VersionRowProps) {
@@ -229,6 +241,9 @@ function VersionRow({
   const [transitionComment, setTransitionComment] = useState("");
   // 승인요청/셀프게시에 동봉할 가시성 변경 선택 — VisibilityBundlePicker가 직접 값 제공(체크박스 대체).
   const [bundleValue, setBundleValue] = useState<"public" | "private" | null>(null);
+  // 코멘트 이력 모달 — 열림 트리거인 클릭 지점(등장 애니메이션 시작점)을 상태로 보관.
+  const [commentsOrigin, setCommentsOrigin] = useState<{ x: number; y: number } | null>(null);
+  const commentCount = (events ?? []).filter((e) => e.note).length;
 
   if (wf === null) {
     return (
@@ -266,6 +281,19 @@ function VersionRow({
 
       {/* 액션 버튼 — 상태·역할별 조건부 / Action buttons: conditional on status and role */}
       <div className="flex items-center gap-1.5">
+        {/* 코멘트 있는 이벤트가 하나라도 있으면 이력 모달 열기 버튼 노출 / Shown only when at least one event has a comment. */}
+        {commentCount > 0 && (
+          <button
+            type="button"
+            data-id={`version-comments-open-${versionId}`}
+            title={t("wf.viewComments")}
+            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+            onClick={(event) => setCommentsOrigin({ x: event.clientX, y: event.clientY })}
+          >
+            <MessageSquare size={16} strokeWidth={1.5} />
+            {commentCount}
+          </button>
+        )}
         {/* draft / rejected → editor+는 승인 요청(submit) 가능. 서버가 체크아웃 보유자·승인자 존재 검증 /
             editor+ can request approval (submit); server gates checkout holder + approvers-present */}
         {(status === "draft" || status === "rejected") && canEdit && (
@@ -482,6 +510,15 @@ function VersionRow({
             setRejecting(false);
             setRejectReason("");
           }}
+        />
+      )}
+      {commentsOrigin && (
+        <CommentHistoryModal
+          label={label}
+          events={events ?? []}
+          nameById={nameById}
+          origin={commentsOrigin}
+          onClose={() => setCommentsOrigin(null)}
         />
       )}
     </div>
