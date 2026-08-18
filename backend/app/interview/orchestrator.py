@@ -119,12 +119,18 @@ _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
 
 
 async def _ask_json(
-    messages: list[dict], model: str | None, schema_cls: type[_SchemaT]
+    messages: list[dict],
+    model: str | None,
+    schema_cls: type[_SchemaT],
+    reasoning: ai_client.AiReasoning | None = None,
 ) -> _SchemaT:
-    """call_ai + JSON 추출 + 스키마 검증 — 실패 1회 재프롬프트 후 TurnError."""
+    """call_ai + JSON 추출 + 스키마 검증 — 실패 1회 재프롬프트 후 TurnError.
+
+    reasoning: 호출 목적별 사고 모드 — 드래프터는 None(최대), 인터뷰어 턴은 "high", 첨부 추출은 "none".
+    """
     for attempt in range(2):
         try:
-            reply = await ai_client.call_ai(messages, model)
+            reply = await ai_client.call_ai(messages, model, reasoning=reasoning)
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 오류는 TurnError로 정규화
             logger.warning("interview AI call failed: %s", exc)
             raise TurnError("AI server error") from exc
@@ -471,6 +477,7 @@ async def generate_proposals(
                 history=history, overrides=overrides,
             ),
             model, AiProposal,
+            # 그래프 드래프팅은 정확도 우선 — 최대 사고(기본)
         )
         for i in range(count)
     ]
@@ -589,6 +596,7 @@ async def extract_attachment_facts(interview_id: int, attachment_id: int) -> Non
                 [{"role": "system", "content": overrides.get("extract_contract") or _EXTRACT_CONTRACT},
                  {"role": "user", "content": parsed_text}],
                 None, AttachmentFactsOut,
+                reasoning="none",  # 단순 추출 — 사고 불필요, 백그라운드 지연 최소화
             )
         finally:
             usage_log.reset(usage_token)
@@ -689,6 +697,7 @@ async def _run_skip_turn(
             dept_catalog=dept_catalog, overrides=overrides,
         ),
         model, InterviewerOut,
+        reasoning="high",  # 대화형 인터뷰어 — 중간 사고로 지연/품질 균형
     )
     if out.facts_patch:
         _merge_stage_facts(interview, out.facts_patch)
@@ -767,7 +776,8 @@ async def run_turn(
         mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
         dept_catalog=dept_catalog, overrides=overrides,
     )
-    out = await _ask_json(interviewer_messages, model, InterviewerOut)
+    # 대화형 인터뷰어 — 중간 사고로 지연/품질 균형
+    out = await _ask_json(interviewer_messages, model, InterviewerOut, reasoning="high")
     if _is_repeat(out.message, prev_consultant):
         try:
             out = await _ask_json(
@@ -775,6 +785,7 @@ async def run_turn(
                  {"role": "assistant", "content": out.message},
                  {"role": "user", "content": (overrides or {}).get("anti_repeat_nudge") or _ANTI_REPEAT_NUDGE}],
                 model, InterviewerOut,
+                reasoning="high",
             )
         except TurnError:
             logger.warning("interview anti-repeat retry failed — keeping original reply")

@@ -97,7 +97,7 @@ def test_chat_no_rows_when_ai_fails(
 ) -> None:
     _enable_ai(monkeypatch)
 
-    async def _boom(messages: list[dict], model: str | None = None) -> str:
+    async def _boom(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> str:
         raise RuntimeError("gpu down")
 
     monkeypatch.setattr(ai_client, "call_ai", _boom)
@@ -410,7 +410,7 @@ def test_ai_usage_event_recorded_on_failure(
 ) -> None:
     _enable_ai(monkeypatch)
 
-    async def _boom(messages: list[dict], model: str | None = None):
+    async def _boom(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None):
         raise RuntimeError("gpu down")
 
     monkeypatch.setattr(ai_client, "call_ai", _boom)

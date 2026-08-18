@@ -38,7 +38,7 @@ def _scripted_ai(replies: list[str]):
     queue = list(replies)
     state = {"active": 0, "peak": 0, "calls": 0}
 
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         state["calls"] += 1
         state["active"] += 1
         state["peak"] = max(state["peak"], state["active"])

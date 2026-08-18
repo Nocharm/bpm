@@ -99,7 +99,7 @@ def _enable_ai(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _fake_ai(content: str, prompt_tokens: int | None = 100, completion_tokens: int | None = 50):
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(
             content=content, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens
         )
@@ -196,7 +196,7 @@ def test_ai_invalid_then_retry_succeeds(
     valid = json.dumps({"kind": "answer", "message": "ok"})
     calls = {"n": 0}
 
-    async def _flaky(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _flaky(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         calls["n"] += 1
         return ai_client.AiReply(content="not json" if calls["n"] == 1 else valid)
 
@@ -230,7 +230,7 @@ def test_ai_server_error_returns_502_without_leaking_url(
     _enable_ai(monkeypatch)
     version_id = _draft_version_checked_out(client)
 
-    async def _boom(messages: list[dict], model: str | None = None) -> str:
+    async def _boom(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> str:
         raise RuntimeError("connection failed to http://internal-gpu:8000/v1")
 
     monkeypatch.setattr(ai_client, "call_ai", _boom)
@@ -250,7 +250,7 @@ def test_ai_chat_uses_selected_model(
     version_id = _draft_version_checked_out(client)
     captured: dict[str, str | None] = {}
 
-    async def _capture(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _capture(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured["model"] = model
         return ai_client.AiReply(content=json.dumps({"kind": "answer", "message": "ok"}))
 
@@ -675,7 +675,7 @@ def test_ai_grounds_on_registered_manual_docs(
 
     captured: dict = {}
 
-    async def fake_call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured["messages"] = messages
         return ai_client.AiReply(content=json.dumps({"kind": "answer", "message": "ok"}))
 

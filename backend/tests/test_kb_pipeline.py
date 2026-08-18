@@ -258,7 +258,7 @@ def test_turn_injects_kb_references_into_prompt(client: TestClient, monkeypatch)
     state = _start_interview(client, monkeypatch)
     captured: list[list[dict]] = []
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured.append(messages)
         return ai_client.AiReply(content=_Q)
 
@@ -283,7 +283,7 @@ def test_turn_kb_failure_appends_degrade_notice_once(client: TestClient, monkeyp
     _enable_kb(monkeypatch)
     state = _start_interview(client, monkeypatch)
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
 
     monkeypatch.setattr(ai_client, "call_ai", fake_ai)
@@ -306,7 +306,7 @@ def test_turn_kb_failure_appends_degrade_notice_once(client: TestClient, monkeyp
 def test_turn_skips_search_when_disabled(client: TestClient, monkeypatch) -> None:
     state = _start_interview(client, monkeypatch)  # ai_enabled=True, embed_url은 기본 ""
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
 
     monkeypatch.setattr(ai_client, "call_ai", fake_ai)
@@ -393,7 +393,7 @@ def test_choice_turn_appends_sp_suggestion_once(client: TestClient, monkeypatch)
     _set_interview_state(state["id"], "activities", None,
                          pending={"options": [_chain_option()]})
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
 
     monkeypatch.setattr(ai_client, "call_ai", fake_ai)
@@ -424,7 +424,7 @@ def test_sp_accept_replaces_segment_with_link_node(client: TestClient, monkeypat
     _set_interview_state(state["id"], "activities", None,
                          pending={"options": [_chain_option()]})
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=_Q)
 
     monkeypatch.setattr(ai_client, "call_ai", fake_ai)
@@ -485,7 +485,7 @@ def test_turn_kb_filters_invisible_map_hits(
     ).json()
     captured: list[list[dict]] = []
 
-    async def fake_ai(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def fake_ai(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured.append(messages)
         return ai_client.AiReply(content=_Q)
 

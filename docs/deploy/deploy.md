@@ -65,10 +65,14 @@ LDAP_USER_FILTER=             # 비우면 기본 (&(objectCategory=person)(objec
 SYSTEM_ADMIN_LOGIN_IDS=hong.gildong,kim.cheolsu   # 초기 관리자 loginId(콤마)
 
 # 온프레미스 AI (OpenAI 호환) — 단일 엔드포인트면 AI_BASE_URL 3종, 여러 개면 AI_ENDPOINTS 사용
+# GLM-5.2/SGLang 전환(2026-08-18): 모델은 glm-5.2 하나. 사고 모드는 모델명 alias가 아니라
+# 코드가 요청 파라미터(chat_template_kwargs)로 지정 — 구 glm-5.2-think/-high/-nothink는 폐기.
 AI_ENABLED=true
-AI_BASE_URL=http://<gpu>:8000/v1
+AI_BASE_URL=https://gpu02.sbiologics.com/v1
 AI_API_TOKEN=<시크릿>
-AI_MODEL=<기본 모델 id>
+AI_MODEL=glm-5.2
+# 응답 max_tokens 상한(사고 토큰 포함) — 작으면 빈 응답. 타임아웃은 최대 사고 기준 120~180 권장
+AI_MAX_TOKENS=8000
 # 다중 엔드포인트+모델(JSON 배열 한 줄, 설정 시 위 3종 대신 사용 — 형식은 .env.example 참고)
 AI_ENDPOINTS=
 ```

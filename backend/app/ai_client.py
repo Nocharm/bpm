@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
+from typing import Literal
 
 import httpx2
 
@@ -12,6 +13,10 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 MODEL_SEP = "::"  # 다중 엔드포인트 모델 id 구분자 — "<엔드포인트명>::<모델id>"
+
+# 사고 모드 — SGLang glm-5.2 전환(2026-08-18)부터 모델명 alias가 아니라 요청 파라미터로 지정.
+# None=최대 사고(기본), "high"=유일한 중간 단계(low/medium은 서버가 조용히 max 처리), "none"=사고 끔.
+AiReasoning = Literal["high", "none"]
 
 # 전역 동시성 가드 — 루프별 캐시(세마포어는 첫 경합 루프에 바인딩되므로 루프 간 공유 금지).
 # 운영은 uvicorn 단일 루프라 전역 상한과 동치. 닫힌 루프 엔트리는 접근 시 정리.
@@ -105,10 +110,18 @@ def _headers(endpoint: AiEndpoint) -> dict:
     return {"Authorization": f"Bearer {endpoint.token}"}
 
 
-async def call_ai(messages: list[dict], model: str | None = None) -> AiReply:
+async def call_ai(
+    messages: list[dict],
+    model: str | None = None,
+    *,
+    reasoning: AiReasoning | None = None,
+    max_tokens: int | None = None,
+) -> AiReply:
     """OpenAI 호환 /chat/completions 호출 → 첫 choice의 message.content + usage 반환.
 
     model 선택자로 엔드포인트 라우팅("이름::모델"), 없으면 첫 엔드포인트의 기본 모델.
+    reasoning은 SGLang chat_template_kwargs로 전달(None=최대 사고). max_tokens는 사고 토큰
+    포함 상한 — 너무 작으면 사고가 예산을 소진해 content가 빈 문자열로 온다(기본 settings.ai_max_tokens).
     네트워크/HTTP 오류는 예외로 전파(라우터가 502로 변환). 토큰은 로그에 남기지 않는다.
     """
     endpoint, model_id = resolve_endpoint(model)
@@ -118,7 +131,12 @@ async def call_ai(messages: list[dict], model: str | None = None) -> AiReply:
         "messages": messages,
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
+        "max_tokens": max_tokens if max_tokens is not None else settings.ai_max_tokens,
     }
+    if reasoning == "high":
+        payload["chat_template_kwargs"] = {"reasoning_effort": "high"}
+    elif reasoning == "none":
+        payload["chat_template_kwargs"] = {"enable_thinking": False}
     async with _get_semaphore():
         async with httpx2.AsyncClient(timeout=settings.ai_timeout_seconds) as client:
             response = await client.post(url, json=payload, headers=_headers(endpoint))
