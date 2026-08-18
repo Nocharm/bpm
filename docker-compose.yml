@@ -59,6 +59,8 @@ services:
       AI_API_TOKEN: ${AI_API_TOKEN:-}
       AI_MODEL: ${AI_MODEL:-}
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-60}
+      # 응답 max_tokens 상한(사고 토큰 포함) — 작으면 GLM-5.2 빈 응답
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-8000}
       EMBED_URL: ${EMBED_URL:-}
       EMBED_MODEL: ${EMBED_MODEL:-bge-m3}
       EMBED_DIM: ${EMBED_DIM:-1024}

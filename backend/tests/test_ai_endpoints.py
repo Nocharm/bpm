@@ -124,6 +124,28 @@ def test_call_ai_hits_selected_endpoint(
     assert call["payload"]["model"] == "gpt-4o"
 
 
+def test_call_ai_payload_thinking_modes(
+    monkeypatch: pytest.MonkeyPatch, fake_http: type[_FakeClient]
+) -> None:
+    """GLM-5.2(SGLang) 사고 모드 계약 — 기본=최대(파라미터 생략), high/none은 chat_template_kwargs."""
+    monkeypatch.setattr(settings, "ai_endpoints", _TWO_ENDPOINTS)
+    msgs = [{"role": "user", "content": "hi"}]
+
+    asyncio.run(ai_client.call_ai(msgs))
+    payload = fake_http.calls[0]["payload"]
+    assert "chat_template_kwargs" not in payload
+    # max_tokens 상시 포함 — 너무 작으면 사고가 예산을 소진해 빈 응답이 온다
+    assert payload["max_tokens"] == settings.ai_max_tokens
+
+    asyncio.run(ai_client.call_ai(msgs, reasoning="high"))
+    assert fake_http.calls[1]["payload"]["chat_template_kwargs"] == {"reasoning_effort": "high"}
+
+    asyncio.run(ai_client.call_ai(msgs, reasoning="none", max_tokens=500))
+    payload = fake_http.calls[2]["payload"]
+    assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+    assert payload["max_tokens"] == 500
+
+
 def test_list_models_combines_env_list_and_discovery(
     monkeypatch: pytest.MonkeyPatch, fake_http: type[_FakeClient]
 ) -> None:

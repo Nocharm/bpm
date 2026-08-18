@@ -11,7 +11,6 @@ import {
   Loader2,
   MessageSquare,
   Minus,
-  Paperclip,
   Plus,
   Route,
   Search,
@@ -746,19 +745,8 @@ export function AiChatPanel({
             </button>
           </div>
         )}
-        {/* 빠른 기능 — 첨부 + 아이콘 칩(호버 시 이름·설명 툴팁) */}
+        {/* 빠른 기능 — 아이콘 칩(호버 시 이름·설명 툴팁) */}
         <div className="mb-2 flex items-center gap-1.5">
-          <button
-            type="button"
-            aria-label={t("ai.attach")}
-            title={t("ai.attach")}
-            onClick={() => onToast?.(t("ai.comingSoon"))}
-            disabled={!aiEnabled}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-hairline text-ink-tertiary hover:border-accent hover:text-accent disabled:opacity-40"
-          >
-            <Paperclip size={16} strokeWidth={1.5} />
-          </button>
-          <span className="mx-0.5 h-5 w-px bg-hairline" />
           {QUICK_CHIPS.map((chip) => (
             <div key={chip.key} className="group relative">
               <button
@@ -836,12 +824,9 @@ export function AiChatPanel({
             disabled={!aiEnabled || isForeign}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
-              // ⌘/Ctrl+Enter=전송, Enter=줄바꿈. IME 조합 중(한글)엔 전송하지 않음.
-              if (
-                event.key === "Enter" &&
-                (event.ctrlKey || event.metaKey) &&
-                !event.nativeEvent.isComposing
-              ) {
+              // Enter=전송, Shift+Enter=줄바꿈 — 컨설턴트 인터뷰 입력과 단축키 정렬(2026-08-18).
+              // IME 조합 중(한글)엔 전송하지 않음. 빈 입력/busy는 send()가 가드.
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 void send();
               }
@@ -857,23 +842,23 @@ export function AiChatPanel({
             <ArrowUp size={16} strokeWidth={1.8} />
           </button>
         </div>
-        {/* 단축키 힌트 — keycap */}
+        {/* 단축키 힌트 — keycap (인터뷰 입력과 동일: Enter 전송 / Shift+Enter 줄바꿈) */}
         <div className="mt-1.5 flex gap-3 text-fine text-ink-tertiary">
           <span className="flex items-center gap-1">
             <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
               Enter
             </kbd>
-            {t("ai.hintNewline")}
+            {t("ai.hintSend")}
           </span>
           <span className="flex items-center gap-1">
             <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
-              ⌘/Ctrl
+              Shift
             </kbd>
             +
             <kbd className="rounded-xs border border-hairline bg-surface-alt px-1 py-px text-[10px] text-ink-secondary">
               Enter
             </kbd>
-            {t("ai.hintSend")}
+            {t("ai.hintNewline")}
           </span>
         </div>
       </div>

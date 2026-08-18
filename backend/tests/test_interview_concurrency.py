@@ -84,7 +84,7 @@ def test_extraction_merges_into_fresh_state(client: TestClient, monkeypatch) -> 
 
     attachment_id = asyncio.run(_add_attachment())
 
-    async def fake_ask(messages, model, schema_cls):
+    async def fake_ask(messages, model, schema_cls, reasoning=None):
         # AI 응답 대기 중 다른 턴이 facts를 커밋하는 상황 재현
         async with SessionLocal() as session:
             interview = await session.get(InterviewSession, interview_id)
