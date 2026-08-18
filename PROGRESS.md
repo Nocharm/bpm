@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-18 — 인터뷰 결과 JSON 임포트 설계 (feat/interview-import)
+- **Task 1: canonical/엔진 확장** — `CanonicalNode/Map.description`·owner optional(actor 폴백+`consultant_owner_pending`, 오우닝 NULL 유지)·pending 맵 재전달 거버넌스 예외 갱신(action `governance`)·description 변경 감지(시그니처/fields). 게이트 BE 1054·ruff 0.
 - PwC 협의로 실전달물이 canonical→인터뷰 결과 JSON으로 확정 — Phase 3 어댑터 설계 스냅샷 `docs/design/2026-08-18-interview-import-design.md`. 핵심 결정: 어댑터→기존 `import_delivery` 재사용, 오너 null=실행자 폴백+`consultant_owner_pending`(재전달 시 거버넌스 예외 갱신), KV는 텍스트 노트 직렬화, 예외·VOC는 신규 `map_notes` 테이블+읽기전용 표시, 실파일 반입 불가라 FE dry-run 키 검증 화면이 1차 범위.
 
 ## 2026-08-14 — 8월 릴리스 문서 일괄 + dev→main 머지

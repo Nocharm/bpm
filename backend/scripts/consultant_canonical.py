@@ -47,6 +47,8 @@ class CanonicalNode(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     seq: int = 0
+    # 인터뷰 어댑터가 KV 직렬화를 싣는다 — Node.description은 Text, 캡 금지 (design 2026-08-18 §3)
+    description: str = ""
 
 
 class CanonicalEdge(BaseModel):
@@ -64,11 +66,14 @@ class CanonicalMap(BaseModel):
     code: str = Field(min_length=1, max_length=200)
     name: str = Field(min_length=1, max_length=200)
     category: str
-    owner: str = Field(min_length=1, max_length=100)  # MapPermission.principal_id는 String(100)
+    # None = 오너 미확정(인터뷰 1차) — 엔진이 actor 폴백 + consultant_owner_pending 마킹 (design 2026-08-18 §4)
+    owner: Annotated[str, Field(min_length=1, max_length=100)] | None = None  # MapPermission.principal_id는 String(100)
     approvers: list[Annotated[str, Field(max_length=100)]] = []  # MapApprover.user_id는 String(100)
     # ProcessMap.owning_department는 String(200)이지만 sp_department는 String(100) — 좁은 쪽에 맞춘다
     department: str = Field(default="", max_length=100)
     visibility: Literal["public", "private"] = "public"
+    # 인터뷰 fields KV 직렬화 착지 — ProcessMap.description(Text), 캡 금지 (design 2026-08-18 §3)
+    description: str = ""
     params: CanonicalParams = CanonicalParams()
     nodes: list[CanonicalNode] = []
     edges: list[CanonicalEdge] = []

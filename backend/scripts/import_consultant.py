@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
@@ -147,7 +147,7 @@ def build_graph_rows(
         code_to_id[cn.code] = uuid.uuid4().hex
         nodes.append(Node(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
-            title=cn.name, node_type=cn.type,
+            title=cn.name, node_type=cn.type, description=cn.description,
             department=cn.department, assignee=cn.assignee, system=cn.system,
             pos_x=x, pos_y=y, sort_order=i,
         ))
@@ -298,8 +298,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
     return (
         sorted(
-            (n.source_node_id or n.id, n.title, n.node_type, n.department or "", n.assignee or "",
-             n.system or "", n.linked_map_id, n.annual_count or "", n.fte or "", bool(n.is_primary_end))
+            (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.department or "",
+             n.assignee or "", n.system or "", n.linked_map_id, n.annual_count or "", n.fte or "",
+             bool(n.is_primary_end))
             for n in nodes
         ),
         sorted(
@@ -433,27 +434,63 @@ async def import_delivery(
             category_errored.add(cmap.code)
             continue
         if cmap.code in existing:
+            # 거버넌스 불변 원칙의 명시적 예외 — 오너 미확정(pending)으로 만들어진 맵만, 재전달에
+            # 실오너가 오면 오너·권한행·승인자·오우닝을 갱신하고 플래그를 내린다 (design 2026-08-18 §4).
+            found = existing[cmap.code]
+            assigned_owner = cmap.owner
+            if found.consultant_owner_pending and assigned_owner is not None:
+                owning, note = await resolve_owning_department(
+                    session, known, dept_index, cmap.department, assigned_owner
+                )
+                if note:
+                    report.add(cmap.code, "warning", note)
+                if assigned_owner not in known_logins:
+                    report.add(cmap.code, "warning", f"owner {assigned_owner!r} not found in employees")
+                found.owner_id = assigned_owner
+                found.owning_department = owning
+                found.consultant_owner_pending = False
+                for perm in await session.scalars(select(MapPermission).where(
+                        MapPermission.map_id == found.id, MapPermission.role == "owner")):
+                    perm.principal_id = assigned_owner
+                    perm.granted_by = actor
+                await session.execute(delete(MapApprover).where(MapApprover.map_id == found.id))
+                for approver in dict.fromkeys(cmap.approvers):
+                    if approver not in known_logins:
+                        report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
+                    session.add(MapApprover(map_id=found.id, user_id=approver, assigned_by=actor))
+                report.add(cmap.code, "governance", f"owner {assigned_owner} assigned")
             continue
-        owning, note = await resolve_owning_department(
-            session, known, dept_index, cmap.department, cmap.owner
-        )
+        owner_login = cmap.owner
+        pending = owner_login is None
+        if pending:
+            # 오너 미확정 — actor(실행 sysadmin) 폴백. 오우닝은 actor 조직으로 오염시키지 않고
+            # NULL로 남긴다(홈 부서 뷰 오염 방지) — 실오너 배정 시 위 예외 분기가 재해석한다.
+            owner_login = actor
+            owning: str | None = None
+            note = None
+            report.add(cmap.code, "warning", "owner missing — fallback to importer (pending)")
+        else:
+            owning, note = await resolve_owning_department(
+                session, known, dept_index, cmap.department, owner_login
+            )
         if note:
             report.add(cmap.code, "warning", note)
-        if cmap.owner not in known_logins:
-            report.add(cmap.code, "warning", f"owner {cmap.owner!r} not found in employees")
+        if not pending and owner_login not in known_logins:
+            report.add(cmap.code, "warning", f"owner {owner_login!r} not found in employees")
         for approver in dict.fromkeys(cmap.approvers):
             if approver not in known_logins:
                 report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
         new_map = ProcessMap(
-            name=cmap.name, created_by=actor, owner_id=cmap.owner,
+            name=cmap.name, created_by=actor, owner_id=owner_login,
             visibility=cmap.visibility, owning_department=owning,
+            description=cmap.description, consultant_owner_pending=pending,
             category_id=category_ids[cmap.category], consultant_code=cmap.code,
         )
         session.add(new_map)
         await session.flush()
         session.add(MapPermission(
             map_id=new_map.id, principal_type="user",
-            principal_id=cmap.owner, role="owner", granted_by=actor,
+            principal_id=owner_login, role="owner", granted_by=actor,
         ))
         for approver in dict.fromkeys(cmap.approvers):
             session.add(MapApprover(map_id=new_map.id, user_id=approver, assigned_by=actor))
@@ -532,6 +569,7 @@ async def import_delivery(
         fields_changed = (
             found_map.name != cmap.name
             or found_map.category_id != category_ids[cmap.category]
+            or (found_map.description or "") != cmap.description
             or (found_map.sp_department or "") != sp_department
             or (found_map.sp_input or "") != params.input
             or (found_map.sp_output or "") != params.output
@@ -547,6 +585,7 @@ async def import_delivery(
         if is_new or graph_changed or fields_changed or found_map.sp_designated_at is None:
             # 콘텐츠 필드 갱신 — 거버넌스 필드(owner·visibility·owning_department·approvers)는 불변
             found_map.name = cmap.name
+            found_map.description = cmap.description
             found_map.category_id = category_ids[cmap.category]
             if found_map.sp_designated_at is None:
                 found_map.sp_designated_at = now_kst()

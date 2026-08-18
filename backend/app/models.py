@@ -177,6 +177,8 @@ class ProcessMap(Base):
     )
     # L6 멱등 업서트 키 — 임포트된 맵만 non-null. 레거시 DB는 유니크 제약 없이 앱 계층에서 보장.
     consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
+    # 오너 미확정 임포트 마킹 — True면 재전달 오너로 거버넌스 갱신 허용(불변 원칙의 명시적 예외) (design 2026-08-18 §4)
+    consultant_owner_pending: Mapped[bool] = mapped_column(default=False)
     # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
     sp_input: Mapped[str | None] = mapped_column(Text, default=None)
     sp_output: Mapped[str | None] = mapped_column(Text, default=None)
