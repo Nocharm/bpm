@@ -1688,6 +1688,17 @@ export interface FeedbackItem {
   body_edited_at: string | null;
   reply_at: string | null;
   done_at: string | null;
+  // 관리자가 작성자에게 알림을 보낸 시각 — status는 1회 한정이라 값이 있으면 버튼 잠금
+  reply_notified_at: string | null;
+  status_notified_at: string | null;
+}
+
+export interface FeedbackNote {
+  id: number;
+  feedback_id: number;
+  author: string;
+  body: string;
+  created_at: string;
 }
 
 export interface FeedbackCounts {
@@ -1737,6 +1748,29 @@ export function patchFeedback(id: number, patch: FeedbackPatch): Promise<Feedbac
 
 export function deleteFeedback(id: number): Promise<void> {
   return request<void>(`/feedback/${id}`, { method: "DELETE" });
+}
+
+// 노트 — 누구나 자유롭게 작성(피드백 진행 메모/로그)
+export function listFeedbackNotes(id: number): Promise<FeedbackNote[]> {
+  return request<FeedbackNote[]>(`/feedback/${id}/notes`);
+}
+
+export function createFeedbackNote(id: number, body: string): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${id}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+// 작성자 알림 명시 발송(관리자) — reply=재발송 가능 / status=피드백당 1회
+export function notifyFeedbackAuthor(
+  id: number,
+  kind: "reply" | "status",
+): Promise<FeedbackItem> {
+  return request<FeedbackItem>(`/feedback/${id}/notify`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
 }
 
 // ── 공지사항 (design 2026-07-05) ──────────────

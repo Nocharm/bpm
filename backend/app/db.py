@@ -95,6 +95,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "consultant_owner_pending", "BOOLEAN DEFAULT FALSE"),
     # 엣지별 선 모양 — ""=레거시(FE가 꺾은선 렌더), DEFAULT로 기존 행 백필 (2026-08-18)
     ("edges", "line_style", "VARCHAR(20) DEFAULT ''"),
+    # 피드백 알림 발송 시각 — 관리자 수동 발송(상태변경은 1회 한정) (2026-08-19)
+    ("feedback", "reply_notified_at", "TIMESTAMP"),
+    ("feedback", "status_notified_at", "TIMESTAMP"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

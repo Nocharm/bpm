@@ -1125,6 +1125,27 @@ class FeedbackOut(BaseModel):
     body_edited_at: datetime | None
     reply_at: datetime | None
     done_at: datetime | None
+    reply_notified_at: datetime | None = None
+    status_notified_at: datetime | None = None
+
+
+class FeedbackNoteCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class FeedbackNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    feedback_id: int
+    author: str
+    body: str
+    created_at: datetime
+
+
+class FeedbackNotifyIn(BaseModel):
+    # reply=답글 도착 알림(재발송 허용) · status=상태변경 알림(1회 한정)
+    kind: Literal["reply", "status"]
 
 
 class FeedbackCounts(BaseModel):

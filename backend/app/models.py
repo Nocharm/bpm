@@ -458,6 +458,28 @@ class Feedback(Base):
     )
     reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # 작성자 알림 발송 시각 — 자동 발송이 아니라 관리자가 버튼으로 보낸 시각(재발송 시 갱신).
+    # 상태변경 알림은 1회 한정이라 값이 있으면 버튼이 잠긴다 (2026-08-19)
+    reply_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    status_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+
+class FeedbackNote(Base):
+    """피드백 노트 — 누구나 자유롭게 다는 메모/진행 기록. 피드백 테이블 플라이아웃에서 열람 (2026-08-19)."""
+
+    __tablename__ = "feedback_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    feedback_id: Mapped[int] = mapped_column(
+        ForeignKey("feedback.id", ondelete="CASCADE"), index=True
+    )
+    author: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Notice(Base):

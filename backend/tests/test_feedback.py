@@ -112,40 +112,110 @@ def test_create_rejects_blank_body(
     assert res.status_code == 422
 
 
-def test_first_reply_notifies_author_once(
+def _notifications(client: TestClient, kind: str) -> list[dict]:
+    return [n for n in client.get("/api/notifications").json() if n["type"] == kind]
+
+
+def test_saving_reply_does_not_notify(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """답글 저장은 무통지 — 알림은 관리자가 버튼으로 명시 발송한다."""
+    monkeypatch.setattr(settings, "dev_user", "fb-quiet")
+    fb = _post(client, body="silent save")
+
+    monkeypatch.setattr(settings, "dev_user", "fb-admin")
+    ok = client.patch(f"/api/feedback/{fb['id']}", json={"reply": "on it"})
+    assert ok.status_code == 200
+    assert ok.json()["reply_notified_at"] is None
+
+    monkeypatch.setattr(settings, "dev_user", "fb-quiet")
+    assert _notifications(client, "feedback_reply") == []
+
+
+def test_notify_reply_sends_and_is_resendable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "dev_user", "fb-author")
     fb = _post(client, body="please fix the export button because it fails")
 
     monkeypatch.setattr(settings, "dev_user", "fb-admin")
-    ok = client.patch(f"/api/feedback/{fb['id']}", json={"reply": "on it"})
-    assert ok.status_code == 200
+    # 답글이 없으면 보낼 것이 없다
+    assert client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "reply"}).status_code == 400
+    client.patch(f"/api/feedback/{fb['id']}", json={"reply": "on it"})
+    sent = client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "reply"})
+    assert sent.status_code == 200
+    assert sent.json()["reply_notified_at"] is not None
 
-    # 작성자 인박스에 feedback_reply 1건 — 본문 스니펫 포함
     monkeypatch.setattr(settings, "dev_user", "fb-author")
-    mine = [
-        n for n in client.get("/api/notifications").json() if n["type"] == "feedback_reply"
-    ]
+    mine = _notifications(client, "feedback_reply")
     assert len(mine) == 1
     assert "please fix the export button" in mine[0]["message"]
 
-    # 답글 수정(두 번째 저장)은 추가 알림 없음 — 첫 답글만 통지
+    # 답글 알림은 재발송 허용 — 답글을 고쳐 다시 알릴 수 있다
     monkeypatch.setattr(settings, "dev_user", "fb-admin")
-    client.patch(f"/api/feedback/{fb['id']}", json={"reply": "fixed in next release"})
+    assert client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "reply"}).status_code == 200
     monkeypatch.setattr(settings, "dev_user", "fb-author")
-    again = [
-        n for n in client.get("/api/notifications").json() if n["type"] == "feedback_reply"
-    ]
-    assert len(again) == 1
+    assert len(_notifications(client, "feedback_reply")) == 2
 
 
-def test_self_reply_does_not_notify(
+def test_notify_status_is_once_only(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-st-author")
+    fb = _post(client, body="status change please")
+
+    monkeypatch.setattr(settings, "dev_user", "fb-admin")
+    client.patch(f"/api/feedback/{fb['id']}", json={"status": "in_progress"})
+    first = client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "status"})
+    assert first.status_code == 200
+    assert first.json()["status_notified_at"] is not None
+    # 1회 한정 — 두 번째는 차단
+    assert client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "status"}).status_code == 400
+
+    monkeypatch.setattr(settings, "dev_user", "fb-st-author")
+    mine = _notifications(client, "feedback_status")
+    assert len(mine) == 1
+    assert "In progress" in mine[0]["message"]
+
+
+def test_notify_requires_sysadmin_and_other_author(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-plain")
+    fb = _post(client, body="who can notify")
+    monkeypatch.setattr(settings, "dev_user", "fb-admin")
+    client.patch(f"/api/feedback/{fb['id']}", json={"reply": "hi"})
+
+    # 비관리자 차단 — 로컬 기본은 전원 sysadmin이라 권한 시뮬레이션을 켜고 검증
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "fb-admin")
+    monkeypatch.setattr(settings, "dev_user", "fb-other")
+    assert client.post(f"/api/feedback/{fb['id']}/notify", json={"kind": "reply"}).status_code == 403
+    monkeypatch.setattr(settings, "dev_enforce_permissions", False)
+
+    # 본인 피드백에 본인이 발송 — 자기 자신에게 알림은 무의미하므로 차단
     monkeypatch.setattr(settings, "dev_user", "fb-selfadmin")
-    fb = _post(client, body="note to self")
-    ok = client.patch(f"/api/feedback/{fb['id']}", json={"reply": "ack"})
-    assert ok.status_code == 200
-    items = client.get("/api/notifications").json()
-    assert [n for n in items if n["type"] == "feedback_reply"] == []
+    own = _post(client, body="mine")
+    client.patch(f"/api/feedback/{own['id']}", json={"reply": "ack"})
+    assert client.post(f"/api/feedback/{own['id']}/notify", json={"kind": "reply"}).status_code == 400
+
+
+def test_notes_are_open_to_everyone(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-note-author")
+    fb = _post(client, body="needs notes")
+
+    # 작성자가 아닌 사람도 노트를 달 수 있다
+    monkeypatch.setattr(settings, "dev_user", "fb-passerby")
+    created = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "reproduced on chrome"})
+    assert created.status_code == 201
+    assert created.json()["author"] == "fb-passerby"
+
+    monkeypatch.setattr(settings, "dev_user", "fb-note-author")
+    client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "thanks"})
+
+    notes = client.get(f"/api/feedback/{fb['id']}/notes").json()
+    assert [n["body"] for n in notes] == ["reproduced on chrome", "thanks"]  # 시간순 로그
+    assert client.post(f"/api/feedback/{fb['id']}/notes", json={"body": ""}).status_code == 422
+    assert client.get("/api/feedback/99999/notes").status_code == 404

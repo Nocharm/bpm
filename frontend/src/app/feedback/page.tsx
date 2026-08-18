@@ -2,7 +2,7 @@
 
 // 전체 피드백 페이지 — 집계 카드 · 유형 필터 · 목록 · 행 클릭 상세/관리 모달 (design 2026-07-05).
 
-import { Bug, Ellipsis, Lightbulb, List, MessageCircle, Plus } from "lucide-react";
+import { Bug, Ellipsis, Lightbulb, List, MessageCircle, MessageSquareText, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -16,10 +16,13 @@ import {
   FEEDBACK_STATUS_STYLE,
 } from "@/lib/feedback-meta";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
+import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { FeedbackDetailModal } from "@/components/feedback-detail-modal";
+import { FeedbackNotesFlyout } from "@/components/feedback-notes-flyout";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { Pagination } from "@/components/pagination";
+import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
 
 const PAGE_SIZE = 20;
@@ -47,6 +50,15 @@ export default function FeedbackPage() {
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const isSysadmin = user?.isSysadmin ?? false;
   const loginId = user?.loginId ?? "";
+  // 노트 플라이아웃 — 트리거 버튼 rect 기준으로 body portal 위치 산정
+  const [notesFor, setNotesFor] = useState<{
+    id: number;
+    body: string;
+    anchor: { left: number; bottom: number };
+  } | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const pushToast = (message: string, tone?: "error") =>
+    setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
 
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [kindFilter, setKindFilter] = useState<FeedbackKind | "all">("all");
@@ -187,6 +199,7 @@ export default function FeedbackPage() {
             <col style={{ width: "8rem" }} />
             <col style={{ width: "6rem" }} />
             <col style={{ width: "11rem" }} />
+            <col style={{ width: "4rem" }} />
           </colgroup>
           <thead>
             <tr className="border-b border-hairline bg-surface-alt text-left text-ink-secondary">
@@ -195,6 +208,7 @@ export default function FeedbackPage() {
               <th className="px-3 py-2 font-normal">{t("feedback.colAuthor")}</th>
               <th className="px-3 py-2 font-normal">{t("feedback.colStatus")}</th>
               <th className="px-3 py-2 font-normal">{t("feedback.colDate")}</th>
+              <th className="px-3 py-2 font-normal">{t("feedback.notes.title")}</th>
             </tr>
           </thead>
           <tbody>
@@ -231,11 +245,32 @@ export default function FeedbackPage() {
                 <td className="whitespace-nowrap px-3 py-2">
                   <DatePills iso={f.created_at} />
                 </td>
+                <td className="px-3 py-2">
+                  {/* 노트 플라이아웃 — 행 클릭(상세 모달)과 분리 */}
+                  <button
+                    type="button"
+                    aria-label={t("feedback.notes.open")}
+                    title={t("feedback.notes.open")}
+                    data-id={`feedback-notes-btn-${f.id}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setNotesFor((prev) =>
+                        prev?.id === f.id
+                          ? null
+                          : { id: f.id, body: f.body, anchor: { left: rect.left, bottom: rect.bottom } },
+                      );
+                    }}
+                    className="rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                  >
+                    <MessageSquareText size={16} strokeWidth={1.5} />
+                  </button>
+                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-ink-tertiary">
+                <td colSpan={6} className="px-3 py-8 text-center text-ink-tertiary">
                   {t("feedback.empty")}
                 </td>
               </tr>
@@ -259,8 +294,23 @@ export default function FeedbackPage() {
             }
           }}
           onChanged={handleChanged}
+          onToast={pushToast}
         />
       )}
+      {notesFor && (
+        <FeedbackNotesFlyout
+          key={notesFor.id}
+          feedbackId={notesFor.id}
+          feedbackBody={notesFor.body}
+          anchor={notesFor.anchor}
+          onClose={() => setNotesFor(null)}
+          onToast={pushToast}
+        />
+      )}
+      <ToastStack
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((x) => x.id !== id))}
+      />
     </div>
   );
 }
