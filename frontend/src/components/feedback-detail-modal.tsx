@@ -101,9 +101,33 @@ export function FeedbackDetailModal({
     }
   };
 
-  // 본인 피드백엔 발송 불가(자기 자신 알림) — 서버도 400으로 막는다
-  const canNotify = isSysadmin && !isAuthor;
+  // 알림 버튼은 관리자에게 항상 보인다 — 못 보내는 경우는 숨기지 말고 사유를 달아 비활성
+  // (숨기면 "버튼이 어디 있냐"가 된다 — 실사용 피드백 2026-08-19)
   const statusNotified = feedback.status_notified_at !== null;
+  const replyBlockedReason = isAuthor
+    ? t("feedback.detail.notifySelf")
+    : !feedback.reply.trim()
+      ? t("feedback.detail.notifyNoReply")
+      : null;
+  const statusBlockedReason = isAuthor
+    ? t("feedback.detail.notifySelf")
+    : statusNotified
+      ? t("feedback.detail.notifyStatusSent")
+      : null;
+
+  const notifyReplyButton = (
+    <button
+      type="button"
+      onClick={() => setNotifyKind("reply")}
+      disabled={busy || replyBlockedReason !== null}
+      data-id="feedback-notify-reply"
+      title={replyBlockedReason ?? undefined}
+      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
+    >
+      <Bell size={14} strokeWidth={1.5} />
+      {t("feedback.detail.notifyReply")}
+    </button>
+  );
 
   const remove = () =>
     run(async () => {
@@ -221,18 +245,7 @@ export function FeedbackDetailModal({
                   className="min-h-24 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
                 />
                 <div className="flex items-center justify-end gap-2">
-                  {canNotify && (
-                    <button
-                      type="button"
-                      onClick={() => setNotifyKind("reply")}
-                      disabled={busy || !feedback.reply.trim()}
-                      data-id="feedback-notify-reply"
-                      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
-                    >
-                      <Bell size={14} strokeWidth={1.5} />
-                      {t("feedback.detail.notifyReply")}
-                    </button>
-                  )}
+                  {isSysadmin && notifyReplyButton}
                   <button
                     type="button"
                     onClick={saveReply}
@@ -255,6 +268,8 @@ export function FeedbackDetailModal({
                   : t("feedback.detail.replyEmpty")}
               </p>
             )}
+            {/* 답글 편집이 잠긴 상태(done 등)에서도 알림은 보낼 수 있어야 한다 */}
+            {isSysadmin && !canReply && <div className="flex justify-end">{notifyReplyButton}</div>}
           </section>
 
           {/* 메타 — 작성자·화면·시각들 */}
@@ -343,20 +358,18 @@ export function FeedbackDetailModal({
                     </button>
                   ))}
                 </div>
-                {canNotify && (
-                  <button
-                    type="button"
-                    onClick={() => setNotifyKind("status")}
-                    disabled={busy || statusNotified}
-                    data-id="feedback-notify-status"
-                    title={statusNotified ? t("feedback.detail.notifyStatusSent") : undefined}
-                    className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
-                  >
-                    <BellRing size={14} strokeWidth={1.5} />
-                    {t("feedback.detail.notifyStatus")}
-                    {statusNotified && <Check size={12} strokeWidth={2} className="text-added" />}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setNotifyKind("status")}
+                  disabled={busy || statusBlockedReason !== null}
+                  data-id="feedback-notify-status"
+                  title={statusBlockedReason ?? undefined}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
+                >
+                  <BellRing size={14} strokeWidth={1.5} />
+                  {t("feedback.detail.notifyStatus")}
+                  {statusNotified && <Check size={12} strokeWidth={2} className="text-added" />}
+                </button>
               </div>
             ) : (
               <span />
