@@ -110,6 +110,11 @@ id(PK) · map_id(FK, null) · node_id(String(50), null — 추후 활동별 등�
 - FE: vitest(파서·리포트·Notes)·tsc·lint·build. 실브라우저 스모크(임포트→홈 트리→맵 Notes).
 - 실파일 검증: 사용자가 실 서버(또는 로컬)에서 dry-run — unknown key 리포트가 어댑터 수정
   목록이 된다.
+- **1차 구현 검증(2026-08-18)**: BE pytest 1071·ruff 0 / FE vitest 646·tsc 0·lint 0 error·build OK /
+  실브라우저 스모크 `frontend/scripts/pw-smoke-interview-import.mjs` 15/15(다중 파일 dry-run 파일
+  리포트→apply→재-dry-run 멱등·홈 Framework 트리 노출·맵 상세 [Interview] 설명·Notes 섹션).
+  에디터 인스펙터 Notes는 동일 컴포넌트 공유라 스모크 생략 — 서버 배포 후 스팟 체크.
+  합성 샘플: `docs/samples/consultant-interview-sample/`.
 
 ## 8. 결정 로그
 
