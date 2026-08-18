@@ -2,7 +2,7 @@
 // 설계: 2026-07-10-csv-import-merge-design.md
 import type { AiEdge, AiGroup, AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
-import { type AppNode, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
+import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
 import {
@@ -582,6 +582,9 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   const baseLineStyles = new Map(
     (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
   );
+  // 대응 쌍 없는 신규 엣지 — 머지(에디터 컨텍스트)는 맵의 새 엣지 기본값(일괄 변경 모달의
+  // "새 연결선도 이 모양" 약속), 신규 맵 생성(base 없음)은 ""(다른 맵 기본값 유입 방지)
+  const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
   const addEdge = (source: string, target: string, label: string) => {
     edges.push({
       id: genId(),
@@ -592,7 +595,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       target_side: "left",
       source_handle: null,
       target_handle: null,
-      line_style: baseLineStyles.get(`${source}→${target}`) ?? "",
+      line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
     });
   };
   const hasIncoming = new Set<string>();
@@ -827,10 +830,11 @@ export function buildGraphFromAiProposal(
     ends[0].is_primary_end = true;
   }
 
-  // CSV 경로와 동일한 선 모양 이월 — AI 머지도 엣지를 전량 재생성한다
+  // CSV 경로와 동일한 선 모양 이월/신규 기본값 — AI 머지도 엣지를 전량 재생성한다
   const baseLineStyles = new Map(
     (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
   );
+  const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
   const edges: GraphEdge[] = proposal.edges
     .map((edge): GraphEdge | null => {
       const source = keyToId.get(edge.source);
@@ -845,7 +849,7 @@ export function buildGraphFromAiProposal(
         target_side: "left",
         source_handle: null,
         target_handle: null,
-        line_style: baseLineStyles.get(`${source}→${target}`) ?? "",
+        line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
       };
     })
     .filter((edge): edge is GraphEdge => edge !== null);

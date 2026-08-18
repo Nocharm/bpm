@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
+import { setNewEdgeLineStyle } from "./canvas";
 import {
   buildAiPromptText,
   buildGraphFromAiProposal,
@@ -778,6 +779,22 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
       (e) => e.source_node_id === "n1" && e.target_node_id === "n2",
     );
     expect(merged?.line_style).toBe("straight");
+  });
+
+  it("new merge edges follow the map's new-edge default line style", () => {
+    // 머지 컨텍스트의 신규 엣지는 맵의 새 엣지 기본값(모듈 상태) — 일괄 변경 모달 약속 준수
+    setNewEdgeLineStyle("straight");
+    try {
+      const a = baseNode("n1", "A");
+      const outcome = buildGraphFromAiProposal(
+        { nodes: [aiNode("a", "A"), aiNode("b", "B")], edges: [{ source: "a", target: "b", label: "" }], groups: [] },
+        { base: base([a]) },
+      );
+      const created = outcome.graph?.edges.find((e) => e.source_node_id === "n1");
+      expect(created?.line_style).toBe("straight");
+    } finally {
+      setNewEdgeLineStyle("smoothstep");
+    }
   });
 
   it("creates a real subprocess link node when AI carries linked_map_id (P2 SP accept)", () => {

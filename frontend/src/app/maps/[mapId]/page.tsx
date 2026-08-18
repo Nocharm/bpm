@@ -6525,10 +6525,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       saved === "default" || saved === "smoothstep" || saved === "straight" ? saved : "smoothstep";
     // 모듈 기본값 동기화 — 캔버스 헬퍼(withEdge 등)의 새 엣지 생성 경로가 이 값을 읽는다
     setNewEdgeLineStyle(resolved);
-    if (resolved !== "smoothstep") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
-      setEdgeStyle(resolved);
-    }
+    // 무조건 set — 맵 간 인앱 이동(리마운트 없음) 시 이전 맵 기본값 하이라이트가 남지 않게
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+    setEdgeStyle(resolved);
   }, [mapId]);
 
   // 전체 일괄 변경 확정 — 전 엣지 type 교체(변경분 있을 때만 히스토리/저장) + 새 엣지 기본값 영속(맵별)
