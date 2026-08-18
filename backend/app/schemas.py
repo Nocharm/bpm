@@ -797,6 +797,51 @@ class MapNoteOut(BaseModel):
     created_at: datetime
 
 
+class InterviewImportFileIn(BaseModel):
+    """인터뷰 파일 1건 — content는 원문 그대로, 검증은 어댑터(consultant_interview) 담당."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+    content: dict[str, Any]
+
+
+class InterviewImportIn(BaseModel):
+    """인터뷰 다중 파일 웹 임포트 요청 — 기본 dry-run (design 2026-08-18 §1)."""
+
+    files: list[InterviewImportFileIn] = []
+    apply: bool = False
+    label: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+
+class InterviewIssueOut(BaseModel):
+    """어댑터 키 검증 이슈 1행 — severity∈error/warning, path는 rows[i].actions[j] 표기."""
+
+    severity: str
+    path: str
+    message: str
+
+
+class InterviewImportFileOut(BaseModel):
+    """파일별 리포트 — ok=False(error 존재)면 그 파일 전체가 임포트에서 제외된 것."""
+
+    name: str
+    ok: bool
+    map_count: int
+    note_count: int
+    issues: list[InterviewIssueOut]
+
+
+class InterviewImportOut(BaseModel):
+    """인터뷰 임포트 응답 — files(어댑터 검증) + rows(엔진 리포트, 기존 500캡 규칙)."""
+
+    applied: bool
+    files: list[InterviewImportFileOut]
+    summary: dict[str, int]
+    rows: list[FrameworkImportRow]
+    truncated: bool
+
+
 class NodeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
