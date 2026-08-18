@@ -462,11 +462,13 @@ async def import_delivery(
             continue
         owner_login = cmap.owner
         pending = owner_login is None
-        if pending:
+        owning: str | None
+        note: str | None
+        if owner_login is None:
             # 오너 미확정 — actor(실행 sysadmin) 폴백. 오우닝은 actor 조직으로 오염시키지 않고
             # NULL로 남긴다(홈 부서 뷰 오염 방지) — 실오너 배정 시 위 예외 분기가 재해석한다.
             owner_login = actor
-            owning: str | None = None
+            owning = None
             note = None
             report.add(cmap.code, "warning", "owner missing — fallback to importer (pending)")
         else:
