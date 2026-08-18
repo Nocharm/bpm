@@ -52,6 +52,7 @@ import { EdgeSelectModal } from "@/components/edge-select-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
+import { EDITOR_EDGE_TYPES } from "@/components/multiline-edge";
 import { FlowConflictModal } from "@/components/flow-conflict-modal";
 import { EditorLeftSidebar } from "@/components/editor-left-sidebar";
 import { EditorToolbar } from "@/components/editor-toolbar";
@@ -7869,6 +7870,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       nodes={displayNodes}
                       edges={styledEdges}
                       nodeTypes={nodeTypes}
+                      edgeTypes={EDITOR_EDGE_TYPES}
                       snapToGrid
                       snapGrid={[8, 8]}
                       nodesDraggable={!readOnly}
@@ -9138,11 +9140,32 @@ function MapEditor({ mapId }: { mapId: number }) {
                       )}
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.label")}</label>
-                        <input
-                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                        <textarea
+                          className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
                           value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
+                          rows={Math.min(
+                            5,
+                            (typeof selectedEdge.label === "string" ? selectedEdge.label : "").split("\n")
+                              .length,
+                          )}
                           disabled={readOnly}
                           onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
+                          onKeyDown={(event) => {
+                            // Enter=포커스 해제, Alt+Enter=줄바꿈 — 노드 이름 편집과 동일 규칙.
+                            // 제어 입력이라 상태로 삽입하고 rAF로 캐럿 복원.
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            if (!event.altKey) {
+                              event.currentTarget.blur();
+                              return;
+                            }
+                            const el = event.currentTarget;
+                            const caret = el.selectionStart + 1;
+                            updateSelectedEdgeLabel(
+                              `${el.value.slice(0, el.selectionStart)}\n${el.value.slice(el.selectionEnd)}`,
+                            );
+                            requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+                          }}
                         />
                       </div>
                       <div>
