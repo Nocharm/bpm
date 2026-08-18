@@ -5,6 +5,7 @@
 
 ## 2026-08-18 — canonical 임포트 경로 정리 (chore/remove-canonical-import)
 - 실전달물이 인터뷰 JSON으로 확정되어 기존 canonical 수용 표면 전체 제거(사용자 결정) — 웹 `POST /api/categories/import`·CLI(run_import/main)·파일 로더(load_categories/load_maps/parse_map_objs)·FrameworkImportIn/Out. 엔진(import_delivery)·canonical 모델·parse_categories는 인터뷰 어댑터의 내부 IR로 유지. BE 게이트 1062·ruff 0.
+- FE도 동반 정리 — 설정 탭 canonical 임포트 섹션·importFramework·parseCategoriesFile/parseMapsFile·미사용 i18n 5키 제거, canonical 샘플 디렉터리 삭제. 스모크 2종은 인터뷰 샘플 웹 임포트 시드로 재작성(admin은 CRUD 전담, home은 자가 시드 + my-dept 스티키 체크 폐기 — 전제였던 admin 오너 canonical 샘플 소멸). 문서 스윕(9910 §8·관리자 매뉴얼 EN/KO·checklist·design/README). 게이트 FE 637·tsc 0·lint 0·build OK, 스모크 15/15·7/7·25/25·23/23.
 
 ## 2026-08-18 — 인터뷰 결과 JSON 임포트 1차 (feat/interview-import → dev)
 - PwC 협의로 실전달물이 canonical → **인터뷰 결과 JSON**(0.3-bpm-interface-draft)으로 확정 — Phase 3 어댑터 1차 구현 완료. 설계·결정 로그: `docs/design/2026-08-18-interview-import-design.md`.

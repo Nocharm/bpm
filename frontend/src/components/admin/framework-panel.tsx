@@ -3,8 +3,8 @@
 // 설정 Framework 탭 — 컨설턴트 업무 체계 카테고리 관리 트리(CRUD). 홈의 lib/framework-tree-state.ts는
 // 맵 목록까지 함께 로드하는 브라우징 전용 캐시라 여기(뮤테이션 후 영향받는 노드를 전체 재조회)엔
 // 그대로 맞지 않는다 — brief가 admin 전용 확장을 금지해 이 파일 안에 별도의 단순 상태를 둔다.
-// 대량 임포트 섹션(트리 하단)은 클라이언트 파싱(framework-import-parse.ts)만 하고, 스키마 검증은
-// 서버 dry-run(POST /categories/import apply=false)이 진실 — 실제 저장은 apply=true 확인 후에만.
+// 인터뷰 임포트 섹션(트리 하단)은 클라이언트 JSON 파싱만 하고, 키/스키마 검증은 서버 어댑터
+// dry-run(POST /categories/import-interview apply=false)이 진실 — 실제 저장은 apply 확인 후에만.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -26,15 +26,13 @@ import {
   createCategory,
   deleteCategory,
   getApiErrorDetail,
-  importFramework,
   importInterview,
   listCategoryNodes,
   updateCategory,
   type CategoryNode,
-  type FrameworkImportResult,
   type InterviewImportResult,
 } from "@/lib/api";
-import { parseCategoriesFile, parseInterviewFile, parseMapsFile } from "@/lib/framework-import-parse";
+import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -49,18 +47,6 @@ const ROW_ICON_BTN =
 const IMPORT_FILE_BTN =
   "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline px-2.5 py-1.5 " +
   "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
-
-interface CategoriesFileState {
-  name: string;
-  categories: unknown[];
-  error?: string;
-}
-
-interface MapsFileState {
-  name: string;
-  maps: unknown[];
-  lineErrors: string[];
-}
 
 interface InterviewFileState {
   name: string;
@@ -91,15 +77,6 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
   const [deletingNode, setDeletingNode] = useState<CategoryNode | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-
-  // 대량 임포트 섹션 — 파일 2개(클라이언트 파싱만) + dry-run 리포트 + apply.
-  const categoriesInputRef = useRef<HTMLInputElement>(null);
-  const mapsInputRef = useRef<HTMLInputElement>(null);
-  const [categoriesFile, setCategoriesFile] = useState<CategoriesFileState | null>(null);
-  const [mapsFile, setMapsFile] = useState<MapsFileState | null>(null);
-  const [importResult, setImportResult] = useState<FrameworkImportResult | null>(null);
-  const [importBusy, setImportBusy] = useState(false);
-  const [confirmApply, setConfirmApply] = useState(false);
 
   // 인터뷰 임포트 섹션 — 다중 파일, 파일별 키 검증 리포트는 서버 어댑터 dry-run이 진실 (design 2026-08-18 §6)
   const interviewInputRef = useRef<HTMLInputElement>(null);
@@ -166,56 +143,6 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     next.set(null, rootNodes);
     openList.forEach((id, i) => next.set(id, childLists[i]));
     setChildrenByParent(next);
-  }
-
-  // 파일 선택 → 클라이언트 파싱만(스키마 검증은 서버 dry-run). 선택이 바뀌면 이전 dry-run은 무효.
-  async function handleCategoriesFile(file: File | null) {
-    if (!file) return;
-    const text = await file.text();
-    setCategoriesFile({ name: file.name, ...parseCategoriesFile(text) });
-    setImportResult(null);
-  }
-
-  async function handleMapsFile(file: File | null) {
-    if (!file) return;
-    const text = await file.text();
-    setMapsFile({ name: file.name, ...parseMapsFile(text) });
-    setImportResult(null);
-  }
-
-  async function handleDryRun() {
-    setImportBusy(true);
-    try {
-      const result = await importFramework({
-        categories: categoriesFile?.categories ?? [],
-        maps: mapsFile?.maps ?? [],
-        apply: false,
-      });
-      setImportResult(result);
-    } catch (err) {
-      onToast(getApiErrorDetail(err));
-    } finally {
-      setImportBusy(false);
-    }
-  }
-
-  async function handleApply() {
-    setConfirmApply(false);
-    setImportBusy(true);
-    try {
-      const result = await importFramework({
-        categories: categoriesFile?.categories ?? [],
-        maps: mapsFile?.maps ?? [],
-        apply: true,
-      });
-      setImportResult(result);
-      await refreshTree();
-      onToast(t("framework.importApplySuccess"));
-    } catch (err) {
-      onToast(getApiErrorDetail(err));
-    } finally {
-      setImportBusy(false);
-    }
   }
 
   // 인터뷰 파일 선택 — 다중 append(재선택으로 누적), 파싱 실패 파일은 error 표시만 하고 payload에서 제외.
@@ -456,8 +383,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     );
   };
 
-  // 엔진 리포트 rows 테이블 — canonical/인터뷰 두 임포트 섹션 공용(응답 rows 구조 동일).
-  function renderEngineRows(result: { rows: FrameworkImportResult["rows"]; truncated: boolean }) {
+  // 엔진 리포트 rows 테이블 — 인터뷰 임포트 응답 rows(코드/동작/상세) 렌더.
+  function renderEngineRows(result: { rows: InterviewImportResult["rows"]; truncated: boolean }) {
     return (
       <>
         <div className="scroll-soft max-h-64 overflow-y-auto rounded-sm border border-hairline">
@@ -545,115 +472,6 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
           </div>
         ) : (
           <ul className="flex flex-col gap-1">{roots.map((r) => renderNode(r, 0))}</ul>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-hairline pt-4" data-id="framework-import">
-        <div>
-          <h3 className="text-body-strong text-ink">{t("framework.importTitle")}</h3>
-          <p className="pt-1 text-caption text-ink-tertiary">{t("framework.importCliHint")}</p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <input
-              ref={categoriesInputRef}
-              type="file"
-              accept=".json,application/json"
-              data-id="framework-import-categories-file"
-              className="hidden"
-              disabled={importBusy}
-              onChange={(event) => {
-                void handleCategoriesFile(event.target.files?.[0] ?? null);
-                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
-              }}
-            />
-            <button
-              type="button"
-              disabled={importBusy}
-              className={IMPORT_FILE_BTN}
-              onClick={() => categoriesInputRef.current?.click()}
-            >
-              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">
-                {categoriesFile ? categoriesFile.name : t("framework.importCategoriesPick")}
-              </span>
-            </button>
-            {categoriesFile && !categoriesFile.error && (
-              <p className="text-fine text-ink-tertiary">
-                {t("framework.importItemCount", { n: categoriesFile.categories.length })}
-              </p>
-            )}
-            {categoriesFile?.error && <p className="text-fine text-error">{categoriesFile.error}</p>}
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <input
-              ref={mapsInputRef}
-              type="file"
-              accept=".jsonl,.json,application/json,text/plain"
-              data-id="framework-import-maps-file"
-              className="hidden"
-              disabled={importBusy}
-              onChange={(event) => {
-                void handleMapsFile(event.target.files?.[0] ?? null);
-                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
-              }}
-            />
-            <button
-              type="button"
-              disabled={importBusy}
-              className={IMPORT_FILE_BTN}
-              onClick={() => mapsInputRef.current?.click()}
-            >
-              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">
-                {mapsFile ? mapsFile.name : t("framework.importMapsPick")}
-              </span>
-            </button>
-            {mapsFile && (
-              <p className="text-fine text-ink-tertiary">
-                {t("framework.importItemCount", { n: mapsFile.maps.length })}
-              </p>
-            )}
-            {mapsFile && mapsFile.lineErrors.length > 0 && (
-              <ul className="scroll-soft flex max-h-24 flex-col gap-0.5">
-                {mapsFile.lineErrors.map((msg) => (
-                  <li key={msg} className="text-fine text-error">
-                    {msg}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            data-id="framework-import-dryrun"
-            disabled={importBusy}
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
-            onClick={() => void handleDryRun()}
-          >
-            {t("framework.importDryRun")}
-          </button>
-          <button
-            type="button"
-            data-id="framework-import-apply"
-            disabled={importBusy || !importResult}
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            onClick={() => setConfirmApply(true)}
-          >
-            {t("framework.importApply")}
-          </button>
-        </div>
-
-        {importResult && (
-          <div className="flex flex-col gap-2" data-id="framework-import-report">
-            {renderImportSummary(importResult)}
-            {renderEngineRows(importResult)}
-          </div>
         )}
       </div>
 
@@ -832,19 +650,6 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
           confirmDisabled={interviewBusy}
           onConfirm={() => void handleInterviewApply()}
           onClose={() => setConfirmInterviewApply(false)}
-        />
-      )}
-
-      {confirmApply && importResult && (
-        <ConfirmDialog
-          title={t("framework.importApplyTitle")}
-          message={t("framework.importApplyMessage")}
-          banner={renderImportSummary(importResult)}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
-          confirmDisabled={importBusy}
-          onConfirm={() => void handleApply()}
-          onClose={() => setConfirmApply(false)}
         />
       )}
 

@@ -32,5 +32,4 @@
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
-[`samples/consultant-delivery-sample/`](samples/consultant-delivery-sample/) — 컨설턴트 canonical 전달물 샘플(`categories.json`+`maps.jsonl`, `scripts/import_consultant.py` 입력).
-[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON 합성 샘플 2파일(설정 > Framework > Interview import 입력, 실전달물 아님).
+[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON 합성 샘플 2파일(설정 > Framework > Interview import 입력, 실전달물 아님). canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.

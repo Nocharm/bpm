@@ -225,7 +225,7 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 **Settings → Framework → Categories & import** (sysadmin only) manages the work-framework category tree.
 
 - **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted.
-- **Bulk JSON import** — upload `categories.json` and `maps.jsonl`, check the impact with **Dry run** (created / updated / unchanged / errors / warnings), then **Apply**. The import is idempotent — re-running the same files is safe.
+- **Interview import** — upload the consultant-delivered L5 interview result JSON files (multiple files at once), check the per-file validation report (errors / warnings / unknown-key paths) and the impact (created / updated / unchanged / notes) with **Dry run**, then **Apply**. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe. Per-task exception rules and VOC land in each map's **Notes** section (map detail card and editor inspector).
 
 ---
 
