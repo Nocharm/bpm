@@ -39,6 +39,7 @@ function mkEdge(id: string, source: string, target: string, label = ""): GraphEd
     target_side: "",
     source_handle: null,
     target_handle: null,
+    line_style: "",
   };
 }
 

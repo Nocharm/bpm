@@ -131,6 +131,9 @@ export interface FlatNode extends GraphNode {
   source_node_id: string | null;
 }
 
+// 엣지별 선 모양 — React Flow 엣지 type 문자열 그대로 저장(default=곡선, smoothstep=꺾은선, straight=직선)
+export type EdgeLineStyle = "default" | "smoothstep" | "straight";
+
 export interface GraphEdge {
   id: string;
   source_node_id: string;
@@ -140,6 +143,8 @@ export interface GraphEdge {
   target_side: string;
   source_handle: string | null;
   target_handle: string | null;
+  // ""=레거시 미지정(렌더는 꺾은선) — 백엔드 schemas.LineStyle과 동일 어휘
+  line_style: EdgeLineStyle | "";
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)

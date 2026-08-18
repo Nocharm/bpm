@@ -15,6 +15,12 @@ export type ContextMenuItem =
   // 안내 전용 — 액션 없는 상태 안내(회색·기울임). 예: 읽기전용 임베드 자식
   | { note: string }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
+  // 엣지 선 모양 행 — 아이콘 3버튼(곡선/꺾은선/직선), current 강조. 골라도 메뉴 유지(EdgeSidesPad 관례)
+  | {
+      lineStyles: { value: string; label: string; icon: LucideIcon }[];
+      current: string;
+      onPick: (value: string) => void;
+    }
   | {
       edgeSides: true;
       sourceLabel: string;
@@ -178,6 +184,8 @@ function MenuList({
           </div>
         ) : "colors" in item ? (
           <ColorRow key={`colors-${index}`} item={item} onClose={onClose} />
+        ) : "lineStyles" in item ? (
+          <LineStyleRow key={`linestyles-${index}`} item={item} />
         ) : "edgeSides" in item ? (
           <EdgeSidesPad key={`edgesides-${index}`} item={item} />
         ) : "submenu" in item ? (
@@ -229,6 +237,39 @@ function MenuList({
         ),
       )}
     </>
+  );
+}
+
+// 엣지 선 모양 행 — 곡선/꺾은선/직선 아이콘 버튼. 골라도 메뉴 유지(즉시 반영을 보며 비교 가능).
+function LineStyleRow({
+  item,
+}: {
+  item: {
+    lineStyles: { value: string; label: string; icon: LucideIcon }[];
+    current: string;
+    onPick: (value: string) => void;
+  };
+}) {
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1.5">
+      {item.lineStyles.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          title={label}
+          aria-label={label}
+          data-id={`edge-menu-line-style-${value}`}
+          onClick={() => item.onPick(value)}
+          className={`flex h-7 flex-1 items-center justify-center rounded-sm border ${
+            item.current === value
+              ? "border-accent bg-accent-tint text-accent"
+              : "border-hairline text-ink-secondary hover:bg-surface-alt"
+          }`}
+        >
+          <Icon size={15} strokeWidth={1.5} />
+        </button>
+      ))}
+    </div>
   );
 }
 

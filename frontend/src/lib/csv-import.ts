@@ -577,6 +577,11 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   });
 
   const edges: GraphEdge[] = [];
+  // 엣지는 전량 재생성되므로 기존 선 모양을 (source→target) 쌍으로 이월 — 머지에서 매칭 노드는
+  // base id를 재사용해 쌍 대조가 성립한다(lostEdges 키잉과 동일). 미이월 시 임포트마다 스타일 증발.
+  const baseLineStyles = new Map(
+    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
+  );
   const addEdge = (source: string, target: string, label: string) => {
     edges.push({
       id: genId(),
@@ -587,6 +592,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       target_side: "left",
       source_handle: null,
       target_handle: null,
+      line_style: baseLineStyles.get(`${source}→${target}`) ?? "",
     });
   };
   const hasIncoming = new Set<string>();
@@ -821,6 +827,10 @@ export function buildGraphFromAiProposal(
     ends[0].is_primary_end = true;
   }
 
+  // CSV 경로와 동일한 선 모양 이월 — AI 머지도 엣지를 전량 재생성한다
+  const baseLineStyles = new Map(
+    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
+  );
   const edges: GraphEdge[] = proposal.edges
     .map((edge): GraphEdge | null => {
       const source = keyToId.get(edge.source);
@@ -835,6 +845,7 @@ export function buildGraphFromAiProposal(
         target_side: "left",
         source_handle: null,
         target_handle: null,
+        line_style: baseLineStyles.get(`${source}→${target}`) ?? "",
       };
     })
     .filter((edge): edge is GraphEdge => edge !== null);

@@ -444,8 +444,8 @@ function baseGraph(): Graph {
       { ...NODE_BASE, id: "e1", title: "종료", node_type: "end", sort_order: 2, pos_x: 600, is_primary_end: true },
     ],
     edges: [
-      { id: "x1", source_node_id: "s1", target_node_id: "a1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null },
-      { id: "x2", source_node_id: "a1", target_node_id: "e1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null },
+      { id: "x1", source_node_id: "s1", target_node_id: "a1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "straight" },
+      { id: "x2", source_node_id: "a1", target_node_id: "e1", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" },
     ],
     groups: [{ id: "g1", parent_group_id: null, label: "검수", color: "" }],
   };
@@ -463,6 +463,13 @@ describe("buildGraphFromCsv — 머지", () => {
     expect(o.merge.matchedCount).toBe(3); // start + Review request + end
     expect(o.merge.addedNodeIds).toEqual([]);
     expect(o.merge.removedNodes).toEqual([]);
+  });
+
+  it("엣지 재구성 시 기존 선 모양(line_style)을 (source→target) 쌍으로 이월한다", () => {
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
+    expect(o.errors).toEqual([]);
+    const kept = o.graph!.edges.find((e) => e.source_node_id === "s1" && e.target_node_id === "a1");
+    expect(kept?.line_style).toBe("straight");
   });
 
   it("빈 셀은 기존 값을 지킨다", () => {
@@ -755,6 +762,24 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("carries per-edge line style across AI merge by endpoint pair", () => {
+    const a = baseNode("n1", "A");
+    const b = baseNode("n2", "B", { sort_order: 2 });
+    const edge: GraphEdge = {
+      id: "e1", source_node_id: "n1", target_node_id: "n2", label: "",
+      source_side: "right", target_side: "left", source_handle: null, target_handle: null,
+      line_style: "straight",
+    };
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "A"), aiNode("b", "B")], edges: [{ source: "a", target: "b", label: "" }], groups: [] },
+      { base: base([a, b], [edge]) },
+    );
+    const merged = outcome.graph?.edges.find(
+      (e) => e.source_node_id === "n1" && e.target_node_id === "n2",
+    );
+    expect(merged?.line_style).toBe("straight");
+  });
+
   it("creates a real subprocess link node when AI carries linked_map_id (P2 SP accept)", () => {
     const outcome = buildGraphFromAiProposal(
       { nodes: [{ ...aiNode("sp", "발주 프로세스", "subprocess"), linked_map_id: 42 }], edges: [], groups: [] },
@@ -814,7 +839,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
   it("lists unmatched base nodes as removed and lost edges", () => {
     const a = baseNode("n1", "유지됨");
     const b = baseNode("n2", "사라짐", { sort_order: 2 });
-    const edge: GraphEdge = { id: "e1", source_node_id: "n1", target_node_id: "n2", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null };
+    const edge: GraphEdge = { id: "e1", source_node_id: "n1", target_node_id: "n2", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" };
     const outcome = buildGraphFromAiProposal(
       { nodes: [aiNode("a", "유지됨")], edges: [], groups: [] },
       { base: base([a, b], [edge]) },

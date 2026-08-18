@@ -139,6 +139,7 @@ async def clone_graph(
                 # 다중 출구 핸들 식별자 보존 (이 브랜치 신규 필드)
                 source_handle=edge.source_handle,
                 target_handle=edge.target_handle,
+                line_style=edge.line_style,
             )
         )
 

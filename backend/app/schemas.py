@@ -889,6 +889,10 @@ class NodeIn(BaseModel):
 
 HandleSide = Literal["top", "bottom", "left", "right"]
 
+# React Flow 엣지 type 문자열 그대로 저장 — default=곡선(bezier), smoothstep=꺾은선, straight=직선.
+# ""=레거시 미지정(FE가 꺾은선으로 렌더)
+LineStyle = Literal["", "default", "smoothstep", "straight"]
+
 
 class EdgeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -901,6 +905,7 @@ class EdgeIn(BaseModel):
     target_side: HandleSide = "left"
     source_handle: str | None = Field(default=None, max_length=200)
     target_handle: str | None = Field(default=None, max_length=200)
+    line_style: LineStyle = ""
 
 
 class NodeOut(NodeIn):

@@ -3,6 +3,7 @@
 import dagre from "@dagrejs/dagre";
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
+import type { EdgeLineStyle } from "@/lib/api";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -471,6 +472,23 @@ export const EDGE_DEFAULTS = {
   markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
 } as const;
 
+// 새 엣지 선 모양 기본값 — "마지막 일괄 변경 값"(맵별 localStorage)을 에디터가 마운트/일괄 적용 시 주입.
+// 모듈 상태인 이유: withEdge 등 순수 헬퍼와 여러 생성 경로의 시그니처를 바꾸지 않고 일괄 적용하기 위함.
+let newEdgeLineStyle: EdgeLineStyle = "smoothstep";
+
+export function setNewEdgeLineStyle(style: EdgeLineStyle): void {
+  newEdgeLineStyle = style;
+}
+
+export function getNewEdgeLineStyle(): EdgeLineStyle {
+  return newEdgeLineStyle;
+}
+
+/** 새 엣지 생성용 기본 속성 — EDGE_DEFAULTS에 현재 선 모양 기본값을 덮은 사본. */
+export function getEdgeDefaults(): Omit<typeof EDGE_DEFAULTS, "type"> & { type: EdgeLineStyle } {
+  return { ...EDGE_DEFAULTS, type: newEdgeLineStyle };
+}
+
 // 판단(decision) 노드 분기 엣지 — Yes/No는 고정 라벨, 기타는 사용자 지정(빈 값 포함)
 export type BranchKind = "yes" | "no" | "other";
 export const BRANCH_YES_LABEL = "Yes";
@@ -684,7 +702,7 @@ function withEdge(edges: Edge[], source: string, target: string): Edge[] {
   return [
     ...edges,
     {
-      ...EDGE_DEFAULTS,
+      ...getEdgeDefaults(),
       id: genId(),
       source,
       target,

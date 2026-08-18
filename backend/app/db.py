@@ -93,6 +93,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("approval_requests", "decision_reason", "VARCHAR(500)"),
     # 인터뷰 임포트 오너 미확정 마킹 (design 2026-08-18 §4)
     ("process_maps", "consultant_owner_pending", "BOOLEAN DEFAULT FALSE"),
+    # 엣지별 선 모양 — ""=레거시(FE가 꺾은선 렌더), DEFAULT로 기존 행 백필 (2026-08-18)
+    ("edges", "line_style", "VARCHAR(20) DEFAULT ''"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
