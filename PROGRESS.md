@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-18 — 인터뷰 결과 JSON 임포트 설계 (feat/interview-import)
+- **Task 5: FE 인터뷰 임포트 UI** — 설정 Framework 탭 `interview-import` 섹션(다중 파일 누적 선택·개별 제거·dry-run→apply 확인 다이얼로그)·파일별 아코디언 리포트(비정상 파일 자동 펼침·이슈 테이블 severity/path/message)·엔진 rows 테이블 공용 추출(`renderEngineRows`)·summary notes/governance 칩·`parseInterviewFile`+`importInterview` API·i18n 14키. 게이트 vitest 646·tsc 0·lint 0 error.
 - **Task 4: 웹 엔드포인트** — `POST /api/categories/import-interview`(sysadmin·dry-run 기본): 파일별 어댑터 검증 리포트(이슈 200캡)+error 파일 통째 스킵·파일 간 중복 taskId=뒤 파일 제외·카테고리 code 병합(이름 충돌 경고)·엔진+노트 같은 세션(rollback 동반). 테스트 5건.
 - **Task 3: map_notes** — 신규 테이블(맵/L5 스코프·node_id 확장 자리)·`apply_interview_notes`(전달 단위 replace 멱등, import_delivery와 같은 세션=dry-run rollback 동반)·`GET /api/maps/{id}/notes`(viewer 게이트). 테스트 4건.
 - **Task 2: 인터뷰 어댑터** — `scripts/consultant_interview.py` `convert_interview()`(키 화이트리스트 검증·경로 표기 issue·seq 그룹 병렬 엣지·decision/handoff·`total_time_min`→H.MM·KV 직렬화 2종·exceptions/sideNotes→`InterviewNote`). 예외 안 던짐 — error 파일 전체 제외 계약. 테스트 8건.
