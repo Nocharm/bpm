@@ -123,7 +123,7 @@ def test_get_map_notes_lists_in_order(client: TestClient) -> None:
 
 @pytest.fixture
 def enforce(client: TestClient) -> Iterator[None]:
-    """enforcement ON — test_categories_import_api.py의 동일 픽스처를 미러."""
+    """enforcement ON — test_interview_import_api.py의 동일 픽스처를 미러."""
     prev_auth = settings.auth_enabled
     prev_sys = settings.bpm_sysadmins
     settings.auth_enabled = True
