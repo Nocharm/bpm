@@ -2350,3 +2350,18 @@ export function importInterview(body: {
     body: JSON.stringify(body),
   });
 }
+
+export interface MapNote {
+  id: number;
+  kind: string; // exception | voc | rule_basis | ...
+  title: string | null;
+  text: string;
+  node_id: string | null;
+  source: string;
+  created_at: string;
+}
+
+// 맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용, 맵 viewer 권한 준수 (design 2026-08-18 §5).
+export function getMapNotes(mapId: number): Promise<MapNote[]> {
+  return request<MapNote[]>(`/maps/${mapId}/notes`);
+}

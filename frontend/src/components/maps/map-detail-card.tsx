@@ -49,6 +49,7 @@ import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
+import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
 import { OrgInfoModal } from "@/components/org-info-modal";
@@ -907,6 +908,8 @@ export function MapDetailCard({
           )}
         </div>
       )}
+
+      <MapNotesSection mapId={detail.id} />
 
       {frameworkModalOpen && (
         <FrameworkAssignModal

@@ -1647,6 +1647,7 @@ const en = {
   "framework.interviewIssueColSeverity": "Severity",
   "framework.interviewIssueColPath": "Path",
   "framework.interviewIssueColMessage": "Message",
+  "notes.title": "Notes",
   // ── API 에러 메시지(humanizeApiError, lib/api-errors.ts) — 알려진 서버 detail 전방일치 매핑 ──
   "apiError.visibilityPending": "A visibility change is already pending approval.",
   "apiError.grantPending": "A change to this permission is already pending approval.",
@@ -3304,6 +3305,7 @@ const ko: Record<MessageKey, string> = {
   "framework.interviewIssueColSeverity": "구분",
   "framework.interviewIssueColPath": "경로",
   "framework.interviewIssueColMessage": "메시지",
+  "notes.title": "노트",
   // ── API 에러 메시지(humanizeApiError, lib/api-errors.ts) — 알려진 서버 detail 전방일치 매핑 ──
   "apiError.visibilityPending": "이미 승인 대기 중인 공개 범위 변경 요청이 있습니다.",
   "apiError.grantPending": "이 권한에 대한 변경이 이미 승인 대기 중입니다.",
