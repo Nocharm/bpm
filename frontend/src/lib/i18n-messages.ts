@@ -1614,11 +1614,6 @@ const en = {
   "framework.adminMoved": "Category moved.",
   "framework.adminDeleted": "Category deleted.",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
-  "framework.importTitle": "Bulk import",
-  "framework.importCliHint": "Large deliveries (thousands of maps) should use the server CLI instead.",
-  "framework.importCategoriesPick": "Choose categories.json",
-  "framework.importMapsPick": "Choose maps.jsonl",
-  "framework.importItemCount": "{n} items",
   "framework.importDryRun": "Dry run",
   "framework.importApply": "Apply",
   "framework.importApplyTitle": "Apply this delivery?",
@@ -3272,11 +3267,6 @@ const ko: Record<MessageKey, string> = {
   "framework.adminMoved": "카테고리를 이동했습니다.",
   "framework.adminDeleted": "카테고리를 삭제했습니다.",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
-  "framework.importTitle": "대량 임포트",
-  "framework.importCliHint": "수천 건 규모의 대량 전달물은 서버 CLI를 사용하세요.",
-  "framework.importCategoriesPick": "categories.json 선택",
-  "framework.importMapsPick": "maps.jsonl 선택",
-  "framework.importItemCount": "{n}개 항목",
   "framework.importDryRun": "드라이런",
   "framework.importApply": "적용",
   "framework.importApplyTitle": "이 전달물을 적용할까요?",

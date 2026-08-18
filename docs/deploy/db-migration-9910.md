@@ -271,15 +271,7 @@ docker exec -it "$DEV_DB" psql -U processmap -d processmap -c \
 - [ ] **운영 데이터 보존**: §5-2 행수와 화면(맵·버전·알림) 대조. 검증 중 만든 데이터는 복사본에만 남는다.
 - [ ] **부서관리 재배치**: Departments 탭 — Manager 열 없음, 테이블 자체 스크롤(60vh), 인원수 호버 툴팁이 하단 행에서도 잘리지 않음(포털 픽스).
 - [ ] **임포트 버튼 부재**: Employees 탭 한글명 임포트·Departments 탭 부서정보 추가 버튼이 없어야 함(API도 404).
-- [ ] **컨설턴트 체계**: 임포트를 먼저 해야 Framework 표면에 데이터가 보인다. **기본 경로는 웹 — 설정 → Framework 탭**(sysadmin): `categories.json`+`maps.jsonl` 업로드 → Dry-run 리포트 확인 → Apply. 샘플은 `docs/samples/consultant-delivery-sample/`(maps.jsonl의 owner → 본인 login_id, department → 홈 부서 트리에 보이는 경로 — 안 맞으면 차단 없이 오너 org 폴백 + 경고). 이후 같은 탭에서 카테고리 관리(생성·개명·이동·삭제), 홈 Framework 토글 → 트리 lazy 로드, 상세 카드 경로 pill·I/O, 연결/이양 모달(오너 계정), 연계 subprocess 노드·게시 v1, 같은 파일 Dry-run 재실행 시 전부 `unchanged`(멱등) 확인. 세부 체크는 [`docs/qa/dev-vs-main-checklist.md`](../qa/dev-vs-main-checklist.md) §2 (설계: [`2026-08-08-consultant-hierarchy-design.md`](../design/2026-08-08-consultant-hierarchy-design.md)).
-
-  ```bash
-  # 대안(초대형 전달 전용) — 서버 CLI. scripts/는 이미지에 있지만 docs/samples는 없음 → docker cp.
-  BACKEND=$(docker ps --format '{{.Names}}' | grep '9910.*backend')
-  docker cp docs/samples/consultant-delivery-sample "$BACKEND":/tmp/delivery
-  docker exec "$BACKEND" python -m scripts.import_consultant /tmp/delivery              # dry-run 리포트
-  docker exec "$BACKEND" python -m scripts.import_consultant /tmp/delivery --apply --actor <본인ID>
-  ```
+- [ ] **컨설턴트 체계**: 임포트를 먼저 해야 Framework 표면에 데이터가 보인다. **경로는 인터뷰 임포트 단일 — 설정 → Framework 탭 → Interview import**(sysadmin): L5 단위 인터뷰 JSON 다중 선택 → Dry-run(파일별 키 검증 리포트: error/warning/unknown key) → Apply. 합성 샘플은 `docs/samples/consultant-interview-sample/`. owner/department가 null이면 실행자 폴백+오우닝 NULL(pending — 추후 실오너 전달 시 자동 갱신). 이후 같은 탭에서 카테고리 관리(생성·개명·이동·삭제), 홈 Framework 토글 → 트리 lazy 로드, 상세 카드 경로 pill·I/O·Notes(예외/VOC), 같은 파일 Dry-run 재실행 시 전부 `unchanged`(멱등) 확인. (구 canonical 웹 임포트·CLI는 2026-08-18 제거 — 설계: [`2026-08-18-interview-import-design.md`](../design/2026-08-18-interview-import-design.md).)
 - [ ] **기존 SP 링크·권한**: 기존 맵의 부서 권한이 그대로 동작(경로 문자열 principal 무변경 — 판정만 체인 해석), SP 임베드 정상.
 
 ---

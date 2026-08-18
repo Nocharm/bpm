@@ -1,19 +1,25 @@
 // 홈 Framework 뷰 스모크 — 세그먼트 토글·캐스케이드 원클릭 펼침·공용 검색/가시성 필터·펼침 상태 영속
 // (localStorage 복원)·상세 카드 경로뱃지/IO·Departments 회귀·새로고침 뷰 유지.
-// docs/samples/consultant-delivery-sample import --apply 전제.
+// 시드는 스크립트가 인터뷰 샘플(docs/samples/consultant-interview-sample)을 웹 임포트로 직접 수행(멱등).
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 node scripts/pw-smoke-framework.mjs
-// 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드 + import_consultant --apply 완료.
+// 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드만.
 // docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
 import { chromium } from "playwright-core";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const ADMIN = "admin.sys";
+const SAMPLE_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../docs/samples/consultant-interview-sample",
+);
 
-// 샘플 전달물(docs/samples/consultant-delivery-sample) 고정값 — 어긋나면 샘플이나 여기 둘 중 하나를 고친다.
-const L5_PATH = "구매/소싱/구매요청관리/발주처리/원자재발주";
-const CHAIN = ["구매", "소싱", "구매요청관리", "발주처리", "원자재발주"]; // L1→L5, 형제(대금지급)는 안 탐
-const MAP_NAME = "원자재 구매요청 접수"; // params(duration/annual_count/fte/input=PR/output=PO) 보유 맵
+// 인터뷰 샘플(calibration-l5.json) 고정값 — 어긋나면 샘플이나 여기 둘 중 하나를 고친다.
+const L5_PATH = "EPCV/Facility/계측 보전/Calibration 기획 및 운영/Calibration 수행 및 결과 보고";
+const CHAIN = ["EPCV", "Facility", "계측 보전", "Calibration 기획 및 운영", "Calibration 수행 및 결과 보고"];
+const MAP_NAME = "교정 준비"; // sp_input=교정 작업지시(EAM)·sp_output=준비 목록 보유 맵
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -42,6 +48,23 @@ try {
   const ctx = await openContext(browser);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+
+  // ── 0) 시드 — 인터뷰 샘플 웹 임포트(멱등: 기적재 상태면 unchanged로 끝) ─────
+  await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Categories & import" }).first().click();
+  await page.locator('[data-id="interview-import-files"]').setInputFiles([
+    path.join(SAMPLE_DIR, "calibration-l5.json"),
+    path.join(SAMPLE_DIR, "utility-l5.json"),
+  ]);
+  await page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+    .waitFor({ state: "visible", timeout: 5000 });
+  await page.locator('[data-id="interview-import-dryrun"]').click();
+  await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });
+  await page.locator('[data-id="interview-import-apply"]').click();
+  await page.locator('[data-id="confirm-dialog-confirm"]').click();
+  const seeded = await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 20000 })
+    .then(() => true).catch(() => false);
+  check("seeded via interview web import", seeded);
 
   // ── 1) 홈 진입 — 뷰 토글 노출 ────────────────────────────────────────────
   await page.goto(BASE, { waitUntil: "networkidle" });
@@ -121,7 +144,8 @@ try {
 
   await page.waitForSelector('[data-id="map-detail-io"]:visible', { timeout: 8000 });
   const ioText = (await page.locator('[data-id="map-detail-io"]:visible').first().textContent()) ?? "";
-  check("map-detail-io shows Input/Output values", ioText.includes("PR") && ioText.includes("PO"), ioText.trim());
+  check("map-detail-io shows Input/Output values",
+    ioText.includes("교정 작업지시") && ioText.includes("준비 목록"), ioText.trim());
 
   // ── 7) Departments 복귀 — 조직도 회귀 + 3.5개 클램프/전체 펼치기 ───────────
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Departments" }).click();
@@ -192,10 +216,9 @@ try {
   const reclamped = ((await page.locator('button[data-id^="org-list-expand-"]').first().textContent()) ?? "")
     .includes("Show all");
   check("header collapse re-clamps the list", reclamped);
-  // 나의 부서 즐겨찾기 박스도 같은 스티키 헤더 규칙 적용(시드 3맵이라 클램프 버튼은 없음 — 헤더만 확인).
-  const favSticky = await page.locator('[data-id="home-my-dept"] div.sticky').first()
-    .evaluate((el) => getComputedStyle(el).position).catch(() => "none");
-  check("my-dept favorites box header is sticky too", favSticky === "sticky", favSticky);
+  // my-dept 스티키 체크는 제거(2026-08-18) — 구 canonical 샘플(owner=admin.sys·IT팀 오우닝)이
+  // 채우던 박스라 인터뷰 샘플(owner null → 오우닝 NULL=미지정)에선 렌더 전제 자체가 없다.
+  // StickyBoxHeader 규칙은 위 unassigned 박스 체크가, my-dept 박스는 pw-smoke-home-dept가 커버.
 
   // ── 10) 접힘 애니메이션 — 닫기 클릭 직후 accordion-close 재생, 종료 후 언마운트 ──
   await page.locator('[data-id="org-unassigned-toggle"]').click();

@@ -128,3 +128,4 @@ id(PK) · map_id(FK, null) · node_id(String(50), null — 추후 활동별 등�
 | 예외·VOC | 공용 `map_notes` 테이블 통합 + 읽기전용 표시. 맵 description에 중복 기재 안 함 |
 | evidence | 제외 확정 |
 | 실파일 | 반입 불가 → FE dry-run 키 검증 화면이 1차 범위 |
+| 구 경로 제거 | canonical 수용 표면(웹 `POST /categories/import`·CLI·파일 로더·canonical 샘플) 전체 제거(2026-08-18, 사용자 결정) — 엔진·canonical 모델은 내부 IR로 유지. 임포트 경로는 인터뷰 웹 임포트 단일 |

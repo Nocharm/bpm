@@ -746,41 +746,13 @@ class FrameworkTransferIn(BaseModel):
     to_map_id: int
 
 
-class FrameworkImportIn(BaseModel):
-    """웹 JSON 대량 임포트 요청 — categories.json/maps.jsonl과 동일 구조를 인라인으로 받는다.
-
-    구조 검증은 scripts.consultant_canonical(parse_categories/parse_map_objs)이 담당 —
-    여기서는 raw dict 그대로 통과시킨다(brief §2).
-    """
-
-    categories: list[dict[str, Any]] = []
-    maps: list[dict[str, Any]] = []
-    apply: bool = False
-    label: (
-        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
-    ) = None
-
-
 class FrameworkImportRow(BaseModel):
-    """임포트 리포트 1행 — action∈created/updated/unchanged/error/warning (ImportReport.rows 미러)."""
+    """임포트 리포트 1행 — action∈created/updated/unchanged/governance/error/warning
+    (ImportReport.rows 미러, 인터뷰 임포트 응답 rows가 사용)."""
 
     code: str
     action: str
     detail: str = ""
-
-
-class FrameworkImportOut(BaseModel):
-    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated).
-
-    summary는 ImportReport.counts()(created/updated/unchanged/error, 0인 키는 없음)에 라우터가
-    "warning" 키를 별도로 더한 것 — counts()는 CLI 요약용이라 warning을 집계 제외하지만, 이 카운트를
-    빼면 rows가 500행에서 잘릴 때 FE가 undercount하므로 잘리기 전 전체 기준으로 채운다.
-    """
-
-    applied: bool
-    summary: dict[str, int]
-    rows: list[FrameworkImportRow]
-    truncated: bool
 
 
 class MapNoteOut(BaseModel):
