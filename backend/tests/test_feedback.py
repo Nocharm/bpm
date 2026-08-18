@@ -110,3 +110,42 @@ def test_create_rejects_blank_body(
     monkeypatch.setattr(settings, "dev_user", "fb-blank")
     res = client.post("/api/feedback", json={"kind": "etc", "body": ""})
     assert res.status_code == 422
+
+
+def test_first_reply_notifies_author_once(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-author")
+    fb = _post(client, body="please fix the export button because it fails")
+
+    monkeypatch.setattr(settings, "dev_user", "fb-admin")
+    ok = client.patch(f"/api/feedback/{fb['id']}", json={"reply": "on it"})
+    assert ok.status_code == 200
+
+    # 작성자 인박스에 feedback_reply 1건 — 본문 스니펫 포함
+    monkeypatch.setattr(settings, "dev_user", "fb-author")
+    mine = [
+        n for n in client.get("/api/notifications").json() if n["type"] == "feedback_reply"
+    ]
+    assert len(mine) == 1
+    assert "please fix the export button" in mine[0]["message"]
+
+    # 답글 수정(두 번째 저장)은 추가 알림 없음 — 첫 답글만 통지
+    monkeypatch.setattr(settings, "dev_user", "fb-admin")
+    client.patch(f"/api/feedback/{fb['id']}", json={"reply": "fixed in next release"})
+    monkeypatch.setattr(settings, "dev_user", "fb-author")
+    again = [
+        n for n in client.get("/api/notifications").json() if n["type"] == "feedback_reply"
+    ]
+    assert len(again) == 1
+
+
+def test_self_reply_does_not_notify(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-selfadmin")
+    fb = _post(client, body="note to self")
+    ok = client.patch(f"/api/feedback/{fb['id']}", json={"reply": "ack"})
+    assert ok.status_code == 200
+    items = client.get("/api/notifications").json()
+    assert [n for n in items if n["type"] == "feedback_reply"] == []

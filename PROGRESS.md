@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-19 — 피드백 첫 답글 알림 + 노드 이름 Alt+Enter 줄바꿈 (dev)
+- 피드백 스레드는 보류하고 알림만 선행(사용자 결정) — 관리자 **첫 답글**(빈→비빈) 저장 시 작성자에게 `feedback_reply` 알림(본문 스니펫 포함, 답글 수정·셀프 답글은 무통지). 인박스 아이콘 매핑 추가. BE 테스트 2건.
+- 노드 이름 3표면(캔버스 인라인·인스펙터·편집 모달)을 textarea로 전환 — **Enter=커밋, Alt+Enter=줄바꿈**. 캔버스 렌더 `whitespace-pre-wrap`, 실측 추정기(estimateNodeWidth/countTitleLines)는 \n 세그먼트별 계산. 엣지 라벨은 SVG text 한계로 제외. 게이트: BE 1068·ruff 0 / FE 640·tsc 0·lint 0·build OK, 실브라우저 스팟(Alt+Enter 입력→저장 "\n" 확인→리로드 2줄 렌더) 통과.
+
 ## 2026-08-18 — GLM-5.2/SGLang 전환 + 챗 UX (feat/glm52-api → dev)
 - GPU 서빙이 vLLM(모델명 alias 3종) → SGLang 단일 `glm-5.2`로 바뀌어 사고 모드를 요청 파라미터로 이관 — `call_ai`에 `reasoning`("high"/"none"/기본=최대)·`max_tokens`(기본 `AI_MAX_TOKENS=8000`, 사고 토큰 포함이라 작으면 빈 응답) 추가, 호출 목적별 지정(챗·인터뷰어="high", 드래프터=최대, 첨부 추출="none"). 서버 .env는 `AI_BASE_URL=https://gpu02.sbiologics.com/v1`·`AI_MODEL=glm-5.2`로 교체 필요(deploy.md 갱신, 타임아웃 120~180 권장).
 - 챗 UX: 전송 단축키를 인터뷰 입력과 정렬(Enter=전송, Shift+Enter=줄바꿈), 스텁("준비 중" 토스트)이던 파일 첨부 버튼 제거. 게이트: BE 1063·ruff 0 / FE 637·tsc 0·lint 0·build OK. 실 GPU 검증 잔여.
