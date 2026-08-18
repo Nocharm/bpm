@@ -8726,12 +8726,32 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <h2 className="text-caption-strong text-ink-secondary">{t("editor.nodeEdit")}</h2>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
-                        <input
-                          className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                        <textarea
+                          className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
                           value={selectedNode.data.label}
+                          rows={Math.min(5, selectedNode.data.label.split("\n").length)}
                           // subprocess 타이틀은 링크된 맵 이름 고정 — 편집 차단 (F5)
                           disabled={readOnly || selectedNode.data.nodeType === "subprocess"}
                           onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
+                          onKeyDown={(event) => {
+                            // Enter=포커스 해제, Alt+Enter=줄바꿈 — 캔버스 이름 편집과 동일 규칙.
+                            // 제어 입력이라 상태로 삽입하고 rAF로 캐럿 복원(리렌더 후 같은 DOM 노드 유지).
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            if (!event.altKey) {
+                              event.currentTarget.blur();
+                              return;
+                            }
+                            const el = event.currentTarget;
+                            const caret = el.selectionStart + 1;
+                            updateSelectedData(
+                              {
+                                label: `${el.value.slice(0, el.selectionStart)}\n${el.value.slice(el.selectionEnd)}`,
+                              },
+                              true,
+                            );
+                            requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+                          }}
                         />
                       </div>
                       {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만.

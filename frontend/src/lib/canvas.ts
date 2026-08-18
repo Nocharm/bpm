@@ -187,7 +187,13 @@ const NODE_LINE_HEIGHT = 20;
 // 나머지 줄은 REGION_MARGIN 여백으로 흡수한다(근사). 타이틀 텍스트를 지정 폭 안에서 몇 줄로 접는지만 계산.
 function countTitleLines(text: string, width: number): number {
   const contentW = Math.max(1, width - NODE_HPAD);
-  return Math.max(1, Math.ceil(measureLabelWidth(text, NODE_TITLE_FONT) / contentW));
+  // 명시 줄바꿈(\n, Alt+Enter) 지원 — 세그먼트별 wrap 줄 수 합산
+  return text
+    .split("\n")
+    .reduce(
+      (acc, seg) => acc + Math.max(1, Math.ceil(measureLabelWidth(seg, NODE_TITLE_FONT) / contentW)),
+      0,
+    );
 }
 
 function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
@@ -202,7 +208,13 @@ function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
 export function estimateNodeWidth(label: string, nodeType: ProcessNodeType): number {
   const base = nodeSizeOf(nodeType).w;
   if (nodeType === "decision" || nodeType === "subprocess") return base;
-  const raw = measureLabelWidth(titleForEstimate(label, nodeType), NODE_TITLE_FONT) + NODE_HPAD + 4;
+  // 명시 줄바꿈(\n) 지원 — 가장 넓은 줄 기준
+  const widest = Math.max(
+    ...titleForEstimate(label, nodeType)
+      .split("\n")
+      .map((seg) => measureLabelWidth(seg, NODE_TITLE_FONT)),
+  );
+  const raw = widest + NODE_HPAD + 4;
   return Math.max(base, Math.min(NODE_MAX_WIDTH, raw));
 }
 
