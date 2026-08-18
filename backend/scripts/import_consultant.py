@@ -22,6 +22,10 @@ import hashlib
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from scripts.consultant_interview import InterviewNote
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +37,7 @@ from app.models import (
     Edge,
     Employee,
     MapApprover,
+    MapNote,
     MapPermission,
     MapVersion,
     Node,
@@ -632,6 +637,49 @@ async def import_delivery(
             await session.commit()  # 스케일 대응 — 20k 맵 단일 트랜잭션 방지 (design §8)
             print(f"pass2 {index + 1}/{len(maps)} maps")
     return report
+
+
+async def apply_interview_notes(
+    session: AsyncSession,
+    notes: list["InterviewNote"],
+    *,
+    label: str,
+) -> int:
+    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입(멱등).
+
+    import_delivery와 같은 세션에서 호출한다 — dry-run rollback이 노트까지 함께 원복된다.
+    map_code가 DB에 없는 노트는 스킵(맵 생성 자체가 스킵된 경우 — 엔진 리포트가 사유를 이미
+    남겼다). 반환값은 삽입 행 수 (design 2026-08-18 §5).
+    """
+    map_codes = {n.map_code for n in notes if n.map_code}
+    cat_codes = {n.category_code for n in notes if n.map_code is None and n.category_code}
+    code_to_id: dict[str, int] = {}
+    if map_codes:
+        rows = (await session.scalars(
+            select(ProcessMap).where(ProcessMap.consultant_code.in_(map_codes))
+        )).all()
+        code_to_id = {m.consultant_code: m.id for m in rows if m.consultant_code is not None}
+    if code_to_id:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.in_(set(code_to_id.values()))
+        ))
+    if cat_codes:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.is_(None),
+            MapNote.category_code.in_(cat_codes),
+        ))
+    inserted = 0
+    for n in notes:
+        map_id = code_to_id.get(n.map_code) if n.map_code else None
+        if n.map_code and map_id is None:
+            continue
+        session.add(MapNote(
+            map_id=map_id, category_code=None if map_id else n.category_code,
+            kind=n.kind[:50], title=(n.title[:300] if n.title else None), text=n.text,
+            source="consultant-import", delivery_label=label,
+        ))
+        inserted += 1
+    return inserted
 
 
 async def run_import(

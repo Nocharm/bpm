@@ -783,6 +783,20 @@ class FrameworkImportOut(BaseModel):
     truncated: bool
 
 
+class MapNoteOut(BaseModel):
+    """맵 노트 1건 — 인터뷰 예외 규칙·VOC 읽기전용 표시 (design 2026-08-18 §5)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    title: str | None
+    text: str
+    node_id: str | None
+    source: str
+    created_at: datetime
+
+
 class NodeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
