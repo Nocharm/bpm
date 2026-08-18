@@ -23,6 +23,7 @@ from app.schemas import (
     FeedbackOut,
     FeedbackUpdate,
 )
+from app.workflow import create_notifications
 
 router = APIRouter(
     prefix="/api/feedback",
@@ -97,8 +98,19 @@ async def update_feedback(
             raise HTTPException(status_code=403, detail="system admin only")
         if feedback.status == "done":
             raise HTTPException(status_code=400, detail="feedback is done (locked)")
+        # 첫 답글(빈→비빈)만 작성자에게 알림 — 이후 답글 수정은 무통지(스레드 도입 전 최소 알림).
+        is_first_reply = not feedback.reply.strip() and bool(payload.reply.strip())
         feedback.reply = payload.reply
         feedback.reply_at = now()
+        if is_first_reply and feedback.author != user:
+            body_line = " ".join(feedback.body.split())
+            snippet = body_line[:40] + ("…" if len(body_line) > 40 else "")
+            await create_notifications(
+                session,
+                [feedback.author],
+                type="feedback_reply",
+                message=f'Your feedback received a reply — "{snippet}"',
+            )
 
     if payload.body is not None:
         if feedback.author != user:

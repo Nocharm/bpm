@@ -162,12 +162,22 @@ function NodeTitle({
   const cancelledRef = useRef(false);
 
   if (editable && editingNodeId === id && onRename) {
+    // 내용 높이에 맞춰 늘어나는 자동 높이 — 줄바꿈(Alt+Enter) 시 잘리지 않게
+    const fitHeight = (el: HTMLTextAreaElement) => {
+      el.style.height = "0";
+      el.style.height = `${el.scrollHeight}px`;
+    };
     return (
-      <input
+      <textarea
         autoFocus
         defaultValue={label}
+        rows={1}
         // nodrag — 입력 중 React Flow가 노드를 끌지 않게
-        className="nodrag w-full rounded-xs border border-accent bg-surface px-1 text-center text-sm text-ink"
+        className="nodrag w-full resize-none overflow-hidden rounded-xs border border-accent bg-surface px-1 text-center text-sm text-ink"
+        ref={(el) => {
+          if (el) fitHeight(el);
+        }}
+        onInput={(event) => fitHeight(event.currentTarget)}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onDoubleClick={(event) => event.stopPropagation()}
@@ -176,12 +186,20 @@ function NodeTitle({
             cancelledRef.current = false;
             return;
           }
-          onRename(id, event.target.value);
+          // 끝쪽 줄바꿈만 정리 — Alt+Enter 후 그대로 커밋하면 빈 줄이 남는다
+          onRename(id, event.target.value.replace(/\n+$/, ""));
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            event.currentTarget.blur();
+            if (event.altKey) {
+              // Alt+Enter = 줄바꿈 삽입 (Enter는 커밋) — 비제어 입력이라 setRangeText로 충분
+              const el = event.currentTarget;
+              el.setRangeText("\n", el.selectionStart, el.selectionEnd, "end");
+              fitHeight(el);
+            } else {
+              event.currentTarget.blur();
+            }
           } else if (event.key === "Escape") {
             event.preventDefault();
             cancelledRef.current = true;
@@ -193,7 +211,7 @@ function NodeTitle({
   }
   return (
     <span
-      className={editable && onStartRename ? "cursor-text" : undefined}
+      className={`whitespace-pre-wrap ${editable && onStartRename ? "cursor-text" : ""}`}
       onDoubleClick={
         editable && onStartRename
           ? (event) => {
