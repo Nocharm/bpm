@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   FEEDBACK_KIND_LABEL,
   FEEDBACK_KIND_STYLE,
@@ -141,9 +142,9 @@ export function FeedbackDetailModal({
     // ConfirmDialog는 portal이지만 이벤트는 React 트리를 따라 버블한다 — 오버레이(onClick=onClose)
     // 안에 두면 확인 클릭이 모달을 닫아버려, 형제로 분리한다 (실측 2026-08-19)
     <>
-      <div
+      <ModalBackdrop
         className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4"
-        onClick={onClose}
+        onClose={onClose}
       >
       <div
         role="dialog"
@@ -407,7 +408,7 @@ export function FeedbackDetailModal({
           </footer>
         )}
         </div>
-      </div>
+      </ModalBackdrop>
       {notifyKind && (
         <ConfirmDialog
           dialogId="feedback-notify-confirm"

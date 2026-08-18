@@ -10,6 +10,7 @@ import { Table2, Trash2 } from "lucide-react";
 import type { ParamsTableRow } from "@/lib/interview";
 import { getEditableParamFields, type ParamField } from "@/lib/params";
 import { ParamInput } from "@/components/param-input";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 
 const PAGE_SIZE = 30; // 청크 렌더 — 노드 많을 때 ParamInput 대량 마운트로 느려지는 것 방지
 
@@ -123,9 +124,9 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
   }, [onClose]);
 
   return (
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 p-6"
-      onClick={onClose}
+      onClose={onClose}
       data-id="iv-params-dialog"
     >
       <div
@@ -277,6 +278,6 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
           </button>
         </footer>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

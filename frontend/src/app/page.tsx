@@ -364,17 +364,17 @@ export default function MapListPage() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  // 생성 메뉴 — 바깥 클릭·Escape로 닫기 (setState는 리스너 안에서만; 이펙트 본문 직접 호출 금지)
+  // 생성 메뉴 — 바깥 누름(mousedown)·Escape로 닫기 (setState는 리스너 안에서만; 이펙트 본문 직접 호출 금지)
   useEffect(() => {
     if (!createMenuOpen) return;
     const close = () => setCreateMenuOpen(false);
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setCreateMenuOpen(false);
     };
-    window.addEventListener("click", close);
+    window.addEventListener("mousedown", close);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("click", close);
+      window.removeEventListener("mousedown", close);
       window.removeEventListener("keydown", onKey);
     };
   }, [createMenuOpen]);
@@ -569,7 +569,7 @@ export default function MapListPage() {
       />
       <div
         data-id="map-detail-accordion"
-        onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
+        onMouseDown={(e) => e.stopPropagation()} // 상세 내부 조작이 배경(선택 해제)으로 버블링 방지
         className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
           effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
@@ -612,10 +612,11 @@ export default function MapListPage() {
 
   return (
     // 페이지는 뷰포트 높이를 채우고 스크롤 안 함 — 리스트만 내부 스크롤 / Page fills height; only the list scrolls.
-    // 빈 여백(마진·헤더 간격·필터 우측 등) 클릭 = 선택 해제. 카드·상세·밴드버튼은 stopPropagation으로 제외.
+    // 빈 여백(마진·헤더 간격·필터 우측 등)을 "누르면"(mousedown) 선택 해제 — 손 뗄 때까지 기다리지 않는다.
+    // 카드·상세·밴드버튼은 stopPropagation으로 제외.
     <div
       className="flex h-full min-h-0 flex-col px-8 py-6"
-      onClick={() => setSelectedId(null)}
+      onMouseDown={() => setSelectedId(null)}
     >
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
       <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
@@ -648,17 +649,15 @@ export default function MapListPage() {
               aria-expanded={createMenuOpen}
               aria-label={t("csvImport.createFromCsv")}
               className="inline-flex shrink-0 items-center rounded-r-sm border-l border-accent-focus bg-accent px-2 py-2 text-on-accent hover:bg-accent-focus"
-              onClick={(event) => {
-                event.stopPropagation(); // 바깥클릭 닫기 리스너가 방금 연 메뉴를 닫지 않도록
-                setCreateMenuOpen((open) => !open);
-              }}
+              onMouseDown={(event) => event.stopPropagation()} // 바깥 누름 닫기 리스너가 방금 연 메뉴를 닫지 않도록
+              onClick={() => setCreateMenuOpen((open) => !open)}
             >
               <ChevronDown size={16} strokeWidth={1.5} />
             </button>
             {createMenuOpen && (
               <div
                 className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-sm border border-hairline bg-surface py-1 shadow-lg"
-                onClick={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
               >
                 <button
                   data-id="home-create-from-csv"
@@ -947,7 +946,7 @@ export default function MapListPage() {
             {/* ≥ split(980px) — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
             <aside
               data-id="map-detail-aside"
-              onClick={(e) => e.stopPropagation()} // 상세 내부 클릭이 배경(선택 해제)으로 버블링 방지
+              onMouseDown={(e) => e.stopPropagation()} // 상세 내부 조작이 배경(선택 해제)으로 버블링 방지
               className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt split:flex"
             >
               {effectiveSelected !== null ? (
