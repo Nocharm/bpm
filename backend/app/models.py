@@ -177,6 +177,8 @@ class ProcessMap(Base):
     )
     # L6 멱등 업서트 키 — 임포트된 맵만 non-null. 레거시 DB는 유니크 제약 없이 앱 계층에서 보장.
     consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
+    # 오너 미확정 임포트 마킹 — True면 재전달 오너로 거버넌스 갱신 허용(불변 원칙의 명시적 예외) (design 2026-08-18 §4)
+    consultant_owner_pending: Mapped[bool] = mapped_column(default=False)
     # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
     sp_input: Mapped[str | None] = mapped_column(Text, default=None)
     sp_output: Mapped[str | None] = mapped_column(Text, default=None)
@@ -187,6 +189,29 @@ class ProcessMap(Base):
     approvers: Mapped[list["MapApprover"]] = relationship(
         cascade="all, delete-orphan"
     )
+
+
+class MapNote(Base):
+    """인터뷰 노트(예외 규칙·VOC) + 추후 일반맵 사용자 노트 공용 (design 2026-08-18 §5).
+
+    스코프는 map_id(맵) 또는 category_code(L5 전역) 중 하나. node_id는 추후 활동별
+    등록 확장 자리. source='consultant-import' 행은 재임포트 시 전달 단위로 replace된다.
+    """
+
+    __tablename__ = "map_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_maps.id", ondelete="CASCADE"), default=None
+    )
+    node_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    category_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    kind: Mapped[str] = mapped_column(String(50))
+    title: Mapped[str | None] = mapped_column(String(300), default=None)
+    text: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(100), default="consultant-import")
+    delivery_label: Mapped[str | None] = mapped_column(String(100), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class MapVersion(Base):

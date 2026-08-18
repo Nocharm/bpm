@@ -2315,3 +2315,53 @@ export function importFramework(body: {
     body: JSON.stringify(body),
   });
 }
+
+export interface InterviewIssue {
+  severity: string; // "error" | "warning"
+  path: string; // 예: rows[2].actions[3]
+  message: string;
+}
+
+export interface InterviewFileReport {
+  name: string;
+  ok: boolean; // false = error 존재 — 그 파일 전체가 임포트에서 제외됨
+  map_count: number;
+  note_count: number;
+  issues: InterviewIssue[];
+}
+
+export interface InterviewImportResult {
+  applied: boolean;
+  files: InterviewFileReport[];
+  summary: Record<string, number>;
+  rows: FrameworkImportRow[];
+  truncated: boolean;
+}
+
+// 인터뷰 결과 JSON 다중 파일 임포트(sysadmin) — apply=false는 dry-run, 파일별 키 검증 리포트 포함
+// (design 2026-08-18). 키/구조 검증은 서버 어댑터가 진실 — content는 파싱된 원문 그대로 보낸다.
+export function importInterview(body: {
+  files: { name: string; content: unknown }[];
+  apply: boolean;
+  label?: string;
+}): Promise<InterviewImportResult> {
+  return request<InterviewImportResult>("/categories/import-interview", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export interface MapNote {
+  id: number;
+  kind: string; // exception | voc | rule_basis | ...
+  title: string | null;
+  text: string;
+  node_id: string | null;
+  source: string;
+  created_at: string;
+}
+
+// 맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용, 맵 viewer 권한 준수 (design 2026-08-18 §5).
+export function getMapNotes(mapId: number): Promise<MapNote[]> {
+  return request<MapNote[]>(`/maps/${mapId}/notes`);
+}

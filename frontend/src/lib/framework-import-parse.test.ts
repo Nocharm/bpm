@@ -1,7 +1,7 @@
 // 프레임워크 대량 임포트 클라이언트 파서 단위 테스트 (brief: .superpowers/sdd/2026-08-11-framework-admin-ui/task-4-brief.md)
 import { describe, expect, it } from "vitest";
 
-import { parseCategoriesFile, parseMapsFile } from "./framework-import-parse";
+import { parseCategoriesFile, parseInterviewFile, parseMapsFile } from "./framework-import-parse";
 
 describe("parseCategoriesFile", () => {
   it("{categories:[...]} 형태를 그대로 반환한다", () => {
@@ -71,5 +71,25 @@ describe("parseMapsFile", () => {
     const result = parseMapsFile(text);
     expect(result.maps).toEqual([{ code: "A" }, { code: "B" }]);
     expect(result.lineErrors).toEqual([]);
+  });
+});
+
+describe("parseInterviewFile", () => {
+  it("정상 객체 파일을 content로 반환한다", () => {
+    const result = parseInterviewFile('{"schema_version": "0.3", "rows": []}');
+    expect(result.error).toBeUndefined();
+    expect(result.content).toEqual({ schema_version: "0.3", rows: [] });
+  });
+
+  it("깨진 JSON은 error를 채운다", () => {
+    const result = parseInterviewFile("{broken");
+    expect(result.content).toBeNull();
+    expect(result.error).toMatch(/Invalid JSON/);
+  });
+
+  it("루트가 객체가 아니면(배열) error", () => {
+    const result = parseInterviewFile("[1, 2]");
+    expect(result.content).toBeNull();
+    expect(result.error).toMatch(/object/);
   });
 });

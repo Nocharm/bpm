@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
+import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { useI18n } from "@/lib/i18n";
 
@@ -179,6 +180,9 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
           onBlur={() => void updateMap(mapId, { description })}
         />
       </section>
+
+      {/* 인터뷰 노트(예외 규칙·VOC) — 노트 없으면 자체 숨김 */}
+      <MapNotesSection mapId={mapId} />
 
       {modalTarget && (
         <ConfirmDialog

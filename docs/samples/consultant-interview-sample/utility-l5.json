@@ -1,0 +1,106 @@
+{
+  "_readme": ["합성 샘플 — 실전달물 아님. calibration-l5.json과 함께 다중 파일 임포트 시험용."],
+  "schema_version": "0.3-bpm-interface-draft",
+  "labelSource": "llm-generated-draft",
+  "framework": {
+    "categories": [
+      { "code": "19", "name": "EPCV", "level": 1, "parent": null },
+      { "code": "19-01", "name": "Facility", "level": 2, "parent": "19" },
+      { "code": "19-01-02", "name": "유틸리티 운전", "level": 3, "parent": "19-01" },
+      { "code": "19-01-02-01", "name": "정제수 시스템 운전", "level": 4, "parent": "19-01-02" },
+      { "code": "19-01-02-01-01", "name": "정제수 일상 점검", "level": 5, "parent": "19-01-02-01" }
+    ]
+  },
+  "l5": { "label": "정제수 일상 점검", "nodeCode": "19-01-02-01-01" },
+  "rows": [
+    {
+      "taskId": "smp-util-task-0001",
+      "unitId": "smp-util-unit-0001",
+      "l6": "정제수 일상 점검 수행",
+      "owner": null,
+      "ownerRole": "유틸리티 운전원",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "매일 오전 점검 라운드 시작",
+        "input_data": "점검 체크리스트",
+        "output_data": "점검 기록",
+        "done_criteria": "체크리스트 전 항목 기록 완료",
+        "systems": "BMS",
+        "total_time": "라운드당 40분쯤",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": null,
+        "frequency": "일 1회",
+        "annual_count": null,
+        "headcount": null,
+        "fte": null,
+        "gmp": "점검 기록은 GMP 기록",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "계기값 확인",
+          "name": "BMS 화면과 현장 계기의 온도·전도도 값을 대조한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "점검 체크리스트",
+          "output": "계기값",
+          "system": "BMS",
+          "screen": "Trend",
+          "dataForm": "structured",
+          "quote": "BMS 값이랑 현장 게이지를 같이 봐요."
+        },
+        {
+          "seq": 2,
+          "label": "점검 기록 작성",
+          "name": "체크리스트에 값과 이상 유무를 기록하고 서명한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "계기값",
+          "output": "점검 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "적고 서명하면 그날 점검은 끝이에요."
+        }
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "smp-util-task-0001",
+      "doc": null,
+      "seq": 1,
+      "name": "정제수 일상 점검 수행",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "유틸리티 운전원",
+      "exceptions": [],
+      "endCondition": "체크리스트 전 항목 기록 완료",
+      "startCondition": "매일 오전 점검 라운드 시작"
+    }
+  ],
+  "summary": {
+    "kept": { "files": 0, "messages": 12, "free_texts": 0, "evidence_total": 0 },
+    "l6_total": 1,
+    "l7_total": 2,
+    "voc_total": 1,
+    "rows_total": 1,
+    "open_items_total": 0,
+    "side_notes_total": 1
+  },
+  "openItems": [],
+  "sideNotes": [
+    {
+      "kind": "voc",
+      "text": "야간 라운드는 인원이 없어 주간에 몰아서 기록하는 경우가 있음",
+      "unitId": "smp-util-unit-0001"
+    }
+  ]
+}

@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-18 — 인터뷰 결과 JSON 임포트 1차 (feat/interview-import → dev)
+- PwC 협의로 실전달물이 canonical → **인터뷰 결과 JSON**(0.3-bpm-interface-draft)으로 확정 — Phase 3 어댑터 1차 구현 완료. 설계·결정 로그: `docs/design/2026-08-18-interview-import-design.md`.
+- 구성: 순수 어댑터 `scripts/consultant_interview.py`(키 화이트리스트 검증·경로 표기 이슈·seq 그룹 병렬 엣지·`total_time_min`→H.MM·KV 텍스트 직렬화) → 기존 `import_delivery` 재사용(canonical description 확장·오너 null=actor 폴백+`consultant_owner_pending`·pending 맵만 재전달 거버넌스 예외 갱신) · 신규 `map_notes` 테이블(예외/VOC, 전달 단위 replace 멱등)+`GET /maps/{id}/notes` · `POST /api/categories/import-interview`(다중 파일·error 파일 스킵·파일 간 중복 taskId 제외) · 설정 Framework 탭 Interview import UI(파일별 아코디언 키 검증 리포트) · 맵 상세/인스펙터 읽기전용 Notes 섹션.
+- 게이트: BE pytest 1071·ruff 0 / FE vitest 646·tsc 0·lint 0·build OK / 실브라우저 스모크 `pw-smoke-interview-import.mjs` 15/15. 합성 샘플 `docs/samples/consultant-interview-sample/`. 잔여: 서버 배포 후 실파일 dry-run 키 대조·에디터 인스펙터 Notes 스팟 체크.
+
 ## 2026-08-14 — 8월 릴리스 문서 일괄 + dev→main 머지
 - 이전 main 머지(2026-08-04) 이후 변경분(거버넌스 UX P0~R6·승인 코멘트·협업자 스테이징·조직 기준 departments·HR 웹훅·업무체계 Framework·관리자 CSV)을 main으로 머지하며 릴리스 문서 일괄 갱신 — 공지 초안 `docs/notices/2026-08-14-release.md` 신설, 사용/편집/관리자 매뉴얼 6종 갱신, README 기능 목록·CLAUDE.md 상태 라인(⑩) 최신화.
 ## 2026-08-14 — 상단 네비 반응형 구현 (fix/frontend-minor)

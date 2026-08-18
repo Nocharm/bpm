@@ -91,6 +91,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("employees", "position", "VARCHAR(100)"),
     # 승인요청 거절 사유 — 받은함 거절 코멘트 (spec 2026-08-14)
     ("approval_requests", "decision_reason", "VARCHAR(500)"),
+    # 인터뷰 임포트 오너 미확정 마킹 (design 2026-08-18 §4)
+    ("process_maps", "consultant_owner_pending", "BOOLEAN DEFAULT FALSE"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
