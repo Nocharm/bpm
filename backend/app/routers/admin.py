@@ -16,7 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.clock import KST
 from app.db import get_session
-from app.models import Base, Employee, MapPermission, Notification, ProcessMap, UserGroupMember
+from app.models import (
+    Base,
+    Employee,
+    FeedbackNote,
+    FeedbackNoteRevision,
+    MapPermission,
+    Notification,
+    ProcessMap,
+    UserGroupMember,
+)
 from app.orgchart import (
     has_org_info,
     load_dept_index,
@@ -473,5 +482,31 @@ async def purge_notifications(
             Notification.created_at >= start, Notification.created_at < end, group_match
         )
     )
+    await session.commit()
+    return NotificationBulkDeleteOut(deleted=max(result.rowcount, 0))
+
+
+@router.post("/feedback-notes/purge-archived", response_model=NotificationBulkDeleteOut)
+async def purge_archived_feedback_notes(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> NotificationBulkDeleteOut:
+    """sysadmin 전용 — 아카이브된 피드백 노트를 이력째 영구 삭제.
+
+    앱에서 노트 삭제는 아카이브까지만 — 되돌릴 수 없는 삭제는 이 관리자 경로에서만 (알림 퍼지와 동일 관례).
+    """
+    _require_sysadmin(login_id)
+    note_ids = list(
+        await session.scalars(
+            select(FeedbackNote.id).where(FeedbackNote.archived_at.is_not(None))
+        )
+    )
+    if not note_ids:
+        return NotificationBulkDeleteOut(deleted=0)
+    # sqlite는 FK CASCADE 기본 비활성 — 이력을 먼저 지운다
+    await session.execute(
+        delete(FeedbackNoteRevision).where(FeedbackNoteRevision.note_id.in_(note_ids))
+    )
+    result = await session.execute(delete(FeedbackNote).where(FeedbackNote.id.in_(note_ids)))
     await session.commit()
     return NotificationBulkDeleteOut(deleted=max(result.rowcount, 0))

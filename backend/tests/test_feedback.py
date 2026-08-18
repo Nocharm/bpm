@@ -219,3 +219,88 @@ def test_notes_are_open_to_everyone(
     assert [n["body"] for n in notes] == ["reproduced on chrome", "thanks"]  # 시간순 로그
     assert client.post(f"/api/feedback/{fb['id']}/notes", json={"body": ""}).status_code == 422
     assert client.get("/api/feedback/99999/notes").status_code == 404
+
+
+def test_note_edit_keeps_revision_history(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """수정은 가능하되 직전 본문이 이력으로 남는다."""
+    monkeypatch.setattr(settings, "dev_user", "fb-editor")
+    fb = _post(client, body="editable notes")
+    note = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "first draft"}).json()
+
+    edited = client.patch(
+        f"/api/feedback/{fb['id']}/notes/{note['id']}", json={"body": "second draft"}
+    )
+    assert edited.status_code == 200
+    assert edited.json()["body"] == "second draft"
+    assert edited.json()["edited_at"] is not None
+
+    revisions = client.get(f"/api/feedback/{fb['id']}/notes/{note['id']}/revisions").json()
+    assert [r["body"] for r in revisions] == ["first draft"]
+
+    # 다른 사람은 남의 노트를 고칠 수 없다
+    monkeypatch.setattr(settings, "dev_user", "fb-stranger")
+    blocked = client.patch(
+        f"/api/feedback/{fb['id']}/notes/{note['id']}", json={"body": "hijack"}
+    )
+    assert blocked.status_code == 403
+
+
+def test_note_delete_is_archive_not_permanent(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-arch")
+    fb = _post(client, body="archive me")
+    note = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "temporary"}).json()
+
+    archived = client.post(f"/api/feedback/{fb['id']}/notes/{note['id']}/archive")
+    assert archived.status_code == 200
+    assert archived.json()["archived_at"] is not None
+
+    # 기본 목록에서는 숨고, 행 자체는 남아 include_archived로 보인다
+    assert client.get(f"/api/feedback/{fb['id']}/notes").json() == []
+    kept = client.get(f"/api/feedback/{fb['id']}/notes?include_archived=true").json()
+    assert [n["id"] for n in kept] == [note["id"]]
+
+    # 아카이브된 노트는 수정 불가
+    assert (
+        client.patch(
+            f"/api/feedback/{fb['id']}/notes/{note['id']}", json={"body": "edit after archive"}
+        ).status_code
+        == 400
+    )
+
+
+def test_admin_purge_removes_archived_notes_only(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """영구 삭제는 관리자 퍼지에서만 — 살아있는 노트는 남는다."""
+    monkeypatch.setattr(settings, "dev_user", "fb-purge")
+    fb = _post(client, body="purge target")
+    keep = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "keep me"}).json()
+    drop = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "drop me"}).json()
+    client.patch(f"/api/feedback/{fb['id']}/notes/{drop['id']}", json={"body": "drop me v2"})
+    client.post(f"/api/feedback/{fb['id']}/notes/{drop['id']}/archive")
+
+    purged = client.post("/api/admin/feedback-notes/purge-archived")
+    assert purged.status_code == 200
+    # 퍼지는 전역(다른 테스트가 남긴 아카이브도 함께) — 이 노트가 지워졌는지는 아래 행으로 단언
+    assert purged.json()["deleted"] >= 1
+
+    remaining = client.get(f"/api/feedback/{fb['id']}/notes?include_archived=true").json()
+    assert [n["id"] for n in remaining] == [keep["id"]]
+    # 이력도 함께 사라진다
+    assert client.get(f"/api/feedback/{fb['id']}/notes/{drop['id']}/revisions").status_code == 404
+
+
+def test_deleting_feedback_cleans_up_notes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "dev_user", "fb-cascade")
+    fb = _post(client, body="draft with notes")
+    note = client.post(f"/api/feedback/{fb['id']}/notes", json={"body": "note on draft"}).json()
+    client.patch(f"/api/feedback/{fb['id']}/notes/{note['id']}", json={"body": "edited"})
+
+    assert client.delete(f"/api/feedback/{fb['id']}").status_code == 204
+    assert client.get(f"/api/feedback/{fb['id']}/notes").status_code == 404

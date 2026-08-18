@@ -98,6 +98,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 피드백 알림 발송 시각 — 관리자 수동 발송(상태변경은 1회 한정) (2026-08-19)
     ("feedback", "reply_notified_at", "TIMESTAMP"),
     ("feedback", "status_notified_at", "TIMESTAMP"),
+    # 노트 수정 이력/아카이브 — 삭제는 아카이브로만, 영구삭제는 관리자 퍼지 (2026-08-19)
+    ("feedback_notes", "edited_at", "TIMESTAMP"),
+    ("feedback_notes", "archived_at", "TIMESTAMP"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

@@ -469,7 +469,11 @@ class Feedback(Base):
 
 
 class FeedbackNote(Base):
-    """피드백 노트 — 누구나 자유롭게 다는 메모/진행 기록. 피드백 테이블 플라이아웃에서 열람 (2026-08-19)."""
+    """피드백 노트 — 누구나 자유롭게 다는 메모/진행 기록. 피드백 테이블 플라이아웃에서 열람 (2026-08-19).
+
+    수정은 이력을 남기고(FeedbackNoteRevision에 직전 본문 스냅샷), 삭제는 아카이브(archived_at)로만 —
+    영구 삭제는 관리자 DB 테이블의 퍼지에서만 수행한다(알림 퍼지와 동일 관례).
+    """
 
     __tablename__ = "feedback_notes"
 
@@ -479,6 +483,22 @@ class FeedbackNote(Base):
     )
     author: Mapped[str] = mapped_column(String(100))
     body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class FeedbackNoteRevision(Base):
+    """노트 수정 이력 — 수정 직전 본문 스냅샷(수정해도 원문이 남게) (2026-08-19)."""
+
+    __tablename__ = "feedback_note_revisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    note_id: Mapped[int] = mapped_column(
+        ForeignKey("feedback_notes.id", ondelete="CASCADE"), index=True
+    )
+    body: Mapped[str] = mapped_column(Text, default="")
+    # 이 본문이 교체된 시각(=수정 시각)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

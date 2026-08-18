@@ -1654,6 +1654,13 @@ export function previewNotificationPurge(
   );
 }
 
+// 아카이브된 피드백 노트 영구 삭제(sysadmin) — 앱에서는 아카이브까지만, 되돌릴 수 없는 삭제는 여기서만
+export function purgeArchivedFeedbackNotes(): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/admin/feedback-notes/purge-archived", {
+    method: "POST",
+  });
+}
+
 export function purgeNotifications(
   from: string,
   to: string,
@@ -1697,6 +1704,15 @@ export interface FeedbackNote {
   id: number;
   feedback_id: number;
   author: string;
+  body: string;
+  created_at: string;
+  // 수정 시각(수정 이력은 별도 조회) · 아카이브 시각(삭제는 아카이브까지만, 영구삭제는 관리자 퍼지)
+  edited_at: string | null;
+  archived_at: string | null;
+}
+
+export interface FeedbackNoteRevision {
+  id: number;
   body: string;
   created_at: string;
 }
@@ -1750,9 +1766,37 @@ export function deleteFeedback(id: number): Promise<void> {
   return request<void>(`/feedback/${id}`, { method: "DELETE" });
 }
 
-// 노트 — 누구나 자유롭게 작성(피드백 진행 메모/로그)
-export function listFeedbackNotes(id: number): Promise<FeedbackNote[]> {
-  return request<FeedbackNote[]>(`/feedback/${id}/notes`);
+// 노트 — 누구나 자유롭게 작성(피드백 진행 메모/로그). 아카이브는 기본 숨김.
+export function listFeedbackNotes(id: number, includeArchived = false): Promise<FeedbackNote[]> {
+  return request<FeedbackNote[]>(
+    `/feedback/${id}/notes${includeArchived ? "?include_archived=true" : ""}`,
+  );
+}
+
+// 수정 — 작성자만. 직전 본문은 서버가 이력으로 남긴다.
+export function updateFeedbackNote(
+  feedbackId: number,
+  noteId: number,
+  body: string,
+): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${feedbackId}/notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ body }),
+  });
+}
+
+// 삭제 = 아카이브(영구삭제 아님) — 작성자 또는 관리자
+export function archiveFeedbackNote(feedbackId: number, noteId: number): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${feedbackId}/notes/${noteId}/archive`, {
+    method: "POST",
+  });
+}
+
+export function listFeedbackNoteRevisions(
+  feedbackId: number,
+  noteId: number,
+): Promise<FeedbackNoteRevision[]> {
+  return request<FeedbackNoteRevision[]>(`/feedback/${feedbackId}/notes/${noteId}/revisions`);
 }
 
 export function createFeedbackNote(id: number, body: string): Promise<FeedbackNote> {

@@ -302,6 +302,8 @@ export default function FeedbackPage() {
           key={notesFor.id}
           feedbackId={notesFor.id}
           feedbackBody={notesFor.body}
+          currentLoginId={loginId}
+          isSysadmin={isSysadmin}
           anchor={notesFor.anchor}
           onClose={() => setNotesFor(null)}
           onToast={pushToast}

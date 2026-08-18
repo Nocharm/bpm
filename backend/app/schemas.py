@@ -1133,12 +1133,26 @@ class FeedbackNoteCreate(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
 
 
+class FeedbackNoteUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
 class FeedbackNoteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     feedback_id: int
     author: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+class FeedbackNoteRevisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
     body: str
     created_at: datetime
 
