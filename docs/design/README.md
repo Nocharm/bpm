@@ -6,6 +6,7 @@
 
 ## 유지 중 (아직 소비될 문서)
 
-- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — canonical 계약(§4)·임포트 파이프라인. **Phase 3(실스키마 어댑터)이 이 계약을 소비** — 컨설턴트 스키마 확정 대기.
+- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — canonical 계약(§4)·임포트 파이프라인. **Phase 3(실스키마 어댑터)이 이 계약을 소비**.
+- [컨설턴트 인터뷰 결과 JSON 임포트(Phase 3 어댑터)](2026-08-18-interview-import-design.md) — 인터뷰 JSON→canonical 어댑터·다중 파일 웹 임포트·키 검증 dry-run·`map_notes` 테이블. **구현 진행 중**(feat/interview-import).
 - [거버넌스 UX 확장 A/B/C](2026-08-08-governance-ux-design.md) — 설계 승인·**미구현** 트랙. 이양 후 오너 대량 발생 전 구현 목표.
 - [인라인 펼침 드래그/좌표 버그 핸드오프](2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md) — 미해결 버그 핸드오프(보류 중).

@@ -24,7 +24,7 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-아직 소비될 설계 문서만 유지(컨설턴트 계약·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
+아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
 - [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md)
