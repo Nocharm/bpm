@@ -73,7 +73,7 @@ import { ProcessLibraryPanel } from "@/components/process-library-panel";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
@@ -138,6 +138,9 @@ import {
   BRANCH_YES_LABEL,
   BRANCH_NO_LABEL,
   EDGE_DEFAULTS,
+  getEdgeDefaults,
+  getNewEdgeLineStyle,
+  setNewEdgeLineStyle,
   estimateNodeHeight,
   estimateNodeWidth,
   hasBpmAttributes,
@@ -196,6 +199,7 @@ import {
   type CheckoutState,
   type CommentItem,
   type DirectoryUser,
+  type EdgeLineStyle,
   type EligibleAssignees,
   type FlatNode,
   type Graph,
@@ -608,6 +612,18 @@ function addTags(existing: string[], add: string[]): string[] {
   return Array.from(set);
 }
 
+// 렌더 type ↔ 저장 line_style 정규화 — ""(레거시)·비정상 값은 기본 꺾은선
+function normalizeEdgeLineStyle(value: string | undefined): EdgeLineStyle {
+  return value === "default" || value === "straight" ? value : "smoothstep";
+}
+
+// 선 모양 옵션 — 인스펙터(엣지/맵 탭)·엣지 컨텍스트 메뉴 3표면 공용
+const EDGE_LINE_STYLE_OPTIONS = [
+  { value: "default", labelKey: "edgeStyle.curve", icon: Spline },
+  { value: "smoothstep", labelKey: "edgeStyle.step", icon: CornerDownRight },
+  { value: "straight", labelKey: "edgeStyle.straight", icon: Slash },
+] as const;
+
 function toAppEdges(graph: Graph): Edge[] {
   return graph.edges.map((edge) => ({
     ...EDGE_DEFAULTS,
@@ -618,6 +634,8 @@ function toAppEdges(graph: Graph): Edge[] {
     // 백엔드가 raw handle id를 보내면 우선 사용(subprocess end 핸들); 없으면 side에서 파생
     sourceHandle: edge.source_handle ?? sourceHandleId((edge.source_side as HandleSide) || "right"),
     targetHandle: edge.target_handle ?? targetHandleId((edge.target_side as HandleSide) || "left"),
+    // 엣지별 저장 선 모양 — ""(레거시)는 기본 꺾은선
+    type: normalizeEdgeLineStyle(edge.line_style),
   }));
 }
 
@@ -721,6 +739,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
         target_side: sideFromHandleId(edge.targetHandle, "left"),
         source_handle: edge.sourceHandle ?? null,
         target_handle: edge.targetHandle ?? null,
+        line_style: normalizeEdgeLineStyle(edge.type),
       })),
     groups: keptGroups.map((group) => ({
       id: group.id,
@@ -1041,8 +1060,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 딥링크 소비 콜백 — 패널 세션 목록 effect deps에 들어가므로 인라인 화살표(렌더마다 새 identity) 금지: refetch 스톰 방지
   const handleAiInitialConsumed = useCallback(() => setAiInitialSessionId(null), []);
 
-  // 엣지 스타일 — 맵 전역(모든 엣지 일괄). React Flow 빌트인 타입: default=곡선, smoothstep=꺾은선, straight=직선. localStorage 영속.
-  const [edgeStyle, setEdgeStyle] = useState<"default" | "smoothstep" | "straight">("smoothstep");
+  // 새 엣지 선 모양 기본값 — 마지막 "전체 일괄 변경" 선택(맵별 localStorage). 개별 엣지의 모양은 edge.type→line_style로 서버 영속.
+  const [edgeStyle, setEdgeStyle] = useState<EdgeLineStyle>("smoothstep");
+  // 전체 일괄 변경 확인 모달 — 선택한 목표 스타일(null=닫힘)
+  const [bulkEdgeStyle, setBulkEdgeStyle] = useState<EdgeLineStyle | null>(null);
 
   // 드래그-오버 드롭 영역 (Phase 1: 앞/뒤 흐름 삽입). rect는 활성 시점에 계산해 저장(렌더 중 ref 접근 회피).
   const [dropTarget, setDropTarget] = useState<{
@@ -1954,6 +1975,8 @@ function MapEditor({ mapId }: { mapId: number }) {
               target_side: "left",
               source_handle: null,
               target_handle: null,
+              // AI connect는 새 엣지 — 수동 생성과 같은 선 모양 기본값
+              line_style: getNewEdgeLineStyle(),
             });
           }
         }
@@ -3099,7 +3122,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       setEdges((current) =>
         addEdge(
           {
-            ...EDGE_DEFAULTS,
+            ...getEdgeDefaults(),
             ...connection,
             sourceHandle,
             targetHandle,
@@ -3328,6 +3351,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           label: typeof edge.label === "string" ? edge.label : undefined,
           sourceHandle: edge.sourceHandle ?? undefined,
           targetHandle: edge.targetHandle ?? undefined,
+          type: edge.type,
         })),
     });
     // 새로 복사하면 다음 붙여넣기는 누적 오프셋 없이 1부터 다시 시작.
@@ -3401,13 +3425,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       setEdges((current) => [
         ...current,
         ...pastedEdges.map((edge) => ({
-          ...EDGE_DEFAULTS,
+          ...getEdgeDefaults(),
           id: edge.id,
           source: edge.source,
           target: edge.target,
           sourceHandle: edge.sourceHandle ?? sourceHandleId("right"),
           targetHandle: edge.targetHandle ?? targetHandleId("left"),
           label: edge.label || undefined,
+          // 원본 엣지의 선 모양 보존 — 구 클립보드(type 없음)는 생성 기본값
+          type: edge.type ?? getNewEdgeLineStyle(),
         })),
       ]);
     }
@@ -3517,14 +3543,15 @@ function MapEditor({ mapId }: { mapId: number }) {
     const newEdges = edgesRef.current
       .filter((edge) => plans.has(edge.source) && plans.has(edge.target))
       .map((edge) => ({
-        ...EDGE_DEFAULTS,
+        ...getEdgeDefaults(),
         id: genId(),
         source: plans.get(edge.source)!.copyId,
         target: plans.get(edge.target)!.copyId,
-        // 원본 엣지가 붙어 있던 변(핸들)을 보존 — 없을 때만 기본값(우→좌). Ctrl+C/V(handlePaste)와 동일 관례.
+        // 원본 엣지가 붙어 있던 변(핸들)·선 모양을 보존 — 없을 때만 기본값(우→좌). Ctrl+C/V(handlePaste)와 동일 관례.
         sourceHandle: edge.sourceHandle ?? sourceHandleId("right"),
         targetHandle: edge.targetHandle ?? targetHandleId("left"),
         label: typeof edge.label === "string" ? edge.label : undefined,
+        type: edge.type ?? getNewEdgeLineStyle(),
       }));
     if (newEdges.length > 0) {
       setEdges((current) => [...current, ...newEdges]);
@@ -4810,6 +4837,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, recordChange, selectedEdgeId, setEdges, scheduleAutoSave],
   );
 
+  // 엣지별 선 모양 변경 — 인스펙터 엣지 패널·컨텍스트 메뉴 공용 (type이 저장 시 line_style로 영속)
+  const setEdgeLineStyle = useCallback(
+    (edgeId: string, style: EdgeLineStyle) => {
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      setEdges((current) =>
+        current.map((edge) => (edge.id === edgeId ? { ...edge, type: style } : edge)),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setEdges, scheduleAutoSave],
+  );
+
   const setEdgeSide = useCallback(
     (edgeId: string, end: "source" | "target", side: HandleSide) => {
       if (readOnly) {
@@ -5325,6 +5367,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
         { divider: true },
         {
+          lineStyles: EDGE_LINE_STYLE_OPTIONS.map((option) => ({
+            value: option.value,
+            label: t(option.labelKey),
+            icon: option.icon,
+          })),
+          current: normalizeEdgeLineStyle(edge.type),
+          onPick: (value: string) => setEdgeLineStyle(edge.id, normalizeEdgeLineStyle(value)),
+        },
+        { divider: true },
+        {
           label: t("edge.editLabel"),
           icon: PencilLine,
           shortcut: "F2",
@@ -5485,6 +5537,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     expandedInline,
     injectSubEnds,
     setEdgeSide,
+    setEdgeLineStyle,
     startEdgeLabelEdit,
     handleAddNode,
     handleRecolor,
@@ -6079,7 +6132,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     staleAnchorIds,
   ]);
 
-  // 엣지 렌더 변환 — ① 맵 전역 스타일(type) 적용, ② 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange)
+  // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
+  // 선 모양(type)은 엣지별 저장값 그대로 유지(구 맵 전역 일괄 적용은 "전체 일괄 변경" 액션으로 대체).
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
     const crossingIds = inlineComposition?.crossingIds;
@@ -6114,7 +6168,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (hiddenIds?.has(edge.id)) {
         return { ...edge, hidden: true } as Edge;
       }
-      let next: Edge = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
+      let next: Edge = edge;
       // 영역을 가로지르는 엣지 — 반투명으로 영역 위를 지나가게
       if (crossingIds?.has(edge.id)) {
         next = { ...next, style: { ...next.style, opacity: REGION_CROSSING_OPACITY } };
@@ -6209,7 +6263,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           sourceHandle: end.key,
           target: anchor.target,
           targetHandle: anchor.targetHandle,
-          type: edgeStyle,
+          // 같은 노드의 실제 출력 엣지(anchor)와 선 모양을 맞춤 — 표시 전용이라 영속 없음
+          type: normalizeEdgeLineStyle(anchor.type),
           selectable: false,
           deletable: false,
           focusable: false,
@@ -6219,24 +6274,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (!inlineComposition) {
       return anchorEdgesToGhosts([...currentStyled, ...syntheticEndEdges]);
     }
-    // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김, 아니면 맵 전역 type만 맞춤. 게이트웨이는 합성 시 스타일 완료.
-    // 포커스 모드 Step 1: 비활성 스코프라 dim + 비선택(읽기전용).
+    // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김. 선 모양은 자식 맵 저장값 그대로(toAppEdges가 주입).
+    // 게이트웨이는 합성 시 스타일 완료. 포커스 모드 Step 1: 비활성 스코프라 dim + 비선택(읽기전용).
     const childStyled = inlineComposition.childEdges.map((edge) => {
       if (hiddenIds?.has(edge.id)) {
         return { ...edge, hidden: true } as Edge;
       }
-      const typed = edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle };
       return {
-        ...typed,
+        ...edge,
         selectable: false,
-        style: { ...typed.style, opacity: INACTIVE_SCOPE_OPACITY },
+        style: { ...edge.style, opacity: INACTIVE_SCOPE_OPACITY },
       };
     });
-    const gatewayStyled = inlineComposition.gateways.map((edge) =>
-      edge.type === edgeStyle ? edge : { ...edge, type: edgeStyle },
-    );
-    return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticEndEdges]);
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, edgeStyle, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
+    return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...inlineComposition.gateways, ...syntheticEndEdges]);
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -6463,15 +6514,36 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 영속은 토글 핸들러에서만 — displayFields 의존 effect로 쓰면 StrictMode 이중 마운트가
   // hydration 전 기본값을 저장소에 덮어써 사용자의 OFF 상태가 리셋된다(실측).
 
-  // 엣지 스타일 1회 hydration — 영속은 변경 버튼 핸들러에서(상태-의존 effect 영속은
-  // StrictMode 이중 마운트가 hydration 전 기본값을 저장소에 덮어써 저장값이 리셋됨, displayFields와 동일 진범)
+  // 새 엣지 선 모양 기본값 1회 hydration — 맵별 키 우선, 구 전역 키 폴백(구버전 사용자 선호 유지).
+  // 영속은 일괄 변경 확정 핸들러에서만(상태-의존 effect 영속은 StrictMode 이중 마운트가
+  // hydration 전 기본값을 저장소에 덮어써 저장값이 리셋됨, displayFields와 동일 진범)
   useEffect(() => {
-    const saved = window.localStorage.getItem("bpm.edgeStyle");
-    if (saved === "default" || saved === "smoothstep" || saved === "straight") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
-      setEdgeStyle(saved);
+    const saved =
+      window.localStorage.getItem(`bpm.edgeStyle.${mapId}`) ??
+      window.localStorage.getItem("bpm.edgeStyle");
+    const resolved =
+      saved === "default" || saved === "smoothstep" || saved === "straight" ? saved : "smoothstep";
+    // 모듈 기본값 동기화 — 캔버스 헬퍼(withEdge 등)의 새 엣지 생성 경로가 이 값을 읽는다
+    setNewEdgeLineStyle(resolved);
+    // 무조건 set — 맵 간 인앱 이동(리마운트 없음) 시 이전 맵 기본값 하이라이트가 남지 않게
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+    setEdgeStyle(resolved);
+  }, [mapId]);
+
+  // 전체 일괄 변경 확정 — 전 엣지 type 교체(변경분 있을 때만 히스토리/저장) + 새 엣지 기본값 영속(맵별)
+  const applyBulkEdgeStyle = (style: EdgeLineStyle) => {
+    setBulkEdgeStyle(null);
+    if (edgesRef.current.some((edge) => normalizeEdgeLineStyle(edge.type) !== style)) {
+      pushHistory();
+      setEdges((current) =>
+        current.map((edge) => (edge.type === style ? edge : { ...edge, type: style })),
+      );
+      scheduleAutoSave();
     }
-  }, []);
+    setEdgeStyle(style);
+    setNewEdgeLineStyle(style);
+    window.localStorage.setItem(`bpm.edgeStyle.${mapId}`, style);
+  };
 
   const toggleDisplayField = useCallback(
     (field: NodeDisplayToggle) => {
@@ -9055,14 +9127,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>
-                        <div className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary">
-                          {t(
-                            selectedEdge.type === "smoothstep"
-                              ? "edgeStyle.step"
-                              : selectedEdge.type === "straight"
-                                ? "edgeStyle.straight"
-                                : "edgeStyle.curve",
-                          )}
+                        <div className="grid grid-cols-3 gap-1.5" data-id="inspector-edge-line-style">
+                          {EDGE_LINE_STYLE_OPTIONS.map(({ value, labelKey, icon: Icon }) => (
+                            <button
+                              key={value}
+                              type="button"
+                              disabled={readOnly}
+                              title={t(labelKey)}
+                              aria-label={t(labelKey)}
+                              data-id={`inspector-edge-line-style-${value}`}
+                              onClick={() => setEdgeLineStyle(selectedEdge.id, value)}
+                              className={`flex items-center justify-center rounded-sm border py-2 ${
+                                normalizeEdgeLineStyle(selectedEdge.type) === value
+                                  ? "border-accent bg-accent-tint text-accent"
+                                  : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                              }`}
+                            >
+                              <Icon size={18} strokeWidth={1.5} />
+                            </button>
+                          ))}
                         </div>
                       </div>
                       {!readOnly && (
@@ -9302,21 +9385,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                       {(edgeStyleSectionOpen || inspectorClosingKeys.has("edgeStyle")) && (
                         <div className={inspectorClosingKeys.has("edgeStyle") ? "accordion-close" : "accordion-open"}>
                           <div className="mt-1 grid grid-cols-3 gap-1.5">
-                            {([
-                              ["default", "edgeStyle.curve", Spline],
-                              ["smoothstep", "edgeStyle.step", CornerDownRight],
-                              ["straight", "edgeStyle.straight", Slash],
-                            ] as const).map(([value, labelKey, Icon]) => (
+                            {EDGE_LINE_STYLE_OPTIONS.map(({ value, labelKey, icon: Icon }) => (
                               <button
                                 key={value}
                                 type="button"
                                 disabled={readOnly}
                                 title={t(labelKey)}
                                 aria-label={t(labelKey)}
-                                onClick={() => {
-                                  setEdgeStyle(value);
-                                  window.localStorage.setItem("bpm.edgeStyle", value);
-                                }}
+                                data-id={`inspector-edge-style-all-${value}`}
+                                onClick={() => setBulkEdgeStyle(value)}
                                 className={`flex items-center justify-center rounded-sm border py-2 ${
                                   edgeStyle === value
                                     ? "border-accent bg-accent-tint text-accent"
@@ -9904,6 +9981,55 @@ function MapEditor({ mapId }: { mapId: number }) {
           position={branchPrompt.at}
         />
       )}
+      {bulkEdgeStyle !== null &&
+        (() => {
+          // 전체 일괄 변경 확인 — 변경 요약(전체/변경 수·모양별 내역)을 보여주고 확정
+          const target = bulkEdgeStyle;
+          const targetOption = EDGE_LINE_STYLE_OPTIONS.find((option) => option.value === target)!;
+          const TargetIcon = targetOption.icon;
+          const changing = edges.filter((edge) => normalizeEdgeLineStyle(edge.type) !== target);
+          const counts = new Map<EdgeLineStyle, number>();
+          for (const edge of changing) {
+            const from = normalizeEdgeLineStyle(edge.type);
+            counts.set(from, (counts.get(from) ?? 0) + 1);
+          }
+          const styleLabel = (value: EdgeLineStyle) =>
+            t(EDGE_LINE_STYLE_OPTIONS.find((option) => option.value === value)!.labelKey);
+          const lines: ConfirmLine[] = [
+            {
+              icon: <ArrowRight size={14} strokeWidth={1.5} />,
+              text:
+                changing.length === 0
+                  ? t("edgeStyle.applyAllNone")
+                  : t("edgeStyle.applyAllChange", { n: changing.length, total: edges.length }),
+            },
+            ...[...counts.entries()].map(([from, count]) => {
+              const FromIcon = EDGE_LINE_STYLE_OPTIONS.find((option) => option.value === from)!.icon;
+              return {
+                icon: <FromIcon size={14} strokeWidth={1.5} />,
+                text: `${styleLabel(from)} → ${styleLabel(target)} · ${count}`,
+                tone: "muted",
+              } as ConfirmLine;
+            }),
+            {
+              icon: <Plus size={14} strokeWidth={1.5} />,
+              text: t("edgeStyle.applyAllNew"),
+              tone: "muted",
+            },
+          ];
+          return (
+            <ConfirmDialog
+              dialogId="edge-style-apply-all"
+              title={`${t("edgeStyle.applyAllTitle")} — ${t(targetOption.labelKey)}`}
+              icon={<TargetIcon size={28} strokeWidth={1.5} />}
+              lines={lines}
+              confirmLabel={t("edgeStyle.applyAllConfirm")}
+              cancelLabel={t("common.cancel")}
+              onConfirm={() => applyBulkEdgeStyle(target)}
+              onClose={() => setBulkEdgeStyle(null)}
+            />
+          );
+        })()}
       {edgeAction && (
         <EdgeActionModal
           position={edgeAction.at}

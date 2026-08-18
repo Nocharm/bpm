@@ -20,7 +20,7 @@ function makeNode(id: string, title: string, node_type: string, sort_order: numb
 }
 
 function makeEdge(id: string, source: string, target: string, label = ""): GraphEdge {
-  return { id, source_node_id: source, target_node_id: target, label, source_side: "right", target_side: "left", source_handle: null, target_handle: null };
+  return { id, source_node_id: source, target_node_id: target, label, source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" };
 }
 
 function makeSubNode(id: string, title: string, sort_order: number, linkedMapId: number, over: Partial<GraphNode> = {}): GraphNode {

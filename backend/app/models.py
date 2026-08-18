@@ -345,6 +345,9 @@ class Edge(Base):
     # 다중 출구 식별 — 하위프로세스 노드의 끝별 출력 핸들 id(대표끝="__primary__", 그 외=끝 이름)
     source_handle: Mapped[str | None] = mapped_column(String(200), default=None)
     target_handle: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 엣지별 선 모양(React Flow type: default=곡선, smoothstep=꺾은선, straight=직선, ""=레거시 기본).
+    # source_side와 동일하게 시각 전용 — diff 비교 제외
+    line_style: Mapped[str] = mapped_column(String(20), default="")
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 

@@ -29,8 +29,8 @@ assert.equal(ends.find((x) => !x.isPrimary)?.key, "Reject");
 
 // buildCompositeTree: embed host "h" → namespaced children with synthetic parent_node_id
 const root: FlatNode[] = [flat("s", "Start", { node_type: "start" }), flat("h", "Call", { node_type: "subprocess", linked_map_id: 7 })];
-const rootEdges: GraphEdge[] = [{ id: "r1", source_node_id: "s", target_node_id: "h", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null }];
-const sub: Graph = { nodes: [flat("cs", "cStart", { node_type: "start" }), flat("ce", "cEnd", { node_type: "end" })], edges: [{ id: "ce1", source_node_id: "cs", target_node_id: "ce", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null }], groups: [] };
+const rootEdges: GraphEdge[] = [{ id: "r1", source_node_id: "s", target_node_id: "h", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" }];
+const sub: Graph = { nodes: [flat("cs", "cStart", { node_type: "start" }), flat("ce", "cEnd", { node_type: "end" })], edges: [{ id: "ce1", source_node_id: "cs", target_node_id: "ce", label: "", source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" }], groups: [] };
 const tree = buildCompositeTree(root, rootEdges, new Set(["h"]), (n) => (n.linked_map_id === 7 ? sub : null));
 assert.ok(tree.nodes.find((n) => n.id === embedId("h", "cs"))?.parent_node_id === "h");
 assert.ok(tree.edges.find((e) => e.id === embedId("h", "ce1")));

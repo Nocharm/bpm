@@ -13,7 +13,7 @@ const FLAT: Omit<FlatNode, "id" | "title" | "node_type" | "source_node_id"> = {
 
 const edge = (id: string, source: string, target: string): GraphEdge => ({
   id, source_node_id: source, target_node_id: target, label: "",
-  source_side: "right", target_side: "left", source_handle: null, target_handle: null,
+  source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "",
 });
 
 // v1 — 게시본. 계보 루트이므로 source_node_id는 null.

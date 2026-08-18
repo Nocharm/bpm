@@ -263,6 +263,7 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
                 "target_node_id": "sub",
                 "source_handle": "bottom-handle",
                 "target_handle": "top-handle",
+                "line_style": "straight",
             }
         ],
     })
@@ -294,6 +295,7 @@ def test_clone_preserves_subprocess_fields(client: TestClient) -> None:
     edge = g["edges"][0]
     assert edge["source_handle"] == "bottom-handle", f"source_handle lost: {edge}"
     assert edge["target_handle"] == "top-handle", f"target_handle lost: {edge}"
+    assert edge["line_style"] == "straight", f"line_style lost: {edge}"
 
 
 # ── FIX 2: primary end defaults to first end (by sort_order) if unspecified ──
