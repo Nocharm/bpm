@@ -4,7 +4,7 @@
 (0.3-bpm-interface-draft) 기반 합성 데이터 — 실전달물 키 차이는 dry-run 리포트로 흡수한다.
 """
 
-from scripts.consultant_interview import convert_interview
+from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, convert_interview
 
 
 def _action(seq: int, label: str, **over: object) -> dict:
@@ -171,3 +171,17 @@ def test_map_description_serialization() -> None:
     fields["done_criterial"] = fields.pop("done_criteria")
     d2 = convert_interview(data).maps[0].description
     assert "Done criteria: 준비 목록 나오면 끝" in d2
+
+
+def test_variant_preserved_and_exception_colored() -> None:
+    data = _interview()
+    data["rows"][0]["actions"].append(
+        _action(4, "현장 수기 기록", variant="exception", rule="급할 때 양식 없이 수기"))
+    m = convert_interview(data).maps[0]
+    exc = next(n for n in m.nodes if n.name == "현장 수기 기록")
+    assert "Variant: exception" in exc.description
+    assert exc.color == EXCEPTION_VARIANT_COLOR
+    # variant="normal"(기본)은 노이즈 — Variant 줄도 색도 없다
+    normal = next(n for n in m.nodes if n.name == "작업지시 확인")
+    assert "Variant" not in normal.description
+    assert normal.color == ""

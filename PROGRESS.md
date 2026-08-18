@@ -11,6 +11,9 @@
 - 선 모양(곡선/꺾은선/직선)을 맵 전역 localStorage 토글 → **엣지별 서버 영속**(`edges.line_style`, `_ADDED_COLUMNS` 등록·clone 보존·""=레거시 꺾은선)으로 전환 — 인스펙터 엣지 패널·엣지 컨텍스트 메뉴에서 개별 변경. 구 전역 토글 자리는 "전체 일괄 변경 + 확인 모달"(변경 수·모양별 내역 요약)로 대체, 새 엣지 기본값은 마지막 일괄 선택(맵별 `bpm.edgeStyle.<mapId>`, 구 전역 키 폴백).
 - 증발 방지: CSV/AI 머지는 엣지 전량 재생성이라 (source→target) 쌍으로 line_style 이월(신규 엣지는 맵 기본값), 붙여넣기·Ctrl드래그 사본·클립보드도 type 보존. 적대적 리뷰 확정 2건(맵 전환 시 기본값 하이라이트 스테일·머지 신규 엣지 "" 폴백) 반영. 게이트: BE 1065·ruff 0 / FE 640·tsc 0·lint 0·build OK, 실브라우저 스모크 `pw-smoke-edge-style.mjs` 11/11(개별 변경·컨텍스트 메뉴·일괄 모달·API 영속·리로드 복원).
 
+## 2026-08-19 — 액션 variant 보존 + 예외 색 분리 (feat/interview-variant)
+- 실파일 검증 피드백 반영 — `variant`가 통째로 버려지던 갭 해소: `normal` 외 값은 `Variant:` 줄로 노드 노트 보존, `exception`은 노드 색 rose(#c2849a, COLOR_PRESETS 수동 동기)로 시각 분리. 흐름 분기는 앵커 정보 부재로 미구현(협의 확장 포인트). CanonicalNode.color 신설·엔진 passthrough·시그니처 포함(색 변경=새 버전 감지). 샘플에 예외 액션 추가. 게이트 BE 1068·ruff 0. dev 머지는 사용자 dev 작업 종료 대기.
+
 ## 2026-08-18 — canonical 임포트 경로 정리 (chore/remove-canonical-import)
 - 실전달물이 인터뷰 JSON으로 확정되어 기존 canonical 수용 표면 전체 제거(사용자 결정) — 웹 `POST /api/categories/import`·CLI(run_import/main)·파일 로더(load_categories/load_maps/parse_map_objs)·FrameworkImportIn/Out. 엔진(import_delivery)·canonical 모델·parse_categories는 인터뷰 어댑터의 내부 IR로 유지. BE 게이트 1062·ruff 0.
 - 정리 커밋의 `git add -A`가 home-dept 스모크 스크린샷 4장(SHOT_DIR 기본 `.`)을 쓸어담은 것 발견 — 제거 + `frontend/.gitignore`에 `home-dept-*.png` 가드.
