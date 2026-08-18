@@ -85,6 +85,20 @@
           "quote": "양식은 미리 뽑아서 가지고 나가요."
         },
         {
+          "seq": 2,
+          "label": "현장 수기 기록(예외)",
+          "name": "양식을 못 뽑았으면 현장에서 손으로 적어 온다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "급할 때만",
+          "input": null,
+          "output": "수기 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "급하면 그냥 손으로 적어 와요."
+        },
+        {
           "seq": 3,
           "label": "표준기 유효성 판정",
           "name": "표준기 유효기간이 남아 있는지 판정한다 — 지났으면 다른 표준기로 교체",

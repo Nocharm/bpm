@@ -140,7 +140,7 @@ def build_graph_rows(
         code_to_id[cn.code] = uuid.uuid4().hex
         nodes.append(Node(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
-            title=cn.name, node_type=cn.type, description=cn.description,
+            title=cn.name, node_type=cn.type, description=cn.description, color=cn.color,
             department=cn.department, assignee=cn.assignee, system=cn.system,
             pos_x=x, pos_y=y, sort_order=i,
         ))
@@ -291,9 +291,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
     return (
         sorted(
-            (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.department or "",
-             n.assignee or "", n.system or "", n.linked_map_id, n.annual_count or "", n.fte or "",
-             bool(n.is_primary_end))
+            (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.color or "",
+             n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
+             n.annual_count or "", n.fte or "", bool(n.is_primary_end))
             for n in nodes
         ),
         sorted(

@@ -720,3 +720,16 @@ def test_description_changes_detected_and_stable(client) -> None:
     report3 = _run(_import_once(maps=[_make_node_desc()]))
     assert report3.counts() == {"unchanged": 1}
     assert _run(_counts())[1] == 2
+
+
+def test_build_graph_rows_carries_color_and_signature_detects_it() -> None:
+    from scripts.import_consultant import _graph_signature, build_graph_rows
+
+    plain = _canonical_map()
+    colored = _canonical_map()
+    colored.nodes[0].color = "#c2849a"
+    nodes_a, edges_a, _ = build_graph_rows(plain, link_targets={})
+    nodes_b, edges_b, _ = build_graph_rows(colored, link_targets={})
+    assert next(n for n in nodes_b if n.title == "요청").color == "#c2849a"
+    # 색은 콘텐츠 — 재전달에서 variant 색이 바뀌면 새 버전으로 감지돼야 한다
+    assert _graph_signature(nodes_a, edges_a) != _graph_signature(nodes_b, edges_b)

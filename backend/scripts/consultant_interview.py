@@ -41,6 +41,10 @@ _ACTION_KEYS = {
 }
 _KNOWN_KINDS = {"action", "handoff", "decision"}
 
+# 예외 variant 노드 stroke — 에디터 COLOR_PRESETS의 rose와 수동 동기
+# (frontend/src/app/maps/[mapId]/page.tsx COLOR_PRESETS — 색은 chrome이 아니라 노드 데이터)
+EXCEPTION_VARIANT_COLOR = "#c2849a"
+
 # 맵 description 직렬화 순서 — 원문 보존이 목적이라 빈 값 줄만 생략하고 변형하지 않는다
 _MAP_FIELD_LABELS: list[tuple[str, str]] = [
     ("start_condition", "Start condition"),
@@ -139,6 +143,9 @@ def format_node_description(action: dict) -> str:
         value = _clean(action.get(key))
         if value:
             kv.append(f"{label}: {value}")
+    variant = _clean(action.get("variant"))
+    if variant and variant != "normal":
+        kv.append(f"Variant: {variant}")  # 예외 표식 등 — normal(기본)은 노이즈라 생략 (2026-08-19)
     if _clean(action.get("kind")) == "handoff":
         kv.append("Kind: handoff")  # 노드 타입은 process — 원 kind는 텍스트로 보존
     if kv and lines:
@@ -201,6 +208,9 @@ def _build_nodes_and_edges(
         occurrence = seen_in_group.get(seq, 0) + 1
         seen_in_group[seq] = occurrence
         code = f"a{seq:02d}" if occurrence == 1 else f"a{seq:02d}-{occurrence}"
+        # 예외 variant는 흐름 분기 대신 색으로만 분리 — 앵커(분기 시작/합류) 정보가 전달물에
+        # 없어 진짜 분기는 그릴 수 없다(협의 확장 포인트, design 2026-08-18 §3).
+        variant = _clean(action.get("variant"))
         groups.setdefault(seq, []).append(CanonicalNode(
             code=code,
             name=label,
@@ -208,6 +218,7 @@ def _build_nodes_and_edges(
             system=system,
             seq=seq,
             description=format_node_description(action),
+            color=EXCEPTION_VARIANT_COLOR if variant == "exception" else "",
         ))
 
     nodes: list[CanonicalNode] = []

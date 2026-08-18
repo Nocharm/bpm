@@ -56,6 +56,7 @@
 | `rows[].fields` | 맵 `description` `[Interview]` 섹션에 key-value 직렬화(빈 값 줄 생략, `ownerRole` 포함) |
 | `actions[]` | 노드 — `title=label`, `description=name` + `Input:/Output:/System:/Screen:/Data form:/Rule:/Quote:` 줄 직렬화. `system`은 노드 `system` 컬럼에도 |
 | `kind` | `decision`→decision 노드, `action`·`handoff`→process. handoff는 `Kind: handoff` 줄로 보존 |
+| `variant` | `normal` 외 값은 `Variant: <값>` 줄로 노드 노트에 보존. `exception`은 노드 색 rose `#c2849a`(에디터 COLOR_PRESETS와 수동 동기)로 시각 분리 — 흐름 분기는 앵커(분기 시작/합류) 정보 부재로 미구현, 협의 확장 포인트 (2026-08-19) |
 | seq | 그룹 k 전원 → 그룹 k+1 전원 엣지. 유일 seq=순차 체인, **중복 seq=병렬 분기/합류**. Start/End는 엔진 시드·자동 배선 |
 | `*_min` 숫자(추후 전달) | `total_time_min`→`duration`(분→H.MM), `annual_count`/`headcount`/`fte` 숫자면 맵 params. 매핑 코드는 1차에 포함(현재 null이라 no-op). 원문 텍스트는 노트에 항상 잔존 — 이중 보존 |
 | `tasks[]` | `taskId` 조인으로 `exceptions`만 소비. start/end 조건은 `rows.fields` 우선(중복) |
@@ -128,4 +129,5 @@ id(PK) · map_id(FK, null) · node_id(String(50), null — 추후 활동별 등�
 | 예외·VOC | 공용 `map_notes` 테이블 통합 + 읽기전용 표시. 맵 description에 중복 기재 안 함 |
 | evidence | 제외 확정 |
 | 실파일 | 반입 불가 → FE dry-run 키 검증 화면이 1차 범위 |
+| variant | 보존(`Variant:` 줄)+exception 색 분리까지만(2026-08-19) — 진짜 분기는 anchor 키 협의 후 |
 | 구 경로 제거 | canonical 수용 표면(웹 `POST /categories/import`·CLI·파일 로더·canonical 샘플) 전체 제거(2026-08-18, 사용자 결정) — 엔진·canonical 모델은 내부 IR로 유지. 임포트 경로는 인터뷰 웹 임포트 단일 |

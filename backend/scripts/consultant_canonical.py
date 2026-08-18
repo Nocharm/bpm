@@ -49,6 +49,8 @@ class CanonicalNode(BaseModel):
     seq: int = 0
     # 인터뷰 어댑터가 KV 직렬화를 싣는다 — Node.description은 Text, 캡 금지 (design 2026-08-18 §3)
     description: str = ""
+    # 노드 stroke 색("#RRGGBB" 또는 "") — Node.color는 String(20). 예외 variant 표식용 (2026-08-19)
+    color: str = Field(default="", max_length=20)
 
 
 class CanonicalEdge(BaseModel):
