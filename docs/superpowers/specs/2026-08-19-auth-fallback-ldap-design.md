@@ -88,7 +88,7 @@ is_sysadmin(login_id) =
 - **빈 비밀번호는 명시적으로 거부**한다. LDAP unauthenticated bind는 빈 비밀번호에 성공을 돌려주므로, 막지 않으면 아이디만 알면 통과한다.
 - **시도 제한** — `loginId`+클라이언트 IP 기준 인메모리 카운터. 앱이 AD에 무제한 bind를 중계하면 **실제 AD 계정이 잠긴다**. 임계 초과 시 짧은 잠금(예: 5회/5분)으로 중계를 끊는다. 프로세스 메모리면 충분하다(단일 백엔드 컨테이너).
 - `employees.active=false`인 계정은 거부한다 — 기존 차단 수단을 그대로 쓴다.
-- 성공·실패 모두 기존 `login_records`에 기록한다.
+- 성공은 별도로 기록하지 않는다 — 로그인 직후 프론트가 호출하는 `/api/me`가 이미 `login_records`에 1건 남긴다(`main.py:146`). 여기서 또 쓰면 사용 현황 집계가 두 배로 잡힌다. **실패는 `logger.warning`으로만** 남긴다(loginId·원인·IP). 실패를 `login_records`에 넣으면 "로그인 현황" 리포트가 오염된다.
 
 **토큰 검증**: `auth.py`의 `get_current_user`가 모드에 따라 검증기만 고른다.
 
@@ -111,7 +111,7 @@ API 라우터와 권한 로직은 변경하지 않는다.
 | loginId | 신규 발급. **AD 계정과 충돌 검사** — `source != 'local'`인 행이 이미 있으면 거부한다. 실계정을 로컬 계정으로 가로채는 것을 막는다 |
 | 이름 | 표시명 |
 | 부서 | 기존 부서 선택 UI 재사용 → `dept_code` 지정. 조직 경로는 기존 resolver(`app/orgchart.py`)가 해석한다 |
-| 권한 | 저장 위치가 다르므로 컨트롤도 둘로 나눈다 — **역할 선택**(`user`/`admin` → `employees.role`)과 **sysadmin 토글**(→ `local_credentials.is_sysadmin`, §3.1 캐시 반영). `BPM_SYSADMINS`로 지정된 계정은 토글이 켜진 채 비활성으로 보이고 이 화면에서 회수되지 않는다 |
+| 권한 | 저장 위치가 다르므로 컨트롤도 둘로 나눈다 — **역할 선택**(`user`/`admin` → `employees.role`)과 **sysadmin 토글**(→ `local_credentials.is_sysadmin`, §3.1 캐시 반영). `BPM_SYSADMINS`로 지정된 계정은 토글이 켜진 채 비활성으로 보이고, 왜 못 끄는지 알 수 있게 "environment로 지정됨"을 함께 표시한다 |
 | 비밀번호 | sysadmin이 발급·재설정한다. 본인 변경 기능은 넣지 않는다 |
 | 차단 | 기존 `employees.active` 토글 |
 
