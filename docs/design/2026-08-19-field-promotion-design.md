@@ -99,7 +99,7 @@ duration 파이프라인의 완전 미러. **한 지점이라도 빠지면 소�
 ### 5.1 필드 표시 (Phase B)
 
 - **노드 인스펙터**: Input/Output — 리스트형(행 add/remove, 저장은 개행 join) + `data_form` 참고 배지(Input/Output 라벨 옆, 값 있을 때만). Start/End condition — 접힘 텍스트 2필드. touch_time — Parameters 그룹에 합류.
-- **맵 SP 패널·설정·인스펙터 맵 탭**: sp_start/end_condition, sp_gmp 셀렉트(4상태), sp_touch_time. 값 있을 때만 렌더해 비인터뷰 맵 노이즈 없음(기존 IO 행 패턴).
+- **맵 표면(구현 확정)**: 읽기 = 상세 카드 IO 블록 확장(gmp 배지·조건·touch_time, 값 있을 때만 — 비인터뷰 맵 노이즈 없음) / 편집 = **설정 > 상세 탭 `ProcessFieldsCard`(오너 전용, PATCH process-fields)** — gmp 셀렉트(4상태)·조건·duration/touch_time·system + 폴백 힌트 5종. 에디터 인스펙터 맵 탭은 밀도상 제외(상세 카드·설정이 담당).
 - 상세 카드/맵 탭의 기존 `[Interview]` 표시는 자연 축소(설명 텍스트라 코드 변경 없음).
 
 ### 5.2 폴백 툴팁 — `FallbackHint` 공용 컴포넌트 (Phase C)
@@ -126,4 +126,5 @@ duration 파이프라인의 완전 미러. **한 지점이라도 빠지면 소�
 - input/output 항목별 dataForm(현재 노드당 1값) — 필요 시 JSON 직렬화로 승격하는 확장 경로만 남김.
 - 시스템 라이브러리 트랙: 카탈로그 테이블 + `system`/`sp_system`의 카탈로그 참조화 + `*_fallback` 대조 검토 화면.
 - `touch_time` Σ 합산의 SP 연쇄 검증(듀레이션 미러 확인).
+- 노드 요약(정보 수정) 모달에 IO/조건 편집 노출 — 1차는 인스펙터 Details 카드만.
 - ownerRole 승격은 실오너 거버넌스 전달 개시와 함께 재논의.

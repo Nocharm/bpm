@@ -414,7 +414,7 @@ describe("buildExcelModel", () => {
       nodes: [
         makeNode("s1", "Start", "start", 0),
         makeNode("p1", "P", "process", 1, {
-          duration: "1.30", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+          duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
         }),
         makeNode("e1", "End", "end", 2, { is_primary_end: true }),
       ],
@@ -430,7 +430,7 @@ describe("buildExcelModel", () => {
     });
     const row = model.rows.find((r) => r.kind === "node" && r.title === "P");
     expect(row).toMatchObject({
-      duration: "1.30", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+      duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
     });
   });
 
@@ -451,7 +451,7 @@ describe("buildExcelModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: null, assignee: null, system: null,
-          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", url: null, url_label: null,
+          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, url: null, url_label: null,
           sp_description: null,
         },
       },
@@ -486,7 +486,7 @@ describe("buildExcelModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: null, assignee: null, system: null,
-          duration: null, cost_krw: null, cost_usd: null, headcount: null, url: null, url_label: null,
+          duration: null, cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, url: null, url_label: null,
           sp_description: "표준 절차 설명",
         },
       },
@@ -907,7 +907,7 @@ describe("COLUMNS", () => {
   it("헤더가 새 라벨·순서를 따른다(design 2026-07-13 §5.2)", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
       "No", "Name", "Type", "Description", "Assignee", "Department", "System",
-      "Duration (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
+      "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
       "URL", "Groups", "Next",
     ]);
   });
@@ -923,7 +923,7 @@ describe("writeExcelSheet", () => {
   // exceljs Workbook 대상 순수 검증(다운로드 Blob/anchor와 분리) — 메타 3행+헤더 1행 다음이 첫 데이터 행(5)
   function buildSheetWithOneRow(over: Partial<Record<string, string>> = {}) {
     const base = {
-      duration: "1.30", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+      duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
       ...over,
     };
     const workbook = new Workbook();
@@ -970,7 +970,7 @@ describe("writeExcelSheet", () => {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00", truncated: false,
       rows: [{
         kind: "node", no: 7, depth: 0, title: "P", type: "process", description: "", assignee: "",
-        department: "", system: "", duration: "", cost_krw: "", cost_usd: "", headcount: "",
+        department: "", system: "", duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "",
         annual_count: "", fte: "", url: "", urlLabel: "", groups: "", next: "",
       }],
     });

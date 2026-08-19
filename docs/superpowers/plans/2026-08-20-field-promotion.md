@@ -17,16 +17,16 @@
 
 ## Phase B — FE 전 표면
 
-- [ ] **B1. 파라미터 원장**: `params.ts` PARAM_FIELDS 7필드·SP_PARAM_FIELDS 5필드·라벨, `duration.ts` 재사용 확인, `api.ts`/그래프 타입(GraphNode·MapOut·SP 타입) 확장. 검증: vitest·tsc.
-- [ ] **B2. CSV 왕복**: `csv-import.ts` NODE_DEFAULTS·mergeNode pick·행 변환(IO는 셀 내 개행)·`dropUneditableParams`(상속 5필드+IO/조건/data_form), CSV export 컬럼. 검증: vitest 왕복 테스트.
-- [ ] **B3. AI 변환**: `buildGraphFromAiProposal`·page.tsx `aiNodeToGraphNode`·`resolveAiParamPatch`. 검증: vitest.
-- [ ] **B4. 노드 인스펙터/에디터**: IO 리스트(add/remove, 개행 join)·data_form 배지·start/end 조건 필드·Parameters 7필드·일괄편집 모달 7필드·SP 노드 read-only 상속 게이트·Σ touch_time 미러. 검증: tsc·vitest·육안(Phase V).
-- [ ] **B5. 맵 표면**: SP 패널/설정/인스펙터 맵 탭 — sp_start/end_condition·gmp 셀렉트(4상태)·sp_touch_time, 값 있을 때만 렌더. Excel export touch_time 컬럼. 검증: tsc·build.
-- [ ] **B-gate**: vitest·tsc·lint·build 전체 그린. → 커밋(작업 단위별).
+- [x] **B1. 파라미터 원장**: `params.ts` PARAM_FIELDS 7필드·SP_PARAM_FIELDS 5필드·라벨, `duration.ts` 재사용 확인, `api.ts`/그래프 타입(GraphNode·MapOut·SP 타입) 확장. 검증: vitest·tsc.
+- [x] **B2. CSV 왕복**: `csv-import.ts` NODE_DEFAULTS·mergeNode pick·행 변환(IO는 셀 내 개행)·`dropUneditableParams`(상속 5필드+IO/조건/data_form), CSV export 컬럼. 검증: vitest 왕복 테스트.
+- [x] **B3. AI 변환**: `buildGraphFromAiProposal`·page.tsx `aiNodeToGraphNode`·`resolveAiParamPatch`. 검증: vitest.
+- [x] **B4. 노드 인스펙터/에디터**: IO 리스트(add/remove, 개행 join)·data_form 배지·start/end 조건 필드·Parameters 7필드·일괄편집 모달 7필드·SP 노드 read-only 상속 게이트·Σ touch_time 미러. 검증: tsc·vitest·육안(Phase V).
+- [x] **B5. 맵 표면**: SP 패널/설정/인스펙터 맵 탭 — sp_start/end_condition·gmp 셀렉트(4상태)·sp_touch_time, 값 있을 때만 렌더. Excel export touch_time 컬럼. 검증: tsc·build.
+- [x] **B-gate**: vitest 659·tsc 0·lint 0(잔여 경고는 기존 pw-smoke-task8)·build OK. BE 재확인 1141·ruff 0.
 
 ## Phase C — FallbackHint
 
-- [ ] **C1. 공용 컴포넌트**: 아이콘(폴백 존재 시)+클릭 팝오버(원문·수정·대표값 적용), body portal·fixed(기존 컨벤션). 배선: 노드 system·맵 gmp/duration/touch_time/sp_system·SP 노드 annual_count(링크 맵 frequency 폴백 힌트). 폴백 수정은 graph PUT/SP PATCH 동승. 검증: vitest(로직)·실브라우저(Phase V).
+- [x] **C1. 공용 컴포넌트**: 아이콘(폴백 존재 시)+클릭 팝오버(원문·수정·대표값 적용), body portal·fixed(기존 컨벤션). 배선: 노드 system·맵 gmp/duration/touch_time/sp_system·SP 노드 annual_count(링크 맵 frequency 폴백 힌트). 폴백 수정은 graph PUT/SP PATCH 동승. 검증: vitest(로직)·실브라우저(Phase V).
 
 ## Phase V — 실브라우저 검증 (QA 문서 주도 — 사용자 지시 2026-08-20)
 

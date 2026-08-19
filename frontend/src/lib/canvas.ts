@@ -27,6 +27,16 @@ export type NodeData = {
   headcount?: string;
   annual_count?: string;
   fte?: string;
+  // 7번째 회당 파라미터 — duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+  touch_time?: string;
+  // 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
+  input?: string;
+  output?: string;
+  start_condition?: string;
+  end_condition?: string;
+  data_form?: string;
+  // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정 (design 2026-08-19 §3)
+  system_fallback?: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
@@ -72,6 +82,12 @@ export type NodeData = {
   spCostKrw?: string | null;
   spCostUsd?: string | null;
   spHeadcount?: string | null;
+  // 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
+  spTouchTime?: string | null;
+  spInput?: string | null;
+  spOutput?: string | null;
+  spStartCondition?: string | null;
+  spEndCondition?: string | null;
   spUrl?: string | null;
   spUrlLabel?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)

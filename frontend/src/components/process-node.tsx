@@ -91,7 +91,7 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 }
 
 const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
+  duration: Clock, touch_time: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
 };
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4, 2026-07-13 §3.2)

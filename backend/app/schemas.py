@@ -1022,6 +1022,8 @@ class SubprocessRefOut(BaseModel):
     output: str | None = None
     start_condition: str | None = None
     end_condition: str | None = None
+    # 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
+    frequency_fallback: str | None = None
     url: str | None = None
     url_label: str | None = None
     sp_description: str | None = None
@@ -1592,6 +1594,13 @@ class AiNodeAttributes(BaseModel):
     headcount: str | None = Field(default=None, max_length=50)
     annual_count: str | None = Field(default=None, max_length=50)
     fte: str | None = Field(default=None, max_length=50)
+    # 7번째 파라미터 + 인터뷰 승격 텍스트 필드 — passthrough. 폴백 컬럼은 AI 표면 제외 (design 2026-08-19 §3)
+    touch_time: str | None = Field(default=None, max_length=50)
+    input: str | None = None
+    output: str | None = None
+    start_condition: str | None = None
+    end_condition: str | None = None
+    data_form: str | None = Field(default=None, max_length=50)
     color: str | None = Field(default=None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
@@ -1600,7 +1609,7 @@ class AiNodeAttributes(BaseModel):
     # _sanitize_word_graph에서 (design 2026-07-26 §4)
     section_anchor: str | None = Field(default=None, max_length=200)
 
-    @field_validator("duration", mode="after")
+    @field_validator("duration", "touch_time", mode="after")
     @classmethod
     def _normalize_duration(cls, value: str | None) -> str | None:
         # None(생략)은 부분 갱신 시맨틱상 "유지"라 정규화 대상이 아니다 — 그대로 보존

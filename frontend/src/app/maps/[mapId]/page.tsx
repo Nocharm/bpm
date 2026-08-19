@@ -38,6 +38,8 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
+import { FallbackHint } from "@/components/fallback-hint";
+import { MultiValueInput } from "@/components/multi-value-input";
 import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
@@ -590,6 +592,13 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       headcount: node.headcount ?? "",
       annual_count: node.annual_count ?? "",
       fte: node.fte ?? "",
+      touch_time: node.touch_time ?? "",
+      input: node.input ?? "",
+      output: node.output ?? "",
+      start_condition: node.start_condition ?? "",
+      end_condition: node.end_condition ?? "",
+      data_form: node.data_form ?? "",
+      system_fallback: node.system_fallback ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       section_anchor: node.section_anchor ?? "",
@@ -670,6 +679,15 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     headcount: num(attr?.headcount),
     annual_count: num(attr?.annual_count),
     fte: num(attr?.fte),
+    // 무효 touch_time도 duration과 동일하게 "" (design 2026-08-19 §2)
+    touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
+    // 인터뷰 승격 텍스트 필드 — passthrough (csv-import buildGraphFromAiProposal과 대칭)
+    input: attr?.input ?? "",
+    output: attr?.output ?? "",
+    start_condition: attr?.start_condition ?? "",
+    end_condition: attr?.end_condition ?? "",
+    data_form: attr?.data_form ?? "",
+    system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -715,6 +733,13 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       headcount: node.data.headcount ?? "",
       annual_count: node.data.annual_count ?? "",
       fte: node.data.fte ?? "",
+      touch_time: node.data.touch_time ?? "",
+      input: node.data.input ?? "",
+      output: node.data.output ?? "",
+      start_condition: node.data.start_condition ?? "",
+      end_condition: node.data.end_condition ?? "",
+      data_form: node.data.data_form ?? "",
+      system_fallback: node.data.system_fallback ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       section_anchor: node.data.section_anchor ?? "",
@@ -1410,6 +1435,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: ref.cost_krw,
             spCostUsd: ref.cost_usd,
             spHeadcount: ref.headcount,
+            spTouchTime: ref.touch_time,
+            spInput: ref.input,
+            spOutput: ref.output,
+            spStartCondition: ref.start_condition,
+            spEndCondition: ref.end_condition,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1421,6 +1451,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: null,
             spCostUsd: null,
             spHeadcount: null,
+            spTouchTime: null,
+            spInput: null,
+            spOutput: null,
+            spStartCondition: null,
+            spEndCondition: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -8515,6 +8550,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                touch_time={node.data.touch_time ?? ""}
                 cost_krw={node.data.cost_krw ?? ""}
                 cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
@@ -8564,6 +8600,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  touch_time: n.data.touch_time ?? "",
                   cost_krw: n.data.cost_krw ?? "",
                   cost_usd: n.data.cost_usd ?? "",
                   headcount: n.data.headcount ?? "",
@@ -8869,6 +8906,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 title={selectedNode.data[key] || undefined}
                                 onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
                               />
+                              {/* 시스템 원문 폴백 힌트 — 라이브러리화 전 검토 원천 (design 2026-08-19 §5.2) */}
+                              {key === "system" && (
+                                <FallbackHint
+                                  dataId="inspector-system-hint"
+                                  fallback={selectedNode.data.system_fallback}
+                                  onSaveFallback={
+                                    readOnly
+                                      ? undefined
+                                      : (text) => updateSelectedData({ system_fallback: text }, true)
+                                  }
+                                  onApply={
+                                    readOnly
+                                      ? undefined
+                                      : () =>
+                                          updateSelectedData(
+                                            { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
+                                            true,
+                                          )
+                                  }
+                                />
+                              )}
                             </div>
                           ))}
                           <UrlLabelField
@@ -9003,12 +9061,102 @@ function MapEditor({ mapId }: { mapId: number }) {
                                       {inheritedParamDisplay(key) || "—"}
                                     </span>
                                   )}
+                                  {/* SP 노드 연간 건수 — 링크 맵 인터뷰 빈도 원문 힌트(읽기 전용, design 2026-08-19 §5.2) */}
+                                  {key === "annual_count" &&
+                                    selectedNode.data.nodeType === "subprocess" && (
+                                      <FallbackHint
+                                        dataId="inspector-annual-count-hint"
+                                        fallback={selectedSpRef?.frequency_fallback}
+                                      />
+                                    )}
                                 </div>
                               ))}
                               {selectedNode.data.nodeType === "subprocess" && (
                                 <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                               )}
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {/* 인터뷰 승격 상세 — IO(개행 복수)·자료 형식·시작/종료 조건.
+                          subprocess는 링크 맵 sp_* 값을 read-only 상속 렌더 (design 2026-08-19 §5.1) */}
+                      {(selectedNode.data.nodeType === "process" ||
+                        selectedNode.data.nodeType === "decision" ||
+                        selectedNode.data.nodeType === "subprocess") && (
+                        <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="text-fine font-semibold text-ink">{t("inspector.details")}</span>
+                            {(selectedNode.data.data_form ?? "") !== "" && (
+                              <span
+                                data-id="inspector-detail-data-form-badge"
+                                className="rounded-full bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
+                                title={t("field.dataForm")}
+                              >
+                                {selectedNode.data.data_form}
+                              </span>
+                            )}
+                          </div>
+                          {selectedNode.data.nodeType === "subprocess" ? (
+                            <>
+                              {([
+                                ["input", "field.input", selectedNode.data.spInput],
+                                ["output", "field.output", selectedNode.data.spOutput],
+                                ["start-condition", "field.startCondition", selectedNode.data.spStartCondition],
+                                ["end-condition", "field.endCondition", selectedNode.data.spEndCondition],
+                              ] as const).map(([id, labelKey, value]) => (
+                                <div
+                                  key={id}
+                                  data-id={`inspector-detail-${id}`}
+                                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
+                                >
+                                  <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                  <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
+                                    {value || "—"}
+                                  </span>
+                                </div>
+                              ))}
+                              <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                            </>
+                          ) : (
+                            <>
+                              <MultiValueInput
+                                key={`${selectedNode.id}-input`}
+                                dataId="inspector-detail-input"
+                                label={t("field.input")}
+                                value={selectedNode.data.input ?? ""}
+                                readOnly={readOnly}
+                                onCommit={(joined) => updateSelectedData({ input: joined }, true)}
+                              />
+                              <MultiValueInput
+                                key={`${selectedNode.id}-output`}
+                                dataId="inspector-detail-output"
+                                label={t("field.output")}
+                                value={selectedNode.data.output ?? ""}
+                                readOnly={readOnly}
+                                onCommit={(joined) => updateSelectedData({ output: joined }, true)}
+                              />
+                              {([
+                                ["data_form", "field.dataForm", 50],
+                                ["start_condition", "field.startCondition", undefined],
+                                ["end_condition", "field.endCondition", undefined],
+                              ] as const).map(([key, labelKey, maxLength]) => (
+                                <div
+                                  key={key}
+                                  className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                                >
+                                  <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                  <input
+                                    data-id={`inspector-detail-${key.replace(/_/g, "-")}`}
+                                    className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                    value={selectedNode.data[key] ?? ""}
+                                    disabled={readOnly}
+                                    maxLength={maxLength}
+                                    title={selectedNode.data[key] || undefined}
+                                    onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
+                                  />
+                                </div>
+                              ))}
+                            </>
                           )}
                         </div>
                       )}

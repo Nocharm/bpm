@@ -18,8 +18,9 @@ export interface ExcelNodeRow {
   assignee: string;
   department: string;
   system: string;
-  // 회당 파라미터 6종 — 표시 순서는 lib/params.ts PARAM_FIELDS와 동일
+  // 회당 파라미터 7종 — 표시 순서는 lib/params.ts PARAM_FIELDS와 동일
   duration: string;
+  touch_time: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -54,12 +55,13 @@ export const EXCEL_MAX_ROWS = 2000;
  * 링크 맵의 sp_* 라이브 참조(g.subprocess_refs)에서 가져온다(캔버스 인스펙터·Σ 합산과 동일 소스,
  * design 2026-07-13 §3.1). annual_count·fte는 부모 맥락 값이라 노드 행 그대로 별도 취급.
  */
-export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "cost_krw" | "cost_usd" | "headcount"> {
+export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "touch_time" | "cost_krw" | "cost_usd" | "headcount"> {
   if (node.node_type === "subprocess" && node.linked_map_id !== null) {
     return getInheritedParams(g.subprocess_refs?.[node.linked_map_id]);
   }
   return {
     duration: node.duration,
+    touch_time: node.touch_time ?? "",
     cost_krw: node.cost_krw ?? "",
     cost_usd: node.cost_usd ?? "",
     headcount: node.headcount ?? "",
@@ -255,6 +257,7 @@ export const COLUMNS = [
   { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Department", width: 18 },
   { header: "System", width: 14 },
   { header: "Duration (h)", width: 12, numFmt: "0.00" }, // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
+  { header: "Touch time (h)", width: 13, numFmt: "0.00" },
   { header: "Cost (KRW)", width: 14, numFmt: "#,##0" },
   { header: "Cost (USD)", width: 14, numFmt: "#,##0.00" },
   { header: "Headcount", width: 11, numFmt: "0.00" },
@@ -297,7 +300,7 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
       row.no, row.title, row.type, row.description, row.assignee, row.department, row.system,
-      num(row.duration), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
+      num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);
     r.getCell(2).alignment = { indent: row.depth * 2 };

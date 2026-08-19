@@ -362,6 +362,7 @@ export default function InboxPage() {
         assignee: spModal.detail.sp_assignee ?? "",
         system: spModal.detail.sp_system ?? "",
         duration: spModal.detail.sp_duration ?? "",
+        touch_time: spModal.detail.sp_touch_time ?? "",
         cost_krw: spModal.detail.sp_cost_krw ?? "",
         cost_usd: spModal.detail.sp_cost_usd ?? "",
         headcount: spModal.detail.sp_headcount ?? "",

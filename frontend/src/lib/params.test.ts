@@ -15,9 +15,10 @@ import {
 } from "./params";
 
 describe("PARAM_FIELDS", () => {
-  it("표시 순서는 소요시간 → 비용(원/달러) → 인원 → 연간 건수 → FTE", () => {
+  it("표시 순서는 소요시간 → 실작업시간 → 비용(원/달러) → 인원 → 연간 건수 → FTE", () => {
     expect([...PARAM_FIELDS]).toEqual([
       "duration",
+      "touch_time",
       "cost_krw",
       "cost_usd",
       "headcount",
@@ -42,8 +43,8 @@ describe("getEditableParamFields", () => {
     expect(getEditableParamFields("end")).toHaveLength(0);
   });
 
-  it("SP 지정 파라미터는 3종(비용 2필드 포함)", () => {
-    expect([...SP_PARAM_FIELDS]).toEqual(["duration", "cost_krw", "cost_usd", "headcount"]);
+  it("SP 지정 파라미터는 5종(비용 2필드·touch_time 포함)", () => {
+    expect([...SP_PARAM_FIELDS]).toEqual(["duration", "touch_time", "cost_krw", "cost_usd", "headcount"]);
   });
 });
 
@@ -101,19 +102,21 @@ describe("getInheritedParams", () => {
     expect(
       getInheritedParams({
         designated: true,
+        touch_time: null,
         duration: "1.30",
         cost_krw: "1000",
         cost_usd: null,
         headcount: "2",
       }),
-    ).toEqual({ duration: "1.30", cost_krw: "1000", cost_usd: "", headcount: "2" });
+    ).toEqual({ duration: "1.30", touch_time: "", cost_krw: "1000", cost_usd: "", headcount: "2" });
   });
 
   it("미지정·참조 없음은 전부 빈 값 — 표시는 호출부가 —로", () => {
-    const empty = { duration: "", cost_krw: "", cost_usd: "", headcount: "" };
+    const empty = { duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "" };
     expect(
       getInheritedParams({
         designated: false,
+        touch_time: "9",
         duration: "9",
         cost_krw: "9",
         cost_usd: "9",
@@ -320,5 +323,20 @@ describe("coerceAiNewNodeType", () => {
     expect(coerceAiNewNodeType("decision")).toBe("decision");
     expect(coerceAiNewNodeType("start")).toBe("start");
     expect(coerceAiNewNodeType("end")).toBe("end");
+  });
+});
+
+describe("resolveAiParamPatch — touch_time (design 2026-08-19 §2)", () => {
+  it("duration과 동일 정규화 — 75분 이월", () => {
+    expect(resolveAiParamPatch("process", { touch_time: "1.75" })).toEqual({ touch_time: "2.15" });
+  });
+
+  it("무효 에코는 키 생략(기존값 유지), 빈 문자열은 명시적 지움", () => {
+    expect(resolveAiParamPatch("process", { touch_time: "한시간쯤" })).toEqual({});
+    expect(resolveAiParamPatch("process", { touch_time: "" })).toEqual({ touch_time: "" });
+  });
+
+  it("SP 노드는 상속 필드라 드롭", () => {
+    expect(resolveAiParamPatch("subprocess", { touch_time: "1.30" })).toEqual({});
   });
 });

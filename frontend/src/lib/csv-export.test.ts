@@ -60,7 +60,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv: exported } = buildCsvFromGraph(graph);
     const bCells = exported.split("\r\n").find((line) => line.startsWith("B,"))?.split(",");
     expect(bCells?.[0]).toBe("B"); // Name
-    expect(bCells?.[13]).toBe("C:approved;D:rejected"); // Next (14번째 컬럼)
+    expect(bCells?.[19]).toBe("C:approved;D:rejected"); // Next (20번째 컬럼)
   });
 
   it("따옴표·쉼표·줄바꿈 셀 이스케이프 — export → re-import에서 원문 보존", () => {
@@ -113,7 +113,7 @@ describe("buildCsvFromGraph — round trip", () => {
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[0]).toBe("A"); // Name
-    expect(aCells?.[13]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
+    expect(aCells?.[19]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
   });
 
   it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
@@ -130,7 +130,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV — dropped']);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[13]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
+    expect(aCells?.[19]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
   });
 
   it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
@@ -150,7 +150,7 @@ describe("buildCsvFromGraph — round trip", () => {
       'Edge label "ok;fine" (from "A") contains ";" — re-import will misparse this reference',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[13]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
+    expect(aCells?.[19]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
   });
 
   it("제목 중복 노드는 그대로 내보내되 경고", () => {

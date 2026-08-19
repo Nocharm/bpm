@@ -5,6 +5,7 @@ import type { MessageKey } from "./i18n-messages";
 
 export const PARAM_FIELDS = [
   "duration",
+  "touch_time",
   "cost_krw",
   "cost_usd",
   "headcount",
@@ -13,8 +14,8 @@ export const PARAM_FIELDS = [
 ] as const;
 export type ParamField = (typeof PARAM_FIELDS)[number];
 
-/** SP 지정값(하위 맵이 대표로 노출)은 4종 — 연간 건수·FTE는 부모 맥락 값이라 제외 */
-export const SP_PARAM_FIELDS = ["duration", "cost_krw", "cost_usd", "headcount"] as const;
+/** SP 지정값(하위 맵이 대표로 노출)은 5종 — 연간 건수·FTE는 부모 맥락 값이라 제외 (touch_time: design 2026-08-19 §2) */
+export const SP_PARAM_FIELDS = ["duration", "touch_time", "cost_krw", "cost_usd", "headcount"] as const;
 export type SpParamField = (typeof SP_PARAM_FIELDS)[number];
 
 /** 서브프로세스 노드에서 사람이 직접 입력하는 필드 — 나머지 4개는 링크 맵 지정값(읽기전용) */
@@ -24,6 +25,7 @@ export const COST_FIELDS = ["cost_krw", "cost_usd"] as const;
 
 export const PARAM_LABEL_KEY: Record<ParamField, MessageKey> = {
   duration: "field.duration",
+  touch_time: "field.touchTime",
   cost_krw: "field.costKrw",
   cost_usd: "field.costUsd",
   headcount: "field.headcount",
@@ -56,7 +58,7 @@ export function isCostFieldDisabled(field: ParamField, costKrw: string, costUsd:
  */
 export function formatParamValue(field: ParamField, raw: string | null | undefined): string {
   const value = (raw ?? "").trim();
-  if (field === "duration") return formatDurationHm(value);
+  if (field === "duration" || field === "touch_time") return formatDurationHm(value);
   if (field === "cost_krw") {
     const amount = formatThousands(value);
     return amount ? `₩${amount}` : "";
@@ -148,9 +150,10 @@ function clearCounterpartCurrency(
   return patch;
 }
 
-/** AI ops set_attr가 보내는 부분 갱신 후보(파라미터 6종만) — 나머지 AiNodeAttributes 필드는 무관. */
+/** AI ops set_attr가 보내는 부분 갱신 후보(파라미터 7종만) — 나머지 AiNodeAttributes 필드는 무관. */
 export interface AiParamPatchInput {
   duration?: string | null;
+  touch_time?: string | null;
   cost_krw?: string | null;
   cost_usd?: string | null;
   headcount?: string | null;
@@ -180,7 +183,11 @@ export function resolveAiParamPatch(
     const normalized = normalizeDuration(attr.duration);
     if (normalized !== null) touched.duration = normalized;
   }
-  const applyNumeric = (field: Exclude<ParamField, "duration">, raw: string | null | undefined) => {
+  if (attr.touch_time != null) {
+    const normalized = normalizeDuration(attr.touch_time);  // duration과 동일 H.MM 계약
+    if (normalized !== null) touched.touch_time = normalized;
+  }
+  const applyNumeric = (field: Exclude<ParamField, "duration" | "touch_time">, raw: string | null | undefined) => {
     if (raw == null) return;
     const normalized = normalizeNumericParam(stripThousands(raw));
     if (normalized !== null) touched[field] = normalized;
@@ -210,13 +217,14 @@ export function coerceAiNewNodeType(nodeType: string): string {
 export interface InheritedParamSource {
   designated: boolean;
   duration: string | null;
+  touch_time: string | null;
   cost_krw: string | null;
   cost_usd: string | null;
   headcount: string | null;
 }
 
 /**
- * 링크 맵 지정값 → 서브프로세스 노드의 읽기전용 파라미터 4종. 미지정·참조 미수신이면 전부 "".
+ * 링크 맵 지정값 → 서브프로세스 노드의 읽기전용 파라미터 5종. 미지정·참조 미수신이면 전부 "".
  * 노드 행에 저장하지 않는 라이브 참조라, 부모 맵은 이 값을 편집·저장할 수 없다 (design 2026-07-13 §3.1).
  */
 export function getInheritedParams(
@@ -225,6 +233,7 @@ export function getInheritedParams(
   const pick = (value: string | null): string => (ref?.designated ? value ?? "" : "");
   return {
     duration: pick(ref?.duration ?? null),
+    touch_time: pick(ref?.touch_time ?? null),
     cost_krw: pick(ref?.cost_krw ?? null),
     cost_usd: pick(ref?.cost_usd ?? null),
     headcount: pick(ref?.headcount ?? null),
