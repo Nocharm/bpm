@@ -1,7 +1,8 @@
-"""Keycloak OIDC 인증 — Bearer JWT 검증 (docs/spec.md §4).
+"""요청 사용자 인증 — 모드별 토큰 검증 (docs/spec.md §4).
 
-settings.auth_enabled=False(로컬)면 검증을 건너뛰고 dev 사용자를 반환한다.
-True(서버)면 realm JWKS로 RS256 서명을 검증한다.
+settings.resolved_auth_mode()로 분기한다: dev는 X-Dev-User(없으면 dev_user)를 그대로
+신뢰, ldap은 앱이 서명한 HS256 세션 토큰(app.tokens)을 검증, keycloak은 realm JWKS로
+RS256 서명을 검증한다(ldap·keycloak 모두 Bearer 토큰 필수, X-Dev-User는 무시).
 """
 
 from functools import lru_cache
