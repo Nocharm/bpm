@@ -46,6 +46,8 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { formatDurationHm } from "@/lib/duration";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
@@ -877,22 +879,48 @@ export function MapDetailCard({
         )}
       </div>
 
-      {/* 지정 I/O — sp_input/sp_output 중 하나라도 있으면 노출 (Phase 2) */}
-      {(detail.sp_input || detail.sp_output) && (
+      {/* 지정 I/O + 인터뷰 승격 필드 — 값 있는 행만 노출(비인터뷰 맵 노이즈 없음, design 2026-08-19 §5.1) */}
+      {(detail.sp_input || detail.sp_output || detail.sp_start_condition || detail.sp_end_condition ||
+        detail.sp_gmp || detail.sp_touch_time) && (
         <div
           data-id="map-detail-io"
           className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
         >
+          {detail.sp_gmp && formatGmp(detail.sp_gmp) && (
+            <p data-id="map-detail-gmp">
+              <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(detail.sp_gmp)}>
+                {formatGmp(detail.sp_gmp)}
+              </span>
+            </p>
+          )}
           {detail.sp_input && (
-            <p>
+            <p className="whitespace-pre-wrap">
               <span className="text-ink-tertiary">{t("home.ioInput")}: </span>
               {detail.sp_input}
             </p>
           )}
           {detail.sp_output && (
-            <p>
+            <p className="whitespace-pre-wrap">
               <span className="text-ink-tertiary">{t("home.ioOutput")}: </span>
               {detail.sp_output}
+            </p>
+          )}
+          {detail.sp_start_condition && (
+            <p data-id="map-detail-start-condition">
+              <span className="text-ink-tertiary">{t("field.startCondition")}: </span>
+              {detail.sp_start_condition}
+            </p>
+          )}
+          {detail.sp_end_condition && (
+            <p data-id="map-detail-end-condition">
+              <span className="text-ink-tertiary">{t("field.endCondition")}: </span>
+              {detail.sp_end_condition}
+            </p>
+          )}
+          {detail.sp_touch_time && formatDurationHm(detail.sp_touch_time) && (
+            <p data-id="map-detail-touch-time">
+              <span className="text-ink-tertiary">{t("field.touchTime")}: </span>
+              {formatDurationHm(detail.sp_touch_time)}
             </p>
           )}
         </div>

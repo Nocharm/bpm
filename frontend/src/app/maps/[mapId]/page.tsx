@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -38,6 +38,9 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
+import { FallbackHint } from "@/components/fallback-hint";
+import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
+import { NodeDetailsFields } from "@/components/node-details-fields";
 import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
@@ -350,6 +353,7 @@ const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
   system: Server,
   url: Link,
   params: SlidersHorizontal,
+  gmp: ShieldCheck,
 };
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -590,6 +594,14 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       headcount: node.headcount ?? "",
       annual_count: node.annual_count ?? "",
       fte: node.fte ?? "",
+      touch_time: node.touch_time ?? "",
+      input: node.input ?? "",
+      output: node.output ?? "",
+      start_condition: node.start_condition ?? "",
+      end_condition: node.end_condition ?? "",
+      data_form: node.data_form ?? "",
+      system_fallback: node.system_fallback ?? "",
+      gmp: node.gmp ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       section_anchor: node.section_anchor ?? "",
@@ -670,6 +682,16 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     headcount: num(attr?.headcount),
     annual_count: num(attr?.annual_count),
     fte: num(attr?.fte),
+    // 무효 touch_time도 duration과 동일하게 "" (design 2026-08-19 §2)
+    touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
+    // 인터뷰 승격 텍스트 필드 — passthrough (csv-import buildGraphFromAiProposal과 대칭)
+    input: attr?.input ?? "",
+    output: attr?.output ?? "",
+    start_condition: attr?.start_condition ?? "",
+    end_condition: attr?.end_condition ?? "",
+    data_form: attr?.data_form ?? "",
+    system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
+    gmp: "",  // 검토값 — AI 표면 제외 (design 2026-08-20)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -715,6 +737,14 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       headcount: node.data.headcount ?? "",
       annual_count: node.data.annual_count ?? "",
       fte: node.data.fte ?? "",
+      touch_time: node.data.touch_time ?? "",
+      input: node.data.input ?? "",
+      output: node.data.output ?? "",
+      start_condition: node.data.start_condition ?? "",
+      end_condition: node.data.end_condition ?? "",
+      data_form: node.data.data_form ?? "",
+      system_fallback: node.data.system_fallback ?? "",
+      gmp: node.data.gmp ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       section_anchor: node.data.section_anchor ?? "",
@@ -1410,6 +1440,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: ref.cost_krw,
             spCostUsd: ref.cost_usd,
             spHeadcount: ref.headcount,
+            spTouchTime: ref.touch_time,
+            spInput: ref.input,
+            spOutput: ref.output,
+            spStartCondition: ref.start_condition,
+            spEndCondition: ref.end_condition,
+            spGmp: ref.gmp,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1421,6 +1457,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: null,
             spCostUsd: null,
             spHeadcount: null,
+            spTouchTime: null,
+            spInput: null,
+            spOutput: null,
+            spStartCondition: null,
+            spEndCondition: null,
+            spGmp: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -6588,6 +6630,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     startRenameRef.current = startRename;
   }, [startRename]);
+  // GMP 필 클릭 → 분류 피커(클릭 좌표 앵커). 편집 모드 전용 — readOnly면 컨텍스트에 null 전달
+  const [gmpPicker, setGmpPicker] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  // setState만 부르는 핸들러는 useCallback 금지 — 컴파일러가 setter를 dep으로 추론해
+  // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
+  const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
+  const onEditGmpAction = readOnly ? null : openGmpPicker;
+  // 분류 확정 안내 — 분류가 노드 색을 자동 변경하므로(일반 노드) 마우스 지점에 알리고
+  // "이전 분류로"/"색만" 두 단계 되돌리기를 제공 (사용자 결정 2026-08-20)
+  const [gmpNotice, setGmpNotice] = useState<{
+    nodeId: string;
+    prevGmp: string;
+    prevColor: string;
+    nextGmp: string;
+    nextColor: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6600,6 +6659,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ctrlDragIds: ctrlDragActive
         ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
         : EMPTY_CTRL_DRAG_IDS,
+      onEditGmp: onEditGmpAction,
     }),
     [
       toggleInlineExpand,
@@ -6611,6 +6671,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       cancelRename,
       ctrlDragActive,
       ctrlDragGhosts,
+      onEditGmpAction,
     ],
   );
 
@@ -8515,6 +8576,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                touch_time={node.data.touch_time ?? ""}
+                input={node.data.input ?? ""}
+                output={node.data.output ?? ""}
+                data_form={node.data.data_form ?? ""}
+                start_condition={node.data.start_condition ?? ""}
+                end_condition={node.data.end_condition ?? ""}
                 cost_krw={node.data.cost_krw ?? ""}
                 cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
@@ -8564,6 +8631,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  touch_time: n.data.touch_time ?? "",
                   cost_krw: n.data.cost_krw ?? "",
                   cost_usd: n.data.cost_usd ?? "",
                   headcount: n.data.headcount ?? "",
@@ -8869,6 +8937,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 title={selectedNode.data[key] || undefined}
                                 onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
                               />
+                              {/* 시스템 원문 폴백 힌트 — 라이브러리화 전 검토 원천 (design 2026-08-19 §5.2) */}
+                              {key === "system" && (
+                                <FallbackHint
+                                  dataId="inspector-system-hint"
+                                  fallback={selectedNode.data.system_fallback}
+                                  onSaveFallback={
+                                    readOnly
+                                      ? undefined
+                                      : (text) => updateSelectedData({ system_fallback: text }, true)
+                                  }
+                                  onApply={
+                                    readOnly
+                                      ? undefined
+                                      : () =>
+                                          updateSelectedData(
+                                            { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
+                                            true,
+                                          )
+                                  }
+                                />
+                              )}
                             </div>
                           ))}
                           <UrlLabelField
@@ -9003,12 +9092,64 @@ function MapEditor({ mapId }: { mapId: number }) {
                                       {inheritedParamDisplay(key) || "—"}
                                     </span>
                                   )}
+                                  {/* SP 노드 연간 건수 — 링크 맵 인터뷰 빈도 원문 힌트(읽기 전용, design 2026-08-19 §5.2) */}
+                                  {key === "annual_count" &&
+                                    selectedNode.data.nodeType === "subprocess" && (
+                                      <FallbackHint
+                                        dataId="inspector-annual-count-hint"
+                                        fallback={selectedSpRef?.frequency_fallback}
+                                      />
+                                    )}
                                 </div>
                               ))}
                               {selectedNode.data.nodeType === "subprocess" && (
                                 <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                               )}
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {/* 인터뷰 승격 상세 — IO(개행 복수)·자료 형식·시작/종료 조건.
+                          subprocess는 링크 맵 sp_* 값을 read-only 상속 렌더 (design 2026-08-19 §5.1) */}
+                      {(selectedNode.data.nodeType === "process" ||
+                        selectedNode.data.nodeType === "decision" ||
+                        selectedNode.data.nodeType === "subprocess") && (
+                        <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
+                          <div className="mb-1 text-fine font-semibold text-ink">{t("inspector.details")}</div>
+                          {selectedNode.data.nodeType === "subprocess" ? (
+                            <>
+                              {/* 링크 맵 라이브 참조 — selectedSpRef가 소스(위 지정 어트리뷰트 카드와 동일 규약) */}
+                              {([
+                                ["input", "field.input", selectedSpRef?.input],
+                                ["output", "field.output", selectedSpRef?.output],
+                                ["start-condition", "field.startCondition", selectedSpRef?.start_condition],
+                                ["end-condition", "field.endCondition", selectedSpRef?.end_condition],
+                              ] as const).map(([id, labelKey, value]) => (
+                                <div
+                                  key={id}
+                                  data-id={`inspector-detail-${id}`}
+                                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
+                                >
+                                  <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                  <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
+                                    {value || "—"}
+                                  </span>
+                                </div>
+                              ))}
+                              <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                            </>
+                          ) : (
+                            <NodeDetailsFields
+                              idPrefix="inspector-detail"
+                              nodeKey={selectedNode.id}
+                              input={selectedNode.data.input ?? ""}
+                              output={selectedNode.data.output ?? ""}
+                              dataForm={selectedNode.data.data_form ?? ""}
+                              startCondition={selectedNode.data.start_condition ?? ""}
+                              endCondition={selectedNode.data.end_condition ?? ""}
+                              readOnly={readOnly}
+                              onPatch={(patch) => updateSelectedData(patch, true)}
+                            />
                           )}
                         </div>
                       )}
@@ -9371,7 +9512,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                                       ? "field.system"
                                       : field === "url"
                                         ? "field.url"
-                                        : "field.params";
+                                        : field === "gmp"
+                                          ? "field.gmp"
+                                          : "field.params";
                               return (
                                 <div
                                   key={field}
@@ -10196,6 +10339,146 @@ function MapEditor({ mapId }: { mapId: number }) {
       />
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
+      {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
+      {/* GMP 변경 안내 — 닫기(X)가 클릭한 마우스 지점, 분류·노드 색 before→after를 명시 (design 2026-08-20) */}
+      {gmpNotice !== null && (
+        <div
+          data-id="node-gmp-notice"
+          className="fixed z-[1360] w-[300px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(gmpNotice.x - 300 + 24, window.innerWidth - 308)),
+            top: Math.max(8, gmpNotice.y - 24),
+          }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-caption-strong text-ink">
+              <ShieldCheck size={14} strokeWidth={1.5} className="text-accent" />
+              {t("gmpNotice.title")}
+            </div>
+            <button
+              type="button"
+              data-id="node-gmp-notice-close"
+              aria-label="Dismiss"
+              className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt"
+              onClick={() => setGmpNotice(null)}
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-caption text-ink-secondary">
+            <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
+            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.prevGmp) ?? undefined}>
+              {formatGmp(gmpNotice.prevGmp) || t("gmpNotice.unset")}
+            </span>
+            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.nextGmp) ?? undefined}>
+              {formatGmp(gmpNotice.nextGmp) || t("gmpNotice.unset")}
+            </span>
+          </div>
+          {gmpNotice.nextColor !== gmpNotice.prevColor && (
+            <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-secondary">
+              <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
+              <span
+                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
+                style={
+                  gmpNotice.prevColor
+                    ? { borderColor: gmpNotice.prevColor, background: `color-mix(in srgb, ${gmpNotice.prevColor} 18%, white)` }
+                    : undefined
+                }
+              />
+              <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+              <span
+                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
+                style={{ borderColor: gmpNotice.nextColor, background: `color-mix(in srgb, ${gmpNotice.nextColor} 18%, white)` }}
+              />
+            </div>
+          )}
+          <div className="mt-2.5 flex justify-end gap-1.5">
+            {gmpNotice.nextColor !== gmpNotice.prevColor && (
+              <button
+                type="button"
+                data-id="node-gmp-notice-revert-color"
+                className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={() => {
+                  patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
+                  setGmpNotice(null);
+                }}
+              >
+                {t("gmpNotice.revertColor")}
+              </button>
+            )}
+            <button
+              type="button"
+              data-id="node-gmp-notice-revert-all"
+              className="rounded-sm px-2 py-0.5 text-caption text-accent hover:bg-accent-tint"
+              onClick={() => {
+                patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
+                setGmpNotice(null);
+              }}
+            >
+              {t("gmpNotice.revertAll")}
+            </button>
+          </div>
+        </div>
+      )}
+      {gmpPicker !== null && (
+        <>
+          <div className="fixed inset-0 z-[1340]" onClick={() => setGmpPicker(null)} />
+          <div
+            data-id="node-gmp-picker"
+            className="fixed z-[1350] w-[180px] rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+            style={{
+              left: Math.min(gmpPicker.x, window.innerWidth - 188),
+              top: Math.min(gmpPicker.y + 6, window.innerHeight - 170),
+            }}
+          >
+            {[{ value: "", label: t("perm.processFields.gmpUnset") }, ...GMP_OPTIONS].map((option) => (
+              <button
+                key={option.value || "unset"}
+                type="button"
+                data-id={`node-gmp-picker-${option.value || "unset"}`}
+                className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
+                onClick={(event) => {
+                  const target = nodes.find((n) => n.id === gmpPicker.nodeId);
+                  const prevGmp = target?.data.gmp ?? "";
+                  const prevColor = target?.data.color ?? "";
+                  // 분류가 노드 색을 자동 확정 — 미분류 선택은 색을 건드리지 않는다
+                  const nextColor = option.value
+                    ? GMP_NODE_COLORS[option.value as GmpValue]
+                    : prevColor;
+                  patchNode(
+                    gmpPicker.nodeId,
+                    option.value ? { gmp: option.value, color: nextColor } : { gmp: option.value },
+                    true,
+                  );
+                  setGmpPicker(null);
+                  if (option.value !== prevGmp) {
+                    setGmpNotice({
+                      nodeId: gmpPicker.nodeId,
+                      prevGmp,
+                      prevColor,
+                      nextGmp: option.value,
+                      nextColor,
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }
+                }}
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full border border-hairline"
+                  style={
+                    option.value
+                      ? { backgroundColor: `var(${GMP_OPTIONS.find((o) => o.value === option.value)?.colorVar})` }
+                      : undefined
+                  }
+                />
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </NodeActionsContext.Provider>
   );
 }

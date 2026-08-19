@@ -22,6 +22,7 @@ export interface DesignationForm {
   assignee: string;
   system: string;
   duration: string;
+  touch_time: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -112,6 +113,7 @@ export function SubprocessDesignationModal({
         assignee: form.assignee,
         system: form.system,
         duration: form.duration,
+        touch_time: form.touch_time,
         cost_krw: form.cost_krw,
         cost_usd: form.cost_usd,
         headcount: form.headcount,

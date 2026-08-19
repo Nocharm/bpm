@@ -65,8 +65,9 @@ try {
   const dryCreated = await chip(page, "Created", 4).waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
   check("dry-run summary shows Created 4", dryCreated);
-  const dryNotes = await chip(page, "Notes", 6).isVisible().catch(() => false);
-  check("dry-run summary shows Notes 6", dryNotes);
+  // 승격(2026-08-19) 후 openItems·tasks[].note도 노트로 보존 — 8건(예외2+사이드3+open1+task1+유틸1)
+  const dryNotes = await chip(page, "Notes", 8).isVisible().catch(() => false);
+  check("dry-run summary shows Notes 8", dryNotes);
   await page.locator('[data-id="interview-file-toggle-0"]').click();
   const noIssues = await page.locator('[data-id="interview-import-file-reports"]')
     .getByText("No issues").first().waitFor({ state: "visible", timeout: 5000 })
@@ -96,14 +97,16 @@ try {
   await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" })
     .first().click();
   await page.waitForSelector('[data-id="map-detail-description"]:visible', { timeout: 10000 });
+  // 승격(2026-08-19) 후 [Interview]는 Owner role만 — Start condition 등은 고유 필드로 이동
   const descText = (await page.locator('[data-id="map-detail-description"]:visible').first().textContent()) ?? "";
-  check("map description carries [Interview] block", descText.includes("[Interview]")
-    && descText.includes("Start condition"), descText.slice(0, 60));
+  check("map description carries [Interview] Owner role only", descText.includes("[Interview]")
+    && descText.includes("Owner role") && !descText.includes("Start condition"), descText.slice(0, 60));
   const notesVisible = await page.locator('[data-id="map-notes-section"]:visible').first()
     .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
   check("map notes section visible", notesVisible);
   const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
-  check("notes rows include exceptions + matched side notes", noteRows === 3, `rows=${noteRows}`);
+  // 승격(2026-08-19) 후 tasks[].note도 맵 노트로 — 예외2+매칭 사이드1+task_note1
+  check("notes rows include exceptions + side notes + task note", noteRows === 4, `rows=${noteRows}`);
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
   check("exception title rendered", notesText.includes("현장 수기 기록"));
   check("exception kind badge rendered", notesText.includes("exception"));

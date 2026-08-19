@@ -48,7 +48,7 @@ function sumDecimal(values: string[]): string {
  * 기여값 0개면 "" — 입력을 비워두는 것과 0을 구분한다.
  */
 export function sumParamField(graph: Graph, field: SpParamField): string {
-  if (field === "duration") {
+  if (field === "duration" || field === "touch_time") {  // touch_time은 duration Σ 규칙 미러 (design 2026-08-19 §2)
     let totalMinutes = 0;
     let contributed = 0;
     for (const raw of collectValues(graph, field, true)) {
@@ -81,7 +81,7 @@ export function sumParamField(graph: Graph, field: SpParamField): string {
  */
 export function formatSumPreview(field: SpParamField, raw: string): string | undefined {
   if (raw === "") return undefined;
-  if (field === "duration") return formatDurationHm(raw) || undefined;
+  if (field === "duration" || field === "touch_time") return formatDurationHm(raw) || undefined;
   if (field === "cost_krw" || field === "cost_usd") return formatThousands(raw) || undefined;
   return raw;
 }

@@ -153,7 +153,7 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
 
-  it("14컬럼 헤더를 파싱한다", () => {
+  it("구 14컬럼 헤더(부분집합)도 계속 파싱한다 — 헤더는 이름 매핑", () => {
     const csv = [
       "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
       "검토,,,,,1.30,1250000,,2,1200,0.8,,,",
@@ -232,7 +232,7 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Output,Data_Form,Start_Condition,End_Condition,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
@@ -1073,5 +1073,64 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     const node = outcome.graph?.nodes.find((n) => n.id === "n1");
     expect(node?.node_type).toBe("section");
     expect(node?.section_anchor).toBe("_Toc1");
+  });
+});
+
+describe("승격 필드 컬럼 (design 2026-08-19)", () => {
+  const H = "Name,Duration,Touch_Time,Input,Output,Data_Form,Start_Condition,End_Condition";
+
+  it("신규 컬럼이 노드 필드로 착지하고 touch_time은 H.MM 정규화된다", () => {
+    const csv = [
+      H,
+      '단계,1.30,1.75,"작업지시\n표준기 목록",측정 범위,structured,주기 도래,목록 확정',
+    ].join("\n");
+    const o = buildGraphFromCsv(csv);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.title === "단계")!;
+    expect(node.touch_time).toBe("2.15"); // 75분 이월
+    expect(node.input).toBe("작업지시\n표준기 목록"); // 셀 내 개행 = 복수 항목
+    expect(node.output).toBe("측정 범위");
+    expect(node.data_form).toBe("structured");
+    expect(node.start_condition).toBe("주기 도래");
+    expect(node.end_condition).toBe("목록 확정");
+  });
+
+  it("무효 touch_time은 행 에러", () => {
+    const o = buildGraphFromCsv(`${H}\n단계,,한시간쯤,,,,,\n`);
+    expect(o.errors.some((e) => e.message.includes("Touch time"))).toBe(true);
+  });
+
+  it("머지에서 빈 셀은 승격 필드 기존값을 지키고 system_fallback은 항상 보존", () => {
+    const base = baseGraph();
+    base.nodes[1] = {
+      ...base.nodes[1],
+      touch_time: "0.30", input: "기존 입력", output: "기존 산출", data_form: "document",
+      start_condition: "기존 시작", end_condition: "기존 종료", system_fallback: "EAM(원문)",
+    };
+    const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`, base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.touch_time).toBe("0.30");
+    expect(node.input).toBe("기존 입력");
+    expect(node.output).toBe("기존 산출");
+    expect(node.data_form).toBe("document");
+    expect(node.start_condition).toBe("기존 시작");
+    expect(node.end_condition).toBe("기존 종료");
+    expect(node.system_fallback).toBe("EAM(원문)"); // CSV 표면 제외 — 병합이 무조건 보존
+  });
+
+  it("서브프로세스 매칭 행은 IO/조건/형식·touch_time 후보를 드롭하고 경고한다 (링크 맵 상속 보호)", () => {
+    const base = baseGraph();
+    base.nodes[1] = {
+      ...base.nodes[1], node_type: "subprocess", linked_map_id: 7,
+      input: "링크 입력", touch_time: "",
+    };
+    const csv = [H, "Review request,,0.30,새 입력,새 산출,tacit,새 시작,새 종료"].join("\n");
+    const o = mergeOf(csv, base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.input).toBe("링크 입력");
+    expect(node.output).toBe("");
+    expect(node.touch_time).toBe("");
+    expect(o.warnings.some((w) => w.message.includes("come from the linked map"))).toBe(true);
   });
 });

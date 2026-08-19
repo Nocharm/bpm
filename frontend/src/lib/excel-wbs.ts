@@ -17,6 +17,7 @@ export interface WbsNodeRow {
   department: string;
   system: string;
   duration: string;
+  touch_time: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -277,7 +278,7 @@ export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsMo
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
       row.no, ...levelCells, row.title, row.type, row.description, row.assignee, row.department, row.system,
-      num(row.duration), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
+      num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);
     for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };

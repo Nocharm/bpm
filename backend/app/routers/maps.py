@@ -40,6 +40,7 @@ from app.schemas import (
     OwningDepartmentIn,
     RenameRequestIn,
     SpDesignationRequestIn,
+    ProcessFieldsIn,
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
@@ -1045,6 +1046,7 @@ async def designate_subprocess(
     found_map.sp_cost_krw = payload.cost_krw
     found_map.sp_cost_usd = payload.cost_usd
     found_map.sp_headcount = payload.headcount
+    found_map.sp_touch_time = payload.touch_time or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     found_map.sp_description = payload.description or None
@@ -1099,6 +1101,30 @@ async def _apply_pending_sp_designation(
         map_id=map_id,
         message=f"Your subprocess registration request for '{map_name}' was approved",
     )
+
+
+@router.patch(
+    "/{map_id}/process-fields",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def update_process_fields(
+    map_id: int,
+    payload: ProcessFieldsIn,
+    session: AsyncSession = Depends(get_session),
+) -> ProcessMap:
+    """인터뷰 승격 필드(대표+폴백) 부분 갱신 — SP 지정 여부와 무관, 검토 편집 경로 (design 2026-08-19 §5).
+
+    필드명이 sp_ 컬럼과 1:1이라 접두만 붙여 매핑한다. 빈 문자열은 NULL 소거.
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(found_map, f"sp_{field}", value or None)
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
 
 
 @router.delete(

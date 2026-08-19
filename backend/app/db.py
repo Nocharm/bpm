@@ -101,6 +101,25 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 노트 수정 이력/아카이브 — 삭제는 아카이브로만, 영구삭제는 관리자 퍼지 (2026-08-19)
     ("feedback_notes", "edited_at", "TIMESTAMP"),
     ("feedback_notes", "archived_at", "TIMESTAMP"),
+    # 인터뷰 필드 승격 — 노드/SP 대칭 + 대표/폴백 쌍 (design 2026-08-19 §1)
+    ("nodes", "touch_time", "VARCHAR(50) DEFAULT ''"),
+    ("nodes", "input", "TEXT DEFAULT ''"),
+    ("nodes", "output", "TEXT DEFAULT ''"),
+    ("nodes", "start_condition", "TEXT DEFAULT ''"),
+    ("nodes", "end_condition", "TEXT DEFAULT ''"),
+    ("nodes", "data_form", "VARCHAR(50) DEFAULT ''"),
+    ("nodes", "system_fallback", "VARCHAR(200) DEFAULT ''"),
+    ("process_maps", "sp_start_condition", "TEXT"),
+    ("process_maps", "sp_end_condition", "TEXT"),
+    ("process_maps", "sp_gmp", "VARCHAR(20)"),
+    ("process_maps", "sp_gmp_fallback", "TEXT"),
+    ("process_maps", "sp_frequency_fallback", "VARCHAR(200)"),
+    ("process_maps", "sp_total_time_fallback", "VARCHAR(200)"),
+    ("process_maps", "sp_touch_time", "VARCHAR(50)"),
+    ("process_maps", "sp_touch_time_fallback", "VARCHAR(200)"),
+    ("process_maps", "sp_system_fallback", "VARCHAR(200)"),
+    # 활동별 GMP (design 2026-08-20 캔버스 필 확장)
+    ("nodes", "gmp", "VARCHAR(20) DEFAULT ''"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

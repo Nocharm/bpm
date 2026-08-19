@@ -23,6 +23,6 @@ describe("parseDisplayToggles", () => {
   });
 });
 
-it("NODE_DISPLAY_TOGGLES는 4속성 + params", () => {
-  expect(NODE_DISPLAY_TOGGLES).toEqual(["assignee", "department", "system", "url", "params"]);
+it("NODE_DISPLAY_TOGGLES는 4속성 + params + gmp", () => {
+  expect(NODE_DISPLAY_TOGGLES).toEqual(["assignee", "department", "system", "url", "params", "gmp"]);
 });

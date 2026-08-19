@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Building2,
   Clock,
+  Timer,
   Coins,
   CornerDownRight,
   Link as LinkIcon,
@@ -15,6 +16,7 @@ import {
   MessageSquare,
   Plus,
   Server,
+  ShieldCheck,
   Tag,
   Target,
   User,
@@ -34,6 +36,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
   PRIMARY_END_HANDLE,
@@ -63,7 +66,8 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
   return (
     <>
       {displayFields
-        .filter((f): f is NodeDisplayField => f !== "params")
+        // params(칩 스위치)·gmp(필 태그)는 텍스트 줄 필드가 아님 — NodeParams/GmpPill이 담당
+        .filter((f): f is NodeDisplayField => f !== "params" && f !== "gmp")
         .map((field) => {
         // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
         if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
@@ -90,8 +94,56 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
   );
 }
 
+// GMP 필 태그 — 노드 라벨 왼쪽 위 부유(토글 "gmp"). 분류가 색을 확정, null(미분류)은 아이콘만.
+// 편집 모드(onEditGmp 제공)에서 클릭하면 해당 노드의 gmp 분류 피커 — SP 노드는 링크 맵 상속이라
+// read-only(수정은 링크 맵 설정 Conditions & GMP에서) (design 2026-08-20).
+function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: AppNode["data"]; className?: string }) {
+  const { displayFields, onEditGmp } = useNodeActions();
+  if (!displayFields.includes("gmp")) return null;
+  const isSubprocess = data.nodeType === "subprocess";
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const value = (isSubprocess ? data.spGmp : data.gmp) ?? "";
+  const label = formatGmp(value);
+  const editable = !isSubprocess && onEditGmp !== null;
+  // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
+  const className =
+    "nodrag nopan inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
+    (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
+    (extra ?? "");
+  const body = (
+    <>
+      <ShieldCheck size={10} strokeWidth={1.5} className="shrink-0" />
+      {label && <span>{label}</span>}
+    </>
+  );
+  if (!editable) {
+    return (
+      <span data-id="node-gmp-pill" className={className} style={label ? getGmpBadgeStyle(value) : undefined} title="GMP">
+        {body}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-id="node-gmp-pill"
+      className={`${className} hover:brightness-95`}
+      style={label ? getGmpBadgeStyle(value) : undefined}
+      title="GMP — click to classify"
+      onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onEditGmp?.(nodeId, event.clientX, event.clientY);
+      }}
+    >
+      {body}
+    </button>
+  );
+}
+
 const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
+  duration: Clock, touch_time: Timer, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
 };
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4, 2026-07-13 §3.2)
@@ -109,12 +161,14 @@ function NodeParams({ data, className }: { data: AppNode["data"]; className?: st
     ...(isSubprocess
       ? {
           duration: data.spDuration,
+          touch_time: data.spTouchTime,
           cost_krw: data.spCostKrw,
           cost_usd: data.spCostUsd,
           headcount: data.spHeadcount,
         }
       : {
           duration: data.duration,
+          touch_time: data.touch_time,
           cost_krw: data.cost_krw,
           cost_usd: data.cost_usd,
           headcount: data.headcount,
@@ -509,6 +563,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
         <div className="min-w-0 flex-1">
+          <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
           <div className="font-medium text-ink">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
@@ -558,6 +613,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        <GmpPill nodeId={id} data={data} className="absolute left-1/2 top-0 z-10 -translate-x-1/2" />
         <div className="relative max-w-20 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} />
           {data.hasChildren && (
@@ -597,6 +653,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
     >
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+      <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
       <div className="font-medium text-ink">
         <NodeTitle
           id={id}

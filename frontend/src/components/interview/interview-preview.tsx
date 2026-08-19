@@ -42,6 +42,7 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onRename: null,
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
+  onEditGmp: null,
 };
 
 interface InterviewPreviewProps {
@@ -87,6 +88,7 @@ interface HoveredNode {
 // 인스펙터 카드의 파라미터 행 라벨 — PARAM_FIELDS 순서와 동기
 const PARAM_LABELS: Record<(typeof PARAM_FIELDS)[number], string> = {
   duration: "Duration",
+  touch_time: "Touch time",
   cost_krw: "Cost (KRW)",
   cost_usd: "Cost (USD)",
   headcount: "Headcount",

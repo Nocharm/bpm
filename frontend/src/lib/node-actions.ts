@@ -17,10 +17,10 @@ export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
   "url",
 ];
 
-// 토글 대상 = BPM 속성 4종 + 파라미터 칩 일괄 스위치("params" — 6필드 칩을 한 번에 켬/끔)
-export type NodeDisplayToggle = NodeDisplayField | "params";
+// 토글 대상 = BPM 속성 4종 + 파라미터 칩 일괄 스위치("params") + GMP 필 태그("gmp", design 2026-08-20)
+export type NodeDisplayToggle = NodeDisplayField | "params" | "gmp";
 
-export const NODE_DISPLAY_TOGGLES: NodeDisplayToggle[] = [...NODE_DISPLAY_FIELDS, "params"];
+export const NODE_DISPLAY_TOGGLES: NodeDisplayToggle[] = [...NODE_DISPLAY_FIELDS, "params", "gmp"];
 
 /** 저장 토글 파싱 — v2 키 우선, 레거시 키(파라미터 토글 도입 전)는 params ON으로 이관. 저장값 없으면 null. */
 export function parseDisplayToggles(
@@ -62,6 +62,8 @@ export interface NodeActions {
   onCancelRename: (() => void) | null;
   // Ctrl/⌘+드래그 복제 중인 노드 id 집합 — "+" 배지 표시용(Provider 없으면 항상 빈 집합).
   ctrlDragIds: ReadonlySet<string>;
+  // GMP 필 클릭 → 분류 피커 오픈(편집 모드 전용, null=비활성 — 뷰어·비교·프리뷰) (design 2026-08-20)
+  onEditGmp: ((nodeId: string, x: number, y: number) => void) | null;
 }
 
 const defaultActions: NodeActions = {
@@ -73,6 +75,7 @@ const defaultActions: NodeActions = {
   onRename: null,
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
+  onEditGmp: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

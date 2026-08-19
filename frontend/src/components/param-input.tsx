@@ -9,6 +9,8 @@ import { formatDurationHm, formatThousands, normalizeDuration, normalizeNumericP
 import { COST_FIELDS, type ParamField } from "@/lib/params";
 
 const isCost = (field: ParamField): boolean => (COST_FIELDS as readonly string[]).includes(field);
+// touch_time은 duration과 동일 H.MM 계약 — 표시 스왑·blur 정규화 모두 미러 (design 2026-08-19 §2)
+const isDurationLike = (field: ParamField): boolean => field === "duration" || field === "touch_time";
 
 export function ParamInput({ field, value, disabled, dataId, className, ariaLabel, placeholder, onCommit }: {
   field: ParamField;
@@ -23,7 +25,7 @@ export function ParamInput({ field, value, disabled, dataId, className, ariaLabe
   const [focused, setFocused] = useState(false);
   const display = focused
     ? value
-    : field === "duration"
+    : isDurationLike(field)
       ? formatDurationHm(value)
       : isCost(field)
         ? formatThousands(value)
@@ -43,7 +45,7 @@ export function ParamInput({ field, value, disabled, dataId, className, ariaLabe
       }}
       onBlur={(e) => {
         const raw = e.target.value.replace(/\.$/, "");
-        const normalized = field === "duration" ? normalizeDuration(raw) : normalizeNumericParam(raw);
+        const normalized = isDurationLike(field) ? normalizeDuration(raw) : normalizeNumericParam(raw);
         onCommit(normalized ?? "");
         setFocused(false);
       }}

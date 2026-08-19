@@ -14,6 +14,7 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
+import { ProcessFieldsCard } from "@/components/permissions/process-fields-card";
 import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
@@ -385,13 +386,17 @@ export default function SettingsPage() {
                     {t(tab.labelKey)}
                   </h2>
                   {tab.id === "details" ? (
-                    <MapDetailsPanel
-                      mapId={mapIdStr}
-                      canEdit={canEdit}
-                      isOwner={isOwner}
-                      onToast={showToast}
-                      onChanged={() => void refreshMap()}
-                    />
+                    <>
+                      <MapDetailsPanel
+                        mapId={mapIdStr}
+                        canEdit={canEdit}
+                        isOwner={isOwner}
+                        onToast={showToast}
+                        onChanged={() => void refreshMap()}
+                      />
+                      {/* 인터뷰 승격 필드 검토 편집 — PATCH가 오너 전용 (design 2026-08-19 §5) */}
+                      {isOwner && <ProcessFieldsCard mapId={mapIdStr} onToast={showToast} />}
+                    </>
                   ) : tab.id === "subprocess" && isOwner ? (
                     <SubprocessDesignationPanel mapId={mapIdStr} onToast={showToast} />
                   ) : tab.id === "collaborators" ? (

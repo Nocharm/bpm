@@ -84,6 +84,16 @@ export interface MapSummary {
   consultant_code?: string | null;
   sp_input?: string | null;
   sp_output?: string | null;
+  // 인터뷰 승격 필드 — 대표+폴백 쌍. sp_gmp는 direct|indirect|non_gmp|null(미분류) (design 2026-08-19 §1.2)
+  sp_start_condition?: string | null;
+  sp_end_condition?: string | null;
+  sp_gmp?: string | null;
+  sp_gmp_fallback?: string | null;
+  sp_frequency_fallback?: string | null;
+  sp_total_time_fallback?: string | null;
+  sp_touch_time?: string | null;
+  sp_touch_time_fallback?: string | null;
+  sp_system_fallback?: string | null;
 }
 
 export interface MapDetail extends MapSummary {
@@ -106,6 +116,18 @@ export interface GraphNode {
   headcount?: string;
   annual_count?: string;
   fte?: string;
+  // 7번째 회당 파라미터 — duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+  touch_time?: string;
+  // 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
+  input?: string;
+  output?: string;
+  start_condition?: string;
+  end_condition?: string;
+  data_form?: string;
+  // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
+  system_fallback?: string;
+  // 활동별 GMP — 캔버스 필 태그, 재임포트가 못 덮는 검토값 (design 2026-08-20)
+  gmp?: string;
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
@@ -169,6 +191,16 @@ export interface SubprocessRef {
   cost_krw: string | null;
   cost_usd: string | null;
   headcount: string | null;
+  // 7번째 파라미터 + 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
+  touch_time: string | null;
+  input: string | null;
+  output: string | null;
+  start_condition: string | null;
+  end_condition: string | null;
+  // 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
+  frequency_fallback: string | null;
+  // 링크 맵 GMP 분류 — SP 노드 캔버스 필 상속 표시(read-only)
+  gmp: string | null;
   url: string | null;
   url_label: string | null;
   // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
@@ -421,10 +453,11 @@ export interface SubprocessDesignationBody {
   assignee?: string;
   system?: string;
   duration?: string;
-  // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
+  // 회당 파라미터 — sp 지정값 4종 + touch_time (design 2026-07-13, 2026-08-19 §2)
   cost_krw?: string;
   cost_usd?: string;
   headcount?: string;
+  touch_time?: string;
   url?: string;
   url_label?: string;
   input?: string;
@@ -455,6 +488,29 @@ export function putSubprocessDesignation(
 export function deleteSubprocessDesignation(mapId: number): Promise<MapSummary> {
   return request<MapSummary>(`/maps/${mapId}/subprocess-designation`, {
     method: "DELETE",
+  });
+}
+
+// 인터뷰 승격 필드 부분 갱신 — SP 지정 여부와 무관한 검토 편집 경로. 필드명은 sp_ 접두 없이
+// 컬럼과 1:1(서버가 매핑), 언급 없는 필드는 유지·""=소거 (design 2026-08-19 §5)
+export interface ProcessFieldsBody {
+  start_condition?: string;
+  end_condition?: string;
+  gmp?: string;
+  duration?: string;
+  touch_time?: string;
+  system?: string;
+  gmp_fallback?: string;
+  frequency_fallback?: string;
+  total_time_fallback?: string;
+  touch_time_fallback?: string;
+  system_fallback?: string;
+}
+
+export function patchProcessFields(mapId: number, body: ProcessFieldsBody): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/process-fields`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
   });
 }
 
@@ -1966,6 +2022,14 @@ export interface AiNodeAttributes {
   headcount?: string | null;
   annual_count?: string | null;
   fte?: string | null;
+  // 7번째 파라미터 — duration과 동일 정규화 (design 2026-08-19 §2)
+  touch_time?: string | null;
+  // 인터뷰 승격 텍스트 필드 — passthrough. 폴백 컬럼(system_fallback 등)은 AI 표면 제외 (design 2026-08-19 §3)
+  input?: string | null;
+  output?: string | null;
+  start_condition?: string | null;
+  end_condition?: string | null;
+  data_form?: string | null;
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
