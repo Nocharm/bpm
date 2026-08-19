@@ -2,10 +2,11 @@
 
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { AuthLoadingScreen } from "@/components/auth-loading";
 import { getMe, setAuthToken, setDevUser } from "@/lib/api";
+import { fetchAuthMode, type AuthModeInfo } from "@/lib/auth-mode";
 import {
   clearAuthRetry,
   clearAutoLoginSkip,
@@ -23,12 +24,10 @@ function useMounted(): boolean {
   return useSyncExternalStore(subscribe, () => true, () => false);
 }
 
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
-
-function buildOidcConfig() {
+function buildOidcConfig(info: AuthModeInfo) {
   return {
-    authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
-    client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
+    authority: info.keycloakIssuer,
+    client_id: info.keycloakClientId,
     redirect_uri: window.location.origin,
     // signinRedirect(keycloak-login.ts)와 짝 — 평문 HTTP 접속 위해 PKCE 비활성(crypto.subtle 회피).
     disablePKCE: true,
@@ -173,14 +172,27 @@ function DevGate({ children }: { children: ReactNode }) {
 
 export function Providers({ children }: { children: ReactNode }) {
   const mounted = useMounted();
-  if (!mounted) {
-    return null;
+  const [modeInfo, setModeInfo] = useState<AuthModeInfo | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchAuthMode().then((info) => {
+      if (alive) setModeInfo(info);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!mounted || modeInfo === null) {
+    // 모드가 정해지기 전에 자식을 그리면 인증 없이 API를 때리는 창이 생긴다.
+    return <AuthLoadingScreen />;
   }
-  if (!AUTH_ENABLED) {
+  if (modeInfo.mode === "dev") {
     return <DevGate>{children}</DevGate>;
   }
   return (
-    <AuthProvider {...buildOidcConfig()}>
+    <AuthProvider {...buildOidcConfig(modeInfo)}>
       <AuthGate>{children}</AuthGate>
     </AuthProvider>
   );
