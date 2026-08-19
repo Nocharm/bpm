@@ -73,6 +73,9 @@ async def _run_hr_sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # ldap 모드인데 서명키가 없으면 위조가 자유로워진다 — 조용히 뜨는 대신 기동을 막는다 (설계 §7)
+    if settings.resolved_auth_mode() == "ldap" and not settings.auth_jwt_secret:
+        raise RuntimeError("AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set")
     await init_models()
     # 로컬(인증 OFF)은 임시 유저 5명 시드 — role별 테스트용
     if not settings.auth_enabled:
