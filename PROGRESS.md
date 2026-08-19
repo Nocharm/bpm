@@ -4,7 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-19 — 인터뷰 필드 승격 설계 (feat/field-promotion)
-- 1차 임포트의 텍스트 직렬화 키들을 고유 필드로 승격하는 설계 확정(사용자 브레인스토밍) — 기조: 노드↔SP 파라미터 대칭. touch_time=7번째 공용 파라미터(duration 미러)·노드 input/output(개행 복수)+start/end_condition+data_form+system_fallback·맵 sp_start/end_condition+GMP 3값(direct/indirect/non_gmp)+폴백 4종. 대표+폴백 쌍은 FallbackHint 툴팁(원문+수정+적용)으로 검토 작업 지원. 시스템 라이브러리는 별도 트랙. 설계: `docs/design/2026-08-19-field-promotion-design.md`. ⚠️ A(BE)+B(FE) 동일 릴리스 필수 — FE 미지 필드는 graph PUT이 소거.
+- 1차 임포트의 텍스트 직렬화 키들을 고유 필드로 승격하는 설계 확정(사용자 브레인스토밍) — 기조: 노드↔SP 파라미터 대칭. touch_time=7번째 공용 파라미터(duration 미러)·노드 input/output(개행 복수)+start/end_condition+data_form+system_fallback·맵 sp_start/end_condition+GMP 3값(direct/indirect/non_gmp)+폴백 4종. 대표+폴백 쌍은 FallbackHint 툴팁(원문+수정+적용)으로 검토 작업 지원. 시스템 라이브러리는 별도 트랙. 설계: `docs/design/2026-08-19-field-promotion-design.md`, 플랜: `docs/superpowers/plans/2026-08-20-field-promotion.md`(실검증은 QA 문서 주도 — 사용자 지시). ⚠️ A(BE)+B(FE) 동일 릴리스 필수 — FE 미지 필드는 graph PUT이 소거.
 
 ## 2026-08-19 — LDAP 인증 폴백 + 로컬 계정 (dev, 완료)
 - 9910을 LDAP으로 열어 Keycloak 없이도 AD bind + 설정 화면 발급 로컬 계정(컨설턴트용)으로 로그인하게 함. 설계: [`docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md`](docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md).
