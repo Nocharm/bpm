@@ -137,6 +137,28 @@ body {
   background: var(--color-ink-tertiary);
 }
 
+/* 스크롤 중에만 보이는 막대 — 평소엔 완전히 감추고, 스크롤하는 동안만 얇게 노출.
+   목록/상세처럼 늘 떠 있는 막대가 시각적으로 거슬리는 영역용(`useQuietScroll`이 is-scrolling 토글). */
+.scroll-quiet {
+  scrollbar-width: none; /* Firefox: 평소 숨김 */
+}
+.scroll-quiet::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.scroll-quiet.is-scrolling {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-tertiary) transparent;
+}
+.scroll-quiet.is-scrolling::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-quiet.is-scrolling::-webkit-scrollbar-thumb {
+  background: var(--color-ink-tertiary);
+  border-radius: 3px;
+}
+
 /* 버튼 기본 인터랙션 — 전역. 포인터 커서 + 클릭 시 살짝 눌림(tactile).
    hover 배경은 컴포넌트별 토큰(hover:bg-*) 유지. element 셀렉터로 specificity를 낮춰 Tailwind 유틸리티가 항상 우선. */
 button:not(:disabled) {

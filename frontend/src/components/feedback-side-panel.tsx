@@ -181,7 +181,7 @@ export function FeedbackSidePanel({
               onChange={(event) => setBody(event.target.value)}
               placeholder={t("feedback.bodyPlaceholder")}
               maxLength={MAX_BODY}
-              className="min-h-40 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
+              className="scroll-quiet min-h-40 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
             />
           </div>
 

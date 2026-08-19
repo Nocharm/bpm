@@ -60,6 +60,7 @@ import { genId } from "@/lib/id";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+import { useQuietScroll } from "@/lib/use-quiet-scroll";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { ActivityDigest } from "@/components/activity-digest";
 import { AutoHeight } from "@/components/auto-height";
@@ -192,6 +193,9 @@ export default function InboxPage() {
   const pushToast = (message: string) => setToasts((prev) => [{ id: genId(), message }, ...prev]);
   const dismissToast = (id: string) => setToasts((prev) => prev.filter((x) => x.id !== id));
   const dir = useDirectory(); // 요청자 login_id → 이름 해석(검색·표시)
+  // 좌측 목록 — 스크롤하는 동안에만 막대 노출(평소엔 감춤)
+  const approvalsScrollRef = useQuietScroll<HTMLUListElement>();
+  const notificationsScrollRef = useQuietScroll<HTMLUListElement>();
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
 
@@ -390,9 +394,19 @@ export default function InboxPage() {
     })),
   ];
 
+  // 페이지 여백을 "직접" 누르면 선택 해제 — 패널 사이 간격(아래 flex row)과 같은 규칙
+  const clearSelectionOnEmptyPress = (event: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
+    if (event.target !== event.currentTarget) return;
+    setSelectedId(null);
+    setSelectedApprovalKey(null);
+  };
+
   return (
-    <div className="flex h-full min-h-0 flex-col px-8 py-6">
-      <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col px-8 py-6" onMouseDown={clearSelectionOnEmptyPress}>
+      <div
+        className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 flex-col gap-4"
+        onMouseDown={clearSelectionOnEmptyPress}
+      >
         {/* 페이지 헤더 — 타이틀(좌) · 모두 읽음(우), 노티스 헤더와 정렬 */}
         <div className="flex shrink-0 items-center justify-between gap-4">
           <h1 className="text-tagline text-ink">Inbox</h1>
@@ -408,13 +422,12 @@ export default function InboxPage() {
           )}
         </div>
 
-        {/* 빈 여백 클릭 = 선택 해제(알림·승인 모두) — 맵 탭과 동일. 카드·상세는 stopPropagation으로 제외 (batch2 ⑩) */}
+        {/* 빈 여백을 "직접" 눌렀을 때만 선택 해제 — 카드·상세에서 올라온 이벤트로는 풀지 않는다.
+            (예전엔 click 버블 + 자식 stopPropagation 가드였는데, 가드가 빠진 곳에서 내용 클릭·드래그만 해도
+             선택이 풀렸다 — 사용자 피드백 2026-08-19. 홈과 같은 규칙·같은 단계(mousedown)로 통일.) */}
         <div
           className="flex min-h-0 flex-1 gap-4"
-          onClick={() => {
-            setSelectedId(null);
-            setSelectedApprovalKey(null);
-          }}
+          onMouseDown={clearSelectionOnEmptyPress}
         >
           {/* 좌 목록 — 검색·필터(알림 전용) + 탭(우측정렬) + 카드 */}
           <aside className="flex min-w-[18rem] flex-1 flex-col">
@@ -537,7 +550,7 @@ export default function InboxPage() {
                   {t("inbox.approvalsEmpty")}
                 </p>
               ) : (
-                <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
+                <ul ref={approvalsScrollRef} className="scroll-quiet flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
                   {shownApprovals.map((a) => {
                     const key = approvalKey(a);
                     return (
@@ -631,7 +644,7 @@ export default function InboxPage() {
                 {t("inbox.empty")}
               </p>
             ) : (
-              <ul className="flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
+              <ul ref={notificationsScrollRef} className="scroll-quiet flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
                 {shownItems.map((n) => {
                   const TypeIcon = typeIcon(n.type);
                   return (

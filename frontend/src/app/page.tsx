@@ -570,7 +570,6 @@ export default function MapListPage() {
       />
       <div
         data-id="map-detail-accordion"
-        onMouseDown={(e) => e.stopPropagation()} // 상세 내부 조작이 배경(선택 해제)으로 버블링 방지
         className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
           effectiveSelected === processMap.id ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
         }`}
@@ -608,6 +607,11 @@ export default function MapListPage() {
 
   // 브라우즈 모드(즐겨찾기·조직도 아코디언)에 전달할 카드 렌더러 — 980px 미만에서도 상세 노출. /
   // Card renderer passed to browse-mode accordions — keeps detail visible below the split breakpoint.
+  // 빈 여백을 "직접" 누르면 선택 해제 — 자식(카드·상세·버튼)에서 올라온 이벤트로는 풀지 않는다
+  const clearSelectionOnEmptyPress = (event: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
+    if (event.target === event.currentTarget) setSelectedId(null);
+  };
+
   const renderCard = (processMap: MapSummary) =>
     renderCardInner(processMap, [], atById.get(processMap.id));
 
@@ -617,10 +621,16 @@ export default function MapListPage() {
     // 카드·상세·밴드버튼은 stopPropagation으로 제외.
     <div
       className="flex h-full min-h-0 flex-col px-8 py-6"
-      onMouseDown={() => setSelectedId(null)}
+      // 빈 여백을 "직접" 눌렀을 때만 해제 — 자식(카드·상세·버튼)에서 올라온 이벤트로는 풀지 않는다.
+      // 예전엔 버블 + 자식마다 stopPropagation 가드였는데, 가드가 빠진 곳에서 내용 클릭·드래그만 해도
+      // 선택이 풀려 불편했다 (사용자 피드백 2026-08-19).
+      onMouseDown={clearSelectionOnEmptyPress}
     >
       {/* 제목 + New map (검색·필터는 좌측 리스트 컬럼 상단으로 이동, #5) */}
-      <div className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4">
+      <div
+        className="mx-auto mb-4 flex w-full max-w-[80rem] shrink-0 items-center justify-between gap-4"
+        onMouseDown={clearSelectionOnEmptyPress}
+      >
         <h1 data-id="home-title" className="text-tagline text-ink">Process Maps</h1>
         <div className="flex shrink-0 items-center gap-2">
           {/* Manual — 홈 헤더에서도 매뉴얼 열람(뷰어 /manual). New map 왼쪽 보조 버튼 */}
@@ -947,7 +957,6 @@ export default function MapListPage() {
             {/* ≥ split(980px) — 우측 사이드 패널. 선택 없으면 플레이스홀더 / wide screens: side panel or empty placeholder */}
             <aside
               data-id="map-detail-aside"
-              onMouseDown={(e) => e.stopPropagation()} // 상세 내부 조작이 배경(선택 해제)으로 버블링 방지
               className="hidden min-w-[24rem] flex-[2] flex-col rounded-sm border border-hairline bg-surface-alt split:flex"
             >
               {effectiveSelected !== null ? (

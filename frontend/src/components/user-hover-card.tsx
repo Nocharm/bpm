@@ -1,7 +1,7 @@
 "use client";
 
-// 유저 호버 카드 — 앵커를 1초 이상 호버하면 유저 정보 팝오버. 맵 상세 '허용 인원' 확장 카드 디자인을 미러
-// (아바타+이름 · 아이디/직급/부서 레벨 필). portal+fixed라 컨테이너 overflow에 안 잘림.
+// 유저 호버 카드 — 앵커를 1초 이상 호버하거나 **클릭하면 즉시** 유저 정보 팝오버. 맵 상세 '허용 인원'
+// 확장 카드 디자인을 미러(아바타+이름 · 아이디/직급/부서 레벨 필). portal+fixed라 컨테이너 overflow에 안 잘림.
 
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -42,6 +42,18 @@ export function UserHoverCard({
       setPos({ x: rect.left, y: rect.bottom });
     }, HOVER_DELAY_MS);
   };
+  // 클릭 — 지연 없이 즉시 표시. 이름 자체를 어포던스로 쓰므로 부모(행 선택 등)로 클릭을 넘기지 않는다.
+  const showNow = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const rect = el.getBoundingClientRect();
+    setPos({ x: rect.left, y: rect.bottom });
+  };
   const hide = () => {
     if (timer.current) {
       clearTimeout(timer.current);
@@ -51,7 +63,13 @@ export function UserHoverCard({
   };
 
   return (
-    <span ref={ref} className="inline-flex min-w-0" onMouseEnter={scheduleShow} onMouseLeave={hide}>
+    <span
+      ref={ref}
+      className="inline-flex min-w-0 cursor-pointer"
+      onMouseEnter={scheduleShow}
+      onMouseLeave={hide}
+      onClick={showNow}
+    >
       {children}
       {pos !== null &&
         createPortal(

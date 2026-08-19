@@ -7,6 +7,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { useQuietScroll } from "@/lib/use-quiet-scroll";
+
 export function AutoHeight({
   children,
   className,
@@ -21,6 +23,8 @@ export function AutoHeight({
   durationMs?: number;
 }) {
   const innerRef = useRef<HTMLDivElement>(null);
+  // 내용이 가용 높이를 넘어 스크롤이 생길 때만, 그것도 스크롤하는 동안만 막대를 보인다
+  const scrollRef = useQuietScroll<HTMLDivElement>();
   const [height, setHeight] = useState<number | null>(null);
   // 첫 측정에는 트랜지션을 걸지 않는다 — 마운트 시 0에서 자라 보이는 것 방지
   const measuredRef = useRef(false);
@@ -30,7 +34,11 @@ export function AutoHeight({
     const el = innerRef.current;
     if (!el) return;
     const sync = () => {
-      setHeight(el.getBoundingClientRect().height);
+      // 올림 + 테두리/패딩 보정 — height는 border-box라 테두리(위아래 1px씩)까지 포함해야 하고,
+      // 소수점을 내리면 1~2px이 모자라 불필요한 스크롤바가 생긴다(실측 2026-08-19)
+      const outer = el.parentElement;
+      const chrome = outer ? outer.offsetHeight - outer.clientHeight : 0;
+      setHeight(Math.ceil(el.getBoundingClientRect().height) + chrome);
       if (!measuredRef.current) {
         measuredRef.current = true;
         // 다음 프레임부터 트랜지션 — 초기 높이는 즉시 적용
@@ -45,7 +53,8 @@ export function AutoHeight({
 
   return (
     <div
-      className={className}
+      ref={scrollRef}
+      className={`scroll-quiet ${className ?? ""}`}
       data-id={dataId}
       style={{
         height: height === null ? undefined : height,
