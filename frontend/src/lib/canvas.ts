@@ -37,6 +37,8 @@ export type NodeData = {
   data_form?: string;
   // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정 (design 2026-08-19 §3)
   system_fallback?: string;
+  // 활동별 GMP — 캔버스 필 태그(토글 노출, null=미분류는 아이콘만) (design 2026-08-20)
+  gmp?: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
@@ -88,6 +90,7 @@ export type NodeData = {
   spOutput?: string | null;
   spStartCondition?: string | null;
   spEndCondition?: string | null;
+  spGmp?: string | null;
   spUrl?: string | null;
   spUrlLabel?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)

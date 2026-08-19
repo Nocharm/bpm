@@ -126,6 +126,8 @@ export interface GraphNode {
   data_form?: string;
   // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
   system_fallback?: string;
+  // 활동별 GMP — 캔버스 필 태그, 재임포트가 못 덮는 검토값 (design 2026-08-20)
+  gmp?: string;
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
@@ -197,6 +199,8 @@ export interface SubprocessRef {
   end_condition: string | null;
   // 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
   frequency_fallback: string | null;
+  // 링크 맵 GMP 분류 — SP 노드 캔버스 필 상속 표시(read-only)
+  gmp: string | null;
   url: string | null;
   url_label: string | null;
   // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)

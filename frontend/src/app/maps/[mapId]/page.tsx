@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -39,6 +39,7 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
+import { GMP_OPTIONS } from "@/lib/gmp";
 import { NodeDetailsFields } from "@/components/node-details-fields";
 import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -352,6 +353,7 @@ const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
   system: Server,
   url: Link,
   params: SlidersHorizontal,
+  gmp: ShieldCheck,
 };
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
@@ -599,6 +601,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       end_condition: node.end_condition ?? "",
       data_form: node.data_form ?? "",
       system_fallback: node.system_fallback ?? "",
+      gmp: node.gmp ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       section_anchor: node.section_anchor ?? "",
@@ -688,6 +691,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     end_condition: attr?.end_condition ?? "",
     data_form: attr?.data_form ?? "",
     system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
+    gmp: "",  // 검토값 — AI 표면 제외 (design 2026-08-20)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -740,6 +744,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       end_condition: node.data.end_condition ?? "",
       data_form: node.data.data_form ?? "",
       system_fallback: node.data.system_fallback ?? "",
+      gmp: node.data.gmp ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       section_anchor: node.data.section_anchor ?? "",
@@ -1440,6 +1445,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             spOutput: ref.output,
             spStartCondition: ref.start_condition,
             spEndCondition: ref.end_condition,
+            spGmp: ref.gmp,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1456,6 +1462,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             spOutput: null,
             spStartCondition: null,
             spEndCondition: null,
+            spGmp: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -6623,6 +6630,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     startRenameRef.current = startRename;
   }, [startRename]);
+  // GMP 필 클릭 → 분류 피커(클릭 좌표 앵커). 편집 모드 전용 — readOnly면 컨텍스트에 null 전달
+  const [gmpPicker, setGmpPicker] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  // setState만 부르는 핸들러는 useCallback 금지 — 컴파일러가 setter를 dep으로 추론해
+  // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
+  const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
+  const onEditGmpAction = readOnly ? null : openGmpPicker;
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6635,6 +6648,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ctrlDragIds: ctrlDragActive
         ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
         : EMPTY_CTRL_DRAG_IDS,
+      onEditGmp: onEditGmpAction,
     }),
     [
       toggleInlineExpand,
@@ -6646,6 +6660,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       cancelRename,
       ctrlDragActive,
       ctrlDragGhosts,
+      onEditGmpAction,
     ],
   );
 
@@ -9486,7 +9501,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                                       ? "field.system"
                                       : field === "url"
                                         ? "field.url"
-                                        : "field.params";
+                                        : field === "gmp"
+                                          ? "field.gmp"
+                                          : "field.params";
                               return (
                                 <div
                                   key={field}
@@ -10311,6 +10328,43 @@ function MapEditor({ mapId }: { mapId: number }) {
       />
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
+      {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
+      {gmpPicker !== null && (
+        <>
+          <div className="fixed inset-0 z-[1340]" onClick={() => setGmpPicker(null)} />
+          <div
+            data-id="node-gmp-picker"
+            className="fixed z-[1350] w-[180px] rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
+            style={{
+              left: Math.min(gmpPicker.x, window.innerWidth - 188),
+              top: Math.min(gmpPicker.y + 6, window.innerHeight - 170),
+            }}
+          >
+            {[{ value: "", label: t("perm.processFields.gmpUnset") }, ...GMP_OPTIONS].map((option) => (
+              <button
+                key={option.value || "unset"}
+                type="button"
+                data-id={`node-gmp-picker-${option.value || "unset"}`}
+                className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
+                onClick={() => {
+                  patchNode(gmpPicker.nodeId, { gmp: option.value }, true);
+                  setGmpPicker(null);
+                }}
+              >
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full border border-hairline"
+                  style={
+                    option.value
+                      ? { backgroundColor: `var(${GMP_OPTIONS.find((o) => o.value === option.value)?.colorVar})` }
+                      : undefined
+                  }
+                />
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </NodeActionsContext.Provider>
   );
 }

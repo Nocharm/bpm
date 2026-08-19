@@ -796,3 +796,21 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
     # 무효 자유텍스트는 duration과 동일하게 경계에서 "" 소거(422 아님)
     n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
     assert n2["touch_time"] == ""
+
+
+def test_node_gmp_roundtrip_and_invalid_scrubbed(client: TestClient) -> None:
+    """활동별 GMP — 3값 왕복, 무효값은 경계에서 "" 소거 (design 2026-08-20)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "분류됨", "gmp": "direct"},
+            {"id": "n2", "title": "무효값", "gmp": "sometimes"},
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    assert next(n for n in saved["nodes"] if n["id"] == "n1")["gmp"] == "direct"
+    assert next(n for n in saved["nodes"] if n["id"] == "n2")["gmp"] == ""

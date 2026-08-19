@@ -36,6 +36,20 @@
 | 28 | 회귀 | `pw-smoke-framework.mjs` | 스모크 | ✅ 25/25 |
 | 29 | 게이트 | BE pytest·ruff / FE vitest·tsc·lint·build 최종 그린 | 명령 | ✅ BE 1141·ruff 0 / FE 659·tsc 0·build OK(잔여 lint 경고는 기존 pw-smoke-task8) |
 
+## 추가 검수 — 활동별 GMP 캔버스 필 (2026-08-20 2차, `tmp-design-shots3` 6체크)
+
+| # | 항목 | 결과 |
+|---|---|---|
+| G1 | 미분류 노드 필 = 아이콘만(무채색) | ✅ |
+| G2 | 편집 모드 필 클릭 → 피커 → 선택 시 해당 노드 gmp 저장(autosave 후 API 대조 direct) | ✅ |
+| G3 | 분류 후 필 색 배지(GMP Direct red) 렌더 | ✅ |
+| G4 | SP 노드 필 = 링크 맵 sp_gmp 상속(GMP Indirect amber) | ✅ |
+| G5 | SP 필 read-only(span — 클릭 편집 불가) | ✅ |
+| G6 | 읽기 모드(published)에서 필 클릭 비활성 | ✅ |
+| G7 | 재임포트 승계 — 노드 gmp 분류 후 내용 변경 재전달의 새 버전에도 유지 | ✅ pytest(`test_node_gmp_survives_redelivery`) |
+| G8 | NodeIn 무효값 "" 소거·왕복 | ✅ pytest(`test_node_gmp_roundtrip_and_invalid_scrubbed`) |
+| G9 | 게이트 — BE 1143·ruff 0 / FE 659·tsc 0·build OK | ✅ |
+
 **육안/보류 항목**
 - 일괄편집 모달 touch_time 탭 — `MODE_META`가 `PARAM_FIELDS` 파생이라 로직상 자동 노출(단위테스트 커버), 실브라우저 스팟은 서버 배포 후 확인.
 - 서버(평문 HTTP·postgres) 재검증 — A+B+C 동일 릴리스 배포 후 실파일 재임포트로 백필 확인(`docs/deploy/db-migration-9910.md`).

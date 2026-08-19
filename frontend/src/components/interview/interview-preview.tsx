@@ -42,6 +42,7 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onRename: null,
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
+  onEditGmp: null,
 };
 
 interface InterviewPreviewProps {

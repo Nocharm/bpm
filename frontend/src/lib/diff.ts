@@ -23,6 +23,7 @@ export type ChangedField =
   | "input"
   | "output"
   | "data_form"
+  | "gmp"
   | "start_condition"
   | "end_condition"
   | "location";
@@ -70,6 +71,7 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["input", "input"],
   ["output", "output"],
   ["data_form", "data_form"],
+  ["gmp", "gmp"],
   ["start_condition", "start_condition"],
   ["end_condition", "end_condition"],
 ];

@@ -304,6 +304,7 @@ async def replace_graph(
             existing.end_condition = node.end_condition
             existing.data_form = node.data_form
             existing.system_fallback = node.system_fallback
+            existing.gmp = node.gmp
             existing.url = node.url
             existing.url_label = node.url_label
             existing.section_anchor = node.section_anchor

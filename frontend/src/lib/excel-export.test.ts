@@ -451,7 +451,7 @@ describe("buildExcelModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: null, assignee: null, system: null,
-          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, url: null, url_label: null,
+          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
           sp_description: null,
         },
       },
@@ -486,7 +486,7 @@ describe("buildExcelModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: null, assignee: null, system: null,
-          duration: null, cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, url: null, url_label: null,
+          duration: null, cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
           sp_description: "표준 절차 설명",
         },
       },

@@ -904,6 +904,8 @@ class NodeIn(BaseModel):
     data_form: str = Field(default="", max_length=50)
     # 시스템 원문 폴백 — 편집 경로는 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
     system_fallback: str = Field(default="", max_length=200)
+    # 활동별 GMP — 맵 sp_gmp와 동일 3값. 무효값은 "" 소거(from_attributes 응답 겸용이라 422 대신)
+    gmp: str = Field(default="", max_length=20)
     # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
@@ -944,6 +946,13 @@ class NodeIn(BaseModel):
         # duration과 동일한 이유로 무효값은 "" 소거 (위 _normalize_duration 주석 참고)
         text = value.strip()
         return text if text == "" or NUMERIC_RE.fullmatch(text) else ""
+
+    @field_validator("gmp", mode="after")
+    @classmethod
+    def _normalize_gmp(cls, value: str) -> str:
+        # 3값 외는 "" 소거 — duration과 동일 결정(경계 스크럽, design 2026-08-20)
+        text = value.strip()
+        return text if text in GMP_VALUES else ""
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "NodeIn":
@@ -1024,6 +1033,8 @@ class SubprocessRefOut(BaseModel):
     end_condition: str | None = None
     # 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
     frequency_fallback: str | None = None
+    # 링크 맵 GMP 분류 — SP 노드 캔버스 필 상속 표시(read-only, design 2026-08-20)
+    gmp: str | None = None
     url: str | None = None
     url_label: str | None = None
     sp_description: str | None = None

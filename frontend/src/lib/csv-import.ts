@@ -198,6 +198,7 @@ const NODE_DEFAULTS = {
   start_condition: "",
   end_condition: "",
   system_fallback: "",
+  gmp: "",  // CSV/AI 표면 제외 — 검토값, 병합은 기존값 보존 (design 2026-08-20)
   url: "",
   url_label: "",
   section_anchor: "",

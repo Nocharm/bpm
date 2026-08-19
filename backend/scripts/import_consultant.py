@@ -562,6 +562,13 @@ async def import_delivery(
                 if new_link_node is not None:
                     new_link_node.annual_count = old_link_node.annual_count
                     new_link_node.fte = old_link_node.fte
+            # 활동별 GMP 이어받기 — 전달물에 없는 검토 선정값이라 재빌드 노드가 늘 비어 있다.
+            # 직전 게시본의 같은 계보 노드에서 승계해 재전달이 검토값을 덮지 않게 한다
+            # (맵 sp_gmp를 엔진이 안 건드리는 것과 동일 계약 — 시그니처에도 미포함, design 2026-08-20)
+            for n in nodes:
+                old_node = old_by_root.get(n.source_node_id or n.id)
+                if old_node is not None and old_node.gmp:
+                    n.gmp = old_node.gmp
 
         graph_changed = True
         if latest is not None:

@@ -19,7 +19,7 @@ const makeGraph = (
 
 const SP_REF_DEFAULTS: SubprocessRef = {
   name: null, designated: true, department: null, assignee: null, system: null, duration: null,
-  cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, url: null, url_label: null,
+  cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
   sp_description: null,
 };
 const spRef = (over: Partial<SubprocessRef> = {}): SubprocessRef => ({ ...SP_REF_DEFAULTS, ...over });

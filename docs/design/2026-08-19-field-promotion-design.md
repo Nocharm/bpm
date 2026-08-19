@@ -50,6 +50,7 @@
 - 저장값: `direct` / `indirect` / `non_gmp` / null. 표시: `GMP Direct` / `GMP Indirect` / `Non-GMP` / `—`.
 - **배지 색 자동 지정(2026-08-20 사용자 결정)**: 분류가 색을 확정 — direct=`--color-removed`(red)·indirect=`--color-changed`(amber)·non_gmp=`--color-added`(green), 12% 틴트 fill(`lib/gmp.ts` 단일 소스). 설정에서 분류 변경 시 **마우스 지점에 닫기(X) 버튼이 오는 안내 팝오버**(새 배지 색 + "Revert to previous")가 떠 이전 값으로 되돌릴 수 있다.
 - 검증: SP 지정 스키마(`SubprocessDesignationIn`류) validator에서 3값+빈 값 외 422. 폴백은 자유 텍스트.
+- **활동별(노드) GMP 확장(2026-08-20 2차 확정)**: `nodes.gmp` 컬럼(동일 3값, NodeIn 경계는 무효 "" 소거). 캔버스 **필 태그** — 맵 탭 "노드 표시 정보"에 GMP 토글(기본 꺼짐), 노드 라벨 왼쪽 위에 아이콘+분류 필(색은 분류가 확정), **미분류(null)는 아이콘만**. 편집 모드에서 필 클릭 → 클릭 지점 분류 피커로 해당 노드 gmp 수정. **SP 노드는 링크 맵 sp_gmp를 read-only 상속 표시**(수정은 링크 맵 설정에서). CSV/AI 표면 제외(병합 보존), diff 포함, 클론 보존. **재임포트 승계** — 전달물에 없는 검토값이라 엔진이 직전 게시본에서 계보로 이어받고 시그니처에서 제외(맵 sp_gmp 보존과 동일 계약).
 
 ## 2. touch_time — 7번째 파라미터 확장 지점
 

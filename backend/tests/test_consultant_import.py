@@ -807,3 +807,52 @@ def test_map_promoted_fields_land_and_gmp_review_survives(client) -> None:
     assert report3.counts() == {"updated": 1}
     m3 = _run(_load())
     assert m3.sp_gmp == "direct" and m3.sp_gmp_fallback == "GMP 기록으로 재분류"
+
+
+def test_node_gmp_survives_redelivery(client) -> None:
+    """활동별 GMP는 검토값 — 전달물에 없어 재전달의 새 버전이 덮으면 안 된다.
+    엔진이 직전 게시본에서 계보(source_node_id)로 이어받는다 (design 2026-08-20)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+
+    def _make(desc: str = ""):
+        cmap = _canonical_map(code="IV-G1", name="GMP 승계")
+        cmap.nodes[0].description = desc
+        return cmap
+
+    _run(_import_once(maps=[_make()]))
+
+    async def _classify() -> None:
+        # 검토자가 게시본 노드(N1 계보)에 GMP 분류를 지정한 상황 재현
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-G1"))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
+            target = next(n for n in nodes if n.title == "요청")
+            target.gmp = "direct"
+            await session.commit()
+
+    _run(_classify())
+
+    # 노드 설명 변경 재전달 → 새 버전 게시 — 새 버전에도 분류가 승계돼야 한다
+    report = _run(_import_once(maps=[_make("개정된 설명")]))
+    assert report.counts() == {"updated": 1}
+
+    async def _load_latest_gmp() -> str:
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-G1"))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
+            return next(n for n in nodes if n.title == "요청").gmp
+
+    assert _run(_load_latest_gmp()) == "direct"

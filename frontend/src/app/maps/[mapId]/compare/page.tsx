@@ -66,6 +66,7 @@ import {
 } from "@/lib/canvas";
 import { humanizeApiError } from "@/lib/api-errors";
 import type { ChangedField } from "@/lib/diff";
+import { formatGmp } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
@@ -158,6 +159,7 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onRename: null,
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
+  onEditGmp: null,
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {
@@ -178,6 +180,7 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   input: "field.input",
   output: "field.output",
   data_form: "field.dataForm",
+  gmp: "field.gmp",
   start_condition: "field.startCondition",
   end_condition: "field.endCondition",
   location: "field.location",
@@ -187,6 +190,7 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
 const displayFieldValue = (field: ChangedField, value: string): string => {
   if (field === "duration" || field === "touch_time") return formatDurationHm(value) || value;
+  if (field === "gmp") return formatGmp(value) || value;
   if (field === "cost_krw" || field === "cost_usd") return formatThousands(value) || value;
   return value;
 };

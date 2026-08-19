@@ -326,6 +326,9 @@ class Node(Base):
     data_form: Mapped[str] = mapped_column(String(50), default="")
     # 시스템 원문 폴백 — 라이브러리화 전 검토 원천, CSV/AI 표면 제외 (design 2026-08-19 §3)
     system_fallback: Mapped[str] = mapped_column(String(200), default="")
+    # 활동별 GMP 분류 — 맵 sp_gmp와 동일 3값 계약. 검토값이라 재임포트가 못 덮는다
+    # (엔진이 계보로 이어받기·시그니처 제외 — design 2026-08-19 §1.3, 2026-08-20 확장)
+    gmp: Mapped[str] = mapped_column(String(20), default="")
     # 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
     url: Mapped[str] = mapped_column(String(500), default="")
     # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)

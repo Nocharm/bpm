@@ -88,6 +88,7 @@ async def clone_graph(
             end_condition=node.end_condition,
             data_form=node.data_form,
             system_fallback=node.system_fallback,
+            gmp=node.gmp,
             url=node.url,
             url_label=node.url_label,
             section_anchor=node.section_anchor,

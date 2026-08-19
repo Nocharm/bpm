@@ -118,6 +118,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_touch_time", "VARCHAR(50)"),
     ("process_maps", "sp_touch_time_fallback", "VARCHAR(200)"),
     ("process_maps", "sp_system_fallback", "VARCHAR(200)"),
+    # 활동별 GMP (design 2026-08-20 캔버스 필 확장)
+    ("nodes", "gmp", "VARCHAR(20) DEFAULT ''"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
