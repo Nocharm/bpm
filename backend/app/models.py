@@ -721,6 +721,27 @@ class LoginRecord(Base):
     )
 
 
+class LocalCredential(Base):
+    """로컬 계정(외부 컨설턴트) 자격증명 — AD 계정이 없는 사용자용 (설계 §3).
+
+    디렉터리 정보는 employees(source='local') 행이 갖고, 여기엔 비밀번호와 sysadmin
+    부여만 둔다. employees에 합치면 raw dict로 직렬화하는 엔드포인트를 통해 해시가
+    새어나갈 경로가 생긴다.
+    """
+
+    __tablename__ = "local_credentials"
+
+    login_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    # 설정 화면에서 부여하는 시스템 관리자 — permissions.logic 캐시에 반영된다 (설계 §3.1)
+    is_sysadmin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class AiUsageEvent(Base):
     """AI 호출 1건의 usage 기록 — 원문(질문 내용) 없이 계량만. 대시보드 집계용 (design 2026-07-11)."""
 
