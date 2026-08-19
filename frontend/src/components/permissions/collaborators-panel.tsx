@@ -38,6 +38,7 @@ import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
 
 import { AddCollaborator } from "./add-collaborator";
 import { HoverSwapPill } from "./hover-swap-pill";
+import { PendingChangePill } from "./pending-change-pill";
 import { PrincipalIcon } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
 import { SkeletonRows } from "./loading-skeleton";
@@ -185,26 +186,14 @@ function CollaboratorRow({
           (하드 제약: R2 서버-진실 마커는 스택 태그와 별개로 유지) / detail tag only once server-confirmed,
           rendered unconditionally regardless of any staged op on this row. */}
       {pendingChange && (
-        pendingChange.requested_by === currentUserId ? (
-          <HoverSwapPill
-            dataId={`perm-pending-withdraw-${perm.id}`}
-            title={t("perm.pending.by", { name: pendingByName })}
-            swapLabel={t("perm.pending.withdraw")}
-            onActivate={() => onWithdrawPending(perm)}
-            base={
-              <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
-                {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-              </span>
-            }
-          />
-        ) : (
-          <span
-            className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-            title={t("perm.pending.by", { name: pendingByName })}
-          >
-            {perm.role} → {pendingChange.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-          </span>
-        )
+        <PendingChangePill
+          dataId={`perm-pending-withdraw-${perm.id}`}
+          role={perm.role}
+          toRole={pendingChange.to_role ?? null}
+          requesterName={pendingByName}
+          canWithdraw={pendingChange.requested_by === currentUserId}
+          onWithdraw={() => onWithdrawPending(perm)}
+        />
       )}
 
       {/* 스택 태그 — 로컬 예정(change/remove), 호버 시 Cancel로 스왑 / staged tag, hover-swaps to Cancel */}

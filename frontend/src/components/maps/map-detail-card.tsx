@@ -56,6 +56,7 @@ import { OrgInfoModal } from "@/components/org-info-modal";
 import { PersonInfoPopup } from "@/components/person-hover-card";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
+import { PendingChangePill } from "@/components/permissions/pending-change-pill";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { UndoLastApplyModal } from "@/components/permissions/undo-last-apply-modal";
 import { useI18n } from "@/lib/i18n";
@@ -628,7 +629,8 @@ export function MapDetailCard({
               {restNode}
             </span>
           </span>
-          <span className="flex flex-col items-end gap-0.5">
+          {/* 우측 필 열 — shrink-0으로 폭을 고정해 좌측 이름/부서가 먼저 자리를 갖는다 */}
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
             <span className="flex items-center gap-1">
               {/* 역할 필 자리 — hover/focus 시 같은 자리·같은 크기의 빨간 Remove 필로 페이드 전환 (U4, R5-1/R5-3).
                   RoleBadge 자체가 ROLE_PILL_WIDTH_CLASS로 고정폭이라 이 wrapper는 배지 크기에 자동으로
@@ -667,36 +669,23 @@ export function MapDetailCard({
                   </button>
                 )}
               </span>
-              {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만.
-                  본인이 낸 요청이면 호버 시 회수(Withdraw)로 스왑 / hover-swaps to Withdraw for the requester. */}
-              {perm.pending_change && (
-                perm.pending_change.requested_by === loginId ? (
-                  <HoverSwapPill
-                    dataId={`map-detail-pending-withdraw-${perm.id}`}
-                    title={t("perm.pending.by", {
-                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                    })}
-                    swapLabel={t("perm.pending.withdraw")}
-                    onActivate={() => void handleWithdrawPending(perm)}
-                    className="max-w-full"
-                    base={
-                      <span className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed">
-                        {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-                      </span>
-                    }
-                  />
-                ) : (
-                  <span
-                    className="min-w-0 max-w-full truncate rounded-sm border border-changed px-1.5 py-0.5 text-fine text-changed"
-                    title={t("perm.pending.by", {
-                      name: nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by,
-                    })}
-                  >
-                    {perm.role} → {perm.pending_change.to_role ?? t("perm.pending.removed")} · {t("perm.pending.tag")}
-                  </span>
-                )
-              )}
             </span>
+            {/* 상세 태그 — 서버 진실(pending_change)일 때만, 즉시성용 로컬 마커는 배지까지만.
+                역할 필과 같은 줄에 두면 좁은 카드에서 이름·부서를 밀어내므로 staged 태그와 같은
+                2번째 줄로 내리고 문구는 툴팁으로 압축(PendingChangePill). staged remove와는
+                동시에 뜨지 않는다 — pending 행은 removable=false. */}
+            {perm.pending_change && (
+              <PendingChangePill
+                dataId={`map-detail-pending-withdraw-${perm.id}`}
+                role={perm.role}
+                toRole={perm.pending_change.to_role ?? null}
+                requesterName={
+                  nameById.get(perm.pending_change.requested_by) ?? perm.pending_change.requested_by
+                }
+                canWithdraw={perm.pending_change.requested_by === loginId}
+                onWithdraw={() => void handleWithdrawPending(perm)}
+              />
+            )}
             {/* 스택 제거 태그 — 좌측 소속(부서) 줄과 같은 높이 대역에 오도록 2번째 줄로 배치 (C4, R5-4).
                 예고 아이콘(즉시/승인)을 달고, 호버 시 같은 자리 Cancel 필로 스왑 (HoverSwapPill). */}
             {stagedRemove && (
