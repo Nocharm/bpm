@@ -16,7 +16,12 @@ def check_and_count(key: str) -> bool:
     """윈도 내 실패가 임계 미만이면 True. 호출 자체는 카운트하지 않는다."""
     now = now_kst().timestamp()
     recent = [t for t in _failures.get(key, []) if now - t < WINDOW_SECONDS]
-    _failures[key] = recent
+    # recent가 비면 키를 남기지 않는다 — 안 그러면 무작위 loginId를 뿌리는 스캐너가
+    # dict를 무한히 키운다(딕셔너리는 프로세스 재시작 전까지 절대 안 줄어든다).
+    if recent:
+        _failures[key] = recent
+    else:
+        _failures.pop(key, None)
     return len(recent) < MAX_ATTEMPTS
 
 

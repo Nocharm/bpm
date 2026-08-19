@@ -1,5 +1,6 @@
 """인증 모드 공개 · LDAP 모드 로그인 (설계: 2026-08-19-auth-fallback-ldap-design.md)."""
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -56,9 +57,14 @@ async def handle_login(
     if employee is not None and employee.active:
         if credential is not None:
             # 로컬 계정은 AD로 보내지 않는다 — 컨설턴트 비밀번호가 사내 AD에 흘러가지 않게.
-            ok = verify_password(body.password, credential.password_hash)
+            # scrypt는 CPU-bound라 to_thread로 감싸 이벤트 루프를 막지 않는다.
+            ok = await asyncio.to_thread(verify_password, body.password, credential.password_hash)
         else:
-            ok = ad_client.authenticate_user(body.login_id, body.password)
+            # ldap3 bind는 블로킹 네트워크 호출 — AD 무응답 시 프로세스 전체가 멎지 않도록
+            # to_thread로 감싼다(app/ad/client.py 모듈 docstring 계약).
+            ok = await asyncio.to_thread(
+                ad_client.authenticate_user, body.login_id, body.password
+            )
 
     if not ok:
         login_throttle.record_failure(throttle_key)
