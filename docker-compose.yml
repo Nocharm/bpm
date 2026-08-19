@@ -47,8 +47,12 @@ services:
       MALLOC_ARENA_MAX: "2"
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-processmap}:${POSTGRES_PASSWORD:?set in .env}@db:5432/${POSTGRES_DB:-processmap}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_MODE: ${AUTH_MODE:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-}
+      AUTH_JWT_TTL_HOURS: ${AUTH_JWT_TTL_HOURS:-8}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
       CHECKOUT_TTL_MINUTES: ${CHECKOUT_TTL_MINUTES:-30}
       # 편집용 매뉴얼 사이트 버튼(F9) — 비우면 에디터 툴바에서 숨김
       MANUAL_URL: ${MANUAL_URL:-}
