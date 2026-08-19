@@ -70,7 +70,23 @@ User feedback (Bug / Suggestion / Question / Other) arrives on the **Feedback** 
 
 - Only a sysadmin can **change status** and **reply** to feedback.
 - Move items through their lifecycle; setting a feedback item to **done** stamps its completion time and **locks further replies**.
-- Users watch their own submissions, so status changes and replies are visible to them immediately.
+- Users see status changes and replies on the Feedback page right away, but **no notification is sent automatically** — you send it deliberately with the buttons below.
+
+### Notifying the author
+
+The detail dialog (click a row) carries two notifications that **an admin sends by hand**. Each opens a confirm dialog first and reports back with a toast.
+
+- **Send notification** (bottom right of the reply area) — after saving a reply, this tells the author a reply has landed. It can be **sent again** after editing the reply, and it stays available on feedback already marked done.
+- **Notify status change** (next to the status segment in the footer) — after changing the status, this sends the new status. It is limited to **once per feedback**; afterwards the button locks and shows a check.
+- What you sent is recorded in the meta rows as **"Notification sent 〈time〉"**, so you can tell at a glance whether it already went out.
+- A **greyed-out** button explains itself in a tooltip: you wrote the feedback yourself (nobody to notify), no reply saved yet, or the status notification was already sent.
+
+### Notes (working memo)
+
+- The note button at the end of each row opens the panel; **anyone** can add notes (no role restriction), and they build up as a time-ordered log.
+- **Editing** is limited to the note's author — the previous text is **kept as history**, reachable from the "edited" badge.
+- **Deleting archives** the note (author or admin). It only disappears from the default list; "Show archived" brings it back.
+- **Permanent deletion** lives in **Settings → Database → Tables → `feedback_notes`** behind the **Delete archived notes** button — it removes the notes and their edit history for good.
 
 ---
 
@@ -243,6 +259,10 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `N8N_POSITION_URL` | backend `.env` | EDW department-head position webhook — empty disables position collection |
 | `HR_SYNC_INTERVAL_HOURS` | backend `.env` | Built-in HR sync scheduler interval (hours). Default 24, 0 = off — keep it at 0 for the first migration and raise it after the preview and a manual sync check out |
 | `HR_SYNC_DELETE_CAP_PCT` | backend `.env` | Full-sync deletion cap (% of managed rows). Default 20, 0 = guard off |
+| `AI_BASE_URL` | backend `.env` | AI server URL (OpenAI-compatible). The in-house GPU is `https://gpu02.sbiologics.com/v1` |
+| `AI_MODEL` | backend `.env` | Default model id — after the SGLang move this is **just `glm-5.2`** (the old `-think` / `-high` / `-nothink` aliases are gone) |
+| `AI_MAX_TOKENS` | backend `.env` | Response token cap, thinking tokens included. Default 8000 — **too low and replies come back empty** |
+| `AI_TIMEOUT_SECONDS` | backend `.env` | Per-call timeout in seconds. Max-thinking calls are slow; 120–180 is recommended |
 
 - Environment changes require a backend restart (`--reload` does not re-read `.env`).
 - Keycloak endpoints and all deployment-specific values come from `.env` — never hardcoded.
@@ -250,4 +270,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-08-14*
+*Business Process Map — Administrator Manual · updated 2026-08-19*

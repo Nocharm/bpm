@@ -45,7 +45,7 @@ Right-click the canvas and choose a shape, or use **Add node** in the inspector.
 
 Select a node and edit in the right inspector:
 
-- **Title** and **Description** — double-click a node (or press `F2`) to rename in place.
+- **Title** and **Description** — double-click a node (or press `F2`) to rename in place. While typing a name, `Enter` commits and **`Shift+Enter` (or `Alt+Enter`) inserts a line break** — the same rule in the canvas, the inspector, and the node edit dialog, and the break shows on the canvas too.
 - **Color** — preset swatches or a custom hex color (`#RRGGBB`).
 - **BPM attributes** — **Assignee** (picked from the org directory), **Department** (auto-set from the assignee), **System**, and the **per-run parameters** (see section 3).
 - **Link (URL)** — attach an external document or system link to a node; a badge appears on the canvas, and you can click it to preview or open in a new tab. You can also give it a display label.
@@ -54,8 +54,9 @@ Select a node and edit in the right inspector:
 
 - Drag from a node's handle onto another node to connect them.
 - A plain node has a **single output** — to branch, use a **Decision** node. Its outgoing edges get branch labels (**Yes** / **No** / **Other**).
-- Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`.
-- **Line style** per edge: Curved, Stepped, or Straight.
+- Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`. Labels take line breaks the same way: `Enter` commits, **`Shift+Enter` / `Alt+Enter`** breaks the line.
+- **Line style is per edge** — Curved, Stepped, or Straight. Select an edge and pick it in the inspector's **Line style** row, or from the edge's right-click menu. The choice is saved with the map, so everyone sees the same shape.
+- To change them all at once, use the inspector's **Map tab → Edge style**: a confirm dialog summarizes how many connections will change, and the style you confirm also becomes the default for newly drawn connections.
 - Dragging a node close to another reveals **drop zones** — **Before** / **After** / **Swap** / **Group** — to insert it into the flow in one motion, or swap the two nodes' places.
 - Dropping an edge onto a node that already has connections asks whether to **Insert between** or **Keep** the existing link; dropping onto a **Decision** node offers **Branch** or **Insert** into an existing output.
 
@@ -248,6 +249,7 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 | `Shift`+drag | Axis-locked move (horizontal/vertical) |
 | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / Redo |
 | `F2` | Rename node / edit edge label |
+| `Shift+Enter` (or `Alt+Enter`) | Line break while editing a name or label (`Enter` commits) |
 | `Delete` | Delete selection |
 | `Esc` | Cancel action, close modal, exit deep view |
 | `Space` (hold) | Pan the canvas |
@@ -266,4 +268,4 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-*Business Process Map — Editing Maps · Updated 2026-08-14*
+*Business Process Map — Editing Maps · Updated 2026-08-19*

@@ -169,6 +169,9 @@ The **Notices** tab lists currently active announcements. Filter by All / Import
 
 Click **Feedback** on any screen: pick a type (**Bug / Suggestion / Question / Other**) and describe the issue, then send — your current screen and open map are attached automatically. Track status and admin replies on the **Feedback** page.
 
+- **Notes** — the note button at the end of each row opens a panel where **anyone** can leave notes (reproduction steps, progress, context). Notes build up as a time-ordered log; you can edit your own, and the **previous text stays in the history**. Deleting a note **archives** it rather than removing it — "Show archived" brings it back into view.
+- **Notifications** — when a reply lands or the status changes, an admin sends you a notification (it is deliberate, not automatic). Check them under the bell icon and in your **Inbox**.
+
 ---
 
 ## 7. User Groups
@@ -194,4 +197,4 @@ Groups let you grant map access to several people in one step.
 
 ---
 
-*Business Process Map — Getting Around · Updated 2026-08-14*
+*Business Process Map — Getting Around · Updated 2026-08-19*
