@@ -1,38 +1,33 @@
-"""컨설턴트 canonical 전달물 임포트 — 멱등 업서트·버전 적재/게시·SP 지정 (dry-run/apply).
+"""컨설턴트 체계 임포트 엔진 — 멱등 업서트·버전 적재/게시·SP 지정·노트 적재 (dry-run/apply).
 
-설계: docs/design/2026-08-08-consultant-hierarchy-design.md §5·§8. 승인 워크플로·알림은
-부트스트랩 경로로 의도적으로 우회한다(오너 이양 전 대량 알림 방지).
-
-중단된 --apply 재실행은 안전하다 — consultant_code 기준 멱등 업서트라 이미 커밋된 맵은 건너뛰고
-이어서 처리한다. 다만 청크 커밋 경계 사이에 크래시하면 재실행이 끝날 때까지 버전 없는 빈 껍데기
-맵(pass 1만 커밋되고 pass 2의 그래프/버전은 아직 못 채운 상태)이 목록에 보일 수 있다.
+설계: docs/design/2026-08-08-consultant-hierarchy-design.md §5·§8 +
+docs/design/2026-08-18-interview-import-design.md. 승인 워크플로·알림은 부트스트랩 경로로
+의도적으로 우회한다(오너 이양 전 대량 알림 방지). 진입점은 인터뷰 웹 임포트
+(routers/categories.import_interview_delivery)뿐 — canonical 파일 CLI는 실전달물이
+인터뷰 결과 JSON으로 확정되며 제거됨(2026-08-18).
 
 `_publish`는 routers/versions.publish_version과 달리 KB 인덱싱을 스킵한다 — 전달 스케일
 (최대 2만 맵)의 대량 임베딩은 부적절하며, 필요하면 별도 백필 스크립트로 다룬다.
-
-실행 (backend/ 에서, 기본 dry-run):
-    bash:       .venv/bin/python -m scripts.import_consultant <delivery_dir> [--apply]
-    PowerShell: .venv\\Scripts\\python -m scripts.import_consultant <delivery_dir> [--apply]
 """
 
-import argparse
-import asyncio
-import csv
 import hashlib
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+if TYPE_CHECKING:
+    from scripts.consultant_interview import InterviewNote
+
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
-from app.db import SessionLocal
 from app.duration import normalize_duration
 from app.models import (
     Edge,
     Employee,
     MapApprover,
+    MapNote,
     MapPermission,
     MapVersion,
     Node,
@@ -46,8 +41,6 @@ from scripts.consultant_canonical import (
     CanonicalCategory,
     CanonicalMap,
     CanonicalParams,
-    load_categories,
-    load_maps,
 )
 
 _X_STEP = 240  # rank 간 가로 간격(px) — create_map Start/End 시드(120→480)와 동일 리듬
@@ -147,7 +140,7 @@ def build_graph_rows(
         code_to_id[cn.code] = uuid.uuid4().hex
         nodes.append(Node(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
-            title=cn.name, node_type=cn.type,
+            title=cn.name, node_type=cn.type, description=cn.description, color=cn.color,
             department=cn.department, assignee=cn.assignee, system=cn.system,
             pos_x=x, pos_y=y, sort_order=i,
         ))
@@ -298,8 +291,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
     return (
         sorted(
-            (n.source_node_id or n.id, n.title, n.node_type, n.department or "", n.assignee or "",
-             n.system or "", n.linked_map_id, n.annual_count or "", n.fte or "", bool(n.is_primary_end))
+            (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.color or "",
+             n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
+             n.annual_count or "", n.fte or "", bool(n.is_primary_end))
             for n in nodes
         ),
         sorted(
@@ -433,27 +427,65 @@ async def import_delivery(
             category_errored.add(cmap.code)
             continue
         if cmap.code in existing:
+            # 거버넌스 불변 원칙의 명시적 예외 — 오너 미확정(pending)으로 만들어진 맵만, 재전달에
+            # 실오너가 오면 오너·권한행·승인자·오우닝을 갱신하고 플래그를 내린다 (design 2026-08-18 §4).
+            found = existing[cmap.code]
+            assigned_owner = cmap.owner
+            if found.consultant_owner_pending and assigned_owner is not None:
+                owning, note = await resolve_owning_department(
+                    session, known, dept_index, cmap.department, assigned_owner
+                )
+                if note:
+                    report.add(cmap.code, "warning", note)
+                if assigned_owner not in known_logins:
+                    report.add(cmap.code, "warning", f"owner {assigned_owner!r} not found in employees")
+                found.owner_id = assigned_owner
+                found.owning_department = owning
+                found.consultant_owner_pending = False
+                for perm in await session.scalars(select(MapPermission).where(
+                        MapPermission.map_id == found.id, MapPermission.role == "owner")):
+                    perm.principal_id = assigned_owner
+                    perm.granted_by = actor
+                await session.execute(delete(MapApprover).where(MapApprover.map_id == found.id))
+                for approver in dict.fromkeys(cmap.approvers):
+                    if approver not in known_logins:
+                        report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
+                    session.add(MapApprover(map_id=found.id, user_id=approver, assigned_by=actor))
+                report.add(cmap.code, "governance", f"owner {assigned_owner} assigned")
             continue
-        owning, note = await resolve_owning_department(
-            session, known, dept_index, cmap.department, cmap.owner
-        )
+        owner_login = cmap.owner
+        pending = owner_login is None
+        owning: str | None
+        note: str | None
+        if owner_login is None:
+            # 오너 미확정 — actor(실행 sysadmin) 폴백. 오우닝은 actor 조직으로 오염시키지 않고
+            # NULL로 남긴다(홈 부서 뷰 오염 방지) — 실오너 배정 시 위 예외 분기가 재해석한다.
+            owner_login = actor
+            owning = None
+            note = None
+            report.add(cmap.code, "warning", "owner missing — fallback to importer (pending)")
+        else:
+            owning, note = await resolve_owning_department(
+                session, known, dept_index, cmap.department, owner_login
+            )
         if note:
             report.add(cmap.code, "warning", note)
-        if cmap.owner not in known_logins:
-            report.add(cmap.code, "warning", f"owner {cmap.owner!r} not found in employees")
+        if not pending and owner_login not in known_logins:
+            report.add(cmap.code, "warning", f"owner {owner_login!r} not found in employees")
         for approver in dict.fromkeys(cmap.approvers):
             if approver not in known_logins:
                 report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
         new_map = ProcessMap(
-            name=cmap.name, created_by=actor, owner_id=cmap.owner,
+            name=cmap.name, created_by=actor, owner_id=owner_login,
             visibility=cmap.visibility, owning_department=owning,
+            description=cmap.description, consultant_owner_pending=pending,
             category_id=category_ids[cmap.category], consultant_code=cmap.code,
         )
         session.add(new_map)
         await session.flush()
         session.add(MapPermission(
             map_id=new_map.id, principal_type="user",
-            principal_id=cmap.owner, role="owner", granted_by=actor,
+            principal_id=owner_login, role="owner", granted_by=actor,
         ))
         for approver in dict.fromkeys(cmap.approvers):
             session.add(MapApprover(map_id=new_map.id, user_id=approver, assigned_by=actor))
@@ -532,6 +564,7 @@ async def import_delivery(
         fields_changed = (
             found_map.name != cmap.name
             or found_map.category_id != category_ids[cmap.category]
+            or (found_map.description or "") != cmap.description
             or (found_map.sp_department or "") != sp_department
             or (found_map.sp_input or "") != params.input
             or (found_map.sp_output or "") != params.output
@@ -547,6 +580,7 @@ async def import_delivery(
         if is_new or graph_changed or fields_changed or found_map.sp_designated_at is None:
             # 콘텐츠 필드 갱신 — 거버넌스 필드(owner·visibility·owning_department·approvers)는 불변
             found_map.name = cmap.name
+            found_map.description = cmap.description
             found_map.category_id = category_ids[cmap.category]
             if found_map.sp_designated_at is None:
                 found_map.sp_designated_at = now_kst()
@@ -593,61 +627,46 @@ async def import_delivery(
     return report
 
 
-async def run_import(
-    delivery_dir: Path,
+async def apply_interview_notes(
+    session: AsyncSession,
+    notes: list["InterviewNote"],
     *,
-    apply: bool,
-    actor: str,
     label: str,
-    report_path: Path | None,
-) -> ImportReport:
-    """전달 디렉터리 임포트 — 기본 dry-run(rollback). apply=True만 영속."""
-    categories = load_categories(delivery_dir / "categories.json")
-    maps, line_errors = load_maps(delivery_dir / "maps.jsonl")
-    async with SessionLocal() as session:
-        report = await import_delivery(
-            session, categories=categories, maps=maps, actor=actor, label=label,
-            commit_every=200 if apply else None,
-        )
-        if apply:
-            await session.commit()
-        else:
-            await session.rollback()
-    for err in line_errors:
-        report.add("-", "error", err)
-    if report_path is not None:
-        with report_path.open("w", encoding="utf-8", newline="") as fh:
-            writer = csv.writer(fh)
-            writer.writerow(["map_code", "action", "detail"])
-            writer.writerows(report.rows)
-    return report
+) -> int:
+    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입(멱등).
+
+    import_delivery와 같은 세션에서 호출한다 — dry-run rollback이 노트까지 함께 원복된다.
+    map_code가 DB에 없는 노트는 스킵(맵 생성 자체가 스킵된 경우 — 엔진 리포트가 사유를 이미
+    남겼다). 반환값은 삽입 행 수 (design 2026-08-18 §5).
+    """
+    map_codes = {n.map_code for n in notes if n.map_code}
+    cat_codes = {n.category_code for n in notes if n.map_code is None and n.category_code}
+    code_to_id: dict[str, int] = {}
+    if map_codes:
+        rows = (await session.scalars(
+            select(ProcessMap).where(ProcessMap.consultant_code.in_(map_codes))
+        )).all()
+        code_to_id = {m.consultant_code: m.id for m in rows if m.consultant_code is not None}
+    if code_to_id:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.in_(set(code_to_id.values()))
+        ))
+    if cat_codes:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.is_(None),
+            MapNote.category_code.in_(cat_codes),
+        ))
+    inserted = 0
+    for n in notes:
+        map_id = code_to_id.get(n.map_code) if n.map_code else None
+        if n.map_code and map_id is None:
+            continue
+        session.add(MapNote(
+            map_id=map_id, category_code=None if map_id else n.category_code,
+            kind=n.kind[:50], title=(n.title[:300] if n.title else None), text=n.text,
+            source="consultant-import", delivery_label=label,
+        ))
+        inserted += 1
+    return inserted
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Import consultant canonical delivery")
-    parser.add_argument("delivery_dir", type=Path)
-    parser.add_argument("--apply", action="store_true", help="write to DB (default: dry-run)")
-    parser.add_argument("--actor", default="consultant-import")
-    parser.add_argument("--label", default=None, help="version label (default: Consultant <KST date>)")
-    parser.add_argument("--report", type=Path, default=None, help="detail CSV path")
-    args = parser.parse_args()
-    # KST 고정 — 컨테이너 UTC 자정 근처에 돌리면 date.today()가 하루 밀린다 (CLAUDE.md 운영 노트).
-    label = args.label if args.label is not None else f"Consultant {now_kst().date().isoformat()}"
-    if len(label) > 100:  # MapVersion.label은 String(100)
-        print(f"--label truncated to 100 chars (was {len(label)})")
-        label = label[:100]
-    report = asyncio.run(run_import(
-        args.delivery_dir, apply=args.apply, actor=args.actor,
-        label=label, report_path=args.report,
-    ))
-    mode = "APPLY" if args.apply else "DRY-RUN"
-    print(f"{mode}  " + ", ".join(f"{k}={v}" for k, v in sorted(report.counts().items())))
-    issues = [r for r in report.rows if r[1] in ("warning", "error")]
-    for map_code, action, detail in issues[:20]:
-        print(f"{action:8} {map_code}: {detail}")
-    if len(issues) > 20:
-        print(f"... {len(issues) - 20} more (use --report for full CSV)")
-
-
-if __name__ == "__main__":
-    main()

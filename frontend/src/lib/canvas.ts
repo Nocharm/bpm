@@ -3,6 +3,7 @@
 import dagre from "@dagrejs/dagre";
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
+import type { EdgeLineStyle } from "@/lib/api";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -186,7 +187,13 @@ const NODE_LINE_HEIGHT = 20;
 // 나머지 줄은 REGION_MARGIN 여백으로 흡수한다(근사). 타이틀 텍스트를 지정 폭 안에서 몇 줄로 접는지만 계산.
 function countTitleLines(text: string, width: number): number {
   const contentW = Math.max(1, width - NODE_HPAD);
-  return Math.max(1, Math.ceil(measureLabelWidth(text, NODE_TITLE_FONT) / contentW));
+  // 명시 줄바꿈(\n, Alt+Enter) 지원 — 세그먼트별 wrap 줄 수 합산
+  return text
+    .split("\n")
+    .reduce(
+      (acc, seg) => acc + Math.max(1, Math.ceil(measureLabelWidth(seg, NODE_TITLE_FONT) / contentW)),
+      0,
+    );
 }
 
 function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
@@ -201,7 +208,13 @@ function titleForEstimate(label: string, nodeType: ProcessNodeType): string {
 export function estimateNodeWidth(label: string, nodeType: ProcessNodeType): number {
   const base = nodeSizeOf(nodeType).w;
   if (nodeType === "decision" || nodeType === "subprocess") return base;
-  const raw = measureLabelWidth(titleForEstimate(label, nodeType), NODE_TITLE_FONT) + NODE_HPAD + 4;
+  // 명시 줄바꿈(\n) 지원 — 가장 넓은 줄 기준
+  const widest = Math.max(
+    ...titleForEstimate(label, nodeType)
+      .split("\n")
+      .map((seg) => measureLabelWidth(seg, NODE_TITLE_FONT)),
+  );
+  const raw = widest + NODE_HPAD + 4;
   return Math.max(base, Math.min(NODE_MAX_WIDTH, raw));
 }
 
@@ -471,6 +484,23 @@ export const EDGE_DEFAULTS = {
   markerEnd: { type: MarkerType.ArrowClosed, color: "var(--color-border-strong)" },
 } as const;
 
+// 새 엣지 선 모양 기본값 — "마지막 일괄 변경 값"(맵별 localStorage)을 에디터가 마운트/일괄 적용 시 주입.
+// 모듈 상태인 이유: withEdge 등 순수 헬퍼와 여러 생성 경로의 시그니처를 바꾸지 않고 일괄 적용하기 위함.
+let newEdgeLineStyle: EdgeLineStyle = "smoothstep";
+
+export function setNewEdgeLineStyle(style: EdgeLineStyle): void {
+  newEdgeLineStyle = style;
+}
+
+export function getNewEdgeLineStyle(): EdgeLineStyle {
+  return newEdgeLineStyle;
+}
+
+/** 새 엣지 생성용 기본 속성 — EDGE_DEFAULTS에 현재 선 모양 기본값을 덮은 사본. */
+export function getEdgeDefaults(): Omit<typeof EDGE_DEFAULTS, "type"> & { type: EdgeLineStyle } {
+  return { ...EDGE_DEFAULTS, type: newEdgeLineStyle };
+}
+
 // 판단(decision) 노드 분기 엣지 — Yes/No는 고정 라벨, 기타는 사용자 지정(빈 값 포함)
 export type BranchKind = "yes" | "no" | "other";
 export const BRANCH_YES_LABEL = "Yes";
@@ -684,7 +714,7 @@ function withEdge(edges: Edge[], source: string, target: string): Edge[] {
   return [
     ...edges,
     {
-      ...EDGE_DEFAULTS,
+      ...getEdgeDefaults(),
       id: genId(),
       source,
       target,

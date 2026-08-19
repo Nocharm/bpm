@@ -12,6 +12,7 @@ import {
   List,
   Mail,
   Megaphone,
+  MessageSquareReply,
   Network,
   ShieldCheck,
   Square,
@@ -126,6 +127,7 @@ function typeIcon(type: string): LucideIcon {
   if (type.startsWith("checkout_")) return ArrowLeftRight;
   if (type.startsWith("permission_")) return ShieldCheck;
   if (type === "subprocess_registered") return Network;
+  if (type === "feedback_reply") return MessageSquareReply;
   return Bell;
 }
 

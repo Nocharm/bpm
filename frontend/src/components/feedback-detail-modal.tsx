@@ -2,15 +2,19 @@
 
 // 피드백 상세/관리 모달 — 상태변경(관리자)·답글(관리자, done 제외)·본문수정/삭제(작성자, draft만).
 
-import { Check, PencilLine, Send, Trash2, X } from "lucide-react";
+import { Bell, BellRing, Check, PencilLine, Send, Trash2, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import {
   deleteFeedback,
+  notifyFeedbackAuthor,
   patchFeedback,
   type FeedbackItem,
   type FeedbackStatus,
 } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   FEEDBACK_KIND_LABEL,
   FEEDBACK_KIND_STYLE,
@@ -40,12 +44,14 @@ export function FeedbackDetailModal({
   isSysadmin,
   onClose,
   onChanged,
+  onToast,
 }: {
   feedback: FeedbackItem;
   currentLoginId: string;
   isSysadmin: boolean;
   onClose: () => void;
   onChanged: (updated: FeedbackItem | null) => void;
+  onToast: (message: string, tone?: "error") => void;
 }) {
   const { t } = useI18n();
   const [nowMs] = useState(() => Date.now());
@@ -53,6 +59,7 @@ export function FeedbackDetailModal({
   const [bodyDraft, setBodyDraft] = useState(feedback.body);
   const [editingBody, setEditingBody] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [notifyKind, setNotifyKind] = useState<"reply" | "status" | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isAuthor = feedback.author === currentLoginId;
@@ -80,6 +87,49 @@ export function FeedbackDetailModal({
       setEditingBody(false);
       return updated;
     });
+  // 알림은 자동 발송이 아니라 이 버튼으로만 — 확인 모달 → 발송 → 토스트 (2026-08-19)
+  const sendNotification = async (kind: "reply" | "status") => {
+    setNotifyKind(null);
+    if (busy) return;
+    setBusy(true);
+    try {
+      onChanged(await notifyFeedbackAuthor(feedback.id, kind));
+      onToast(t("feedback.toast.notified"));
+    } catch (err) {
+      onToast(humanizeApiError(err, t), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 알림 버튼은 관리자에게 항상 보인다 — 못 보내는 경우는 숨기지 말고 사유를 달아 비활성
+  // (숨기면 "버튼이 어디 있냐"가 된다 — 실사용 피드백 2026-08-19)
+  const statusNotified = feedback.status_notified_at !== null;
+  const replyBlockedReason = isAuthor
+    ? t("feedback.detail.notifySelf")
+    : !feedback.reply.trim()
+      ? t("feedback.detail.notifyNoReply")
+      : null;
+  const statusBlockedReason = isAuthor
+    ? t("feedback.detail.notifySelf")
+    : statusNotified
+      ? t("feedback.detail.notifyStatusSent")
+      : null;
+
+  const notifyReplyButton = (
+    <button
+      type="button"
+      onClick={() => setNotifyKind("reply")}
+      disabled={busy || replyBlockedReason !== null}
+      data-id="feedback-notify-reply"
+      title={replyBlockedReason ?? undefined}
+      className="inline-flex items-center gap-1 rounded-sm border border-hairline px-3 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
+    >
+      <Bell size={14} strokeWidth={1.5} />
+      {t("feedback.detail.notifyReply")}
+    </button>
+  );
+
   const remove = () =>
     run(async () => {
       await deleteFeedback(feedback.id);
@@ -89,10 +139,13 @@ export function FeedbackDetailModal({
   const route = feedback.context?.route;
 
   return (
-    <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4"
-      onClick={onClose}
-    >
+    // ConfirmDialog는 portal이지만 이벤트는 React 트리를 따라 버블한다 — 오버레이(onClick=onClose)
+    // 안에 두면 확인 클릭이 모달을 닫아버려, 형제로 분리한다 (실측 2026-08-19)
+    <>
+      <ModalBackdrop
+        className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4"
+        onClose={onClose}
+      >
       <div
         role="dialog"
         aria-label={t("feedback.detail.title")}
@@ -192,7 +245,8 @@ export function FeedbackDetailModal({
                   placeholder={t("feedback.detail.replyPlaceholder")}
                   className="min-h-24 w-full resize-none rounded-sm border border-hairline bg-surface px-3 py-2 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
                 />
-                <div className="flex justify-end">
+                <div className="flex items-center justify-end gap-2">
+                  {isSysadmin && notifyReplyButton}
                   <button
                     type="button"
                     onClick={saveReply}
@@ -215,6 +269,8 @@ export function FeedbackDetailModal({
                   : t("feedback.detail.replyEmpty")}
               </p>
             )}
+            {/* 답글 편집이 잠긴 상태(done 등)에서도 알림은 보낼 수 있어야 한다 */}
+            {isSysadmin && !canReply && <div className="flex justify-end">{notifyReplyButton}</div>}
           </section>
 
           {/* 메타 — 작성자·화면·시각들 */}
@@ -250,6 +306,19 @@ export function FeedbackDetailModal({
               <MetaRow
                 label={t("feedback.detail.doneAt")}
                 value={<TimePills iso={feedback.done_at} nowMs={nowMs} />}
+              />
+            )}
+            {/* 알림 발송 이력 — "이전에 보냈는지" 확인용 */}
+            {feedback.reply_notified_at && (
+              <MetaRow
+                label={`${t("feedback.detail.notifyReply")} · ${t("feedback.detail.notifySentAt")}`}
+                value={<TimePills iso={feedback.reply_notified_at} nowMs={nowMs} />}
+              />
+            )}
+            {feedback.status_notified_at && (
+              <MetaRow
+                label={`${t("feedback.detail.notifyStatus")} · ${t("feedback.detail.notifySentAt")}`}
+                value={<TimePills iso={feedback.status_notified_at} nowMs={nowMs} />}
               />
             )}
           </section>
@@ -290,6 +359,18 @@ export function FeedbackDetailModal({
                     </button>
                   ))}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setNotifyKind("status")}
+                  disabled={busy || statusBlockedReason !== null}
+                  data-id="feedback-notify-status"
+                  title={statusBlockedReason ?? undefined}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink-secondary hover:border-accent hover:text-accent disabled:opacity-40"
+                >
+                  <BellRing size={14} strokeWidth={1.5} />
+                  {t("feedback.detail.notifyStatus")}
+                  {statusNotified && <Check size={12} strokeWidth={2} className="text-added" />}
+                </button>
               </div>
             ) : (
               <span />
@@ -326,8 +407,24 @@ export function FeedbackDetailModal({
               ))}
           </footer>
         )}
-      </div>
-    </div>
+        </div>
+      </ModalBackdrop>
+      {notifyKind && (
+        <ConfirmDialog
+          dialogId="feedback-notify-confirm"
+          title={t("feedback.detail.notifyConfirmTitle")}
+          message={t(
+            notifyKind === "reply"
+              ? "feedback.detail.notifyReplyConfirm"
+              : "feedback.detail.notifyStatusConfirm",
+          )}
+          confirmLabel={t("feedback.detail.notifyConfirmAction")}
+          cancelLabel={t("feedback.cancel")}
+          onConfirm={() => void sendNotification(notifyKind)}
+          onClose={() => setNotifyKind(null)}
+        />
+      )}
+    </>
   );
 }
 

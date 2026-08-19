@@ -746,38 +746,69 @@ class FrameworkTransferIn(BaseModel):
     to_map_id: int
 
 
-class FrameworkImportIn(BaseModel):
-    """웹 JSON 대량 임포트 요청 — categories.json/maps.jsonl과 동일 구조를 인라인으로 받는다.
-
-    구조 검증은 scripts.consultant_canonical(parse_categories/parse_map_objs)이 담당 —
-    여기서는 raw dict 그대로 통과시킨다(brief §2).
-    """
-
-    categories: list[dict[str, Any]] = []
-    maps: list[dict[str, Any]] = []
-    apply: bool = False
-    label: (
-        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
-    ) = None
-
-
 class FrameworkImportRow(BaseModel):
-    """임포트 리포트 1행 — action∈created/updated/unchanged/error/warning (ImportReport.rows 미러)."""
+    """임포트 리포트 1행 — action∈created/updated/unchanged/governance/error/warning
+    (ImportReport.rows 미러, 인터뷰 임포트 응답 rows가 사용)."""
 
     code: str
     action: str
     detail: str = ""
 
 
-class FrameworkImportOut(BaseModel):
-    """웹 JSON 대량 임포트 응답 — rows는 최대 500행(error/warning 우선, 초과 시 truncated).
+class MapNoteOut(BaseModel):
+    """맵 노트 1건 — 인터뷰 예외 규칙·VOC 읽기전용 표시 (design 2026-08-18 §5)."""
 
-    summary는 ImportReport.counts()(created/updated/unchanged/error, 0인 키는 없음)에 라우터가
-    "warning" 키를 별도로 더한 것 — counts()는 CLI 요약용이라 warning을 집계 제외하지만, 이 카운트를
-    빼면 rows가 500행에서 잘릴 때 FE가 undercount하므로 잘리기 전 전체 기준으로 채운다.
-    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    title: str | None
+    text: str
+    node_id: str | None
+    source: str
+    created_at: datetime
+
+
+class InterviewImportFileIn(BaseModel):
+    """인터뷰 파일 1건 — content는 원문 그대로, 검증은 어댑터(consultant_interview) 담당."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
+    content: dict[str, Any]
+
+
+class InterviewImportIn(BaseModel):
+    """인터뷰 다중 파일 웹 임포트 요청 — 기본 dry-run (design 2026-08-18 §1)."""
+
+    files: list[InterviewImportFileIn] = []
+    apply: bool = False
+    label: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+
+class InterviewIssueOut(BaseModel):
+    """어댑터 키 검증 이슈 1행 — severity∈error/warning, path는 rows[i].actions[j] 표기."""
+
+    severity: str
+    path: str
+    message: str
+
+
+class InterviewImportFileOut(BaseModel):
+    """파일별 리포트 — ok=False(error 존재)면 그 파일 전체가 임포트에서 제외된 것."""
+
+    name: str
+    ok: bool
+    map_count: int
+    note_count: int
+    issues: list[InterviewIssueOut]
+
+
+class InterviewImportOut(BaseModel):
+    """인터뷰 임포트 응답 — files(어댑터 검증) + rows(엔진 리포트, 기존 500캡 규칙)."""
 
     applied: bool
+    files: list[InterviewImportFileOut]
     summary: dict[str, int]
     rows: list[FrameworkImportRow]
     truncated: bool
@@ -858,6 +889,10 @@ class NodeIn(BaseModel):
 
 HandleSide = Literal["top", "bottom", "left", "right"]
 
+# React Flow 엣지 type 문자열 그대로 저장 — default=곡선(bezier), smoothstep=꺾은선, straight=직선.
+# ""=레거시 미지정(FE가 꺾은선으로 렌더)
+LineStyle = Literal["", "default", "smoothstep", "straight"]
+
 
 class EdgeIn(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -870,6 +905,7 @@ class EdgeIn(BaseModel):
     target_side: HandleSide = "left"
     source_handle: str | None = Field(default=None, max_length=200)
     target_handle: str | None = Field(default=None, max_length=200)
+    line_style: LineStyle = ""
 
 
 class NodeOut(NodeIn):
@@ -1089,6 +1125,41 @@ class FeedbackOut(BaseModel):
     body_edited_at: datetime | None
     reply_at: datetime | None
     done_at: datetime | None
+    reply_notified_at: datetime | None = None
+    status_notified_at: datetime | None = None
+
+
+class FeedbackNoteCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class FeedbackNoteUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class FeedbackNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    feedback_id: int
+    author: str
+    body: str
+    created_at: datetime
+    edited_at: datetime | None = None
+    archived_at: datetime | None = None
+
+
+class FeedbackNoteRevisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    body: str
+    created_at: datetime
+
+
+class FeedbackNotifyIn(BaseModel):
+    # reply=답글 도착 알림(재발송 허용) · status=상태변경 알림(1회 한정)
+    kind: Literal["reply", "status"]
 
 
 class FeedbackCounts(BaseModel):

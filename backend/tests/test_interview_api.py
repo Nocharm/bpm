@@ -92,7 +92,7 @@ def _enable_ai(monkeypatch) -> None:
 
 
 def _fake_ai(content: str):
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=content, prompt_tokens=10, completion_tokens=5)
 
     return _call
@@ -149,7 +149,7 @@ def test_interview_turn_ai_failure_is_atomic(client: TestClient, monkeypatch) ->
         f"/api/maps/{created['id']}/interviews", json={"version_id": version_id}
     ).json()["id"]
 
-    async def _boom(messages, model=None):
+    async def _boom(messages, model=None, *, reasoning=None, max_tokens=None):
         raise RuntimeError("gpu down")
 
     monkeypatch.setattr(ai_client, "call_ai", _boom)
@@ -423,7 +423,7 @@ def _scripted(monkeypatch, replies: list[str]) -> dict:
     queue = list(replies)
     state = {"calls": 0}
 
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         state["calls"] += 1
         return ai_client.AiReply(content=queue.pop(0))
 
@@ -724,7 +724,7 @@ def test_turn_prompt_includes_dept_catalog(client: TestClient, monkeypatch) -> N
     asyncio.run(_seed_active_anchor())
     captured: dict = {}
 
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured["system"] = messages[0]["content"]
         return ai_client.AiReply(content=json.dumps({"message": "ok", "facts_patch": {}}))
 
@@ -756,7 +756,7 @@ def test_turn_prompt_reflects_working_graph(client: TestClient, monkeypatch) -> 
     asyncio.run(_seed())
     captured: dict = {}
 
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         captured["system"] = messages[0]["content"]
         return ai_client.AiReply(content=json.dumps({"message": "ok", "facts_patch": {}}))
 
@@ -875,7 +875,7 @@ def test_draw_sums_usage_across_parallel_calls(client: TestClient, monkeypatch) 
     state = _iv_session(client)
     queue = [_DRAW_A, _DRAW_B]
 
-    async def _call(messages: list[dict], model: str | None = None) -> ai_client.AiReply:
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None) -> ai_client.AiReply:
         return ai_client.AiReply(content=queue.pop(0), prompt_tokens=10, completion_tokens=5)
 
     monkeypatch.setattr(ai_client, "call_ai", _call)

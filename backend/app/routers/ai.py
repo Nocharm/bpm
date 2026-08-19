@@ -132,7 +132,8 @@ async def _ask_and_validate(
     totals = AiUsageTotals()
     for attempt in range(2):
         try:
-            reply = await ai_client.call_ai(messages, model)
+            # 대화형 챗 — 중간 사고("high")로 지연/품질 균형 (GLM-5.2 사고 모드, ai_client.AiReasoning)
+            reply = await ai_client.call_ai(messages, model, reasoning="high")
         except Exception as exc:  # noqa: BLE001 -- 외부 AI 서버 오류는 502로 일괄 변환
             # exc는 내부 GPU 주소를 담을 수 있어 클라이언트엔 노출 금지 — 서버 로그에만 기록
             logger.warning("AI server call failed: %s", exc)

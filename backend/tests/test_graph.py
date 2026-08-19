@@ -368,6 +368,65 @@ def test_edge_handle_side_invalid_rejected(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_edge_line_style_roundtrips(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "ls-n1", "title": "A", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "ls-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [
+            {
+                "id": "ls-e1",
+                "source_node_id": "ls-n1",
+                "target_node_id": "ls-n2",
+                "line_style": "straight",
+            }
+        ],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert saved["edges"][0]["line_style"] == "straight"
+
+
+def test_edge_line_style_defaults(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "lsd-n1", "title": "A", "node_type": "start", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "lsd-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [{"id": "lsd-e1", "source_node_id": "lsd-n1", "target_node_id": "lsd-n2"}],
+    }
+
+    client.put(f"/api/versions/{version_id}/graph", json=graph)
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+
+    assert saved["edges"][0]["line_style"] == ""
+
+
+def test_edge_line_style_invalid_rejected(client: TestClient) -> None:
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "lsb-n1", "title": "A", "pos_x": 0, "pos_y": 0, "sort_order": 0},
+            {"id": "lsb-n2", "title": "B", "pos_x": 200, "pos_y": 0, "sort_order": 1},
+        ],
+        "edges": [
+            {
+                "id": "lsb-e1",
+                "source_node_id": "lsb-n1",
+                "target_node_id": "lsb-n2",
+                "line_style": "zigzag",
+            }
+        ],
+    }
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert response.status_code == 422
+
+
 def test_removed_group_is_cleaned(client: TestClient) -> None:
     version_id = _create_version(client)
     client.put(

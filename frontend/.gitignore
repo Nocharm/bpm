@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 스모크 스크린샷(SHOT_DIR 기본 . — pw-smoke-home-dept)
+home-dept-*.png

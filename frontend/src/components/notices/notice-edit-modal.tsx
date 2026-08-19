@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { DateRangeCalendar } from "@/components/notices/date-range-calendar";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 
 // ISO(KST) 경계 — 시작=자정, 종료=하루 끝
 function toStartIso(date: string): string {
@@ -88,9 +89,9 @@ export function NoticeEditModal({
       : null;
 
   return (
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4"
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         role="dialog"
@@ -236,6 +237,6 @@ export function NoticeEditModal({
           </button>
         </footer>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

@@ -7,10 +7,19 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Download, Loader2, Table2, Trash2 } from "lucide-react";
 
-import { exportDbTableCsv, getDbTable, listDbTables, type TableData, type TableInfo } from "@/lib/api";
+import {
+  exportDbTableCsv,
+  getDbTable,
+  listDbTables,
+  purgeArchivedFeedbackNotes,
+  type TableData,
+  type TableInfo,
+} from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { downloadCsv } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
+
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 import { NotificationPurgeModal } from "./notification-purge-modal";
 
@@ -51,6 +60,8 @@ export function TableViewer() {
   const [purgeTo, setPurgeTo] = useState("");
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [purgeResult, setPurgeResult] = useState<number | null>(null);
+  // feedback_notes 전용 — 아카이브 노트 영구 삭제(앱에서는 아카이브까지만 가능)
+  const [notesPurgeOpen, setNotesPurgeOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false); // 스크롤 트리거 동기 가드
@@ -251,6 +262,17 @@ export function TableViewer() {
                   {t("db.rowsTotalShown", { total, loaded })}
                 </span>
               )}
+              {selected === "feedback_notes" && (
+                <button
+                  type="button"
+                  data-id="table-viewer-purge-archived-notes"
+                  onClick={() => setNotesPurgeOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-error hover:bg-error/10"
+                >
+                  <Trash2 size={13} strokeWidth={1.5} />
+                  {t("db.purgeNotesButton")}
+                </button>
+              )}
               {selected === "notifications" && (
                 <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
                   <input type="date" value={purgeFrom} onChange={(e) => setPurgeFrom(e.target.value)}
@@ -338,6 +360,27 @@ export function TableViewer() {
             )}
           </div>
         </div>
+      )}
+
+      {notesPurgeOpen && (
+        <ConfirmDialog
+          dialogId="purge-archived-notes-confirm"
+          title={t("db.purgeNotesButton")}
+          message={t("db.purgeNotesConfirm")}
+          confirmLabel={t("db.purgeNotesAction")}
+          cancelLabel={t("db.purgeCancel")}
+          danger
+          onConfirm={() => {
+            setNotesPurgeOpen(false);
+            void purgeArchivedFeedbackNotes()
+              .then((res) => {
+                setPurgeResult(res.deleted);
+                setRefreshTick((v) => v + 1);
+              })
+              .catch((err) => setError(humanizeApiError(err, t)));
+          }}
+          onClose={() => setNotesPurgeOpen(false)}
+        />
       )}
 
       {purgeOpen && (

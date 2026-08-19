@@ -13,6 +13,7 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 
 const keyOf = (g: NotificationPurgeGroup) => `${g.type}::${g.message}`;
 
@@ -90,10 +91,10 @@ export function NotificationPurgeModal({
     .reduce((sum, g) => sum + g.count, 0);
 
   return (
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1340] flex items-center justify-center bg-ink/30"
-      onClick={() => {
-        if (!busy) onClose(); // purge in-flight 중 닫힘 차단 — onPurged가 다른 테이블 상태를 오염시키는 경로 방지
+      onClose={() => {
+        if (!busy) onClose(); // purge in-flight 중 닫힘 차단(Escape 포함) — 다른 테이블 상태 오염 방지
       }}
     >
       <div
@@ -161,6 +162,6 @@ export function NotificationPurgeModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

@@ -177,6 +177,8 @@ class ProcessMap(Base):
     )
     # L6 멱등 업서트 키 — 임포트된 맵만 non-null. 레거시 DB는 유니크 제약 없이 앱 계층에서 보장.
     consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
+    # 오너 미확정 임포트 마킹 — True면 재전달 오너로 거버넌스 갱신 허용(불변 원칙의 명시적 예외) (design 2026-08-18 §4)
+    consultant_owner_pending: Mapped[bool] = mapped_column(default=False)
     # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
     sp_input: Mapped[str | None] = mapped_column(Text, default=None)
     sp_output: Mapped[str | None] = mapped_column(Text, default=None)
@@ -187,6 +189,29 @@ class ProcessMap(Base):
     approvers: Mapped[list["MapApprover"]] = relationship(
         cascade="all, delete-orphan"
     )
+
+
+class MapNote(Base):
+    """인터뷰 노트(예외 규칙·VOC) + 추후 일반맵 사용자 노트 공용 (design 2026-08-18 §5).
+
+    스코프는 map_id(맵) 또는 category_code(L5 전역) 중 하나. node_id는 추후 활동별
+    등록 확장 자리. source='consultant-import' 행은 재임포트 시 전달 단위로 replace된다.
+    """
+
+    __tablename__ = "map_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_maps.id", ondelete="CASCADE"), default=None
+    )
+    node_id: Mapped[str | None] = mapped_column(String(50), default=None)
+    category_code: Mapped[str | None] = mapped_column(String(100), default=None)
+    kind: Mapped[str] = mapped_column(String(50))
+    title: Mapped[str | None] = mapped_column(String(300), default=None)
+    text: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(100), default="consultant-import")
+    delivery_label: Mapped[str | None] = mapped_column(String(100), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class MapVersion(Base):
@@ -320,6 +345,9 @@ class Edge(Base):
     # 다중 출구 식별 — 하위프로세스 노드의 끝별 출력 핸들 id(대표끝="__primary__", 그 외=끝 이름)
     source_handle: Mapped[str | None] = mapped_column(String(200), default=None)
     target_handle: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 엣지별 선 모양(React Flow type: default=곡선, smoothstep=꺾은선, straight=직선, ""=레거시 기본).
+    # source_side와 동일하게 시각 전용 — diff 비교 제외
+    line_style: Mapped[str] = mapped_column(String(20), default="")
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 
@@ -430,6 +458,48 @@ class Feedback(Base):
     )
     reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # 작성자 알림 발송 시각 — 자동 발송이 아니라 관리자가 버튼으로 보낸 시각(재발송 시 갱신).
+    # 상태변경 알림은 1회 한정이라 값이 있으면 버튼이 잠긴다 (2026-08-19)
+    reply_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    status_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+
+class FeedbackNote(Base):
+    """피드백 노트 — 누구나 자유롭게 다는 메모/진행 기록. 피드백 테이블 플라이아웃에서 열람 (2026-08-19).
+
+    수정은 이력을 남기고(FeedbackNoteRevision에 직전 본문 스냅샷), 삭제는 아카이브(archived_at)로만 —
+    영구 삭제는 관리자 DB 테이블의 퍼지에서만 수행한다(알림 퍼지와 동일 관례).
+    """
+
+    __tablename__ = "feedback_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    feedback_id: Mapped[int] = mapped_column(
+        ForeignKey("feedback.id", ondelete="CASCADE"), index=True
+    )
+    author: Mapped[str] = mapped_column(String(100))
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class FeedbackNoteRevision(Base):
+    """노트 수정 이력 — 수정 직전 본문 스냅샷(수정해도 원문이 남게) (2026-08-19)."""
+
+    __tablename__ = "feedback_note_revisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    note_id: Mapped[int] = mapped_column(
+        ForeignKey("feedback_notes.id", ondelete="CASCADE"), index=True
+    )
+    body: Mapped[str] = mapped_column(Text, default="")
+    # 이 본문이 교체된 시각(=수정 시각)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Notice(Base):

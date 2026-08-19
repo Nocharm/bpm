@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { PenLine } from "lucide-react";
 
 import { MarkdownView } from "@/components/markdown-view";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 
 interface DrawConfirmDialogProps {
   summary: string; // buildDrawSummary 산출 마크다운
@@ -24,9 +25,9 @@ export function DrawConfirmDialog({ summary, onConfirm, onClose }: DrawConfirmDi
   }, [onClose]);
 
   return (
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/30 p-6"
-      onClick={onClose}
+      onClose={onClose}
       data-id="iv-draw-confirm"
     >
       <div
@@ -62,6 +63,6 @@ export function DrawConfirmDialog({ summary, onConfirm, onClose }: DrawConfirmDi
           </button>
         </footer>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

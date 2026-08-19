@@ -131,6 +131,9 @@ export interface FlatNode extends GraphNode {
   source_node_id: string | null;
 }
 
+// 엣지별 선 모양 — React Flow 엣지 type 문자열 그대로 저장(default=곡선, smoothstep=꺾은선, straight=직선)
+export type EdgeLineStyle = "default" | "smoothstep" | "straight";
+
 export interface GraphEdge {
   id: string;
   source_node_id: string;
@@ -140,6 +143,8 @@ export interface GraphEdge {
   target_side: string;
   source_handle: string | null;
   target_handle: string | null;
+  // ""=레거시 미지정(렌더는 꺾은선) — 백엔드 schemas.LineStyle과 동일 어휘
+  line_style: EdgeLineStyle | "";
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
@@ -1649,6 +1654,13 @@ export function previewNotificationPurge(
   );
 }
 
+// 아카이브된 피드백 노트 영구 삭제(sysadmin) — 앱에서는 아카이브까지만, 되돌릴 수 없는 삭제는 여기서만
+export function purgeArchivedFeedbackNotes(): Promise<NotificationBulkDeleteResult> {
+  return request<NotificationBulkDeleteResult>("/admin/feedback-notes/purge-archived", {
+    method: "POST",
+  });
+}
+
 export function purgeNotifications(
   from: string,
   to: string,
@@ -1683,6 +1695,26 @@ export interface FeedbackItem {
   body_edited_at: string | null;
   reply_at: string | null;
   done_at: string | null;
+  // 관리자가 작성자에게 알림을 보낸 시각 — status는 1회 한정이라 값이 있으면 버튼 잠금
+  reply_notified_at: string | null;
+  status_notified_at: string | null;
+}
+
+export interface FeedbackNote {
+  id: number;
+  feedback_id: number;
+  author: string;
+  body: string;
+  created_at: string;
+  // 수정 시각(수정 이력은 별도 조회) · 아카이브 시각(삭제는 아카이브까지만, 영구삭제는 관리자 퍼지)
+  edited_at: string | null;
+  archived_at: string | null;
+}
+
+export interface FeedbackNoteRevision {
+  id: number;
+  body: string;
+  created_at: string;
 }
 
 export interface FeedbackCounts {
@@ -1732,6 +1764,57 @@ export function patchFeedback(id: number, patch: FeedbackPatch): Promise<Feedbac
 
 export function deleteFeedback(id: number): Promise<void> {
   return request<void>(`/feedback/${id}`, { method: "DELETE" });
+}
+
+// 노트 — 누구나 자유롭게 작성(피드백 진행 메모/로그). 아카이브는 기본 숨김.
+export function listFeedbackNotes(id: number, includeArchived = false): Promise<FeedbackNote[]> {
+  return request<FeedbackNote[]>(
+    `/feedback/${id}/notes${includeArchived ? "?include_archived=true" : ""}`,
+  );
+}
+
+// 수정 — 작성자만. 직전 본문은 서버가 이력으로 남긴다.
+export function updateFeedbackNote(
+  feedbackId: number,
+  noteId: number,
+  body: string,
+): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${feedbackId}/notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ body }),
+  });
+}
+
+// 삭제 = 아카이브(영구삭제 아님) — 작성자 또는 관리자
+export function archiveFeedbackNote(feedbackId: number, noteId: number): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${feedbackId}/notes/${noteId}/archive`, {
+    method: "POST",
+  });
+}
+
+export function listFeedbackNoteRevisions(
+  feedbackId: number,
+  noteId: number,
+): Promise<FeedbackNoteRevision[]> {
+  return request<FeedbackNoteRevision[]>(`/feedback/${feedbackId}/notes/${noteId}/revisions`);
+}
+
+export function createFeedbackNote(id: number, body: string): Promise<FeedbackNote> {
+  return request<FeedbackNote>(`/feedback/${id}/notes`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+// 작성자 알림 명시 발송(관리자) — reply=재발송 가능 / status=피드백당 1회
+export function notifyFeedbackAuthor(
+  id: number,
+  kind: "reply" | "status",
+): Promise<FeedbackItem> {
+  return request<FeedbackItem>(`/feedback/${id}/notify`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
 }
 
 // ── 공지사항 (design 2026-07-05) ──────────────
@@ -2293,25 +2376,52 @@ export interface FrameworkImportRow {
   detail: string;
 }
 
-export interface FrameworkImportResult {
+export interface InterviewIssue {
+  severity: string; // "error" | "warning"
+  path: string; // 예: rows[2].actions[3]
+  message: string;
+}
+
+export interface InterviewFileReport {
+  name: string;
+  ok: boolean; // false = error 존재 — 그 파일 전체가 임포트에서 제외됨
+  map_count: number;
+  note_count: number;
+  issues: InterviewIssue[];
+}
+
+export interface InterviewImportResult {
   applied: boolean;
-  // 서버는 action별 카운트만 채워 보낸다(0인 키는 아예 없음) — created/updated/unchanged/error는
-  // backend ImportReport.counts() 미러, warning은 counts()가 제외하는 대신 라우터가 rows 전체
-  // (500행 캡 이전) 기준으로 별도 채운다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
+  files: InterviewFileReport[];
   summary: Record<string, number>;
   rows: FrameworkImportRow[];
   truncated: boolean;
 }
 
-// 웹 JSON 대량 임포트(sysadmin) — apply=false는 dry-run 미리보기, categories/maps는 CLI 임포터와 동일 raw 구조.
-export function importFramework(body: {
-  categories: unknown[];
-  maps: unknown[];
+// 인터뷰 결과 JSON 다중 파일 임포트(sysadmin) — apply=false는 dry-run, 파일별 키 검증 리포트 포함
+// (design 2026-08-18). 키/구조 검증은 서버 어댑터가 진실 — content는 파싱된 원문 그대로 보낸다.
+export function importInterview(body: {
+  files: { name: string; content: unknown }[];
   apply: boolean;
   label?: string;
-}): Promise<FrameworkImportResult> {
-  return request<FrameworkImportResult>("/categories/import", {
+}): Promise<InterviewImportResult> {
+  return request<InterviewImportResult>("/categories/import-interview", {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export interface MapNote {
+  id: number;
+  kind: string; // exception | voc | rule_basis | ...
+  title: string | null;
+  text: string;
+  node_id: string | null;
+  source: string;
+  created_at: string;
+}
+
+// 맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용, 맵 viewer 권한 준수 (design 2026-08-18 §5).
+export function getMapNotes(mapId: number): Promise<MapNote[]> {
+  return request<MapNote[]>(`/maps/${mapId}/notes`);
 }

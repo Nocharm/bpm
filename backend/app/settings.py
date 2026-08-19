@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     ai_api_token: str = ""  # Bearer 토큰 (시크릿 — .env만, git 금지)
     ai_model: str = ""
     ai_timeout_seconds: int = 60  # 요청 타임아웃(초)
+    # 응답 max_tokens 상한 — 사고(thinking) 토큰 포함. 너무 작으면 GLM-5.2가 빈 응답 반환(최대 사고 기준 ≥2000 권장)
+    ai_max_tokens: int = 8000
     # 다중 엔드포인트+모델 — JSON 배열 [{"name","base_url","token","model","models"}]. .env에서 추가/삭제.
     # 비우면 위 단일 설정(AI_BASE_URL 등) 사용. 토큰은 시크릿이라 .env 전용(app_settings 아님).
     ai_endpoints: str = ""

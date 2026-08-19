@@ -28,9 +28,11 @@ from app.schemas import (
     CategoryMapsOut,
     CategoryNodeOut,
     CategoryUpdateIn,
-    FrameworkImportIn,
-    FrameworkImportOut,
     FrameworkImportRow,
+    InterviewImportFileOut,
+    InterviewImportIn,
+    InterviewImportOut,
+    InterviewIssueOut,
     MapOut,
 )
 
@@ -270,58 +272,99 @@ async def list_category_nodes(
     ]
 
 
-@router.post("/import", response_model=FrameworkImportOut)
-async def import_framework_delivery(
-    payload: FrameworkImportIn,
+_INTERVIEW_ISSUE_CAP = 200  # 파일당 이슈 표시 상한 — 초과분은 말미 요약 1행
+
+
+@router.post("/import-interview", response_model=InterviewImportOut)
+async def import_interview_delivery(
+    payload: InterviewImportIn,
     login_id: str = Depends(require_sysadmin),
     session: AsyncSession = Depends(get_session),
-) -> FrameworkImportOut:
-    """웹 JSON 대량 임포트 — CLI(scripts.import_consultant)와 동일 엔진 재사용, 기본 dry-run.
+) -> InterviewImportOut:
+    """인터뷰 결과 JSON 다중 파일 임포트 — 파일별 어댑터 검증 후 공용 엔진 재사용, 기본 dry-run.
 
-    literal "/import"는 `/{category_id}/...` 패턴에 앞서 선언 — FastAPI는 등록 순서대로
-    매칭하므로 path-param 라우트가 이 세그먼트를 가로채지 않게 한다(brief 주의사항).
+    error가 있는 파일은 통째로 스킵하고 나머지 파일만 진행한다(부분 임포트 없음 —
+    dry-run으로 고친 뒤 재실행). 노트 적재는 같은 세션이라 dry-run rollback에 함께 원복.
+    literal "/import-interview"는 `/{category_id}/...` 패턴보다 앞서 선언 — FastAPI는 등록
+    순서대로 매칭하므로 path-param 라우트가 이 세그먼트를 가로채지 않게 한다.
     scripts는 app 모듈을 가져와 순환참조가 생기므로 함수 지역에서 지연 임포트한다.
+    설계: docs/design/2026-08-18-interview-import-design.md §1·§6.
     """
-    from scripts.consultant_canonical import CanonicalError, parse_categories, parse_map_objs
-    from scripts.import_consultant import import_delivery
+    from scripts.consultant_canonical import CanonicalCategory, CanonicalMap
+    from scripts.consultant_interview import AdapterIssue, InterviewNote, convert_interview
+    from scripts.import_consultant import apply_interview_notes, import_delivery
 
-    try:
-        categories = parse_categories({"categories": payload.categories})
-    except CanonicalError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    files_out: list[InterviewImportFileOut] = []
+    merged_cats: dict[str, CanonicalCategory] = {}
+    merged_maps: list[CanonicalMap] = []
+    merged_notes: list[InterviewNote] = []
+    seen_task_codes: set[str] = set()
 
-    maps, item_errors = parse_map_objs(payload.maps)
-    label = payload.label or f"Web import {now_kst():%Y-%m-%d}"
+    for file in payload.files:
+        result = convert_interview(file.content)
+        issues = list(result.issues)
+        ok = not result.has_error()
+        if ok:
+            # 파일 간 중복 taskId = 같은 파일 재선택/재전달 겹침 신호 — 뒤 파일을 통째로 제외
+            dupes = [m.code for m in result.maps if m.code in seen_task_codes]
+            if dupes:
+                issues.append(AdapterIssue(
+                    "error", "rows", f"duplicate taskId across files: {', '.join(dupes)} — file skipped",
+                ))
+                ok = False
+        if ok:
+            for cat in result.categories:
+                prev = merged_cats.get(cat.code)
+                if prev is not None and prev.name != cat.name:
+                    issues.append(AdapterIssue(
+                        "warning", "framework.categories",
+                        f"category {cat.code} name differs across files — later file wins",
+                    ))
+                merged_cats[cat.code] = cat
+            merged_maps.extend(result.maps)
+            seen_task_codes.update(m.code for m in result.maps)
+            merged_notes.extend(result.notes)
 
+        shown = issues[:_INTERVIEW_ISSUE_CAP]
+        overflow = len(issues) - len(shown)
+        rows_out = [InterviewIssueOut(severity=i.severity, path=i.path, message=i.message) for i in shown]
+        if overflow > 0:
+            rows_out.append(InterviewIssueOut(
+                severity="warning", path="$", message=f"... {overflow} more issues",
+            ))
+        files_out.append(InterviewImportFileOut(
+            name=file.name, ok=ok,
+            map_count=len(result.maps) if ok else 0,
+            note_count=len(result.notes) if ok else 0,
+            issues=rows_out,
+        ))
+
+    label = payload.label or f"Interview {now_kst():%Y-%m-%d}"
     report = await import_delivery(
-        session, categories=categories, maps=maps, actor=login_id, label=label,
-        commit_every=None,
+        session, categories=list(merged_cats.values()), maps=merged_maps,
+        actor=login_id, label=label, commit_every=None,
     )
-    for err in item_errors:
-        report.add("-", "error", err)
+    inserted_notes = await apply_interview_notes(session, merged_notes, label=label)
 
     if payload.apply:
         await session.commit()
     else:
         await session.rollback()
 
-    # error/warning 행 우선 포함 후 나머지 순서대로(brief §2) — summary는 잘림 전 전체 기준
+    # rows 정렬·캡·warning 카운트는 기존 /import 규칙 그대로 (categories.py import_framework_delivery)
     priority = [r for r in report.rows if r[1] in ("error", "warning")]
     rest = [r for r in report.rows if r[1] not in ("error", "warning")]
     ordered = priority + rest
-    truncated = len(ordered) > 500
-
-    # counts()는 warning을 집계 제외한다(CLI 요약용 의미는 그대로 둔다) — 이 엔드포인트만 응답에
-    # warning 카운트를 별도로 채운다. rows는 500행에서 잘리므로(위 truncated) FE가 rows에서 세면
-    # 캡 초과 전달물에서 undercount된다 — 잘리기 전 report.rows 전체를 기준으로 센다(fix round 1).
     summary = report.counts()
     summary["warning"] = sum(1 for r in report.rows if r[1] == "warning")
+    summary["notes"] = inserted_notes
 
-    return FrameworkImportOut(
+    return InterviewImportOut(
         applied=payload.apply,
+        files=files_out,
         summary=summary,
         rows=[FrameworkImportRow(code=c, action=a, detail=d) for c, a, d in ordered[:500]],
-        truncated=truncated,
+        truncated=len(ordered) > 500,
     )
 
 

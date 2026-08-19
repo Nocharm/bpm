@@ -610,69 +610,126 @@ def test_chunked_commit_across_both_passes(client) -> None:
     assert all(v.status == "published" for _, v in results)
 
 
-def _write_delivery(tmp_path, maps):
-    import json
-
-    (tmp_path / "categories.json").write_text(json.dumps({"categories": [
-        {"code": "A", "name": "구매", "level": 1, "parent": None},
-        {"code": "A1", "name": "직접구매", "level": 2, "parent": "A"},
-    ]}, ensure_ascii=False), encoding="utf-8")
-    lines = [json.dumps(m, ensure_ascii=False) for m in maps]
-    (tmp_path / "maps.jsonl").write_text("\n".join(lines), encoding="utf-8")
-    return tmp_path
+# ── 인터뷰 임포트 확장 (design 2026-08-18) — owner 폴백·pending 거버넌스 예외·description ──
 
 
-def _raw_map(code="L6-DRY"):
-    return {
-        "code": code, "name": f"드라이런 {code}", "category": "A1", "owner": "cons.owner",
-        "nodes": [{"code": "N1", "name": "요청", "type": "process", "seq": 1}],
-    }
+def test_owner_pending_column_registered() -> None:
+    from app.db import _ADDED_COLUMNS
+
+    assert ("process_maps", "consultant_owner_pending") in {(t, c) for t, c, _ in _ADDED_COLUMNS}
 
 
-def test_dry_run_writes_nothing_but_reports(client, tmp_path) -> None:
+def test_owner_none_falls_back_to_actor_and_marks_pending(client) -> None:
     from sqlalchemy import select
 
     from app.db import SessionLocal
-    from app.models import ProcessMap
-    from scripts.import_consultant import run_import
+    from app.models import MapPermission, ProcessMap
 
     _seed_import_employees()
-    delivery = _write_delivery(tmp_path, [_raw_map()])
-    report_path = tmp_path / "report.csv"
-    report = _run(run_import(delivery, apply=False, actor="admin.sys",
-                             label="DRY", report_path=report_path))
-    assert report.counts() == {"created": 1}
-    assert "created" in report_path.read_text(encoding="utf-8")
-
-    async def _absent():
-        async with SessionLocal() as session:
-            return (await session.scalars(
-                select(ProcessMap).where(ProcessMap.consultant_code == "L6-DRY")
-            )).first()
-
-    assert _run(_absent()) is None  # rollback — DB 무변경
-
-
-def test_apply_persists_and_line_errors_reported(client, tmp_path) -> None:
-    from sqlalchemy import select
-
-    from app.db import SessionLocal
-    from app.models import ProcessMap
-    from scripts.import_consultant import run_import
-
-    _seed_import_employees()
-    delivery = _write_delivery(tmp_path, [_raw_map("L6-APPLY")])
-    (tmp_path / "maps.jsonl").write_text(
-        (tmp_path / "maps.jsonl").read_text(encoding="utf-8") + "\n{broken", encoding="utf-8"
+    cmap = _canonical_map(
+        code="IV-P1", name="교정 준비", owner=None, approvers=[], department="",
+        description="[Interview]\nGMP: yes",
     )
-    report = _run(run_import(delivery, apply=True, actor="admin.sys", label="APPLY", report_path=None))
-    assert report.counts()["created"] == 1
-    assert any(action == "error" for _, action, _ in report.rows)  # 깨진 줄 편입
+    report = _run(_import_once(maps=[cmap]))
+    assert report.counts() == {"created": 1}
+    assert any(a == "warning" and "owner missing" in d for _, a, d in report.rows)
 
-    async def _present():
+    async def _load():
         async with SessionLocal() as session:
-            return (await session.scalars(
-                select(ProcessMap).where(ProcessMap.consultant_code == "L6-APPLY")
-            )).one()
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P1"))).one()
+            perms = (await session.scalars(select(MapPermission).where(MapPermission.map_id == m.id))).all()
+        return m, perms
 
-    assert _run(_present()).name == "드라이런 L6-APPLY"
+    m, perms = _run(_load())
+    assert m.owner_id == "admin.sys" and m.consultant_owner_pending is True
+    assert m.owning_department is None  # actor 조직으로 오염 금지 — 실오너 배정 시 재해석 (design §4)
+    assert m.description.startswith("[Interview]")
+    assert [(p.principal_id, p.role) for p in perms] == [("admin.sys", "owner")]
+
+
+def test_pending_map_governance_updated_on_redelivery_with_owner(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapApprover, MapPermission, ProcessMap
+
+    _seed_import_employees()
+    base = dict(code="IV-P2", name="교정 수행")
+    _run(_import_once(maps=[_canonical_map(**base, owner=None, approvers=[], department="")]))
+    report = _run(_import_once(maps=[_canonical_map(
+        **base, owner="cons.owner", approvers=["cons.appr"], department="Consult Div/Consult Team",
+    )]))
+    assert any(a == "governance" for _, a, _ in report.rows)
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P2"))).one()
+            perms = (await session.scalars(select(MapPermission).where(MapPermission.map_id == m.id))).all()
+            apprs = (await session.scalars(select(MapApprover).where(MapApprover.map_id == m.id))).all()
+        return m, perms, apprs
+
+    m, perms, apprs = _run(_load())
+    assert m.owner_id == "cons.owner" and m.consultant_owner_pending is False
+    assert m.owning_department == "Consult Div/Consult Team"
+    assert [(p.principal_id, p.role) for p in perms] == [("cons.owner", "owner")]
+    assert [a.user_id for a in apprs] == ["cons.appr"]
+
+
+def test_description_changes_detected_and_stable(client) -> None:
+    from sqlalchemy import func, select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    _seed_import_employees()
+
+    def _make():
+        return _canonical_map(code="IV-D1", name="설명 변경 감지")
+
+    _run(_import_once(maps=[_make()]))
+
+    # 맵 description만 변경 → fields_changed(updated), 새 버전 없음
+    with_desc = _make()
+    with_desc.description = "[Interview]\nStart condition: 주기 도래"
+    report = _run(_import_once(maps=[with_desc]))
+    assert report.counts() == {"updated": 1}
+
+    # 노드 description 변경 → graph_changed → 새 버전 게시
+    def _make_node_desc():
+        m = _make()
+        m.description = "[Interview]\nStart condition: 주기 도래"
+        m.nodes[0].description = "EAM에서 작업지시를 연다"
+        return m
+
+    report2 = _run(_import_once(maps=[_make_node_desc()]))
+    assert report2.counts() == {"updated": 1}
+
+    async def _counts():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-D1"))).one()
+            n = await session.scalar(
+                select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id)
+            )
+        return m, n
+
+    m, version_count = _run(_counts())
+    assert m.description == "[Interview]\nStart condition: 주기 도래"
+    assert version_count == 2
+
+    # 동일 내용 재전달(새 객체) → unchanged — description이 시그니처를 흔들지 않는다
+    report3 = _run(_import_once(maps=[_make_node_desc()]))
+    assert report3.counts() == {"unchanged": 1}
+    assert _run(_counts())[1] == 2
+
+
+def test_build_graph_rows_carries_color_and_signature_detects_it() -> None:
+    from scripts.import_consultant import _graph_signature, build_graph_rows
+
+    plain = _canonical_map()
+    colored = _canonical_map()
+    colored.nodes[0].color = "#c2849a"
+    nodes_a, edges_a, _ = build_graph_rows(plain, link_targets={})
+    nodes_b, edges_b, _ = build_graph_rows(colored, link_targets={})
+    assert next(n for n in nodes_b if n.title == "요청").color == "#c2849a"
+    # 색은 콘텐츠 — 재전달에서 variant 색이 바뀌면 새 버전으로 감지돼야 한다
+    assert _graph_signature(nodes_a, edges_a) != _graph_signature(nodes_b, edges_b)

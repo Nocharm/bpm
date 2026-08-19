@@ -13,6 +13,7 @@ import { PersonHoverCard } from "@/components/person-hover-card";
 import { buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 
 // 디렉터리에서 파생한 조직 조회 구조 — 직속 인원 맵 + (중간 조직 포함) 전체 경로 집합.
 interface OrgData {
@@ -179,11 +180,9 @@ export function OrgInfoModal({ orgPath, koreanDeptByPath, origin, onClose }: Org
   } as CSSProperties;
 
   return createPortal(
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      onClose={onClose}
     >
       <div
         data-id="org-info-modal"
@@ -223,7 +222,7 @@ export function OrgInfoModal({ orgPath, koreanDeptByPath, origin, onClose }: Org
           <OrgUnitBody path={path} ctx={ctx} />
         </div>
       </div>
-    </div>,
+    </ModalBackdrop>,
     document.body,
   );
 }

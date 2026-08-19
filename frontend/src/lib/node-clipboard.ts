@@ -14,6 +14,8 @@ export interface ClipboardEdge {
   label?: string;
   sourceHandle?: string | null;
   targetHandle?: string | null;
+  // 엣지별 선 모양(React Flow type) — 붙여넣기 사본이 원본 스타일을 물려받게
+  type?: string;
 }
 export interface NodeClipboard {
   sourceMapId: number | null;
@@ -70,6 +72,7 @@ export function buildPaste(
       label: e.label,
       sourceHandle: e.sourceHandle,
       targetHandle: e.targetHandle,
+      type: e.type,
     }));
   return { nodes, edges };
 }

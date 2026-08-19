@@ -13,7 +13,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, Employee, MapApprover, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
+from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
@@ -34,6 +34,7 @@ from app.schemas import (
     MapCopy,
     MapCreate,
     MapDetailOut,
+    MapNoteOut,
     MapOut,
     MapUpdate,
     OwningDepartmentIn,
@@ -518,6 +519,21 @@ async def list_editors(
         for lid in sorted(login_ids)
         if lid in emp_map  # 퇴직자·소멸 계정은 점유권 이전 후보에서 제외 (design 2026-08-10 §7)
     ]
+
+
+@router.get(
+    "/{map_id}/notes",
+    response_model=list[MapNoteOut],
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def list_map_notes(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> list[MapNote]:
+    """맵 노트(인터뷰 예외 규칙·VOC) 읽기전용 목록 (design 2026-08-18 §5·§6)."""
+    return list((await session.scalars(
+        select(MapNote).where(MapNote.map_id == map_id).order_by(MapNote.id)
+    )).all())
 
 
 @router.get(

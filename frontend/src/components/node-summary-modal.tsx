@@ -439,12 +439,27 @@ export function NodeSummaryModal({
               {/* 제목 — subprocess는 링크된 맵 이름 고정이라 편집 차단 (F5) */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
-                <input
-                  className="w-full rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink disabled:bg-surface-alt disabled:text-ink-tertiary"
+                <textarea
+                  className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink disabled:bg-surface-alt disabled:text-ink-tertiary"
                   value={form.label}
+                  rows={Math.min(5, form.label.split("\n").length)}
                   aria-label={t("field.title")}
                   disabled={nodeType === "subprocess"}
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
+                  onKeyDown={(event) => {
+                    // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 캔버스/인스펙터 이름 편집과 동일 규칙
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    if (!event.altKey && !event.shiftKey) {
+                      event.currentTarget.blur();
+                      return;
+                    }
+                    const el = event.currentTarget;
+                    const caret = el.selectionStart + 1;
+                    const next = `${el.value.slice(0, el.selectionStart)}\n${el.value.slice(el.selectionEnd)}`;
+                    setForm((f) => ({ ...f, label: next }));
+                    requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+                  }}
                 />
               </div>
               {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
