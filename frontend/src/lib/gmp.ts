@@ -25,12 +25,14 @@ export const GMP_NODE_COLORS: Record<GmpValue, string> = {
   non_gmp: "#16794f",  // --color-added
 };
 
-/** GMP 배지 inline style — stroke는 상태 토큰, fill은 12% 틴트(노드 파스텔 파생 규칙과 동형). */
+/** GMP 배지 inline style — 텍스트는 상태 토큰, fill 12% 틴트 + 45% 틴트 보더(캔버스 위 가시성,
+ * 사용자 요청 2026-08-20). 필·홈 카드·설정·안내 모달 배지가 이 한 곳을 공유한다. */
 export function getGmpBadgeStyle(value: string | null | undefined): CSSProperties | undefined {
   const colorVar = GMP_OPTIONS.find((option) => option.value === value)?.colorVar;
   if (!colorVar) return undefined;
   return {
     color: `var(${colorVar})`,
     backgroundColor: `color-mix(in srgb, var(${colorVar}) 12%, white)`,
+    border: `1px solid color-mix(in srgb, var(${colorVar}) 45%, white)`,
   };
 }
