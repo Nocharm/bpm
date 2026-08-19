@@ -49,12 +49,30 @@ Keycloak을 쓸 수 없는 배포에서 **LDAP(사내 AD)을 인증 수단으로
 |---|---|---|
 | `login_id` | str PK | `employees.login_id` 느슨 참조 |
 | `password_hash` | str | scrypt (아래) |
+| `is_sysadmin` | bool | 기본 `false`. 설정 화면에서 부여 (§3.1) |
 | `created_by` | str | 발급한 sysadmin loginId |
 | `created_at` / `updated_at` | datetime | `app/clock.now()` (KST) |
 
 **분리하는 이유**: 디렉터리 데이터를 raw dict로 직렬화하는 엔드포인트가 있어(`library.py`류 — 응답 validator를 우회한다) 같은 테이블에 해시를 두면 새어나갈 경로가 생긴다. 신규 테이블이므로 startup `create_all`이 만든다 — `_ADDED_COLUMNS` 등록 대상이 아니다.
 
 **해싱**: stdlib `hashlib.scrypt`. 새 의존성을 넣지 않는다 (`rules/common/dependencies.md` — stdlib 우선). 계정마다 무작위 salt를 생성해 `salt$hash` 형태로 저장하고, 검증은 `hmac.compare_digest`로 상수 시간 비교한다. salt는 `secrets.token_bytes(16)`.
+
+### 3.1 sysadmin 부여 — 판정 경로 확장
+
+로컬 계정에는 설정 화면에서 sysadmin을 부여할 수 있어야 한다. 그런데 현재 `permissions/logic.is_sysadmin(login_id)`(`logic.py:43`)은 **env만 읽는 동기 순수 함수**이고 앱 코드 33곳에서 세션 없이 호출된다. DB를 직접 읽게 바꾸면 그 호출부를 전부 async + 세션 전달로 고쳐야 하므로, 대신 **모듈 수준 집합을 캐시로 얹는다**.
+
+```
+is_sysadmin(login_id) =
+    (auth OFF and dev_enforce OFF)            # 현행 로컬 잠금 방지
+    or login_id in BPM_SYSADMINS              # 현행 env
+    or login_id in _granted_sysadmins         # 신규 — local_credentials.is_sysadmin
+```
+
+`_granted_sysadmins`는 **기동 시 `local_credentials`에서 로드**하고, 로컬 계정의 생성·수정·삭제 시 갱신한다. 함수 시그니처와 33개 호출부는 그대로다.
+
+**전제**: 백엔드는 단일 uvicorn 프로세스다(`backend/Dockerfile:27` — `--workers` 없음). 워커를 늘리면 프로세스별 캐시가 갈라져 부여·회수가 일부 워커에만 반영된다. 이 전제를 `logic.py` 주석과 배포 문서에 남기고, 워커를 늘려야 할 때는 캐시를 버리고 DB 조회로 전환한다.
+
+**불변식**: `BPM_SYSADMINS`로 지정된 계정은 **UI에서 회수할 수 없다.** UI로 마지막 관리자를 지워 스스로 잠기는 것을 막는다. env sysadmin과 UI sysadmin은 출처가 다르며, UI는 자기가 부여한 것만 회수한다.
 
 ## 4. LDAP 모드 로그인 흐름
 
@@ -93,7 +111,7 @@ API 라우터와 권한 로직은 변경하지 않는다.
 | loginId | 신규 발급. **AD 계정과 충돌 검사** — `source != 'local'`인 행이 이미 있으면 거부한다. 실계정을 로컬 계정으로 가로채는 것을 막는다 |
 | 이름 | 표시명 |
 | 부서 | 기존 부서 선택 UI 재사용 → `dept_code` 지정. 조직 경로는 기존 resolver(`app/orgchart.py`)가 해석한다 |
-| 권한 | `admin` / `user`. **sysadmin은 UI에서 부여하지 않는다** — `BPM_SYSADMINS` env로만. 설정 화면에서 최고 권한을 만들 수 있으면 권한 상승 경로가 된다 |
+| 권한 | 저장 위치가 다르므로 컨트롤도 둘로 나눈다 — **역할 선택**(`user`/`admin` → `employees.role`)과 **sysadmin 토글**(→ `local_credentials.is_sysadmin`, §3.1 캐시 반영). `BPM_SYSADMINS`로 지정된 계정은 토글이 켜진 채 비활성으로 보이고 이 화면에서 회수되지 않는다 |
 | 비밀번호 | sysadmin이 발급·재설정한다. 본인 변경 기능은 넣지 않는다 |
 | 차단 | 기존 `employees.active` 토글 |
 
@@ -123,6 +141,8 @@ frontend build ARG 3개(`NEXT_PUBLIC_AUTH_ENABLED`, `NEXT_PUBLIC_KEYCLOAK_ISSUER
 
 **pytest** — 모드별 `get_current_user` 분기 3종 / 로컬 계정 성공·실패 / AD bind 성공·실패(ldap3 mock) / 빈 비밀번호 거부 / `active=false` 거부 / loginId 충돌 거부 / 시도 제한 발동 / 토큰 위조·만료 거부 / `ldap` 모드 아닐 때 관리 엔드포인트 404 / 응답에 해시 미포함.
 
+sysadmin 부여 경로(§3.1) — 부여 즉시 `is_sysadmin` True / 회수 즉시 False / 계정 삭제 시 캐시에서 제거 / 기동 시 DB에서 재로드 / **`BPM_SYSADMINS` 계정은 UI 회수로 내려가지 않음** / sysadmin 부여·회수 자체가 sysadmin 전용.
+
 **vitest** — 모드 fetch 분기, 로그인 폼 상태.
 
 **Playwright** — `ldap` 모드에서 로컬 계정 로그인 왕복(발급 → 로그인 → 딥링크 복원 → 로그아웃).
@@ -134,6 +154,7 @@ frontend build ARG 3개(`NEXT_PUBLIC_AUTH_ENABLED`, `NEXT_PUBLIC_KEYCLOAK_ISSUER
 1. **평문 HTTP로 비밀번호가 전송된다.** 이 앱은 서버에서 원격 IP + 평문 HTTP(3333)로 접속한다(`docs/deploy/deploy.md:145`). 따라서 AD 비밀번호와 로컬 계정 비밀번호가 모두 사내망을 평문으로 지난다. 같은 LAN에서 캡처 가능하며, AD 비밀번호가 유출되면 피해는 BPM이 아니라 AD 계정 전체에 미친다. **사내망 전제로 감수하고 진행하기로 결정했다(2026-08-19).** 앱이 사내망 밖으로 노출되거나 엣지 nginx에 도메인 라우팅이 붙는 시점에 이 결정을 재검토한다.
 2. **`AUTH_JWT_SECRET` 유출 = 전 계정 위조 가능.** `.env` 전용, 커밋 금지. 유출 시 시크릿 교체로 전 세션이 무효화된다.
 3. **외부 컨설턴트 계정이 운영 서버에 상주한다.** 시연 종료 후 `active=false` 처리 절차를 배포 문서에 남긴다.
+4. **UI에서 부여하는 sysadmin은 AD를 우회하는 상시 최고권한 계정이 된다.** 비밀번호를 sysadmin이 직접 정하므로, 부여된 계정 하나는 곧 AD 인증을 거치지 않는 전권 접속 경로다. 완화: 부여·회수는 sysadmin만 가능하고, `created_by`와 `updated_at`을 남기며, 로컬 계정 목록에서 sysadmin 여부가 항상 보이게 한다. 시연 종료 시 회수 절차를 배포 문서에 명시한다.
 
 ## 10. 범위 밖
 

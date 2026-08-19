@@ -6,7 +6,8 @@
 ## 2026-08-19 — LDAP 인증 폴백 + 로컬 계정 설계 (dev, 설계만)
 - 9910을 LDAP으로 열어 외부 컨설턴트가 직접 들어와 확인하는 게 목적. Keycloak을 쓸 수 없는 배포에서 AD bind로 인증하고, AD 계정이 없는 컨설턴트는 설정 화면에서 발급한 로컬 계정(ID+PW)으로 접속한다. 설계: [`docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md`](docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md).
 - 주요 결정 — ①`AUTH_ENABLED` 불리언을 `AUTH_MODE=keycloak|ldap|dev`로 교체하고 `GET /api/auth/mode`로 런타임 노출(프론트 인증 상수의 빌드타임 탈출) ②로컬 계정은 `employees`(`source='local'`) 행 + 비밀번호만 별도 `local_credentials` 테이블(raw dict 직렬화 경로로 해시가 새는 것 방지, 해싱은 stdlib scrypt로 의존성 추가 없음) ③세션은 자체 HS256 JWT — 기존 Bearer 경로를 그대로 타서 API·권한 코드 무변경.
-- 감수한 위험: 서버가 평문 HTTP라 AD·로컬 비밀번호가 사내망을 평문으로 지난다(사내망 전제로 진행 결정, 외부 노출 시 재검토). AD 계정 잠금을 유발하지 않도록 로그인 시도 제한을 넣는다.
+- 로컬 계정에는 sysadmin도 부여한다. `is_sysadmin()`이 env만 읽는 동기 함수라 33개 호출부를 async로 바꾸지 않으려고, 기동 시 로드하고 변경 시 갱신하는 메모리 집합을 얹는 방식(단일 uvicorn 프로세스 전제). `BPM_SYSADMINS` 계정은 UI로 회수 불가 — 스스로 잠기는 것 방지.
+- 감수한 위험: 서버가 평문 HTTP라 AD·로컬 비밀번호가 사내망을 평문으로 지난다(사내망 전제로 진행 결정, 외부 노출 시 재검토). UI로 부여한 sysadmin은 AD를 우회하는 상시 전권 계정이 된다. AD 계정 잠금을 유발하지 않도록 로그인 시도 제한을 넣는다.
 
 ## 2026-08-19 — 로딩 플레이스홀더(shimmer) 일괄 도입 + 첫 렌더 애니메이션 억제 (dev)
 - 실서비스에서 보이던 3종 깜빡임 — ①공지 작성자 필이 아이디→이름으로 바뀜 ②홈 새로고침 시 "맵 없음" 화면이 1초쯤 떴다가 뒤집힘 ③좌측 조직도가 렌더 후 아코디언 애니메이션을 우르르 재생. 공통 원인은 "데이터 없는 상태를 먼저 그린다"라, 그 자리를 shimmer 스켈레톤(`globals.css .skeleton` + `components/skeleton.tsx`)으로 채우는 방향으로 통일.
