@@ -100,6 +100,13 @@ async def update_local_account(
     employee = await session.get(Employee, login_id)
     if credential is None or employee is None:
         raise HTTPException(status_code=404, detail=f"local account {login_id} not found")
+    if employee.source != "local":
+        # employee가 이후 HR 피드로 편입되면 source가 바뀌어 credential만 로컬로 남는다
+        # (app/hr/service.py) — 그 상태에서 디렉터리 행을 덮어쓰지 않는다. DELETE가 정답 경로.
+        raise HTTPException(
+            status_code=409,
+            detail=f"login id {login_id} belongs to a directory user — delete the local credential instead",
+        )
 
     if body.name is not None:
         employee.name = body.name

@@ -9,6 +9,7 @@ from sqlalchemy import delete
 from app import tokens
 from app.db import SessionLocal
 from app.models import Employee, LocalCredential
+from app.passwords import hash_password
 from app.permissions import logic
 from app.settings import settings
 
@@ -197,6 +198,83 @@ def test_load_granted_sysadmins_reads_db_rows(client: TestClient, ldap_admin):
 
     asyncio.run(_reload())
     assert "consultant.reload" in logic._granted_sysadmins
+
+
+def test_non_sysadmin_token_get_is_403(client: TestClient, ldap_admin):
+    """require_sysadmin이 실제로 걸려 있는지 — 지워지면 그린인 채 credential이 새는 서피스."""
+    plain_token, _ = tokens.create_access_token("plain.user")
+    res = client.get(
+        "/api/admin/local-accounts", headers={"Authorization": f"Bearer {plain_token}"}
+    )
+    assert res.status_code == 403
+
+
+def test_non_sysadmin_token_post_is_403_and_no_write_happens(client: TestClient, ldap_admin):
+    plain_token, _ = tokens.create_access_token("plain.user")
+    res = client.post(
+        "/api/admin/local-accounts",
+        json={
+            "loginId": "consultant.blocked",
+            "name": "Blocked",
+            "deptCode": None,
+            "role": "user",
+            "password": "pw",
+            "isSysadmin": False,
+        },
+        headers={"Authorization": f"Bearer {plain_token}"},
+    )
+    assert res.status_code == 403
+
+    async def _assert_not_created() -> None:
+        async with SessionLocal() as session:
+            assert await session.get(LocalCredential, "consultant.blocked") is None
+
+    asyncio.run(_assert_not_created())
+
+
+def test_patch_refuses_non_local_employee(client: TestClient, ldap_admin):
+    """employee가 HR 피드로 편입돼 source가 바뀌어도(app/hr/service.py) credential은 남는다 —
+    그 상태에서 PATCH가 디렉터리 행을 덮어쓰면 안 된다(DELETE가 정답 경로)."""
+
+    async def _seed_hr_employee_with_credential() -> None:
+        async with SessionLocal() as session:
+            session.add(
+                Employee(
+                    login_id="consultant.hrbound",
+                    name="Original Name",
+                    source="hr",
+                    role="user",
+                    active=True,
+                )
+            )
+            session.add(
+                LocalCredential(
+                    login_id="consultant.hrbound",
+                    password_hash=hash_password("pw"),
+                    created_by="admin.sys",
+                )
+            )
+            await session.commit()
+
+    asyncio.run(_seed_hr_employee_with_credential())
+    _seeded_ids.append("consultant.hrbound")
+
+    res = client.patch(
+        "/api/admin/local-accounts/consultant.hrbound",
+        json={"name": "Hijacked", "role": "admin", "active": False},
+        headers=ldap_admin,
+    )
+    assert res.status_code == 409
+
+    async def _assert_unchanged() -> None:
+        async with SessionLocal() as session:
+            employee = await session.get(Employee, "consultant.hrbound")
+            assert employee is not None
+            assert employee.name == "Original Name"
+            assert employee.role == "user"
+            assert employee.active is True
+
+    asyncio.run(_assert_unchanged())
 
 
 def test_endpoint_is_404_outside_ldap_mode(client: TestClient):
