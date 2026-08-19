@@ -49,13 +49,16 @@ POSTGRES_USER=processmap
 POSTGRES_PASSWORD=<강한 비밀번호>
 POSTGRES_DB=processmap
 
-# 인증
+# 인증 모드 — 빈 값이면 AUTH_ENABLED로 하위호환 유도(§2.1). 3값 중 하나로 명시 권장.
+AUTH_MODE=keycloak
 AUTH_ENABLED=true
 KEYCLOAK_ISSUER=http://182.199.63.71:8080/realms/ai-portal
 KEYCLOAK_AUDIENCE=
 KEYCLOAK_CLIENT_ID=bpm-frontend
+# ldap 모드일 때만 필수 — openssl rand -hex 32
+AUTH_JWT_SECRET=
 
-# 사내 AD(LDAP) 동기화 — 4종이 모두 채워져야 활성(ldap_enabled)
+# 사내 AD(LDAP) 동기화 — 4종이 모두 채워져야 활성(ldap_enabled). ldap 모드 로그인의 AD bind도 이 값을 공유.
 LDAP_URL=ldaps://<ad-host>:636
 LDAP_BIND_DN=CN=svc-bpm,OU=Service Accounts,DC=corp,DC=example,DC=com
 LDAP_BIND_CREDENTIALS=<서비스 계정 비밀번호 — 시크릿>
@@ -77,9 +80,33 @@ AI_MAX_TOKENS=8000
 AI_ENDPOINTS=
 ```
 
-- `NEXT_PUBLIC_*`는 compose가 `AUTH_ENABLED`/`KEYCLOAK_ISSUER`/`KEYCLOAK_CLIENT_ID`로부터 build args로 자동 주입(docker-compose.yml). 별도 설정 불필요.
-- **`LDAP_URL`/`LDAP_BIND_DN`/`LDAP_BIND_CREDENTIALS`/`LDAP_USER_SEARCH_BASE` 4종이 모두** 채워져야 동기화가 켜진다(`settings.ldap_enabled`). 하나라도 비면 로그인 시 동기화 skip, 전체 동기화 엔드포인트는 503.
+- 인증 모드는 frontend가 **런타임**에 `GET /api/auth/mode`로 조회한다 — `NEXT_PUBLIC_*` 빌드 인라인은 폐기됐다(2026-08-19). `AUTH_MODE`/`KEYCLOAK_*`를 바꿔도 frontend 재빌드 불필요, backend 재기동만으로 반영된다.
+- **`LDAP_URL`/`LDAP_BIND_DN`/`LDAP_BIND_CREDENTIALS`/`LDAP_USER_SEARCH_BASE` 4종이 모두** 채워져야 동기화가 켜진다(`settings.ldap_enabled`). 하나라도 비면 로그인 시 동기화 skip, 전체 동기화 엔드포인트는 503. `AUTH_MODE=ldap`의 AD bind 로그인도 이 게이트를 그대로 쓴다.
 - `SYSTEM_ADMIN_LOGIN_IDS`에 든 loginId만 `role=admin`. 비우면 아무도 관리자 페이지에 못 들어간다.
+
+## 2.1 인증 모드 (`AUTH_MODE`)
+
+`AUTH_MODE`는 `keycloak` / `ldap` / `dev` 셋 중 하나다. 비우면 `settings.resolved_auth_mode()`가 구 `AUTH_ENABLED`로 유도한다(하위호환) — `AUTH_ENABLED=true`→`keycloak`, `false`→`dev`. 새 배포는 `AUTH_MODE`를 명시하는 걸 권장.
+
+| 모드 | 의미 | 로그인 화면 |
+|------|------|-------------|
+| `keycloak` | 운영 기본. 사내 Keycloak(realm `ai-portal`) OIDC | "Keycloak으로 로그인" 버튼 |
+| `ldap` | 사내 AD 직접 bind 인증 + 설정 화면에서 발급한 로컬 계정(컨설턴트용) — Keycloak 인프라 없이도 운영 가능 | ID/PW 폼 |
+| `dev` | 로컬 우회(임시 유저 선택) — 서버 배포에서 사용 금지 | 유저 피커 |
+
+**`ldap` 모드 필수값:**
+- `AUTH_JWT_SECRET` — 앱이 자체 서명하는 세션 토큰(HS256)의 서명키. 비우면 **기동 자체가 실패**한다(`backend/app/main.py` — `AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set`). 발급: `openssl rand -hex 32`.
+- LDAP 연결 4종(`LDAP_URL`·`LDAP_BIND_DN`·`LDAP_BIND_CREDENTIALS`·`LDAP_USER_SEARCH_BASE`) — 위 §2 그대로. 이 4종이 채워져야 AD bind 로그인이 동작한다. 비어 있으면 로컬 계정(설정 화면에서 발급)만으로 로그인 가능.
+
+**컨설턴트 로컬 계정 회수 절차(시연/프로젝트 종료 시):** 설정 화면(sysadmin 전용, `/api/admin/local-accounts`)에서
+1. 먼저 sysadmin 권한을 해제(`is_sysadmin=false`) — 즉시 관리자 권한 상실.
+2. 이어서 계정을 완전 삭제하거나(`DELETE`), 재사용 여지가 있으면 `active=false`로 비활성화만.
+
+둘 다 로그인 자체를 막을 뿐 **이미 발급된 토큰은 즉시 무효화되지 않는다** — 아래 참고.
+
+**토큰은 만료 전 강제 무효화가 안 된다.** 앱 서명 토큰(HS256, 무상태)은 서버가 세션을 추적하지 않으므로 계정을 삭제/비활성화해도 만료 시각(`AUTH_JWT_TTL_HOURS`, 기본 8시간) 전까지는 그 토큰 자체로 계속 인증된다(`/api/me` 조회는 막히지만 토큰 검증은 통과). **즉시 전면 차단이 필요하면 `AUTH_JWT_SECRET`을 교체하고 backend를 재기동한다** — 서명키가 바뀌면 기존에 발급된 모든 토큰이 한 번에 무효화된다(전 사용자 재로그인 필요, kill switch 용도).
+
+**백엔드 워커를 늘리면 sysadmin 캐시가 프로세스별로 갈라진다.** sysadmin 부여/회수(`grant_sysadmin_cache`, `backend/app/permissions/logic.py`)는 프로세스 내 메모리 캐시다. 현재 Dockerfile은 uvicorn 단일 워커 전제 — 워커를 늘리면 부여/회수가 일부 워커에만 반영돼 사용자마다 다른 권한을 보는 상황이 생긴다. 스케일아웃 시 이 캐시를 DB 조회로 전환할 것.
 
 ## 3. 배포
 
@@ -87,7 +114,7 @@ AI_ENDPOINTS=
 docker compose up -d --build
 ```
 
-- `AUTH_ENABLED`/`KEYCLOAK_*`는 frontend **빌드 타임**에 `NEXT_PUBLIC_*`로 번들 인라인된다 → 값 변경 시 `--build` 필수(§7).
+- `AUTH_MODE`/`AUTH_ENABLED`/`KEYCLOAK_*`/`AUTH_JWT_SECRET`는 backend **런타임** 환경변수(§2.1) → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영. frontend는 부팅 시 backend에 조회하므로 재빌드 불필요.
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
 - `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
 - DB 스키마는 backend 起動 시 `create_all`로 생성(마이그레이션은 후속). 신규 테이블은 자동 생성되지만 **제거된 테이블은 드롭되지 않는다** — 아래 업그레이드 노트.
@@ -117,7 +144,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 |------|------|
 | 로그인 후 redirect 오류 | Keycloak Valid redirect URIs에 `:3333/*` 등록됐는지 |
 | `/api/*` 401 | 토큰 만료 / `KEYCLOAK_ISSUER`가 realm URL(`/realms/ai-portal`까지)과 일치하는지 |
-| frontend가 인증 안 함 | `NEXT_PUBLIC_AUTH_ENABLED=true`로 **빌드됐는지** — 값 변경 시 `--build` |
+| frontend가 인증 안 함 | backend `GET /api/auth/mode` 응답 확인(`curl http://localhost:3333/api/auth/mode`) — `AUTH_MODE`/`AUTH_ENABLED`가 의도대로 설정됐는지, backend가 재기동됐는지 |
 | db 연결 실패 | `docker compose logs db`, healthcheck 통과 여부 |
 | 관리자 페이지가 아무에게도 안 보임 | `SYSTEM_ADMIN_LOGIN_IDS`에 loginId 정확히(대소문자) 들었는지. 변경 후 backend 재생성 |
 | 로그인은 되는데 이름/부서 빔 | `/api/me`의 AD 조회 실패 — `ldap_enabled`(4종)·bind 권한·`LDAP_USER_SEARCH_BASE` 확인 |
@@ -144,7 +171,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 
 **왜 "로컬은 되는데 서버만" 깨지나 — secure context.** 브라우저는 `crypto.subtle`·`crypto.randomUUID`(Web Crypto)를 secure context(HTTPS 또는 `localhost`/`127.0.0.1`)에서만 노출한다. 서버는 원격 IP + 평문 HTTP라 insecure → 이 API가 `undefined`. 그래서 로그인은 `disablePKCE:true`로, 노드/엣지 생성은 `lib/id.ts`의 `genId()`(`getRandomValues` 폴백)로 우회. **로컬 `npm run dev`를 `localhost`로 띄우면 둘 다 정상 → 버그/수정 검증 불가.** 서버 또는 윈도우에서 LAN IP(`http://192.168.x.x:3000`)로 재현할 것.
 
-**`NEXT_PUBLIC_*`는 빌드 타임 인라인** — 값 변경 시 `docker compose up -d --build frontend` 필수. `APP_PORT`는 런타임이라 재빌드 불필요.
+**소스 코드 변경만 frontend 재빌드가 필요하다** — 인증 모드 관련 값(`AUTH_MODE`/`KEYCLOAK_*`/`AUTH_JWT_SECRET`)은 backend 런타임 환경변수로 바뀌었으므로(§2.1) `--build frontend` 불필요, backend 재기동만으로 반영된다. `APP_PORT`도 런타임이라 재빌드 불필요.
 
 **"고쳤는데 서버에서 여전히 같은 에러" — 빌드 반영부터 확인.** 흔한 함정: `git pull`은 했지만 이미지 재빌드 안 함, 또는 옛 JS 청크 캐시.
 

@@ -10,13 +10,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# NEXT_PUBLIC_* 는 빌드 타임에 번들로 인라인 — compose가 build args로 전달
-ARG NEXT_PUBLIC_AUTH_ENABLED
-ARG NEXT_PUBLIC_KEYCLOAK_ISSUER
-ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
-ENV NEXT_PUBLIC_AUTH_ENABLED=$NEXT_PUBLIC_AUTH_ENABLED \
-    NEXT_PUBLIC_KEYCLOAK_ISSUER=$NEXT_PUBLIC_KEYCLOAK_ISSUER \
-    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=$NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+# 인증 모드는 백엔드가 런타임에 GET /api/auth/mode로 알려준다 — 빌드 타임 인라인 불필요(설계 §2).
 RUN npm run build
 
 # standalone 산출물만 담은 런타임 이미지 (next.config.ts output: "standalone")

@@ -858,7 +858,6 @@ const en = {
   "login.ssoActiveBody":
     "Your Keycloak SSO session is still active — you may be signed back in automatically. Sign out of all apps on this browser?",
   "login.ssoSignoutAll": "Sign out of all sessions",
-  "login.or": "or",
   "login.terms": "COPYRIGHT SAMSUNG BIOLOGICS. ALL RIGHTS RESERVED",
   "login.signIn": "Sign in",
   "login.idPlaceholder": "Login ID",
@@ -2576,7 +2575,6 @@ const ko: Record<MessageKey, string> = {
   "login.ssoActiveBody":
     "Keycloak SSO 세션이 아직 활성 상태라 재방문 시 자동 로그인될 수 있습니다. 이 브라우저의 모든 앱 세션을 종료할까요?",
   "login.ssoSignoutAll": "모든 세션 로그아웃",
-  "login.or": "또는",
   "login.terms": "COPYRIGHT SAMSUNG BIOLOGICS. ALL RIGHTS RESERVED",
   "login.signIn": "로그인",
   "login.idPlaceholder": "로그인 아이디",

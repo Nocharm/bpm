@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { setAuthToken, setDevUser } from "@/lib/api";
-import { type AuthMode, getCachedAuthMode } from "@/lib/auth-mode";
+import { type AuthMode, type AuthModeInfo, getCachedAuthMode } from "@/lib/auth-mode";
 import { saveSsoLogoutHint, setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
@@ -130,6 +130,8 @@ export function TopNav() {
   );
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AuthMode | null>(null);
+  // 로그아웃 시 UserManager 생성에 필요 — NEXT_PUBLIC_* 빌드 상수 대신 런타임 조회 결과를 재사용
+  const authInfoRef = useRef<AuthModeInfo | null>(null);
   const feedbackOpen = useSyncExternalStore(
     subscribeFeedbackPanel,
     getFeedbackPanelOpen,
@@ -173,6 +175,7 @@ export function TopNav() {
   useEffect(() => {
     let alive = true;
     void getCachedAuthMode().then((info) => {
+      authInfoRef.current = info;
       if (alive) setMode(info.mode);
     });
     return () => {
@@ -203,8 +206,8 @@ export function TopNav() {
       // 로그아웃은 removeUser()만 하고 Keycloak SSO 세션은 살아있음 — /login 자동 재로그인 차단
       const { UserManager } = await import("oidc-client-ts");
       const mgr = new UserManager({
-        authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
-        client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
+        authority: authInfoRef.current?.keycloakIssuer ?? "",
+        client_id: authInfoRef.current?.keycloakClientId ?? "",
         redirect_uri: window.location.origin,
       });
       // "모든 세션 종료" 패널(/login)용 id_token 확보 — removeUser 후에는 사라지므로 먼저 저장

@@ -77,7 +77,7 @@ export default function LoginPage() {
   // 자동 silent 로그인 — SSO 세션 있으면 버튼 없이 즉시 복귀. 시도 "직전"에 skip 플래그를 세워
   // 실패(login_required) 복귀 시 다음 로그인 마운트 1회를 억제한다(성공 시 AuthGate가 해제).
   useEffect(() => {
-    if (!autoSigning || autoAttemptStarted) {
+    if (!autoSigning || autoAttemptStarted || !modeInfo) {
       return;
     }
     autoAttemptStarted = true;
@@ -89,7 +89,7 @@ export default function LoginPage() {
           import("@/lib/keycloak-login"),
           new Promise((resolve) => setTimeout(resolve, AUTO_LOGIN_MIN_VISIBLE_MS)),
         ]);
-        await signinRedirectFromLogin({ promptNone: true });
+        await signinRedirectFromLogin(modeInfo, { promptNone: true });
       } catch (e) {
         // Keycloak 미응답 등 — 카드로 폴백. 플래그는 원복해 다음 방문에 자동 시도 유지.
         console.error("silent login attempt failed", e);
@@ -98,19 +98,21 @@ export default function LoginPage() {
         setAutoSigning(false);
       }
     })();
-  }, [autoSigning]);
+  }, [autoSigning, modeInfo]);
 
   const onKeycloak = async () => {
+    if (!modeInfo) return;
     clearAutoLoginSkip();
     const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
-    await signinRedirectFromLogin();
+    await signinRedirectFromLogin(modeInfo);
   };
 
   // Keycloak 모든 세션 종료 — 종료 후 /login 복귀 시 무의미한 silent 시도(login_required 왕복) 방지 플래그
   const onSsoSignoutAll = async () => {
+    if (!modeInfo) return;
     setAutoLoginSkip();
     const { signoutAllSessions } = await import("@/lib/keycloak-login");
-    await signoutAllSessions(ssoHint);
+    await signoutAllSessions(modeInfo, ssoHint);
   };
 
   const onPickDev = (loginId: string) => {

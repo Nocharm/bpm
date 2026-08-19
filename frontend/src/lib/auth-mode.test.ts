@@ -40,3 +40,28 @@ describe("fetchAuthMode", () => {
     expect(info.mode).toBe("keycloak");
   });
 });
+
+describe("getCachedAuthMode", () => {
+  it("does not memoize a transient fallback — retries once the endpoint recovers", async () => {
+    vi.resetModules();
+    const { getCachedAuthMode: freshGetCachedAuthMode } = await import("./auth-mode");
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("boot blip")));
+    const first = await freshGetCachedAuthMode();
+    expect(first.mode).toBe("keycloak");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          mode: "ldap",
+          keycloakIssuer: "http://kc/realms/x",
+          keycloakClientId: "bpm-frontend",
+        }),
+      }),
+    );
+    const second = await freshGetCachedAuthMode();
+    expect(second.mode).toBe("ldap");
+  });
+});

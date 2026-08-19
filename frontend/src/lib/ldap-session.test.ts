@@ -31,4 +31,10 @@ describe("ldap session storage", () => {
     expect(getStoredLdapToken()).toBeNull();
     expect(window.localStorage.getItem(KEY)).toBeNull();
   });
+
+  it("treats an unparseable expiresAt as absent and clears the stored value", () => {
+    storeLdapToken("token-abc", "garbage");
+    expect(getStoredLdapToken()).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
 });

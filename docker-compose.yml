@@ -22,11 +22,6 @@ services:
   frontend:
     build:
       context: ./frontend
-      # NEXT_PUBLIC_* 는 빌드 시 번들에 인라인됨 → build args로 주입
-      args:
-        NEXT_PUBLIC_AUTH_ENABLED: ${AUTH_ENABLED:-true}
-        NEXT_PUBLIC_KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
     environment:
       # Next.js standalone 런타임 V8 old-space 힙 상한(MB) — 무제한 성장 방지
       NODE_OPTIONS: --max-old-space-size=512

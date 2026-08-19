@@ -11,7 +11,8 @@ interface StoredLdapSession {
 
 function isExpired(expiresAt: string): boolean {
   const expiry = Date.parse(expiresAt);
-  return Number.isFinite(expiry) && expiry <= Date.now();
+  // 파싱 불가(NaN)는 저장값이 손상됐다는 뜻 — 살아있는 토큰으로 오인하지 않도록 만료 취급한다.
+  return !Number.isFinite(expiry) || expiry <= Date.now();
 }
 
 export function getStoredLdapToken(): string | null {

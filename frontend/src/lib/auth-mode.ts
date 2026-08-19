@@ -22,9 +22,17 @@ let cachedModePromise: Promise<AuthModeInfo> | null = null;
 
 // Providers·로그인 페이지·top-nav가 모두 부팅 시 같은 값을 묻는다 — 매 마운트마다 재요청하지 않도록
 // 인플라이트/완료된 promise를 모듈 캐시로 공유한다. fetchAuthMode 자체는 테스트가 직접 쓰므로 그대로 둔다.
+// 폴백(fail-closed) 결과는 캐시하지 않는다 — 부팅 시 일시적 오류를 세션 내내 고정하면 실제 모드가
+// 복구돼도 새로고침 전까지 keycloak으로 갇힌다. 성공 응답만 태워 단일 비행(single-flight) 성질을 유지.
 export function getCachedAuthMode(): Promise<AuthModeInfo> {
   if (!cachedModePromise) {
-    cachedModePromise = fetchAuthMode();
+    const promise = fetchAuthMode().then((info) => {
+      if (info === FALLBACK) {
+        cachedModePromise = null;
+      }
+      return info;
+    });
+    cachedModePromise = promise;
   }
   return cachedModePromise;
 }
