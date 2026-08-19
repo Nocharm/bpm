@@ -17,6 +17,14 @@ export function formatGmp(value: string | null | undefined): string {
   return GMP_OPTIONS.find((option) => option.value === value)?.label ?? "";
 }
 
+/** GMP 분류 → 노드 색(stroke hex) — 분류가 노드 색을 자동 확정(일반 노드, 사용자 결정 2026-08-20).
+ * 노드 color는 데이터(raw hex 허용 예외) — 값은 diff 상태 토큰(removed/changed/added)의 hex 미러. */
+export const GMP_NODE_COLORS: Record<GmpValue, string> = {
+  direct: "#cc3300",   // --color-removed
+  indirect: "#9a6b00", // --color-changed
+  non_gmp: "#16794f",  // --color-added
+};
+
 /** GMP 배지 inline style — stroke는 상태 토큰, fill은 12% 틴트(노드 파스텔 파생 규칙과 동형). */
 export function getGmpBadgeStyle(value: string | null | undefined): CSSProperties | undefined {
   const colorVar = GMP_OPTIONS.find((option) => option.value === value)?.colorVar;

@@ -39,7 +39,7 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
-import { GMP_OPTIONS } from "@/lib/gmp";
+import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
 import { NodeDetailsFields } from "@/components/node-details-fields";
 import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -6636,6 +6636,17 @@ function MapEditor({ mapId }: { mapId: number }) {
   // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
   const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
   const onEditGmpAction = readOnly ? null : openGmpPicker;
+  // 분류 확정 안내 — 분류가 노드 색을 자동 변경하므로(일반 노드) 마우스 지점에 알리고
+  // "이전 분류로"/"색만" 두 단계 되돌리기를 제공 (사용자 결정 2026-08-20)
+  const [gmpNotice, setGmpNotice] = useState<{
+    nodeId: string;
+    prevGmp: string;
+    prevColor: string;
+    nextGmp: string;
+    nextColor: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -10329,6 +10340,87 @@ function MapEditor({ mapId }: { mapId: number }) {
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
+      {/* GMP 변경 안내 — 닫기(X)가 클릭한 마우스 지점, 분류·노드 색 before→after를 명시 (design 2026-08-20) */}
+      {gmpNotice !== null && (
+        <div
+          data-id="node-gmp-notice"
+          className="fixed z-[1360] w-[300px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(gmpNotice.x - 300 + 24, window.innerWidth - 308)),
+            top: Math.max(8, gmpNotice.y - 24),
+          }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-caption-strong text-ink">
+              <ShieldCheck size={14} strokeWidth={1.5} className="text-accent" />
+              {t("gmpNotice.title")}
+            </div>
+            <button
+              type="button"
+              data-id="node-gmp-notice-close"
+              aria-label="Dismiss"
+              className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt"
+              onClick={() => setGmpNotice(null)}
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-caption text-ink-secondary">
+            <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
+            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.prevGmp) ?? undefined}>
+              {formatGmp(gmpNotice.prevGmp) || t("gmpNotice.unset")}
+            </span>
+            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.nextGmp) ?? undefined}>
+              {formatGmp(gmpNotice.nextGmp) || t("gmpNotice.unset")}
+            </span>
+          </div>
+          {gmpNotice.nextColor !== gmpNotice.prevColor && (
+            <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-secondary">
+              <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
+              <span
+                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
+                style={
+                  gmpNotice.prevColor
+                    ? { borderColor: gmpNotice.prevColor, background: `color-mix(in srgb, ${gmpNotice.prevColor} 18%, white)` }
+                    : undefined
+                }
+              />
+              <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+              <span
+                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
+                style={{ borderColor: gmpNotice.nextColor, background: `color-mix(in srgb, ${gmpNotice.nextColor} 18%, white)` }}
+              />
+            </div>
+          )}
+          <div className="mt-2.5 flex justify-end gap-1.5">
+            {gmpNotice.nextColor !== gmpNotice.prevColor && (
+              <button
+                type="button"
+                data-id="node-gmp-notice-revert-color"
+                className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={() => {
+                  patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
+                  setGmpNotice(null);
+                }}
+              >
+                {t("gmpNotice.revertColor")}
+              </button>
+            )}
+            <button
+              type="button"
+              data-id="node-gmp-notice-revert-all"
+              className="rounded-sm px-2 py-0.5 text-caption text-accent hover:bg-accent-tint"
+              onClick={() => {
+                patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
+                setGmpNotice(null);
+              }}
+            >
+              {t("gmpNotice.revertAll")}
+            </button>
+          </div>
+        </div>
+      )}
       {gmpPicker !== null && (
         <>
           <div className="fixed inset-0 z-[1340]" onClick={() => setGmpPicker(null)} />
@@ -10346,9 +10438,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                 type="button"
                 data-id={`node-gmp-picker-${option.value || "unset"}`}
                 className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
-                onClick={() => {
-                  patchNode(gmpPicker.nodeId, { gmp: option.value }, true);
+                onClick={(event) => {
+                  const target = nodes.find((n) => n.id === gmpPicker.nodeId);
+                  const prevGmp = target?.data.gmp ?? "";
+                  const prevColor = target?.data.color ?? "";
+                  // 분류가 노드 색을 자동 확정 — 미분류 선택은 색을 건드리지 않는다
+                  const nextColor = option.value
+                    ? GMP_NODE_COLORS[option.value as GmpValue]
+                    : prevColor;
+                  patchNode(
+                    gmpPicker.nodeId,
+                    option.value ? { gmp: option.value, color: nextColor } : { gmp: option.value },
+                    true,
+                  );
                   setGmpPicker(null);
+                  if (option.value !== prevGmp) {
+                    setGmpNotice({
+                      nodeId: gmpPicker.nodeId,
+                      prevGmp,
+                      prevColor,
+                      nextGmp: option.value,
+                      nextColor,
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }
                 }}
               >
                 <span

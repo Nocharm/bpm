@@ -50,6 +50,16 @@
 | G8 | NodeIn 무효값 "" 소거·왕복 | ✅ pytest(`test_node_gmp_roundtrip_and_invalid_scrubbed`) |
 | G9 | 게이트 — BE 1143·ruff 0 / FE 659·tsc 0·build OK | ✅ |
 
+## 추가 검수 — 3차(필 안쪽·노드색 자동·일괄 편집) (`tmp-design-shots5` 5체크)
+
+| # | 항목 | 결과 |
+|---|---|---|
+| P1 | 필이 노드 경계 안쪽에 렌더(바운딩 박스 포함 판정) | ✅ |
+| P2 | 분류 선택 → 노드 색 자동 변경(direct=#cc3300) + 안내 모달(X=마우스 지점) | ✅ |
+| P3 | "색만 되돌리기" → 분류 유지·색 복원 | ✅ |
+| P4 | "이전 분류로 되돌리기" → 분류+색 모두 복원 | ✅ |
+| P5 | 그룹 일괄 편집 touch_time — 탭 노출·충돌 교체 정책·멤버 2개 적용(API 대조 0.30) + `bulk-params` 단위 3케이스(SP 게이트 포함) | ✅ |
+
 **육안/보류 항목**
 - 일괄편집 모달 touch_time 탭 — `MODE_META`가 `PARAM_FIELDS` 파생이라 로직상 자동 노출(단위테스트 커버), 실브라우저 스팟은 서버 배포 후 확인.
 - 서버(평문 HTTP·postgres) 재검증 — A+B+C 동일 릴리스 배포 후 실파일 재임포트로 백필 확인(`docs/deploy/db-migration-9910.md`).
