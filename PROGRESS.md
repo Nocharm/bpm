@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-19 — LDAP 인증 폴백 + 로컬 계정 설계 (dev, 설계만)
+- 9910을 LDAP으로 열어 외부 컨설턴트가 직접 들어와 확인하는 게 목적. Keycloak을 쓸 수 없는 배포에서 AD bind로 인증하고, AD 계정이 없는 컨설턴트는 설정 화면에서 발급한 로컬 계정(ID+PW)으로 접속한다. 설계: [`docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md`](docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md).
+- 주요 결정 — ①`AUTH_ENABLED` 불리언을 `AUTH_MODE=keycloak|ldap|dev`로 교체하고 `GET /api/auth/mode`로 런타임 노출(프론트 인증 상수의 빌드타임 탈출) ②로컬 계정은 `employees`(`source='local'`) 행 + 비밀번호만 별도 `local_credentials` 테이블(raw dict 직렬화 경로로 해시가 새는 것 방지, 해싱은 stdlib scrypt로 의존성 추가 없음) ③세션은 자체 HS256 JWT — 기존 Bearer 경로를 그대로 타서 API·권한 코드 무변경.
+- 감수한 위험: 서버가 평문 HTTP라 AD·로컬 비밀번호가 사내망을 평문으로 지난다(사내망 전제로 진행 결정, 외부 노출 시 재검토). AD 계정 잠금을 유발하지 않도록 로그인 시도 제한을 넣는다.
+
 ## 2026-08-19 — 로딩 플레이스홀더(shimmer) 일괄 도입 + 첫 렌더 애니메이션 억제 (dev)
 - 실서비스에서 보이던 3종 깜빡임 — ①공지 작성자 필이 아이디→이름으로 바뀜 ②홈 새로고침 시 "맵 없음" 화면이 1초쯤 떴다가 뒤집힘 ③좌측 조직도가 렌더 후 아코디언 애니메이션을 우르르 재생. 공통 원인은 "데이터 없는 상태를 먼저 그린다"라, 그 자리를 shimmer 스켈레톤(`globals.css .skeleton` + `components/skeleton.tsx`)으로 채우는 방향으로 통일.
 - ① `useDirectoryState().ready`로 "아직 안 온 것"과 "모르는 사람"을 구분 — 도착 전 UserPill은 스켈레톤 필. ② 홈은 맵+내 정보+디렉터리가 모두 settled될 때까지 `HomeSkeleton`(같은 1:2 레이아웃). ③ `useClosingKeys.getSectionClass`가 사용자가 접거나 편 뒤에만 `accordion-open`을 주고, 그 전(첫 페인트·localStorage 복원·시드)에는 애니메이션 없는 `accordion-static`.
