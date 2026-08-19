@@ -71,11 +71,12 @@ Select a node and edit in the right inspector:
 
 ## 3. Per-run Parameters
 
-Each node records the cost and effort of running the process **once**, across six parameters. Edit them in the inspector's parameter section (collapsed by default). **Start** and **End** nodes have no parameters.
+Each node records the cost and effort of running the process **once**, across seven parameters. Edit them in the inspector's parameter section (collapsed by default). **Start** and **End** nodes have no parameters.
 
 | Parameter | Label | Input format | Canvas display |
 | --- | --- | --- | --- |
 | **Duration** | Duration / run (h) | `h.mm` — fractional part is **minutes** | `1h30m` |
+| **Touch time** | Touch time / run (h) | `h.mm` — same rule as duration | `1h30m` |
 | **Cost (KRW)** | Cost / run (KRW) | number | `₩1,250,000` |
 | **Cost (USD)** | Cost / run (USD) | number | `$1,200` |
 | **Headcount** | Headcount / run | number | as entered |
@@ -96,11 +97,11 @@ Write duration as **hours and minutes** — the fractional part is **minutes, no
 
 ### Parameters on subprocess nodes
 
-A subprocess node takes only **Annual volume** and **FTE** directly. The other four (duration, cost, headcount) are **inherited read-only from the linked map's designated values** and cannot be changed in the parent map (see section 5).
+A subprocess node takes only **Annual volume** and **FTE** directly. The other five (duration, touch time, cost, headcount) are **inherited read-only from the linked map's designated values** and cannot be changed in the parent map (see section 5).
 
 ### Sum preview (Σ)
 
-When you designate a map as a subprocess (see Map Settings in the Getting Around manual), the designation form proposes a **preview by summing** that map's published parameters — duration and cost are **summed**, while headcount is the **average** across plain nodes that have a value.
+When you designate a map as a subprocess (see Map Settings in the Getting Around manual), the designation form proposes a **preview by summing** that map's published parameters — duration, touch time, and cost are **summed**, while headcount is the **average** across plain nodes that have a value.
 
 ---
 
@@ -189,9 +190,9 @@ You can fill a map by pasting in a process that's already organized as a table o
 ### CSV import
 
 - Open it with **Import CSV** in the top bar. Use **Download template** to get a blank form, fill it, and upload.
-- The CSV uses **14 columns**: `name` (required), `description`, `assignee`, `department`, `system`, `duration`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `url`, `url_label`, `next` (the successor to connect to).
+- The CSV uses **20 columns**: `name` (required), `description`, `assignee`, `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `output`, `data_form`, `start_condition`, `end_condition`, `url`, `url_label`, `next` (the successor to connect to). Older 14-column files still import (columns match by name). Put multiple `input`/`output` items on separate lines inside the cell.
 - Import **merges by name** — an existing node with the same title keeps its color, comments, and group, updating only its values, and **blank cells keep the existing value**. New titles not already in the map are added as nodes.
-- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). The four fields a subprocess node inherits are ignored even if supplied in the CSV.
+- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run parameters plus input/output/conditions/data form) are ignored even if supplied in the CSV.
 - Review the **Added / Matched / Removed** summary and warnings in the preview tab before applying.
 
 > **Make a CSV with an external AI:** In the import window, **Ask another AI** copies a prompt you can paste — along with your document — into an external AI (ChatGPT, etc.); paste the CSV it returns back here.

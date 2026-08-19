@@ -30,10 +30,10 @@
 
 ## Phase V — 실브라우저 검증 (QA 문서 주도 — 사용자 지시 2026-08-20)
 
-- [ ] **V0. QA 문서 작성**: `docs/qa/2026-08-20-field-promotion-qa.md` — 표면별 체크 항목(임포트 착지·노드 인스펙터 IO/조건/배지·touch_time 정규화/Σ/일괄편집·SP 상속 read-only·맵 gmp/조건·FallbackHint 수정/적용·재임포트 멱등·CSV/Excel 왕복) + 항목별 결과 열. 구현 완료 후 작성, 검증하며 체크.
-- [ ] **V1. 실브라우저 체크**: 격리 DB 시드(reset_db+인터뷰 샘플 웹 임포트) 후 QA 문서 항목을 실브라우저(Playwright+시스템 Chrome)로 전수 체크 — 자동화 가능한 항목은 `frontend/scripts/pw-smoke-field-promotion.mjs`로 스크립트화(재실행 가능하게), 나머지는 스크린샷 육안.
-- [ ] **V2. 기존 스모크 회귀**: `pw-smoke-interview-import.mjs`(설명 KV 축소로 단언 갱신) · `pw-smoke-framework-admin.mjs` · `pw-smoke-framework.mjs`.
-- [ ] **V-gate**: QA 문서 전 항목 체크 + BE/FE 최종 전체 그린 → 문서(`docs/deploy/db-migration-9910.md`·매뉴얼 해당 절) 갱신 → 최종 커밋.
+- [x] **V0. QA 문서 작성**: `docs/qa/2026-08-20-field-promotion-qa.md` — 표면별 체크 항목(임포트 착지·노드 인스펙터 IO/조건/배지·touch_time 정규화/Σ/일괄편집·SP 상속 read-only·맵 gmp/조건·FallbackHint 수정/적용·재임포트 멱등·CSV/Excel 왕복) + 항목별 결과 열. 구현 완료 후 작성, 검증하며 체크.
+- [x] **V1. 실브라우저 체크**: 격리 DB 시드(reset_db+인터뷰 샘플 웹 임포트) 후 QA 문서 항목을 실브라우저(Playwright+시스템 Chrome)로 전수 체크 — 자동화 가능한 항목은 `frontend/scripts/pw-smoke-field-promotion.mjs`로 스크립트화(재실행 가능하게), 나머지는 스크린샷 육안.
+- [x] **V2. 기존 스모크 회귀**: `pw-smoke-interview-import.mjs`(설명 KV 축소로 단언 갱신) · `pw-smoke-framework-admin.mjs` · `pw-smoke-framework.mjs`.
+- [x] **V-gate**: QA 29항목 전부 ✅(스모크 25/25·15/15·7/7·25/25, BE 1141·FE 659) — 9910 §8·편집 매뉴얼(7파라미터·CSV 20열)·관리자 매뉴얼(승격·GMP 검토) 갱신 완료.
 
 ## 이후 (이 플랜 밖)
 
