@@ -242,8 +242,15 @@ export function PersonInfoPopup({ userId, position, onClose }: PersonInfoPopupPr
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    // 스크롤·리사이즈에도 닫는다 — 팝업은 fixed 좌표라 목록이 움직이면 앵커에서 떨어진다
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("resize", onClose);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("resize", onClose);
+    };
   }, [onClose]);
 
   const { left, top } = clampToViewport(position.x, position.y, CARD_WIDTH, CARD_EST_HEIGHT);

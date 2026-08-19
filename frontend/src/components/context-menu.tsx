@@ -131,11 +131,17 @@ export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuP
         onClose();
       }
     };
+    // 스크롤·리사이즈로도 닫는다 — 메뉴는 fixed 좌표라 목록이 움직이면 엉뚱한 자리에 남는다
+    // (캡처 단계: 내부 스크롤 컨테이너의 스크롤도 잡는다)
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("resize", onClose);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("resize", onClose);
     };
   }, [items, kbSub, onClose]);
 

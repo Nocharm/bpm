@@ -1220,9 +1220,72 @@ export function MapDetailCard({
     </>
   );
 
+  // 컨텍스트 메뉴·정보 팝업 — 두 반환(홈 카드 / 인스펙터 members-only) 모두에서 렌더해야 한다.
+  // 예전엔 footer 있는 반환에만 있어서 인스펙터에선 클릭해도 아무것도 안 떴다 (2026-08-19).
+  const overlays = (
+    <>
+          {personMenu && (
+            <ContextMenu
+              x={personMenu.x}
+              y={personMenu.y}
+              onClose={() => setPersonMenu(null)}
+              items={[
+                {
+                  label: t("person.sendMessenger"),
+                  icon: MessageCircle,
+                  onSelect: () => {
+                    // 사내 메신저 프로토콜 — 설치된 환경에서 해당 인원 대화창이 열린다
+                    window.location.href = `mysingleim://token=&ids=${personMenu.id}`;
+                  },
+                },
+                {
+                  label: t("person.info"),
+                  icon: User,
+                  onSelect: () => setPersonInfo({ id: personMenu.id, x: personMenu.x, y: personMenu.y }),
+                },
+              ]}
+            />
+          )}
+          {orgMenu && (
+            <ContextMenu
+              x={orgMenu.x}
+              y={orgMenu.y}
+              onClose={() => setOrgMenu(null)}
+              items={[
+                {
+                  label: t("org.infoMenu"),
+                  icon: Building2,
+                  onSelect: () => setOrgInfo({ path: orgMenu.path, origin: { x: orgMenu.x, y: orgMenu.y } }),
+                },
+              ]}
+            />
+          )}
+          {orgInfo && (
+            <OrgInfoModal
+              orgPath={orgInfo.path}
+              koreanDeptByPath={koreanDeptByPath}
+              origin={orgInfo.origin}
+              onClose={() => setOrgInfo(null)}
+            />
+          )}
+          {personInfo && (
+            <PersonInfoPopup
+              userId={personInfo.id}
+              position={{ x: personInfo.x, y: personInfo.y }}
+              onClose={() => setPersonInfo(null)}
+            />
+          )}
+    </>
+  );
+
   // 에디터 인스펙터(footer 없음) — 부모 스크롤에 자연 배치 / embedded: flow in parent, no footer.
   if (!showFooter) {
-    return <div className="flex flex-col gap-3">{body}</div>;
+    return (
+      <div className="flex flex-col gap-3">
+        {body}
+        {overlays}
+      </div>
+    );
   }
 
   // 승인본(approved/published)이 있어야 복사 가능 — 없으면 버튼 숨김(백엔드 409 회피) /
@@ -1289,57 +1352,7 @@ export function MapDetailCard({
           onClose={() => setConfirmDelete(false)}
         />
       )}
-      {personMenu && (
-        <ContextMenu
-          x={personMenu.x}
-          y={personMenu.y}
-          onClose={() => setPersonMenu(null)}
-          items={[
-            {
-              label: t("person.sendMessenger"),
-              icon: MessageCircle,
-              onSelect: () => {
-                // 사내 메신저 프로토콜 — 설치된 환경에서 해당 인원 대화창이 열린다
-                window.location.href = `mysingleim://token=&ids=${personMenu.id}`;
-              },
-            },
-            {
-              label: t("person.info"),
-              icon: User,
-              onSelect: () => setPersonInfo({ id: personMenu.id, x: personMenu.x, y: personMenu.y }),
-            },
-          ]}
-        />
-      )}
-      {orgMenu && (
-        <ContextMenu
-          x={orgMenu.x}
-          y={orgMenu.y}
-          onClose={() => setOrgMenu(null)}
-          items={[
-            {
-              label: t("org.infoMenu"),
-              icon: Building2,
-              onSelect: () => setOrgInfo({ path: orgMenu.path, origin: { x: orgMenu.x, y: orgMenu.y } }),
-            },
-          ]}
-        />
-      )}
-      {orgInfo && (
-        <OrgInfoModal
-          orgPath={orgInfo.path}
-          koreanDeptByPath={koreanDeptByPath}
-          origin={orgInfo.origin}
-          onClose={() => setOrgInfo(null)}
-        />
-      )}
-      {personInfo && (
-        <PersonInfoPopup
-          userId={personInfo.id}
-          position={{ x: personInfo.x, y: personInfo.y }}
-          onClose={() => setPersonInfo(null)}
-        />
-      )}
+      {overlays}
     </div>
   );
 }
