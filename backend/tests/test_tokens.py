@@ -71,16 +71,45 @@ def test_ldap_mode_accepts_self_issued_token(client, signing_secret):
         s.auth_mode = saved_mode
 
 
-def test_keycloak_mode_rejects_self_issued_token(client, signing_secret):
-    """HS256 토큰은 keycloak 모드의 RS256 검증을 통과할 수 없다 — 총 우회 방지 회귀 고정."""
+def test_keycloak_mode_rejects_self_issued_token(client, signing_secret, monkeypatch):
+    """RS256 알고리즘 고정 — HS256 토큰은 서명·issuer가 실제값과 일치해도 alg가
+    허용목록에 없어 거부된다 (총 우회 방지).
+
+    keycloak_issuer가 비어 있으면 JWKS URL 자체가 무효라 _jwk_client()가 먼저 죽는데,
+    그건 "URL 미설정"을 검증하는 것이지 알고리즘 고정을 검증하는 게 아니다(어떤 입력을
+    넣어도 통과하는 가짜-그린). _jwk_client를 스텁으로 교체해 jwt.decode(...,
+    algorithms=["RS256"])까지 실제로 도달시킨다. 서명키·issuer를 실제값과 동일하게
+    맞춰 "alg만 다른" 최악의 위조 토큰을 만든다 — 그렇지 않으면 서명·issuer 검증이
+    먼저 걸려 alg 검증을 실제로 통과했는지 알 수 없다.
+    """
+    from app import auth
     from app.settings import settings as s
+
+    class _StubSigningKey:
+        # 실제 서명키와 동일하게 둔다 — 그래야 "alg 허용목록만이 방어선"이라는 걸 증명할 수
+        # 있다. 다른 값이면 서명 불일치로 우연히 401이 나 가짜-그린이 된다.
+        key = s.auth_jwt_secret
+
+    class _StubJwkClient:
+        def get_signing_key_from_jwt(self, token: str) -> _StubSigningKey:
+            return _StubSigningKey()
+
+    # lru_cache가 감싼 실제 _jwk_client 대신 이름 자체를 교체 — 캐시를 건드리지 않으므로
+    # 나머지 ~1090개 테스트에 오염이 남지 않는다(monkeypatch가 테스트 종료 시 자동 원복).
+    monkeypatch.setattr(auth, "_jwk_client", lambda: _StubJwkClient())
 
     saved_mode = s.auth_mode
     s.auth_mode = "keycloak"
     try:
-        token, _ = tokens.create_access_token("consultant.a")
-        res = client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
+        # issuer까지 실제값과 맞춰 서명·issuer 검증은 모두 통과시키고 alg만 다르게 만든다.
+        forged = jwt.encode(
+            {"sub": "consultant.a", "iss": s.keycloak_issuer, "exp": now_kst() + timedelta(hours=1)},
+            s.auth_jwt_secret,
+            algorithm="HS256",
+        )
+        res = client.get("/api/me", headers={"Authorization": f"Bearer {forged}"})
         assert res.status_code == 401
+        assert "invalid token" in res.json()["detail"]
     finally:
         s.auth_mode = saved_mode
 
