@@ -1820,3 +1820,45 @@ class LoginOut(BaseModel):
 
     token: str
     expires_at: datetime = Field(serialization_alias="expiresAt")
+
+
+class LocalAccountIn(BaseModel):
+    """로컬 계정(외부 컨설턴트) 생성 요청 — sysadmin 전용 (설계 §5)."""
+
+    login_id: str = Field(alias="loginId", min_length=1, max_length=100)
+    name: str = Field(max_length=200)
+    dept_code: str | None = Field(default=None, alias="deptCode", max_length=100)
+    role: str = Field(default="user")
+    password: str = Field(min_length=1, max_length=200)
+    is_sysadmin: bool = Field(default=False, alias="isSysadmin")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class LocalAccountPatch(BaseModel):
+    """로컬 계정 부분 갱신 — password는 있으면 재설정."""
+
+    name: str | None = Field(default=None, max_length=200)
+    dept_code: str | None = Field(default=None, alias="deptCode", max_length=100)
+    role: str | None = None
+    password: str | None = Field(default=None, min_length=1, max_length=200)
+    is_sysadmin: bool | None = Field(default=None, alias="isSysadmin")
+    active: bool | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class LocalAccountOut(BaseModel):
+    """로컬 계정 조회 응답 — password_hash는 절대 포함하지 않는다."""
+
+    login_id: str = Field(serialization_alias="loginId")
+    name: str
+    department: str
+    dept_code: str | None = Field(serialization_alias="deptCode")
+    role: str
+    is_sysadmin: bool = Field(serialization_alias="isSysadmin")
+    # BPM_SYSADMINS로 지정된 계정 — UI에서 회수 불가(설계 §3.1 불변식)
+    env_sysadmin: bool = Field(serialization_alias="envSysadmin")
+    active: bool
+    created_by: str = Field(serialization_alias="createdBy")
+    updated_at: datetime = Field(serialization_alias="updatedAt")

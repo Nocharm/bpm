@@ -40,6 +40,7 @@ from app.routers import (
     interviews,
     kb,
     library,
+    local_accounts,
     manual,
     maps,
     notices,
@@ -121,6 +122,7 @@ app.include_router(kb.router)
 app.include_router(manual.router)
 app.include_router(dashboard.router)
 app.include_router(library.router)
+app.include_router(local_accounts.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)
 
