@@ -1057,6 +1057,11 @@ export interface InboxApproval {
   before: string | null; // approval_request 변경 전 값
   after: string | null; // approval_request 변경 후 값
   principal: string | null; // permission_downgrade 대상 사용자
+  // 결재 주체 — 관리자 권한으로 보이는 건지, 내가 실제 결재자인지 구분 (2026-08-19)
+  deciders: string[]; // 이 건을 결정할 권한이 있는 사람
+  pending_on: string[]; // 아직 결정하지 않은 사람
+  approved_by: string[]; // 이미 승인한 사람(버전 승인 전용)
+  via_sysadmin: boolean; // true면 결재자가 아니라 sysadmin 권한으로 열람 중
 }
 
 // 내가 결정할 승인 대기 통합 큐 — 버전 승인·점유권 이전·권한/가시성. act는 각 출처 기존 함수 재사용.

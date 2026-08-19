@@ -138,3 +138,52 @@ def test_inbox_excludes_approval_requests_of_deleted_maps(client: TestClient) ->
     _act_as("a")
     items = client.get("/api/inbox/approvals").json()
     assert all(not (i["kind"] == "approval_request" and i["map_id"] == map_id) for i in items)
+
+
+def test_inbox_exposes_deciders_and_pending(client: TestClient) -> None:
+    """승인자 목록·미결자를 함께 내려준다 — 카드에서 '누구에게 걸려 있는지' 보이게."""
+    _map_id, version_id = _submit_pending(client, ["a", "b"])
+
+    _act_as("a")
+    item = next(it for it in client.get("/api/inbox/approvals").json() if it["version_id"] == version_id)
+    assert sorted(item["deciders"]) == ["a", "b"]
+    assert sorted(item["pending_on"]) == ["a", "b"]
+    assert item["approved_by"] == []
+    assert item["via_sysadmin"] is False  # 내가 실제 승인자
+
+    client.post(f"/api/versions/{version_id}/approve")  # a 승인 → b만 미결
+    _act_as("b")
+    item = next(it for it in client.get("/api/inbox/approvals").json() if it["version_id"] == version_id)
+    assert item["approved_by"] == ["a"]
+    assert item["pending_on"] == ["b"]
+
+
+def test_inbox_marks_sysadmin_only_visibility(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """결재자가 아닌 sysadmin에게는 via_sysadmin=True — '관리자라서 보이는 건'임을 구분."""
+    from app.settings import settings
+
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"inbox-sys-{uuid4().hex[:6]}"},
+    ).json()
+    version_id = created["versions"][0]["id"]
+    req_id = _seed_checkout_request(version_id, holder="holder.u", requester="editor.u")
+
+    monkeypatch.setattr(settings, "dev_enforce_permissions", True)
+    monkeypatch.setattr(settings, "bpm_sysadmins", "admin.sys")
+    _act_as("admin.sys")
+    item = next(
+        it for it in client.get("/api/inbox/approvals").json()
+        if it["kind"] == "checkout_transfer" and it["id"] == req_id
+    )
+    assert item["via_sysadmin"] is True
+    assert "holder.u" in item["deciders"]  # 실제 결재자는 점유자
+
+    _act_as("holder.u")
+    mine = next(
+        it for it in client.get("/api/inbox/approvals").json()
+        if it["kind"] == "checkout_transfer" and it["id"] == req_id
+    )
+    assert mine["via_sysadmin"] is False

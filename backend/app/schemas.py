@@ -369,6 +369,11 @@ class InboxApprovalOut(BaseModel):
     before: str | None = None  # approval_request 변경 전 값(가시성/역할)
     after: str | None = None  # approval_request 변경 후 값
     principal: str | None = None  # permission_downgrade 대상 사용자
+    # 결재 주체 — "관리자라서 보이는 건지, 내가 실제 결재자인지" 구분용 (2026-08-19)
+    deciders: list[str] = []  # 이 건을 결정할 권한이 있는 사람(sysadmin 포괄 권한 제외)
+    pending_on: list[str] = []  # 아직 결정하지 않은 사람(버전 승인은 미승인 승인자, 그 외는 deciders와 동일)
+    approved_by: list[str] = []  # 이미 승인한 사람(버전 승인 전용)
+    via_sysadmin: bool = False  # True면 내가 결재자가 아니라 sysadmin 권한으로 열람 중
 
 
 class ManualOut(BaseModel):

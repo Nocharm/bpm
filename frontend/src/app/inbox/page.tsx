@@ -62,6 +62,7 @@ import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { ActivityDigest } from "@/components/activity-digest";
+import { AutoHeight } from "@/components/auto-height";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import {
   findLatestSubmitComment,
@@ -119,6 +120,24 @@ const TABS: { id: Tab; labelKey: MessageKey }[] = [
   { id: "approvals", labelKey: "inbox.tabApprovals" },
   { id: "notifications", labelKey: "inbox.tabNotifications" },
 ];
+
+// 결재 대기 필 — 앞 2명만 이름 필로, 나머지는 "+n"으로 접는다(카드 폭 보호)
+function DeciderPills({ logins, t }: { logins: string[]; t: Translate }) {
+  if (logins.length === 0) {
+    return <span className="truncate">{t("inbox.approverNone")}</span>;
+  }
+  const shown = logins.slice(0, 2);
+  const rest = logins.length - shown.length;
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <span className="shrink-0">{t("inbox.pendingOn")}</span>
+      {shown.map((login) => (
+        <UserPill key={login} loginId={login} />
+      ))}
+      {rest > 0 && <span className="shrink-0">+{rest}</span>}
+    </span>
+  );
+}
 
 // 알림 유형별 아이콘 — 공지/승인요청/기타
 function typeIcon(type: string): LucideIcon {
@@ -563,6 +582,19 @@ export default function InboxPage() {
                               <TimePills iso={a.created_at} nowMs={nowMs} />
                             </span>
                           </div>
+                          {/* 결재 주체 — 누구에게 걸려 있는지 + 내가 결재자인지(관리자 열람인지) */}
+                          <div className="flex items-center justify-between gap-2 text-fine text-ink-tertiary">
+                            <DeciderPills logins={a.pending_on} t={t} />
+                            {a.via_sysadmin && (
+                              <span
+                                title={t("inbox.viaSysadminHint")}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-surface-alt px-1.5 py-0.5 text-ink-tertiary"
+                              >
+                                <ShieldCheck size={11} strokeWidth={1.5} />
+                                {t("inbox.viaSysadmin")}
+                              </span>
+                            )}
+                          </div>
                         </button>
                         {/* < split(980px) — 카드 아래 인라인 아코디언 (맵 탭과 동일 패턴) */}
                         <div
@@ -691,12 +723,14 @@ export default function InboxPage() {
             )}
           </aside>
 
-          {/* 우 상세 — ≥ split(980px)만. 좁으면 카드 아래 아코디언이 대신한다 */}
-          <div
-            data-id="inbox-detail-aside"
-            className="hidden min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt split:block"
-            onClick={(e) => e.stopPropagation()}
+          {/* 우 상세 — ≥ split(980px)만. 좁으면 카드 아래 아코디언이 대신한다.
+              높이는 내용에 맞추고(AutoHeight) 카드 전환 시 이전 높이에서 부드럽게 이어진다;
+              가용 높이를 넘으면 max-h-full에 걸려 내부 스크롤. */}
+          <AutoHeight
+            dataId="inbox-detail-shell"
+            className="hidden min-w-0 max-h-full flex-[2] self-start overflow-y-auto rounded-sm border border-hairline bg-surface-alt split:block"
           >
+          <div data-id="inbox-detail-aside" onMouseDown={(e) => e.stopPropagation()}>
             {tab === "approvals" ? (
               selectedApproval ? (
                 <ApprovalDetail
@@ -736,6 +770,7 @@ export default function InboxPage() {
               />
             )}
           </div>
+          </AutoHeight>
         </div>
 
         {/* 삭제 확인 모달 — 선택/읽음/날짜 3종 공용, 요약 1줄만 다르게 */}
@@ -970,7 +1005,40 @@ function ApprovalDetail({
             <UserPill loginId={approval.principal} />
           </DetailRow>
         )}
+        {/* 결재 주체 — 버전 승인은 아래 "승인자 현황"이 더 자세하므로 그 외 종류에만 */}
+        {!isVersion && (
+          <>
+            <DetailRow label={t("inbox.deciders")}>
+              {approval.deciders.length === 0 ? (
+                <span className="text-fine text-ink-tertiary">{t("inbox.approverNone")}</span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-1">
+                  {approval.deciders.map((login) => (
+                    <UserPill key={login} loginId={login} />
+                  ))}
+                </span>
+              )}
+            </DetailRow>
+            {approval.pending_on.length > 0 && (
+              <DetailRow label={t("inbox.pendingOn")}>
+                <span className="flex flex-wrap items-center gap-1">
+                  {approval.pending_on.map((login) => (
+                    <UserPill key={login} loginId={login} />
+                  ))}
+                </span>
+              </DetailRow>
+            )}
+          </>
+        )}
       </dl>
+
+      {/* 내가 결재자가 아닌데 보인다면 그 근거를 알려 준다 — 관리자 인박스 혼동 방지 */}
+      {approval.via_sysadmin && (
+        <p className="mt-3 flex items-start gap-1.5 rounded-sm bg-surface px-3 py-2 text-fine text-ink-tertiary">
+          <ShieldCheck size={13} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+          {t("inbox.viaSysadminHint")}
+        </p>
+      )}
 
       {/* 승인자 현황 — 버전 승인만(✓승인/○대기/✗반려) */}
       {isVersion && approvers.length > 0 && (

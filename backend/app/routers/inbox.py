@@ -234,5 +234,73 @@ async def list_inbox_approvals(
             }
         )
 
+    await _attach_deciders(session, items, user, sysadmin)
     items.sort(key=lambda x: x["created_at"], reverse=True)
     return items
+
+
+# kind별 결재 주체 — 버전/가시성·권한은 지정 승인자, 이름변경·SP지정은 오너, 점유권은 점유자+오너
+_OWNER_GATED_TITLES = {"map_rename", "sp_designation"}
+
+
+async def _attach_deciders(
+    session: AsyncSession, items: list[dict], user: str, sysadmin: bool
+) -> None:
+    """각 항목에 실제 결재자(deciders)·미결자(pending_on)·열람 근거(via_sysadmin)를 채운다.
+
+    sysadmin은 모든 건을 볼 수 있어 "관리자라서 보이는 것"과 "내가 결재자인 것"이 섞인다 —
+    수신자가 구분할 수 있도록 결재 주체를 함께 내려준다 (2026-08-19).
+    """
+    if not items:
+        return
+    map_ids = {item["map_id"] for item in items}
+    approvers: dict[int, list[str]] = {}
+    for map_id, login in await session.execute(
+        select(MapApprover.map_id, MapApprover.user_id).where(MapApprover.map_id.in_(map_ids))
+    ):
+        approvers.setdefault(map_id, []).append(login)
+    owners: dict[int, list[str]] = {}
+    for map_id, login in await session.execute(
+        select(MapPermission.map_id, MapPermission.principal_id).where(
+            MapPermission.map_id.in_(map_ids),
+            MapPermission.principal_type == "user",
+            MapPermission.role == "owner",
+        )
+    ):
+        owners.setdefault(map_id, []).append(login)
+
+    version_ids = {
+        item["version_id"]
+        for item in items
+        if item["kind"] == "version_approval" and item["version_id"] is not None
+    }
+    approved: dict[int, list[str]] = {}
+    if version_ids:
+        for version_id, approver in await session.execute(
+            select(VersionApproval.version_id, VersionApproval.approver).where(
+                VersionApproval.version_id.in_(version_ids)
+            )
+        ):
+            approved.setdefault(version_id, []).append(approver)
+
+    for item in items:
+        map_id = item["map_id"]
+        if item["kind"] == "version_approval":
+            deciders = approvers.get(map_id, [])
+            done = approved.get(item["version_id"], [])
+            item["approved_by"] = [x for x in deciders if x in done]
+            item["pending_on"] = [x for x in deciders if x not in done]
+        elif item["kind"] == "checkout_transfer":
+            # 점유권은 현 점유자 또는 오너가 넘겨줄 수 있다
+            holder = item.get("holder")
+            deciders = ([holder] if holder else []) + [
+                x for x in owners.get(map_id, []) if x != holder
+            ]
+            item["pending_on"] = deciders
+        else:
+            owner_gated = item["title"] in _OWNER_GATED_TITLES
+            deciders = owners.get(map_id, []) if owner_gated else approvers.get(map_id, [])
+            item["pending_on"] = deciders
+        item["deciders"] = deciders
+        # 결재자 목록에 없는데 보인다 = sysadmin 포괄 권한으로 열람 중
+        item["via_sysadmin"] = sysadmin and user not in deciders
