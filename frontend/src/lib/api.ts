@@ -264,6 +264,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+// ldap 모드 로그인 — 서버가 계정 존재 여부를 노출하지 않으므로(자격증명 vs 스로틀만 구분) 두 갈래만 본다.
+export async function postLdapLogin(
+  loginId: string,
+  password: string,
+): Promise<{ token: string; expiresAt: string }> {
+  try {
+    return await request<{ token: string; expiresAt: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ loginId, password }),
+    });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 429) {
+      throw new Error("too-many-attempts");
+    }
+    throw new Error("invalid-credentials");
+  }
+}
+
 export function listMaps(): Promise<MapSummary[]> {
   return request<MapSummary[]>("/maps");
 }

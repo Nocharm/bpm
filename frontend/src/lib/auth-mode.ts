@@ -18,6 +18,17 @@ function isAuthMode(value: unknown): value is AuthMode {
   return typeof value === "string" && MODES.includes(value as AuthMode);
 }
 
+let cachedModePromise: Promise<AuthModeInfo> | null = null;
+
+// Providers·로그인 페이지·top-nav가 모두 부팅 시 같은 값을 묻는다 — 매 마운트마다 재요청하지 않도록
+// 인플라이트/완료된 promise를 모듈 캐시로 공유한다. fetchAuthMode 자체는 테스트가 직접 쓰므로 그대로 둔다.
+export function getCachedAuthMode(): Promise<AuthModeInfo> {
+  if (!cachedModePromise) {
+    cachedModePromise = fetchAuthMode();
+  }
+  return cachedModePromise;
+}
+
 export async function fetchAuthMode(): Promise<AuthModeInfo> {
   try {
     const res = await fetch("/api/auth/mode", { cache: "no-store" });
