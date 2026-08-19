@@ -103,8 +103,13 @@ export default function LoginPage() {
   const onKeycloak = async () => {
     if (!modeInfo) return;
     clearAutoLoginSkip();
-    const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
-    await signinRedirectFromLogin(modeInfo);
+    try {
+      const { signinRedirectFromLogin } = await import("@/lib/keycloak-login");
+      await signinRedirectFromLogin(modeInfo);
+    } catch (e) {
+      // signinRedirect는 보통 페이지를 떠나므로 실패해야만 여기 도달 — 안 잡으면 버튼이 죽은 것처럼 보인다
+      console.error("keycloak signin redirect failed", e);
+    }
   };
 
   // Keycloak 모든 세션 종료 — 종료 후 /login 복귀 시 무의미한 silent 시도(login_required 왕복) 방지 플래그

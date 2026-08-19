@@ -194,8 +194,10 @@ export function TopNav() {
   }, [open]);
 
   const onLogout = async () => {
+    // 모드 미확정 상태에서 클릭하면 else 분기(keycloak)로 떨어져 authInfoRef가 비어 있어
+    // UserManager가 빈 authority/client_id로 조용히 아무 일도 안 한다 — 확정될 때까지 무시.
+    if (!mode) return;
     setAutoLoginSkip();
-    // 모드 미확정 시엔 가장 엄격한 keycloak 경로로 폴백(fetchAuthMode의 fail-closed 방침과 동일)
     if (mode === "ldap") {
       clearLdapToken();
       setAuthToken(null);

@@ -250,8 +250,8 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | Variable | Where | Effect |
 | --- | --- | --- |
 | `BPM_SYSADMINS` | backend `.env` | Comma-separated login IDs granted sysadmin |
-| `AUTH_ENABLED` | backend `.env` | Enable Keycloak JWT verification |
-| `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | Enable the Keycloak login flow in the UI |
+| `AUTH_MODE` | backend `.env` | Auth mode — `keycloak` \| `ldap` \| `dev`. Empty falls back to legacy `AUTH_ENABLED` (`true`→keycloak, `false`→dev). The frontend has no build-time equivalent — it reads the resolved mode at boot from `GET /api/auth/mode` |
+| `AUTH_ENABLED` | backend `.env` | Legacy on/off switch, superseded by `AUTH_MODE` — kept for backward compatibility |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | Enforce RBAC locally even with auth off |
 | `MANUAL_URL` | `.env` (compose) | Manual-site button on the editor toolbar — hidden when empty |
 | `N8N_HR_URL` | backend `.env` | n8n HR webhook URL (single source for people and org chart) — sync activates only with the token set too |

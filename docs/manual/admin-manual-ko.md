@@ -249,8 +249,8 @@ PUT /api/manual
 | 변수 | 위치 | 효과 |
 | --- | --- | --- |
 | `BPM_SYSADMINS` | backend `.env` | sysadmin으로 지정할 로그인 ID 콤마 목록 |
-| `AUTH_ENABLED` | backend `.env` | Keycloak JWT 검증 활성화 |
-| `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | UI의 Keycloak 로그인 플로 활성화 |
+| `AUTH_MODE` | backend `.env` | 인증 모드 — `keycloak` \| `ldap` \| `dev`. 비우면 구 `AUTH_ENABLED`로 유도(`true`→keycloak, `false`→dev). 프론트는 빌드타임 대응값이 없고, 부팅 시 `GET /api/auth/mode`로 런타임 조회한다 |
+| `AUTH_ENABLED` | backend `.env` | 구 온/오프 스위치 — `AUTH_MODE`로 대체됨, 하위호환용으로 유지 |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | 인증 없이도 로컬에서 RBAC 강제 |
 | `MANUAL_URL` | `.env` (compose) | 에디터 툴바의 매뉴얼 사이트 버튼 — 비우면 숨김 |
 | `N8N_HR_URL` | backend `.env` | n8n HR 웹훅 주소(사용자·조직도 단일 소스) — 토큰과 함께 설정해야 동기화 활성 |

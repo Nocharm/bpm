@@ -163,7 +163,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 
 - `LDAP_BIND_CREDENTIALS`는 시크릿 — `.env`에만, git 금지. 서비스 계정은 읽기 전용 최소 권한.
 - 가능하면 LDAPS(636)/StartTLS로 평문 bind 회피.
-- `X-Dev-User` 헤더는 `AUTH_ENABLED=false`에서만 신뢰. 서버는 `true`라 무시(우회 불가).
+- `X-Dev-User` 헤더는 `AUTH_MODE=dev`(또는 구 `AUTH_ENABLED=false`로 유도된 dev)에서만 신뢰. 서버는 `keycloak`/`ldap`이라 무시(우회 불가).
 - 관리자 엔드포인트(`/api/employees`, `/api/employees/sync`)는 백엔드 `require_admin`으로 서버측 보호(프론트 숨김에 의존 안 함).
 - **PKCE 비활성(`disablePKCE:true`)은 의도된 트레이드오프** — 사내망 평문 HTTP에서 `crypto.subtle`(secure context 전용)을 못 써 끈 것. auth code 가로채기 방어가 약해지나 사내망 한정으로 수용. **HTTPS 도메인 전환 시 PKCE(S256) 복구**(앱·Keycloak 둘 다 HTTPS여야 discovery mixed-content 회피).
 

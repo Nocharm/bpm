@@ -69,7 +69,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 - 같은 배포 서버의 Keycloak 사용: realm `ai-portal` (주소는 `.env`로 관리, 예: `http://182.199.63.71:8080/realms/ai-portal`)
 - frontend: OIDC Authorization Code + PKCE 로그인(`react-oidc-context`) → backend API 호출 시 Bearer 토큰
 - backend: realm JWKS로 RS256 서명 검증(`pyjwt[crypto]`) 후 사용자 식별 — `created_by`에 기록
-- **우회 플래그(확정)**: `AUTH_ENABLED`(backend) / `NEXT_PUBLIC_AUTH_ENABLED`(frontend). 로컬 네이티브는 미설정(우회), 서버 compose는 `true`. `/api/health`는 항상 인증 면제
+- **인증 모드(확정, 2026-08-19)**: backend `AUTH_MODE`(`keycloak`|`ldap`|`dev`, 비면 구 `AUTH_ENABLED`로 유도)가 유일한 스위치. frontend는 빌드타임 상수 없이 `GET /api/auth/mode`로 부팅 시 런타임 조회한다. 로컬 네이티브는 `AUTH_MODE` 미설정(=`dev`, 우회), 서버 compose는 `keycloak`. `/api/health`는 항상 인증 면제
 - Keycloak에 public(PKCE) 클라이언트 등록 필요 — client_id `KEYCLOAK_CLIENT_ID`(예: `bpm-frontend`), redirect_uri는 앱 origin
 
 ## 5. 기술 스택 / 배포
