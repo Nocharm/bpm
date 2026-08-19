@@ -39,7 +39,7 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
-import { MultiValueInput } from "@/components/multi-value-input";
+import { NodeDetailsFields } from "@/components/node-details-fields";
 import { ParamInput } from "@/components/param-input";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
@@ -8551,6 +8551,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                 system={node.data.system}
                 duration={node.data.duration}
                 touch_time={node.data.touch_time ?? ""}
+                input={node.data.input ?? ""}
+                output={node.data.output ?? ""}
+                data_form={node.data.data_form ?? ""}
+                start_condition={node.data.start_condition ?? ""}
+                end_condition={node.data.end_condition ?? ""}
                 cost_krw={node.data.cost_krw ?? ""}
                 cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
@@ -9084,18 +9089,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         selectedNode.data.nodeType === "decision" ||
                         selectedNode.data.nodeType === "subprocess") && (
                         <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <span className="text-fine font-semibold text-ink">{t("inspector.details")}</span>
-                            {(selectedNode.data.data_form ?? "") !== "" && (
-                              <span
-                                data-id="inspector-detail-data-form-badge"
-                                className="rounded-full bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
-                                title={t("field.dataForm")}
-                              >
-                                {selectedNode.data.data_form}
-                              </span>
-                            )}
-                          </div>
+                          <div className="mb-1 text-fine font-semibold text-ink">{t("inspector.details")}</div>
                           {selectedNode.data.nodeType === "subprocess" ? (
                             <>
                               {/* 링크 맵 라이브 참조 — selectedSpRef가 소스(위 지정 어트리뷰트 카드와 동일 규약) */}
@@ -9119,45 +9113,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                               <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                             </>
                           ) : (
-                            <>
-                              <MultiValueInput
-                                key={`${selectedNode.id}-input`}
-                                dataId="inspector-detail-input"
-                                label={t("field.input")}
-                                value={selectedNode.data.input ?? ""}
-                                readOnly={readOnly}
-                                onCommit={(joined) => updateSelectedData({ input: joined }, true)}
-                              />
-                              <MultiValueInput
-                                key={`${selectedNode.id}-output`}
-                                dataId="inspector-detail-output"
-                                label={t("field.output")}
-                                value={selectedNode.data.output ?? ""}
-                                readOnly={readOnly}
-                                onCommit={(joined) => updateSelectedData({ output: joined }, true)}
-                              />
-                              {([
-                                ["data_form", "field.dataForm", 50],
-                                ["start_condition", "field.startCondition", undefined],
-                                ["end_condition", "field.endCondition", undefined],
-                              ] as const).map(([key, labelKey, maxLength]) => (
-                                <div
-                                  key={key}
-                                  className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                                >
-                                  <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                                  <input
-                                    data-id={`inspector-detail-${key.replace(/_/g, "-")}`}
-                                    className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                    value={selectedNode.data[key] ?? ""}
-                                    disabled={readOnly}
-                                    maxLength={maxLength}
-                                    title={selectedNode.data[key] || undefined}
-                                    onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
-                                  />
-                                </div>
-                              ))}
-                            </>
+                            <NodeDetailsFields
+                              idPrefix="inspector-detail"
+                              nodeKey={selectedNode.id}
+                              input={selectedNode.data.input ?? ""}
+                              output={selectedNode.data.output ?? ""}
+                              dataForm={selectedNode.data.data_form ?? ""}
+                              startCondition={selectedNode.data.start_condition ?? ""}
+                              endCondition={selectedNode.data.end_condition ?? ""}
+                              readOnly={readOnly}
+                              onPatch={(patch) => updateSelectedData(patch, true)}
+                            />
                           )}
                         </div>
                       )}

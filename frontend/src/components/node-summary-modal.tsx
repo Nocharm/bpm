@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { NodeDetailsFields } from "@/components/node-details-fields";
 import { ParamInput } from "@/components/param-input";
 import { ScopePreview } from "@/components/scope-preview";
 import { SearchSelect } from "@/components/search-select";
@@ -62,6 +63,11 @@ export type NodeEditPatch = Partial<{
   system: string;
   duration: string;
   touch_time: string;
+  input: string;
+  output: string;
+  data_form: string;
+  start_condition: string;
+  end_condition: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -130,6 +136,11 @@ interface NodeSummaryModalProps {
   system: string;
   duration: string;
   touch_time: string;
+  input: string;
+  output: string;
+  data_form: string;
+  start_condition: string;
+  end_condition: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -175,6 +186,11 @@ export function NodeSummaryModal({
   system,
   duration,
   touch_time,
+  input,
+  output,
+  data_form,
+  start_condition,
+  end_condition,
   cost_krw,
   cost_usd,
   headcount,
@@ -208,6 +224,7 @@ export function NodeSummaryModal({
   const [form, setForm] = useState({
     label: title, description, color, assignee, department, system, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+    input, output, data_form, start_condition, end_condition,
   });
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
@@ -216,6 +233,7 @@ export function NodeSummaryModal({
     setForm({
       label: title, description, color, assignee, department, system, duration,
       touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+      input, output, data_form, start_condition, end_condition,
     });
   }
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
@@ -228,6 +246,11 @@ export function NodeSummaryModal({
       system: form.system,
       duration: form.duration,
       touch_time: form.touch_time,
+      input: form.input,
+      output: form.output,
+      data_form: form.data_form,
+      start_condition: form.start_condition,
+      end_condition: form.end_condition,
       cost_krw: form.cost_krw,
       cost_usd: form.cost_usd,
       headcount: form.headcount,
@@ -273,6 +296,11 @@ export function NodeSummaryModal({
     form.system !== system ||
     form.duration !== duration ||
     form.touch_time !== touch_time ||
+    form.input !== input ||
+    form.output !== output ||
+    form.data_form !== data_form ||
+    form.start_condition !== start_condition ||
+    form.end_condition !== end_condition ||
     form.cost_krw !== cost_krw ||
     form.cost_usd !== cost_usd ||
     form.headcount !== headcount ||
@@ -296,6 +324,11 @@ export function NodeSummaryModal({
       system: form.system,
       duration: form.duration,
       touch_time: form.touch_time,
+      input: form.input,
+      output: form.output,
+      data_form: form.data_form,
+      start_condition: form.start_condition,
+      end_condition: form.end_condition,
       cost_krw: form.cost_krw,
       cost_usd: form.cost_usd,
       headcount: form.headcount,
@@ -687,6 +720,25 @@ export function NodeSummaryModal({
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영) */}
+                {showAttributes && (
+                  <div className="py-1.5" data-id="summary-details">
+                    <div className="mb-1 text-fine font-semibold text-ink-tertiary">{t("inspector.details")}</div>
+                    <div className="ml-2 border-l border-divider pl-2">
+                      <NodeDetailsFields
+                        idPrefix="modal-detail"
+                        nodeKey={nodeId}
+                        input={form.input}
+                        output={form.output}
+                        dataForm={form.data_form}
+                        startCondition={form.start_condition}
+                        endCondition={form.end_condition}
+                        readOnly={readOnly}
+                        onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                      />
+                    </div>
                   </div>
                 )}
                 {showAttributes && (

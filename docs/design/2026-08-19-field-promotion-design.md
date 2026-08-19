@@ -48,6 +48,7 @@
 ### 1.3 GMP 값 계약
 
 - 저장값: `direct` / `indirect` / `non_gmp` / null. 표시: `GMP Direct` / `GMP Indirect` / `Non-GMP` / `—`.
+- **배지 색 자동 지정(2026-08-20 사용자 결정)**: 분류가 색을 확정 — direct=`--color-removed`(red)·indirect=`--color-changed`(amber)·non_gmp=`--color-added`(green), 12% 틴트 fill(`lib/gmp.ts` 단일 소스). 설정에서 분류 변경 시 **마우스 지점에 닫기(X) 버튼이 오는 안내 팝오버**(새 배지 색 + "Revert to previous")가 떠 이전 값으로 되돌릴 수 있다.
 - 검증: SP 지정 스키마(`SubprocessDesignationIn`류) validator에서 3값+빈 값 외 422. 폴백은 자유 텍스트.
 
 ## 2. touch_time — 7번째 파라미터 확장 지점
@@ -98,7 +99,7 @@ duration 파이프라인의 완전 미러. **한 지점이라도 빠지면 소�
 
 ### 5.1 필드 표시 (Phase B)
 
-- **노드 인스펙터**: Input/Output — 리스트형(행 add/remove, 저장은 개행 join) + `data_form` 참고 배지(Input/Output 라벨 옆, 값 있을 때만). Start/End condition — 접힘 텍스트 2필드. touch_time — Parameters 그룹에 합류.
+- **노드 인스펙터·편집 모달(공용 `NodeDetailsFields`)**: Input/Output — 리스트형(행 add/remove, 저장은 개행 join). **Data form은 IO 그룹 하단 종속 행**(들여쓰기+세로선 — 흘러가는 자료의 형식이라 조건과 동등한 형제 필드가 아님, 2026-08-20 사용자 결정). Start/End condition — 단일 행 입력(긴 문장 말줄임 유지 결정). touch_time — Parameters 그룹 합류(칩 아이콘은 duration=시계, touch_time=스톱워치로 분리). **편집 모달에도 Details 섹션으로 전부 노출**(버퍼 편집).
 - **맵 표면(구현 확정)**: 읽기 = 상세 카드 IO 블록 확장(gmp 배지·조건·touch_time, 값 있을 때만 — 비인터뷰 맵 노이즈 없음) / 편집 = **설정 > 상세 탭 `ProcessFieldsCard`(오너 전용, PATCH process-fields)** — gmp 셀렉트(4상태)·조건·duration/touch_time·system + 폴백 힌트 5종. 에디터 인스펙터 맵 탭은 밀도상 제외(상세 카드·설정이 담당).
 - 상세 카드/맵 탭의 기존 `[Interview]` 표시는 자연 축소(설명 텍스트라 코드 변경 없음).
 
@@ -123,7 +124,7 @@ duration 파이프라인의 완전 미러. **한 지점이라도 빠지면 소�
 ## 7. 미결 · 백로그
 
 - `sp_gmp`의 노드 레벨 확장(활동별 GMP) — 보류(확정 4).
-- input/output 항목별 dataForm(현재 노드당 1값) — 필요 시 JSON 직렬화로 승격하는 확장 경로만 남김.
+- input/output **항목별** dataForm — 전달물이 액션당 1값(`dataForm`)이라 현행 노드당 1값 저장이 전달물과 1:1로 충실(임포트 변경 불요, UI만 종속 표현). 항목별 형식(입력1=structured·입력2=document)이 필요해지면 **PwC 전달물에 항목별 form 협의**(anchor 키와 같은 협의 확장) 후 JSON 직렬화 승격.
 - 시스템 라이브러리 트랙: 카탈로그 테이블 + `system`/`sp_system`의 카탈로그 참조화 + `*_fallback` 대조 검토 화면.
 - `touch_time` Σ 합산의 SP 연쇄 검증(듀레이션 미러 확인).
 - 노드 요약(정보 수정) 모달에 IO/조건 편집 노출 — 1차는 인스펙터 Details 카드만.

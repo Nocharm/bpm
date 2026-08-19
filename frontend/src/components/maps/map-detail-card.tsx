@@ -47,7 +47,7 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { formatDurationHm } from "@/lib/duration";
-import { formatGmp } from "@/lib/gmp";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
@@ -888,7 +888,7 @@ export function MapDetailCard({
         >
           {detail.sp_gmp && formatGmp(detail.sp_gmp) && (
             <p data-id="map-detail-gmp">
-              <span className="rounded-full bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+              <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(detail.sp_gmp)}>
                 {formatGmp(detail.sp_gmp)}
               </span>
             </p>
