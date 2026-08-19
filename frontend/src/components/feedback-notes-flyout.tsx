@@ -77,10 +77,10 @@ export function FeedbackNotesFlyout({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
-    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousedown", handleMouseDown, true);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousedown", handleMouseDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);

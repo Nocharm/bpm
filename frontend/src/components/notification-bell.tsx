@@ -28,8 +28,8 @@ export function NotificationBell() {
         setOpen(false);
       }
     };
-    window.addEventListener("mousedown", handleMouseDown);
-    return () => window.removeEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousedown", handleMouseDown, true);
+    return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [open]);
 
   useEffect(() => {

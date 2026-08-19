@@ -371,10 +371,11 @@ export default function MapListPage() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setCreateMenuOpen(false);
     };
-    window.addEventListener("mousedown", close);
+    // 캡처 단계 — 중간에서 stopPropagation 하는 영역(맵 상세 카드 등)에서도 닫히게
+    window.addEventListener("mousedown", close, true);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("mousedown", close);
+      window.removeEventListener("mousedown", close, true);
       window.removeEventListener("keydown", onKey);
     };
   }, [createMenuOpen]);

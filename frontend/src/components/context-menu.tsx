@@ -131,15 +131,16 @@ export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuP
         onClose();
       }
     };
-    // 스크롤·리사이즈로도 닫는다 — 메뉴는 fixed 좌표라 목록이 움직이면 엉뚱한 자리에 남는다
-    // (캡처 단계: 내부 스크롤 컨테이너의 스크롤도 잡는다)
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("mousedown", handleMouseDown);
+    // 모두 캡처 단계로 듣는다 — 버블 단계면 중간 컴포넌트의 stopPropagation(예: 맵 상세 카드의
+    // 선택-해제 가드)에 막혀 window까지 오지 않아, 그 영역을 클릭할 때 메뉴가 안 닫혔다(실측 2026-08-19).
+    // 스크롤·리사이즈로도 닫는다 — 메뉴는 fixed 좌표라 목록이 움직이면 엉뚱한 자리에 남는다.
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("mousedown", handleMouseDown, true);
     window.addEventListener("scroll", onClose, true);
     window.addEventListener("resize", onClose);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("mousedown", handleMouseDown, true);
       window.removeEventListener("scroll", onClose, true);
       window.removeEventListener("resize", onClose);
     };

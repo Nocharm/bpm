@@ -242,12 +242,13 @@ export function PersonInfoPopup({ userId, position, onClose }: PersonInfoPopupPr
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
-    // 스크롤·리사이즈에도 닫는다 — 팝업은 fixed 좌표라 목록이 움직이면 앵커에서 떨어진다
-    window.addEventListener("keydown", handleKey);
+    // 스크롤·리사이즈에도 닫는다 — 팝업은 fixed 좌표라 목록이 움직이면 앵커에서 떨어진다.
+    // keydown은 캡처 — 중간에서 stopPropagation 하는 영역(맵 상세 카드 등)에서도 Esc가 먹게.
+    window.addEventListener("keydown", handleKey, true);
     window.addEventListener("scroll", onClose, true);
     window.addEventListener("resize", onClose);
     return () => {
-      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("keydown", handleKey, true);
       window.removeEventListener("scroll", onClose, true);
       window.removeEventListener("resize", onClose);
     };
