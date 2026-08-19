@@ -1804,3 +1804,19 @@ class InterviewStateOut(BaseModel):
     base_graph_updated_at: datetime | None = None
     # 턴 응답 전용 그리기 신호(비영속) — "multi" | "single" | None (speed redesign §4)
     draw_due: str | None = None
+
+
+class LoginIn(BaseModel):
+    """ldap 모드 로그인 요청 (설계 §4)."""
+
+    login_id: str = Field(alias="loginId", min_length=1, max_length=100)
+    password: str = Field(max_length=200)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class LoginOut(BaseModel):
+    """로그인 성공 응답 — 토큰과 만료시각만, 자격증명 관련 정보는 절대 포함하지 않는다."""
+
+    token: str
+    expires_at: datetime = Field(serialization_alias="expiresAt")
