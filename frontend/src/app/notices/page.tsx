@@ -7,7 +7,7 @@ import { Circle, CircleAlert, List } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { listNotices, type DirectoryUser, type NoticeImportance, type NoticeItem } from "@/lib/api";
-import { useDirectory } from "@/lib/directory";
+import { useDirectoryState } from "@/lib/directory";
 import { formatKstShort } from "@/lib/datetime";
 import { openFeedbackPanel } from "@/lib/feedback-panel";
 import { genId } from "@/lib/id";
@@ -21,6 +21,7 @@ import { ActivityDigest } from "@/components/activity-digest";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
+import { SkeletonBlock, SkeletonLine, SkeletonPill } from "@/components/skeleton";
 import { TimePills } from "@/components/time-pills";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { UserPill } from "@/components/user-pill";
@@ -44,6 +45,24 @@ function dateOnly(iso: string): string {
   return formatKstShort(iso).split(" ")[0];
 }
 
+// 목록 카드 자리 — 실제 카드와 같은 테두리·패딩·행 구성이라 도착 시 자리가 그대로 채워진다.
+function SkeletonNoticeCard() {
+  return (
+    <div className="flex w-full flex-col gap-1.5 rounded-xs border border-hairline px-3 py-2.5">
+      <div className="flex items-center justify-between">
+        <SkeletonBlock className="h-4 w-12" />
+        <SkeletonBlock className="h-1.5 w-1.5 rounded-full" />
+      </div>
+      <SkeletonLine className="w-3/5" />
+      <SkeletonLine className="w-4/5" />
+      <div className="flex items-center justify-between gap-2">
+        <SkeletonPill />
+        <SkeletonBlock className="h-4 w-20" />
+      </div>
+    </div>
+  );
+}
+
 // 내용 첫 줄 미리보기 — 첫 비어있지 않은 줄에서 마크다운 마커 제거 후 앞부분만
 function bodyPreview(md: string): string {
   const firstLine = md.split("\n").map((line) => line.trim()).find((line) => line.length > 0) ?? "";
@@ -57,13 +76,16 @@ function bodyPreview(md: string): string {
 export default function NoticesPage() {
   const { t } = useI18n();
   const [notices, setNotices] = useState<NoticeItem[]>([]);
+  // 목록 도착 전에는 "공지 없음"을 그리지 않는다 — 빈 상태→목록 교체 깜빡임 대신 스켈레톤.
+  const [loading, setLoading] = useState(true);
   const [readIds, setReadIds] = useState<number[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [nowMs] = useState(() => Date.now());
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const dir = useDirectory(); // 작성자 login_id → 이름 해석(아바타 이니셜용)
+  // 작성자 login_id → 이름 해석(아바타 이니셜용). ready 전에는 이니셜도 아이디 첫 글자로 잘못 뜨므로 대기.
+  const { users: dir, ready: dirReady } = useDirectoryState();
   const searchRef = useRef<HTMLInputElement>(null);
   useSlashFocus(searchRef);
 
@@ -73,11 +95,15 @@ export default function NoticesPage() {
 
   useEffect(() => {
     let alive = true;
-    listNotices().then((data) => {
-      if (!alive) return;
-      setNotices(data);
-      setReadIds(getReadNoticeIds());
-    });
+    listNotices()
+      .then((data) => {
+        if (!alive) return;
+        setNotices(data);
+        setReadIds(getReadNoticeIds());
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
     return () => {
       alive = false;
     };
@@ -201,6 +227,7 @@ export default function NoticesPage() {
                             notice={n}
                             nowMs={nowMs}
                             dir={dir}
+                            dirReady={dirReady}
                             t={t}
                             onCopy={notifyCopied}
                           />
@@ -212,7 +239,14 @@ export default function NoticesPage() {
               );
             })}
             {hasMore && <li ref={sentinelRef} className="h-px shrink-0" />}
-            {filtered.length === 0 && (
+            {/* 로딩 중에는 카드 자리만 잡아 둔다 — 도착 시 같은 자리에 내용이 채워져 레이아웃이 안 튄다 */}
+            {loading &&
+              Array.from({ length: 4 }).map((_, i) => (
+                <li key={`skeleton-${i}`}>
+                  <SkeletonNoticeCard />
+                </li>
+              ))}
+            {!loading && filtered.length === 0 && (
               <li className="px-4 py-8 text-center text-caption text-ink-tertiary">
                 {t("notices.empty")}
               </li>
@@ -226,8 +260,15 @@ export default function NoticesPage() {
           className="ml-4 hidden min-w-0 flex-[2] overflow-y-auto rounded-sm border border-hairline bg-surface-alt split:block"
           onClick={(e) => e.stopPropagation()}
         >
-          {selected ? (
-            <NoticeDetail notice={selected} nowMs={nowMs} dir={dir} t={t} onCopy={notifyCopied} />
+          {loading ? (
+            /* 집계(전체/중요/미읽음)도 0으로 먼저 찍혔다가 갱신되므로 도착 전엔 자리만 잡는다 */
+            <div className="flex flex-col gap-3 px-8 py-6">
+              <SkeletonLine className="w-24" />
+              <SkeletonBlock className="h-16 w-full" />
+              <SkeletonBlock className="h-16 w-full" />
+            </div>
+          ) : selected ? (
+            <NoticeDetail notice={selected} nowMs={nowMs} dir={dir} dirReady={dirReady} t={t} onCopy={notifyCopied} />
           ) : (
             <ActivityDigest
               title={t("nav.tab.notices")}
@@ -266,12 +307,15 @@ function NoticeDetail({
   notice,
   nowMs,
   dir,
+  dirReady,
   t,
   onCopy,
 }: {
   notice: NoticeItem;
   nowMs: number;
   dir: Map<string, DirectoryUser>;
+  /** 디렉터리 도착 여부 — 도착 전 이니셜은 아이디 첫 글자라 스켈레톤으로 대신한다. */
+  dirReady: boolean;
   t: Translate;
   onCopy: () => void;
 }) {
@@ -290,9 +334,13 @@ function NoticeDetail({
       <h2 className="mt-2 text-tagline text-ink">{notice.title}</h2>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-caption text-ink-secondary">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
-            {(dir.get(notice.created_by)?.name ?? notice.created_by).charAt(0).toUpperCase()}
-          </span>
+          {dirReady || dir.has(notice.created_by) ? (
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-fine text-accent">
+              {(dir.get(notice.created_by)?.name ?? notice.created_by).charAt(0).toUpperCase()}
+            </span>
+          ) : (
+            <SkeletonBlock className="h-5 w-5 rounded-full" />
+          )}
           <UserPill loginId={notice.created_by} />
           <span className="flex items-center gap-1">
             <TimePills iso={notice.created_at} nowMs={nowMs} />

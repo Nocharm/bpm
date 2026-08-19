@@ -25,6 +25,7 @@ import { WordCreateModal, type WordCreateOutcome } from "@/components/word-creat
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
 import { FrameworkTree } from "@/components/maps/framework-tree";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
+import { HomeSkeleton } from "@/components/maps/home-skeleton";
 import { HomeFilterPills } from "@/components/maps/home-filter-pills";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -45,6 +46,11 @@ export default function MapListPage() {
 
   const [maps, setMaps] = useState<MapSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 첫 진입 로딩 — 맵 목록과 내 정보/디렉터리가 모두 도착(또는 실패)하기 전에는 빈 상태를 그리지 않는다.
+  // 셋을 함께 기다리는 이유: 맵만 먼저 오면 좌측 조직도가 부서 트리 없이 한 번 그려졌다가 다시 그려진다.
+  const [mapsSettled, setMapsSettled] = useState(false);
+  const [profileSettled, setProfileSettled] = useState(false);
+  const booting = !mapsSettled || !profileSettled;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [csvModalOpen, setCsvModalOpen] = useState(false);
@@ -162,6 +168,10 @@ export default function MapListPage() {
         if (active) {
           setError(humanizeApiError(err, t));
         }
+      } finally {
+        if (active) {
+          setMapsSettled(true);
+        }
       }
     })();
     return () => {
@@ -173,8 +183,13 @@ export default function MapListPage() {
   // useDirectory 훅은 유저 Map만 노출해 여기선 직접 fetch).
   useEffect(() => {
     let active = true;
-    void getMe().then((m) => { if (active) setMe(m); }).catch(() => {});
-    void getDirectory().then((d) => { if (active) setDirectory(d); }).catch(() => {});
+    // 실패해도 settled로 푼다 — 스켈레톤에 영원히 갇히느니 빈 트리를 그리는 편이 낫다.
+    void Promise.allSettled([getMe(), getDirectory()]).then(([meResult, dirResult]) => {
+      if (!active) return;
+      if (meResult.status === "fulfilled") setMe(meResult.value);
+      if (dirResult.status === "fulfilled") setDirectory(dirResult.value);
+      setProfileSettled(true);
+    });
     return () => { active = false; };
   }, []);
 
@@ -300,7 +315,8 @@ export default function MapListPage() {
     // 마운트될 때 effect를 다시 돌려야 ResizeObserver가 비로소 붙는다 — 없으면 filterMode가
     // 초기값 "full"에 영원히 고정되고(관측된 실측 버그, T9), 그 뒤 리사이즈도 못 잡는다.
     // hasActiveFilter는 clearBtnRef가 새로 마운트/언마운트될 때 observer를 다시 붙이기 위함.
-  }, [homeView, lang, maps.length, hasActiveFilter]);
+    // booting도 같은 이유 — 첫 로드 동안은 스켈레톤이 필터 행 자리를 대신해 ref가 null이다.
+  }, [homeView, lang, maps.length, hasActiveFilter, booting]);
 
   // 검색·필터 저장 — 변경 시 session에 기록. 마운트 첫 실행은 skip(초기 default가 저장값 덮어쓰기 방지).
   const saveSkip = useRef(true);
@@ -694,7 +710,10 @@ export default function MapListPage() {
       {/* 마스터-디테일 — 리스트:상세 = 1:2(flex-1 : flex-[2]), min-w로 안 깨지게, 전체 max-w로 중앙 (H6) /
           List : detail = 1:2 (flex-1 : flex-[2]); min-w guards wrapping; centered by max-w. */}
       <div className="mx-auto flex min-h-0 w-full max-w-[80rem] flex-1 gap-4">
-        {visibleMaps.length === 0 ? (
+        {booting ? (
+          /* 첫 로드 — 빈 상태 대신 같은 레이아웃의 스켈레톤(데이터 도착 시 자리 그대로 채워짐) */
+          <HomeSkeleton />
+        ) : visibleMaps.length === 0 ? (
           /* 맵이 하나도 없음 — 풀폭 환영 화면(상세 자리까지 차지) */
           <WelcomePlaceholder onCreate={() => setDialogOpen(true)} />
         ) : (

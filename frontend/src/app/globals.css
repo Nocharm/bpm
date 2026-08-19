@@ -289,10 +289,18 @@ button:not(:disabled):active {
   animation: accordion-open 300ms var(--ease-smooth);
 }
 
+/* 애니메이션 없는 같은 레이아웃 — 첫 페인트·저장값 복원처럼 사용자가 연 게 아닌 펼침에 쓴다.
+   (레이아웃 규칙을 빼면 그리드가 아니게 되어 긴 맵 이름이 박스를 뚫는다 — 아래 min-width 주석) */
+.accordion-static {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
 /* 내부 콘텐츠가 0fr 행 안에서 줄어들 수 있어야 한다 — min-height 기본값(auto)이면 행이 안 접힌다.
    min-width도 0 필수 — 그리드 아이템 기본 auto는 카드 truncate 축소를 막아 리스트가 min-content
    폭으로 틴트 박스 우측을 뚫는다(긴 맵 이름에서 재현). */
-.accordion-open > * {
+.accordion-open > *,
+.accordion-static > * {
   min-height: 0;
   min-width: 0;
 }
@@ -508,6 +516,34 @@ button:not(:disabled):active {
   35%  { background-color: var(--color-accent-tint); }
   65%  { background-color: var(--color-accent-tint); }
   100% { background-color: transparent; }
+}
+
+/* 스켈레톤 플레이스홀더 — 데이터 도착 전 최종 레이아웃과 같은 자리를 회색 블록으로 잡아 두고,
+   빛줄기(shimmer)가 좌→우로 훑어 "불러오는 중"임을 알린다. 색은 surface 단계만 사용(테마 토큰). */
+@keyframes skeleton-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+/* 바탕은 hairline — surface-alt는 흰 배경 위에서 거의 안 보인다(실측). */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-hairline);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 20%,
+    color-mix(in srgb, var(--color-surface) 55%, transparent) 50%,
+    transparent 80%
+  );
+  animation: skeleton-shimmer 1400ms var(--ease-smooth) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
 }
 
 /* 링크 미리보기 패널 로딩 — 진행 바/링 회전/글로브 펄스/점 페이드 (목업 Node Focus Actions 이식) */

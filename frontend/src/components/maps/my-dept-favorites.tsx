@@ -17,6 +17,8 @@ import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
 
 // 리스트 "전체 펼치기" 영속 키 — 단일 리스트라 boolean 블롭(부서 목록의 bpm.home.deptListExpand와 동형 규칙).
 const FAV_LIST_EXPAND_KEY = "bpm.home.favListExpand";
+// 섹션이 하나뿐이라 접힘/애니메이션 키도 하나 — 조직도의 부서 path 자리.
+const FAV_SECTION_KEY = "fav";
 
 interface MyDeptFavoritesProps {
   maps: MapSummary[];
@@ -55,11 +57,11 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
   };
 
   // 섹션 접힘 애니메이션 — 상태는 즉시 커밋, 고스트 렌더로 accordion-close만 재생 후 언마운트.
-  const { closingKeys, beginClose, cancelClose } = useClosingKeys<string>();
+  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<string>();
 
   if (maps.length === 0) return null;
 
-  const isClosing = closingKeys.has("fav");
+  const isClosing = closingKeys.has(FAV_SECTION_KEY);
   const header = (
     <button
       type="button"
@@ -67,8 +69,8 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
       aria-expanded={open}
       onClick={(e) => {
         e.stopPropagation();
-        if (open) beginClose("fav");
-        else cancelClose("fav");
+        if (open) beginClose(FAV_SECTION_KEY);
+        else cancelClose(FAV_SECTION_KEY);
         onToggle();
       }}
       className="group flex w-full items-center gap-1.5 rounded-sm px-1 py-1 text-left hover:bg-divider"
@@ -100,7 +102,7 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
           </StickyBoxHeader>
           {/* accordion-open/close — 펼침·접힘 높이 애니메이션(globals.css). 인셋은 pl-5 pr-2
               고정값(depth 파생 아님) — 조직도 카드 리스트와 동일 상수라야 폭이 일치한다 */}
-          <div className={isClosing ? "accordion-close" : "accordion-open"}>
+          <div className={getSectionClass(FAV_SECTION_KEY)}>
             <ClampedList
               count={maps.length}
               expanded={listExpanded}

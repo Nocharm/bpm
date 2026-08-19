@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listInboxApprovals, type InboxApproval } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { Donut } from "@/components/charts/donut";
+import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
 
 // kind → 토큰 색변수. checkout_transfer는 --color-warning(미존재) 대신 --color-changed 사용.
 const KIND_COLOR: Record<InboxApproval["kind"], string> = {
@@ -21,11 +22,14 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
   const [items, setItems] = useState<InboxApproval[]>([]);
   // 조회 실패와 진짜 0건을 구분 — 실패 시 "모두 처리됨"으로 오인시키지 않는다
   const [loadError, setLoadError] = useState(false);
+  // 도착 전 0건도 마찬가지 — "모두 처리됨"을 먼저 띄웠다가 목록으로 뒤집히지 않게 스켈레톤으로 대기
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
     void listInboxApprovals()
       .then((r) => { if (active) { setItems(r); setLoadError(false); } })
-      .catch(() => { if (active) setLoadError(true); });
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
   const segments = useMemo(() => {
@@ -36,7 +40,16 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
   return (
     <section data-id="home-needs-approval" className="flex flex-col gap-3 rounded-sm border border-hairline bg-surface-alt p-3">
       <div className="text-caption-strong text-ink">{t("home.needsApproval")}</div>
-      {items.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center gap-3">
+          <SkeletonBlock className="h-[104px] w-[104px] rounded-full" />
+          <div className="flex flex-1 flex-col gap-2">
+            <SkeletonLine className="w-4/5" />
+            <SkeletonLine className="w-3/5" />
+            <SkeletonLine className="w-2/3" />
+          </div>
+        </div>
+      ) : items.length === 0 ? (
         <p className="py-4 text-center text-fine text-ink-tertiary">
           {loadError ? t("home.approvalsLoadError") : t("home.allCaughtUp")}
         </p>

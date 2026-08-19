@@ -53,7 +53,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
   // 맵 리스트 3.5개 클램프의 "전체 펼치기" 상태 — 카테고리 id 키, openIds와 함께 영속.
   const [expandedLists, setExpandedLists] = useState<Set<number>>(new Set());
   // 카테고리 접힘 애니메이션 — 상태는 즉시 커밋(영속 보존), 고스트 렌더로 accordion-close만 재생.
-  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
+  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<number>();
 
   // 펼침 상태 영속 — 복원 effect(아래)보다 먼저 선언해 첫 실행이 hydration 전에 스킵되게 한다.
   useEffect(() => {
@@ -193,7 +193,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const filteredOut = mapsData.maps.length - shownMaps.length;
     return (
       // accordion-open/close — 펼침(로드 완료) 진입·접힘 퇴장 높이 애니메이션(globals.css).
-      <div className={closingKeys.has(categoryId) ? "accordion-close" : "accordion-open"}>
+      <div className={getSectionClass(categoryId)}>
       <ClampedList
         count={shownMaps.length}
         expanded={expandedLists.has(categoryId)}
@@ -305,7 +305,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
             </button>
           ) : (
             children.length > 0 && (
-              <div className={isClosing ? "accordion-close" : "accordion-open"}>
+              <div className={getSectionClass(node.id)}>
                 <ul className="flex flex-col gap-2">{children.map((c) => renderNode(c, depth + 1))}</ul>
               </div>
             )

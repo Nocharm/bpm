@@ -69,14 +69,14 @@ export function OrgAccordion(props: OrgAccordionProps) {
   };
 
   // 섹션 접힘 애니메이션 — 상태는 즉시 커밋, 고스트 렌더로 accordion-close만 재생 후 언마운트.
-  const { closingKeys, beginClose, cancelClose } = useClosingKeys<string>();
+  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<string>();
 
   // 맵 목록 — 인셋은 pl-5 pr-2 고정값(depth에서 파생하지 않는 상수). 박스가 테두리를 잃은 뒤
   // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
   // 3.5개 초과 목록은 ClampedList가 자르고 풀폭 쉐브론 버튼으로 전체 펼침을 토글한다.
   // accordion-open/close — 펼침은 0→콘텐츠 높이 진입, 접힘은 역방향 재생 후 언마운트(globals.css).
   const renderMapList = (maps: MapSummary[], listKey: string) => (
-    <div className={closingKeys.has(listKey) ? "accordion-close" : "accordion-open"}>
+    <div className={getSectionClass(listKey)}>
       <ClampedList
         count={maps.length}
         expanded={expandedLists.has(listKey)}
@@ -152,7 +152,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
           </DeptGroupBox>
         ) : header}
         {showContent && node.children.length > 0 && (
-          <div className={isClosing ? "accordion-close" : "accordion-open"}>
+          <div className={getSectionClass(node.path)}>
             <ul className="flex flex-col gap-2">{node.children.map((c) => renderNode(c, depth + 1))}</ul>
           </div>
         )}
