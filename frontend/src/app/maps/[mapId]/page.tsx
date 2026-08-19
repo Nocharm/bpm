@@ -9098,11 +9098,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                           {selectedNode.data.nodeType === "subprocess" ? (
                             <>
+                              {/* 링크 맵 라이브 참조 — selectedSpRef가 소스(위 지정 어트리뷰트 카드와 동일 규약) */}
                               {([
-                                ["input", "field.input", selectedNode.data.spInput],
-                                ["output", "field.output", selectedNode.data.spOutput],
-                                ["start-condition", "field.startCondition", selectedNode.data.spStartCondition],
-                                ["end-condition", "field.endCondition", selectedNode.data.spEndCondition],
+                                ["input", "field.input", selectedSpRef?.input],
+                                ["output", "field.output", selectedSpRef?.output],
+                                ["start-condition", "field.startCondition", selectedSpRef?.start_condition],
+                                ["end-condition", "field.endCondition", selectedSpRef?.end_condition],
                               ] as const).map(([id, labelKey, value]) => (
                                 <div
                                   key={id}

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Building2,
   Clock,
+  Timer,
   Coins,
   CornerDownRight,
   Link as LinkIcon,
@@ -91,7 +92,7 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 }
 
 const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, touch_time: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
+  duration: Clock, touch_time: Timer, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
 };
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4, 2026-07-13 §3.2)
@@ -109,12 +110,14 @@ function NodeParams({ data, className }: { data: AppNode["data"]; className?: st
     ...(isSubprocess
       ? {
           duration: data.spDuration,
+          touch_time: data.spTouchTime,
           cost_krw: data.spCostKrw,
           cost_usd: data.spCostUsd,
           headcount: data.spHeadcount,
         }
       : {
           duration: data.duration,
+          touch_time: data.touch_time,
           cost_krw: data.cost_krw,
           cost_usd: data.cost_usd,
           headcount: data.headcount,

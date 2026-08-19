@@ -6,6 +6,7 @@ import {
   ArrowRight,
   ChevronRight,
   Clock,
+  Timer,
   Coins,
   Eraser,
   ListChecks,
@@ -46,7 +47,7 @@ export type PeopleUpdate = { id: string; department: string; assignee: string };
 
 // 캔버스 칩(process-node PARAM_ICON)과 동일한 아이콘 매핑 — 탭에서 같은 시각 언어 유지
 const PARAM_MODE_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, touch_time: Clock, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
+  duration: Clock, touch_time: Timer, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
 };
 // 속성 탭 — people/system + 파라미터 7종(PARAM_FIELDS 순서·라벨 단일 소스)
 const MODE_META: { key: BulkMode; icon: LucideIcon; labelKey: MessageKey }[] = [

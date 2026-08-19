@@ -169,18 +169,24 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   department: "field.department",
   system: "field.system",
   duration: "field.duration",
+  touch_time: "field.touchTime",
   cost_krw: "field.costKrw",
   cost_usd: "field.costUsd",
   headcount: "field.headcount",
   annual_count: "field.annualCount",
   fte: "field.fte",
+  input: "field.input",
+  output: "field.output",
+  data_form: "field.dataForm",
+  start_condition: "field.startCondition",
+  end_condition: "field.endCondition",
   location: "field.location",
 };
 
-// duration은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
+// duration·touch_time은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
 const displayFieldValue = (field: ChangedField, value: string): string => {
-  if (field === "duration") return formatDurationHm(value) || value;
+  if (field === "duration" || field === "touch_time") return formatDurationHm(value) || value;
   if (field === "cost_krw" || field === "cost_usd") return formatThousands(value) || value;
   return value;
 };
