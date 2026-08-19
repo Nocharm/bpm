@@ -162,7 +162,7 @@ function NodeTitle({
   const cancelledRef = useRef(false);
 
   if (editable && editingNodeId === id && onRename) {
-    // 내용 높이에 맞춰 늘어나는 자동 높이 — 줄바꿈(Alt+Enter) 시 잘리지 않게
+    // 내용 높이에 맞춰 늘어나는 자동 높이 — 줄바꿈(Alt/Shift+Enter) 시 잘리지 않게
     const fitHeight = (el: HTMLTextAreaElement) => {
       el.style.height = "0";
       el.style.height = `${el.scrollHeight}px`;
@@ -186,14 +186,14 @@ function NodeTitle({
             cancelledRef.current = false;
             return;
           }
-          // 끝쪽 줄바꿈만 정리 — Alt+Enter 후 그대로 커밋하면 빈 줄이 남는다
+          // 끝쪽 줄바꿈만 정리 — Alt/Shift+Enter 후 그대로 커밋하면 빈 줄이 남는다
           onRename(id, event.target.value.replace(/\n+$/, ""));
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            if (event.altKey) {
-              // Alt+Enter = 줄바꿈 삽입 (Enter는 커밋) — 비제어 입력이라 setRangeText로 충분
+            if (event.altKey || event.shiftKey) {
+              // Alt/Shift+Enter = 줄바꿈 삽입 (Enter는 커밋) — 비제어 입력이라 setRangeText로 충분
               const el = event.currentTarget;
               el.setRangeText("\n", el.selectionStart, el.selectionEnd, "end");
               fitHeight(el);

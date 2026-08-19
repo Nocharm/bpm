@@ -8736,11 +8736,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                           disabled={readOnly || selectedNode.data.nodeType === "subprocess"}
                           onChange={(event) => updateSelectedData({ label: event.target.value }, true)}
                           onKeyDown={(event) => {
-                            // Enter=포커스 해제, Alt+Enter=줄바꿈 — 캔버스 이름 편집과 동일 규칙.
+                            // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 캔버스 이름 편집과 동일 규칙.
                             // 제어 입력이라 상태로 삽입하고 rAF로 캐럿 복원(리렌더 후 같은 DOM 노드 유지).
                             if (event.key !== "Enter") return;
                             event.preventDefault();
-                            if (!event.altKey) {
+                            if (!event.altKey && !event.shiftKey) {
                               event.currentTarget.blur();
                               return;
                             }
@@ -9151,11 +9151,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                           disabled={readOnly}
                           onChange={(event) => updateSelectedEdgeLabel(event.target.value)}
                           onKeyDown={(event) => {
-                            // Enter=포커스 해제, Alt+Enter=줄바꿈 — 노드 이름 편집과 동일 규칙.
+                            // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 노드 이름 편집과 동일 규칙.
                             // 제어 입력이라 상태로 삽입하고 rAF로 캐럿 복원.
                             if (event.key !== "Enter") return;
                             event.preventDefault();
-                            if (!event.altKey) {
+                            if (!event.altKey && !event.shiftKey) {
                               event.currentTarget.blur();
                               return;
                             }

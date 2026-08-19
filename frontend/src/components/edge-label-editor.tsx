@@ -1,7 +1,7 @@
 "use client";
 
 // 엣지 더블클릭 시 캔버스 가운데(엣지 중점)에 뜨는 인라인 라벨 편집 박스 — page.tsx 오버레이 전용.
-// 좌표는 canvasContainerRef 기준(screenRectOf와 동일). Enter/blur 커밋, Alt+Enter 줄바꿈, Esc 취소.
+// 좌표는 canvasContainerRef 기준(screenRectOf와 동일). Enter/blur 커밋, Alt/Shift+Enter 줄바꿈, Esc 취소.
 
 import { useRef } from "react";
 
@@ -24,7 +24,7 @@ export function EdgeLabelEditor({
 }: EdgeLabelEditorProps) {
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
-  // 내용 높이에 맞춰 늘어나는 자동 높이 — Alt+Enter 줄바꿈이 잘리지 않게
+  // 내용 높이에 맞춰 늘어나는 자동 높이 — Alt/Shift+Enter 줄바꿈이 잘리지 않게
   const fitHeight = (el: HTMLTextAreaElement) => {
     el.style.height = "0";
     el.style.height = `${el.scrollHeight}px`;
@@ -51,14 +51,14 @@ export function EdgeLabelEditor({
           cancelledRef.current = false;
           return;
         }
-        // 끝쪽 줄바꿈만 정리 — Alt+Enter 후 그대로 커밋하면 빈 줄이 남는다
+        // 끝쪽 줄바꿈만 정리 — Alt/Shift+Enter 후 그대로 커밋하면 빈 줄이 남는다
         onCommit(event.target.value.replace(/\n+$/, ""));
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
-          if (event.altKey) {
-            // Alt+Enter = 줄바꿈 삽입 (Enter는 커밋) — 비제어 입력이라 setRangeText로 충분
+          if (event.altKey || event.shiftKey) {
+            // Alt/Shift+Enter = 줄바꿈 삽입 (Enter는 커밋) — 비제어 입력이라 setRangeText로 충분
             const el = event.currentTarget;
             el.setRangeText("\n", el.selectionStart, el.selectionEnd, "end");
             fitHeight(el);

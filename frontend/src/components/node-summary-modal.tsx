@@ -447,10 +447,10 @@ export function NodeSummaryModal({
                   disabled={nodeType === "subprocess"}
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                   onKeyDown={(event) => {
-                    // Enter=포커스 해제, Alt+Enter=줄바꿈 — 캔버스/인스펙터 이름 편집과 동일 규칙
+                    // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 캔버스/인스펙터 이름 편집과 동일 규칙
                     if (event.key !== "Enter") return;
                     event.preventDefault();
-                    if (!event.altKey) {
+                    if (!event.altKey && !event.shiftKey) {
                       event.currentTarget.blur();
                       return;
                     }
