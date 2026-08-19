@@ -97,6 +97,7 @@ AI_ENDPOINTS=
 **`ldap` 모드 필수값:**
 - `AUTH_JWT_SECRET` — 앱이 자체 서명하는 세션 토큰(HS256)의 서명키. 비우면 **기동 자체가 실패**한다(`backend/app/main.py` — `AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set`). 발급: `openssl rand -hex 32`.
 - LDAP 연결 4종(`LDAP_URL`·`LDAP_BIND_DN`·`LDAP_BIND_CREDENTIALS`·`LDAP_USER_SEARCH_BASE`) — 위 §2 그대로. 이 4종이 채워져야 AD bind 로그인이 동작한다. 비어 있으면 로컬 계정(설정 화면에서 발급)만으로 로그인 가능.
+- AD bind는 비밀번호가 맞아도 `employees` 테이블에 해당 loginId 행이 없으면 로그인이 401이다(`backend/app/routers/auth.py`) — HR 동기화로 아직 들어오지 않은 신규 입사자는 AD 계정이 유효해도 로그인할 수 없다.
 
 **컨설턴트 로컬 계정 회수 절차(시연/프로젝트 종료 시):** 설정 화면(sysadmin 전용, `/api/admin/local-accounts`)에서
 1. 먼저 sysadmin 권한을 해제(`is_sysadmin=false`) — 즉시 관리자 권한 상실.

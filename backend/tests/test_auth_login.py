@@ -164,6 +164,38 @@ def test_success_resets_throttle_counter(client: TestClient, ldap_mode):
     assert res.status_code == 401
 
 
+def test_source_switched_to_hr_falls_back_to_ad(client: TestClient, ldap_mode, monkeypatch):
+    """local_credentials가 남아 있어도 source가 'hr'로 전환되면 orphan residue —
+    AD bind로 폴백해야 한다 (app/hr/service.py:114가 충돌 loginId를 무조건 'hr'로 전환).
+    """
+    _seed_local_account("consultant.g", "pw-correct")
+
+    async def _switch_to_hr() -> None:
+        async with SessionLocal() as session:
+            emp = await session.get(Employee, "consultant.g")
+            assert emp is not None
+            emp.source = "hr"
+            await session.commit()
+
+    asyncio.run(_switch_to_hr())
+
+    monkeypatch.setattr(ad_client, "authenticate_user", lambda login_id, password: True)
+    res = client.post(
+        "/api/auth/login", json={"loginId": "consultant.g", "password": "pw-correct"}
+    )
+    assert res.status_code == 200
+
+    def _refuse(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(ad_client, "authenticate_user", _refuse)
+    # 로컬 비밀번호가 맞아도 local-verify 경로는 더 이상 타지 않는다 — AD가 거부하면 401.
+    res = client.post(
+        "/api/auth/login", json={"loginId": "consultant.g", "password": "pw-correct"}
+    )
+    assert res.status_code == 401
+
+
 def test_login_is_404_outside_ldap_mode(client: TestClient):
     res = client.post("/api/auth/login", json={"loginId": "x", "password": "y"})
     assert res.status_code == 404

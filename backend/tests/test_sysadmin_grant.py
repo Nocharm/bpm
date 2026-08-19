@@ -43,6 +43,32 @@ def test_cache_replacement_drops_previous_grants(enforce_permissions):
     assert logic.is_sysadmin("consultant.b") is True
 
 
+def test_cache_grant_is_ldap_mode_only(enforce_permissions):
+    """ldap→keycloak 전환 후 남은 캐시 부여분이 동일 loginId의 Keycloak 계정에
+    새지 않아야 한다 — 관리 엔드포인트가 ldap 모드 밖에서 404라 UI로 회수 불가하므로
+    predicate에서 직접 막는다 (최종 리뷰 하드닝).
+    """
+    logic.add_granted_sysadmin("consultant.a")
+    assert settings.auth_mode == "ldap"
+    assert logic.is_sysadmin("consultant.a") is True
+
+    settings.auth_mode = "keycloak"
+    try:
+        assert logic.is_sysadmin("consultant.a") is False
+    finally:
+        settings.auth_mode = "ldap"
+
+
+def test_env_sysadmin_works_outside_ldap_mode(enforce_permissions):
+    """게이트는 캐시(_granted_sysadmins) 항만 적용 — BPM_SYSADMINS 목록은 모드 무관하게 유효."""
+    settings.bpm_sysadmins = "admin.sys"
+    settings.auth_mode = "keycloak"
+    try:
+        assert logic.is_sysadmin("admin.sys") is True
+    finally:
+        settings.auth_mode = "ldap"
+
+
 def test_ldap_mode_with_auth_enabled_unset_does_not_grant_everyone():
     """resolved_auth_mode()는 AUTH_MODE 설정 시 auth_enabled를 무시한다 —
     AUTH_MODE=ldap + AUTH_ENABLED 기본값(False) + dev_enforce_permissions 기본값(False)

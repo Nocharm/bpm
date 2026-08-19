@@ -70,11 +70,16 @@ def is_sysadmin(login_id: str) -> bool:
     """BPM 시스템 관리자 판정.
 
     dev 모드 + dev_enforce_permissions OFF → 전원 True (로컬 잠금 방지, 현행 동작).
-    그 외 → BPM_SYSADMINS 목록 또는 설정 화면에서 부여한 로컬 계정.
+    그 외 → BPM_SYSADMINS 목록(모든 모드) 또는 설정 화면에서 부여한 로컬 계정
+    (_granted_sysadmins — ldap 모드 한정, 설계 §9.4가 허용한 바이패스는 ldap
+    모드에 한해서만 적용된다. keycloak/dev 전환 후 남은 부여분이 동일 로그인 id의
+    Keycloak 계정에 새어들지 않도록 predicate에서 직접 게이팅한다).
     """
     if settings.resolved_auth_mode() == "dev" and not settings.dev_enforce_permissions:
         return True
-    return login_id in settings.sysadmin_login_ids() or login_id in _granted_sysadmins
+    if login_id in settings.sysadmin_login_ids():
+        return True
+    return settings.resolved_auth_mode() == "ldap" and login_id in _granted_sysadmins
 
 
 async def load_granted_sysadmins(session: "AsyncSession") -> None:

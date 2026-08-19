@@ -55,7 +55,10 @@ async def handle_login(
 
     ok = False
     if employee is not None and employee.active:
-        if credential is not None:
+        # source가 'local'로 바뀐 이후에도 남아있는 credential은 orphan residue다
+        # (app/hr/service.py가 HR 피드 등장 시 source를 'hr'로 무조건 전환) —
+        # 그런 계정은 로컬 비밀번호로 검증하지 않고 AD bind로 폴백한다.
+        if credential is not None and employee.source == "local":
             # 로컬 계정은 AD로 보내지 않는다 — 컨설턴트 비밀번호가 사내 AD에 흘러가지 않게.
             # scrypt는 CPU-bound라 to_thread로 감싸 이벤트 루프를 막지 않는다.
             ok = await asyncio.to_thread(verify_password, body.password, credential.password_hash)

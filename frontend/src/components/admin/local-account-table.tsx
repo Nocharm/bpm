@@ -59,6 +59,7 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [resetValue, setResetValue] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
+  const [activeBusyId, setActiveBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -125,6 +126,21 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
       onToast(humanizeApiError(e, t));
     } finally {
       setResetBusy(false);
+    }
+  };
+
+  // active 토글 — 스펙 §5 "차단 = 기존 active 토글"과 컨설턴트 오프보딩 절차(docs/deploy/deploy.md)가
+  // 이 화면에서 active=false 전환을 요구한다. PATCH는 이미 active를 받는다(app/routers/admin.py).
+  const handleToggleActive = async (row: LocalAccount) => {
+    setActiveBusyId(row.loginId);
+    try {
+      await updateLocalAccount(row.loginId, { active: !row.active });
+      setReloadKey((k) => k + 1);
+      onToast(row.active ? t("localAccount.deactivated") : t("localAccount.reactivated"));
+    } catch (e) {
+      onToast(humanizeApiError(e, t));
+    } finally {
+      setActiveBusyId(null);
     }
   };
 
@@ -316,6 +332,15 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
                         {t("localAccount.resetPassword")}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      data-id={`local-account-active-${row.loginId}`}
+                      disabled={activeBusyId === row.loginId}
+                      onClick={() => void handleToggleActive(row)}
+                      className="rounded-sm border border-hairline px-2 py-1 text-fine text-ink-tertiary hover:bg-surface-alt disabled:opacity-40"
+                    >
+                      {row.active ? t("localAccount.deactivate") : t("localAccount.reactivate")}
+                    </button>
                     <button
                       type="button"
                       data-id={`local-account-delete-${row.loginId}`}
