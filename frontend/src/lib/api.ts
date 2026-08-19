@@ -1611,6 +1611,61 @@ export function getAdminUsers(): Promise<AdminDirectory> {
   return request<AdminDirectory>("/admin/users");
 }
 
+// ── 로컬 계정(외부 컨설턴트) 관리 — sysadmin 전용, ldap 모드에서만 백엔드가 라우트를 노출 ──
+
+export interface LocalAccount {
+  loginId: string;
+  name: string;
+  department: string;
+  deptCode: string | null;
+  role: "admin" | "user";
+  isSysadmin: boolean;
+  envSysadmin: boolean; // BPM_SYSADMINS로 지정 — UI에서 회수 불가(설계 §3.1)
+  active: boolean;
+  createdBy: string;
+  updatedAt: string;
+}
+
+export interface LocalAccountInput {
+  loginId: string;
+  name: string;
+  deptCode: string | null;
+  role: "admin" | "user";
+  password: string;
+  isSysadmin: boolean;
+}
+
+export type LocalAccountPatch = Partial<Omit<LocalAccountInput, "loginId">> & {
+  active?: boolean;
+};
+
+export function listLocalAccounts(): Promise<LocalAccount[]> {
+  return request<LocalAccount[]>("/admin/local-accounts");
+}
+
+export function createLocalAccount(input: LocalAccountInput): Promise<LocalAccount> {
+  return request<LocalAccount>("/admin/local-accounts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateLocalAccount(
+  loginId: string,
+  patch: LocalAccountPatch,
+): Promise<LocalAccount> {
+  return request<LocalAccount>(`/admin/local-accounts/${encodeURIComponent(loginId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteLocalAccount(loginId: string): Promise<void> {
+  return request<void>(`/admin/local-accounts/${encodeURIComponent(loginId)}`, {
+    method: "DELETE",
+  });
+}
+
 export interface NotificationItem {
   id: number;
   type: string;
