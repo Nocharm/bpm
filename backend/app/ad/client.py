@@ -174,8 +174,15 @@ def fetch_all_users() -> list[RawUser]:
 
 
 def _find_user_dn(login_id: str) -> str | None:
-    """서비스 계정으로 sAMAccountName을 검색해 DN을 얻는다. 없으면 None."""
-    conn = _open_service_connection()
+    """서비스 계정으로 sAMAccountName을 검색해 DN을 얻는다.
+
+    없으면 None — 서버 연결·bind 실패(AD 다운, 잘못된 호스트, TLS 실패)도 None으로
+    수렴시켜 authenticate_user가 예외를 던지지 않고 항상 False로 돌아가게 한다.
+    """
+    try:
+        conn = _open_service_connection()
+    except LDAPException:
+        return None
     try:
         conn.search(
             search_base=settings.ldap_user_search_base,
@@ -186,8 +193,13 @@ def _find_user_dn(login_id: str) -> str | None:
         if not conn.entries:
             return None
         return str(conn.entries[0].entry_dn)
+    except LDAPException:
+        return None
     finally:
-        conn.unbind()
+        try:
+            conn.unbind()
+        except LDAPException:
+            pass  # 이미 끊긴 연결 — 정리 실패는 인증 결과에 영향 없음
 
 
 def _try_bind(user_dn: str, password: str) -> bool:
