@@ -733,3 +733,77 @@ def test_build_graph_rows_carries_color_and_signature_detects_it() -> None:
     assert next(n for n in nodes_b if n.title == "요청").color == "#c2849a"
     # 색은 콘텐츠 — 재전달에서 variant 색이 바뀌면 새 버전으로 감지돼야 한다
     assert _graph_signature(nodes_a, edges_a) != _graph_signature(nodes_b, edges_b)
+
+
+def test_build_graph_rows_carries_promoted_fields_and_signature_detects_them() -> None:
+    from scripts.import_consultant import _graph_signature, build_graph_rows
+
+    plain = _canonical_map()
+    promoted = _canonical_map()
+    promoted.nodes[0].input = "작업지시"
+    promoted.nodes[0].output = "측정 범위"
+    promoted.nodes[0].data_form = "structured"
+    promoted.nodes[0].system_fallback = "EAM"
+    nodes_a, edges_a, _ = build_graph_rows(plain, link_targets={})
+    nodes_b, edges_b, _ = build_graph_rows(promoted, link_targets={})
+    row = next(n for n in nodes_b if n.title == "요청")
+    assert (row.input, row.output, row.data_form, row.system_fallback) == (
+        "작업지시", "측정 범위", "structured", "EAM")
+    # 승격 필드도 콘텐츠 — 재전달에서 값이 바뀌면 새 버전으로 감지 (design 2026-08-19 §4.1)
+    assert _graph_signature(nodes_a, edges_a) != _graph_signature(nodes_b, edges_b)
+
+
+def test_map_promoted_fields_land_and_gmp_review_survives(client) -> None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+
+    def _make():
+        cmap = _canonical_map(
+            code="IV-F1", name="필드 승격",
+            system="EAM", start_condition="주기 도래", end_condition="목록 완성",
+            gmp_fallback="GMP 문서 맞음", frequency_fallback="주 1회",
+            total_time_fallback="한시간쯤", touch_time_fallback="30분쯤",
+            system_fallback="EAM",
+        )
+        cmap.params.touch_time = "0.30"
+        return cmap
+
+    report = _run(_import_once(maps=[_make()]))
+    assert report.counts() == {"created": 1}
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-F1"))).one()
+
+    m = _run(_load())
+    assert m.sp_system == "EAM" and m.sp_system_fallback == "EAM"
+    assert m.sp_start_condition == "주기 도래" and m.sp_end_condition == "목록 완성"
+    assert m.sp_gmp is None and m.sp_gmp_fallback == "GMP 문서 맞음"  # 대표는 검토에서 선정
+    assert m.sp_frequency_fallback == "주 1회"
+    assert m.sp_total_time_fallback == "한시간쯤"
+    assert m.sp_touch_time == "0.30" and m.sp_touch_time_fallback == "30분쯤"
+
+    # 동일 재전달 → unchanged — 새 필드가 비교에 참여해도 안정(불필요 updated 없음)
+    report2 = _run(_import_once(maps=[_make()]))
+    assert report2.counts() == {"unchanged": 1}
+
+    # 검토자가 sp_gmp 선정 후 폴백만 바뀐 재전달 → updated, 선정값은 보존(엔진이 sp_gmp 불건드림)
+    async def _review():
+        async with SessionLocal() as session:
+            m2 = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-F1"))).one()
+            m2.sp_gmp = "direct"
+            await session.commit()
+
+    _run(_review())
+    changed = _make()
+    changed.gmp_fallback = "GMP 기록으로 재분류"
+    report3 = _run(_import_once(maps=[changed]))
+    assert report3.counts() == {"updated": 1}
+    m3 = _run(_load())
+    assert m3.sp_gmp == "direct" and m3.sp_gmp_fallback == "GMP 기록으로 재분류"

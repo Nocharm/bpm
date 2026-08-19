@@ -761,3 +761,38 @@ def test_section_anchor_roundtrips(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
     node = next(n for n in saved["nodes"] if n["id"] == "n1")
     assert node["section_anchor"] == "_Toc999"
+
+
+def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestClient) -> None:
+    """인터뷰 승격 필드 왕복 + touch_time H.MM 정규화 (design 2026-08-19 §1.1·§2)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "작업지시 확인",
+                "input": "그 주 작업지시\n표준기 목록",  # 개행 구분 복수
+                "output": "측정 범위",
+                "start_condition": "주기 도래",
+                "end_condition": "목록 확정",
+                "data_form": "structured",
+                "system_fallback": "EAM(구모델)",
+                "touch_time": "1.75",  # 75분 이월 → 2.15
+            },
+            {"id": "n2", "title": "무효 터치타임", "touch_time": "한시간쯤"},
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert n1["input"] == "그 주 작업지시\n표준기 목록"
+    assert n1["output"] == "측정 범위"
+    assert n1["start_condition"] == "주기 도래" and n1["end_condition"] == "목록 확정"
+    assert n1["data_form"] == "structured"
+    assert n1["system_fallback"] == "EAM(구모델)"
+    assert n1["touch_time"] == "2.15"
+    # 무효 자유텍스트는 duration과 동일하게 경계에서 "" 소거(422 아님)
+    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
+    assert n2["touch_time"] == ""

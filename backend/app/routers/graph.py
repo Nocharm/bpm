@@ -297,6 +297,13 @@ async def replace_graph(
             existing.headcount = node.headcount
             existing.annual_count = node.annual_count
             existing.fte = node.fte
+            existing.touch_time = node.touch_time
+            existing.input = node.input
+            existing.output = node.output
+            existing.start_condition = node.start_condition
+            existing.end_condition = node.end_condition
+            existing.data_form = node.data_form
+            existing.system_fallback = node.system_fallback
             existing.url = node.url
             existing.url_label = node.url_label
             existing.section_anchor = node.section_anchor

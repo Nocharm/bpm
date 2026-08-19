@@ -5,6 +5,7 @@
 
 ## 2026-08-19 — 인터뷰 필드 승격 설계 (feat/field-promotion)
 - 1차 임포트의 텍스트 직렬화 키들을 고유 필드로 승격하는 설계 확정(사용자 브레인스토밍) — 기조: 노드↔SP 파라미터 대칭. touch_time=7번째 공용 파라미터(duration 미러)·노드 input/output(개행 복수)+start/end_condition+data_form+system_fallback·맵 sp_start/end_condition+GMP 3값(direct/indirect/non_gmp)+폴백 4종. 대표+폴백 쌍은 FallbackHint 툴팁(원문+수정+적용)으로 검토 작업 지원. 시스템 라이브러리는 별도 트랙. 설계: `docs/design/2026-08-19-field-promotion-design.md`, 플랜: `docs/superpowers/plans/2026-08-20-field-promotion.md`(실검증은 QA 문서 주도 — 사용자 지시). ⚠️ A(BE)+B(FE) 동일 릴리스 필수 — FE 미지 필드는 graph PUT이 소거.
+- Phase A(BE) 완료 — Node 7컬럼·ProcessMap 9컬럼(_ADDED_COLUMNS 16행)·NodeIn/SP지정/MapOut/RefOut 스키마·`PATCH /maps/{id}/process-fields`(SP 지정 무관 검토 편집, gmp 3값 422)·어댑터 착지 이동([Interview]=Owner role만·설명 KV=Rule/Screen/Quote만·openItems/tasks.note→map_notes)·엔진 시그니처/fields_changed 확장(sp_gmp는 비교·갱신 제외=검토값 보존). 게이트 pytest 1141·ruff 0.
 
 ## 2026-08-19 — LDAP 인증 폴백 + 로컬 계정 (dev, 완료)
 - 9910을 LDAP으로 열어 Keycloak 없이도 AD bind + 설정 화면 발급 로컬 계정(컨설턴트용)으로 로그인하게 함. 설계: [`docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md`](docs/superpowers/specs/2026-08-19-auth-fallback-ldap-design.md).

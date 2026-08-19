@@ -88,6 +88,8 @@ class SubprocessDesignationIn(BaseModel):
     cost_krw: str = Field(default="", max_length=50)
     cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
+    # 7번째 회당 파라미터 — 노드 touch_time 대칭, SP 노드가 read-only 상속 (design 2026-08-19 §2)
+    touch_time: str = Field(default="", max_length=50)
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
@@ -104,7 +106,7 @@ class SubprocessDesignationIn(BaseModel):
             raise ValueError("department must not be blank")
         return value.strip()
 
-    @field_validator("duration", mode="after")
+    @field_validator("duration", "touch_time", mode="after")
     @classmethod
     def _normalize_duration(cls, value: str) -> str:
         # 무효(레거시 자유텍스트 포함)는 "" — 노드 duration과 동일 결정 (design 2026-07-11 SP §2)
@@ -132,6 +134,49 @@ class SubprocessDesignationIn(BaseModel):
     def _check_single_currency(self) -> "SubprocessDesignationIn":
         _assert_single_currency(self.cost_krw, self.cost_usd)
         return self
+
+
+# GMP 분류 저장값 — 표시(GMP Direct/Indirect/Non-GMP)는 FE 담당 (design 2026-08-19 §1.3)
+GMP_VALUES = ("direct", "indirect", "non_gmp")
+
+
+class ProcessFieldsIn(BaseModel):
+    """맵 프로세스 필드 부분 갱신 — 인터뷰 승격 대표/폴백의 검토 편집 (design 2026-08-19 §5).
+
+    SP 지정 여부와 무관하게 오너가 수정한다. 필드명은 sp_ 접두 없이 컬럼과 1:1
+    (라우터가 `sp_{field}`로 매핑). exclude_unset 부분 갱신 — 빈 문자열=소거(NULL).
+    """
+
+    start_condition: str | None = None
+    end_condition: str | None = None
+    gmp: str | None = Field(default=None, max_length=20)
+    duration: str | None = Field(default=None, max_length=50)
+    touch_time: str | None = Field(default=None, max_length=50)
+    system: str | None = Field(default=None, max_length=100)
+    gmp_fallback: str | None = None
+    frequency_fallback: str | None = Field(default=None, max_length=200)
+    total_time_fallback: str | None = Field(default=None, max_length=200)
+    touch_time_fallback: str | None = Field(default=None, max_length=200)
+    system_fallback: str | None = Field(default=None, max_length=200)
+
+    @field_validator("gmp")
+    @classmethod
+    def _check_gmp(cls, value: str | None) -> str | None:
+        # 3값 유효성 — 빈 값(미분류)은 허용, 그 외는 422 (design 2026-08-19 §1.3)
+        if value is None:
+            return None
+        text = value.strip()
+        if text and text not in GMP_VALUES:
+            raise ValueError(f"gmp must be one of {GMP_VALUES} or empty")
+        return text
+
+    @field_validator("duration", "touch_time", mode="after")
+    @classmethod
+    def _normalize_durations(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        normalized = normalize_duration(value)
+        return "" if normalized is None else normalized
 
 
 class VersionOut(BaseModel):
@@ -669,11 +714,21 @@ class MapOut(BaseModel):
     # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
     category_path: str | None = None
     consultant_code: str | None = None
-    # L6 Input/Output — 자유 텍스트
+    # L6 Input/Output — 자유 텍스트(개행 구분 복수)
     sp_input: str | None = None
     sp_output: str | None = None
+    # 인터뷰 승격 필드 — 대표+폴백 쌍 (design 2026-08-19 §1.2)
+    sp_start_condition: str | None = None
+    sp_end_condition: str | None = None
+    sp_gmp: str | None = None
+    sp_gmp_fallback: str | None = None
+    sp_frequency_fallback: str | None = None
+    sp_total_time_fallback: str | None = None
+    sp_touch_time: str | None = None
+    sp_touch_time_fallback: str | None = None
+    sp_system_fallback: str | None = None
 
-    @field_validator("sp_duration", mode="after")
+    @field_validator("sp_duration", "sp_touch_time", mode="after")
     @classmethod
     def _clear_invalid_sp_duration(cls, value: str | None) -> str | None:
         # 레거시 자유텍스트("3일")가 응답 경계를 깨지 않게 소거 — NodeIn._normalize_duration과 동일 결정
@@ -839,6 +894,16 @@ class NodeIn(BaseModel):
     headcount: str = Field(default="", max_length=50)
     annual_count: str = Field(default="", max_length=50)
     fte: str = Field(default="", max_length=50)
+    # 7번째 회당 파라미터 — duration과 동일 정규화·소거 (design 2026-08-19 §2)
+    touch_time: str = Field(default="", max_length=50)
+    # 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
+    input: str = ""
+    output: str = ""
+    start_condition: str = ""
+    end_condition: str = ""
+    data_form: str = Field(default="", max_length=50)
+    # 시스템 원문 폴백 — 편집 경로는 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
+    system_fallback: str = Field(default="", max_length=200)
     # 참조 링크 — 스킴 검증은 클라이언트(CSV 파서·링크 렌더)에서. 자유 타이핑 자동저장이 깨지지 않게 길이만 제한
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
@@ -863,13 +928,13 @@ class NodeIn(BaseModel):
         # 레거시 DB(컬럼 NULL)에서 from_attributes 로드 시 None → [] 로 보정
         return [] if value is None else value
 
-    @field_validator("duration", mode="after")
+    @field_validator("duration", "touch_time", mode="after")
     @classmethod
     def _normalize_duration(cls, value: str) -> str:
         # 무효(레거시 자유텍스트 포함)는 "" — model_config(from_attributes=True)가 GET 응답
         # 직렬화에도 쓰여 422를 내면 레거시 행 조회가 깨진다. "" 소거로 ①화면에서 즉시 사라지고
         # ②다음 저장 때 물리적으로도 비워져 "기존 duration 전부 버림"(design 2026-07-11 §2.3)을
-        # 경계에서 집행한다.
+        # 경계에서 집행한다. touch_time은 duration과 동일 H.MM 계약 (design 2026-08-19 §2).
         normalized = normalize_duration(value)
         return "" if normalized is None else normalized
 
@@ -951,11 +1016,17 @@ class SubprocessRefOut(BaseModel):
     cost_krw: str | None = None
     cost_usd: str | None = None
     headcount: str | None = None
+    # 7번째 파라미터 + 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
+    touch_time: str | None = None
+    input: str | None = None
+    output: str | None = None
+    start_condition: str | None = None
+    end_condition: str | None = None
     url: str | None = None
     url_label: str | None = None
     sp_description: str | None = None
 
-    @field_validator("duration", mode="after")
+    @field_validator("duration", "touch_time", mode="after")
     @classmethod
     def _clear_invalid_duration(cls, value: str | None) -> str | None:
         # 레거시 자유텍스트("2일")가 칩/합산을 깨지 않게 응답 경계에서 소거

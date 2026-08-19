@@ -9,11 +9,11 @@
 
 ## Phase A — BE 스키마·어댑터
 
-- [ ] **A1. 컬럼+마이그레이션**: `models.py` Node 7컬럼·ProcessMap 9컬럼(스펙 §1.1/§1.2), `db.py` `_ADDED_COLUMNS` 16행. 검증: 스키마 테스트(기존 consultant 컬럼 테스트 패턴) 추가 후 pytest.
-- [ ] **A2. 경계 스키마**: `schemas.py` — NodeIn(신규 7필드, touch_time은 duration과 동일 소거 정규화, 길이 방어), NodeOut/graph 에코, SP 지정 In/Out(sp_ 9필드, gmp 3값 validator, sp_touch_time 소거), MapOut 계열 에코. 검증: 경계 테스트(무효 touch_time `""` 소거, gmp 422).
-- [ ] **A3. 영속 경로**: `graph.py` upsert · `versions.py` clone_graph · SP 지정 라우터 저장/에코. 검증: 그래프 PUT 왕복 + clone 보존 테스트.
-- [ ] **A4. IR+어댑터+엔진**: `consultant_canonical.py` 확장 → `consultant_interview.py` 착지 이동(스펙 §4.1 표: 설명 KV 축소·[Interview]=Owner role만·touch_time_min→H.MM·openItems/tasks.note→map_notes) → `import_consultant.py` build_graph_rows·`_graph_signature`·`fields_changed`·SP 반영 확장. 샘플 JSON에 touch_time_min·openItems 값 추가. 검증: 어댑터 매핑 테스트·재임포트 백필(시그니처 감지)·no-op 불변식·기존 기대값(설명 KV) 전수 수정.
-- [ ] **A-gate**: BE 전체 그린 + ruff. → 커밋(작업 단위별).
+- [x] **A1. 컬럼+마이그레이션**: `models.py` Node 7컬럼·ProcessMap 9컬럼(스펙 §1.1/§1.2), `db.py` `_ADDED_COLUMNS` 16행. 검증: 스키마 테스트(기존 consultant 컬럼 테스트 패턴) 추가 후 pytest.
+- [x] **A2. 경계 스키마**: `schemas.py` — NodeIn(신규 7필드, touch_time은 duration과 동일 소거 정규화, 길이 방어), NodeOut/graph 에코, SP 지정 In/Out(sp_ 9필드, gmp 3값 validator, sp_touch_time 소거), MapOut 계열 에코. 검증: 경계 테스트(무효 touch_time `""` 소거, gmp 422).
+- [x] **A3. 영속 경로**: `graph.py` upsert · `versions.py` clone_graph · SP 지정 라우터 저장/에코. 검증: 그래프 PUT 왕복 + clone 보존 테스트.
+- [x] **A4. IR+어댑터+엔진**: `consultant_canonical.py` 확장 → `consultant_interview.py` 착지 이동(스펙 §4.1 표: 설명 KV 축소·[Interview]=Owner role만·touch_time_min→H.MM·openItems/tasks.note→map_notes) → `import_consultant.py` build_graph_rows·`_graph_signature`·`fields_changed`·SP 반영 확장. 샘플 JSON에 touch_time_min·openItems 값 추가. 검증: 어댑터 매핑 테스트·재임포트 백필(시그니처 감지)·no-op 불변식·기존 기대값(설명 KV) 전수 수정.
+- [x] **A-gate**: BE 전체 그린 + ruff — pytest 1141 passed·ruff 0. PATCH /maps/{id}/process-fields 신설(검토 편집 경로, SP 지정과 무관).
 
 ## Phase B — FE 전 표면
 
