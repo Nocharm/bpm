@@ -159,7 +159,7 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
 
       {/* 멤버(허용 인원) — 코멘트 영역처럼 테두리 박스로 감싸 분리. 카드 디자인은 OLD MapDetailCard 재사용(클릭 펼침·역할 배지).
           기본 펼침 (R2 QA 피드백) */}
-      <details open className="group rounded-md border border-hairline px-3 py-2">
+      <details open data-acc className="group rounded-md border border-hairline px-3 py-2">
         <summary className="flex cursor-pointer list-none items-center gap-1 text-fine font-semibold text-ink [&::-webkit-details-marker]:hidden">
           <ChevronRight size={12} strokeWidth={1.5} className="transition-transform group-open:rotate-90" />
           {t("inspector.collaborators")}

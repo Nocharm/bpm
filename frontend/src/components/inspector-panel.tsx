@@ -5,6 +5,8 @@
 import {
   Boxes,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleCheck,
   FileUp,
   GitCompare,
@@ -17,8 +19,9 @@ import {
   Workflow,
 } from "lucide-react";
 import Link from "next/link";
-import { type ComponentType, type ReactNode, useState } from "react";
+import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Tooltip } from "@/components/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
 
@@ -120,6 +123,53 @@ export function InspectorPanel({
     ...(importSlot ? [IMPORT_TAB] : []),
   ];
 
+  // 탭 콘텐츠의 아코디언 일괄 접기/펼치기 — 상태가 여러 컴포넌트에 흩어져 있어 DOM 컨벤션으로 수렴:
+  // 헤더 버튼 data-acc-toggle(aria-expanded) + <details data-acc>. 활성 탭만 마운트되므로
+  // 컨테이너 쿼리가 곧 "해당 탭의" 아코디언이다 (사용자 결정 2026-08-20).
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [anySectionOpen, setAnySectionOpen] = useState(false);
+  useEffect(() => {
+    const root = contentRef.current;
+    if (root === null) return;
+    const compute = () => {
+      let open = false;
+      root.querySelectorAll('button[data-acc-toggle]').forEach((b) => {
+        if (b.getAttribute("aria-expanded") === "true") open = true;
+      });
+      root.querySelectorAll("details[data-acc]").forEach((d) => {
+        if ((d as HTMLDetailsElement).open) open = true;
+      });
+      setAnySectionOpen(open);
+    };
+    // 초기 판정은 rAF로 미뤄 effect 내 동기 setState 회피(react-hooks/set-state-in-effect)
+    const raf = requestAnimationFrame(compute);
+    const observer = new MutationObserver(compute);
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["aria-expanded", "open"],
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, []);
+  const toggleAllSections = () => {
+    const root = contentRef.current;
+    if (root === null) return;
+    const toggles = [...root.querySelectorAll<HTMLButtonElement>("button[data-acc-toggle]")];
+    const detailsEls = [...root.querySelectorAll<HTMLDetailsElement>("details[data-acc]")];
+    const anyOpen =
+      toggles.some((b) => b.getAttribute("aria-expanded") === "true") ||
+      detailsEls.some((d) => d.open);
+    // 하나라도 펼쳐져 있으면 모두 접기, 모두 접혀 있으면 모두 펼치기
+    for (const b of toggles) {
+      if ((b.getAttribute("aria-expanded") === "true") === anyOpen) b.click();
+    }
+    for (const d of detailsEls) d.open = !anyOpen;
+  };
+
   return (
     // @container — 패널 폭 기준 컨테이너 쿼리(탭 라벨 전체 펼침 판정용, ≥430px면 전 탭 라벨)
     <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
@@ -161,9 +211,28 @@ export function InspectorPanel({
             </button>
           );
         })}
+        {/* 아코디언 일괄 접기/펼치기 — 아이콘 전용 + 호버 툴팁 (사용자 결정 2026-08-20) */}
+        <Tooltip
+          label={t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+          className="ml-auto shrink-0"
+        >
+          <button
+            type="button"
+            data-id="inspector-toggle-all-sections"
+            aria-label={t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            onClick={toggleAllSections}
+          >
+            {anySectionOpen ? (
+              <ChevronsDownUp size={16} strokeWidth={1.5} />
+            ) : (
+              <ChevronsUpDown size={16} strokeWidth={1.5} />
+            )}
+          </button>
+        </Tooltip>
       </div>
 
-      <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-4">
+      <div ref={contentRef} className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-4">
         {tab === "properties" && selectionKind === null && (
           <PropertiesEmpty
             readOnly={readOnly}

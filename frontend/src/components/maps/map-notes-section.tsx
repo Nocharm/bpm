@@ -47,6 +47,7 @@ export function MapNotesSection({ mapId }: MapNotesSectionProps) {
       <button
         type="button"
         data-id="map-notes-toggle"
+        data-acc-toggle
         aria-expanded={!collapsed}
         onClick={() => setCollapsed((v) => !v)}
         className="flex w-full items-center gap-1 text-fine font-semibold text-ink"

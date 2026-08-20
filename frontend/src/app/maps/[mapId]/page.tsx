@@ -8946,6 +8946,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <button
                             type="button"
                             data-id="inspector-attrs-toggle"
+                            data-acc-toggle
                             aria-expanded={!attrsCollapsed}
                             className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
                             onClick={() => {
@@ -9067,6 +9068,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <button
                             type="button"
                             data-id="inspector-sp-attrs-toggle"
+                            data-acc-toggle
                             aria-expanded={!attrsCollapsed}
                             className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
                             onClick={() => {
@@ -9202,7 +9204,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                         )}
                       {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
-                      <details open className="rounded-md border border-hairline px-3 py-2">
+                      <details open data-acc className="rounded-md border border-hairline px-3 py-2">
                         <summary className="cursor-pointer text-fine font-semibold text-ink">
                           {t("editor.comments")}
                           {selectedComments.some((comment) => !comment.resolved) &&
@@ -9516,6 +9518,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <div data-id="inspector-edge-style-section" className="rounded-md border border-hairline p-3">
                       <button
                         type="button"
+                        data-acc-toggle
                         aria-expanded={edgeStyleSectionOpen}
                         onClick={() => {
                           if (edgeStyleSectionOpen) beginInspectorClose("edgeStyle");
@@ -9638,6 +9641,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
                       <button
                         type="button"
+                        data-acc-toggle
                         aria-expanded={editorApprovalsSectionOpen}
                         onClick={() => {
                           if (editorApprovalsSectionOpen) beginInspectorClose("editorApprovals");
@@ -9717,6 +9721,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
                         <button
                           type="button"
+                          data-acc-toggle
                           aria-expanded={approvalWorkflowSectionOpen}
                           onClick={() => {
                             if (approvalWorkflowSectionOpen) beginInspectorClose("approvalWorkflow");

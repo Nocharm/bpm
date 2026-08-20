@@ -214,6 +214,7 @@ export function SubprocessInspectorCard({
       <button
         type="button"
         data-id="sp-inspector-toggle"
+        data-acc-toggle
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
         onClick={toggleOpen}

@@ -103,6 +103,7 @@ export function NodeMetricsCard({
         <button
           type="button"
           data-id="inspector-params-toggle"
+          data-acc-toggle
           aria-expanded={!collapsed}
           className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink"
           onClick={() => {

@@ -6,7 +6,7 @@
 
 ## 1. Editor at a Glance
 
-Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card.
+Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all).
 
 ### Moving around the canvas
 

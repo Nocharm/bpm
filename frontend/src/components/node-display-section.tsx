@@ -70,6 +70,7 @@ export function NodeDisplaySection({ displayFields, onToggle, idPrefix }: NodeDi
       <button
         type="button"
         data-id={`${idPrefix}-node-display-toggle`}
+        data-acc-toggle
         aria-expanded={!collapsed}
         onClick={() => setCollapsed((v) => !v)}
         className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
