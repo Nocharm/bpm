@@ -8,6 +8,8 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Circle,
   CircleDot,
   CornerDownRight,
@@ -245,6 +247,18 @@ export function NodeSummaryModal({
   const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
   // BPM attributes 접힘 — 인스펙터 카드와 키 공유(bpm.attrsCollapsed) (사용자 결정 2026-08-20)
   const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
+  // 모달 섹션 일괄 접기/펼치기 — 인스펙터 탭 바 버튼과 동일 판정(하나라도 펼침→모두 접기).
+  // 모달 3섹션은 로컬 state라 DOM 스윕 대신 직접 제어(영속 키 공유는 write*로 유지) (사용자 결정 2026-08-20)
+  const anySectionOpen = !attrsCollapsed || !paramsCollapsed || !detailsCollapsed;
+  const toggleAllSections = () => {
+    const next = anySectionOpen; // true=모두 접기
+    setAttrsCollapsed(next);
+    writeAttrsCollapsed(next);
+    setParamsCollapsed(next);
+    writeParamsCollapsed(next);
+    setDetailsCollapsed(next);
+    writeDetailsCollapsed(next);
+  };
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
@@ -673,11 +687,12 @@ export function NodeSummaryModal({
                 {/* BPM 속성 — process·decision만 표시. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
                 {showAttributes && (
                   <div className="py-1.5" data-id="summary-attrs">
+                    <div className="flex items-center gap-1">
                     <button
                       type="button"
                       data-id="summary-attrs-toggle"
                       aria-expanded={!attrsCollapsed}
-                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
                       onClick={() => {
                         const next = !attrsCollapsed;
                         setAttrsCollapsed(next);
@@ -696,6 +711,22 @@ export function NodeSummaryModal({
                       {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
                       {hasChangedIn(ATTRS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
+                    {/* 섹션 일괄 접기/펼치기 — 모달은 공간이 있어 아이콘+라벨 병기, 인스펙터 탭 바
+                        버튼과 동일 판정 로직 (사용자 결정 2026-08-20) */}
+                    <button
+                      type="button"
+                      data-id="summary-toggle-all-sections"
+                      className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                      onClick={toggleAllSections}
+                    >
+                      {anySectionOpen ? (
+                        <ChevronsDownUp size={13} strokeWidth={1.5} />
+                      ) : (
+                        <ChevronsUpDown size={13} strokeWidth={1.5} />
+                      )}
+                      {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+                    </button>
+                    </div>
                     {!attrsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
                     {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
