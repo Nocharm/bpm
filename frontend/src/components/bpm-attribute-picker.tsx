@@ -20,7 +20,8 @@ interface BpmAttributePickerProps {
   onChange: (patch: { assignee?: string; department?: string }) => void;
 }
 
-const ROW = "flex items-center justify-between gap-2 border-t border-divider py-1";
+// 행간 구분선 없음 — 어트리뷰트 섹션은 URL 위에만 스페이서 (사용자 결정 2026-08-20)
+const ROW = "flex items-center justify-between gap-2 py-1";
 
 export function BpmAttributePicker({
   versionId,
@@ -89,7 +90,7 @@ export function BpmAttributePicker({
       </div>
 
       {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커). 읽기전용은 칩만. */}
-      <div className="flex items-start gap-2 border-t border-divider py-1">
+      <div className="flex items-start gap-2 py-1">
         <span className="mt-1 shrink-0 text-caption text-ink-secondary">{t("field.assignee")}</span>
         <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">

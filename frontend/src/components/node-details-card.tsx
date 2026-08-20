@@ -144,6 +144,7 @@ export function NodeDetailsCard({
                       ? "-"
                       : items.map((r, i) => (
                           <span key={i} className="block">
+                            <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
                             {r.text}
                             {r.form !== "" && (
                               <span className="text-fine text-ink-tertiary"> · {r.form}</span>

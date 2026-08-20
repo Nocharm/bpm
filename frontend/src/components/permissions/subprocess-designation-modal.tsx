@@ -247,7 +247,7 @@ export function SubprocessDesignationModal({
                     readOnly={false}
                     onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
                   />
-                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                  <div className="flex items-center justify-between gap-2 py-1">
                     <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
                     <input
                       data-id="subprocess-designation-system"
@@ -270,11 +270,12 @@ export function SubprocessDesignationModal({
                   {urlInvalid && (
                     <p className="py-0.5 text-right text-fine text-error">{t("subprocess.urlInvalid")}</p>
                   )}
-                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
+                  {/* 링크 라벨 — URL의 하위 항목: 한 단 더 들여쓰기 + 축소 글자 */}
+                  <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
+                    <span className="shrink-0 text-fine text-ink-tertiary">{t("field.urlLabel")}</span>
                     <input
                       data-id="subprocess-designation-url-label"
-                      className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
+                      className={`${INPUT_CLASS} w-44 shrink-0 text-right !text-fine disabled:opacity-40`}
                       maxLength={100}
                       value={form.urlLabel}
                       disabled={form.url.trim() === ""}
@@ -310,7 +311,7 @@ export function SubprocessDesignationModal({
               {!paramsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
           {SP_PARAM_FIELDS.map((key) => (
-            <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
+            <div key={key} className="flex items-center justify-between gap-2 py-1">
               <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
               <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
                 <ParamInput
@@ -377,8 +378,7 @@ export function SubprocessDesignationModal({
                       setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
                     }
                   />
-                  <div className="border-t border-divider">
-                    <MultiValueInput
+                  <MultiValueInput
                       dataId="subprocess-designation-output"
                       label={t("sp.output")}
                       value={form.output}
@@ -388,7 +388,6 @@ export function SubprocessDesignationModal({
                         setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))
                       }
                     />
-                  </div>
                 </div>
               )}
             </AutoHeight>

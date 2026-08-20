@@ -82,8 +82,9 @@ export function UrlLabelField({
         )}
       </div>
       {url.trim() !== "" && (
-        <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-          <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
+        /* 링크 라벨 — URL의 하위 항목: 한 단 더 들여쓰기 + 축소 글자 (사용자 결정 2026-08-20) */
+        <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
+          <span className="shrink-0 text-fine text-ink-tertiary">{t("field.urlLabel")}</span>
           {urlLabel ? (
             <span data-id="url-label-pill" className={PILL_CLASS} title={urlLabel}>
               <span className="truncate">{urlLabel}</span>
@@ -101,7 +102,7 @@ export function UrlLabelField({
           ) : (
             <input
               data-id="url-label-input"
-              className={inputClass}
+              className={`${inputClass} !text-fine`}
               placeholder={t("urlField.addLabel")}
               maxLength={100}
               disabled={readOnly}

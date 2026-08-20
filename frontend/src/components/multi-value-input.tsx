@@ -84,6 +84,8 @@ export function MultiValueInput({
             ? "-"
             : items.map((r, i) => (
                 <span key={i} className="block">
+                  {/* 항목 번호 — 회색톤 (사용자 결정 2026-08-20) */}
+                  <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
                   {r.text}
                   {r.form !== "" && <span className="text-fine text-ink-tertiary"> · {r.form}</span>}
                 </span>
@@ -114,6 +116,8 @@ export function MultiValueInput({
         // 항목은 위치 기반 편집 — 값 key는 중복 항목에서 충돌하므로 인덱스 사용(항목 재정렬 없음).
         // group/mvrow — 폼 미지정 행의 지정 아이콘이 행 호버 시에만 나타난다(DataFormPicker)
         <div key={i} className="group/mvrow mt-0.5 flex items-center gap-1">
+          {/* 항목 번호 — 회색톤 (사용자 결정 2026-08-20) */}
+          <span className="w-4 shrink-0 text-right text-fine tabular-nums text-ink-muted">{i + 1}.</span>
           <input
             data-id={`${dataId}-row-${i}`}
             className="min-w-0 flex-1 rounded-sm border border-transparent bg-surface-alt px-1.5 py-0.5 text-caption text-ink focus:border-accent focus:outline-none"

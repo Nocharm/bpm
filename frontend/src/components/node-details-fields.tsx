@@ -107,8 +107,14 @@ export function NodeDetailsFields({
         ["end_condition", "field.endCondition", endCondition],
       ] as const).map(([key, labelKey, value]) => {
         const RowIcon = DETAIL_FIELD_ICONS[key];
+        // 스페이서는 IO 그룹↔조건 경계(시작 조건 위)에만 (사용자 결정 2026-08-20)
         return (
-        <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
+        <div
+          key={key}
+          className={`flex items-center justify-between gap-2 py-1 ${
+            key === "start_condition" ? "border-t border-divider" : ""
+          }`}
+        >
           <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
             <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
             {t(labelKey)}

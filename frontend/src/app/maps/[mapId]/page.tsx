@@ -8988,7 +8988,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
-                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                              className="flex items-center justify-between gap-2 py-1"
                             >
                               <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                               <input
