@@ -125,6 +125,13 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_system_fallback", "VARCHAR(200)"),
     # 활동별 GMP (design 2026-08-20 캔버스 필 확장)
     ("nodes", "gmp", "VARCHAR(20) DEFAULT ''"),
+    # IO 링크(불러오기) — 줄 정렬은 input_forms와 동일 (io-linking design 2026-08-21 §3)
+    ("nodes", "output_ids", "TEXT DEFAULT ''"),
+    ("nodes", "input_links", "TEXT DEFAULT ''"),
+    ("nodes", "output_links", "TEXT DEFAULT ''"),
+    ("nodes", "input_flags", "TEXT DEFAULT ''"),
+    ("process_maps", "sp_input_ids", "TEXT"),
+    ("process_maps", "sp_output_ids", "TEXT"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

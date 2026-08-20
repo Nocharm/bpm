@@ -101,6 +101,14 @@ class SubprocessDesignationIn(BaseModel):
     # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(노드 대칭, 2026-08-20)
     input_forms: str = Field(default="")
     output_forms: str = Field(default="")
+    # SP IO 항목 id — 지정 모달이 전 줄 부여(소비 맵 미러의 참조 대상) (io-linking §3)
+    input_ids: str = Field(default="")
+    output_ids: str = Field(default="")
+
+    @field_validator("input_ids", "output_ids", mode="after")
+    @classmethod
+    def _trim_trailing_id_lines(cls, value: str) -> str:
+        return value.rstrip()
 
     @field_validator("department")
     @classmethod
@@ -907,6 +915,11 @@ class NodeIn(BaseModel):
     # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정). 후행 공백 줄만 소거(정렬 보존)
     input_forms: str = ""
     output_forms: str = ""
+    # IO 링크 — itemId-only 참조. 서버는 무해석 왕복, 정합성은 FE reconcile 담당 (io-linking §3)
+    output_ids: str = ""
+    input_links: str = ""
+    output_links: str = ""
+    input_flags: str = ""
     start_condition: str = ""
     end_condition: str = ""
     data_form: str = Field(default="", max_length=50)
@@ -962,7 +975,7 @@ class NodeIn(BaseModel):
         text = value.strip()
         return text if text in GMP_VALUES else ""
 
-    @field_validator("input_forms", "output_forms", mode="after")
+    @field_validator("input_forms", "output_forms", "output_ids", "input_links", "output_links", "input_flags", mode="after")
     @classmethod
     def _trim_trailing_form_lines(cls, value: str) -> str:
         # 후행 공백 줄만 소거 — 선행/중간 빈 줄은 input/output 줄과의 1:1 정렬이라 보존
@@ -1046,6 +1059,9 @@ class SubprocessRefOut(BaseModel):
     # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(read-only 상속 표시용, 2026-08-20)
     input_forms: str | None = None
     output_forms: str | None = None
+    # SP IO 항목 id — 미러 해석용 (io-linking §3)
+    input_ids: str | None = None
+    output_ids: str | None = None
     start_condition: str | None = None
     end_condition: str | None = None
     # 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)

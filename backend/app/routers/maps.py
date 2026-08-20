@@ -1054,6 +1054,8 @@ async def designate_subprocess(
     found_map.sp_output = payload.output or None
     found_map.sp_input_forms = payload.input_forms or None
     found_map.sp_output_forms = payload.output_forms or None
+    found_map.sp_input_ids = payload.input_ids or None
+    found_map.sp_output_ids = payload.output_ids or None
     found_map.sp_changed_by = user
     found_map.sp_changed_at = now_kst()
     if was_new:

@@ -185,6 +185,9 @@ class ProcessMap(Base):
     # L6 IO 항목별 데이터 폼 — sp_input/sp_output 줄과 1:1 정렬(노드 input_forms 대칭) (2026-08-20)
     sp_input_forms: Mapped[str | None] = mapped_column(Text, default=None)
     sp_output_forms: Mapped[str | None] = mapped_column(Text, default=None)
+    # SP 지정 IO 항목 id — 지정 저장 시 전 줄 부여(소비 맵의 미러가 참조). 줄 정렬은 sp_input과 1:1
+    sp_input_ids: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_output_ids: Mapped[str | None] = mapped_column(Text, default=None)
     # 인터뷰 승격 필드 — 노드 대칭 + 대표/폴백 쌍 (design 2026-08-19 §1.2)
     sp_start_condition: Mapped[str | None] = mapped_column(Text, default=None)
     sp_end_condition: Mapped[str | None] = mapped_column(Text, default=None)
@@ -326,6 +329,13 @@ class Node(Base):
     # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정, 짧으면 이후 줄 미지정) (2026-08-20)
     input_forms: Mapped[str] = mapped_column(Text, default="")
     output_forms: Mapped[str] = mapped_column(Text, default="")
+    # IO 링크(불러오기) — 줄 정렬 계약은 input_forms와 동일. output_ids=원본 항목 id(원본만),
+    # *_links=미러의 원본 itemId 참조, input_flags=필수/선택(빈 줄=required, "optional"만 명시).
+    # 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md §3
+    output_ids: Mapped[str] = mapped_column(Text, default="")
+    input_links: Mapped[str] = mapped_column(Text, default="")
+    output_links: Mapped[str] = mapped_column(Text, default="")
+    input_flags: Mapped[str] = mapped_column(Text, default="")
     start_condition: Mapped[str] = mapped_column(Text, default="")
     end_condition: Mapped[str] = mapped_column(Text, default="")
     # 입출력 형식 참고 배지 — structured/document/tacit 등 자유값
