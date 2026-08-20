@@ -267,6 +267,81 @@ export function applyIoImport<N extends IoNode>(opts: {
   return { nodes: next, action: "join" };
 }
 
+// 전파+로드 정합화 겸용 단일 패스 (io-linking §5) — 미러 텍스트/폼을 원본 값으로 동기화,
+// 원본 소실·자기참조·id+link 공존 링크는 소거(복사본 전환), 인덱스에 없는(중복·빈 텍스트) 원본 id도 소거.
+export function propagateIoLinks<N extends IoNode>(nodes: N[], spRefs: SpRefMap): { nodes: N[]; changed: boolean } {
+  const index = buildIoIndex(nodes, spRefs);
+  let changed = false;
+  const next = nodes.map((node) => {
+    const d = node.data;
+    let { input = "", output = "", input_forms = "", output_forms = "", output_ids = "", input_links = "", output_links = "" } = d;
+    // ① 원본 id 정리 — 인덱스가 인정하지 않는 id(중복 후발·빈 텍스트 줄)는 소거
+    if (d.nodeType !== "subprocess") {
+      output_ids.split("\n").forEach((raw, i) => {
+        const id = raw.trim();
+        if (id === "") return;
+        const o = index.get(id);
+        if (!o || o.nodeId !== node.id || o.index !== i) output_ids = setIoLine(output_ids, i, "");
+      });
+    }
+    // ② 미러 정리·동기화
+    const syncSide = (side: IoSide) => {
+      let links = side === "input" ? input_links : output_links;
+      links.split("\n").forEach((raw, i) => {
+        const itemId = raw.trim();
+        if (itemId === "") return;
+        // 같은 줄 원본 id 공존(무효) 또는 원본 소실·자기 참조 → 링크 소거(복사본 전환)
+        const o = index.get(itemId) ?? null;
+        const invalid = (side === "output" && getIoLine(output_ids, i) !== "") || o === null || o.nodeId === node.id;
+        if (invalid) {
+          links = setIoLine(links, i, "");
+          return;
+        }
+        if (side === "input") {
+          if (getIoLine(input, i) !== o.text) input = setIoLine(input, i, o.text);
+          if (getIoLine(input_forms, i) !== o.form) input_forms = setIoLine(input_forms, i, o.form);
+        } else {
+          if (getIoLine(output, i) !== o.text) output = setIoLine(output, i, o.text);
+          if (getIoLine(output_forms, i) !== o.form) output_forms = setIoLine(output_forms, i, o.form);
+        }
+      });
+      if (side === "input") input_links = links;
+      else output_links = links;
+    };
+    syncSide("input");
+    syncSide("output");
+    const dirty =
+      input !== (d.input ?? "") || output !== (d.output ?? "") ||
+      input_forms !== (d.input_forms ?? "") || output_forms !== (d.output_forms ?? "") ||
+      output_ids !== (d.output_ids ?? "") || input_links !== (d.input_links ?? "") || output_links !== (d.output_links ?? "");
+    if (!dirty) return node;
+    changed = true;
+    return { ...node, data: { ...d, input, output, input_forms, output_forms, output_ids, input_links, output_links } };
+  });
+  return { nodes: changed ? next : nodes, changed };
+}
+
+// 항목 하나의 링크 관계 조회 — 인스펙터/모달 호버 하이라이트용(원본이면 mirrors 전체, 미러면 origin 1개)
+export function getIoLinkPeers(
+  nodes: IoNode[], spRefs: SpRefMap, nodeId: string, side: IoSide, index: number,
+): { groupId: string | null; origin: IoOriginRef | null; mirrors: IoMirrorSite[] } {
+  const node = nodes.find((n) => n.id === nodeId);
+  if (!node) return { groupId: null, origin: null, mirrors: [] };
+  let groupId: string | null = null;
+  if (node.data.nodeType === "subprocess") {
+    const ref = node.data.linkedMapId != null ? spRefs.get(node.data.linkedMapId) : undefined;
+    groupId = getIoLine(side === "input" ? ref?.input_ids : ref?.output_ids, index) || null;
+  } else if (side === "output") {
+    groupId = getIoLine(node.data.output_ids, index) || getIoLine(node.data.output_links, index) || null;
+  } else {
+    groupId = getIoLine(node.data.input_links, index) || null;
+  }
+  if (groupId === null) return { groupId: null, origin: null, mirrors: [] };
+  const origin = buildIoIndex(nodes, spRefs).get(groupId) ?? null;
+  const mirrors = buildIoMirrorIndex(nodes).get(groupId) ?? [];
+  return { groupId, origin, mirrors };
+}
+
 export function collectIoImportCandidates(opts: {
   nodes: IoNode[]; edges: Edge[]; spRefs: SpRefMap; nodeId: string; side: IoSide;
 }): IoImportCandidate[] {

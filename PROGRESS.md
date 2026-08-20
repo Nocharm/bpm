@@ -11,6 +11,7 @@
 - Task 3: `lib/io-items.ts` 신설 — 줄 헬퍼(getIoLine/setIoLine/countIoLines)·상태 판정(origin/mirror/plain)·맵 전체 인덱스(buildIoIndex·buildIoMirrorIndex, 중복 itemId는 선착만 원본)·SP 지정 저장용 전 줄 id 부여(assignSpIoIds, 텍스트 일치 줄만 기존 id 승계). TDD RED→GREEN, 전체 683 passed.
 - Task 4: `lib/io-items.ts` 확장 — 전방 BFS 최단 경로(getFlowPathBetween·canReachForward)와 불러오기 후보 수집(collectIoImportCandidates, 홉별 BFS+사이클 차단·alreadyLinked/자기그룹 재수입 제외·미지정 SP 제외·댕글링 링크는 groupId null). TDD RED→GREEN, 전체 697 passed.
 - Task 5: `lib/io-items.ts` 불러오기 실행 — applyIoImport(mirror/takeover/succession/join 4시나리오+SP join, appendIoRow로 줄 정렬 동반 추가). TDD RED→GREEN, 전체 709 passed.
+- Task 6: `lib/io-items.ts` 전파·정합화 겸용 패스 — propagateIoLinks(미러 텍스트/폼 동기화·댕글링/중복/자기참조/id+link공존 소거, changed=false는 입력 배열 참조 그대로 반환)·getIoLinkPeers(원본→mirrors, 미러→origin). TDD RED→GREEN, 전체 724 passed.
 
 ## 2026-08-20 — 좁은 인스펙터 입력 오버플로 픽스 (dev)
 - 통일 폭 입력의 shrink-0가 원인 — w-32/w-44는 상한으로 두고 min-w-0+축소 허용(메트릭스·조건·시스템·URL·SP 지정 4행). 인스펙터 최소 폭 300px에서 경계 이탈 0 실측(여유 폭에선 통일 폭 유지).

@@ -5,7 +5,7 @@ import type { Edge } from "@xyflow/react";
 
 import {
   applyIoImport, assignSpIoIds, buildIoIndex, buildIoMirrorIndex, canReachForward, collectIoImportCandidates,
-  countIoLines, getFlowPathBetween, getIoItemState, getIoLine, setIoLine,
+  countIoLines, getFlowPathBetween, getIoItemState, getIoLine, getIoLinkPeers, propagateIoLinks, setIoLine,
   type IoImportCandidate, type IoNode, type SpRefMap,
 } from "./io-items";
 
@@ -438,5 +438,179 @@ describe("applyIoImport", () => {
     };
     const result = applyIoImport({ nodes, edges: [], spRefs: NO_SP, nodeId: "A", side: "output", candidate });
     expect(result).toBeNull();
+  });
+});
+
+describe("propagateIoLinks", () => {
+  it("① 원본 텍스트 변경 후 propagate — 모든 미러(인풋·아웃풋, 복수 노드) 동기화", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "새 산출물", output_ids: "itm_1", output_forms: "PDF" }),
+      node("B", { input: "구 산출물", input_links: "itm_1", input_forms: "Excel" }),
+      node("C", { output: "구 산출물", output_links: "itm_1", output_forms: "Excel" }),
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const b = result.nodes.find((n) => n.id === "B")!;
+    const c = result.nodes.find((n) => n.id === "C")!;
+    expect(b.data.input).toBe("새 산출물");
+    expect(b.data.input_forms).toBe("PDF");
+    expect(c.data.output).toBe("새 산출물");
+    expect(c.data.output_forms).toBe("PDF");
+  });
+
+  it("② 원본 항목 삭제(텍스트 줄 제거로 id가 빈 텍스트 위에 잔존) — 미러 링크 소거+텍스트 보존", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "", output_ids: "itm_1" }), // 텍스트 줄만 삭제된 상태 — id가 빈 줄 위에 남음
+      node("B", { input: "산출물사본", input_links: "itm_1" }),
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const a = result.nodes.find((n) => n.id === "A")!;
+    const b = result.nodes.find((n) => n.id === "B")!;
+    expect(a.data.output_ids ?? "").toBe(""); // 댕글링 id — 원본측도 소거
+    expect(b.data.input).toBe("산출물사본"); // 복사본 텍스트 보존
+    expect(b.data.input_links ?? "").toBe("");
+  });
+
+  it("③ 원본 노드 자체가 부재 — 미러 링크 소거+텍스트 보존", () => {
+    const nodes: IoNode[] = [node("B", { input: "산출물사본", input_links: "itm_ghost" })];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const b = result.nodes.find((n) => n.id === "B")!;
+    expect(b.data.input).toBe("산출물사본");
+    expect(b.data.input_links ?? "").toBe("");
+  });
+
+  it("④ 중복 itemId 두 노드 — 뒤쪽(나중에 순회되는) 노드의 id만 소거", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "원본출력", output_ids: "itm_1" }),
+      node("D", { output: "복제출력", output_ids: "itm_1" }),
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const a = result.nodes.find((n) => n.id === "A")!;
+    const d = result.nodes.find((n) => n.id === "D")!;
+    expect(a.data.output_ids).toBe("itm_1"); // 선착 — 유지
+    expect(d.data.output_ids ?? "").toBe(""); // 후착 — 소거
+    expect(d.data.output).toBe("복제출력"); // 텍스트는 보존
+  });
+
+  it("⑤ 같은 줄에 output_ids+output_links 공존 — link 소거(id 우선)", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "산출물", output_ids: "itm_1" }),
+      node("C", { output: "산출물", output_ids: "itm_2", output_links: "itm_1" }), // 무효 공존
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const c = result.nodes.find((n) => n.id === "C")!;
+    expect(c.data.output_ids).toBe("itm_2"); // 원본 id 유지
+    expect(c.data.output_links ?? "").toBe(""); // link 소거
+  });
+
+  it("⑥ 변경 없음 — changed=false, 반환 배열이 입력과 동일 참조(렌더 루프 방지)", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "산출물", output_ids: "itm_1" }),
+      node("B", { input: "산출물", input_links: "itm_1" }),
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(false);
+    expect(result.nodes).toBe(nodes); // 참조 동일성 — deep-equal 아님
+  });
+
+  it("⑦ SP 원본 드리프트(ref 텍스트만 바뀐 상황) — 미러 치유", () => {
+    const spRefs: SpRefMap = new Map([[7, {
+      designated: true, output: "갱신된 산출물", output_ids: "sp_out1", output_forms: "Excel",
+      input: "", input_ids: "", input_forms: "",
+    } as never]]);
+    const nodes: IoNode[] = [
+      node("S", { nodeType: "subprocess", linkedMapId: 7 }),
+      node("D", { input: "구 산출물", input_links: "sp_out1", input_forms: "PDF" }),
+    ];
+    const result = propagateIoLinks(nodes, spRefs);
+    expect(result.changed).toBe(true);
+    const d = result.nodes.find((n) => n.id === "D")!;
+    expect(d.data.input).toBe("갱신된 산출물");
+    expect(d.data.input_forms).toBe("Excel");
+    const s = result.nodes.find((n) => n.id === "S")!;
+    expect(s).toBe(nodes[0]); // SP 노드 자체는 손대지 않음
+  });
+
+  it("SP 노드에 잔존 output_ids가 있어도 정합화 대상에서 제외(SP 원본은 spRefs로만 판정)", () => {
+    // nodeType 가드 제거 시: leftover_id가 buildIoIndex에 없어 소거되면서 changed=true로 바뀐다 — 가드를 직접 잠그는 케이스.
+    const nodes: IoNode[] = [node("S", { nodeType: "subprocess", linkedMapId: 7, output_ids: "leftover_id" })];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(false);
+    const s = result.nodes.find((n) => n.id === "S")!;
+    expect(s.data.output_ids).toBe("leftover_id");
+  });
+
+  it("자기 참조 링크(자기 자신이 원본인 id를 자기 미러 링크로도 지정) — 무효로 소거", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "산출물", output_ids: "itm_1", input: "산출물사본", input_links: "itm_1" }),
+    ];
+    const result = propagateIoLinks(nodes, NO_SP);
+    expect(result.changed).toBe(true);
+    const a = result.nodes.find((n) => n.id === "A")!;
+    expect(a.data.input).toBe("산출물사본"); // 텍스트 보존
+    expect(a.data.input_links ?? "").toBe("");
+  });
+});
+
+describe("getIoLinkPeers", () => {
+  it("원본 항목 — groupId=자신의 itemId, mirrors=모든 미러(인풋·아웃풋)", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "산출물", output_ids: "itm_1" }),
+      node("B", { input: "산출물", input_links: "itm_1" }),
+      node("C", { output: "산출물", output_links: "itm_1" }),
+    ];
+    const peers = getIoLinkPeers(nodes, NO_SP, "A", "output", 0);
+    expect(peers.groupId).toBe("itm_1");
+    expect(peers.origin).toMatchObject({ itemId: "itm_1", nodeId: "A", kind: "out" });
+    expect(peers.mirrors).toHaveLength(2);
+    expect(peers.mirrors).toEqual(expect.arrayContaining([
+      { nodeId: "B", side: "input", index: 0 },
+      { nodeId: "C", side: "output", index: 0 },
+    ]));
+  });
+
+  it("미러 항목(인풋) — origin은 원본 노드, mirrors는 그룹의 미러 목록", () => {
+    const nodes: IoNode[] = [
+      node("A", { output: "산출물", output_ids: "itm_1" }),
+      node("B", { input: "산출물", input_links: "itm_1" }),
+    ];
+    const peers = getIoLinkPeers(nodes, NO_SP, "B", "input", 0);
+    expect(peers.groupId).toBe("itm_1");
+    expect(peers.origin).toMatchObject({ nodeId: "A", kind: "out" });
+    expect(peers.mirrors).toEqual([{ nodeId: "B", side: "input", index: 0 }]);
+  });
+
+  it("plain 항목 — groupId/origin null, mirrors 빈 배열(인풋·아웃풋 양쪽)", () => {
+    const nodes: IoNode[] = [node("P", { input: "평문", output: "평문출력" })];
+    expect(getIoLinkPeers(nodes, NO_SP, "P", "input", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
+    expect(getIoLinkPeers(nodes, NO_SP, "P", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
+  });
+
+  it("존재하지 않는 노드 — groupId/origin null, mirrors 빈 배열", () => {
+    expect(getIoLinkPeers([], NO_SP, "ghost", "input", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
+  });
+
+  it("SP 항목 — 지정 ref의 spout에서 groupId 해석, origin.kind='spout'", () => {
+    const spRefs: SpRefMap = new Map([[7, {
+      designated: true, output: "SP산출물", output_ids: "sp_out1", output_forms: "",
+      input: "", input_ids: "", input_forms: "",
+    } as never]]);
+    const nodes: IoNode[] = [
+      node("S", { nodeType: "subprocess", linkedMapId: 7 }),
+      node("D", { input: "SP산출물", input_links: "sp_out1" }),
+    ];
+    const peers = getIoLinkPeers(nodes, spRefs, "S", "output", 0);
+    expect(peers.groupId).toBe("sp_out1");
+    expect(peers.origin).toMatchObject({ nodeId: "S", kind: "spout" });
+    expect(peers.mirrors).toEqual([{ nodeId: "D", side: "input", index: 0 }]);
+  });
+
+  it("SP 노드지만 링크맵 미지정/ref 없음 — groupId null", () => {
+    const nodes: IoNode[] = [node("S", { nodeType: "subprocess" })];
+    expect(getIoLinkPeers(nodes, NO_SP, "S", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
   });
 });
