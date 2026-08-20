@@ -816,6 +816,7 @@ export default function InboxPage() {
       {spModal && spModalInitial && (
         <SubprocessDesignationModal
           mapId={spModal.approval.map_id}
+          designated={spModal.detail.sp_designated_at != null}
           publishedVersionId={spModalPublishedId}
           initial={spModalInitial}
           onSaved={() => {

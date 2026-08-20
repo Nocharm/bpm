@@ -3,7 +3,7 @@
 // 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + SP 파라미터 4종(Σ 합산 지원).
 // 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
 
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Sigma } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Sigma, Workflow } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -52,6 +52,8 @@ export interface DesignationForm {
 interface SubprocessDesignationModalProps {
   mapId: number;
   publishedVersionId: number | null; // BPM 피커 후보 스코프
+  // 현재 지정 여부 — 헤더 상태 필(영어 고정, SP 카드 뱃지와 동일 규칙) (사용자 결정 2026-08-20)
+  designated?: boolean;
   initial: DesignationForm;
   onSaved: (updated: MapSummary) => void;
   onClose: () => void;
@@ -63,6 +65,7 @@ const INPUT_CLASS =
 export function SubprocessDesignationModal({
   mapId,
   publishedVersionId,
+  designated = false,
   initial,
   onSaved,
   onClose,
@@ -175,7 +178,26 @@ export function SubprocessDesignationModal({
         data-id="subprocess-designation-modal"
         className="flex max-h-[82vh] w-full max-w-sm flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
       >
-        <h2 className="shrink-0 text-body-strong text-ink">{t("perm.sp.designate")}</h2>
+        <h2 className="flex shrink-0 items-center gap-2 text-body-strong text-ink">
+          <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+          <span className="min-w-0 truncate">{t("perm.sp.designate")}</span>
+          {/* 지정 상태 필 — SP 카드 뱃지와 동일(영어 고정) */}
+          {designated ? (
+            <span
+              data-id="sp-designation-status-pill"
+              className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine font-normal text-accent"
+            >
+              Designated
+            </span>
+          ) : (
+            <span
+              data-id="sp-designation-status-pill"
+              className="shrink-0 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine font-normal text-ink-secondary"
+            >
+              Not designated
+            </span>
+          )}
+        </h2>
         <p className="shrink-0 text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
         {/* 본문 스크롤 — 작은 창에서 위아래 넘침 방지(다른 모달과 동일, 사용자 결정 2026-08-20) */}
         <div className="scroll-soft -mx-1 min-h-0 flex-1 overflow-y-auto px-1">

@@ -230,7 +230,11 @@ export function SubprocessInspectorCard({
           {/* 연결 절차 안내 — 호버 툴팁(제목 옆) */}
           <span onClick={(e) => e.stopPropagation()}>
             <Tooltip content={t("inspector.spNoteFull")}>
-              <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <Info
+                size={14}
+                strokeWidth={1.5}
+                className="shrink-0 text-ink-tertiary transition-colors hover:text-accent"
+              />
             </Tooltip>
           </span>
         </span>
@@ -361,6 +365,7 @@ export function SubprocessInspectorCard({
       {showModal && (
         <SubprocessDesignationModal
           mapId={mapId}
+          designated={designated}
           publishedVersionId={publishedVersionId}
           initial={modalInitial}
           onSaved={(updated) => {

@@ -13,6 +13,7 @@ import {
   Replace,
   Server,
   SkipForward,
+  SlidersHorizontal,
   Users,
   X,
   type LucideIcon,
@@ -767,7 +768,10 @@ export function GroupBulkModal({
           /* ---- Main UI ---- */
           <div>
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-body-strong text-ink">{t("bulk.title")}</p>
+              <p className="flex items-center gap-2 text-body-strong text-ink">
+                <SlidersHorizontal size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
+                {t("bulk.title")}
+              </p>
               <span className="text-fine text-ink-tertiary">
                 {t("bulk.members", { n: allMembers.length })}
               </span>

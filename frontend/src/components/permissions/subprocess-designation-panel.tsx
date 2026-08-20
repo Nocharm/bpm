@@ -225,6 +225,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       {showModal && (
         <SubprocessDesignationModal
           mapId={Number(mapId)}
+          designated={designated}
           publishedVersionId={publishedVersionId}
           initial={modalInitial}
           onSaved={(updated) => {
