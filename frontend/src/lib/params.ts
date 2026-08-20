@@ -241,6 +241,19 @@ export function getInheritedParams(
 }
 
 export const PARAMS_COLLAPSED_KEY = "bpm.paramsCollapsed";
+export const ATTRS_COLLAPSED_KEY = "bpm.attrsCollapsed";
+
+/** BPM attributes 접힘 — 기본 접힘(true), 수행 지표·입출력 조건과 동일 패턴 (사용자 결정 2026-08-20). */
+export function readAttrsCollapsed(): boolean {
+  if (typeof window === "undefined") return true;
+  const saved = window.localStorage.getItem(ATTRS_COLLAPSED_KEY);
+  return saved === null ? true : saved === "1";
+}
+
+export function writeAttrsCollapsed(collapsed: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(ATTRS_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
 export const DETAILS_COLLAPSED_KEY = "bpm.detailsCollapsed";
 
 /** I/O & Conditions 접힘 — 기본 접힘(true), 인스펙터·편집 모달 공유 (사용자 결정 2026-08-20). */

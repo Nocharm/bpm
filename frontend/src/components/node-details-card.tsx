@@ -17,8 +17,21 @@ import { readDetailsCollapsed, writeDetailsCollapsed } from "@/lib/params";
 type DetailField = keyof NodeDetailsPatch;
 
 const DETAIL_FIELDS: readonly DetailField[] = [
+  "input", "output", "input_forms", "output_forms", "data_form", "start_condition", "end_condition",
+];
+// 헤더 채움 카운트는 주 필드 5종만 — 항목별 폼은 IO의 부속값이라 세지 않는다
+const COUNT_FIELDS: readonly DetailField[] = [
   "input", "output", "data_form", "start_condition", "end_condition",
 ];
+
+// SP 상속 표시용 — IO 원문과 항목별 폼(줄 1:1 정렬)을 행 목록으로 결합
+function splitWithForms(value: string | null | undefined, forms: string | null | undefined) {
+  const formLines = (forms ?? "").split("\n");
+  return (value ?? "")
+    .split("\n")
+    .map((v, i) => ({ text: v.trim(), form: (formLines[i] ?? "").trim() }))
+    .filter((r) => r.text !== "");
+}
 
 interface NodeDetailsCardProps {
   nodeKey: string;
@@ -29,6 +42,8 @@ interface NodeDetailsCardProps {
   sp?: {
     input?: string | null;
     output?: string | null;
+    input_forms?: string | null;
+    output_forms?: string | null;
     start_condition?: string | null;
     end_condition?: string | null;
   };
@@ -63,7 +78,7 @@ export function NodeDetailsCard({
   const filledCount = isSubprocess
     ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition]
         .filter((v) => (v ?? "") !== "").length
-    : DETAIL_FIELDS.filter((f) => shown(f) !== "").length;
+    : COUNT_FIELDS.filter((f) => shown(f) !== "").length;
 
   return (
     <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
@@ -108,10 +123,36 @@ export function NodeDetailsCard({
         <div className="ml-2 border-l border-divider pl-2">
           {isSubprocess ? (
             <>
-              {/* 링크 맵 라이브 참조 — sp가 소스(지정 어트리뷰트 카드와 동일 규약) */}
+              {/* 링크 맵 라이브 참조 — sp가 소스(지정 어트리뷰트 카드와 동일 규약).
+                  IO는 항목별 데이터 폼을 " · form" 접미로 함께 상속 표시 */}
               {([
-                ["input", "field.input", sp?.input, DETAIL_FIELD_ICONS.input],
-                ["output", "field.output", sp?.output, DETAIL_FIELD_ICONS.output],
+                ["input", "field.input", splitWithForms(sp?.input, sp?.input_forms), DETAIL_FIELD_ICONS.input],
+                ["output", "field.output", splitWithForms(sp?.output, sp?.output_forms), DETAIL_FIELD_ICONS.output],
+              ] as const).map(([id, labelKey, items, RowIcon]) => (
+                <div
+                  key={id}
+                  data-id={`inspector-detail-${id}`}
+                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
+                >
+                  <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                    <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
+                    {t(labelKey)}
+                  </span>
+                  <span className="min-w-0 text-right text-caption text-ink">
+                    {items.length === 0
+                      ? "—"
+                      : items.map((r, i) => (
+                          <span key={i} className="block">
+                            {r.text}
+                            {r.form !== "" && (
+                              <span className="text-fine text-ink-tertiary"> · {r.form}</span>
+                            )}
+                          </span>
+                        ))}
+                  </span>
+                </div>
+              ))}
+              {([
                 ["start-condition", "field.startCondition", sp?.start_condition, DETAIL_FIELD_ICONS.start_condition],
                 ["end-condition", "field.endCondition", sp?.end_condition, DETAIL_FIELD_ICONS.end_condition],
               ] as const).map(([id, labelKey, value, RowIcon]) => (
@@ -138,6 +179,8 @@ export function NodeDetailsCard({
                 nodeKey={nodeKey}
                 input={shown("input")}
                 output={shown("output")}
+                inputForms={shown("input_forms")}
+                outputForms={shown("output_forms")}
                 dataForm={shown("data_form")}
                 startCondition={shown("start_condition")}
                 endCondition={shown("end_condition")}

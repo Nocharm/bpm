@@ -44,7 +44,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     url: "",
     urlLabel: "",
     input: "",
+    input_forms: "",
     output: "",
+    output_forms: "",
     description: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
@@ -106,7 +108,9 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       url: detail?.sp_url ?? "",
       urlLabel: detail?.sp_url_label ?? "",
       input: detail?.sp_input ?? "",
+      input_forms: detail?.sp_input_forms ?? "",
       output: detail?.sp_output ?? "",
+      output_forms: detail?.sp_output_forms ?? "",
       description: detail?.sp_description ?? "",
     });
     setError(null);

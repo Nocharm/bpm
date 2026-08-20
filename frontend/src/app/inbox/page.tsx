@@ -369,7 +369,9 @@ export default function InboxPage() {
         url: spModal.detail.sp_url ?? "",
         urlLabel: spModal.detail.sp_url_label ?? "",
         input: spModal.detail.sp_input ?? "",
+        input_forms: spModal.detail.sp_input_forms ?? "",
         output: spModal.detail.sp_output ?? "",
+        output_forms: spModal.detail.sp_output_forms ?? "",
         description: spModal.detail.sp_description ?? "",
       }
     : null;

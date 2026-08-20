@@ -179,6 +179,8 @@ const FIELD_MSG: Record<ChangedField, MessageKey> = {
   fte: "field.fte",
   input: "field.input",
   output: "field.output",
+  input_forms: "field.inputForms",
+  output_forms: "field.outputForms",
   data_form: "field.dataForm",
   gmp: "field.gmp",
   start_condition: "field.startCondition",

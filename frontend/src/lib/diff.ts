@@ -22,6 +22,8 @@ export type ChangedField =
   | "fte"
   | "input"
   | "output"
+  | "input_forms"
+  | "output_forms"
   | "data_form"
   | "gmp"
   | "start_condition"
@@ -70,6 +72,8 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   // 인터뷰 승격 필드 — 콘텐츠 diff 대상. 폴백(system_fallback)은 검토 메모라 제외 (design 2026-08-19 §3)
   ["input", "input"],
   ["output", "output"],
+  ["input_forms", "input_forms"],
+  ["output_forms", "output_forms"],
   ["data_form", "data_form"],
   ["gmp", "gmp"],
   ["start_condition", "start_condition"],

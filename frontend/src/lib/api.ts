@@ -84,6 +84,8 @@ export interface MapSummary {
   consultant_code?: string | null;
   sp_input?: string | null;
   sp_output?: string | null;
+  sp_input_forms?: string | null;
+  sp_output_forms?: string | null;
   // 인터뷰 승격 필드 — 대표+폴백 쌍. sp_gmp는 direct|indirect|non_gmp|null(미분류) (design 2026-08-19 §1.2)
   sp_start_condition?: string | null;
   sp_end_condition?: string | null;
@@ -121,6 +123,9 @@ export interface GraphNode {
   // 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
   input?: string;
   output?: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
+  input_forms?: string;
+  output_forms?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;
@@ -195,6 +200,9 @@ export interface SubprocessRef {
   touch_time: string | null;
   input: string | null;
   output: string | null;
+  // 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms (read-only 상속 표시)
+  input_forms: string | null;
+  output_forms: string | null;
   start_condition: string | null;
   end_condition: string | null;
   // 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
@@ -462,6 +470,9 @@ export interface SubprocessDesignationBody {
   url_label?: string;
   input?: string;
   output?: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
+  input_forms?: string;
+  output_forms?: string;
   description?: string;
 }
 

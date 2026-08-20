@@ -98,6 +98,9 @@ class SubprocessDesignationIn(BaseModel):
     # L6 Input/Output — 자유 텍스트, 길이 캡 없음 (design 2026-08-08)
     input: str = Field(default="")
     output: str = Field(default="")
+    # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(노드 대칭, 2026-08-20)
+    input_forms: str = Field(default="")
+    output_forms: str = Field(default="")
 
     @field_validator("department")
     @classmethod
@@ -717,6 +720,8 @@ class MapOut(BaseModel):
     # L6 Input/Output — 자유 텍스트(개행 구분 복수)
     sp_input: str | None = None
     sp_output: str | None = None
+    sp_input_forms: str | None = None
+    sp_output_forms: str | None = None
     # 인터뷰 승격 필드 — 대표+폴백 쌍 (design 2026-08-19 §1.2)
     sp_start_condition: str | None = None
     sp_end_condition: str | None = None
@@ -899,6 +904,9 @@ class NodeIn(BaseModel):
     # 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
     input: str = ""
     output: str = ""
+    # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정). 후행 공백 줄만 소거(정렬 보존)
+    input_forms: str = ""
+    output_forms: str = ""
     start_condition: str = ""
     end_condition: str = ""
     data_form: str = Field(default="", max_length=50)
@@ -953,6 +961,12 @@ class NodeIn(BaseModel):
         # 3값 외는 "" 소거 — duration과 동일 결정(경계 스크럽, design 2026-08-20)
         text = value.strip()
         return text if text in GMP_VALUES else ""
+
+    @field_validator("input_forms", "output_forms", mode="after")
+    @classmethod
+    def _trim_trailing_form_lines(cls, value: str) -> str:
+        # 후행 공백 줄만 소거 — 선행/중간 빈 줄은 input/output 줄과의 1:1 정렬이라 보존
+        return value.rstrip()
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "NodeIn":
@@ -1029,6 +1043,9 @@ class SubprocessRefOut(BaseModel):
     touch_time: str | None = None
     input: str | None = None
     output: str | None = None
+    # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(read-only 상속 표시용, 2026-08-20)
+    input_forms: str | None = None
+    output_forms: str | None = None
     start_condition: str | None = None
     end_condition: str | None = None
     # 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)

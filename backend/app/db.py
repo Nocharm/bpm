@@ -105,6 +105,11 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "touch_time", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "input", "TEXT DEFAULT ''"),
     ("nodes", "output", "TEXT DEFAULT ''"),
+    # IO 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
+    ("nodes", "input_forms", "TEXT DEFAULT ''"),
+    ("nodes", "output_forms", "TEXT DEFAULT ''"),
+    ("process_maps", "sp_input_forms", "TEXT"),
+    ("process_maps", "sp_output_forms", "TEXT"),
     ("nodes", "start_condition", "TEXT DEFAULT ''"),
     ("nodes", "end_condition", "TEXT DEFAULT ''"),
     ("nodes", "data_form", "VARCHAR(50) DEFAULT ''"),

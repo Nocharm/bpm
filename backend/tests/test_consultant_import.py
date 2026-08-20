@@ -856,3 +856,56 @@ def test_node_gmp_survives_redelivery(client) -> None:
             return next(n for n in nodes if n.title == "요청").gmp
 
     assert _run(_load_latest_gmp()) == "direct"
+
+
+def test_node_io_forms_survive_redelivery_unless_io_changed(client) -> None:
+    """IO 항목별 데이터 폼은 검토 입력값 — gmp와 동일하게 계보로 승계하되,
+    해당 측 항목 텍스트가 재전달로 바뀌면 정렬이 깨지므로 폐기한다 (2026-08-20)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+
+    def _make(desc: str = "", node_input: str = "작업지시\n표준기 목록"):
+        cmap = _canonical_map(code="IV-F1", name="폼 승계")
+        cmap.nodes[0].description = desc
+        cmap.nodes[0].input = node_input
+        return cmap
+
+    _run(_import_once(maps=[_make()]))
+
+    async def _set_forms() -> None:
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-F1"))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
+            target = next(n for n in nodes if n.title == "요청")
+            target.input_forms = "document\nstructured"
+            await session.commit()
+
+    _run(_set_forms())
+
+    async def _load_latest_forms() -> str:
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-F1"))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
+            return next(n for n in nodes if n.title == "요청").input_forms
+
+    # input 불변 재전달(설명만 변경) → 폼 승계
+    report = _run(_import_once(maps=[_make("개정된 설명")]))
+    assert report.counts() == {"updated": 1}
+    assert _run(_load_latest_forms()) == "document\nstructured"
+
+    # input 자체가 바뀐 재전달 → 정렬 불가로 폼 폐기(검토 재정렬)
+    report = _run(_import_once(maps=[_make("개정된 설명", node_input="작업지시\n교정 대장")]))
+    assert report.counts() == {"updated": 1}
+    assert _run(_load_latest_forms()) == ""

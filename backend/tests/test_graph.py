@@ -798,6 +798,32 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
     assert n2["touch_time"] == ""
 
 
+def test_node_io_item_forms_roundtrip(client: TestClient) -> None:
+    """IO 항목별 데이터 폼 — input/output 줄과 1:1 정렬 왕복, 후행 공백 줄만 소거 (2026-08-20)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "작업지시 확인",
+                "input": "그 주 작업지시\n표준기 목록",
+                # 두 번째 항목은 미지정(빈 줄) — 정렬 보존을 위해 유지돼야 한다
+                "input_forms": "document\n",
+                "output": "측정 범위",
+                "output_forms": "structured",
+            },
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    # 후행 빈 줄은 소거 — 항목보다 짧은 forms는 이후 줄 미지정으로 해석
+    assert n1["input_forms"] == "document"
+    assert n1["output_forms"] == "structured"
+
+
 def test_node_gmp_roundtrip_and_invalid_scrubbed(client: TestClient) -> None:
     """활동별 GMP — 3값 왕복, 무효값은 경계에서 "" 소거 (design 2026-08-20)."""
     version_id = _create_version(client)

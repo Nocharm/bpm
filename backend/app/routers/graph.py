@@ -300,6 +300,8 @@ async def replace_graph(
             existing.touch_time = node.touch_time
             existing.input = node.input
             existing.output = node.output
+            existing.input_forms = node.input_forms
+            existing.output_forms = node.output_forms
             existing.start_condition = node.start_condition
             existing.end_condition = node.end_condition
             existing.data_form = node.data_form

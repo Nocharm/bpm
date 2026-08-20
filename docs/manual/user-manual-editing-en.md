@@ -48,6 +48,7 @@ Select a node and edit in the right inspector:
 - **Title** and **Description** — double-click a node (or press `F2`) to rename in place. While typing a name, `Enter` commits and **`Shift+Enter` (or `Alt+Enter`) inserts a line break** — the same rule in the canvas, the inspector, and the node edit dialog, and the break shows on the canvas too.
 - **Color** — preset swatches or a custom hex color (`#RRGGBB`).
 - **BPM attributes** — **Assignee** (picked from the org directory), **Department** (auto-set from the assignee), **System**, and the **per-run metrics** (see section 3).
+- **I/O & Conditions** — **Input** and **Output** hold multiple items (one per row), and each item takes its own small **data form** value (structured / document / tacit …) right next to it. **Start / End conditions** are free text. The node-level *Data form* row is an import fallback — it shows only while no per-item form is set.
 - **Link (URL)** — attach an external document or system link to a node; a badge appears on the canvas, and you can click it to preview or open in a new tab. You can also give it a display label.
 
 ### Connecting nodes
@@ -111,7 +112,7 @@ When you designate a map as a subprocess (see Map Settings in the Getting Around
 
 - Select **two or more nodes** and press `Ctrl+G` (or right-click → **Create group**) to bundle them.
 - Double-click the group title to rename it; drag the title bar to move the whole group; **Ungroup** disbands it.
-- **Group bulk edit** sets or clears assignee, department, system — and all **seven per-run metrics** — across all members at once, with Append / Replace / Skip conflict handling and a before/after summary. The one-currency rule and subprocess-node restrictions (annual volume · FTE only) apply here too.
+- **Group bulk edit** is organized into three accordion categories — **Metrics** (all seven per-run metrics), **I/O & Conditions** (input, output, start/end conditions), and **Attributes** (people, system). Pick a category, then a field, and set or clear it across all members at once, with Append / Replace / Skip conflict handling and a before/after summary. For input/output, **Append adds new item lines** under what's there, while **Replace overwrites the items and clears their per-item data forms** (the line-by-line pairing no longer holds). The one-currency rule and subprocess-node restrictions (annual volume · FTE only; IO/conditions are inherited, so subprocess nodes are excluded) apply here too.
 
 ### Alignment and layout
 
@@ -192,7 +193,7 @@ You can fill a map by pasting in a process that's already organized as a table o
 - Open it with **Import CSV** in the top bar. Use **Download template** to get a blank form, fill it, and upload.
 - The CSV uses **20 columns**: `name` (required), `description`, `assignee`, `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `output`, `data_form`, `start_condition`, `end_condition`, `url`, `url_label`, `next` (the successor to connect to). Older 14-column files still import (columns match by name). Put multiple `input`/`output` items on separate lines inside the cell.
 - Import **merges by name** — an existing node with the same title keeps its color, comments, and group, updating only its values, and **blank cells keep the existing value**. New titles not already in the map are added as nodes.
-- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run metrics plus input/output/conditions/data form) are ignored even if supplied in the CSV.
+- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run metrics plus input/output/conditions/data form) are ignored even if supplied in the CSV. Per-item data forms are app-only — the CSV has no column for them, and an import keeps the existing ones as long as the item lines are unchanged.
 - Review the **Added / Matched / Removed** summary and warnings in the preview tab before applying.
 
 > **Make a CSV with an external AI:** In the import window, **Ask another AI** copies a prompt you can paste — along with your document — into an external AI (ChatGPT, etc.); paste the CSV it returns back here.

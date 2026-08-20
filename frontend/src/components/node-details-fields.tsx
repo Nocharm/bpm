@@ -1,6 +1,6 @@
 // 노드 상세(승격) 필드 편집 — 인스펙터 Details 카드와 노드 편집 모달이 공유.
-// Data form은 Input/Output에 종속된 값(흘러가는 자료의 형식)이라 IO 그룹 안에 들여쓰기로
-// 배치한다 — 조건(start/end)과 동등한 형제 필드로 보이지 않게 (design 2026-08-19 §5.1).
+// 데이터 폼은 IO 항목별 값(input_forms/output_forms, 줄 1:1 정렬)이 정본 — 노드 레벨 data_form은
+// 임포트 착지 폴백이라 항목별 값이 하나도 없을 때만 참고 행으로 표시 (사용자 결정 2026-08-20).
 "use client";
 
 import { FileType, Flag, LogIn, LogOut, Play, type LucideIcon } from "lucide-react";
@@ -20,6 +20,8 @@ export const DETAIL_FIELD_ICONS = {
 export interface NodeDetailsPatch {
   input?: string;
   output?: string;
+  input_forms?: string;
+  output_forms?: string;
   data_form?: string;
   start_condition?: string;
   end_condition?: string;
@@ -28,6 +30,9 @@ export interface NodeDetailsPatch {
 interface NodeDetailsFieldsProps {
   input: string;
   output: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
+  inputForms: string;
+  outputForms: string;
   dataForm: string;
   startCondition: string;
   endCondition: string;
@@ -40,21 +45,25 @@ interface NodeDetailsFieldsProps {
 }
 
 export function NodeDetailsFields({
-  input, output, dataForm, startCondition, endCondition,
+  input, output, inputForms, outputForms, dataForm, startCondition, endCondition,
   readOnly, idPrefix, nodeKey, onPatch,
 }: NodeDetailsFieldsProps) {
   const { t } = useI18n();
+  // 노드 레벨 data_form 폴백 행 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본)
+  const showLegacyDataForm = inputForms === "" && outputForms === "";
   return (
     <>
-      {/* IO 그룹 — Data form은 이 그룹의 종속 행(들여쓰기 + 세로선) */}
+      {/* IO 그룹 — 항목별 데이터 폼 열 포함(placeholder "form") */}
       <MultiValueInput
         key={`${nodeKey}-input`}
         dataId={`${idPrefix}-input`}
         label={t("field.input")}
         icon={DETAIL_FIELD_ICONS.input}
         value={input}
+        formsValue={inputForms}
+        formPlaceholder={t("detail.formPlaceholder")}
         readOnly={readOnly}
-        onCommit={(joined) => onPatch({ input: joined })}
+        onCommit={(joined, formsJoined) => onPatch({ input: joined, input_forms: formsJoined ?? "" })}
       />
       <MultiValueInput
         key={`${nodeKey}-output`}
@@ -62,30 +71,34 @@ export function NodeDetailsFields({
         label={t("field.output")}
         icon={DETAIL_FIELD_ICONS.output}
         value={output}
+        formsValue={outputForms}
+        formPlaceholder={t("detail.formPlaceholder")}
         readOnly={readOnly}
-        onCommit={(joined) => onPatch({ output: joined })}
+        onCommit={(joined, formsJoined) => onPatch({ output: joined, output_forms: formsJoined ?? "" })}
       />
-      <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
-        <span className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary">
-          <FileType size={12} strokeWidth={1.5} className="text-ink-muted" />
-          {t("field.dataForm")}
-        </span>
-        {readOnly ? (
-          <span data-id={`${idPrefix}-data-form`} className="min-w-0 truncate text-right text-fine text-ink-secondary">
-            {dataForm || "—"}
+      {showLegacyDataForm && (
+        <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
+          <span className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary">
+            <FileType size={12} strokeWidth={1.5} className="text-ink-muted" />
+            {t("field.dataForm")}
           </span>
-        ) : (
-          <input
-            data-id={`${idPrefix}-data-form`}
-            className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-fine text-ink-secondary hover:bg-surface-alt focus:bg-surface-alt focus:outline-none"
-            maxLength={50}
-            value={dataForm}
-            placeholder="structured / document / tacit"
-            title={dataForm || undefined}
-            onChange={(event) => onPatch({ data_form: event.target.value })}
-          />
-        )}
-      </div>
+          {readOnly ? (
+            <span data-id={`${idPrefix}-data-form`} className="min-w-0 truncate text-right text-fine text-ink-secondary">
+              {dataForm || "—"}
+            </span>
+          ) : (
+            <input
+              data-id={`${idPrefix}-data-form`}
+              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-fine text-ink-secondary hover:bg-surface-alt focus:bg-surface-alt focus:outline-none"
+              maxLength={50}
+              value={dataForm}
+              placeholder="structured / document / tacit"
+              title={dataForm || undefined}
+              onChange={(event) => onPatch({ data_form: event.target.value })}
+            />
+          )}
+        </div>
+      )}
       {/* 조건 — IO와 동등한 형제 필드. 긴 문장은 말줄임 유지(사용자 결정 2026-08-20) */}
       {([
         ["start_condition", "field.startCondition", startCondition],

@@ -57,6 +57,7 @@ try {
     window.localStorage.setItem("bpm.lang", "en");
     window.localStorage.setItem("bpm.paramsCollapsed", "0"); // Parameters 기본 펼침 — 행 단언 안정화
     window.localStorage.setItem("bpm.detailsCollapsed", "0"); // I/O & Conditions 기본 펼침 — 행 단언 안정화
+    window.localStorage.setItem("bpm.attrsCollapsed", "0"); // BPM attributes 기본 펼침 — 시스템 힌트 단언 안정화
   }, ADMIN);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
@@ -200,28 +201,35 @@ try {
   await page.locator('[data-id="inspector-detail-input-add"]').click();
   await page.locator('[data-id="inspector-detail-input-row-1"]').fill("표준기 목록");
   await page.keyboard.press("Enter");
+  // 항목별 데이터 폼 — 첫 항목에만 지정(줄 1:1 정렬, 2026-08-20)
+  await page.locator('input[data-id="inspector-detail-input-form-0"]').fill("document");
+  await page.keyboard.press("Enter");
   await page.locator('[data-id="inspector-details-save"]').click(); // 레이지 세이브 — 명시 Save
   await page.waitForTimeout(2600); // autosave 디바운스
   let g = await api(`/versions/${draftId}/graph`);
   let node = g.nodes.find((n) => n.id === "fp-node-1");
-  check("[11] IO add x2 → newline-joined save", node?.input === "작업지시\n표준기 목록", JSON.stringify(node?.input));
+  check("[11] IO add x2 + item form → newline-joined save",
+    node?.input === "작업지시\n표준기 목록" && node?.input_forms === "document",
+    `${JSON.stringify(node?.input)} forms=${JSON.stringify(node?.input_forms)}`);
   // [12] remove 두 번째 항목
   await page.locator('[data-id="inspector-detail-input-remove-1"]').click();
   await page.locator('[data-id="inspector-details-save"]').click();
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
-  check("[12] IO remove → server reflects", node?.input === "작업지시", JSON.stringify(node?.input));
-  // [13] 조건·형식 입력
-  await page.locator('[data-id="inspector-detail-data-form"]').fill("document");
+  check("[12] IO remove → server reflects, first item form survives",
+    node?.input === "작업지시" && node?.input_forms === "document", JSON.stringify(node?.input));
+  // [13] 조건 입력 + 항목별 폼 존재 시 노드 레벨 data_form 행 숨김(폴백 규칙, 2026-08-20)
+  const legacyDataFormHidden =
+    (await page.locator('[data-id="inspector-detail-data-form"]').count()) === 0;
   await page.locator('[data-id="inspector-detail-start-condition"]').fill("주기 도래");
   await page.locator('[data-id="inspector-detail-end-condition"]').fill("목록 확정");
   await page.locator('[data-id="inspector-details-save"]').click();
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
-  check("[13] data_form + conditions saved",
-    node?.data_form === "document" && node?.start_condition === "주기 도래" && node?.end_condition === "목록 확정");
+  check("[13] conditions saved + legacy data_form row hidden with item forms",
+    legacyDataFormHidden && node?.start_condition === "주기 도래" && node?.end_condition === "목록 확정");
   // [14] touch_time 정규화
   await page.locator('input[data-id="inspector-param-touch_time"]').fill("1.75");
   await page.keyboard.press("Enter");

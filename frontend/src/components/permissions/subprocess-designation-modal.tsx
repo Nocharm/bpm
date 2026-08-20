@@ -11,6 +11,7 @@ import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from 
 import { humanizeApiError } from "@/lib/api-errors";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { MultiValueInput } from "@/components/multi-value-input";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
 import { isCostFieldDisabled, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
@@ -30,6 +31,9 @@ export interface DesignationForm {
   urlLabel: string;
   input: string;
   output: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
+  input_forms: string;
+  output_forms: string;
   description: string;
 }
 
@@ -121,6 +125,8 @@ export function SubprocessDesignationModal({
         url_label: form.urlLabel.trim(),
         input: form.input.trim(),
         output: form.output.trim(),
+        input_forms: form.input_forms,
+        output_forms: form.output_forms,
         description: form.description.trim(),
       });
       onSaved(updated);
@@ -213,22 +219,31 @@ export function SubprocessDesignationModal({
               onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
             />
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.input")}</span>
-            <input
-              data-id="subprocess-designation-input"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+          {/* IO — 개행 복수 + 항목별 데이터 폼(노드 인스펙터와 동일 편집기, 2026-08-20) */}
+          <div className="border-t border-divider">
+            <MultiValueInput
+              dataId="subprocess-designation-input"
+              label={t("sp.input")}
               value={form.input}
-              onChange={(e) => setForm((prev) => ({ ...prev, input: e.target.value }))}
+              formsValue={form.input_forms}
+              formPlaceholder={t("detail.formPlaceholder")}
+              readOnly={false}
+              onCommit={(joined, formsJoined) =>
+                setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
+              }
             />
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("sp.output")}</span>
-            <input
-              data-id="subprocess-designation-output"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+          <div className="border-t border-divider">
+            <MultiValueInput
+              dataId="subprocess-designation-output"
+              label={t("sp.output")}
               value={form.output}
-              onChange={(e) => setForm((prev) => ({ ...prev, output: e.target.value }))}
+              formsValue={form.output_forms}
+              formPlaceholder={t("detail.formPlaceholder")}
+              readOnly={false}
+              onCommit={(joined, formsJoined) =>
+                setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))
+              }
             />
           </div>
           <div className="flex flex-col gap-1 border-t border-divider py-1">

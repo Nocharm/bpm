@@ -194,6 +194,8 @@ const NODE_DEFAULTS = {
   fte: "",
   input: "",
   output: "",
+  input_forms: "",  // CSV/AI 표면 제외 — 항목별 폼, 병합은 기존값 보존 (2026-08-20)
+  output_forms: "",
   data_form: "",
   start_condition: "",
   end_condition: "",
@@ -275,6 +277,10 @@ const mergeNode = (
       annual_count: pick(allowed.annual_count ?? "", existing.annual_count ?? ""),
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
       ...mergedText,
+      // 항목별 데이터 폼 — CSV/AI 표면 제외(...existing 보존). 단, 병합으로 해당 측 항목이 바뀌면
+      // 줄 정렬이 깨지므로 폐기 — 백엔드 재임포트 승계(import_consultant)와 동일 규칙 (2026-08-20)
+      input_forms: mergedText.input === (existing.input ?? "") ? existing.input_forms ?? "" : "",
+      output_forms: mergedText.output === (existing.output ?? "") ? existing.output_forms ?? "" : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
       section_anchor: mergedSectionAnchor,

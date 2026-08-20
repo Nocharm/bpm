@@ -569,6 +569,13 @@ async def import_delivery(
                 old_node = old_by_root.get(n.source_node_id or n.id)
                 if old_node is not None and old_node.gmp:
                     n.gmp = old_node.gmp
+                # IO 항목별 데이터 폼 이어받기 — gmp와 동일 계약(검토 입력값·시그니처 미포함).
+                # 단, 줄 정렬(index) 기반이라 해당 측 항목 텍스트가 재전달로 바뀌면 폐기(검토 재정렬)
+                if old_node is not None:
+                    if old_node.input_forms and n.input == old_node.input:
+                        n.input_forms = old_node.input_forms
+                    if old_node.output_forms and n.output == old_node.output:
+                        n.output_forms = old_node.output_forms
 
         graph_changed = True
         if latest is not None:

@@ -255,7 +255,9 @@ import {
   getEditableParamFields,
   getInheritedParams,
   isSpParamField,
+  readAttrsCollapsed,
   resolveAiParamPatch,
+  writeAttrsCollapsed,
   type ParamField,
 } from "@/lib/params";
 
@@ -592,6 +594,8 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       touch_time: node.touch_time ?? "",
       input: node.input ?? "",
       output: node.output ?? "",
+      input_forms: node.input_forms ?? "",
+      output_forms: node.output_forms ?? "",
       start_condition: node.start_condition ?? "",
       end_condition: node.end_condition ?? "",
       data_form: node.data_form ?? "",
@@ -682,6 +686,8 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     // 인터뷰 승격 텍스트 필드 — passthrough (csv-import buildGraphFromAiProposal과 대칭)
     input: attr?.input ?? "",
     output: attr?.output ?? "",
+    input_forms: "",  // 항목별 폼 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (2026-08-20)
+    output_forms: "",
     start_condition: attr?.start_condition ?? "",
     end_condition: attr?.end_condition ?? "",
     data_form: attr?.data_form ?? "",
@@ -735,6 +741,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       touch_time: node.data.touch_time ?? "",
       input: node.data.input ?? "",
       output: node.data.output ?? "",
+      input_forms: node.data.input_forms ?? "",
+      output_forms: node.data.output_forms ?? "",
       start_condition: node.data.start_condition ?? "",
       end_condition: node.data.end_condition ?? "",
       data_form: node.data.data_form ?? "",
@@ -974,6 +982,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     setToasts((cur) => [{ id: genId(), message, tone }, ...cur]);
   }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // BPM attributes 접힘 — 기본 접힘, 수행 지표·입출력 조건 카드와 동일 패턴(전역 선호, 노드 무관)
+  const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // 저장 실패 상세 — 상단 배너로 노출, 다음 저장 성공까지 유지
@@ -3968,7 +3978,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 ...node,
                 data: {
                   ...node.data,
-                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? ""),
+                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? "", {
+                    input: node.data.input ?? "",
+                    output: node.data.output ?? "",
+                  }),
                 },
               }
             : node,
@@ -8569,6 +8582,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 touch_time={node.data.touch_time ?? ""}
                 input={node.data.input ?? ""}
                 output={node.data.output ?? ""}
+                input_forms={node.data.input_forms ?? ""}
+                output_forms={node.data.output_forms ?? ""}
                 data_form={node.data.data_form ?? ""}
                 start_condition={node.data.start_condition ?? ""}
                 end_condition={node.data.end_condition ?? ""}
@@ -8627,6 +8642,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                   headcount: n.data.headcount ?? "",
                   annual_count: n.data.annual_count ?? "",
                   fte: n.data.fte ?? "",
+                  input: n.data.input ?? "",
+                  output: n.data.output ?? "",
+                  start_condition: n.data.start_condition ?? "",
+                  end_condition: n.data.end_condition ?? "",
                   nodeType: n.data.nodeType,
                 }))}
               colorPresets={COLOR_PRESETS}
@@ -8899,10 +8918,41 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </div>
                         )}
                       </div>
-                      {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+                      {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김.
+                          아코디언(기본 접힘) — 수행 지표·입출력 조건과 동일 패턴 (사용자 결정 2026-08-20) */}
                       {hasBpmAttributes(selectedNode.data.nodeType) && (
                         <div className="rounded-md border border-hairline p-3">
-                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          <button
+                            type="button"
+                            data-id="inspector-attrs-toggle"
+                            aria-expanded={!attrsCollapsed}
+                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                            onClick={() => {
+                              const next = !attrsCollapsed;
+                              setAttrsCollapsed(next);
+                              writeAttrsCollapsed(next);
+                            }}
+                          >
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                            />
+                            {t("editor.bpmAttrs")}
+                            {(() => {
+                              const filled = [
+                                selectedNode.data.assignee,
+                                selectedNode.data.department,
+                                selectedNode.data.system,
+                                selectedNode.data.url,
+                              ].filter((v) => (v ?? "") !== "").length;
+                              return filled > 0 ? (
+                                <span className="font-normal text-ink-tertiary">({filled})</span>
+                              ) : null;
+                            })()}
+                          </button>
+                          {!attrsCollapsed && (
+                          <div className="ml-2 border-l border-divider pl-2">
                           {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
                           <BpmAttributePicker
                             versionId={versionId}
@@ -8957,6 +9007,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
+                          </div>
+                          )}
                         </div>
                       )}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
@@ -8991,7 +9043,37 @@ function MapEditor({ mapId }: { mapId: number }) {
                           회당 파라미터 4종은 아래 Parameters 카드에서 같이 표시(중복 방지) */}
                       {selectedNode.data.nodeType === "subprocess" && selectedSpRef?.designated && (
                         <div data-id="inspector-subprocess-attrs" className="rounded-md border border-hairline p-3">
-                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          <button
+                            type="button"
+                            data-id="inspector-sp-attrs-toggle"
+                            aria-expanded={!attrsCollapsed}
+                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                            onClick={() => {
+                              const next = !attrsCollapsed;
+                              setAttrsCollapsed(next);
+                              writeAttrsCollapsed(next);
+                            }}
+                          >
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                            />
+                            {t("editor.bpmAttrs")}
+                            {(() => {
+                              const filled = [
+                                selectedSpRef.department,
+                                selectedSpRef.assignee,
+                                selectedSpRef.system,
+                                selectedSpRef.url,
+                              ].filter((v) => (v ?? "") !== "").length;
+                              return filled > 0 ? (
+                                <span className="font-normal text-ink-tertiary">({filled})</span>
+                              ) : null;
+                            })()}
+                          </button>
+                          {!attrsCollapsed && (
+                          <div className="ml-2 border-l border-divider pl-2">
                           {([
                             ["department", "field.department"],
                             ["assignee", "field.assignee"],
@@ -9023,6 +9105,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             </span>
                           </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                          </div>
+                          )}
                         </div>
                       )}
                       {/* 회당 파라미터 — 접기 카드(레이지 세이브·비용 통화 토글). start/end 외 모든 타입에 표시.
@@ -9059,6 +9143,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           values={{
                             input: selectedNode.data.input ?? "",
                             output: selectedNode.data.output ?? "",
+                            input_forms: selectedNode.data.input_forms ?? "",
+                            output_forms: selectedNode.data.output_forms ?? "",
                             data_form: selectedNode.data.data_form ?? "",
                             start_condition: selectedNode.data.start_condition ?? "",
                             end_condition: selectedNode.data.end_condition ?? "",

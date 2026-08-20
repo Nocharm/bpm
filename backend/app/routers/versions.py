@@ -84,6 +84,8 @@ async def clone_graph(
             touch_time=node.touch_time,
             input=node.input,
             output=node.output,
+            input_forms=node.input_forms,
+            output_forms=node.output_forms,
             start_condition=node.start_condition,
             end_condition=node.end_condition,
             data_form=node.data_form,

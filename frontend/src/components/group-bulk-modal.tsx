@@ -21,32 +21,71 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { DETAIL_FIELD_ICONS } from "@/components/node-details-fields";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
-import { canBulkEditField, isBulkParamField } from "@/lib/bulk-params";
+import { canBulkEditField, isBulkParamField, type BulkDetailField } from "@/lib/bulk-params";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import { formatParamValue, PARAM_FIELDS, PARAM_LABEL_KEY, type ParamField } from "@/lib/params";
 import type { MessageKey } from "@/lib/i18n-messages";
 
-// "people" = combined assignee+department mode; 나머지는 단일 필드 모드(system + 파라미터 6종)
-export type BulkAttrField = "system" | ParamField;
+// "people" = combined assignee+department mode; 나머지는 단일 필드 모드(system + 파라미터 7종 + IO·조건)
+export type BulkAttrField = "system" | ParamField | BulkDetailField;
 export type BulkMode = "people" | BulkAttrField;
 export type BulkAction = "set" | "clear";
-// 충돌 처리: 교체/추가(콤마)/건너뛰기/개별 선택. null=미선택(필수)
+// 충돌 처리: 교체/추가(system·조건=콤마, IO=줄)/건너뛰기/개별 선택. null=미선택(필수)
 export type BulkPolicy = "replace" | "append" | "skip" | "individual";
 // Combined people update written by onApplyPeople
 export type PeopleUpdate = { id: string; department: string; assignee: string };
 
-// 속성 탭 — people/system + 파라미터 7종(PARAM_FIELDS 순서·라벨 단일 소스)
-const MODE_META: { key: BulkMode; icon: LucideIcon; labelKey: MessageKey }[] = [
-  { key: "people", icon: Users, labelKey: "bulk.modePeople" },
-  { key: "system", icon: Server, labelKey: "field.system" },
-  ...PARAM_FIELDS.map((f) => ({ key: f, icon: PARAM_ICON[f], labelKey: PARAM_LABEL_KEY[f] })),
+interface ModeMeta {
+  key: BulkMode;
+  icon: LucideIcon;
+  labelKey: MessageKey;
+}
+
+// 카테고리 아코디언 — 수행 지표 / 입출력·조건 / 속성 3분류, 클릭 시 하위 모드 버튼 노출
+// (사용자 결정 2026-08-20). 라벨은 인스펙터 카드와 동일 키 재사용.
+type BulkCategory = "metrics" | "details" | "attributes";
+const CATEGORY_META: { key: BulkCategory; labelKey: MessageKey; modes: ModeMeta[] }[] = [
+  {
+    key: "metrics",
+    labelKey: "inspector.parameters",
+    modes: PARAM_FIELDS.map((f) => ({ key: f, icon: PARAM_ICON[f], labelKey: PARAM_LABEL_KEY[f] })),
+  },
+  {
+    key: "details",
+    labelKey: "inspector.details",
+    modes: [
+      { key: "input", icon: DETAIL_FIELD_ICONS.input, labelKey: "field.input" },
+      { key: "output", icon: DETAIL_FIELD_ICONS.output, labelKey: "field.output" },
+      { key: "start_condition", icon: DETAIL_FIELD_ICONS.start_condition, labelKey: "field.startCondition" },
+      { key: "end_condition", icon: DETAIL_FIELD_ICONS.end_condition, labelKey: "field.endCondition" },
+    ],
+  },
+  {
+    key: "attributes",
+    labelKey: "bulk.catAttributes",
+    modes: [
+      { key: "people", icon: Users, labelKey: "bulk.modePeople" },
+      { key: "system", icon: Server, labelKey: "field.system" },
+    ],
+  },
 ];
+const getCategoryOf = (mode: BulkMode): BulkCategory =>
+  CATEGORY_META.find((c) => c.modes.some((m) => m.key === mode))?.key ?? "attributes";
+
+// IO textarea 정리 — 줄 단위 trim + 빈 줄 제거(blur 시 적용, MultiValueInput commit과 동일 규칙)
+const normalizeMultiline = (v: string): string =>
+  v.split("\n").map((s) => s.trim()).filter((s) => s !== "").join("\n");
+
+// append 조인 — IO는 항목(줄) 추가, system·조건은 콤마 이어붙임
+const appendAttrValue = (field: BulkAttrField, existing: string, value: string): string =>
+  field === "input" || field === "output" ? `${existing}\n${value}` : `${existing}, ${value}`;
 // 값 설정 / 비우기 — 선택 필(아이콘 + 라벨)
 const ACTION_META: { key: BulkAction; icon: LucideIcon; labelKey: MessageKey }[] = [
   { key: "set", icon: PencilLine, labelKey: "bulk.actionSet" },
@@ -79,6 +118,11 @@ export interface BulkMember {
   headcount: string;
   annual_count: string;
   fte: string;
+  // 입출력·조건 일괄 모드 소스 (2026-08-20)
+  input: string;
+  output: string;
+  start_condition: string;
+  end_condition: string;
   nodeType: string; // 모드별 편집 대상 판정에 사용 (canBulkEditField)
 }
 
@@ -128,6 +172,8 @@ export function GroupBulkModal({
 
   // Shared UI state
   const [mode, setMode] = useState<BulkMode>("people");
+  // 카테고리 아코디언 — 한 번에 하나만 펼침, 기본은 현재 모드의 카테고리 (사용자 결정 2026-08-20)
+  const [openCategory, setOpenCategory] = useState<BulkCategory | null>(() => getCategoryOf("people"));
   const [policy, setPolicy] = useState<BulkPolicy | null>(null);
   const [showConflicts, setShowConflicts] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
@@ -421,7 +467,8 @@ export function GroupBulkModal({
       if (existing === "") return [{ id: m.id, value }];
       if (m[attrField].trim() === value.trim()) return []; // 동일 값(비용은 같은 통화) — 자동 스킵
       if (effectivePolicy === "replace") return [{ id: m.id, value }];
-      if (effectivePolicy === "append") return [{ id: m.id, value: `${m[attrField]}, ${value}` }];
+      if (effectivePolicy === "append")
+        return [{ id: m.id, value: appendAttrValue(attrField, m[attrField], value) }];
       return []; // skip
     });
     finish(updates);
@@ -433,7 +480,7 @@ export function GroupBulkModal({
     const resolved = [...wizard.resolved];
     if (choice === "replace") resolved.push({ id: member.id, value });
     else if (choice === "append")
-      resolved.push({ id: member.id, value: `${member[attrField]}, ${value}` });
+      resolved.push({ id: member.id, value: appendAttrValue(attrField, member[attrField], value) });
     // skip → 추가 안 함
     const next = wizard.step + 1;
     if (next >= attrConflicts.length) {
@@ -512,7 +559,7 @@ export function GroupBulkModal({
                     {summary.map((r) => (
                       <tr key={r.id} className="border-t border-hairline align-top">
                         <td className="px-1.5 py-1 text-ink">{r.label}</td>
-                        <td className="px-1.5 py-1 text-ink-tertiary line-through">{r.before}</td>
+                        <td className="whitespace-pre-wrap px-1.5 py-1 text-ink-tertiary line-through">{r.before}</td>
                         <td className="px-1 py-1">
                           <ArrowRight
                             size={11}
@@ -520,7 +567,7 @@ export function GroupBulkModal({
                             className="shrink-0 text-ink-tertiary"
                           />
                         </td>
-                        <td className="px-1.5 py-1 text-ink">{r.after}</td>
+                        <td className="whitespace-pre-wrap px-1.5 py-1 text-ink">{r.after}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -671,11 +718,11 @@ export function GroupBulkModal({
             <p className="mb-1 text-caption text-ink">
               {attrConflicts[wizard.step].label || attrConflicts[wizard.step].id}
             </p>
-            <p className="mb-1 text-fine text-ink-tertiary">
+            <p className="mb-1 whitespace-pre-wrap text-fine text-ink-tertiary">
               {t("bulk.existing")}:{" "}
               {attrField ? displayExistingAttr(attrConflicts[wizard.step], attrField) : ""}
             </p>
-            <p className="mb-3 text-fine text-ink-tertiary">
+            <p className="mb-3 whitespace-pre-wrap text-fine text-ink-tertiary">
               {t("bulk.value")}: {attrField ? displayAttrValue(attrField, value) : value}
             </p>
             <div className="flex gap-1">
@@ -778,28 +825,66 @@ export function GroupBulkModal({
               {t("bulk.attribute")}
             </p>
             <div className="flex flex-col gap-2">
-              {/* 속성 탭 — 3분할(아이콘 + 라벨) */}
+              {/* 카테고리 3버튼 한 행 — 클릭하면 아래 섹션에 하위 모드 버튼이 펼쳐지고, 다른
+                  카테고리를 누르면 아래 내용이 교체된다(같은 버튼 재클릭=접힘) (사용자 결정 2026-08-20) */}
               <div className="grid grid-cols-3 gap-1">
-                {MODE_META.map(({ key, icon: Icon, labelKey }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      setMode(key);
-                      setPolicy(null);
-                      setValue("");
-                    }}
-                    className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-sm border px-1 py-1.5 text-caption ${
-                      mode === key
-                        ? "border-accent bg-accent-tint text-accent"
-                        : "border-hairline text-ink hover:bg-surface-alt"
-                    }`}
-                  >
-                    <Icon size={14} strokeWidth={1.5} className="shrink-0" />
-                    {t(labelKey)}
-                  </button>
-                ))}
+                {CATEGORY_META.map(({ key: catKey, labelKey: catLabelKey, modes }) => {
+                  const open = openCategory === catKey;
+                  const holdsActiveMode = modes.some((m) => m.key === mode);
+                  return (
+                    <button
+                      key={catKey}
+                      type="button"
+                      data-id={`bulk-category-${catKey}`}
+                      aria-expanded={open}
+                      className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-sm border px-1 py-1.5 text-caption ${
+                        open
+                          ? "border-accent bg-accent-tint text-accent"
+                          : "border-hairline text-ink hover:bg-surface-alt"
+                      }`}
+                      onClick={() => setOpenCategory(open ? null : catKey)}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+                      />
+                      <span className="truncate">{t(catLabelKey)}</span>
+                      {/* 현재 선택 모드가 속한 카테고리 표시점 — 접혀 있어도 위치를 잃지 않게 */}
+                      {holdsActiveMode && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
+                    </button>
+                  );
+                })}
               </div>
+              {openCategory !== null && (
+                <div
+                  data-id="bulk-category-panel"
+                  className="grid grid-cols-3 gap-1 rounded-sm border border-hairline bg-surface-alt/50 p-1"
+                >
+                  {(CATEGORY_META.find((c) => c.key === openCategory)?.modes ?? []).map(
+                    ({ key, icon: Icon, labelKey }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        data-id={`bulk-mode-${key}`}
+                        onClick={() => {
+                          setMode(key);
+                          setPolicy(null);
+                          setValue("");
+                        }}
+                        className={`flex items-center justify-center gap-1 whitespace-nowrap rounded-sm border px-1 py-1.5 text-fine ${
+                          mode === key
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline bg-surface text-ink hover:bg-surface-alt"
+                        }`}
+                      >
+                        <Icon size={13} strokeWidth={1.5} className="shrink-0" />
+                        <span className="truncate">{t(labelKey)}</span>
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
 
               {/* 값 설정 / 비우기 — 선택 필(아이콘 + 라벨) */}
               <div className="flex gap-1">
@@ -878,6 +963,18 @@ export function GroupBulkModal({
                     ariaLabel={t("bulk.value")}
                     value={value}
                     onCommit={setValue}
+                  />
+                ) : attrField === "input" || attrField === "output" ? (
+                  /* IO는 개행 복수 — 줄=항목. 항목별 데이터 폼은 일괄 대상 아님(교체 시 정렬 무효화는
+                     buildBulkAttrPatch가 처리) */
+                  <textarea
+                    data-id="bulk-value-multiline"
+                    className="min-h-[3.5rem] resize-y rounded-sm border border-hairline px-2 py-1 text-caption"
+                    placeholder={t("bulk.valuePerLine")}
+                    aria-label={t("bulk.value")}
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                    onBlur={(event) => setValue(normalizeMultiline(event.target.value))}
                   />
                 ) : (
                   <input

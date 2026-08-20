@@ -140,6 +140,20 @@ def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
     assert client.get(f"/api/maps/{map_id}").json()["sp_description"] == "설명 텍스트"
 
 
+def test_designate_roundtrips_io_item_forms(client: TestClient, enforce) -> None:
+    """SP IO 항목별 데이터 폼 — sp_input/sp_output 줄과 1:1 정렬 왕복 (2026-08-20)."""
+    map_id = seed_map("desig-io-forms", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "input": "PR\n견적", "input_forms": "document", "output": "PO", "output_forms": "structured"},
+    )
+    assert res.status_code == 200
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["sp_input_forms"] == "document"
+    assert detail["sp_output_forms"] == "structured"
+
+
 def test_designate_requires_published_version(client: TestClient, enforce) -> None:
     map_id = seed_map("desig-draft-only", published=False)
     act_as(OWNER)

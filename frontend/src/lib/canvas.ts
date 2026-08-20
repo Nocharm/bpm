@@ -32,6 +32,9 @@ export type NodeData = {
   // 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
   input?: string;
   output?: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
+  input_forms?: string;
+  output_forms?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;

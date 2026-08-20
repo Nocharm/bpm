@@ -67,6 +67,8 @@ export type NodeEditPatch = Partial<{
   touch_time: string;
   input: string;
   output: string;
+  input_forms: string;
+  output_forms: string;
   data_form: string;
   start_condition: string;
   end_condition: string;
@@ -140,6 +142,8 @@ interface NodeSummaryModalProps {
   touch_time: string;
   input: string;
   output: string;
+  input_forms: string;
+  output_forms: string;
   data_form: string;
   start_condition: string;
   end_condition: string;
@@ -190,6 +194,8 @@ export function NodeSummaryModal({
   touch_time,
   input,
   output,
+  input_forms,
+  output_forms,
   data_form,
   start_condition,
   end_condition,
@@ -228,7 +234,7 @@ export function NodeSummaryModal({
   const [form, setForm] = useState({
     label: title, description, color, assignee, department, system, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-    input, output, data_form, start_condition, end_condition,
+    input, output, input_forms, output_forms, data_form, start_condition, end_condition,
   });
   // 비용 통화 토글 — 배타 계약이라 한 번에 한 통화만. 전환 시 기존 값은 버퍼에서 소거+안내 (사용자 결정 2026-08-20)
   const [activeCurrency, setActiveCurrency] = useState<"cost_krw" | "cost_usd">(
@@ -242,7 +248,7 @@ export function NodeSummaryModal({
     setForm({
       label: title, description, color, assignee, department, system, duration,
       touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-      input, output, data_form, start_condition, end_condition,
+      input, output, input_forms, output_forms, data_form, start_condition, end_condition,
     });
     setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
     setCostNotice(null);
@@ -277,6 +283,8 @@ export function NodeSummaryModal({
       touch_time: form.touch_time,
       input: form.input,
       output: form.output,
+      input_forms: form.input_forms,
+      output_forms: form.output_forms,
       data_form: form.data_form,
       start_condition: form.start_condition,
       end_condition: form.end_condition,
@@ -358,6 +366,8 @@ export function NodeSummaryModal({
       touch_time: form.touch_time,
       input: form.input,
       output: form.output,
+      input_forms: form.input_forms,
+      output_forms: form.output_forms,
       data_form: form.data_form,
       start_condition: form.start_condition,
       end_condition: form.end_condition,
@@ -834,6 +844,8 @@ export function NodeSummaryModal({
                         nodeKey={nodeId}
                         input={form.input}
                         output={form.output}
+                        inputForms={form.input_forms}
+                        outputForms={form.output_forms}
                         dataForm={form.data_form}
                         startCondition={form.start_condition}
                         endCondition={form.end_condition}

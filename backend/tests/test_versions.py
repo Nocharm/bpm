@@ -108,7 +108,7 @@ def test_create_version_clones_graph(client: TestClient) -> None:
         json={
             "nodes": [
                 {"id": "s", "title": "시작", "node_type": "start"},
-                {"id": "p", "title": "발주"},
+                {"id": "p", "title": "발주", "input": "PR\n견적", "input_forms": "document"},
                 {"id": "c", "title": "승인"},
             ],
             "edges": [],
@@ -127,6 +127,9 @@ def test_create_version_clones_graph(client: TestClient) -> None:
     cloned_ids = {n["id"] for n in cloned_graph["nodes"]}
     assert "p" not in cloned_ids
     assert "c" not in cloned_ids
+    # IO 항목별 데이터 폼도 클론에 보존 (2026-08-20)
+    cloned_p = next(n for n in cloned_graph["nodes"] if n["title"] == "발주")
+    assert cloned_p["input"] == "PR\n견적" and cloned_p["input_forms"] == "document"
 
 
 def test_clone_preserves_groups_and_membership(client: TestClient) -> None:

@@ -10,6 +10,13 @@ describe("canBulkEditField", () => {
     expect(canBulkEditField("start", "system")).toBe(false);
   });
 
+  it("IO·조건도 process·decision만 — SP는 링크 맵 상속이라 제외", () => {
+    expect(canBulkEditField("process", "input")).toBe(true);
+    expect(canBulkEditField("decision", "end_condition")).toBe(true);
+    expect(canBulkEditField("subprocess", "input")).toBe(false);
+    expect(canBulkEditField("start", "output")).toBe(false);
+  });
+
   it("subprocess는 annual_count·fte만 파라미터 일괄 대상", () => {
     expect(canBulkEditField("subprocess", "annual_count")).toBe(true);
     expect(canBulkEditField("subprocess", "fte")).toBe(true);
@@ -37,6 +44,23 @@ describe("buildBulkAttrPatch", () => {
   it("비용 외 필드는 단일 필드 패치", () => {
     expect(buildBulkAttrPatch("system", "SAP")).toEqual({ system: "SAP" });
     expect(buildBulkAttrPatch("duration", "1.15")).toEqual({ duration: "1.15" });
+  });
+
+  it("IO append(줄 경계 접두 보존)는 항목별 폼 유지, 교체·비우기는 폼 소거", () => {
+    const existing = { input: "PR\n견적", output: "PO" };
+    // append — 기존이 줄 경계 접두로 남으므로 폼 정렬 유효
+    expect(buildBulkAttrPatch("input", "PR\n견적\n계약", existing)).toEqual({ input: "PR\n견적\n계약" });
+    expect(buildBulkAttrPatch("input", "PR\n견적", existing)).toEqual({ input: "PR\n견적" });
+    // 교체 — 인덱스 정렬이 깨지므로 폼 함께 소거
+    expect(buildBulkAttrPatch("input", "발주서", existing)).toEqual({ input: "발주서", input_forms: "" });
+    expect(buildBulkAttrPatch("output", "", existing)).toEqual({ output: "", output_forms: "" });
+    // 기존이 비어 있으면 폼도 원래 없음 — 소거 패치 포함(무해)
+    expect(buildBulkAttrPatch("input", "신규", { input: "", output: "" }))
+      .toEqual({ input: "신규", input_forms: "" });
+  });
+
+  it("조건 필드는 단일 필드 패치(폼 무관)", () => {
+    expect(buildBulkAttrPatch("start_condition", "주기 도래")).toEqual({ start_condition: "주기 도래" });
   });
 });
 
