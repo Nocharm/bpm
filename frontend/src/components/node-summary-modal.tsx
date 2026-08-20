@@ -45,8 +45,10 @@ import {
   isSpParamField,
   PARAM_FIELDS,
   PARAM_LABEL_KEY,
+  readAttrsCollapsed,
   readDetailsCollapsed,
   readParamsCollapsed,
+  writeAttrsCollapsed,
   writeDetailsCollapsed,
   writeParamsCollapsed,
   type ParamField,
@@ -240,6 +242,8 @@ export function NodeSummaryModal({
   const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
   // I/O & Conditions 접힘 — 기본 접힘, 인스펙터와 키 공유 (사용자 결정 2026-08-20)
   const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
+  // BPM attributes 접힘 — 인스펙터 카드와 키 공유(bpm.attrsCollapsed) (사용자 결정 2026-08-20)
+  const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
@@ -323,6 +327,9 @@ export function NodeSummaryModal({
   const editableParams = getEditableParamFields(nodeType);
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
   const filledParamCount = editableParams.filter((f) => form[f]).length;
+  // BPM attributes 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
+  const filledAttrCount = [form.department, form.assignee, form.system, form.url]
+    .filter((v) => v !== "").length;
   // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
   const filledDetailCount = [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
     .filter((v) => v !== "").length;
@@ -634,9 +641,32 @@ export function NodeSummaryModal({
                   </div>
                 </div>
                 )}
-                {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+                {/* BPM 속성 — process·decision만 표시. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
                 {showAttributes && (
-                  <>
+                  <div className="py-1.5" data-id="summary-attrs">
+                    <button
+                      type="button"
+                      data-id="summary-attrs-toggle"
+                      aria-expanded={!attrsCollapsed}
+                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      onClick={() => {
+                        const next = !attrsCollapsed;
+                        setAttrsCollapsed(next);
+                        writeAttrsCollapsed(next);
+                      }}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {t("editor.bpmAttrs")}
+                      {filledAttrCount > 0 && (
+                        <span className="font-normal">({filledAttrCount})</span>
+                      )}
+                    </button>
+                    {!attrsCollapsed && (
+                    <div className="ml-2 border-l border-divider pl-2">
                     {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
                     <div className="flex min-h-[34px] items-center gap-3 py-1.5">
                       <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</span>
@@ -709,7 +739,7 @@ export function NodeSummaryModal({
                         <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</span>
                         <div className="flex min-w-0 flex-1 justify-end">
                           <input
-                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none"
                             value={form[key]}
                             aria-label={t(labelKey)}
                             onChange={(event) => setForm((f) => ({ ...f, [key]: event.target.value }))}
@@ -717,7 +747,17 @@ export function NodeSummaryModal({
                         </div>
                       </div>
                     ))}
-                  </>
+                    <UrlLabelField
+                      key={nodeId}
+                      url={form.url}
+                      urlLabel={form.urlLabel}
+                      readOnly={readOnly}
+                      inputWidth="w-44"
+                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    />
+                    </div>
+                    )}
+                  </div>
                 )}
                 {/* 회당 파라미터 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
                     subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
@@ -783,7 +823,7 @@ export function NodeSummaryModal({
                                   key={field}
                                   field={field}
                                   dataId={`summary-param-${field}`}
-                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
+                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none disabled:bg-surface-alt disabled:text-ink-tertiary"
                                   value={form[field]}
                                   ariaLabel={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[field])}
                                   onCommit={(next) => setForm((f) => ({ ...f, [field]: next }))}
@@ -856,6 +896,7 @@ export function NodeSummaryModal({
                       <NodeDetailsFields
                         idPrefix="modal-detail"
                         nodeKey={nodeId}
+                        inputWidth="w-44"
                         input={form.input}
                         output={form.output}
                         inputForms={form.input_forms}
@@ -869,15 +910,6 @@ export function NodeSummaryModal({
                     </div>
                     )}
                   </div>
-                )}
-                {showAttributes && (
-                  <UrlLabelField
-                    key={nodeId}
-                    url={form.url}
-                    urlLabel={form.urlLabel}
-                    readOnly={readOnly}
-                    onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                  />
                 )}
               </div>
               {groupLabel && (

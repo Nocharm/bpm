@@ -173,7 +173,12 @@ export function NodeMetricsCard({
                     key={field} // 통화 전환 시 focused 상태 리셋
                     field={field}
                     dataId={`inspector-param-${field}`}
-                    className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                    // 편집 가능이면 입력 영역 상시 노출 + 통일 폭(w-32) + 포커스 보더 (사용자 결정 2026-08-20)
+                    className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
+                      readOnly
+                        ? "min-w-0 flex-1 bg-transparent"
+                        : "w-32 shrink-0 border border-hairline bg-surface-alt focus:border-accent"
+                    }`}
                     value={shown(field)}
                     disabled={readOnly}
                     ariaLabel={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[field])}

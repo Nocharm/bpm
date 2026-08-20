@@ -41,14 +41,18 @@ interface NodeDetailsFieldsProps {
   idPrefix: string;
   // 노드 전환 리마운트 키(MultiValueInput 행 버퍼 리셋)
   nodeKey: string;
+  // 편집 입력 통일 폭 — 인스펙터 w-32(기본), 편집 모달 w-44 (사용자 결정 2026-08-20)
+  inputWidth?: string;
   onPatch: (patch: NodeDetailsPatch) => void;
 }
 
 export function NodeDetailsFields({
   input, output, inputForms, outputForms, dataForm, startCondition, endCondition,
-  readOnly, idPrefix, nodeKey, onPatch,
+  readOnly, idPrefix, nodeKey, inputWidth = "w-32", onPatch,
 }: NodeDetailsFieldsProps) {
   const { t } = useI18n();
+  // 편집 가능 입력 — 영역 상시 노출·통일 폭·포커스 보더 (사용자 결정 2026-08-20)
+  const editableInput = `${inputWidth} shrink-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right focus:border-accent focus:outline-none`;
   // 노드 레벨 data_form 폴백 행 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본)
   const showLegacyDataForm = inputForms === "" && outputForms === "";
   return (
@@ -89,7 +93,7 @@ export function NodeDetailsFields({
           ) : (
             <input
               data-id={`${idPrefix}-data-form`}
-              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-fine text-ink-secondary hover:bg-surface-alt focus:bg-surface-alt focus:outline-none"
+              className={`${editableInput} text-fine text-ink-secondary`}
               maxLength={50}
               value={dataForm}
               placeholder="structured / document / tacit"
@@ -118,7 +122,7 @@ export function NodeDetailsFields({
           ) : (
             <input
               data-id={`${idPrefix}-${key.replace(/_/g, "-")}`}
-              className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none"
+              className={`${editableInput} text-caption text-ink`}
               value={value}
               title={value || undefined}
               onChange={(event) => onPatch({ [key]: event.target.value })}

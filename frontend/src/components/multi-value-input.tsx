@@ -103,7 +103,7 @@ export function MultiValueInput({
         <div key={i} className="mt-0.5 flex items-center gap-1">
           <input
             data-id={`${dataId}-row-${i}`}
-            className="min-w-0 flex-1 rounded-sm bg-surface-alt px-1.5 py-0.5 text-caption text-ink focus:outline-none"
+            className="min-w-0 flex-1 rounded-sm border border-transparent bg-surface-alt px-1.5 py-0.5 text-caption text-ink focus:border-accent focus:outline-none"
             value={row.text}
             placeholder={placeholder}
             onChange={(e) =>

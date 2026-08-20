@@ -11,22 +11,28 @@ import { useI18n } from "@/lib/i18n";
 
 const PILL_CLASS =
   "flex min-w-0 max-w-full items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink";
-const INPUT_CLASS =
-  "min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink " +
-  "hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent";
+const READONLY_INPUT_CLASS =
+  "min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink focus:outline-none";
 
 export function UrlLabelField({
   url,
   urlLabel,
   readOnly,
+  inputWidth = "w-32",
   onChange,
 }: {
   url: string;
   urlLabel: string;
   readOnly: boolean;
+  // 편집 입력 통일 폭 — 인스펙터 w-32(기본), 편집 모달 w-44 (사용자 결정 2026-08-20)
+  inputWidth?: string;
   onChange: (patch: { url?: string; urlLabel?: string }) => void;
 }) {
   const { t } = useI18n();
+  // 편집 가능이면 입력 영역 상시 노출 + 통일 폭 + 포커스 보더 (사용자 결정 2026-08-20)
+  const inputClass = readOnly
+    ? READONLY_INPUT_CLASS
+    : `${inputWidth} shrink-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none`;
   const [urlDraft, setUrlDraft] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
 
@@ -62,7 +68,7 @@ export function UrlLabelField({
         ) : (
           <input
             data-id="url-field-input"
-            className={INPUT_CLASS}
+            className={inputClass}
             placeholder={t("urlField.addUrl")}
             maxLength={500}
             disabled={readOnly}
@@ -95,7 +101,7 @@ export function UrlLabelField({
           ) : (
             <input
               data-id="url-label-input"
-              className={INPUT_CLASS}
+              className={inputClass}
               placeholder={t("urlField.addLabel")}
               maxLength={100}
               disabled={readOnly}
