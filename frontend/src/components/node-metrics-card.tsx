@@ -46,6 +46,16 @@ export function NodeMetricsCard({
   const [activeCurrency, setActiveCurrency] = useState<CostField>(
     values.cost_usd !== "" ? "cost_usd" : "cost_krw",
   );
+  // 외부 저장(편집 모달 등)으로 비용이 바뀌면 활성 통화 동기화 — 렌더 중 상태 조정,
+  // 로컬 비용 draft가 있을 때는 사용자 편집 우선 (사용자 결정 2026-08-20)
+  const [prevCost, setPrevCost] = useState({ krw: values.cost_krw, usd: values.cost_usd });
+  if (prevCost.krw !== values.cost_krw || prevCost.usd !== values.cost_usd) {
+    setPrevCost({ krw: values.cost_krw, usd: values.cost_usd });
+    if (draft.cost_krw === undefined && draft.cost_usd === undefined) {
+      setActiveCurrency(values.cost_usd !== "" ? "cost_usd" : "cost_krw");
+      setCostNotice(null);
+    }
+  }
 
   const shown = (field: ParamField): string => draft[field] ?? values[field];
   const dirty = Object.keys(draft).length > 0;

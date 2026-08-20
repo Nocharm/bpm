@@ -48,6 +48,17 @@ export function MultiValueInput({
   const withForms = formsValue !== undefined;
   // 편집 중 행 버퍼 — 저장 원문에서 시작, blur/삭제 시 join 커밋. 노드 전환은 key 리마운트가 리셋.
   const [rows, setRows] = useState<ItemRow[]>(() => splitRows(value, formsValue));
+  // 외부 변경 동기화(편집 모달 저장 → 인스펙터 등) — 렌더 중 상태 조정. 자기 커밋 에코(현재 행과
+  // 동일한 join)는 리셋하지 않아 입력 중 빈 행이 날아가지 않는다 (사용자 결정 2026-08-20)
+  const [prevProps, setPrevProps] = useState({ value, formsValue });
+  if (prevProps.value !== value || prevProps.formsValue !== formsValue) {
+    setPrevProps({ value, formsValue });
+    const kept = rows.map((r) => ({ text: r.text.trim(), form: r.form.trim() })).filter((r) => r.text !== "");
+    const joined = kept.map((r) => r.text).join("\n");
+    if (value !== joined || (withForms && (formsValue ?? "") !== joinForms(kept))) {
+      setRows(splitRows(value, formsValue));
+    }
+  }
 
   const commit = (next: ItemRow[]) => {
     setRows(next);

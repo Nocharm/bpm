@@ -38,6 +38,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import {
   formatParamValue,
@@ -330,6 +331,34 @@ export function NodeSummaryModal({
   // BPM attributes 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
   const filledAttrCount = [form.department, form.assignee, form.system, form.url]
     .filter((v) => v !== "").length;
+  // 버퍼 변경 노출 — 초기값 대비 달라진 필드(섹션 점 + 푸터 목록) (사용자 결정 2026-08-20)
+  const initialForm: Record<string, string> = {
+    label: title, description, color, assignee, department, system, duration,
+    touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+    input, output, input_forms, output_forms, data_form, start_condition, end_condition,
+  };
+  const changedKeys = Object.keys(initialForm).filter(
+    (k) => (form as Record<string, string>)[k] !== initialForm[k],
+  );
+  const hasChangedIn = (keys: readonly string[]) => changedKeys.some((k) => keys.includes(k));
+  const ATTRS_KEYS = ["assignee", "department", "system", "url", "urlLabel"] as const;
+  const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "data_form", "start_condition", "end_condition"] as const;
+  // 폼(항목별)은 소속 IO 라벨로 접고, URL 라벨은 URL로 접어 중복 제거
+  const CHANGED_LABEL_KEY: Record<string, MessageKey> = {
+    label: "field.title", description: "field.description", color: "field.color",
+    assignee: "field.assignee", department: "field.department", system: "field.system",
+    url: "field.url", urlLabel: "field.url",
+    input: "field.input", input_forms: "field.input",
+    output: "field.output", output_forms: "field.output",
+    data_form: "field.dataForm", start_condition: "field.startCondition", end_condition: "field.endCondition",
+  };
+  const changedLabels = [...new Set(changedKeys.map((k) =>
+    k === "cost_krw" || k === "cost_usd"
+      ? t("field.costRun") // 통화 토글 한 행 계약 — 전환 시 두 필드가 함께 바뀌므로 하나로 접음
+      : (PARAM_FIELDS as readonly string[]).includes(k)
+        ? t(PARAM_LABEL_KEY[k as ParamField])
+        : t(CHANGED_LABEL_KEY[k]),
+  ))].join(", ");
   // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
   const filledDetailCount = [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
     .filter((v) => v !== "").length;
@@ -664,6 +693,8 @@ export function NodeSummaryModal({
                       {filledAttrCount > 0 && (
                         <span className="font-normal">({filledAttrCount})</span>
                       )}
+                      {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
+                      {hasChangedIn(ATTRS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
                     {!attrsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
@@ -783,6 +814,7 @@ export function NodeSummaryModal({
                       {filledParamCount > 0 && (
                         <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
                       )}
+                      {hasChangedIn(PARAM_FIELDS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
                     {!paramsCollapsed && (
                       <div className="ml-2 border-l border-divider pl-2">
@@ -890,6 +922,7 @@ export function NodeSummaryModal({
                       {filledDetailCount > 0 && (
                         <span className="font-normal text-ink-tertiary">({filledDetailCount})</span>
                       )}
+                      {hasChangedIn(DETAILS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
                     {!detailsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
@@ -1065,14 +1098,27 @@ export function NodeSummaryModal({
             </>
           ) : (
             <>
-              <span className="flex items-center gap-2 text-fine text-ink-tertiary">
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
-                  {t("summary.cancel")}
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
-                  {t("editor.save")}
+              <span className="flex min-w-0 flex-col gap-0.5 text-fine text-ink-tertiary">
+                {/* 저장 전 변경 필드 목록 — 버퍼 내용 노출 (사용자 결정 2026-08-20) */}
+                {changedKeys.length > 0 && (
+                  <span
+                    data-id="summary-dirty-fields"
+                    className="flex min-w-0 items-center gap-1 text-accent"
+                    title={changedLabels}
+                  >
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />
+                    <span className="min-w-0 truncate">{t("summary.unsavedFields", { fields: changedLabels })}</span>
+                  </span>
+                )}
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1">
+                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
+                    {t("summary.cancel")}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
+                    {t("editor.save")}
+                  </span>
                 </span>
               </span>
               <div className="flex items-center gap-1.5">
