@@ -63,6 +63,8 @@ interface InspectorPanelProps {
   lockTabs?: boolean;
   // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
   subprocessSlot?: ReactNode;
+  // Node display 토글 섹션 — 속성 빈상태(맵 요약 아래) 노출. page.tsx 주입 (2026-08-20)
+  nodeDisplaySlot?: ReactNode;
   // Subprocess 탭(지정 메타+역참조 목록) — 지정된 맵에서만 슬롯이 오고, 있을 때만 탭이 나타난다
   subprocessTabSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
@@ -93,6 +95,7 @@ export function InspectorPanel({
   forcedTab,
   lockTabs,
   subprocessSlot,
+  nodeDisplaySlot,
   subprocessTabSlot,
   mapName,
   mapVersionMarker,
@@ -175,6 +178,7 @@ export function InspectorPanel({
             mapVersionMarker={mapVersionMarker}
             versionControl={versionControl}
             subprocessSlot={subprocessSlot}
+            nodeDisplaySlot={nodeDisplaySlot}
           />
         )}
         {tab === "properties" &&
@@ -234,6 +238,7 @@ function PropertiesEmpty({
   mapVersionMarker,
   versionControl,
   subprocessSlot,
+  nodeDisplaySlot,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId" | "canCompare">) {
   const { t } = useI18n();
   const action =
@@ -281,6 +286,9 @@ function PropertiesEmpty({
         <SummaryRow icon={LayoutGrid} label={t("inspector.sumSubprocess")} value={`${subprocessCount}`} />
         <SummaryRow icon={Boxes} label={t("inspector.sumSaved")} value={saveLabel} muted />
       </div>
+
+      {/* Node display 토글 — 맵 탭과 동일 섹션(맵 요약 바로 아래, 사용자 결정 2026-08-20) */}
+      {nodeDisplaySlot}
 
       {/* 서브프로세스 지정 카드 — 다른 맵 연결 절차 안내 + 상태/설정 */}
       {subprocessSlot}

@@ -51,7 +51,16 @@ interface ModeMeta {
 // 카테고리 아코디언 — 수행 지표 / 입출력·조건 / 속성 3분류, 클릭 시 하위 모드 버튼 노출
 // (사용자 결정 2026-08-20). 라벨은 인스펙터 카드와 동일 키 재사용.
 type BulkCategory = "metrics" | "details" | "attributes";
+// 순서는 인스펙터 카드 배치와 동일 — 속성/수행 지표/입출력·조건 (사용자 결정 2026-08-20)
 const CATEGORY_META: { key: BulkCategory; labelKey: MessageKey; modes: ModeMeta[] }[] = [
+  {
+    key: "attributes",
+    labelKey: "bulk.catAttributes",
+    modes: [
+      { key: "people", icon: Users, labelKey: "bulk.modePeople" },
+      { key: "system", icon: Server, labelKey: "field.system" },
+    ],
+  },
   {
     key: "metrics",
     labelKey: "inspector.parameters",
@@ -65,14 +74,6 @@ const CATEGORY_META: { key: BulkCategory; labelKey: MessageKey; modes: ModeMeta[
       { key: "output", icon: DETAIL_FIELD_ICONS.output, labelKey: "field.output" },
       { key: "start_condition", icon: DETAIL_FIELD_ICONS.start_condition, labelKey: "field.startCondition" },
       { key: "end_condition", icon: DETAIL_FIELD_ICONS.end_condition, labelKey: "field.endCondition" },
-    ],
-  },
-  {
-    key: "attributes",
-    labelKey: "bulk.catAttributes",
-    modes: [
-      { key: "people", icon: Users, labelKey: "bulk.modePeople" },
-      { key: "system", icon: Server, labelKey: "field.system" },
     ],
   },
 ];
@@ -844,14 +845,9 @@ export function GroupBulkModal({
                       }`}
                       onClick={() => setOpenCategory(open ? null : catKey)}
                     >
-                      <ChevronRight
-                        size={12}
-                        strokeWidth={1.5}
-                        className={`shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
-                      />
-                      <span className="truncate">{t(catLabelKey)}</span>
-                      {/* 현재 선택 모드가 속한 카테고리 표시점 — 접혀 있어도 위치를 잃지 않게 */}
+                      {/* 현재 선택 모드가 속한 카테고리 표시점 — 라벨 앞(사용자 결정 2026-08-20) */}
                       {holdsActiveMode && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
+                      <span className="truncate">{t(catLabelKey)}</span>
                     </button>
                   );
                 })}

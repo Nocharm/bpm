@@ -3,18 +3,25 @@
 
 import { createContext, useContext } from "react";
 
-// 노드에 표시할 정보 필드 — 사용자가 좌측 사이드바 체크박스로 토글 (BPM 속성 + URL)
+// 노드에 표시할 정보 필드 — 인스펙터 Node display 토글 (BPM 속성 + URL + 승격 IO/조건, 2026-08-20).
+// 조건은 시작/종료를 "conditions" 하나로 묶어 토글(표시는 두 줄) — 사용자 결정 2026-08-20.
 export type NodeDisplayField =
   | "assignee"
   | "department"
   | "system"
-  | "url";
+  | "url"
+  | "input"
+  | "output"
+  | "conditions";
 
 export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
   "assignee",
   "department",
   "system",
   "url",
+  "input",
+  "output",
+  "conditions",
 ];
 
 // 토글 대상 = BPM 속성 4종 + 파라미터 칩 일괄 스위치("params") + GMP 필 태그("gmp", design 2026-08-20)

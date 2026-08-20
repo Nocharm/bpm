@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { NodeDetailsFields } from "@/components/node-details-fields";
@@ -164,6 +164,8 @@ interface NodeSummaryModalProps {
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
+  // 열릴 때 자동 포커스할 필드 — 인스펙터 설명 더블클릭/편집 아이콘 진입 (사용자 결정 2026-08-20)
+  initialFocus?: "description";
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
   // 선행/후행 노드 클릭 시 그 노드 편집으로 전환
@@ -212,6 +214,7 @@ export function NodeSummaryModal({
   versionPickerSlot,
   showAttributes,
   onPatch,
+  initialFocus,
   onCommitLabel,
   onNavigate,
   onClose,
@@ -219,6 +222,15 @@ export function NodeSummaryModal({
 }: NodeSummaryModalProps) {
   const { t, lang } = useI18n();
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  // initialFocus="description" — 열림/노드 전환 시 설명 textarea로 포커스(커서는 끝)
+  useEffect(() => {
+    if (initialFocus !== "description") return;
+    const el = descriptionRef.current;
+    if (el === null) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [initialFocus, nodeId]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -556,6 +568,8 @@ export function NodeSummaryModal({
                   </div>
                 )}
                 <textarea
+                  ref={descriptionRef}
+                  data-id="summary-description"
                   className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
                   rows={2}
                   value={form.description}

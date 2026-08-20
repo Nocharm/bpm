@@ -7,10 +7,14 @@ import {
   AlertTriangle,
   Building2,
   CornerDownRight,
+  Flag,
   Link as LinkIcon,
   Lock,
+  LogIn,
+  LogOut,
   type LucideIcon,
   MessageSquare,
+  Play,
   Plus,
   Server,
   ShieldCheck,
@@ -39,11 +43,14 @@ import {
   type SubEnd,
 } from "@/lib/subprocess-embed";
 
-const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
+const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = {
   assignee: User,
   department: Building2,
   system: Server,
   url: LinkIcon,
+  // 승격 IO — 인스펙터 I/O & Conditions 카드와 동일 아이콘 (2026-08-20)
+  input: LogIn,
+  output: LogOut,
 };
 
 // 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
@@ -52,38 +59,62 @@ const FIELD_ICON: Record<NodeDisplayField, LucideIcon> = {
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
-  const spValues: Record<NodeDisplayField, string | null | undefined> = {
+  const spValues: Record<Exclude<NodeDisplayField, "conditions">, string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
     url: data.spUrl,
+    input: data.spInput,
+    output: data.spOutput,
   };
   return (
     <>
       {displayFields
         // params(칩 스위치)·gmp(필 태그)는 텍스트 줄 필드가 아님 — NodeParams/GmpPill이 담당
         .filter((f): f is NodeDisplayField => f !== "params" && f !== "gmp")
-        .map((field) => {
+        .flatMap((field) => {
         // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
         if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
-          return null;
+          return [];
         }
-        const raw = isSubprocess ? spValues[field] : data[field];
-        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
-        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
-        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
-        if (!value) {
-          return null;
-        }
-        const Icon = FIELD_ICON[field];
-        return (
-          <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
-            <span className="inline-flex items-center gap-1">
-              <Icon size={12} strokeWidth={1.5} />
-              {value}
-            </span>
-          </div>
-        );
+        // "conditions"는 시작/종료 두 줄을 담당(단일 토글, 사용자 결정 2026-08-20)
+        const lines: { key: string; icon: LucideIcon; value: string | null | undefined }[] =
+          field === "conditions"
+            ? [
+                {
+                  key: "start_condition",
+                  icon: Play,
+                  value: isSubprocess ? data.spStartCondition : data.start_condition,
+                },
+                {
+                  key: "end_condition",
+                  icon: Flag,
+                  value: isSubprocess ? data.spEndCondition : data.end_condition,
+                },
+              ]
+            : (() => {
+                const raw = isSubprocess ? spValues[field] : data[field];
+                // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
+                const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
+                // input/output은 개행 복수 — 노드 줄에서는 ", "로 접는다 (2026-08-20)
+                const value =
+                  field === "url"
+                    ? (raw ? urlLabel || "LINK" : null)
+                    : field === "input" || field === "output"
+                      ? raw?.split("\n").filter(Boolean).join(", ")
+                      : raw;
+                return [{ key: field, icon: FIELD_ICON[field], value }];
+              })();
+        return lines
+          .filter((line) => !!line.value)
+          .map(({ key, icon: Icon, value }) => (
+            <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
+              <span className="inline-flex items-center gap-1">
+                <Icon size={12} strokeWidth={1.5} />
+                {value}
+              </span>
+            </div>
+          ));
       })}
     </>
   );

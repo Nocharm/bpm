@@ -23,6 +23,10 @@ describe("parseDisplayToggles", () => {
   });
 });
 
-it("NODE_DISPLAY_TOGGLES는 4속성 + params + gmp", () => {
-  expect(NODE_DISPLAY_TOGGLES).toEqual(["assignee", "department", "system", "url", "params", "gmp"]);
+it("NODE_DISPLAY_TOGGLES는 속성 4 + IO 2 + 조건 묶음 1 + params + gmp", () => {
+  expect(NODE_DISPLAY_TOGGLES).toEqual([
+    "assignee", "department", "system", "url",
+    "input", "output", "conditions",
+    "params", "gmp",
+  ]);
 });

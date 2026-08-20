@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -41,6 +41,7 @@ import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
 import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
 import { NodeDetailsCard } from "@/components/node-details-card";
+import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
@@ -239,7 +240,6 @@ import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
-  NODE_DISPLAY_TOGGLES,
   NodeActionsContext,
   type NodeDisplayToggle,
   parseDisplayToggles,
@@ -343,15 +343,6 @@ const NODE_TYPE_ICONS: Record<string, LucideIcon> = {
   end: CircleDot,
 };
 
-// 노드 디스플레이 토글 항목별 아이콘 — 인스펙터 맵 탭 접힘 섹션에서 라벨 왼쪽에 표시
-const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
-  assignee: UserRound,
-  department: Building2,
-  system: Server,
-  url: Link,
-  params: SlidersHorizontal,
-  gmp: ShieldCheck,
-};
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
@@ -967,6 +958,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
   const pointerScreenRef = useRef({ x: 0, y: 0 });
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
+  // 편집 모달 자동 포커스 대상 — 인스펙터 설명 더블클릭/편집 아이콘 진입 시 "description" (2026-08-20)
+  const [summaryFocus, setSummaryFocus] = useState<"description" | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
@@ -6602,9 +6595,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     [displayFields],
   );
 
-  // 맵 탭의 노드 디스플레이/엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요),
-  // 두 섹션이 키("nodeDisplay"/"edgeStyle")로 하나의 accordion-close 고스트 렌더를 공유.
-  const [nodeDisplaySectionOpen, setNodeDisplaySectionOpen] = useState(false);
+  // 맵 탭의 엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요). 노드 디스플레이는
+  // NodeDisplaySection 컴포넌트가 자체 관리 (2026-08-20).
   const [edgeStyleSectionOpen, setEdgeStyleSectionOpen] = useState(false);
   const { closingKeys: inspectorClosingKeys, beginClose: beginInspectorClose, cancelClose: cancelInspectorClose } =
     useClosingKeys<string>();
@@ -8615,10 +8607,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
+                initialFocus={summaryFocus ?? undefined}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onNavigate={(id) => setSummaryNodeId(id)}
-                onClose={() => setSummaryNodeId(null)}
+                onClose={() => {
+                  setSummaryNodeId(null);
+                  setSummaryFocus(null);
+                }}
                 onOpenChild={handleSummaryOpenChild}
               />
             );
@@ -8833,11 +8829,22 @@ function MapEditor({ mapId }: { mapId: number }) {
                           }}
                         />
                       </div>
-                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만.
+                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 호버 시 편집 아이콘, 더블클릭/아이콘으로
+                          편집 모달을 열어 설명에 자동 포커스 (사용자 결정 2026-08-20).
                           subprocess는 링크맵 설명(베이스)+이 맵 추가분을 줄바꿈 합성해 표시. */}
-                      <div>
+                      <div className="group/desc relative">
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
-                        <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary">
+                        <div
+                          data-id="inspector-description"
+                          className={`min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary ${
+                            readOnly ? "" : "cursor-text transition-colors hover:bg-surface-pearl"
+                          }`}
+                          onDoubleClick={() => {
+                            if (readOnly) return;
+                            setSummaryFocus("description");
+                            setSummaryNodeId(selectedNode.id);
+                          }}
+                        >
                           {(selectedNode.data.nodeType === "subprocess"
                             ? mergeSubprocessDescription(
                                 selectedSpRef?.sp_description,
@@ -8845,6 +8852,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                               )
                             : selectedNode.data.description) || t("summary.none")}
                         </div>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            data-id="inspector-description-edit"
+                            aria-label={t("field.description")}
+                            className="absolute right-1 top-6 hidden rounded-sm bg-surface p-1 text-ink-tertiary shadow-sm hover:text-accent group-hover/desc:block"
+                            onClick={() => {
+                              setSummaryFocus("description");
+                              setSummaryNodeId(selectedNode.id);
+                            }}
+                          >
+                            <SquarePen size={13} strokeWidth={1.5} />
+                          </button>
+                        )}
                       </div>
                       {/* 유형·색 — 라벨 좌·필드 우측정렬·세로중앙·구분선(편집 모달과 동일) */}
                       <div className="flex flex-col divide-y divide-divider">
@@ -9357,6 +9378,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onGoToPublished={(id) => void switchVersion(id)}
                   />
                 }
+                nodeDisplaySlot={
+                  // 속성 탭 빈상태(맵 요약 아래) — 맵 탭과 동일 토글 킷 (사용자 결정 2026-08-20)
+                  <NodeDisplaySection
+                    idPrefix="properties"
+                    displayFields={displayFields}
+                    onToggle={toggleDisplayField}
+                  />
+                }
                 subprocessTabSlot={
                   // 지정된 맵에서만 탭 노출 — 지정 메타(버전·시점·행위자) + 역참조 목록
                   spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
@@ -9479,76 +9508,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                     </div>
                     <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    <div data-id="inspector-node-display-section" className="rounded-md border border-hairline p-3">
-                      <button
-                        type="button"
-                        aria-expanded={nodeDisplaySectionOpen}
-                        onClick={() => {
-                          if (nodeDisplaySectionOpen) beginInspectorClose("nodeDisplay");
-                          else cancelInspectorClose("nodeDisplay");
-                          setNodeDisplaySectionOpen((v) => !v);
-                        }}
-                        className="flex w-full items-center gap-1.5 text-left"
-                      >
-                        <ChevronRight
-                          size={14}
-                          strokeWidth={1.5}
-                          className={`shrink-0 transition-transform ${nodeDisplaySectionOpen ? "rotate-90" : ""}`}
-                        />
-                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
-                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
-                      </button>
-                      {(nodeDisplaySectionOpen || inspectorClosingKeys.has("nodeDisplay")) && (
-                        <div className={inspectorClosingKeys.has("nodeDisplay") ? "accordion-close" : "accordion-open"}>
-                          <div className="mt-1">
-                            {NODE_DISPLAY_TOGGLES.map((field) => {
-                              const on = displayFields.includes(field);
-                              const Icon = NODE_DISPLAY_ICONS[field];
-                              const labelKey =
-                                field === "assignee"
-                                  ? "field.assignee"
-                                  : field === "department"
-                                    ? "field.department"
-                                    : field === "system"
-                                      ? "field.system"
-                                      : field === "url"
-                                        ? "field.url"
-                                        : field === "gmp"
-                                          ? "field.gmp"
-                                          : "field.params";
-                              return (
-                                <div
-                                  key={field}
-                                  className="flex items-center justify-between py-1 text-caption text-ink-secondary"
-                                >
-                                  <span className="flex items-center gap-1.5">
-                                    <Icon size={14} strokeWidth={1.5} className="text-ink-muted" />
-                                    {t(labelKey)}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={on}
-                                    aria-label={t(labelKey)}
-                                    onClick={() => toggleDisplayField(field)}
-                                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                                      on ? "bg-accent" : "bg-border-strong"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                                        on ? "left-3.5" : "left-0.5"
-                                      }`}
-                                    />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div data-id="inspector-edge-style-section">
+                    <NodeDisplaySection
+                      idPrefix="inspector"
+                      displayFields={displayFields}
+                      onToggle={toggleDisplayField}
+                    />
+                    <div data-id="inspector-edge-style-section" className="rounded-md border border-hairline p-3">
                       <button
                         type="button"
                         aria-expanded={edgeStyleSectionOpen}

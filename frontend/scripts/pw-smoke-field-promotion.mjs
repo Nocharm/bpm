@@ -136,6 +136,9 @@ try {
   // ── [7] Notes — task_note 포함 4행 ──────────────────────────────────────
   await page.locator('[data-id="map-notes-section"]:visible').first()
     .waitFor({ state: "visible", timeout: 10000 });
+  // 노트는 기본 접힘 아코디언(2026-08-20) — 행 단언 전에 펼침
+  await page.locator('[data-id="map-notes-section"]:visible [data-id="map-notes-toggle"]').first()
+    .click({ timeout: 10000 }).catch(() => {});
   await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').first()
     .waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
