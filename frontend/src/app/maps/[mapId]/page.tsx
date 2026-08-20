@@ -587,6 +587,10 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       output: node.output ?? "",
       input_forms: node.input_forms ?? "",
       output_forms: node.output_forms ?? "",
+      output_ids: node.output_ids ?? "",
+      input_links: node.input_links ?? "",
+      output_links: node.output_links ?? "",
+      input_flags: node.input_flags ?? "",
       start_condition: node.start_condition ?? "",
       end_condition: node.end_condition ?? "",
       data_form: node.data_form ?? "",
@@ -679,6 +683,11 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     output: attr?.output ?? "",
     input_forms: "",  // 항목별 폼 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (2026-08-20)
     output_forms: "",
+    // IO 링크 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (io-linking §3)
+    output_ids: "",
+    input_links: "",
+    output_links: "",
+    input_flags: "",
     start_condition: attr?.start_condition ?? "",
     end_condition: attr?.end_condition ?? "",
     data_form: attr?.data_form ?? "",
@@ -734,6 +743,10 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       output: node.data.output ?? "",
       input_forms: node.data.input_forms ?? "",
       output_forms: node.data.output_forms ?? "",
+      output_ids: node.data.output_ids ?? "",
+      input_links: node.data.input_links ?? "",
+      output_links: node.data.output_links ?? "",
+      input_flags: node.data.input_flags ?? "",
       start_condition: node.data.start_condition ?? "",
       end_condition: node.data.end_condition ?? "",
       data_form: node.data.data_form ?? "",
@@ -3572,7 +3585,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           position: { ...node.position },
           selected: true,
           // 사본은 원본 그룹 소속·대표끝 지정을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
-          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false },
+          // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
+          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false, output_ids: "" },
         });
         return { ...node, position: plan.resetPos, selected: false };
       });

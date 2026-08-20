@@ -126,6 +126,11 @@ export interface GraphNode {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // IO 링크 — output_ids=원본 항목 id, *_links=미러의 원본 itemId, input_flags=필수/선택("optional"만 명시) (io-linking §3)
+  output_ids?: string;
+  input_links?: string;
+  output_links?: string;
+  input_flags?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;
@@ -203,6 +208,9 @@ export interface SubprocessRef {
   // 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms (read-only 상속 표시)
   input_forms: string | null;
   output_forms: string | null;
+  // SP 지정 IO 항목 id — 링크 맵 sp_input_ids/sp_output_ids (io-linking §3)
+  input_ids: string | null;
+  output_ids: string | null;
   start_condition: string | null;
   end_condition: string | null;
   // 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
@@ -473,6 +481,9 @@ export interface SubprocessDesignationBody {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // SP 지정 IO 항목 id (io-linking §3)
+  input_ids?: string;
+  output_ids?: string;
   description?: string;
 }
 

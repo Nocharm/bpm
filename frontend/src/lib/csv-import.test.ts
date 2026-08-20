@@ -1118,6 +1118,25 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.system_fallback).toBe("EAM(원문)"); // CSV 표면 제외 — 병합이 무조건 보존
   });
 
+  it("IO 링크 필드(io-linking §3) — output 텍스트가 바뀌면 output_ids/output_links를 소거하고, input 셀이 비어 기존 텍스트가 유지되면 input_links/input_flags를 지킨다", () => {
+    const base = baseGraph();
+    base.nodes[1] = {
+      ...base.nodes[1],
+      output: "회의록", output_ids: "itm_1", output_links: "itm_5",
+      input: "PR", input_links: "itm_9", input_flags: "optional",
+    };
+    const row = ["Review request", "", "", "", "새 회의록", "", "", ""].join(",");
+    const o = mergeOf([H, row].join("\n"), base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.output).toBe("새 회의록");
+    expect(node.output_ids).toBe("");
+    expect(node.output_links).toBe("");
+    expect(node.input).toBe("PR");
+    expect(node.input_links).toBe("itm_9");
+    expect(node.input_flags).toBe("optional");
+  });
+
   it("서브프로세스 매칭 행은 IO/조건/형식·touch_time 후보를 드롭하고 경고한다 (링크 맵 상속 보호)", () => {
     const base = baseGraph();
     base.nodes[1] = {

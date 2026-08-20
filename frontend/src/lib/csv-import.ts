@@ -196,6 +196,10 @@ const NODE_DEFAULTS = {
   output: "",
   input_forms: "",  // CSV/AI 표면 제외 — 항목별 폼, 병합은 기존값 보존 (2026-08-20)
   output_forms: "",
+  output_ids: "",  // CSV/AI 표면 제외 — IO 링크 (io-linking §3)
+  input_links: "",
+  output_links: "",
+  input_flags: "",
   data_form: "",
   start_condition: "",
   end_condition: "",
@@ -281,6 +285,11 @@ const mergeNode = (
       // 줄 정렬이 깨지므로 폐기 — 백엔드 재임포트 승계(import_consultant)와 동일 규칙 (2026-08-20)
       input_forms: mergedText.input === (existing.input ?? "") ? existing.input_forms ?? "" : "",
       output_forms: mergedText.output === (existing.output ?? "") ? existing.output_forms ?? "" : "",
+      // IO 링크 — 해당 측 텍스트가 바뀌면 줄 정렬이 깨지므로 폐기(보수적 해산), 안 바뀌면 보존 (io-linking §3)
+      output_ids: mergedText.output === (existing.output ?? "") ? existing.output_ids ?? "" : "",
+      output_links: mergedText.output === (existing.output ?? "") ? existing.output_links ?? "" : "",
+      input_links: mergedText.input === (existing.input ?? "") ? existing.input_links ?? "" : "",
+      input_flags: mergedText.input === (existing.input ?? "") ? existing.input_flags ?? "" : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
       section_anchor: mergedSectionAnchor,

@@ -35,6 +35,11 @@ export type NodeData = {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // IO 링크 — output_ids=원본 항목 id, *_links=미러의 원본 itemId, input_flags=필수/선택 (io-linking §3)
+  output_ids?: string;
+  input_links?: string;
+  output_links?: string;
+  input_flags?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;
