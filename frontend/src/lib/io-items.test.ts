@@ -67,7 +67,11 @@ describe("state & index", () => {
     expect(idx.get("sp_in1")).toMatchObject({ nodeId: "S", kind: "spin" });
 
     const undesignated = node("U", { nodeType: "subprocess", linkedMapId: 8 });
-    const refsUndesignated: SpRefMap = new Map([[8, { designated: false } as never]]);
+    // 텍스트·id를 채워야 가드(!ref?.designated) 제거 시 실패하는 유의미한 케이스가 된다 — 빈 mock은 가드 없이도 통과(공허한 단언).
+    const refsUndesignated: SpRefMap = new Map([[8, {
+      designated: false, input: "원료 목록", output: "검사 성적서",
+      input_ids: "sp_in1_u", output_ids: "sp_out1_u", input_forms: "", output_forms: "",
+    } as never]]);
     const idxUndesignated = buildIoIndex([undesignated], refsUndesignated);
     expect(idxUndesignated.size).toBe(0);
   });
@@ -176,7 +180,10 @@ describe("collectIoImportCandidates", () => {
     const candsDesignated = collectIoImportCandidates({ nodes: [spNode, consumer], edges, spRefs: refsDesignated, nodeId: "X", side: "input" });
     expect(candsDesignated).toEqual([expect.objectContaining({ nodeId: "S", list: "spout", isSp: true, text: "SP출력" })]);
 
-    const refsUndesignated: SpRefMap = new Map([[7, { designated: false } as never]]);
+    // 텍스트·id를 채워야 가드(isSp && !ref?.designated) 제거 시 실패하는 유의미한 케이스가 된다 — 빈 mock은 가드 없이도 통과(공허한 단언).
+    const refsUndesignated: SpRefMap = new Map([[7, {
+      designated: false, output: "SP출력", output_ids: "sp_out1", output_forms: "",
+    } as never]]);
     const candsUndesignated = collectIoImportCandidates({ nodes: [spNode, consumer], edges, spRefs: refsUndesignated, nodeId: "X", side: "input" });
     expect(candsUndesignated).toEqual([]);
   });
