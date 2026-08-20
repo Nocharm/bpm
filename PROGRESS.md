@@ -8,6 +8,7 @@
 - 구현 플랜 작성 `docs/superpowers/plans/2026-08-21-io-linking.md` — 10태스크(백엔드 스레딩→FE 직렬화→io-items 라이브러리 4분할→MVI/모달/배선→스모크), 코드 정독 기반 실 코드 포함.
 - Task 1: 백엔드 스키마 6컬럼(Node 4·ProcessMap 2) 스레딩 — models/db/schemas/graph upsert/versions clone/maps 지정 저장/subprocess.py 3중 위치일치 select-kwargs-unpack. TDD RED→GREEN, 전체 1147 passed.
 - Task 2: FE 타입·직렬화 스레딩 — api.ts(GraphNode·SubprocessRef·지정 payload)·canvas.ts NodeData·page.tsx(toAppNodes/buildGraph/aiNodeToGraphNode)에 IO 링크 4필드 왕복, csv-import.ts mergeNode 보존규칙(텍스트 동일=유지/변경=소거), 노드 복사 2경로(applyCtrlDragCopy·buildPaste)는 output_ids만 소거·*_links/input_flags는 유지(§6). TDD RED→GREEN, 전체 671 passed.
+- Task 3: `lib/io-items.ts` 신설 — 줄 헬퍼(getIoLine/setIoLine/countIoLines)·상태 판정(origin/mirror/plain)·맵 전체 인덱스(buildIoIndex·buildIoMirrorIndex, 중복 itemId는 선착만 원본)·SP 지정 저장용 전 줄 id 부여(assignSpIoIds, 텍스트 일치 줄만 기존 id 승계). TDD RED→GREEN, 전체 683 passed.
 
 ## 2026-08-20 — 좁은 인스펙터 입력 오버플로 픽스 (dev)
 - 통일 폭 입력의 shrink-0가 원인 — w-32/w-44는 상한으로 두고 min-w-0+축소 허용(메트릭스·조건·시스템·URL·SP 지정 4행). 인스펙터 최소 폭 300px에서 경계 이탈 0 실측(여유 폭에선 통일 폭 유지).
