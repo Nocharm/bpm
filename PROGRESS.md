@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- 브레인스토밍 확정: 링크 그룹(원본 1+미러 N, 원본=항상 아웃풋/SP)·상류 합류 시 원본 승계·itemId-only 참조(clone 리매핑 불요)·복사 저장+로드 정합화·인풋 필수/선택 플래그(소비 노드 로컬). 스펙 `docs/superpowers/specs/2026-08-21-io-linking-design.md`, 구현 플랜 후속.
+
 ## 2026-08-20 — 좁은 인스펙터 입력 오버플로 픽스 (dev)
 - 통일 폭 입력의 shrink-0가 원인 — w-32/w-44는 상한으로 두고 min-w-0+축소 허용(메트릭스·조건·시스템·URL·SP 지정 4행). 인스펙터 최소 폭 300px에서 경계 이탈 0 실측(여유 폭에선 통일 폭 유지).
 
