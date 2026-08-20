@@ -4,7 +4,7 @@
 // 지정은 다른 맵이 이 맵을 서브프로세스 노드로 연결(임베드)하기 위한 절차 — 노트로 안내.
 // 변경은 게시된 버전이 열린 상태에서 오너·관리자만 가능(비활성 시 사유 노트 표시).
 
-import { ArrowRight, BadgeCheck, ChevronRight, Info, Workflow } from "lucide-react";
+import { ArrowRight, BadgeCheck, Boxes, ChevronRight, Info, Network, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -229,7 +229,26 @@ export function SubprocessInspectorCard({
           <span className="truncate">{t("inspector.spTitle")}</span>
           {/* 연결 절차 안내 — 호버 툴팁(제목 옆) */}
           <span onClick={(e) => e.stopPropagation()}>
-            <Tooltip content={t("inspector.spNoteFull")}>
+            {/* 안내 툴팁 — 문장 대신 아이콘+키워드 행, 보완 설명은 회색 보조 텍스트 (사용자 결정 2026-08-20) */}
+            <Tooltip
+              content={
+                <span className="flex flex-col gap-1.5 py-0.5">
+                  <span className="flex items-center gap-1.5">
+                    <Network size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+                    <span className="text-caption-strong text-ink">{t("inspector.spNoteKwLibrary")}</span>
+                    <span className="text-fine text-ink-tertiary">{t("inspector.spNoteKwLibrarySub")}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Boxes size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+                    <span className="text-caption-strong text-ink">{t("inspector.spNoteKwEmbed")}</span>
+                    <span className="text-fine text-ink-tertiary">{t("inspector.spNoteKwEmbedSub")}</span>
+                  </span>
+                  <span className="border-t border-divider pt-1 text-fine text-ink-tertiary">
+                    {t("inspector.spNoteHint")}
+                  </span>
+                </span>
+              }
+            >
               <Info
                 size={14}
                 strokeWidth={1.5}
