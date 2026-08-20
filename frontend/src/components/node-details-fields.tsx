@@ -3,8 +3,19 @@
 // 배치한다 — 조건(start/end)과 동등한 형제 필드로 보이지 않게 (design 2026-08-19 §5.1).
 "use client";
 
+import { FileType, Flag, LogIn, LogOut, Play, type LucideIcon } from "lucide-react";
+
 import { MultiValueInput } from "@/components/multi-value-input";
 import { useI18n } from "@/lib/i18n";
+
+// I/O & Conditions 행 아이콘(12px) — 인스펙터·편집 모달·SP 상속 표시가 공유 (사용자 결정 2026-08-20)
+export const DETAIL_FIELD_ICONS = {
+  input: LogIn,
+  output: LogOut,
+  data_form: FileType,
+  start_condition: Play,
+  end_condition: Flag,
+} satisfies Record<string, LucideIcon>;
 
 export interface NodeDetailsPatch {
   input?: string;
@@ -40,6 +51,7 @@ export function NodeDetailsFields({
         key={`${nodeKey}-input`}
         dataId={`${idPrefix}-input`}
         label={t("field.input")}
+        icon={DETAIL_FIELD_ICONS.input}
         value={input}
         readOnly={readOnly}
         onCommit={(joined) => onPatch({ input: joined })}
@@ -48,12 +60,16 @@ export function NodeDetailsFields({
         key={`${nodeKey}-output`}
         dataId={`${idPrefix}-output`}
         label={t("field.output")}
+        icon={DETAIL_FIELD_ICONS.output}
         value={output}
         readOnly={readOnly}
         onCommit={(joined) => onPatch({ output: joined })}
       />
       <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
-        <span className="shrink-0 text-fine text-ink-tertiary">{t("field.dataForm")}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary">
+          <FileType size={12} strokeWidth={1.5} className="text-ink-muted" />
+          {t("field.dataForm")}
+        </span>
         {readOnly ? (
           <span data-id={`${idPrefix}-data-form`} className="min-w-0 truncate text-right text-fine text-ink-secondary">
             {dataForm || "—"}
@@ -74,9 +90,14 @@ export function NodeDetailsFields({
       {([
         ["start_condition", "field.startCondition", startCondition],
         ["end_condition", "field.endCondition", endCondition],
-      ] as const).map(([key, labelKey, value]) => (
+      ] as const).map(([key, labelKey, value]) => {
+        const RowIcon = DETAIL_FIELD_ICONS[key];
+        return (
         <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
-          <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+            <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
+            {t(labelKey)}
+          </span>
           {readOnly ? (
             <span className="min-w-0 truncate text-right text-caption text-ink" title={value || undefined}>
               {value || "—"}
@@ -91,7 +112,8 @@ export function NodeDetailsFields({
             />
           )}
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }

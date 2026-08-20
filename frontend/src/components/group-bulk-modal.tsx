@@ -5,9 +5,6 @@ import {
   AlertTriangle,
   ArrowRight,
   ChevronRight,
-  Clock,
-  Timer,
-  Coins,
   Eraser,
   ListChecks,
   MousePointerClick,
@@ -16,8 +13,6 @@ import {
   Replace,
   Server,
   SkipForward,
-  Tag,
-  Target,
   Users,
   X,
   type LucideIcon,
@@ -26,6 +21,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { SearchSelect } from "@/components/search-select";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
@@ -45,15 +41,11 @@ export type BulkPolicy = "replace" | "append" | "skip" | "individual";
 // Combined people update written by onApplyPeople
 export type PeopleUpdate = { id: string; department: string; assignee: string };
 
-// 캔버스 칩(process-node PARAM_ICON)과 동일한 아이콘 매핑 — 탭에서 같은 시각 언어 유지
-const PARAM_MODE_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, touch_time: Timer, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
-};
 // 속성 탭 — people/system + 파라미터 7종(PARAM_FIELDS 순서·라벨 단일 소스)
 const MODE_META: { key: BulkMode; icon: LucideIcon; labelKey: MessageKey }[] = [
   { key: "people", icon: Users, labelKey: "bulk.modePeople" },
   { key: "system", icon: Server, labelKey: "field.system" },
-  ...PARAM_FIELDS.map((f) => ({ key: f, icon: PARAM_MODE_ICON[f], labelKey: PARAM_LABEL_KEY[f] })),
+  ...PARAM_FIELDS.map((f) => ({ key: f, icon: PARAM_ICON[f], labelKey: PARAM_LABEL_KEY[f] })),
 ];
 // 값 설정 / 비우기 — 선택 필(아이콘 + 라벨)
 const ACTION_META: { key: BulkAction; icon: LucideIcon; labelKey: MessageKey }[] = [

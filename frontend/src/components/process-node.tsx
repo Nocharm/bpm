@@ -6,9 +6,6 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   AlertTriangle,
   Building2,
-  Clock,
-  Timer,
-  Coins,
   CornerDownRight,
   Link as LinkIcon,
   Lock,
@@ -17,10 +14,7 @@ import {
   Plus,
   Server,
   ShieldCheck,
-  Tag,
-  Target,
   User,
-  Users,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -36,6 +30,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
@@ -141,10 +136,6 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
     </button>
   );
 }
-
-const PARAM_ICON: Record<ParamField, LucideIcon> = {
-  duration: Clock, touch_time: Timer, cost_krw: Coins, cost_usd: Coins, headcount: Users, annual_count: Tag, fte: Target,
-};
 
 // 파라미터 칩 — 값이 작성된 파라미터 전부, 라벨 없이 아이콘+숫자 (design 2026-07-11 §2.4, 2026-07-13 §3.2)
 // subprocess는 회당 4필드를 지정 어트리뷰트(sp*, 라이브 참조)로, 연간 건수·FTE는 노드 자체 값으로 표시.

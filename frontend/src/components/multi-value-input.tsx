@@ -2,11 +2,13 @@
 // (Node.input/output Text 계약, design 2026-08-19 §1.1). 노드 전환 시 부모가 key로 리마운트한다.
 "use client";
 
-import { Plus, X } from "lucide-react";
+import { Plus, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 interface MultiValueInputProps {
   label: string;
+  // 라벨 앞 소형 아이콘(12px) — 행 스캔 가시성 (사용자 결정 2026-08-20)
+  icon?: LucideIcon;
   // 저장된 개행 join 원문 — 빈 문자열이면 항목 0개
   value: string;
   readOnly: boolean;
@@ -20,7 +22,7 @@ function splitValues(value: string): string[] {
   return value.split("\n").map((v) => v.trim()).filter((v) => v !== "");
 }
 
-export function MultiValueInput({ label, value, readOnly, dataId, placeholder, onCommit }: MultiValueInputProps) {
+export function MultiValueInput({ label, icon: Icon, value, readOnly, dataId, placeholder, onCommit }: MultiValueInputProps) {
   // 편집 중 행 버퍼 — 저장 원문에서 시작, blur/삭제 시 join 커밋. 노드 전환은 key 리마운트가 리셋.
   const [rows, setRows] = useState<string[]>(() => splitValues(value));
 
@@ -33,7 +35,10 @@ export function MultiValueInput({ label, value, readOnly, dataId, placeholder, o
   if (readOnly) {
     return (
       <div className="flex items-start justify-between gap-2 py-1" data-id={dataId}>
-        <span className="shrink-0 text-caption text-ink-secondary">{label}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+          {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
+          {label}
+        </span>
         <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
           {splitValues(value).join("\n") || "—"}
         </span>
@@ -44,7 +49,10 @@ export function MultiValueInput({ label, value, readOnly, dataId, placeholder, o
   return (
     <div className="py-1" data-id={dataId}>
       <div className="flex items-center justify-between gap-2">
-        <span className="shrink-0 text-caption text-ink-secondary">{label}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+          {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
+          {label}
+        </span>
         <button
           type="button"
           data-id={`${dataId}-add`}

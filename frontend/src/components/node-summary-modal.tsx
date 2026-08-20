@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { NodeDetailsFields } from "@/components/node-details-fields";
+import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { ScopePreview } from "@/components/scope-preview";
 import { SearchSelect } from "@/components/search-select";
@@ -45,7 +46,9 @@ import {
   isSpParamField,
   PARAM_FIELDS,
   PARAM_LABEL_KEY,
+  readDetailsCollapsed,
   readParamsCollapsed,
+  writeDetailsCollapsed,
   writeParamsCollapsed,
   type ParamField,
   type SpParamField,
@@ -218,6 +221,8 @@ export function NodeSummaryModal({
   const [colorMoreOpen, setColorMoreOpen] = useState(false);
   // Parameters 그룹 접기 — 기본 접힘, 인스펙터와 공유 키(bpm.paramsCollapsed)로 localStorage 퍼시스트
   const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
+  // I/O & Conditions 접힘 — 기본 접힘, 인스펙터와 키 공유 (사용자 결정 2026-08-20)
+  const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
@@ -274,6 +279,9 @@ export function NodeSummaryModal({
   const editableParams = getEditableParamFields(nodeType);
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
   const filledParamCount = editableParams.filter((f) => form[f]).length;
+  // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
+  const filledDetailCount = [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
+    .filter((v) => v !== "").length;
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 값 없으면 ""(행은 "—")
   const inheritedDisplay = (field: ParamField): string =>
     spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
@@ -690,9 +698,14 @@ export function NodeSummaryModal({
                     </button>
                     {!paramsCollapsed && (
                       <div className="ml-2 border-l border-divider pl-2">
-                        {PARAM_FIELDS.map((key) => (
+                        {PARAM_FIELDS.map((key) => {
+                          const RowIcon = PARAM_ICON[key];
+                          return (
                           <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
-                            <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
+                            <span className="inline-flex w-20 shrink-0 items-center gap-1 text-fine text-ink-tertiary">
+                              <RowIcon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+                              {t(PARAM_LABEL_KEY[key])}
+                            </span>
                             <div className="flex min-w-0 flex-1 justify-end">
                               {editableParams.includes(key) ? (
                                 <ParamInput
@@ -714,7 +727,8 @@ export function NodeSummaryModal({
                               )}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                         {nodeType === "subprocess" && (
                           <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         )}
@@ -722,10 +736,31 @@ export function NodeSummaryModal({
                     )}
                   </div>
                 )}
-                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영) */}
+                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘 */}
                 {showAttributes && (
                   <div className="py-1.5" data-id="summary-details">
-                    <div className="mb-1 text-fine font-semibold text-ink-tertiary">{t("inspector.details")}</div>
+                    <button
+                      type="button"
+                      data-id="summary-details-toggle"
+                      aria-expanded={!detailsCollapsed}
+                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      onClick={() => {
+                        const next = !detailsCollapsed;
+                        setDetailsCollapsed(next);
+                        writeDetailsCollapsed(next);
+                      }}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {t("inspector.details")}
+                      {filledDetailCount > 0 && (
+                        <span className="font-normal text-ink-tertiary">({filledDetailCount})</span>
+                      )}
+                    </button>
+                    {!detailsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
                       <NodeDetailsFields
                         idPrefix="modal-detail"
@@ -739,6 +774,7 @@ export function NodeSummaryModal({
                         onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
                       />
                     </div>
+                    )}
                   </div>
                 )}
                 {showAttributes && (

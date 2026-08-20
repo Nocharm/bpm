@@ -241,6 +241,19 @@ export function getInheritedParams(
 }
 
 export const PARAMS_COLLAPSED_KEY = "bpm.paramsCollapsed";
+export const DETAILS_COLLAPSED_KEY = "bpm.detailsCollapsed";
+
+/** I/O & Conditions 접힘 — 기본 접힘(true), 인스펙터·편집 모달 공유 (사용자 결정 2026-08-20). */
+export function readDetailsCollapsed(): boolean {
+  if (typeof window === "undefined") return true;
+  const saved = window.localStorage.getItem(DETAILS_COLLAPSED_KEY);
+  return saved === null ? true : saved === "1";
+}
+
+export function writeDetailsCollapsed(collapsed: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DETAILS_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
 
 /** 저장값 없으면 기본 접힘(true). 직전 토글 상태는 세션 간 유지 (design 2026-07-11 SP §5). */
 export function readParamsCollapsed(): boolean {
