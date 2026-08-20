@@ -3,18 +3,30 @@
 // 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + SP 파라미터 4종(Σ 합산 지원).
 // 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
 
-import { Sigma } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Sigma } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
+import { AutoHeight } from "@/components/auto-height";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput } from "@/components/multi-value-input";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
-import { isCostFieldDisabled, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
+import {
+  isCostFieldDisabled,
+  PARAM_LABEL_KEY,
+  readAttrsCollapsed,
+  readDetailsCollapsed,
+  readParamsCollapsed,
+  SP_PARAM_FIELDS,
+  writeAttrsCollapsed,
+  writeDetailsCollapsed,
+  writeParamsCollapsed,
+  type SpParamField,
+} from "@/lib/params";
 import { formatSumPreview, sumParamField } from "@/lib/param-sum";
 import { isHttpUrl } from "@/lib/url";
 
@@ -57,6 +69,24 @@ export function SubprocessDesignationModal({
 }: SubprocessDesignationModalProps) {
   const { t } = useI18n();
   const [form, setForm] = useState<DesignationForm>(initial);
+  // 섹션 아코디언 — 노드 편집 모달과 동일 구성·공유 영속 키 (사용자 결정 2026-08-20)
+  const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
+  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
+  const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
+  const anySectionOpen = !attrsCollapsed || !paramsCollapsed || !detailsCollapsed;
+  const toggleAllSections = () => {
+    const next = anySectionOpen; // true=모두 접기
+    setAttrsCollapsed(next);
+    writeAttrsCollapsed(next);
+    setParamsCollapsed(next);
+    writeParamsCollapsed(next);
+    setDetailsCollapsed(next);
+    writeDetailsCollapsed(next);
+  };
+  const filledAttrCount = [form.department, form.assignee, form.system, form.url]
+    .filter((v) => v.trim() !== "").length;
+  const filledParamCount = SP_PARAM_FIELDS.filter((f) => form[f] !== "").length;
+  const filledDetailCount = [form.input, form.output].filter((v) => v.trim() !== "").length;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summing, setSumming] = useState(false);
@@ -139,32 +169,124 @@ export function SubprocessDesignationModal({
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[1300] flex items-start justify-center bg-ink/20 px-4 pt-[9vh] backdrop-blur-sm"
     >
       <div
         data-id="subprocess-designation-modal"
-        className="flex w-full max-w-sm flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
+        className="flex max-h-[82vh] w-full max-w-sm flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
       >
-        <h2 className="text-body-strong text-ink">{t("perm.sp.designate")}</h2>
-        <p className="text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
-        <div className="flex flex-col">
-          <BpmAttributePicker
-            versionId={publishedVersionId}
-            assignee={form.assignee}
-            department={form.department}
-            readOnly={false}
-            onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-          />
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
-            <input
-              data-id="subprocess-designation-system"
-              className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
-              maxLength={100}
-              value={form.system}
-              onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
-            />
+        <h2 className="shrink-0 text-body-strong text-ink">{t("perm.sp.designate")}</h2>
+        <p className="shrink-0 text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
+        {/* 본문 스크롤 — 작은 창에서 위아래 넘침 방지(다른 모달과 동일, 사용자 결정 2026-08-20) */}
+        <div className="scroll-soft -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          {/* BPM attributes — 노드 편집 모달과 동일 섹션 구성 + 우측 모두 접기/펼치기 */}
+          <div className="py-1" data-id="sp-designation-attrs">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                data-id="sp-designation-attrs-toggle"
+                aria-expanded={!attrsCollapsed}
+                className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                onClick={() => {
+                  const next = !attrsCollapsed;
+                  setAttrsCollapsed(next);
+                  writeAttrsCollapsed(next);
+                }}
+              >
+                <ChevronRight
+                  size={12}
+                  strokeWidth={1.5}
+                  className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                />
+                {t("editor.bpmAttrs")}
+                {filledAttrCount > 0 && <span className="font-normal">({filledAttrCount})</span>}
+              </button>
+              <button
+                type="button"
+                data-id="sp-designation-toggle-all-sections"
+                className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                onClick={toggleAllSections}
+              >
+                {anySectionOpen ? (
+                  <ChevronsDownUp size={13} strokeWidth={1.5} />
+                ) : (
+                  <ChevronsUpDown size={13} strokeWidth={1.5} />
+                )}
+                {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+              </button>
+            </div>
+            <AutoHeight className="overflow-hidden">
+              {!attrsCollapsed && (
+                <div className="ml-2 border-l border-divider pl-2">
+                  <BpmAttributePicker
+                    versionId={publishedVersionId}
+                    assignee={form.assignee}
+                    department={form.department}
+                    readOnly={false}
+                    onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                  />
+                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
+                    <input
+                      data-id="subprocess-designation-system"
+                      className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
+                      maxLength={100}
+                      value={form.system}
+                      onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
+                    <input
+                      data-id="subprocess-designation-url"
+                      className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
+                      maxLength={500}
+                      value={form.url}
+                      onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
+                    />
+                  </div>
+                  {urlInvalid && (
+                    <p className="py-0.5 text-right text-fine text-error">{t("subprocess.urlInvalid")}</p>
+                  )}
+                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
+                    <input
+                      data-id="subprocess-designation-url-label"
+                      className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
+                      maxLength={100}
+                      value={form.urlLabel}
+                      disabled={form.url.trim() === ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
+            </AutoHeight>
           </div>
+          {/* Metrics — SP 파라미터 5종 + Σ */}
+          <div className="py-1" data-id="sp-designation-params">
+            <button
+              type="button"
+              data-id="sp-designation-params-toggle"
+              aria-expanded={!paramsCollapsed}
+              className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+              onClick={() => {
+                const next = !paramsCollapsed;
+                setParamsCollapsed(next);
+                writeParamsCollapsed(next);
+              }}
+            >
+              <ChevronRight
+                size={12}
+                strokeWidth={1.5}
+                className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
+              />
+              {t("inspector.parameters")}
+              {filledParamCount > 0 && <span className="font-normal">({filledParamCount})</span>}
+            </button>
+            <AutoHeight className="overflow-hidden">
+              {!paramsCollapsed && (
+                <div className="ml-2 border-l border-divider pl-2">
           {SP_PARAM_FIELDS.map((key) => (
             <div key={key} className="flex items-center justify-between gap-2 border-t border-divider py-1">
               <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
@@ -195,54 +317,59 @@ export function SubprocessDesignationModal({
               </div>
             </div>
           ))}
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
-            <input
-              data-id="subprocess-designation-url"
-              className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
-              maxLength={500}
-              value={form.url}
-              onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
-            />
+                </div>
+              )}
+            </AutoHeight>
           </div>
-          {urlInvalid && (
-            <p className="py-0.5 text-right text-fine text-error">{t("subprocess.urlInvalid")}</p>
-          )}
-          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-            <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
-            <input
-              data-id="subprocess-designation-url-label"
-              className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
-              maxLength={100}
-              value={form.urlLabel}
-              disabled={form.url.trim() === ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
-            />
-          </div>
-          {/* IO — 개행 복수 + 항목별 데이터 폼(노드 인스펙터와 동일 편집기, 2026-08-20) */}
-          <div className="border-t border-divider">
-            <MultiValueInput
-              dataId="subprocess-designation-input"
-              label={t("sp.input")}
-              value={form.input}
-              formsValue={form.input_forms}
-              readOnly={false}
-              onCommit={(joined, formsJoined) =>
-                setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
-              }
-            />
-          </div>
-          <div className="border-t border-divider">
-            <MultiValueInput
-              dataId="subprocess-designation-output"
-              label={t("sp.output")}
-              value={form.output}
-              formsValue={form.output_forms}
-              readOnly={false}
-              onCommit={(joined, formsJoined) =>
-                setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))
-              }
-            />
+          {/* I/O & Conditions — 개행 복수 + 항목별 데이터 폼(노드 인스펙터와 동일 편집기) */}
+          <div className="py-1" data-id="sp-designation-details">
+            <button
+              type="button"
+              data-id="sp-designation-details-toggle"
+              aria-expanded={!detailsCollapsed}
+              className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+              onClick={() => {
+                const next = !detailsCollapsed;
+                setDetailsCollapsed(next);
+                writeDetailsCollapsed(next);
+              }}
+            >
+              <ChevronRight
+                size={12}
+                strokeWidth={1.5}
+                className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
+              />
+              {t("inspector.details")}
+              {filledDetailCount > 0 && <span className="font-normal">({filledDetailCount})</span>}
+            </button>
+            <AutoHeight className="overflow-hidden">
+              {!detailsCollapsed && (
+                <div className="ml-2 border-l border-divider pl-2">
+                  <MultiValueInput
+                    dataId="subprocess-designation-input"
+                    label={t("sp.input")}
+                    value={form.input}
+                    formsValue={form.input_forms}
+                    readOnly={false}
+                    onCommit={(joined, formsJoined) =>
+                      setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
+                    }
+                  />
+                  <div className="border-t border-divider">
+                    <MultiValueInput
+                      dataId="subprocess-designation-output"
+                      label={t("sp.output")}
+                      value={form.output}
+                      formsValue={form.output_forms}
+                      readOnly={false}
+                      onCommit={(joined, formsJoined) =>
+                        setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </AutoHeight>
           </div>
           <div className="flex flex-col gap-1 border-t border-divider py-1">
             <span className="text-caption text-ink-secondary">{t("field.description")}</span>
@@ -254,8 +381,8 @@ export function SubprocessDesignationModal({
             />
           </div>
         </div>
-        {error && <p className="text-caption text-error">{error}</p>}
-        <div className="flex justify-end gap-2">
+        {error && <p className="shrink-0 text-caption text-error">{error}</p>}
+        <div className="flex shrink-0 justify-end gap-2">
           <button
             type="button"
             className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"

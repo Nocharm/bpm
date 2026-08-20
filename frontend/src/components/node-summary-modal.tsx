@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { AutoHeight } from "@/components/auto-height";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { NodeDetailsFields } from "@/components/node-details-fields";
 import { PARAM_ICON } from "@/components/param-icons";
@@ -522,7 +523,7 @@ export function NodeSummaryModal({
 
   return (
     <ModalBackdrop
-      className="absolute inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
+      className="absolute inset-0 z-[1200] flex items-start justify-center pt-[7vh] backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
@@ -727,6 +728,8 @@ export function NodeSummaryModal({
                       {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
                     </button>
                     </div>
+                    {/* 아코디언 높이 전환 — 접힘/펼침을 AutoHeight가 부드럽게 잇는다 (사용자 결정 2026-08-20) */}
+                    <AutoHeight className="overflow-hidden">
                     {!attrsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
                     {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
@@ -819,6 +822,7 @@ export function NodeSummaryModal({
                     />
                     </div>
                     )}
+                    </AutoHeight>
                   </div>
                 )}
                 {/* 회당 파라미터 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
@@ -847,6 +851,7 @@ export function NodeSummaryModal({
                       )}
                       {hasChangedIn(PARAM_FIELDS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
+                    <AutoHeight className="overflow-hidden">
                     {!paramsCollapsed && (
                       <div className="ml-2 border-l border-divider pl-2">
                         {/* 비용 2필드는 통화 토글 한 행으로 접음(cost_usd 자리는 스킵) — 배타 계약 (사용자 결정 2026-08-20) */}
@@ -928,6 +933,7 @@ export function NodeSummaryModal({
                         )}
                       </div>
                     )}
+                    </AutoHeight>
                   </div>
                 )}
                 {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘 */}
@@ -955,6 +961,7 @@ export function NodeSummaryModal({
                       )}
                       {hasChangedIn(DETAILS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
+                    <AutoHeight className="overflow-hidden">
                     {!detailsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
                       <NodeDetailsFields
@@ -973,6 +980,7 @@ export function NodeSummaryModal({
                       />
                     </div>
                     )}
+                    </AutoHeight>
                   </div>
                 )}
               </div>

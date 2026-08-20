@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AutoHeight } from "@/components/auto-height";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { DETAIL_FIELD_ICONS } from "@/components/node-details-fields";
 import { PARAM_ICON } from "@/components/param-icons";
@@ -520,7 +521,7 @@ export function GroupBulkModal({
 
   return createPortal(
     <ModalBackdrop
-      className="fixed inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] flex items-start justify-center pt-[10vh] backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
@@ -530,6 +531,8 @@ export function GroupBulkModal({
         className="w-[29rem] rounded-md bg-surface p-4 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
+        {/* 상단 고정 + 높이 전환 스무딩 — 화면(요약/마법사/메인)·모드 전환의 키가 부드럽게 이어진다 */}
+        <AutoHeight className="max-h-[76vh]">
         {/* ---- 적용 후 최종 변경 요약 — 확인 시 모달 닫힘 ---- */}
         {summary ? (
           /* ---- 적용 후 변경 요약 — 대표 모달(아이콘 원+요약박스) 스타일, 이전→현재 표 ---- */
@@ -852,6 +855,7 @@ export function GroupBulkModal({
                   );
                 })}
               </div>
+              <AutoHeight className="overflow-hidden">
               {openCategory !== null && (
                 <div
                   data-id="bulk-category-panel"
@@ -881,6 +885,7 @@ export function GroupBulkModal({
                   )}
                 </div>
               )}
+              </AutoHeight>
 
               {/* 값 설정 / 비우기 — 선택 필(아이콘 + 라벨) */}
               <div className="flex gap-1">
@@ -982,6 +987,7 @@ export function GroupBulkModal({
                 ))}
 
               {/* 충돌 처리 — 설정인데 이미 값 있는 멤버가 있을 때만. 디폴트 없음(필수) */}
+              <AutoHeight className="overflow-hidden">
               {hasConflict && (
                 <div className="rounded-sm bg-surface-alt p-2 text-caption">
                   {/* 5-3 호버 시 기존 데이터 팝오버 */}
@@ -1040,6 +1046,7 @@ export function GroupBulkModal({
                   </div>
                 </div>
               )}
+              </AutoHeight>
 
               {/* 제외 안내 — 모드별 편집 불가 타입(canBulkEditField). 호버 시 타입별 개수 */}
               {excludedMembers.length > 0 && (
@@ -1098,6 +1105,7 @@ export function GroupBulkModal({
             </div>
           </div>
         )}
+        </AutoHeight>
       </div>
     </ModalBackdrop>,
     document.body,
