@@ -99,6 +99,8 @@ duration 파이프라인의 완전 미러. **한 지점이라도 빠지면 소�
 
 ## 5. UI
 
+**용어(2026-08-20 확정)**: 노드 인스펙터/편집 모달의 카드 타이틀은 "Details/상세 속성" → **"I/O & Conditions / 입출력 · 조건"**, "Parameters/파라미터" → **"Metrics / 수행 지표"** — 설명(description)·BPM 속성과의 혼동 제거. 표시 문자열(i18n)·매뉴얼만 변경, 코드 식별자(PARAM_FIELDS 등)는 유지. 설정 페이지의 "상세(Details)" 탭명은 별개 표면이라 유지.
+
 ### 5.1 필드 표시 (Phase B)
 
 - **노드 인스펙터·편집 모달(공용 `NodeDetailsFields`)**: Input/Output — 리스트형(행 add/remove, 저장은 개행 join). **Data form은 IO 그룹 하단 종속 행**(들여쓰기+세로선 — 흘러가는 자료의 형식이라 조건과 동등한 형제 필드가 아님, 2026-08-20 사용자 결정). Start/End condition — 단일 행 입력(긴 문장 말줄임 유지 결정). touch_time — Parameters 그룹 합류(칩 아이콘은 duration=시계, touch_time=스톱워치로 분리). **편집 모달에도 Details 섹션으로 전부 노출**(버퍼 편집).
