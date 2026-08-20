@@ -1,7 +1,10 @@
 // IO 연결(불러오기) 단일 소스 — 줄 정렬·판정·인덱스·후보·불러오기·전파. 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md
 
-import { genId } from "@/lib/id";
+import type { Edge } from "@xyflow/react";
+
 import type { SubprocessRef } from "@/lib/api";
+import { getIncomingEdges, getOutgoingEdges } from "@/lib/canvas";
+import { genId } from "@/lib/id";
 
 export type IoSide = "input" | "output";
 export type IoListKind = "in" | "out" | "spin" | "spout";
@@ -130,4 +133,118 @@ export function assignSpIoIds(
     })
     .join("\n")
     .replace(/\s+$/, "");
+}
+
+export function getFlowPathBetween(edges: Edge[], fromId: string, toId: string): string[] {
+  if (fromId === toId) return [];
+  const parent = new Map<string, { prev: string; edgeId: string }>();
+  const seen = new Set([fromId]);
+  let frontier = [fromId];
+  while (frontier.length > 0 && !parent.has(toId)) {
+    const next: string[] = [];
+    for (const cur of frontier) {
+      for (const edge of getOutgoingEdges(edges, cur)) {
+        if (seen.has(edge.target)) continue;
+        seen.add(edge.target);
+        parent.set(edge.target, { prev: cur, edgeId: edge.id });
+        next.push(edge.target);
+      }
+    }
+    frontier = next;
+  }
+  if (!parent.has(toId)) return [];
+  const path: string[] = [];
+  for (let cur = toId; cur !== fromId; ) {
+    const step = parent.get(cur);
+    if (!step) return [];
+    path.unshift(step.edgeId);
+    cur = step.prev;
+  }
+  return path;
+}
+
+export function canReachForward(edges: Edge[], fromId: string, toId: string): boolean {
+  return getFlowPathBetween(edges, fromId, toId).length > 0;
+}
+
+export interface IoImportCandidate {
+  nodeId: string;
+  nodeLabel: string;
+  list: IoListKind;
+  index: number;
+  text: string;
+  form: string;
+  groupId: string | null;
+  isSp: boolean;
+  hop: number;
+  pathEdgeIds: string[];
+}
+
+export function collectIoImportCandidates(opts: {
+  nodes: IoNode[]; edges: Edge[]; spRefs: SpRefMap; nodeId: string; side: IoSide;
+}): IoImportCandidate[] {
+  const { nodes, edges, spRefs, nodeId, side } = opts;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const index = buildIoIndex(nodes, spRefs);
+  const self = byId.get(nodeId);
+  const alreadyLinked = new Set(
+    ((side === "input" ? self?.data.input_links : self?.data.output_links) ?? "")
+      .split("\n").map((s) => s.trim()).filter((s) => s !== ""),
+  );
+  // 홉 계산 — 인풋은 업스트림(incoming의 source), 아웃풋은 다운스트림(outgoing의 target)
+  const hops = new Map<string, number>();
+  const seen = new Set([nodeId]);
+  let frontier = [nodeId];
+  for (let hop = 1; frontier.length > 0; hop++) {
+    const next: string[] = [];
+    for (const cur of frontier) {
+      const stepEdges = side === "input" ? getIncomingEdges(edges, cur) : getOutgoingEdges(edges, cur);
+      for (const edge of stepEdges) {
+        const nb = side === "input" ? edge.source : edge.target;
+        if (seen.has(nb)) continue;
+        seen.add(nb);
+        hops.set(nb, hop);
+        next.push(nb);
+      }
+    }
+    frontier = next;
+  }
+  const results: IoImportCandidate[] = [];
+  for (const [candId, hop] of hops) {
+    const cand = byId.get(candId);
+    if (!cand) continue;
+    const isSp = cand.data.nodeType === "subprocess";
+    const ref = isSp && cand.data.linkedMapId != null ? spRefs.get(cand.data.linkedMapId) : undefined;
+    if (isSp && !ref?.designated) continue; // 미지정 SP는 원본이 될 수 없음 (io-linking §2)
+    // 인풋이 가져올 것 = 상대의 아웃풋(spout) / 아웃풋이 가져올 것 = 상대의 인풋(spin) (§1-3·4)
+    const wantOutput = side === "input";
+    const list: IoListKind = isSp ? (wantOutput ? "spout" : "spin") : wantOutput ? "out" : "in";
+    const texts = isSp ? (wantOutput ? ref!.output : ref!.input) : wantOutput ? cand.data.output : cand.data.input;
+    const forms = isSp ? (wantOutput ? ref!.output_forms : ref!.input_forms) : wantOutput ? cand.data.output_forms : cand.data.input_forms;
+    const pathEdgeIds = side === "input"
+      ? getFlowPathBetween(edges, candId, nodeId)
+      : getFlowPathBetween(edges, nodeId, candId);
+    (texts ?? "").split("\n").forEach((raw, i) => {
+      const text = raw.trim();
+      if (text === "") return;
+      let groupId: string | null;
+      if (isSp) {
+        groupId = getIoLine(wantOutput ? ref!.output_ids : ref!.input_ids, i) || null;
+      } else if (wantOutput) {
+        groupId = getIoLine(cand.data.output_ids, i) || getIoLine(cand.data.output_links, i) || null;
+      } else {
+        groupId = getIoLine(cand.data.input_links, i) || null;
+      }
+      if (groupId !== null && !index.has(groupId)) groupId = null; // 댕글링은 일반 항목 취급
+      if (groupId !== null) {
+        if (alreadyLinked.has(groupId)) return;              // 같은 그룹 중복 불러오기 방지 (§4)
+        if (index.get(groupId)?.nodeId === nodeId) return;   // 자기 그룹 재수입 방지
+      }
+      results.push({
+        nodeId: candId, nodeLabel: cand.data.label, list, index: i,
+        text, form: getIoLine(forms, i), groupId, isSp, hop, pathEdgeIds,
+      });
+    });
+  }
+  return results.sort((a, b) => a.hop - b.hop);
 }
