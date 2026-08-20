@@ -56,6 +56,7 @@ try {
     window.localStorage.setItem("bpm.devUser", user);
     window.localStorage.setItem("bpm.lang", "en");
     window.localStorage.setItem("bpm.paramsCollapsed", "0"); // Parameters 기본 펼침 — 행 단언 안정화
+    window.localStorage.setItem("bpm.detailsCollapsed", "0"); // I/O & Conditions 기본 펼침 — 행 단언 안정화
   }, ADMIN);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
@@ -147,9 +148,10 @@ try {
   const details = page.locator('[data-id="inspector-details"]');
   await details.waitFor({ state: "visible", timeout: 10000 });
   const detailsText = (await details.textContent()) ?? "";
-  const badge = (await page.locator('[data-id="inspector-detail-data-form-badge"]').textContent().catch(() => "")) ?? "";
-  check("[8] inspector Details shows imported IO + badge",
-    detailsText.includes("그 주 작업지시") && badge === "structured");
+  // data_form은 IO 종속 행(배지 아님) — c0c532a에서 배지 제거, readOnly 행 텍스트로 단언
+  const dataFormText = (await page.locator('[data-id="inspector-detail-data-form"]').textContent().catch(() => "")) ?? "";
+  check("[8] inspector Details shows imported IO + data form row",
+    detailsText.includes("그 주 작업지시") && dataFormText.trim() === "structured");
   await page.locator('[data-id="inspector-system-hint"]').click();
   const hintText = (await page.locator('[data-id="inspector-system-hint-popover"]').textContent().catch(() => "")) ?? "";
   check("[9] system fallback popover shows raw text", hintText.includes("EAM"));
@@ -198,12 +200,14 @@ try {
   await page.locator('[data-id="inspector-detail-input-add"]').click();
   await page.locator('[data-id="inspector-detail-input-row-1"]').fill("표준기 목록");
   await page.keyboard.press("Enter");
+  await page.locator('[data-id="inspector-details-save"]').click(); // 레이지 세이브 — 명시 Save
   await page.waitForTimeout(2600); // autosave 디바운스
   let g = await api(`/versions/${draftId}/graph`);
   let node = g.nodes.find((n) => n.id === "fp-node-1");
   check("[11] IO add x2 → newline-joined save", node?.input === "작업지시\n표준기 목록", JSON.stringify(node?.input));
   // [12] remove 두 번째 항목
   await page.locator('[data-id="inspector-detail-input-remove-1"]').click();
+  await page.locator('[data-id="inspector-details-save"]').click();
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
@@ -212,6 +216,7 @@ try {
   await page.locator('[data-id="inspector-detail-data-form"]').fill("document");
   await page.locator('[data-id="inspector-detail-start-condition"]').fill("주기 도래");
   await page.locator('[data-id="inspector-detail-end-condition"]').fill("목록 확정");
+  await page.locator('[data-id="inspector-details-save"]').click();
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
@@ -220,6 +225,7 @@ try {
   // [14] touch_time 정규화
   await page.locator('input[data-id="inspector-param-touch_time"]').fill("1.75");
   await page.keyboard.press("Enter");
+  await page.locator('[data-id="inspector-params-save"]').click(); // 레이지 세이브 — 명시 Save
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");

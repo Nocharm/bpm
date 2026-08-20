@@ -42,7 +42,6 @@ import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept"
 import {
   formatParamValue,
   getEditableParamFields,
-  isCostFieldDisabled,
   isSpParamField,
   PARAM_FIELDS,
   PARAM_LABEL_KEY,
@@ -231,6 +230,11 @@ export function NodeSummaryModal({
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     input, output, data_form, start_condition, end_condition,
   });
+  // 비용 통화 토글 — 배타 계약이라 한 번에 한 통화만. 전환 시 기존 값은 버퍼에서 소거+안내 (사용자 결정 2026-08-20)
+  const [activeCurrency, setActiveCurrency] = useState<"cost_krw" | "cost_usd">(
+    cost_usd !== "" ? "cost_usd" : "cost_krw",
+  );
+  const [costNotice, setCostNotice] = useState<{ field: "cost_krw" | "cost_usd"; value: string } | null>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
@@ -240,7 +244,27 @@ export function NodeSummaryModal({
       touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
       input, output, data_form, start_condition, end_condition,
     });
+    setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
+    setCostNotice(null);
   }
+  const switchCurrency = (target: "cost_krw" | "cost_usd") => {
+    if (target === activeCurrency) return;
+    const current = activeCurrency;
+    const currentValue = form[current];
+    if (currentValue !== "") {
+      setForm((f) => ({ ...f, [current]: "" }));
+      setCostNotice({ field: current, value: currentValue });
+    }
+    setActiveCurrency(target);
+  };
+  const undoCurrencySwitch = () => {
+    if (costNotice === null) return;
+    const other = costNotice.field === "cost_krw" ? "cost_usd" : "cost_krw";
+    // 전환 취소 — 소거된 원래 통화 값을 복원하고, 전환 후 입력했을 수 있는 새 통화 값은 폐기
+    setForm((f) => ({ ...f, [costNotice.field]: costNotice.value, [other]: "" }));
+    setActiveCurrency(costNotice.field);
+    setCostNotice(null);
+  };
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
   const handleSave = useCallback(() => {
     onPatch({
@@ -698,37 +722,80 @@ export function NodeSummaryModal({
                     </button>
                     {!paramsCollapsed && (
                       <div className="ml-2 border-l border-divider pl-2">
-                        {PARAM_FIELDS.map((key) => {
-                          const RowIcon = PARAM_ICON[key];
+                        {/* 비용 2필드는 통화 토글 한 행으로 접음(cost_usd 자리는 스킵) — 배타 계약 (사용자 결정 2026-08-20) */}
+                        {PARAM_FIELDS.filter((f) => f !== "cost_usd").map((key) => {
+                          const isCostRow = key === "cost_krw";
+                          const field = isCostRow ? activeCurrency : key;
+                          const RowIcon = PARAM_ICON[field];
                           return (
                           <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
                             <span className="inline-flex w-20 shrink-0 items-center gap-1 text-fine text-ink-tertiary">
                               <RowIcon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                              {t(PARAM_LABEL_KEY[key])}
+                              {isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}
                             </span>
+                            {isCostRow && editableParams.includes(field) && (
+                              <span className="inline-flex shrink-0 overflow-hidden rounded-sm border border-hairline">
+                                {(["cost_krw", "cost_usd"] as const).map((currency) => (
+                                  <button
+                                    key={currency}
+                                    type="button"
+                                    data-id={`summary-cost-currency-${currency === "cost_krw" ? "krw" : "usd"}`}
+                                    aria-pressed={activeCurrency === currency}
+                                    className={`px-1.5 py-0.5 text-fine ${
+                                      activeCurrency === currency
+                                        ? "bg-accent-tint text-accent"
+                                        : "text-ink-tertiary hover:bg-surface-alt"
+                                    }`}
+                                    onClick={() => switchCurrency(currency)}
+                                  >
+                                    {currency === "cost_krw" ? "₩" : "$"}
+                                  </button>
+                                ))}
+                              </span>
+                            )}
                             <div className="flex min-w-0 flex-1 justify-end">
-                              {editableParams.includes(key) ? (
+                              {editableParams.includes(field) ? (
                                 <ParamInput
-                                  field={key}
-                                  dataId={`summary-param-${key}`}
+                                  key={field}
+                                  field={field}
+                                  dataId={`summary-param-${field}`}
                                   className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
-                                  value={form[key]}
-                                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
-                                  ariaLabel={t(PARAM_LABEL_KEY[key])}
-                                  onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
+                                  value={form[field]}
+                                  ariaLabel={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[field])}
+                                  onCommit={(next) => setForm((f) => ({ ...f, [field]: next }))}
                                 />
                               ) : (
                                 <span
-                                  data-id={`summary-param-${key}`}
+                                  data-id={`summary-param-${field}`}
                                   className="min-w-0 truncate text-right text-caption text-ink"
                                 >
-                                  {inheritedDisplay(key) || "—"}
+                                  {(isCostRow
+                                    ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
+                                    : inheritedDisplay(field)) || "—"}
                                 </span>
                               )}
                             </div>
                           </div>
                           );
                         })}
+                        {costNotice !== null && (
+                          <div
+                            data-id="summary-cost-clear-notice"
+                            className="flex items-center justify-between gap-2 py-0.5 text-fine text-error"
+                          >
+                            <span className="min-w-0">
+                              {t("metrics.clearOnSave", { v: formatParamValue(costNotice.field, costNotice.value) })}
+                            </span>
+                            <button
+                              type="button"
+                              data-id="summary-cost-clear-undo"
+                              className="shrink-0 rounded-sm px-1.5 py-0.5 text-fine text-accent hover:bg-accent-tint"
+                              onClick={undoCurrencySwitch}
+                            >
+                              {t("metrics.undoSwitch")}
+                            </button>
+                          </div>
+                        )}
                         {nodeType === "subprocess" && (
                           <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         )}

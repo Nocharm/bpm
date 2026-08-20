@@ -40,9 +40,8 @@ import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
 import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
-import { DETAIL_FIELD_ICONS, NodeDetailsFields } from "@/components/node-details-fields";
-import { PARAM_ICON } from "@/components/param-icons";
-import { ParamInput } from "@/components/param-input";
+import { NodeDetailsCard } from "@/components/node-details-card";
+import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
@@ -255,15 +254,8 @@ import {
   formatParamValue,
   getEditableParamFields,
   getInheritedParams,
-  isCostFieldDisabled,
   isSpParamField,
-  PARAM_FIELDS,
-  PARAM_LABEL_KEY,
-  readDetailsCollapsed,
-  readParamsCollapsed,
   resolveAiParamPatch,
-  writeDetailsCollapsed,
-  writeParamsCollapsed,
   type ParamField,
 } from "@/lib/params";
 
@@ -972,9 +964,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
   const [showHexInput, setShowHexInput] = useState(false);
   // Parameters 그룹 접기 — 기본 접힘, 인스펙터/요약모달 공유 키로 localStorage 퍼시스트
-  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
-  // I/O & Conditions 접힘 — 기본 접힘, 편집 모달과 키 공유(bpm.detailsCollapsed) (사용자 결정 2026-08-20)
-  const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -5616,19 +5605,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   const selectedInheritedParams = getInheritedParams(selectedSpRef);
   const inheritedParamDisplay = (field: ParamField): string =>
     isSpParamField(field) ? formatParamValue(field, selectedInheritedParams[field]) : "";
-  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
-  const filledParamCount = selectedNode
-    ? editableParams.filter((f) => selectedNode.data[f]).length
-    : 0;
-  // I/O & Conditions 접힘 헤더의 채워진 개수 — SP 노드는 링크 맵 상속값 기준
-  const filledDetailCount = selectedNode
-    ? selectedNode.data.nodeType === "subprocess"
-      ? [selectedSpRef?.input, selectedSpRef?.output, selectedSpRef?.start_condition, selectedSpRef?.end_condition]
-          .filter((v) => (v ?? "") !== "").length
-      : [selectedNode.data.input, selectedNode.data.output, selectedNode.data.data_form,
-         selectedNode.data.start_condition, selectedNode.data.end_condition]
-          .filter((v) => (v ?? "") !== "").length
-    : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -9049,154 +9025,48 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         </div>
                       )}
-                      {/* 회당 파라미터 — 접기 그룹(기본 접힘). start/end 외 모든 타입에 표시.
+                      {/* 회당 파라미터 — 접기 카드(레이지 세이브·비용 통화 토글). start/end 외 모든 타입에 표시.
                           subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
                       {editableParams.length > 0 && (
-                        <div data-id="inspector-params" className="rounded-md border border-hairline p-3">
-                          <button
-                            type="button"
-                            data-id="inspector-params-toggle"
-                            aria-expanded={!paramsCollapsed}
-                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
-                            onClick={() => {
-                              const next = !paramsCollapsed;
-                              setParamsCollapsed(next);
-                              writeParamsCollapsed(next);
-                            }}
-                          >
-                            <ChevronRight
-                              size={12}
-                              strokeWidth={1.5}
-                              className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-                            />
-                            {t("inspector.parameters")}
-                            {filledParamCount > 0 && (
-                              <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
-                            )}
-                          </button>
-                          {!paramsCollapsed && (
-                            <div className="ml-2 border-l border-divider pl-2">
-                              {PARAM_FIELDS.map((key) => {
-                                const RowIcon = PARAM_ICON[key];
-                                return (
-                                <div key={key} className="flex items-center justify-between gap-2 py-1">
-                                  <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-                                    <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                                    {t(PARAM_LABEL_KEY[key])}
-                                  </span>
-                                  {editableParams.includes(key) ? (
-                                    <ParamInput
-                                      field={key}
-                                      dataId={`inspector-param-${key}`}
-                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                      value={selectedNode.data[key] ?? ""}
-                                      disabled={
-                                        readOnly ||
-                                        isCostFieldDisabled(
-                                          key,
-                                          selectedNode.data.cost_krw ?? "",
-                                          selectedNode.data.cost_usd ?? "",
-                                        )
-                                      }
-                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
-                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
-                                    />
-                                  ) : (
-                                    <span
-                                      data-id={`inspector-param-${key}`}
-                                      className="min-w-0 flex-1 truncate px-1 py-0.5 text-right text-caption text-ink"
-                                    >
-                                      {inheritedParamDisplay(key) || "—"}
-                                    </span>
-                                  )}
-                                  {/* SP 노드 연간 건수 — 링크 맵 인터뷰 빈도 원문 힌트(읽기 전용, design 2026-08-19 §5.2) */}
-                                  {key === "annual_count" &&
-                                    selectedNode.data.nodeType === "subprocess" && (
-                                      <FallbackHint
-                                        dataId="inspector-annual-count-hint"
-                                        fallback={selectedSpRef?.frequency_fallback}
-                                      />
-                                    )}
-                                </div>
-                                );
-                              })}
-                              {selectedNode.data.nodeType === "subprocess" && (
-                                <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <NodeMetricsCard
+                          key={`metrics-${selectedNode.id}`}
+                          nodeType={selectedNode.data.nodeType}
+                          values={{
+                            duration: selectedNode.data.duration ?? "",
+                            touch_time: selectedNode.data.touch_time ?? "",
+                            cost_krw: selectedNode.data.cost_krw ?? "",
+                            cost_usd: selectedNode.data.cost_usd ?? "",
+                            headcount: selectedNode.data.headcount ?? "",
+                            annual_count: selectedNode.data.annual_count ?? "",
+                            fte: selectedNode.data.fte ?? "",
+                          }}
+                          editableParams={editableParams}
+                          inheritedDisplay={inheritedParamDisplay}
+                          frequencyFallback={selectedSpRef?.frequency_fallback}
+                          readOnly={readOnly}
+                          onSave={(patch) => updateSelectedData(patch, true)}
+                        />
                       )}
-                      {/* 인터뷰 승격 상세 — IO(개행 복수)·자료 형식·시작/종료 조건.
+                      {/* 인터뷰 승격 상세 — IO(개행 복수)·자료 형식·시작/종료 조건. 레이지 세이브 카드.
                           subprocess는 링크 맵 sp_* 값을 read-only 상속 렌더 (design 2026-08-19 §5.1) */}
                       {(selectedNode.data.nodeType === "process" ||
                         selectedNode.data.nodeType === "decision" ||
                         selectedNode.data.nodeType === "subprocess") && (
-                        <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
-                          <button
-                            type="button"
-                            data-id="inspector-details-toggle"
-                            aria-expanded={!detailsCollapsed}
-                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
-                            onClick={() => {
-                              const next = !detailsCollapsed;
-                              setDetailsCollapsed(next);
-                              writeDetailsCollapsed(next);
-                            }}
-                          >
-                            <ChevronRight
-                              size={12}
-                              strokeWidth={1.5}
-                              className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
-                            />
-                            {t("inspector.details")}
-                            {filledDetailCount > 0 && (
-                              <span className="font-normal text-ink-tertiary">({filledDetailCount})</span>
-                            )}
-                          </button>
-                          {!detailsCollapsed && (
-                          <div className="ml-2 border-l border-divider pl-2">
-                          {selectedNode.data.nodeType === "subprocess" ? (
-                            <>
-                              {/* 링크 맵 라이브 참조 — selectedSpRef가 소스(위 지정 어트리뷰트 카드와 동일 규약) */}
-                              {([
-                                ["input", "field.input", selectedSpRef?.input, DETAIL_FIELD_ICONS.input],
-                                ["output", "field.output", selectedSpRef?.output, DETAIL_FIELD_ICONS.output],
-                                ["start-condition", "field.startCondition", selectedSpRef?.start_condition, DETAIL_FIELD_ICONS.start_condition],
-                                ["end-condition", "field.endCondition", selectedSpRef?.end_condition, DETAIL_FIELD_ICONS.end_condition],
-                              ] as const).map(([id, labelKey, value, RowIcon]) => (
-                                <div
-                                  key={id}
-                                  data-id={`inspector-detail-${id}`}
-                                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
-                                >
-                                  <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-                                    <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                                    {t(labelKey)}
-                                  </span>
-                                  <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
-                                    {value || "—"}
-                                  </span>
-                                </div>
-                              ))}
-                              <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                            </>
-                          ) : (
-                            <NodeDetailsFields
-                              idPrefix="inspector-detail"
-                              nodeKey={selectedNode.id}
-                              input={selectedNode.data.input ?? ""}
-                              output={selectedNode.data.output ?? ""}
-                              dataForm={selectedNode.data.data_form ?? ""}
-                              startCondition={selectedNode.data.start_condition ?? ""}
-                              endCondition={selectedNode.data.end_condition ?? ""}
-                              readOnly={readOnly}
-                              onPatch={(patch) => updateSelectedData(patch, true)}
-                            />
-                          )}
-                          </div>
-                          )}
-                        </div>
+                        <NodeDetailsCard
+                          key={`details-${selectedNode.id}`}
+                          nodeKey={selectedNode.id}
+                          isSubprocess={selectedNode.data.nodeType === "subprocess"}
+                          values={{
+                            input: selectedNode.data.input ?? "",
+                            output: selectedNode.data.output ?? "",
+                            data_form: selectedNode.data.data_form ?? "",
+                            start_condition: selectedNode.data.start_condition ?? "",
+                            end_condition: selectedNode.data.end_condition ?? "",
+                          }}
+                          sp={selectedSpRef}
+                          readOnly={readOnly}
+                          onSave={(patch) => updateSelectedData(patch, true)}
+                        />
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
                       {selectedNode.data.nodeType === "subprocess" &&

@@ -71,7 +71,7 @@ Select a node and edit in the right inspector:
 
 ## 3. Per-run Metrics
 
-Each node records the cost and effort of running the process **once**, across seven metrics. Edit them in the inspector's Metrics section (collapsed by default). **Start** and **End** nodes have no metrics.
+Each node records the cost and effort of running the process **once**, across seven metrics. Edit them in the inspector's Metrics section (collapsed by default). Edits in the **Metrics** and **I/O & Conditions** sections are buffered — press the **Save** button in the section header (it lights up when there are changes) to apply them. **Start** and **End** nodes have no metrics.
 
 | Metric | Label | Input format | Canvas display |
 | --- | --- | --- | --- |
@@ -93,7 +93,7 @@ Write duration as **hours and minutes** — the fractional part is **minutes, no
 
 ### One currency only
 
-**KRW (₩) and USD ($) cannot both be entered.** Filling one side locks the other's input. To switch currency, clear the filled side first. Thousands separators are added to costs automatically, and you can paste values that already contain commas (like `1,250,000`).
+**KRW (₩) and USD ($) cannot both be entered.** Cost appears as a single row with a **₩ / $ toggle** — switch it to change currency. If the current currency already has a value, a notice tells you it will be cleared on save, with an **Undo** to cancel the switch. Thousands separators are added to costs automatically, and you can paste values that already contain commas (like `1,250,000`).
 
 ### Metrics on subprocess nodes
 
