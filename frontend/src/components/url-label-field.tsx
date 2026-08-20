@@ -32,7 +32,7 @@ export function UrlLabelField({
   // 편집 가능이면 입력 영역 상시 노출 + 통일 폭 + 포커스 보더 (사용자 결정 2026-08-20)
   const inputClass = readOnly
     ? READONLY_INPUT_CLASS
-    : `${inputWidth} shrink-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none`;
+    : `${inputWidth} min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none`;
   const [urlDraft, setUrlDraft] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
 

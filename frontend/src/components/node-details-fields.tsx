@@ -52,7 +52,8 @@ export function NodeDetailsFields({
 }: NodeDetailsFieldsProps) {
   const { t } = useI18n();
   // 편집 가능 입력 — 영역 상시 노출·통일 폭·포커스 보더 (사용자 결정 2026-08-20)
-  const editableInput = `${inputWidth} shrink-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right focus:border-accent focus:outline-none`;
+  // 폭은 상한 — 인스펙터가 좁아지면 함께 줄어 경계 안 유지 (사용자 결정 2026-08-20)
+  const editableInput = `${inputWidth} min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right focus:border-accent focus:outline-none`;
   // 노드 레벨 data_form 폴백 행 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본)
   const showLegacyDataForm = inputForms === "" && outputForms === "";
   return (

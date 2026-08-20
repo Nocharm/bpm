@@ -187,7 +187,7 @@ export function NodeMetricsCard({
                     className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
                       readOnly
                         ? "min-w-0 flex-1 bg-transparent"
-                        : "w-32 shrink-0 border border-hairline bg-surface-alt focus:border-accent"
+                        : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
                     }`}
                     value={shown(field)}
                     disabled={readOnly}

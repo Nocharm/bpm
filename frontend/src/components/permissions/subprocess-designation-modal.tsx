@@ -251,7 +251,7 @@ export function SubprocessDesignationModal({
                     <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
                     <input
                       data-id="subprocess-designation-system"
-                      className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
+                      className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
                       maxLength={100}
                       value={form.system}
                       onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
@@ -261,7 +261,7 @@ export function SubprocessDesignationModal({
                     <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
                     <input
                       data-id="subprocess-designation-url"
-                      className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
+                      className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
                       maxLength={500}
                       value={form.url}
                       onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
@@ -275,7 +275,7 @@ export function SubprocessDesignationModal({
                     <span className="shrink-0 text-fine text-ink-tertiary">{t("field.urlLabel")}</span>
                     <input
                       data-id="subprocess-designation-url-label"
-                      className={`${INPUT_CLASS} w-44 shrink-0 text-right !text-fine disabled:opacity-40`}
+                      className={`${INPUT_CLASS} w-44 min-w-0 text-right !text-fine disabled:opacity-40`}
                       maxLength={100}
                       value={form.urlLabel}
                       disabled={form.url.trim() === ""}
@@ -317,7 +317,7 @@ export function SubprocessDesignationModal({
                 <ParamInput
                   field={key}
                   dataId={`subprocess-designation-${key}`}
-                  className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
+                  className={`${INPUT_CLASS} w-44 min-w-0 text-right disabled:opacity-40`}
                   value={form[key]}
                   disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                   ariaLabel={t(PARAM_LABEL_KEY[key])}
