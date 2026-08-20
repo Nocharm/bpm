@@ -180,6 +180,93 @@ export interface IoImportCandidate {
   pathEdgeIds: string[];
 }
 
+export type IoImportAction = "mirror" | "takeover" | "succession" | "join";
+
+// 요청 노드의 side 목록 끝에 항목 1줄 추가 — forms/links/ids 줄 정렬 동반
+function appendIoRow<N extends IoNode>(
+  node: N, side: IoSide, row: { text: string; form: string; link: string; originId: string },
+): N {
+  const texts = side === "input" ? node.data.input : node.data.output;
+  const idx = countIoLines(texts);
+  const nextTexts = idx === 0 ? row.text : `${texts}\n${row.text}`;
+  const data: IoLinkFields = { ...node.data };
+  if (side === "input") {
+    data.input = nextTexts;
+    data.input_forms = setIoLine(node.data.input_forms, idx, row.form);
+    data.input_links = setIoLine(node.data.input_links, idx, row.link);
+  } else {
+    data.output = nextTexts;
+    data.output_forms = setIoLine(node.data.output_forms, idx, row.form);
+    data.output_links = setIoLine(node.data.output_links, idx, row.link);
+    data.output_ids = setIoLine(node.data.output_ids, idx, row.originId);
+  }
+  return { ...node, data: { ...node.data, ...data } };
+}
+
+// 불러오기 실행 — 소유권 모델 5케이스(io-linking §2)를 판정해 그래프에 즉시 반영
+export function applyIoImport<N extends IoNode>(opts: {
+  nodes: N[]; edges: Edge[]; spRefs: SpRefMap;
+  nodeId: string; side: IoSide; candidate: IoImportCandidate;
+}): { nodes: N[]; action: IoImportAction } | null {
+  const { nodes, edges, spRefs, nodeId, side, candidate } = opts;
+  const index = buildIoIndex(nodes, spRefs);
+  const origin = candidate.groupId ? (index.get(candidate.groupId) ?? null) : null;
+  const mapNode = (list: N[], id: string, fn: (n: N) => N) => list.map((n) => (n.id === id ? fn(n) : n));
+
+  if (side === "input") {
+    // 인풋은 항상 미러 (io-linking §2) — 일반 아웃풋이면 원본 id를 먼저 부여
+    let next = nodes;
+    let itemId = origin?.itemId ?? null;
+    if (itemId === null) {
+      if (candidate.list !== "out") return null; // SP 항목은 id 상시 보유 — 여기 올 수 없음
+      itemId = genId();
+      next = mapNode(next, candidate.nodeId, (n) => ({
+        ...n, data: { ...n.data, output_ids: setIoLine(n.data.output_ids, candidate.index, itemId!) },
+      }));
+    }
+    const text = origin?.text ?? candidate.text;
+    const form = origin?.form ?? candidate.form;
+    next = mapNode(next, nodeId, (n) => appendIoRow(n, "input", { text, form, link: itemId!, originId: "" }));
+    return { nodes: next, action: "mirror" };
+  }
+
+  // side === "output"
+  if (origin === null) {
+    if (candidate.list !== "in") return null;
+    // 소유권 인수 — 아웃풋이 일반 인풋을 불러오면 아웃풋이 원본이 된다 (io-linking §2)
+    const itemId = genId();
+    let next = mapNode(nodes, candidate.nodeId, (n) => ({
+      ...n, data: { ...n.data, input_links: setIoLine(n.data.input_links, candidate.index, itemId) },
+    }));
+    next = mapNode(next, nodeId, (n) =>
+      appendIoRow(n, "output", { text: candidate.text, form: candidate.form, link: "", originId: itemId }));
+    return { nodes: next, action: "takeover" };
+  }
+
+  const upstream =
+    origin.kind === "out" &&
+    canReachForward(edges, nodeId, origin.nodeId) &&
+    !canReachForward(edges, origin.nodeId, nodeId); // 순환이면 승계 없음 (io-linking §2)
+  if (upstream) {
+    // 원본 승계 — itemId를 합류자 아웃풋으로 이동, 구 원본은 미러로 강등. 미러들 링크 줄은 불변(자동 재지향)
+    let next = mapNode(nodes, origin.nodeId, (n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        output_ids: setIoLine(n.data.output_ids, origin.index, ""),
+        output_links: setIoLine(n.data.output_links, origin.index, origin.itemId),
+      },
+    }));
+    next = mapNode(next, nodeId, (n) =>
+      appendIoRow(n, "output", { text: origin.text, form: origin.form, link: "", originId: origin.itemId }));
+    return { nodes: next, action: "succession" };
+  }
+  // 병렬·하류·순환·SP 원본 → 그룹 합류 (io-linking §2)
+  const next = mapNode(nodes, nodeId, (n) =>
+    appendIoRow(n, "output", { text: origin.text, form: origin.form, link: origin.itemId, originId: "" }));
+  return { nodes: next, action: "join" };
+}
+
 export function collectIoImportCandidates(opts: {
   nodes: IoNode[]; edges: Edge[]; spRefs: SpRefMap; nodeId: string; side: IoSide;
 }): IoImportCandidate[] {
