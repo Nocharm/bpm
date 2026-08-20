@@ -195,8 +195,11 @@ export function InspectorPanel({
               title={t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
+              // 폭 부족 시 비선택 탭이 먼저 줄고(말줄임) 선택 탭 라벨은 지키지 않는다 (사용자 결정 2026-08-20)
               className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${
-                active ? "bg-accent-tint font-medium text-accent" : "text-ink-secondary hover:bg-surface-alt"
+                active
+                  ? "shrink-0 bg-accent-tint font-medium text-accent"
+                  : "min-w-0 text-ink-secondary hover:bg-surface-alt"
               }`}
               onClick={() => setInternalTab(key)}
             >
@@ -206,7 +209,7 @@ export function InspectorPanel({
                   active ? "grid-cols-[1fr]" : "grid-cols-[0fr]"
                 }`}
               >
-                <span className="overflow-hidden whitespace-nowrap">{t(labelKey)}</span>
+                <span className="truncate">{t(labelKey)}</span>
               </span>
             </button>
           );

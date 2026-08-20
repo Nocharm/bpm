@@ -867,7 +867,7 @@ export function NodeSummaryModal({
                                 >
                                   {(isCostRow
                                     ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
-                                    : inheritedDisplay(field)) || "—"}
+                                    : inheritedDisplay(field)) || "-"}
                                 </span>
                               )}
                             </div>

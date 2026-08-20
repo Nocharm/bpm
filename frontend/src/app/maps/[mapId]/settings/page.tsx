@@ -346,7 +346,7 @@ export default function SettingsPage() {
           <div className="mt-auto flex flex-col gap-1 pt-3">
             {currentMockUser && (
               <span className="px-1 text-fine text-ink-tertiary">
-                {currentMockUser.name} · {effectiveRole ?? "—"}
+                {currentMockUser.name} · {effectiveRole ?? "-"}
               </span>
             )}
             <button

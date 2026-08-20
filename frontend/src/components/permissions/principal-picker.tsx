@@ -389,7 +389,7 @@ export function PrincipalPicker({
           })}
           {hasMore && <div ref={sentinelRef} className="h-px shrink-0" />}
           {hits.length === 0 && (
-            <span className="px-3 py-2 text-caption text-ink-tertiary">—</span>
+            <span className="px-3 py-2 text-caption text-ink-tertiary">-</span>
           )}
         </div>,
         document.body,

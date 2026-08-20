@@ -65,7 +65,6 @@ export function NodeDetailsFields({
         icon={DETAIL_FIELD_ICONS.input}
         value={input}
         formsValue={inputForms}
-        formPlaceholder={t("detail.formPlaceholder")}
         readOnly={readOnly}
         onCommit={(joined, formsJoined) => onPatch({ input: joined, input_forms: formsJoined ?? "" })}
       />
@@ -76,7 +75,6 @@ export function NodeDetailsFields({
         icon={DETAIL_FIELD_ICONS.output}
         value={output}
         formsValue={outputForms}
-        formPlaceholder={t("detail.formPlaceholder")}
         readOnly={readOnly}
         onCommit={(joined, formsJoined) => onPatch({ output: joined, output_forms: formsJoined ?? "" })}
       />
@@ -88,7 +86,7 @@ export function NodeDetailsFields({
           </span>
           {readOnly ? (
             <span data-id={`${idPrefix}-data-form`} className="min-w-0 truncate text-right text-fine text-ink-secondary">
-              {dataForm || "—"}
+              {dataForm || "-"}
             </span>
           ) : (
             <input
@@ -117,7 +115,7 @@ export function NodeDetailsFields({
           </span>
           {readOnly ? (
             <span className="min-w-0 truncate text-right text-caption text-ink" title={value || undefined}>
-              {value || "—"}
+              {value || "-"}
             </span>
           ) : (
             <input

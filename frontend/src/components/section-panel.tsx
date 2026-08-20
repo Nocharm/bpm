@@ -170,7 +170,7 @@ export function SectionPanel({ sections, docName, onReimport, onClose, staleCoun
               className="flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink hover:bg-surface-alt active:cursor-grabbing"
             >
               <span className="shrink-0 rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent">
-                {s.number || "—"}
+                {s.number || "-"}
               </span>
               <span className="min-w-0 flex-1 truncate">{s.title}</span>
             </div>

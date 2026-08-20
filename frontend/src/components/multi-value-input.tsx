@@ -6,6 +6,8 @@
 import { Plus, X, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
+import { DataFormPicker } from "@/components/data-form-picker";
+
 interface MultiValueInputProps {
   label: string;
   // 라벨 앞 소형 아이콘(12px) — 행 스캔 가시성 (사용자 결정 2026-08-20)
@@ -17,7 +19,6 @@ interface MultiValueInputProps {
   readOnly: boolean;
   dataId: string;
   placeholder?: string;
-  formPlaceholder?: string;
   // 항목 편집/추가/삭제 확정 시 개행 join 문자열로 콜백(빈 항목은 제거).
   // formsValue를 준 호출부는 두 번째 인자로 정렬된 폼 join을 받는다(후행 빈 줄 소거).
   onCommit: (joined: string, formsJoined?: string) => void;
@@ -43,7 +44,7 @@ function joinForms(rows: ItemRow[]): string {
 }
 
 export function MultiValueInput({
-  label, icon: Icon, value, formsValue, readOnly, dataId, placeholder, formPlaceholder, onCommit,
+  label, icon: Icon, value, formsValue, readOnly, dataId, placeholder, onCommit,
 }: MultiValueInputProps) {
   const withForms = formsValue !== undefined;
   // 편집 중 행 버퍼 — 저장 원문에서 시작, blur/삭제 시 join 커밋. 노드 전환은 key 리마운트가 리셋.
@@ -80,7 +81,7 @@ export function MultiValueInput({
         </span>
         <span className="min-w-0 text-right text-caption text-ink">
           {items.length === 0
-            ? "—"
+            ? "-"
             : items.map((r, i) => (
                 <span key={i} className="block">
                   {r.text}
@@ -110,8 +111,9 @@ export function MultiValueInput({
         </button>
       </div>
       {rows.map((row, i) => (
-        // 항목은 위치 기반 편집 — 값 key는 중복 항목에서 충돌하므로 인덱스 사용(항목 재정렬 없음)
-        <div key={i} className="mt-0.5 flex items-center gap-1">
+        // 항목은 위치 기반 편집 — 값 key는 중복 항목에서 충돌하므로 인덱스 사용(항목 재정렬 없음).
+        // group/mvrow — 폼 미지정 행의 지정 아이콘이 행 호버 시에만 나타난다(DataFormPicker)
+        <div key={i} className="group/mvrow mt-0.5 flex items-center gap-1">
           <input
             data-id={`${dataId}-row-${i}`}
             className="min-w-0 flex-1 rounded-sm border border-transparent bg-surface-alt px-1.5 py-0.5 text-caption text-ink focus:border-accent focus:outline-none"
@@ -126,19 +128,10 @@ export function MultiValueInput({
             }}
           />
           {withForms && (
-            <input
-              data-id={`${dataId}-form-${i}`}
-              className="w-[5.5rem] shrink-0 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary placeholder:italic placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
+            <DataFormPicker
+              dataId={`${dataId}-form-${i}`}
               value={row.form}
-              placeholder={formPlaceholder}
-              maxLength={50}
-              onChange={(e) =>
-                setRows((prev) => prev.map((v, j) => (j === i ? { ...v, form: e.target.value } : v)))
-              }
-              onBlur={() => commit(rows)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              }}
+              onCommit={(next) => commit(rows.map((v, j) => (j === i ? { ...v, form: next } : v)))}
             />
           )}
           <button
@@ -152,7 +145,7 @@ export function MultiValueInput({
           </button>
         </div>
       ))}
-      {rows.length === 0 && <div className="mt-0.5 text-right text-caption text-ink-tertiary">—</div>}
+      {rows.length === 0 && <div className="mt-0.5 text-right text-caption text-ink-tertiary">-</div>}
     </div>
   );
 }

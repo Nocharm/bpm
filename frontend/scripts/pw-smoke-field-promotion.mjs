@@ -204,9 +204,11 @@ try {
   await page.locator('[data-id="inspector-detail-input-add"]').click();
   await page.locator('[data-id="inspector-detail-input-row-1"]').fill("표준기 목록");
   await page.keyboard.press("Enter");
-  // 항목별 데이터 폼 — 첫 항목에만 지정(줄 1:1 정렬, 2026-08-20)
+  // 항목별 데이터 폼 — 첫 항목에만 지정. 피커 전환(행 호버 아이콘→자동완성 Enter 선택, 2026-08-20)
+  await page.locator('[data-id="inspector-detail-input-row-0"]').hover();
+  await page.locator('[data-id="inspector-detail-input-form-0-open"]').click();
   await page.locator('input[data-id="inspector-detail-input-form-0"]').fill("document");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter"); // 최상위 후보(document) 선택
   await page.locator('[data-id="inspector-details-save"]').click(); // 레이지 세이브 — 명시 Save
   await page.waitForTimeout(2600); // autosave 디바운스
   let g = await api(`/versions/${draftId}/graph`);

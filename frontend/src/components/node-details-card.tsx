@@ -141,7 +141,7 @@ export function NodeDetailsCard({
                   </span>
                   <span className="min-w-0 text-right text-caption text-ink">
                     {items.length === 0
-                      ? "—"
+                      ? "-"
                       : items.map((r, i) => (
                           <span key={i} className="block">
                             {r.text}
@@ -167,7 +167,7 @@ export function NodeDetailsCard({
                     {t(labelKey)}
                   </span>
                   <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
-                    {value || "—"}
+                    {value || "-"}
                   </span>
                 </div>
               ))}

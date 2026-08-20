@@ -169,7 +169,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
               <div key={row.label} className="flex items-center justify-between gap-2 py-0.5">
                 <span className="shrink-0 text-caption text-ink-secondary">{row.label}</span>
                 <span className="min-w-0 truncate text-caption text-ink">
-                  {row.value || "—"}
+                  {row.value || "-"}
                 </span>
               </div>
             ))}

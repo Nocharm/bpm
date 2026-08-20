@@ -253,7 +253,7 @@ export function SubprocessInspectorCard({
               {attrRows.map((row) => (
                 <div key={row.label} className="flex items-center justify-between gap-2 py-0.5">
                   <span className="shrink-0 text-fine text-ink-secondary">{row.label}</span>
-                  <span className="min-w-0 truncate text-fine text-ink">{row.value || "—"}</span>
+                  <span className="min-w-0 truncate text-fine text-ink">{row.value || "-"}</span>
                 </div>
               ))}
             </div>

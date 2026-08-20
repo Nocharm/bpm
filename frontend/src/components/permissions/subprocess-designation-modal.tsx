@@ -159,7 +159,7 @@ export function SubprocessDesignationModal({
             <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
             <input
               data-id="subprocess-designation-system"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
               maxLength={100}
               value={form.system}
               onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
@@ -172,7 +172,7 @@ export function SubprocessDesignationModal({
                 <ParamInput
                   field={key}
                   dataId={`subprocess-designation-${key}`}
-                  className={`${INPUT_CLASS} min-w-0 flex-1 text-right disabled:opacity-40`}
+                  className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
                   value={form[key]}
                   disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
                   ariaLabel={t(PARAM_LABEL_KEY[key])}
@@ -199,7 +199,7 @@ export function SubprocessDesignationModal({
             <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
             <input
               data-id="subprocess-designation-url"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right`}
+              className={`${INPUT_CLASS} w-44 shrink-0 text-right`}
               maxLength={500}
               value={form.url}
               onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
@@ -212,7 +212,7 @@ export function SubprocessDesignationModal({
             <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
             <input
               data-id="subprocess-designation-url-label"
-              className={`${INPUT_CLASS} min-w-0 flex-1 text-right disabled:opacity-40`}
+              className={`${INPUT_CLASS} w-44 shrink-0 text-right disabled:opacity-40`}
               maxLength={100}
               value={form.urlLabel}
               disabled={form.url.trim() === ""}
@@ -226,7 +226,6 @@ export function SubprocessDesignationModal({
               label={t("sp.input")}
               value={form.input}
               formsValue={form.input_forms}
-              formPlaceholder={t("detail.formPlaceholder")}
               readOnly={false}
               onCommit={(joined, formsJoined) =>
                 setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
@@ -239,7 +238,6 @@ export function SubprocessDesignationModal({
               label={t("sp.output")}
               value={form.output}
               formsValue={form.output_forms}
-              formPlaceholder={t("detail.formPlaceholder")}
               readOnly={false}
               onCommit={(joined, formsJoined) =>
                 setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))

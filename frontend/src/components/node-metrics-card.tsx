@@ -201,7 +201,7 @@ export function NodeMetricsCard({
                   >
                     {(isCostRow
                       ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
-                      : inheritedDisplay(field)) || "—"}
+                      : inheritedDisplay(field)) || "-"}
                   </span>
                 )}
                 {key === "annual_count" && isSubprocess && (

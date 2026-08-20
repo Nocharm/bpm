@@ -9117,7 +9117,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                   className="min-w-0 truncate text-right text-caption text-ink"
                                   title={value || undefined}
                                 >
-                                  {value || "—"}
+                                  {value || "-"}
                                 </span>
                               </div>
                             );
@@ -9128,7 +9128,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               className="min-w-0 truncate text-right text-caption text-ink"
                               title={selectedSpRef.url || undefined}
                             >
-                              {selectedSpRef.url_label || selectedSpRef.url || "—"}
+                              {selectedSpRef.url_label || selectedSpRef.url || "-"}
                             </span>
                           </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
@@ -9246,11 +9246,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
                         <span className="min-w-0 flex-1 truncate font-medium">
-                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "—"}
+                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "-"}
                         </span>
                         <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                         <span className="min-w-0 flex-1 truncate text-right font-medium">
-                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
+                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "-"}
                         </span>
                       </div>
                       {/* 연결면 — 엣지 우클릭 메뉴의 EdgeSidesPad 재사용, 편집 모드에서만 (2026-07-30) */}

@@ -308,7 +308,7 @@ export function GroupBulkModal({
         return {
           id: u.id,
           label: labelOf(u.id),
-          before: [m?.department, m?.assignee].filter(Boolean).join(" / ") || "—",
+          before: [m?.department, m?.assignee].filter(Boolean).join(" / ") || "-",
           after: [u.department, u.assignee].filter(Boolean).join(" / ") || t("bulk.cleared"),
         };
       }),
@@ -435,7 +435,7 @@ export function GroupBulkModal({
         return {
           id: u.id,
           label: labelOf(u.id),
-          before: (m ? displayExistingAttr(m, attrField) : "") || "—",
+          before: (m ? displayExistingAttr(m, attrField) : "") || "-",
           after: displayAttrValue(attrField, u.value) || t("bulk.cleared"),
         };
       }),
@@ -631,7 +631,7 @@ export function GroupBulkModal({
                     <div className="flex items-start gap-1.5">
                       <span className={rowCls}>{t("bulk.before")}</span>
                       <div className="flex flex-wrap gap-1">
-                        <span className={pillCls(discardExisting)}>{member.department || "—"}</span>
+                        <span className={pillCls(discardExisting)}>{member.department || "-"}</span>
                         {existingAssignees.map((n) => (
                           <span key={n} className={pillCls(discardExisting)}>
                             {n}
@@ -642,7 +642,7 @@ export function GroupBulkModal({
                     <div className="flex items-start gap-1.5">
                       <span className={rowCls}>{t("bulk.after")}</span>
                       <div className="flex flex-wrap gap-1">
-                        <span className={pillCls(discardNew)}>{peopleDept || "—"}</span>
+                        <span className={pillCls(discardNew)}>{peopleDept || "-"}</span>
                         {peopleAssignees.map((n) => (
                           <span key={n} className={pillCls(discardNew)}>
                             {n}
