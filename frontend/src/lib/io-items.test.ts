@@ -188,6 +188,19 @@ describe("collectIoImportCandidates", () => {
     expect(candsUndesignated).toEqual([]);
   });
 
+  it("지정 SP라도 id 줄이 빈 항목은 후보에서 제외(레거시 지정 — 클릭해도 무피드백)", () => {
+    // 운영 선례: sp_*_ids 도입 전에 지정된 SP는 텍스트만 있고 id 줄이 비어 있다.
+    // 그대로 후보로 내보내면 groupId=null → applyIoImport가 null을 반환해 아무 일도 안 일어난다.
+    const spNode = node("S", { nodeType: "subprocess", linkedMapId: 7 });
+    const edges: Edge[] = [{ id: "e1", source: "S", target: "X" } as Edge];
+    const consumer = node("X", { input: "" });
+    const refsNoIds: SpRefMap = new Map([[7, {
+      designated: true, output: "SP출력", output_ids: "", output_forms: "",
+    } as never]]);
+    const cands = collectIoImportCandidates({ nodes: [spNode, consumer], edges, spRefs: refsNoIds, nodeId: "X", side: "input" });
+    expect(cands).toEqual([]);
+  });
+
   it("사이클 A→B→A에서 무한루프 없이 종료", () => {
     const cyclic: Edge[] = [
       { id: "e1", source: "A", target: "B" } as Edge,

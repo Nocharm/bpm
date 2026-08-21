@@ -392,6 +392,9 @@ export function collectIoImportCandidates(opts: {
       let groupId: string | null;
       if (isSp) {
         groupId = getIoLine(wantOutput ? ref!.output_ids : ref!.input_ids, i) || null;
+        // sp_*_ids 도입 전 지정된 SP는 id 줄이 비어 있다 — 그대로 내보내면 불러오기가 조용히 무동작하므로
+        // 아예 후보에서 뺀다(SP는 영구 원본이라 여기서 lazy 부여도 불가). 재부여는 SP 지정 재저장이 담당.
+        if (groupId === null) return;
       } else if (wantOutput) {
         groupId = getIoLine(cand.data.output_ids, i) || getIoLine(cand.data.output_links, i) || null;
       } else {
