@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- UI/UX 배치2(#9·#10): 캔버스 노드 표시 규범 순서 고정(속성→지표→조건→IO — 토글 순서 의존 제거)·IO 체크리스트 영역(화면 한정, 링크 itemId 키로 그룹 동반 체크).
 - UI/UX 배치1(#3~#8): GMP 픽커 리디자인(스테이징+Confirm+호버 미리보기 강조·별도 컴포넌트)·미분류=기본색 리셋·필 nowrap·인스펙터 GMP 행·읽기전용 빈 섹션 딤·노드 디스플레이 카테고리 눈 버튼.
 - QA 이슈 #2 픽스: 전 줄 무효 플래그 셀 '제공' 판정 분리 + required 토큰 신설(Optional 명시 리셋 경로).
 - 백로그 반영 ①CSV Input_Flags 컬럼(왕복+병합 규칙+템플릿/AI 프롬프트, 선행 빈 줄 보존 rawCellOf) ③끊긴 흐름 경고 배지(인풋 미러 한정, getBrokenInputMirrorIndexes).

@@ -43,6 +43,8 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
   onEditGmp: null,
+  ioChecks: new Set<string>(),
+  onToggleIoCheck: null,
 };
 
 interface InterviewPreviewProps {

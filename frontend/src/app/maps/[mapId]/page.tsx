@@ -6835,6 +6835,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     x: number;
     y: number;
   } | null>(null);
+  // 노드 IO 체크리스트(#9) — 화면 한정 상태(저장·영속 없음, 새로고침 리셋). 키는 링크 itemId
+  // (원본·미러 그룹 동반 체크) 또는 노드·측·줄. 뷰어도 조작 가능 — 데이터가 아니라 열람 보조.
+  const [ioChecks, setIoChecks] = useState<ReadonlySet<string>>(new Set());
+  const toggleIoCheck = useCallback((key: string) => {
+    setIoChecks((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6848,6 +6859,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
         : EMPTY_CTRL_DRAG_IDS,
       onEditGmp: onEditGmpAction,
+      ioChecks,
+      onToggleIoCheck: toggleIoCheck,
     }),
     [
       toggleInlineExpand,
@@ -6860,6 +6873,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       ctrlDragActive,
       ctrlDragGhosts,
       onEditGmpAction,
+      ioChecks,
+      toggleIoCheck,
     ],
   );
 

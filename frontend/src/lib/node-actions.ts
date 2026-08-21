@@ -71,6 +71,10 @@ export interface NodeActions {
   ctrlDragIds: ReadonlySet<string>;
   // GMP 필 클릭 → 분류 피커 오픈(편집 모드 전용, null=비활성 — 뷰어·비교·프리뷰) (design 2026-08-20)
   onEditGmp: ((nodeId: string, x: number, y: number) => void) | null;
+  // 노드 IO 체크리스트(#9) — 화면 한정 체크 상태. 키=링크 itemId(그룹 동반) 또는 `${nodeId}:in|out:${줄}`.
+  // null이면 비활성(비교·프리뷰 등 Provider 부재 표면).
+  ioChecks: ReadonlySet<string>;
+  onToggleIoCheck: ((key: string) => void) | null;
 }
 
 const defaultActions: NodeActions = {
@@ -83,6 +87,8 @@ const defaultActions: NodeActions = {
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
   onEditGmp: null,
+  ioChecks: new Set<string>(),
+  onToggleIoCheck: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

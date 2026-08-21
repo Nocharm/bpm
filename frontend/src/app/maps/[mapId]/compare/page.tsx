@@ -160,6 +160,8 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
   onEditGmp: null,
+  ioChecks: new Set<string>(),
+  onToggleIoCheck: null,
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {

@@ -36,6 +36,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
   PRIMARY_END_HANDLE,
@@ -53,68 +54,131 @@ const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = 
   output: LogOut,
 };
 
-// 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
-// start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
-// subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
+// 캔버스 규범 순서(#10) — 표시 순서는 토글을 켠 순서가 아니라 고정: 속성 → 지표(NodeParams) →
+// 조건 → 인풋 → 아웃풋. 속성 줄은 NodeFields, 조건·IO는 NodeIoDetails(지표 뒤)가 담당.
+const ATTR_FIELD_ORDER = ["assignee", "department", "system", "url"] as const;
+
+// 노드 속성 줄(담당자/부서/시스템/URL) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
+// start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
-  const spValues: Record<Exclude<NodeDisplayField, "conditions">, string | null | undefined> = {
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const spValues: Record<(typeof ATTR_FIELD_ORDER)[number], string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
     url: data.spUrl,
-    input: data.spInput,
-    output: data.spOutput,
   };
   return (
     <>
-      {displayFields
-        // params(칩 스위치)·gmp(필 태그)는 텍스트 줄 필드가 아님 — NodeParams/GmpPill이 담당
-        .filter((f): f is NodeDisplayField => f !== "params" && f !== "gmp")
-        .flatMap((field) => {
-        // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
-        if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
-          return [];
-        }
-        // "conditions"는 시작/종료 두 줄을 담당(단일 토글, 사용자 결정 2026-08-20)
-        const lines: { key: string; icon: LucideIcon; value: string | null | undefined }[] =
-          field === "conditions"
-            ? [
-                {
-                  key: "start_condition",
-                  icon: Play,
-                  value: isSubprocess ? data.spStartCondition : data.start_condition,
-                },
-                {
-                  key: "end_condition",
-                  icon: Flag,
-                  value: isSubprocess ? data.spEndCondition : data.end_condition,
-                },
-              ]
-            : (() => {
-                const raw = isSubprocess ? spValues[field] : data[field];
-                // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
-                const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
-                // input/output은 개행 복수 — 노드 줄에서는 ", "로 접는다 (2026-08-20)
-                const value =
-                  field === "url"
-                    ? (raw ? urlLabel || "LINK" : null)
-                    : field === "input" || field === "output"
-                      ? raw?.split("\n").filter(Boolean).join(", ")
-                      : raw;
-                return [{ key: field, icon: FIELD_ICON[field], value }];
-              })();
-        return lines
-          .filter((line) => !!line.value)
-          .map(({ key, icon: Icon, value }) => (
-            <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
-              <span className="inline-flex items-center gap-1">
-                <Icon size={12} strokeWidth={1.5} />
-                {value}
-              </span>
+      {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
+        const raw = isSubprocess ? spValues[field] : data[field];
+        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
+        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
+        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
+        if (!value) return null;
+        const Icon = FIELD_ICON[field];
+        return (
+          <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
+            <span className="inline-flex items-center gap-1">
+              <Icon size={12} strokeWidth={1.5} />
+              {value}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
+// 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
+function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"] }) {
+  const { displayFields, ioChecks, onToggleIoCheck } = useNodeActions();
+  const isSubprocess = data.nodeType === "subprocess";
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const conditionLines = displayFields.includes("conditions")
+    ? [
+        {
+          key: "start_condition",
+          icon: Play,
+          value: isSubprocess ? data.spStartCondition : data.start_condition,
+        },
+        {
+          key: "end_condition",
+          icon: Flag,
+          value: isSubprocess ? data.spEndCondition : data.end_condition,
+        },
+      ].filter((line) => !!line.value)
+    : [];
+  const sides = (["input", "output"] as const).filter((side) => displayFields.includes(side));
+  return (
+    <>
+      {conditionLines.map(({ key, icon: Icon, value }) => (
+        <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
+          <span className="inline-flex items-center gap-1">
+            <Icon size={12} strokeWidth={1.5} />
+            {value}
+          </span>
+        </div>
+      ))}
+      {sides.map((side) => {
+        const raw = isSubprocess
+          ? side === "input"
+            ? data.spInput
+            : data.spOutput
+          : data[side];
+        const visible = (raw ?? "")
+          .split("\n")
+          .map((text, index) => ({ text: text.trim(), index }))
+          .filter((item) => item.text !== "");
+        if (visible.length === 0) return null;
+        const Icon = FIELD_ICON[side];
+        return (
+          // nodrag/nopan + 전파 차단 — 체크 조작이 드래그·더블클릭(요약 모달)로 새지 않게
+          <div
+            key={side}
+            data-id={`node-io-list-${side}`}
+            className="nodrag nopan mt-1 rounded-sm border border-hairline bg-surface-alt/60 px-1.5 py-1"
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted">
+              <Icon size={10} strokeWidth={1.5} />
+              {side === "input" ? "Input" : "Output"}
             </div>
-          ));
+            {visible.map(({ text, index }) => {
+              // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
+              const checkKey = isSubprocess
+                ? `${nodeId}:${side}:${index}`
+                : side === "input"
+                  ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
+                  : getIoLine(data.output_ids, index) ||
+                    getIoLine(data.output_links, index) ||
+                    `${nodeId}:out:${index}`;
+              const checked = ioChecks.has(checkKey);
+              return (
+                <label
+                  key={index}
+                  className={`flex cursor-pointer items-center gap-1 py-px text-xs ${
+                    checked ? "text-ink-muted" : "text-ink-tertiary"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    data-id={`node-io-check-${side}-${index}`}
+                    className="h-3 w-3 shrink-0 accent-[var(--color-accent)]"
+                    checked={checked}
+                    disabled={onToggleIoCheck === null}
+                    onChange={() => onToggleIoCheck?.(checkKey)}
+                  />
+                  <span className={`min-w-0 ${checked ? "line-through opacity-70" : ""}`}>{text}</span>
+                </label>
+              );
+            })}
+          </div>
+        );
       })}
     </>
   );
@@ -594,6 +658,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
           {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
           <NodeFields data={data} />
           <NodeParams data={data} />
+          <NodeIoDetails nodeId={id} data={data} />
           {data.updateAvailable && (
             <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
@@ -688,6 +753,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       </div>
       <NodeFields data={data} />
       <NodeParams data={data} />
+      <NodeIoDetails nodeId={id} data={data} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />
