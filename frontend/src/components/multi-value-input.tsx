@@ -38,6 +38,8 @@ interface MultiValueInputProps {
   onNavigateLinked?: (index: number) => void;
   // 행 단위 호버(원본·미러 공통) — 인스펙터/모달 하이라이트 공유용
   onHoverLinked?: (side: "row", index: number | null) => void;
+  // 읽기전용에서 링크 항목 클릭 → 연결 노드 드롭다운(#2). 편집 모드에선 미사용
+  onPeersMenu?: (index: number, at: { x: number; y: number }) => void;
   readOnly: boolean;
   dataId: string;
   placeholder?: string;
@@ -102,6 +104,7 @@ export function MultiValueInput({
   onUnlink,
   onNavigateLinked,
   onHoverLinked,
+  onPeersMenu,
   readOnly,
   dataId,
   placeholder,
@@ -167,6 +170,22 @@ export function MultiValueInput({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuContainerRef = useRef<HTMLDivElement>(null);
+  // 행 선택(#1·#15) — 클릭한 행에 포커스 링 + 인박스 컨트롤 노출. 다른 행 클릭 시 이동
+  const [activeRow, setActiveRow] = useState<number | null>(null);
+  // 플래그 토글 직후 풀 라벨 플래시(#15) — R/O 이니셜의 의미 전달, 0.9s 후 다시 축소
+  const [flagFlashRow, setFlagFlashRow] = useState<number | null>(null);
+  const flagFlashTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (flagFlashTimer.current !== null) window.clearTimeout(flagFlashTimer.current);
+    },
+    [],
+  );
+  const flashFlag = (index: number) => {
+    if (flagFlashTimer.current !== null) window.clearTimeout(flagFlashTimer.current);
+    setFlagFlashRow(index);
+    flagFlashTimer.current = window.setTimeout(() => setFlagFlashRow(null), 900);
+  };
 
   // 바깥 mousedown/Esc = 닫힘 — add-node-menu.tsx와 동일 컨벤션(document 레벨, capture)
   useEffect(() => {
@@ -203,9 +222,15 @@ export function MultiValueInput({
                 return (
                   <span
                     key={i}
-                    className="block"
+                    // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2 — 호버 하이라이트와 병행)
+                    className={`block ${linked && onPeersMenu ? "cursor-pointer rounded-sm hover:bg-surface-alt" : ""}`}
                     onMouseEnter={linked ? () => onHoverLinked?.("row", i) : undefined}
                     onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
+                    onClick={
+                      linked && onPeersMenu
+                        ? (e) => onPeersMenu(i, { x: e.clientX, y: e.clientY })
+                        : undefined
+                    }
                   >
                     {linked && <Link2 size={12} strokeWidth={1.5} className="mr-0.5 inline text-accent" />}
                     {warnRowIndexes?.has(i) && (
@@ -291,6 +316,9 @@ export function MultiValueInput({
         const isMirror = row.link !== "";
         const isOrigin = !isMirror && row.id !== "" && (originGroupIndexes?.has(i) ?? false);
         const linked = isMirror || isOrigin;
+        const optionalFlag = row.flag === "optional";
+        const flagExpanded = flagFlashRow === i;
+        const flagFull = optionalFlag ? t("io.flagOptional") : t("io.flagRequired");
         return (
           // 항목은 위치 기반 편집 — 값 key는 중복 항목에서 충돌하므로 인덱스 사용(항목 재정렬 없음).
           // group/mvrow — 폼 미지정 행의 지정 아이콘(DataFormPicker)·미러 행의 Unlink 스왑이 행 호버에 반응
@@ -341,70 +369,92 @@ export function MultiValueInput({
                 <TriangleAlert size={12} strokeWidth={1.5} />
               </span>
             )}
-            <input
-              data-id={`${dataId}-row-${i}`}
-              readOnly={isMirror}
-              title={isMirror ? t("io.linkedTooltip") : undefined}
-              // 미러 텍스트는 원본으로 이동하는 클릭 대상 — 네비 핸들러가 없는 표면에선 포인터 커서도 빼 오해 방지
-              className={`min-w-0 flex-1 rounded-sm border border-transparent px-1.5 py-0.5 text-caption focus:outline-none ${
-                isMirror
-                  ? `bg-surface-pearl text-ink-secondary ${onNavigateLinked ? "cursor-pointer" : ""}`
-                  : "bg-surface-alt text-ink focus:border-accent"
-              }`}
-              value={row.text}
-              placeholder={placeholder}
-              onChange={
-                isMirror
-                  ? undefined
-                  : (e) => setRows((prev) => prev.map((v, j) => (j === i ? { ...v, text: e.target.value } : v)))
-              }
-              onBlur={isMirror ? undefined : () => commit(rows)}
-              onKeyDown={
-                isMirror
-                  ? undefined
-                  : (e) => {
-                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                    }
-              }
-              onClick={isMirror ? () => onNavigateLinked?.(i) : undefined}
-            />
-            {flagsValue !== undefined && (
-              // 플래그는 소비 노드 로컬 — 미러여도 그 자리에서 토글(전파 없음, io-linking §1-9)
-              <button
-                type="button"
-                data-id={`${dataId}-flag-${i}`}
-                className={`shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-fine ${
-                  row.flag === "optional"
-                    ? "border-hairline text-ink-tertiary"
-                    : "border-transparent bg-accent-tint text-accent"
+            {/* 입력 박스 + 인박스 컨트롤(#15) — 태그·형식·삭제는 행 호버/선택 시에만 우측 오버레이로 */}
+            <div className={`relative min-w-0 flex-1 rounded-sm ${activeRow === i ? "ring-1 ring-accent" : ""}`}>
+              <input
+                data-id={`${dataId}-row-${i}`}
+                readOnly={isMirror}
+                title={isMirror ? t("io.linkedTooltip") : undefined}
+                // 미러 텍스트는 원본으로 이동하는 더블클릭 대상 — 네비 핸들러가 없는 표면에선 포인터 커서도 빼 오해 방지
+                className={`w-full rounded-sm border border-transparent px-1.5 py-0.5 text-caption focus:outline-none ${
+                  isMirror
+                    ? `bg-surface-pearl text-ink-secondary ${onNavigateLinked ? "cursor-pointer" : ""}`
+                    : "bg-surface-alt text-ink focus:border-accent"
                 }`}
-                onClick={() =>
-                  commit(rows.map((v, j) => (j === i ? { ...v, flag: v.flag === "optional" ? "" : "optional" } : v)))
+                value={row.text}
+                placeholder={placeholder}
+                onFocus={() => setActiveRow(i)}
+                onChange={
+                  isMirror
+                    ? undefined
+                    : (e) => setRows((prev) => prev.map((v, j) => (j === i ? { ...v, text: e.target.value } : v)))
                 }
+                onBlur={isMirror ? undefined : () => commit(rows)}
+                onKeyDown={
+                  isMirror
+                    ? undefined
+                    : (e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }
+                }
+                // 1클릭 = 행 포커스 효과만, 더블클릭 = 원본으로 이동 (#1)
+                onClick={isMirror ? () => setActiveRow(i) : undefined}
+                onDoubleClick={isMirror ? () => onNavigateLinked?.(i) : undefined}
+              />
+              <div
+                className={`absolute inset-y-0.5 right-0.5 flex items-center gap-0.5 rounded-sm pl-1 transition-opacity duration-150 ${
+                  activeRow === i
+                    ? "opacity-100"
+                    : "pointer-events-none opacity-0 group-hover/mvrow:pointer-events-auto group-hover/mvrow:opacity-100"
+                } ${isMirror ? "bg-surface-pearl/95" : "bg-surface-alt/95"}`}
               >
-                {row.flag === "optional" ? t("io.flagOptional") : t("io.flagRequired")}
-              </button>
-            )}
-            {withForms &&
-              (isMirror ? (
-                // 미러는 폼 편집 불가 — 정적 텍스트로만 표시(원본에서만 수정)
-                <span className="shrink-0 text-fine text-ink-tertiary">{row.form}</span>
-              ) : (
-                <DataFormPicker
-                  dataId={`${dataId}-form-${i}`}
-                  value={row.form}
-                  onCommit={(next) => commit(rows.map((v, j) => (j === i ? { ...v, form: next } : v)))}
-                />
-              ))}
-            <button
-              type="button"
-              data-id={`${dataId}-remove-${i}`}
-              aria-label={`Remove ${label} ${i + 1}`}
-              className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt"
-              onClick={() => commit(rows.filter((_, j) => j !== i))}
-            >
-              <X size={12} strokeWidth={1.5} />
-            </button>
+                {flagsValue !== undefined && (
+                  // 플래그는 소비 노드 로컬(io-linking §1-9). 평소 R/O 이니셜, 토글 직후 풀 라벨 플래시(#15)
+                  <button
+                    type="button"
+                    data-id={`${dataId}-flag-${i}`}
+                    title={flagFull}
+                    className={`shrink-0 overflow-hidden whitespace-nowrap rounded-full border px-1.5 py-0.5 text-fine ${
+                      optionalFlag
+                        ? "border-hairline text-ink-tertiary"
+                        : "border-transparent bg-accent-tint text-accent"
+                    }`}
+                    onClick={() => {
+                      flashFlag(i);
+                      commit(rows.map((v, j) => (j === i ? { ...v, flag: v.flag === "optional" ? "" : "optional" } : v)));
+                    }}
+                  >
+                    <span
+                      className={`inline-block overflow-hidden align-middle transition-[max-width] duration-350 ease-smooth ${
+                        flagExpanded ? "max-w-16" : "max-w-3"
+                      }`}
+                    >
+                      {flagExpanded ? flagFull : optionalFlag ? "O" : "R"}
+                    </span>
+                  </button>
+                )}
+                {withForms &&
+                  (isMirror ? (
+                    // 미러는 폼 편집 불가 — 정적 텍스트로만 표시(원본에서만 수정)
+                    <span className="max-w-20 shrink-0 truncate text-fine text-ink-tertiary">{row.form}</span>
+                  ) : (
+                    <DataFormPicker
+                      dataId={`${dataId}-form-${i}`}
+                      value={row.form}
+                      onCommit={(next) => commit(rows.map((v, j) => (j === i ? { ...v, form: next } : v)))}
+                    />
+                  ))}
+                <button
+                  type="button"
+                  data-id={`${dataId}-remove-${i}`}
+                  aria-label={`Remove ${label} ${i + 1}`}
+                  className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt"
+                  onClick={() => commit(rows.filter((_, j) => j !== i))}
+                >
+                  <X size={12} strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
           </div>
         );
       })}

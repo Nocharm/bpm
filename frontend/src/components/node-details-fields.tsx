@@ -46,6 +46,8 @@ export interface NodeDetailsIoWiring {
   onUnlink: (side: IoSide, index: number, at: { x: number; y: number }) => void;
   onNavigate: (side: IoSide, index: number) => void;
   onHoverItem: (side: IoSide, index: number | null) => void;
+  // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2)
+  onPeersMenu?: (side: IoSide, index: number, at: { x: number; y: number }) => void;
 }
 
 interface NodeDetailsFieldsProps {
@@ -102,6 +104,7 @@ export function NodeDetailsFields({
         onUnlink={io ? (index, at) => io.onUnlink("input", index, at) : undefined}
         onNavigateLinked={io ? (index) => io.onNavigate("input", index) : undefined}
         onHoverLinked={io ? (_, index) => io.onHoverItem("input", index) : undefined}
+        onPeersMenu={io?.onPeersMenu ? (index, at) => io.onPeersMenu?.("input", index, at) : undefined}
         readOnly={readOnly}
         onCommit={(joined, formsJoined, extras) =>
           onPatch({
@@ -126,6 +129,7 @@ export function NodeDetailsFields({
         onUnlink={io ? (index, at) => io.onUnlink("output", index, at) : undefined}
         onNavigateLinked={io ? (index) => io.onNavigate("output", index) : undefined}
         onHoverLinked={io ? (_, index) => io.onHoverItem("output", index) : undefined}
+        onPeersMenu={io?.onPeersMenu ? (index, at) => io.onPeersMenu?.("output", index, at) : undefined}
         readOnly={readOnly}
         onCommit={(joined, formsJoined, extras) =>
           onPatch({

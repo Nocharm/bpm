@@ -41,6 +41,7 @@ import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { GmpColorSwatch, GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
+import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
 import { NodeDetailsCard } from "@/components/node-details-card";
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
@@ -1621,6 +1622,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
+      // 카메라 애니메이션(fitView) 중 클릭은 RF가 onNodeClick을 드래그로 삼켜 selectedId가 안 따라온다(#14)
+      // — RF 선택 변경을 미러링해 선택 링과 인스펙터를 일치시킨다(단일 신규 선택·현재 스코프만).
+      const newlySelected = changes.filter(
+        (change): change is Extract<NodeChange<AppNode>, { type: "select" }> =>
+          change.type === "select" && change.selected,
+      );
+      if (newlySelected.length === 1) {
+        const node = nodesRef.current.find((n) => n.id === newlySelected[0].id);
+        if (node && (node.data.scopeId ?? null) === currentParentId) {
+          setSelectedId(node.id);
+          setSelectedEdgeId(null);
+        }
+      }
       if (childNodes.length === 0) {
         onNodesChange(dropDraggingPositions(changes));
         return;
@@ -1637,7 +1651,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
       }
     },
-    [childNodes, onNodesChange, dropDraggingPositions],
+    [childNodes, onNodesChange, dropDraggingPositions, currentParentId],
   );
   useEffect(() => {
     groupsRef.current = groups;
@@ -5768,6 +5782,36 @@ function MapEditor({ mapId }: { mapId: number }) {
         : [],
     [ioImport, nodes, edges, subprocessRefs],
   );
+  // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2). anchorId는 경로 하이라이트 기준점
+  const [ioPeersMenu, setIoPeersMenu] = useState<{
+    anchorId: string;
+    at: { x: number; y: number };
+    items: IoPeerItem[];
+  } | null>(null);
+  const handleIoPeersMenu = (side: IoSide, index: number, at: { x: number; y: number }) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    const items: IoPeerItem[] = [];
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      const originNode = nodes.find((n) => n.id === peers.origin?.nodeId);
+      if (originNode) {
+        items.push({
+          nodeId: originNode.id,
+          label: originNode.data.label,
+          side: peers.origin.kind === "spin" ? "input" : "output",
+        });
+      }
+    } else {
+      for (const mirror of peers.mirrors) {
+        if (mirror.nodeId === selectedNode.id) continue;
+        const mirrorNode = nodes.find((n) => n.id === mirror.nodeId);
+        if (mirrorNode) {
+          items.push({ nodeId: mirrorNode.id, label: mirrorNode.data.label, side: mirror.side });
+        }
+      }
+    }
+    if (items.length > 0) setIoPeersMenu({ anchorId: selectedNode.id, at, items });
+  };
   // 미러 텍스트 클릭 → 원본 노드로 이동(선택+센터링). 원본이 없으면 no-op (io-linking §4-4)
   const handleIoNavigate = (side: IoSide, index: number) => {
     if (selectedNode === null) return;
@@ -9438,6 +9482,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               setIoImport({ side, nodeId: selectedNode.id, at }),
                             onNavigate: handleIoNavigate,
                             onHoverItem: handleIoHoverItem,
+                            onPeersMenu: handleIoPeersMenu,
                             spLinkedInputIndexes: ioSpLinkedInputIndexes,
                             spLinkedOutputIndexes: ioSpLinkedOutputIndexes,
                           }}
@@ -10692,6 +10737,31 @@ function MapEditor({ mapId }: { mapId: number }) {
             </button>
           </div>
         </div>
+      )}
+      {ioPeersMenu !== null && (
+        <IoPeersMenu
+          position={ioPeersMenu.at}
+          items={ioPeersMenu.items}
+          onHoverPeer={(nodeId) => {
+            if (nodeId === null) {
+              setIoHighlight(null);
+              return;
+            }
+            // 앵커→상대 흐름 경로가 있으면 엣지도 함께(양방향 중 존재하는 쪽) — 없으면 노드만
+            const forward = getFlowPathBetween(edges, ioPeersMenu.anchorId, nodeId);
+            const path = forward.length > 0 ? forward : getFlowPathBetween(edges, nodeId, ioPeersMenu.anchorId);
+            setIoHighlight({ nodeIds: [nodeId], edgeIds: path });
+          }}
+          onPick={(nodeId) => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+            highlightNode(nodeId);
+          }}
+          onClose={() => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+          }}
+        />
       )}
       {gmpPicker !== null && (
         <GmpPickerPopup

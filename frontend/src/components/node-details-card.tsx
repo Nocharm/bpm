@@ -51,6 +51,8 @@ export interface NodeDetailsCardIo {
   onImport: (side: IoSide, at: { x: number; y: number }) => void;
   onNavigate: (side: IoSide, index: number) => void;
   onHoverItem: (side: IoSide, index: number | null) => void;
+  // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2)
+  onPeersMenu?: (side: IoSide, index: number, at: { x: number; y: number }) => void;
   // SP 읽기전용 행 중 이 맵에 미러가 있는 인덱스 — SP 항목은 노드 열이 아니라 링크 맵 지정값이라
   // getIoItemState가 판정하지 못하므로 page가 계산해 넘긴다
   spLinkedInputIndexes?: ReadonlySet<number>;
@@ -190,9 +192,15 @@ export function NodeDetailsCard({
                           return (
                             <span
                               key={i}
-                              className="block"
+                              // SP 원본 행 클릭 → 소비(미러) 노드 드롭다운(#2)
+                              className={`block ${linked && io?.onPeersMenu ? "cursor-pointer rounded-sm hover:bg-surface-alt" : ""}`}
                               onMouseEnter={linked ? () => io?.onHoverItem(id, i) : undefined}
                               onMouseLeave={linked ? () => io?.onHoverItem(id, null) : undefined}
+                              onClick={
+                                linked && io?.onPeersMenu
+                                  ? (e) => io.onPeersMenu?.(id, i, { x: e.clientX, y: e.clientY })
+                                  : undefined
+                              }
                             >
                               {linked && (
                                 <Link2 size={12} strokeWidth={1.5} className="mr-0.5 inline text-accent" />
@@ -251,6 +259,7 @@ export function NodeDetailsCard({
                     onUnlink: (side, index, at) => setUnlinkAsk({ side, index, at }),
                     onNavigate: io.onNavigate,
                     onHoverItem: io.onHoverItem,
+                    onPeersMenu: io.onPeersMenu,
                   }
                 }
                 dataForm={shown("data_form")}

@@ -168,6 +168,7 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                   <input
                     type="checkbox"
                     data-id={`node-io-check-${side}-${index}`}
+                    tabIndex={-1}
                     className="h-3 w-3 shrink-0 accent-[var(--color-accent)]"
                     checked={checked}
                     disabled={onToggleIoCheck === null}
@@ -218,6 +219,8 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
     <button
       type="button"
       data-id="node-gmp-pill"
+      // 캔버스 탭 순회에서 제외 — Tab이 노드 대신 GMP 태그를 넘어다니는 문제(#16)
+      tabIndex={-1}
       className={`${className} hover:brightness-95`}
       style={label ? getGmpBadgeStyle(value) : undefined}
       title="GMP — click to classify"
