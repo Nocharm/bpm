@@ -11,7 +11,7 @@
 | A1 | 인풋/아웃풋 섹션 비호버 시 + 버튼 숨김, 섹션(헤더·목록) 호버 시 표시 | ✅ | opacity 0→1→0 실측(헤더·행 호버 모두 1). 스크린샷에서 + 부재/등장 육안 확인 |
 | A2 | + 클릭 → 2항목 메뉴(Add new / Import from node…), 바깥 mousedown·Esc로 닫힘 | ✅ | 메뉴 항목 2개 `["Add new","Import from node…"]`, Esc·바깥 클릭 모두 닫힘 |
 | A3 | Add new → 기존처럼 빈 행 추가·편집 정상 | ✅ | 빈 행 추가→입력→커밋, Save 활성(dirty) 전환까지 확인 |
-| A4 | 카드 draft dirty 상태에서 Import 항목 비활성 + 사유 노출(툴팁 신뢰성 — 최종 리뷰 지적) | ✅ | `disabled=true`, `title="Save this card first"`. 스크린샷에서 회색 처리 확인 |
+| A4 | 카드 draft dirty 상태에서 Import 항목 비활성 + 사유 노출(툴팁 신뢰성 — 최종 리뷰 지적) | ✅ | `disabled=true`, `title="Save this card first"`. 스크린샷에서 회색 처리 확인. **툴팁 전달 경로 재검증(`9dc6a3b5`)** — title이 disabled 버튼에서 래퍼 `<span>`으로 이동(`btnOwnTitle=null`, `span.title="Save this card first"`), 실제 마우스 호버에서 그 span이 `mouseover`를 수신하고 hit-test(`elementFromPoint`)도 같은 title 보유 요소로 해석됨 = 네이티브 툴팁 노출 조건 성립. 툴팁 픽셀 자체는 브라우저 크롬이라 페이지 스크린샷에 안 잡히고 OS 캡처는 이 환경에서 권한 부족(`screencapture: could not create image from display`)이라 촬영 불가 |
 | A5 | 읽기전용(뷰어/비체크아웃)에선 + 버튼 자체 미노출 | ✅ | 게시(published) 버전에서 `-add` 0개·편집 input 0개. **비체크아웃만으로는 미검증** — 에디터가 로드 시 체크아웃을 자동 재획득해 편집모드가 됨(io-linking 무관 기존 동작) |
 
 ## B. 불러오기 모달
@@ -120,7 +120,8 @@
 
 - **A5 — 비체크아웃 읽기전용 미검증**: 체크아웃을 API로 해제한 뒤 에디터를 열면 에디터가 체크아웃을 자동 재획득해 편집모드가 된다(io-linking 이전부터의 기존 동작). 읽기전용 판정은 **게시(published) 버전**과 **권한 없는 뷰어**(I5) 두 경로로 검증했다.
 - **E6 replace 직후 소비 노드의 `input_links` 잔존**: 일괄 교체는 편집 대상 side의 열만 지우므로, 다른 노드에 남은 미러 링크는 그 시점엔 댕글링으로 남고 **다음 로드의 정합화에서 복사본으로 해산**된다(설계 §5 의도된 동작, 텍스트 보존 확인).
-- **SP 원본 호버의 경로 엣지 미점등**: SP 카드 항목 호버는 상대 노드만 켜지고 흐름 경로 엣지(`SP노드→소비노드`)는 켜지지 않는다. 픽스 전 최초 검수(`H1`)에서도 동일해 `34ccb79e`와 무관한 기존 동작이며, H1의 판정 기준(Link 아이콘 + 호버 하이라이트)은 충족한다. 원인은 미조사 — 스펙 §4-5의 "흐름 경로 있으면 엣지 포함"을 SP에도 적용할지는 별도 판단 필요.
+- **~~SP 원본 호버의 경로 엣지 미점등~~ → 검수 시드 결함이었음(`9dc6a3b5`에서 재검증, 제품 정상)**: 앞선 H1 관찰에서 엣지가 안 켜진 것은 **시드한 엣지가 캔버스에 렌더되지 않았기 때문**이다. SP 노드의 핸들 id는 일반 노드와 다른데(`target="in"`, `source=__primary__` 또는 끝 이름; 일반 노드는 `t-<side>`/`s-<side>`), API 시드가 `source_handle`/`target_handle`을 null로 둬 React Flow가 핸들을 못 찾고 그 엣지를 아예 그리지 않았다. 서버에는 엣지 3개가 있는데 캔버스 DOM엔 SP에 안 붙은 1개만 존재하는 것을 진단으로 확인. **핸들 id를 UI 연결과 동일하게 명시해 다시 시드하니 엣지 3개 전부 렌더되고, SP 원본 호버 → `{nodes:[소비노드], edges:[SP→소비 엣지]}`·소비 미러 호버 → `{nodes:[SP노드], edges:[SP→소비 엣지]}`로 경로 점등이 정상 확인**됐다. 즉 스펙 §4-5의 "흐름 경로 있으면 엣지 포함"은 SP에도 그대로 적용되고 있다. (교훈: SP 노드에 붙는 엣지를 API로 시드할 땐 핸들 id를 반드시 명시할 것)
+- **폴리시 픽스(`9dc6a3b5`) 회귀 스팟체크**: 후보 목록 memo화·`subprocessRefs` 병합 순서 변경의 회귀를 확인 — 불러오기 모달 정상 개시, 행 호버 하이라이트 `{nodes:[원본], edges:[경로]}`, 클릭 임포트 1회로 미러 행 생성(readOnly·Link 아이콘·`aria-label="Disconnect"` 신규 확인·플래그 기본 `Required`), 서버 `output_ids ↔ input_links` 일치. `appendIoRow`의 flags 소거 픽스대로 새 미러 행 flags는 빈 값(기본 required). 콘솔 에러 0.
 - **잔류**: 생성한 QA 맵 8개는 소프트삭제+ORM 하드퍼지로 전량 제거, 게시 워크플로가 만든 알림 12행도 map_id 스코프로 삭제해 베이스라인과 일치. `login_records` 2행(admin.sys·bora.choi)만 남으며, 이는 `scripts/_purge-test-map.py`에 명시된 의도적 예외(로그인id당 KST 하루 1행 dedup이라 소유 판별 불가).
 
 ## 결과 요약
