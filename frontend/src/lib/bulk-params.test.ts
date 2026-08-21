@@ -46,17 +46,34 @@ describe("buildBulkAttrPatch", () => {
     expect(buildBulkAttrPatch("duration", "1.15")).toEqual({ duration: "1.15" });
   });
 
-  it("IO append(줄 경계 접두 보존)는 항목별 폼 유지, 교체·비우기는 폼 소거", () => {
+  it("IO append(줄 경계 접두 보존)는 정렬 열 유지, 교체·비우기는 정렬 열 소거", () => {
     const existing = { input: "PR\n견적", output: "PO" };
-    // append — 기존이 줄 경계 접두로 남으므로 폼 정렬 유효
+    // append — 기존이 줄 경계 접두로 남으므로 폼·링크 정렬 유효
     expect(buildBulkAttrPatch("input", "PR\n견적\n계약", existing)).toEqual({ input: "PR\n견적\n계약" });
     expect(buildBulkAttrPatch("input", "PR\n견적", existing)).toEqual({ input: "PR\n견적" });
-    // 교체 — 인덱스 정렬이 깨지므로 폼 함께 소거
-    expect(buildBulkAttrPatch("input", "발주서", existing)).toEqual({ input: "발주서", input_forms: "" });
-    expect(buildBulkAttrPatch("output", "", existing)).toEqual({ output: "", output_forms: "" });
-    // 기존이 비어 있으면 폼도 원래 없음 — 소거 패치 포함(무해)
+    // 교체 — 인덱스 정렬이 깨지므로 줄 1:1 열을 함께 소거
+    expect(buildBulkAttrPatch("input", "발주서", existing))
+      .toEqual({ input: "발주서", input_forms: "", input_links: "", input_flags: "" });
+    expect(buildBulkAttrPatch("output", "", existing))
+      .toEqual({ output: "", output_forms: "", output_ids: "", output_links: "" });
+    // 기존이 비어 있으면 정렬 열도 원래 없음 — 소거 패치 포함(무해)
     expect(buildBulkAttrPatch("input", "신규", { input: "", output: "" }))
-      .toEqual({ input: "신규", input_forms: "" });
+      .toEqual({ input: "신규", input_forms: "", input_links: "", input_flags: "" });
+  });
+
+  it("정렬이 깨지는 IO 교체·비우기는 링크 열도 함께 소거(io-linking §3)", () => {
+    const existing = { input: "PR\n견적", output: "PO" };
+    // 교체 — 잔존 input_links가 새 텍스트의 엉뚱한 행을 가리키면 전파가 그 행을 원본 값으로 덮어쓴다
+    expect(buildBulkAttrPatch("input", "발주서", existing)).toEqual({
+      input: "발주서", input_forms: "", input_links: "", input_flags: "",
+    });
+    // 비우기 — 잔존 output_ids가 남으면 정합화가 지운 항목의 그룹을 되살린다
+    expect(buildBulkAttrPatch("output", "", existing)).toEqual({
+      output: "", output_forms: "", output_ids: "", output_links: "",
+    });
+    // append(줄 경계 접두 보존)는 정렬이 유지되므로 링크 열도 보존 — 그룹이 끊기면 안 된다
+    expect(buildBulkAttrPatch("input", "PR\n견적\n계약", existing)).toEqual({ input: "PR\n견적\n계약" });
+    expect(buildBulkAttrPatch("output", "PO\n검수서", existing)).toEqual({ output: "PO\n검수서" });
   });
 
   it("조건 필드는 단일 필드 패치(폼 무관)", () => {

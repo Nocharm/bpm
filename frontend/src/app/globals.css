@@ -383,12 +383,6 @@ button:not(:disabled):active {
   filter: drop-shadow(0 0 2px color-mix(in srgb, var(--color-accent) 70%, transparent))
     drop-shadow(0 0 5px color-mix(in srgb, var(--color-accent) 30%, transparent));
 }
-/* IO 링크 항목 hover — 상대(원본/미러) 노드 링 강조 (io-linking §4-6) */
-.react-flow__node.io-node-highlight {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-  border-radius: 8px;
-}
 
 /* 핸들 스타일은 page.tsx의 raw <style>로 이전 — Turbopack이 dev에서 .react-flow__node 셀렉터
    규칙을 purge하므로 노드 hover 기반 표시가 확실히 먹도록(lessons: canvas-react-flow §5). */

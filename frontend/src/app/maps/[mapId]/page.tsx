@@ -1541,10 +1541,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     lockedKeysRef.current = lockedKeys;
   }, [lockedKeys]);
   // saveCurrentScope(useCallback)가 stale 클로저 없이 읽기전용 여부를 읽도록 ref 미러 — dep 추가 회피.
+  // readOnly ref 미러 — 디바운스 타이머가 예약 시점 클로저를 잡으므로, 발사 순간의 최신 권한으로
+  // 다시 판정해야 한다. myRole/checkout 도착 전엔 readOnly가 false로 시작해, 그 창에 예약된 저장이
+  // 뷰어 권한으로 확정된 뒤에도 옛 클로저로 PUT을 던져 403이 난다.
+  const readOnlyRef = useRef<boolean>(false);
   const currentScopeIsReadOnlyRef = useRef<boolean>(false);
   useEffect(() => {
     currentScopeIsReadOnlyRef.current = currentScopeIsReadOnly;
   }, [currentScopeIsReadOnly]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -1727,6 +1734,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     autoSaveTimerRef.current = setTimeout(() => {
       autoSaveTimerRef.current = null;
+      // 예약 이후 읽기전용으로 확정됐으면(권한 도착·타인 체크아웃) 발사하지 않는다 —
+      // saveCurrentScope의 readOnly는 예약 시점 클로저값이라 여기서 막지 않으면 403이 난다.
+      // 저장할 수 없는 변경이므로 이탈 경고용 더티도 함께 내린다.
+      if (readOnlyRef.current) {
+        dirtyRef.current = false;
+        return;
+      }
       // 실패는 saveState=error 표시로 사용자에게 노출 — 수동 저장으로 재시도
       void saveCurrentScope().catch(() => undefined);
     }, AUTO_SAVE_DELAY_MS);
@@ -7589,7 +7603,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
