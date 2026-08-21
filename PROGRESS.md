@@ -12,6 +12,7 @@
 - Task 4: `lib/io-items.ts` 확장 — 전방 BFS 최단 경로(getFlowPathBetween·canReachForward)와 불러오기 후보 수집(collectIoImportCandidates, 홉별 BFS+사이클 차단·alreadyLinked/자기그룹 재수입 제외·미지정 SP 제외·댕글링 링크는 groupId null). TDD RED→GREEN, 전체 697 passed.
 - Task 5: `lib/io-items.ts` 불러오기 실행 — applyIoImport(mirror/takeover/succession/join 4시나리오+SP join, appendIoRow로 줄 정렬 동반 추가). TDD RED→GREEN, 전체 709 passed.
 - Task 6: `lib/io-items.ts` 전파·정합화 겸용 패스 — propagateIoLinks(미러 텍스트/폼 동기화·댕글링/중복/자기참조/id+link공존 소거, changed=false는 입력 배열 참조 그대로 반환)·getIoLinkPeers(원본→mirrors, 미러→origin). TDD RED→GREEN, 전체 724 passed.
+- Task 7: `multi-value-input.tsx` 확장(컴포넌트 전용, 배선은 후속 태스크) — 5열 행 버퍼(text/form/id/link/flag)·+ 버튼 섹션 호버 공개(`group/iosec`)+Add new/Import from node… 2항목 메뉴(mousedown/Esc 닫힘)·미러 행(Link2→Link2Off 호버 스왑, readOnly input, 정적 폼 텍스트)·원본 행(Link2 배지)·필수/선택 플래그 필. 기존 두 호출부는 신규 props 전부 optional이라 무변경 호환. 4게이트(tsc/lint/vitest 724/build) 그린.
 
 ## 2026-08-20 — 좁은 인스펙터 입력 오버플로 픽스 (dev)
 - 통일 폭 입력의 shrink-0가 원인 — w-32/w-44는 상한으로 두고 min-w-0+축소 허용(메트릭스·조건·시스템·URL·SP 지정 4행). 인스펙터 최소 폭 300px에서 경계 이탈 0 실측(여유 폭에선 통일 폭 유지).
