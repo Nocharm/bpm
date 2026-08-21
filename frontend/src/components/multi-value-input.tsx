@@ -290,7 +290,12 @@ export function MultiValueInput({
             onMouseEnter={linked ? () => onHoverLinked?.("row", i) : undefined}
             onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
           >
-            {isMirror ? (
+            {isMirror && onUnlink === undefined ? (
+              // 해제 핸들러가 없는 표면(노드 편집 모달 등) — 죽은 어포던스 대신 정적 Link2만
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent">
+                <Link2 size={12} strokeWidth={1.5} />
+              </span>
+            ) : isMirror ? (
               // 미러 행 — 번호 배지 대신 Unlink 아이콘 버튼(호버 시 Link2→Link2Off 겹쳐 스왑)
               <button
                 type="button"
@@ -323,9 +328,10 @@ export function MultiValueInput({
               data-id={`${dataId}-row-${i}`}
               readOnly={isMirror}
               title={isMirror ? t("io.linkedTooltip") : undefined}
+              // 미러 텍스트는 원본으로 이동하는 클릭 대상 — 네비 핸들러가 없는 표면에선 포인터 커서도 빼 오해 방지
               className={`min-w-0 flex-1 rounded-sm border border-transparent px-1.5 py-0.5 text-caption focus:outline-none ${
                 isMirror
-                  ? "cursor-pointer bg-surface-pearl text-ink-secondary"
+                  ? `bg-surface-pearl text-ink-secondary ${onNavigateLinked ? "cursor-pointer" : ""}`
                   : "bg-surface-alt text-ink focus:border-accent"
               }`}
               value={row.text}

@@ -154,6 +154,21 @@ def test_designate_roundtrips_io_item_forms(client: TestClient, enforce) -> None
     assert detail["sp_output_forms"] == "structured"
 
 
+def test_designate_roundtrips_io_item_ids(client: TestClient, enforce) -> None:
+    """SP IO 항목 id — 응답에 실려야 지정 모달이 재저장 때 기존 id를 승계할 수 있다 (io-linking §3)."""
+    map_id = seed_map("desig-io-ids", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "input": "PR\n견적", "input_ids": "itm_i1\nitm_i2", "output": "PO", "output_ids": "itm_o1"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_input_ids"] == "itm_i1\nitm_i2"
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["sp_input_ids"] == "itm_i1\nitm_i2"
+    assert detail["sp_output_ids"] == "itm_o1"
+
+
 def test_designate_requires_published_version(client: TestClient, enforce) -> None:
     map_id = seed_map("desig-draft-only", published=False)
     act_as(OWNER)

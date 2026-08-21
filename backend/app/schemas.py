@@ -730,6 +730,9 @@ class MapOut(BaseModel):
     sp_output: str | None = None
     sp_input_forms: str | None = None
     sp_output_forms: str | None = None
+    # SP IO 항목 id — 지정 모달이 재저장 때 기존 id를 승계하려면 현행 값을 읽어야 한다 (io-linking §3)
+    sp_input_ids: str | None = None
+    sp_output_ids: str | None = None
     # 인터뷰 승격 필드 — 대표+폴백 쌍 (design 2026-08-19 §1.2)
     sp_start_condition: str | None = None
     sp_end_condition: str | None = None

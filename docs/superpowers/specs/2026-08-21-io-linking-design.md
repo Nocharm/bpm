@@ -76,9 +76,11 @@ split/join·상태 판정·링크 파싱·인덱스 구축·후보 수집·불�
 
 ## 5. 전파·정합화
 
-**전파** — 원본 텍스트/폼이 저장되는 지점(인스펙터 카드 Save·일괄편집 모달·노드 요약 모달)에서 커밋 직전 `propagateOriginEdits(graph)` 호출 → 모든 미러 줄 갱신. 원본 항목/노드 삭제 시 해당 미러 전부 자동 해제(복사본 전환). SP 원본은 이 맵에서 수정 불가라 트리거 없음.
+전파와 정합화는 결국 같은 일(미러를 원본 값으로 맞추고 무효 링크를 소거)이라 **단일 함수 `propagateIoLinks(nodes, spRefs)`** 로 합쳤다(구 `propagateOriginEdits`/`reconcileIoLinks`). 반환은 `{nodes, changed}` — `changed:false`면 입력 배열을 참조 그대로 돌려줘 불필요한 리렌더가 없다.
 
-**정합화** — 맵 로드 시 그래프+SP ref 로드 완료 후 `reconcileIoLinks(graph, spRefs)` 1회:
+**전파** — 원본 텍스트/폼이 저장되는 지점에서 커밋 직전 호출 → 모든 미러 줄 갱신. 배선은 `page.tsx`의 노드 데이터 쓰기 경로 두 곳(`updateSelectedData`=인스펙터 카드 Save, `patchNode`=노드 편집 모달)이며, IO 관련 키가 패치에 있을 때만 돈다(`hasIoPatchField`). 일괄편집 모달은 IO를 줄 추가로만 바꿔(기존 줄 텍스트 불변) 정렬이 깨지지 않으므로 트리거하지 않는다. 원본 항목/노드 삭제 시 해당 미러 전부 자동 해제(복사본 전환). SP 원본은 이 맵에서 수정 불가라 트리거 없음.
+
+**정합화** — 맵 로드 시(루트 스코프 `getGraph` 직후, 그래프의 `subprocess_refs` 동봉) 같은 함수를 1회:
 1. itemId 인덱스 구축 (`output_ids` + SP ref `sp_*_ids`)
 2. 원본 소실 링크 → 복사본 전환 (CSV/AI id 소거·SP 지정 항목 삭제 등)
 3. 원본과 어긋난 미러 텍스트/폼 → 원본 값으로 치유 (SP 지정 변경 등 전파 우회 드리프트)

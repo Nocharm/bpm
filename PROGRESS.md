@@ -15,6 +15,7 @@
 - Task 7: `multi-value-input.tsx` 확장(컴포넌트 전용, 배선은 후속 태스크) — 5열 행 버퍼(text/form/id/link/flag)·+ 버튼 섹션 호버 공개(`group/iosec`)+Add new/Import from node… 2항목 메뉴(mousedown/Esc 닫힘)·미러 행(Link2→Link2Off 호버 스왑, readOnly input, 정적 폼 텍스트)·원본 행(Link2 배지)·필수/선택 플래그 필. 기존 두 호출부는 신규 props 전부 optional이라 무변경 호환. 4게이트(tsc/lint/vitest 724/build) 그린.
 - Task 8: `io-import-modal.tsx` 신설(컴포넌트 전용) — EdgeSelectModal 크롬(포탈·투명 백드롭·Esc·edge-row-in)을 본떠 필터 입력+hop≤2 축약(Show more)+nodeId 연속 캡션 그룹핑+행 배지(SP 필/Link2)로 IoImportCandidate 선택 UI 구성. 4게이트(tsc/lint/vitest 724/build) 그린.
 - 후보 수집 픽스: 운영 레거시 SP 지정은 `sp_*_ids`가 비어 있어 후보 클릭이 조용히 무동작 — id 없는 SP 항목은 아예 후보에서 제외(applyIoImport의 null 가드는 방어로 유지).
+- Task 9: 에디터 배선 — 로드 정합화(루트 스코프, 치유분은 autosave 동승)·노드 데이터 쓰기 2경로 전파(rootGraph 미로드 시 SP 미러 오판 방지 가드)·인스펙터 IO 카드 4열 draft+해제 팝오버(Save 전 취소)·불러오기 모달/토스트 4종·노드·엣지 hover 하이라이트·SP 지정 저장 시 항목 id 승계. 노드 편집 모달에도 링크 4열을 왕복시켜(미노출) 행 삭제 시 열 정렬 어긋남을 차단하고, `MapOut`에 `sp_*_ids`를 노출해 지정 재저장이 기존 id를 승계하도록 했다(없으면 매 저장마다 소비 맵 미러가 전량 해산).
 
 ## 2026-08-20 — 좁은 인스펙터 입력 오버플로 픽스 (dev)
 - 통일 폭 입력의 shrink-0가 원인 — w-32/w-44는 상한으로 두고 min-w-0+축소 허용(메트릭스·조건·시스템·URL·SP 지정 4행). 인스펙터 최소 폭 300px에서 경계 이탈 0 실측(여유 폭에선 통일 폭 유지).

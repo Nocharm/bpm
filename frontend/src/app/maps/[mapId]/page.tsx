@@ -53,6 +53,7 @@ import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { IoImportModal } from "@/components/io-import-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
@@ -232,6 +233,16 @@ import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
+import {
+  applyIoImport,
+  buildIoMirrorIndex,
+  collectIoImportCandidates,
+  getFlowPathBetween,
+  getIoLinkPeers,
+  propagateIoLinks,
+  type IoImportAction,
+  type IoSide,
+} from "@/lib/io-items";
 import { displayToSavedX } from "@/lib/inline-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
@@ -284,6 +295,21 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
+// 불러오기 실행 결과별 안내 토스트 — 어떤 소유권 판정이 났는지 알려준다 (io-linking §2)
+const IMPORT_TOAST_KEY = {
+  mirror: "io.importedMirror",
+  takeover: "io.importedTakeover",
+  succession: "io.importedSuccession",
+  join: "io.importedJoin",
+} as const satisfies Record<IoImportAction, string>;
+// 이 키가 패치에 하나라도 있으면 원본 수정일 수 있어 미러 전파를 돌린다 (io-linking §5)
+const IO_PATCH_FIELDS = [
+  "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links",
+] as const satisfies readonly (keyof NodeData)[];
+
+function hasIoPatchField(patch: Partial<NodeData>): boolean {
+  return IO_PATCH_FIELDS.some((field) => field in patch);
+}
 
 const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
@@ -958,6 +984,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   >(null);
   // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // IO 링크 hover 하이라이트 — 인스펙터 행 hover와 불러오기 모달 행 hover가 공유하는 단일 상태 (io-linking §4-6)
+  const [ioHighlight, setIoHighlight] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  // 열려 있는 불러오기 모달 — 어느 노드의 어느 쪽 IO를 채우는지 + 앵커 좌표
+  const [ioImport, setIoImport] = useState<
+    { side: IoSide; nodeId: string; at: { x: number; y: number } } | null
+  >(null);
   // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
   const [decisionDrop, setDecisionDrop] = useState<
     | {
@@ -2348,14 +2380,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         // 로드되는 스코프 노드 id들 — 카메라 프레이밍에 쓴다(루트=권위 그래프, 딥뷰=합성 트리 자식).
         let scopeNodeIds: string[];
+        // IO 링크 정합화가 무언가 고쳤는지 — 아래 히스토리/더티 리셋 이후에 저장을 예약해야 살아남는다
+        let ioLinksHealed = false;
         if (currentParentId === null) {
           // 루트 스코프 — 편집 가능한 권위 그래프(평면)를 그대로 로드.
           const graph = await getGraph(versionId);
           if (!active) {
             return;
           }
+          // 로드 정합화 — 원본 소실 링크 해산·드리프트한 미러 텍스트 치유 (io-linking §5).
+          // 읽기전용이면 scheduleAutoSave가 자체 게이트로 무시하므로 메모리 치유만 남는다.
+          const { nodes: reconciled, changed } = propagateIoLinks(
+            toAppNodes(graph, currentParentId),
+            new Map(
+              Object.entries(graph.subprocess_refs ?? {}).map(([key, ref]) => [Number(key), ref]),
+            ),
+          );
+          ioLinksHealed = changed;
           // 현재 스코프 노드는 모두 currentParentId(=null) 스코프 소속 — scope-split 저장 식별용 태그
-          setNodes(toAppNodes(graph, currentParentId));
+          setNodes(reconciled);
           setEdges(toAppEdges(graph));
           setGroups(graph.groups);
           scopeNodeIds = graph.nodes.map((node) => node.id);
@@ -2463,6 +2506,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           autoSaveTimerRef.current = null;
         }
         setSaveState("idle");
+        // 정합화 치유분은 다음 PUT에 동승 — 위 더티 리셋 뒤에 예약해야 타이머가 살아남는다 (io-linking §5)
+        if (ioLinksHealed) {
+          scheduleAutoSave();
+        }
         // 스코프 전환이면(첫 로드/버전 변경 제외) 새 스코프로 카메라를 부드럽게 이동 — 콘텐츠가 제자리에서
         // 갑자기 바뀌어 시야가 길을 잃는 것 방지(포커스 모드 전환 연속화 A안).
         const isScopeTransition =
@@ -2517,7 +2564,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
     // fullGraph: 딥뷰 진입 직후 host의 자식이 resolved 로딩으로 늦게 합성 트리에 들어오면 effect를 재실행해 채운다.
     // 루트 스코프에선 위 scopeKey 가드가 fullGraph-only 재실행을 무시하므로 권위 재로딩 회귀는 없다.
-  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, t, frameScopeTopLeftKeepZoom]);
+  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, scheduleAutoSave, t, frameScopeTopLeftKeepZoom]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -4723,16 +4770,21 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // IO 텍스트/폼/링크가 바뀌면 원본 수정일 수 있다 → 같은 커밋에서 미러 전량 동기화 (io-linking §5).
+      // rootGraph 미로드(=SP 지정 미확보) 중엔 건너뛴다 — 불완전한 spRefs로 돌리면 SP 원본 미러가
+      // 댕글링으로 오판돼 해산된다. 그 경우 치유는 다음 로드 정합화가 맡는다.
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === selectedId
             ? { ...node, data: { ...node.data, ...patch } }
             : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, selectedId, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 하위프로세스 "최신으로 업데이트" — linkedVersionId를 latest_published_version_id로 갱신,
@@ -4802,14 +4854,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // 노드 편집 모달도 IO 원본 텍스트를 고칠 수 있다 — 인스펙터와 같은 전파 트리거·가드 (io-linking §5)
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 정보 수정 모달 패치 — summaryNodeId 대상. 현재 스코프 노드는 state, 펼친 자식은 scope-split.
@@ -5619,6 +5674,63 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // ── IO 링크(불러오기) 인스펙터 배선 (io-linking §4) ──
+  // 미러를 실제로 보유한 원본/SP 항목의 줄 인덱스 — 행 아이콘 표시는 이 집합으로만 판정한다
+  // (getIoLinkPeers는 호출마다 인덱스를 재구축하므로 행 단위로 쓰지 않는다).
+  const ioMirrorIndex = useMemo(() => buildIoMirrorIndex(nodes), [nodes]);
+  const collectLinkedIndexes = (ids: string | null | undefined): ReadonlySet<number> => {
+    const set = new Set<number>();
+    (ids ?? "").split("\n").forEach((raw, i) => {
+      const itemId = raw.trim();
+      if (itemId !== "" && (ioMirrorIndex.get(itemId)?.length ?? 0) > 0) {
+        set.add(i);
+      }
+    });
+    return set;
+  };
+  const ioOriginGroupIndexes = collectLinkedIndexes(selectedNode?.data.output_ids);
+  const ioSpLinkedInputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.input_ids : null,
+  );
+  const ioSpLinkedOutputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.output_ids : null,
+  );
+  // 항목 hover → 상대편(원본이면 미러 전부, 미러면 원본) 노드 + 흐름 경로 엣지 하이라이트.
+  // 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는 유지 (io-linking §2)
+  const handleIoHoverItem = (side: IoSide, index: number | null) => {
+    if (selectedNode === null || index === null) {
+      setIoHighlight(null);
+      return;
+    }
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    const peerIds = [
+      ...(peers.origin ? [peers.origin.nodeId] : []),
+      ...peers.mirrors.map((m) => m.nodeId),
+    ].filter((id) => id !== selectedNode.id);
+    const nodeIds = [...new Set(peerIds)];
+    if (nodeIds.length === 0) {
+      setIoHighlight(null);
+      return;
+    }
+    const edgeIds = new Set<string>();
+    for (const peerId of nodeIds) {
+      const forward = getFlowPathBetween(edges, selectedNode.id, peerId);
+      const path = forward.length > 0 ? forward : getFlowPathBetween(edges, peerId, selectedNode.id);
+      for (const edgeId of path) {
+        edgeIds.add(edgeId);
+      }
+    }
+    setIoHighlight({ nodeIds, edgeIds: [...edgeIds] });
+  };
+  // 미러 텍스트 클릭 → 원본 노드로 이동(선택+센터링). 원본이 없으면 no-op (io-linking §4-4)
+  const handleIoNavigate = (side: IoSide, index: number) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      setIoHighlight(null);
+      highlightNode(peers.origin.nodeId);
+    }
+  };
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
   const editableParams = selectedNode ? getEditableParamFields(selectedNode.data.nodeType) : [];
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 미지정이면 ""(행은 "—")
@@ -6087,6 +6199,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // Ctrl+드래그 중인 원본 id — 끌리는 실제 노드는 반투명 사본으로 표시(커서를 따라오는 건 사본).
     // 진짜 원본 그래픽은 아래 ghostNodes가 원위치에 솔리드로 렌더하고, 엣지도 그 고스트로 앵커된다(styledEdges).
     const ctrlGhostIdSet = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 상대 노드에 링 강조(className만, 스타일은 globals.css)
+    const ioHighlightIdSet = ioHighlight ? new Set(ioHighlight.nodeIds) : null;
     // 파생 자식(prop-only) 대신 childNodes의 state 객체를 buildScope 파생 위치로 표시해야 RF가 측정·이벤트를 라우팅한다.
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
@@ -6143,8 +6257,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       const withCopyStyle = ctrlGhostIdSet?.has(node.id)
         ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
         : withWarning;
+      const withIoHighlight = ioHighlightIdSet?.has(node.id)
+        ? { ...withCopyStyle, className: [withCopyStyle.className, "io-node-highlight"].filter(Boolean).join(" ") }
+        : withCopyStyle;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withCopyStyle);
+      return injectSubEnds(withIoHighlight);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6183,6 +6300,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     ctrlDragActive,
     ctrlDragGhosts,
     staleAnchorIds,
+    ioHighlight,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -6202,6 +6320,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // Ctrl+드래그 중엔 끌리는 노드의 엣지를 원위치 고스트(ctrl-ghost:id)로 앵커 — 엣지가 원본 자리에 남고
     // 반투명 사본만 커서를 따라간다(원본은 제자리 유지). ghostIds가 없으면 항등 변환.
     const ctrlGhostIds = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 원본↔미러 사이 흐름 경로 엣지(양방향 중 존재하는 쪽) 강조
+    const ioHighlightEdgeIds = ioHighlight ? new Set(ioHighlight.edgeIds) : null;
     const anchorEdgesToGhosts = (list: Edge[]): Edge[] =>
       ctrlGhostIds
         ? list.map((edge) => {
@@ -6253,7 +6373,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         };
       }
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
-      if (edge.id === hoveredEdgeId) {
+      if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id)) {
         next = {
           ...next,
           className: [next.className, "edge-hover-highlight"].filter(Boolean).join(" "),
@@ -6340,7 +6460,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
     });
     return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...inlineComposition.gateways, ...syntheticEndEdges]);
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -8590,6 +8710,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 output={node.data.output ?? ""}
                 input_forms={node.data.input_forms ?? ""}
                 output_forms={node.data.output_forms ?? ""}
+                output_ids={node.data.output_ids ?? ""}
+                input_links={node.data.input_links ?? ""}
+                output_links={node.data.output_links ?? ""}
+                input_flags={node.data.input_flags ?? ""}
                 data_form={node.data.data_form ?? ""}
                 start_condition={node.data.start_condition ?? ""}
                 end_condition={node.data.end_condition ?? ""}
@@ -9186,9 +9310,22 @@ function MapEditor({ mapId }: { mapId: number }) {
                             output: selectedNode.data.output ?? "",
                             input_forms: selectedNode.data.input_forms ?? "",
                             output_forms: selectedNode.data.output_forms ?? "",
+                            output_ids: selectedNode.data.output_ids ?? "",
+                            input_links: selectedNode.data.input_links ?? "",
+                            output_links: selectedNode.data.output_links ?? "",
+                            input_flags: selectedNode.data.input_flags ?? "",
                             data_form: selectedNode.data.data_form ?? "",
                             start_condition: selectedNode.data.start_condition ?? "",
                             end_condition: selectedNode.data.end_condition ?? "",
+                          }}
+                          io={{
+                            originGroupIndexes: ioOriginGroupIndexes,
+                            onImport: (side, at) =>
+                              setIoImport({ side, nodeId: selectedNode.id, at }),
+                            onNavigate: handleIoNavigate,
+                            onHoverItem: handleIoHoverItem,
+                            spLinkedInputIndexes: ioSpLinkedInputIndexes,
+                            spLinkedOutputIndexes: ioSpLinkedOutputIndexes,
                           }}
                           sp={selectedSpRef}
                           readOnly={readOnly}
@@ -10241,6 +10378,51 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setHoveredEdgeId(null);
             setSwapSelect(null);
+          }}
+        />
+      )}
+      {/* IO 항목 불러오기 — 후보 계산은 이 표현식 안이라 모달이 닫혀 있으면 실행되지 않는다.
+          선택 즉시 그래프에 커밋(여러 노드를 만지므로 카드 draft로는 표현 불가, io-linking §4-2) */}
+      {ioImport && (
+        <IoImportModal
+          side={ioImport.side}
+          position={ioImport.at}
+          candidates={collectIoImportCandidates({
+            nodes,
+            edges,
+            spRefs: subprocessRefs,
+            nodeId: ioImport.nodeId,
+            side: ioImport.side,
+          })}
+          onHoverCandidate={(candidate) =>
+            setIoHighlight(
+              candidate
+                ? { nodeIds: [candidate.nodeId], edgeIds: candidate.pathEdgeIds }
+                : null,
+            )
+          }
+          onPick={(candidate) => {
+            const result = applyIoImport({
+              nodes: nodesRef.current,
+              edges,
+              spRefs: subprocessRefs,
+              nodeId: ioImport.nodeId,
+              side: ioImport.side,
+              candidate,
+            });
+            setIoImport(null);
+            setIoHighlight(null);
+            if (!result) {
+              return;
+            }
+            recordChange(false);
+            setNodes(result.nodes);
+            scheduleAutoSave();
+            showToast(t(IMPORT_TOAST_KEY[result.action]));
+          }}
+          onClose={() => {
+            setIoImport(null);
+            setIoHighlight(null);
           }}
         />
       )}

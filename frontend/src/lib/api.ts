@@ -86,6 +86,9 @@ export interface MapSummary {
   sp_output?: string | null;
   sp_input_forms?: string | null;
   sp_output_forms?: string | null;
+  // SP IO 항목 id — 지정 재저장 시 기존 id 승계 소스 (io-linking §3)
+  sp_input_ids?: string | null;
+  sp_output_ids?: string | null;
   // 인터뷰 승격 필드 — 대표+폴백 쌍. sp_gmp는 direct|indirect|non_gmp|null(미분류) (design 2026-08-19 §1.2)
   sp_start_condition?: string | null;
   sp_end_condition?: string | null;

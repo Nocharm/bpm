@@ -75,6 +75,11 @@ export type NodeEditPatch = Partial<{
   output: string;
   input_forms: string;
   output_forms: string;
+  // IO 링크 열 — 이 모달은 편집하지 않지만, 행 삭제 시 텍스트와 함께 정렬을 옮겨야 하므로 왕복시킨다 (io-linking §3)
+  output_ids: string;
+  input_links: string;
+  output_links: string;
+  input_flags: string;
   data_form: string;
   start_condition: string;
   end_condition: string;
@@ -150,6 +155,11 @@ interface NodeSummaryModalProps {
   output: string;
   input_forms: string;
   output_forms: string;
+  // IO 링크 열 — MultiValueInput이 텍스트와 함께 정렬 유지 (io-linking §3)
+  output_ids: string;
+  input_links: string;
+  output_links: string;
+  input_flags: string;
   data_form: string;
   start_condition: string;
   end_condition: string;
@@ -204,6 +214,10 @@ export function NodeSummaryModal({
   output,
   input_forms,
   output_forms,
+  output_ids,
+  input_links,
+  output_links,
+  input_flags,
   data_form,
   start_condition,
   end_condition,
@@ -266,7 +280,8 @@ export function NodeSummaryModal({
   const [form, setForm] = useState({
     label: title, description, color, assignee, department, system, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-    input, output, input_forms, output_forms, data_form, start_condition, end_condition,
+    input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+    data_form, start_condition, end_condition,
   });
   // 비용 통화 토글 — 배타 계약이라 한 번에 한 통화만. 전환 시 기존 값은 버퍼에서 소거+안내 (사용자 결정 2026-08-20)
   const [activeCurrency, setActiveCurrency] = useState<"cost_krw" | "cost_usd">(
@@ -280,7 +295,8 @@ export function NodeSummaryModal({
     setForm({
       label: title, description, color, assignee, department, system, duration,
       touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-      input, output, input_forms, output_forms, data_form, start_condition, end_condition,
+      input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+    data_form, start_condition, end_condition,
     });
     setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
     setCostNotice(null);
@@ -317,6 +333,10 @@ export function NodeSummaryModal({
       output: form.output,
       input_forms: form.input_forms,
       output_forms: form.output_forms,
+      output_ids: form.output_ids,
+      input_links: form.input_links,
+      output_links: form.output_links,
+      input_flags: form.input_flags,
       data_form: form.data_form,
       start_condition: form.start_condition,
       end_condition: form.end_condition,
@@ -350,21 +370,23 @@ export function NodeSummaryModal({
   const initialForm: Record<string, string> = {
     label: title, description, color, assignee, department, system, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-    input, output, input_forms, output_forms, data_form, start_condition, end_condition,
+    input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+    data_form, start_condition, end_condition,
   };
   const changedKeys = Object.keys(initialForm).filter(
     (k) => (form as Record<string, string>)[k] !== initialForm[k],
   );
   const hasChangedIn = (keys: readonly string[]) => changedKeys.some((k) => keys.includes(k));
   const ATTRS_KEYS = ["assignee", "department", "system", "url", "urlLabel"] as const;
-  const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "data_form", "start_condition", "end_condition"] as const;
+  const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "output_ids", "input_links",
+    "output_links", "input_flags", "data_form", "start_condition", "end_condition"] as const;
   // 폼(항목별)은 소속 IO 라벨로 접고, URL 라벨은 URL로 접어 중복 제거
   const CHANGED_LABEL_KEY: Record<string, MessageKey> = {
     label: "field.title", description: "field.description", color: "field.color",
     assignee: "field.assignee", department: "field.department", system: "field.system",
     url: "field.url", urlLabel: "field.url",
-    input: "field.input", input_forms: "field.input",
-    output: "field.output", output_forms: "field.output",
+    input: "field.input", input_forms: "field.input", input_links: "field.input", input_flags: "field.input",
+    output: "field.output", output_forms: "field.output", output_ids: "field.output", output_links: "field.output",
     data_form: "field.dataForm", start_condition: "field.startCondition", end_condition: "field.endCondition",
   };
   const changedLabels = [...new Set(changedKeys.map((k) =>
@@ -431,6 +453,10 @@ export function NodeSummaryModal({
       output: form.output,
       input_forms: form.input_forms,
       output_forms: form.output_forms,
+      output_ids: form.output_ids,
+      input_links: form.input_links,
+      output_links: form.output_links,
+      input_flags: form.input_flags,
       data_form: form.data_form,
       start_condition: form.start_condition,
       end_condition: form.end_condition,
@@ -972,6 +998,10 @@ export function NodeSummaryModal({
                         output={form.output}
                         inputForms={form.input_forms}
                         outputForms={form.output_forms}
+                        outputIds={form.output_ids}
+                        inputLinks={form.input_links}
+                        outputLinks={form.output_links}
+                        inputFlags={form.input_flags}
                         dataForm={form.data_form}
                         startCondition={form.start_condition}
                         endCondition={form.end_condition}
