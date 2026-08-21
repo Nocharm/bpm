@@ -1157,12 +1157,30 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
   });
 
   it("Input_Flags — 신규 노드 착지, 대소문자 정규화, 미지 값은 경고와 함께 required 강등", () => {
-    const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2\n자료3","OPTIONAL\nrequired\noptional"'].join("\n");
+    const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2\n자료3","OPTIONAL\nmandatory\noptional"'].join("\n");
     const o = buildGraphFromCsv(csv);
     expect(o.errors).toEqual([]);
     const a = o.graph!.nodes.find((n) => n.title === "A")!;
     expect(a.input_flags).toBe("optional\n\noptional");
     expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(true);
+  });
+
+  it("Input_Flags — 전 줄 무효 셀도 '제공'으로 취급해 required로 리셋 + 경고 (QA 이슈 #2)", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], input: "PR", input_flags: "optional" };
+    const o = mergeOf(["Name,Input_Flags", '"Review request","mandatory"'].join("\n"), base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.input_flags).toBe("");
+    expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(true);
+  });
+
+  it("Input_Flags — required 토큰으로 optional을 명시 리셋한다(경고 없음)", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], input: "PR", input_flags: "optional" };
+    const o = mergeOf(["Name,Input_Flags", '"Review request","required"'].join("\n"), base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.input_flags).toBe("");
+    expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(false);
   });
 
   it("Input_Flags — 선행 빈 줄 보존(1번째 필수·2번째 선택 패턴)", () => {

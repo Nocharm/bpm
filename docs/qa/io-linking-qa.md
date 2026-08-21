@@ -112,7 +112,7 @@
 | J1 | CSV 내보내기 헤더에 `Input_Flags`가 `Input`과 `Output` 사이에 위치 | ✅ | 에디터 인스펙터 Map 탭 `export-csv`로 실내보내기 → `…,FTE,Input,Input_Flags,Output,Data_Form,…` |
 | J2 | 플래그 있는 노드 행이 따옴표 묶인 멀티라인 셀 `"\noptional"`로 실림 | ✅ | 2항목 인풋(2번째만 Optional)을 필로 토글·Save 후 내보내기 — 서버 `input_flags="\noptional"`, CSV 셀도 `"(개행)optional"`(첫 줄 빈 줄=required) |
 | J3 | 같은 CSV 재임포트 → 대상 노드 변경 없음, 적용·리로드 후 2번 항목 Optional 유지 | ✅ | 프리뷰 `3 nodes matched / 0 nodes added / Nothing in this map …`, 적용 후 서버 `input="요청서\n첨부자료"`·`input_flags="\noptional"`, 필 `[Required, Optional]` |
-| J4 | 알 수 없는 플래그 값(`mandatory`) → Input_Flags 경고 + 값이 Required로 착지 | ❌ | **이슈 #2** — 경고는 정상 노출(`Row 2: Input_Flags accepts only "optional" per line — other values were treated as required`)이나, **셀의 모든 줄이 무효라 정규화 결과가 빈 문자열이 되면** "빈 셀=기존 유지" 규칙에 걸려 기존 `optional`이 그대로 남는다(필 Optional 유지). 일부 줄만 무효한 변형(`"mandatory\noptional"`)은 기대대로 1행 Required·2행 Optional로 착지 |
+| J4 | 알 수 없는 플래그 값(`mandatory`) → Input_Flags 경고 + 값이 Required로 착지 | ✅ | **이슈 #2** — 경고는 정상 노출(`Row 2: Input_Flags accepts only "optional" per line — other values were treated as required`)이나, **셀의 모든 줄이 무효라 정규화 결과가 빈 문자열이 되면** "빈 셀=기존 유지" 규칙에 걸려 기존 `optional`이 그대로 남는다(필 Optional 유지). 일부 줄만 무효한 변형(`"mandatory\noptional"`)은 기대대로 1행 Required·2행 Optional로 착지 |
 | J5 | 원본→미러 흐름이 연결된 상태에선 배지 없음(편집·읽기 모드 모두) | ✅ | 편집모드 행 `warn=false`, 게시본 읽기모드 `1. 산출물 · PDF`에도 경고 아이콘 없음 |
 | J6 | 원본↔미러 엣지 삭제 → 인풋 미러 행에 빨간 TriangleAlert + 툴팁 | ✅ | 행 마크업에 `svg.lucide-triangle-alert`, 감싼 요소 `title="No upstream flow path from its origin"`. 스크린샷에서 링크 아이콘 다음·텍스트 앞 위치 확인 |
 | J7 | 읽기모드에서도 같은 배지 노출 | ✅ | 게시 버전 읽기모드 행 `warn=true`, 동일 title. 스크린샷 `J7-read-broken-badge` |
@@ -131,7 +131,9 @@
 - **조치**: **`34ccb79e`에서 수정, 재검증 통과.** `handleIoHoverItem`이 호버 대상을 분기하도록 변경 — 원본이 선택 노드 자신이면 미러 전부, 아니면 원본 하나만, 원본 소실(댕글링)이면 아무것도 점등하지 않는다.
 - **재검증(2026-08-21, `34ccb79e`)**: 원본 1 + 미러 2(인풋·아웃풋) 전용 맵으로 4케이스 실측 — 미러(인풋) 호버 `{nodes:[f2-q], edges:[f2-e-q-s]}` / 병렬 미러(아웃풋) 호버 `{nodes:[f2-q], edges:[]}` / 원본 호버 `{nodes:[f2-r,f2-s], edges:[f2-e-q-s]}` / 엣지 삭제 후 미러 호버 `{nodes:[f2-q], edges:[]}`. 형제 미러 점등은 전 케이스에서 사라졌고, SP 원본↔미러 호버(H1 경로)도 각각 상대 1개만 점등되는 것으로 회귀 없음 확인. 콘솔 에러 0.
 
-### #2 CSV Input_Flags — 셀 전 줄이 무효면 경고와 달리 기존 값이 유지됨 (J4) · **미수정**
+### #2 CSV Input_Flags — 셀 전 줄이 무효면 경고와 달리 기존 값이 유지됨 (J4) · **수정 완료**
+
+조치: "셀 제공" 판정을 정규화 결과와 분리(원문 셀 기준 post-merge 확정 반영) + `required` 유효 토큰 추가(Optional→Required 명시 리셋 경로 신설). 회귀 테스트 2건 추가, vitest 740 그린 — 단위 테스트로 재검증(브라우저 재검은 생략, 착지 값만 달라지는 변경).
 
 - **증상**: `Input_Flags` 셀의 값이 전부 알 수 없는 값이면(예: 유일한 비어있지 않은 줄이 `mandatory`) 경고는 `Input_Flags accepts only "optional" per line — other values were treated as required`로 뜨는데, 실제 저장값은 **기존 `optional`이 그대로 유지**된다. 경고 문구와 결과가 어긋난다.
 - **원인**: `normalizeInputFlagsCell`이 무효 줄을 `""`로 낮춘 뒤 `join("\n").replace(/\s+$/,"")`를 적용해, 전 줄이 무효면 셀 전체가 `""`가 된다. 그 뒤 `mergeNode`는 `nextFlags === ""`를 "셀 미제공"으로 보고 "빈 셀=기존 값 유지" 규칙을 적용한다 — 즉 **"제공됐지만 전부 무효"와 "아예 비어 있음"이 구분되지 않는다.**

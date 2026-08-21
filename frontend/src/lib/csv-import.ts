@@ -325,20 +325,22 @@ const mergeNode = (
   };
 };
 
-// Input_Flags 셀 정규화 — 줄 단위 "optional"만 인정(대소문자 무시), 그 외 값은 required("")로 강등+경고
+// Input_Flags 셀 정규화 — 줄 단위 "optional"/"required"만 인정(대소문자 무시, required→""),
+// 그 외 값은 required("")로 강등+경고. 제공 여부 판정은 호출부가 원문 셀로 한다(전량 무효→""가 "생략"으로 안 읽히게)
 function normalizeInputFlagsCell(cell: string, line: number, warnings: CsvImportWarning[]): string {
   if (cell.trim() === "") return "";
   let hadUnknown = false;
   const lines = cell.split("\n").map((raw) => {
     const value = raw.trim().toLowerCase();
-    if (value === "" || value === "optional") return value;
+    if (value === "" || value === "required") return "";
+    if (value === "optional") return value;
     hadUnknown = true;
     return "";
   });
   if (hadUnknown) {
     warnings.push({
       line,
-      message: 'Input_Flags accepts only "optional" per line — other values were treated as required',
+      message: 'Input_Flags accepts only "optional" or "required" per line — other values were treated as required',
     });
   }
   return lines.join("\n").replace(/\s+$/, "");
@@ -640,6 +642,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     // Start/End는 CSV가 이름을 싣지 않는다 → 기존 제목 유지("시작"을 "Start"로 덮으면 거짓 변경)
     mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }).node,
     ...rows.map((row, i) => {
+      const normalizedFlags = normalizeInputFlagsCell(row.input_flags, row.line, warnings);
       const { node, droppedParamFields, droppedTextFields } = mergeNode(byTitle.get(row.name) ?? null, {
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
@@ -657,7 +660,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         annual_count: normalizeNumericParam(row.annual_count) ?? "",
         fte: normalizeNumericParam(row.fte) ?? "",
         input: row.input,
-        input_flags: normalizeInputFlagsCell(row.input_flags, row.line, warnings),
+        input_flags: normalizedFlags,
         output: row.output,
         data_form: row.data_form,
         start_condition: row.start_condition,
@@ -667,6 +670,11 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         section_anchor: row.section_anchor,
         sort_order: i + 1,
       });
+      // 셀이 제공됐다면(전 줄 무효·전 줄 required 포함) 병합 결과에 확정 반영 — 전량 무효가 ""로
+      // 정규화되면 mergeNode가 "셀 생략"으로 읽어 기존 optional을 지키던 결함 픽스 (QA 이슈 #2)
+      if (row.input_flags.trim() !== "" && node.node_type !== "subprocess") {
+        node.input_flags = alignFlagLines(normalizedFlags, node.input ?? "");
+      }
       // 서브프로세스 매칭 행 — 상속 파라미터·IO/조건/형식은 링크 맵 지정값이라 CSV로 못 바꾼다
       if (droppedParamFields.length > 0 || droppedTextFields.length > 0) {
         const fields = [
@@ -1108,7 +1116,7 @@ export function buildAiPromptText(): string {
     "- Annual_Count: 선택, 연간 처리 건수(숫자만). 모르면 비워두세요.",
     "- FTE: 선택, 전일환산 투입 인원(숫자만). 모르면 비워두세요.",
     "- Input / Output: 선택, 단계의 입력물/산출물. 여러 개면 셀 안에서 줄바꿈으로 나열하고 셀 전체를 큰따옴표로 감싸세요.",
-    "- Input_Flags: 선택, Input 항목별 필수/선택 표시. Input과 같은 순서로 줄바꿈 나열하되 선택 항목 줄에만 optional, 필수 항목 줄은 비움. 전부 필수면 셀을 비워두세요.",
+    "- Input_Flags: 선택, Input 항목별 필수/선택 표시. Input과 같은 순서로 줄바꿈 나열하고 각 줄에 optional 또는 required(비움=required). 전부 필수면 셀을 비워두세요.",
     `- Data_Form: 선택, 입출력 형식 참고값(structured/document/tacit 등, ${MAX_LEN.data_form}자 이하). 모르면 비워두세요.`,
     "- Start_Condition / End_Condition: 선택, 단계의 시작/종료 조건 한 문장. 모르면 비워두세요.",
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
