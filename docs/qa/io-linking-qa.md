@@ -103,6 +103,21 @@
 | I5 | 뷰어(권한 없음)로 드리프트 맵 열람 → 자동 PUT 미발사(403·에러 배너 없음), 아이콘·호버만 동작 | ✅ | `DEV_ENFORCE_PERMISSIONS=true`+`BPM_SYSADMINS=admin.sys`, 뷰어 `bora.choi`. PUT /graph 0건·4xx 0건, 서버 드리프트값 그대로, 화면은 치유값 표시·Link 아이콘/호버 정상 |
 | I6 | 콘솔 에러 0 (전 시나리오 통과 중) | ✅ | 전 페이즈(A·B·C·D·E·F·G·H·I·R) 콘솔 error/pageerror 0건 |
 
+## J. 백로그 반영 검수 (2026-08-21)
+
+`353fc392`에서 들어온 두 기능 — CSV `Input_Flags` 왕복, 인풋 미러 끊긴 흐름 경고 배지.
+
+| # | 항목 | 결과 | 비고 |
+|---|---|---|---|
+| J1 | CSV 내보내기 헤더에 `Input_Flags`가 `Input`과 `Output` 사이에 위치 | ✅ | 에디터 인스펙터 Map 탭 `export-csv`로 실내보내기 → `…,FTE,Input,Input_Flags,Output,Data_Form,…` |
+| J2 | 플래그 있는 노드 행이 따옴표 묶인 멀티라인 셀 `"\noptional"`로 실림 | ✅ | 2항목 인풋(2번째만 Optional)을 필로 토글·Save 후 내보내기 — 서버 `input_flags="\noptional"`, CSV 셀도 `"(개행)optional"`(첫 줄 빈 줄=required) |
+| J3 | 같은 CSV 재임포트 → 대상 노드 변경 없음, 적용·리로드 후 2번 항목 Optional 유지 | ✅ | 프리뷰 `3 nodes matched / 0 nodes added / Nothing in this map …`, 적용 후 서버 `input="요청서\n첨부자료"`·`input_flags="\noptional"`, 필 `[Required, Optional]` |
+| J4 | 알 수 없는 플래그 값(`mandatory`) → Input_Flags 경고 + 값이 Required로 착지 | ❌ | **이슈 #2** — 경고는 정상 노출(`Row 2: Input_Flags accepts only "optional" per line — other values were treated as required`)이나, **셀의 모든 줄이 무효라 정규화 결과가 빈 문자열이 되면** "빈 셀=기존 유지" 규칙에 걸려 기존 `optional`이 그대로 남는다(필 Optional 유지). 일부 줄만 무효한 변형(`"mandatory\noptional"`)은 기대대로 1행 Required·2행 Optional로 착지 |
+| J5 | 원본→미러 흐름이 연결된 상태에선 배지 없음(편집·읽기 모드 모두) | ✅ | 편집모드 행 `warn=false`, 게시본 읽기모드 `1. 산출물 · PDF`에도 경고 아이콘 없음 |
+| J6 | 원본↔미러 엣지 삭제 → 인풋 미러 행에 빨간 TriangleAlert + 툴팁 | ✅ | 행 마크업에 `svg.lucide-triangle-alert`, 감싼 요소 `title="No upstream flow path from its origin"`. 스크린샷에서 링크 아이콘 다음·텍스트 앞 위치 확인 |
+| J7 | 읽기모드에서도 같은 배지 노출 | ✅ | 게시 버전 읽기모드 행 `warn=true`, 동일 title. 스크린샷 `J7-read-broken-badge` |
+| J8 | 병렬 합류 **아웃풋** 미러엔 배지 없음(인풋 전용 규칙) + 엣지 복구 시 배지 소멸 | ✅ | 경로 없는 병렬 아웃풋 미러 `warn=false`, A→B 엣지 재추가 후 인풋 미러도 `warn=false`로 복귀 |
+
 ## 이슈 로그
 
 ### #1 미러 항목 호버 시 형제 미러까지 하이라이트 (F2 / F3 일부) — **수정 완료 · 재검증 통과**
@@ -116,6 +131,15 @@
 - **조치**: **`34ccb79e`에서 수정, 재검증 통과.** `handleIoHoverItem`이 호버 대상을 분기하도록 변경 — 원본이 선택 노드 자신이면 미러 전부, 아니면 원본 하나만, 원본 소실(댕글링)이면 아무것도 점등하지 않는다.
 - **재검증(2026-08-21, `34ccb79e`)**: 원본 1 + 미러 2(인풋·아웃풋) 전용 맵으로 4케이스 실측 — 미러(인풋) 호버 `{nodes:[f2-q], edges:[f2-e-q-s]}` / 병렬 미러(아웃풋) 호버 `{nodes:[f2-q], edges:[]}` / 원본 호버 `{nodes:[f2-r,f2-s], edges:[f2-e-q-s]}` / 엣지 삭제 후 미러 호버 `{nodes:[f2-q], edges:[]}`. 형제 미러 점등은 전 케이스에서 사라졌고, SP 원본↔미러 호버(H1 경로)도 각각 상대 1개만 점등되는 것으로 회귀 없음 확인. 콘솔 에러 0.
 
+### #2 CSV Input_Flags — 셀 전 줄이 무효면 경고와 달리 기존 값이 유지됨 (J4) · **미수정**
+
+- **증상**: `Input_Flags` 셀의 값이 전부 알 수 없는 값이면(예: 유일한 비어있지 않은 줄이 `mandatory`) 경고는 `Input_Flags accepts only "optional" per line — other values were treated as required`로 뜨는데, 실제 저장값은 **기존 `optional`이 그대로 유지**된다. 경고 문구와 결과가 어긋난다.
+- **원인**: `normalizeInputFlagsCell`이 무효 줄을 `""`로 낮춘 뒤 `join("\n").replace(/\s+$/,"")`를 적용해, 전 줄이 무효면 셀 전체가 `""`가 된다. 그 뒤 `mergeNode`는 `nextFlags === ""`를 "셀 미제공"으로 보고 "빈 셀=기존 값 유지" 규칙을 적용한다 — 즉 **"제공됐지만 전부 무효"와 "아예 비어 있음"이 구분되지 않는다.**
+- **파급**: Input 텍스트가 그대로인 한 **CSV로 Optional을 다시 Required로 되돌릴 방법이 없다**(빈 셀·공백 셀·무효 값 셀이 모두 "유지"로 수렴). 텍스트가 바뀌면 정렬이 깨져 플래그 열이 소거되므로 그때는 초기화된다.
+- **심각도**: **Minor** — 데이터 손실이 아니라 사용자 값 보존 쪽으로 치우친 동작이고, 일부 줄만 무효한 일반적 케이스(`"mandatory\noptional"`)는 기대대로 동작한다. 다만 경고 문구가 결과를 잘못 설명한다.
+- **재현 절차**: ① 인풋 2항목 중 2번째를 Optional로 저장 → ② CSV 내보내기 → ③ 셀 `"\noptional"`을 `"\nmandatory"`로 바꿔 재임포트 → ④ 경고는 뜨지만 적용·리로드 후 2번 항목 필이 여전히 Optional.
+- **조치**: 미수정(QA는 기록만). 고치려면 정규화 결과와 별개로 "셀이 제공됐는지"를 전달하거나(예: `null` vs `""` 구분), 문구를 실제 동작에 맞게 정정.
+
 ### 참고(결함 아님)
 
 - **A5 — 비체크아웃 읽기전용 미검증**: 체크아웃을 API로 해제한 뒤 에디터를 열면 에디터가 체크아웃을 자동 재획득해 편집모드가 된다(io-linking 이전부터의 기존 동작). 읽기전용 판정은 **게시(published) 버전**과 **권한 없는 뷰어**(I5) 두 경로로 검증했다.
@@ -128,7 +152,8 @@
 
 - **일시**: 2026-08-21 (KST) · **브랜치**: `feat/io-linking` @ `2ed64edc` (이슈 #1 재검증은 픽스 커밋 `34ccb79e`)
 - **환경**: macOS 로컬 네이티브 — backend `uvicorn :8000`(sqlite `dev.db`, `python -m scripts.reset_db` 데모 시드) + frontend `npm run dev :3000`, Playwright(playwright-core) + 시스템 Chrome headless 1600×1000, devUser `admin.sys`(뷰어 검증만 `bora.choi`).
-- **점수**: **54 ✅ / 0 ❌ / 0 ➖ (총 54항목)** — 1차 검수 53✅/1❌ 후 이슈 #1을 `34ccb79e`에서 수정, F2·F3 재검증 통과로 전수 통과. 문서 상단 안내의 "51항목"은 실제 표 행수(54)와 달라 표 기준으로 집계.
-- **이슈**: #1 미러 호버 시 형제 미러까지 하이라이트 (Minor) — **수정·재검증 완료**. 미해결 이슈 없음.
+- **점수**: **61 ✅ / 1 ❌ / 0 ➖ (총 62항목)** — 본 검수 A~I 54항목(1차 53✅/1❌ → 이슈 #1 `34ccb79e` 수정·재검증으로 54✅) + 백로그 반영 검수 J 8항목(7✅/1❌). 문서 상단 안내의 "51항목"은 실제 표 행수와 달라 표 기준으로 집계.
+- **이슈**: #1 미러 호버 시 형제 미러까지 하이라이트 (Minor) — **수정·재검증 완료**. #2 CSV Input_Flags 전 줄 무효 시 경고와 달리 기존 값 유지 (Minor) — **미해결**.
 - **테스트 토폴로지**: 체인(A→B→C→D) · 병렬 분기(P→{Q,R}→S) · 순환(X→Y→Z→X) · 전파 전용 체인 · SP 지정/미지정 호스트 · 읽기전용/clone 검증용 — 총 8맵을 API로 생성 후 전량 퍼지.
+- **후속 검증 라운드**: 이슈 #1 픽스 재검증(`34ccb79e`) · 폴리시 픽스 검증(`9dc6a3b5`) · 백로그 기능 J1~J8(`353fc392`). 각 라운드도 전용 맵을 새로 시드해 실기동 후 전량 퍼지했고, 콘솔 에러는 모든 라운드 0건.
 - **비고**: 검수는 임시 드라이버 스크립트(페이즈 분할)로 수행했고, 상태를 소모하는 성격이라 저장소에는 남기지 않았다. 재현 가능한 자동 회귀는 기존 `frontend/scripts/pw-smoke-io-links.mjs`(26체크)가 담당한다.
