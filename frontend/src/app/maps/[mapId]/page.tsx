@@ -3917,9 +3917,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
       pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
+      // 원본 노드 삭제 → 미러 즉시 해제(복사본 전환, io-linking §5). RF는 실제 제거(applyNodeChanges)
+      // 전에 onNodesDelete를 먼저 호출하므로, current에서 직접 걸러낸 배열로 propagateIoLinks를 돌린다
+      // (updateSelectedData/patchNode와 동일 가드) — 뒤이은 RF 자체 제거는 이미 없는 id라 no-op.
+      if (rootGraph !== null) {
+        setNodes((current) =>
+          propagateIoLinks(current.filter((node) => !removed.has(node.id)), subprocessRefs).nodes,
+        );
+      }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave],
+    [pruneSmallGroups, rootGraph, setNodes, subprocessRefs, scheduleAutoSave],
   );
 
   // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
