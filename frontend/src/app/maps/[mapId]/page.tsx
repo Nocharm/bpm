@@ -8846,6 +8846,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 spParams={
                   node.data.nodeType === "subprocess" ? getInheritedParams(summarySpRef) : null
                 }
+                sp={node.data.nodeType === "subprocess" ? summarySpRef ?? null : null}
+                gmp={
+                  node.data.nodeType === "subprocess"
+                    ? summarySpRef?.gmp ?? ""
+                    : node.data.gmp ?? ""
+                }
                 inheritedDescription={
                   node.data.nodeType === "subprocess" ? (summarySpRef?.sp_description ?? null) : null
                 }

@@ -241,10 +241,23 @@ export function MultiValueInput({
                     {/* 항목 번호 — 회색톤 (사용자 결정 2026-08-20) */}
                     <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
                     {r.text}
-                    {r.form !== "" && <span className="text-fine text-ink-tertiary"> · {r.form}</span>}
-                    {/* 기본값(required)은 노이즈라 표시 생략 — optional만 접미 */}
-                    {r.flag === "optional" && (
-                      <span className="text-fine text-ink-tertiary"> · {t("io.flagOptional")}</span>
+                    {/* 데이터 양식·필수여부는 필 형식(#12) — 플래그는 R/O 이니셜(#15 관례 공유) */}
+                    {r.form !== "" && (
+                      <span className="ml-1 inline-block rounded-full border border-hairline bg-surface-alt px-1.5 py-0 align-middle text-[10px] leading-4 text-ink-secondary">
+                        {r.form}
+                      </span>
+                    )}
+                    {flagsValue !== undefined && (
+                      <span
+                        title={r.flag === "optional" ? t("io.flagOptional") : t("io.flagRequired")}
+                        className={`ml-1 inline-block rounded-full border px-1 py-0 align-middle text-[10px] leading-4 ${
+                          r.flag === "optional"
+                            ? "border-hairline text-ink-tertiary"
+                            : "border-transparent bg-accent-tint text-accent"
+                        }`}
+                      >
+                        {r.flag === "optional" ? "O" : "R"}
+                      </span>
                     )}
                   </span>
                 );

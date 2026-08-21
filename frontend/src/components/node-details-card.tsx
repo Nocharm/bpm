@@ -207,8 +207,11 @@ export function NodeDetailsCard({
                               )}
                               <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
                               {r.text}
+                              {/* 데이터 양식은 필 형식(#12 — MVI 읽기 행과 통일) */}
                               {r.form !== "" && (
-                                <span className="text-fine text-ink-tertiary"> · {r.form}</span>
+                                <span className="ml-1 inline-block rounded-full border border-hairline bg-surface-alt px-1.5 py-0 align-middle text-[10px] leading-4 text-ink-secondary">
+                                  {r.form}
+                                </span>
                               )}
                             </span>
                           );

@@ -42,6 +42,7 @@ import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import {
   formatParamValue,
@@ -173,6 +174,17 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
+  // subprocess 상속 상세(링크 맵 sp_* IO/조건) — 읽기전용 표시(#11). 그 외 타입은 null
+  sp?: {
+    input?: string | null;
+    output?: string | null;
+    input_forms?: string | null;
+    output_forms?: string | null;
+    start_condition?: string | null;
+    end_condition?: string | null;
+  } | null;
+  // 표시용 GMP 분류(SP는 링크 맵 상속값을 호출부가 해석) — 읽기전용 배지(#13)
+  gmp?: string;
   // subprocess 설명 베이스(링크 맵 sp_description, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
   inheritedDescription?: string | null;
   // subprocess 연결 버전 피커(인스펙터와 동일 컴포넌트) — 호출부가 렌더해 주입
@@ -230,6 +242,8 @@ export function NodeSummaryModal({
   urlLabel,
   colorPresets,
   spParams,
+  sp,
+  gmp,
   inheritedDescription,
   versionPickerSlot,
   showAttributes,
@@ -396,12 +410,32 @@ export function NodeSummaryModal({
         ? t(PARAM_LABEL_KEY[k as ParamField])
         : t(CHANGED_LABEL_KEY[k]),
   ))].join(", ");
-  // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
-  const filledDetailCount = [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
-    .filter((v) => v !== "").length;
+  // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준. SP는 링크 맵 상속값 기준(#11)
+  const filledDetailCount =
+    nodeType === "subprocess"
+      ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter(
+          (v) => (v ?? "") !== "",
+        ).length
+      : [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
+          .filter((v) => v !== "").length;
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 값 없으면 ""(행은 "—")
   const inheritedDisplay = (field: ParamField): string =>
     spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
+  // 읽기전용 뷰(#13) — 값 있는 것만 나열. SP 파라미터는 상속값 우선(연간/FTE는 자기 값)
+  const gmpValue = gmp ?? "";
+  const readAttrRows = [
+    { key: "assignee", labelKey: "field.assignee" as MessageKey, value: assignee },
+    { key: "department", labelKey: "field.department" as MessageKey, value: department },
+    { key: "system", labelKey: "field.system" as MessageKey, value: system },
+    { key: "url", labelKey: "field.url" as MessageKey, value: url ? urlLabel || url : "" },
+  ].filter((row) => row.value !== "");
+  const readParamRows = PARAM_FIELDS.map((field) => ({
+    field,
+    value:
+      nodeType === "subprocess"
+        ? inheritedDisplay(field) || formatParamValue(field, form[field] ?? "")
+        : formatParamValue(field, form[field] ?? ""),
+  })).filter((row) => row.value !== "");
 
   const changeDept = (dept: string) => {
     if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
@@ -603,6 +637,72 @@ export function NodeSummaryModal({
                   </div>
                 ) : null;
               })()}
+              {/* Attributes 읽기(#13) — 값 있는 행만, GMP는 배지 */}
+              {(readAttrRows.length > 0 || gmpValue !== "") && (
+                <div data-id="summary-read-attrs">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("editor.bpmAttrs")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    {readAttrRows.map((row) => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t(row.labelKey)}</span>
+                        <span className="min-w-0 truncate text-right text-ink" title={row.value}>
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                    {gmpValue !== "" && (
+                      <div className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t("field.gmp")}</span>
+                        <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpValue)}>
+                          {formatGmp(gmpValue)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Parameters 읽기 — 포맷 표시값(1h30m 등), SP는 링크 맵 상속값 우선 */}
+              {readParamRows.length > 0 && (
+                <div data-id="summary-read-params">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.parameters")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    {readParamRows.map(({ field, value }) => (
+                      <div key={field} className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t(PARAM_LABEL_KEY[field])}</span>
+                        <span className="text-right text-ink">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* I/O & Conditions 읽기 — 필 표시(#12)와 통일, SP는 링크 맵 상속(#11) */}
+              {(showAttributes || nodeType === "subprocess") && filledDetailCount > 0 && (
+                <div data-id="summary-read-details">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.details")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    <NodeDetailsFields
+                      idPrefix="modal-read-detail"
+                      nodeKey={nodeId}
+                      input={nodeType === "subprocess" ? sp?.input ?? "" : input}
+                      output={nodeType === "subprocess" ? sp?.output ?? "" : output}
+                      inputForms={nodeType === "subprocess" ? sp?.input_forms ?? "" : input_forms}
+                      outputForms={nodeType === "subprocess" ? sp?.output_forms ?? "" : output_forms}
+                      outputIds={nodeType === "subprocess" ? undefined : output_ids}
+                      inputLinks={nodeType === "subprocess" ? undefined : input_links}
+                      outputLinks={nodeType === "subprocess" ? undefined : output_links}
+                      inputFlags={nodeType === "subprocess" ? undefined : input_flags}
+                      dataForm={nodeType === "subprocess" ? "" : data_form}
+                      startCondition={nodeType === "subprocess" ? sp?.start_condition ?? "" : start_condition}
+                      endCondition={nodeType === "subprocess" ? sp?.end_condition ?? "" : end_condition}
+                      readOnly
+                      onPatch={() => {}}
+                    />
+                    {nodeType === "subprocess" && (
+                      <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -962,8 +1062,9 @@ export function NodeSummaryModal({
                     </AutoHeight>
                   </div>
                 )}
-                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘 */}
-                {showAttributes && (
+                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘.
+                    SP는 링크 맵 상속 읽기전용 렌더 — 인스펙터 카드와 동기화(#11) */}
+                {(showAttributes || nodeType === "subprocess") && (
                   <div className="py-1.5" data-id="summary-details">
                     <button
                       type="button"
@@ -990,24 +1091,44 @@ export function NodeSummaryModal({
                     <AutoHeight className="overflow-hidden">
                     {!detailsCollapsed && (
                     <div className="ml-2 border-l border-divider pl-2">
-                      <NodeDetailsFields
-                        idPrefix="modal-detail"
-                        nodeKey={nodeId}
-                        inputWidth="w-44"
-                        input={form.input}
-                        output={form.output}
-                        inputForms={form.input_forms}
-                        outputForms={form.output_forms}
-                        outputIds={form.output_ids}
-                        inputLinks={form.input_links}
-                        outputLinks={form.output_links}
-                        inputFlags={form.input_flags}
-                        dataForm={form.data_form}
-                        startCondition={form.start_condition}
-                        endCondition={form.end_condition}
-                        readOnly={readOnly}
-                        onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                      />
+                      {nodeType === "subprocess" ? (
+                        <>
+                          {/* 링크 맵 상속 상세(읽기전용) — 인스펙터 카드와 동기화(#11) */}
+                          <NodeDetailsFields
+                            idPrefix="modal-detail"
+                            nodeKey={nodeId}
+                            input={sp?.input ?? ""}
+                            output={sp?.output ?? ""}
+                            inputForms={sp?.input_forms ?? ""}
+                            outputForms={sp?.output_forms ?? ""}
+                            dataForm=""
+                            startCondition={sp?.start_condition ?? ""}
+                            endCondition={sp?.end_condition ?? ""}
+                            readOnly
+                            onPatch={() => {}}
+                          />
+                          <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                        </>
+                      ) : (
+                        <NodeDetailsFields
+                          idPrefix="modal-detail"
+                          nodeKey={nodeId}
+                          inputWidth="w-44"
+                          input={form.input}
+                          output={form.output}
+                          inputForms={form.input_forms}
+                          outputForms={form.output_forms}
+                          outputIds={form.output_ids}
+                          inputLinks={form.input_links}
+                          outputLinks={form.output_links}
+                          inputFlags={form.input_flags}
+                          dataForm={form.data_form}
+                          startCondition={form.start_condition}
+                          endCondition={form.end_condition}
+                          readOnly={readOnly}
+                          onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                        />
+                      )}
                     </div>
                     )}
                     </AutoHeight>
