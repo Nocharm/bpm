@@ -990,6 +990,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   // IO 링크 hover 하이라이트 — 인스펙터 행 hover와 불러오기 모달 행 hover가 공유하는 단일 상태 (io-linking §4-6)
   const [ioHighlight, setIoHighlight] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  // 안내 버튼 호버 미리보기 — 노드에 결과값(분류·색) 임시 반영, 렌더 전용(데이터 무변경) (#6 확장)
+  const [gmpPreview, setGmpPreview] = useState<{ nodeId: string; gmp: string; color: string } | null>(null);
   // 열려 있는 불러오기 모달 — 어느 노드의 어느 쪽 IO를 채우는지 + 앵커 좌표
   const [ioImport, setIoImport] = useState<
     { side: IoSide; nodeId: string; at: { x: number; y: number } } | null
@@ -6352,7 +6354,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? { ...withCopyStyle, className: [withCopyStyle.className, "io-node-highlight"].filter(Boolean).join(" ") }
         : withCopyStyle;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withIoHighlight);
+      // GMP 안내 버튼 호버 미리보기 — 노드에도 결과값을 임시 반영(데이터 무변경, 렌더 전용) (사용자 요청 2026-08-21)
+      const withGmpPreview =
+        gmpPreview !== null && gmpPreview.nodeId === node.id
+          ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
+          : withIoHighlight;
+      return injectSubEnds(withGmpPreview);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6392,6 +6399,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     ctrlDragGhosts,
     staleAnchorIds,
     ioHighlight,
+    gmpPreview,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -10685,12 +10693,31 @@ function MapEditor({ mapId }: { mapId: number }) {
           onRevertColor={() => {
             patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
             setGmpNotice(null);
+            setGmpPreview(null);
           }}
           onRevertAll={() => {
             patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
             setGmpNotice(null);
+            setGmpPreview(null);
           }}
-          onClose={() => setGmpNotice(null)}
+          onClose={() => {
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onHoverAction={(action) => {
+            if (action === null) {
+              setGmpPreview(null);
+              return;
+            }
+            // 액션 결과값을 노드에 미리 반영 — color=색만 복원, all=둘 다 복원, confirm=현행 유지
+            const preview =
+              action === "color"
+                ? { gmp: gmpNotice.nextGmp, color: gmpNotice.prevColor }
+                : action === "all"
+                  ? { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }
+                  : { gmp: gmpNotice.nextGmp, color: gmpNotice.nextColor };
+            setGmpPreview({ nodeId: gmpNotice.nodeId, ...preview });
+          }}
         />
       )}
       {ioPeersMenu !== null && (

@@ -19,14 +19,21 @@ interface GmpNoticePopoverProps {
   onRevertColor: () => void;
   onRevertAll: () => void;
   onClose: () => void;
+  // 버튼 호버 → 캔버스 노드에도 결과값 미리 반영(렌더 전용) — null=해제 (사용자 요청 2026-08-21)
+  onHoverAction?: (action: "color" | "all" | "confirm" | null) => void;
 }
 
 export function GmpNoticePopover({
-  x, y, prevGmp, nextGmp, prevColor, nextColor, onRevertColor, onRevertAll, onClose,
+  x, y, prevGmp, nextGmp, prevColor, nextColor, onRevertColor, onRevertAll, onClose, onHoverAction,
 }: GmpNoticePopoverProps) {
   const { t } = useI18n();
   // 호버 중인 동작 — color=색만 복원, all=분류+색 복원, confirm=현행 유지(되돌릴 값 없음 → 전부 딤)
   const [hovered, setHovered] = useState<"color" | "all" | "confirm" | null>(null);
+  // 팝오버 내 강조와 캔버스 노드 미리보기를 한 번에 — 호버 진입/이탈 공용
+  const hoverAction = (action: "color" | "all" | "confirm" | null) => {
+    setHovered(action);
+    onHoverAction?.(action);
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -37,13 +44,23 @@ export function GmpNoticePopover({
   }, [onClose]);
 
   const colorChanged = nextColor !== prevColor;
-  // 호버한 동작이 이 줄을 바꾸는가 — all=둘 다, color=색 줄만, confirm=없음
-  const affects = (row: "gmp" | "color"): boolean =>
-    hovered === "all" ? true : hovered === "color" ? row === "color" : false;
-  const rowClass = (affected: boolean) =>
-    `mt-2 flex items-center gap-2 text-caption text-ink-secondary transition-all duration-150 ${
-      hovered === null ? "" : affected ? "opacity-100" : "opacity-35"
+  // 호버 미리보기 — 액션 실행 후 "남을 쪽"만 남기고 반대쪽+화살표는 폭이 접히며 사라진다
+  // (색만 복원: 분류=next 유지·색=prev 복원 / 언도: 둘 다 prev / 확인: 둘 다 next) (사용자 요청 2026-08-21)
+  const survivor = (row: "gmp" | "color"): "prev" | "next" | null => {
+    if (hovered === null) return null; // 미리보기 없음 — 전체 표시
+    if (hovered === "confirm") return "next";
+    if (hovered === "all") return "prev";
+    return row === "color" ? "prev" : "next";
+  };
+  const segClass = (row: "gmp" | "color", seg: "prev" | "arrow" | "next") => {
+    const keep = survivor(row);
+    const visible = keep === null || seg === keep;
+    // gap 대신 mr — 접힌 세그먼트가 간격까지 회수해 남는 요소가 자연스럽게 밀려온다
+    return `inline-flex items-center overflow-hidden transition-all duration-350 ease-smooth ${
+      visible ? "mr-2 max-w-40 opacity-100" : "mr-0 max-w-0 opacity-0"
     }`;
+  };
+  const rowClass = "mt-2 flex items-center text-caption text-ink-secondary";
   const actionButton =
     "flex items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt";
 
@@ -74,23 +91,35 @@ export function GmpNoticePopover({
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <div className={rowClass(affects("gmp"))} data-id="node-gmp-notice-row-gmp">
-          <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
-          <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(prevGmp) ?? undefined}>
-            {formatGmp(prevGmp) || t("gmpNotice.unset")}
+        <div className={rowClass} data-id="node-gmp-notice-row-gmp">
+          <span className="mr-2 w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
+          <span className={segClass("gmp", "prev")}>
+            <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(prevGmp) ?? undefined}>
+              {formatGmp(prevGmp) || t("gmpNotice.unset")}
+            </span>
           </span>
-          <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-          <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(nextGmp) ?? undefined}>
-            {formatGmp(nextGmp) || t("gmpNotice.unset")}
+          <span className={segClass("gmp", "arrow")}>
+            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+          </span>
+          <span className={segClass("gmp", "next")}>
+            <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(nextGmp) ?? undefined}>
+              {formatGmp(nextGmp) || t("gmpNotice.unset")}
+            </span>
           </span>
         </div>
         {colorChanged && (
-          <div className={rowClass(affects("color"))} data-id="node-gmp-notice-row-color">
-            <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
-            <GmpColorSwatch color={prevColor} />
-            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-            {/* 빈 색 = 타입 기본색(미분류 리셋) — 점선 스와치 (#7) */}
-            <GmpColorSwatch color={nextColor} />
+          <div className={rowClass} data-id="node-gmp-notice-row-color">
+            <span className="mr-2 w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
+            <span className={segClass("color", "prev")}>
+              <GmpColorSwatch color={prevColor} />
+            </span>
+            <span className={segClass("color", "arrow")}>
+              <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+            </span>
+            <span className={segClass("color", "next")}>
+              {/* 빈 색 = 타입 기본색(미분류 리셋) — 점선 스와치 (#7) */}
+              <GmpColorSwatch color={nextColor} />
+            </span>
           </div>
         )}
         <div className="mt-2.5 flex flex-nowrap items-center justify-end gap-1.5">
@@ -99,8 +128,8 @@ export function GmpNoticePopover({
               type="button"
               data-id="node-gmp-notice-revert-color"
               className={actionButton}
-              onMouseEnter={() => setHovered("color")}
-              onMouseLeave={() => setHovered(null)}
+              onMouseEnter={() => hoverAction("color")}
+              onMouseLeave={() => hoverAction(null)}
               onClick={onRevertColor}
             >
               <Palette size={12} strokeWidth={1.5} />
@@ -111,8 +140,8 @@ export function GmpNoticePopover({
             type="button"
             data-id="node-gmp-notice-revert-all"
             className={actionButton}
-            onMouseEnter={() => setHovered("all")}
-            onMouseLeave={() => setHovered(null)}
+            onMouseEnter={() => hoverAction("all")}
+            onMouseLeave={() => hoverAction(null)}
             onClick={onRevertAll}
           >
             <Undo2 size={12} strokeWidth={1.5} />
@@ -122,8 +151,8 @@ export function GmpNoticePopover({
             type="button"
             data-id="node-gmp-notice-confirm"
             className="flex items-center gap-1 whitespace-nowrap rounded-sm bg-accent px-2.5 py-0.5 text-caption text-on-accent hover:bg-accent-focus"
-            onMouseEnter={() => setHovered("confirm")}
-            onMouseLeave={() => setHovered(null)}
+            onMouseEnter={() => hoverAction("confirm")}
+            onMouseLeave={() => hoverAction(null)}
             onClick={onClose}
           >
             <Check size={12} strokeWidth={1.5} />
