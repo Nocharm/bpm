@@ -120,7 +120,7 @@
 
 ## L. UI/UX 개선 검수 (2026-08-21)
 
-`fb46744c` · `c70c8ace` · `a427ab84` · `1061a6c9`로 들어온 UI/UX 16건 + `591fd0c6`(#6·#7 재배치) 재검증. 전 항목 실기동 검수 — 24/24 통과, 콘솔 에러 0.
+`fb46744c` · `c70c8ace` · `a427ab84` · `1061a6c9`로 들어온 UI/UX 16건 + `591fd0c6`(#6·#7 재배치) + `5fd0b8fa`(안내 팝오버 다듬기) 재검증. 전 항목 실기동 검수 — 26/26 통과, 콘솔 에러 0.
 
 | # | 항목 | 결과 | 비고 |
 |---|---|---|---|
@@ -145,16 +145,18 @@
 | L19 | SP 노드 모달(편집 모드): I/O & Conditions가 링크맵 상속 읽기전용 + 안내 문구, 파라미터는 상속값 | ✅ | 편집 가능한 IO 입력 0개, 상세 텍스트에 `SP인풋`/`SP산출물PDF` + `Set by the subprocess owner in map settings.`, Metrics는 상속값(`2h`, `30m`, `₩50,000`, `3`) |
 | L20 | 읽기전용 모달: 타입/설명 + Attributes(GMP 배지)·Parameters(포맷값)·I/O(필 스타일) 표시, 빈 섹션 생략 | ✅ | `Type: Process` + `summary-read-attrs`(GMP Direct 배지)·`summary-read-params`(`1h30m`)·`summary-read-details`(PDF 필) 모두 노출. 값 없는 노드에선 세 섹션 전부 미렌더 |
 
-### L21~L24 — #6·#7 재배치 재검증 (`591fd0c6`)
+### L21~L26 — #6·#7 재배치(`591fd0c6`) + 안내 팝오버 다듬기(`5fd0b8fa`) 재검증
 
-스테이징·Confirm·호버 미리보기가 픽커에서 **안내 팝오버(`GmpNoticePopover`)로 이동**한 뒤의 재검수. L1·L2는 이 4항목으로 대체된다.
+스테이징·Confirm·호버 미리보기가 픽커에서 **안내 팝오버(`GmpNoticePopover`)로 이동**한 뒤의 재검수(L21~L24). L1·L2는 이 항목들로 대체된다. `5fd0b8fa`에서 팝오버 폭 고정(L25) · 딤→**접힘형** 호버 미리보기 전환(L23 재정의) · **캔버스 노드 실시간 반영**(L26)이 들어와 함께 검수했다.
 
 | # | 항목 | 결과 | 비고 |
 |---|---|---|---|
 | L21 | 픽커 즉시 적용 + 동일값 재선택 no-op(커스텀 색 유지) | ✅ | 픽커에 `node-gmp-picker-confirm`·`node-gmp-picker-preview` 모두 count 0(제거 확인), 옵션 아이콘 4종 유지. 현재값(indirect) 재선택 → 픽커만 닫히고 안내 미노출·노드 `--nc` `#4A7C7C` 유지·서버도 `gmp=indirect, color=#4A7C7C` 불변(커스텀 색 리셋 없음). 다른 값(direct) 선택 → Confirm 없이 즉시 반영(`--nc`→`#cc3300`) + 안내 팝오버 노출 |
 | L22 | 안내 팝오버 버튼 아이콘 3종 + 우하단 Confirm으로 닫힘 | ✅ | `Palette`(Restore color only) · `Undo2`(Undo classification) · `Check`(Confirm, accent) 순으로 좌→우 배치(left 452 < 538 < 657), Confirm 우변 743 vs 팝오버 우변 756(패딩 13px) = 우하단 정렬. Confirm 클릭 시 닫힘 |
-| L23 | 호버 강조: Restore-color=색 행만, Undo=두 행, Confirm=전부 딤 | ✅ | 무호버 `{분류 1, 색 1}` → Restore color 호버 `{0.35, 1}` → Undo 호버 `{1, 1}` → Confirm 호버 `{0.35, 0.35}`. 스크린샷에서 분류 배지/색 스와치의 딤 상태 육안 확인 |
+| L23 | ~~호버 강조: 반대편 행 딤(opacity 0.35)~~ → **재정의(`5fd0b8fa`)**: 접힘형 미리보기 — 버튼 호버 시 그 동작 뒤 **남을 값만 남고** 반대쪽 값 + 화살표는 폭이 접히며 사라진다 | ✅ | **딤 방식은 `5fd0b8fa`에서 폐기(이 행의 최초 측정은 폐기).** 세그먼트 span 6개(분류·색 × prev/arrow/next) computed 실측 — 무호버: 전부 `max-width 160px · opacity 1`. Restore color only 호버: 색 행 `[prev 160px/1, arrow 0px/0, next 0px/0]` · 분류 행 `[0px/0, 0px/0, next 160px/1]`. Undo classification 호버: 두 행 모두 prev만 남음. Confirm 호버: 두 행 모두 next만 남음. 이탈 시 6개 전부 복귀. 스크린샷 `L23-collapse-restore-color.png`·`L23-collapse-confirm.png`에서 남은 세그먼트가 라벨 쪽으로 밀려온 것 육안 확인 |
 | L24 | 바깥 클릭·Esc 닫힘 + Restore color only(색만)·Undo(둘 다) 동작 | ✅ | 바깥 클릭·Esc 모두 닫힘. Restore color only → `gmp=direct` 유지·`color`만 이전(`#9a6b00`)으로 복원. Undo classification → 분류·색 둘 다 직전 상태로 복원. 미분류 선택 시 색 행의 "이후" 스와치가 점선(`border-dashed`)이고 노드 `--nc`가 타입 기본(`#6e84a3`)으로 리셋, 확정 후 서버 `gmp=""`·`color=""` |
+| L25 | 팝오버 폭 `w-[400px]` + 배지·버튼 줄바꿈 없음(각 1줄, 3버튼 한 행) | ✅ | 미분류→indirect·direct→indirect 두 케이스 모두 폭 400px. 배지 `Unclassified`/`GMP Direct`/`GMP Indirect` 전부 `getClientRects()` 1개(=줄바꿈 없음). 푸터 3버튼 `Restore color only`·`Undo classification`·`Confirm` 각각 1줄이고 `top`이 셋 다 625로 동일 = 한 행에 정렬. 인스펙터 Attributes GMP 배지도 1줄(`GMP Direct`, h 28). 스크린샷 `L25-notice-width.png`. **게시본/뷰어 읽기전용 모달 배지는 이번 라운드 미측정(➖)** — 노출 자체는 L20에서 확인됨 |
+| L26 | 버튼 호버 → 캔버스 노드에도 결과값 실시간 미리보기(렌더 전용·비영속) | ✅ | A=`direct`(`#cc3300`)에서 indirect 선택 → 노드 `--nc` `#9a6b00`·필 `GMP Indirect`로 즉시 적용되고 서버에도 저장. **Undo classification 호버 중 노드가 `#cc3300`·`GMP Direct`로 되돌아가고, 이탈하면 `#9a6b00`·`GMP Indirect`로 복귀**(스크린샷 `L26-node-preview-hover.png` / `L26-node-preview-off.png`, 노드·팝오버 한 화면). Confirm 호버=현행(`#9a6b00`), Restore color only 호버=분류 indirect 유지 + 색만 `#cc3300`. **호버 구간 그래프 쓰기 요청 0건**(관측된 건 체크아웃 하트비트 `POST /versions/*/checkout` 뿐)·서버 값 `indirect`/`#9a6b00` 불변. 실제 Undo 클릭 시에는 노드·서버 모두 `direct`/`#cc3300`으로 영속. 캔버스 필·인스펙터 두 진입 경로 모두 동일 동작 |
 
 ## 이슈 로그
 
@@ -190,10 +192,10 @@
 
 ## 결과 요약
 
-- **일시**: 2026-08-21 (KST) · **브랜치**: `feat/io-linking` @ `2ed64edc` (이슈 #1 재검증은 픽스 커밋 `34ccb79e`)
+- **일시**: 2026-08-21 (KST) · **브랜치**: `feat/io-linking` @ `2ed64edc` (이슈 #1 재검증은 픽스 커밋 `34ccb79e`, L25·L26·L23 재정의는 `5fd0b8fa`)
 - **환경**: macOS 로컬 네이티브 — backend `uvicorn :8000`(sqlite `dev.db`, `python -m scripts.reset_db` 데모 시드) + frontend `npm run dev :3000`, Playwright(playwright-core) + 시스템 Chrome headless 1600×1000, devUser `admin.sys`(뷰어 검증만 `bora.choi`).
-- **점수**: **85 ✅ / 1 ❌ / 0 ➖ (총 86항목)** — 본 검수 A~I 54항목(1차 53✅/1❌ → 이슈 #1 `34ccb79e` 수정·재검증으로 54✅) + 백로그 반영 검수 J 8항목(7✅/1❌) + UI/UX 개선 검수 L 24항목(L1~L20 + `591fd0c6` 재배치 재검증 L21~L24, 전부 ✅). 문서 상단 안내의 "51항목"은 실제 표 행수와 달라 표 기준으로 집계.
+- **점수**: **87 ✅ / 1 ❌ / 0 ➖ (총 88항목)** — 본 검수 A~I 54항목(1차 53✅/1❌ → 이슈 #1 `34ccb79e` 수정·재검증으로 54✅) + 백로그 반영 검수 J 8항목(7✅/1❌) + UI/UX 개선 검수 L 26항목(L1~L20 + `591fd0c6` 재배치 재검증 L21~L24 + `5fd0b8fa` 팝오버 다듬기 L25·L26, 전부 ✅). L25의 읽기전용 모달 배지 1줄 확인만 미측정(행 안 ➖ 주석)이라 행 판정에는 포함하지 않았다. 문서 상단 안내의 "51항목"은 실제 표 행수와 달라 표 기준으로 집계.
 - **이슈**: #1 미러 호버 시 형제 미러까지 하이라이트 (Minor) — **수정·재검증 완료**. #2 CSV Input_Flags 전 줄 무효 시 경고와 달리 기존 값 유지 (Minor) — **미해결**.
 - **테스트 토폴로지**: 체인(A→B→C→D) · 병렬 분기(P→{Q,R}→S) · 순환(X→Y→Z→X) · 전파 전용 체인 · SP 지정/미지정 호스트 · 읽기전용/clone 검증용 — 총 8맵을 API로 생성 후 전량 퍼지.
-- **후속 검증 라운드**: 이슈 #1 픽스 재검증(`34ccb79e`) · 폴리시 픽스 검증(`9dc6a3b5`) · 백로그 기능 J1~J8(`353fc392`) · UI/UX 개선 L1~L20(`1061a6c9`) · GMP #6·#7 재배치 L21~L24(`591fd0c6`). 각 라운드도 전용 맵을 새로 시드해 실기동 후 전량 퍼지했고, 콘솔 에러는 모든 라운드 0건.
+- **후속 검증 라운드**: 이슈 #1 픽스 재검증(`34ccb79e`) · 폴리시 픽스 검증(`9dc6a3b5`) · 백로그 기능 J1~J8(`353fc392`) · UI/UX 개선 L1~L20(`1061a6c9`) · GMP #6·#7 재배치 L21~L24(`591fd0c6`) · 안내 팝오버 폭/접힘 미리보기/노드 실시간 반영 L25·L26·L23 재정의(`5fd0b8fa`, 드라이버 체크 20/20). 각 라운드도 전용 맵을 새로 시드해 실기동 후 전량 퍼지했고, 콘솔 에러는 모든 라운드 0건.
 - **비고**: 검수는 임시 드라이버 스크립트(페이즈 분할)로 수행했고, 상태를 소모하는 성격이라 저장소에는 남기지 않았다. 재현 가능한 자동 회귀는 기존 `frontend/scripts/pw-smoke-io-links.mjs`(26체크)가 담당한다.
