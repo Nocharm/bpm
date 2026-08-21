@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -40,7 +40,8 @@ import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
-import { GmpColorSwatch, GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
+import { GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
+import { GmpNoticePopover } from "@/components/gmp-notice-popover";
 import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
 import { NodeDetailsCard } from "@/components/node-details-card";
 import { NodeDisplaySection } from "@/components/node-display-section";
@@ -10674,75 +10675,23 @@ function MapEditor({ mapId }: { mapId: number }) {
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
       {/* GMP 변경 안내 — 닫기(X)가 클릭한 마우스 지점, 분류·노드 색 before→after를 명시 (design 2026-08-20) */}
       {gmpNotice !== null && (
-        <div
-          data-id="node-gmp-notice"
-          className="fixed z-[1360] w-[300px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
-          style={{
-            left: Math.max(8, Math.min(gmpNotice.x - 300 + 24, window.innerWidth - 308)),
-            top: Math.max(8, gmpNotice.y - 24),
+        <GmpNoticePopover
+          x={gmpNotice.x}
+          y={gmpNotice.y}
+          prevGmp={gmpNotice.prevGmp}
+          nextGmp={gmpNotice.nextGmp}
+          prevColor={gmpNotice.prevColor}
+          nextColor={gmpNotice.nextColor}
+          onRevertColor={() => {
+            patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
           }}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-caption-strong text-ink">
-              <ShieldCheck size={14} strokeWidth={1.5} className="text-accent" />
-              {t("gmpNotice.title")}
-            </div>
-            <button
-              type="button"
-              data-id="node-gmp-notice-close"
-              aria-label="Dismiss"
-              className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt"
-              onClick={() => setGmpNotice(null)}
-            >
-              <X size={14} strokeWidth={1.5} />
-            </button>
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-caption text-ink-secondary">
-            <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
-            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.prevGmp) ?? undefined}>
-              {formatGmp(gmpNotice.prevGmp) || t("gmpNotice.unset")}
-            </span>
-            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.nextGmp) ?? undefined}>
-              {formatGmp(gmpNotice.nextGmp) || t("gmpNotice.unset")}
-            </span>
-          </div>
-          {gmpNotice.nextColor !== gmpNotice.prevColor && (
-            <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-secondary">
-              <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
-              <GmpColorSwatch color={gmpNotice.prevColor} />
-              <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-              {/* 빈 색 = 타입 기본색(미분류 리셋) — 점선 스와치 (사용자 요청 2026-08-21 #7) */}
-              <GmpColorSwatch color={gmpNotice.nextColor} />
-            </div>
-          )}
-          <div className="mt-2.5 flex justify-end gap-1.5">
-            {gmpNotice.nextColor !== gmpNotice.prevColor && (
-              <button
-                type="button"
-                data-id="node-gmp-notice-revert-color"
-                className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                onClick={() => {
-                  patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
-                  setGmpNotice(null);
-                }}
-              >
-                {t("gmpNotice.revertColor")}
-              </button>
-            )}
-            <button
-              type="button"
-              data-id="node-gmp-notice-revert-all"
-              className="rounded-sm px-2 py-0.5 text-caption text-accent hover:bg-accent-tint"
-              onClick={() => {
-                patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
-                setGmpNotice(null);
-              }}
-            >
-              {t("gmpNotice.revertAll")}
-            </button>
-          </div>
-        </div>
+          onRevertAll={() => {
+            patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
+          }}
+          onClose={() => setGmpNotice(null)}
+        />
       )}
       {ioPeersMenu !== null && (
         <IoPeersMenu
@@ -10773,15 +10722,15 @@ function MapEditor({ mapId }: { mapId: number }) {
         <GmpPickerPopup
           x={gmpPicker.x}
           y={gmpPicker.y}
-          current={{ gmp: gmpPickerNode?.data.gmp ?? "", color: gmpPickerNode?.data.color ?? "" }}
           onClose={() => setGmpPicker(null)}
-          onConfirm={(value) => {
+          onPick={(value) => {
             const prevGmp = gmpPickerNode?.data.gmp ?? "";
             const prevColor = gmpPickerNode?.data.color ?? "";
+            setGmpPicker(null);
+            if (value === prevGmp) return; // 동일 분류 재선택 — 색 리셋 부작용 없이 무시
             // 분류가 노드 색을 자동 확정 — 미분류 선택은 타입 기본색으로 리셋 (사용자 요청 2026-08-21 #7)
             const nextColor = getGmpTargetColor(value);
             patchNode(gmpPicker.nodeId, { gmp: value, color: nextColor }, true);
-            setGmpPicker(null);
             setGmpNotice({
               nodeId: gmpPicker.nodeId,
               prevGmp,
