@@ -5,7 +5,8 @@ import type { Edge } from "@xyflow/react";
 
 import {
   applyIoImport, assignSpIoIds, buildIoIndex, buildIoMirrorIndex, canReachForward, collectIoImportCandidates,
-  countIoLines, getFlowPathBetween, getIoItemState, getIoLine, getIoLinkPeers, propagateIoLinks, setIoLine,
+  countIoLines, getBrokenInputMirrorIndexes, getFlowPathBetween, getIoItemState, getIoLine, getIoLinkPeers,
+  propagateIoLinks, setIoLine,
   type IoImportCandidate, type IoNode, type SpRefMap,
 } from "./io-items";
 
@@ -655,5 +656,21 @@ describe("getIoLinkPeers", () => {
   it("SP 노드지만 링크맵 미지정/ref 없음 — groupId null", () => {
     const nodes: IoNode[] = [node("S", { nodeType: "subprocess" })];
     expect(getIoLinkPeers(nodes, NO_SP, "S", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
+  });
+});
+
+describe("getBrokenInputMirrorIndexes", () => {
+  const origin = node("A", { output: "회의록", output_ids: "itm_1" });
+  const mirror = node("B", { input: "회의록\n자체입력", input_links: "itm_1" });
+  it("원본→소비 경로가 있으면 비었고, 엣지가 끊기면 해당 인풋 미러 줄만 배지", () => {
+    const connected: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
+    expect(getBrokenInputMirrorIndexes([origin, mirror], connected, NO_SP, "B").size).toBe(0);
+    expect([...getBrokenInputMirrorIndexes([origin, mirror], [], NO_SP, "B")]).toEqual([0]);
+  });
+  it("댕글링 링크·아웃풋(병렬 합류) 미러는 대상이 아니다", () => {
+    const dangling = node("C", { input: "고아", input_links: "itm_ghost" });
+    expect(getBrokenInputMirrorIndexes([origin, dangling], [], NO_SP, "C").size).toBe(0);
+    const outJoin = node("D", { output: "회의록", output_links: "itm_1" });
+    expect(getBrokenInputMirrorIndexes([origin, outJoin], [], NO_SP, "D").size).toBe(0);
   });
 });

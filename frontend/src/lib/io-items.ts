@@ -416,3 +416,23 @@ export function collectIoImportCandidates(opts: {
   }
   return results.sort((a, b) => a.hop - b.hop);
 }
+
+// 끊긴 흐름 판정 — 선택 노드의 "인풋 미러" 중 원본→소비 전방 경로가 없는 줄 인덱스 (경고 배지용).
+// 병렬 합류 아웃풋 미러는 원본과 직접 경로가 없는 게 정상이라 대상에서 제외한다 (사용자 합의 2026-08-21).
+// 댕글링·자기참조 링크는 정합화가 처리하므로 여기선 배지 대상이 아니다.
+export function getBrokenInputMirrorIndexes(
+  nodes: IoNode[], edges: Edge[], spRefs: SpRefMap, nodeId: string,
+): Set<number> {
+  const broken = new Set<number>();
+  const node = nodes.find((n) => n.id === nodeId);
+  if (!node || node.data.nodeType === "subprocess") return broken;
+  const index = buildIoIndex(nodes, spRefs);
+  (node.data.input_links ?? "").split("\n").forEach((raw, i) => {
+    const itemId = raw.trim();
+    if (itemId === "") return;
+    const origin = index.get(itemId);
+    if (!origin || origin.nodeId === nodeId) return;
+    if (getFlowPathBetween(edges, origin.nodeId, nodeId).length === 0) broken.add(i);
+  });
+  return broken;
+}

@@ -46,6 +46,8 @@ function splitWithForms(value: string | null | undefined, forms: string | null |
 // 해제만은 카드가 자체 처리 — draft 수준이라 Save 전 취소가 가능해야 하기 때문 (io-linking §4-3)
 export interface NodeDetailsCardIo {
   originGroupIndexes: ReadonlySet<number>;
+  // 끊긴 흐름 인풋 미러 행(원본→소비 경로 부재) — 경고 아이콘 (io-linking 백로그 2026-08-21)
+  brokenInputIndexes?: ReadonlySet<number>;
   onImport: (side: IoSide, at: { x: number; y: number }) => void;
   onNavigate: (side: IoSide, index: number) => void;
   onHoverItem: (side: IoSide, index: number | null) => void;
@@ -241,6 +243,7 @@ export function NodeDetailsCard({
                 io={
                   io && {
                     originGroupIndexes: io.originGroupIndexes,
+                    brokenInputIndexes: io.brokenInputIndexes,
                     onImport: io.onImport,
                     // 불러오기는 그래프에 즉시 커밋 — 미저장 draft와 겹치면 어느 쪽이 이길지 모호해진다
                     importDisabledReason: dirty ? t("io.importSaveFirst") : undefined,

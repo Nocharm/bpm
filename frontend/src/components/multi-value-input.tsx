@@ -6,7 +6,7 @@
 // 무변경 호환 (io-linking design 2026-08-21 §4).
 "use client";
 
-import { Link2, Link2Off, Plus, X, type LucideIcon } from "lucide-react";
+import { Link2, Link2Off, Plus, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { DataFormPicker } from "@/components/data-form-picker";
@@ -28,6 +28,8 @@ interface MultiValueInputProps {
   flagsValue?: string;
   // 미러가 1개 이상 있는 원본 행의 인덱스 — 배지 대신 링크 아이콘 표시용
   originGroupIndexes?: ReadonlySet<number>;
+  // 끊긴 흐름 경고 행(인풋 미러 한정 — 원본→소비 경로 부재) — 경고 아이콘 표시용 (io-linking 백로그 2026-08-21)
+  warnRowIndexes?: ReadonlySet<number>;
   // 주면 + 버튼이 Add new/Import from node… 2항목 메뉴로 바뀐다
   onImport?: (at: { x: number; y: number }) => void;
   // 있으면 메뉴의 "Import from node…" 항목을 비활성화 + 툴팁으로 사유 표시(예: dirty 카드)
@@ -94,6 +96,7 @@ export function MultiValueInput({
   linksValue,
   flagsValue,
   originGroupIndexes,
+  warnRowIndexes,
   onImport,
   importDisabledReason,
   onUnlink,
@@ -205,6 +208,11 @@ export function MultiValueInput({
                     onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
                   >
                     {linked && <Link2 size={12} strokeWidth={1.5} className="mr-0.5 inline text-accent" />}
+                    {warnRowIndexes?.has(i) && (
+                      <span title={t("io.brokenFlow")} className="mr-0.5 inline-flex align-middle text-error">
+                        <TriangleAlert size={12} strokeWidth={1.5} />
+                      </span>
+                    )}
                     {/* 항목 번호 — 회색톤 (사용자 결정 2026-08-20) */}
                     <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
                     {r.text}
@@ -326,6 +334,12 @@ export function MultiValueInput({
             ) : (
               // 항목 번호 — 회색톤 (사용자 결정 2026-08-20)
               <span className="w-4 shrink-0 text-right text-fine tabular-nums text-ink-muted">{i + 1}.</span>
+            )}
+            {isMirror && warnRowIndexes?.has(i) && (
+              // 끊긴 흐름 경고 — 원본→소비 경로 부재(인풋 미러 한정). 표시 전용, 링크·전파 불변
+              <span title={t("io.brokenFlow")} className="inline-flex shrink-0 items-center text-error">
+                <TriangleAlert size={12} strokeWidth={1.5} />
+              </span>
             )}
             <input
               data-id={`${dataId}-row-${i}`}

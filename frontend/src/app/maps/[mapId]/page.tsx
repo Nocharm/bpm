@@ -237,6 +237,7 @@ import {
   applyIoImport,
   buildIoMirrorIndex,
   collectIoImportCandidates,
+  getBrokenInputMirrorIndexes,
   getFlowPathBetween,
   getIoLinkPeers,
   propagateIoLinks,
@@ -5718,6 +5719,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const ioSpLinkedOutputIndexes = collectLinkedIndexes(
     selectedSpRef?.designated ? selectedSpRef.output_ids : null,
   );
+  // 끊긴 흐름 경고 — 선택 노드 인풋 미러 중 원본→소비 경로 부재 행(표시 전용, io-linking 백로그 2026-08-21)
+  const ioBrokenInputIndexes = selectedNode
+    ? getBrokenInputMirrorIndexes(nodes, edges, subprocessRefs, selectedNode.id)
+    : new Set<number>();
   // 항목 hover → 상대편(원본이면 미러 전부, 미러면 원본) 노드 + 흐름 경로 엣지 하이라이트.
   // 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는 유지 (io-linking §2)
   const handleIoHoverItem = (side: IoSide, index: number | null) => {
@@ -9360,6 +9365,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           }}
                           io={{
                             originGroupIndexes: ioOriginGroupIndexes,
+                            brokenInputIndexes: ioBrokenInputIndexes,
                             onImport: (side, at) =>
                               setIoImport({ side, nodeId: selectedNode.id, at }),
                             onNavigate: handleIoNavigate,

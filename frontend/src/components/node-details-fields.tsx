@@ -38,6 +38,8 @@ export interface NodeDetailsPatch {
 export interface NodeDetailsIoWiring {
   // 미러를 1개 이상 보유한 아웃풋 원본 행 인덱스 — 번호 배지 대신 Link 아이콘
   originGroupIndexes: ReadonlySet<number>;
+  // 끊긴 흐름 인풋 미러 행(원본→소비 경로 부재) — 경고 아이콘 (io-linking 백로그 2026-08-21)
+  brokenInputIndexes?: ReadonlySet<number>;
   onImport: (side: IoSide, at: { x: number; y: number }) => void;
   // 있으면 메뉴의 불러오기 항목 비활성 + 사유 툴팁(예: 미저장 draft)
   importDisabledReason?: string;
@@ -94,6 +96,7 @@ export function NodeDetailsFields({
         formsValue={inputForms}
         linksValue={inputLinks}
         flagsValue={inputFlags}
+        warnRowIndexes={io?.brokenInputIndexes}
         onImport={io ? (at) => io.onImport("input", at) : undefined}
         importDisabledReason={io?.importDisabledReason}
         onUnlink={io ? (index, at) => io.onUnlink("input", index, at) : undefined}

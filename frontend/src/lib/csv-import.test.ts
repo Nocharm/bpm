@@ -232,7 +232,7 @@ describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Output,Data_Form,Start_Condition,End_Condition,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Data_Form,Start_Condition,End_Condition,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
@@ -1154,6 +1154,41 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.output).toBe("회의록");
     expect(node.output_ids).toBe("itm_1");
     expect(node.output_links).toBe("itm_5");
+  });
+
+  it("Input_Flags — 신규 노드 착지, 대소문자 정규화, 미지 값은 경고와 함께 required 강등", () => {
+    const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2\n자료3","OPTIONAL\nrequired\noptional"'].join("\n");
+    const o = buildGraphFromCsv(csv);
+    expect(o.errors).toEqual([]);
+    const a = o.graph!.nodes.find((n) => n.title === "A")!;
+    expect(a.input_flags).toBe("optional\n\noptional");
+    expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(true);
+  });
+
+  it("Input_Flags — 선행 빈 줄 보존(1번째 필수·2번째 선택 패턴)", () => {
+    const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2","\noptional"'].join("\n");
+    const o = buildGraphFromCsv(csv);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "A")!.input_flags).toBe("\noptional");
+  });
+
+  it("Input_Flags — input 셀이 비어도(기존 유지) 제공되면 기존 줄에 정렬 적용, 초과 줄은 잘림", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], input: "PR\n참고" };
+    const o = mergeOf(["Name,Input_Flags", '"Review request","optional\n\noptional"'].join("\n"), base);
+    expect(o.errors).toEqual([]);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.input).toBe("PR\n참고");
+    expect(node.input_flags).toBe("optional"); // 2줄로 잘리고 후행 빈 줄 소거
+  });
+
+  it("Input_Flags — 서브프로세스 매칭 행은 드롭하고 경고에 포함", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], node_type: "subprocess", linked_map_id: 7 };
+    const o = mergeOf(["Name,Input_Flags", '"Review request","optional"'].join("\n"), base);
+    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
+    expect(node.input_flags ?? "").toBe("");
+    expect(o.warnings.some((w) => w.message.includes("input_flags"))).toBe(true);
   });
 
   it("서브프로세스 매칭 행은 IO/조건/형식·touch_time 후보를 드롭하고 경고한다 (링크 맵 상속 보호)", () => {
