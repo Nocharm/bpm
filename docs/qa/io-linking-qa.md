@@ -118,6 +118,33 @@
 | J7 | 읽기모드에서도 같은 배지 노출 | ✅ | 게시 버전 읽기모드 행 `warn=true`, 동일 title. 스크린샷 `J7-read-broken-badge` |
 | J8 | 병렬 합류 **아웃풋** 미러엔 배지 없음(인풋 전용 규칙) + 엣지 복구 시 배지 소멸 | ✅ | 경로 없는 병렬 아웃풋 미러 `warn=false`, A→B 엣지 재추가 후 인풋 미러도 `warn=false`로 복귀 |
 
+## L. UI/UX 개선 검수 (2026-08-21)
+
+`fb46744c` · `c70c8ace` · `a427ab84` · `1061a6c9`(HEAD)로 들어온 UI/UX 16건. 전 항목 실기동 검수 — 20/20 통과, 콘솔 에러 0.
+
+| # | 항목 | 결과 | 비고 |
+|---|---|---|---|
+| L1 | GMP 픽커: 옵션 4개 아이콘·클릭 스테이징(체크)·Confirm으로만 적용·동일값이면 Confirm 비활성 | ✅ | 아이콘 `[circle-dashed, shield-check, shield, shield-off]` 순서 일치. Confirm `disabled`: 최초 true → 현재값(indirect) 스테이징 true → 다른 값(direct) false. 스테이징 행 `aria-pressed=true`+체크 아이콘 |
+| L2 | 호버 미리보기: 바뀌는 줄만 불투명, 안 바뀌는 줄 딤 | ✅ | 현재값(indirect) 호버 → 분류 행 `opacity 0.35`·노드색 행 `1`. 다른 값(direct) 호버 → 두 행 모두 `1` |
+| L3 | Unclassified 확정 → 노드색 타입 기본 리셋 + 되돌리기 토스트 점선 스와치 + "Restore color only" | ✅ | 확정 직후 노드 `--nc`가 `#4A7C7C`→타입 기본 `#6e84a3`, 토스트 두 번째 스와치 클래스에 `border-dashed`. Restore color only 클릭 → 서버 `color=#4A7C7C` 복원·`gmp=""` 유지 |
+| L4 | 캔버스 GMP 필 "GMP Indirect"가 좁은 노드에서 한 줄 유지 | ✅ | 계산 스타일 `white-space: nowrap`, 필 높이 18px(1줄), 노드 폭 146px |
+| L5 | 인스펙터 Attributes의 System 아래 GMP 행 — 편집=픽커, 읽기전용=배지만 | ✅ | 편집 `BUTTON`(클릭 시 픽커 열림 확인), 게시본 읽기전용 `SPAN`("GMP Direct" 배지) |
+| L6 | Esc·바깥 클릭으로 픽커 닫힘 | ✅ | Esc·재오픈·바깥 클릭 3단계 모두 확인 |
+| L7 | 읽기전용에서 값 0인 섹션(Attributes/Parameters/Details) 딤 | ✅ | 빈 노드 3섹션 `opacity 0.5`, 값 있는 노드 3섹션 `1` |
+| L8 | 노드 디스플레이 3카테고리 눈 버튼 + 영속 | ✅ | 1개 이상 켜짐=`EyeOff`("Hide all") → 클릭 시 전부 꺼짐=`Eye`("Show all"). details 일괄 켜기 후 input/output/conditions `aria-checked=true`, 새로고침 후에도 유지(localStorage `["params","input","output","conditions"]`) |
+| L9 | 캔버스 표시 순서: 토글 역순이어도 속성→지표→조건→인풋→아웃풋 | ✅ | 토글 저장 순서를 역순으로 두고 렌더 확인 — `Bora Choi \| Support Team \| MES \| Ref \| 1h30m \| 시작조건 \| 종료조건 \| INPUT … \| OUTPUT …` 인덱스 단조 증가 |
+| L10 | IO 체크리스트: 박스형 목록+체크박스, 체크=취소선, 비영속, 드래그·더블클릭 미유출 | ✅ | 목록 컨테이너 border 1px·radius 8px·체크박스 2개, 체크 시 `line-through`. 목록 더블클릭에 요약 모달 안 열림, 목록 위 드래그로 노드 transform 불변, 리로드 시 해제 |
+| L11 | 그룹 동반 체크: 미러 인풋 체크 → 원본 아웃풋·형제 미러 동시 체크 | ✅ | `l-b` 인풋0 체크 → `l-a` 아웃풋0·`l-c` 아웃풋0 모두 `checked`, 무관 행(`l-b` 인풋1)은 false |
+| L12 | Tab 순회가 GMP 태그·체크박스에 머물지 않음(서브프로세스 펼침 내부 노드 포함) | ✅ | 루트: Tab 4회 모두 노드 컨테이너(`l-b→l-c→l-empty→l-end`). SP 펼침 후 내부 노드(`lh-sp/lsp-start`) 클릭 → Tab 4회는 내부 노드 2개 + 일반 버튼 2개, GMP 필·체크박스 정지 0회 |
+| L13 | 네비게이션 애니메이션 중 다른 노드 클릭 → 선택 링·인스펙터 일치 | ✅ | 미러 더블클릭(카메라 이동) 120ms 후 `l-c` 클릭 → 선택 노드 `["l-c"]`, 인스펙터 제목 `Node C` |
+| L14 | 미러 행 1클릭=행 포커스 링만·캔버스 이동 없음, 더블클릭=원본 이동 | ✅ | 클릭 후 래퍼에 `ring-accent`·viewport transform 불변·선택 `l-b` 유지. 더블클릭 후 선택 `l-a`·transform 변경 |
+| L15 | 인박스 컨트롤: 평소 숨김, 행 호버·선택 시 입력 박스 우측 안에 표시 | ✅ | 오버레이 opacity 0 → 호버 1 → 행 선택 1. 오버레이 우측 경계가 입력 박스 안(`insideRight`), 플래그·형식·× 3종 포함. 스크린샷에서 비호버 행엔 컨트롤 없음 확인 |
+| L16 | R/O 플래그: 평소 이니셜, 토글 시 풀 라벨 확장 후 ~0.9s 뒤 축소 | ✅ | `O`(max-w-3) → 토글 직후 `Required`(max-w-16) → 1.2s 후 `R`(max-w-3) |
+| L17 | 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(호버 하이라이트·클릭 이동), SP 카드 원본 행 포함 | ✅ | 원본 행 → 2행(`Node B/Input`, `Node C/Output`), 행 호버 시 해당 노드만 하이라이트, 클릭 시 그 노드 선택. 미러 행 → 원본 1행. SP 카드 원본 행 → 소비 노드 1행 |
+| L18 | 읽기 행 필 디자인: 형식 필 + R/O 필, 접미 텍스트(`· PDF`) 없음 | ✅ | 행1 `pills=[PDF, R]`, 행2 `pills=[O]`, 두 행 모두 `·` 접미 없음 |
+| L19 | SP 노드 모달(편집 모드): I/O & Conditions가 링크맵 상속 읽기전용 + 안내 문구, 파라미터는 상속값 | ✅ | 편집 가능한 IO 입력 0개, 상세 텍스트에 `SP인풋`/`SP산출물PDF` + `Set by the subprocess owner in map settings.`, Metrics는 상속값(`2h`, `30m`, `₩50,000`, `3`) |
+| L20 | 읽기전용 모달: 타입/설명 + Attributes(GMP 배지)·Parameters(포맷값)·I/O(필 스타일) 표시, 빈 섹션 생략 | ✅ | `Type: Process` + `summary-read-attrs`(GMP Direct 배지)·`summary-read-params`(`1h30m`)·`summary-read-details`(PDF 필) 모두 노출. 값 없는 노드에선 세 섹션 전부 미렌더 |
+
 ## 이슈 로그
 
 ### #1 미러 항목 호버 시 형제 미러까지 하이라이트 (F2 / F3 일부) — **수정 완료 · 재검증 통과**
@@ -154,8 +181,8 @@
 
 - **일시**: 2026-08-21 (KST) · **브랜치**: `feat/io-linking` @ `2ed64edc` (이슈 #1 재검증은 픽스 커밋 `34ccb79e`)
 - **환경**: macOS 로컬 네이티브 — backend `uvicorn :8000`(sqlite `dev.db`, `python -m scripts.reset_db` 데모 시드) + frontend `npm run dev :3000`, Playwright(playwright-core) + 시스템 Chrome headless 1600×1000, devUser `admin.sys`(뷰어 검증만 `bora.choi`).
-- **점수**: **61 ✅ / 1 ❌ / 0 ➖ (총 62항목)** — 본 검수 A~I 54항목(1차 53✅/1❌ → 이슈 #1 `34ccb79e` 수정·재검증으로 54✅) + 백로그 반영 검수 J 8항목(7✅/1❌). 문서 상단 안내의 "51항목"은 실제 표 행수와 달라 표 기준으로 집계.
+- **점수**: **81 ✅ / 1 ❌ / 0 ➖ (총 82항목)** — 본 검수 A~I 54항목(1차 53✅/1❌ → 이슈 #1 `34ccb79e` 수정·재검증으로 54✅) + 백로그 반영 검수 J 8항목(7✅/1❌) + UI/UX 개선 검수 L 20항목(20✅). 문서 상단 안내의 "51항목"은 실제 표 행수와 달라 표 기준으로 집계.
 - **이슈**: #1 미러 호버 시 형제 미러까지 하이라이트 (Minor) — **수정·재검증 완료**. #2 CSV Input_Flags 전 줄 무효 시 경고와 달리 기존 값 유지 (Minor) — **미해결**.
 - **테스트 토폴로지**: 체인(A→B→C→D) · 병렬 분기(P→{Q,R}→S) · 순환(X→Y→Z→X) · 전파 전용 체인 · SP 지정/미지정 호스트 · 읽기전용/clone 검증용 — 총 8맵을 API로 생성 후 전량 퍼지.
-- **후속 검증 라운드**: 이슈 #1 픽스 재검증(`34ccb79e`) · 폴리시 픽스 검증(`9dc6a3b5`) · 백로그 기능 J1~J8(`353fc392`). 각 라운드도 전용 맵을 새로 시드해 실기동 후 전량 퍼지했고, 콘솔 에러는 모든 라운드 0건.
+- **후속 검증 라운드**: 이슈 #1 픽스 재검증(`34ccb79e`) · 폴리시 픽스 검증(`9dc6a3b5`) · 백로그 기능 J1~J8(`353fc392`) · UI/UX 개선 L1~L20(`1061a6c9`). 각 라운드도 전용 맵을 새로 시드해 실기동 후 전량 퍼지했고, 콘솔 에러는 모든 라운드 0건.
 - **비고**: 검수는 임시 드라이버 스크립트(페이즈 분할)로 수행했고, 상태를 소모하는 성격이라 저장소에는 남기지 않았다. 재현 가능한 자동 회귀는 기존 `frontend/scripts/pw-smoke-io-links.mjs`(26체크)가 담당한다.
