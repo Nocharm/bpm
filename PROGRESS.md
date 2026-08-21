@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- 이연 폴리시 일괄 해소: dirty Import 툴팁 span 래핑·appendIoRow flags 소거·후보 useMemo·subprocessRefs 루트 우선·aria-label·dead code/들여쓰기·assignSpIoIds 빈 줄·테스트 5건 보강·스펙 문구 2곳 정정.
 - 브라우저 QA 54항목 전수 통과(`docs/qa/io-linking-qa.md`) — 1차 검수에서 나온 이슈 #1(미러 호버가 형제 미러까지 점등)을 `34ccb79e`로 수정하고 F2·F3 브라우저 재검증까지 완료, 미해결 이슈 없음. 체인·병렬·순환·SP·읽기전용/뷰어 토폴로지 실기동, 읽기전용 판정은 게시 버전+권한 뷰어 두 경로로 검증.
 - 브레인스토밍 확정: 링크 그룹(원본 1+미러 N, 원본=항상 아웃풋/SP)·상류 합류 시 원본 승계·itemId-only 참조(clone 리매핑 불요)·복사 저장+로드 정합화·인풋 필수/선택 플래그(소비 노드 로컬). 스펙 `docs/superpowers/specs/2026-08-21-io-linking-design.md`.
 - 구현 플랜 작성 `docs/superpowers/plans/2026-08-21-io-linking.md` — 10태스크(백엔드 스레딩→FE 직렬화→io-items 라이브러리 4분할→MVI/모달/배선→스모크), 코드 정독 기반 실 코드 포함.

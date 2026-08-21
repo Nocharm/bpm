@@ -1440,10 +1440,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         m.set(Number(refMapId), ref);
       }
     };
-    addAll(rootGraph?.subprocess_refs);
+    // resolvedCache는 linkKey별 1회 fetch라 스테일 가능 — 루트 그래프 refs(매 로드/저장 응답 갱신)가 이긴다
     for (const g of resolvedCache.values()) {
       addAll(g.subprocess_refs);
     }
+    addAll(rootGraph?.subprocess_refs);
     return m;
   }, [rootGraph, resolvedCache]);
 
@@ -5747,6 +5748,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     setIoHighlight({ nodeIds, edgeIds: [...edgeIds] });
   };
+  // 불러오기 후보 — 모달이 열린 동안 hover가 ioHighlight 리렌더를 유발하므로 memo로 재스캔 방지
+  const ioImportCandidates = useMemo(
+    () =>
+      ioImport
+        ? collectIoImportCandidates({
+            nodes,
+            edges,
+            spRefs: subprocessRefs,
+            nodeId: ioImport.nodeId,
+            side: ioImport.side,
+          })
+        : [],
+    [ioImport, nodes, edges, subprocessRefs],
+  );
   // 미러 텍스트 클릭 → 원본 노드로 이동(선택+센터링). 원본이 없으면 no-op (io-linking §4-4)
   const handleIoNavigate = (side: IoSide, index: number) => {
     if (selectedNode === null) return;
@@ -10406,19 +10421,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           }}
         />
       )}
-      {/* IO 항목 불러오기 — 후보 계산은 이 표현식 안이라 모달이 닫혀 있으면 실행되지 않는다.
+      {/* IO 항목 불러오기 — 후보는 ioImportCandidates memo(닫혀 있으면 빈 배열, 열림 중 hover 리렌더에 재스캔 없음).
           선택 즉시 그래프에 커밋(여러 노드를 만지므로 카드 draft로는 표현 불가, io-linking §4-2) */}
       {ioImport && (
         <IoImportModal
           side={ioImport.side}
           position={ioImport.at}
-          candidates={collectIoImportCandidates({
-            nodes,
-            edges,
-            spRefs: subprocessRefs,
-            nodeId: ioImport.nodeId,
-            side: ioImport.side,
-          })}
+          candidates={ioImportCandidates}
           onHoverCandidate={(candidate) =>
             setIoHighlight(
               candidate

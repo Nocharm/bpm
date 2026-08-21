@@ -278,7 +278,6 @@ export function NodeDetailsCard({
                 UNLINK_POPOVER_WIDTH,
                 UNLINK_POPOVER_HEIGHT,
               )}
-              onClick={(event) => event.stopPropagation()}
             >
               <p className="px-1 pb-2 text-caption text-ink-secondary">{t("io.unlinkConfirm")}</p>
               <div className="flex justify-end gap-1">

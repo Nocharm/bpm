@@ -296,7 +296,7 @@ export function NodeSummaryModal({
       label: title, description, color, assignee, department, system, duration,
       touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
       input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
-    data_form, start_condition, end_condition,
+      data_form, start_condition, end_condition,
     });
     setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
     setCostNotice(null);

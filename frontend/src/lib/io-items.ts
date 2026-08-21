@@ -123,6 +123,7 @@ export function assignSpIoIds(
     .split("\n")
     .map((line) => {
       const text = line.trim();
+      if (text === "") return ""; // 빈 텍스트 줄엔 id 미부여 — 고아 id·후행 트림 무력화 방지
       const j = oldLines.findIndex((old, k) => old !== "" && old === text && !used.has(k));
       if (j >= 0) {
         used.add(j);
@@ -194,6 +195,8 @@ function appendIoRow<N extends IoNode>(
     data.input = nextTexts;
     data.input_forms = setIoLine(node.data.input_forms, idx, row.form);
     data.input_links = setIoLine(node.data.input_links, idx, row.link);
+    // 텍스트보다 긴 스테일 flags 열이 새 행에 상속되지 않게 명시 소거 — 기본 required("")
+    data.input_flags = setIoLine(node.data.input_flags, idx, "");
   } else {
     data.output = nextTexts;
     data.output_forms = setIoLine(node.data.output_forms, idx, row.form);

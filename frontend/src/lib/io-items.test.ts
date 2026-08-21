@@ -25,6 +25,10 @@ describe("io line helpers", () => {
     expect(setIoLine("a\nb\nc", 2, "")).toBe("a\nb");
     expect(setIoLine("a", 0, "z")).toBe("z");
   });
+  it("setIoLine은 중간 빈 줄을 보존한다 — 정렬 계약 §3", () => {
+    expect(setIoLine("a\n\nc", 2, "z")).toBe("a\n\nz");
+    expect(setIoLine("a\n\nc", 0, "x")).toBe("x\n\nc");
+  });
   it("countIoLines는 빈 문자열=0, 그 외는 줄 수", () => {
     expect(countIoLines(undefined)).toBe(0);
     expect(countIoLines("")).toBe(0);
@@ -91,6 +95,18 @@ describe("assignSpIoIds", () => {
   });
   it("빈 텍스트면 빈 결과", () => {
     expect(assignSpIoIds("", "구항목", "sp_1")).toBe("");
+  });
+  it("빈 텍스트 줄엔 id 미부여 — 고아 id 방지", () => {
+    const out = assignSpIoIds("a\n\nb", "", "");
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).not.toBe("");
+    expect(lines[1]).toBe("");
+    expect(lines[2]).not.toBe("");
+  });
+  it("중복 텍스트 줄은 기존 id를 한 번씩만 소비한다(used-once)", () => {
+    const out = assignSpIoIds("회의록\n회의록", "회의록\n회의록", "id_1\nid_2");
+    expect(out.split("\n")).toEqual(["id_1", "id_2"]);
   });
 });
 
@@ -256,6 +272,20 @@ describe("applyIoImport", () => {
     expect(b.data.input_links).toBe(a.data.output_ids);
     expect(b.data.input_forms ?? "").toBe("");
     expect(b.data.input_flags ?? "").toBe(""); // 플래그 줄 미추가(기본 required)
+  });
+
+  it("mirror: 텍스트보다 긴 스테일 flags 줄이 새 미러 행에 상속되지 않는다", () => {
+    // input 1줄인데 flags가 2줄(스테일) — 새 미러가 붙는 인덱스 1의 "optional"이 소거돼야 한다
+    const nodes: IoNode[] = [
+      node("A", { output: "출력1" }),
+      node("B", { input: "기존", input_flags: "\noptional" }),
+    ];
+    const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
+    const candidate = collectIoImportCandidates({ nodes, edges, spRefs: NO_SP, nodeId: "B", side: "input" })[0];
+    const result = applyIoImport({ nodes, edges, spRefs: NO_SP, nodeId: "B", side: "input", candidate })!;
+    const b = result.nodes.find((n) => n.id === "B")!;
+    expect(getIoLine(b.data.input, 1)).toBe("출력1");
+    expect(getIoLine(b.data.input_flags, 1)).toBe(""); // 스테일 "optional" 미상속 — 기본 required
   });
 
   it("mirror(기존 그룹): 인풋이 이미 원본인 아웃풋 불러오기 — id 재부여 없이 재사용", () => {

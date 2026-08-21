@@ -260,19 +260,21 @@ export function MultiValueInput({
               >
                 {t("io.addNew")}
               </button>
-              <button
-                type="button"
-                data-id={`${dataId}-add-import`}
-                disabled={importDisabledReason !== undefined}
-                title={importDisabledReason}
-                className="block w-full whitespace-nowrap rounded-sm px-2 py-1 text-left text-fine text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:text-ink-tertiary disabled:hover:bg-transparent"
-                onClick={(e) => {
-                  setMenuOpen(false);
-                  onImport({ x: e.clientX, y: e.clientY });
-                }}
-              >
-                {t("io.importFromNode")}
-              </button>
+              {/* disabled 버튼은 마우스 이벤트를 못 받아 title 툴팁이 안 뜰 수 있다 — 래퍼 span이 툴팁 담당 */}
+              <span title={importDisabledReason} className="block">
+                <button
+                  type="button"
+                  data-id={`${dataId}-add-import`}
+                  disabled={importDisabledReason !== undefined}
+                  className="block w-full whitespace-nowrap rounded-sm px-2 py-1 text-left text-fine text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:text-ink-tertiary disabled:hover:bg-transparent"
+                  onClick={(e) => {
+                    setMenuOpen(false);
+                    onImport({ x: e.clientX, y: e.clientY });
+                  }}
+                >
+                  {t("io.importFromNode")}
+                </button>
+              </span>
             </div>
           )}
         </div>
@@ -301,6 +303,7 @@ export function MultiValueInput({
                 type="button"
                 data-id={`${dataId}-link-${i}`}
                 title={t("io.unlinkTooltip")}
+                aria-label={t("io.unlinkTooltip")}
                 className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent hover:text-error"
                 onClick={(e) => onUnlink?.(i, { x: e.clientX, y: e.clientY })}
               >
