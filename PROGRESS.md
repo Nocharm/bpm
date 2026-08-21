@@ -4,7 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
-- 브라우저 QA 검수 체크리스트 51항목 작성(`docs/qa/io-linking-qa.md`) — 스모크 커버 항목 표기, 전수 검수 진행 중(결과는 후속 커밋).
+- 브라우저 QA 전수 검수 완료(`docs/qa/io-linking-qa.md`, 54항목 중 53✅/1❌) — 체인·병렬·순환·SP·읽기전용/뷰어 토폴로지 8맵 실기동. 유일 결함은 미러 항목 호버가 원본 외 형제 미러까지 하이라이트하는 Minor 이슈(#1, 미수정); 읽기전용 판정은 게시 버전+권한 뷰어 두 경로로 대체 검증.
 - 브레인스토밍 확정: 링크 그룹(원본 1+미러 N, 원본=항상 아웃풋/SP)·상류 합류 시 원본 승계·itemId-only 참조(clone 리매핑 불요)·복사 저장+로드 정합화·인풋 필수/선택 플래그(소비 노드 로컬). 스펙 `docs/superpowers/specs/2026-08-21-io-linking-design.md`.
 - 구현 플랜 작성 `docs/superpowers/plans/2026-08-21-io-linking.md` — 10태스크(백엔드 스레딩→FE 직렬화→io-items 라이브러리 4분할→MVI/모달/배선→스모크), 코드 정독 기반 실 코드 포함.
 - Task 1: 백엔드 스키마 6컬럼(Node 4·ProcessMap 2) 스레딩 — models/db/schemas/graph upsert/versions clone/maps 지정 저장/subprocess.py 3중 위치일치 select-kwargs-unpack. TDD RED→GREEN, 전체 1147 passed.
