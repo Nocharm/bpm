@@ -9297,7 +9297,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               (selectedNode.data.gmp ?? "") !== "" ? (
                                 <span
                                   data-id="inspector-field-gmp"
-                                  className="rounded-full px-1.5 py-0.5 text-fine"
+                                  className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
                                   style={getGmpBadgeStyle(selectedNode.data.gmp)}
                                 >
                                   {formatGmp(selectedNode.data.gmp)}
@@ -9314,7 +9314,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               >
                                 {(selectedNode.data.gmp ?? "") !== "" ? (
                                   <span
-                                    className="rounded-full px-1.5 py-0.5 text-fine"
+                                    className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
                                     style={getGmpBadgeStyle(selectedNode.data.gmp)}
                                   >
                                     {formatGmp(selectedNode.data.gmp)}

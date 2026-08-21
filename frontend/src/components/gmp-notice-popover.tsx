@@ -45,7 +45,7 @@ export function GmpNoticePopover({
       hovered === null ? "" : affected ? "opacity-100" : "opacity-35"
     }`;
   const actionButton =
-    "flex items-center gap-1 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt";
+    "flex items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt";
 
   return (
     <>
@@ -53,9 +53,9 @@ export function GmpNoticePopover({
       <div className="fixed inset-0 z-[1355]" onMouseDown={onClose} />
       <div
         data-id="node-gmp-notice"
-        className="fixed z-[1360] w-[300px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
+        className="fixed z-[1360] w-[400px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
         style={{
-          left: Math.max(8, Math.min(x - 300 + 24, window.innerWidth - 308)),
+          left: Math.max(8, Math.min(x - 400 + 24, window.innerWidth - 408)),
           top: Math.max(8, y - 24),
         }}
       >
@@ -76,11 +76,11 @@ export function GmpNoticePopover({
         </div>
         <div className={rowClass(affects("gmp"))} data-id="node-gmp-notice-row-gmp">
           <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
-          <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(prevGmp) ?? undefined}>
+          <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(prevGmp) ?? undefined}>
             {formatGmp(prevGmp) || t("gmpNotice.unset")}
           </span>
           <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-          <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(nextGmp) ?? undefined}>
+          <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(nextGmp) ?? undefined}>
             {formatGmp(nextGmp) || t("gmpNotice.unset")}
           </span>
         </div>
@@ -93,7 +93,7 @@ export function GmpNoticePopover({
             <GmpColorSwatch color={nextColor} />
           </div>
         )}
-        <div className="mt-2.5 flex items-center justify-end gap-1.5">
+        <div className="mt-2.5 flex flex-nowrap items-center justify-end gap-1.5">
           {colorChanged && (
             <button
               type="button"
@@ -121,7 +121,7 @@ export function GmpNoticePopover({
           <button
             type="button"
             data-id="node-gmp-notice-confirm"
-            className="flex items-center gap-1 rounded-sm bg-accent px-2.5 py-0.5 text-caption text-on-accent hover:bg-accent-focus"
+            className="flex items-center gap-1 whitespace-nowrap rounded-sm bg-accent px-2.5 py-0.5 text-caption text-on-accent hover:bg-accent-focus"
             onMouseEnter={() => setHovered("confirm")}
             onMouseLeave={() => setHovered(null)}
             onClick={onClose}

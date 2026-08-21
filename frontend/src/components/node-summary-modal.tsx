@@ -653,7 +653,7 @@ export function NodeSummaryModal({
                     {gmpValue !== "" && (
                       <div className="flex items-center justify-between gap-2 py-0.5 text-caption">
                         <span className="shrink-0 text-ink-secondary">{t("field.gmp")}</span>
-                        <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpValue)}>
+                        <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpValue)}>
                           {formatGmp(gmpValue)}
                         </span>
                       </div>
