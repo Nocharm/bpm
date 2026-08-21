@@ -5725,10 +5725,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       return;
     }
     const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
-    const peerIds = [
-      ...(peers.origin ? [peers.origin.nodeId] : []),
-      ...peers.mirrors.map((m) => m.nodeId),
-    ].filter((id) => id !== selectedNode.id);
+    // 미러 행 호버 = 원본만, 원본 행 호버 = 미러 전부 — 형제 미러 동시 점등 금지 (§4-5, QA 이슈 #1)
+    const peerIds =
+      peers.origin === null
+        ? [] // 원본 소실(댕글링) — 비출 상대 없음
+        : peers.origin.nodeId !== selectedNode.id
+          ? [peers.origin.nodeId]
+          : peers.mirrors.map((m) => m.nodeId).filter((id) => id !== selectedNode.id);
     const nodeIds = [...new Set(peerIds)];
     if (nodeIds.length === 0) {
       setIoHighlight(null);
