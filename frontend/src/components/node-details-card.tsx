@@ -120,7 +120,8 @@ export function NodeDetailsCard({
     : COUNT_FIELDS.filter((f) => shown(f) !== "").length;
 
   return (
-    <div data-id="inspector-details" className="rounded-md border border-hairline p-3">
+    // 읽기전용+빈 섹션은 딤 — 정보 없는 칸을 인액티브로 (사용자 요청 2026-08-21 #3)
+    <div data-id="inspector-details" className={`rounded-md border border-hairline p-3 ${readOnly && filledCount === 0 ? "opacity-50" : ""}`}>
       <div className="flex items-center gap-1">
         <button
           type="button"

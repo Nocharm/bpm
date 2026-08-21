@@ -39,7 +39,8 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
-import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { GmpColorSwatch, GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
 import { NodeDetailsCard } from "@/components/node-details-card";
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
@@ -6773,6 +6774,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [displayFields],
   );
+  // 카테고리 일괄 보이기/숨기기(#4) — 영속은 핸들러에서만(위 StrictMode 리셋 랜드마인과 동일 이유)
+  const setCategoryDisplayFields = useCallback(
+    (fields: NodeDisplayToggle[], on: boolean) => {
+      const next = on
+        ? [...displayFields, ...fields.filter((f) => !displayFields.includes(f))]
+        : displayFields.filter((f) => !fields.includes(f));
+      window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(next));
+      setDisplayFields(next);
+    },
+    [displayFields],
+  );
 
   // 맵 탭의 엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요). 노드 디스플레이는
   // NodeDisplaySection 컴포넌트가 자체 관리 (2026-08-20).
@@ -6809,6 +6821,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // setState만 부르는 핸들러는 useCallback 금지 — 컴파일러가 setter를 dep으로 추론해
   // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
   const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
+  // 픽커 대상 노드의 현재 값 — 미리보기·확정 패치가 공유 (렌더 IIFE 금지 — 컴파일러 ref 규칙)
+  const gmpPickerNode = gmpPicker !== null ? nodes.find((n) => n.id === gmpPicker.nodeId) : undefined;
   const onEditGmpAction = readOnly ? null : openGmpPicker;
   // 분류 확정 안내 — 분류가 노드 색을 자동 변경하므로(일반 노드) 마우스 지점에 알리고
   // "이전 분류로"/"색만" 두 단계 되돌리기를 제공 (사용자 결정 2026-08-20)
@@ -9124,8 +9138,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김.
                           아코디언(기본 접힘) — 수행 지표·입출력 조건과 동일 패턴 (사용자 결정 2026-08-20) */}
-                      {hasBpmAttributes(selectedNode.data.nodeType) && (
-                        <div className="rounded-md border border-hairline p-3">
+                      {hasBpmAttributes(selectedNode.data.nodeType) && (() => {
+                        // 채움 카운트 — 헤더 배지·읽기전용 빈 섹션 딤(#3) 공용, gmp 포함 (사용자 요청 2026-08-21)
+                        const attrsFilled = [
+                          selectedNode.data.assignee,
+                          selectedNode.data.department,
+                          selectedNode.data.system,
+                          selectedNode.data.url,
+                          selectedNode.data.gmp,
+                        ].filter((v) => (v ?? "") !== "").length;
+                        return (
+                        <div className={`rounded-md border border-hairline p-3 ${readOnly && attrsFilled === 0 ? "opacity-50" : ""}`}>
                           <button
                             type="button"
                             data-id="inspector-attrs-toggle"
@@ -9144,17 +9167,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                               className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
                             />
                             {t("editor.bpmAttrs")}
-                            {(() => {
-                              const filled = [
-                                selectedNode.data.assignee,
-                                selectedNode.data.department,
-                                selectedNode.data.system,
-                                selectedNode.data.url,
-                              ].filter((v) => (v ?? "") !== "").length;
-                              return filled > 0 ? (
-                                <span className="font-normal text-ink-tertiary">({filled})</span>
-                              ) : null;
-                            })()}
+                            {attrsFilled > 0 && (
+                              <span className="font-normal text-ink-tertiary">({attrsFilled})</span>
+                            )}
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
@@ -9209,6 +9224,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                               )}
                             </div>
                           ))}
+                          {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
+                          <div className="flex items-center justify-between gap-2 py-1">
+                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.gmp")}</span>
+                            {readOnly ? (
+                              (selectedNode.data.gmp ?? "") !== "" ? (
+                                <span
+                                  data-id="inspector-field-gmp"
+                                  className="rounded-full px-1.5 py-0.5 text-fine"
+                                  style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                >
+                                  {formatGmp(selectedNode.data.gmp)}
+                                </span>
+                              ) : (
+                                <span data-id="inspector-field-gmp" className="text-caption text-ink-tertiary">-</span>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                data-id="inspector-field-gmp"
+                                className="rounded-sm px-1 py-0.5 hover:bg-surface-alt"
+                                onClick={(event) => openGmpPicker(selectedNode.id, event.clientX, event.clientY)}
+                              >
+                                {(selectedNode.data.gmp ?? "") !== "" ? (
+                                  <span
+                                    className="rounded-full px-1.5 py-0.5 text-fine"
+                                    style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                  >
+                                    {formatGmp(selectedNode.data.gmp)}
+                                  </span>
+                                ) : (
+                                  <span className="text-caption text-ink-tertiary">
+                                    {t("perm.processFields.gmpUnset")}
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </div>
                           <UrlLabelField
                             key={selectedNode.id}
                             url={selectedNode.data.url ?? ""}
@@ -9219,7 +9271,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
                       {selectedNode.data.nodeType === "end" && (
                         <div className="flex items-center justify-between">
@@ -9587,6 +9640,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     idPrefix="properties"
                     displayFields={displayFields}
                     onToggle={toggleDisplayField}
+                    onSetCategory={setCategoryDisplayFields}
                   />
                 }
                 subprocessTabSlot={
@@ -9715,6 +9769,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       idPrefix="inspector"
                       displayFields={displayFields}
                       onToggle={toggleDisplayField}
+                      onSetCategory={setCategoryDisplayFields}
                     />
                     <div data-id="inspector-edge-style-section" className="rounded-md border border-hairline p-3">
                       <button
@@ -10589,19 +10644,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           {gmpNotice.nextColor !== gmpNotice.prevColor && (
             <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-secondary">
               <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
-              <span
-                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
-                style={
-                  gmpNotice.prevColor
-                    ? { borderColor: gmpNotice.prevColor, background: `color-mix(in srgb, ${gmpNotice.prevColor} 18%, white)` }
-                    : undefined
-                }
-              />
+              <GmpColorSwatch color={gmpNotice.prevColor} />
               <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-              <span
-                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
-                style={{ borderColor: gmpNotice.nextColor, background: `color-mix(in srgb, ${gmpNotice.nextColor} 18%, white)` }}
-              />
+              {/* 빈 색 = 타입 기본색(미분류 리셋) — 점선 스와치 (사용자 요청 2026-08-21 #7) */}
+              <GmpColorSwatch color={gmpNotice.nextColor} />
             </div>
           )}
           <div className="mt-2.5 flex justify-end gap-1.5">
@@ -10633,62 +10679,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       )}
       {gmpPicker !== null && (
-        <>
-          <div className="fixed inset-0 z-[1340]" onClick={() => setGmpPicker(null)} />
-          <div
-            data-id="node-gmp-picker"
-            className="fixed z-[1350] w-[180px] rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
-            style={{
-              left: Math.min(gmpPicker.x, window.innerWidth - 188),
-              top: Math.min(gmpPicker.y + 6, window.innerHeight - 170),
-            }}
-          >
-            {[{ value: "", label: t("perm.processFields.gmpUnset") }, ...GMP_OPTIONS].map((option) => (
-              <button
-                key={option.value || "unset"}
-                type="button"
-                data-id={`node-gmp-picker-${option.value || "unset"}`}
-                className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
-                onClick={(event) => {
-                  const target = nodes.find((n) => n.id === gmpPicker.nodeId);
-                  const prevGmp = target?.data.gmp ?? "";
-                  const prevColor = target?.data.color ?? "";
-                  // 분류가 노드 색을 자동 확정 — 미분류 선택은 색을 건드리지 않는다
-                  const nextColor = option.value
-                    ? GMP_NODE_COLORS[option.value as GmpValue]
-                    : prevColor;
-                  patchNode(
-                    gmpPicker.nodeId,
-                    option.value ? { gmp: option.value, color: nextColor } : { gmp: option.value },
-                    true,
-                  );
-                  setGmpPicker(null);
-                  if (option.value !== prevGmp) {
-                    setGmpNotice({
-                      nodeId: gmpPicker.nodeId,
-                      prevGmp,
-                      prevColor,
-                      nextGmp: option.value,
-                      nextColor,
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }
-                }}
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full border border-hairline"
-                  style={
-                    option.value
-                      ? { backgroundColor: `var(${GMP_OPTIONS.find((o) => o.value === option.value)?.colorVar})` }
-                      : undefined
-                  }
-                />
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
+        <GmpPickerPopup
+          x={gmpPicker.x}
+          y={gmpPicker.y}
+          current={{ gmp: gmpPickerNode?.data.gmp ?? "", color: gmpPickerNode?.data.color ?? "" }}
+          onClose={() => setGmpPicker(null)}
+          onConfirm={(value) => {
+            const prevGmp = gmpPickerNode?.data.gmp ?? "";
+            const prevColor = gmpPickerNode?.data.color ?? "";
+            // 분류가 노드 색을 자동 확정 — 미분류 선택은 타입 기본색으로 리셋 (사용자 요청 2026-08-21 #7)
+            const nextColor = getGmpTargetColor(value);
+            patchNode(gmpPicker.nodeId, { gmp: value, color: nextColor }, true);
+            setGmpPicker(null);
+            setGmpNotice({
+              nodeId: gmpPicker.nodeId,
+              prevGmp,
+              prevColor,
+              nextGmp: value,
+              nextColor,
+              x: gmpPicker.x,
+              y: gmpPicker.y,
+            });
+          }}
+        />
       )}
     </NodeActionsContext.Provider>
   );

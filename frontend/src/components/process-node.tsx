@@ -132,8 +132,9 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   const label = formatGmp(value);
   const editable = !isSubprocess && onEditGmp !== null;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
+  // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
-    "nodrag nopan inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
+    "nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
     (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
     (extra ?? "");
   const body = (

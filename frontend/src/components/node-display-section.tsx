@@ -5,6 +5,8 @@
 import {
   Building2,
   ChevronRight,
+  Eye,
+  EyeOff,
   Link,
   LogIn,
   LogOut,
@@ -56,11 +58,13 @@ const TOGGLE_CATEGORIES: { key: string; labelKey: MessageKey; fields: NodeDispla
 interface NodeDisplaySectionProps {
   displayFields: NodeDisplayToggle[];
   onToggle: (field: NodeDisplayToggle) => void;
+  // 카테고리 일괄 보이기/숨기기(눈 아이콘, 사용자 요청 2026-08-21 #4) — 영속은 핸들러 소유(StrictMode 랜드마인)
+  onSetCategory: (fields: NodeDisplayToggle[], on: boolean) => void;
   // 표면별 data-id 접두("inspector" | "properties") — 같은 화면에 중복 마운트되지 않게 구분
   idPrefix: string;
 }
 
-export function NodeDisplaySection({ displayFields, onToggle, idPrefix }: NodeDisplaySectionProps) {
+export function NodeDisplaySection({ displayFields, onToggle, onSetCategory, idPrefix }: NodeDisplaySectionProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
   const onCount = displayFields.length;
@@ -86,9 +90,28 @@ export function NodeDisplaySection({ displayFields, onToggle, idPrefix }: NodeDi
       </button>
       {!collapsed && (
         <div className="mt-1 flex flex-col gap-1">
-          {TOGGLE_CATEGORIES.map(({ key, labelKey, fields }) => (
+          {TOGGLE_CATEGORIES.map(({ key, labelKey, fields }) => {
+            // 카테고리 내 1개 이상 켜짐 = 모두 숨기기(EyeOff), 전부 꺼짐 = 모두 보이기(Eye) (#4)
+            const anyOn = fields.some((field) => displayFields.includes(field));
+            return (
             <div key={key}>
-              <p className="py-0.5 text-fine text-ink-tertiary">{t(labelKey)}</p>
+              <div className="flex items-center justify-between py-0.5">
+                <p className="text-fine text-ink-tertiary">{t(labelKey)}</p>
+                <button
+                  type="button"
+                  data-id={`${idPrefix}-node-display-${key}-all`}
+                  title={anyOn ? t("nodeDisplay.hideAll") : t("nodeDisplay.showAll")}
+                  aria-label={anyOn ? t("nodeDisplay.hideAll") : t("nodeDisplay.showAll")}
+                  className="rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt"
+                  onClick={() => onSetCategory(fields, !anyOn)}
+                >
+                  {anyOn ? (
+                    <EyeOff size={12} strokeWidth={1.5} />
+                  ) : (
+                    <Eye size={12} strokeWidth={1.5} />
+                  )}
+                </button>
+              </div>
               {/* 계단 구성 — 카테고리 아래 들여쓰기 + 세로선(카드 아코디언과 동일 시각 언어) */}
               <div className="ml-2 border-l border-divider pl-2">
                 {fields.map((field) => {
@@ -125,7 +148,8 @@ export function NodeDisplaySection({ displayFields, onToggle, idPrefix }: NodeDi
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
