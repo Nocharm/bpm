@@ -37,6 +37,11 @@ const api = async (pathname, { method = "GET", body } = {}) => {
 
 // 전 테이블 행수 스냅샷 — sysadmin 전용 읽기전용 COUNT(*) (admin.py list_tables). teardown 후 대조해
 // "잔류 0"을 API만으로 증명한다(sqlite 파일 직접 조회 불필요).
+// login_records는 대조에서 제외 — /api/me는 login_id당 KST 하루 1행 dedup이라 이 테이블의 증가분이
+// "이 런이 만든 행"인지 "다른 동시 세션이 그날 먼저 찍은 행"인지 구분할 근거가 없다(스키마에 세션
+// 식별자 없음). _purge-test-map.py도 같은 이유로 이 테이블을 건드리지 않는다 — 남의 행을 지우는
+// 쪽이 하루 1행/로그인id의 잔류를 감수하는 쪽보다 훨씬 위험하다는 판단(코드리뷰 반영).
+const RESIDUE_EXEMPT_TABLES = new Set(["login_records"]);
 const snapshotTables = async () => {
   const rows = await api("/admin/tables");
   return new Map(rows.map((r) => [r.name, r.count]));
@@ -46,7 +51,6 @@ let browser;
 let mapId = null;
 let versionId = null;
 let baseline = null;
-const startedAt = new Date().toISOString();
 
 try {
   baseline = await snapshotTables();
@@ -311,11 +315,7 @@ try {
       execFileSync(
         path.join(BACKEND_DIR, ".venv/bin/python"),
         [path.join(__dirname, "_purge-test-map.py")],
-        {
-          cwd: BACKEND_DIR,
-          env: { ...process.env, SMOKE_MAP_ID: String(mapId), SMOKE_STARTED_AT: startedAt, SMOKE_DEV_USER: DEV_USER },
-          stdio: "inherit",
-        },
+        { cwd: BACKEND_DIR, env: { ...process.env, SMOKE_MAP_ID: String(mapId) }, stdio: "inherit" },
       );
     } catch (e) {
       console.error("hard purge failed:", e.message);
@@ -326,6 +326,7 @@ try {
     if (after) {
       const diffs = [];
       for (const [name, count] of after) {
+        if (RESIDUE_EXEMPT_TABLES.has(name)) continue;
         const before = baseline.get(name) ?? 0;
         if (count !== before) diffs.push(`${name}: ${before}→${count}`);
       }
