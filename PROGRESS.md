@@ -5,6 +5,7 @@
 
 ## 2026-08-23 — 노드 간격 자동 재조정 height-shift 설계 (feat/node-spacing)
 - 브레인스토밍 확정: 원래 간격 보존·아래 전체(행 보존)·상시 자동·실측 기반 Y 계단함수(inline-shift 수학 재사용). 스펙 docs/superpowers/specs/2026-08-23-node-spacing-design.md. 플랜 5태스크(모듈 TDD→합성/역변환→생성 스윕→rAF 트윈→스모크). 스펙 정정: 인라인 펼침 중 V1 비활성(자식 합성 좌표 결합 리스크)·앵커 allowlist·경계 등호 계약.
+- Task 1(TDD): `lib/height-shift.ts` 신설 — getDisplayHeight(measured 우선/추정 폴백)·buildHeightSteps(앵커 필터+행 병합)·buildYOffsets(nodewise 오프셋) 3함수, 테스트 9/9 통과. 게이트 그린: vitest 749(740→+9) / tsc 0 / lint 0.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
 - UI 문자열 em-dash(—)→하이픈(-) 일괄 스윕(i18n 179줄+소스 65줄+테스트 단언 8줄, 주석·테스트 제목 제외 — 8f254b44 컨벤션 확장). QA S1의 배너 title 전문도 하이픈으로 변경됨.
