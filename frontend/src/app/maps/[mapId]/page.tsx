@@ -6352,6 +6352,49 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [ySteps]);
   const yOffsets = useMemo(() => buildYOffsets(nodes, ySteps), [nodes, ySteps]);
 
+  // 오프셋 전환 트윈 — CSS transition은 엣지(SVG 재계산)가 안 따라와 분리돼 보임 → 값 자체를 rAF 보간.
+  // 즉시 적용 3조건: 첫 산출(로드 정착)·드래그 중·prefers-reduced-motion. (spec §6)
+  const [renderYOffsets, setRenderYOffsets] = useState<ReadonlyMap<string, number>>(new Map());
+  const renderYOffsetsRef = useRef(renderYOffsets);
+  useEffect(() => {
+    renderYOffsetsRef.current = renderYOffsets;
+  }, [renderYOffsets]);
+  const yTweenInitRef = useRef(false);
+  useEffect(() => {
+    const from = renderYOffsetsRef.current;
+    const to = yOffsets;
+    // 동일하면 스킵 — set-state-in-effect 회피 겸 무한 루프 방지
+    if (from.size === to.size && [...to].every(([id, v]) => from.get(id) === v)) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dragging = dragStartPositionsRef.current.size > 0;
+    const instant = !yTweenInitRef.current || dragging || reduced;
+    yTweenInitRef.current = true;
+    if (instant) {
+      const raf = requestAnimationFrame(() => setRenderYOffsets(to));
+      return () => cancelAnimationFrame(raf);
+    }
+    const start = performance.now();
+    const DURATION = 350;
+    const ids = new Set([...from.keys(), ...to.keys()]);
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      // ease-smooth 근사(cubic ease-out) — 프레임마다 노드·엣지가 함께 이동
+      const e = 1 - Math.pow(1 - t, 3);
+      const next = new Map<string, number>();
+      for (const id of ids) {
+        const a = from.get(id) ?? 0;
+        const b = to.get(id) ?? 0;
+        const v = a + (b - a) * e;
+        if (v !== 0) next.set(id, v);
+      }
+      setRenderYOffsets(t >= 1 ? to : next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [yOffsets]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
@@ -6426,8 +6469,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
       const injected = injectSubEnds(withGmpPreview);
-      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 이동
-      const yOff = yOffsets.get(node.id) ?? 0;
+      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동
+      const yOff = renderYOffsets.get(node.id) ?? 0;
       return yOff === 0
         ? injected
         : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
@@ -6471,7 +6514,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     staleAnchorIds,
     ioHighlight,
     gmpPreview,
-    yOffsets,
+    renderYOffsets,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
