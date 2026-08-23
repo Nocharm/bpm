@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- SP 배너 한 줄화: 짧은 전용 문구(Update available/Pinned version)+truncate, 전문은 title 툴팁.
 - SP 버전 추적 배너 2종(하단): 새 발행본=accent 틴트 배너(기존 점+텍스트 대체), 핀 고정=중립 배너(신규 — 캔버스엔 추적 표시가 없었음). 새 발행본이 핀 안내를 함의해 단일 노출.
 - SP 캔버스 IO에 양식 아이콘(sp_*_forms 스레딩 누락이 원인 — 모델·API엔 이미 존재)·SP 마크 라벨 앞 인라인화(이하 행 전체 폭).
 - IO 행 다듬기 2R: 디시전 라벨 max-w-24·긴 항목 2줄 클램프·미체크 인풋 필수/선택 글자색 분류·양식 아이콘 맨 뒤 고정+툴팁·Show more/less 호버 노출+셰브론.
