@@ -308,7 +308,7 @@ export function MapDetailCard({
           failed: result.failed.length,
         });
         const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
-        setStagedSaveError(`${summary} — ${failureText}`);
+        setStagedSaveError(`${summary} - ${failureText}`);
       }
       const kept = result.records.filter((r) => r.outcome !== "failed");
       setLastApply(kept.length > 0 ? kept : null);
@@ -442,7 +442,7 @@ export function MapDetailCard({
           failed: summary.failed.length,
         });
         const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
-        setStagedSaveError(`${text} — ${failureText}`);
+        setStagedSaveError(`${text} - ${failureText}`);
       }
       setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
       setUndoOpen(false);
@@ -863,7 +863,7 @@ export function MapDetailCard({
             <p className="text-fine text-ink-tertiary">Generated {formatDocStamp(detail.doc_generated_at)}</p>
           )}
           {needsRegenerate(detail) && (
-            <p className="text-fine text-changed">Re-imported after last generation — regenerate the document.</p>
+            <p className="text-fine text-changed">Re-imported after last generation - regenerate the document.</p>
           )}
         </div>
       )}

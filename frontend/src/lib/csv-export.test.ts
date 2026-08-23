@@ -110,7 +110,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Secondary end node "Extra End" is not expressible in CSV — skipped']);
+    expect(warnings).toEqual(['Secondary end node "Extra End" is not expressible in CSV - skipped']);
     const lines = csv.split("\r\n");
     expect(lines.length).toBe(2); // header + A만 (start/end/extra end 모두 행이 아님)
     expect(lines[1].startsWith("A,")).toBe(true);
@@ -128,8 +128,8 @@ describe("buildCsvFromGraph — round trip", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([
-      'Edge "A" → End (label "reject") is not expressible in CSV — dropped',
-      'Decision "A" has fewer than 2 branches — re-import will infer process',
+      'Edge "A" → End (label "reject") is not expressible in CSV - dropped',
+      'Decision "A" has fewer than 2 branches - re-import will infer process',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[0]).toBe("A"); // Name
@@ -148,7 +148,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV — dropped']);
+    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[20]).toBe("B"); // Next(21번째) — End행 엣지는 드랍, B만 남는다
   });
@@ -166,8 +166,8 @@ describe("buildCsvFromGraph — round trip", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([
-      'Next target "C:review" contains ";" or ":" — re-import will misparse this reference',
-      'Edge label "ok;fine" (from "A") contains ";" — re-import will misparse this reference',
+      'Next target "C:review" contains ";" or ":" - re-import will misparse this reference',
+      'Edge label "ok;fine" (from "A") contains ";" - re-import will misparse this reference',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[20]).toBe("C:review;B:ok;fine"); // Next(21번째) — 드랍 없이 그대로 직렬화
@@ -180,7 +180,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Duplicate title "A" — re-import will fail on this file']);
+    expect(warnings).toEqual(['Duplicate title "A" - re-import will fail on this file']);
   });
 
   it("start의 outgoing 대상이 진입 엣지 없는 노드 집합과 다르면 경고", () => {
@@ -196,7 +196,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(["Start connections differ from computed roots — re-import will recompute them"]);
+    expect(warnings).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
   });
 
   it("숫자 파라미터 4필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {

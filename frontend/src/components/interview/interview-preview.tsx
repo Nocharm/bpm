@@ -421,7 +421,7 @@ export function InterviewPreview({
                 ) : (
                   <>
                     <div className="text-caption text-ink-secondary">
-                      Answer a few questions — the map draws itself.
+                      Answer a few questions - the map draws itself.
                     </div>
                     <div className="text-fine text-ink-muted">
                       Attach a document in chat to draw right away (fast track).
@@ -481,7 +481,7 @@ export function InterviewPreview({
               >
                 <Undo2 size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
                 <span className="truncate text-caption text-ink-secondary">
-                  Previewing “{previewLabel}” — going back sets aside later messages and map changes.
+                  Previewing “{previewLabel}” - going back sets aside later messages and map changes.
                 </span>
                 <button
                   className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
@@ -578,7 +578,7 @@ export function InterviewPreview({
                   >
                     {spData.map_name || "map"}
                   </a>{" "}
-                  — replace {spData.node_keys?.length ?? 0} steps with a subprocess link?
+                  - replace {spData.node_keys?.length ?? 0} steps with a subprocess link?
                 </span>
                 <button
                   className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"

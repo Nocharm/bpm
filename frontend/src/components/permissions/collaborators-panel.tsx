@@ -363,7 +363,7 @@ export function CollaboratorsPanel({
         failed: result.failed.length,
       });
       const failureText = result.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
-      onToast(failureText ? `${summary} — ${failureText}` : summary);
+      onToast(failureText ? `${summary} - ${failureText}` : summary);
       const kept = result.records.filter((r) => r.outcome !== "failed");
       setLastApply(kept.length > 0 ? kept : null);
       setStagedOps([]);
@@ -389,7 +389,7 @@ export function CollaboratorsPanel({
         failed: summary.failed.length,
       });
       const failureText = summary.failed.map((f) => humanizeApiError(f.message, t)).join(" · ");
-      onToast(failureText ? `${text} — ${failureText}` : text);
+      onToast(failureText ? `${text} - ${failureText}` : text);
       setLastApply(null); // 1회성 — 재저장 전까지 Undo 불가
       setUndoOpen(false);
       await reload();

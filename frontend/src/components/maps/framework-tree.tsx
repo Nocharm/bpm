@@ -301,7 +301,7 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
               className="text-left text-fine text-error hover:underline"
               onClick={() => handleRetryNode(node.id)}
             >
-              {node.name} — {t("home.frameworkLoadError")}
+              {node.name} - {t("home.frameworkLoadError")}
             </button>
           ) : (
             children.length > 0 && (

@@ -309,7 +309,7 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
       tabIndex={-1}
       className={`${className} hover:brightness-95`}
       style={label ? getGmpBadgeStyle(value) : undefined}
-      title="GMP — click to classify"
+      title="GMP - click to classify"
       onPointerDown={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onClick={(event) => {

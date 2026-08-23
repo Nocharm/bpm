@@ -294,7 +294,7 @@ export function VersionTimeline({
                         {publishedEvt && (
                           <span
                             data-id={`version-event-${publishedEvt.id}`}
-                            title={`${t("home.verEvent.published")} — ${nameOf(publishedEvt.actor)}`}
+                            title={`${t("home.verEvent.published")} - ${nameOf(publishedEvt.actor)}`}
                             className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP.published}`}
                           >
                             <EventIcon type="published" />

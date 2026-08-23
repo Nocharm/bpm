@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- UI 문자열 em-dash(—)→하이픈(-) 일괄 스윕(i18n 179줄+소스 65줄+테스트 단언 8줄, 주석·테스트 제목 제외 — 8f254b44 컨벤션 확장). QA S1의 배너 title 전문도 하이픈으로 변경됨.
 - SP 배너 한 줄화: 짧은 전용 문구(Update available/Pinned version)+truncate, 전문은 title 툴팁.
 - SP 버전 추적 배너 2종(하단): 새 발행본=accent 틴트 배너(기존 점+텍스트 대체), 핀 고정=중립 배너(신규 — 캔버스엔 추적 표시가 없었음). 새 발행본이 핀 안내를 함의해 단일 노출.
 - SP 캔버스 IO에 양식 아이콘(sp_*_forms 스레딩 누락이 원인 — 모델·API엔 이미 존재)·SP 마크 라벨 앞 인라인화(이하 행 전체 폭).

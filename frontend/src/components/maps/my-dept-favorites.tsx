@@ -83,7 +83,7 @@ export function MyDeptFavorites({ maps, deptLabel, open, onToggle, selectedId, o
         data-id="org-node-name"
         className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
       >
-        {t("home.myDepartment")} — {deptLabel}
+        {t("home.myDepartment")} - {deptLabel}
       </span>
       {!open && <CountTag count={maps.length} />}
     </button>

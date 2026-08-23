@@ -516,7 +516,7 @@ export default function ConsultPage() {
         </Link>
         <Headset size={16} strokeWidth={1.5} className="text-accent" />
         <span className="text-body-strong">{mapName || "…"}</span>
-        <span className="text-caption text-ink-muted">— Consultant</span>
+        <span className="text-caption text-ink-muted">- Consultant</span>
         {/* 진행바 옆 현재 스테이지 라벨 — 무명 인디케이터 해소 (P1 #6) */}
         <span className="ml-auto text-caption text-ink-secondary" data-id="consult-stage-label">
           {stagesForMode(interview?.mode)[stageIdx]?.label ?? ""}
@@ -640,7 +640,7 @@ export default function ConsultPage() {
       {restartOpen ? (
         <ConfirmDialog
           title="Start the interview over?"
-          message="This discards the current session — conversation, collected facts, attachments, and the working map. The draft version itself is not affected."
+          message="This discards the current session - conversation, collected facts, attachments, and the working map. The draft version itself is not affected."
           confirmLabel={restartBusy ? "Restarting…" : "Start over"}
           cancelLabel="Cancel"
           danger

@@ -115,7 +115,7 @@ export function QuestionOptions({ options, disabled, onSelect, onFreeType }: Que
                 className={selected === options.length ? "text-accent" : "text-ink-muted"}
               />
             </span>
-            <span className="flex-1 italic">Other — type my own answer</span>
+            <span className="flex-1 italic">Other - type my own answer</span>
             {selected === options.length ? (
               <CornerDownLeft size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
             ) : null}

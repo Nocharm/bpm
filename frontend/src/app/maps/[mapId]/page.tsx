@@ -7922,7 +7922,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             const consultDisabledReason = !readOnly
               ? null
               : isViewer
-                ? "View-only access — consulting needs edit permission"
+                ? "View-only access - consulting needs edit permission"
                 : checkout?.checked_out_by
                   ? "Another user is editing this draft"
                   : "This version isn't an editable draft";
@@ -7994,7 +7994,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   >
                     <div className="text-caption-strong text-ink">Try the AI consultant</div>
                     <p className="mt-1 text-fine text-ink-secondary">
-                      Answer a few questions and this empty map draws itself — attach a document
+                      Answer a few questions and this empty map draws itself - attach a document
                       to go even faster.
                     </p>
                     <div className="mt-2 flex justify-end gap-1.5">
@@ -8053,7 +8053,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <AlertTriangle size={14} strokeWidth={1.7} className="shrink-0" />
           <span className="shrink-0 font-semibold">{t("editor.saveFailedPill")}</span>
           <span className="min-w-0">
-            {saveErrorDetail} — {t("editor.saveRetryHint")}
+            {saveErrorDetail} - {t("editor.saveRetryHint")}
           </span>
         </div>
       )}
@@ -9996,7 +9996,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           data-id="inspector-generate-complete-doc"
                           onClick={() => completeDocPickerRef.current?.click()}
                           className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                          title="Pick the original SOP .docx - injects section bookmarks and appends the flowchart page."
                         >
                           <FileText size={16} strokeWidth={1.5} />
                           Generate complete document
@@ -10565,7 +10565,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           return (
             <ConfirmDialog
               dialogId="edge-style-apply-all"
-              title={`${t("edgeStyle.applyAllTitle")} — ${t(targetOption.labelKey)}`}
+              title={`${t("edgeStyle.applyAllTitle")} - ${t(targetOption.labelKey)}`}
               icon={<TargetIcon size={28} strokeWidth={1.5} />}
               lines={lines}
               confirmLabel={t("edgeStyle.applyAllConfirm")}

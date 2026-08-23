@@ -304,7 +304,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
     console.error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`, detail);
     throw new ApiError(
-      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -916,7 +916,7 @@ export async function exportDbTableCsv(
     // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
     console.error(`API GET ${path} failed: ${response.status}`, detail);
     throw new ApiError(
-      `API GET ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API GET ${path} failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -2336,7 +2336,7 @@ export async function uploadKbDocument(file: File): Promise<KbDocument> {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new ApiError(
-      `API POST /kb/documents failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API POST /kb/documents failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -2387,7 +2387,7 @@ export async function uploadInterviewAttachment(
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new ApiError(
-      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );

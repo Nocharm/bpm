@@ -340,7 +340,7 @@ function normalizeInputFlagsCell(cell: string, line: number, warnings: CsvImport
   if (hadUnknown) {
     warnings.push({
       line,
-      message: 'Input_Flags accepts only "optional" or "required" per line — other values were treated as required',
+      message: 'Input_Flags accepts only "optional" or "required" per line - other values were treated as required',
     });
   }
   return lines.join("\n").replace(/\s+$/, "");
@@ -438,7 +438,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
 
   const records = parseCsvRecords(text);
   if (records.length === 0) {
-    return fail([{ line: 1, message: "Empty file — header row required" }]);
+    return fail([{ line: 1, message: "Empty file - header row required" }]);
   }
 
   // 헤더 매핑 — 대소문자 무시·순서 무관, 미지 컬럼은 에러(오타 방지)
@@ -469,7 +469,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   }
   if (dataRecords.length > MAX_DATA_ROWS) {
     return fail([
-      { line: dataRecords[MAX_DATA_ROWS].line, message: `Too many rows — max ${MAX_DATA_ROWS}` },
+      { line: dataRecords[MAX_DATA_ROWS].line, message: `Too many rows - max ${MAX_DATA_ROWS}` },
     ]);
   }
 
@@ -530,19 +530,19 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     if (row.url !== "" && !/^https?:\/\//i.test(row.url)) {
       errors.push({
         line: row.line,
-        message: `URL must start with http:// or https:// — "${row.url}"`,
+        message: `URL must start with http:// or https:// - "${row.url}"`,
       });
     }
     const durationNorm = normalizeDuration(row.duration);
     if (durationNorm === null) {
-      errors.push({ line: row.line, message: `Duration must be a number in H.MM hours — "${row.duration}"` });
+      errors.push({ line: row.line, message: `Duration must be a number in H.MM hours - "${row.duration}"` });
     }
     if (normalizeDuration(row.touch_time) === null) {
-      errors.push({ line: row.line, message: `Touch time must be a number in H.MM hours — "${row.touch_time}"` });
+      errors.push({ line: row.line, message: `Touch time must be a number in H.MM hours - "${row.touch_time}"` });
     }
     for (const col of NUMERIC_COLUMNS) {
       if (normalizeNumericParam(row[col]) === null) {
-        errors.push({ line: row.line, message: `${PARAM_FIELD_LABEL[col]} must be a number — "${row[col]}"` });
+        errors.push({ line: row.line, message: `${PARAM_FIELD_LABEL[col]} must be a number - "${row[col]}"` });
       }
     }
     // 통화 배타 — 백엔드 NodeIn 검증기가 둘 다 있으면 저장 전체를 422시키므로 행 단위로 먼저 막는다
@@ -573,7 +573,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       }
       // Edge.label String(200) 미러 — 로컬 sqlite는 통과하고 서버 postgres에서 500 나는 것 방지
       if (label.length > 200) {
-        errors.push({ line: row.line, message: `label exceeds 200 characters — "${label.slice(0, 30)}…"` });
+        errors.push({ line: row.line, message: `label exceeds 200 characters - "${label.slice(0, 30)}…"` });
         continue;
       }
       seen.add(target);
@@ -683,7 +683,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         ].join(", ");
         warnings.push({
           line: row.line,
-          message: `Subprocess "${row.name}" only accepts Annual_Count/FTE from CSV — ${fields} come from the linked map and were ignored`,
+          message: `Subprocess "${row.name}" only accepts Annual_Count/FTE from CSV - ${fields} come from the linked map and were ignored`,
         });
       }
       return node;
@@ -894,7 +894,7 @@ export function buildGraphFromAiProposal(
       cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd),
     });
     if (conflict) {
-      warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD — both were ignored` });
+      warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD - both were ignored` });
     }
 
     const candidate: GraphNode = {
@@ -944,7 +944,7 @@ export function buildGraphFromAiProposal(
       ].join(", ");
       warnings.push({
         line: 0,
-        message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI — ${fields} come from the linked map and were ignored`,
+        message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI - ${fields} come from the linked map and were ignored`,
       });
     }
     // 신규 노드는 AI 색 허용, 매칭 노드는 mergeNode({...existing})가 기존 색 유지
@@ -1097,7 +1097,7 @@ export function buildAiPromptText(): string {
     "당신은 업무 절차 분석가입니다. 아래에 첨부하는 업무 문서(규정·지침·절차서 등)를 읽고,",
     "문서에 기술된 업무 프로세스 흐름을 추출해 CSV 한 개로 작성하세요.",
     "",
-    "[출력 형식 — 반드시 지킬 것]",
+    "[출력 형식 - 반드시 지킬 것]",
     "- 다른 설명·코드블록(```) 없이 CSV 텍스트만 출력하세요.",
     `- 첫 행(헤더)은 정확히: ${buildTemplateCsv().split("\r\n")[0]}`,
     "- 한 행 = 프로세스 단계 1개. 셀에 쉼표가 들어가면 그 셀을 큰따옴표로 감싸세요.",
@@ -1105,10 +1105,10 @@ export function buildAiPromptText(): string {
     "[컬럼 규칙]",
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
     "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
-    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 — 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 - 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
     `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
-    "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 — 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
+    "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 - 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
     "- Touch_Time: 선택, 실작업 시간(Duration과 같은 H.MM 표기). 모르면 비워두세요.",
     "- Cost_KRW: 선택, 건당 비용(원화, 숫자만). Cost_USD와 동시에 채우지 마세요. 모르면 비워두세요.",
     "- Cost_USD: 선택, 건당 비용(달러, 숫자만). Cost_KRW와 동시에 채우지 마세요. 모르면 비워두세요.",
@@ -1125,12 +1125,12 @@ export function buildAiPromptText(): string {
     "  예: 승인 여부 단계가 승인/반려로 갈라지면 → 계약 체결:승인;반려 통보:반려",
     "",
     "[작성 규칙]",
-    "- Start·End(시작/종료) 행은 쓰지 마세요 — 시스템이 자동 생성합니다.",
+    "- Start·End(시작/종료) 행은 쓰지 마세요 - 시스템이 자동 생성합니다.",
     "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
     "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
     `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
     "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Assignee·Department·System·Duration·URL)은 비워두세요.",
-    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 — 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
+    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 - 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
     "",
     "[예시]",
     buildTemplateCsv().replace(/\r\n/g, "\n"),

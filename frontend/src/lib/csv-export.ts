@@ -48,13 +48,13 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
   const ends = nodes.filter((n) => n.node_type === "end");
   const primaryEnd = ends.find((n) => n.is_primary_end) ?? [...ends].sort((a, b) => a.sort_order - b.sort_order)[0] ?? null;
   for (const extraEnd of ends.filter((n) => n !== primaryEnd)) {
-    warnings.push(`Secondary end node "${extraEnd.title}" is not expressible in CSV — skipped`);
+    warnings.push(`Secondary end node "${extraEnd.title}" is not expressible in CSV - skipped`);
   }
   const rows = nodes.filter((n) => n.node_type !== "start" && n.node_type !== "end");
   const titles = new Map<string, number>();
   for (const n of rows) titles.set(n.title, (titles.get(n.title) ?? 0) + 1);
   for (const [title, count] of titles) {
-    if (count > 1) warnings.push(`Duplicate title "${title}" — re-import will fail on this file`);
+    if (count > 1) warnings.push(`Duplicate title "${title}" - re-import will fail on this file`);
   }
   const rowIds = new Set(rows.map((n) => n.id));
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -64,7 +64,7 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     for (const e of outs) {
       if (primaryEnd && e.target_node_id === primaryEnd.id) {
         if (e.label !== "" || outs.length > 1) {
-          warnings.push(`Edge "${node.title}" → End ${e.label ? `(label "${e.label}") ` : ""}is not expressible in CSV — dropped`);
+          warnings.push(`Edge "${node.title}" → End ${e.label ? `(label "${e.label}") ` : ""}is not expressible in CSV - dropped`);
         }
         continue; // 유일·무라벨이면 임포트가 재생성
       }
@@ -72,15 +72,15 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
       if (!target || !rowIds.has(target.id)) continue;
       // 임포트 파서는 Next를 ";"로 쪼개고 첫 ":"에서 target/label을 가른다 — 그 문자가 제목/라벨에 있으면 오파싱
       if (/[;:]/.test(target.title)) {
-        warnings.push(`Next target "${target.title}" contains ";" or ":" — re-import will misparse this reference`);
+        warnings.push(`Next target "${target.title}" contains ";" or ":" - re-import will misparse this reference`);
       }
       if (e.label.includes(";")) {
-        warnings.push(`Edge label "${e.label}" (from "${node.title}") contains ";" — re-import will misparse this reference`);
+        warnings.push(`Edge label "${e.label}" (from "${node.title}") contains ";" - re-import will misparse this reference`);
       }
       parts.push(e.label === "" ? target.title : `${target.title}:${e.label}`);
     }
     if (node.node_type === "decision" && parts.length < 2) {
-      warnings.push(`Decision "${node.title}" has fewer than 2 branches — re-import will infer process`);
+      warnings.push(`Decision "${node.title}" has fewer than 2 branches - re-import will infer process`);
     }
     // 서브프로세스 노드는 자기 행의 duration/cost_*/headcount(보통 빈값)를 쓴다 — 링크 맵의
     // 상속값(excel-export.ts는 getInheritedParams로 이 값을 씀)을 쓰지 않는 것은 의도적 차이다.
@@ -106,7 +106,7 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     );
     const roots = new Set(rows.filter((n) => !incoming.has(n.id)).map((n) => n.id));
     const same = startTargets.size === roots.size && [...startTargets].every((id) => roots.has(id));
-    if (!same) warnings.push("Start connections differ from computed roots — re-import will recompute them");
+    if (!same) warnings.push("Start connections differ from computed roots - re-import will recompute them");
   }
   return { csv: [HEADER, ...rows.map(line)].join("\r\n"), warnings };
 }

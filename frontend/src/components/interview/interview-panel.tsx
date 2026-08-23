@@ -576,7 +576,7 @@ export function InterviewPanel({
             data-id="iv-fasttrack-chip"
           >
             <Zap size={12} strokeWidth={1.5} className="shrink-0" />
-            <span className="min-w-0 flex-1">Fast track — attach a document to draw right away</span>
+            <span className="min-w-0 flex-1">Fast track - attach a document to draw right away</span>
             <button
               className="shrink-0 text-fine underline hover:opacity-80"
               onClick={onFastTrackCancel}

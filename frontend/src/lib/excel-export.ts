@@ -248,7 +248,7 @@ export const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
 export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   circular: "(circular reference)",
   denied: "(access denied)",
-  rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached — output truncated)`,
+  rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached - output truncated)`,
 };
 // 컬럼 순서·서식 단일 소스(design 2026-07-13 §5.2) — numFmt는 셀 인덱스 대신 이 정의에서 파생시켜
 // 컬럼 추가/재배열 시 인덱스가 조용히 어긋나는 사고를 막는다.

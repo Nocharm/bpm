@@ -45,7 +45,7 @@ export function RequesterCommentBanner({ kind = "submit", authorName, comment }:
       >
         <Icon size={12} strokeWidth={1.5} />
         {t(isRejection ? "wf.previousRejection" : "wf.requesterComment")}
-        {authorName ? ` — ${authorName}` : ""}
+        {authorName ? ` - ${authorName}` : ""}
       </span>
       <p className="whitespace-pre-wrap break-keep text-caption text-ink">{comment}</p>
     </div>
