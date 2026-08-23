@@ -96,6 +96,9 @@ export type NodeData = {
   spTouchTime?: string | null;
   spInput?: string | null;
   spOutput?: string | null;
+  // SP IO 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms 상속(캔버스 아이콘 표시용)
+  spInputForms?: string | null;
+  spOutputForms?: string | null;
   spStartCondition?: string | null;
   spEndCondition?: string | null;
   spGmp?: string | null;

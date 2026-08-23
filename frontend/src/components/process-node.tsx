@@ -195,11 +195,13 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                   // 고정 노출+호버 툴팁 — 긴 이름은 2줄 클램프라 텍스트가 잘려도 아이콘은 남는다
                   const isOptional =
                     !isSubprocess && side === "input" && getIoLine(data.input_flags, index) === "optional";
-                  const form = isSubprocess
-                    ? null
-                    : resolveDataForm(
-                        getIoLine(side === "input" ? data.input_forms : data.output_forms, index),
-                      );
+                  // SP는 링크 맵 지정의 sp_*_forms 상속(subprocess_refs 경유) — 플래그는 소비자 로컬이라 없음
+                  const formsRaw = isSubprocess
+                    ? ((side === "input" ? data.spInputForms : data.spOutputForms) ?? "")
+                    : side === "input"
+                      ? data.input_forms
+                      : data.output_forms;
+                  const form = resolveDataForm(getIoLine(formsRaw, index));
                   return (
                     // 빈 체크박스는 행 호버 시에만 노출, 체크된 것은 유지. 체크 텍스트는 accent-tint
                     // 하이라이트+진한 글자 — 취소선·딤 대신 "확인됨" 강조 (사용자 결정 2026-08-23)
@@ -736,30 +738,31 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   if (data.nodeType === "subprocess") {
     return (
       <div
-        className="group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150"
+        className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-center rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={style}
         title={data.diffNote}
       >
         {diff && <DiffBadge status={diff} />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
-        <div className="min-w-0 flex-1">
-          <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
-          <div className="font-medium text-ink">
+        <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
+        {/* SP 마크는 라벨 앞에만 — 아래 줄들(필드·IO)이 노드 전체 폭을 쓴다 (사용자 요청 2026-08-23) */}
+        <div className="flex items-center gap-1.5 font-medium text-ink">
+          <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+          <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
           </div>
-          {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
-          <NodeFields data={data} />
-          <NodeParams data={data} />
-          <NodeIoDetails nodeId={id} data={data} />
-          {data.updateAvailable && (
-            <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-              {t("subprocess.updateAvailable")}
-            </div>
-          )}
         </div>
+        {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
+        <NodeFields data={data} />
+        <NodeParams data={data} />
+        <NodeIoDetails nodeId={id} data={data} />
+        {data.updateAvailable && (
+          <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+            {t("subprocess.updateAvailable")}
+          </div>
+        )}
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
