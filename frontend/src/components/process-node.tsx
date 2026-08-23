@@ -694,15 +694,35 @@ const NODE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
 
 // 4변 각각에 source·target 핸들(총 8개) — 엣지가 어느 변에든 붙도록. 어느 핸들에 붙을지는 엣지가 id로 지정.
 // connectable — SubprocessHandles와 동일하게 노드 레벨 값을 명시 전달(기본 true로 무시되는 것 방지) (F3)
-function NodeHandles({ connectable }: { connectable: boolean }) {
+// sideAnchorTop — 좌/우 핸들을 노드 세로 중앙 대신 제목 라인 높이에 고정(px). 키 큰 노드에서 엣지가
+// 몸통 중앙이 아니라 라벨 옆에 붙고, 모든 노드가 같은 높이라 이웃 간 엣지가 수평 유지(사용자 요청 2026-08-24).
+function NodeHandles({ connectable, sideAnchorTop }: { connectable: boolean; sideAnchorTop?: number }) {
   return (
     <>
-      {NODE_SIDES.map((side) => (
-        <Fragment key={side}>
-          <Handle id={`t-${side}`} type="target" position={toPosition(side)} isConnectable={connectable} />
-          <Handle id={`s-${side}`} type="source" position={toPosition(side)} isConnectable={connectable} />
-        </Fragment>
-      ))}
+      {NODE_SIDES.map((side) => {
+        const style =
+          sideAnchorTop !== undefined && (side === "left" || side === "right")
+            ? { top: sideAnchorTop }
+            : undefined;
+        return (
+          <Fragment key={side}>
+            <Handle
+              id={`t-${side}`}
+              type="target"
+              position={toPosition(side)}
+              isConnectable={connectable}
+              style={style}
+            />
+            <Handle
+              id={`s-${side}`}
+              type="source"
+              position={toPosition(side)}
+              isConnectable={connectable}
+              style={style}
+            />
+          </Fragment>
+        );
+      })}
     </>
   );
 }
@@ -891,7 +911,9 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         </span>
       )}
       {showCopyBadge && <CopyDragBadge />}
-      <NodeHandles connectable={isConnectable ?? true} />
+      {/* 좌/우 핸들 = 제목 라인 높이(py-2 8px + text-sm 줄높이 20의 절반 = 18px).
+          터미널(알약)은 단일 라인 중앙 정렬이라 기본 50% 유지 */}
+      <NodeHandles connectable={isConnectable ?? true} sideAnchorTop={isTerminal ? undefined : 18} />
     </div>
   );
 }

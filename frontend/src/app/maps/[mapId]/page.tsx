@@ -6383,6 +6383,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     renderYOffsetsRef.current = renderYOffsets;
   }, [renderYOffsets]);
   const yTweenInitRef = useRef(false);
+  // 성장 반영 후 1회 재-fit — 초기 fitView는 측정 전(성장 전) 좌표 기준이라 밀린 하단 노드가
+  // 뷰 밖일 수 있다(V라운드 관찰 1). 마운트 직후 창(1.5s) 안에서만 — 이후 사용자 펼침엔 카메라 불가침.
+  const mountAtRef = useRef(0);
+  useEffect(() => {
+    mountAtRef.current = performance.now();
+  }, []);
+  const didGrowthFitRef = useRef(false);
+  useEffect(() => {
+    if (!didGrowthFitRef.current && yOffsets.size > 0) {
+      didGrowthFitRef.current = true;
+      if (performance.now() - mountAtRef.current < 1500) {
+        const timer = window.setTimeout(() => {
+          void reactFlow.fitView({ padding: 0.1, duration: 300 });
+        }, 80);
+        return () => window.clearTimeout(timer);
+      }
+    }
+    return undefined;
+  }, [yOffsets, reactFlow]);
   useEffect(() => {
     const from = renderYOffsetsRef.current;
     const to = yOffsets;

@@ -134,12 +134,29 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
   );
 }
 
+// 라벨 가림 판정 반경 — 엣지 라벨 max-width 160의 절반 + 세로 여유. 회랑이 장애물에 붙어
+// 지나면(여백 13px) 그 구간 중앙 라벨이 노드 뒤로 숨는다(V라운드 관찰 2) → 가리는 구간은 건너뜀
+const LABEL_HALF_W = 80;
+const LABEL_HALF_H = 12;
+
+function isLabelClear(x: number, y: number, obstacles: ObstacleRect[]): boolean {
+  return !obstacles.some(
+    (r) =>
+      x > r.x - LABEL_HALF_W &&
+      x < r.x + r.w + LABEL_HALF_W &&
+      y > r.y - LABEL_HALF_H &&
+      y < r.y + r.h + LABEL_HALF_H,
+  );
+}
+
 /**
- * 직각 웨이포인트 → 모서리 라운드 SVG 경로 + 라벨 앵커(최장 구간 중앙).
+ * 직각 웨이포인트 → 모서리 라운드 SVG 경로 + 라벨 앵커.
+ * 라벨은 "중앙이 장애물에 가려지지 않는" 구간 중 최장 구간의 중앙 — 전부 가려지면 최장 구간 폴백.
  * 반경은 인접 구간 절반으로 클램프 — 짧은 구간에서 경로가 뒤집히지 않게.
  */
 export function buildRoundedOrthPath(
   points: { x: number; y: number }[],
+  obstacles: ObstacleRect[] = [],
 ): [string, number, number] {
   const parts = [`M ${points[0].x},${points[0].y}`];
   for (let i = 1; i < points.length - 1; i += 1) {
@@ -161,13 +178,23 @@ export function buildRoundedOrthPath(
   let bestLen = -1;
   let labelX = points[0].x;
   let labelY = points[0].y;
+  let bestClearLen = -1;
+  let clearX = 0;
+  let clearY = 0;
   for (let i = 1; i < points.length; i += 1) {
     const len = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+    const midX = (points[i].x + points[i - 1].x) / 2;
+    const midY = (points[i].y + points[i - 1].y) / 2;
     if (len > bestLen) {
       bestLen = len;
-      labelX = (points[i].x + points[i - 1].x) / 2;
-      labelY = (points[i].y + points[i - 1].y) / 2;
+      labelX = midX;
+      labelY = midY;
+    }
+    if (len > bestClearLen && isLabelClear(midX, midY, obstacles)) {
+      bestClearLen = len;
+      clearX = midX;
+      clearY = midY;
     }
   }
-  return [parts.join(" "), labelX, labelY];
+  return bestClearLen > 0 ? [parts.join(" "), clearX, clearY] : [parts.join(" "), labelX, labelY];
 }

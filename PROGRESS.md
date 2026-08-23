@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-23 — 노드 간격 자동 재조정 height-shift 설계 (feat/node-spacing)
+- V라운드 후속 3종: 우회 라벨 가림 회피(무가림 최장 구간 선택, 폴백=최장)·성장 반영 후 1회 재-fit(마운트 1.5s 창 한정 — 이후 펼침엔 카메라 불가침)·프로세스 좌우 핸들 제목 라인(18px) 고정(터미널·디시전·SP는 중앙 유지 — 전 노드 동일 높이라 이웃 엣지 수평 유지).
 - 꺾은선 장애물 회피 배선(lib/edge-detour): 기본 3구간 경로가 표시 bbox 관통 시 빈 회랑으로 직각 우회(최소 이탈·결정적 타이브레이크·무회랑=폴백). 직선·곡선·혼합 방향 대상 외. vitest 9.
 - 브레인스토밍 확정: 원래 간격 보존·아래 전체(행 보존)·상시 자동·실측 기반 Y 계단함수(inline-shift 수학 재사용). 스펙 docs/superpowers/specs/2026-08-23-node-spacing-design.md. 플랜 5태스크(모듈 TDD→합성/역변환→생성 스윕→rAF 트윈→스모크). 스펙 정정: 인라인 펼침 중 V1 비활성(자식 합성 좌표 결합 리스크)·앵커 allowlist·경계 등호 계약.
 - Task 1(TDD): `lib/height-shift.ts` 신설 — getDisplayHeight(measured 우선/추정 폴백)·buildHeightSteps(앵커 필터+행 병합)·buildYOffsets(nodewise 오프셋) 3함수, 테스트 9/9 통과. 게이트 그린: vitest 749(740→+9) / tsc 0 / lint 0.

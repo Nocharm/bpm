@@ -71,7 +71,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
     obstacles,
   });
   const [path, labelX, labelY] = detour
-    ? buildRoundedOrthPath(detour)
+    ? buildRoundedOrthPath(detour, obstacles)
     : buildPath("smoothstep", props);
   return renderEdge(
     { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius },
