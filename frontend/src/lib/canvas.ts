@@ -177,7 +177,8 @@ const COLLISION_GAP = 8;
 export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } {
   switch (nodeType) {
     case "decision":
-      return { w: 96, h: 96 };
+      // 1:1.2 가로 확장 마름모 — process-node.tsx 디시전 박스(w-[116px])와 동기화 필수
+      return { w: 116, h: 96 };
     case "start":
     case "end":
       return { w: 96, h: 40 };

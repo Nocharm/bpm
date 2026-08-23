@@ -44,6 +44,7 @@ import { GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup
 import { GmpNoticePopover } from "@/components/gmp-notice-popover";
 import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
 import { NodeDetailsCard } from "@/components/node-details-card";
+import { NewlineHint } from "@/components/newline-hint";
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -9149,7 +9150,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
-                        <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
+                        <NewlineHint />
                       </div>
                       {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 호버 시 편집 아이콘, 더블클릭/아이콘으로
                           편집 모달을 열어 설명에 자동 포커스 (사용자 결정 2026-08-20).
@@ -9712,7 +9713,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
-                        <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
+                        <NewlineHint />
                       </div>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>

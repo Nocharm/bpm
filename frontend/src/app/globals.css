@@ -630,10 +630,17 @@ button:not(:disabled):active {
   0% { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
   100% { background: transparent; }
 }
+/* 체크박스 팝은 링 확산+저배율 — 1.35 스케일은 3.5줄 캡(overflow-hidden) 경계 행에서 잘렸다(사용자 리포트 2026-08-23) */
 @keyframes bpm-io-pulse-box {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.35); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  40% { transform: scale(1.15); }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 5px transparent;
+  }
 }
 .bpm-io-pulse { animation: bpm-io-pulse-bg 700ms var(--ease-smooth) 120ms backwards; }
 .bpm-io-pulse input { animation: bpm-io-pulse-box 450ms var(--ease-overshoot) 120ms backwards; }

@@ -261,10 +261,10 @@ const COMPARE_RENDER_H: Record<string, number> = {
 
 // 비교뷰 실측 렌더 폭 — TB에서 cross축(X) 정렬·핸들 중심 계산에 사용. nodeSizeOf는 dagre 박스라 실제와
 // 다르다(process는 min-w-[150px]=150인데 nodeSizeOf=170 → TB 세로 엣지가 10px 꺾임). 실제 폭으로 계산해야
-// handle X가 일치해 [D-U] 세로 엣지가 직선. process 150·terminal 90·decision 96·subprocess 180.
+// handle X가 일치해 [D-U] 세로 엣지가 직선. process 150·terminal 90·decision 116·subprocess 180.
 const COMPARE_RENDER_W: Record<string, number> = {
   process: 150,
-  decision: 96,
+  decision: 116,
   start: 90,
   end: 90,
   subprocess: 180,

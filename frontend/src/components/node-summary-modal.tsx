@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { AutoHeight } from "@/components/auto-height";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { NodeDetailsFields } from "@/components/node-details-fields";
+import { NewlineHint } from "@/components/newline-hint";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { ScopePreview } from "@/components/scope-preview";
@@ -731,7 +732,7 @@ export function NodeSummaryModal({
                     requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                   }}
                 />
-                <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
+                <NewlineHint />
               </div>
               {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
                   베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}

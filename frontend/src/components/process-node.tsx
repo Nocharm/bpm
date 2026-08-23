@@ -147,7 +147,7 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
           <div
             key={side}
             data-id={`node-io-list-${side}`}
-            className="nodrag nopan mt-1 rounded-sm border border-hairline bg-surface-alt/60 px-1.5 py-1"
+            className="nodrag nopan mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >
@@ -189,22 +189,30 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                   // 체크 동기 애니메이션(#3) — key에 논스를 실어 같은 키 재체크도 재생(리마운트)
                   const pulsing = ioCheckPulse !== null && ioCheckPulse.key === checkKey;
                   return (
+                    // 빈 체크박스는 행 호버 시에만 노출, 체크된 것은 유지. 체크 텍스트는 accent-tint
+                    // 하이라이트+진한 글자 — 취소선·딤 대신 "확인됨" 강조 (사용자 결정 2026-08-23)
                     <label
                       key={pulsing ? `${index}-p${ioCheckPulse.nonce}` : index}
-                      className={`flex cursor-pointer items-center gap-1 rounded-xs py-px text-xs ${
-                        checked ? "text-ink-muted" : "text-ink-tertiary"
-                      } ${pulsing ? "bpm-io-pulse" : ""}`}
+                      className={`group/iorow -mx-0.5 flex cursor-pointer items-center gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary hover:bg-surface-alt ${
+                        pulsing ? "bpm-io-pulse" : ""
+                      }`}
                     >
                       <input
                         type="checkbox"
                         data-id={`node-io-check-${side}-${index}`}
                         tabIndex={-1}
-                        className="h-3 w-3 shrink-0 accent-[var(--color-accent)]"
+                        className={`h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                          checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
+                        }`}
                         checked={checked}
                         disabled={onToggleIoCheck === null}
                         onChange={() => onToggleIoCheck?.(checkKey)}
                       />
-                      <span className={`min-w-0 ${checked ? "line-through opacity-70" : ""}`}>{text}</span>
+                      <span
+                        className={`min-w-0 ${checked ? "rounded-xs bg-accent-tint px-0.5 text-ink" : ""}`}
+                      >
+                        {text}
+                      </span>
                     </label>
                   );
                 })}
@@ -748,18 +756,19 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   if (data.nodeType === "decision") {
     return (
       <div
-        className="group relative flex h-24 w-24 items-center justify-center"
+        className="group relative flex h-24 w-[116px] items-center justify-center"
         title={data.diffNote}
       >
-          {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
+        {/* 마름모는 회전한 정사각형 + 화면축 scaleX(1.2)로 가로가 살짝 긴 1:1.2 비율(사용자 요청 2026-08-23).
+            텍스트는 회전하지 않은 레이어에 둔다. 박스 폭 116은 canvas.ts nodeSizeOf와 동기화 필수 */}
         <div
-          className="bpm-node-emph absolute inset-3 rotate-45 rounded-sm transition-all duration-150"
-          style={style}
+          className="bpm-node-emph absolute left-1/2 top-1/2 h-[72px] w-[72px] rounded-sm transition-all duration-150"
+          style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        {/* GMP 태그는 왼쪽 위(#4) — 가운데 3줄 제목과 겹치지 않게 */}
-        <GmpPill nodeId={id} data={data} className="absolute left-0 top-0 z-10" />
+        {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
+        <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
         <div className="bpm-decision-title-box relative max-w-20 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} clamp3 />
           {data.hasChildren && (
@@ -769,12 +778,12 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
-        {/* 파라미터 칩 — 마름모 내접(h-24 w-24)을 넘치지 않게 아래 절대배치 캡션으로.
+        {/* 파라미터 칩 — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로.
             절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향 */}
         <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
           <NodeParams data={data} className="justify-center" />
         </div>
-        {/* 배지는 96px 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
+        {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
         {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
