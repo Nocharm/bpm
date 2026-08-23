@@ -6,6 +6,7 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   AlertTriangle,
   Building2,
+  ChevronRight,
   CornerDownRight,
   Flag,
   Link as LinkIcon,
@@ -95,7 +96,9 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 // 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
 // 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
 function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"] }) {
-  const { displayFields, ioChecks, onToggleIoCheck } = useNodeActions();
+  const { t } = useI18n();
+  const { displayFields, ioChecks, onToggleIoCheck, ioListStates, onSetIoListState, ioCheckPulse } =
+    useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const conditionLines = displayFields.includes("conditions")
@@ -135,6 +138,10 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
           .filter((item) => item.text !== "");
         if (visible.length === 0) return null;
         const Icon = FIELD_ICON[side];
+        // 표시 3단계(#2): collapsed=헤더만 · capped=3.5줄 오버플로 히든 · all=전부. 화면 한정 상태
+        const listKey = `${nodeId}:${side}`;
+        const listState = ioListStates.get(listKey) ?? "capped";
+        const hiddenCount = Math.max(0, visible.length - 3);
         return (
           // nodrag/nopan + 전파 차단 — 체크 조작이 드래그·더블클릭(요약 모달)로 새지 않게
           <div
@@ -144,40 +151,78 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted">
+            {/* 헤더 클릭 = 접기(0줄)↔기본(3.5줄) 토글(#2) */}
+            <button
+              type="button"
+              data-id={`node-io-list-${side}-toggle`}
+              tabIndex={-1}
+              disabled={onSetIoListState === null}
+              className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted"
+              onClick={() =>
+                onSetIoListState?.(listKey, listState === "collapsed" ? "capped" : "collapsed")
+              }
+            >
+              <ChevronRight
+                size={10}
+                strokeWidth={1.5}
+                className={`shrink-0 transition-transform duration-150 ${
+                  listState === "collapsed" ? "" : "rotate-90"
+                }`}
+              />
               <Icon size={10} strokeWidth={1.5} />
               {side === "input" ? "Input" : "Output"}
-            </div>
-            {visible.map(({ text, index }) => {
-              // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
-              const checkKey = isSubprocess
-                ? `${nodeId}:${side}:${index}`
-                : side === "input"
-                  ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
-                  : getIoLine(data.output_ids, index) ||
-                    getIoLine(data.output_links, index) ||
-                    `${nodeId}:out:${index}`;
-              const checked = ioChecks.has(checkKey);
-              return (
-                <label
-                  key={index}
-                  className={`flex cursor-pointer items-center gap-1 py-px text-xs ${
-                    checked ? "text-ink-muted" : "text-ink-tertiary"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    data-id={`node-io-check-${side}-${index}`}
-                    tabIndex={-1}
-                    className="h-3 w-3 shrink-0 accent-[var(--color-accent)]"
-                    checked={checked}
-                    disabled={onToggleIoCheck === null}
-                    onChange={() => onToggleIoCheck?.(checkKey)}
-                  />
-                  <span className={`min-w-0 ${checked ? "line-through opacity-70" : ""}`}>{text}</span>
-                </label>
-              );
-            })}
+              <span className="normal-case tracking-normal">({visible.length})</span>
+            </button>
+            {listState !== "collapsed" && (
+              // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2)
+              <div className={listState === "capped" && hiddenCount > 0 ? "max-h-[63px] overflow-hidden" : undefined}>
+                {visible.map(({ text, index }) => {
+                  // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
+                  const checkKey = isSubprocess
+                    ? `${nodeId}:${side}:${index}`
+                    : side === "input"
+                      ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
+                      : getIoLine(data.output_ids, index) ||
+                        getIoLine(data.output_links, index) ||
+                        `${nodeId}:out:${index}`;
+                  const checked = ioChecks.has(checkKey);
+                  // 체크 동기 애니메이션(#3) — key에 논스를 실어 같은 키 재체크도 재생(리마운트)
+                  const pulsing = ioCheckPulse !== null && ioCheckPulse.key === checkKey;
+                  return (
+                    <label
+                      key={pulsing ? `${index}-p${ioCheckPulse.nonce}` : index}
+                      className={`flex cursor-pointer items-center gap-1 rounded-xs py-px text-xs ${
+                        checked ? "text-ink-muted" : "text-ink-tertiary"
+                      } ${pulsing ? "bpm-io-pulse" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        data-id={`node-io-check-${side}-${index}`}
+                        tabIndex={-1}
+                        className="h-3 w-3 shrink-0 accent-[var(--color-accent)]"
+                        checked={checked}
+                        disabled={onToggleIoCheck === null}
+                        onChange={() => onToggleIoCheck?.(checkKey)}
+                      />
+                      <span className={`min-w-0 ${checked ? "line-through opacity-70" : ""}`}>{text}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {listState !== "collapsed" && hiddenCount > 0 && (
+              // 전체 펼침↔기본 캡 토글(#2) — 전체 펼침 시 간격 재조정(#1)은 별도 브랜치에서
+              <button
+                type="button"
+                data-id={`node-io-list-${side}-more`}
+                tabIndex={-1}
+                disabled={onSetIoListState === null}
+                className="mt-0.5 w-full text-left text-[10px] text-accent"
+                onClick={() => onSetIoListState?.(listKey, listState === "all" ? "capped" : "all")}
+              >
+                {listState === "all" ? t("io.showLess") : `${t("io.showMore")} (+${hiddenCount})`}
+              </button>
+            )}
           </div>
         );
       })}
@@ -294,13 +339,17 @@ function NodeTitle({
   label,
   displayLabel,
   editable = true,
+  clamp3 = false,
 }: {
   id: string;
   label: string;
   displayLabel?: string;
   // false면 인라인 이름 편집 진입 차단 — subprocess는 링크된 맵 이름 고정 (F5)
   editable?: boolean;
+  // 마름모 전용 — 3줄 클램프+말줄임(#4). 전문은 title 툴팁, 인쇄(PNG)는 export 픽스업이 해제
+  clamp3?: boolean;
 }) {
+  const { t } = useI18n();
   const { editingNodeId, onStartRename, onRename, onCancelRename } = useNodeActions();
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
@@ -316,6 +365,8 @@ function NodeTitle({
         autoFocus
         defaultValue={label}
         rows={1}
+        // 줄바꿈 단축키 안내(#7) — 캔버스 인라인은 공간이 없어 title 툴팁으로
+        title={t("hint.newline")}
         // nodrag — 입력 중 React Flow가 노드를 끌지 않게
         className="nodrag w-full resize-none overflow-hidden rounded-xs border border-accent bg-surface px-1 text-center text-sm text-ink"
         ref={(el) => {
@@ -355,7 +406,10 @@ function NodeTitle({
   }
   return (
     <span
-      className={`whitespace-pre-wrap ${editable && onStartRename ? "cursor-text" : ""}`}
+      className={`whitespace-pre-wrap ${clamp3 ? "bpm-decision-title line-clamp-3" : ""} ${
+        editable && onStartRename ? "cursor-text" : ""
+      }`}
+      title={clamp3 ? (displayLabel ?? label) : undefined}
       onDoubleClick={
         editable && onStartRename
           ? (event) => {
@@ -704,9 +758,10 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        <GmpPill nodeId={id} data={data} className="absolute left-1/2 top-0 z-10 -translate-x-1/2" />
-        <div className="relative max-w-20 text-center text-xs font-medium text-ink">
-          <NodeTitle id={id} label={data.label} />
+        {/* GMP 태그는 왼쪽 위(#4) — 가운데 3줄 제목과 겹치지 않게 */}
+        <GmpPill nodeId={id} data={data} className="absolute left-0 top-0 z-10" />
+        <div className="bpm-decision-title-box relative max-w-20 text-center text-xs font-medium text-ink">
+          <NodeTitle id={id} label={data.label} clamp3 />
           {data.hasChildren && (
             <div className="inline-flex items-center gap-0.5 text-[10px] text-accent">
               <CornerDownRight size={12} strokeWidth={1.5} />
@@ -719,11 +774,11 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
           <NodeParams data={data} className="justify-center" />
         </div>
-        {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
+        {/* 배지는 96px 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
-        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
-        {data.url && <UrlBadge url={data.url} className="bottom-3 left-3" />}
-        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-3 right-3" />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
+        {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
+        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-0 right-0" />}
         {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>

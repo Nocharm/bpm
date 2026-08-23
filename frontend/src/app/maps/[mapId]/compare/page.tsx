@@ -72,7 +72,7 @@ import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
-import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
+import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
   buildMergedGraph,
@@ -162,6 +162,9 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onEditGmp: null,
   ioChecks: new Set<string>(),
   onToggleIoCheck: null,
+  ioListStates: new Map<string, IoListDisplayState>(),
+  onSetIoListState: null,
+  ioCheckPulse: null,
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {

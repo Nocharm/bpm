@@ -47,6 +47,15 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     setImportant(head, "stroke", EDGE_STROKE);
     setImportant(head, "fill", EDGE_STROKE);
   }
+  // 마름모 제목 — 화면은 3줄 클램프+80px 폭이지만 인쇄(PNG)에선 전문 노출 (사용자 요청 2026-08-23 #4)
+  for (const box of viewport.querySelectorAll(".bpm-decision-title-box")) {
+    setImportant(box, "max-width", "200px");
+  }
+  for (const span of viewport.querySelectorAll(".bpm-decision-title")) {
+    setImportant(span, "-webkit-line-clamp", "unset");
+    setImportant(span, "display", "inline");
+    setImportant(span, "overflow", "visible");
+  }
   return () => {
     for (const undo of undos) undo();
   };

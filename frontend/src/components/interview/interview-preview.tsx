@@ -18,7 +18,7 @@ import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, hi
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
-import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
+import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChoiceOverlay } from "@/components/interview/choice-card";
@@ -45,6 +45,9 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onEditGmp: null,
   ioChecks: new Set<string>(),
   onToggleIoCheck: null,
+  ioListStates: new Map<string, IoListDisplayState>(),
+  onSetIoListState: null,
+  ioCheckPulse: null,
 };
 
 interface InterviewPreviewProps {

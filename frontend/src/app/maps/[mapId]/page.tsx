@@ -238,6 +238,7 @@ import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import {
   applyIoImport,
+  buildIoIndex,
   buildIoMirrorIndex,
   collectIoImportCandidates,
   getBrokenInputMirrorIndexes,
@@ -256,6 +257,7 @@ import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
   NodeActionsContext,
+  type IoListDisplayState,
   type NodeDisplayToggle,
   parseDisplayToggles,
 } from "@/lib/node-actions";
@@ -6891,14 +6893,56 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 노드 IO 체크리스트(#9) — 화면 한정 상태(저장·영속 없음, 새로고침 리셋). 키는 링크 itemId
   // (원본·미러 그룹 동반 체크) 또는 노드·측·줄. 뷰어도 조작 가능 — 데이터가 아니라 열람 보조.
   const [ioChecks, setIoChecks] = useState<ReadonlySet<string>>(new Set());
-  const toggleIoCheck = useCallback((key: string) => {
-    setIoChecks((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+  // 체크리스트 표시 상태(#2) — 키 `${nodeId}:${side}`, 미지정=capped(3.5줄)
+  const [ioListStates, setIoListStates] = useState<ReadonlyMap<string, IoListDisplayState>>(new Map());
+  const setIoListState = useCallback((key: string, state: IoListDisplayState) => {
+    setIoListStates((prev) => {
+      if (prev.get(key) === state) return prev;
+      const next = new Map(prev);
+      next.set(key, state);
       return next;
     });
   }, []);
+  // 체크 동기 애니메이션(#3) — 논스로 같은 키 재체크도 재생
+  const [ioCheckPulse, setIoCheckPulse] = useState<{ key: string; nonce: number } | null>(null);
+  const toggleIoCheck = useCallback(
+    (key: string) => {
+      const turningOn = !ioChecks.has(key);
+      setIoChecks((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      // 링크 항목 체크 시(#3) — 상대(원본·형제 미러) 목록이 접혀 있으면 펼치고(0줄→3.5줄),
+      // 행이 캡 밖이면 전체 펼침, 체크 애니메이션 재생. per-노드 키(`:in:`/`:out:`)는 대상 없음
+      if (!turningOn || /:(in|out):/.test(key)) return;
+      const currentNodes = nodesRef.current;
+      const sites: { nodeId: string; side: IoSide; index: number }[] = [
+        ...(buildIoMirrorIndex(currentNodes).get(key) ?? []),
+      ];
+      const origin = buildIoIndex(currentNodes, subprocessRefs).get(key);
+      if (origin && origin.kind === "out") {
+        sites.push({ nodeId: origin.nodeId, side: "output", index: origin.index });
+      }
+      setIoListStates((prev) => {
+        let next: Map<string, IoListDisplayState> | null = null;
+        for (const site of sites) {
+          const listKey = `${site.nodeId}:${site.side}`;
+          const cur = (next ?? prev).get(listKey) ?? "capped";
+          const want: IoListDisplayState =
+            site.index >= 3 ? "all" : cur === "collapsed" ? "capped" : cur;
+          if (want !== cur) {
+            next = next ?? new Map(prev);
+            next.set(listKey, want);
+          }
+        }
+        return next ?? prev;
+      });
+      setIoCheckPulse((prev) => ({ key, nonce: (prev?.nonce ?? 0) + 1 }));
+    },
+    [ioChecks, subprocessRefs],
+  );
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6914,6 +6958,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       onEditGmp: onEditGmpAction,
       ioChecks,
       onToggleIoCheck: toggleIoCheck,
+      ioListStates,
+      onSetIoListState: setIoListState,
+      ioCheckPulse,
     }),
     [
       toggleInlineExpand,
@@ -6928,6 +6975,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       onEditGmpAction,
       ioChecks,
       toggleIoCheck,
+      ioListStates,
+      setIoListState,
+      ioCheckPulse,
     ],
   );
 
@@ -9099,6 +9149,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
                       </div>
                       {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 호버 시 편집 아이콘, 더블클릭/아이콘으로
                           편집 모달을 열어 설명에 자동 포커스 (사용자 결정 2026-08-20).
@@ -9661,6 +9712,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
                       </div>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>

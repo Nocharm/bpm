@@ -75,7 +75,15 @@ export interface NodeActions {
   // null이면 비활성(비교·프리뷰 등 Provider 부재 표면).
   ioChecks: ReadonlySet<string>;
   onToggleIoCheck: ((key: string) => void) | null;
+  // 체크리스트 표시 상태(#2) — 키 `${nodeId}:${side}`, 미지정=capped(3.5줄). 화면 한정
+  ioListStates: ReadonlyMap<string, IoListDisplayState>;
+  onSetIoListState: ((key: string, state: IoListDisplayState) => void) | null;
+  // 체크 동기 애니메이션(#3) — 마지막 체크된 링크 itemId + 재생 논스(같은 키 재체크도 재생)
+  ioCheckPulse: { key: string; nonce: number } | null;
 }
+
+// IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
+export type IoListDisplayState = "collapsed" | "capped" | "all";
 
 const defaultActions: NodeActions = {
   onToggleExpand: null,
@@ -89,6 +97,9 @@ const defaultActions: NodeActions = {
   onEditGmp: null,
   ioChecks: new Set<string>(),
   onToggleIoCheck: null,
+  ioListStates: new Map<string, IoListDisplayState>(),
+  onSetIoListState: null,
+  ioCheckPulse: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

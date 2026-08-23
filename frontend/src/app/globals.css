@@ -624,3 +624,19 @@ button:not(:disabled):active {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* IO 체크 동기 애니메이션(#3) — 상대 노드 행 플래시 + 체크박스 팝. 펼침이 먼저 보이도록 120ms 지연 */
+@keyframes bpm-io-pulse-bg {
+  0% { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+  100% { background: transparent; }
+}
+@keyframes bpm-io-pulse-box {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+.bpm-io-pulse { animation: bpm-io-pulse-bg 700ms var(--ease-smooth) 120ms backwards; }
+.bpm-io-pulse input { animation: bpm-io-pulse-box 450ms var(--ease-overshoot) 120ms backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .bpm-io-pulse, .bpm-io-pulse input { animation: none; }
+}

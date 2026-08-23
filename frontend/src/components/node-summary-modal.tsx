@@ -731,6 +731,7 @@ export function NodeSummaryModal({
                     requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                   }}
                 />
+                <p className="mt-0.5 text-fine text-ink-muted">{t("hint.newline")}</p>
               </div>
               {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
                   베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}
