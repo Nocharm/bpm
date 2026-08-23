@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
+- IO 행 다듬기 2R: 디시전 라벨 max-w-24·긴 항목 2줄 클램프·미체크 인풋 필수/선택 글자색 분류·양식 아이콘 맨 뒤 고정+툴팁·Show more/less 호버 노출+셰브론.
 - 후속 5종: kbd 힌트(Alt/Shift 병기)·디시전 1:1.2(116px, nodeSizeOf/COMPARE_RENDER_W 동기)·인쇄=클램프 해제만(폭 원복)·IO 흰 배경+행 호버+체크박스 호버 노출+체크 하이라이트·펄스 저배율+링(캡 경계 잘림 픽스).
 - M7 픽스: PNG 픽스업이 flex에 눌려 폭 무효 → width·flex-shrink 강제. M3(캡만으론 워스트 겹침 잔존)은 #1 별도 브랜치 근거로 기록.
 - 사용자 후속 5종 브라우저 검수 N1~N8(`ad0131ec`, 8/8·드라이버 30/30·콘솔 에러 0): kbd 힌트 4표면·Shift/Alt+Enter 실키 입력·디시전 116×96(마름모 실측 비율 1.200, 드롭 충돌 dx 155px로 nodeSizeOf 반영 확인)·GMP 필과 코멘트 배지 15.8px 이격·인쇄는 클램프만 해제(3L→4L @80px)·IO 행 호버/체크 강조·캡 경계 펄스 잘림 0·비교뷰 TB 세로 엣지 Δx 0. M7의 200px 폭 강제는 이 커밋에서 되돌려져 계약이 "클램프 해제만"으로 축소 확정.

@@ -6,7 +6,9 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   AlertTriangle,
   Building2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   CornerDownRight,
   Flag,
   Link as LinkIcon,
@@ -37,6 +39,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
@@ -147,7 +150,7 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
           <div
             key={side}
             data-id={`node-io-list-${side}`}
-            className="nodrag nopan mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
+            className="group/iobox nodrag nopan mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >
@@ -188,12 +191,21 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                   const checked = ioChecks.has(checkKey);
                   // 체크 동기 애니메이션(#3) — key에 논스를 실어 같은 키 재체크도 재생(리마운트)
                   const pulsing = ioCheckPulse !== null && ioCheckPulse.key === checkKey;
+                  // 미체크 인풋은 필수/선택을 글자색으로 분류(선택=뮤트), 양식은 아이콘만 맨 뒤
+                  // 고정 노출+호버 툴팁 — 긴 이름은 2줄 클램프라 텍스트가 잘려도 아이콘은 남는다
+                  const isOptional =
+                    !isSubprocess && side === "input" && getIoLine(data.input_flags, index) === "optional";
+                  const form = isSubprocess
+                    ? null
+                    : resolveDataForm(
+                        getIoLine(side === "input" ? data.input_forms : data.output_forms, index),
+                      );
                   return (
                     // 빈 체크박스는 행 호버 시에만 노출, 체크된 것은 유지. 체크 텍스트는 accent-tint
                     // 하이라이트+진한 글자 — 취소선·딤 대신 "확인됨" 강조 (사용자 결정 2026-08-23)
                     <label
                       key={pulsing ? `${index}-p${ioCheckPulse.nonce}` : index}
-                      className={`group/iorow -mx-0.5 flex cursor-pointer items-center gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary hover:bg-surface-alt ${
+                      className={`group/iorow -mx-0.5 flex cursor-pointer items-start gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary hover:bg-surface-alt ${
                         pulsing ? "bpm-io-pulse" : ""
                       }`}
                     >
@@ -201,7 +213,7 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                         type="checkbox"
                         data-id={`node-io-check-${side}-${index}`}
                         tabIndex={-1}
-                        className={`h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                        className={`mt-0.5 h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
                           checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
                         }`}
                         checked={checked}
@@ -209,10 +221,21 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
                         onChange={() => onToggleIoCheck?.(checkKey)}
                       />
                       <span
-                        className={`min-w-0 ${checked ? "rounded-xs bg-accent-tint px-0.5 text-ink" : ""}`}
+                        className={`line-clamp-2 min-w-0 flex-1 break-words ${
+                          checked
+                            ? "rounded-xs bg-accent-tint px-0.5 text-ink"
+                            : isOptional
+                              ? "text-ink-muted"
+                              : ""
+                        }`}
                       >
                         {text}
                       </span>
+                      {form && (
+                        <span title={form.value} className="mt-0.5 shrink-0 text-ink-muted">
+                          <form.icon size={10} strokeWidth={1.5} />
+                        </span>
+                      )}
                     </label>
                   );
                 })}
@@ -220,14 +243,20 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
             )}
             {listState !== "collapsed" && hiddenCount > 0 && (
               // 전체 펼침↔기본 캡 토글(#2) — 전체 펼침 시 간격 재조정(#1)은 별도 브랜치에서
+              // 박스 호버 시에만 노출 — 평상시엔 4번째 반 줄이 "더 있음"을 암시 (사용자 요청 2026-08-23)
               <button
                 type="button"
                 data-id={`node-io-list-${side}-more`}
                 tabIndex={-1}
                 disabled={onSetIoListState === null}
-                className="mt-0.5 w-full text-left text-[10px] text-accent"
+                className="mt-0.5 flex w-full items-center gap-0.5 text-left text-[10px] text-accent opacity-0 transition-opacity duration-150 group-hover/iobox:opacity-100"
                 onClick={() => onSetIoListState?.(listKey, listState === "all" ? "capped" : "all")}
               >
+                {listState === "all" ? (
+                  <ChevronUp size={10} strokeWidth={1.5} className="shrink-0" />
+                ) : (
+                  <ChevronDown size={10} strokeWidth={1.5} className="shrink-0" />
+                )}
                 {listState === "all" ? t("io.showLess") : `${t("io.showMore")} (+${hiddenCount})`}
               </button>
             )}
@@ -769,7 +798,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
         <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
-        <div className="bpm-decision-title-box relative max-w-20 text-center text-xs font-medium text-ink">
+        <div className="bpm-decision-title-box relative max-w-24 text-center text-xs font-medium text-ink">
           <NodeTitle id={id} label={data.label} clamp3 />
           {data.hasChildren && (
             <div className="inline-flex items-center gap-0.5 text-[10px] text-accent">
