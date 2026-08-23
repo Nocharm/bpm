@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-23 — 노드 간격 자동 재조정 height-shift 설계 (feat/node-spacing)
+- 꺾은선 장애물 회피 배선(lib/edge-detour): 기본 3구간 경로가 표시 bbox 관통 시 빈 회랑으로 직각 우회(최소 이탈·결정적 타이브레이크·무회랑=폴백). 직선·곡선·혼합 방향 대상 외. vitest 9.
 - 브레인스토밍 확정: 원래 간격 보존·아래 전체(행 보존)·상시 자동·실측 기반 Y 계단함수(inline-shift 수학 재사용). 스펙 docs/superpowers/specs/2026-08-23-node-spacing-design.md. 플랜 5태스크(모듈 TDD→합성/역변환→생성 스윕→rAF 트윈→스모크). 스펙 정정: 인라인 펼침 중 V1 비활성(자식 합성 좌표 결합 리스크)·앵커 allowlist·경계 등호 계약.
 - Task 1(TDD): `lib/height-shift.ts` 신설 — getDisplayHeight(measured 우선/추정 폴백)·buildHeightSteps(앵커 필터+행 병합)·buildYOffsets(nodewise 오프셋) 3함수, 테스트 9/9 통과. 게이트 그린: vitest 749(740→+9) / tsc 0 / lint 0.
 - Task 2(에디터 합성): page.tsx에 ySteps/yStepsRef/yOffsets 메모 + displayNodes 오프셋 합성 + dropDraggingPositions Y 역변환. React Compiler 랜드마인: yStepsRef는 dropDraggingPositions(앞선 useCallback)보다 먼저 선언해야 함(TDZ 회피 컨벤션, nodesRef와 동일 패턴) — ySteps 메모 옆에 두면 `react-hooks/immutability` lint 에러. 게이트 그린: vitest 749 / tsc 0 / lint 0 / build 성공. 수동검증(playwright-core+시스템 Chrome, 격리 dev.db): Show more→노드 ~61px 하강, Show less→정확히 원위치(diff=0), 오프셋 활성 중 드래그해도 저장좌표는 역변환값(509)으로 저장되고 새로고침 후에도 동일(509→509, 오염 없음) 11/11 통과.
