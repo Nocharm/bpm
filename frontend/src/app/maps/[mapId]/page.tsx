@@ -249,7 +249,8 @@ import {
   type IoImportAction,
   type IoSide,
 } from "@/lib/io-items";
-import { displayToSavedX } from "@/lib/inline-shift";
+import { displayToSavedX, type ShiftStep } from "@/lib/inline-shift";
+import { buildHeightSteps, buildYOffsets } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { useClosingKeys } from "@/lib/use-closing-keys";
@@ -1353,6 +1354,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
+  // height-shift(#1) 스텝 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
+  const yStepsRef = useRef<ShiftStep[]>([]);
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
@@ -1616,6 +1619,17 @@ function MapEditor({ mapId }: { mapId: number }) {
               change.position = constrainToAxis(start, change.position, shiftHeldRef.current);
             }
           }
+        }
+      }
+      // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
+      // nodes state(저장 좌표)에 그대로 넣으면 드래그마다 오프셋이 누적된다. 축 고정과 무관하게 항상 적용.
+      const ySteps2 = yStepsRef.current;
+      for (const change of changes) {
+        if (change.type === "position" && change.position && ySteps2.length > 0) {
+          change.position = {
+            x: change.position.x,
+            y: displayToSavedX(change.position.y, ySteps2),
+          };
         }
       }
       const suppress = suppressPosIdsRef.current;
@@ -6293,6 +6307,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     return out;
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
 
+  // height-shift(#1): 표시 높이로 커진 노드 아래를 렌더 시점에만 밀어냄 — 저장 좌표 불변.
+  // 인라인 펼침 중엔 비활성(자식 합성 좌표와 결합 금지, spec §7). 설계: 2026-08-23-node-spacing-design.md
+  const ySteps = useMemo(
+    () => (inlineComposition ? [] : buildHeightSteps(nodes)),
+    [inlineComposition, nodes],
+  );
+  useEffect(() => {
+    yStepsRef.current = ySteps;
+  }, [ySteps]);
+  const yOffsets = useMemo(() => buildYOffsets(nodes, ySteps), [nodes, ySteps]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
@@ -6366,7 +6391,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         gmpPreview !== null && gmpPreview.nodeId === node.id
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
-      return injectSubEnds(withGmpPreview);
+      const injected = injectSubEnds(withGmpPreview);
+      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 이동
+      const yOff = yOffsets.get(node.id) ?? 0;
+      return yOff === 0
+        ? injected
+        : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6407,6 +6437,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     staleAnchorIds,
     ioHighlight,
     gmpPreview,
+    yOffsets,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
