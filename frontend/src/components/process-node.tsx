@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CircleArrowUp,
   CornerDownRight,
   Flag,
   Link as LinkIcon,
@@ -17,6 +18,7 @@ import {
   LogOut,
   type LucideIcon,
   MessageSquare,
+  Pin,
   Play,
   Plus,
   Server,
@@ -757,12 +759,25 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         <NodeFields data={data} />
         <NodeParams data={data} />
         <NodeIoDetails nodeId={id} data={data} />
-        {data.updateAvailable && (
-          <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+        {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
+            점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23) */}
+        {data.updateAvailable ? (
+          <div
+            data-id="sp-banner-update"
+            className="mt-1 flex items-start gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-xs text-accent"
+          >
+            <CircleArrowUp size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
             {t("subprocess.updateAvailable")}
           </div>
-        )}
+        ) : data.followLatest === false ? (
+          <div
+            data-id="sp-banner-pinned"
+            className="mt-1 flex items-start gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-xs text-ink-secondary"
+          >
+            <Pin size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+            {t("subprocess.pinnedNotice")}
+          </div>
+        ) : null}
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
