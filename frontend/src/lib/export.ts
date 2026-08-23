@@ -48,8 +48,11 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     setImportant(head, "fill", EDGE_STROKE);
   }
   // 마름모 제목 — 화면은 3줄 클램프+80px 폭이지만 인쇄(PNG)에선 전문 노출 (사용자 요청 2026-08-23 #4)
+  // max-width만으론 부모 flex(h-24 w-24)가 도로 눌러 무효(QA M7) — width·flex-shrink까지 강제
   for (const box of viewport.querySelectorAll(".bpm-decision-title-box")) {
     setImportant(box, "max-width", "200px");
+    setImportant(box, "width", "200px");
+    setImportant(box, "flex-shrink", "0");
   }
   for (const span of viewport.querySelectorAll(".bpm-decision-title")) {
     setImportant(span, "-webkit-line-clamp", "unset");
