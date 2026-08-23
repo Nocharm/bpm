@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-23 — 노드 간격 자동 재조정 height-shift 설계 (feat/node-spacing)
+- 브레인스토밍 확정: 원래 간격 보존·아래 전체(행 보존)·상시 자동·실측 기반 Y 계단함수(inline-shift 수학 재사용). 스펙 docs/superpowers/specs/2026-08-23-node-spacing-design.md.
+
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
 - UI 문자열 em-dash(—)→하이픈(-) 일괄 스윕(i18n 179줄+소스 65줄+테스트 단언 8줄, 주석·테스트 제목 제외 — 8f254b44 컨벤션 확장). QA S1의 배너 title 전문도 하이픈으로 변경됨.
 - SP 배너 한 줄화: 짧은 전용 문구(Update available/Pinned version)+truncate, 전문은 title 툴팁.
