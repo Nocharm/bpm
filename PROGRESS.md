@@ -7,6 +7,7 @@
 - 브레인스토밍 확정: 원래 간격 보존·아래 전체(행 보존)·상시 자동·실측 기반 Y 계단함수(inline-shift 수학 재사용). 스펙 docs/superpowers/specs/2026-08-23-node-spacing-design.md. 플랜 5태스크(모듈 TDD→합성/역변환→생성 스윕→rAF 트윈→스모크). 스펙 정정: 인라인 펼침 중 V1 비활성(자식 합성 좌표 결합 리스크)·앵커 allowlist·경계 등호 계약.
 - Task 1(TDD): `lib/height-shift.ts` 신설 — getDisplayHeight(measured 우선/추정 폴백)·buildHeightSteps(앵커 필터+행 병합)·buildYOffsets(nodewise 오프셋) 3함수, 테스트 9/9 통과. 게이트 그린: vitest 749(740→+9) / tsc 0 / lint 0.
 - Task 2(에디터 합성): page.tsx에 ySteps/yStepsRef/yOffsets 메모 + displayNodes 오프셋 합성 + dropDraggingPositions Y 역변환. React Compiler 랜드마인: yStepsRef는 dropDraggingPositions(앞선 useCallback)보다 먼저 선언해야 함(TDZ 회피 컨벤션, nodesRef와 동일 패턴) — ySteps 메모 옆에 두면 `react-hooks/immutability` lint 에러. 게이트 그린: vitest 749 / tsc 0 / lint 0 / build 성공. 수동검증(playwright-core+시스템 Chrome, 격리 dev.db): Show more→노드 ~61px 하강, Show less→정확히 원위치(diff=0), 오프셋 활성 중 드래그해도 저장좌표는 역변환값(509)으로 저장되고 새로고침 후에도 동일(509→509, 오염 없음) 11/11 통과.
+- Task 3(생성 좌표 스윕): `toSavedPoint` 헬퍼 + `screenToFlowPosition` 7지점 중 6곳(노드 생성·크로스맵 붙여넣기·라이브러리/섹션 드롭·링크노드 추가) 감쌈, 드래그 중 그룹 히트테스트 1곳(persist 안 됨)은 제외. 게이트 그린: vitest 749 / tsc 0 / lint 0 / build 성공. 수동검증 14/14 통과 — 밀린 영역 우클릭 추가 시 저장좌표가 "역변환 적용" 가설에 2px, "미적용" 가설에 108px로 명확히 판별, 새로고침 후 표시좌표 완전 일치(dist=0).
 
 ## 2026-08-21 — 노드 IO 연결(불러오기) 설계 스펙 (feat/io-linking)
 - UI 문자열 em-dash(—)→하이픈(-) 일괄 스윕(i18n 179줄+소스 65줄+테스트 단언 8줄, 주석·테스트 제목 제외 — 8f254b44 컨벤션 확장). QA S1의 배너 title 전문도 하이픈으로 변경됨.

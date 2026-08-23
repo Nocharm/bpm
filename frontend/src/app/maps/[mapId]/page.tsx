@@ -1600,6 +1600,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
+  // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용
+  const toSavedPoint = useCallback((point: { x: number; y: number }) => {
+    const steps = yStepsRef.current;
+    return steps.length === 0 ? point : { x: point.x, y: displayToSavedX(point.y, steps) };
+  }, []);
+
   // 펼침 중 루트 드래그: 드래그 중인 노드의 position 변경은 nodes state에 쓰지 않고 버린다(저장 좌표 동결).
   // 라이브 표시좌표는 dragLiveById가 따로 추적하고 displayNodes가 직접 렌더한다 → 커서 1:1 추종, 매 프레임
   // offset 보정으로 인한 튐 없음. 표시→저장 환산은 드롭 시점(onNodeDragStop)에 한 번만. select/dimensions/remove
@@ -3429,17 +3435,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       const count = nodesRef.current.length;
       let position = { x: 80 + count * 30, y: 80 + count * 30 };
       if (screen) {
-        const point = reactFlow.screenToFlowPosition(screen);
+        const point = toSavedPoint(reactFlow.screenToFlowPosition(screen));
         position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
       } else {
         // 좌측 팔레트 등 좌표 없는 추가 — 현재 뷰포트 중앙에 배치
         const container = canvasContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
-          const point = reactFlow.screenToFlowPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          });
+          const point = toSavedPoint(
+            reactFlow.screenToFlowPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            }),
+          );
           position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
         }
       }
@@ -3482,6 +3490,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode,
       showToast,
       highlightNode,
+      toSavedPoint,
     ],
   );
 
@@ -3534,10 +3543,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       const container = canvasContainerRef.current;
       if (container) {
         const rect = container.getBoundingClientRect();
-        const center = reactFlow.screenToFlowPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        });
+        const center = toSavedPoint(
+          reactFlow.screenToFlowPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          }),
+        );
         const minX = Math.min(...clip.nodes.map((n) => n.position.x));
         const maxX = Math.max(...clip.nodes.map((n) => n.position.x)) + NODE_WIDTH;
         const minY = Math.min(...clip.nodes.map((n) => n.position.y));
@@ -3611,6 +3622,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     showToast,
     t,
     findFreeSpot,
+    toSavedPoint,
   ]);
 
   // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
@@ -4428,7 +4440,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
       const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
       const pinned = pinnedRaw ? Number(pinnedRaw) : null;
-      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       if (e.dataTransfer.getData("application/bpm-process-unregistered") === "1") {
         setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
         return;
@@ -4437,7 +4449,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
     // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
-    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop],
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -4453,7 +4465,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const label = [number, title].filter(Boolean).join(" ");
       pushHistory();
       const id = genId();
-      const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const point = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
       setNodes((current) => [
         ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
@@ -4471,7 +4483,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
       flashNode(id);
     },
-    [readOnly, reactFlow, findFreeSpot, pushHistory, setNodes, scheduleAutoSave, flashNode],
+    [
+      readOnly,
+      reactFlow,
+      findFreeSpot,
+      pushHistory,
+      setNodes,
+      scheduleAutoSave,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -4494,10 +4515,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("library.alreadyLinked"));
         return;
       }
-      const center = reactFlow.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      const center = toSavedPoint(
+        reactFlow.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        }),
+      );
       const id = genId();
       const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
       let subEnds: SubEnd[] = [];
@@ -4539,7 +4562,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, linkedMapIds, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
+    [
+      readOnly,
+      linkedMapIds,
+      reactFlow,
+      setNodes,
+      scheduleAutoSave,
+      showToast,
+      t,
+      findFreeSpot,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
