@@ -10,6 +10,7 @@ import {
   isCostFieldDisabled,
   PARAM_FIELDS,
   resolveAiParamPatch,
+  resolveAiTextPatch,
   resolveCostFields,
   SP_PARAM_FIELDS,
 } from "./params";
@@ -338,5 +339,59 @@ describe("resolveAiParamPatch — touch_time (design 2026-08-19 §2)", () => {
 
   it("SP 노드는 상속 필드라 드롭", () => {
     expect(resolveAiParamPatch("subprocess", { touch_time: "1.30" })).toEqual({});
+  });
+});
+
+describe("resolveAiTextPatch", () => {
+  it("건드리지 않은 필드는 결과에 없다 (부분 갱신)", () => {
+    expect(resolveAiTextPatch("process", { data_form: "structured" }, {})).toEqual({
+      data_form: "structured",
+    });
+  });
+
+  it("input 텍스트가 바뀌면 폼·링크·플래그를 함께 폐기한다 (mergeNode 줄 정렬 계약 미러)", () => {
+    const patch = resolveAiTextPatch("process", { input: "발주서\n견적서" }, { input: "발주서" });
+    expect(patch).toEqual({
+      input: "발주서\n견적서",
+      input_forms: "",
+      input_links: "",
+      input_flags: "",
+    });
+  });
+
+  it("output 텍스트가 바뀌면 output 폼·원본 id·링크를 함께 폐기한다", () => {
+    const patch = resolveAiTextPatch("process", { output: "승인서" }, { output: "구승인서" });
+    expect(patch).toEqual({
+      output: "승인서",
+      output_forms: "",
+      output_ids: "",
+      output_links: "",
+    });
+  });
+
+  it("동일 텍스트 에코는 정렬 부속을 폐기하지 않는다 (검토값 보존)", () => {
+    expect(resolveAiTextPatch("process", { input: "발주서" }, { input: "발주서" })).toEqual({
+      input: "발주서",
+    });
+  });
+
+  it("빈 문자열은 '지움' — 값과 정렬 부속을 함께 비운다", () => {
+    const patch = resolveAiTextPatch("process", { input: "" }, { input: "발주서" });
+    expect(patch).toEqual({ input: "", input_forms: "", input_links: "", input_flags: "" });
+  });
+
+  it("조건·양식은 정렬 부속 없이 그대로 적용된다", () => {
+    const patch = resolveAiTextPatch(
+      "process",
+      { start_condition: "예산 확정", end_condition: "결재 완료" },
+      {},
+    );
+    expect(patch).toEqual({ start_condition: "예산 확정", end_condition: "결재 완료" });
+  });
+
+  it("서브프로세스는 링크 맵 상속(read-only) — 전부 드롭", () => {
+    expect(
+      resolveAiTextPatch("subprocess", { input: "x", output: "y", data_form: "z" }, {}),
+    ).toEqual({});
   });
 });

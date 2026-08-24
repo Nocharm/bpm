@@ -276,6 +276,7 @@ import {
   isSpParamField,
   readAttrsCollapsed,
   resolveAiParamPatch,
+  resolveAiTextPatch,
   writeAttrsCollapsed,
   type ParamField,
 } from "@/lib/params";
@@ -2159,6 +2160,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 배타를 resolveAiParamPatch(buildGraphFromAiProposal과 같은 규칙 재사용)로 강제.
                     // 위반 필드는 색과 같은 방식으로 조용히 드롭 — 이 경로엔 프리뷰 경고 채널이 없다.
                     ...resolveAiParamPatch(node.data.nodeType, attr),
+                    // 승격 텍스트 필드 — IO 텍스트 변경 시 폼·링크·플래그 폐기 동반(mergeNode 계약 미러)
+                    ...resolveAiTextPatch(node.data.nodeType, attr, node.data),
                     ...(attr.url != null ? { url: attr.url } : {}),
                     ...(attr.url_label != null ? { urlLabel: attr.url_label } : {}),
                   }

@@ -201,6 +201,61 @@ export function resolveAiParamPatch(
   return dropUneditableParams(nodeType, clearCounterpartCurrency(guarded)).allowed;
 }
 
+/** AI ops set_attr가 보내는 승격 텍스트 필드 후보 — 파라미터 7종(AiParamPatchInput)과 별개. */
+export interface AiTextPatchInput {
+  input?: string | null;
+  output?: string | null;
+  start_condition?: string | null;
+  end_condition?: string | null;
+  data_form?: string | null;
+}
+
+type AiTextPatchKey =
+  | keyof AiTextPatchInput
+  | "input_forms"
+  | "input_links"
+  | "input_flags"
+  | "output_forms"
+  | "output_ids"
+  | "output_links";
+
+/**
+ * AI ops set_attr의 승격 텍스트 필드 부분 갱신 → 실제 반영할 패치. 시맨틱은 파라미터와 동일 —
+ * null/생략=유지(키 생략), ""=명시적 지움. 정규화가 없는 자유 텍스트라 값은 그대로 싣는다.
+ * input/output 텍스트가 현재 값과 달라지면 그 측의 폼·링크·플래그를 함께 ""로 폐기한다 —
+ * 줄 정렬(1:1) 계약이 깨지므로 csv-import mergeNode의 병합 규칙을 그대로 미러(동일 에코는 보존).
+ * SP 노드는 다섯 필드 전부 링크 맵 상속(read-only) — csv-import SP_INHERITED_TEXT_FIELDS와
+ * 동일 집합을 통째로 드롭한다(직접 import하면 순환 참조라 규칙만 미러).
+ */
+export function resolveAiTextPatch(
+  nodeType: string,
+  attr: AiTextPatchInput,
+  current: { input?: string | null; output?: string | null },
+): Partial<Record<AiTextPatchKey, string>> {
+  if (nodeType === "subprocess") return {};
+  const patch: Partial<Record<AiTextPatchKey, string>> = {};
+  if (attr.input != null) {
+    patch.input = attr.input;
+    if (attr.input !== (current.input ?? "")) {
+      patch.input_forms = "";
+      patch.input_links = "";
+      patch.input_flags = "";
+    }
+  }
+  if (attr.output != null) {
+    patch.output = attr.output;
+    if (attr.output !== (current.output ?? "")) {
+      patch.output_forms = "";
+      patch.output_ids = "";
+      patch.output_links = "";
+    }
+  }
+  if (attr.start_condition != null) patch.start_condition = attr.start_condition;
+  if (attr.end_condition != null) patch.end_condition = attr.end_condition;
+  if (attr.data_form != null) patch.data_form = attr.data_form;
+  return patch;
+}
+
 /**
  * AI가 신규 노드에 링크 없이 보낸 subprocess 타입은 process로 강등 — Call Activity는
  * linked_map_id가 있어야 렌더/조회되므로, 링크 없는 subprocess는 칩·인스펙터 어디에도 값이
