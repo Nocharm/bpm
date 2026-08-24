@@ -8,6 +8,7 @@
 
 - [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — 스키마·엔진(§5) 설계 원본. canonical(§4)은 외부 전달 양식에서 **내부 IR로 강등**(2026-08-18) — 파일 로더·CLI·웹 canonical 임포트는 제거됨.
 - [컨설턴트 인터뷰 결과 JSON 임포트(Phase 3 어댑터)](2026-08-18-interview-import-design.md) — 인터뷰 JSON→canonical 어댑터·다중 파일 웹 임포트·키 검증 dry-run·`map_notes` 테이블. **1차 구현 dev 머지 완료** — 실파일 dry-run 대조 대기.
+- [데이터 표면 패리티 — CSV 왕복·Excel·JSON 임포트 점검](2026-08-24-data-surface-parity-design.md) — 검토값(gmp·항목별 폼) CSV 왕복 확장·Excel 컬럼 확장·어댑터 키 대조. **미구현 이관 트랙** — AI 계약 최신화(feat/ai-contract-parity)에서 분리, system_fallback 처리 미결.
 - [인터뷰 필드 승격 — 노드/SP 파라미터 확장+폴백 컬럼](2026-08-19-field-promotion-design.md) — touch_time 7번째 파라미터·노드 input/output(복수)·시작/종료 조건·GMP 3값 유효성·대표+폴백 쌍·FallbackHint 툴팁. **설계 단계** — 사용자 검토 대기.
 - [거버넌스 UX 확장 A/B/C](2026-08-08-governance-ux-design.md) — 설계 승인·**미구현** 트랙. 이양 후 오너 대량 발생 전 구현 목표.
 - [인라인 펼침 드래그/좌표 버그 핸드오프](2026-07-17-inline-expand-drag-bugs-NEXT-SESSION.md) — 미해결 버그 핸드오프(보류 중).
