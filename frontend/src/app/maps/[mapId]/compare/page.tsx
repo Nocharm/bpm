@@ -282,21 +282,11 @@ const COMPARE_RENDER_W: Record<string, number> = {
 };
 
 // 비교뷰 실측 크기 함수 — 공용 alignBackbone에 주입(에디터는 measured, 비교는 위 상수표).
-// 터미널은 커스텀 라벨(타입 필 +18px)·노트(text-xs 줄당 16px, 3줄 클램프)로 커진 높이를 근사 —
-// 랩은 240px 폭·한글 ~18자/줄 가정(백본 중심 정렬용 근사, 정밀 측정 아님).
+// 터미널은 커스텀 라벨의 타입 필 줄(+18px)로 커진 높이를 근사(백본 중심 정렬용 — 노트는 캔버스 미노출).
 const compareRenderH = (node: AppNode) => {
   const base = COMPARE_RENDER_H[node.data.nodeType] ?? 38;
   if (node.data.nodeType !== "start" && node.data.nodeType !== "end") return base;
-  let h = base;
-  if (hasCustomTerminalLabel(node.data.label)) h += 18;
-  const note = (node.data.description ?? "").trim();
-  if (note) {
-    const lines = note
-      .split("\n")
-      .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 18)), 0);
-    h += 16 * Math.min(3, lines);
-  }
-  return h;
+  return hasCustomTerminalLabel(node.data.label) ? base + 18 : base;
 };
 const compareRenderW = (node: AppNode) =>
   COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;

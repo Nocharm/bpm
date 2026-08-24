@@ -866,18 +866,18 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   }
 
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
-  // 터미널 커스텀 라벨 — 타입 필("Start"/"End") + 라벨 본문 분리 렌더. 기본 라벨은 종전 알약 그대로.
+  // 터미널 커스텀 라벨 — 타입 필("Start"/"End") + 라벨 본문 분리, 왼쪽 정렬(일반 노드와 동일 결).
+  // 설명(노트)은 캔버스에 노출하지 않는다 — 다른 노드처럼 인스펙터·편집 모달에서만 (사용자 결정 2026-08-24).
   const customTerminal = isTerminal && hasCustomTerminalLabel(data.label);
-  // 터미널 노트 — description을 캔버스에 노출(작성·편집은 기존 설명 필드 그대로).
-  const terminalNote = isTerminal ? (data.description ?? "").trim() : "";
   // 긴 라벨은 max-w-[240px](canvas.ts NODE_MAX_WIDTH 동기화)에서 wrap — break-words로 무공백 토큰도 분절
   // 터미널 곡률은 rounded-full 대신 한 줄 높이의 반지름 고정(19px) — 내용이 늘어나 키가 커져도
   // 타원이 계란형으로 변하지 않고 같은 곡률의 둥근 사각형이 된다(사용자 요청 2026-08-24).
+  // 기본 라벨(Start/End 한 단어) 알약만 가운데 정렬 유지 — 좁은 알약에서 좌정렬은 쏠려 보인다.
   return (
     <div
       className={`group bpm-node-emph relative break-words px-3 py-2 text-sm transition-all duration-150 ${
         isTerminal
-          ? "min-w-[90px] max-w-[240px] rounded-[19px] text-center"
+          ? `min-w-[90px] max-w-[240px] rounded-[19px] ${customTerminal ? "text-left" : "text-center"}`
           : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
       style={style}
@@ -887,8 +887,8 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
       {customTerminal && (
-        // 타입 필 — GMP 필과 같은 자리(본문 첫 줄). 노드색 테두리+틴트로 소속을 드러낸다.
-        <div className="mb-0.5 flex justify-center">
+        // 타입 필 — GMP 필과 같은 자리(본문 첫 줄 좌측). 노드색 테두리+틴트로 소속을 드러낸다.
+        <div className="mb-0.5 flex justify-start">
           <span
             data-id="node-terminal-pill"
             className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4"
@@ -914,17 +914,6 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
           }
         />
       </div>
-      {terminalNote && (
-        // 터미널 노트 — 3줄 클램프 고정(전문은 툴팁). export에서도 해제하지 않는다 — 클론에서
-        // 노드 높이가 늘어나면 아래 노드와 겹친다(마름모 제목 unclamp와 달리 박스가 가변).
-        <div
-          data-id="node-terminal-note"
-          className="mx-auto mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs font-normal text-ink-tertiary"
-          title={terminalNote}
-        >
-          {terminalNote}
-        </div>
-      )}
       <NodeFields data={data} />
       <NodeParams data={data} />
       <NodeIoDetails nodeId={id} data={data} />
