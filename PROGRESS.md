@@ -4,6 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-08-24 — 비교화면 최신화 (feat/compare-refresh)
+- 비교 데모 시드(scripts.seed_compare_demo) 워스트케이스 확장 — 전 필드 동시 변경(통화 전환·GMP·IO/양식/조건), 터미널 커스텀 라벨+설명, 동일 이웃 삭제 노드 2개(포개짐 오프셋), 엣지 라벨 변경·선 모양 3종. 조직 데모 시드(seed_org_demo)는 버전 간 계보가 없어 비교화면 데모 불가 — 비교 검증은 이 맵으로.
 - 엣지 라벨 변경 감지(MergedEdgeStatus "changed"+labelChange, 목록·캔버스 옐로)·저장 line_style대로 경로 렌더(직선/곡선/꺾은선)·인스펙터 확장(touch_time·GMP 행+입출력/양식/조건 블록형 diff+엣지 포커스 패널)·변경 목록 필드 세로 행(truncate+툴팁)·삭제 노드 동좌표 포개짐 순차 오프셋. location은 레거시 계층 마커라 diff 미대상 확정. ⚠️ 데모 시드는 버전 간 source_node_id 계보가 없어 비교화면이 전부 추가/삭제로 보임(시드 한계, 코드 무관).
 
 ## 2026-08-24 — start/end 노드 개선 (feat/compare-refresh)
