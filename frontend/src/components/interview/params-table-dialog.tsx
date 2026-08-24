@@ -17,6 +17,7 @@ const PAGE_SIZE = 30; // 청크 렌더 — 노드 많을 때 ParamInput 대량 �
 // 통화(₩/$)는 노드별 배타 계약 — 열을 'Cost' 하나로 합치고 행별 통화 토글 (P1 #10)
 const COLUMNS: Array<{ key: string; label: string; title: string }> = [
   { key: "duration", label: "Duration", title: "Duration per run (H.MM)" },
+  { key: "touch_time", label: "Touch", title: "Hands-on time per run (H.MM)" },
   { key: "cost", label: "Cost", title: "Cost per run - ₩ or $ (exclusive per activity)" },
   { key: "headcount", label: "People", title: "Headcount per run" },
   { key: "annual_count", label: "Runs/yr", title: "Runs per year" },
@@ -31,6 +32,7 @@ type Currency = "krw" | "usd";
 
 interface DraftRow {
   duration: string;
+  touch_time: string;
   cost: string;
   currency: Currency;
   headcount: string;
@@ -44,6 +46,7 @@ function toDraft(rows: ParamsTableRow[]): Record<string, DraftRow> {
       row.activity,
       {
         duration: row.values.duration ?? "",
+        touch_time: row.values.touch_time ?? "",
         cost: row.values.cost_krw ?? row.values.cost_usd ?? "",
         currency: (row.values.cost_usd && !row.values.cost_krw ? "usd" : "krw") as Currency,
         headcount: row.values.headcount ?? "",
@@ -61,6 +64,7 @@ function toTable(draft: Record<string, DraftRow>): Record<string, Record<string,
       activity,
       {
         duration: row.duration,
+        touch_time: row.touch_time,
         cost_krw: row.currency === "krw" ? row.cost : "",
         cost_usd: row.currency === "usd" ? row.cost : "",
         headcount: row.headcount,
@@ -100,6 +104,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
     // SP 상속 필드는 건드리지 않는다 — 편집 가능한 필드만 비움 (CLAUDE.md SP 3표면 게이팅)
     const patch: Partial<DraftRow> = {};
     if (editable.has("duration")) patch.duration = "";
+    if (editable.has("touch_time")) patch.touch_time = "";
     if (editable.has("cost_krw") || editable.has("cost_usd")) patch.cost = "";
     if (editable.has("headcount")) patch.headcount = "";
     if (editable.has("annual_count")) patch.annual_count = "";
@@ -130,7 +135,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
       data-id="iv-params-dialog"
     >
       <div
-        className="iv-pop flex max-h-[80vh] w-[42rem] max-w-full flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="iv-pop flex max-h-[80vh] w-[48rem] max-w-full flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex items-center gap-2 border-b border-hairline px-4 py-3">
@@ -178,6 +183,16 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
                         className={CELL_INPUT}
                         ariaLabel={`${row.activity} duration`}
                         onCommit={(next) => patchRow(row.activity, { duration: next })}
+                      />
+                    </td>
+                    <td className="w-20 px-1.5 py-1">
+                      <ParamInput
+                        field="touch_time"
+                        value={current.touch_time}
+                        disabled={busy || !editable.has("touch_time")}
+                        className={CELL_INPUT}
+                        ariaLabel={`${row.activity} touch time`}
+                        onCommit={(next) => patchRow(row.activity, { touch_time: next })}
                       />
                     </td>
                     <td className="w-32 px-1.5 py-1">

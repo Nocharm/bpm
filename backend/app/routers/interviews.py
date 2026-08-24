@@ -699,7 +699,8 @@ async def draw_interview_proposals(
 
 
 # params 표 반영 — AI 0콜 결정적 적용 (speed redesign 후속, 실사용 피드백 2026-07-27)
-_PARAM_FIELDS = ("duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte")
+# touch_time은 7번째 회당 파라미터 — duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+_PARAM_FIELDS = ("duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte")
 _PARAM_UNKNOWN_TOKENS = {"미정", "TBD", "tbd", "-"}
 _PARAMS_APPLIED_NOTICE = {
     "ko": "확정된 파라미터를 활동 {n}개에 반영했습니다.",

@@ -194,6 +194,13 @@ describe("deriveParamsTable (params 표 확정 흐름)", () => {
     expect(deriveParamsTable({ params: { params_done: "yes" } })).toEqual([]);
     expect(deriveParamsTable(null)).toEqual([]);
   });
+
+  it("touch_time(7번째 회당 파라미터)도 수집분으로 인정한다 (design 2026-08-19 §2)", () => {
+    const rows = deriveParamsTable({
+      params: { params_table: { "요청서 작성": { touch_time: "0.45" } } },
+    });
+    expect(rows).toEqual([{ activity: "요청서 작성", values: { touch_time: "0.45" } }]);
+  });
 });
 
 describe("getGraphSignature", () => {

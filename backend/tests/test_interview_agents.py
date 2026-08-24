@@ -218,3 +218,24 @@ def test_contract_has_fast_track_rule() -> None:
         history=[], user_input="안녕",
     )
     assert '"이대로 그리기", "수정할래요", "일반 인터뷰로 진행"' in msgs[0]["content"]
+
+
+def test_params_rule_includes_touch_time() -> None:
+    """params_table 체계가 7종 파라미터(touch_time 포함)를 안내해야 수집이 가능하다 (design 2026-08-19 §2)."""
+    msgs = build_interviewer_messages(
+        stage_key="activities", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="이 활동은 실작업 30분이에요",
+    )
+    assert '"touch_time"' in msgs[0]["content"]
+    assert "실작업" in msgs[0]["content"]
+
+
+def test_drafter_contract_lists_promoted_fields() -> None:
+    """드래프터 attributes 예시가 승격 필드를 알아야 확정 facts가 노드에 실린다 (design 2026-08-19 §1.1)."""
+    messages = build_drafter_messages(
+        stage_key="activities", lang="ko", facts={}, working_graph=None,
+        context_text="", variant_hint="표준",
+    )
+    content = messages[0]["content"]
+    for field in ("touch_time", "input", "output", "start_condition", "end_condition", "data_form"):
+        assert field in content

@@ -98,7 +98,7 @@ export function deriveSequencePreview(
 // ---------- params 표 (수집 → 확정 → 결정적 반영, speed redesign 후속) ----------
 
 export const PARAM_TABLE_KEYS = [
-  "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+  "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
 ] as const;
 
 export interface ParamsTableRow {

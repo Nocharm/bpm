@@ -584,3 +584,10 @@ def test_choice_accept_branches_without_decisions_stamps_fallback() -> None:
     _run(db, interview, InterviewTurnIn(type="choice", choice_id="opt-1"), [reply])
     assert interview.facts["branches"]["branches"] == "분기 없음(수락안 기준)"
     assert interview.current_stage == "roles"
+
+
+def test_extract_contract_includes_touch_time() -> None:
+    """첨부 추출기 params_table 예시에 touch_time — 문서의 실작업시간도 수집한다 (design 2026-08-19 §2)."""
+    from app.interview.orchestrator import _EXTRACT_CONTRACT
+
+    assert '"touch_time"' in _EXTRACT_CONTRACT

@@ -598,6 +598,21 @@ def test_apply_params_currency_exclusive(client: TestClient, monkeypatch) -> Non
     client.delete(f"/api/interviews/{state['id']}")
 
 
+def test_apply_params_includes_touch_time(client: TestClient, monkeypatch) -> None:
+    """touch_time은 7번째 회당 파라미터 — params 표 반영이 duration과 동일하게 착지한다 (design 2026-08-19 §2)."""
+    _enable_ai(monkeypatch)
+    state = _iv_session(client)
+    graph = {
+        "nodes": [{"key": "a", "title": "요청서 작성", "node_type": "process", "attributes": None}],
+        "edges": [], "groups": [],
+    }
+    _seed_interview_params(state["id"], {"요청서 작성": {"touch_time": "0.45"}}, graph)
+    data = client.post(f"/api/interviews/{state['id']}/apply-params").json()
+    node = next(n for n in data["working_graph"]["nodes"] if n["title"] == "요청서 작성")
+    assert node["attributes"]["touch_time"] == "0.45"
+    client.delete(f"/api/interviews/{state['id']}")
+
+
 # ---------- 첨부 시점 정보 추출 (2026-07-28) ----------
 
 
