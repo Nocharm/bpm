@@ -9,7 +9,9 @@ import {
   type EdgeProps,
   type EdgeTypes,
   EdgeLabelRenderer,
+  getBezierPath,
   getSmoothStepPath,
+  getStraightPath,
   MarkerType,
   type NodeTypes,
   Panel,
@@ -57,6 +59,7 @@ import {
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
   type HandleSide,
+  hasCustomTerminalLabel,
   layoutWithDagre,
   nodeSizeOf,
   normalizeNodeType,
@@ -102,8 +105,8 @@ function RemovedArcEdge({
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
-// 라벨 있는 일반 엣지 — smoothstep 경로 + HTML 라벨(EdgeLabelRenderer). 라벨 배경을 반투명+블러로 처리해
-// 엣지 선이 라벨에서 "끊긴" 느낌을 줄이면서 글자 가독성 확보(SVG 라벨은 backdrop-blur 불가라 커스텀 처리).
+// 라벨 있는 일반 엣지 — 저장된 line_style(곡선/꺾은선/직선)대로 경로를 그린다(""=레거시는 꺾은선).
+// HTML 라벨(EdgeLabelRenderer)은 반투명+블러 배경으로 선이 라벨에서 "끊긴" 느낌을 줄이며 가독성 확보.
 function LabeledSmoothEdge({
   sourceX,
   sourceY,
@@ -114,15 +117,23 @@ function LabeledSmoothEdge({
   label,
   markerEnd,
   style,
+  data,
 }: EdgeProps) {
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const lineStyle = data && "lineStyle" in data ? data.lineStyle : undefined;
+  const pathArgs = {
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
-  });
+  };
+  const [path, labelX, labelY] =
+    lineStyle === "straight"
+      ? getStraightPath(pathArgs)
+      : lineStyle === "default"
+        ? getBezierPath(pathArgs)
+        : getSmoothStepPath(pathArgs);
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
@@ -271,7 +282,22 @@ const COMPARE_RENDER_W: Record<string, number> = {
 };
 
 // 비교뷰 실측 크기 함수 — 공용 alignBackbone에 주입(에디터는 measured, 비교는 위 상수표).
-const compareRenderH = (node: AppNode) => COMPARE_RENDER_H[node.data.nodeType] ?? 38;
+// 터미널은 커스텀 라벨(타입 필 +18px)·노트(text-xs 줄당 16px, 3줄 클램프)로 커진 높이를 근사 —
+// 랩은 240px 폭·한글 ~18자/줄 가정(백본 중심 정렬용 근사, 정밀 측정 아님).
+const compareRenderH = (node: AppNode) => {
+  const base = COMPARE_RENDER_H[node.data.nodeType] ?? 38;
+  if (node.data.nodeType !== "start" && node.data.nodeType !== "end") return base;
+  let h = base;
+  if (hasCustomTerminalLabel(node.data.label)) h += 18;
+  const note = (node.data.description ?? "").trim();
+  if (note) {
+    const lines = note
+      .split("\n")
+      .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 18)), 0);
+    h += 16 * Math.min(3, lines);
+  }
+  return h;
+};
 const compareRenderW = (node: AppNode) =>
   COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
 
@@ -285,20 +311,26 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
         ? "var(--color-added)"
         : e.status === "removed"
           ? "var(--color-removed)"
-          : "var(--color-border-strong)";
+          : e.status === "changed"
+            ? "var(--color-changed)"
+            : "var(--color-border-strong)";
     return {
       id: e.id,
       source: e.source,
       target: e.target,
       label: e.label || undefined,
       type: passthrough ? "removedArc" : "labeled",
+      // 저장된 선 모양 그대로 렌더 — LabeledSmoothEdge가 경로 함수를 고른다
+      data: { lineStyle: e.lineStyle },
       markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
       style:
         e.status === "added"
           ? { stroke: "var(--color-added)", strokeWidth: 2 }
           : e.status === "removed"
             ? { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" }
-            : undefined,
+            : e.status === "changed"
+              ? { stroke: "var(--color-changed)", strokeWidth: 2 }
+              : undefined,
     };
   });
 }
@@ -540,6 +572,10 @@ function ComparePane({
     // 삭제 노드는 삭제 엣지 이웃(배치된 유지 노드)의 평균 위치에서 곁가지로 밀어낸다(본류 라인 비우기).
     // LR은 아래로(+y), TB는 오른쪽으로(+x) — 흐름축과 겹치지 않는 쪽.
     const posByKey = new Map(aligned.map((node) => [node.id, node.position]));
+    // 같은 이웃을 공유하는 삭제 노드는 평균 위치가 동일해 완전히 포개진다 — 점유 슬롯을 추적해
+    // 곁가지 방향(LR=아래, TB=오른쪽)으로 순차 오프셋.
+    const occupiedSlots = new Set<string>();
+    const slotKey = (x: number, y: number) => `${Math.round(x / 40)}:${Math.round(y / 40)}`;
     const removed = buildAppNodes(
       merged.nodes.filter((node) => node.status === "removed"),
       noteOf,
@@ -553,9 +589,14 @@ function ComparePane({
       if (neighbors.length === 0) return node;
       const ax = neighbors.reduce((sum, pos) => sum + pos.x, 0) / neighbors.length;
       const ay = neighbors.reduce((sum, pos) => sum + pos.y, 0) / neighbors.length;
-      return flowDir === "LR"
-        ? { ...node, position: { x: ax, y: ay + 150 } }
-        : { ...node, position: { x: ax + 220, y: ay } };
+      let x = flowDir === "LR" ? ax : ax + 220;
+      let y = flowDir === "LR" ? ay + 150 : ay;
+      while (occupiedSlots.has(slotKey(x, y))) {
+        if (flowDir === "LR") y += 120;
+        else x += 220;
+      }
+      occupiedSlots.add(slotKey(x, y));
+      return { ...node, position: { x, y } };
     });
     return [...aligned, ...removed];
   }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds]);
@@ -679,7 +720,22 @@ function ComparePane({
         isEdge: true,
         status: e.status,
         title: `${titleByKey.get(e.source) ?? "?"} → ${titleByKey.get(e.target) ?? "?"}`,
-        detail: e.status === "added" ? t("compare.edgeAdded") : t("compare.edgeRemoved"),
+        detail:
+          e.status === "added"
+            ? t("compare.edgeAdded")
+            : e.status === "removed"
+              ? t("compare.edgeRemoved")
+              : t("compare.edgeLabelChanged"),
+        // 라벨 변경 엣지 — 노드 필드 변경과 같은 before→after 행으로 표시
+        fields: e.labelChange
+          ? [
+              {
+                label: t("compare.edgeLabelField"),
+                before: e.labelChange.before || t("summary.none"),
+                after: e.labelChange.after || t("summary.none"),
+              },
+            ]
+          : undefined,
       }));
     const pick = (items: ChangeItem[], status: MergedNodeStatus) =>
       items.filter((i) => i.status === status);
@@ -689,6 +745,7 @@ function ComparePane({
       ...pick(nodeItems, "removed"),
       ...pick(edgeItems, "removed"),
       ...pick(nodeItems, "changed"),
+      ...pick(edgeItems, "changed"),
     ];
   }, [merged, titleByKey, t]);
 
@@ -793,9 +850,13 @@ function ComparePane({
     sentinelRef: changesSentinelRef,
   } = useInfiniteSlice(filteredChanges, `${filter}:${kindFilter}`);
 
-  // 우측 인스펙터 대상 — 포커스된 id가 노드면 그 노드(엣지면 null → 빈 상태).
+  // 우측 인스펙터 대상 — 포커스된 id가 노드면 노드 패널, 엣지면 엣지 패널(둘 다 아니면 안내).
   const selectedNode = useMemo(
     () => merged.nodes.find((n) => n.id === focusId) ?? null,
+    [merged, focusId],
+  );
+  const selectedEdge = useMemo(
+    () => merged.edges.find((e) => e.id === focusId) ?? null,
     [merged, focusId],
   );
 
@@ -1053,16 +1114,18 @@ function ComparePane({
                             </span>
                           </span>
                           {item.fields && item.fields.length > 0 && (
-                            <span className="mt-1 flex flex-wrap gap-1">
+                            // 필드별 세로 행 — 인라인 랩 필은 긴 값에서 줄바꿈 난장. 긴 값은 truncate+툴팁.
+                            <span className="mt-1 flex flex-col gap-0.5">
                               {item.fields.map((f) => (
                                 <span
                                   key={f.label}
-                                  className="flex items-center gap-1 rounded-xs border border-changed/30 bg-changed/10 px-1 text-fine"
+                                  title={`${f.label}: ${f.before} → ${f.after}`}
+                                  className="flex min-w-0 items-center gap-1 rounded-xs border border-changed/30 bg-changed/10 px-1 py-px text-fine"
                                 >
-                                  <span className="font-semibold text-changed">{f.label}</span>
-                                  <span className="text-ink-muted">{f.before}</span>
-                                  <span className="text-ink-tertiary">→</span>
-                                  <span className="font-semibold text-ink">{f.after}</span>
+                                  <span className="shrink-0 font-semibold text-changed">{f.label}</span>
+                                  <span className="min-w-0 truncate text-ink-muted">{f.before}</span>
+                                  <span className="shrink-0 text-ink-tertiary">→</span>
+                                  <span className="min-w-0 truncate font-semibold text-ink">{f.after}</span>
                                 </span>
                               ))}
                             </span>
@@ -1144,7 +1207,61 @@ function ComparePane({
                 {t("compare.viewOnly")}
               </span>
             </div>
-            {!selectedNode ? (
+            {!selectedNode && selectedEdge ? (
+              // 엣지 포커스 — 빈 안내 대신 배선 정보(출발→도착·상태·라벨·선 모양) (B7)
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3"
+                data-id="compare-inspector-edge"
+              >
+                <div>
+                  <div className="mb-1 text-fine text-ink-tertiary">{t("compare.kindEdges")}</div>
+                  <div className="rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
+                    {titleByKey.get(selectedEdge.source) ?? "?"}
+                    <span className="mx-1 text-ink-tertiary">→</span>
+                    {titleByKey.get(selectedEdge.target) ?? "?"}
+                  </div>
+                </div>
+                <div className="divide-y divide-divider">
+                  <InspectorRow label={t("field.type")}>
+                    {selectedEdge.status === "unchanged" ? (
+                      <span className="text-ink-tertiary">-</span>
+                    ) : (
+                      <span
+                        className={`rounded-full px-1.5 text-fine font-semibold ${badgeClass[selectedEdge.status]}`}
+                      >
+                        {badgeLabel[selectedEdge.status]}
+                      </span>
+                    )}
+                  </InspectorRow>
+                  <InspectorRow label={t("compare.edgeLabelField")}>
+                    {selectedEdge.labelChange ? (
+                      <>
+                        <span className="text-ink-muted line-through">
+                          {selectedEdge.labelChange.before || t("summary.none")}
+                        </span>
+                        <span className="mx-1 text-ink-tertiary">→</span>
+                        <span className="font-semibold text-changed">
+                          {selectedEdge.labelChange.after || t("summary.none")}
+                        </span>
+                      </>
+                    ) : (
+                      <span className={selectedEdge.label ? "text-ink-secondary" : "text-ink-tertiary"}>
+                        {selectedEdge.label || t("summary.none")}
+                      </span>
+                    )}
+                  </InspectorRow>
+                  <InspectorRow label={t("inspector.edgeStyle")}>
+                    {t(
+                      selectedEdge.lineStyle === "straight"
+                        ? "edgeStyle.straight"
+                        : selectedEdge.lineStyle === "default"
+                          ? "edgeStyle.curve"
+                          : "edgeStyle.step",
+                    )}
+                  </InspectorRow>
+                </div>
+              </div>
+            ) : !selectedNode ? (
               <div className="px-3 py-3 text-caption text-ink-tertiary">
                 {t("compare.selectNode")}
               </div>
@@ -1185,11 +1302,13 @@ function ComparePane({
                       "department",
                       "system",
                       "duration",
+                      "touch_time",
                       "cost_krw",
                       "cost_usd",
                       "headcount",
                       "annual_count",
                       "fte",
+                      "gmp",
                     ] as const
                   ).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
@@ -1215,6 +1334,52 @@ function ComparePane({
                     );
                   })}
                 </div>
+                {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화) */}
+                {(() => {
+                  const longFields = [
+                    "input",
+                    "output",
+                    "input_forms",
+                    "output_forms",
+                    "data_form",
+                    "start_condition",
+                    "end_condition",
+                  ] as const;
+                  const rows = longFields
+                    .map((key) => ({
+                      key,
+                      change: selectedNode.fieldChanges.find((fc) => fc.field === key),
+                      current: selectedNode.node[key] ?? "",
+                    }))
+                    .filter((row) => row.change || row.current);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div className="flex flex-col gap-2" data-id="compare-inspector-io">
+                      <div className="text-fine font-semibold text-ink-tertiary">
+                        {t("inspector.details")}
+                      </div>
+                      {rows.map(({ key, change, current }) => (
+                        <div key={key}>
+                          <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG[key])}</div>
+                          {change ? (
+                            <div className="rounded-sm border border-changed/30 bg-changed/10 px-2 py-1.5 text-caption">
+                              <div className="whitespace-pre-wrap text-ink-muted line-through">
+                                {change.before || t("summary.none")}
+                              </div>
+                              <div className="whitespace-pre-wrap font-semibold text-ink">
+                                {change.after || t("summary.none")}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
+                              {current}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </aside>

@@ -131,4 +131,31 @@ describe("buildMergedGraph", () => {
     expect(merged.nodes.every((n) => n.status === "unchanged")).toBe(true);
     expect(merged.edges.every((e) => e.status === "unchanged")).toBe(true);
   });
+
+  it("flags a label change on a kept edge as changed with before/after", () => {
+    const { base, target } = buildFixture();
+    base.edges[0] = mkEdge("e1", "a", "b", "yes");
+    target.edges[0] = mkEdge("e3", "a2", "b2", "approved");
+
+    const merged = buildMergedGraph(base, target);
+    const edge = merged.edges.find((e) => e.id === "a->b");
+
+    expect(edge?.status).toBe("changed");
+    expect(edge?.labelChange).toEqual({ before: "yes", after: "approved" });
+  });
+
+  it("keeps identical labels unchanged and carries target line style", () => {
+    const { base, target } = buildFixture();
+    base.edges[0] = { ...mkEdge("e1", "a", "b", "same"), line_style: "straight" };
+    target.edges[0] = { ...mkEdge("e3", "a2", "b2", "same"), line_style: "default" };
+
+    const merged = buildMergedGraph(base, target);
+    const kept = merged.edges.find((e) => e.id === "a->b");
+    const removed = merged.edges.find((e) => e.id === "b->c");
+
+    expect(kept?.status).toBe("unchanged");
+    expect(kept?.labelChange).toBeUndefined();
+    expect(kept?.lineStyle).toBe("default"); // target 우선
+    expect(removed?.lineStyle).toBe(""); // base만 있으면 base 값
+  });
 });
