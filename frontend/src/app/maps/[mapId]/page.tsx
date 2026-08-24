@@ -23,7 +23,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useParams, useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
@@ -2682,13 +2682,20 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 체크아웃 — 지정 인계 전용(자동해제 없음). 진입 시 점유 상태를 조회하고 주기적으로 재조회해
   // 요청 승인/이전으로 보유자가 바뀌면 반영한다. 이탈해도 점유는 유지(release 호출 안 함).
   // 뷰어는 점유 대상이 아니므로 조회도 생략(읽기 전용).
+  // 게이트는 선택 버전의 status만 반응 — versions 배열 identity를 deps에 두면 목록 갱신마다
+  // 인터벌이 재구독되며 acquireCheckout이 즉시 재호출된다(스팸).
+  const selectedVersionStatus = versions.find((v) => v.id === versionId)?.status ?? null;
+  // 폴 실패 처리 — t 최신값을 읽되 재구독을 유발하지 않는다. true 반환 = 영구 409(권한 pending)로 폴링 정지.
+  const handleCheckoutPollError = useEffectEvent((err: unknown) => {
+    setStatus(humanizeApiError(err, t));
+    return getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX);
+  });
   useEffect(() => {
     if (versionId === null || !isEditorRole) {
       return;
     }
     // 비편집 상태에선 체크아웃 조회 안 함 — 백엔드가 409 반환하므로 스팸 방지
-    const selected = versions.find((v) => v.id === versionId);
-    if (selected && selected.status !== "draft" && selected.status !== "rejected") {
+    if (selectedVersionStatus !== null && selectedVersionStatus !== "draft" && selectedVersionStatus !== "rejected") {
       return;
     }
     let active = true;
@@ -2709,8 +2716,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (!active) {
           return;
         }
-        setStatus(humanizeApiError(err, t));
-        if (getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX)) {
+        if (handleCheckoutPollError(err)) {
           stopped = true;
           if (intervalId !== null) {
             clearInterval(intervalId);
@@ -2731,7 +2737,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       checkoutMineRef.current = false;
     };
-  }, [versionId, versions, isEditorRole, t]);
+  }, [versionId, selectedVersionStatus, isEditorRole]);
 
   const handleForceCheckout = useCallback(async () => {
     if (versionId === null) {
