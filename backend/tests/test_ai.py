@@ -942,7 +942,21 @@ def test_ai_prompt_states_subprocess_param_limit() -> None:
     from app.ai_prompt import _INSTRUCTIONS
 
     assert "subprocess 노드는 annual_count·fte만 수정할 수 있습니다" in _INSTRUCTIONS
-    for field in ("cost_krw", "cost_usd", "headcount", "annual_count", "fte"):
+    # SP 상속 범위 확장 문구 — 파라미터 5종 + 승격 텍스트 필드도 하위 맵 지정값 (design 2026-08-19 §3)
+    assert "duration·touch_time·cost_krw·cost_usd·headcount" in _INSTRUCTIONS
+    for field in (
+        "touch_time",
+        "cost_krw",
+        "cost_usd",
+        "headcount",
+        "annual_count",
+        "fte",
+        "input",
+        "output",
+        "start_condition",
+        "end_condition",
+        "data_form",
+    ):
         assert field in _INSTRUCTIONS  # graph 스키마 예시 + 규칙 텍스트 모두 갱신됐는지 확인
 
 
@@ -965,3 +979,49 @@ def test_serialize_node_exposes_new_params() -> None:
     assert "인원=3" in text
     assert "연간건수=500" in text
     assert "FTE=0.5" in text
+
+
+def test_serialize_node_exposes_promoted_fields() -> None:
+    """승격 필드(실작업·IO·조건·양식·GMP)를 노출해야 모델이 기존값을 보존/판단할 수 있다.
+
+    gmp는 읽기 노출 전용 — AiNodeAttributes에 없어 편집 에코는 스키마가 거른다 (design 2026-08-20).
+    """
+    from app.ai_prompt import _serialize_node
+    from app.schemas import NodeOut
+
+    node = NodeOut(
+        id="n1",
+        title="처리",
+        node_type="process",
+        touch_time="1.30",
+        input="발주서\n견적서",
+        output="승인서",
+        start_condition="예산 확정",
+        end_condition="결재 완료",
+        data_form="structured",
+        gmp="direct",
+    )
+    text = _serialize_node(node)
+    assert "실작업=1.30" in text
+    assert "입력=발주서; 견적서" in text  # 개행 복수 항목은 "; " 조인
+    assert "출력=승인서" in text
+    assert "시작조건=예산 확정" in text
+    assert "종료조건=결재 완료" in text
+    assert "양식=structured" in text
+    assert "GMP=direct" in text
+
+
+def test_serialize_node_clips_long_io() -> None:
+    """긴 IO/조건은 길이 상한으로 잘라 프롬프트 팽창을 막는다 (_fmt_ids와 같은 크기 가드)."""
+    from app.ai_prompt import _serialize_node
+    from app.schemas import NodeOut
+
+    node = NodeOut(
+        id="n1",
+        title="처리",
+        node_type="process",
+        input="\n".join(f"입력항목{i:02d}" for i in range(30)),
+    )
+    text = _serialize_node(node)
+    assert "…" in text  # 상한 초과분은 말줄임
+    assert "입력항목29" not in text  # 꼬리 항목은 잘려나감

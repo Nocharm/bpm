@@ -16,7 +16,7 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
  "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee":"","department":"","system":"","duration":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","url":"","url_label":"","color":""},
+           "attributes":{"assignee":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","data_form":"","url":"","url_label":"","color":""},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
@@ -35,9 +35,12 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
   url/url_label로 노드 링크를 설정합니다(url은 http:// 또는 https:// 로 시작, 지어내지 말 것).
 - duration은 시간 단위 숫자 H.MM 표기만 허용 — 소수부 2자리는 분(0.30=30분, 1.30=1시간 30분). "2일" 같은 텍스트 금지, 모르면 비워두세요.
 - 파라미터 의미 — duration=회당 소요시간(H.MM 시간, 소수부 2자리는 분: 0.30=30분, "2일" 같은 텍스트 금지),
-  cost_krw/cost_usd=회당 추가비용(인건비 제외), headcount=회당 투입 인원, annual_count=연간 처리 건수, fte=FTE. 모르면 비워두세요.
+  touch_time=회당 실작업시간(duration과 동일 H.MM 표기), cost_krw/cost_usd=회당 추가비용(인건비 제외), headcount=회당 투입 인원, annual_count=연간 처리 건수, fte=FTE. 모르면 비워두세요.
 - 비용은 cost_krw·cost_usd 중 하나만 채웁니다 — 둘 다 채우면 제안 전체가 거절됩니다.
-- subprocess 노드는 annual_count·fte만 수정할 수 있습니다. duration·cost_krw·cost_usd·headcount는 하위 맵의 지정값이라 수정할 수 없습니다(무시됩니다).
+- input/output은 개행(\\n)으로 항목을 구분한 복수 값, start_condition/end_condition은 시작·종료 조건 자유 텍스트,
+  data_form은 입출력 양식 표기입니다. 사용자가 말했거나 [현재 그래프]에 있는 내용에 근거해서만 채우세요(지어내지 말 것).
+- subprocess 노드는 annual_count·fte만 수정할 수 있습니다. duration·touch_time·cost_krw·cost_usd·headcount와
+  input/output·start_condition/end_condition·data_form은 하위 맵의 지정값이라 수정할 수 없습니다(무시됩니다).
 예) "견적 검토 뒤에 '승인' 추가해" → add(승인) + connect(견적검토 id → 승인 새키).
 예) "A와 B 사이에 '검수' 넣어줘" → add(검수) + disconnect(A→B) + connect(A→검수새키) + connect(검수새키→B).
 
@@ -63,6 +66,15 @@ node_ids는 [현재 그래프]의 기존 id만 사용. suggestion은 실행 가�
 7. [현재 그래프]에 링크=가 표시된 노드를 graph(전체 재생성)에 다시 포함할 때는 그 url/url_label을 attributes에 그대로 에코해 보존하세요. 링크를 새로 지어내지는 마세요."""
 
 
+_META_VALUE_CAP = 80  # 노드 메타 값 길이 상한(자) — IO/조건이 길어도 프롬프트가 팽창하지 않게
+
+
+def _clip(text: str, cap: int = _META_VALUE_CAP) -> str:
+    """개행 복수 값은 "; "로 합치고 상한 초과분은 말줄임 — _fmt_ids와 같은 크기 가드."""
+    joined = "; ".join(part.strip() for part in text.splitlines() if part.strip())
+    return joined if len(joined) <= cap else joined[: cap - 1] + "…"
+
+
 def _serialize_node(node: NodeOut) -> str:
     meta: list[str] = []
     if node.assignee:
@@ -73,6 +85,8 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"시스템={node.system}")
     if node.duration:
         meta.append(f"소요={node.duration}")
+    if node.touch_time:
+        meta.append(f"실작업={node.touch_time}")
     if node.cost_krw:
         meta.append(f"비용={node.cost_krw}원")
     if node.cost_usd:
@@ -83,6 +97,19 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"연간건수={node.annual_count}")
     if node.fte:
         meta.append(f"FTE={node.fte}")
+    if node.input:
+        meta.append(f"입력={_clip(node.input)}")
+    if node.output:
+        meta.append(f"출력={_clip(node.output)}")
+    if node.data_form:
+        meta.append(f"양식={node.data_form}")
+    if node.start_condition:
+        meta.append(f"시작조건={_clip(node.start_condition)}")
+    if node.end_condition:
+        meta.append(f"종료조건={_clip(node.end_condition)}")
+    if node.gmp:
+        # 읽기 노출 전용 — AiNodeAttributes에 gmp가 없어 편집 에코는 스키마가 거른다 (design 2026-08-20)
+        meta.append(f"GMP={node.gmp}")
     if node.url:
         # 링크 노출 — 재생성(graph) 시 모델이 에코해 보존할 수 있게 (계약 규칙 ⑦)
         meta.append(f"링크={node.url}" + (f' "{node.url_label}"' if node.url_label else ""))
