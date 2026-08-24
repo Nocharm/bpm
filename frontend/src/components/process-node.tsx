@@ -30,6 +30,7 @@ import {
 
 import {
   hasBpmAttributes,
+  hasCustomTerminalLabel,
   type AppNode,
   type HandleSide,
   type ProcessNodeType,
@@ -865,12 +866,18 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   }
 
   const isTerminal = data.nodeType === "start" || data.nodeType === "end";
+  // 터미널 커스텀 라벨 — 타입 필("Start"/"End") + 라벨 본문 분리 렌더. 기본 라벨은 종전 알약 그대로.
+  const customTerminal = isTerminal && hasCustomTerminalLabel(data.label);
+  // 터미널 노트 — description을 캔버스에 노출(작성·편집은 기존 설명 필드 그대로).
+  const terminalNote = isTerminal ? (data.description ?? "").trim() : "";
   // 긴 라벨은 max-w-[240px](canvas.ts NODE_MAX_WIDTH 동기화)에서 wrap — break-words로 무공백 토큰도 분절
+  // 터미널 곡률은 rounded-full 대신 한 줄 높이의 반지름 고정(19px) — 내용이 늘어나 키가 커져도
+  // 타원이 계란형으로 변하지 않고 같은 곡률의 둥근 사각형이 된다(사용자 요청 2026-08-24).
   return (
     <div
       className={`group bpm-node-emph relative break-words px-3 py-2 text-sm transition-all duration-150 ${
         isTerminal
-          ? "min-w-[90px] max-w-[240px] rounded-full text-center"
+          ? "min-w-[90px] max-w-[240px] rounded-[19px] text-center"
           : "min-w-[150px] max-w-[240px] rounded-sm"
       }`}
       style={style}
@@ -879,15 +886,45 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
+      {customTerminal && (
+        // 타입 필 — GMP 필과 같은 자리(본문 첫 줄). 노드색 테두리+틴트로 소속을 드러낸다.
+        <div className="mb-0.5 flex justify-center">
+          <span
+            data-id="node-terminal-pill"
+            className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4"
+            style={{ borderColor: color, background: "var(--color-surface)", color }}
+          >
+            {data.nodeType === "start" ? (
+              <Play size={10} strokeWidth={1.5} className="shrink-0" />
+            ) : (
+              <Flag size={10} strokeWidth={1.5} className="shrink-0" />
+            )}
+            {data.nodeType === "start" ? "Start" : "End"}
+          </span>
+        </div>
+      )}
       <div className="font-medium text-ink">
         <NodeTitle
           id={id}
           label={data.label}
           displayLabel={
-            isTerminal ? terminalDisplayLabel(data.nodeType, data.label) : undefined
+            isTerminal && !customTerminal
+              ? terminalDisplayLabel(data.nodeType, data.label)
+              : undefined
           }
         />
       </div>
+      {terminalNote && (
+        // 터미널 노트 — 3줄 클램프 고정(전문은 툴팁). export에서도 해제하지 않는다 — 클론에서
+        // 노드 높이가 늘어나면 아래 노드와 겹친다(마름모 제목 unclamp와 달리 박스가 가변).
+        <div
+          data-id="node-terminal-note"
+          className="mx-auto mt-0.5 line-clamp-3 whitespace-pre-wrap text-xs font-normal text-ink-tertiary"
+          title={terminalNote}
+        >
+          {terminalNote}
+        </div>
+      )}
       <NodeFields data={data} />
       <NodeParams data={data} />
       <NodeIoDetails nodeId={id} data={data} />
