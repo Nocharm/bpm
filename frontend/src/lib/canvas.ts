@@ -617,14 +617,19 @@ export function canSwapTypes(
 // 시작/끝 노드의 표시 라벨은 i18n·사용자 라벨과 무관하게 항상 영문 고정값.
 const TERMINAL_DEFAULT_LABELS = new Set(["start", "end", "시작", "종료"]);
 
+/** 시작/끝 노드에 사용자 지정 라벨이 있는지 — 있으면 캔버스는 타입 필+라벨 분리 렌더(ProcessNode). */
+export function hasCustomTerminalLabel(label: string): boolean {
+  const custom = label.trim();
+  return custom !== "" && !TERMINAL_DEFAULT_LABELS.has(custom.toLowerCase());
+}
+
 /** 시작/끝 노드 표시명 — 항상 "Start"/"End", 사용자 지정 라벨이 있으면 괄호로 덧붙인다(한영 전환 무관). */
 export function terminalDisplayLabel(nodeType: ProcessNodeType, label: string): string {
   const base = nodeType === "start" ? "Start" : "End";
-  const custom = label.trim();
-  if (!custom || TERMINAL_DEFAULT_LABELS.has(custom.toLowerCase())) {
+  if (!hasCustomTerminalLabel(label)) {
     return base;
   }
-  return `${base} (${custom})`;
+  return `${base} (${label.trim()})`;
 }
 
 // 캔버스 내 이름 중복 방지 — 이미 쓰이는 이름이면 " (2)", " (3)"... 접미사를 붙여 고유화.

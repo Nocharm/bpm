@@ -10,6 +10,7 @@ import {
   getFlowPathForward,
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
+  hasCustomTerminalLabel,
   hasReciprocalEdge,
   insertNodeAfter,
   isCopyableNodeType,
@@ -219,6 +220,22 @@ describe("terminalDisplayLabel", () => {
   it("appends a custom label in parentheses", () => {
     expect(terminalDisplayLabel("start", "검토 시작")).toBe("Start (검토 시작)");
     expect(terminalDisplayLabel("end", "승인 완료")).toBe("End (승인 완료)");
+  });
+});
+
+describe("hasCustomTerminalLabel (터미널 필+제목 분리 렌더 판정)", () => {
+  it("treats empty/default labels as non-custom (any locale, any case)", () => {
+    expect(hasCustomTerminalLabel("")).toBe(false);
+    expect(hasCustomTerminalLabel("  ")).toBe(false);
+    expect(hasCustomTerminalLabel("Start")).toBe(false);
+    expect(hasCustomTerminalLabel("END")).toBe(false);
+    expect(hasCustomTerminalLabel("시작")).toBe(false);
+    expect(hasCustomTerminalLabel("종료")).toBe(false);
+  });
+
+  it("detects user-authored labels", () => {
+    expect(hasCustomTerminalLabel("검토 시작")).toBe(true);
+    expect(hasCustomTerminalLabel("승인 완료")).toBe(true);
   });
 });
 
