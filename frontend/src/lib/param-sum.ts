@@ -3,7 +3,10 @@
 // design 2026-07-13 §4.
 import type { Graph } from "./api";
 import { DURATION_PATTERN, formatDurationHm, formatThousands, NUMERIC_PATTERN, normalizeDuration } from "./duration";
-import { getInheritedParams, type SpParamField } from "./params";
+import { getInheritedParams, isSpParamField, type ParamField, type SpParamField } from "./params";
+
+// 합산에 필요한 최소 그래프 — VersionGraph(groups 없음)도 받도록 구조적 타입으로 좁힌다.
+type ParamGraph = Pick<Graph, "nodes" | "subprocess_refs">;
 
 /**
  * 합산 기여값 — SP 노드는 링크 맵 지정값. includeSubprocess=false면 SP 노드를 건너뛴다
@@ -13,7 +16,7 @@ import { getInheritedParams, type SpParamField } from "./params";
  * Σ만 남은 값을 합산하는 불일치(finding)를 막는다. 인스펙터가 쓰는 getInheritedParams와 같은
  * 소스라 두 규칙이 어긋날 수 없다.
  */
-function collectValues(graph: Graph, field: SpParamField, includeSubprocess: boolean): string[] {
+function collectValues(graph: ParamGraph, field: SpParamField, includeSubprocess: boolean): string[] {
   const values: string[] = [];
   for (const node of graph.nodes) {
     if (node.node_type === "subprocess" && node.linked_map_id !== null) {
@@ -47,7 +50,7 @@ function sumDecimal(values: string[]): string {
  * 파라미터 4종 Σ. duration·cost_krw·cost_usd는 합, headcount는 값 있는 일반 노드의 평균(소수점 2자리).
  * 기여값 0개면 "" — 입력을 비워두는 것과 0을 구분한다.
  */
-export function sumParamField(graph: Graph, field: SpParamField): string {
+export function sumParamField(graph: ParamGraph, field: SpParamField): string {
   if (field === "duration" || field === "touch_time") {  // touch_time은 duration Σ 규칙 미러 (design 2026-08-19 §2)
     let totalMinutes = 0;
     let contributed = 0;
@@ -73,6 +76,17 @@ export function sumParamField(graph: Graph, field: SpParamField): string {
     return (hundredths / 100).toFixed(2);
   }
   return sumDecimal(collectValues(graph, field, true));
+}
+
+/**
+ * 버전 그래프 파라미터 합 — 7필드 전체(비교 서머리 탭). SP 5종은 sumParamField(지정값 상속) 위임,
+ * annual_count·fte는 SP 노드도 자체값이라 노드 값을 그대로 십진 합산한다.
+ */
+export function sumVersionParam(graph: ParamGraph, field: ParamField): string {
+  if (isSpParamField(field)) {
+    return sumParamField(graph, field);
+  }
+  return sumDecimal(graph.nodes.map((node) => node[field] ?? "").filter((value) => value !== ""));
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   getSmoothStepPath,
   getStraightPath,
   MarkerType,
+  type NodeChange,
   type NodeTypes,
   Panel,
   PanOnScrollMode,
@@ -29,6 +30,7 @@ import {
   ArrowLeftRight,
   ArrowRight,
   ChevronDown,
+  ChevronRight,
   Download,
   Lock,
   Maximize,
@@ -49,6 +51,7 @@ import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
   ApiError,
+  type FlatNode,
   getFullGraph,
   getMap,
   type VersionGraph,
@@ -68,9 +71,18 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import { humanizeApiError } from "@/lib/api-errors";
-import type { ChangedField } from "@/lib/diff";
+import { type ChangedField, getLineageKey } from "@/lib/diff";
 import { formatGmp } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
+import {
+  getInheritedParams,
+  isSpParamField,
+  PARAM_FIELDS,
+  PARAM_LABEL_KEY,
+  type ParamField,
+} from "@/lib/params";
+import { sumVersionParam } from "@/lib/param-sum";
+import { PARAM_ICON } from "@/components/param-icons";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -216,6 +228,39 @@ const displayFieldValue = (field: ChangedField, value: string): string => {
 // 병합 노드 status → ProcessNode diffStatus (unchanged는 중립=undefined)
 function toDiffStatus(status: MergedNodeStatus): "added" | "removed" | "changed" | undefined {
   return status === "unchanged" ? undefined : status;
+}
+
+// H.MM → 분 — 합계 delta 계산용(서머리 탭). 값은 sumVersionParam이 이미 정규화한 것만 들어온다.
+function toMinutes(value: string): number {
+  const [h, mm = ""] = value.split(".");
+  return Number.parseInt(h, 10) * 60 + (mm === "" ? 0 : Number.parseInt(mm, 10));
+}
+
+// 버전 합계 delta(target−base) — 부호+표시형. 동일/무의미(0)면 null(칩 미표시).
+function formatSumDelta(field: ParamField, base: string, target: string): string | null {
+  if (base === "" && target === "") return null;
+  if (field === "duration" || field === "touch_time") {
+    const diff = (target === "" ? 0 : toMinutes(target)) - (base === "" ? 0 : toMinutes(base));
+    if (diff === 0) return null;
+    const abs = Math.abs(diff);
+    const hm = abs % 60 === 0 ? String(abs / 60) : `${Math.floor(abs / 60)}.${String(abs % 60).padStart(2, "0")}`;
+    return `${diff > 0 ? "+" : "−"}${formatDurationHm(hm) || hm}`;
+  }
+  const diff = (target === "" ? 0 : Number(target)) - (base === "" ? 0 : Number(base));
+  if (!Number.isFinite(diff) || diff === 0) return null;
+  // 십진 오차 잘라내기 — 파라미터 표시 정밀도(소수 2자리)면 충분
+  const abs = Math.round(Math.abs(diff) * 100) / 100;
+  const shown =
+    field === "cost_krw" || field === "cost_usd" ? formatThousands(String(abs)) || String(abs) : String(abs);
+  return `${diff > 0 ? "+" : "−"}${shown}`;
+}
+
+// 노드의 파라미터 기여값 — SP 노드는 지정값 상속(5종), annual_count·fte는 자체값. sumVersionParam과 동일 규칙.
+function getNodeParamValue(graph: VersionGraph, node: FlatNode, field: ParamField): string {
+  if (node.node_type === "subprocess" && node.linked_map_id !== null && isSpParamField(field)) {
+    return getInheritedParams(graph.subprocess_refs?.[node.linked_map_id])[field];
+  }
+  return node[field] ?? "";
 }
 
 // union 노드를 좌표 없는 AppNode로 — 이후 layoutWithDagre가 위치 산정
@@ -481,6 +526,25 @@ function ComparePane({
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [titleMenuOpen, setTitleMenuOpen] = useState(false);
+  // 인스펙터 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계). 요약의 파라미터별 펼침 상태.
+  const [inspectorTab, setInspectorTab] = useState<"props" | "summary">("props");
+  const [openParams, setOpenParams] = useState<ReadonlySet<ParamField>>(new Set());
+  // 세션 한정 드래그 — 저장하지 않는 표시 전용 위치. 키에 레이아웃 기준(방향·버전 쌍)을 심어
+  // 방향 토글/버전 전환 시 이전 드래그가 자동 무효화된다(리셋 effect 불필요).
+  const [sessionPos, setSessionPos] = useState<ReadonlyMap<string, { x: number; y: number }>>(
+    new Map(),
+  );
+  const layoutKey = `${flowDir}|${baseId}>${targetId}`;
+  const handleNodesChange = (changes: NodeChange[]) => {
+    setSessionPos((prev) => {
+      let next: Map<string, { x: number; y: number }> | null = null;
+      for (const change of changes) {
+        if (change.type !== "position" || !change.position) continue;
+        (next ??= new Map(prev)).set(`${layoutKey}|${change.id}`, change.position);
+      }
+      return next ?? prev;
+    });
+  };
 
   const merged = useMemo(
     () => buildMergedGraph(baseGraph, targetGraph),
@@ -592,18 +656,20 @@ function ComparePane({
   }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
-  // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남).
+  // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
+  // 쓴다 — 옮긴 노드를 따라 핸들 변 배정도 다시 계산된다.
   const nodeCenters = useMemo(() => {
     const centers = new Map<string, { cx: number; cy: number }>();
     for (const node of positioned) {
       const type = node.data.nodeType;
+      const pos = sessionPos.get(`${layoutKey}|${node.id}`) ?? node.position;
       centers.set(node.id, {
-        cx: node.position.x + (COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w) / 2,
-        cy: node.position.y + (COMPARE_RENDER_H[type] ?? 38) / 2,
+        cx: pos.x + (COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w) / 2,
+        cy: pos.y + (COMPARE_RENDER_H[type] ?? 38) / 2,
       });
     }
     return centers;
-  }, [positioned]);
+  }, [positioned, sessionPos, layoutKey]);
 
 
   // 엣지별 붙을 변(핸들) — 의미상 정해진 변을 각 끝에 "직접" 배정(핸들 공유 허용). 이전의 4변 그리디 회피는
@@ -638,10 +704,16 @@ function ComparePane({
     return result;
   }, [merged, keptKeys, nodeCenters, flowDir, spineIds]);
 
-  // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신)
+  // 포커스된 노드만 selected 표시 (재레이아웃 없이 얕은 갱신) + 세션 드래그 위치 오버라이드
   const laidNodes = useMemo(
-    () => positioned.map((node) => ({ ...node, selected: focusId === node.id })),
-    [positioned, focusId],
+    () =>
+      positioned.map((node) => {
+        const override = sessionPos.get(`${layoutKey}|${node.id}`);
+        return override
+          ? { ...node, position: override, selected: focusId === node.id }
+          : { ...node, selected: focusId === node.id };
+      }),
+    [positioned, focusId, sessionPos, layoutKey],
   );
 
 
@@ -850,6 +922,33 @@ function ComparePane({
     [merged, focusId],
   );
 
+  // 서머리 탭 — 버전별 파라미터 합계(BASE→TARGET)와 기여 노드 목록(계보 키, 클릭=캔버스 포커스).
+  // 값이 양 버전 모두 없는 파라미터/노드는 숨긴다.
+  const paramSummary = useMemo(() => {
+    const baseByLineage = new Map(baseGraph.nodes.map((n) => [getLineageKey(n), n]));
+    const targetByLineage = new Map(targetGraph.nodes.map((n) => [getLineageKey(n), n]));
+    return PARAM_FIELDS.map((field) => {
+      const rows = merged.nodes
+        .map((m) => {
+          const baseNode = baseByLineage.get(m.id);
+          const targetNode = targetByLineage.get(m.id);
+          return {
+            key: m.id,
+            title: m.node.title,
+            base: baseNode ? getNodeParamValue(baseGraph, baseNode, field) : "",
+            target: targetNode ? getNodeParamValue(targetGraph, targetNode, field) : "",
+          };
+        })
+        .filter((row) => row.base !== "" || row.target !== "");
+      return {
+        field,
+        base: sumVersionParam(baseGraph, field),
+        target: sumVersionParam(targetGraph, field),
+        rows,
+      };
+    }).filter((entry) => entry.base !== "" || entry.target !== "");
+  }, [merged, baseGraph, targetGraph]);
+
   // Tab 이동용 흐름 엣지 — 삭제 제외(현재 To-Be 흐름). getNextNodeAlongFlow는 source/target만 읽음.
   const flowEdges = useMemo(
     () =>
@@ -884,8 +983,10 @@ function ComparePane({
       setFocusId(target);
       const node = positioned.find((n) => n.id === target);
       if (node) {
+        // 세션 드래그로 옮긴 노드는 옮긴 좌표로 센터링
+        const pos = sessionPos.get(`${layoutKey}|${node.id}`) ?? node.position;
         const size = nodeSizeOf(node.data.nodeType);
-        void flow.setCenter(node.position.x + size.w / 2, node.position.y + size.h / 2, {
+        void flow.setCenter(pos.x + size.w / 2, pos.y + size.h / 2, {
           duration: 350,
           zoom: flow.getZoom(),
         });
@@ -893,7 +994,7 @@ function ComparePane({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [flowEdges, focusId, positioned, flow]);
+  }, [flowEdges, focusId, positioned, flow, sessionPos, layoutKey]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -1151,7 +1252,10 @@ function ComparePane({
             edges={appEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            nodesDraggable={false}
+            /* 세션 한정 드래그 — 배치는 자동(dagre)이지만 검토 중 임시로 끌어 볼 수 있다.
+               저장하지 않으며 방향 토글·버전 전환 시 원위치(sessionPos 키에 레이아웃 기준 포함). */
+            nodesDraggable
+            onNodesChange={handleNodesChange}
             nodesConnectable={false}
             elementsSelectable={false}
             nodesFocusable={false}
@@ -1190,14 +1294,132 @@ function ComparePane({
             className="flex w-72 shrink-0 flex-col border-l border-hairline bg-surface"
             data-id="compare-inspector"
           >
-            <div className="flex items-center justify-between border-b border-hairline px-3 pb-2 pt-3">
-              <h2 className="text-body-strong text-ink">{t("compare.properties")}</h2>
-              <span className="inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
+            {/* 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계) */}
+            <div className="flex items-center gap-1 border-b border-hairline px-3 pb-2 pt-3">
+              {(
+                [
+                  { key: "props", label: t("compare.properties") },
+                  { key: "summary", label: t("compare.summaryTab") },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  data-id={`compare-inspector-tab-${tab.key}`}
+                  onClick={() => setInspectorTab(tab.key)}
+                  className={`rounded-sm px-2 py-0.5 text-caption ${
+                    inspectorTab === tab.key
+                      ? "bg-accent-tint font-semibold text-accent"
+                      : "text-ink-secondary hover:bg-surface-alt"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+              <span className="ml-auto inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
                 <Lock size={12} strokeWidth={1.7} />
                 {t("compare.viewOnly")}
               </span>
             </div>
-            {!selectedNode && selectedEdge ? (
+            {inspectorTab === "summary" ? (
+              // 요약 탭 — 파라미터별 버전 합계(BASE→TARGET, delta 칩) + 접기/펼치기 기여 노드 목록.
+              <div
+                className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto p-3"
+                data-id="compare-summary"
+              >
+                {paramSummary.length === 0 ? (
+                  <div className="text-caption text-ink-tertiary">{t("compare.noParams")}</div>
+                ) : (
+                  paramSummary.map(({ field, base, target, rows }) => {
+                    const Icon = PARAM_ICON[field];
+                    const open = openParams.has(field);
+                    const delta = formatSumDelta(field, base, target);
+                    return (
+                      <div key={field} className="rounded-md border border-hairline">
+                        <button
+                          type="button"
+                          data-id={`compare-sum-${field}`}
+                          onClick={() =>
+                            setOpenParams((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(field)) next.delete(field);
+                              else next.add(field);
+                              return next;
+                            })
+                          }
+                          className="w-full px-2 py-1.5 text-left"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`shrink-0 text-ink-tertiary transition-transform duration-150 ${
+                                open ? "rotate-90" : ""
+                              }`}
+                            />
+                            <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+                            <span className="min-w-0 truncate text-caption text-ink">
+                              {t(PARAM_LABEL_KEY[field])}
+                              {/* headcount 합계는 평균 규칙(param-sum) — 오해 방지 표기 */}
+                              {field === "headcount" && (
+                                <span className="text-ink-tertiary"> · {t("compare.avg")}</span>
+                              )}
+                            </span>
+                            {delta && (
+                              <span className="ml-auto shrink-0 rounded-full bg-changed/10 px-1.5 text-fine font-semibold text-changed">
+                                {delta}
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 flex items-center justify-end gap-1 text-caption">
+                            <span className={base ? "text-ink-secondary" : "text-ink-tertiary"}>
+                              {displayFieldValue(field, base) || t("summary.none")}
+                            </span>
+                            <span className="text-ink-tertiary">→</span>
+                            <span className={`font-semibold ${target ? "text-ink" : "text-ink-tertiary"}`}>
+                              {displayFieldValue(field, target) || t("summary.none")}
+                            </span>
+                          </span>
+                        </button>
+                        {open && (
+                          <ul className="border-t border-hairline px-1 py-1">
+                            {rows.map((row) => (
+                              <li key={row.key}>
+                                <button
+                                  type="button"
+                                  data-id={`compare-sum-${field}-node-${row.key}`}
+                                  onClick={() => focusNode(row.key)}
+                                  className="flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
+                                >
+                                  <span className="min-w-0 flex-1 truncate text-caption text-ink-secondary">
+                                    {row.title}
+                                  </span>
+                                  {row.base === row.target ? (
+                                    <span className="shrink-0 text-caption text-ink-secondary">
+                                      {displayFieldValue(field, row.target)}
+                                    </span>
+                                  ) : (
+                                    <span className="flex shrink-0 items-center gap-1 text-caption">
+                                      <span className="text-ink-muted line-through">
+                                        {displayFieldValue(field, row.base) || t("summary.none")}
+                                      </span>
+                                      <span className="text-ink-tertiary">→</span>
+                                      <span className="font-semibold text-changed">
+                                        {displayFieldValue(field, row.target) || t("summary.none")}
+                                      </span>
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : !selectedNode && selectedEdge ? (
               // 엣지 포커스 — 빈 안내 대신 배선 정보(출발→도착·상태·라벨·선 모양) (B7)
               <div
                 className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3"

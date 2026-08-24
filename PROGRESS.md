@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-24 — 비교화면 세션 드래그 + 요약 탭 (feat/compare-refresh)
+- 세션 한정 드래그: nodesDraggable+onNodesChange로 표시 전용 위치(sessionPos, 키에 방향·버전 쌍 포함 → 전환 시 자동 원위치, 리셋 effect 불필요). 핸들 변·Tab/목록 내비게이션 센터링 모두 옮긴 좌표 기준. 저장 없음.
+- 인스펙터 2탭(속성/요약): 요약 탭은 7파라미터 버전 합계(BASE→TARGET+delta 칩, sumVersionParam 신설 — SP 5종은 sumParamField 위임·annual_count/fte는 자체값 합, headcount는 평균 표기)·파라미터별 접기/펼치기 기여 노드 목록(계보 키, 클릭=캔버스 포커스).
+
 ## 2026-08-24 — 비교화면 최신화 (feat/compare-refresh)
 - 비교 데모 시드(scripts.seed_compare_demo) 워스트케이스 확장 — 전 필드 동시 변경(통화 전환·GMP·IO/양식/조건), 터미널 커스텀 라벨+설명, 동일 이웃 삭제 노드 2개(포개짐 오프셋), 엣지 라벨 변경·선 모양 3종. 조직 데모 시드(seed_org_demo)는 버전 간 계보가 없어 비교화면 데모 불가 — 비교 검증은 이 맵으로.
 - 엣지 라벨 변경 감지(MergedEdgeStatus "changed"+labelChange, 목록·캔버스 옐로)·저장 line_style대로 경로 렌더(직선/곡선/꺾은선)·인스펙터 확장(touch_time·GMP 행+입출력/양식/조건 블록형 diff+엣지 포커스 패널)·변경 목록 필드 세로 행(truncate+툴팁)·삭제 노드 동좌표 포개짐 순차 오프셋. location은 레거시 계층 마커라 diff 미대상 확정. ⚠️ 데모 시드는 버전 간 source_node_id 계보가 없어 비교화면이 전부 추가/삭제로 보임(시드 한계, 코드 무관).

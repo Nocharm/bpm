@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphNode, SubprocessRef } from "./api";
-import { formatSumPreview, sumParamField } from "./param-sum";
+import { formatSumPreview, sumParamField, sumVersionParam } from "./param-sum";
 
 const node = (id: string, over: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id, description: "", node_type: "process", color: "",
@@ -140,5 +140,23 @@ describe("formatSumPreview", () => {
   });
   it("headcount는 평균 문자열 그대로", () => {
     expect(formatSumPreview("headcount", "1.50")).toBe("1.50");
+  });
+});
+
+describe("sumVersionParam (버전 합계 — 7필드)", () => {
+  it("SP 5종 필드는 sumParamField에 위임한다", () => {
+    const g = makeGraph([node("a", { duration: "0.45" }), node("b", { duration: "0.30" })]);
+    expect(sumVersionParam(g, "duration")).toBe("1.15");
+  });
+  it("annual_count·fte는 SP 노드 자체값 포함 십진 합", () => {
+    const g = makeGraph([
+      node("a", { annual_count: "1200", fte: "0.8" }),
+      node("s", { node_type: "subprocess", linked_map_id: 7, annual_count: "2400", fte: "0.4" }),
+    ]);
+    expect(sumVersionParam(g, "annual_count")).toBe("3600");
+    expect(sumVersionParam(g, "fte")).toBe("1.2");
+  });
+  it("기여값 0개면 빈 문자열", () => {
+    expect(sumVersionParam(makeGraph([node("a")]), "fte")).toBe("");
   });
 });
