@@ -6391,16 +6391,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, []);
   const didGrowthFitRef = useRef(false);
   useEffect(() => {
-    if (!didGrowthFitRef.current && yOffsets.size > 0) {
-      didGrowthFitRef.current = true;
-      if (performance.now() - mountAtRef.current < 1500) {
-        const timer = window.setTimeout(() => {
-          void reactFlow.fitView({ padding: 0.1, duration: 300 });
-        }, 80);
-        return () => window.clearTimeout(timer);
-      }
+    if (didGrowthFitRef.current || yOffsets.size === 0) return undefined;
+    if (performance.now() - mountAtRef.current >= 1500) {
+      didGrowthFitRef.current = true; // 창 밖 도착 — 이후 성장에도 카메라 불가침
+      return undefined;
     }
-    return undefined;
+    // 소모 플래그는 실제 발사 시점에 세운다 — 오프셋이 여러 커밋으로 나눠 오면(터미널 높이가 IO 박스보다
+    // 먼저 확정되는 등) cleanup이 타이머를 취소하고 재예약 없이 끝나던 버그(QA W3). 지금은 마지막
+    // 성장 커밋 기준 80ms 디바운스로 1회 발사.
+    const timer = window.setTimeout(() => {
+      didGrowthFitRef.current = true;
+      void reactFlow.fitView({ padding: 0.1, duration: 300 });
+    }, 80);
+    return () => window.clearTimeout(timer);
   }, [yOffsets, reactFlow]);
   useEffect(() => {
     const from = renderYOffsetsRef.current;
