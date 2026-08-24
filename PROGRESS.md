@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-24 — 요약 탭 확장 섹션 4종 + 표시 선택 드롭다운 (feat/compare-refresh)
+- 확장 섹션: 구조(노드/엣지/분기/SP 카운트)·시스템 집합 diff(+추가/−제거/공통 칩, SP는 링크 맵 지정값)·부서 집합 diff+담당자 지정률(process/decision 자체 assignee)·GMP 분포(분류별+미분류, SP 상속). 공용 SummaryCard 셸로 카드 통일.
+- 읽기전용 필 대신(요약 탭 한정) 표시 항목 드롭다운 — 체크 해제=숨김, 트리거에 숨김 개수 (-N) 표기. 데이터 없는 항목은 목록에서 자동 제외.
+
 ## 2026-08-24 — 비교화면 세션 드래그 + 요약 탭 (feat/compare-refresh)
 - 세션 한정 드래그: nodesDraggable+onNodesChange로 표시 전용 위치(sessionPos, 키에 방향·버전 쌍 포함 → 전환 시 자동 원위치, 리셋 effect 불필요). 핸들 변·Tab/목록 내비게이션 센터링 모두 옮긴 좌표 기준. 저장 없음.
 - 인스펙터 2탭(속성/요약): 요약 탭은 7파라미터 버전 합계(BASE→TARGET+delta 칩, sumVersionParam 신설 — SP 5종은 sumParamField 위임·annual_count/fte는 자체값 합, headcount는 평균 표기)·파라미터별 접기/펼치기 기여 노드 목록(계보 키, 클릭=캔버스 포커스).
