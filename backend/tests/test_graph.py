@@ -798,6 +798,36 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
     assert n2["touch_time"] == ""
 
 
+def test_node_io_link_columns_roundtrip(client: TestClient) -> None:
+    """IO 링크 컬럼 왕복 — 줄 정렬 유지, 후행 공백 줄 소거 (io-linking design §3)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "원본",
+                "output": "회의록\n견적서",
+                "output_ids": "itm_a1\n",  # 첫 항목만 원본 — 후행 빈 줄 소거 기대
+            },
+            {
+                "id": "n2", "title": "미러",
+                "input": "회의록",
+                "input_links": "itm_a1",
+                "input_flags": "optional",
+            },
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
+    assert n1["output_ids"] == "itm_a1"
+    assert n2["input_links"] == "itm_a1"
+    assert n2["input_flags"] == "optional"
+
+
 def test_node_io_item_forms_roundtrip(client: TestClient) -> None:
     """IO 항목별 데이터 폼 — input/output 줄과 1:1 정렬 왕복, 후행 공백 줄만 소거 (2026-08-20)."""
     version_id = _create_version(client)

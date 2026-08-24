@@ -46,6 +46,9 @@ function createLineEdge(variant: LineVariant) {
               className="nodrag nopan pointer-events-none absolute whitespace-pre-wrap text-center leading-tight"
               style={{
                 transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6)
+                maxWidth: 160,
+                overflowWrap: "break-word",
                 // labelStyle/labelBgStyle은 SVG 어휘(fill/stroke)로 들어온다 — HTML 속성으로 변환
                 color: labelStyle?.fill,
                 fontWeight: labelStyle?.fontWeight,

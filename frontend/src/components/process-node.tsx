@@ -6,6 +6,10 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import {
   AlertTriangle,
   Building2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleArrowUp,
   CornerDownRight,
   Flag,
   Link as LinkIcon,
@@ -14,6 +18,7 @@ import {
   LogOut,
   type LucideIcon,
   MessageSquare,
+  Pin,
   Play,
   Plus,
   Server,
@@ -36,6 +41,8 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { resolveDataForm } from "@/lib/data-forms";
+import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import {
   PRIMARY_END_HANDLE,
@@ -53,68 +60,212 @@ const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = 
   output: LogOut,
 };
 
-// 노드에 표시할 정보 줄들 — displayFields(컨텍스트)에서 켜진 필드 중 값이 있는 것만 여러 줄로
-// start/end는 BPM 속성(담당자/부서/시스템/소요) 줄을 표시하지 않음.
-// subprocess는 노드 자체 필드 대신 지정 어트리뷰트(sp*, 라이브 참조)를 표시 (spec 2026-07-06).
+// 캔버스 규범 순서(#10) — 표시 순서는 토글을 켠 순서가 아니라 고정: 속성 → 지표(NodeParams) →
+// 조건 → 인풋 → 아웃풋. 속성 줄은 NodeFields, 조건·IO는 NodeIoDetails(지표 뒤)가 담당.
+const ATTR_FIELD_ORDER = ["assignee", "department", "system", "url"] as const;
+
+// 노드 속성 줄(담당자/부서/시스템/URL) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
+// start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
-  const spValues: Record<Exclude<NodeDisplayField, "conditions">, string | null | undefined> = {
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const spValues: Record<(typeof ATTR_FIELD_ORDER)[number], string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
     url: data.spUrl,
-    input: data.spInput,
-    output: data.spOutput,
   };
   return (
     <>
-      {displayFields
-        // params(칩 스위치)·gmp(필 태그)는 텍스트 줄 필드가 아님 — NodeParams/GmpPill이 담당
-        .filter((f): f is NodeDisplayField => f !== "params" && f !== "gmp")
-        .flatMap((field) => {
-        // BPM 속성 줄은 process·decision(+지정 subprocess)만 — url도 동일 규칙 (batch2 ⑦)
-        if (!hasBpmAttributes(data.nodeType) && !isSubprocess) {
-          return [];
-        }
-        // "conditions"는 시작/종료 두 줄을 담당(단일 토글, 사용자 결정 2026-08-20)
-        const lines: { key: string; icon: LucideIcon; value: string | null | undefined }[] =
-          field === "conditions"
-            ? [
-                {
-                  key: "start_condition",
-                  icon: Play,
-                  value: isSubprocess ? data.spStartCondition : data.start_condition,
-                },
-                {
-                  key: "end_condition",
-                  icon: Flag,
-                  value: isSubprocess ? data.spEndCondition : data.end_condition,
-                },
-              ]
-            : (() => {
-                const raw = isSubprocess ? spValues[field] : data[field];
-                // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
-                const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
-                // input/output은 개행 복수 — 노드 줄에서는 ", "로 접는다 (2026-08-20)
-                const value =
-                  field === "url"
-                    ? (raw ? urlLabel || "LINK" : null)
-                    : field === "input" || field === "output"
-                      ? raw?.split("\n").filter(Boolean).join(", ")
-                      : raw;
-                return [{ key: field, icon: FIELD_ICON[field], value }];
-              })();
-        return lines
-          .filter((line) => !!line.value)
-          .map(({ key, icon: Icon, value }) => (
-            <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
-              <span className="inline-flex items-center gap-1">
-                <Icon size={12} strokeWidth={1.5} />
-                {value}
-              </span>
-            </div>
-          ));
+      {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
+        const raw = isSubprocess ? spValues[field] : data[field];
+        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
+        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
+        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
+        if (!value) return null;
+        const Icon = FIELD_ICON[field];
+        return (
+          <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
+            <span className="inline-flex items-center gap-1">
+              <Icon size={12} strokeWidth={1.5} />
+              {value}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
+// 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
+function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"] }) {
+  const { t } = useI18n();
+  const { displayFields, ioChecks, onToggleIoCheck, ioListStates, onSetIoListState, ioCheckPulse } =
+    useNodeActions();
+  const isSubprocess = data.nodeType === "subprocess";
+  if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  const conditionLines = displayFields.includes("conditions")
+    ? [
+        {
+          key: "start_condition",
+          icon: Play,
+          value: isSubprocess ? data.spStartCondition : data.start_condition,
+        },
+        {
+          key: "end_condition",
+          icon: Flag,
+          value: isSubprocess ? data.spEndCondition : data.end_condition,
+        },
+      ].filter((line) => !!line.value)
+    : [];
+  const sides = (["input", "output"] as const).filter((side) => displayFields.includes(side));
+  return (
+    <>
+      {conditionLines.map(({ key, icon: Icon, value }) => (
+        <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
+          <span className="inline-flex items-center gap-1">
+            <Icon size={12} strokeWidth={1.5} />
+            {value}
+          </span>
+        </div>
+      ))}
+      {sides.map((side) => {
+        const raw = isSubprocess
+          ? side === "input"
+            ? data.spInput
+            : data.spOutput
+          : data[side];
+        const visible = (raw ?? "")
+          .split("\n")
+          .map((text, index) => ({ text: text.trim(), index }))
+          .filter((item) => item.text !== "");
+        if (visible.length === 0) return null;
+        const Icon = FIELD_ICON[side];
+        // 표시 3단계(#2): collapsed=헤더만 · capped=3.5줄 오버플로 히든 · all=전부. 화면 한정 상태
+        const listKey = `${nodeId}:${side}`;
+        const listState = ioListStates.get(listKey) ?? "capped";
+        const hiddenCount = Math.max(0, visible.length - 3);
+        return (
+          // nodrag/nopan + 전파 차단 — 체크 조작이 드래그·더블클릭(요약 모달)로 새지 않게
+          <div
+            key={side}
+            data-id={`node-io-list-${side}`}
+            className="group/iobox nodrag nopan mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            {/* 헤더 클릭 = 접기(0줄)↔기본(3.5줄) 토글(#2) */}
+            <button
+              type="button"
+              data-id={`node-io-list-${side}-toggle`}
+              tabIndex={-1}
+              disabled={onSetIoListState === null}
+              className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted"
+              onClick={() =>
+                onSetIoListState?.(listKey, listState === "collapsed" ? "capped" : "collapsed")
+              }
+            >
+              <ChevronRight
+                size={10}
+                strokeWidth={1.5}
+                className={`shrink-0 transition-transform duration-150 ${
+                  listState === "collapsed" ? "" : "rotate-90"
+                }`}
+              />
+              <Icon size={10} strokeWidth={1.5} />
+              {side === "input" ? "Input" : "Output"}
+              <span className="normal-case tracking-normal">({visible.length})</span>
+            </button>
+            {listState !== "collapsed" && (
+              // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2)
+              <div className={listState === "capped" && hiddenCount > 0 ? "max-h-[63px] overflow-hidden" : undefined}>
+                {visible.map(({ text, index }) => {
+                  // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
+                  const checkKey = isSubprocess
+                    ? `${nodeId}:${side}:${index}`
+                    : side === "input"
+                      ? getIoLine(data.input_links, index) || `${nodeId}:in:${index}`
+                      : getIoLine(data.output_ids, index) ||
+                        getIoLine(data.output_links, index) ||
+                        `${nodeId}:out:${index}`;
+                  const checked = ioChecks.has(checkKey);
+                  // 체크 동기 애니메이션(#3) — key에 논스를 실어 같은 키 재체크도 재생(리마운트)
+                  const pulsing = ioCheckPulse !== null && ioCheckPulse.key === checkKey;
+                  // 미체크 인풋은 필수/선택을 글자색으로 분류(선택=뮤트), 양식은 아이콘만 맨 뒤
+                  // 고정 노출+호버 툴팁 — 긴 이름은 2줄 클램프라 텍스트가 잘려도 아이콘은 남는다
+                  const isOptional =
+                    !isSubprocess && side === "input" && getIoLine(data.input_flags, index) === "optional";
+                  // SP는 링크 맵 지정의 sp_*_forms 상속(subprocess_refs 경유) — 플래그는 소비자 로컬이라 없음
+                  const formsRaw = isSubprocess
+                    ? ((side === "input" ? data.spInputForms : data.spOutputForms) ?? "")
+                    : side === "input"
+                      ? data.input_forms
+                      : data.output_forms;
+                  const form = resolveDataForm(getIoLine(formsRaw, index));
+                  return (
+                    // 빈 체크박스는 행 호버 시에만 노출, 체크된 것은 유지. 체크 텍스트는 accent-tint
+                    // 하이라이트+진한 글자 — 취소선·딤 대신 "확인됨" 강조 (사용자 결정 2026-08-23)
+                    <label
+                      key={pulsing ? `${index}-p${ioCheckPulse.nonce}` : index}
+                      className={`group/iorow -mx-0.5 flex cursor-pointer items-start gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary hover:bg-surface-alt ${
+                        pulsing ? "bpm-io-pulse" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        data-id={`node-io-check-${side}-${index}`}
+                        tabIndex={-1}
+                        className={`mt-0.5 h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                          checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
+                        }`}
+                        checked={checked}
+                        disabled={onToggleIoCheck === null}
+                        onChange={() => onToggleIoCheck?.(checkKey)}
+                      />
+                      <span
+                        className={`line-clamp-2 min-w-0 flex-1 break-words ${
+                          checked
+                            ? "rounded-xs bg-accent-tint px-0.5 text-ink"
+                            : isOptional
+                              ? "text-ink-muted"
+                              : ""
+                        }`}
+                      >
+                        {text}
+                      </span>
+                      {form && (
+                        <span title={form.value} className="mt-0.5 shrink-0 text-ink-muted">
+                          <form.icon size={10} strokeWidth={1.5} />
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {listState !== "collapsed" && hiddenCount > 0 && (
+              // 전체 펼침↔기본 캡 토글(#2) — 전체 펼침 시 간격 재조정(#1)은 별도 브랜치에서
+              // 박스 호버 시에만 노출 — 평상시엔 4번째 반 줄이 "더 있음"을 암시 (사용자 요청 2026-08-23)
+              <button
+                type="button"
+                data-id={`node-io-list-${side}-more`}
+                tabIndex={-1}
+                disabled={onSetIoListState === null}
+                className="mt-0.5 flex w-full items-center gap-0.5 text-left text-[10px] text-accent opacity-0 transition-opacity duration-150 group-hover/iobox:opacity-100"
+                onClick={() => onSetIoListState?.(listKey, listState === "all" ? "capped" : "all")}
+              >
+                {listState === "all" ? (
+                  <ChevronUp size={10} strokeWidth={1.5} className="shrink-0" />
+                ) : (
+                  <ChevronDown size={10} strokeWidth={1.5} className="shrink-0" />
+                )}
+                {listState === "all" ? t("io.showLess") : `${t("io.showMore")} (+${hiddenCount})`}
+              </button>
+            )}
+          </div>
+        );
       })}
     </>
   );
@@ -132,8 +283,9 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   const label = formatGmp(value);
   const editable = !isSubprocess && onEditGmp !== null;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
+  // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
-    "nodrag nopan inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
+    "nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
     (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
     (extra ?? "");
   const body = (
@@ -153,9 +305,11 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
     <button
       type="button"
       data-id="node-gmp-pill"
+      // 캔버스 탭 순회에서 제외 — Tab이 노드 대신 GMP 태그를 넘어다니는 문제(#16)
+      tabIndex={-1}
       className={`${className} hover:brightness-95`}
       style={label ? getGmpBadgeStyle(value) : undefined}
-      title="GMP — click to classify"
+      title="GMP - click to classify"
       onPointerDown={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -226,13 +380,17 @@ function NodeTitle({
   label,
   displayLabel,
   editable = true,
+  clamp3 = false,
 }: {
   id: string;
   label: string;
   displayLabel?: string;
   // false면 인라인 이름 편집 진입 차단 — subprocess는 링크된 맵 이름 고정 (F5)
   editable?: boolean;
+  // 마름모 전용 — 3줄 클램프+말줄임(#4). 전문은 title 툴팁, 인쇄(PNG)는 export 픽스업이 해제
+  clamp3?: boolean;
 }) {
+  const { t } = useI18n();
   const { editingNodeId, onStartRename, onRename, onCancelRename } = useNodeActions();
   // Esc 취소 시 onBlur가 값을 다시 커밋하지 않도록 가드
   const cancelledRef = useRef(false);
@@ -248,6 +406,8 @@ function NodeTitle({
         autoFocus
         defaultValue={label}
         rows={1}
+        // 줄바꿈 단축키 안내(#7) — 캔버스 인라인은 공간이 없어 title 툴팁으로
+        title={t("hint.newline")}
         // nodrag — 입력 중 React Flow가 노드를 끌지 않게
         className="nodrag w-full resize-none overflow-hidden rounded-xs border border-accent bg-surface px-1 text-center text-sm text-ink"
         ref={(el) => {
@@ -287,7 +447,10 @@ function NodeTitle({
   }
   return (
     <span
-      className={`whitespace-pre-wrap ${editable && onStartRename ? "cursor-text" : ""}`}
+      className={`whitespace-pre-wrap ${clamp3 ? "bpm-decision-title line-clamp-3" : ""} ${
+        editable && onStartRename ? "cursor-text" : ""
+      }`}
+      title={clamp3 ? (displayLabel ?? label) : undefined}
       onDoubleClick={
         editable && onStartRename
           ? (event) => {
@@ -577,29 +740,47 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   if (data.nodeType === "subprocess") {
     return (
       <div
-        className="group bpm-node-emph relative flex w-[180px] min-h-[64px] items-center gap-2 rounded-sm px-3 py-2 text-sm transition-all duration-150"
+        className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-center rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={style}
         title={data.diffNote}
       >
         {diff && <DiffBadge status={diff} />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
-        <div className="min-w-0 flex-1">
-          <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
-          <div className="font-medium text-ink">
+        <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
+        {/* SP 마크는 라벨 앞에만 — 아래 줄들(필드·IO)이 노드 전체 폭을 쓴다 (사용자 요청 2026-08-23) */}
+        <div className="flex items-center gap-1.5 font-medium text-ink">
+          <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+          <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
           </div>
-          {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
-          <NodeFields data={data} />
-          <NodeParams data={data} />
-          {data.updateAvailable && (
-            <div className="mt-0.5 flex items-center gap-1 text-xs text-accent" title={t("subprocess.updateAvailable")}>
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-              {t("subprocess.updateAvailable")}
-            </div>
-          )}
         </div>
+        {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
+        <NodeFields data={data} />
+        <NodeParams data={data} />
+        <NodeIoDetails nodeId={id} data={data} />
+        {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
+            점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23) */}
+        {data.updateAvailable ? (
+          // 배너는 한 줄 고정(짧은 문구+truncate) — 전문은 툴팁 (사용자 요청 2026-08-23)
+          <div
+            data-id="sp-banner-update"
+            title={t("subprocess.updateAvailable")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-xs text-accent"
+          >
+            <CircleArrowUp size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.updateBanner")}</span>
+          </div>
+        ) : data.followLatest === false ? (
+          <div
+            data-id="sp-banner-pinned"
+            title={t("subprocess.pinnedNotice")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-xs text-ink-secondary"
+          >
+            <Pin size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.pinnedBanner")}</span>
+          </div>
+        ) : null}
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
@@ -625,19 +806,21 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
   if (data.nodeType === "decision") {
     return (
       <div
-        className="group relative flex h-24 w-24 items-center justify-center"
+        className="group relative flex h-24 w-[116px] items-center justify-center"
         title={data.diffNote}
       >
-          {/* 마름모는 회전한 사각형으로 그리고 텍스트는 회전하지 않은 레이어에 둔다 */}
+        {/* 마름모는 회전한 정사각형 + 화면축 scaleX(1.2)로 가로가 살짝 긴 1:1.2 비율(사용자 요청 2026-08-23).
+            텍스트는 회전하지 않은 레이어에 둔다. 박스 폭 116은 canvas.ts nodeSizeOf와 동기화 필수 */}
         <div
-          className="bpm-node-emph absolute inset-3 rotate-45 rounded-sm transition-all duration-150"
-          style={style}
+          className="bpm-node-emph absolute left-1/2 top-1/2 h-[72px] w-[72px] rounded-sm transition-all duration-150"
+          style={{ ...style, transform: "translate(-50%, -50%) scaleX(1.2) rotate(45deg)" }}
         />
         {diff && <DiffBadge status={diff} className="-top-1 left-1/2 -translate-x-1/2" />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
-        <GmpPill nodeId={id} data={data} className="absolute left-1/2 top-0 z-10 -translate-x-1/2" />
-        <div className="relative max-w-20 text-center text-xs font-medium text-ink">
-          <NodeTitle id={id} label={data.label} />
+        {/* GMP 태그는 왼쪽 위 바깥쪽(#4) — 가운데 3줄 제목·우상단 코멘트 배지와 겹치지 않게 */}
+        <GmpPill nodeId={id} data={data} className="absolute -left-2 top-0 z-10" />
+        <div className="bpm-decision-title-box relative max-w-24 text-center text-xs font-medium text-ink">
+          <NodeTitle id={id} label={data.label} clamp3 />
           {data.hasChildren && (
             <div className="inline-flex items-center gap-0.5 text-[10px] text-accent">
               <CornerDownRight size={12} strokeWidth={1.5} />
@@ -645,16 +828,16 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
-        {/* 파라미터 칩 — 마름모 내접(h-24 w-24)을 넘치지 않게 아래 절대배치 캡션으로.
+        {/* 파라미터 칩 — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로.
             절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향 */}
         <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
           <NodeParams data={data} className="justify-center" />
         </div>
-        {/* 마름모는 코너가 도형에서 멀다 — 배지를 안쪽(12px)으로 당겨 대각 엣지 근처에 (batch2 ⑬) */}
+        {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
-        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="left-3 top-3" />}
-        {data.url && <UrlBadge url={data.url} className="bottom-3 left-3" />}
-        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-3 right-3" />}
+        {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
+        {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
+        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-0 right-0" />}
         {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
@@ -687,6 +870,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       </div>
       <NodeFields data={data} />
       <NodeParams data={data} />
+      <NodeIoDetails nodeId={id} data={data} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />

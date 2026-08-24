@@ -325,7 +325,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           onCreated(true);
           setError(
             err instanceof Error
-              ? `${t("csvImport.mapCreatedImportFailed")} — ${humanizeApiError(err, t)}`
+              ? `${t("csvImport.mapCreatedImportFailed")} - ${humanizeApiError(err, t)}`
               : t("csvImport.mapCreatedImportFailed"),
           );
           setSubmitting(false);
@@ -348,7 +348,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         onCreated(true);
         setError(
           err instanceof Error
-            ? `${t("perm.createDialog.partialFailure")} — ${humanizeApiError(err, t)}`
+            ? `${t("perm.createDialog.partialFailure")} - ${humanizeApiError(err, t)}`
             : t("perm.createDialog.partialFailure"),
         );
       } else {

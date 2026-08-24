@@ -5,7 +5,7 @@ import pathlib
 
 from sqlalchemy import create_engine, inspect, text
 
-from app.db import _add_missing_columns, engine
+from app.db import _ADDED_COLUMNS, _add_missing_columns, engine
 
 
 def test_stopgap_adds_workflow_columns(tmp_path: pathlib.Path) -> None:
@@ -53,6 +53,21 @@ def test_stopgap_is_idempotent(tmp_path: pathlib.Path) -> None:
     with engine.connect() as conn:
         columns = {col["name"] for col in inspect(conn).get_columns("map_versions")}
         assert "status" in columns
+
+
+def test_added_columns_registers_io_linking_fields() -> None:
+    # io-linking §3 신규 컬럼 6개가 _ADDED_COLUMNS에 정확한 타입으로 등록됐는지 잠금 —
+    # 운영은 startup 자동 ALTER(create_all 후속)로만 보강되므로 누락 시 배포본에 컬럼이 안 생긴다.
+    expected = [
+        ("nodes", "output_ids", "TEXT DEFAULT ''"),
+        ("nodes", "input_links", "TEXT DEFAULT ''"),
+        ("nodes", "output_links", "TEXT DEFAULT ''"),
+        ("nodes", "input_flags", "TEXT DEFAULT ''"),
+        ("process_maps", "sp_input_ids", "TEXT"),
+        ("process_maps", "sp_output_ids", "TEXT"),
+    ]
+    for entry in expected:
+        assert entry in _ADDED_COLUMNS
 
 
 def test_added_indexes_bootstrap_idempotent(client) -> None:  # noqa: ARG001

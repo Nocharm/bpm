@@ -18,7 +18,7 @@ import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, hi
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
-import { NodeActionsContext, type NodeActions } from "@/lib/node-actions";
+import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChoiceOverlay } from "@/components/interview/choice-card";
@@ -43,6 +43,11 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
   onEditGmp: null,
+  ioChecks: new Set<string>(),
+  onToggleIoCheck: null,
+  ioListStates: new Map<string, IoListDisplayState>(),
+  onSetIoListState: null,
+  ioCheckPulse: null,
 };
 
 interface InterviewPreviewProps {
@@ -416,7 +421,7 @@ export function InterviewPreview({
                 ) : (
                   <>
                     <div className="text-caption text-ink-secondary">
-                      Answer a few questions — the map draws itself.
+                      Answer a few questions - the map draws itself.
                     </div>
                     <div className="text-fine text-ink-muted">
                       Attach a document in chat to draw right away (fast track).
@@ -476,7 +481,7 @@ export function InterviewPreview({
               >
                 <Undo2 size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
                 <span className="truncate text-caption text-ink-secondary">
-                  Previewing “{previewLabel}” — going back sets aside later messages and map changes.
+                  Previewing “{previewLabel}” - going back sets aside later messages and map changes.
                 </span>
                 <button
                   className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
@@ -573,7 +578,7 @@ export function InterviewPreview({
                   >
                     {spData.map_name || "map"}
                   </a>{" "}
-                  — replace {spData.node_keys?.length ?? 0} steps with a subprocess link?
+                  - replace {spData.node_keys?.length ?? 0} steps with a subprocess link?
                 </span>
                 <button
                   className="shrink-0 rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"

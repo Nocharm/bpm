@@ -192,7 +192,7 @@ describe("buildWbsModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: "Ops", assignee: null, system: null, duration: "72",
-          cost_krw: "2000000", cost_usd: null, headcount: "6", touch_time: null, input: null, output: null, input_forms: null, output_forms: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
+          cost_krw: "2000000", cost_usd: null, headcount: "6", touch_time: null, input: null, output: null, input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
           sp_description: "base desc",
         },
       },

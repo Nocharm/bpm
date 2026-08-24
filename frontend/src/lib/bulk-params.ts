@@ -29,8 +29,9 @@ export function canBulkEditField(
 }
 
 /** 비용 배타 — 설정 시 반대 통화 명시적 소거, 비우기는 양쪽 소거(노드의 비용은 하나라는 불변식 유지).
- *  input/output은 항목별 폼 정렬(줄 1:1)을 지킨다 — 기존 항목이 줄 경계 접두로 보존되는 변경(동일/append)만
- *  폼을 유지하고, 그 외(교체·비우기)는 함께 소거한다(백엔드 재임포트 승계와 동일 규칙, 2026-08-20). */
+ *  input/output은 줄 1:1 정렬 열(폼 + IO 링크)을 지킨다 — 기존 항목이 줄 경계 접두로 보존되는
+ *  변경(동일/append)만 그 열들을 유지하고, 그 외(교체·비우기)는 함께 소거한다
+ *  (백엔드 재임포트 승계와 동일 규칙, 2026-08-20 / io-linking §3). */
 export function buildBulkAttrPatch(
   field: "system" | ParamField | BulkDetailField,
   value: string,
@@ -45,7 +46,12 @@ export function buildBulkAttrPatch(
   if (field === "input" || field === "output") {
     const prev = existing?.[field] ?? "";
     const keepsAlignment = prev !== "" && (value === prev || value.startsWith(`${prev}\n`));
-    return keepsAlignment ? { [field]: value } : { [field]: value, [`${field}_forms`]: "" };
+    if (keepsAlignment) return { [field]: value };
+    // 링크 열을 남기면 잔존 id/link가 새 텍스트의 엉뚱한 행을 가리켜, 전파가 맵 전역 미러에
+    // 무관한 텍스트를 주입하거나 정합화가 지운 항목의 그룹을 되살린다 (io-linking §3)
+    return field === "input"
+      ? { input: value, input_forms: "", input_links: "", input_flags: "" }
+      : { output: value, output_forms: "", output_ids: "", output_links: "" };
   }
   return { [field]: value };
 }

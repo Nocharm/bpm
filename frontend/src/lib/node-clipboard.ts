@@ -60,7 +60,8 @@ export function buildPaste(
       id,
       position: { x: n.position.x + opts.offset.x, y: n.position.y + opts.offset.y },
       // 대표 끝(isPrimaryEnd)은 맵당 1개 — 사본이 상속하면 대표끝이 중복된다. 사본은 항상 해제.
-      data: { ...n.data, label, groupIds: [] as string[], isPrimaryEnd: false },
+      // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
+      data: { ...n.data, label, groupIds: [] as string[], isPrimaryEnd: false, output_ids: "" },
     };
   });
   const edges = clip.edges

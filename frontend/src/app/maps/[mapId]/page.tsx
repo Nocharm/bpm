@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -39,8 +39,12 @@ import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
 import { FallbackHint } from "@/components/fallback-hint";
-import { formatGmp, getGmpBadgeStyle, GMP_NODE_COLORS, GMP_OPTIONS, type GmpValue } from "@/lib/gmp";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
+import { GmpNoticePopover } from "@/components/gmp-notice-popover";
+import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
 import { NodeDetailsCard } from "@/components/node-details-card";
+import { NewlineHint } from "@/components/newline-hint";
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -53,6 +57,7 @@ import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { IoImportModal } from "@/components/io-import-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
@@ -232,6 +237,18 @@ import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
+import {
+  applyIoImport,
+  buildIoIndex,
+  buildIoMirrorIndex,
+  collectIoImportCandidates,
+  getBrokenInputMirrorIndexes,
+  getFlowPathBetween,
+  getIoLinkPeers,
+  propagateIoLinks,
+  type IoImportAction,
+  type IoSide,
+} from "@/lib/io-items";
 import { displayToSavedX } from "@/lib/inline-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
@@ -241,6 +258,7 @@ import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
   NodeActionsContext,
+  type IoListDisplayState,
   type NodeDisplayToggle,
   parseDisplayToggles,
 } from "@/lib/node-actions";
@@ -284,6 +302,21 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
+// 불러오기 실행 결과별 안내 토스트 — 어떤 소유권 판정이 났는지 알려준다 (io-linking §2)
+const IMPORT_TOAST_KEY = {
+  mirror: "io.importedMirror",
+  takeover: "io.importedTakeover",
+  succession: "io.importedSuccession",
+  join: "io.importedJoin",
+} as const satisfies Record<IoImportAction, string>;
+// 이 키가 패치에 하나라도 있으면 원본 수정일 수 있어 미러 전파를 돌린다 (io-linking §5)
+const IO_PATCH_FIELDS = [
+  "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links",
+] as const satisfies readonly (keyof NodeData)[];
+
+function hasIoPatchField(patch: Partial<NodeData>): boolean {
+  return IO_PATCH_FIELDS.some((field) => field in patch);
+}
 
 const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
@@ -587,6 +620,10 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       output: node.output ?? "",
       input_forms: node.input_forms ?? "",
       output_forms: node.output_forms ?? "",
+      output_ids: node.output_ids ?? "",
+      input_links: node.input_links ?? "",
+      output_links: node.output_links ?? "",
+      input_flags: node.input_flags ?? "",
       start_condition: node.start_condition ?? "",
       end_condition: node.end_condition ?? "",
       data_form: node.data_form ?? "",
@@ -679,6 +716,11 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     output: attr?.output ?? "",
     input_forms: "",  // 항목별 폼 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (2026-08-20)
     output_forms: "",
+    // IO 링크 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (io-linking §3)
+    output_ids: "",
+    input_links: "",
+    output_links: "",
+    input_flags: "",
     start_condition: attr?.start_condition ?? "",
     end_condition: attr?.end_condition ?? "",
     data_form: attr?.data_form ?? "",
@@ -734,6 +776,10 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       output: node.data.output ?? "",
       input_forms: node.data.input_forms ?? "",
       output_forms: node.data.output_forms ?? "",
+      output_ids: node.data.output_ids ?? "",
+      input_links: node.data.input_links ?? "",
+      output_links: node.data.output_links ?? "",
+      input_flags: node.data.input_flags ?? "",
       start_condition: node.data.start_condition ?? "",
       end_condition: node.data.end_condition ?? "",
       data_form: node.data.data_form ?? "",
@@ -945,6 +991,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   >(null);
   // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // IO 링크 hover 하이라이트 — 인스펙터 행 hover와 불러오기 모달 행 hover가 공유하는 단일 상태 (io-linking §4-6)
+  const [ioHighlight, setIoHighlight] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  // 안내 버튼 호버 미리보기 — 노드에 결과값(분류·색) 임시 반영, 렌더 전용(데이터 무변경) (#6 확장)
+  const [gmpPreview, setGmpPreview] = useState<{ nodeId: string; gmp: string; color: string } | null>(null);
+  // 열려 있는 불러오기 모달 — 어느 노드의 어느 쪽 IO를 채우는지 + 앵커 좌표
+  const [ioImport, setIoImport] = useState<
+    { side: IoSide; nodeId: string; at: { x: number; y: number } } | null
+  >(null);
   // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
   const [decisionDrop, setDecisionDrop] = useState<
     | {
@@ -1395,10 +1449,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         m.set(Number(refMapId), ref);
       }
     };
-    addAll(rootGraph?.subprocess_refs);
+    // resolvedCache는 linkKey별 1회 fetch라 스테일 가능 — 루트 그래프 refs(매 로드/저장 응답 갱신)가 이긴다
     for (const g of resolvedCache.values()) {
       addAll(g.subprocess_refs);
     }
+    addAll(rootGraph?.subprocess_refs);
     return m;
   }, [rootGraph, resolvedCache]);
 
@@ -1440,6 +1495,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             spTouchTime: ref.touch_time,
             spInput: ref.input,
             spOutput: ref.output,
+            spInputForms: ref.input_forms,
+            spOutputForms: ref.output_forms,
             spStartCondition: ref.start_condition,
             spEndCondition: ref.end_condition,
             spGmp: ref.gmp,
@@ -1457,6 +1514,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             spTouchTime: null,
             spInput: null,
             spOutput: null,
+            spInputForms: null,
+            spOutputForms: null,
             spStartCondition: null,
             spEndCondition: null,
             spGmp: null,
@@ -1496,10 +1555,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     lockedKeysRef.current = lockedKeys;
   }, [lockedKeys]);
   // saveCurrentScope(useCallback)가 stale 클로저 없이 읽기전용 여부를 읽도록 ref 미러 — dep 추가 회피.
+  // readOnly ref 미러 — 디바운스 타이머가 예약 시점 클로저를 잡으므로, 발사 순간의 최신 권한으로
+  // 다시 판정해야 한다. myRole/checkout 도착 전엔 readOnly가 false로 시작해, 그 창에 예약된 저장이
+  // 뷰어 권한으로 확정된 뒤에도 옛 클로저로 PUT을 던져 403이 난다.
+  const readOnlyRef = useRef<boolean>(false);
   const currentScopeIsReadOnlyRef = useRef<boolean>(false);
   useEffect(() => {
     currentScopeIsReadOnlyRef.current = currentScopeIsReadOnly;
   }, [currentScopeIsReadOnly]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -1566,6 +1632,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
+      // 카메라 애니메이션(fitView) 중 클릭은 RF가 onNodeClick을 드래그로 삼켜 selectedId가 안 따라온다(#14)
+      // — RF 선택 변경을 미러링해 선택 링과 인스펙터를 일치시킨다(단일 신규 선택·현재 스코프만).
+      const newlySelected = changes.filter(
+        (change): change is Extract<NodeChange<AppNode>, { type: "select" }> =>
+          change.type === "select" && change.selected,
+      );
+      if (newlySelected.length === 1) {
+        const node = nodesRef.current.find((n) => n.id === newlySelected[0].id);
+        if (node && (node.data.scopeId ?? null) === currentParentId) {
+          setSelectedId(node.id);
+          setSelectedEdgeId(null);
+        }
+      }
       if (childNodes.length === 0) {
         onNodesChange(dropDraggingPositions(changes));
         return;
@@ -1582,7 +1661,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
       }
     },
-    [childNodes, onNodesChange, dropDraggingPositions],
+    [childNodes, onNodesChange, dropDraggingPositions, currentParentId],
   );
   useEffect(() => {
     groupsRef.current = groups;
@@ -1682,6 +1761,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     autoSaveTimerRef.current = setTimeout(() => {
       autoSaveTimerRef.current = null;
+      // 예약 이후 읽기전용으로 확정됐으면(권한 도착·타인 체크아웃) 발사하지 않는다 —
+      // saveCurrentScope의 readOnly는 예약 시점 클로저값이라 여기서 막지 않으면 403이 난다.
+      // 저장할 수 없는 변경이므로 이탈 경고용 더티도 함께 내린다.
+      if (readOnlyRef.current) {
+        dirtyRef.current = false;
+        return;
+      }
       // 실패는 saveState=error 표시로 사용자에게 노출 — 수동 저장으로 재시도
       void saveCurrentScope().catch(() => undefined);
     }, AUTO_SAVE_DELAY_MS);
@@ -2335,14 +2421,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         // 로드되는 스코프 노드 id들 — 카메라 프레이밍에 쓴다(루트=권위 그래프, 딥뷰=합성 트리 자식).
         let scopeNodeIds: string[];
+        // IO 링크 정합화가 무언가 고쳤는지 — 아래 히스토리/더티 리셋 이후에 저장을 예약해야 살아남는다
+        let ioLinksHealed = false;
         if (currentParentId === null) {
           // 루트 스코프 — 편집 가능한 권위 그래프(평면)를 그대로 로드.
           const graph = await getGraph(versionId);
           if (!active) {
             return;
           }
+          // 로드 정합화 — 원본 소실 링크 해산·드리프트한 미러 텍스트 치유 (io-linking §5).
+          // 읽기전용이면 scheduleAutoSave가 자체 게이트로 무시하므로 메모리 치유만 남는다.
+          const { nodes: reconciled, changed } = propagateIoLinks(
+            toAppNodes(graph, currentParentId),
+            new Map(
+              Object.entries(graph.subprocess_refs ?? {}).map(([key, ref]) => [Number(key), ref]),
+            ),
+          );
+          ioLinksHealed = changed;
           // 현재 스코프 노드는 모두 currentParentId(=null) 스코프 소속 — scope-split 저장 식별용 태그
-          setNodes(toAppNodes(graph, currentParentId));
+          setNodes(reconciled);
           setEdges(toAppEdges(graph));
           setGroups(graph.groups);
           scopeNodeIds = graph.nodes.map((node) => node.id);
@@ -2450,6 +2547,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           autoSaveTimerRef.current = null;
         }
         setSaveState("idle");
+        // 정합화 치유분은 다음 PUT에 동승 — 위 더티 리셋 뒤에 예약해야 타이머가 살아남는다 (io-linking §5)
+        if (ioLinksHealed) {
+          scheduleAutoSave();
+        }
         // 스코프 전환이면(첫 로드/버전 변경 제외) 새 스코프로 카메라를 부드럽게 이동 — 콘텐츠가 제자리에서
         // 갑자기 바뀌어 시야가 길을 잃는 것 방지(포커스 모드 전환 연속화 A안).
         const isScopeTransition =
@@ -2504,7 +2605,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
     // fullGraph: 딥뷰 진입 직후 host의 자식이 resolved 로딩으로 늦게 합성 트리에 들어오면 effect를 재실행해 채운다.
     // 루트 스코프에선 위 scopeKey 가드가 fullGraph-only 재실행을 무시하므로 권위 재로딩 회귀는 없다.
-  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, t, frameScopeTopLeftKeepZoom]);
+  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, scheduleAutoSave, t, frameScopeTopLeftKeepZoom]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -3572,7 +3673,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           position: { ...node.position },
           selected: true,
           // 사본은 원본 그룹 소속·대표끝 지정을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
-          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false },
+          // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
+          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false, output_ids: "" },
         });
         return { ...node, position: plan.resetPos, selected: false };
       });
@@ -3842,9 +3944,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
       pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
+      // 원본 노드 삭제 → 미러 즉시 해제(복사본 전환, io-linking §5). RF는 실제 제거(applyNodeChanges)
+      // 전에 onNodesDelete를 먼저 호출하므로, current에서 직접 걸러낸 배열로 propagateIoLinks를 돌린다
+      // (updateSelectedData/patchNode와 동일 가드) — 뒤이은 RF 자체 제거는 이미 없는 id라 no-op.
+      if (rootGraph !== null) {
+        setNodes((current) =>
+          propagateIoLinks(current.filter((node) => !removed.has(node.id)), subprocessRefs).nodes,
+        );
+      }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave],
+    [pruneSmallGroups, rootGraph, setNodes, subprocessRefs, scheduleAutoSave],
   );
 
   // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
@@ -4709,16 +4819,21 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // IO 텍스트/폼/링크가 바뀌면 원본 수정일 수 있다 → 같은 커밋에서 미러 전량 동기화 (io-linking §5).
+      // rootGraph 미로드(=SP 지정 미확보) 중엔 건너뛴다 — 불완전한 spRefs로 돌리면 SP 원본 미러가
+      // 댕글링으로 오판돼 해산된다. 그 경우 치유는 다음 로드 정합화가 맡는다.
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === selectedId
             ? { ...node, data: { ...node.data, ...patch } }
             : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, selectedId, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 하위프로세스 "최신으로 업데이트" — linkedVersionId를 latest_published_version_id로 갱신,
@@ -4788,14 +4903,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // 노드 편집 모달도 IO 원본 텍스트를 고칠 수 있다 — 인스펙터와 같은 전파 트리거·가드 (io-linking §5)
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 정보 수정 모달 패치 — summaryNodeId 대상. 현재 스코프 노드는 state, 펼친 자식은 scope-split.
@@ -5605,6 +5723,114 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // ── IO 링크(불러오기) 인스펙터 배선 (io-linking §4) ──
+  // 미러를 실제로 보유한 원본/SP 항목의 줄 인덱스 — 행 아이콘 표시는 이 집합으로만 판정한다
+  // (getIoLinkPeers는 호출마다 인덱스를 재구축하므로 행 단위로 쓰지 않는다).
+  const ioMirrorIndex = useMemo(() => buildIoMirrorIndex(nodes), [nodes]);
+  const collectLinkedIndexes = (ids: string | null | undefined): ReadonlySet<number> => {
+    const set = new Set<number>();
+    (ids ?? "").split("\n").forEach((raw, i) => {
+      const itemId = raw.trim();
+      if (itemId !== "" && (ioMirrorIndex.get(itemId)?.length ?? 0) > 0) {
+        set.add(i);
+      }
+    });
+    return set;
+  };
+  const ioOriginGroupIndexes = collectLinkedIndexes(selectedNode?.data.output_ids);
+  const ioSpLinkedInputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.input_ids : null,
+  );
+  const ioSpLinkedOutputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.output_ids : null,
+  );
+  // 끊긴 흐름 경고 — 선택 노드 인풋 미러 중 원본→소비 경로 부재 행(표시 전용, io-linking 백로그 2026-08-21)
+  const ioBrokenInputIndexes = selectedNode
+    ? getBrokenInputMirrorIndexes(nodes, edges, subprocessRefs, selectedNode.id)
+    : new Set<number>();
+  // 항목 hover → 상대편(원본이면 미러 전부, 미러면 원본) 노드 + 흐름 경로 엣지 하이라이트.
+  // 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는 유지 (io-linking §2)
+  const handleIoHoverItem = (side: IoSide, index: number | null) => {
+    if (selectedNode === null || index === null) {
+      setIoHighlight(null);
+      return;
+    }
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    // 미러 행 호버 = 원본만, 원본 행 호버 = 미러 전부 — 형제 미러 동시 점등 금지 (§4-5, QA 이슈 #1)
+    const peerIds =
+      peers.origin === null
+        ? [] // 원본 소실(댕글링) — 비출 상대 없음
+        : peers.origin.nodeId !== selectedNode.id
+          ? [peers.origin.nodeId]
+          : peers.mirrors.map((m) => m.nodeId).filter((id) => id !== selectedNode.id);
+    const nodeIds = [...new Set(peerIds)];
+    if (nodeIds.length === 0) {
+      setIoHighlight(null);
+      return;
+    }
+    const edgeIds = new Set<string>();
+    for (const peerId of nodeIds) {
+      const forward = getFlowPathBetween(edges, selectedNode.id, peerId);
+      const path = forward.length > 0 ? forward : getFlowPathBetween(edges, peerId, selectedNode.id);
+      for (const edgeId of path) {
+        edgeIds.add(edgeId);
+      }
+    }
+    setIoHighlight({ nodeIds, edgeIds: [...edgeIds] });
+  };
+  // 불러오기 후보 — 모달이 열린 동안 hover가 ioHighlight 리렌더를 유발하므로 memo로 재스캔 방지
+  const ioImportCandidates = useMemo(
+    () =>
+      ioImport
+        ? collectIoImportCandidates({
+            nodes,
+            edges,
+            spRefs: subprocessRefs,
+            nodeId: ioImport.nodeId,
+            side: ioImport.side,
+          })
+        : [],
+    [ioImport, nodes, edges, subprocessRefs],
+  );
+  // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2). anchorId는 경로 하이라이트 기준점
+  const [ioPeersMenu, setIoPeersMenu] = useState<{
+    anchorId: string;
+    at: { x: number; y: number };
+    items: IoPeerItem[];
+  } | null>(null);
+  const handleIoPeersMenu = (side: IoSide, index: number, at: { x: number; y: number }) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    const items: IoPeerItem[] = [];
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      const originNode = nodes.find((n) => n.id === peers.origin?.nodeId);
+      if (originNode) {
+        items.push({
+          nodeId: originNode.id,
+          label: originNode.data.label,
+          side: peers.origin.kind === "spin" ? "input" : "output",
+        });
+      }
+    } else {
+      for (const mirror of peers.mirrors) {
+        if (mirror.nodeId === selectedNode.id) continue;
+        const mirrorNode = nodes.find((n) => n.id === mirror.nodeId);
+        if (mirrorNode) {
+          items.push({ nodeId: mirrorNode.id, label: mirrorNode.data.label, side: mirror.side });
+        }
+      }
+    }
+    if (items.length > 0) setIoPeersMenu({ anchorId: selectedNode.id, at, items });
+  };
+  // 미러 텍스트 클릭 → 원본 노드로 이동(선택+센터링). 원본이 없으면 no-op (io-linking §4-4)
+  const handleIoNavigate = (side: IoSide, index: number) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      setIoHighlight(null);
+      highlightNode(peers.origin.nodeId);
+    }
+  };
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
   const editableParams = selectedNode ? getEditableParamFields(selectedNode.data.nodeType) : [];
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 미지정이면 ""(행은 "—")
@@ -6073,6 +6299,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // Ctrl+드래그 중인 원본 id — 끌리는 실제 노드는 반투명 사본으로 표시(커서를 따라오는 건 사본).
     // 진짜 원본 그래픽은 아래 ghostNodes가 원위치에 솔리드로 렌더하고, 엣지도 그 고스트로 앵커된다(styledEdges).
     const ctrlGhostIdSet = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 상대 노드에 링 강조(className만, 스타일은 globals.css)
+    const ioHighlightIdSet = ioHighlight ? new Set(ioHighlight.nodeIds) : null;
     // 파생 자식(prop-only) 대신 childNodes의 state 객체를 buildScope 파생 위치로 표시해야 RF가 측정·이벤트를 라우팅한다.
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
@@ -6129,8 +6357,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       const withCopyStyle = ctrlGhostIdSet?.has(node.id)
         ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
         : withWarning;
+      const withIoHighlight = ioHighlightIdSet?.has(node.id)
+        ? { ...withCopyStyle, className: [withCopyStyle.className, "io-node-highlight"].filter(Boolean).join(" ") }
+        : withCopyStyle;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withCopyStyle);
+      // GMP 안내 버튼 호버 미리보기 — 노드에도 결과값을 임시 반영(데이터 무변경, 렌더 전용) (사용자 요청 2026-08-21)
+      const withGmpPreview =
+        gmpPreview !== null && gmpPreview.nodeId === node.id
+          ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
+          : withIoHighlight;
+      return injectSubEnds(withGmpPreview);
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6169,6 +6405,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     ctrlDragActive,
     ctrlDragGhosts,
     staleAnchorIds,
+    ioHighlight,
+    gmpPreview,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -6188,6 +6426,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // Ctrl+드래그 중엔 끌리는 노드의 엣지를 원위치 고스트(ctrl-ghost:id)로 앵커 — 엣지가 원본 자리에 남고
     // 반투명 사본만 커서를 따라간다(원본은 제자리 유지). ghostIds가 없으면 항등 변환.
     const ctrlGhostIds = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 원본↔미러 사이 흐름 경로 엣지(양방향 중 존재하는 쪽) 강조
+    const ioHighlightEdgeIds = ioHighlight ? new Set(ioHighlight.edgeIds) : null;
     const anchorEdgesToGhosts = (list: Edge[]): Edge[] =>
       ctrlGhostIds
         ? list.map((edge) => {
@@ -6239,7 +6479,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         };
       }
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
-      if (edge.id === hoveredEdgeId) {
+      if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id)) {
         next = {
           ...next,
           className: [next.className, "edge-hover-highlight"].filter(Boolean).join(" "),
@@ -6326,7 +6566,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
     });
     return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...inlineComposition.gateways, ...syntheticEndEdges]);
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -6594,6 +6834,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [displayFields],
   );
+  // 카테고리 일괄 보이기/숨기기(#4) — 영속은 핸들러에서만(위 StrictMode 리셋 랜드마인과 동일 이유)
+  const setCategoryDisplayFields = useCallback(
+    (fields: NodeDisplayToggle[], on: boolean) => {
+      const next = on
+        ? [...displayFields, ...fields.filter((f) => !displayFields.includes(f))]
+        : displayFields.filter((f) => !fields.includes(f));
+      window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(next));
+      setDisplayFields(next);
+    },
+    [displayFields],
+  );
 
   // 맵 탭의 엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요). 노드 디스플레이는
   // NodeDisplaySection 컴포넌트가 자체 관리 (2026-08-20).
@@ -6630,6 +6881,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // setState만 부르는 핸들러는 useCallback 금지 — 컴파일러가 setter를 dep으로 추론해
   // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
   const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
+  // 픽커 대상 노드의 현재 값 — 미리보기·확정 패치가 공유 (렌더 IIFE 금지 — 컴파일러 ref 규칙)
+  const gmpPickerNode = gmpPicker !== null ? nodes.find((n) => n.id === gmpPicker.nodeId) : undefined;
   const onEditGmpAction = readOnly ? null : openGmpPicker;
   // 분류 확정 안내 — 분류가 노드 색을 자동 변경하므로(일반 노드) 마우스 지점에 알리고
   // "이전 분류로"/"색만" 두 단계 되돌리기를 제공 (사용자 결정 2026-08-20)
@@ -6642,6 +6895,59 @@ function MapEditor({ mapId }: { mapId: number }) {
     x: number;
     y: number;
   } | null>(null);
+  // 노드 IO 체크리스트(#9) — 화면 한정 상태(저장·영속 없음, 새로고침 리셋). 키는 링크 itemId
+  // (원본·미러 그룹 동반 체크) 또는 노드·측·줄. 뷰어도 조작 가능 — 데이터가 아니라 열람 보조.
+  const [ioChecks, setIoChecks] = useState<ReadonlySet<string>>(new Set());
+  // 체크리스트 표시 상태(#2) — 키 `${nodeId}:${side}`, 미지정=capped(3.5줄)
+  const [ioListStates, setIoListStates] = useState<ReadonlyMap<string, IoListDisplayState>>(new Map());
+  const setIoListState = useCallback((key: string, state: IoListDisplayState) => {
+    setIoListStates((prev) => {
+      if (prev.get(key) === state) return prev;
+      const next = new Map(prev);
+      next.set(key, state);
+      return next;
+    });
+  }, []);
+  // 체크 동기 애니메이션(#3) — 논스로 같은 키 재체크도 재생
+  const [ioCheckPulse, setIoCheckPulse] = useState<{ key: string; nonce: number } | null>(null);
+  const toggleIoCheck = useCallback(
+    (key: string) => {
+      const turningOn = !ioChecks.has(key);
+      setIoChecks((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      // 링크 항목 체크 시(#3) — 상대(원본·형제 미러) 목록이 접혀 있으면 펼치고(0줄→3.5줄),
+      // 행이 캡 밖이면 전체 펼침, 체크 애니메이션 재생. per-노드 키(`:in:`/`:out:`)는 대상 없음
+      if (!turningOn || /:(in|out):/.test(key)) return;
+      const currentNodes = nodesRef.current;
+      const sites: { nodeId: string; side: IoSide; index: number }[] = [
+        ...(buildIoMirrorIndex(currentNodes).get(key) ?? []),
+      ];
+      const origin = buildIoIndex(currentNodes, subprocessRefs).get(key);
+      if (origin && origin.kind === "out") {
+        sites.push({ nodeId: origin.nodeId, side: "output", index: origin.index });
+      }
+      setIoListStates((prev) => {
+        let next: Map<string, IoListDisplayState> | null = null;
+        for (const site of sites) {
+          const listKey = `${site.nodeId}:${site.side}`;
+          const cur = (next ?? prev).get(listKey) ?? "capped";
+          const want: IoListDisplayState =
+            site.index >= 3 ? "all" : cur === "collapsed" ? "capped" : cur;
+          if (want !== cur) {
+            next = next ?? new Map(prev);
+            next.set(listKey, want);
+          }
+        }
+        return next ?? prev;
+      });
+      setIoCheckPulse((prev) => ({ key, nonce: (prev?.nonce ?? 0) + 1 }));
+    },
+    [ioChecks, subprocessRefs],
+  );
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6655,6 +6961,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
         : EMPTY_CTRL_DRAG_IDS,
       onEditGmp: onEditGmpAction,
+      ioChecks,
+      onToggleIoCheck: toggleIoCheck,
+      ioListStates,
+      onSetIoListState: setIoListState,
+      ioCheckPulse,
     }),
     [
       toggleInlineExpand,
@@ -6667,6 +6978,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       ctrlDragActive,
       ctrlDragGhosts,
       onEditGmpAction,
+      ioChecks,
+      toggleIoCheck,
+      ioListStates,
+      setIoListState,
+      ioCheckPulse,
     ],
   );
 
@@ -7455,7 +7771,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -7606,7 +7922,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             const consultDisabledReason = !readOnly
               ? null
               : isViewer
-                ? "View-only access — consulting needs edit permission"
+                ? "View-only access - consulting needs edit permission"
                 : checkout?.checked_out_by
                   ? "Another user is editing this draft"
                   : "This version isn't an editable draft";
@@ -7678,7 +7994,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   >
                     <div className="text-caption-strong text-ink">Try the AI consultant</div>
                     <p className="mt-1 text-fine text-ink-secondary">
-                      Answer a few questions and this empty map draws itself — attach a document
+                      Answer a few questions and this empty map draws itself - attach a document
                       to go even faster.
                     </p>
                     <div className="mt-2 flex justify-end gap-1.5">
@@ -7737,7 +8053,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <AlertTriangle size={14} strokeWidth={1.7} className="shrink-0" />
           <span className="shrink-0 font-semibold">{t("editor.saveFailedPill")}</span>
           <span className="min-w-0">
-            {saveErrorDetail} — {t("editor.saveRetryHint")}
+            {saveErrorDetail} - {t("editor.saveRetryHint")}
           </span>
         </div>
       )}
@@ -8576,6 +8892,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 output={node.data.output ?? ""}
                 input_forms={node.data.input_forms ?? ""}
                 output_forms={node.data.output_forms ?? ""}
+                output_ids={node.data.output_ids ?? ""}
+                input_links={node.data.input_links ?? ""}
+                output_links={node.data.output_links ?? ""}
+                input_flags={node.data.input_flags ?? ""}
                 data_form={node.data.data_form ?? ""}
                 start_condition={node.data.start_condition ?? ""}
                 end_condition={node.data.end_condition ?? ""}
@@ -8589,6 +8909,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 colorPresets={colorsForType(node.data.nodeType)}
                 spParams={
                   node.data.nodeType === "subprocess" ? getInheritedParams(summarySpRef) : null
+                }
+                sp={node.data.nodeType === "subprocess" ? summarySpRef ?? null : null}
+                gmp={
+                  node.data.nodeType === "subprocess"
+                    ? summarySpRef?.gmp ?? ""
+                    : node.data.gmp ?? ""
                 }
                 inheritedDescription={
                   node.data.nodeType === "subprocess" ? (summarySpRef?.sp_description ?? null) : null
@@ -8828,6 +9154,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <NewlineHint />
                       </div>
                       {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 호버 시 편집 아이콘, 더블클릭/아이콘으로
                           편집 모달을 열어 설명에 자동 포커스 (사용자 결정 2026-08-20).
@@ -8941,8 +9268,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김.
                           아코디언(기본 접힘) — 수행 지표·입출력 조건과 동일 패턴 (사용자 결정 2026-08-20) */}
-                      {hasBpmAttributes(selectedNode.data.nodeType) && (
-                        <div className="rounded-md border border-hairline p-3">
+                      {hasBpmAttributes(selectedNode.data.nodeType) && (() => {
+                        // 채움 카운트 — 헤더 배지·읽기전용 빈 섹션 딤(#3) 공용, gmp 포함 (사용자 요청 2026-08-21)
+                        const attrsFilled = [
+                          selectedNode.data.assignee,
+                          selectedNode.data.department,
+                          selectedNode.data.system,
+                          selectedNode.data.url,
+                          selectedNode.data.gmp,
+                        ].filter((v) => (v ?? "") !== "").length;
+                        return (
+                        <div className={`rounded-md border border-hairline p-3 ${readOnly && attrsFilled === 0 ? "opacity-50" : ""}`}>
                           <button
                             type="button"
                             data-id="inspector-attrs-toggle"
@@ -8961,17 +9297,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                               className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
                             />
                             {t("editor.bpmAttrs")}
-                            {(() => {
-                              const filled = [
-                                selectedNode.data.assignee,
-                                selectedNode.data.department,
-                                selectedNode.data.system,
-                                selectedNode.data.url,
-                              ].filter((v) => (v ?? "") !== "").length;
-                              return filled > 0 ? (
-                                <span className="font-normal text-ink-tertiary">({filled})</span>
-                              ) : null;
-                            })()}
+                            {attrsFilled > 0 && (
+                              <span className="font-normal text-ink-tertiary">({attrsFilled})</span>
+                            )}
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
@@ -9026,6 +9354,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                               )}
                             </div>
                           ))}
+                          {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
+                          <div className="flex items-center justify-between gap-2 py-1">
+                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.gmp")}</span>
+                            {readOnly ? (
+                              (selectedNode.data.gmp ?? "") !== "" ? (
+                                <span
+                                  data-id="inspector-field-gmp"
+                                  className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
+                                  style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                >
+                                  {formatGmp(selectedNode.data.gmp)}
+                                </span>
+                              ) : (
+                                <span data-id="inspector-field-gmp" className="text-caption text-ink-tertiary">-</span>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                data-id="inspector-field-gmp"
+                                className="rounded-sm px-1 py-0.5 hover:bg-surface-alt"
+                                onClick={(event) => openGmpPicker(selectedNode.id, event.clientX, event.clientY)}
+                              >
+                                {(selectedNode.data.gmp ?? "") !== "" ? (
+                                  <span
+                                    className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
+                                    style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                  >
+                                    {formatGmp(selectedNode.data.gmp)}
+                                  </span>
+                                ) : (
+                                  <span className="text-caption text-ink-tertiary">
+                                    {t("perm.processFields.gmpUnset")}
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </div>
                           <UrlLabelField
                             key={selectedNode.id}
                             url={selectedNode.data.url ?? ""}
@@ -9036,7 +9401,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
                       {selectedNode.data.nodeType === "end" && (
                         <div className="flex items-center justify-between">
@@ -9172,9 +9538,24 @@ function MapEditor({ mapId }: { mapId: number }) {
                             output: selectedNode.data.output ?? "",
                             input_forms: selectedNode.data.input_forms ?? "",
                             output_forms: selectedNode.data.output_forms ?? "",
+                            output_ids: selectedNode.data.output_ids ?? "",
+                            input_links: selectedNode.data.input_links ?? "",
+                            output_links: selectedNode.data.output_links ?? "",
+                            input_flags: selectedNode.data.input_flags ?? "",
                             data_form: selectedNode.data.data_form ?? "",
                             start_condition: selectedNode.data.start_condition ?? "",
                             end_condition: selectedNode.data.end_condition ?? "",
+                          }}
+                          io={{
+                            originGroupIndexes: ioOriginGroupIndexes,
+                            brokenInputIndexes: ioBrokenInputIndexes,
+                            onImport: (side, at) =>
+                              setIoImport({ side, nodeId: selectedNode.id, at }),
+                            onNavigate: handleIoNavigate,
+                            onHoverItem: handleIoHoverItem,
+                            onPeersMenu: handleIoPeersMenu,
+                            spLinkedInputIndexes: ioSpLinkedInputIndexes,
+                            spLinkedOutputIndexes: ioSpLinkedOutputIndexes,
                           }}
                           sp={selectedSpRef}
                           readOnly={readOnly}
@@ -9336,6 +9717,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <NewlineHint />
                       </div>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>
@@ -9390,6 +9772,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     idPrefix="properties"
                     displayFields={displayFields}
                     onToggle={toggleDisplayField}
+                    onSetCategory={setCategoryDisplayFields}
                   />
                 }
                 subprocessTabSlot={
@@ -9518,6 +9901,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       idPrefix="inspector"
                       displayFields={displayFields}
                       onToggle={toggleDisplayField}
+                      onSetCategory={setCategoryDisplayFields}
                     />
                     <div data-id="inspector-edge-style-section" className="rounded-md border border-hairline p-3">
                       <button
@@ -9612,7 +9996,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           data-id="inspector-generate-complete-doc"
                           onClick={() => completeDocPickerRef.current?.click()}
                           className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                          title="Pick the original SOP .docx - injects section bookmarks and appends the flowchart page."
                         >
                           <FileText size={16} strokeWidth={1.5} />
                           Generate complete document
@@ -10181,7 +10565,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           return (
             <ConfirmDialog
               dialogId="edge-style-apply-all"
-              title={`${t("edgeStyle.applyAllTitle")} — ${t(targetOption.labelKey)}`}
+              title={`${t("edgeStyle.applyAllTitle")} - ${t(targetOption.labelKey)}`}
               icon={<TargetIcon size={28} strokeWidth={1.5} />}
               lines={lines}
               confirmLabel={t("edgeStyle.applyAllConfirm")}
@@ -10227,6 +10611,45 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setHoveredEdgeId(null);
             setSwapSelect(null);
+          }}
+        />
+      )}
+      {/* IO 항목 불러오기 — 후보는 ioImportCandidates memo(닫혀 있으면 빈 배열, 열림 중 hover 리렌더에 재스캔 없음).
+          선택 즉시 그래프에 커밋(여러 노드를 만지므로 카드 draft로는 표현 불가, io-linking §4-2) */}
+      {ioImport && (
+        <IoImportModal
+          side={ioImport.side}
+          position={ioImport.at}
+          candidates={ioImportCandidates}
+          onHoverCandidate={(candidate) =>
+            setIoHighlight(
+              candidate
+                ? { nodeIds: [candidate.nodeId], edgeIds: candidate.pathEdgeIds }
+                : null,
+            )
+          }
+          onPick={(candidate) => {
+            const result = applyIoImport({
+              nodes: nodesRef.current,
+              edges,
+              spRefs: subprocessRefs,
+              nodeId: ioImport.nodeId,
+              side: ioImport.side,
+              candidate,
+            });
+            setIoImport(null);
+            setIoHighlight(null);
+            if (!result) {
+              return;
+            }
+            recordChange(false);
+            setNodes(result.nodes);
+            scheduleAutoSave();
+            showToast(t(IMPORT_TOAST_KEY[result.action]));
+          }}
+          onClose={() => {
+            setIoImport(null);
+            setIoHighlight(null);
           }}
         />
       )}
@@ -10317,142 +10740,92 @@ function MapEditor({ mapId }: { mapId: number }) {
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
       {/* GMP 변경 안내 — 닫기(X)가 클릭한 마우스 지점, 분류·노드 색 before→after를 명시 (design 2026-08-20) */}
       {gmpNotice !== null && (
-        <div
-          data-id="node-gmp-notice"
-          className="fixed z-[1360] w-[300px] rounded-md border border-hairline bg-surface p-3 shadow-lg"
-          style={{
-            left: Math.max(8, Math.min(gmpNotice.x - 300 + 24, window.innerWidth - 308)),
-            top: Math.max(8, gmpNotice.y - 24),
+        <GmpNoticePopover
+          x={gmpNotice.x}
+          y={gmpNotice.y}
+          prevGmp={gmpNotice.prevGmp}
+          nextGmp={gmpNotice.nextGmp}
+          prevColor={gmpNotice.prevColor}
+          nextColor={gmpNotice.nextColor}
+          onRevertColor={() => {
+            patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
+            setGmpPreview(null);
           }}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-caption-strong text-ink">
-              <ShieldCheck size={14} strokeWidth={1.5} className="text-accent" />
-              {t("gmpNotice.title")}
-            </div>
-            <button
-              type="button"
-              data-id="node-gmp-notice-close"
-              aria-label="Dismiss"
-              className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt"
-              onClick={() => setGmpNotice(null)}
-            >
-              <X size={14} strokeWidth={1.5} />
-            </button>
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-caption text-ink-secondary">
-            <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.classification")}</span>
-            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.prevGmp) ?? undefined}>
-              {formatGmp(gmpNotice.prevGmp) || t("gmpNotice.unset")}
-            </span>
-            <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-            <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpNotice.nextGmp) ?? undefined}>
-              {formatGmp(gmpNotice.nextGmp) || t("gmpNotice.unset")}
-            </span>
-          </div>
-          {gmpNotice.nextColor !== gmpNotice.prevColor && (
-            <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-secondary">
-              <span className="w-20 shrink-0 text-fine text-ink-tertiary">{t("gmpNotice.nodeColor")}</span>
-              <span
-                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
-                style={
-                  gmpNotice.prevColor
-                    ? { borderColor: gmpNotice.prevColor, background: `color-mix(in srgb, ${gmpNotice.prevColor} 18%, white)` }
-                    : undefined
-                }
-              />
-              <ArrowRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-              <span
-                className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm border"
-                style={{ borderColor: gmpNotice.nextColor, background: `color-mix(in srgb, ${gmpNotice.nextColor} 18%, white)` }}
-              />
-            </div>
-          )}
-          <div className="mt-2.5 flex justify-end gap-1.5">
-            {gmpNotice.nextColor !== gmpNotice.prevColor && (
-              <button
-                type="button"
-                data-id="node-gmp-notice-revert-color"
-                className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                onClick={() => {
-                  patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
-                  setGmpNotice(null);
-                }}
-              >
-                {t("gmpNotice.revertColor")}
-              </button>
-            )}
-            <button
-              type="button"
-              data-id="node-gmp-notice-revert-all"
-              className="rounded-sm px-2 py-0.5 text-caption text-accent hover:bg-accent-tint"
-              onClick={() => {
-                patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
-                setGmpNotice(null);
-              }}
-            >
-              {t("gmpNotice.revertAll")}
-            </button>
-          </div>
-        </div>
+          onRevertAll={() => {
+            patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onClose={() => {
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onHoverAction={(action) => {
+            if (action === null) {
+              setGmpPreview(null);
+              return;
+            }
+            // 액션 결과값을 노드에 미리 반영 — color=색만 복원, all=둘 다 복원, confirm=현행 유지
+            const preview =
+              action === "color"
+                ? { gmp: gmpNotice.nextGmp, color: gmpNotice.prevColor }
+                : action === "all"
+                  ? { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }
+                  : { gmp: gmpNotice.nextGmp, color: gmpNotice.nextColor };
+            setGmpPreview({ nodeId: gmpNotice.nodeId, ...preview });
+          }}
+        />
+      )}
+      {ioPeersMenu !== null && (
+        <IoPeersMenu
+          position={ioPeersMenu.at}
+          items={ioPeersMenu.items}
+          onHoverPeer={(nodeId) => {
+            if (nodeId === null) {
+              setIoHighlight(null);
+              return;
+            }
+            // 앵커→상대 흐름 경로가 있으면 엣지도 함께(양방향 중 존재하는 쪽) — 없으면 노드만
+            const forward = getFlowPathBetween(edges, ioPeersMenu.anchorId, nodeId);
+            const path = forward.length > 0 ? forward : getFlowPathBetween(edges, nodeId, ioPeersMenu.anchorId);
+            setIoHighlight({ nodeIds: [nodeId], edgeIds: path });
+          }}
+          onPick={(nodeId) => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+            highlightNode(nodeId);
+          }}
+          onClose={() => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+          }}
+        />
       )}
       {gmpPicker !== null && (
-        <>
-          <div className="fixed inset-0 z-[1340]" onClick={() => setGmpPicker(null)} />
-          <div
-            data-id="node-gmp-picker"
-            className="fixed z-[1350] w-[180px] rounded-md border border-hairline bg-surface p-1.5 shadow-lg"
-            style={{
-              left: Math.min(gmpPicker.x, window.innerWidth - 188),
-              top: Math.min(gmpPicker.y + 6, window.innerHeight - 170),
-            }}
-          >
-            {[{ value: "", label: t("perm.processFields.gmpUnset") }, ...GMP_OPTIONS].map((option) => (
-              <button
-                key={option.value || "unset"}
-                type="button"
-                data-id={`node-gmp-picker-${option.value || "unset"}`}
-                className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt"
-                onClick={(event) => {
-                  const target = nodes.find((n) => n.id === gmpPicker.nodeId);
-                  const prevGmp = target?.data.gmp ?? "";
-                  const prevColor = target?.data.color ?? "";
-                  // 분류가 노드 색을 자동 확정 — 미분류 선택은 색을 건드리지 않는다
-                  const nextColor = option.value
-                    ? GMP_NODE_COLORS[option.value as GmpValue]
-                    : prevColor;
-                  patchNode(
-                    gmpPicker.nodeId,
-                    option.value ? { gmp: option.value, color: nextColor } : { gmp: option.value },
-                    true,
-                  );
-                  setGmpPicker(null);
-                  if (option.value !== prevGmp) {
-                    setGmpNotice({
-                      nodeId: gmpPicker.nodeId,
-                      prevGmp,
-                      prevColor,
-                      nextGmp: option.value,
-                      nextColor,
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }
-                }}
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 rounded-full border border-hairline"
-                  style={
-                    option.value
-                      ? { backgroundColor: `var(${GMP_OPTIONS.find((o) => o.value === option.value)?.colorVar})` }
-                      : undefined
-                  }
-                />
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </>
+        <GmpPickerPopup
+          x={gmpPicker.x}
+          y={gmpPicker.y}
+          onClose={() => setGmpPicker(null)}
+          onPick={(value) => {
+            const prevGmp = gmpPickerNode?.data.gmp ?? "";
+            const prevColor = gmpPickerNode?.data.color ?? "";
+            setGmpPicker(null);
+            if (value === prevGmp) return; // 동일 분류 재선택 — 색 리셋 부작용 없이 무시
+            // 분류가 노드 색을 자동 확정 — 미분류 선택은 타입 기본색으로 리셋 (사용자 요청 2026-08-21 #7)
+            const nextColor = getGmpTargetColor(value);
+            patchNode(gmpPicker.nodeId, { gmp: value, color: nextColor }, true);
+            setGmpNotice({
+              nodeId: gmpPicker.nodeId,
+              prevGmp,
+              prevColor,
+              nextGmp: value,
+              nextColor,
+              x: gmpPicker.x,
+              y: gmpPicker.y,
+            });
+          }}
+        />
       )}
     </NodeActionsContext.Provider>
   );

@@ -58,7 +58,7 @@ export function WordDocsSection({
         <ul className="flex flex-col gap-0.5 border-t border-hairline p-1">
           {maps.length === 0 && (
             <li className="px-2 py-1.5 text-fine text-ink-muted">
-              No Word documents yet — create one from a .docx.
+              No Word documents yet - create one from a .docx.
             </li>
           )}
           {maps.map((m) => {
@@ -88,7 +88,7 @@ export function WordDocsSection({
                     </p>
                     {needsRegenerate(m) && (
                       <p data-id={`word-doc-regen-hint-${m.id}`} className="truncate text-fine text-changed">
-                        Re-imported after last generation — regenerate the document.
+                        Re-imported after last generation - regenerate the document.
                       </p>
                     )}
                   </div>

@@ -86,6 +86,9 @@ export interface MapSummary {
   sp_output?: string | null;
   sp_input_forms?: string | null;
   sp_output_forms?: string | null;
+  // SP IO 항목 id — 지정 재저장 시 기존 id 승계 소스 (io-linking §3)
+  sp_input_ids?: string | null;
+  sp_output_ids?: string | null;
   // 인터뷰 승격 필드 — 대표+폴백 쌍. sp_gmp는 direct|indirect|non_gmp|null(미분류) (design 2026-08-19 §1.2)
   sp_start_condition?: string | null;
   sp_end_condition?: string | null;
@@ -126,6 +129,11 @@ export interface GraphNode {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // IO 링크 — output_ids=원본 항목 id, *_links=미러의 원본 itemId, input_flags=필수/선택("optional"만 명시) (io-linking §3)
+  output_ids?: string;
+  input_links?: string;
+  output_links?: string;
+  input_flags?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;
@@ -203,6 +211,9 @@ export interface SubprocessRef {
   // 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms (read-only 상속 표시)
   input_forms: string | null;
   output_forms: string | null;
+  // SP 지정 IO 항목 id — 링크 맵 sp_input_ids/sp_output_ids (io-linking §3)
+  input_ids: string | null;
+  output_ids: string | null;
   start_condition: string | null;
   end_condition: string | null;
   // 빈도 원문 — SP 노드 annual_count 입력 힌트(읽기 전용, 수정은 링크 맵 설정에서)
@@ -293,7 +304,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
     console.error(`API ${init?.method ?? "GET"} ${path} failed: ${response.status}`, detail);
     throw new ApiError(
-      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API ${init?.method ?? "GET"} ${path} failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -473,6 +484,9 @@ export interface SubprocessDesignationBody {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // SP 지정 IO 항목 id (io-linking §3)
+  input_ids?: string;
+  output_ids?: string;
   description?: string;
 }
 
@@ -902,7 +916,7 @@ export async function exportDbTableCsv(
     // 원문(JSON body 포함)은 콘솔에 보존 — UI는 humanizeApiError로 정제 (spec 2026-08-14 §4)
     console.error(`API GET ${path} failed: ${response.status}`, detail);
     throw new ApiError(
-      `API GET ${path} failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API GET ${path} failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -2322,7 +2336,7 @@ export async function uploadKbDocument(file: File): Promise<KbDocument> {
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new ApiError(
-      `API POST /kb/documents failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API POST /kb/documents failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );
@@ -2373,7 +2387,7 @@ export async function uploadInterviewAttachment(
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new ApiError(
-      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` — ${detail}` : ""}`,
+      `API POST /interviews/${id}/attachments failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
       response.status,
       detail,
     );

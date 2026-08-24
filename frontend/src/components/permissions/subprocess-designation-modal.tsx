@@ -15,6 +15,7 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput } from "@/components/multi-value-input";
 import { ParamInput } from "@/components/param-input";
 import { useI18n } from "@/lib/i18n";
+import { assignSpIoIds } from "@/lib/io-items";
 import {
   isCostFieldDisabled,
   PARAM_LABEL_KEY,
@@ -46,6 +47,10 @@ export interface DesignationForm {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬 (2026-08-20)
   input_forms: string;
   output_forms: string;
+  // SP IO 항목 id — 폼에서 편집하지 않는 현행 값. 저장 시 텍스트가 유지된 줄의 id를 승계하는 데만 쓴다
+  // (id가 바뀌면 소비 맵의 미러가 댕글링→복사본으로 해산된다, io-linking §3)
+  input_ids: string;
+  output_ids: string;
   description: string;
 }
 
@@ -160,6 +165,9 @@ export function SubprocessDesignationModal({
         output: form.output.trim(),
         input_forms: form.input_forms,
         output_forms: form.output_forms,
+        // 전 줄 id 부여 — 텍스트가 그대로인 줄은 기존 id 승계(소비 맵 미러 유지), 개명·신규는 새 id
+        input_ids: assignSpIoIds(form.input.trim(), initial.input, initial.input_ids),
+        output_ids: assignSpIoIds(form.output.trim(), initial.output, initial.output_ids),
         description: form.description.trim(),
       });
       onSaved(updated);

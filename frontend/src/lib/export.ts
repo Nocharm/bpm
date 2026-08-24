@@ -47,6 +47,13 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     setImportant(head, "stroke", EDGE_STROKE);
     setImportant(head, "fill", EDGE_STROKE);
   }
+  // 마름모 제목 — 인쇄(PNG)에선 3줄 클램프만 해제해 전문 노출. 폭은 화면 그대로(max-w-24) 유지
+  // — 폭을 늘리면 마름모 밖으로 퍼져 어색 (사용자 결정 2026-08-23)
+  for (const span of viewport.querySelectorAll(".bpm-decision-title")) {
+    setImportant(span, "-webkit-line-clamp", "unset");
+    setImportant(span, "display", "inline");
+    setImportant(span, "overflow", "visible");
+  }
   return () => {
     for (const undo of undos) undo();
   };

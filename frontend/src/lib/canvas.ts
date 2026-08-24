@@ -35,6 +35,11 @@ export type NodeData = {
   // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
   input_forms?: string;
   output_forms?: string;
+  // IO 링크 — output_ids=원본 항목 id, *_links=미러의 원본 itemId, input_flags=필수/선택 (io-linking §3)
+  output_ids?: string;
+  input_links?: string;
+  output_links?: string;
+  input_flags?: string;
   start_condition?: string;
   end_condition?: string;
   data_form?: string;
@@ -91,6 +96,9 @@ export type NodeData = {
   spTouchTime?: string | null;
   spInput?: string | null;
   spOutput?: string | null;
+  // SP IO 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms 상속(캔버스 아이콘 표시용)
+  spInputForms?: string | null;
+  spOutputForms?: string | null;
   spStartCondition?: string | null;
   spEndCondition?: string | null;
   spGmp?: string | null;
@@ -172,7 +180,8 @@ const COLLISION_GAP = 8;
 export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } {
   switch (nodeType) {
     case "decision":
-      return { w: 96, h: 96 };
+      // 1:1.2 가로 확장 마름모 — process-node.tsx 디시전 박스(w-[116px])와 동기화 필수
+      return { w: 116, h: 96 };
     case "start":
     case "end":
       return { w: 96, h: 40 };

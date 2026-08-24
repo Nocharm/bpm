@@ -302,6 +302,10 @@ async def replace_graph(
             existing.output = node.output
             existing.input_forms = node.input_forms
             existing.output_forms = node.output_forms
+            existing.output_ids = node.output_ids
+            existing.input_links = node.input_links
+            existing.output_links = node.output_links
+            existing.input_flags = node.input_flags
             existing.start_condition = node.start_condition
             existing.end_condition = node.end_condition
             existing.data_form = node.data_form

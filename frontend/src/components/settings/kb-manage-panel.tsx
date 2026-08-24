@@ -52,7 +52,7 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
       await refresh();
       onToast(
         doc.status === "parsed"
-          ? "Document uploaded — indexing runs in the background."
+          ? "Document uploaded - indexing runs in the background."
           : "Uploaded, but the file could not be parsed.",
       );
     } catch (err) {
@@ -109,7 +109,7 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
       </header>
       {docs.length === 0 ? (
         <p className="rounded-sm border border-hairline bg-surface-alt px-3 py-4 text-caption text-ink-muted">
-          No documents yet — upload SOPs or guides to ground the AI consultant.
+          No documents yet - upload SOPs or guides to ground the AI consultant.
         </p>
       ) : (
         <ul className="divide-y divide-hairline rounded-sm border border-hairline">

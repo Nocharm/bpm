@@ -281,7 +281,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
                       {event.event_type}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-caption text-ink">
-                      {event.map_name} {event.version_label} — {event.actor_name}
+                      {event.map_name} {event.version_label} - {event.actor_name}
                     </span>
                     <span className="shrink-0 text-fine text-ink-tertiary">
                       {formatKstShort(event.created_at)}
