@@ -48,9 +48,12 @@
 
 ## 3. 인터뷰 JSON 임포트 점검
 
-- 어댑터(`backend/scripts/consultant_interview.py`) 인지 키 ↔ 인터뷰 웹 최신 출력 키 전수 대조.
-- 실파일 dry-run 대조 — `2026-08-18-interview-import-design.md`의 잔여 작업. **실파일은 사용자 제공 필요.**
-- 대조에서 갭 발견 시 같은 브랜치에서 수정.
+**2026-08-24 점검 완료(feat/ai-contract-parity에서 선행 수행)** — 어댑터 키 전수 소비 대조·샘플 2종
+dry-run(이슈 0)·`artifact_role` 유실 회귀 봉합(`[Interview]` 섹션 잔류 복원)·l5/tasks/exceptions
+미지 키 경고 추가. `summary`·`labelSource` 미소비는 원설계 §3 "미저장" 의도 유지.
+
+- **잔여: 실파일 dry-run 대조** — `2026-08-18-interview-import-design.md`의 잔여 작업.
+  **실파일은 사용자 제공 필요.** unknown key 리포트가 어댑터 수정 목록이 된다.
 
 ## 결정 로그 (2026-08-24 브레인스토밍)
 

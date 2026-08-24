@@ -39,6 +39,13 @@ _ACTION_KEYS = {
     "seq", "label", "name", "kind", "variant", "rule", "input", "output",
     "system", "screen", "dataForm", "quote",
 }
+# l5·tasks·exceptions 미지 키도 dry-run이 표면화 — 실파일 대조 완전성 (점검 2026-08-24)
+_L5_KEYS = {"label", "nodeCode"}
+_TASK_KEYS = {
+    "id", "doc", "seq", "name", "note", "state", "evidence", "revision",
+    "ownerRole", "exceptions", "startCondition", "endCondition",
+}
+_EXCEPTION_KEYS = {"name", "rule", "evidence"}
 _KNOWN_KINDS = {"action", "handoff", "decision"}
 
 # 예외 variant 노드 stroke — 에디터 COLOR_PRESETS의 rose와 수동 동기
@@ -141,14 +148,21 @@ def format_node_description(action: dict) -> str:
     return "\n".join(lines)
 
 
-def format_map_description(owner_role: object) -> str:
-    """맵 설명 [Interview] 섹션 — 승격 후 Owner role만 잔류(실오너 거버넌스 전까지).
+def format_map_description(owner_role: object, artifact_role: object = None) -> str:
+    """맵 설명 [Interview] 섹션 — 승격 후 기록성 키(Owner role·Artifact role)만 잔류.
 
     나머지 fields 키는 전부 고유/폴백 컬럼으로 이동해 직렬화에서 제거(드리프트 방지,
-    design 2026-08-19 §4.1).
+    design 2026-08-19 §4.1). artifact_role은 전용/폴백 컬럼이 없는 기록성 값 —
+    승격 리팩터에서 조용히 유실되던 회귀를 원설계의 KV 잔류 방식으로 복원 (점검 2026-08-24).
     """
+    lines: list[str] = []
     role = _clean(owner_role)
-    return f"[Interview]\nOwner role: {role}" if role else ""
+    if role:
+        lines.append(f"Owner role: {role}")
+    artifact = _clean(artifact_role)
+    if artifact:
+        lines.append(f"Artifact role: {artifact}")
+    return "[Interview]\n" + "\n".join(lines) if lines else ""
 
 
 def _truncate(value: str, limit: int, path: str, label: str, issues: list[AdapterIssue]) -> str:
@@ -249,6 +263,8 @@ def convert_interview(raw: object) -> AdapterResult:
         return result
 
     l5 = raw.get("l5")
+    if isinstance(l5, dict):
+        _warn_unknown_keys(l5, _L5_KEYS, "l5", issues)
     l5_code = _clean(l5.get("nodeCode")) if isinstance(l5, dict) else ""
     codes = {c.code: c for c in result.categories}
     if not l5_code or l5_code not in codes:
@@ -269,9 +285,11 @@ def convert_interview(raw: object) -> AdapterResult:
     tasks_raw = raw.get("tasks")
     tasks_by_id: dict[str, dict] = {}
     if isinstance(tasks_raw, list):
-        for task in tasks_raw:
-            if isinstance(task, dict) and _clean(task.get("id")):
-                tasks_by_id[_clean(task.get("id"))] = task
+        for t_idx, task in enumerate(tasks_raw):
+            if isinstance(task, dict):
+                _warn_unknown_keys(task, _TASK_KEYS, f"tasks[{t_idx}]", issues)
+                if _clean(task.get("id")):
+                    tasks_by_id[_clean(task.get("id"))] = task
 
     unit_to_task: dict[str, str] = {}
     seen_task_ids: set[str] = set()
@@ -349,7 +367,7 @@ def convert_interview(raw: object) -> AdapterResult:
                 owner=_clean(row.get("owner")) or None,
                 approvers=approvers,
                 department=_truncate(_clean(row.get("department")), 100, path, "department", issues),
-                description=format_map_description(row.get("ownerRole")),
+                description=format_map_description(row.get("ownerRole"), fields.get("artifact_role")),
                 # 승격 대표 필드 — systems는 sp_system 원문+폴백 이중 기록 (design 2026-08-19 §4.1)
                 system=_truncate(_clean(fields.get("systems")), 100, fpath, "systems", issues),
                 start_condition=_clean(fields.get("start_condition")),
@@ -381,6 +399,7 @@ def convert_interview(raw: object) -> AdapterResult:
                 if not isinstance(exc_item, dict):
                     issues.append(AdapterIssue("warning", epath, "exception is not an object — skipped"))
                     continue
+                _warn_unknown_keys(exc_item, _EXCEPTION_KEYS, epath, issues)
                 title = _clean(exc_item.get("name")) or None
                 text = _clean(exc_item.get("rule")) or (title or "")
                 if not text:

@@ -162,8 +162,9 @@ def test_notes_extraction() -> None:
 
 def test_map_fields_promoted_and_description_shrunk() -> None:
     m = convert_interview(_interview()).maps[0]
-    # [Interview] 직렬화는 Owner role만 잔류 — 승격 키는 고유/폴백 필드로 (design 2026-08-19 §4.1)
-    assert m.description == "[Interview]\nOwner role: 교정 담당자"
+    # [Interview] 직렬화는 기록성 키(Owner role·Artifact role)만 잔류 — 승격 키는 고유/폴백 필드로
+    # (design 2026-08-19 §4.1, artifact_role 잔류 복원 2026-08-24)
+    assert m.description == "[Interview]\nOwner role: 교정 담당자\nArtifact role: deliverable"
     assert m.start_condition == "교정 주기 도래 시 EAM에서 작업지시 자동 발생"
     assert m.end_condition == "준비 목록 나오면 끝"
     assert m.system == "EAM" and m.system_fallback == "EAM"
@@ -177,6 +178,27 @@ def test_map_fields_promoted_and_description_shrunk() -> None:
     fields = data["rows"][0]["fields"]
     fields["done_criterial"] = fields.pop("done_criteria")
     assert convert_interview(data).maps[0].end_condition == "준비 목록 나오면 끝"
+
+
+def test_artifact_role_preserved_without_owner_role() -> None:
+    """artifact_role은 [Interview] 섹션에 잔류 — 승격 리팩터에서 조용히 유실되던 회귀 봉합 (2026-08-24)."""
+    data = _interview()
+    data["rows"][0]["ownerRole"] = None
+    assert convert_interview(data).maps[0].description == "[Interview]\nArtifact role: deliverable"
+
+
+def test_unknown_keys_in_l5_tasks_and_exceptions_warn() -> None:
+    """l5·tasks·exceptions도 dry-run이 미지 키를 표면화해야 실파일 대조가 완전하다 (2026-08-24)."""
+    data = _interview()
+    data["l5"]["extra"] = "x"
+    data["tasks"][0]["surprise"] = "x"
+    data["tasks"][0]["exceptions"][0]["severity"] = "high"
+    res = convert_interview(data)
+    assert not res.has_error()
+    warns = [(i.path, i.message) for i in res.issues if i.severity == "warning"]
+    assert any(p == "l5" and "'extra'" in m for p, m in warns)
+    assert any(p == "tasks[0]" and "'surprise'" in m for p, m in warns)
+    assert any("exceptions[0]" in p and "'severity'" in m for p, m in warns)
 
 
 def test_touch_time_min_to_param() -> None:

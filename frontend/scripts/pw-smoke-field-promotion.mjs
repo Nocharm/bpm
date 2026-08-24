@@ -93,8 +93,10 @@ try {
   const descOk = a01?.description.includes("Quote:")
     && !/Input:|Output:|System:|Data form:/.test(a01?.description ?? "");
   check("[4] node description KV shrunk (Quote only)", descOk, (a01?.description ?? "").slice(0, 60));
-  check("[5] map [Interview] = Owner role only",
-    calDetail.description === "[Interview]\nOwner role: 교정 담당자", calDetail.description);
+  // artifact_role 잔류 복원 (점검 2026-08-24) — 기록성 키 2종만 [Interview]에 남는다
+  check("[5] map [Interview] = Owner role + Artifact role",
+    calDetail.description === "[Interview]\nOwner role: 교정 담당자\nArtifact role: deliverable",
+    calDetail.description);
   check("[landing] map fields: conditions/touch/gmp fallback",
     calDetail.sp_start_condition?.startsWith("교정 주기 도래")
       && calDetail.sp_end_condition === "준비 목록 나오면 끝"
