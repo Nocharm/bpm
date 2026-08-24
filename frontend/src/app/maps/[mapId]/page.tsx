@@ -249,7 +249,8 @@ import {
   type IoImportAction,
   type IoSide,
 } from "@/lib/io-items";
-import { displayToSavedX } from "@/lib/inline-shift";
+import { displayToSavedX, type ShiftStep } from "@/lib/inline-shift";
+import { buildHeightSteps, buildYOffsets } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { useClosingKeys } from "@/lib/use-closing-keys";
@@ -1353,6 +1354,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
+  // height-shift(#1) 스텝 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
+  const yStepsRef = useRef<ShiftStep[]>([]);
+  // height-shift(#1) 렌더 오프셋(트윈 중간값) 미러 — findGroupAt·handleExportPng(정의가 앞선 useCallback)에서
+  // 읽기 위한 ref — TDZ 회피(renderYOffsets state는 뒤에서 선언). 미러링 useEffect는 state 선언부 옆에 유지.
+  const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
@@ -1597,6 +1603,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
+  // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용
+  const toSavedPoint = useCallback((point: { x: number; y: number }) => {
+    const steps = yStepsRef.current;
+    return steps.length === 0 ? point : { x: point.x, y: displayToSavedX(point.y, steps) };
+  }, []);
+
   // 펼침 중 루트 드래그: 드래그 중인 노드의 position 변경은 nodes state에 쓰지 않고 버린다(저장 좌표 동결).
   // 라이브 표시좌표는 dragLiveById가 따로 추적하고 displayNodes가 직접 렌더한다 → 커서 1:1 추종, 매 프레임
   // offset 보정으로 인한 튐 없음. 표시→저장 환산은 드롭 시점(onNodeDragStop)에 한 번만. select/dimensions/remove
@@ -1616,6 +1628,17 @@ function MapEditor({ mapId }: { mapId: number }) {
               change.position = constrainToAxis(start, change.position, shiftHeldRef.current);
             }
           }
+        }
+      }
+      // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
+      // nodes state(저장 좌표)에 그대로 넣으면 드래그마다 오프셋이 누적된다. 축 고정과 무관하게 항상 적용.
+      const ySteps2 = yStepsRef.current;
+      for (const change of changes) {
+        if (change.type === "position" && change.position && ySteps2.length > 0) {
+          change.position = {
+            x: change.position.x,
+            y: displayToSavedX(change.position.y, ySteps2),
+          };
         }
       }
       const suppress = suppressPosIdsRef.current;
@@ -3415,17 +3438,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       const count = nodesRef.current.length;
       let position = { x: 80 + count * 30, y: 80 + count * 30 };
       if (screen) {
-        const point = reactFlow.screenToFlowPosition(screen);
+        const point = toSavedPoint(reactFlow.screenToFlowPosition(screen));
         position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
       } else {
         // 좌측 팔레트 등 좌표 없는 추가 — 현재 뷰포트 중앙에 배치
         const container = canvasContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
-          const point = reactFlow.screenToFlowPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          });
+          const point = toSavedPoint(
+            reactFlow.screenToFlowPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            }),
+          );
           position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
         }
       }
@@ -3468,6 +3493,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode,
       showToast,
       highlightNode,
+      toSavedPoint,
     ],
   );
 
@@ -3520,10 +3546,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       const container = canvasContainerRef.current;
       if (container) {
         const rect = container.getBoundingClientRect();
-        const center = reactFlow.screenToFlowPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        });
+        const center = toSavedPoint(
+          reactFlow.screenToFlowPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          }),
+        );
         const minX = Math.min(...clip.nodes.map((n) => n.position.x));
         const maxX = Math.max(...clip.nodes.map((n) => n.position.x)) + NODE_WIDTH;
         const minY = Math.min(...clip.nodes.map((n) => n.position.y));
@@ -3597,6 +3625,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     showToast,
     t,
     findFreeSpot,
+    toSavedPoint,
   ]);
 
   // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
@@ -3648,15 +3677,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     const existingLabels = nodesRef.current.map((node) => node.data.label);
     // ghost.position은 RF 보고값(표시좌표) — 인라인 펼침으로 footprint-shift된 노드는 저장좌표로 환산해
     // 원위치를 복원해야 표시좌표가 저장좌표로 박히는 드리프트가 없다(#3b). 미펼침이면 오프셋 0(동일).
+    // height-shift(#1) 오프셋도 같은 이유로 빼야 한다(C2) — inline offset을 먼저 뺀 뒤 y만 역변환.
     const rootOffsets = inlineCompositionRef.current?.rootOffsets;
     const plans = new Map<string, { copyId: string; label: string; resetPos: { x: number; y: number } }>();
     for (const ghost of ghosts) {
       const label = makeCopyLabel(ghost.data.label, existingLabels);
       existingLabels.push(label);
       const offset = rootOffsets?.get(ghost.id);
-      const resetPos = offset
-        ? { x: ghost.position.x - offset.x, y: ghost.position.y - offset.y }
-        : { ...ghost.position };
+      const resetPos = {
+        x: offset ? ghost.position.x - offset.x : ghost.position.x,
+        y: displayToSavedX(ghost.position.y - (offset?.y ?? 0), yStepsRef.current),
+      };
       plans.set(ghost.id, { copyId: genId(), label, resetPos });
     }
     setNodes((current) => {
@@ -4178,12 +4209,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       aStartOverride?: { x: number; y: number } | null,
     ) => {
       const start = dragStartPosRef.current;
-      const aOrig =
+      const rawOrig =
         aStartOverride !== undefined
           ? aStartOverride
           : start && start.id === aId
             ? { x: start.x, y: start.y }
             : null;
+      // rawOrig는 onNodeDragStart가 캡처한 *표시* 좌표(height-shift 오프셋 포함) — 저장 좌표(nodes state)에
+      // 그대로 쓰면 B의 saved_y가 드리프트한다(C1). dropDraggingPositions와 동일하게 역변환해야 한다.
+      const aOrig = rawOrig ? toSavedPoint(rawOrig) : null;
       setNodes((current) => {
         const b = current.find((node) => node.id === bId);
         if (!b) {
@@ -4213,7 +4247,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       scheduleAutoSave();
     },
-    [setNodes, setEdges, scheduleAutoSave],
+    [setNodes, setEdges, scheduleAutoSave, toSavedPoint],
   );
 
   // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위·교환. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
@@ -4414,7 +4448,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
       const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
       const pinned = pinnedRaw ? Number(pinnedRaw) : null;
-      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       if (e.dataTransfer.getData("application/bpm-process-unregistered") === "1") {
         setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
         return;
@@ -4423,7 +4457,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
     // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
-    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop],
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -4439,7 +4473,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const label = [number, title].filter(Boolean).join(" ");
       pushHistory();
       const id = genId();
-      const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const point = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
       setNodes((current) => [
         ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
@@ -4457,7 +4491,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
       flashNode(id);
     },
-    [readOnly, reactFlow, findFreeSpot, pushHistory, setNodes, scheduleAutoSave, flashNode],
+    [
+      readOnly,
+      reactFlow,
+      findFreeSpot,
+      pushHistory,
+      setNodes,
+      scheduleAutoSave,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -4480,10 +4523,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("library.alreadyLinked"));
         return;
       }
-      const center = reactFlow.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      const center = toSavedPoint(
+        reactFlow.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        }),
+      );
       const id = genId();
       const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
       let subEnds: SubEnd[] = [];
@@ -4525,7 +4570,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, linkedMapIds, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
+    [
+      readOnly,
+      linkedMapIds,
+      reactFlow,
+      setNodes,
+      scheduleAutoSave,
+      showToast,
+      t,
+      findFreeSpot,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -4545,10 +4601,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       for (const m of members) {
         const w = m.measured?.width ?? NODE_WIDTH;
         const h = m.measured?.height ?? NODE_HEIGHT;
+        // 마우스(mouse)는 표시좌표(screenToFlowPosition) — 멤버는 저장좌표라 height-shift 오프셋을
+        // 더해야 히트박스가 실제 렌더 위치와 일치한다(I1 findGroupAt).
+        const my = m.position.y + (renderYOffsetsRef.current.get(m.id) ?? 0);
         minX = Math.min(minX, m.position.x);
-        minY = Math.min(minY, m.position.y);
+        minY = Math.min(minY, my);
         maxX = Math.max(maxX, m.position.x + w);
-        maxY = Math.max(maxY, m.position.y + h);
+        maxY = Math.max(maxY, my + h);
       }
       const inX = mouse.x >= minX - GROUP_PAD && mouse.x <= maxX + GROUP_PAD;
       const inY = mouse.y >= minY - GROUP_PAD - GROUP_TITLE_GAP && mouse.y <= maxY + GROUP_PAD;
@@ -5145,7 +5204,20 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const handleExportPng = useCallback(async () => {
     try {
-      await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
+      // getNodesBounds는 전달받은 좌표 그대로 프레임을 잡는데, 캡처 대상(.react-flow__viewport)은
+      // height-shift로 밀린 *표시* 위치를 그린다 — 저장 좌표(nodesRef)로 프레임을 잡으면 밀려난
+      // 하단 노드가 잘린다(I1/I2 PNG export). 여기서만 오프셋을 더해 표시 위치로 맞춘다(저장 좌표는 불변).
+      const offsets = renderYOffsetsRef.current;
+      const exportNodes =
+        offsets.size === 0
+          ? nodesRef.current
+          : nodesRef.current.map((node) => {
+              const yOff = offsets.get(node.id);
+              return yOff
+                ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
+                : node;
+            });
+      await exportCanvasPng(exportNodes, buildExportFileName("png"));
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     }
@@ -6293,6 +6365,81 @@ function MapEditor({ mapId }: { mapId: number }) {
     return out;
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
 
+  // height-shift(#1): 표시 높이로 커진 노드 아래를 렌더 시점에만 밀어냄 — 저장 좌표 불변.
+  // 인라인 펼침 중엔 비활성(자식 합성 좌표와 결합 금지, spec §7). 설계: 2026-08-23-node-spacing-design.md
+  const ySteps = useMemo(
+    () => (inlineComposition ? [] : buildHeightSteps(nodes)),
+    [inlineComposition, nodes],
+  );
+  useEffect(() => {
+    yStepsRef.current = ySteps;
+  }, [ySteps]);
+  const yOffsets = useMemo(() => buildYOffsets(nodes, ySteps), [nodes, ySteps]);
+
+  // 오프셋 전환 트윈 — CSS transition은 엣지(SVG 재계산)가 안 따라와 분리돼 보임 → 값 자체를 rAF 보간.
+  // 즉시 적용 3조건: 첫 산출(로드 정착)·드래그 중·prefers-reduced-motion. (spec §6)
+  const [renderYOffsets, setRenderYOffsets] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    renderYOffsetsRef.current = renderYOffsets;
+  }, [renderYOffsets]);
+  const yTweenInitRef = useRef(false);
+  // 성장 반영 후 1회 재-fit — 초기 fitView는 측정 전(성장 전) 좌표 기준이라 밀린 하단 노드가
+  // 뷰 밖일 수 있다(V라운드 관찰 1). 마운트 직후 창(1.5s) 안에서만 — 이후 사용자 펼침엔 카메라 불가침.
+  const mountAtRef = useRef(0);
+  useEffect(() => {
+    mountAtRef.current = performance.now();
+  }, []);
+  const didGrowthFitRef = useRef(false);
+  useEffect(() => {
+    if (didGrowthFitRef.current || yOffsets.size === 0) return undefined;
+    if (performance.now() - mountAtRef.current >= 1500) {
+      didGrowthFitRef.current = true; // 창 밖 도착 — 이후 성장에도 카메라 불가침
+      return undefined;
+    }
+    // 소모 플래그는 실제 발사 시점에 세운다 — 오프셋이 여러 커밋으로 나눠 오면(터미널 높이가 IO 박스보다
+    // 먼저 확정되는 등) cleanup이 타이머를 취소하고 재예약 없이 끝나던 버그(QA W3). 지금은 마지막
+    // 성장 커밋 기준 80ms 디바운스로 1회 발사.
+    const timer = window.setTimeout(() => {
+      didGrowthFitRef.current = true;
+      void reactFlow.fitView({ padding: 0.1, duration: 300 });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [yOffsets, reactFlow]);
+  useEffect(() => {
+    const from = renderYOffsetsRef.current;
+    const to = yOffsets;
+    // 동일하면 스킵 — set-state-in-effect 회피 겸 무한 루프 방지
+    if (from.size === to.size && [...to].every(([id, v]) => from.get(id) === v)) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dragging = dragStartPositionsRef.current.size > 0;
+    const instant = !yTweenInitRef.current || dragging || reduced;
+    yTweenInitRef.current = true;
+    if (instant) {
+      const raf = requestAnimationFrame(() => setRenderYOffsets(to));
+      return () => cancelAnimationFrame(raf);
+    }
+    const start = performance.now();
+    const DURATION = 350;
+    const ids = new Set([...from.keys(), ...to.keys()]);
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      // ease-smooth 근사(cubic ease-out) — 프레임마다 노드·엣지가 함께 이동
+      const e = 1 - Math.pow(1 - t, 3);
+      const next = new Map<string, number>();
+      for (const id of ids) {
+        const a = from.get(id) ?? 0;
+        const b = to.get(id) ?? 0;
+        const v = a + (b - a) * e;
+        if (v !== 0) next.set(id, v);
+      }
+      setRenderYOffsets(t >= 1 ? to : next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [yOffsets]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
@@ -6366,7 +6513,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         gmpPreview !== null && gmpPreview.nodeId === node.id
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
-      return injectSubEnds(withGmpPreview);
+      const injected = injectSubEnds(withGmpPreview);
+      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동
+      const yOff = renderYOffsets.get(node.id) ?? 0;
+      return yOff === 0
+        ? injected
+        : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6407,6 +6559,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     staleAnchorIds,
     ioHighlight,
     gmpPreview,
+    renderYOffsets,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -6575,6 +6728,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (expandedInline.size > 0) {
       return [];
     }
+    // 저장좌표(nodes)에 height-shift 표시 오프셋을 더해야 멤버가 실제 렌더 위치(밀려난 하단)와 일치한다(I2).
+    const dispY = (node: AppNode) => node.position.y + (renderYOffsets.get(node.id) ?? 0);
     return groups.flatMap((group) => {
       const members = nodes.filter((node) => node.data.groupIds.includes(group.id));
       if (members.length === 0) {
@@ -6587,10 +6742,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       for (const member of members) {
         const w = member.measured?.width ?? NODE_WIDTH;
         const h = member.measured?.height ?? NODE_HEIGHT;
+        const my = dispY(member);
         minX = Math.min(minX, member.position.x);
-        minY = Math.min(minY, member.position.y);
+        minY = Math.min(minY, my);
         maxX = Math.max(maxX, member.position.x + w);
-        maxY = Math.max(maxY, member.position.y + h);
+        maxY = Math.max(maxY, my + h);
       }
       // 멤버 많을수록 패딩↑ → 큰 그룹이 작은 그룹을 시각적으로 감쌈
       const pad = GROUP_PAD + Math.min(members.length, 8) * 4;
@@ -6606,19 +6762,20 @@ function MapEditor({ mapId }: { mapId: number }) {
         .flatMap((node) => {
           const w = node.measured?.width ?? NODE_WIDTH;
           const h = node.measured?.height ?? NODE_HEIGHT;
+          const ny = dispY(node);
           // 멤버 padded bbox와 겹치는 비멤버만
           if (
             node.position.x >= maxX + pad ||
             node.position.x + w <= minX - pad ||
-            node.position.y >= maxY + pad ||
-            node.position.y + h <= minY - pad
+            ny >= maxY + pad ||
+            ny + h <= minY - pad
           ) {
             return [];
           }
           return [
             {
               x: node.position.x - intruderMargin - originX,
-              y: node.position.y - intruderMargin - originY,
+              y: ny - intruderMargin - originY,
               w: w + intruderMargin * 2,
               h: h + intruderMargin * 2,
             },
@@ -6631,7 +6788,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const h = member.measured?.height ?? NODE_HEIGHT;
         return {
           x: member.position.x - memberKeep - originX,
-          y: member.position.y - memberKeep - originY,
+          y: dispY(member) - memberKeep - originY,
           w: w + memberKeep * 2,
           h: h + memberKeep * 2,
         };
@@ -6657,7 +6814,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       ];
     });
-  }, [nodes, groups, expandedInline]);
+  }, [nodes, groups, expandedInline, renderYOffsets]);
 
   // 노드 위치(nodeExtent)·패닝(translateExtent) 허용 범위 = 콘텐츠 bbox + 사방 대칭 여백(무한 캔버스 느낌, 자유 패닝).
   const contentExtent = useMemo<
