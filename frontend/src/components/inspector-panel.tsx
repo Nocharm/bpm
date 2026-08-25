@@ -62,6 +62,8 @@ interface InspectorPanelProps {
   importSlot?: ReactNode;
   // 탭을 강제 고정(프리뷰 중). 내부 상태 대신 이 값이 이긴다.
   forcedTab?: InspectorTab;
+  // 노드 더블클릭 신호(논스) — 바뀔 때마다 속성 탭으로 전환 (사용자 요청 2026-08-25)
+  propertiesTabNonce?: number;
   // 다른 탭·접기 잠금 — 프리뷰를 두고 빠져나가 자동저장 꺼진 상태에 갇히는 걸 막는다
   lockTabs?: boolean;
   // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
@@ -86,6 +88,7 @@ interface InspectorPanelProps {
 }
 
 export function InspectorPanel({
+  propertiesTabNonce,
   onCollapse,
   mapId,
   canCompare,
@@ -114,6 +117,12 @@ export function InspectorPanel({
 }: InspectorPanelProps) {
   const { t } = useI18n();
   const [internalTab, setInternalTab] = useState<InspectorTab>("properties");
+  // 노드 더블클릭 → 속성 탭 전환 — 렌더 중 상태 조정(외부 논스 비교, link-preview-panel과 같은 패턴)
+  const [seenPropertiesNonce, setSeenPropertiesNonce] = useState(propertiesTabNonce ?? 0);
+  if ((propertiesTabNonce ?? 0) !== seenPropertiesNonce) {
+    setSeenPropertiesNonce(propertiesTabNonce ?? 0);
+    setInternalTab("properties");
+  }
   // 지정 해제로 슬롯이 사라지면 열려 있던 subprocess 탭을 Map 탭으로 폴백(렌더 파생 — effect 불요)
   const rawTab = forcedTab ?? internalTab;
   const tab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;

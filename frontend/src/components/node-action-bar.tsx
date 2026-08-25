@@ -10,7 +10,6 @@ import { ChevronDown, ExternalLink, Link, LogOut } from "lucide-react";
 import type { NodeData } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
 import { useNodeActions } from "@/lib/node-actions";
-import { isSafePreviewUrl } from "@/lib/url";
 
 // 노드 하단 ↔ 바 상단 간격(px) — 스펙 12~14, 커넥터 선 7px과 시각적으로 이어지는 값
 const BAR_GAP = 13;
@@ -87,7 +86,9 @@ export function NodeActionBar({
 
   const expanded = expandedInlineIds.has(target.id);
   const showExpand = target.expandable && onToggleExpand !== null;
-  const showLink = isSafePreviewUrl(target.url);
+  // 등록돼 있으면 무조건 노출(유효성검사 없음) — 안전 판정(isSafePreviewUrl)은 뷰어 iframe 로드
+  // 게이트에만 남는다(샌드박스 탈출 방지, 사용자 결정 2026-08-25)
+  const showLink = !!target.url?.trim();
   const showLeave = !readOnly && target.groupIds.length > 0;
   if (!showExpand && !showLink && !showLeave) return null;
 

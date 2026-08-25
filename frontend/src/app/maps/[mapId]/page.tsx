@@ -1014,6 +1014,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
   const pointerScreenRef = useRef({ x: 0, y: 0 });
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
+  // 노드 더블클릭 → 인스펙터 속성 탭 강제 전환 신호(논스) — 읽기전용/편집 공통 (사용자 요청 2026-08-25)
+  const [propertiesTabNonce, setPropertiesTabNonce] = useState(0);
   // 편집 모달 자동 포커스 대상 — 인스펙터 설명 더블클릭/편집 아이콘 진입 시 "description" (2026-08-20)
   const [summaryFocus, setSummaryFocus] = useState<"description" | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
@@ -8513,6 +8515,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 드릴인은 임베드 자식 더블클릭·펼침 토글 경로로 유지. 타이틀 더블클릭은 이름 편집(비-subprocess).
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
+                        setPropertiesTabNonce((n) => n + 1); // 인스펙터 속성 탭 자동 전환
                       }}
                       onEdgeClick={(_, edge) => {
                         setSelectedEdgeId(edge.id);
@@ -9348,6 +9351,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
+                propertiesTabNonce={propertiesTabNonce}
                 mapId={mapId}
                 canCompare={versions.some((version) => version.status === "published")}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}

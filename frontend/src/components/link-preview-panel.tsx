@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 
 import { checkEmbeddable } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import { isSafePreviewUrl } from "@/lib/url";
+import { isHttpUrl, isSafePreviewUrl } from "@/lib/url";
 
 // load 이벤트가 이 시간 안에 안 오면 임베드 차단으로 판정(ms) — 스펙 6s
 const LOAD_TIMEOUT_MS = 6000;
@@ -38,23 +38,27 @@ export function LinkPreviewPanel({
   // 서버 임베드 체크 판정 — 차단(false) verdict가 온 key만 기록(크롬 오류 화면 대신 폴백 카드)
   const [blockedKey, setBlockedKey] = useState<string | null>(null);
 
-  // http(s) + 자기 오리진 차단만 로드 — 액션 바와 같은 가드(isSafePreviewUrl, 샌드박스 탈출 방지)
-  const validUrl = url !== null && isSafePreviewUrl(url) ? url : null;
-  const open = validUrl !== null;
+  // 패널은 등록 URL이면 무조건 연다(유효성검사 없음, 사용자 결정 2026-08-25) — 안전 판정
+  // (isSafePreviewUrl: http(s)+자기 오리진 차단)은 iframe "로드"만 게이트(샌드박스 탈출 방지 유지).
+  // 비안전 URL은 즉시 폴백 카드로.
+  const open = url !== null && url.trim() !== "";
+  const validUrl = open && isSafePreviewUrl(url) ? url : null;
   const currentKey = `${validUrl ?? ""}#${reloadKey}`;
   // 로딩/실패는 status↔currentKey 비교로 파생 — effect 내 동기 setState 금지(react-hooks/set-state-in-effect)
   const loaded = status?.key === currentKey && status.state === "loaded";
   // 서버 판정 차단도 폴백 카드 경로로 — Chrome은 차단 로드에도 onLoad를 쏴 클라이언트 단독 감지 불가
   const failed =
     (status?.key === currentKey && status.state === "failed") ||
-    blockedKey === currentKey;
+    blockedKey === currentKey ||
+    (open && validUrl === null);
   const loading = open && !loaded && !failed;
 
   // 슬라이드 아웃 애니메이션 동안 주소 줄 유지 — 렌더 중 상태 조정(effect 아님).
   // ref 변형은 react-hooks/refs(React Compiler)가 렌더 중 접근을 금지 — group-title-bar.tsx와 같은 패턴.
+  // 주소 줄은 원문 표시(비안전 URL 포함) — 로드/새탭 열기는 별도 게이트.
   const [shownUrl, setShownUrl] = useState("");
-  if (validUrl !== null && validUrl !== shownUrl) {
-    setShownUrl(validUrl);
+  if (open && url !== shownUrl) {
+    setShownUrl(url);
   }
 
   // 임베드 차단 타임아웃 — 만료 시점까지 이 key로 load가 안 왔으면 failed 마킹(이미 loaded면 유지)
@@ -146,7 +150,8 @@ export function LinkPreviewPanel({
               <button
                 type="button"
                 onClick={() => {
-                  if (validUrl) window.open(validUrl, "_blank", "noopener");
+                  // 새 탭 열기는 http(s)만 — javascript: 등 임의 스킴 차단(안전 게이트 유지)
+                  if (isHttpUrl(shownUrl)) window.open(shownUrl, "_blank", "noopener");
                 }}
                 aria-label={t("linkPreview.openNewTab")}
                 title={t("linkPreview.openNewTab")}
@@ -243,14 +248,17 @@ export function LinkPreviewPanel({
                 <div className="w-full truncate rounded-xs border border-hairline bg-surface-alt px-2.5 py-1.5 text-fine text-ink-tertiary">
                   {shownUrl}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => window.open(shownUrl, "_blank", "noopener")}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-accent px-3 text-xs font-semibold text-on-accent hover:bg-accent-focus"
-                >
-                  <ExternalLink size={14} strokeWidth={1.5} />
-                  {t("linkPreview.openNewTab")}
-                </button>
+                {/* 새 탭 열기는 http(s)만 — 임의 스킴(javascript: 등)은 버튼 자체를 숨긴다 */}
+                {isHttpUrl(shownUrl) && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(shownUrl, "_blank", "noopener")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-accent px-3 text-xs font-semibold text-on-accent hover:bg-accent-focus"
+                  >
+                    <ExternalLink size={14} strokeWidth={1.5} />
+                    {t("linkPreview.openNewTab")}
+                  </button>
+                )}
               </div>
             </div>
           )}

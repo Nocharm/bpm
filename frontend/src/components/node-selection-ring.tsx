@@ -61,7 +61,9 @@ export function NodeSelectionRing() {
         <div
           key={solo ? "node-sel-solo" : r.id}
           className={`node-ring-selected pointer-events-none absolute ${
-            r.terminal ? "rounded-full" : "rounded-sm"
+            // 터미널은 노드와 동일한 고정 곡률(19px) — rounded-full은 키 큰 노드에서 코너 곡률이
+            // 노드보다 커져 링이 노드 뒤로 숨는다(계란형 회귀, 사용자 리포트 2026-08-25)
+            r.terminal ? "rounded-[19px]" : "rounded-sm"
           } ${solo && !r.dragging ? "transition-all duration-350 ease-smooth" : ""}`}
           style={{
             left: 0,
