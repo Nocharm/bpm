@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -10078,6 +10078,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                       {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
                       <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                        {/* 버전 비교 — 액션 최좌측(사용자 요청 2026-08-25). 게시본 없으면 비활성(하단 CTA와 동일 게이트) */}
+                        <Tooltip
+                          label={
+                            versions.some((version) => version.status === "published")
+                              ? t("inspector.compareVersions")
+                              : t("inspector.compareNeedsPublished")
+                          }
+                        >
+                          <button
+                            type="button"
+                            data-id="map-tab-compare"
+                            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+                            disabled={!versions.some((version) => version.status === "published")}
+                            onClick={() => router.push(`/maps/${mapId}/compare`)}
+                            aria-label={t("inspector.compareVersions")}
+                          >
+                            <GitCompare size={16} strokeWidth={1.5} />
+                          </button>
+                        </Tooltip>
                         {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약) */}
                         {isEditorRole && !hasDraft && (
                           <Tooltip label={t("editor.newVersion")}>
