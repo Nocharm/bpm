@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-25 — SP GMP 필 숨김·우측 핸들 dot 정렬 (dev)
+- 미분류 GMP 호버 필은 수정 가능할 때만(SP는 링크 맵 상속 read-only·읽기전용 모드 제외) — 클릭 유도만 되던 필 제거. SP 단일 끝 핸들 dot이 50% 중앙에 남아 엣지 앵커(라벨 라인)와 어긋나던 것 — 단일 끝은 18px 앵커, 다중 끝만 분산 유지.
+
 ## 2026-08-25 — 분기 URL 배지 위치 조정 (dev)
 - 분기노드 링크 바로가기 배지(bottom-0)가 하단 노출 콘텐츠(파라미터/조건/IO)에 가려질 수 있어 bottom-6으로 상향 — 마름모 좌하단 대각선 바깥 빈 공간 활용.
 

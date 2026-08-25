@@ -306,6 +306,8 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   // 미분류(Unclassified)는 공간을 차지하지 않고 기본 숨김 — 노드 호버 시 좌상단에 부유로만 노출
   // (분류 진입점은 유지, 사용자 요청 2026-08-25). 이때 호출부 위치 className(extra)은 무시한다.
   const floating = !label;
+  // 미분류인데 수정 불가(SP는 링크 맵 상속·읽기전용 모드) — 클릭만 유도하는 필이라 아예 미노출
+  if (floating && (isSubprocess || onEditGmp === null)) return null;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
   // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
@@ -729,7 +731,13 @@ function SubprocessHandles({
             id={end.key}
             type="source"
             position={Position.Right}
-            style={{ top: `${((i + 1) / (ends.length + 1)) * 100}%` }}
+            // 단일 끝은 라벨 라인 앵커(좌 인핸들과 동일) — 50% 중앙 dot이 엣지 앵커와 어긋나던 것.
+            // 다중 끝만 세로 분산 유지 (사용자 리포트 2026-08-25)
+            style={
+              ends.length === 1 && anchorStyle
+                ? anchorStyle
+                : { top: `${((i + 1) / (ends.length + 1)) * 100}%` }
+            }
             title={end.title}
             isConnectable={connectable}
           />
