@@ -176,7 +176,8 @@ function NodeIoDetails({
               data-id={`node-io-list-${side}-toggle`}
               tabIndex={-1}
               disabled={onSetIoListState === null}
-              className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted"
+              // 호버 = 행과 같은 배경 하이라이트 + 글자 진하게(클릭 가능 암시). 비활성(비교뷰)은 제외
+              className="-mx-0.5 flex w-full items-center gap-1 rounded-xs px-0.5 py-px text-[10px] uppercase tracking-wide text-ink-muted transition-colors duration-150 enabled:hover:bg-surface-alt enabled:hover:text-ink-secondary"
               onClick={() => {
                 if (!nodeSelected) return;
                 onSetIoListState?.(listKey, listState === "collapsed" ? "capped" : "collapsed");
