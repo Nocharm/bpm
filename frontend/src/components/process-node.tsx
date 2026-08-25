@@ -850,6 +850,26 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <CircleArrowUp size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.updateBanner")}</span>
           </div>
+        ) : data.undesignated ? (
+          // 지정 해제 — 코너 경고 뱃지와 같은 에러 톤으로 사유를 글로도 안내 (사용자 요청 2026-08-25)
+          <div
+            data-id="sp-banner-undesignated"
+            title={t("subprocess.undesignated")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error"
+          >
+            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
+          </div>
+        ) : data.linkedMapId == null ? (
+          // 플레이스홀더(링크 미지정) — 셋업 미완 앰버 톤(해제=에러와 강도 구분) (사용자 요청 2026-08-25)
+          <div
+            data-id="sp-banner-placeholder"
+            title={t("subprocess.placeholderNotice")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-changed/40 bg-changed/10 px-1.5 py-0.5 text-xs text-changed"
+          >
+            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.placeholderBanner")}</span>
+          </div>
         ) : data.followLatest === false ? (
           <div
             data-id="sp-banner-pinned"
@@ -859,13 +879,13 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <Pin size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.pinnedBanner")}</span>
           </div>
-        ) : data.followLatest === true && data.linkedMapId != null && !data.undesignated ? (
-          // 최신본 추종 중(기본 상태)도 같은 배너 결로 상시 안내 — 핀 고정과 구분되는 아이콘만 다르게
-          // (사용자 요청 2026-08-25). follow_latest는 전 노드 공통 불리언이라 실링크(+지정 유효)로 게이트.
+        ) : data.followLatest === true ? (
+          // 최신본 추종 중(기본 상태) — 정상 진행의 초록(added) 톤, 핀 고정(중립)과 구분
+          // (사용자 요청 2026-08-25). 위에서 미지정/해제를 걸렀으니 여기 오면 실링크+지정 유효.
           <div
             data-id="sp-banner-following"
             title={t("subprocess.followingNotice")}
-            className="mt-1 flex items-center gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-xs text-ink-secondary"
+            className="mt-1 flex items-center gap-1 rounded-xs border border-added/30 bg-added/10 px-1.5 py-0.5 text-xs text-added"
           >
             <RefreshCw size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.followingBanner")}</span>
