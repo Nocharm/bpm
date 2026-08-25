@@ -100,6 +100,17 @@ async def _assert_unique_name(
         raise HTTPException(status_code=409, detail="map name already exists")
 
 
+async def _build_retired_name(session: AsyncSession, base: str) -> str:
+    """원본 은퇴 rename — "(Pending deletion)" 태그, 200자 한도 절단, 중복 시 카운터."""
+    n = 1
+    while True:
+        tag = " (Pending deletion)" if n == 1 else f" (Pending deletion {n})"
+        candidate = base[: 200 - len(tag)] + tag
+        if await session.scalar(select(ProcessMap.id).where(ProcessMap.name == candidate)) is None:
+            return candidate
+        n += 1
+
+
 async def _assert_known_department(session: AsyncSession, dept_path: str) -> None:
     """오우닝 부서는 실제 조직 경로여야 한다 — resolver 유효 경로 프리픽스와 대조, 아니면 422.
 
@@ -331,21 +342,42 @@ async def copy_map(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
-    """맵 복사 — 새 맵의 초기 draft에 그래프 복제 (request #12).
+    """맵 복사 — 새 맵의 초기 draft에 그래프 복제, 원본 오너 알림 (request #12 재편).
 
-    version_id 지정 시 그 버전(승인 여부 무관)을 원본으로, 미지정이면 최신 승인본
-    (approved/published) — 없으면 409.
+    게시(published/expired) 이력 1회 이상인 맵만 복사 가능 — Word 승격(convert)은 예외로
+    기존 승인본 기준 유지. version_id 지정 시 그 버전(상태 무관)을 원본으로, 미지정이면
+    최신 게시본. retire_source(오너 전용)는 원본을 "(Pending deletion)" rename 후
+    휴지통으로 보내고 승인자·editor+ 협업자에게 알린다.
     """
     source_map = await session.get(ProcessMap, map_id)
     if source_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    original_name = source_map.name
+    convert = payload.convert_to_normal
+    # 게시 이력 게이트 — 프론트 버튼 비활성과 동일 판정(status 기준: version_number는
+    # pre-ALTER 게시본이 NULL일 수 있어 부적합)
+    if not convert:
+        has_publish = await session.scalar(
+            select(MapVersion.id)
+            .where(
+                MapVersion.map_id == map_id,
+                MapVersion.status.in_([workflow.PUBLISHED, workflow.EXPIRED]),
+            )
+            .limit(1)
+        )
+        if has_publish is None:
+            raise HTTPException(status_code=409, detail="map has never been published")
     # 원본 버전 1개 — 그래프 즉시 클론을 위해 nodes/edges/groups eager-load
     version_query = select(MapVersion).where(MapVersion.map_id == map_id)
     if payload.version_id is not None:
         version_query = version_query.where(MapVersion.id == payload.version_id)
-    else:
+    elif convert:
         version_query = version_query.where(
             MapVersion.status.in_([workflow.APPROVED, workflow.PUBLISHED])
+        )
+    else:
+        version_query = version_query.where(
+            MapVersion.status.in_([workflow.PUBLISHED, workflow.EXPIRED])
         )
     source_version = (
         await session.scalars(
@@ -366,17 +398,42 @@ async def copy_map(
             )
         raise HTTPException(status_code=409, detail="map has no approved version to copy")
 
-    copy_name = payload.name or f"{source_map.name} (Copy)"
-    await _assert_unique_name(session, copy_name)
+    copy_name = payload.name or f"{original_name} (Copy)"
     if payload.owning_department:
         await _assert_known_department(session, payload.owning_department)
-    convert = payload.convert_to_normal
+    actor_name = await workflow.get_display_name(session, user)
+    if payload.retire_source:
+        # 원본 은퇴는 오너 전용 — viewer 복사 권한과 별개로 상향 검증 (B4)
+        await assert_map_role(session, user, map_id, "owner")
+        retire_recipients = [
+            r
+            for r in dict.fromkeys(
+                [
+                    *(await workflow.load_active_approvers(session, map_id)),
+                    *(await workflow.load_map_user_collaborators(session, map_id, role="editor")),
+                    *(await workflow.load_map_user_collaborators(session, map_id, role="owner")),
+                ]
+            )
+            if r != user
+        ]
+        # rename을 먼저 — 새 맵이 원본 이름을 그대로 물려받아도 중복 검사를 통과한다 (B5)
+        source_map.name = await _build_retired_name(session, original_name)
+        source_map.deleted_at = now_kst()
+        await _delete_map_kb_chunks(session, [map_id])
+        await workflow.create_notifications(
+            session,
+            retire_recipients,
+            type="map_retired",
+            map_id=map_id,
+            message=f"{actor_name} copied '{original_name}' and moved the original to the trash",
+        )
+    await _assert_unique_name(session, copy_name)
     new_map = ProcessMap(
         name=copy_name,
         description=source_map.description,
         created_by=user,
         owner_id=user,
-        visibility="private",
+        visibility=payload.visibility,
         owning_department=payload.owning_department or source_map.owning_department,
         # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 승격(convert)은 일반 맵으로 소거 (design 2026-07-24 §6)
         mode="normal" if convert else source_map.mode,
@@ -405,6 +462,24 @@ async def copy_map(
             role="owner",
             granted_by=user,
         )
+    )
+    # 원본 오너에게 복사 사실 알림 — 행위자 본인 제외 (A1)
+    owner_recipients = [
+        o
+        for o in dict.fromkeys(
+            [
+                *(await workflow.load_map_user_collaborators(session, map_id, role="owner")),
+                *([source_map.owner_id] if source_map.owner_id else []),
+            ]
+        )
+        if o != user
+    ]
+    await workflow.create_notifications(
+        session,
+        owner_recipients,
+        type="map_copied",
+        map_id=map_id,
+        message=f"{actor_name} copied '{original_name}' as '{copy_name}'",
     )
     await session.commit()
     await session.refresh(new_map, attribute_names=["versions"])

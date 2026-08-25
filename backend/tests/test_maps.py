@@ -254,7 +254,8 @@ def test_copy_inherits_word_mode_and_catalog(client: TestClient) -> None:
                 doc_name="sop.docx",
                 doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
             )
-            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            # published — 일반 복사는 게시 이력 1회 이상 필요 (copy workflow 재편)
+            m.versions.append(MapVersion(label="As-Is", status="published"))
             session.add(m)
             await session.commit()
             return m.id
@@ -422,7 +423,8 @@ def test_copy_survives_null_doc_sections(client: TestClient) -> None:
     async def _seed() -> int:
         async with SessionLocal() as session:
             m = ProcessMap(name=name, visibility="public")
-            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            # published — 일반 복사는 게시 이력 1회 이상 필요 (copy workflow 재편)
+            m.versions.append(MapVersion(label="As-Is", status="published"))
             session.add(m)
             await session.commit()
             map_id = m.id

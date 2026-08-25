@@ -1,5 +1,7 @@
-// 맵 복사 버전 선택 + 드래프트 열림 + 휴지통 즉시삭제(sysadmin) 스모크.
-// 실행: node scripts/pw-smoke-copy-purge.mjs  (서버 8000/3000 기동, org demo 시드 전제)
+// 맵 복사 워크플로 재편 + 휴지통 즉시삭제 스모크 — 게시 이력 게이트(비활성 버튼)·
+// CreateMapDialog copy 모드(버전 선택·비게시 안내·오너 안내·오우닝 프리필)·원본 은퇴(retire)·
+// 알림(map_copied/map_retired, SMOKE_DB sqlite 실측)·설정 휴지통 Delete now(sysadmin).
+// 실행: SMOKE_DB=<sqlite> node scripts/pw-smoke-copy-purge.mjs  (서버 8000/3000, org demo 시드 전제)
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -11,6 +13,26 @@ const check = (name, ok, extra = "") => {
   results.push([name, ok, extra]);
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`);
 };
+
+// ── API 준비 — 원본(게시 이력 有)·미게시 맵 ──
+const maps = await (await fetch(`${API}/maps`, { headers: HDR })).json();
+const source = maps.find((m) => m.name === "Vendor Management");
+if (!source) throw new Error("seed map 'Vendor Management' not found");
+const detail = await (await fetch(`${API}/maps/${source.id}`, { headers: HDR })).json();
+const draft = detail.versions.find((v) => v.status === "draft");
+const spUsage = await (
+  await fetch(`${API}/maps/${source.id}/subprocess-usage`, { headers: HDR })
+).json();
+const owningDept = maps.find((m) => m.owning_department)?.owning_department;
+const neverPubName = `NeverPub ${Date.now()}`;
+const neverPub = await (
+  await fetch(`${API}/maps`, {
+    method: "POST",
+    headers: HDR,
+    body: JSON.stringify({ name: neverPubName, owning_department: owningDept }),
+  })
+).json();
+if (!neverPub.id) throw new Error(`never-pub map create failed: ${JSON.stringify(neverPub)}`);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
@@ -24,78 +46,159 @@ page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text());
 });
 
-// 원본 맵 — 게시본이 있는 org demo 맵 하나 선택
-const maps = await (await fetch(`${API}/maps`, { headers: HDR })).json();
-const source = maps.find((m) => m.name === "Vendor Management");
-if (!source) throw new Error("seed map 'Vendor Management' not found");
-const detail = await (await fetch(`${API}/maps/${source.id}`, { headers: HDR })).json();
-const draft = detail.versions.find((v) => v.status === "draft");
+const visibleCopyBtn = () => page.locator("[data-id='map-detail-copy']:visible").first();
 
-// [1] 홈 → 맵 선택 → 복사 모달 오픈
+// [1] 미게시 맵 — 복사 버튼 비활성 (숨김 아님)
 await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
-await page.waitForSelector("[data-id^='map-row'], .text-caption", { timeout: 30000 }).catch(() => {});
-await page.getByText("Vendor Management", { exact: true }).first().click();
-// 카드가 아코디언·우측 패널 두 곳에 렌더 — 가시 버튼만 클릭
-const copyBtn = page.locator("[data-id='map-detail-copy']:visible").first();
-await copyBtn.waitFor({ state: "visible", timeout: 15000 });
-await copyBtn.click();
-await page.waitForSelector("[data-id='copy-map-dialog']", { timeout: 10000 });
-check("copy dialog opens", true);
+await page.getByText(neverPubName, { exact: true }).first().click();
+await visibleCopyBtn().waitFor({ state: "visible", timeout: 20000 });
+check("never-published: copy button disabled", await visibleCopyBtn().isDisabled());
 
-// [2] 버전 셀렉트 — 전체 버전 노출 + 기본값은 최신 승인본(published)
-const options = await page.$$eval("[data-id='copy-map-dialog-version'] option", (els) =>
+// [2] 게시 이력 맵 — 버튼 활성 → CreateMapDialog copy 모드 오픈
+// 원본 카드는 접힌 부서 아코디언 안에 있을 수 있어 검색으로 노출시킨다
+await page.fill("[data-id='home-map-search']", "Vendor Management");
+await page.getByText("Vendor Management", { exact: true }).first().click();
+await page.waitForFunction(
+  () =>
+    [...document.querySelectorAll("[data-id='map-detail-copy']")].some(
+      (b) => b.offsetParent !== null && !b.disabled,
+    ),
+  { timeout: 20000 },
+);
+await visibleCopyBtn().click();
+await page.waitForSelector("[data-id='copy-version-select']", { timeout: 10000 });
+check("copy dialog opens with version select", true);
+
+// [3] 버전 드롭다운 — 전체 버전·기본 최신 게시본·비게시 안내는 숨김
+const options = await page.$$eval("[data-id='copy-version-select'] option", (els) =>
   els.map((o) => ({ value: o.value, label: o.textContent })),
 );
 check("version select lists all versions", options.length === detail.versions.length,
   `${options.length}/${detail.versions.length}`);
-const selectedValue = await page.$eval("[data-id='copy-map-dialog-version']", (el) => el.value);
-const selectedOpt = options.find((o) => o.value === selectedValue);
-check("default = latest published", Boolean(selectedOpt?.label.includes("published")),
-  selectedOpt?.label ?? "none");
+const selectedValue = await page.$eval("[data-id='copy-version-select']", (el) => el.value);
+check("default = latest published",
+  Boolean(options.find((o) => o.value === selectedValue)?.label.includes("published")));
+check("no unpublished note for published pick",
+  (await page.locator("[data-id='copy-version-unpublished-note']").count()) === 0);
 
-// [3] 드래프트 버전 선택 + 이름 입력 후 제출 → 새 맵 에디터로 이동
-const copyName = `Smoke Copy ${Date.now()}`;
-await page.fill("[data-id='copy-map-dialog-name']", copyName);
-await page.selectOption("[data-id='copy-map-dialog-version']", String(draft.id));
-await page.click("[data-id='copy-map-dialog-confirm']");
-await page.waitForURL(/\/maps\/\d+/, { timeout: 20000 });
-const newMapId = Number(page.url().match(/\/maps\/(\d+)/)[1]);
-check("navigates to new map editor", newMapId !== source.id, `map ${newMapId}`);
-await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+// [4] draft 선택 → 비게시 안내 노출 (B1)
+await page.selectOption("[data-id='copy-version-select']", String(draft.id));
+await page.waitForSelector("[data-id='copy-version-unpublished-note']", { timeout: 5000 });
+check("unpublished note appears for draft pick", true);
 
-// [4] 새 맵은 드래프트 1개 + 선택한 버전(v6 draft) 그래프가 복제됨.
-// 계보(source_node_id)는 graph API가 노출하지 않음 — SMOKE_DB(sqlite 경로) 지정 시 DB 실측.
-const newDetail = await (await fetch(`${API}/maps/${newMapId}`, { headers: HDR })).json();
-check("new map has single draft", newDetail.versions.length === 1 && newDetail.versions[0].status === "draft",
-  newDetail.versions.map((v) => v.status).join(","));
-if (process.env.SMOKE_DB) {
-  // execFileSync + 인자 배열 — 셸 미경유 (SMOKE_DB는 로컬 개발자 입력)
-  const { execFileSync } = await import("node:child_process");
-  const lineage = execFileSync("sqlite3", [
-    process.env.SMOKE_DB,
-    `SELECT group_concat(n.source_node_id) FROM nodes n JOIN map_versions v ON n.version_id=v.id WHERE v.map_id=${Number(newMapId)}`,
-  ]).toString().trim();
-  check("graph cloned from selected draft (v6)", lineage.includes("v6"), lineage);
+// [5] 오너 행 + 오너 알림 안내 + 오우닝 부서 프리필 (B2·B3)
+check("owner row shown", (await page.locator("[data-id='copy-owner-row']").count()) === 1);
+check("notify-owner note shown",
+  (await page.locator("[data-id='copy-notify-owner-note']").count()) === 1);
+// 디렉터리 fetch 후 비동기 프리필 — 즉시 count 대신 대기
+await page.waitForSelector("[data-id='owning-dept-selected']", { timeout: 10000 });
+check("owning dept prefilled from source", true);
+
+// [6] 원본 은퇴 체크(오너) — 이름 고정 + SP 분기 (B4·B5)
+await page.check("[data-id='copy-retire-checkbox']");
+await page.waitForTimeout(500); // SP usage fetch
+const nameInput = page.locator("[data-id='create-map-name']");
+check("name locked to source name",
+  (await nameInput.inputValue()) === "Vendor Management" && (await nameInput.isDisabled()));
+if (spUsage.designated) {
+  await page.waitForSelector("[data-id='copy-retire-sp-confirm']", { timeout: 5000 });
+  await page.check("[data-id='copy-retire-sp-confirm']");
+  check("SP accordion + confirm checked", true, `${spUsage.used_by.length} referencing`);
 } else {
-  console.log("SKIP graph lineage check (set SMOKE_DB=<sqlite path>)");
+  check("no SP accordion for non-designated map",
+    (await page.locator("[data-id='copy-retire-sp-accordion']").count()) === 0);
 }
 
-// [5] 복사본 소프트삭제 → 설정 휴지통에서 즉시 삭제(sysadmin)
-const del = await fetch(`${API}/maps/${newMapId}`, { method: "DELETE", headers: HDR });
-if (del.status !== 204) throw new Error(`soft delete failed: ${del.status}`);
+// [7] 승인자 추가(필수) — 마지막 'Search by name' 피커에서 첫 후보 선택
+const approverInput = page.locator('input[placeholder^="Search by name"]').last();
+await approverInput.scrollIntoViewIfNeeded();
+await approverInput.click();
+await page.waitForSelector("[data-id='principal-picker-dropdown']", { timeout: 5000 });
+await page.locator("[data-id='principal-picker-dropdown'] button").first().click();
+await page.waitForSelector("[data-id^='create-approver-pill-']", { timeout: 5000 });
+
+// [8] 제출 → 새 맵 에디터로 이동, 새 맵 이름 = 원본명
+await page.click("[data-id='create-map-submit']");
+await page.waitForURL(/\/maps\/\d+$/, { timeout: 20000 });
+const newMapId = Number(page.url().match(/\/maps\/(\d+)/)[1]);
+check("navigates to new map editor", newMapId !== source.id, `map ${newMapId}`);
+const newDetail = await (await fetch(`${API}/maps/${newMapId}`, { headers: HDR })).json();
+check("copy keeps original name", newDetail.name === "Vendor Management");
+check("new map has single draft",
+  newDetail.versions.length === 1 && newDetail.versions[0].status === "draft");
+
+// [9] 원본 — "(Pending deletion)" rename + 휴지통행
+const trash = await (await fetch(`${API}/maps/deleted/list`, { headers: HDR })).json();
+const retired = trash.find((m) => m.id === source.id);
+check("source renamed + trashed",
+  Boolean(retired && retired.name.includes("(Pending deletion)")), retired?.name ?? "not in trash");
+
+// [10] 알림 실측 (SMOKE_DB) — map_copied(원본 오너)·map_retired(승인자/editor+, 행위자 제외)
+if (process.env.SMOKE_DB) {
+  const { execFileSync } = await import("node:child_process");
+  const rows = execFileSync("sqlite3", [
+    process.env.SMOKE_DB,
+    `SELECT type, recipient FROM notifications WHERE map_id = ${Number(source.id)} AND type IN ('map_copied','map_retired')`,
+  ]).toString().trim().split("\n").filter(Boolean).map((r) => r.split("|"));
+  const copied = rows.filter(([t]) => t === "map_copied");
+  const retiredNotes = rows.filter(([t]) => t === "map_retired");
+  check("map_copied sent to source owner", copied.length >= 1, `${copied.length} rows`);
+  check("map_retired sent to approvers/editors", retiredNotes.length >= 1, `${retiredNotes.length} rows`);
+  check("actor excluded from notifications", rows.every(([, r]) => r !== "admin.sys"));
+} else {
+  console.log("SKIP notification checks (set SMOKE_DB=<sqlite path>)");
+}
+
+// [11] SP 지정 맵 — retire 체크 시 경고+아코디언+확인 체크 게이트(제출 없이 UI만 검증)
+// 오우닝 부서 있는 지정 맵만 — 없으면 프리필 대기가 성립하지 않는다(시드 1/3은 오우닝 누락)
+const spMap = maps.find(
+  (m) => m.sp_designated_at && m.owning_department && m.name !== "Vendor Management",
+);
+if (spMap) {
+  await page.goto("http://localhost:3000/", { waitUntil: "domcontentloaded" });
+  await page.fill("[data-id='home-map-search']", spMap.name);
+  await page.getByText(spMap.name, { exact: true }).first().click();
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[data-id='map-detail-copy']")].some(
+        (b) => b.offsetParent !== null && !b.disabled,
+      ),
+    { timeout: 20000 },
+  );
+  await visibleCopyBtn().click();
+  await page.waitForSelector("[data-id='copy-retire-checkbox']", { timeout: 10000 });
+  await page.waitForSelector("[data-id='owning-dept-selected']", { timeout: 10000 });
+  await page.check("[data-id='copy-retire-checkbox']");
+  await page.waitForSelector("[data-id='copy-retire-sp-confirm']", { timeout: 10000 });
+  check("SP map: warning + confirm gate shown", true);
+  // 승인자 추가 후에도 확인 체크 전엔 제출 비활성 — 체크하면 활성
+  const spApproverInput = page.locator('input[placeholder^="Search by name"]').last();
+  await spApproverInput.scrollIntoViewIfNeeded();
+  await spApproverInput.click();
+  await page.waitForSelector("[data-id='principal-picker-dropdown']", { timeout: 5000 });
+  await page.locator("[data-id='principal-picker-dropdown'] button").first().click();
+  await page.waitForSelector("[data-id^='create-approver-pill-']", { timeout: 5000 });
+  check("submit blocked until SP confirm",
+    await page.locator("[data-id='create-map-submit']").isDisabled());
+  await page.check("[data-id='copy-retire-sp-confirm']");
+  check("submit enabled after SP confirm",
+    !(await page.locator("[data-id='create-map-submit']").isDisabled()));
+  await page.keyboard.press("Escape"); // 제출하지 않고 닫기
+} else {
+  console.log("SKIP SP branch (no designated map in seed)");
+}
+
+// [12] 설정 휴지통 — 은퇴된 원본을 sysadmin이 즉시 영구삭제
 await page.goto("http://localhost:3000/settings", { waitUntil: "domcontentloaded" });
 await page.getByText("Scheduled deletion", { exact: true }).first().click();
-const row = page.locator("[data-id='deleted-map-row']", { hasText: copyName });
-await row.waitFor({ state: "visible", timeout: 15000 });
-await row.getByText("Delete now", { exact: true }).click();
+const row = page.locator("[data-id='deleted-map-row']", { hasText: "(Pending deletion" });
+await row.first().waitFor({ state: "visible", timeout: 15000 });
+await row.first().getByText("Delete now", { exact: true }).click();
 await page.getByText("Permanently delete this map?").waitFor({ timeout: 10000 });
-check("purge confirm dialog opens", true);
-// ConfirmDialog의 확인 버튼(모달 내 "Delete now")
-await page.locator("[data-id='confirm-dialog'] button, [role='dialog'] button, button", { hasText: "Delete now" }).last().click();
-await row.waitFor({ state: "detached", timeout: 15000 });
-check("row removed after purge", true);
-const deletedList = await (await fetch(`${API}/maps/deleted/list`, { headers: HDR })).json();
-check("purged map gone from trash API", !deletedList.some((m) => m.id === newMapId));
+await page.locator("button", { hasText: "Delete now" }).last().click();
+await row.first().waitFor({ state: "detached", timeout: 15000 });
+const trashAfter = await (await fetch(`${API}/maps/deleted/list`, { headers: HDR })).json();
+check("retired source purged from trash", !trashAfter.some((m) => m.id === source.id));
 
 check("no console errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 

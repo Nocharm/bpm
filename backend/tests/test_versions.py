@@ -19,15 +19,8 @@ def _create_map(client: TestClient) -> dict:
 
 
 def _approve_version(version_id: int) -> None:
-    """버전 status 를 직접 approved 로 설정 — 'draft 1개 제한' 가드를 위해 소스 draft 해소용."""
-
-    async def _run() -> None:
-        async with SessionLocal() as session:
-            version = await session.get(MapVersion, version_id)
-            version.status = "approved"
-            await session.commit()
-
-    asyncio.run(_run())
+    """'draft 1개 제한' 가드 해소용 — 아래 _set_version_status 로 위임."""
+    _set_version_status(version_id, "approved")
 
 
 def test_create_version_blocked_when_draft_exists(client: TestClient) -> None:
@@ -253,7 +246,7 @@ def test_cannot_delete_last_version(client: TestClient) -> None:
     assert response.status_code == 409
 
 
-def test_copy_map_from_approved(client: TestClient) -> None:
+def test_copy_map_from_published(client: TestClient) -> None:
     created = _create_map(client)
     src_version = created["versions"][0]["id"]
     client.post(f"/api/versions/{src_version}/checkout", json={})
@@ -264,7 +257,7 @@ def test_copy_map_from_approved(client: TestClient) -> None:
             "edges": [],
         },
     )
-    _approve_version(src_version)  # 승인본 — 복사 기준 (request #12)
+    _set_version_status(src_version, "published")  # 게시본 — 복사 기준 (copy workflow 재편)
 
     copy = client.post(f"/api/maps/{created['id']}/copy", json={"name": "복사본"})
     assert copy.status_code == 201

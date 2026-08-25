@@ -84,7 +84,8 @@ def test_copy_inherits_owning_department(client: TestClient) -> None:
             m = ProcessMap(
                 name=name, visibility="public", owning_department=SOURCING_1
             )
-            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            # published — 일반 복사는 게시 이력 1회 이상 필요 (copy workflow 재편)
+            m.versions.append(MapVersion(label="As-Is", status="published"))
             session.add(m)
             await session.commit()
             return m.id

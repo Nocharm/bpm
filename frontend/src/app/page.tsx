@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
-import { copyMap, deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapSummary, type Me, type VersionSummary } from "@/lib/api";
+import { deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
@@ -33,7 +33,6 @@ import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
 import { OrgAccordion } from "@/components/maps/org-accordion";
 import { WelcomePlaceholder } from "@/components/maps/welcome-placeholder";
 import { WordDocsSection } from "@/components/maps/word-docs-section";
-import { CopyMapDialog } from "@/components/maps/copy-map-dialog";
 import { SearchBox } from "@/components/search-box";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 
@@ -77,13 +76,8 @@ export default function MapListPage() {
   const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
   // SP 지정 여부 필터 — "sp"(지정됨)/"non_sp"(미지정), 비면 전체 (sp_designated_at 기준)
   const [spFilter, setSpFilter] = useState<Set<string>>(new Set());
-  // 승인본 복사 — 이름 입력 모달(중복 시 error 유지) + 생성 후 새 카드 강조(쉬머) (F12).
-  const [copyTarget, setCopyTarget] = useState<{
-    id: number;
-    name: string;
-    versions: VersionSummary[];
-  } | null>(null);
-  const [copyError, setCopyError] = useState<string | null>(null);
+  // 맵 복사 — CreateMapDialog copy 모드(버전 선택·오너 알림 안내·원본 은퇴). 상세 카드가 detail 통째 전달 (F12 재편).
+  const [copyTarget, setCopyTarget] = useState<MapDetail | null>(null);
   // word 맵 승격 대상 — 지정 시 승격 관문 다이얼로그(CreateMapDialog promote 모드)를 연다 (design 2026-07-24 §6).
   const [promoteTarget, setPromoteTarget] = useState<{ id: number; name: string } | null>(null);
 
@@ -412,32 +406,10 @@ export default function MapListPage() {
     [refresh, showToast, t],
   );
 
-  // 복사 버튼(맵 상세) → 이름·버전 선택 모달 오픈
-  const handleCopyOpen = useCallback(
-    (mapId: number, name: string, versions: VersionSummary[]) => {
-      setCopyError(null);
-      setCopyTarget({ id: mapId, name, versions });
-    },
-    [],
-  );
-
-  // 복사 모달 제출 — 중복 이름이면 모달 유지하고 error 표시, 성공하면 새 맵의 드래프트로 이동.
-  const handleCopySubmit = useCallback(
-    async (name: string, versionId: number) => {
-      if (copyTarget === null) {
-        return;
-      }
-      try {
-        const created = await copyMap(copyTarget.id, name, { versionId });
-        setCopyTarget(null);
-        setCopyError(null);
-        router.push(`/maps/${created.id}`);
-      } catch (err) {
-        setCopyError(humanizeApiError(err, t));
-      }
-    },
-    [copyTarget, router, t],
-  );
+  // 복사 버튼(맵 상세) → 복사 모달 오픈 — 제출·이동은 CreateMapDialog copy 모드가 처리.
+  const handleCopyOpen = useCallback((detail: MapDetail) => {
+    setCopyTarget(detail);
+  }, []);
 
   // 가시성은 서버가 이미 적용(GET /maps는 접근 가능한 맵만 반환, my_role 동봉) — 클라 재계산 폐기 /
   // Server already filters GET /maps by access and sets my_role; no client recompute.
@@ -1086,15 +1058,16 @@ export default function MapListPage() {
       )}
 
       {copyTarget && (
-        <CopyMapDialog
-          sourceName={copyTarget.name}
-          versions={copyTarget.versions}
-          error={copyError}
-          onConfirm={(name, versionId) => void handleCopySubmit(name, versionId)}
-          onClose={() => {
-            setCopyTarget(null);
-            setCopyError(null);
+        <CreateMapDialog
+          copy={{
+            mapId: copyTarget.id,
+            sourceName: copyTarget.name,
+            versions: copyTarget.versions,
+            myRole: copyTarget.my_role,
+            owningDepartment: copyTarget.owning_department ?? null,
           }}
+          onClose={() => setCopyTarget(null)}
+          onCreated={() => void refresh()}
         />
       )}
 
