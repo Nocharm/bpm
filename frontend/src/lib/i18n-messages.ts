@@ -1741,6 +1741,10 @@ const en = {
   "home.ioOutput": "Output",
   // ── 설정 Framework 탭 — 카테고리 관리 트리 (Task 3) ──
   "admin.catFramework": "Framework",
+  "framework.chipLabel": "Framework",
+  "framework.chipLoading": "Loading...",
+  "framework.chipNoMaps": "No maps in this category",
+  "framework.chipError": "Failed to load framework",
   "framework.adminTab": "Categories & import",
   "framework.adminReimportHint":
     "Re-imports overwrite category names/structure by code - the last delivery is the source of truth.",
@@ -3548,6 +3552,10 @@ const ko: Record<MessageKey, string> = {
   "home.ioOutput": "아웃풋",
   // ── 설정 Framework 탭 — 카테고리 관리 트리 (Task 3) ──
   "admin.catFramework": "프레임워크",
+  "framework.chipLabel": "프레임워크",
+  "framework.chipLoading": "불러오는 중...",
+  "framework.chipNoMaps": "이 카테고리에 맵이 없습니다",
+  "framework.chipError": "프레임워크를 불러오지 못했습니다",
   "framework.adminTab": "카테고리·임포트",
   "framework.adminReimportHint":
     "재임포트는 코드 기준으로 카테고리 이름·구조를 덮어씁니다 - 최신 배송본이 항상 최종 진실입니다.",

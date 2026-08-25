@@ -30,6 +30,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
+import { FrameworkChip } from "@/components/framework-chip";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
@@ -1058,9 +1059,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
-  // PNG 정보 카드 소스 — getMap 상세에서 채움 (2026-08-25)
+  // PNG 정보 카드·프레임워크 칩 소스 — getMap 상세에서 채움 (2026-08-25)
   const [mapOwnerName, setMapOwnerName] = useState<string | null>(null);
   const [mapOwningDept, setMapOwningDept] = useState<string | null>(null);
+  const [mapCategoryId, setMapCategoryId] = useState<number | null>(null);
   const [mapCategoryPath, setMapCategoryPath] = useState<string | null>(null);
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
@@ -2300,6 +2302,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwner(detail.created_by);
         setMapOwnerName(detail.owner_name ?? null);
         setMapOwningDept(detail.owning_department ?? null);
+        setMapCategoryId(detail.category_id ?? null);
         setMapCategoryPath(detail.category_path ?? null);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
@@ -8405,6 +8408,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       checklistLabel={t("save.checklistTitle")}
                       items={nodes.length > 0 ? saveCheckItems : []}
                     />
+                  ) : undefined
+                }
+                // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함)
+                topRightSlot={
+                  index === 0 && mapCategoryId !== null ? (
+                    <FrameworkChip mapId={mapId} categoryId={mapCategoryId} />
                   ) : undefined
                 }
                 bounds={bounds}
