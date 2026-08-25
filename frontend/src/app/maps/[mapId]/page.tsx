@@ -1362,6 +1362,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const childNodesRef = useRef<AppNode[]>([]);
   // height-shift(#1) 스텝 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
   const yStepsRef = useRef<ShiftStep[]>([]);
+  // 상시(비게이트) 스텝 미러 — 표시 Y는 펼침 중에도 밀리므로(합성 입력에 베이크), 클릭점→저장 변환
+  // (toSavedPoint)과 펼침 드롭 Y 환산(finalizeRootDrag)은 이 상시 스텝으로 역변환한다.
+  const heightStepsRef = useRef<ShiftStep[]>([]);
   // height-shift(#1) 렌더 오프셋(트윈 중간값) 미러 — findGroupAt·handleExportPng(정의가 앞선 useCallback)에서
   // 읽기 위한 ref — TDZ 회피(renderYOffsets state는 뒤에서 선언). 미러링 useEffect는 state 선언부 옆에 유지.
   const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
@@ -1609,9 +1612,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
-  // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용
+  // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용.
+  // 상시 스텝 사용 — 펼침 중에도 표시 Y는 밀려 있다(합성 입력 베이크).
   const toSavedPoint = useCallback((point: { x: number; y: number }) => {
-    const steps = yStepsRef.current;
+    const steps = heightStepsRef.current;
     return steps.length === 0 ? point : { x: point.x, y: displayToSavedX(point.y, steps) };
   }, []);
 
@@ -4846,7 +4850,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       let committed = false;
       const savedById = new Map<string, { x: number; y: number }>();
-      for (const [id, { offset }] of offsets) {
+      for (const [id] of offsets) {
         const dropDisplay = live.get(id);
         if (!dropDisplay) {
           continue;
@@ -4857,7 +4861,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         // x는 드롭 위치 오프셋으로 환산(드래그 시작 오프셋 아님) — 펼침 영역 경계를 가로지르면 두 오프셋이 달라
         // footprint만큼 빗나간다. 도달 불가 갭(앵커 점프 구간)은 앵커 x로 클램프(lib/inline-shift).
         const sx = displayToSavedX(dropDisplay.x, steps);
-        savedById.set(id, { x: sx, y: dropDisplay.y - offset.y });
+        // y도 드롭 위치 기준 상시 스텝 역변환 — 펼침 중에도 height-shift가 베이크돼 있고,
+        // 밴드 경계를 가로지른 드래그는 시작 오프셋(rootOffsets.y) 빼기로는 어긋난다.
+        savedById.set(id, { x: sx, y: displayToSavedX(dropDisplay.y, heightStepsRef.current) });
         committed = true;
       }
       if (savedById.size > 0) {
@@ -6046,12 +6052,37 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
+  // height-shift(#1) 상시 스텝/오프셋 — 합성(아래 inlineComposition) 입력에도 베이크하므로 게이트 없이 산출.
+  // 펼침 중 표시는 합성 좌표가 담당(베이크)하고, 평시 표시는 renderYOffsets 트윈이 담당한다(flowNodes에서 게이트).
+  // 드래그 중엔 시작 시점 스텝으로 동결 — 커진 노드(앵커)를 끌면 자기 밴드가 매 프레임 따라 움직여
+  // 표시(offset)와 역변환이 서로 쫓으며 마우스·원위치 사이를 튀는 지터가 난다. 드롭 시 해제(트윈 복귀).
+  const [dragFrozenSteps, setDragFrozenSteps] = useState<ShiftStep[] | null>(null);
+  const heightSteps = useMemo(
+    () => dragFrozenSteps ?? buildHeightSteps(nodes),
+    [dragFrozenSteps, nodes],
+  );
+  useEffect(() => {
+    heightStepsRef.current = heightSteps;
+  }, [heightSteps]);
+  const yOffsets = useMemo(() => buildYOffsets(nodes, heightSteps), [nodes, heightSteps]);
+
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
     }
     const tree = fullGraph;
     const rootIds = new Set(nodes.map((node) => node.id));
+    // height-shift(#1)를 합성 입력에 베이크 — 펼침 중에도 커진 노드 아래가 밀린 표시 Y로 배치된다.
+    // 파생(childTop·regions bbox·rootOffsets=표시−저장)이 전부 이 표시 Y 기준으로 자동 일관.
+    const displayNodes =
+      yOffsets.size === 0
+        ? nodes
+        : nodes.map((node) => {
+            const yOff = yOffsets.get(node.id);
+            return yOff
+              ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
+              : node;
+          });
 
     // 루트 스코프(depth 1) 펼침 앵커별 footprint-shift 단계 — 각 {저장 x, footprint}.
     // 드롭 좌표 환산 시 "이 저장 x에서의 표시 오프셋"을 위치 의존으로 재계산하기 위함(드래그 시작 오프셋이 아닌
@@ -6200,7 +6231,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       return { nodes: all, regions, childEdges, width, height };
     };
 
-    const root = buildScope(nodes, 1);
+    const root = buildScope(displayNodes, 1);
     if (root.regions.length === 0) {
       return null;
     }
@@ -6305,7 +6336,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       rootOffsets,
       rootShiftSteps,
     };
-  }, [expandedInline, fullGraph, nodes, edges, currentParentId, injectSubEnds]);
+  }, [expandedInline, fullGraph, nodes, yOffsets, edges, currentParentId, injectSubEnds]);
 
   useEffect(() => {
     inlineCompositionRef.current = inlineComposition;
@@ -6399,15 +6430,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
 
   // height-shift(#1): 표시 높이로 커진 노드 아래를 렌더 시점에만 밀어냄 — 저장 좌표 불변.
-  // 인라인 펼침 중엔 비활성(자식 합성 좌표와 결합 금지, spec §7). 설계: 2026-08-23-node-spacing-design.md
+  // 드롭 역변환용 게이트 스텝 — 펼침 중엔 rootOffsets(y 베이크 포함)가 드롭 환산을 담당하므로
+  // 비활성(이중 차감 방지). 상시 스텝/오프셋은 위(heightSteps/yOffsets)에서 산출.
   const ySteps = useMemo(
-    () => (inlineComposition ? [] : buildHeightSteps(nodes)),
-    [inlineComposition, nodes],
+    () => (inlineComposition ? [] : heightSteps),
+    [inlineComposition, heightSteps],
   );
   useEffect(() => {
     yStepsRef.current = ySteps;
   }, [ySteps]);
-  const yOffsets = useMemo(() => buildYOffsets(nodes, ySteps), [nodes, ySteps]);
 
   // 오프셋 전환 트윈 — CSS transition은 엣지(SVG 재계산)가 안 따라와 분리돼 보임 → 값 자체를 rAF 보간.
   // 즉시 적용 3조건: 첫 산출(로드 정착)·드래그 중·prefers-reduced-motion. (spec §6)
@@ -6547,8 +6578,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
       const injected = injectSubEnds(withGmpPreview);
-      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동
-      const yOff = renderYOffsets.get(node.id) ?? 0;
+      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동.
+      // 펼침 중엔 합성 입력에 이미 베이크돼 있어 여기서 더하면 이중 적용 — 스킵.
+      const yOff = inlineComposition ? 0 : (renderYOffsets.get(node.id) ?? 0);
       return yOff === 0
         ? injected
         : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
@@ -8517,6 +8549,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
+                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureRootDragStart([node]);
                         beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
@@ -8553,6 +8586,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 제스처 종료 — 다음 무관한 position 변경(화살표 이동 등)이 축 고정에 새지 않게 해제.
                         dragStartPosRef.current = null;
                         dragStartPositionsRef.current = new Map();
+                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                       }}
                       onSelectionDragStart={(event, nodes) => {
                         pushHistory();
@@ -8561,6 +8595,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
+                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureRootDragStart(nodes);
                         // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
                         beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
@@ -8602,6 +8637,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
                         // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
                         dragStartPositionsRef.current = new Map();
+                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                       }}
                       onBeforeDelete={async () => {
                         if (readOnly) {
