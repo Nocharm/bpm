@@ -303,12 +303,17 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   const value = (isSubprocess ? data.spGmp : data.gmp) ?? "";
   const label = formatGmp(value);
   const editable = !isSubprocess && onEditGmp !== null;
+  // 미분류(Unclassified)는 공간을 차지하지 않고 기본 숨김 — 노드 호버 시 좌상단에 부유로만 노출
+  // (분류 진입점은 유지, 사용자 요청 2026-08-25). 이때 호출부 위치 className(extra)은 무시한다.
+  const floating = !label;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
   // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
     "nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
     (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
-    (extra ?? "");
+    (floating
+      ? "absolute -left-2 -top-2 z-10 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+      : (extra ?? ""));
   const body = (
     <>
       <ShieldCheck size={10} strokeWidth={1.5} className="shrink-0" />
@@ -895,11 +900,12 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         </div>
         {/* 어트리뷰트·파라미터·조건/IO — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로
             (규범 순서 #10: 속성→지표→조건→IO — 프로세스/서브프로세스와 동일 수준 표시, 사용자 요청 2026-08-25).
-            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향. IO 박스는 framed(보더 강조). */}
+            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향. IO 박스는 framed(보더 강조).
+            조건/IO 박스는 노드 밖이라 상시 노출이 산만 — 선택(활성) 시에만 (사용자 요청 2026-08-25). */}
         <div className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2">
           <NodeFields data={data} />
           <NodeParams data={data} className="justify-center" />
-          <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} framed />
+          {selected && <NodeIoDetails nodeId={id} data={data} nodeSelected framed />}
         </div>
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
