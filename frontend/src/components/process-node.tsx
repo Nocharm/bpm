@@ -880,12 +880,13 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <span className="truncate">{t("subprocess.pinnedBanner")}</span>
           </div>
         ) : data.followLatest === true ? (
-          // 최신본 추종 중(기본 상태) — 정상 진행의 초록(added) 톤, 핀 고정(중립)과 구분
-          // (사용자 요청 2026-08-25). 위에서 미지정/해제를 걸렀으니 여기 오면 실링크+지정 유효.
+          // 최신본 추종 중(기본 상태) — 중립 톤. 색은 조치 필요 상태(업데이트/해제/미지정)에만 남겨
+          // 위계 유지, 핀 고정과는 아이콘·문구로 구분 (사용자 결정 2026-08-25 — 초록안 철회).
+          // 위에서 미지정/해제를 걸렀으니 여기 오면 실링크+지정 유효.
           <div
             data-id="sp-banner-following"
             title={t("subprocess.followingNotice")}
-            className="mt-1 flex items-center gap-1 rounded-xs border border-added/30 bg-added/10 px-1.5 py-0.5 text-xs text-added"
+            className="mt-1 flex items-center gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-xs text-ink-secondary"
           >
             <RefreshCw size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.followingBanner")}</span>
