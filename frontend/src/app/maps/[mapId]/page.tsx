@@ -8485,10 +8485,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
-                // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함)
+                // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함).
+                // 이동은 F6 "링크맵 열기"와 같은 미저장 경고 확인 모달(openMapPrompt)을 거친다.
                 topRightSlot={
                   index === 0 && mapCategoryId !== null ? (
-                    <FrameworkChip mapId={mapId} categoryId={mapCategoryId} />
+                    <FrameworkChip
+                      mapId={mapId}
+                      categoryId={mapCategoryId}
+                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                    />
                   ) : undefined
                 }
                 bounds={bounds}

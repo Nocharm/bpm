@@ -20,7 +20,16 @@ import { useI18n } from "@/lib/i18n";
 const CHIP_BASE =
   "absolute right-2 top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
 
-export function FrameworkChip({ mapId, categoryId }: { mapId: number; categoryId: number }) {
+export function FrameworkChip({
+  mapId,
+  categoryId,
+  onNavigate,
+}: {
+  mapId: number;
+  categoryId: number;
+  // 이동 게이트 — 주면 직접 이동(router.push) 대신 호출측이 확인 모달을 띄운다(에디터 이탈 미저장 경고)
+  onNavigate?: (targetMapId: number, name: string) => void;
+}) {
   const { t } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -200,7 +209,11 @@ export function FrameworkChip({ mapId, categoryId }: { mapId: number; categoryId
                       type="button"
                       data-id={`editor-framework-flyout-map-${entry.id}`}
                       disabled={isCurrent}
-                      onClick={() => router.push(`/maps/${entry.id}`)}
+                      onClick={() => {
+                        setFlyout(null);
+                        if (onNavigate) onNavigate(entry.id, entry.name);
+                        else router.push(`/maps/${entry.id}`);
+                      }}
                       className={`w-full truncate rounded-sm px-1.5 py-1 text-left text-fine ${
                         isCurrent
                           ? "bg-accent-tint font-semibold text-accent"
