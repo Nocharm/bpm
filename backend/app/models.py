@@ -179,9 +179,28 @@ class ProcessMap(Base):
     consultant_code: Mapped[str | None] = mapped_column(String(200), unique=True, default=None)
     # 오너 미확정 임포트 마킹 — True면 재전달 오너로 거버넌스 갱신 허용(불변 원칙의 명시적 예외) (design 2026-08-18 §4)
     consultant_owner_pending: Mapped[bool] = mapped_column(default=False)
-    # L6 Input/Output — 자유 텍스트(구조화는 후속 승격) (design 2026-08-08 §2.2)
+    # L6 Input/Output — 자유 텍스트(개행 구분 복수) (design 2026-08-08 §2.2, 2026-08-19)
     sp_input: Mapped[str | None] = mapped_column(Text, default=None)
     sp_output: Mapped[str | None] = mapped_column(Text, default=None)
+    # L6 IO 항목별 데이터 폼 — sp_input/sp_output 줄과 1:1 정렬(노드 input_forms 대칭) (2026-08-20)
+    sp_input_forms: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_output_forms: Mapped[str | None] = mapped_column(Text, default=None)
+    # SP 지정 IO 항목 id — 지정 저장 시 전 줄 부여(소비 맵의 미러가 참조). 줄 정렬은 sp_input과 1:1
+    sp_input_ids: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_output_ids: Mapped[str | None] = mapped_column(Text, default=None)
+    # 인터뷰 승격 필드 — 노드 대칭 + 대표/폴백 쌍 (design 2026-08-19 §1.2)
+    sp_start_condition: Mapped[str | None] = mapped_column(Text, default=None)
+    sp_end_condition: Mapped[str | None] = mapped_column(Text, default=None)
+    # GMP 분류 — direct|indirect|non_gmp|None(미분류). 임포트는 폴백만 채움(검토에서 선정)
+    sp_gmp: Mapped[str | None] = mapped_column(String(20), default=None)
+    sp_gmp_fallback: Mapped[str | None] = mapped_column(Text, default=None)
+    # 폴백 원문 — 대표 필드는 각각 참조 SP 노드 annual_count · sp_duration · sp_touch_time
+    sp_frequency_fallback: Mapped[str | None] = mapped_column(String(200), default=None)
+    sp_total_time_fallback: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 7번째 회당 파라미터 — 노드 touch_time 대칭 (design 2026-08-19 §2)
+    sp_touch_time: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_touch_time_fallback: Mapped[str | None] = mapped_column(String(200), default=None)
+    sp_system_fallback: Mapped[str | None] = mapped_column(String(200), default=None)
 
     versions: Mapped[list["MapVersion"]] = relationship(
         back_populates="map", cascade="all, delete-orphan"
@@ -302,6 +321,30 @@ class Node(Base):
     headcount: Mapped[str] = mapped_column(String(50), default="")
     annual_count: Mapped[str] = mapped_column(String(50), default="")
     fte: Mapped[str] = mapped_column(String(50), default="")
+    # 7번째 회당 파라미터 — 실작업시간, duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+    touch_time: Mapped[str] = mapped_column(String(50), default="")
+    # 인터뷰 승격 필드 — input/output은 개행 구분 복수, 조건은 자유 텍스트 (design 2026-08-19 §1.1)
+    input: Mapped[str] = mapped_column(Text, default="")
+    output: Mapped[str] = mapped_column(Text, default="")
+    # 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정, 짧으면 이후 줄 미지정) (2026-08-20)
+    input_forms: Mapped[str] = mapped_column(Text, default="")
+    output_forms: Mapped[str] = mapped_column(Text, default="")
+    # IO 링크(불러오기) — 줄 정렬 계약은 input_forms와 동일. output_ids=원본 항목 id(원본만),
+    # *_links=미러의 원본 itemId 참조, input_flags=필수/선택(빈 줄=required, "optional"만 명시).
+    # 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md §3
+    output_ids: Mapped[str] = mapped_column(Text, default="")
+    input_links: Mapped[str] = mapped_column(Text, default="")
+    output_links: Mapped[str] = mapped_column(Text, default="")
+    input_flags: Mapped[str] = mapped_column(Text, default="")
+    start_condition: Mapped[str] = mapped_column(Text, default="")
+    end_condition: Mapped[str] = mapped_column(Text, default="")
+    # 입출력 형식 참고 배지 — structured/document/tacit 등 자유값
+    data_form: Mapped[str] = mapped_column(String(50), default="")
+    # 시스템 원문 폴백 — 라이브러리화 전 검토 원천, CSV/AI 표면 제외 (design 2026-08-19 §3)
+    system_fallback: Mapped[str] = mapped_column(String(200), default="")
+    # 활동별 GMP 분류 — 맵 sp_gmp와 동일 3값 계약. 검토값이라 재임포트가 못 덮는다
+    # (엔진이 계보로 이어받기·시그니처 제외 — design 2026-08-19 §1.3, 2026-08-20 확장)
+    gmp: Mapped[str] = mapped_column(String(20), default="")
     # 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
     url: Mapped[str] = mapped_column(String(500), default="")
     # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)
@@ -718,6 +761,27 @@ class LoginRecord(Base):
     name: Mapped[str | None] = mapped_column(String(200), default=None)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, index=True
+    )
+
+
+class LocalCredential(Base):
+    """로컬 계정(외부 컨설턴트) 자격증명 — AD 계정이 없는 사용자용 (설계 §3).
+
+    디렉터리 정보는 employees(source='local') 행이 갖고, 여기엔 비밀번호와 sysadmin
+    부여만 둔다. employees에 합치면 raw dict로 직렬화하는 엔드포인트를 통해 해시가
+    새어나갈 경로가 생긴다.
+    """
+
+    __tablename__ = "local_credentials"
+
+    login_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    # 설정 화면에서 부여하는 시스템 관리자 — permissions.logic 캐시에 반영된다 (설계 §3.1)
+    is_sysadmin: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
     )
 
 

@@ -168,9 +168,9 @@ export function NoticeEditModal({
               </label>
             </div>
             <div className="flex items-center gap-2 text-caption text-ink">
-              <span>{startDate || "—"}</span>
+              <span>{startDate || "-"}</span>
               <span className="text-ink-tertiary">→</span>
-              <span>{unlimited ? t("notices.unlimited") : endDate || "—"}</span>
+              <span>{unlimited ? t("notices.unlimited") : endDate || "-"}</span>
               {days ? (
                 <span className="ml-auto text-fine text-ink-tertiary">
                   {t("noticeEdit.days", { n: days })}

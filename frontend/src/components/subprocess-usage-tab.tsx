@@ -22,7 +22,7 @@ export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
   const versionText =
     usage.designated_version_number != null
       ? `v${usage.designated_version_number}${usage.designated_version_label ? ` · ${usage.designated_version_label}` : ""}`
-      : (usage.designated_version_label ?? "—");
+      : (usage.designated_version_label ?? "-");
   return (
     <div data-id="sp-usage-tab" className="flex flex-col gap-4">
       {/* 지정 메타 — 버전·시점·행위자 (SP 카드와 동일 박스 스타일) */}
@@ -47,14 +47,14 @@ export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
           </MetaRow>
           <MetaRow label={t("inspector.spUsageDesignatedAt")}>
             <span className="text-fine text-ink">
-              {usage.designated_at ? formatKst(usage.designated_at) : "—"}
+              {usage.designated_at ? formatKst(usage.designated_at) : "-"}
             </span>
           </MetaRow>
           <MetaRow label={t("inspector.spUsageBy")}>
             {usage.changed_by ? (
               <UserPill loginId={usage.changed_by} />
             ) : (
-              <span className="text-fine text-ink-tertiary">—</span>
+              <span className="text-fine text-ink-tertiary">-</span>
             )}
           </MetaRow>
           {usage.changed_at && usage.changed_at !== usage.designated_at && (

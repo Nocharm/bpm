@@ -761,3 +761,112 @@ def test_section_anchor_roundtrips(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
     node = next(n for n in saved["nodes"] if n["id"] == "n1")
     assert node["section_anchor"] == "_Toc999"
+
+
+def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestClient) -> None:
+    """인터뷰 승격 필드 왕복 + touch_time H.MM 정규화 (design 2026-08-19 §1.1·§2)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "작업지시 확인",
+                "input": "그 주 작업지시\n표준기 목록",  # 개행 구분 복수
+                "output": "측정 범위",
+                "start_condition": "주기 도래",
+                "end_condition": "목록 확정",
+                "data_form": "structured",
+                "system_fallback": "EAM(구모델)",
+                "touch_time": "1.75",  # 75분 이월 → 2.15
+            },
+            {"id": "n2", "title": "무효 터치타임", "touch_time": "한시간쯤"},
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    assert n1["input"] == "그 주 작업지시\n표준기 목록"
+    assert n1["output"] == "측정 범위"
+    assert n1["start_condition"] == "주기 도래" and n1["end_condition"] == "목록 확정"
+    assert n1["data_form"] == "structured"
+    assert n1["system_fallback"] == "EAM(구모델)"
+    assert n1["touch_time"] == "2.15"
+    # 무효 자유텍스트는 duration과 동일하게 경계에서 "" 소거(422 아님)
+    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
+    assert n2["touch_time"] == ""
+
+
+def test_node_io_link_columns_roundtrip(client: TestClient) -> None:
+    """IO 링크 컬럼 왕복 — 줄 정렬 유지, 후행 공백 줄 소거 (io-linking design §3)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "원본",
+                "output": "회의록\n견적서",
+                "output_ids": "itm_a1\n",  # 첫 항목만 원본 — 후행 빈 줄 소거 기대
+            },
+            {
+                "id": "n2", "title": "미러",
+                "input": "회의록",
+                "input_links": "itm_a1",
+                "input_flags": "optional",
+            },
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    n2 = next(n for n in saved["nodes"] if n["id"] == "n2")
+    assert n1["output_ids"] == "itm_a1"
+    assert n2["input_links"] == "itm_a1"
+    assert n2["input_flags"] == "optional"
+
+
+def test_node_io_item_forms_roundtrip(client: TestClient) -> None:
+    """IO 항목별 데이터 폼 — input/output 줄과 1:1 정렬 왕복, 후행 공백 줄만 소거 (2026-08-20)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {
+                "id": "n1", "title": "작업지시 확인",
+                "input": "그 주 작업지시\n표준기 목록",
+                # 두 번째 항목은 미지정(빈 줄) — 정렬 보존을 위해 유지돼야 한다
+                "input_forms": "document\n",
+                "output": "측정 범위",
+                "output_forms": "structured",
+            },
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    n1 = next(n for n in saved["nodes"] if n["id"] == "n1")
+    # 후행 빈 줄은 소거 — 항목보다 짧은 forms는 이후 줄 미지정으로 해석
+    assert n1["input_forms"] == "document"
+    assert n1["output_forms"] == "structured"
+
+
+def test_node_gmp_roundtrip_and_invalid_scrubbed(client: TestClient) -> None:
+    """활동별 GMP — 3값 왕복, 무효값은 경계에서 "" 소거 (design 2026-08-20)."""
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "n0", "title": "시작", "node_type": "start"},
+            {"id": "n1", "title": "분류됨", "gmp": "direct"},
+            {"id": "n2", "title": "무효값", "gmp": "sometimes"},
+        ],
+        "edges": [],
+    }
+    res = client.put(f"/api/versions/{version_id}/graph", json=graph)
+    assert res.status_code == 200
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    assert next(n for n in saved["nodes"] if n["id"] == "n1")["gmp"] == "direct"
+    assert next(n for n in saved["nodes"] if n["id"] == "n2")["gmp"] == ""

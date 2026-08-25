@@ -109,7 +109,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
   }, [user?.isSysadmin]);
 
   const count = (value: number | undefined) =>
-    value === undefined ? "—" : value.toLocaleString();
+    value === undefined ? "-" : value.toLocaleString();
 
   const points = series?.points ?? [];
 
@@ -131,7 +131,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
         <div>
           <h1 className="text-body-strong text-ink">{t("dashboard.opsTitle")}</h1>
           <p className="mt-0.5 text-fine text-ink-tertiary">
-            {summary ? formatKstShort(summary.generated_at) : "—"}
+            {summary ? formatKstShort(summary.generated_at) : "-"}
           </p>
         </div>
 
@@ -281,7 +281,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
                       {event.event_type}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-caption text-ink">
-                      {event.map_name} {event.version_label} — {event.actor_name}
+                      {event.map_name} {event.version_label} - {event.actor_name}
                     </span>
                     <span className="shrink-0 text-fine text-ink-tertiary">
                       {formatKstShort(event.created_at)}
@@ -309,7 +309,7 @@ export function DashboardPanel({ onBack, onToast }: DashboardPanelProps) {
                     value={
                       aiUsage.last7.calls > 0
                         ? `${Math.round((aiUsage.last7.failed / aiUsage.last7.calls) * 100)}%`
-                        : "—"
+                        : "-"
                     }
                   />
                   <StatCard

@@ -132,7 +132,7 @@ export function WordCreateModal({ onClose, onContinue }: WordCreateModalProps) {
               ) : (
                 <p className="flex items-start gap-1.5 text-caption text-ink-tertiary">
                   <AlertTriangle size={14} strokeWidth={1.5} className="mt-px shrink-0" />
-                  No linkable sections found — you can import later.
+                  No linkable sections found - you can import later.
                 </p>
               )}
             </div>

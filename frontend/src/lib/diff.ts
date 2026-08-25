@@ -14,11 +14,20 @@ export type ChangedField =
   | "department"
   | "system"
   | "duration"
+  | "touch_time"
   | "cost_krw"
   | "cost_usd"
   | "headcount"
   | "annual_count"
   | "fte"
+  | "input"
+  | "output"
+  | "input_forms"
+  | "output_forms"
+  | "data_form"
+  | "gmp"
+  | "start_condition"
+  | "end_condition"
   | "location";
 
 export interface NodeDiffEntry {
@@ -54,11 +63,21 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["department", "department"],
   ["system", "system"],
   ["duration", "duration"],
+  ["touch_time", "touch_time"],
   ["cost_krw", "cost_krw"],
   ["cost_usd", "cost_usd"],
   ["headcount", "headcount"],
   ["annual_count", "annual_count"],
   ["fte", "fte"],
+  // 인터뷰 승격 필드 — 콘텐츠 diff 대상. 폴백(system_fallback)은 검토 메모라 제외 (design 2026-08-19 §3)
+  ["input", "input"],
+  ["output", "output"],
+  ["input_forms", "input_forms"],
+  ["output_forms", "output_forms"],
+  ["data_form", "data_form"],
+  ["gmp", "gmp"],
+  ["start_condition", "start_condition"],
+  ["end_condition", "end_condition"],
 ];
 
 // 계보 키 — 복제본은 원본 노드 ID를 공유한다

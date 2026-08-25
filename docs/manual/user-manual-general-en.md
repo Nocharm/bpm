@@ -130,7 +130,7 @@ Open **Compare** from the editor top bar (requires at least one published versio
 - Pick **Base** and **Target** versions — **Swap** flips them.
 - Differences are highlighted: **Added** (green), **Removed** (red), **Changed** (yellow), with a "Changed: fields" detail and a summary line.
 - Toggle **Horizontal layout** / **Vertical layout** to re-arrange both canvases.
-- The **Changes** list filters by All / Nodes / Edges; the **Properties** pane shows the selected node's fields (including per-run parameters) side by side.
+- The **Changes** list filters by All / Nodes / Edges; the **Properties** pane shows the selected node's fields (including per-run metrics) side by side.
 - **Apply To-Be** carries the target's changes forward; **Export** saves the comparison.
 
 ---

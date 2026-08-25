@@ -22,11 +22,6 @@ services:
   frontend:
     build:
       context: ./frontend
-      # NEXT_PUBLIC_* 는 빌드 시 번들에 인라인됨 → build args로 주입
-      args:
-        NEXT_PUBLIC_AUTH_ENABLED: ${AUTH_ENABLED:-true}
-        NEXT_PUBLIC_KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
     environment:
       # Next.js standalone 런타임 V8 old-space 힙 상한(MB) — 무제한 성장 방지
       NODE_OPTIONS: --max-old-space-size=512
@@ -47,8 +42,12 @@ services:
       MALLOC_ARENA_MAX: "2"
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-processmap}:${POSTGRES_PASSWORD:?set in .env}@db:5432/${POSTGRES_DB:-processmap}
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_MODE: ${AUTH_MODE:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-}
+      AUTH_JWT_TTL_HOURS: ${AUTH_JWT_TTL_HOURS:-8}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
       CHECKOUT_TTL_MINUTES: ${CHECKOUT_TTL_MINUTES:-30}
       # 편집용 매뉴얼 사이트 버튼(F9) — 비우면 에디터 툴바에서 숨김
       MANUAL_URL: ${MANUAL_URL:-}

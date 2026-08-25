@@ -17,7 +17,7 @@ const PAGE_SIZE = 30; // 청크 렌더 — 노드 많을 때 ParamInput 대량 �
 // 통화(₩/$)는 노드별 배타 계약 — 열을 'Cost' 하나로 합치고 행별 통화 토글 (P1 #10)
 const COLUMNS: Array<{ key: string; label: string; title: string }> = [
   { key: "duration", label: "Duration", title: "Duration per run (H.MM)" },
-  { key: "cost", label: "Cost", title: "Cost per run — ₩ or $ (exclusive per activity)" },
+  { key: "cost", label: "Cost", title: "Cost per run - ₩ or $ (exclusive per activity)" },
   { key: "headcount", label: "People", title: "Headcount per run" },
   { key: "annual_count", label: "Runs/yr", title: "Runs per year" },
   { key: "fte", label: "FTE", title: "Full-time equivalent" },
@@ -138,7 +138,7 @@ export function ParamsTableDialog({ rows, busy, onApply, onClose }: ParamsTableD
           <div className="min-w-0 flex-1">
             <h2 className="text-body-strong text-ink">Confirm collected parameters</h2>
             <p className="text-fine text-ink-muted">
-              Edit values directly if needed — applied instantly to matching activities, nothing is redrawn.
+              Edit values directly if needed - applied instantly to matching activities, nothing is redrawn.
             </p>
           </div>
         </header>

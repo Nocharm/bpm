@@ -1,12 +1,12 @@
 # Business Process Map — Editing Maps
 
-> This manual covers how to **draw and edit process maps** in Business Process Map (BPM) — nodes, connections, groups, per-run parameters, subprocesses, saving, import/export, and the AI assistant. For everything outside editing — signing in, the map list, version approval, settings — see the companion **Getting Around** manual.
+> This manual covers how to **draw and edit process maps** in Business Process Map (BPM) — nodes, connections, groups, per-run metrics, subprocesses, saving, import/export, and the AI assistant. For everything outside editing — signing in, the map list, version approval, settings — see the companion **Getting Around** manual.
 
 ---
 
 ## 1. Editor at a Glance
 
-Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card.
+Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all).
 
 ### Moving around the canvas
 
@@ -22,7 +22,7 @@ Open a map to enter the editor. The top bar holds the version selector, **New ve
 
 Selecting a node shows that node's properties in the inspector; with nothing selected, two tabs appear: **Map** and **Approval**.
 
-- **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and a manage icon. Below it sit two collapsed accordions: **Node display** (what each node shows) and **Edge style** — the latter applies a line style to **all connections at once** (a confirm dialog summarizes what will change), and that choice also becomes the default for newly drawn connections. Individual edges can still be styled one by one from the edge's inspector panel or right-click menu. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
+- **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and a manage icon. Below it sit collapsed sections: **Node display** (what each node shows — grouped into **Attributes / Metrics / I/O & Conditions** steps, and any part of a row toggles it; the same section also appears in the Properties tab's empty state under the map summary), **Edge style**, and — on maps that have them — **Notes** (interview exception rules · VOC, collapsed by default). Edge style applies a line style to **all connections at once** (a confirm dialog summarizes what will change), and that choice also becomes the default for newly drawn connections. Individual edges can still be styled one by one from the edge's inspector panel or right-click menu. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
 - **Approval tab** — from top to bottom: **Pending Approvals** (this map's pending requests — count badge, collapsed by default) → a draft CTA (**Switch to draft for approval** when a draft exists, **Create draft for approval** otherwise) → the **Approval workflow** section (collapsible, with a status badge in its header even while collapsed) → the **Subprocess** designation card → the version card list. See section 7 and the Getting Around manual for running an approval.
 
 ---
@@ -45,9 +45,10 @@ Right-click the canvas and choose a shape, or use **Add node** in the inspector.
 
 Select a node and edit in the right inspector:
 
-- **Title** and **Description** — double-click a node (or press `F2`) to rename in place. While typing a name, `Enter` commits and **`Shift+Enter` (or `Alt+Enter`) inserts a line break** — the same rule in the canvas, the inspector, and the node edit dialog, and the break shows on the canvas too.
+- **Title** and **Description** — double-click a node (or press `F2`) to rename in place. In the inspector the description is **read-only** — hover it for an edit icon, or double-click the text, to open the node edit dialog with the description focused. While typing a name, `Enter` commits and **`Shift+Enter` (or `Alt+Enter`) inserts a line break** — the same rule in the canvas, the inspector, and the node edit dialog, and the break shows on the canvas too.
 - **Color** — preset swatches or a custom hex color (`#RRGGBB`).
-- **BPM attributes** — **Assignee** (picked from the org directory), **Department** (auto-set from the assignee), **System**, and the **per-run parameters** (see section 3).
+- **BPM attributes** — **Assignee** (picked from the org directory), **Department** (auto-set from the assignee), **System**, and the **per-run metrics** (see section 3).
+- **I/O & Conditions** — **Input** and **Output** hold multiple items (one per row). Hover a row and click the small file icon to set that item's **data form**: an autocomplete list matches by extension, English program name, or Korean (`.xlsx` / `Excel` / `엑셀` all find the same entry), navigated with ↑/↓ and picked with Enter or Space. A value outside the list is added via the **Add "…"** row at the bottom. A set form shows as a small pill (catalog entries carry their icon); click the pill to change it, ✕ to remove. **Start / End conditions** are free text. The node-level *Data form* row is an import fallback — it shows only while no per-item form is set.
 - **Link (URL)** — attach an external document or system link to a node; a badge appears on the canvas, and you can click it to preview or open in a new tab. You can also give it a display label.
 
 ### Connecting nodes
@@ -69,13 +70,14 @@ Select a node and edit in the right inspector:
 
 ---
 
-## 3. Per-run Parameters
+## 3. Per-run Metrics
 
-Each node records the cost and effort of running the process **once**, across six parameters. Edit them in the inspector's parameter section (collapsed by default). **Start** and **End** nodes have no parameters.
+Each node records the cost and effort of running the process **once**, across seven metrics. Edit them in the inspector's Metrics section (collapsed by default). Edits in the **Metrics** and **I/O & Conditions** sections are buffered — press the **Save** button in the section header (it lights up when there are changes) to apply them. **Start** and **End** nodes have no metrics.
 
-| Parameter | Label | Input format | Canvas display |
+| Metric | Label | Input format | Canvas display |
 | --- | --- | --- | --- |
 | **Duration** | Duration / run (h) | `h.mm` — fractional part is **minutes** | `1h30m` |
+| **Touch time** | Touch time / run (h) | `h.mm` — same rule as duration | `1h30m` |
 | **Cost (KRW)** | Cost / run (KRW) | number | `₩1,250,000` |
 | **Cost (USD)** | Cost / run (USD) | number | `$1,200` |
 | **Headcount** | Headcount / run | number | as entered |
@@ -92,15 +94,15 @@ Write duration as **hours and minutes** — the fractional part is **minutes, no
 
 ### One currency only
 
-**KRW (₩) and USD ($) cannot both be entered.** Filling one side locks the other's input. To switch currency, clear the filled side first. Thousands separators are added to costs automatically, and you can paste values that already contain commas (like `1,250,000`).
+**KRW (₩) and USD ($) cannot both be entered.** Cost appears as a single row with a **₩ / $ toggle** — switch it to change currency. If the current currency already has a value, a notice tells you it will be cleared on save, with an **Undo** to cancel the switch. Thousands separators are added to costs automatically, and you can paste values that already contain commas (like `1,250,000`).
 
-### Parameters on subprocess nodes
+### Metrics on subprocess nodes
 
-A subprocess node takes only **Annual volume** and **FTE** directly. The other four (duration, cost, headcount) are **inherited read-only from the linked map's designated values** and cannot be changed in the parent map (see section 5).
+A subprocess node takes only **Annual volume** and **FTE** directly. The other five (duration, touch time, cost, headcount) are **inherited read-only from the linked map's designated values** and cannot be changed in the parent map (see section 5).
 
 ### Sum preview (Σ)
 
-When you designate a map as a subprocess (see Map Settings in the Getting Around manual), the designation form proposes a **preview by summing** that map's published parameters — duration and cost are **summed**, while headcount is the **average** across plain nodes that have a value.
+When you designate a map as a subprocess (see Map Settings in the Getting Around manual), the designation form proposes a **preview by summing** that map's published metrics — duration, touch time, and cost are **summed**, while headcount is the **average** across plain nodes that have a value.
 
 ---
 
@@ -110,7 +112,7 @@ When you designate a map as a subprocess (see Map Settings in the Getting Around
 
 - Select **two or more nodes** and press `Ctrl+G` (or right-click → **Create group**) to bundle them.
 - Double-click the group title to rename it; drag the title bar to move the whole group; **Ungroup** disbands it.
-- **Group bulk edit** sets or clears assignee, department, system — and all **six per-run parameters** — across all members at once, with Append / Replace / Skip conflict handling and a before/after summary. The one-currency rule and subprocess-node restrictions (annual volume · FTE only) apply here too.
+- **Group bulk edit** puts its fields behind a one-row category bar — **Attributes** (people, system) · **Metrics** (all seven per-run metrics) · **I/O & Conditions** (input, output, start/end conditions). Click a category to unfold its field buttons right below (clicking another category swaps the panel), pick a field, and set or clear it across all members at once, with Append / Replace / Skip conflict handling and a before/after summary. For input/output, **Append adds new item lines** under what's there, while **Replace overwrites the items and clears their per-item data forms** (the line-by-line pairing no longer holds). The one-currency rule and subprocess-node restrictions (annual volume · FTE only; IO/conditions are inherited, so subprocess nodes are excluded) apply here too.
 
 ### Alignment and layout
 
@@ -189,9 +191,9 @@ You can fill a map by pasting in a process that's already organized as a table o
 ### CSV import
 
 - Open it with **Import CSV** in the top bar. Use **Download template** to get a blank form, fill it, and upload.
-- The CSV uses **14 columns**: `name` (required), `description`, `assignee`, `department`, `system`, `duration`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `url`, `url_label`, `next` (the successor to connect to).
+- The CSV uses **20 columns**: `name` (required), `description`, `assignee`, `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `output`, `data_form`, `start_condition`, `end_condition`, `url`, `url_label`, `next` (the successor to connect to). Older 14-column files still import (columns match by name). Put multiple `input`/`output` items on separate lines inside the cell.
 - Import **merges by name** — an existing node with the same title keeps its color, comments, and group, updating only its values, and **blank cells keep the existing value**. New titles not already in the map are added as nodes.
-- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). The four fields a subprocess node inherits are ignored even if supplied in the CSV.
+- **Assignee** written as a name is matched against the org directory. **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run metrics plus input/output/conditions/data form) are ignored even if supplied in the CSV. Per-item data forms are app-only — the CSV has no column for them, and an import keeps the existing ones as long as the item lines are unchanged.
 - Review the **Added / Matched / Removed** summary and warnings in the preview tab before applying.
 
 > **Make a CSV with an external AI:** In the import window, **Ask another AI** copies a prompt you can paste — along with your document — into an external AI (ChatGPT, etc.); paste the CSV it returns back here.
@@ -213,7 +215,7 @@ Save the current map to a file from the export button in the right inspector (or
 | Format | Contents |
 | --- | --- |
 | **PNG** | The current canvas as a 2× resolution image — every connector renders as a solid black line. `Ctrl+Shift+E`. |
-| **Excel** | **Choose one of two formats** — ① Structured: a node table (assignee, department, system, per-run parameters) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
+| **Excel** | **Choose one of two formats** — ① Structured: a node table (assignee, department, system, per-run metrics) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
 | **CSV** | The same 14-column table as import — you can round-trip by editing an exported CSV and importing it again. |
 | **Word** | A `.docx` document with a shape-based flowchart — node links (URL) are included as hyperlinks. Use **Download Word**. |
 
@@ -225,7 +227,7 @@ Save the current map to a file from the export button in the right inspector (or
 
 Open the **AI assistant** from the editor top bar (it appears only when AI is enabled on the server).
 
-- **Generate** a flowchart from a plain-language description — nodes, edges, groups, and BPM attributes (assignee, department, system, per-run parameters) are filled to match the org directory.
+- **Generate** a flowchart from a plain-language description — nodes, edges, groups, and BPM attributes (assignee, department, system, per-run metrics) are filled to match the org directory.
 - **Edit incrementally** — ask for changes and the existing layout, colors, assignees, and groups are preserved. Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions and links (URL). Review the preview, then **Add to map (Apply)** or Discard.
 - **Analyze** ("Find issues"), **summarize**, and **walk through** the flow step by step (prev / next / autoplay).
 - Ask **how-to questions** — answers are grounded in this manual; anything outside the manual it reports it doesn't know.

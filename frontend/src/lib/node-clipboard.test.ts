@@ -76,4 +76,19 @@ describe("buildPaste", () => {
     const out = buildPaste(endClip, { newId: () => `new${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
     expect(out.nodes[0].data.isPrimaryEnd).toBe(false);
   });
+
+  it("clears output_ids on copies (itemId dedup) but keeps *_links/input_flags (io-linking §6)", () => {
+    const ioClip: NodeClipboard = {
+      sourceMapId: 1,
+      nodes: [
+        { id: "a", position: { x: 0, y: 0 }, data: { ...mkData("A"), output_ids: "itm_1", output_links: "itm_5", input_flags: "optional" } },
+      ],
+      edges: [],
+    };
+    let n = 0;
+    const out = buildPaste(ioClip, { newId: () => `new${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
+    expect(out.nodes[0].data.output_ids).toBe("");
+    expect(out.nodes[0].data.output_links).toBe("itm_5");
+    expect(out.nodes[0].data.input_flags).toBe("optional");
+  });
 });

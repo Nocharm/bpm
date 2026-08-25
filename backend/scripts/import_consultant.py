@@ -142,6 +142,8 @@ def build_graph_rows(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
             title=cn.name, node_type=cn.type, description=cn.description, color=cn.color,
             department=cn.department, assignee=cn.assignee, system=cn.system,
+            input=cn.input, output=cn.output, data_form=cn.data_form,
+            system_fallback=cn.system_fallback,
             pos_x=x, pos_y=y, sort_order=i,
         ))
     for j, (virtual, _, map_id, params) in enumerate(link_rows):
@@ -263,13 +265,16 @@ class ImportReport:
 def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalParams:
     """duration/cost/headcount 정규화 — 무효값은 경고 후 "" 소거(422 아님, §7 무효값 계약과 동형)."""
     p = cmap.params.model_copy()
-    if p.duration:
-        normalized = normalize_duration(p.duration)
+    for name in ("duration", "touch_time"):  # touch_time은 duration과 동일 H.MM 계약 (2026-08-19)
+        raw = getattr(p, name)
+        if not raw:
+            continue
+        normalized = normalize_duration(raw)
         if normalized is None:
-            report.add(cmap.code, "warning", f"invalid duration {p.duration!r} dropped")
-            p.duration = ""
+            report.add(cmap.code, "warning", f"invalid {name} {raw!r} dropped")
+            setattr(p, name, "")
         else:
-            p.duration = normalized
+            setattr(p, name, normalized)
     if p.cost_krw.strip() and p.cost_usd.strip():
         report.add(cmap.code, "warning", "both cost_krw and cost_usd set — cost_usd dropped")
         p.cost_usd = ""
@@ -293,7 +298,12 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
         sorted(
             (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.color or "",
              n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
-             n.annual_count or "", n.fte or "", bool(n.is_primary_end))
+             n.annual_count or "", n.fte or "", bool(n.is_primary_end),
+             # 승격 필드 — 전달분이 진실이라 변경=새 버전(사용자 수기 편집도 재임포트가 덮음,
+             # 기존 description과 동일 계약) (design 2026-08-19 §4.1)
+             n.touch_time or "", n.input or "", n.output or "",
+             n.start_condition or "", n.end_condition or "",
+             n.data_form or "", n.system_fallback or "")
             for n in nodes
         ),
         sorted(
@@ -552,6 +562,20 @@ async def import_delivery(
                 if new_link_node is not None:
                     new_link_node.annual_count = old_link_node.annual_count
                     new_link_node.fte = old_link_node.fte
+            # 활동별 GMP 이어받기 — 전달물에 없는 검토 선정값이라 재빌드 노드가 늘 비어 있다.
+            # 직전 게시본의 같은 계보 노드에서 승계해 재전달이 검토값을 덮지 않게 한다
+            # (맵 sp_gmp를 엔진이 안 건드리는 것과 동일 계약 — 시그니처에도 미포함, design 2026-08-20)
+            for n in nodes:
+                old_node = old_by_root.get(n.source_node_id or n.id)
+                if old_node is not None and old_node.gmp:
+                    n.gmp = old_node.gmp
+                # IO 항목별 데이터 폼 이어받기 — gmp와 동일 계약(검토 입력값·시그니처 미포함).
+                # 단, 줄 정렬(index) 기반이라 해당 측 항목 텍스트가 재전달로 바뀌면 폐기(검토 재정렬)
+                if old_node is not None:
+                    if old_node.input_forms and n.input == old_node.input:
+                        n.input_forms = old_node.input_forms
+                    if old_node.output_forms and n.output == old_node.output:
+                        n.output_forms = old_node.output_forms
 
         graph_changed = True
         if latest is not None:
@@ -572,6 +596,16 @@ async def import_delivery(
             or (found_map.sp_cost_krw or "") != params.cost_krw
             or (found_map.sp_cost_usd or "") != params.cost_usd
             or (found_map.sp_headcount or "") != params.headcount
+            # 승격 필드 — sp_gmp(검토 선정값)는 전달분에 없어 비교·갱신 모두 제외 (design 2026-08-19 §4.1)
+            or (found_map.sp_touch_time or "") != params.touch_time
+            or (found_map.sp_system or "") != cmap.system
+            or (found_map.sp_start_condition or "") != cmap.start_condition
+            or (found_map.sp_end_condition or "") != cmap.end_condition
+            or (found_map.sp_gmp_fallback or "") != cmap.gmp_fallback
+            or (found_map.sp_frequency_fallback or "") != cmap.frequency_fallback
+            or (found_map.sp_total_time_fallback or "") != cmap.total_time_fallback
+            or (found_map.sp_touch_time_fallback or "") != cmap.touch_time_fallback
+            or (found_map.sp_system_fallback or "") != cmap.system_fallback
         )
         is_new = cmap.code in created
         # 내용이 그대로면 아무것도 쓰지 않는다 — 안 그러면 재전달마다 updated_at이 갱신돼 홈
@@ -591,6 +625,15 @@ async def import_delivery(
             found_map.sp_headcount = params.headcount
             found_map.sp_input = params.input
             found_map.sp_output = params.output
+            found_map.sp_touch_time = params.touch_time
+            found_map.sp_system = cmap.system
+            found_map.sp_start_condition = cmap.start_condition
+            found_map.sp_end_condition = cmap.end_condition
+            found_map.sp_gmp_fallback = cmap.gmp_fallback
+            found_map.sp_frequency_fallback = cmap.frequency_fallback
+            found_map.sp_total_time_fallback = cmap.total_time_fallback
+            found_map.sp_touch_time_fallback = cmap.touch_time_fallback
+            found_map.sp_system_fallback = cmap.system_fallback
             found_map.sp_changed_by = actor
             found_map.sp_changed_at = now_kst()
 

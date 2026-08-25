@@ -42,8 +42,11 @@ export function Tooltip({
         createPortal(
           <span
             role="tooltip"
-            className={`pointer-events-none fixed z-[1400] -translate-x-1/2 -translate-y-full rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink shadow-lg ${
-              content ? "max-w-56" : "whitespace-nowrap"
+            // content(리치 카드)는 라벨보다 크게 — 본문 caption·넓은 폭·여유 패딩으로 가독 확보 (사용자 결정 2026-08-20)
+            className={`pointer-events-none fixed z-[1400] -translate-x-1/2 -translate-y-full rounded-sm border border-hairline bg-surface shadow-lg ${
+              content
+                ? "max-w-72 px-2.5 py-2 text-caption leading-snug text-ink"
+                : "whitespace-nowrap px-2 py-1 text-fine text-ink"
             }`}
             style={{ left: pos.x, top: pos.y - 6 }}
           >

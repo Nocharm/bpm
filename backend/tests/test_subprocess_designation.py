@@ -140,6 +140,35 @@ def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
     assert client.get(f"/api/maps/{map_id}").json()["sp_description"] == "설명 텍스트"
 
 
+def test_designate_roundtrips_io_item_forms(client: TestClient, enforce) -> None:
+    """SP IO 항목별 데이터 폼 — sp_input/sp_output 줄과 1:1 정렬 왕복 (2026-08-20)."""
+    map_id = seed_map("desig-io-forms", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "input": "PR\n견적", "input_forms": "document", "output": "PO", "output_forms": "structured"},
+    )
+    assert res.status_code == 200
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["sp_input_forms"] == "document"
+    assert detail["sp_output_forms"] == "structured"
+
+
+def test_designate_roundtrips_io_item_ids(client: TestClient, enforce) -> None:
+    """SP IO 항목 id — 응답에 실려야 지정 모달이 재저장 때 기존 id를 승계할 수 있다 (io-linking §3)."""
+    map_id = seed_map("desig-io-ids", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "input": "PR\n견적", "input_ids": "itm_i1\nitm_i2", "output": "PO", "output_ids": "itm_o1"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_input_ids"] == "itm_i1\nitm_i2"
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["sp_input_ids"] == "itm_i1\nitm_i2"
+    assert detail["sp_output_ids"] == "itm_o1"
+
+
 def test_designate_requires_published_version(client: TestClient, enforce) -> None:
     map_id = seed_map("desig-draft-only", published=False)
     act_as(OWNER)
@@ -370,3 +399,53 @@ def test_first_designation_excludes_acting_owner(client: TestClient, enforce) ->
         if n["type"] == "subprocess_registered" and n["map_id"] == map_id
     ]
     assert len(appr_notifs) == 1
+
+
+def test_designate_carries_touch_time(client: TestClient, enforce) -> None:
+    """7번째 파라미터 touch_time — 지정 페이로드로 저장·정규화 (design 2026-08-19 §2)."""
+    map_id = seed_map("desig-touch-time", published=True)
+    act_as(OWNER)
+    res = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "touch_time": "0.90"},  # 90분 이월 → 1.30
+    )
+    assert res.status_code == 200
+    assert res.json()["sp_touch_time"] == "1.30"
+
+
+def test_process_fields_patch_partial_and_gmp_validation(client: TestClient, enforce) -> None:
+    """PATCH /maps/{id}/process-fields — SP 지정 없이도 검토 편집, 부분 갱신 (design 2026-08-19 §5)."""
+    map_id = seed_map("proc-fields", published=False)  # 게시본 불필요 — 지정 엔드포인트와 다른 계약
+    act_as(OWNER)
+    res = client.patch(
+        f"/api/maps/{map_id}/process-fields",
+        json={"gmp": "direct", "start_condition": "주기 도래", "touch_time": "0.30"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["sp_gmp"] == "direct"
+    assert data["sp_start_condition"] == "주기 도래"
+    assert data["sp_touch_time"] == "0.30"
+
+    # 부분 갱신 — 언급 없는 필드는 유지, 빈 문자열은 소거(NULL)
+    res2 = client.patch(
+        f"/api/maps/{map_id}/process-fields",
+        json={"touch_time_fallback": "30분쯤", "start_condition": ""},
+    )
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["sp_gmp"] == "direct"  # 유지
+    assert data2["sp_touch_time_fallback"] == "30분쯤"
+    assert data2["sp_start_condition"] is None  # 소거
+
+    # gmp 3값 유효성 — 그 외는 422
+    assert client.patch(
+        f"/api/maps/{map_id}/process-fields", json={"gmp": "sometimes"}
+    ).status_code == 422
+
+
+def test_process_fields_requires_owner(client: TestClient, enforce) -> None:
+    map_id = seed_map("proc-fields-guard", published=False)
+    act_as(OTHER)
+    res = client.patch(f"/api/maps/{map_id}/process-fields", json={"gmp": "direct"})
+    assert res.status_code == 403

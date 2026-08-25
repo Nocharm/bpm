@@ -39,7 +39,7 @@ export function DrawConfirmDialog({ summary, onConfirm, onClose }: DrawConfirmDi
           <div className="min-w-0 flex-1">
             <h2 className="text-body-strong text-ink">Draw the map now?</h2>
             <p className="text-fine text-ink-muted">
-              Based on what we&apos;ve collected — proposals are already being prepared in the background.
+              Based on what we&apos;ve collected - proposals are already being prepared in the background.
             </p>
           </div>
         </header>

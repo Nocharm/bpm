@@ -37,13 +37,18 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     assignee: "",
     system: "",
     duration: "",
+    touch_time: "",
     cost_krw: "",
     cost_usd: "",
     headcount: "",
     url: "",
     urlLabel: "",
     input: "",
+    input_forms: "",
+    input_ids: "",
     output: "",
+    output_forms: "",
+    output_ids: "",
     description: "",
   });
   const [showUndesignate, setShowUndesignate] = useState(false);
@@ -98,13 +103,18 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       assignee: detail?.sp_assignee ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
+      touch_time: detail?.sp_touch_time ?? "",
       cost_krw: detail?.sp_cost_krw ?? "",
       cost_usd: detail?.sp_cost_usd ?? "",
       headcount: detail?.sp_headcount ?? "",
       url: detail?.sp_url ?? "",
       urlLabel: detail?.sp_url_label ?? "",
       input: detail?.sp_input ?? "",
+      input_forms: detail?.sp_input_forms ?? "",
+      input_ids: detail?.sp_input_ids ?? "",
       output: detail?.sp_output ?? "",
+      output_forms: detail?.sp_output_forms ?? "",
+      output_ids: detail?.sp_output_ids ?? "",
       description: detail?.sp_description ?? "",
     });
     setError(null);
@@ -163,7 +173,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
               <div key={row.label} className="flex items-center justify-between gap-2 py-0.5">
                 <span className="shrink-0 text-caption text-ink-secondary">{row.label}</span>
                 <span className="min-w-0 truncate text-caption text-ink">
-                  {row.value || "—"}
+                  {row.value || "-"}
                 </span>
               </div>
             ))}
@@ -219,6 +229,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
       {showModal && (
         <SubprocessDesignationModal
           mapId={Number(mapId)}
+          designated={designated}
           publishedVersionId={publishedVersionId}
           initial={modalInitial}
           onSaved={(updated) => {

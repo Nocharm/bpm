@@ -33,7 +33,7 @@
         "total_time": "한번에 한시간쯤",
         "total_time_min": null,
         "touch_time": "한시간쯤",
-        "touch_time_min": null,
+        "touch_time_min": 60,
         "frequency": "주 1회",
         "annual_count": null,
         "headcount": null,
@@ -247,7 +247,7 @@
       "doc": null,
       "seq": 1,
       "name": "교정 준비",
-      "note": null,
+      "note": "표준기 관리대장은 아직 엑셀 — 시스템화 논의 중",
       "state": "confirmed",
       "evidence": [{ "id": "smp-ev-1", "quote": "준비하고,", "sourceKind": "chat" }],
       "revision": 1,
@@ -305,7 +305,9 @@
     "open_items_total": 0,
     "side_notes_total": 3
   },
-  "openItems": [],
+  "openItems": [
+    { "text": "교정 성적서 전자화 범위 — IT와 협의 필요", "unitId": null }
+  ],
   "sideNotes": [
     {
       "kind": "voc",

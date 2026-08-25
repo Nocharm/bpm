@@ -100,9 +100,13 @@ def test_convert_basic_map_and_nodes() -> None:
     assert m.params.input == "교정 작업지시(EAM)" and m.params.output == "준비 목록"
     n1 = next(n for n in m.nodes if n.name == "작업지시 확인")
     assert n1.description.startswith("EAM에서 작업지시를 열어")
-    assert "Input: 그 주 작업지시" in n1.description
     assert "Quote: EAM에서 그 주 작업지시를 열어 확인해요." in n1.description
-    assert n1.system == "EAM"
+    # 승격 필드 — 설명 KV에서 빠지고 고유 필드로 (design 2026-08-19 §4.1)
+    assert n1.input == "그 주 작업지시" and n1.output == "대상 계측기와 측정 범위"
+    assert n1.data_form == "structured"
+    assert n1.system == "EAM" and n1.system_fallback == "EAM"
+    for gone in ("Input:", "Output:", "System:", "Data form:"):
+        assert gone not in n1.description
 
 
 def test_seq_groups_make_parallel_edges() -> None:
@@ -156,21 +160,49 @@ def test_notes_extraction() -> None:
     assert exc.title == "현장 수기 기록" and "손으로" in exc.text
 
 
-def test_map_description_serialization() -> None:
-    d = convert_interview(_interview()).maps[0].description
-    assert d.startswith("[Interview]")
-    assert "Start condition: 교정 주기 도래 시 EAM에서 작업지시 자동 발생" in d
-    assert "Total time: 한번에 한시간쯤" in d  # 프리텍스트 원문 보존
-    assert "Done criteria: 준비 목록 나오면 끝" in d
-    assert "Owner role: 교정 담당자" in d
-    assert "Annual count" not in d  # 빈 값 줄 생략
+def test_map_fields_promoted_and_description_shrunk() -> None:
+    m = convert_interview(_interview()).maps[0]
+    # [Interview] 직렬화는 Owner role만 잔류 — 승격 키는 고유/폴백 필드로 (design 2026-08-19 §4.1)
+    assert m.description == "[Interview]\nOwner role: 교정 담당자"
+    assert m.start_condition == "교정 주기 도래 시 EAM에서 작업지시 자동 발생"
+    assert m.end_condition == "준비 목록 나오면 끝"
+    assert m.system == "EAM" and m.system_fallback == "EAM"
+    assert m.gmp_fallback == "GMP 문서 맞음, 교정관리 SOP(EM-CAL-001) 다름"
+    assert m.frequency_fallback == "주 1회"
+    assert m.total_time_fallback == "한번에 한시간쯤"
+    assert m.touch_time_fallback == "한시간쯤"
 
-    # 손타이핑 모호 — done_criterial 표기도 같은 줄로 수용 (실파일 대조 전 이중 수용)
+    # 손타이핑 모호 — done_criterial 표기도 같은 자리로 수용 (실파일 대조 전 이중 수용)
     data = _interview()
     fields = data["rows"][0]["fields"]
     fields["done_criterial"] = fields.pop("done_criteria")
-    d2 = convert_interview(data).maps[0].description
-    assert "Done criteria: 준비 목록 나오면 끝" in d2
+    assert convert_interview(data).maps[0].end_condition == "준비 목록 나오면 끝"
+
+
+def test_touch_time_min_to_param() -> None:
+    data = _interview()
+    data["rows"][0]["fields"]["touch_time_min"] = 60
+    assert convert_interview(data).maps[0].params.touch_time == "1.00"
+    assert convert_interview(_interview()).maps[0].params.touch_time == ""  # None → ""
+
+
+def test_multi_value_io_joined_with_newline() -> None:
+    # 현 전달은 str이지만 list가 와도 개행 join — IO 복수 시맨틱 (design 2026-08-19 §4.1)
+    data = _interview()
+    data["rows"][0]["actions"][0]["input"] = ["작업지시", "표준기 목록"]
+    n1 = next(n for n in convert_interview(data).maps[0].nodes if n.name == "작업지시 확인")
+    assert n1.input == "작업지시\n표준기 목록"
+
+
+def test_open_items_and_task_note_preserved() -> None:
+    data = _interview()
+    data["openItems"] = [{"text": "성적서 전자화 범위 — IT 협의", "unitId": None}, "문자열 항목"]
+    data["tasks"][0]["note"] = "표준기 관리대장은 아직 엑셀"
+    res = convert_interview(data)
+    triples = {(n.kind, n.text, n.map_code, n.category_code) for n in res.notes}
+    assert ("open_item", "성적서 전자화 범위 — IT 협의", None, "19-01-06-01-02") in triples
+    assert ("open_item", "문자열 항목", None, "19-01-06-01-02") in triples
+    assert ("task_note", "표준기 관리대장은 아직 엑셀", "task-prep-0001", None) in triples
 
 
 def test_variant_preserved_and_exception_colored() -> None:

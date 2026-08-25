@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, Group, Hand, Headset, Hourglass, LayoutGrid, Link, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Server, Slash, SlidersHorizontal, Sparkles, Spline, Square, Trash2, Type, Undo2, Ungroup, User, UserRound, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -8,6 +8,7 @@ import {
   BackgroundVariant,
   type Connection,
   type Edge,
+  type FinalConnectionState,
   MarkerType,
   type NodeChange,
   type NodeTypes,
@@ -23,13 +24,15 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useParams, useRouter } from "next/navigation";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
+import { FrameworkChip } from "@/components/framework-chip";
+import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
@@ -38,7 +41,15 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
-import { ParamInput } from "@/components/param-input";
+import { FallbackHint } from "@/components/fallback-hint";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
+import { GmpNoticePopover } from "@/components/gmp-notice-popover";
+import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
+import { NodeDetailsCard } from "@/components/node-details-card";
+import { NewlineHint } from "@/components/newline-hint";
+import { NodeDisplaySection } from "@/components/node-display-section";
+import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { MapNameDropdown } from "@/components/map-name-dropdown";
@@ -49,6 +60,7 @@ import { BranchGlyph } from "@/components/branch-icon";
 import { EdgeBranchModal } from "@/components/edge-branch-modal";
 import { EdgeActionModal } from "@/components/edge-action-modal";
 import { EdgeSelectModal } from "@/components/edge-select-modal";
+import { IoImportModal } from "@/components/io-import-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
@@ -79,7 +91,7 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
-import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { findLatestRejection, findLatestSubmitComment, findPublishedAt } from "@/components/version/requester-comment-banner";
 import { VersionSwitchConfirm } from "@/components/version/version-switch-confirm";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
@@ -228,7 +240,20 @@ import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
-import { displayToSavedX } from "@/lib/inline-shift";
+import {
+  applyIoImport,
+  buildIoIndex,
+  buildIoMirrorIndex,
+  collectIoImportCandidates,
+  getBrokenInputMirrorIndexes,
+  getFlowPathBetween,
+  getIoLinkPeers,
+  propagateIoLinks,
+  type IoImportAction,
+  type IoSide,
+} from "@/lib/io-items";
+import { displayToSavedX, type ShiftStep } from "@/lib/inline-shift";
+import { buildHeightSteps, buildYOffsets } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { useClosingKeys } from "@/lib/use-closing-keys";
@@ -236,8 +261,8 @@ import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
-  NODE_DISPLAY_TOGGLES,
   NodeActionsContext,
+  type IoListDisplayState,
   type NodeDisplayToggle,
   parseDisplayToggles,
 } from "@/lib/node-actions";
@@ -251,13 +276,10 @@ import {
   formatParamValue,
   getEditableParamFields,
   getInheritedParams,
-  isCostFieldDisabled,
   isSpParamField,
-  PARAM_FIELDS,
-  PARAM_LABEL_KEY,
-  readParamsCollapsed,
+  readAttrsCollapsed,
   resolveAiParamPatch,
-  writeParamsCollapsed,
+  writeAttrsCollapsed,
   type ParamField,
 } from "@/lib/params";
 
@@ -284,6 +306,21 @@ const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
+// 불러오기 실행 결과별 안내 토스트 — 어떤 소유권 판정이 났는지 알려준다 (io-linking §2)
+const IMPORT_TOAST_KEY = {
+  mirror: "io.importedMirror",
+  takeover: "io.importedTakeover",
+  succession: "io.importedSuccession",
+  join: "io.importedJoin",
+} as const satisfies Record<IoImportAction, string>;
+// 이 키가 패치에 하나라도 있으면 원본 수정일 수 있어 미러 전파를 돌린다 (io-linking §5)
+const IO_PATCH_FIELDS = [
+  "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links",
+] as const satisfies readonly (keyof NodeData)[];
+
+function hasIoPatchField(patch: Partial<NodeData>): boolean {
+  return IO_PATCH_FIELDS.some((field) => field in patch);
+}
 
 const REGION_PAD = 28; // 하위 영역 안쪽 좌우 여백
 const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
@@ -343,14 +380,6 @@ const NODE_TYPE_ICONS: Record<string, LucideIcon> = {
   end: CircleDot,
 };
 
-// 노드 디스플레이 토글 항목별 아이콘 — 인스펙터 맵 탭 접힘 섹션에서 라벨 왼쪽에 표시
-const NODE_DISPLAY_ICONS: Record<NodeDisplayToggle, LucideIcon> = {
-  assignee: UserRound,
-  department: Building2,
-  system: Server,
-  url: Link,
-  params: SlidersHorizontal,
-};
 
 const HISTORY_LIMIT = 50; // 스코프당 undo 스냅샷 상한 — 메모리/실용 균형
 const TEXT_HISTORY_GAP_MS = 2000; // 타이핑은 이 간격 안에서 한 번의 undo 단위로 묶음
@@ -590,6 +619,20 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       headcount: node.headcount ?? "",
       annual_count: node.annual_count ?? "",
       fte: node.fte ?? "",
+      touch_time: node.touch_time ?? "",
+      input: node.input ?? "",
+      output: node.output ?? "",
+      input_forms: node.input_forms ?? "",
+      output_forms: node.output_forms ?? "",
+      output_ids: node.output_ids ?? "",
+      input_links: node.input_links ?? "",
+      output_links: node.output_links ?? "",
+      input_flags: node.input_flags ?? "",
+      start_condition: node.start_condition ?? "",
+      end_condition: node.end_condition ?? "",
+      data_form: node.data_form ?? "",
+      system_fallback: node.system_fallback ?? "",
+      gmp: node.gmp ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
       section_anchor: node.section_anchor ?? "",
@@ -670,6 +713,23 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     headcount: num(attr?.headcount),
     annual_count: num(attr?.annual_count),
     fte: num(attr?.fte),
+    // 무효 touch_time도 duration과 동일하게 "" (design 2026-08-19 §2)
+    touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
+    // 인터뷰 승격 텍스트 필드 — passthrough (csv-import buildGraphFromAiProposal과 대칭)
+    input: attr?.input ?? "",
+    output: attr?.output ?? "",
+    input_forms: "",  // 항목별 폼 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (2026-08-20)
+    output_forms: "",
+    // IO 링크 — AI 표면 제외, 매칭 노드는 mergeNode가 보존 (io-linking §3)
+    output_ids: "",
+    input_links: "",
+    output_links: "",
+    input_flags: "",
+    start_condition: attr?.start_condition ?? "",
+    end_condition: attr?.end_condition ?? "",
+    data_form: attr?.data_form ?? "",
+    system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
+    gmp: "",  // 검토값 — AI 표면 제외 (design 2026-08-20)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
@@ -715,6 +775,20 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       headcount: node.data.headcount ?? "",
       annual_count: node.data.annual_count ?? "",
       fte: node.data.fte ?? "",
+      touch_time: node.data.touch_time ?? "",
+      input: node.data.input ?? "",
+      output: node.data.output ?? "",
+      input_forms: node.data.input_forms ?? "",
+      output_forms: node.data.output_forms ?? "",
+      output_ids: node.data.output_ids ?? "",
+      input_links: node.data.input_links ?? "",
+      output_links: node.data.output_links ?? "",
+      input_flags: node.data.input_flags ?? "",
+      start_condition: node.data.start_condition ?? "",
+      end_condition: node.data.end_condition ?? "",
+      data_form: node.data.data_form ?? "",
+      system_fallback: node.data.system_fallback ?? "",
+      gmp: node.data.gmp ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
       section_anchor: node.data.section_anchor ?? "",
@@ -921,6 +995,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   >(null);
   // 출력선 선택 모달에서 행 hover 중인 엣지 — 캔버스의 해당 엣지를 하이라이트(styledEdges).
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  // IO 링크 hover 하이라이트 — 인스펙터 행 hover와 불러오기 모달 행 hover가 공유하는 단일 상태 (io-linking §4-6)
+  const [ioHighlight, setIoHighlight] = useState<{ nodeIds: string[]; edgeIds: string[] } | null>(null);
+  // 안내 버튼 호버 미리보기 — 노드에 결과값(분류·색) 임시 반영, 렌더 전용(데이터 무변경) (#6 확장)
+  const [gmpPreview, setGmpPreview] = useState<{ nodeId: string; gmp: string; color: string } | null>(null);
+  // 열려 있는 불러오기 모달 — 어느 노드의 어느 쪽 IO를 채우는지 + 앵커 좌표
+  const [ioImport, setIoImport] = useState<
+    { side: IoSide; nodeId: string; at: { x: number; y: number } } | null
+  >(null);
   // 디시전 노드에 노드 드롭(출력 ≥1) → 분기/인터셉트/취소 선택 (F1). options=B의 기존 출력선.
   const [decisionDrop, setDecisionDrop] = useState<
     | {
@@ -934,12 +1016,15 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 마지막 포인터 화면 좌표 — 모달을 마우스 위치에 띄워 동선 최소화.
   const pointerScreenRef = useRef({ x: 0, y: 0 });
   const [summaryNodeId, setSummaryNodeId] = useState<string | null>(null);
+  // 노드 더블클릭 → 인스펙터 속성 탭 강제 전환 신호(논스) — 읽기전용/편집 공통 (사용자 요청 2026-08-25)
+  const [propertiesTabNonce, setPropertiesTabNonce] = useState(0);
+  // 편집 모달 자동 포커스 대상 — 인스펙터 설명 더블클릭/편집 아이콘 진입 시 "description" (2026-08-20)
+  const [summaryFocus, setSummaryFocus] = useState<"description" | null>(null);
   // 인라인 이름 편집 중인 노드 — 더블클릭으로 진입, NodeActionsContext로 ProcessNode에 전달
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // 인스펙터 hex 입력 토글 — 기본 숨김(아이콘), 필요 시에만 펼침 (#8)
   const [showHexInput, setShowHexInput] = useState(false);
   // Parameters 그룹 접기 — 기본 접힘, 인스펙터/요약모달 공유 키로 localStorage 퍼시스트
-  const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
   const [bulkEditGroupId, setBulkEditGroupId] = useState<string | null>(null);
   // 토스트 스택 — 새 항목은 위에 쌓이고(prepend) 각자 슬라이드 아웃 후 자동 제거
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -950,6 +1035,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     setToasts((cur) => [{ id: genId(), message, tone }, ...cur]);
   }, []);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // BPM attributes 접힘 — 기본 접힘, 수행 지표·입출력 조건 카드와 동일 패턴(전역 선호, 노드 무관)
+  const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
   const [status, setStatus] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // 저장 실패 상세 — 상단 배너로 노출, 다음 저장 성공까지 유지
@@ -976,6 +1063,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
+  // PNG 정보 카드·프레임워크 칩 소스 — getMap 상세에서 채움 (2026-08-25)
+  const [mapOwnerName, setMapOwnerName] = useState<string | null>(null);
+  const [mapOwningDept, setMapOwningDept] = useState<string | null>(null);
+  const [mapCategoryId, setMapCategoryId] = useState<number | null>(null);
+  const [mapCategoryPath, setMapCategoryPath] = useState<string | null>(null);
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spUsageReload, setSpUsageReload] = useState(0);
@@ -1272,6 +1364,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
+  // height-shift(#1) 스텝 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
+  const yStepsRef = useRef<ShiftStep[]>([]);
+  // 상시(비게이트) 스텝 미러 — 표시 Y는 펼침 중에도 밀리므로(합성 입력에 베이크), 클릭점→저장 변환
+  // (toSavedPoint)과 펼침 드롭 Y 환산(finalizeRootDrag)은 이 상시 스텝으로 역변환한다.
+  const heightStepsRef = useRef<ShiftStep[]>([]);
+  // height-shift(#1) 렌더 오프셋(트윈 중간값) 미러 — findGroupAt·handleExportPng(정의가 앞선 useCallback)에서
+  // 읽기 위한 ref — TDZ 회피(renderYOffsets state는 뒤에서 선언). 미러링 useEffect는 state 선언부 옆에 유지.
+  const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
@@ -1368,10 +1468,11 @@ function MapEditor({ mapId }: { mapId: number }) {
         m.set(Number(refMapId), ref);
       }
     };
-    addAll(rootGraph?.subprocess_refs);
+    // resolvedCache는 linkKey별 1회 fetch라 스테일 가능 — 루트 그래프 refs(매 로드/저장 응답 갱신)가 이긴다
     for (const g of resolvedCache.values()) {
       addAll(g.subprocess_refs);
     }
+    addAll(rootGraph?.subprocess_refs);
     return m;
   }, [rootGraph, resolvedCache]);
 
@@ -1410,6 +1511,14 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: ref.cost_krw,
             spCostUsd: ref.cost_usd,
             spHeadcount: ref.headcount,
+            spTouchTime: ref.touch_time,
+            spInput: ref.input,
+            spOutput: ref.output,
+            spInputForms: ref.input_forms,
+            spOutputForms: ref.output_forms,
+            spStartCondition: ref.start_condition,
+            spEndCondition: ref.end_condition,
+            spGmp: ref.gmp,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
           }
@@ -1421,6 +1530,14 @@ function MapEditor({ mapId }: { mapId: number }) {
             spCostKrw: null,
             spCostUsd: null,
             spHeadcount: null,
+            spTouchTime: null,
+            spInput: null,
+            spOutput: null,
+            spInputForms: null,
+            spOutputForms: null,
+            spStartCondition: null,
+            spEndCondition: null,
+            spGmp: null,
             spUrl: null,
             spUrlLabel: null,
           };
@@ -1457,10 +1574,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     lockedKeysRef.current = lockedKeys;
   }, [lockedKeys]);
   // saveCurrentScope(useCallback)가 stale 클로저 없이 읽기전용 여부를 읽도록 ref 미러 — dep 추가 회피.
+  // readOnly ref 미러 — 디바운스 타이머가 예약 시점 클로저를 잡으므로, 발사 순간의 최신 권한으로
+  // 다시 판정해야 한다. myRole/checkout 도착 전엔 readOnly가 false로 시작해, 그 창에 예약된 저장이
+  // 뷰어 권한으로 확정된 뒤에도 옛 클로저로 PUT을 던져 403이 난다.
+  const readOnlyRef = useRef<boolean>(false);
   const currentScopeIsReadOnlyRef = useRef<boolean>(false);
   useEffect(() => {
     currentScopeIsReadOnlyRef.current = currentScopeIsReadOnly;
   }, [currentScopeIsReadOnly]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
@@ -1492,6 +1616,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     });
   }, [expandedInline, fullGraph, injectSubEnds]);
 
+  // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용.
+  // 상시 스텝 사용 — 펼침 중에도 표시 Y는 밀려 있다(합성 입력 베이크).
+  const toSavedPoint = useCallback((point: { x: number; y: number }) => {
+    const steps = heightStepsRef.current;
+    return steps.length === 0 ? point : { x: point.x, y: displayToSavedX(point.y, steps) };
+  }, []);
+
   // 펼침 중 루트 드래그: 드래그 중인 노드의 position 변경은 nodes state에 쓰지 않고 버린다(저장 좌표 동결).
   // 라이브 표시좌표는 dragLiveById가 따로 추적하고 displayNodes가 직접 렌더한다 → 커서 1:1 추종, 매 프레임
   // offset 보정으로 인한 튐 없음. 표시→저장 환산은 드롭 시점(onNodeDragStop)에 한 번만. select/dimensions/remove
@@ -1513,6 +1644,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
         }
       }
+      // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
+      // nodes state(저장 좌표)에 그대로 넣으면 드래그마다 오프셋이 누적된다. 축 고정과 무관하게 항상 적용.
+      const ySteps2 = yStepsRef.current;
+      for (const change of changes) {
+        if (change.type === "position" && change.position && ySteps2.length > 0) {
+          change.position = {
+            x: change.position.x,
+            y: displayToSavedX(change.position.y, ySteps2),
+          };
+        }
+      }
       const suppress = suppressPosIdsRef.current;
       if (suppress.size === 0) {
         return changes;
@@ -1527,6 +1669,19 @@ function MapEditor({ mapId }: { mapId: number }) {
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
   const handleNodesChange = useCallback(
     (changes: NodeChange<AppNode>[]) => {
+      // 카메라 애니메이션(fitView) 중 클릭은 RF가 onNodeClick을 드래그로 삼켜 selectedId가 안 따라온다(#14)
+      // — RF 선택 변경을 미러링해 선택 링과 인스펙터를 일치시킨다(단일 신규 선택·현재 스코프만).
+      const newlySelected = changes.filter(
+        (change): change is Extract<NodeChange<AppNode>, { type: "select" }> =>
+          change.type === "select" && change.selected,
+      );
+      if (newlySelected.length === 1) {
+        const node = nodesRef.current.find((n) => n.id === newlySelected[0].id);
+        if (node && (node.data.scopeId ?? null) === currentParentId) {
+          setSelectedId(node.id);
+          setSelectedEdgeId(null);
+        }
+      }
       if (childNodes.length === 0) {
         onNodesChange(dropDraggingPositions(changes));
         return;
@@ -1543,7 +1698,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
       }
     },
-    [childNodes, onNodesChange, dropDraggingPositions],
+    [childNodes, onNodesChange, dropDraggingPositions, currentParentId],
   );
   useEffect(() => {
     groupsRef.current = groups;
@@ -1643,6 +1798,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     autoSaveTimerRef.current = setTimeout(() => {
       autoSaveTimerRef.current = null;
+      // 예약 이후 읽기전용으로 확정됐으면(권한 도착·타인 체크아웃) 발사하지 않는다 —
+      // saveCurrentScope의 readOnly는 예약 시점 클로저값이라 여기서 막지 않으면 403이 난다.
+      // 저장할 수 없는 변경이므로 이탈 경고용 더티도 함께 내린다.
+      if (readOnlyRef.current) {
+        dirtyRef.current = false;
+        return;
+      }
       // 실패는 saveState=error 표시로 사용자에게 노출 — 수동 저장으로 재시도
       void saveCurrentScope().catch(() => undefined);
     }, AUTO_SAVE_DELAY_MS);
@@ -2146,6 +2308,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         setMapName(detail.name);
         setMapOwner(detail.created_by);
+        setMapOwnerName(detail.owner_name ?? null);
+        setMapOwningDept(detail.owning_department ?? null);
+        setMapCategoryId(detail.category_id ?? null);
+        setMapCategoryPath(detail.category_path ?? null);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
@@ -2296,14 +2462,25 @@ function MapEditor({ mapId }: { mapId: number }) {
       try {
         // 로드되는 스코프 노드 id들 — 카메라 프레이밍에 쓴다(루트=권위 그래프, 딥뷰=합성 트리 자식).
         let scopeNodeIds: string[];
+        // IO 링크 정합화가 무언가 고쳤는지 — 아래 히스토리/더티 리셋 이후에 저장을 예약해야 살아남는다
+        let ioLinksHealed = false;
         if (currentParentId === null) {
           // 루트 스코프 — 편집 가능한 권위 그래프(평면)를 그대로 로드.
           const graph = await getGraph(versionId);
           if (!active) {
             return;
           }
+          // 로드 정합화 — 원본 소실 링크 해산·드리프트한 미러 텍스트 치유 (io-linking §5).
+          // 읽기전용이면 scheduleAutoSave가 자체 게이트로 무시하므로 메모리 치유만 남는다.
+          const { nodes: reconciled, changed } = propagateIoLinks(
+            toAppNodes(graph, currentParentId),
+            new Map(
+              Object.entries(graph.subprocess_refs ?? {}).map(([key, ref]) => [Number(key), ref]),
+            ),
+          );
+          ioLinksHealed = changed;
           // 현재 스코프 노드는 모두 currentParentId(=null) 스코프 소속 — scope-split 저장 식별용 태그
-          setNodes(toAppNodes(graph, currentParentId));
+          setNodes(reconciled);
           setEdges(toAppEdges(graph));
           setGroups(graph.groups);
           scopeNodeIds = graph.nodes.map((node) => node.id);
@@ -2411,6 +2588,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           autoSaveTimerRef.current = null;
         }
         setSaveState("idle");
+        // 정합화 치유분은 다음 PUT에 동승 — 위 더티 리셋 뒤에 예약해야 타이머가 살아남는다 (io-linking §5)
+        if (ioLinksHealed) {
+          scheduleAutoSave();
+        }
         // 스코프 전환이면(첫 로드/버전 변경 제외) 새 스코프로 카메라를 부드럽게 이동 — 콘텐츠가 제자리에서
         // 갑자기 바뀌어 시야가 길을 잃는 것 방지(포커스 모드 전환 연속화 A안).
         const isScopeTransition =
@@ -2465,7 +2646,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     };
     // fullGraph: 딥뷰 진입 직후 host의 자식이 resolved 로딩으로 늦게 합성 트리에 들어오면 effect를 재실행해 채운다.
     // 루트 스코프에선 위 scopeKey 가드가 fullGraph-only 재실행을 무시하므로 권위 재로딩 회귀는 없다.
-  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, t, frameScopeTopLeftKeepZoom]);
+  }, [versionId, currentParentId, fullGraph, setNodes, setEdges, reactFlow, refreshFullGraph, scheduleAutoSave, t, frameScopeTopLeftKeepZoom]);
 
   // 노드 검색 — 버전 전체 노드에서 제목 부분 일치 + 초성 일치 (spec §7 Phase B).
   // 빈 쿼리의 결과 초기화는 입력 핸들러에서 처리 (effect 내 동기 setState 금지)
@@ -2519,13 +2700,20 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 체크아웃 — 지정 인계 전용(자동해제 없음). 진입 시 점유 상태를 조회하고 주기적으로 재조회해
   // 요청 승인/이전으로 보유자가 바뀌면 반영한다. 이탈해도 점유는 유지(release 호출 안 함).
   // 뷰어는 점유 대상이 아니므로 조회도 생략(읽기 전용).
+  // 게이트는 선택 버전의 status만 반응 — versions 배열 identity를 deps에 두면 목록 갱신마다
+  // 인터벌이 재구독되며 acquireCheckout이 즉시 재호출된다(스팸).
+  const selectedVersionStatus = versions.find((v) => v.id === versionId)?.status ?? null;
+  // 폴 실패 처리 — t 최신값을 읽되 재구독을 유발하지 않는다. true 반환 = 영구 409(권한 pending)로 폴링 정지.
+  const handleCheckoutPollError = useEffectEvent((err: unknown) => {
+    setStatus(humanizeApiError(err, t));
+    return getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX);
+  });
   useEffect(() => {
     if (versionId === null || !isEditorRole) {
       return;
     }
     // 비편집 상태에선 체크아웃 조회 안 함 — 백엔드가 409 반환하므로 스팸 방지
-    const selected = versions.find((v) => v.id === versionId);
-    if (selected && selected.status !== "draft" && selected.status !== "rejected") {
+    if (selectedVersionStatus !== null && selectedVersionStatus !== "draft" && selectedVersionStatus !== "rejected") {
       return;
     }
     let active = true;
@@ -2546,8 +2734,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         if (!active) {
           return;
         }
-        setStatus(humanizeApiError(err, t));
-        if (getApiErrorDetail(err).startsWith(PERMISSION_PENDING_DETAIL_PREFIX)) {
+        if (handleCheckoutPollError(err)) {
           stopped = true;
           if (intervalId !== null) {
             clearInterval(intervalId);
@@ -2568,7 +2755,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       checkoutMineRef.current = false;
     };
-  }, [versionId, versions, isEditorRole, t]);
+  }, [versionId, selectedVersionStatus, isEditorRole]);
 
   const handleForceCheckout = useCallback(async () => {
     if (versionId === null) {
@@ -3186,6 +3373,45 @@ function MapEditor({ mapId }: { mapId: number }) {
     return !violatesTerminalRule(sourceType, targetType);
   }, []);
 
+  // 몸체 드롭 빠른 연결 — 핸들 미포착 드롭(isValid 아님)이 노드 위에서 끝나면 기본 핸들
+  // (정방향=왼쪽 타깃, 역방향=오른쪽 소스)로 연결. 판정은 미리보기(QuickConnectLine)와 공유.
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+      if (readOnly || connectionState.isValid) return;
+      const { fromNode, fromHandle } = connectionState;
+      if (!fromNode || !fromHandle) return;
+      const point = "changedTouches" in event ? event.changedTouches[0] : event;
+      const nodeEl = document
+        .elementFromPoint(point.clientX, point.clientY)
+        ?.closest(".react-flow__node");
+      const overId = nodeEl?.getAttribute("data-id");
+      if (!overId || overId === fromNode.id) return;
+      // 루트 스코프 노드만 — 임베드 자식/고스트는 nodes state에 없어 자연 제외
+      const over = nodesRef.current.find((n) => n.id === overId);
+      if (!over) return;
+      const reverse = fromHandle.type === "target";
+      // FinalConnectionState의 fromNode.data는 제네릭(Record) — 우리 노드 데이터로 좁혀 읽는다
+      const fromType = (fromNode.data as AppNode["data"]).nodeType;
+      if (!canQuickConnect(fromType, over.data.nodeType, reverse)) return;
+      const connection: Connection = reverse
+        ? {
+            source: over.id,
+            sourceHandle: sourceHandleId("right"),
+            target: fromNode.id,
+            targetHandle: fromHandle.id ?? null,
+          }
+        : {
+            source: fromNode.id,
+            sourceHandle: fromHandle.id ?? null,
+            target: over.id,
+            targetHandle: getQuickTargetHandleId(over.data.nodeType),
+          };
+      if (!isValidConnection(connection)) return;
+      onConnect(connection);
+    },
+    [readOnly, isValidConnection, onConnect],
+  );
+
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
   // 핸들 드래그(isValidConnection)와 동일 규칙을 드롭존에도 적용 (양방향 모두 고려).
   const flowZoneViolates = useCallback(
@@ -3275,17 +3501,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       const count = nodesRef.current.length;
       let position = { x: 80 + count * 30, y: 80 + count * 30 };
       if (screen) {
-        const point = reactFlow.screenToFlowPosition(screen);
+        const point = toSavedPoint(reactFlow.screenToFlowPosition(screen));
         position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
       } else {
         // 좌측 팔레트 등 좌표 없는 추가 — 현재 뷰포트 중앙에 배치
         const container = canvasContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
-          const point = reactFlow.screenToFlowPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-          });
+          const point = toSavedPoint(
+            reactFlow.screenToFlowPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            }),
+          );
           position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
         }
       }
@@ -3328,6 +3556,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode,
       showToast,
       highlightNode,
+      toSavedPoint,
     ],
   );
 
@@ -3380,10 +3609,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       const container = canvasContainerRef.current;
       if (container) {
         const rect = container.getBoundingClientRect();
-        const center = reactFlow.screenToFlowPosition({
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        });
+        const center = toSavedPoint(
+          reactFlow.screenToFlowPosition({
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+          }),
+        );
         const minX = Math.min(...clip.nodes.map((n) => n.position.x));
         const maxX = Math.max(...clip.nodes.map((n) => n.position.x)) + NODE_WIDTH;
         const minY = Math.min(...clip.nodes.map((n) => n.position.y));
@@ -3457,6 +3688,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     showToast,
     t,
     findFreeSpot,
+    toSavedPoint,
   ]);
 
   // Ctrl/⌘+드래그 시작 — 복사 가능 노드(process/decision/end)의 원위치 잔상을 캡처해 사본 모드를 켠다.
@@ -3508,15 +3740,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     const existingLabels = nodesRef.current.map((node) => node.data.label);
     // ghost.position은 RF 보고값(표시좌표) — 인라인 펼침으로 footprint-shift된 노드는 저장좌표로 환산해
     // 원위치를 복원해야 표시좌표가 저장좌표로 박히는 드리프트가 없다(#3b). 미펼침이면 오프셋 0(동일).
+    // height-shift(#1) 오프셋도 같은 이유로 빼야 한다(C2) — inline offset을 먼저 뺀 뒤 y만 역변환.
     const rootOffsets = inlineCompositionRef.current?.rootOffsets;
     const plans = new Map<string, { copyId: string; label: string; resetPos: { x: number; y: number } }>();
     for (const ghost of ghosts) {
       const label = makeCopyLabel(ghost.data.label, existingLabels);
       existingLabels.push(label);
       const offset = rootOffsets?.get(ghost.id);
-      const resetPos = offset
-        ? { x: ghost.position.x - offset.x, y: ghost.position.y - offset.y }
-        : { ...ghost.position };
+      const resetPos = {
+        x: offset ? ghost.position.x - offset.x : ghost.position.x,
+        y: displayToSavedX(ghost.position.y - (offset?.y ?? 0), yStepsRef.current),
+      };
       plans.set(ghost.id, { copyId: genId(), label, resetPos });
     }
     setNodes((current) => {
@@ -3533,7 +3767,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           position: { ...node.position },
           selected: true,
           // 사본은 원본 그룹 소속·대표끝 지정을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
-          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false },
+          // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
+          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false, output_ids: "" },
         });
         return { ...node, position: plan.resetPos, selected: false };
       });
@@ -3803,9 +4038,17 @@ function MapEditor({ mapId }: { mapId: number }) {
     (deleted: AppNode[]) => {
       const removed = new Set(deleted.map((node) => node.id));
       pruneSmallGroups(nodesRef.current.filter((node) => !removed.has(node.id)));
+      // 원본 노드 삭제 → 미러 즉시 해제(복사본 전환, io-linking §5). RF는 실제 제거(applyNodeChanges)
+      // 전에 onNodesDelete를 먼저 호출하므로, current에서 직접 걸러낸 배열로 propagateIoLinks를 돌린다
+      // (updateSelectedData/patchNode와 동일 가드) — 뒤이은 RF 자체 제거는 이미 없는 id라 no-op.
+      if (rootGraph !== null) {
+        setNodes((current) =>
+          propagateIoLinks(current.filter((node) => !removed.has(node.id)), subprocessRefs).nodes,
+        );
+      }
       scheduleAutoSave();
     },
-    [pruneSmallGroups, scheduleAutoSave],
+    [pruneSmallGroups, rootGraph, setNodes, subprocessRefs, scheduleAutoSave],
   );
 
   // 액션 바 "그룹 나가기" — 선택 멤버를 소속 그룹 전체에서 이탈(확정: 클릭 1회 전 그룹 탈퇴).
@@ -3932,7 +4175,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 ...node,
                 data: {
                   ...node.data,
-                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? ""),
+                  ...buildBulkAttrPatch(field, valueById.get(node.id) ?? "", {
+                    input: node.data.input ?? "",
+                    output: node.data.output ?? "",
+                  }),
                 },
               }
             : node,
@@ -4026,12 +4272,15 @@ function MapEditor({ mapId }: { mapId: number }) {
       aStartOverride?: { x: number; y: number } | null,
     ) => {
       const start = dragStartPosRef.current;
-      const aOrig =
+      const rawOrig =
         aStartOverride !== undefined
           ? aStartOverride
           : start && start.id === aId
             ? { x: start.x, y: start.y }
             : null;
+      // rawOrig는 onNodeDragStart가 캡처한 *표시* 좌표(height-shift 오프셋 포함) — 저장 좌표(nodes state)에
+      // 그대로 쓰면 B의 saved_y가 드리프트한다(C1). dropDraggingPositions와 동일하게 역변환해야 한다.
+      const aOrig = rawOrig ? toSavedPoint(rawOrig) : null;
       setNodes((current) => {
         const b = current.find((node) => node.id === bId);
         if (!b) {
@@ -4061,7 +4310,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       );
       scheduleAutoSave();
     },
-    [setNodes, setEdges, scheduleAutoSave],
+    [setNodes, setEdges, scheduleAutoSave, toSavedPoint],
   );
 
   // 드롭 영역에 놓음 — 앞/뒤(흐름)·그룹·하위·교환. 앞·뒤는 기존 엣지가 있으면 유지/삽입 되묻기
@@ -4262,7 +4511,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
       const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
       const pinned = pinnedRaw ? Number(pinnedRaw) : null;
-      const position = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const position = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       if (e.dataTransfer.getData("application/bpm-process-unregistered") === "1") {
         setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
         return;
@@ -4271,7 +4520,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
     // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
-    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop],
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -4287,7 +4536,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const label = [number, title].filter(Boolean).join(" ");
       pushHistory();
       const id = genId();
-      const point = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const point = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
       const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
       setNodes((current) => [
         ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
@@ -4305,7 +4554,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       scheduleAutoSave();
       flashNode(id);
     },
-    [readOnly, reactFlow, findFreeSpot, pushHistory, setNodes, scheduleAutoSave, flashNode],
+    [
+      readOnly,
+      reactFlow,
+      findFreeSpot,
+      pushHistory,
+      setNodes,
+      scheduleAutoSave,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
@@ -4328,10 +4586,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         showToast(t("library.alreadyLinked"));
         return;
       }
-      const center = reactFlow.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
+      const center = toSavedPoint(
+        reactFlow.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        }),
+      );
       const id = genId();
       const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
       let subEnds: SubEnd[] = [];
@@ -4373,7 +4633,18 @@ function MapEditor({ mapId }: { mapId: number }) {
       flashNode(id);
       showToast(t("editor.linkNodeAdded", { name }));
     },
-    [readOnly, linkedMapIds, reactFlow, setNodes, scheduleAutoSave, showToast, t, findFreeSpot, flashNode],
+    [
+      readOnly,
+      linkedMapIds,
+      reactFlow,
+      setNodes,
+      scheduleAutoSave,
+      showToast,
+      t,
+      findFreeSpot,
+      flashNode,
+      toSavedPoint,
+    ],
   );
 
   // 마우스(flow 좌표) 아래에 있는, 드래그 노드가 아직 속하지 않은 기존 그룹 박스 id — 박스 영역 드롭 합류용
@@ -4393,10 +4664,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       for (const m of members) {
         const w = m.measured?.width ?? NODE_WIDTH;
         const h = m.measured?.height ?? NODE_HEIGHT;
+        // 마우스(mouse)는 표시좌표(screenToFlowPosition) — 멤버는 저장좌표라 height-shift 오프셋을
+        // 더해야 히트박스가 실제 렌더 위치와 일치한다(I1 findGroupAt).
+        const my = m.position.y + (renderYOffsetsRef.current.get(m.id) ?? 0);
         minX = Math.min(minX, m.position.x);
-        minY = Math.min(minY, m.position.y);
+        minY = Math.min(minY, my);
         maxX = Math.max(maxX, m.position.x + w);
-        maxY = Math.max(maxY, m.position.y + h);
+        maxY = Math.max(maxY, my + h);
       }
       const inX = mouse.x >= minX - GROUP_PAD && mouse.x <= maxX + GROUP_PAD;
       const inY = mouse.y >= minY - GROUP_PAD - GROUP_TITLE_GAP && mouse.y <= maxY + GROUP_PAD;
@@ -4619,7 +4893,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       let committed = false;
       const savedById = new Map<string, { x: number; y: number }>();
-      for (const [id, { offset }] of offsets) {
+      for (const [id] of offsets) {
         const dropDisplay = live.get(id);
         if (!dropDisplay) {
           continue;
@@ -4630,7 +4904,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         // x는 드롭 위치 오프셋으로 환산(드래그 시작 오프셋 아님) — 펼침 영역 경계를 가로지르면 두 오프셋이 달라
         // footprint만큼 빗나간다. 도달 불가 갭(앵커 점프 구간)은 앵커 x로 클램프(lib/inline-shift).
         const sx = displayToSavedX(dropDisplay.x, steps);
-        savedById.set(id, { x: sx, y: dropDisplay.y - offset.y });
+        // y도 드롭 위치 기준 상시 스텝 역변환 — 펼침 중에도 height-shift가 베이크돼 있고,
+        // 밴드 경계를 가로지른 드래그는 시작 오프셋(rootOffsets.y) 빼기로는 어긋난다.
+        savedById.set(id, { x: sx, y: displayToSavedX(dropDisplay.y, heightStepsRef.current) });
         committed = true;
       }
       if (savedById.size > 0) {
@@ -4667,16 +4943,21 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // IO 텍스트/폼/링크가 바뀌면 원본 수정일 수 있다 → 같은 커밋에서 미러 전량 동기화 (io-linking §5).
+      // rootGraph 미로드(=SP 지정 미확보) 중엔 건너뛴다 — 불완전한 spRefs로 돌리면 SP 원본 미러가
+      // 댕글링으로 오판돼 해산된다. 그 경우 치유는 다음 로드 정합화가 맡는다.
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === selectedId
             ? { ...node, data: { ...node.data, ...patch } }
             : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, selectedId, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, selectedId, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 하위프로세스 "최신으로 업데이트" — linkedVersionId를 latest_published_version_id로 갱신,
@@ -4746,14 +5027,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       recordChange(fromTyping);
-      setNodes((current) =>
-        current.map((node) =>
+      // 노드 편집 모달도 IO 원본 텍스트를 고칠 수 있다 — 인스펙터와 같은 전파 트리거·가드 (io-linking §5)
+      const propagate = rootGraph !== null && hasIoPatchField(patch);
+      setNodes((current) => {
+        const mapped = current.map((node) =>
           node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
-        ),
-      );
+        );
+        return propagate ? propagateIoLinks(mapped, subprocessRefs).nodes : mapped;
+      });
       scheduleAutoSave();
     },
-    [readOnly, recordChange, setNodes, scheduleAutoSave],
+    [readOnly, recordChange, setNodes, rootGraph, subprocessRefs, scheduleAutoSave],
   );
 
   // 정보 수정 모달 패치 — summaryNodeId 대상. 현재 스코프 노드는 state, 펼친 자식은 scope-split.
@@ -4985,11 +5269,41 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   const handleExportPng = useCallback(async () => {
     try {
-      await exportCanvasPng(nodesRef.current, buildExportFileName("png"));
+      // getNodesBounds는 전달받은 좌표 그대로 프레임을 잡는데, 캡처 대상(.react-flow__viewport)은
+      // height-shift로 밀린 *표시* 위치를 그린다 — 저장 좌표(nodesRef)로 프레임을 잡으면 밀려난
+      // 하단 노드가 잘린다(I1/I2 PNG export). 여기서만 오프셋을 더해 표시 위치로 맞춘다(저장 좌표는 불변).
+      const offsets = renderYOffsetsRef.current;
+      const exportNodes =
+        offsets.size === 0
+          ? nodesRef.current
+          : nodesRef.current.map((node) => {
+              const yOff = offsets.get(node.id);
+              return yOff
+                ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
+                : node;
+            });
+      // 좌하단 정보 카드 — 이름·부서(org_path 리프)·오너·버전·게시일(있으면)·프레임워크(등록 시)
+      const version = versions.find((v) => v.id === versionId);
+      const publishedAt = findPublishedAt(version?.events);
+      const info = {
+        title: mapName,
+        rows: [
+          { label: t("export.infoOwningDept"), value: mapOwningDept?.split("/").filter(Boolean).pop() ?? "-" },
+          { label: t("export.infoOwner"), value: mapOwnerName ?? mapOwner ?? "-" },
+          { label: t("export.infoVersion"), value: version?.label ?? "-" },
+          ...(publishedAt
+            ? [{ label: t("export.infoPublished"), value: formatKst(publishedAt) }]
+            : []),
+          ...(mapCategoryPath
+            ? [{ label: t("export.infoFramework"), value: mapCategoryPath }]
+            : []),
+        ],
+      };
+      await exportCanvasPng(exportNodes, buildExportFileName("png"), info);
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     }
-  }, [buildExportFileName, t]);
+  }, [buildExportFileName, t, versions, versionId, mapName, mapOwningDept, mapOwnerName, mapOwner, mapCategoryPath]);
 
   const handleExportCsv = useCallback(() => {
     // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
@@ -5563,16 +5877,120 @@ function MapEditor({ mapId }: { mapId: number }) {
     selectedNode?.data.nodeType === "subprocess" && selectedNode.data.linkedMapId != null
       ? subprocessRefs.get(selectedNode.data.linkedMapId)
       : undefined;
+  // ── IO 링크(불러오기) 인스펙터 배선 (io-linking §4) ──
+  // 미러를 실제로 보유한 원본/SP 항목의 줄 인덱스 — 행 아이콘 표시는 이 집합으로만 판정한다
+  // (getIoLinkPeers는 호출마다 인덱스를 재구축하므로 행 단위로 쓰지 않는다).
+  const ioMirrorIndex = useMemo(() => buildIoMirrorIndex(nodes), [nodes]);
+  const collectLinkedIndexes = (ids: string | null | undefined): ReadonlySet<number> => {
+    const set = new Set<number>();
+    (ids ?? "").split("\n").forEach((raw, i) => {
+      const itemId = raw.trim();
+      if (itemId !== "" && (ioMirrorIndex.get(itemId)?.length ?? 0) > 0) {
+        set.add(i);
+      }
+    });
+    return set;
+  };
+  const ioOriginGroupIndexes = collectLinkedIndexes(selectedNode?.data.output_ids);
+  const ioSpLinkedInputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.input_ids : null,
+  );
+  const ioSpLinkedOutputIndexes = collectLinkedIndexes(
+    selectedSpRef?.designated ? selectedSpRef.output_ids : null,
+  );
+  // 끊긴 흐름 경고 — 선택 노드 인풋 미러 중 원본→소비 경로 부재 행(표시 전용, io-linking 백로그 2026-08-21)
+  const ioBrokenInputIndexes = selectedNode
+    ? getBrokenInputMirrorIndexes(nodes, edges, subprocessRefs, selectedNode.id)
+    : new Set<number>();
+  // 항목 hover → 상대편(원본이면 미러 전부, 미러면 원본) 노드 + 흐름 경로 엣지 하이라이트.
+  // 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는 유지 (io-linking §2)
+  const handleIoHoverItem = (side: IoSide, index: number | null) => {
+    if (selectedNode === null || index === null) {
+      setIoHighlight(null);
+      return;
+    }
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    // 미러 행 호버 = 원본만, 원본 행 호버 = 미러 전부 — 형제 미러 동시 점등 금지 (§4-5, QA 이슈 #1)
+    const peerIds =
+      peers.origin === null
+        ? [] // 원본 소실(댕글링) — 비출 상대 없음
+        : peers.origin.nodeId !== selectedNode.id
+          ? [peers.origin.nodeId]
+          : peers.mirrors.map((m) => m.nodeId).filter((id) => id !== selectedNode.id);
+    const nodeIds = [...new Set(peerIds)];
+    if (nodeIds.length === 0) {
+      setIoHighlight(null);
+      return;
+    }
+    const edgeIds = new Set<string>();
+    for (const peerId of nodeIds) {
+      const forward = getFlowPathBetween(edges, selectedNode.id, peerId);
+      const path = forward.length > 0 ? forward : getFlowPathBetween(edges, peerId, selectedNode.id);
+      for (const edgeId of path) {
+        edgeIds.add(edgeId);
+      }
+    }
+    setIoHighlight({ nodeIds, edgeIds: [...edgeIds] });
+  };
+  // 불러오기 후보 — 모달이 열린 동안 hover가 ioHighlight 리렌더를 유발하므로 memo로 재스캔 방지
+  const ioImportCandidates = useMemo(
+    () =>
+      ioImport
+        ? collectIoImportCandidates({
+            nodes,
+            edges,
+            spRefs: subprocessRefs,
+            nodeId: ioImport.nodeId,
+            side: ioImport.side,
+          })
+        : [],
+    [ioImport, nodes, edges, subprocessRefs],
+  );
+  // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2). anchorId는 경로 하이라이트 기준점
+  const [ioPeersMenu, setIoPeersMenu] = useState<{
+    anchorId: string;
+    at: { x: number; y: number };
+    items: IoPeerItem[];
+  } | null>(null);
+  const handleIoPeersMenu = (side: IoSide, index: number, at: { x: number; y: number }) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    const items: IoPeerItem[] = [];
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      const originNode = nodes.find((n) => n.id === peers.origin?.nodeId);
+      if (originNode) {
+        items.push({
+          nodeId: originNode.id,
+          label: originNode.data.label,
+          side: peers.origin.kind === "spin" ? "input" : "output",
+        });
+      }
+    } else {
+      for (const mirror of peers.mirrors) {
+        if (mirror.nodeId === selectedNode.id) continue;
+        const mirrorNode = nodes.find((n) => n.id === mirror.nodeId);
+        if (mirrorNode) {
+          items.push({ nodeId: mirrorNode.id, label: mirrorNode.data.label, side: mirror.side });
+        }
+      }
+    }
+    if (items.length > 0) setIoPeersMenu({ anchorId: selectedNode.id, at, items });
+  };
+  // 미러 텍스트 클릭 → 원본 노드로 이동(선택+센터링). 원본이 없으면 no-op (io-linking §4-4)
+  const handleIoNavigate = (side: IoSide, index: number) => {
+    if (selectedNode === null) return;
+    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
+    if (peers.origin && peers.origin.nodeId !== selectedNode.id) {
+      setIoHighlight(null);
+      highlightNode(peers.origin.nodeId);
+    }
+  };
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
   const editableParams = selectedNode ? getEditableParamFields(selectedNode.data.nodeType) : [];
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 미지정이면 ""(행은 "—")
   const selectedInheritedParams = getInheritedParams(selectedSpRef);
   const inheritedParamDisplay = (field: ParamField): string =>
     isSpParamField(field) ? formatParamValue(field, selectedInheritedParams[field]) : "";
-  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생(가벼운 계산, useMemo 불요)
-  const filledParamCount = selectedNode
-    ? editableParams.filter((f) => selectedNode.data[f]).length
-    : 0;
   const selectedEdge = useMemo(
     () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
     [edges, selectedEdgeId],
@@ -5677,12 +6095,37 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
+  // height-shift(#1) 상시 스텝/오프셋 — 합성(아래 inlineComposition) 입력에도 베이크하므로 게이트 없이 산출.
+  // 펼침 중 표시는 합성 좌표가 담당(베이크)하고, 평시 표시는 renderYOffsets 트윈이 담당한다(flowNodes에서 게이트).
+  // 드래그 중엔 시작 시점 스텝으로 동결 — 커진 노드(앵커)를 끌면 자기 밴드가 매 프레임 따라 움직여
+  // 표시(offset)와 역변환이 서로 쫓으며 마우스·원위치 사이를 튀는 지터가 난다. 드롭 시 해제(트윈 복귀).
+  const [dragFrozenSteps, setDragFrozenSteps] = useState<ShiftStep[] | null>(null);
+  const heightSteps = useMemo(
+    () => dragFrozenSteps ?? buildHeightSteps(nodes),
+    [dragFrozenSteps, nodes],
+  );
+  useEffect(() => {
+    heightStepsRef.current = heightSteps;
+  }, [heightSteps]);
+  const yOffsets = useMemo(() => buildYOffsets(nodes, heightSteps), [nodes, heightSteps]);
+
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
     }
     const tree = fullGraph;
     const rootIds = new Set(nodes.map((node) => node.id));
+    // height-shift(#1)를 합성 입력에 베이크 — 펼침 중에도 커진 노드 아래가 밀린 표시 Y로 배치된다.
+    // 파생(childTop·regions bbox·rootOffsets=표시−저장)이 전부 이 표시 Y 기준으로 자동 일관.
+    const displayNodes =
+      yOffsets.size === 0
+        ? nodes
+        : nodes.map((node) => {
+            const yOff = yOffsets.get(node.id);
+            return yOff
+              ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
+              : node;
+          });
 
     // 루트 스코프(depth 1) 펼침 앵커별 footprint-shift 단계 — 각 {저장 x, footprint}.
     // 드롭 좌표 환산 시 "이 저장 x에서의 표시 오프셋"을 위치 의존으로 재계산하기 위함(드래그 시작 오프셋이 아닌
@@ -5831,7 +6274,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       return { nodes: all, regions, childEdges, width, height };
     };
 
-    const root = buildScope(nodes, 1);
+    const root = buildScope(displayNodes, 1);
     if (root.regions.length === 0) {
       return null;
     }
@@ -5936,7 +6379,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       rootOffsets,
       rootShiftSteps,
     };
-  }, [expandedInline, fullGraph, nodes, edges, currentParentId, injectSubEnds]);
+  }, [expandedInline, fullGraph, nodes, yOffsets, edges, currentParentId, injectSubEnds]);
 
   useEffect(() => {
     inlineCompositionRef.current = inlineComposition;
@@ -6029,12 +6472,89 @@ function MapEditor({ mapId }: { mapId: number }) {
     return out;
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
 
+  // height-shift(#1): 표시 높이로 커진 노드 아래를 렌더 시점에만 밀어냄 — 저장 좌표 불변.
+  // 드롭 역변환용 게이트 스텝 — 펼침 중엔 rootOffsets(y 베이크 포함)가 드롭 환산을 담당하므로
+  // 비활성(이중 차감 방지). 상시 스텝/오프셋은 위(heightSteps/yOffsets)에서 산출.
+  const ySteps = useMemo(
+    () => (inlineComposition ? [] : heightSteps),
+    [inlineComposition, heightSteps],
+  );
+  useEffect(() => {
+    yStepsRef.current = ySteps;
+  }, [ySteps]);
+
+  // 오프셋 전환 트윈 — CSS transition은 엣지(SVG 재계산)가 안 따라와 분리돼 보임 → 값 자체를 rAF 보간.
+  // 즉시 적용 3조건: 첫 산출(로드 정착)·드래그 중·prefers-reduced-motion. (spec §6)
+  const [renderYOffsets, setRenderYOffsets] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    renderYOffsetsRef.current = renderYOffsets;
+  }, [renderYOffsets]);
+  const yTweenInitRef = useRef(false);
+  // 성장 반영 후 1회 재-fit — 초기 fitView는 측정 전(성장 전) 좌표 기준이라 밀린 하단 노드가
+  // 뷰 밖일 수 있다(V라운드 관찰 1). 마운트 직후 창(1.5s) 안에서만 — 이후 사용자 펼침엔 카메라 불가침.
+  const mountAtRef = useRef(0);
+  useEffect(() => {
+    mountAtRef.current = performance.now();
+  }, []);
+  const didGrowthFitRef = useRef(false);
+  useEffect(() => {
+    if (didGrowthFitRef.current || yOffsets.size === 0) return undefined;
+    if (performance.now() - mountAtRef.current >= 1500) {
+      didGrowthFitRef.current = true; // 창 밖 도착 — 이후 성장에도 카메라 불가침
+      return undefined;
+    }
+    // 소모 플래그는 실제 발사 시점에 세운다 — 오프셋이 여러 커밋으로 나눠 오면(터미널 높이가 IO 박스보다
+    // 먼저 확정되는 등) cleanup이 타이머를 취소하고 재예약 없이 끝나던 버그(QA W3). 지금은 마지막
+    // 성장 커밋 기준 80ms 디바운스로 1회 발사.
+    const timer = window.setTimeout(() => {
+      didGrowthFitRef.current = true;
+      void reactFlow.fitView({ padding: 0.1, duration: 300 });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [yOffsets, reactFlow]);
+  useEffect(() => {
+    const from = renderYOffsetsRef.current;
+    const to = yOffsets;
+    // 동일하면 스킵 — set-state-in-effect 회피 겸 무한 루프 방지
+    if (from.size === to.size && [...to].every(([id, v]) => from.get(id) === v)) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dragging = dragStartPositionsRef.current.size > 0;
+    const instant = !yTweenInitRef.current || dragging || reduced;
+    yTweenInitRef.current = true;
+    if (instant) {
+      const raf = requestAnimationFrame(() => setRenderYOffsets(to));
+      return () => cancelAnimationFrame(raf);
+    }
+    const start = performance.now();
+    const DURATION = 350;
+    const ids = new Set([...from.keys(), ...to.keys()]);
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      // ease-smooth 근사(cubic ease-out) — 프레임마다 노드·엣지가 함께 이동
+      const e = 1 - Math.pow(1 - t, 3);
+      const next = new Map<string, number>();
+      for (const id of ids) {
+        const a = from.get(id) ?? 0;
+        const b = to.get(id) ?? 0;
+        const v = a + (b - a) * e;
+        if (v !== 0) next.set(id, v);
+      }
+      setRenderYOffsets(t >= 1 ? to : next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [yOffsets]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
     // Ctrl+드래그 중인 원본 id — 끌리는 실제 노드는 반투명 사본으로 표시(커서를 따라오는 건 사본).
     // 진짜 원본 그래픽은 아래 ghostNodes가 원위치에 솔리드로 렌더하고, 엣지도 그 고스트로 앵커된다(styledEdges).
     const ctrlGhostIdSet = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 상대 노드에 링 강조(className만, 스타일은 globals.css)
+    const ioHighlightIdSet = ioHighlight ? new Set(ioHighlight.nodeIds) : null;
     // 파생 자식(prop-only) 대신 childNodes의 state 객체를 buildScope 파생 위치로 표시해야 RF가 측정·이벤트를 라우팅한다.
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
@@ -6091,8 +6611,22 @@ function MapEditor({ mapId }: { mapId: number }) {
       const withCopyStyle = ctrlGhostIdSet?.has(node.id)
         ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
         : withWarning;
+      const withIoHighlight = ioHighlightIdSet?.has(node.id)
+        ? { ...withCopyStyle, className: [withCopyStyle.className, "io-node-highlight"].filter(Boolean).join(" ") }
+        : withCopyStyle;
       // 루트 하위프로세스 노드(이 경로는 미주입)에 subEnds 주입 — 펼침 토글·끝 핸들 렌더 활성화.
-      return injectSubEnds(withCopyStyle);
+      // GMP 안내 버튼 호버 미리보기 — 노드에도 결과값을 임시 반영(데이터 무변경, 렌더 전용) (사용자 요청 2026-08-21)
+      const withGmpPreview =
+        gmpPreview !== null && gmpPreview.nodeId === node.id
+          ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
+          : withIoHighlight;
+      const injected = injectSubEnds(withGmpPreview);
+      // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동.
+      // 펼침 중엔 합성 입력에 이미 베이크돼 있어 여기서 더하면 이중 적용 — 스킵.
+      const yOff = inlineComposition ? 0 : (renderYOffsets.get(node.id) ?? 0);
+      return yOff === 0
+        ? injected
+        : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -6131,6 +6665,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     ctrlDragActive,
     ctrlDragGhosts,
     staleAnchorIds,
+    ioHighlight,
+    gmpPreview,
+    renderYOffsets,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -6150,6 +6687,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     // Ctrl+드래그 중엔 끌리는 노드의 엣지를 원위치 고스트(ctrl-ghost:id)로 앵커 — 엣지가 원본 자리에 남고
     // 반투명 사본만 커서를 따라간다(원본은 제자리 유지). ghostIds가 없으면 항등 변환.
     const ctrlGhostIds = ctrlDragActive ? new Set(ctrlDragGhosts.map((g) => g.id)) : null;
+    // IO 링크 hover — 원본↔미러 사이 흐름 경로 엣지(양방향 중 존재하는 쪽) 강조
+    const ioHighlightEdgeIds = ioHighlight ? new Set(ioHighlight.edgeIds) : null;
     const anchorEdgesToGhosts = (list: Edge[]): Edge[] =>
       ctrlGhostIds
         ? list.map((edge) => {
@@ -6201,7 +6740,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         };
       }
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
-      if (edge.id === hoveredEdgeId) {
+      if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id)) {
         next = {
           ...next,
           className: [next.className, "edge-hover-highlight"].filter(Boolean).join(" "),
@@ -6288,7 +6827,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
     });
     return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...inlineComposition.gateways, ...syntheticEndEdges]);
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ctrlDragActive, ctrlDragGhosts]);
+  }, [edges, nodes, resolvedCache, expandedInline, selectedId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -6297,6 +6836,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (expandedInline.size > 0) {
       return [];
     }
+    // 저장좌표(nodes)에 height-shift 표시 오프셋을 더해야 멤버가 실제 렌더 위치(밀려난 하단)와 일치한다(I2).
+    const dispY = (node: AppNode) => node.position.y + (renderYOffsets.get(node.id) ?? 0);
     return groups.flatMap((group) => {
       const members = nodes.filter((node) => node.data.groupIds.includes(group.id));
       if (members.length === 0) {
@@ -6309,10 +6850,11 @@ function MapEditor({ mapId }: { mapId: number }) {
       for (const member of members) {
         const w = member.measured?.width ?? NODE_WIDTH;
         const h = member.measured?.height ?? NODE_HEIGHT;
+        const my = dispY(member);
         minX = Math.min(minX, member.position.x);
-        minY = Math.min(minY, member.position.y);
+        minY = Math.min(minY, my);
         maxX = Math.max(maxX, member.position.x + w);
-        maxY = Math.max(maxY, member.position.y + h);
+        maxY = Math.max(maxY, my + h);
       }
       // 멤버 많을수록 패딩↑ → 큰 그룹이 작은 그룹을 시각적으로 감쌈
       const pad = GROUP_PAD + Math.min(members.length, 8) * 4;
@@ -6328,19 +6870,20 @@ function MapEditor({ mapId }: { mapId: number }) {
         .flatMap((node) => {
           const w = node.measured?.width ?? NODE_WIDTH;
           const h = node.measured?.height ?? NODE_HEIGHT;
+          const ny = dispY(node);
           // 멤버 padded bbox와 겹치는 비멤버만
           if (
             node.position.x >= maxX + pad ||
             node.position.x + w <= minX - pad ||
-            node.position.y >= maxY + pad ||
-            node.position.y + h <= minY - pad
+            ny >= maxY + pad ||
+            ny + h <= minY - pad
           ) {
             return [];
           }
           return [
             {
               x: node.position.x - intruderMargin - originX,
-              y: node.position.y - intruderMargin - originY,
+              y: ny - intruderMargin - originY,
               w: w + intruderMargin * 2,
               h: h + intruderMargin * 2,
             },
@@ -6353,7 +6896,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         const h = member.measured?.height ?? NODE_HEIGHT;
         return {
           x: member.position.x - memberKeep - originX,
-          y: member.position.y - memberKeep - originY,
+          y: dispY(member) - memberKeep - originY,
           w: w + memberKeep * 2,
           h: h + memberKeep * 2,
         };
@@ -6379,7 +6922,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       ];
     });
-  }, [nodes, groups, expandedInline]);
+  }, [nodes, groups, expandedInline, renderYOffsets]);
 
   // 노드 위치(nodeExtent)·패닝(translateExtent) 허용 범위 = 콘텐츠 bbox + 사방 대칭 여백(무한 캔버스 느낌, 자유 패닝).
   const contentExtent = useMemo<
@@ -6556,10 +7099,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [displayFields],
   );
+  // 카테고리 일괄 보이기/숨기기(#4) — 영속은 핸들러에서만(위 StrictMode 리셋 랜드마인과 동일 이유)
+  const setCategoryDisplayFields = useCallback(
+    (fields: NodeDisplayToggle[], on: boolean) => {
+      const next = on
+        ? [...displayFields, ...fields.filter((f) => !displayFields.includes(f))]
+        : displayFields.filter((f) => !fields.includes(f));
+      window.localStorage.setItem("bpm.nodeDisplayFields.v2", JSON.stringify(next));
+      setDisplayFields(next);
+    },
+    [displayFields],
+  );
 
-  // 맵 탭의 노드 디스플레이/엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요),
-  // 두 섹션이 키("nodeDisplay"/"edgeStyle")로 하나의 accordion-close 고스트 렌더를 공유.
-  const [nodeDisplaySectionOpen, setNodeDisplaySectionOpen] = useState(false);
+  // 맵 탭의 엣지 스타일 섹션 접힘 — 마운트마다 기본 접힘(세션 영속 불요). 노드 디스플레이는
+  // NodeDisplaySection 컴포넌트가 자체 관리 (2026-08-20).
   const [edgeStyleSectionOpen, setEdgeStyleSectionOpen] = useState(false);
   const { closingKeys: inspectorClosingKeys, beginClose: beginInspectorClose, cancelClose: cancelInspectorClose } =
     useClosingKeys<string>();
@@ -6588,6 +7141,78 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     startRenameRef.current = startRename;
   }, [startRename]);
+  // GMP 필 클릭 → 분류 피커(클릭 좌표 앵커). 편집 모드 전용 — readOnly면 컨텍스트에 null 전달
+  const [gmpPicker, setGmpPicker] = useState<{ nodeId: string; x: number; y: number } | null>(null);
+  // setState만 부르는 핸들러는 useCallback 금지 — 컴파일러가 setter를 dep으로 추론해
+  // preserve-manual-memoization에 걸린다(AGENTS.md). 평 함수로 두면 컴파일러가 메모이즈.
+  const openGmpPicker = (nodeId: string, x: number, y: number) => setGmpPicker({ nodeId, x, y });
+  // 픽커 대상 노드의 현재 값 — 미리보기·확정 패치가 공유 (렌더 IIFE 금지 — 컴파일러 ref 규칙)
+  const gmpPickerNode = gmpPicker !== null ? nodes.find((n) => n.id === gmpPicker.nodeId) : undefined;
+  const onEditGmpAction = readOnly ? null : openGmpPicker;
+  // 분류 확정 안내 — 분류가 노드 색을 자동 변경하므로(일반 노드) 마우스 지점에 알리고
+  // "이전 분류로"/"색만" 두 단계 되돌리기를 제공 (사용자 결정 2026-08-20)
+  const [gmpNotice, setGmpNotice] = useState<{
+    nodeId: string;
+    prevGmp: string;
+    prevColor: string;
+    nextGmp: string;
+    nextColor: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  // 노드 IO 체크리스트(#9) — 화면 한정 상태(저장·영속 없음, 새로고침 리셋). 키는 링크 itemId
+  // (원본·미러 그룹 동반 체크) 또는 노드·측·줄. 뷰어도 조작 가능 — 데이터가 아니라 열람 보조.
+  const [ioChecks, setIoChecks] = useState<ReadonlySet<string>>(new Set());
+  // 체크리스트 표시 상태(#2) — 키 `${nodeId}:${side}`, 미지정=capped(3.5줄)
+  const [ioListStates, setIoListStates] = useState<ReadonlyMap<string, IoListDisplayState>>(new Map());
+  const setIoListState = useCallback((key: string, state: IoListDisplayState) => {
+    setIoListStates((prev) => {
+      if (prev.get(key) === state) return prev;
+      const next = new Map(prev);
+      next.set(key, state);
+      return next;
+    });
+  }, []);
+  // 체크 동기 애니메이션(#3) — 논스로 같은 키 재체크도 재생
+  const [ioCheckPulse, setIoCheckPulse] = useState<{ key: string; nonce: number } | null>(null);
+  const toggleIoCheck = useCallback(
+    (key: string) => {
+      const turningOn = !ioChecks.has(key);
+      setIoChecks((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      // 링크 항목 체크 시(#3) — 상대(원본·형제 미러) 목록이 접혀 있으면 펼치고(0줄→3.5줄),
+      // 행이 캡 밖이면 전체 펼침, 체크 애니메이션 재생. per-노드 키(`:in:`/`:out:`)는 대상 없음
+      if (!turningOn || /:(in|out):/.test(key)) return;
+      const currentNodes = nodesRef.current;
+      const sites: { nodeId: string; side: IoSide; index: number }[] = [
+        ...(buildIoMirrorIndex(currentNodes).get(key) ?? []),
+      ];
+      const origin = buildIoIndex(currentNodes, subprocessRefs).get(key);
+      if (origin && origin.kind === "out") {
+        sites.push({ nodeId: origin.nodeId, side: "output", index: origin.index });
+      }
+      setIoListStates((prev) => {
+        let next: Map<string, IoListDisplayState> | null = null;
+        for (const site of sites) {
+          const listKey = `${site.nodeId}:${site.side}`;
+          const cur = (next ?? prev).get(listKey) ?? "capped";
+          const want: IoListDisplayState =
+            site.index >= 3 ? "all" : cur === "collapsed" ? "capped" : cur;
+          if (want !== cur) {
+            next = next ?? new Map(prev);
+            next.set(listKey, want);
+          }
+        }
+        return next ?? prev;
+      });
+      setIoCheckPulse((prev) => ({ key, nonce: (prev?.nonce ?? 0) + 1 }));
+    },
+    [ioChecks, subprocessRefs],
+  );
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -6600,6 +7225,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       ctrlDragIds: ctrlDragActive
         ? new Set(ctrlDragGhosts.map((ghost) => ghost.id))
         : EMPTY_CTRL_DRAG_IDS,
+      onEditGmp: onEditGmpAction,
+      ioChecks,
+      onToggleIoCheck: toggleIoCheck,
+      ioListStates,
+      onSetIoListState: setIoListState,
+      ioCheckPulse,
     }),
     [
       toggleInlineExpand,
@@ -6611,6 +7242,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       cancelRename,
       ctrlDragActive,
       ctrlDragGhosts,
+      onEditGmpAction,
+      ioChecks,
+      toggleIoCheck,
+      ioListStates,
+      setIoListState,
+      ioCheckPulse,
     ],
   );
 
@@ -7399,7 +8036,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
@@ -7550,7 +8187,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             const consultDisabledReason = !readOnly
               ? null
               : isViewer
-                ? "View-only access — consulting needs edit permission"
+                ? "View-only access - consulting needs edit permission"
                 : checkout?.checked_out_by
                   ? "Another user is editing this draft"
                   : "This version isn't an editable draft";
@@ -7622,7 +8259,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   >
                     <div className="text-caption-strong text-ink">Try the AI consultant</div>
                     <p className="mt-1 text-fine text-ink-secondary">
-                      Answer a few questions and this empty map draws itself — attach a document
+                      Answer a few questions and this empty map draws itself - attach a document
                       to go even faster.
                     </p>
                     <div className="mt-2 flex justify-end gap-1.5">
@@ -7681,7 +8318,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <AlertTriangle size={14} strokeWidth={1.7} className="shrink-0" />
           <span className="shrink-0 font-semibold">{t("editor.saveFailedPill")}</span>
           <span className="min-w-0">
-            {saveErrorDetail} — {t("editor.saveRetryHint")}
+            {saveErrorDetail} - {t("editor.saveRetryHint")}
           </span>
         </div>
       )}
@@ -7848,6 +8485,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
+                // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함).
+                // 이동은 F6 "링크맵 열기"와 같은 미저장 경고 확인 모달(openMapPrompt)을 거친다.
+                topRightSlot={
+                  index === 0 && mapCategoryId !== null ? (
+                    <FrameworkChip
+                      mapId={mapId}
+                      categoryId={mapCategoryId}
+                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                    />
+                  ) : undefined
+                }
                 bounds={bounds}
                 onFocus={() => {
                   bringToFront(key);
@@ -7878,6 +8526,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
+                      onConnectEnd={handleConnectEnd}
+                      connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}
                       onNodeClick={(_, node) => {
                         // 인라인 자식(읽기전용) — 선택 효과(테두리·불투명)는 RF가 처리하고, selectedId도
@@ -7913,6 +8563,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 드릴인은 임베드 자식 더블클릭·펼침 토글 경로로 유지. 타이틀 더블클릭은 이름 편집(비-subprocess).
                         setSelectedId(node.id);
                         setSummaryNodeId(node.id);
+                        setPropertiesTabNonce((n) => n + 1); // 인스펙터 속성 탭 자동 전환
                       }}
                       onEdgeClick={(_, edge) => {
                         setSelectedEdgeId(edge.id);
@@ -7949,6 +8600,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
+                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureRootDragStart([node]);
                         beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
@@ -7985,6 +8637,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 제스처 종료 — 다음 무관한 position 변경(화살표 이동 등)이 축 고정에 새지 않게 해제.
                         dragStartPosRef.current = null;
                         dragStartPositionsRef.current = new Map();
+                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                       }}
                       onSelectionDragStart={(event, nodes) => {
                         pushHistory();
@@ -7993,6 +8646,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
+                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureRootDragStart(nodes);
                         // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
                         beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
@@ -8034,6 +8688,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
                         // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
                         dragStartPositionsRef.current = new Map();
+                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                       }}
                       onBeforeDelete={async () => {
                         if (readOnly) {
@@ -8515,6 +9170,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                 department={node.data.department}
                 system={node.data.system}
                 duration={node.data.duration}
+                touch_time={node.data.touch_time ?? ""}
+                input={node.data.input ?? ""}
+                output={node.data.output ?? ""}
+                input_forms={node.data.input_forms ?? ""}
+                output_forms={node.data.output_forms ?? ""}
+                output_ids={node.data.output_ids ?? ""}
+                input_links={node.data.input_links ?? ""}
+                output_links={node.data.output_links ?? ""}
+                input_flags={node.data.input_flags ?? ""}
+                data_form={node.data.data_form ?? ""}
+                start_condition={node.data.start_condition ?? ""}
+                end_condition={node.data.end_condition ?? ""}
                 cost_krw={node.data.cost_krw ?? ""}
                 cost_usd={node.data.cost_usd ?? ""}
                 headcount={node.data.headcount ?? ""}
@@ -8525,6 +9192,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 colorPresets={colorsForType(node.data.nodeType)}
                 spParams={
                   node.data.nodeType === "subprocess" ? getInheritedParams(summarySpRef) : null
+                }
+                sp={node.data.nodeType === "subprocess" ? summarySpRef ?? null : null}
+                gmp={
+                  node.data.nodeType === "subprocess"
+                    ? summarySpRef?.gmp ?? ""
+                    : node.data.gmp ?? ""
                 }
                 inheritedDescription={
                   node.data.nodeType === "subprocess" ? (summarySpRef?.sp_description ?? null) : null
@@ -8543,10 +9216,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
+                initialFocus={summaryFocus ?? undefined}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
                 onNavigate={(id) => setSummaryNodeId(id)}
-                onClose={() => setSummaryNodeId(null)}
+                onClose={() => {
+                  setSummaryNodeId(null);
+                  setSummaryFocus(null);
+                }}
                 onOpenChild={handleSummaryOpenChild}
               />
             );
@@ -8564,11 +9241,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                   department: n.data.department,
                   system: n.data.system,
                   duration: n.data.duration,
+                  touch_time: n.data.touch_time ?? "",
                   cost_krw: n.data.cost_krw ?? "",
                   cost_usd: n.data.cost_usd ?? "",
                   headcount: n.data.headcount ?? "",
                   annual_count: n.data.annual_count ?? "",
                   fte: n.data.fte ?? "",
+                  input: n.data.input ?? "",
+                  output: n.data.output ?? "",
+                  start_condition: n.data.start_condition ?? "",
+                  end_condition: n.data.end_condition ?? "",
                   nodeType: n.data.nodeType,
                 }))}
               colorPresets={COLOR_PRESETS}
@@ -8717,6 +9399,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-hairline bg-surface">
               <InspectorPanel
                 onCollapse={() => setInspectorOpen(false)}
+                propertiesTabNonce={propertiesTabNonce}
                 mapId={mapId}
                 canCompare={versions.some((version) => version.status === "published")}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
@@ -8755,12 +9438,24 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <NewlineHint />
                       </div>
-                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 편집은 편집 모달에서만.
+                      {/* 설명 — 인스펙터는 읽기전용(회색, 내용만). 호버 시 편집 아이콘, 더블클릭/아이콘으로
+                          편집 모달을 열어 설명에 자동 포커스 (사용자 결정 2026-08-20).
                           subprocess는 링크맵 설명(베이스)+이 맵 추가분을 줄바꿈 합성해 표시. */}
-                      <div>
+                      <div className="group/desc relative">
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
-                        <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary">
+                        <div
+                          data-id="inspector-description"
+                          className={`min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-tertiary ${
+                            readOnly ? "" : "cursor-text transition-colors hover:bg-surface-pearl"
+                          }`}
+                          onDoubleClick={() => {
+                            if (readOnly) return;
+                            setSummaryFocus("description");
+                            setSummaryNodeId(selectedNode.id);
+                          }}
+                        >
                           {(selectedNode.data.nodeType === "subprocess"
                             ? mergeSubprocessDescription(
                                 selectedSpRef?.sp_description,
@@ -8768,6 +9463,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                               )
                             : selectedNode.data.description) || t("summary.none")}
                         </div>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            data-id="inspector-description-edit"
+                            aria-label={t("field.description")}
+                            className="absolute right-1 top-6 hidden rounded-sm bg-surface p-1 text-ink-tertiary shadow-sm hover:text-accent group-hover/desc:block"
+                            onClick={() => {
+                              setSummaryFocus("description");
+                              setSummaryNodeId(selectedNode.id);
+                            }}
+                          >
+                            <SquarePen size={13} strokeWidth={1.5} />
+                          </button>
+                        )}
                       </div>
                       {/* 유형·색 — 라벨 좌·필드 우측정렬·세로중앙·구분선(편집 모달과 동일) */}
                       <div className="flex flex-col divide-y divide-divider">
@@ -8841,10 +9550,43 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </div>
                         )}
                       </div>
-                      {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
-                      {hasBpmAttributes(selectedNode.data.nodeType) && (
-                        <div className="rounded-md border border-hairline p-3">
-                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                      {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김.
+                          아코디언(기본 접힘) — 수행 지표·입출력 조건과 동일 패턴 (사용자 결정 2026-08-20) */}
+                      {hasBpmAttributes(selectedNode.data.nodeType) && (() => {
+                        // 채움 카운트 — 헤더 배지·읽기전용 빈 섹션 딤(#3) 공용, gmp 포함 (사용자 요청 2026-08-21)
+                        const attrsFilled = [
+                          selectedNode.data.assignee,
+                          selectedNode.data.department,
+                          selectedNode.data.system,
+                          selectedNode.data.url,
+                          selectedNode.data.gmp,
+                        ].filter((v) => (v ?? "") !== "").length;
+                        return (
+                        <div className={`rounded-md border border-hairline p-3 ${readOnly && attrsFilled === 0 ? "opacity-50" : ""}`}>
+                          <button
+                            type="button"
+                            data-id="inspector-attrs-toggle"
+                            data-acc-toggle
+                            aria-expanded={!attrsCollapsed}
+                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                            onClick={() => {
+                              const next = !attrsCollapsed;
+                              setAttrsCollapsed(next);
+                              writeAttrsCollapsed(next);
+                            }}
+                          >
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                            />
+                            {t("editor.bpmAttrs")}
+                            {attrsFilled > 0 && (
+                              <span className="font-normal text-ink-tertiary">({attrsFilled})</span>
+                            )}
+                          </button>
+                          {!attrsCollapsed && (
+                          <div className="ml-2 border-l border-divider pl-2">
                           {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
                           <BpmAttributePicker
                             versionId={versionId}
@@ -8858,19 +9600,81 @@ function MapEditor({ mapId }: { mapId: number }) {
                           ] as const).map(([key, labelKey]) => (
                             <div
                               key={key}
-                              className="flex items-center justify-between gap-2 border-t border-divider py-1"
+                              className="flex items-center justify-between gap-2 py-1"
                             >
                               <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
                               <input
                                 data-id={`inspector-field-${key}`}
-                                className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
+                                className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
+                                  readOnly
+                                    ? "min-w-0 flex-1 bg-transparent"
+                                    : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
+                                }`}
                                 value={selectedNode.data[key] ?? ""}
                                 disabled={readOnly}
                                 title={selectedNode.data[key] || undefined}
                                 onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
                               />
+                              {/* 시스템 원문 폴백 힌트 — 라이브러리화 전 검토 원천 (design 2026-08-19 §5.2) */}
+                              {key === "system" && (
+                                <FallbackHint
+                                  dataId="inspector-system-hint"
+                                  fallback={selectedNode.data.system_fallback}
+                                  onSaveFallback={
+                                    readOnly
+                                      ? undefined
+                                      : (text) => updateSelectedData({ system_fallback: text }, true)
+                                  }
+                                  onApply={
+                                    readOnly
+                                      ? undefined
+                                      : () =>
+                                          updateSelectedData(
+                                            { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
+                                            true,
+                                          )
+                                  }
+                                />
+                              )}
                             </div>
                           ))}
+                          {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
+                          <div className="flex items-center justify-between gap-2 py-1">
+                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.gmp")}</span>
+                            {readOnly ? (
+                              (selectedNode.data.gmp ?? "") !== "" ? (
+                                <span
+                                  data-id="inspector-field-gmp"
+                                  className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
+                                  style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                >
+                                  {formatGmp(selectedNode.data.gmp)}
+                                </span>
+                              ) : (
+                                <span data-id="inspector-field-gmp" className="text-caption text-ink-tertiary">-</span>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                data-id="inspector-field-gmp"
+                                className="rounded-sm px-1 py-0.5 hover:bg-surface-alt"
+                                onClick={(event) => openGmpPicker(selectedNode.id, event.clientX, event.clientY)}
+                              >
+                                {(selectedNode.data.gmp ?? "") !== "" ? (
+                                  <span
+                                    className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
+                                    style={getGmpBadgeStyle(selectedNode.data.gmp)}
+                                  >
+                                    {formatGmp(selectedNode.data.gmp)}
+                                  </span>
+                                ) : (
+                                  <span className="text-caption text-ink-tertiary">
+                                    {t("perm.processFields.gmpUnset")}
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </div>
                           <UrlLabelField
                             key={selectedNode.id}
                             url={selectedNode.data.url ?? ""}
@@ -8878,8 +9682,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
+                          </div>
+                          )}
                         </div>
-                      )}
+                        );
+                      })()}
                       {/* end 노드 — 대표 엔드: 체크박스 대신 토글 스위치 */}
                       {selectedNode.data.nodeType === "end" && (
                         <div className="flex items-center justify-between">
@@ -8912,7 +9719,38 @@ function MapEditor({ mapId }: { mapId: number }) {
                           회당 파라미터 4종은 아래 Parameters 카드에서 같이 표시(중복 방지) */}
                       {selectedNode.data.nodeType === "subprocess" && selectedSpRef?.designated && (
                         <div data-id="inspector-subprocess-attrs" className="rounded-md border border-hairline p-3">
-                          <div className="mb-1 text-fine font-semibold text-ink">{t("editor.bpmAttrs")}</div>
+                          <button
+                            type="button"
+                            data-id="inspector-sp-attrs-toggle"
+                            data-acc-toggle
+                            aria-expanded={!attrsCollapsed}
+                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
+                            onClick={() => {
+                              const next = !attrsCollapsed;
+                              setAttrsCollapsed(next);
+                              writeAttrsCollapsed(next);
+                            }}
+                          >
+                            <ChevronRight
+                              size={12}
+                              strokeWidth={1.5}
+                              className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                            />
+                            {t("editor.bpmAttrs")}
+                            {(() => {
+                              const filled = [
+                                selectedSpRef.department,
+                                selectedSpRef.assignee,
+                                selectedSpRef.system,
+                                selectedSpRef.url,
+                              ].filter((v) => (v ?? "") !== "").length;
+                              return filled > 0 ? (
+                                <span className="font-normal text-ink-tertiary">({filled})</span>
+                              ) : null;
+                            })()}
+                          </button>
+                          {!attrsCollapsed && (
+                          <div className="ml-2 border-l border-divider pl-2">
                           {([
                             ["department", "field.department"],
                             ["assignee", "field.assignee"],
@@ -8929,7 +9767,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                   className="min-w-0 truncate text-right text-caption text-ink"
                                   title={value || undefined}
                                 >
-                                  {value || "—"}
+                                  {value || "-"}
                                 </span>
                               </div>
                             );
@@ -8940,77 +9778,73 @@ function MapEditor({ mapId }: { mapId: number }) {
                               className="min-w-0 truncate text-right text-caption text-ink"
                               title={selectedSpRef.url || undefined}
                             >
-                              {selectedSpRef.url_label || selectedSpRef.url || "—"}
+                              {selectedSpRef.url_label || selectedSpRef.url || "-"}
                             </span>
                           </div>
                           <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                        </div>
-                      )}
-                      {/* 회당 파라미터 — 접기 그룹(기본 접힘). start/end 외 모든 타입에 표시.
-                          subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
-                      {editableParams.length > 0 && (
-                        <div data-id="inspector-params" className="rounded-md border border-hairline p-3">
-                          <button
-                            type="button"
-                            data-id="inspector-params-toggle"
-                            aria-expanded={!paramsCollapsed}
-                            className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
-                            onClick={() => {
-                              const next = !paramsCollapsed;
-                              setParamsCollapsed(next);
-                              writeParamsCollapsed(next);
-                            }}
-                          >
-                            <ChevronRight
-                              size={12}
-                              strokeWidth={1.5}
-                              className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-                            />
-                            {t("inspector.parameters")}
-                            {filledParamCount > 0 && (
-                              <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
-                            )}
-                          </button>
-                          {!paramsCollapsed && (
-                            <div className="ml-2 border-l border-divider pl-2">
-                              {PARAM_FIELDS.map((key) => (
-                                <div key={key} className="flex items-center justify-between gap-2 py-1">
-                                  <span className="shrink-0 text-caption text-ink-secondary">
-                                    {t(PARAM_LABEL_KEY[key])}
-                                  </span>
-                                  {editableParams.includes(key) ? (
-                                    <ParamInput
-                                      field={key}
-                                      dataId={`inspector-param-${key}`}
-                                      className="min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent"
-                                      value={selectedNode.data[key] ?? ""}
-                                      disabled={
-                                        readOnly ||
-                                        isCostFieldDisabled(
-                                          key,
-                                          selectedNode.data.cost_krw ?? "",
-                                          selectedNode.data.cost_usd ?? "",
-                                        )
-                                      }
-                                      ariaLabel={t(PARAM_LABEL_KEY[key])}
-                                      onCommit={(next) => updateSelectedData({ [key]: next }, true)}
-                                    />
-                                  ) : (
-                                    <span
-                                      data-id={`inspector-param-${key}`}
-                                      className="min-w-0 flex-1 truncate px-1 py-0.5 text-right text-caption text-ink"
-                                    >
-                                      {inheritedParamDisplay(key) || "—"}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                              {selectedNode.data.nodeType === "subprocess" && (
-                                <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                              )}
-                            </div>
+                          </div>
                           )}
                         </div>
+                      )}
+                      {/* 회당 파라미터 — 접기 카드(레이지 세이브·비용 통화 토글). start/end 외 모든 타입에 표시.
+                          subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
+                      {editableParams.length > 0 && (
+                        <NodeMetricsCard
+                          key={`metrics-${selectedNode.id}`}
+                          nodeType={selectedNode.data.nodeType}
+                          values={{
+                            duration: selectedNode.data.duration ?? "",
+                            touch_time: selectedNode.data.touch_time ?? "",
+                            cost_krw: selectedNode.data.cost_krw ?? "",
+                            cost_usd: selectedNode.data.cost_usd ?? "",
+                            headcount: selectedNode.data.headcount ?? "",
+                            annual_count: selectedNode.data.annual_count ?? "",
+                            fte: selectedNode.data.fte ?? "",
+                          }}
+                          editableParams={editableParams}
+                          inheritedDisplay={inheritedParamDisplay}
+                          frequencyFallback={selectedSpRef?.frequency_fallback}
+                          readOnly={readOnly}
+                          onSave={(patch) => updateSelectedData(patch, true)}
+                        />
+                      )}
+                      {/* 인터뷰 승격 상세 — IO(개행 복수)·자료 형식·시작/종료 조건. 레이지 세이브 카드.
+                          subprocess는 링크 맵 sp_* 값을 read-only 상속 렌더 (design 2026-08-19 §5.1) */}
+                      {(selectedNode.data.nodeType === "process" ||
+                        selectedNode.data.nodeType === "decision" ||
+                        selectedNode.data.nodeType === "subprocess") && (
+                        <NodeDetailsCard
+                          key={`details-${selectedNode.id}`}
+                          nodeKey={selectedNode.id}
+                          isSubprocess={selectedNode.data.nodeType === "subprocess"}
+                          values={{
+                            input: selectedNode.data.input ?? "",
+                            output: selectedNode.data.output ?? "",
+                            input_forms: selectedNode.data.input_forms ?? "",
+                            output_forms: selectedNode.data.output_forms ?? "",
+                            output_ids: selectedNode.data.output_ids ?? "",
+                            input_links: selectedNode.data.input_links ?? "",
+                            output_links: selectedNode.data.output_links ?? "",
+                            input_flags: selectedNode.data.input_flags ?? "",
+                            data_form: selectedNode.data.data_form ?? "",
+                            start_condition: selectedNode.data.start_condition ?? "",
+                            end_condition: selectedNode.data.end_condition ?? "",
+                          }}
+                          io={{
+                            originGroupIndexes: ioOriginGroupIndexes,
+                            brokenInputIndexes: ioBrokenInputIndexes,
+                            onImport: (side, at) =>
+                              setIoImport({ side, nodeId: selectedNode.id, at }),
+                            onNavigate: handleIoNavigate,
+                            onHoverItem: handleIoHoverItem,
+                            onPeersMenu: handleIoPeersMenu,
+                            spLinkedInputIndexes: ioSpLinkedInputIndexes,
+                            spLinkedOutputIndexes: ioSpLinkedOutputIndexes,
+                          }}
+                          sp={selectedSpRef}
+                          readOnly={readOnly}
+                          onSave={(patch) => updateSelectedData(patch, true)}
+                        />
                       )}
                       {/* subprocess 노드 — 연결 버전 선택(최신 추종 토글 + 버전 고정 + 업데이트) */}
                       {selectedNode.data.nodeType === "subprocess" &&
@@ -9039,7 +9873,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           />
                         )}
                       {/* 코멘트 — 노드별, 하단 배치(읽기전용에서도 작성 가능). 활동 탭 통합은 R5d */}
-                      <details open className="rounded-md border border-hairline px-3 py-2">
+                      <details open data-acc className="rounded-md border border-hairline px-3 py-2">
                         <summary className="cursor-pointer text-fine font-semibold text-ink">
                           {t("editor.comments")}
                           {selectedComments.some((comment) => !comment.resolved) &&
@@ -9077,11 +9911,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
                         <span className="min-w-0 flex-1 truncate font-medium">
-                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "—"}
+                          {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "-"}
                         </span>
                         <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                         <span className="min-w-0 flex-1 truncate text-right font-medium">
-                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "—"}
+                          {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "-"}
                         </span>
                       </div>
                       {/* 연결면 — 엣지 우클릭 메뉴의 EdgeSidesPad 재사용, 편집 모드에서만 (2026-07-30) */}
@@ -9167,6 +10001,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                           }}
                         />
+                        <NewlineHint />
                       </div>
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.connStyle")}</label>
@@ -9215,6 +10050,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onGoToPublished={(id) => void switchVersion(id)}
                   />
                 }
+                nodeDisplaySlot={
+                  // 속성 탭 빈상태(맵 요약 아래) — 맵 탭과 동일 토글 킷 (사용자 결정 2026-08-20)
+                  <NodeDisplaySection
+                    idPrefix="properties"
+                    displayFields={displayFields}
+                    onToggle={toggleDisplayField}
+                    onSetCategory={setCategoryDisplayFields}
+                  />
+                }
                 subprocessTabSlot={
                   // 지정된 맵에서만 탭 노출 — 지정 메타(버전·시점·행위자) + 역참조 목록
                   spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
@@ -9234,6 +10078,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                       {/* 버전 관리 — 역할/상태 매트릭스 우측 정렬 아이콘 (§6.2) */}
                       <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                        {/* 버전 비교 — 액션 최좌측(사용자 요청 2026-08-25). 게시본 없으면 비활성(하단 CTA와 동일 게이트) */}
+                        <Tooltip
+                          label={
+                            versions.some((version) => version.status === "published")
+                              ? t("inspector.compareVersions")
+                              : t("inspector.compareNeedsPublished")
+                          }
+                        >
+                          <button
+                            type="button"
+                            data-id="map-tab-compare"
+                            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
+                            disabled={!versions.some((version) => version.status === "published")}
+                            onClick={() => router.push(`/maps/${mapId}/compare`)}
+                            aria-label={t("inspector.compareVersions")}
+                          >
+                            <GitCompare size={16} strokeWidth={1.5} />
+                          </button>
+                        </Tooltip>
                         {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약) */}
                         {isEditorRole && !hasDraft && (
                           <Tooltip label={t("editor.newVersion")}>
@@ -9337,76 +10200,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                     </div>
                     <MapInspectorTab mapId={mapId} readOnly={readOnly} />
-                    <div data-id="inspector-node-display-section" className="rounded-md border border-hairline p-3">
+                    <NodeDisplaySection
+                      idPrefix="inspector"
+                      displayFields={displayFields}
+                      onToggle={toggleDisplayField}
+                      onSetCategory={setCategoryDisplayFields}
+                    />
+                    <div data-id="inspector-edge-style-section" className="rounded-md border border-hairline p-3">
                       <button
                         type="button"
-                        aria-expanded={nodeDisplaySectionOpen}
-                        onClick={() => {
-                          if (nodeDisplaySectionOpen) beginInspectorClose("nodeDisplay");
-                          else cancelInspectorClose("nodeDisplay");
-                          setNodeDisplaySectionOpen((v) => !v);
-                        }}
-                        className="flex w-full items-center gap-1.5 text-left"
-                      >
-                        <ChevronRight
-                          size={14}
-                          strokeWidth={1.5}
-                          className={`shrink-0 transition-transform ${nodeDisplaySectionOpen ? "rotate-90" : ""}`}
-                        />
-                        <span className="text-fine font-semibold text-ink">{t("inspector.nodeDisplay")}</span>
-                        <span className="text-fine text-ink-tertiary">· {t("inspector.mapWide")}</span>
-                      </button>
-                      {(nodeDisplaySectionOpen || inspectorClosingKeys.has("nodeDisplay")) && (
-                        <div className={inspectorClosingKeys.has("nodeDisplay") ? "accordion-close" : "accordion-open"}>
-                          <div className="mt-1">
-                            {NODE_DISPLAY_TOGGLES.map((field) => {
-                              const on = displayFields.includes(field);
-                              const Icon = NODE_DISPLAY_ICONS[field];
-                              const labelKey =
-                                field === "assignee"
-                                  ? "field.assignee"
-                                  : field === "department"
-                                    ? "field.department"
-                                    : field === "system"
-                                      ? "field.system"
-                                      : field === "url"
-                                        ? "field.url"
-                                        : "field.params";
-                              return (
-                                <div
-                                  key={field}
-                                  className="flex items-center justify-between py-1 text-caption text-ink-secondary"
-                                >
-                                  <span className="flex items-center gap-1.5">
-                                    <Icon size={14} strokeWidth={1.5} className="text-ink-muted" />
-                                    {t(labelKey)}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={on}
-                                    aria-label={t(labelKey)}
-                                    onClick={() => toggleDisplayField(field)}
-                                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
-                                      on ? "bg-accent" : "bg-border-strong"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all ${
-                                        on ? "left-3.5" : "left-0.5"
-                                      }`}
-                                    />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div data-id="inspector-edge-style-section">
-                      <button
-                        type="button"
+                        data-acc-toggle
                         aria-expanded={edgeStyleSectionOpen}
                         onClick={() => {
                           if (edgeStyleSectionOpen) beginInspectorClose("edgeStyle");
@@ -9496,7 +10299,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           data-id="inspector-generate-complete-doc"
                           onClick={() => completeDocPickerRef.current?.click()}
                           className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx — injects section bookmarks and appends the flowchart page."
+                          title="Pick the original SOP .docx - injects section bookmarks and appends the flowchart page."
                         >
                           <FileText size={16} strokeWidth={1.5} />
                           Generate complete document
@@ -9529,6 +10332,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
                       <button
                         type="button"
+                        data-acc-toggle
                         aria-expanded={editorApprovalsSectionOpen}
                         onClick={() => {
                           if (editorApprovalsSectionOpen) beginInspectorClose("editorApprovals");
@@ -9608,6 +10412,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
                         <button
                           type="button"
+                          data-acc-toggle
                           aria-expanded={approvalWorkflowSectionOpen}
                           onClick={() => {
                             if (approvalWorkflowSectionOpen) beginInspectorClose("approvalWorkflow");
@@ -10063,7 +10868,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           return (
             <ConfirmDialog
               dialogId="edge-style-apply-all"
-              title={`${t("edgeStyle.applyAllTitle")} — ${t(targetOption.labelKey)}`}
+              title={`${t("edgeStyle.applyAllTitle")} - ${t(targetOption.labelKey)}`}
               icon={<TargetIcon size={28} strokeWidth={1.5} />}
               lines={lines}
               confirmLabel={t("edgeStyle.applyAllConfirm")}
@@ -10109,6 +10914,45 @@ function MapEditor({ mapId }: { mapId: number }) {
           onClose={() => {
             setHoveredEdgeId(null);
             setSwapSelect(null);
+          }}
+        />
+      )}
+      {/* IO 항목 불러오기 — 후보는 ioImportCandidates memo(닫혀 있으면 빈 배열, 열림 중 hover 리렌더에 재스캔 없음).
+          선택 즉시 그래프에 커밋(여러 노드를 만지므로 카드 draft로는 표현 불가, io-linking §4-2) */}
+      {ioImport && (
+        <IoImportModal
+          side={ioImport.side}
+          position={ioImport.at}
+          candidates={ioImportCandidates}
+          onHoverCandidate={(candidate) =>
+            setIoHighlight(
+              candidate
+                ? { nodeIds: [candidate.nodeId], edgeIds: candidate.pathEdgeIds }
+                : null,
+            )
+          }
+          onPick={(candidate) => {
+            const result = applyIoImport({
+              nodes: nodesRef.current,
+              edges,
+              spRefs: subprocessRefs,
+              nodeId: ioImport.nodeId,
+              side: ioImport.side,
+              candidate,
+            });
+            setIoImport(null);
+            setIoHighlight(null);
+            if (!result) {
+              return;
+            }
+            recordChange(false);
+            setNodes(result.nodes);
+            scheduleAutoSave();
+            showToast(t(IMPORT_TOAST_KEY[result.action]));
+          }}
+          onClose={() => {
+            setIoImport(null);
+            setIoHighlight(null);
           }}
         />
       )}
@@ -10196,6 +11040,96 @@ function MapEditor({ mapId }: { mapId: number }) {
       />
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
+      {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}
+      {/* GMP 변경 안내 — 닫기(X)가 클릭한 마우스 지점, 분류·노드 색 before→after를 명시 (design 2026-08-20) */}
+      {gmpNotice !== null && (
+        <GmpNoticePopover
+          x={gmpNotice.x}
+          y={gmpNotice.y}
+          prevGmp={gmpNotice.prevGmp}
+          nextGmp={gmpNotice.nextGmp}
+          prevColor={gmpNotice.prevColor}
+          nextColor={gmpNotice.nextColor}
+          onRevertColor={() => {
+            patchNode(gmpNotice.nodeId, { color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onRevertAll={() => {
+            patchNode(gmpNotice.nodeId, { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }, true);
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onClose={() => {
+            setGmpNotice(null);
+            setGmpPreview(null);
+          }}
+          onHoverAction={(action) => {
+            if (action === null) {
+              setGmpPreview(null);
+              return;
+            }
+            // 액션 결과값을 노드에 미리 반영 — color=색만 복원, all=둘 다 복원, confirm=현행 유지
+            const preview =
+              action === "color"
+                ? { gmp: gmpNotice.nextGmp, color: gmpNotice.prevColor }
+                : action === "all"
+                  ? { gmp: gmpNotice.prevGmp, color: gmpNotice.prevColor }
+                  : { gmp: gmpNotice.nextGmp, color: gmpNotice.nextColor };
+            setGmpPreview({ nodeId: gmpNotice.nodeId, ...preview });
+          }}
+        />
+      )}
+      {ioPeersMenu !== null && (
+        <IoPeersMenu
+          position={ioPeersMenu.at}
+          items={ioPeersMenu.items}
+          onHoverPeer={(nodeId) => {
+            if (nodeId === null) {
+              setIoHighlight(null);
+              return;
+            }
+            // 앵커→상대 흐름 경로가 있으면 엣지도 함께(양방향 중 존재하는 쪽) — 없으면 노드만
+            const forward = getFlowPathBetween(edges, ioPeersMenu.anchorId, nodeId);
+            const path = forward.length > 0 ? forward : getFlowPathBetween(edges, nodeId, ioPeersMenu.anchorId);
+            setIoHighlight({ nodeIds: [nodeId], edgeIds: path });
+          }}
+          onPick={(nodeId) => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+            highlightNode(nodeId);
+          }}
+          onClose={() => {
+            setIoPeersMenu(null);
+            setIoHighlight(null);
+          }}
+        />
+      )}
+      {gmpPicker !== null && (
+        <GmpPickerPopup
+          x={gmpPicker.x}
+          y={gmpPicker.y}
+          onClose={() => setGmpPicker(null)}
+          onPick={(value) => {
+            const prevGmp = gmpPickerNode?.data.gmp ?? "";
+            const prevColor = gmpPickerNode?.data.color ?? "";
+            setGmpPicker(null);
+            if (value === prevGmp) return; // 동일 분류 재선택 — 색 리셋 부작용 없이 무시
+            // 분류가 노드 색을 자동 확정 — 미분류 선택은 타입 기본색으로 리셋 (사용자 요청 2026-08-21 #7)
+            const nextColor = getGmpTargetColor(value);
+            patchNode(gmpPicker.nodeId, { gmp: value, color: nextColor }, true);
+            setGmpNotice({
+              nodeId: gmpPicker.nodeId,
+              prevGmp,
+              prevColor,
+              nextGmp: value,
+              nextColor,
+              x: gmpPicker.x,
+              y: gmpPicker.y,
+            });
+          }}
+        />
+      )}
     </NodeActionsContext.Provider>
   );
 }

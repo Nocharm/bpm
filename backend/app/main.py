@@ -15,6 +15,7 @@ from app.clock import now as now_kst
 from app.db import SessionLocal, get_session, init_models
 from app.models import Employee, LoginRecord
 from app.orgchart import load_dept_index, resolve_org_path
+from app.permissions import logic
 from app.permissions.access import can_view_dashboard_db
 from app.permissions.logic import is_sysadmin
 from app.routers import (
@@ -23,6 +24,7 @@ from app.routers import (
     ai_prompts,
     ai_sessions,
     app_settings,
+    auth as auth_router,
     categories,
     embed,
     approvers,
@@ -38,6 +40,7 @@ from app.routers import (
     interviews,
     kb,
     library,
+    local_accounts,
     manual,
     maps,
     notices,
@@ -72,13 +75,19 @@ async def _run_hr_sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # ldap 모드인데 서명키가 없으면 위조가 자유로워진다 — 조용히 뜨는 대신 기동을 막는다 (설계 §7)
+    if settings.resolved_auth_mode() == "ldap" and not settings.auth_jwt_secret:
+        raise RuntimeError("AUTH_MODE=ldap requires AUTH_JWT_SECRET to be set")
     await init_models()
-    # 로컬(인증 OFF)은 임시 유저 5명 시드 — role별 테스트용
-    if not settings.auth_enabled:
+    # 로컬(dev 모드)은 임시 유저 5명 시드 — role별 테스트용. ldap/keycloak은 실 계정을 쓰므로 시드 금지.
+    if settings.resolved_auth_mode() == "dev":
         from app.ad.service import seed_local_employees
 
         async with SessionLocal() as session:
             await seed_local_employees(session)
+    # 설정 화면 부여 sysadmin 캐시 로드 — 기동 시 1회 (설계 §3.1)
+    async with SessionLocal() as session:
+        await logic.load_granted_sysadmins(session)
     hr_task: asyncio.Task | None = None
     if settings.hr_enabled and settings.hr_sync_interval_hours > 0:
         hr_task = asyncio.create_task(_run_hr_sync_loop())
@@ -93,6 +102,7 @@ app.include_router(ai.router)
 app.include_router(ai_sessions.router)
 app.include_router(app_settings.router)
 app.include_router(ai_prompts.router)
+app.include_router(auth_router.router)
 app.include_router(categories.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
@@ -112,6 +122,7 @@ app.include_router(kb.router)
 app.include_router(manual.router)
 app.include_router(dashboard.router)
 app.include_router(library.router)
+app.include_router(local_accounts.router)
 app.include_router(permissions.router)
 app.include_router(groups.router)
 
@@ -126,8 +137,8 @@ async def get_me(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MeOut:
-    # 인증 ON + HR 웹훅 설정 시 로그인 시점 1인 동기화 — 하루 1회 스로틀은 서비스가 담당 (design §6)
-    if settings.auth_enabled and settings.hr_enabled:
+    # 실 인증(keycloak/ldap) + HR 웹훅 설정 시 로그인 시점 1인 동기화 — 하루 1회 스로틀은 서비스가 담당 (design §6)
+    if settings.resolved_auth_mode() != "dev" and settings.hr_enabled:
         from app.hr.service import sync_one
 
         await sync_one(session, login_id)

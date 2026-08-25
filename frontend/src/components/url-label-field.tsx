@@ -11,22 +11,28 @@ import { useI18n } from "@/lib/i18n";
 
 const PILL_CLASS =
   "flex min-w-0 max-w-full items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink";
-const INPUT_CLASS =
-  "min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink " +
-  "hover:bg-surface-alt focus:bg-surface-alt focus:outline-none disabled:hover:bg-transparent";
+const READONLY_INPUT_CLASS =
+  "min-w-0 flex-1 truncate rounded-sm bg-transparent px-1 py-0.5 text-right text-caption text-ink focus:outline-none";
 
 export function UrlLabelField({
   url,
   urlLabel,
   readOnly,
+  inputWidth = "w-32",
   onChange,
 }: {
   url: string;
   urlLabel: string;
   readOnly: boolean;
+  // 편집 입력 통일 폭 — 인스펙터 w-32(기본), 편집 모달 w-44 (사용자 결정 2026-08-20)
+  inputWidth?: string;
   onChange: (patch: { url?: string; urlLabel?: string }) => void;
 }) {
   const { t } = useI18n();
+  // 편집 가능이면 입력 영역 상시 노출 + 통일 폭 + 포커스 보더 (사용자 결정 2026-08-20)
+  const inputClass = readOnly
+    ? READONLY_INPUT_CLASS
+    : `${inputWidth} min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none`;
   const [urlDraft, setUrlDraft] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
 
@@ -62,7 +68,7 @@ export function UrlLabelField({
         ) : (
           <input
             data-id="url-field-input"
-            className={INPUT_CLASS}
+            className={inputClass}
             placeholder={t("urlField.addUrl")}
             maxLength={500}
             disabled={readOnly}
@@ -76,8 +82,9 @@ export function UrlLabelField({
         )}
       </div>
       {url.trim() !== "" && (
-        <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-          <span className="shrink-0 text-caption text-ink-secondary">{t("field.urlLabel")}</span>
+        /* 링크 라벨 — URL의 하위 항목: 한 단 더 들여쓰기 + 축소 글자 (사용자 결정 2026-08-20) */
+        <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
+          <span className="shrink-0 text-fine text-ink-tertiary">{t("field.urlLabel")}</span>
           {urlLabel ? (
             <span data-id="url-label-pill" className={PILL_CLASS} title={urlLabel}>
               <span className="truncate">{urlLabel}</span>
@@ -95,7 +102,7 @@ export function UrlLabelField({
           ) : (
             <input
               data-id="url-label-input"
-              className={INPUT_CLASS}
+              className={`${inputClass} !text-fine`}
               placeholder={t("urlField.addLabel")}
               maxLength={100}
               disabled={readOnly}

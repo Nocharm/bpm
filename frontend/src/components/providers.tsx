@@ -2,10 +2,11 @@
 
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { AuthLoadingScreen } from "@/components/auth-loading";
-import { getMe, setAuthToken, setDevUser } from "@/lib/api";
+import { ApiError, getMe, setAuthToken, setDevUser } from "@/lib/api";
+import { getCachedAuthMode, type AuthModeInfo } from "@/lib/auth-mode";
 import {
   clearAuthRetry,
   clearAutoLoginSkip,
@@ -17,18 +18,17 @@ import {
 } from "@/lib/auth-return";
 import { setCurrentUser } from "@/lib/current-user";
 import { getStoredDevUser } from "@/lib/dev-auth";
+import { clearLdapToken, getStoredLdapToken } from "@/lib/ldap-session";
 
 const subscribe = () => () => {};
 function useMounted(): boolean {
   return useSyncExternalStore(subscribe, () => true, () => false);
 }
 
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
-
-function buildOidcConfig() {
+function buildOidcConfig(info: AuthModeInfo) {
   return {
-    authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
-    client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
+    authority: info.keycloakIssuer,
+    client_id: info.keycloakClientId,
     redirect_uri: window.location.origin,
     // signinRedirect(keycloak-login.ts)와 짝 — 평문 HTTP 접속 위해 PKCE 비활성(crypto.subtle 회피).
     disablePKCE: true,
@@ -47,8 +47,9 @@ function isLoginRequiredError(err: unknown): boolean {
   return code === "login_required" || code === "interaction_required";
 }
 
-// 로그인 후 /api/me로 표시 프로필 + role 발행
-async function publishMe(): Promise<void> {
+// 로그인 후 /api/me로 표시 프로필 + role 발행. onUnauthorized는 401(토큰 거부)에서만 호출 —
+// LdapGate가 만료 아닌 서버측 거부(비밀번호 변경 등)를 감지해 저장된 토큰을 정리하고 재로그인시킨다.
+async function publishMe(onUnauthorized?: () => void): Promise<void> {
   try {
     const me = await getMe();
     setCurrentUser({
@@ -62,8 +63,11 @@ async function publishMe(): Promise<void> {
       managerIds: me.manager_ids ?? [],
       canViewDashboard: me.can_view_dashboard ?? false,
     });
-  } catch {
+  } catch (e) {
     setCurrentUser(null);
+    if (onUnauthorized && e instanceof ApiError && e.status === 401) {
+      onUnauthorized();
+    }
   }
 }
 
@@ -171,16 +175,71 @@ function DevGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-export function Providers({ children }: { children: ReactNode }) {
-  const mounted = useMounted();
-  if (!mounted) {
+function LdapGate({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const stored = getStoredLdapToken();
+
+  // 렌더 단계에서 동기 반영 — 자식의 fetch effect가 게이트 effect보다 먼저 도는 레이스 방지
+  // (DevGate와 같은 이유. 위 주석 참조).
+  setAuthToken(stored);
+
+  useEffect(() => {
+    if (stored) {
+      void publishMe(() => {
+        // 서버가 토큰을 거부(401, 만료 외의 사유) — 그대로 두면 이후 요청도 계속 401 루프이므로
+        // 즉시 정리하고 로그인 카드로 되돌린다.
+        clearLdapToken();
+        setAuthToken(null);
+        if (pathname !== "/login") {
+          saveReturnTo(pathname + window.location.search);
+        }
+        router.replace("/login");
+      });
+    } else {
+      setCurrentUser(null);
+      if (pathname !== "/login") {
+        saveReturnTo(pathname + window.location.search);
+        router.replace("/login");
+      }
+    }
+  }, [stored, pathname, router]);
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
+  if (!stored) {
     return null;
   }
-  if (!AUTH_ENABLED) {
+  return <>{children}</>;
+}
+
+export function Providers({ children }: { children: ReactNode }) {
+  const mounted = useMounted();
+  const [modeInfo, setModeInfo] = useState<AuthModeInfo | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void getCachedAuthMode().then((info) => {
+      if (alive) setModeInfo(info);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!mounted || modeInfo === null) {
+    // 모드가 정해지기 전에 자식을 그리면 인증 없이 API를 때리는 창이 생긴다.
+    return <AuthLoadingScreen />;
+  }
+  if (modeInfo.mode === "dev") {
     return <DevGate>{children}</DevGate>;
   }
+  if (modeInfo.mode === "ldap") {
+    return <LdapGate>{children}</LdapGate>;
+  }
   return (
-    <AuthProvider {...buildOidcConfig()}>
+    <AuthProvider {...buildOidcConfig(modeInfo)}>
       <AuthGate>{children}</AuthGate>
     </AuthProvider>
   );

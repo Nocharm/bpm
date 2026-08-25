@@ -51,7 +51,6 @@ const hasBaesong = panelTexts.some((t) => t.includes("배송"));
 
 // 자기 자신(map 3) 행이 disabled(opacity-40)인지 확인
 const selfDisabled = await page.evaluate(() => {
-  const all = [...document.querySelectorAll("[draggable]")];
   // draggable=false 이거나 opacity-40 클래스를 가진 행이 "주문 이행" 텍스트를 포함하면 비활성
   const selfRow = [...document.querySelectorAll("div")].find(
     (el) => el.textContent?.trim() === "주문 이행" && el.className.includes("opacity-40")

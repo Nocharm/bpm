@@ -29,6 +29,8 @@ class CanonicalParams(BaseModel):
     # 파서 단계에서 막는다. input/output은 무상한 — sp_input/sp_output은 Text(자유 텍스트,
     # design §2.2), 실제 값은 문장 단위라 50자 상한을 걸면 정상 데이터가 거부된다.
     duration: str = Field(default="", max_length=50)
+    # 7번째 회당 파라미터 — duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+    touch_time: str = Field(default="", max_length=50)
     cost_krw: str = Field(default="", max_length=50)
     cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
@@ -47,6 +49,11 @@ class CanonicalNode(BaseModel):
     assignee: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     seq: int = 0
+    # 인터뷰 승격 필드 — IO는 개행 구분 복수, 폭 상한은 Node 컬럼과 동기 (design 2026-08-19 §1.1)
+    input: str = ""
+    output: str = ""
+    data_form: str = Field(default="", max_length=50)
+    system_fallback: str = Field(default="", max_length=200)
     # 인터뷰 어댑터가 KV 직렬화를 싣는다 — Node.description은 Text, 캡 금지 (design 2026-08-18 §3)
     description: str = ""
     # 노드 stroke 색("#RRGGBB" 또는 "") — Node.color는 String(20). 예외 variant 표식용 (2026-08-19)
@@ -73,6 +80,15 @@ class CanonicalMap(BaseModel):
     approvers: list[Annotated[str, Field(max_length=100)]] = []  # MapApprover.user_id는 String(100)
     # ProcessMap.owning_department는 String(200)이지만 sp_department는 String(100) — 좁은 쪽에 맞춘다
     department: str = Field(default="", max_length=100)
+    # 인터뷰 승격 필드 — 대표(system·조건)+폴백 원문, 폭 상한은 sp_ 컬럼과 동기 (design 2026-08-19 §1.2)
+    system: str = Field(default="", max_length=100)
+    start_condition: str = ""
+    end_condition: str = ""
+    gmp_fallback: str = ""
+    frequency_fallback: str = Field(default="", max_length=200)
+    total_time_fallback: str = Field(default="", max_length=200)
+    touch_time_fallback: str = Field(default="", max_length=200)
+    system_fallback: str = Field(default="", max_length=200)
     visibility: Literal["public", "private"] = "public"
     # 인터뷰 fields KV 직렬화 착지 — ProcessMap.description(Text), 캡 금지 (design 2026-08-18 §3)
     description: str = ""

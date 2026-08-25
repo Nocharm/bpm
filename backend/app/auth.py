@@ -1,7 +1,8 @@
-"""Keycloak OIDC 인증 — Bearer JWT 검증 (docs/spec.md §4).
+"""요청 사용자 인증 — 모드별 토큰 검증 (docs/spec.md §4).
 
-settings.auth_enabled=False(로컬)면 검증을 건너뛰고 dev 사용자를 반환한다.
-True(서버)면 realm JWKS로 RS256 서명을 검증한다.
+settings.resolved_auth_mode()로 분기한다: dev는 X-Dev-User(없으면 dev_user)를 그대로
+신뢰, ldap은 앱이 서명한 HS256 세션 토큰(app.tokens)을 검증, keycloak은 realm JWKS로
+RS256 서명을 검증한다(ldap·keycloak 모두 Bearer 토큰 필수, X-Dev-User는 무시).
 """
 
 from functools import lru_cache
@@ -9,6 +10,7 @@ from functools import lru_cache
 import jwt
 from fastapi import Depends, Header, HTTPException
 
+from app import tokens
 from app.permissions.logic import is_sysadmin
 from app.settings import settings
 
@@ -23,14 +25,25 @@ def get_current_user(
     authorization: str | None = Header(default=None),
     x_dev_user: str | None = Header(default=None),
 ) -> str:
-    """요청 사용자 loginId. auth OFF면 X-Dev-User(없으면 dev_user), ON이면 JWT preferred_username."""
-    if not settings.auth_enabled:
-        return x_dev_user or settings.dev_user  # 헤더는 auth OFF에서만 신뢰
+    """요청 사용자 loginId. 모드별로 검증기만 다르고 반환 계약은 같다 (설계 §4)."""
+    mode = settings.resolved_auth_mode()
+    if mode == "dev":
+        return x_dev_user or settings.dev_user  # 헤더는 dev 모드에서만 신뢰
 
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
-
     token = authorization.removeprefix("Bearer ")
+
+    if mode == "ldap":
+        try:
+            return tokens.decode_access_token(token)
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return _decode_keycloak_token(token)
+
+
+def _decode_keycloak_token(token: str) -> str:
+    """realm JWKS로 RS256 검증 — 기존 동작 그대로."""
     try:
         signing_key = _jwk_client().get_signing_key_from_jwt(token)
         claims = jwt.decode(
@@ -44,7 +57,6 @@ def get_current_user(
         )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail=f"invalid token: {exc}") from exc
-
     username = claims.get("preferred_username") or claims.get("sub")
     if not username:
         raise HTTPException(status_code=401, detail="token has no subject")

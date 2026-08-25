@@ -241,7 +241,7 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 **Settings → Framework → Categories & import** (sysadmin only) manages the work-framework category tree.
 
 - **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted.
-- **Interview import** — upload the consultant-delivered L5 interview result JSON files (multiple files at once), check the per-file validation report (errors / warnings / unknown-key paths) and the impact (created / updated / unchanged / notes) with **Dry run**, then **Apply**. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe. Per-task exception rules and VOC land in each map's **Notes** section (map detail card and editor inspector).
+- **Interview import** — upload the consultant-delivered L5 interview result JSON files (multiple files at once), check the per-file validation report (errors / warnings / unknown-key paths) and the impact (created / updated / unchanged / notes) with **Dry run**, then **Apply**. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe. Per-task exception rules and VOC land in each map's **Notes** section (map detail card and editor inspector). Interview fields land as real fields — an activity's input/output/data form/system go to node fields, and start/end conditions, total time (min), touch time (min), and systems go to map fields, while the free-text originals (GMP, frequency, time wording) are kept as **fallbacks** shown behind the speech-bubble icon next to each field. Classify GMP (GMP Direct / Indirect / Non-GMP) and settle conditions/times in **Map Settings → Details → Conditions & GMP**; the GMP you select survives redeliveries. Open items and per-task notes are also preserved as notes.
 
 ---
 
@@ -250,8 +250,8 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | Variable | Where | Effect |
 | --- | --- | --- |
 | `BPM_SYSADMINS` | backend `.env` | Comma-separated login IDs granted sysadmin |
-| `AUTH_ENABLED` | backend `.env` | Enable Keycloak JWT verification |
-| `NEXT_PUBLIC_AUTH_ENABLED` | frontend env | Enable the Keycloak login flow in the UI |
+| `AUTH_MODE` | backend `.env` | Auth mode — `keycloak` \| `ldap` \| `dev`. Empty falls back to legacy `AUTH_ENABLED` (`true`→keycloak, `false`→dev). The frontend has no build-time equivalent — it reads the resolved mode at boot from `GET /api/auth/mode` |
+| `AUTH_ENABLED` | backend `.env` | Legacy on/off switch, superseded by `AUTH_MODE` — kept for backward compatibility |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | Enforce RBAC locally even with auth off |
 | `MANUAL_URL` | `.env` (compose) | Manual-site button on the editor toolbar — hidden when empty |
 | `N8N_HR_URL` | backend `.env` | n8n HR webhook URL (single source for people and org chart) — sync activates only with the token set too |

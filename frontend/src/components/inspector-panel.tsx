@@ -5,6 +5,8 @@
 import {
   Boxes,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleCheck,
   FileUp,
   GitCompare,
@@ -17,8 +19,9 @@ import {
   Workflow,
 } from "lucide-react";
 import Link from "next/link";
-import { type ComponentType, type ReactNode, useState } from "react";
+import { type ComponentType, type ReactNode, useEffect, useRef, useState } from "react";
 
+import { Tooltip } from "@/components/tooltip";
 import { useI18n } from "@/lib/i18n";
 import { type MessageKey } from "@/lib/i18n-messages";
 
@@ -59,10 +62,14 @@ interface InspectorPanelProps {
   importSlot?: ReactNode;
   // 탭을 강제 고정(프리뷰 중). 내부 상태 대신 이 값이 이긴다.
   forcedTab?: InspectorTab;
+  // 노드 더블클릭 신호(논스) — 바뀔 때마다 속성 탭으로 전환 (사용자 요청 2026-08-25)
+  propertiesTabNonce?: number;
   // 다른 탭·접기 잠금 — 프리뷰를 두고 빠져나가 자동저장 꺼진 상태에 갇히는 걸 막는다
   lockTabs?: boolean;
   // 서브프로세스 지정 카드 — 속성 빈상태·맵 탭 공용. page.tsx 주입.
   subprocessSlot?: ReactNode;
+  // Node display 토글 섹션 — 속성 빈상태(맵 요약 아래) 노출. page.tsx 주입 (2026-08-20)
+  nodeDisplaySlot?: ReactNode;
   // Subprocess 탭(지정 메타+역참조 목록) — 지정된 맵에서만 슬롯이 오고, 있을 때만 탭이 나타난다
   subprocessTabSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
@@ -81,6 +88,7 @@ interface InspectorPanelProps {
 }
 
 export function InspectorPanel({
+  propertiesTabNonce,
   onCollapse,
   mapId,
   canCompare,
@@ -93,6 +101,7 @@ export function InspectorPanel({
   forcedTab,
   lockTabs,
   subprocessSlot,
+  nodeDisplaySlot,
   subprocessTabSlot,
   mapName,
   mapVersionMarker,
@@ -108,6 +117,12 @@ export function InspectorPanel({
 }: InspectorPanelProps) {
   const { t } = useI18n();
   const [internalTab, setInternalTab] = useState<InspectorTab>("properties");
+  // 노드 더블클릭 → 속성 탭 전환 — 렌더 중 상태 조정(외부 논스 비교, link-preview-panel과 같은 패턴)
+  const [seenPropertiesNonce, setSeenPropertiesNonce] = useState(propertiesTabNonce ?? 0);
+  if ((propertiesTabNonce ?? 0) !== seenPropertiesNonce) {
+    setSeenPropertiesNonce(propertiesTabNonce ?? 0);
+    setInternalTab("properties");
+  }
   // 지정 해제로 슬롯이 사라지면 열려 있던 subprocess 탭을 Map 탭으로 폴백(렌더 파생 — effect 불요)
   const rawTab = forcedTab ?? internalTab;
   const tab = rawTab === "subprocess" && !subprocessTabSlot ? "map" : rawTab;
@@ -116,6 +131,53 @@ export function InspectorPanel({
     ...(subprocessTabSlot ? [SUBPROCESS_TAB] : []),
     ...(importSlot ? [IMPORT_TAB] : []),
   ];
+
+  // 탭 콘텐츠의 아코디언 일괄 접기/펼치기 — 상태가 여러 컴포넌트에 흩어져 있어 DOM 컨벤션으로 수렴:
+  // 헤더 버튼 data-acc-toggle(aria-expanded) + <details data-acc>. 활성 탭만 마운트되므로
+  // 컨테이너 쿼리가 곧 "해당 탭의" 아코디언이다 (사용자 결정 2026-08-20).
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [anySectionOpen, setAnySectionOpen] = useState(false);
+  useEffect(() => {
+    const root = contentRef.current;
+    if (root === null) return;
+    const compute = () => {
+      let open = false;
+      root.querySelectorAll('button[data-acc-toggle]').forEach((b) => {
+        if (b.getAttribute("aria-expanded") === "true") open = true;
+      });
+      root.querySelectorAll("details[data-acc]").forEach((d) => {
+        if ((d as HTMLDetailsElement).open) open = true;
+      });
+      setAnySectionOpen(open);
+    };
+    // 초기 판정은 rAF로 미뤄 effect 내 동기 setState 회피(react-hooks/set-state-in-effect)
+    const raf = requestAnimationFrame(compute);
+    const observer = new MutationObserver(compute);
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["aria-expanded", "open"],
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, []);
+  const toggleAllSections = () => {
+    const root = contentRef.current;
+    if (root === null) return;
+    const toggles = [...root.querySelectorAll<HTMLButtonElement>("button[data-acc-toggle]")];
+    const detailsEls = [...root.querySelectorAll<HTMLDetailsElement>("details[data-acc]")];
+    const anyOpen =
+      toggles.some((b) => b.getAttribute("aria-expanded") === "true") ||
+      detailsEls.some((d) => d.open);
+    // 하나라도 펼쳐져 있으면 모두 접기, 모두 접혀 있으면 모두 펼치기
+    for (const b of toggles) {
+      if ((b.getAttribute("aria-expanded") === "true") === anyOpen) b.click();
+    }
+    for (const d of detailsEls) d.open = !anyOpen;
+  };
 
   return (
     // @container — 패널 폭 기준 컨테이너 쿼리(탭 라벨 전체 펼침 판정용, ≥430px면 전 탭 라벨)
@@ -142,8 +204,11 @@ export function InspectorPanel({
               title={t(labelKey)}
               aria-label={t(labelKey)}
               aria-pressed={active}
+              // 폭 부족 시 비선택 탭이 먼저 줄고(말줄임) 선택 탭 라벨은 지키지 않는다 (사용자 결정 2026-08-20)
               className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${
-                active ? "bg-accent-tint font-medium text-accent" : "text-ink-secondary hover:bg-surface-alt"
+                active
+                  ? "shrink-0 bg-accent-tint font-medium text-accent"
+                  : "min-w-0 text-ink-secondary hover:bg-surface-alt"
               }`}
               onClick={() => setInternalTab(key)}
             >
@@ -153,14 +218,33 @@ export function InspectorPanel({
                   active ? "grid-cols-[1fr]" : "grid-cols-[0fr]"
                 }`}
               >
-                <span className="overflow-hidden whitespace-nowrap">{t(labelKey)}</span>
+                <span className="truncate">{t(labelKey)}</span>
               </span>
             </button>
           );
         })}
+        {/* 아코디언 일괄 접기/펼치기 — 아이콘 전용 + 호버 툴팁 (사용자 결정 2026-08-20) */}
+        <Tooltip
+          label={t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+          className="ml-auto shrink-0"
+        >
+          <button
+            type="button"
+            data-id="inspector-toggle-all-sections"
+            aria-label={t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+            className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            onClick={toggleAllSections}
+          >
+            {anySectionOpen ? (
+              <ChevronsDownUp size={16} strokeWidth={1.5} />
+            ) : (
+              <ChevronsUpDown size={16} strokeWidth={1.5} />
+            )}
+          </button>
+        </Tooltip>
       </div>
 
-      <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-4">
+      <div ref={contentRef} className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-4">
         {tab === "properties" && selectionKind === null && (
           <PropertiesEmpty
             readOnly={readOnly}
@@ -175,6 +259,7 @@ export function InspectorPanel({
             mapVersionMarker={mapVersionMarker}
             versionControl={versionControl}
             subprocessSlot={subprocessSlot}
+            nodeDisplaySlot={nodeDisplaySlot}
           />
         )}
         {tab === "properties" &&
@@ -234,6 +319,7 @@ function PropertiesEmpty({
   mapVersionMarker,
   versionControl,
   subprocessSlot,
+  nodeDisplaySlot,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId" | "canCompare">) {
   const { t } = useI18n();
   const action =
@@ -281,6 +367,9 @@ function PropertiesEmpty({
         <SummaryRow icon={LayoutGrid} label={t("inspector.sumSubprocess")} value={`${subprocessCount}`} />
         <SummaryRow icon={Boxes} label={t("inspector.sumSaved")} value={saveLabel} muted />
       </div>
+
+      {/* Node display 토글 — 맵 탭과 동일 섹션(맵 요약 바로 아래, 사용자 결정 2026-08-20) */}
+      {nodeDisplaySlot}
 
       {/* 서브프로세스 지정 카드 — 다른 맵 연결 절차 안내 + 상태/설정 */}
       {subprocessSlot}

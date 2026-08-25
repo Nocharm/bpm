@@ -12,6 +12,13 @@ class Settings(BaseSettings):
 
     # 인증 — 로컬은 Keycloak 접근 불가하므로 기본 비활성(우회). 서버에서만 True.
     auth_enabled: bool = False
+    # 인증 모드 — keycloak(운영 OIDC) | ldap(사내 AD 직접 인증) | dev(로컬 우회).
+    # 비우면 아래 auth_enabled로 유도한다(기존 .env 무수정 동작).
+    auth_mode: str = ""
+    # ldap 모드 세션 토큰 서명키 — 유출 시 전 계정 위조 가능. .env 전용, 커밋 금지.
+    auth_jwt_secret: str = ""
+    # 발급 토큰 수명(시간). 무상태라 만료 전 강제 로그아웃이 불가하므로 짧게 유지한다.
+    auth_jwt_ttl_hours: int = 8
     # dev-only: auth OFF에서도 X-Dev-User의 실제 권한을 계산해 로컬 역할 검증.
     # 기본 False = 현행 동작(전원 sysadmin). True로 설정 시 BPM_SYSADMINS 외엔 실제 역할 적용.
     dev_enforce_permissions: bool = False
@@ -19,6 +26,8 @@ class Settings(BaseSettings):
     keycloak_issuer: str = ""
     # 토큰 aud 검증값. 비우면 aud 검증 생략 (Keycloak 기본 토큰은 aud=account 등 가변)
     keycloak_audience: str | None = None
+    # 프론트가 OIDC 클라이언트로 쓸 id — 비밀 아님(브라우저 노출값)
+    keycloak_client_id: str = ""
     # auth 비활성 시 created_by에 기록할 개발용 사용자명
     dev_user: str = "local-dev"
 
@@ -79,6 +88,15 @@ class Settings(BaseSettings):
     # (2026-08 9910 검증 확정). departments 체인 해석에만 적용, employees org 컬럼·폴백은 원본 보존.
     # 비즈니스 상수 — env 미노출 (rules/backend/config.md).
     org_trim_levels: int = 2
+
+    def resolved_auth_mode(self) -> str:
+        """항상 keycloak|ldap|dev 중 하나. auth_mode가 비면 구 auth_enabled로 유도."""
+        raw = self.auth_mode.strip().lower()
+        if not raw:
+            return "keycloak" if self.auth_enabled else "dev"
+        if raw not in ("keycloak", "ldap", "dev"):
+            raise ValueError(f"unknown AUTH_MODE: {self.auth_mode!r}")
+        return raw
 
     @property
     def ldap_enabled(self) -> bool:

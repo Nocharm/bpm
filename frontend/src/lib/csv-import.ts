@@ -66,43 +66,56 @@ export interface CsvImportContext {
   base?: Graph;
 }
 
-// 14컬럼 스키마 (design 2026-07-13 §5.1) — 순서는 Cost_KRW/Cost_USD/Headcount/Annual_Count/FTE
+// 20컬럼 스키마 (design 2026-07-13 §5.1, 승격 필드 2026-08-19) — Input/Output은 셀 내 개행으로 복수.
+// 폴백 컬럼(system_fallback 등)은 CSV 표면 제외 — 병합이 기존값을 보존한다 (design 2026-08-19 §3)
 const HEADER_COLUMNS = [
-  "name", "description", "assignee", "department", "system", "duration",
-  "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor", "next",
+  "name", "description", "assignee", "department", "system", "duration", "touch_time",
+  "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+  "input", "input_flags", "output", "data_form", "start_condition", "end_condition",
+  "url", "url_label", "section_anchor", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
 // 데이터 행 상한 — 초대형 파일 오업로드 방지
 const MAX_DATA_ROWS = 500;
-// 백엔드 NodeIn 제약 미러. description은 NodeIn에 max_length가 없고 Node.description이 Text 컬럼이라 제외한다.
-const MAX_LEN: Record<Exclude<HeaderColumn, "next" | "description">, number> = {
+// 백엔드 NodeIn 제약 미러. description·input/output·조건은 Text 컬럼(무상한)이라 제외한다.
+const MAX_LEN: Record<
+  Exclude<HeaderColumn, "next" | "description" | "input" | "input_flags" | "output" | "start_condition" | "end_condition">,
+  number
+> = {
   name: 200,
   assignee: 100,   // NodeIn.assignee — 해석된 "이름" 문자열 기준
   department: 100, // NodeIn.department
   system: 100,
   duration: 50,
+  touch_time: 50,
   cost_krw: 50,
   cost_usd: 50,
   headcount: 50,
   annual_count: 50,
   fte: 50,
+  data_form: 50,
   url: 500,
   url_label: 100,
   section_anchor: 200, // backend models.py Node.section_anchor String(200) 미러
 };
 
-// 십진 파라미터 컬럼(duration 제외 — 별도 H.MM 검증) — 에러 문구는 컬럼명이 아닌 사람이 읽는 라벨로.
+// 십진 파라미터 컬럼(duration·touch_time 제외 — 별도 H.MM 검증) — 에러 문구는 사람이 읽는 라벨로.
 // ParamField(lib/params.ts)와 라벨을 공유해 인스펙터/요약 표시와 문구가 드리프트하지 않게 한다.
 const NUMERIC_COLUMNS = ["cost_krw", "cost_usd", "headcount", "annual_count", "fte"] as const;
 const PARAM_FIELD_LABEL: Record<ParamField, string> = {
   duration: "Duration",
+  touch_time: "Touch time",
   cost_krw: "Cost (KRW)",
   cost_usd: "Cost (USD)",
   headcount: "Headcount",
   annual_count: "Annual volume",
   fte: "FTE",
 };
+
+// SP 노드에서 링크 맵이 원천인 텍스트 필드 — CSV/AI 후보를 드롭하고 기존값 유지 (design 2026-08-19 §3)
+const SP_INHERITED_TEXT_FIELDS = ["input", "output", "data_form", "start_condition", "end_condition"] as const;
+type SpInheritedTextField = (typeof SP_INHERITED_TEXT_FIELDS)[number];
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -173,11 +186,25 @@ const NODE_DEFAULTS = {
   department: "",
   system: "",
   duration: "",
+  touch_time: "",
   cost_krw: "",
   cost_usd: "",
   headcount: "",
   annual_count: "",
   fte: "",
+  input: "",
+  output: "",
+  input_forms: "",  // CSV/AI 표면 제외 — 항목별 폼, 병합은 기존값 보존 (2026-08-20)
+  output_forms: "",
+  output_ids: "",  // CSV/AI 표면 제외 — IO 링크 (io-linking §3)
+  input_links: "",
+  output_links: "",
+  input_flags: "",
+  data_form: "",
+  start_condition: "",
+  end_condition: "",
+  system_fallback: "",
+  gmp: "",  // CSV/AI 표면 제외 — 검토값, 병합은 기존값 보존 (design 2026-08-20)
   url: "",
   url_label: "",
   section_anchor: "",
@@ -193,6 +220,13 @@ const NODE_DEFAULTS = {
 // 빈 값은 "건드리지 않음" — 제안/CSV가 모르는 속성이 기존 값을 지우지 않게 (CSV·AI 병합 공용)
 const pick = (next: string, existing: string): string => (next === "" ? existing : next);
 
+// Input_Flags를 대상 Input 줄 수에 맞춰 자름 — 초과 줄의 고아 값 방지, 후행 공백 줄 소거 (io-linking §3)
+const alignFlagLines = (flags: string, text: string): string => {
+  if (flags === "") return "";
+  const count = text === "" ? 0 : text.split("\n").length;
+  return flags.split("\n").slice(0, count).join("\n").replace(/\s+$/, "");
+};
+
 // 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
 // 서브프로세스 노드는 node_type도 보존 — 추론/제안값으로 덮으면 Call Activity 렌더가 깨진다.
 // 서브프로세스는 duration/cost_krw/cost_usd/headcount가 링크 맵 지정값(읽기전용)이라 CSV/AI 값을
@@ -200,16 +234,41 @@ const pick = (next: string, existing: string): string => (next === "" ? existing
 const mergeNode = (
   existing: GraphNode | null,
   next: GraphNode,
-): { node: GraphNode; droppedParamFields: ParamField[] } => {
-  if (existing === null) return { node: next, droppedParamFields: [] };
+): { node: GraphNode; droppedParamFields: ParamField[]; droppedTextFields: (SpInheritedTextField | "input_flags")[] } => {
+  if (existing === null) {
+    // 신규 노드도 flags를 자기 Input 줄 수에 정렬 — CSV가 초과 줄을 실어도 고아 값이 안 남게
+    return {
+      node: { ...next, input_flags: alignFlagLines(next.input_flags ?? "", next.input ?? "") },
+      droppedParamFields: [],
+      droppedTextFields: [],
+    };
+  }
   const { allowed, droppedFields } = dropUneditableParams(existing.node_type, {
     duration: next.duration,
+    touch_time: next.touch_time ?? "",
     cost_krw: next.cost_krw ?? "",
     cost_usd: next.cost_usd ?? "",
     headcount: next.headcount ?? "",
     annual_count: next.annual_count ?? "",
     fte: next.fte ?? "",
   });
+  // SP 노드의 IO/조건/형식은 링크 맵이 원천(read-only 상속) — 후보를 드롭하고 기존값 유지.
+  // system_fallback은 CSV/AI 표면 제외라 항상 기존값(...existing 스프레드)이 남는다 (design 2026-08-19 §3)
+  const isSubprocess = existing.node_type === "subprocess";
+  // SP는 IO 자체가 링크 맵 상속이라 플래그도 무의미 — 제공 시 함께 드롭·경고 (io-linking §3)
+  const droppedTextFields: (SpInheritedTextField | "input_flags")[] = isSubprocess
+    ? [
+        ...SP_INHERITED_TEXT_FIELDS.filter((f) => (next[f] ?? "") !== ""),
+        ...((next.input_flags ?? "") !== "" ? (["input_flags"] as const) : []),
+      ]
+    : [];
+  const nextFlags = isSubprocess ? "" : (next.input_flags ?? "");
+  const mergedText = Object.fromEntries(
+    SP_INHERITED_TEXT_FIELDS.map((f) => [
+      f,
+      isSubprocess ? existing[f] ?? "" : pick(next[f] ?? "", existing[f] ?? ""),
+    ]),
+  ) as Record<SpInheritedTextField, string>;
   // 통화 전환은 편도 pick이 아니라 반대쪽을 함께 비우는 병합 — resolveCostFields(finding: 한쪽만
   // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
   const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
@@ -234,19 +293,58 @@ const mergeNode = (
       department: pick(next.department, existing.department),
       system: pick(next.system, existing.system),
       duration: pick(allowed.duration ?? "", existing.duration),
+      touch_time: pick(allowed.touch_time ?? "", existing.touch_time ?? ""),
       cost_krw: cost.cost_krw,
       cost_usd: cost.cost_usd,
       headcount: pick(allowed.headcount ?? "", existing.headcount ?? ""),
       annual_count: pick(allowed.annual_count ?? "", existing.annual_count ?? ""),
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
+      ...mergedText,
+      // 항목별 데이터 폼 — CSV/AI 표면 제외(...existing 보존). 단, 병합으로 해당 측 항목이 바뀌면
+      // 줄 정렬이 깨지므로 폐기 — 백엔드 재임포트 승계(import_consultant)와 동일 규칙 (2026-08-20)
+      input_forms: mergedText.input === (existing.input ?? "") ? existing.input_forms ?? "" : "",
+      output_forms: mergedText.output === (existing.output ?? "") ? existing.output_forms ?? "" : "",
+      // IO 링크 — 해당 측 텍스트가 바뀌면 줄 정렬이 깨지므로 폐기(보수적 해산), 안 바뀌면 보존 (io-linking §3)
+      output_ids: mergedText.output === (existing.output ?? "") ? existing.output_ids ?? "" : "",
+      output_links: mergedText.output === (existing.output ?? "") ? existing.output_links ?? "" : "",
+      input_links: mergedText.input === (existing.input ?? "") ? existing.input_links ?? "" : "",
+      // Input_Flags는 CSV 왕복 표면 — 셀 제공 시 병합된 Input 줄 수에 정렬해 착지, 미제공(빈 셀)이면 기존 보존 규칙
+      input_flags:
+        nextFlags !== ""
+          ? alignFlagLines(nextFlags, mergedText.input)
+          : mergedText.input === (existing.input ?? "")
+            ? existing.input_flags ?? ""
+            : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
       section_anchor: mergedSectionAnchor,
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
+    droppedTextFields,
   };
 };
+
+// Input_Flags 셀 정규화 — 줄 단위 "optional"/"required"만 인정(대소문자 무시, required→""),
+// 그 외 값은 required("")로 강등+경고. 제공 여부 판정은 호출부가 원문 셀로 한다(전량 무효→""가 "생략"으로 안 읽히게)
+function normalizeInputFlagsCell(cell: string, line: number, warnings: CsvImportWarning[]): string {
+  if (cell.trim() === "") return "";
+  let hadUnknown = false;
+  const lines = cell.split("\n").map((raw) => {
+    const value = raw.trim().toLowerCase();
+    if (value === "" || value === "required") return "";
+    if (value === "optional") return value;
+    hadUnknown = true;
+    return "";
+  });
+  if (hadUnknown) {
+    warnings.push({
+      line,
+      message: 'Input_Flags accepts only "optional" or "required" per line - other values were treated as required',
+    });
+  }
+  return lines.join("\n").replace(/\s+$/, "");
+}
 
 /** login_id → 이름. 이미 이름이면 그대로(거짓 경고 방지). 못 찾으면 원문 + 경고. */
 function resolveAssignee(
@@ -340,7 +438,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
 
   const records = parseCsvRecords(text);
   if (records.length === 0) {
-    return fail([{ line: 1, message: "Empty file — header row required" }]);
+    return fail([{ line: 1, message: "Empty file - header row required" }]);
   }
 
   // 헤더 매핑 — 대소문자 무시·순서 무관, 미지 컬럼은 에러(오타 방지)
@@ -371,7 +469,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   }
   if (dataRecords.length > MAX_DATA_ROWS) {
     return fail([
-      { line: dataRecords[MAX_DATA_ROWS].line, message: `Too many rows — max ${MAX_DATA_ROWS}` },
+      { line: dataRecords[MAX_DATA_ROWS].line, message: `Too many rows - max ${MAX_DATA_ROWS}` },
     ]);
   }
 
@@ -381,6 +479,11 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   };
   // 숫자 파라미터 컬럼은 "1,250,000" 같은 천단위 콤마 표기를 허용 — 파싱 시점에 한 번만 벗긴다
   const numCellOf = (record: CsvRecord, col: HeaderColumn): string => stripThousands(cellOf(record, col));
+  // 줄 정렬 셀(Input_Flags)은 선행 빈 줄이 의미("1번째 필수") — 셀 전체 trim 금지, 줄 단위 정규화가 처리
+  const rawCellOf = (record: CsvRecord, col: HeaderColumn): string => {
+    const idx = colIndex.get(col);
+    return idx === undefined ? "" : (record.cells[idx] ?? "");
+  };
   const rows = dataRecords.map((r) => ({
     name: cellOf(r, "name"),
     description: cellOf(r, "description"),
@@ -388,11 +491,18 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     department: cellOf(r, "department"),
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
+    touch_time: cellOf(r, "touch_time"),
     cost_krw: numCellOf(r, "cost_krw"),
     cost_usd: numCellOf(r, "cost_usd"),
     headcount: numCellOf(r, "headcount"),
     annual_count: numCellOf(r, "annual_count"),
     fte: numCellOf(r, "fte"),
+    input: cellOf(r, "input"),
+    input_flags: rawCellOf(r, "input_flags"),
+    output: cellOf(r, "output"),
+    data_form: cellOf(r, "data_form"),
+    start_condition: cellOf(r, "start_condition"),
+    end_condition: cellOf(r, "end_condition"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
     section_anchor: cellOf(r, "section_anchor"),
@@ -412,7 +522,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
+    for (const col of ["name", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "data_form", "url", "url_label", "section_anchor"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -420,16 +530,19 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     if (row.url !== "" && !/^https?:\/\//i.test(row.url)) {
       errors.push({
         line: row.line,
-        message: `URL must start with http:// or https:// — "${row.url}"`,
+        message: `URL must start with http:// or https:// - "${row.url}"`,
       });
     }
     const durationNorm = normalizeDuration(row.duration);
     if (durationNorm === null) {
-      errors.push({ line: row.line, message: `Duration must be a number in H.MM hours — "${row.duration}"` });
+      errors.push({ line: row.line, message: `Duration must be a number in H.MM hours - "${row.duration}"` });
+    }
+    if (normalizeDuration(row.touch_time) === null) {
+      errors.push({ line: row.line, message: `Touch time must be a number in H.MM hours - "${row.touch_time}"` });
     }
     for (const col of NUMERIC_COLUMNS) {
       if (normalizeNumericParam(row[col]) === null) {
-        errors.push({ line: row.line, message: `${PARAM_FIELD_LABEL[col]} must be a number — "${row[col]}"` });
+        errors.push({ line: row.line, message: `${PARAM_FIELD_LABEL[col]} must be a number - "${row[col]}"` });
       }
     }
     // 통화 배타 — 백엔드 NodeIn 검증기가 둘 다 있으면 저장 전체를 422시키므로 행 단위로 먼저 막는다
@@ -460,7 +573,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       }
       // Edge.label String(200) 미러 — 로컬 sqlite는 통과하고 서버 postgres에서 500 나는 것 방지
       if (label.length > 200) {
-        errors.push({ line: row.line, message: `label exceeds 200 characters — "${label.slice(0, 30)}…"` });
+        errors.push({ line: row.line, message: `label exceeds 200 characters - "${label.slice(0, 30)}…"` });
         continue;
       }
       seen.add(target);
@@ -529,7 +642,8 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     // Start/End는 CSV가 이름을 싣지 않는다 → 기존 제목 유지("시작"을 "Start"로 덮으면 거짓 변경)
     mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }).node,
     ...rows.map((row, i) => {
-      const { node, droppedParamFields } = mergeNode(byTitle.get(row.name) ?? null, {
+      const normalizedFlags = normalizeInputFlagsCell(row.input_flags, row.line, warnings);
+      const { node, droppedParamFields, droppedTextFields } = mergeNode(byTitle.get(row.name) ?? null, {
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
         title: row.name,
@@ -539,22 +653,37 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         department: resolved.get(row.name)?.department ?? "",
         system: row.system,
         duration: normalizeDuration(row.duration) ?? "",
+        touch_time: normalizeDuration(row.touch_time) ?? "",
         cost_krw: normalizeNumericParam(row.cost_krw) ?? "",
         cost_usd: normalizeNumericParam(row.cost_usd) ?? "",
         headcount: normalizeNumericParam(row.headcount) ?? "",
         annual_count: normalizeNumericParam(row.annual_count) ?? "",
         fte: normalizeNumericParam(row.fte) ?? "",
+        input: row.input,
+        input_flags: normalizedFlags,
+        output: row.output,
+        data_form: row.data_form,
+        start_condition: row.start_condition,
+        end_condition: row.end_condition,
         url: row.url,
         url_label: row.url_label,
         section_anchor: row.section_anchor,
         sort_order: i + 1,
       });
-      // 서브프로세스 매칭 행 — duration/cost_krw/cost_usd/headcount는 링크 맵 지정값이라 CSV로 못 바꾼다
-      if (droppedParamFields.length > 0) {
-        const fields = droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]).join(", ");
+      // 셀이 제공됐다면(전 줄 무효·전 줄 required 포함) 병합 결과에 확정 반영 — 전량 무효가 ""로
+      // 정규화되면 mergeNode가 "셀 생략"으로 읽어 기존 optional을 지키던 결함 픽스 (QA 이슈 #2)
+      if (row.input_flags.trim() !== "" && node.node_type !== "subprocess") {
+        node.input_flags = alignFlagLines(normalizedFlags, node.input ?? "");
+      }
+      // 서브프로세스 매칭 행 — 상속 파라미터·IO/조건/형식은 링크 맵 지정값이라 CSV로 못 바꾼다
+      if (droppedParamFields.length > 0 || droppedTextFields.length > 0) {
+        const fields = [
+          ...droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]),
+          ...droppedTextFields,
+        ].join(", ");
         warnings.push({
           line: row.line,
-          message: `Subprocess "${row.name}" only accepts Annual_Count/FTE from CSV — ${fields} come from the linked map and were ignored`,
+          message: `Subprocess "${row.name}" only accepts Annual_Count/FTE from CSV - ${fields} come from the linked map and were ignored`,
         });
       }
       return node;
@@ -765,7 +894,7 @@ export function buildGraphFromAiProposal(
       cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd),
     });
     if (conflict) {
-      warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD — both were ignored` });
+      warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD - both were ignored` });
     }
 
     const candidate: GraphNode = {
@@ -785,11 +914,19 @@ export function buildGraphFromAiProposal(
       department: attr?.department ?? "",
       system: attr?.system ?? "",
       duration: normalizeDuration(attr?.duration ?? "") ?? "",
+      touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
       cost_krw: costGuarded.cost_krw ?? "",
       cost_usd: costGuarded.cost_usd ?? "",
       headcount: num(attr?.headcount),
       annual_count: num(attr?.annual_count),
       fte: num(attr?.fte),
+      // 인터뷰 승격 텍스트 필드 — passthrough. system_fallback은 AI 표면 제외(NODE_DEFAULTS ""
+      // → 매칭 노드는 mergeNode의 ...existing이 기존 폴백 유지) (design 2026-08-19 §3)
+      input: attr?.input ?? "",
+      output: attr?.output ?? "",
+      data_form: attr?.data_form ?? "",
+      start_condition: attr?.start_condition ?? "",
+      end_condition: attr?.end_condition ?? "",
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
       section_anchor: attr?.section_anchor ?? "",
@@ -799,12 +936,15 @@ export function buildGraphFromAiProposal(
     };
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
     // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.
-    const { node: merged, droppedParamFields } = mergeNode(existing, candidate);
-    if (droppedParamFields.length > 0) {
-      const fields = droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]).join(", ");
+    const { node: merged, droppedParamFields, droppedTextFields } = mergeNode(existing, candidate);
+    if (droppedParamFields.length > 0 || droppedTextFields.length > 0) {
+      const fields = [
+        ...droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]),
+        ...droppedTextFields,
+      ].join(", ");
       warnings.push({
         line: 0,
-        message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI — ${fields} come from the linked map and were ignored`,
+        message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI - ${fields} come from the linked map and were ignored`,
       });
     }
     // 신규 노드는 AI 색 허용, 매칭 노드는 mergeNode({...existing})가 기존 색 유지
@@ -923,13 +1063,24 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
 /** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
  *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
-  return [
-    "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
-    "Review request,Check the request against the purchasing policy,hong.gd,Quality Part 1,SAP ERP,16,50000,,1,,,,,Approval decision",
-    'Approval decision,,"hong.gd, kim.cs",Quality Part 1,,0.30,,20,2,,,,,Sign contract:approved;Notify rejection:rejected',
-    "Sign contract,,lee.yh,Finance Part,,24,,,1,,,https://example.com/contract,Contract,",
-    "Notify rejection,,,,,8,,,,,,,,",
-  ].join("\r\n");
+  // 셀 배열로 조립 — 20컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지)
+  const rows: string[][] = [
+    ["Name", "Description", "Assignee", "Department", "System", "Duration", "Touch_Time",
+     "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE",
+     "Input", "Input_Flags", "Output", "Data_Form", "Start_Condition", "End_Condition",
+     "URL", "URL_Label", "Next"],
+    ["Review request", "Check the request against the purchasing policy", "hong.gd", "Quality Part 1",
+     "SAP ERP", "16", "8", "50000", "", "1", "", "",
+     "Purchase request", "", "Review result", "document", "PR submitted", "Review recorded",
+     "", "", "Approval decision"],
+    ["Approval decision", "", '"hong.gd, kim.cs"', "Quality Part 1", "", "0.30", "",
+     "", "20", "2", "", "", "", "", "", "", "", "", "", "",
+     "Sign contract:approved;Notify rejection:rejected"],
+    ["Sign contract", "", "lee.yh", "Finance Part", "", "24", "", "", "", "1", "", "",
+     "", "", "", "", "", "", "https://example.com/contract", "Contract", ""],
+    ["Notify rejection", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+  ];
+  return rows.map((cells) => cells.join(",")).join("\r\n");
 }
 
 /** 붙여넣은 텍스트의 코드펜스 관용 처리 — 외부 AI 답변이 ```csv … ``` 로 감싸 오는 경우 본문만 추출. */
@@ -946,7 +1097,7 @@ export function buildAiPromptText(): string {
     "당신은 업무 절차 분석가입니다. 아래에 첨부하는 업무 문서(규정·지침·절차서 등)를 읽고,",
     "문서에 기술된 업무 프로세스 흐름을 추출해 CSV 한 개로 작성하세요.",
     "",
-    "[출력 형식 — 반드시 지킬 것]",
+    "[출력 형식 - 반드시 지킬 것]",
     "- 다른 설명·코드블록(```) 없이 CSV 텍스트만 출력하세요.",
     `- 첫 행(헤더)은 정확히: ${buildTemplateCsv().split("\r\n")[0]}`,
     "- 한 행 = 프로세스 단계 1개. 셀에 쉼표가 들어가면 그 셀을 큰따옴표로 감싸세요.",
@@ -954,27 +1105,32 @@ export function buildAiPromptText(): string {
     "[컬럼 규칙]",
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
     "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
-    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 — 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 - 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
     `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
-    "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 — 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
+    "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 - 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
+    "- Touch_Time: 선택, 실작업 시간(Duration과 같은 H.MM 표기). 모르면 비워두세요.",
     "- Cost_KRW: 선택, 건당 비용(원화, 숫자만). Cost_USD와 동시에 채우지 마세요. 모르면 비워두세요.",
     "- Cost_USD: 선택, 건당 비용(달러, 숫자만). Cost_KRW와 동시에 채우지 마세요. 모르면 비워두세요.",
     "- Headcount: 선택, 투입 인력(숫자만). 모르면 비워두세요.",
     "- Annual_Count: 선택, 연간 처리 건수(숫자만). 모르면 비워두세요.",
     "- FTE: 선택, 전일환산 투입 인원(숫자만). 모르면 비워두세요.",
+    "- Input / Output: 선택, 단계의 입력물/산출물. 여러 개면 셀 안에서 줄바꿈으로 나열하고 셀 전체를 큰따옴표로 감싸세요.",
+    "- Input_Flags: 선택, Input 항목별 필수/선택 표시. Input과 같은 순서로 줄바꿈 나열하고 각 줄에 optional 또는 required(비움=required). 전부 필수면 셀을 비워두세요.",
+    `- Data_Form: 선택, 입출력 형식 참고값(structured/document/tacit 등, ${MAX_LEN.data_form}자 이하). 모르면 비워두세요.`,
+    "- Start_Condition / End_Condition: 선택, 단계의 시작/종료 조건 한 문장. 모르면 비워두세요.",
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
     `- URL_Label: 선택, 링크 표시 이름(${MAX_LEN.url_label}자 이하). URL이 있는 행에서만 의미(URL 없으면 무시됩니다).`,
     "- Next: 선택, 다음 단계의 Name을 세미콜론(;)으로 나열. 분기 조건은 \"대상이름:라벨\" 형식(라벨 200자 이하).",
     "  예: 승인 여부 단계가 승인/반려로 갈라지면 → 계약 체결:승인;반려 통보:반려",
     "",
     "[작성 규칙]",
-    "- Start·End(시작/종료) 행은 쓰지 마세요 — 시스템이 자동 생성합니다.",
+    "- Start·End(시작/종료) 행은 쓰지 마세요 - 시스템이 자동 생성합니다.",
     "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
     "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
     `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
     "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Assignee·Department·System·Duration·URL)은 비워두세요.",
-    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 — 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
+    "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 - 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
     "",
     "[예시]",
     buildTemplateCsv().replace(/\r\n/g, "\n"),

@@ -8,6 +8,8 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Circle,
   CircleDot,
   CornerDownRight,
@@ -17,9 +19,13 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { AutoHeight } from "@/components/auto-height";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { NodeDetailsFields } from "@/components/node-details-fields";
+import { NewlineHint } from "@/components/newline-hint";
+import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { ScopePreview } from "@/components/scope-preview";
 import { SearchSelect } from "@/components/search-select";
@@ -36,15 +42,20 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import {
   formatParamValue,
   getEditableParamFields,
-  isCostFieldDisabled,
   isSpParamField,
   PARAM_FIELDS,
   PARAM_LABEL_KEY,
+  readAttrsCollapsed,
+  readDetailsCollapsed,
   readParamsCollapsed,
+  writeAttrsCollapsed,
+  writeDetailsCollapsed,
   writeParamsCollapsed,
   type ParamField,
   type SpParamField,
@@ -61,6 +72,19 @@ export type NodeEditPatch = Partial<{
   department: string;
   system: string;
   duration: string;
+  touch_time: string;
+  input: string;
+  output: string;
+  input_forms: string;
+  output_forms: string;
+  // IO 링크 열 — 이 모달은 편집하지 않지만, 행 삭제 시 텍스트와 함께 정렬을 옮겨야 하므로 왕복시킨다 (io-linking §3)
+  output_ids: string;
+  input_links: string;
+  output_links: string;
+  input_flags: string;
+  data_form: string;
+  start_condition: string;
+  end_condition: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -128,6 +152,19 @@ interface NodeSummaryModalProps {
   department: string;
   system: string;
   duration: string;
+  touch_time: string;
+  input: string;
+  output: string;
+  input_forms: string;
+  output_forms: string;
+  // IO 링크 열 — MultiValueInput이 텍스트와 함께 정렬 유지 (io-linking §3)
+  output_ids: string;
+  input_links: string;
+  output_links: string;
+  input_flags: string;
+  data_form: string;
+  start_condition: string;
+  end_condition: string;
   cost_krw: string;
   cost_usd: string;
   headcount: string;
@@ -138,6 +175,17 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
+  // subprocess 상속 상세(링크 맵 sp_* IO/조건) — 읽기전용 표시(#11). 그 외 타입은 null
+  sp?: {
+    input?: string | null;
+    output?: string | null;
+    input_forms?: string | null;
+    output_forms?: string | null;
+    start_condition?: string | null;
+    end_condition?: string | null;
+  } | null;
+  // 표시용 GMP 분류(SP는 링크 맵 상속값을 호출부가 해석) — 읽기전용 배지(#13)
+  gmp?: string;
   // subprocess 설명 베이스(링크 맵 sp_description, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
   inheritedDescription?: string | null;
   // subprocess 연결 버전 피커(인스펙터와 동일 컴포넌트) — 호출부가 렌더해 주입
@@ -145,6 +193,8 @@ interface NodeSummaryModalProps {
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
   showAttributes: boolean;
   onPatch: (patch: NodeEditPatch) => void;
+  // 열릴 때 자동 포커스할 필드 — 인스펙터 설명 더블클릭/편집 아이콘 진입 (사용자 결정 2026-08-20)
+  initialFocus?: "description";
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
   // 선행/후행 노드 클릭 시 그 노드 편집으로 전환
@@ -172,6 +222,18 @@ export function NodeSummaryModal({
   department,
   system,
   duration,
+  touch_time,
+  input,
+  output,
+  input_forms,
+  output_forms,
+  output_ids,
+  input_links,
+  output_links,
+  input_flags,
+  data_form,
+  start_condition,
+  end_condition,
   cost_krw,
   cost_usd,
   headcount,
@@ -181,10 +243,13 @@ export function NodeSummaryModal({
   urlLabel,
   colorPresets,
   spParams,
+  sp,
+  gmp,
   inheritedDescription,
   versionPickerSlot,
   showAttributes,
   onPatch,
+  initialFocus,
   onCommitLabel,
   onNavigate,
   onClose,
@@ -192,6 +257,15 @@ export function NodeSummaryModal({
 }: NodeSummaryModalProps) {
   const { t, lang } = useI18n();
   const [comments, setComments] = useState<CommentItem[]>([]);
+  const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  // initialFocus="description" — 열림/노드 전환 시 설명 textarea로 포커스(커서는 끝)
+  useEffect(() => {
+    if (initialFocus !== "description") return;
+    const el = descriptionRef.current;
+    if (el === null) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [initialFocus, nodeId]);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -199,22 +273,67 @@ export function NodeSummaryModal({
   const [colorMoreOpen, setColorMoreOpen] = useState(false);
   // Parameters 그룹 접기 — 기본 접힘, 인스펙터와 공유 키(bpm.paramsCollapsed)로 localStorage 퍼시스트
   const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
+  // I/O & Conditions 접힘 — 기본 접힘, 인스펙터와 키 공유 (사용자 결정 2026-08-20)
+  const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
+  // BPM attributes 접힘 — 인스펙터 카드와 키 공유(bpm.attrsCollapsed) (사용자 결정 2026-08-20)
+  const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
+  // 모달 섹션 일괄 접기/펼치기 — 인스펙터 탭 바 버튼과 동일 판정(하나라도 펼침→모두 접기).
+  // 모달 3섹션은 로컬 state라 DOM 스윕 대신 직접 제어(영속 키 공유는 write*로 유지) (사용자 결정 2026-08-20)
+  const anySectionOpen = !attrsCollapsed || !paramsCollapsed || !detailsCollapsed;
+  const toggleAllSections = () => {
+    const next = anySectionOpen; // true=모두 접기
+    setAttrsCollapsed(next);
+    writeAttrsCollapsed(next);
+    setParamsCollapsed(next);
+    writeParamsCollapsed(next);
+    setDetailsCollapsed(next);
+    writeDetailsCollapsed(next);
+  };
   // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
   const [form, setForm] = useState({
     label: title, description, color, assignee, department, system, duration,
-    cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+    touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+    input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+    data_form, start_condition, end_condition,
   });
+  // 비용 통화 토글 — 배타 계약이라 한 번에 한 통화만. 전환 시 기존 값은 버퍼에서 소거+안내 (사용자 결정 2026-08-20)
+  const [activeCurrency, setActiveCurrency] = useState<"cost_krw" | "cost_usd">(
+    cost_usd !== "" ? "cost_usd" : "cost_krw",
+  );
+  const [costNotice, setCostNotice] = useState<{ field: "cost_krw" | "cost_usd"; value: string } | null>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
     setPrevNodeId(nodeId);
     setForm({
       label: title, description, color, assignee, department, system, duration,
-      cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+      touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+      input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+      data_form, start_condition, end_condition,
     });
+    setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
+    setCostNotice(null);
   }
+  const switchCurrency = (target: "cost_krw" | "cost_usd") => {
+    if (target === activeCurrency) return;
+    const current = activeCurrency;
+    const currentValue = form[current];
+    if (currentValue !== "") {
+      setForm((f) => ({ ...f, [current]: "" }));
+      setCostNotice({ field: current, value: currentValue });
+    }
+    setActiveCurrency(target);
+  };
+  const undoCurrencySwitch = () => {
+    if (costNotice === null) return;
+    const other = costNotice.field === "cost_krw" ? "cost_usd" : "cost_krw";
+    // 전환 취소 — 소거된 원래 통화 값을 복원하고, 전환 후 입력했을 수 있는 새 통화 값은 폐기
+    setForm((f) => ({ ...f, [costNotice.field]: costNotice.value, [other]: "" }));
+    setActiveCurrency(costNotice.field);
+    setCostNotice(null);
+  };
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
   const handleSave = useCallback(() => {
     onPatch({
@@ -224,6 +343,18 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      touch_time: form.touch_time,
+      input: form.input,
+      output: form.output,
+      input_forms: form.input_forms,
+      output_forms: form.output_forms,
+      output_ids: form.output_ids,
+      input_links: form.input_links,
+      output_links: form.output_links,
+      input_flags: form.input_flags,
+      data_form: form.data_form,
+      start_condition: form.start_condition,
+      end_condition: form.end_condition,
       cost_krw: form.cost_krw,
       cost_usd: form.cost_usd,
       headcount: form.headcount,
@@ -247,9 +378,65 @@ export function NodeSummaryModal({
   const editableParams = getEditableParamFields(nodeType);
   // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
   const filledParamCount = editableParams.filter((f) => form[f]).length;
+  // BPM attributes 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
+  const filledAttrCount = [form.department, form.assignee, form.system, form.url]
+    .filter((v) => v !== "").length;
+  // 버퍼 변경 노출 — 초기값 대비 달라진 필드(섹션 점 + 푸터 목록) (사용자 결정 2026-08-20)
+  const initialForm: Record<string, string> = {
+    label: title, description, color, assignee, department, system, duration,
+    touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
+    input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
+    data_form, start_condition, end_condition,
+  };
+  const changedKeys = Object.keys(initialForm).filter(
+    (k) => (form as Record<string, string>)[k] !== initialForm[k],
+  );
+  const hasChangedIn = (keys: readonly string[]) => changedKeys.some((k) => keys.includes(k));
+  const ATTRS_KEYS = ["assignee", "department", "system", "url", "urlLabel"] as const;
+  const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "output_ids", "input_links",
+    "output_links", "input_flags", "data_form", "start_condition", "end_condition"] as const;
+  // 폼(항목별)은 소속 IO 라벨로 접고, URL 라벨은 URL로 접어 중복 제거
+  const CHANGED_LABEL_KEY: Record<string, MessageKey> = {
+    label: "field.title", description: "field.description", color: "field.color",
+    assignee: "field.assignee", department: "field.department", system: "field.system",
+    url: "field.url", urlLabel: "field.url",
+    input: "field.input", input_forms: "field.input", input_links: "field.input", input_flags: "field.input",
+    output: "field.output", output_forms: "field.output", output_ids: "field.output", output_links: "field.output",
+    data_form: "field.dataForm", start_condition: "field.startCondition", end_condition: "field.endCondition",
+  };
+  const changedLabels = [...new Set(changedKeys.map((k) =>
+    k === "cost_krw" || k === "cost_usd"
+      ? t("field.costRun") // 통화 토글 한 행 계약 — 전환 시 두 필드가 함께 바뀌므로 하나로 접음
+      : (PARAM_FIELDS as readonly string[]).includes(k)
+        ? t(PARAM_LABEL_KEY[k as ParamField])
+        : t(CHANGED_LABEL_KEY[k]),
+  ))].join(", ");
+  // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준. SP는 링크 맵 상속값 기준(#11)
+  const filledDetailCount =
+    nodeType === "subprocess"
+      ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter(
+          (v) => (v ?? "") !== "",
+        ).length
+      : [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
+          .filter((v) => v !== "").length;
   // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 값 없으면 ""(행은 "—")
   const inheritedDisplay = (field: ParamField): string =>
     spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
+  // 읽기전용 뷰(#13) — 값 있는 것만 나열. SP 파라미터는 상속값 우선(연간/FTE는 자기 값)
+  const gmpValue = gmp ?? "";
+  const readAttrRows = [
+    { key: "assignee", labelKey: "field.assignee" as MessageKey, value: assignee },
+    { key: "department", labelKey: "field.department" as MessageKey, value: department },
+    { key: "system", labelKey: "field.system" as MessageKey, value: system },
+    { key: "url", labelKey: "field.url" as MessageKey, value: url ? urlLabel || url : "" },
+  ].filter((row) => row.value !== "");
+  const readParamRows = PARAM_FIELDS.map((field) => ({
+    field,
+    value:
+      nodeType === "subprocess"
+        ? inheritedDisplay(field) || formatParamValue(field, form[field] ?? "")
+        : formatParamValue(field, form[field] ?? ""),
+  })).filter((row) => row.value !== "");
 
   const changeDept = (dept: string) => {
     if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
@@ -268,6 +455,12 @@ export function NodeSummaryModal({
     form.department !== department ||
     form.system !== system ||
     form.duration !== duration ||
+    form.touch_time !== touch_time ||
+    form.input !== input ||
+    form.output !== output ||
+    form.data_form !== data_form ||
+    form.start_condition !== start_condition ||
+    form.end_condition !== end_condition ||
     form.cost_krw !== cost_krw ||
     form.cost_usd !== cost_usd ||
     form.headcount !== headcount ||
@@ -290,6 +483,18 @@ export function NodeSummaryModal({
       department: form.department,
       system: form.system,
       duration: form.duration,
+      touch_time: form.touch_time,
+      input: form.input,
+      output: form.output,
+      input_forms: form.input_forms,
+      output_forms: form.output_forms,
+      output_ids: form.output_ids,
+      input_links: form.input_links,
+      output_links: form.output_links,
+      input_flags: form.input_flags,
+      data_form: form.data_form,
+      start_condition: form.start_condition,
+      end_condition: form.end_condition,
       cost_krw: form.cost_krw,
       cost_usd: form.cost_usd,
       headcount: form.headcount,
@@ -379,7 +584,7 @@ export function NodeSummaryModal({
 
   return (
     <ModalBackdrop
-      className="absolute inset-0 z-[1200] flex items-center justify-center backdrop-blur-sm"
+      className="absolute inset-0 z-[1200] flex items-start justify-center pt-[7vh] backdrop-blur-sm"
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
@@ -433,6 +638,72 @@ export function NodeSummaryModal({
                   </div>
                 ) : null;
               })()}
+              {/* Attributes 읽기(#13) — 값 있는 행만, GMP는 배지 */}
+              {(readAttrRows.length > 0 || gmpValue !== "") && (
+                <div data-id="summary-read-attrs">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("editor.bpmAttrs")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    {readAttrRows.map((row) => (
+                      <div key={row.key} className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t(row.labelKey)}</span>
+                        <span className="min-w-0 truncate text-right text-ink" title={row.value}>
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                    {gmpValue !== "" && (
+                      <div className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t("field.gmp")}</span>
+                        <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpValue)}>
+                          {formatGmp(gmpValue)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Parameters 읽기 — 포맷 표시값(1h30m 등), SP는 링크 맵 상속값 우선 */}
+              {readParamRows.length > 0 && (
+                <div data-id="summary-read-params">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.parameters")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    {readParamRows.map(({ field, value }) => (
+                      <div key={field} className="flex items-center justify-between gap-2 py-0.5 text-caption">
+                        <span className="shrink-0 text-ink-secondary">{t(PARAM_LABEL_KEY[field])}</span>
+                        <span className="text-right text-ink">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* I/O & Conditions 읽기 — 필 표시(#12)와 통일, SP는 링크 맵 상속(#11) */}
+              {(showAttributes || nodeType === "subprocess") && filledDetailCount > 0 && (
+                <div data-id="summary-read-details">
+                  <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.details")}</p>
+                  <div className="ml-2 border-l border-divider pl-2">
+                    <NodeDetailsFields
+                      idPrefix="modal-read-detail"
+                      nodeKey={nodeId}
+                      input={nodeType === "subprocess" ? sp?.input ?? "" : input}
+                      output={nodeType === "subprocess" ? sp?.output ?? "" : output}
+                      inputForms={nodeType === "subprocess" ? sp?.input_forms ?? "" : input_forms}
+                      outputForms={nodeType === "subprocess" ? sp?.output_forms ?? "" : output_forms}
+                      outputIds={nodeType === "subprocess" ? undefined : output_ids}
+                      inputLinks={nodeType === "subprocess" ? undefined : input_links}
+                      outputLinks={nodeType === "subprocess" ? undefined : output_links}
+                      inputFlags={nodeType === "subprocess" ? undefined : input_flags}
+                      dataForm={nodeType === "subprocess" ? "" : data_form}
+                      startCondition={nodeType === "subprocess" ? sp?.start_condition ?? "" : start_condition}
+                      endCondition={nodeType === "subprocess" ? sp?.end_condition ?? "" : end_condition}
+                      readOnly
+                      onPatch={() => {}}
+                    />
+                    {nodeType === "subprocess" && (
+                      <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -461,6 +732,7 @@ export function NodeSummaryModal({
                     requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                   }}
                 />
+                <NewlineHint />
               </div>
               {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
                   베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}
@@ -475,6 +747,8 @@ export function NodeSummaryModal({
                   </div>
                 )}
                 <textarea
+                  ref={descriptionRef}
+                  data-id="summary-description"
                   className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink"
                   rows={2}
                   value={form.description}
@@ -539,9 +813,53 @@ export function NodeSummaryModal({
                   </div>
                 </div>
                 )}
-                {/* BPM 속성 — process·decision만 표시. start/end/subprocess는 숨김 */}
+                {/* BPM 속성 — process·decision만 표시. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
                 {showAttributes && (
-                  <>
+                  <div className="py-1.5" data-id="summary-attrs">
+                    <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-id="summary-attrs-toggle"
+                      aria-expanded={!attrsCollapsed}
+                      className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      onClick={() => {
+                        const next = !attrsCollapsed;
+                        setAttrsCollapsed(next);
+                        writeAttrsCollapsed(next);
+                      }}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {t("editor.bpmAttrs")}
+                      {filledAttrCount > 0 && (
+                        <span className="font-normal">({filledAttrCount})</span>
+                      )}
+                      {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
+                      {hasChangedIn(ATTRS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
+                    </button>
+                    {/* 섹션 일괄 접기/펼치기 — 모달은 공간이 있어 아이콘+라벨 병기, 인스펙터 탭 바
+                        버튼과 동일 판정 로직 (사용자 결정 2026-08-20) */}
+                    <button
+                      type="button"
+                      data-id="summary-toggle-all-sections"
+                      className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                      onClick={toggleAllSections}
+                    >
+                      {anySectionOpen ? (
+                        <ChevronsDownUp size={13} strokeWidth={1.5} />
+                      ) : (
+                        <ChevronsUpDown size={13} strokeWidth={1.5} />
+                      )}
+                      {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+                    </button>
+                    </div>
+                    {/* 아코디언 높이 전환 — 접힘/펼침을 AutoHeight가 부드럽게 잇는다 (사용자 결정 2026-08-20) */}
+                    <AutoHeight className="overflow-hidden">
+                    {!attrsCollapsed && (
+                    <div className="ml-2 border-l border-divider pl-2">
                     {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
                     <div className="flex min-h-[34px] items-center gap-3 py-1.5">
                       <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</span>
@@ -614,7 +932,7 @@ export function NodeSummaryModal({
                         <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</span>
                         <div className="flex min-w-0 flex-1 justify-end">
                           <input
-                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption"
+                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none"
                             value={form[key]}
                             aria-label={t(labelKey)}
                             onChange={(event) => setForm((f) => ({ ...f, [key]: event.target.value }))}
@@ -622,7 +940,18 @@ export function NodeSummaryModal({
                         </div>
                       </div>
                     ))}
-                  </>
+                    <UrlLabelField
+                      key={nodeId}
+                      url={form.url}
+                      urlLabel={form.urlLabel}
+                      readOnly={readOnly}
+                      inputWidth="w-44"
+                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    />
+                    </div>
+                    )}
+                    </AutoHeight>
+                  </div>
                 )}
                 {/* 회당 파라미터 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
                     subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
@@ -648,49 +977,164 @@ export function NodeSummaryModal({
                       {filledParamCount > 0 && (
                         <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
                       )}
+                      {hasChangedIn(PARAM_FIELDS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
                     </button>
+                    <AutoHeight className="overflow-hidden">
                     {!paramsCollapsed && (
                       <div className="ml-2 border-l border-divider pl-2">
-                        {PARAM_FIELDS.map((key) => (
+                        {/* 비용 2필드는 통화 토글 한 행으로 접음(cost_usd 자리는 스킵) — 배타 계약 (사용자 결정 2026-08-20) */}
+                        {PARAM_FIELDS.filter((f) => f !== "cost_usd").map((key) => {
+                          const isCostRow = key === "cost_krw";
+                          const field = isCostRow ? activeCurrency : key;
+                          const RowIcon = PARAM_ICON[field];
+                          return (
                           <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
-                            <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(PARAM_LABEL_KEY[key])}</span>
+                            <span className="inline-flex w-20 shrink-0 items-center gap-1 text-fine text-ink-tertiary">
+                              <RowIcon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+                              {isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}
+                            </span>
+                            {isCostRow && editableParams.includes(field) && (
+                              <span className="inline-flex shrink-0 overflow-hidden rounded-sm border border-hairline">
+                                {(["cost_krw", "cost_usd"] as const).map((currency) => (
+                                  <button
+                                    key={currency}
+                                    type="button"
+                                    data-id={`summary-cost-currency-${currency === "cost_krw" ? "krw" : "usd"}`}
+                                    aria-pressed={activeCurrency === currency}
+                                    className={`px-1.5 py-0.5 text-fine ${
+                                      activeCurrency === currency
+                                        ? "bg-accent-tint text-accent"
+                                        : "text-ink-tertiary hover:bg-surface-alt"
+                                    }`}
+                                    onClick={() => switchCurrency(currency)}
+                                  >
+                                    {currency === "cost_krw" ? "₩" : "$"}
+                                  </button>
+                                ))}
+                              </span>
+                            )}
                             <div className="flex min-w-0 flex-1 justify-end">
-                              {editableParams.includes(key) ? (
+                              {editableParams.includes(field) ? (
                                 <ParamInput
-                                  field={key}
-                                  dataId={`summary-param-${key}`}
-                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption disabled:bg-surface-alt disabled:text-ink-tertiary"
-                                  value={form[key]}
-                                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
-                                  ariaLabel={t(PARAM_LABEL_KEY[key])}
-                                  onCommit={(next) => setForm((f) => ({ ...f, [key]: next }))}
+                                  key={field}
+                                  field={field}
+                                  dataId={`summary-param-${field}`}
+                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none disabled:bg-surface-alt disabled:text-ink-tertiary"
+                                  value={form[field]}
+                                  ariaLabel={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[field])}
+                                  onCommit={(next) => setForm((f) => ({ ...f, [field]: next }))}
                                 />
                               ) : (
                                 <span
-                                  data-id={`summary-param-${key}`}
+                                  data-id={`summary-param-${field}`}
                                   className="min-w-0 truncate text-right text-caption text-ink"
                                 >
-                                  {inheritedDisplay(key) || "—"}
+                                  {(isCostRow
+                                    ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
+                                    : inheritedDisplay(field)) || "-"}
                                 </span>
                               )}
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
+                        {costNotice !== null && (
+                          <div
+                            data-id="summary-cost-clear-notice"
+                            className="flex items-center justify-between gap-2 py-0.5 text-fine text-error"
+                          >
+                            <span className="min-w-0">
+                              {t("metrics.clearOnSave", { v: formatParamValue(costNotice.field, costNotice.value) })}
+                            </span>
+                            <button
+                              type="button"
+                              data-id="summary-cost-clear-undo"
+                              className="shrink-0 rounded-sm px-1.5 py-0.5 text-fine text-accent hover:bg-accent-tint"
+                              onClick={undoCurrencySwitch}
+                            >
+                              {t("metrics.undoSwitch")}
+                            </button>
+                          </div>
+                        )}
                         {nodeType === "subprocess" && (
                           <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
                         )}
                       </div>
                     )}
+                    </AutoHeight>
                   </div>
                 )}
-                {showAttributes && (
-                  <UrlLabelField
-                    key={nodeId}
-                    url={form.url}
-                    urlLabel={form.urlLabel}
-                    readOnly={readOnly}
-                    onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                  />
+                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘.
+                    SP는 링크 맵 상속 읽기전용 렌더 — 인스펙터 카드와 동기화(#11) */}
+                {(showAttributes || nodeType === "subprocess") && (
+                  <div className="py-1.5" data-id="summary-details">
+                    <button
+                      type="button"
+                      data-id="summary-details-toggle"
+                      aria-expanded={!detailsCollapsed}
+                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
+                      onClick={() => {
+                        const next = !detailsCollapsed;
+                        setDetailsCollapsed(next);
+                        writeDetailsCollapsed(next);
+                      }}
+                    >
+                      <ChevronRight
+                        size={12}
+                        strokeWidth={1.5}
+                        className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
+                      />
+                      {t("inspector.details")}
+                      {filledDetailCount > 0 && (
+                        <span className="font-normal text-ink-tertiary">({filledDetailCount})</span>
+                      )}
+                      {hasChangedIn(DETAILS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
+                    </button>
+                    <AutoHeight className="overflow-hidden">
+                    {!detailsCollapsed && (
+                    <div className="ml-2 border-l border-divider pl-2">
+                      {nodeType === "subprocess" ? (
+                        <>
+                          {/* 링크 맵 상속 상세(읽기전용) — 인스펙터 카드와 동기화(#11) */}
+                          <NodeDetailsFields
+                            idPrefix="modal-detail"
+                            nodeKey={nodeId}
+                            input={sp?.input ?? ""}
+                            output={sp?.output ?? ""}
+                            inputForms={sp?.input_forms ?? ""}
+                            outputForms={sp?.output_forms ?? ""}
+                            dataForm=""
+                            startCondition={sp?.start_condition ?? ""}
+                            endCondition={sp?.end_condition ?? ""}
+                            readOnly
+                            onPatch={() => {}}
+                          />
+                          <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                        </>
+                      ) : (
+                        <NodeDetailsFields
+                          idPrefix="modal-detail"
+                          nodeKey={nodeId}
+                          inputWidth="w-44"
+                          input={form.input}
+                          output={form.output}
+                          inputForms={form.input_forms}
+                          outputForms={form.output_forms}
+                          outputIds={form.output_ids}
+                          inputLinks={form.input_links}
+                          outputLinks={form.output_links}
+                          inputFlags={form.input_flags}
+                          dataForm={form.data_form}
+                          startCondition={form.start_condition}
+                          endCondition={form.end_condition}
+                          readOnly={readOnly}
+                          onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                        />
+                      )}
+                    </div>
+                    )}
+                    </AutoHeight>
+                  </div>
                 )}
               </div>
               {groupLabel && (
@@ -846,14 +1290,27 @@ export function NodeSummaryModal({
             </>
           ) : (
             <>
-              <span className="flex items-center gap-2 text-fine text-ink-tertiary">
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
-                  {t("summary.cancel")}
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
-                  {t("editor.save")}
+              <span className="flex min-w-0 flex-col gap-0.5 text-fine text-ink-tertiary">
+                {/* 저장 전 변경 필드 목록 — 버퍼 내용 노출 (사용자 결정 2026-08-20) */}
+                {changedKeys.length > 0 && (
+                  <span
+                    data-id="summary-dirty-fields"
+                    className="flex min-w-0 items-center gap-1 text-accent"
+                    title={changedLabels}
+                  >
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />
+                    <span className="min-w-0 truncate">{t("summary.unsavedFields", { fields: changedLabels })}</span>
+                  </span>
+                )}
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1">
+                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
+                    {t("summary.cancel")}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
+                    {t("editor.save")}
+                  </span>
                 </span>
               </span>
               <div className="flex items-center gap-1.5">

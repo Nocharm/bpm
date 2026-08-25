@@ -3,24 +3,31 @@
 
 import { createContext, useContext } from "react";
 
-// 노드에 표시할 정보 필드 — 사용자가 좌측 사이드바 체크박스로 토글 (BPM 속성 + URL)
+// 노드에 표시할 정보 필드 — 인스펙터 Node display 토글 (BPM 속성 + URL + 승격 IO/조건, 2026-08-20).
+// 조건은 시작/종료를 "conditions" 하나로 묶어 토글(표시는 두 줄) — 사용자 결정 2026-08-20.
 export type NodeDisplayField =
   | "assignee"
   | "department"
   | "system"
-  | "url";
+  | "url"
+  | "input"
+  | "output"
+  | "conditions";
 
 export const NODE_DISPLAY_FIELDS: NodeDisplayField[] = [
   "assignee",
   "department",
   "system",
   "url",
+  "input",
+  "output",
+  "conditions",
 ];
 
-// 토글 대상 = BPM 속성 4종 + 파라미터 칩 일괄 스위치("params" — 6필드 칩을 한 번에 켬/끔)
-export type NodeDisplayToggle = NodeDisplayField | "params";
+// 토글 대상 = BPM 속성 4종 + 파라미터 칩 일괄 스위치("params") + GMP 필 태그("gmp", design 2026-08-20)
+export type NodeDisplayToggle = NodeDisplayField | "params" | "gmp";
 
-export const NODE_DISPLAY_TOGGLES: NodeDisplayToggle[] = [...NODE_DISPLAY_FIELDS, "params"];
+export const NODE_DISPLAY_TOGGLES: NodeDisplayToggle[] = [...NODE_DISPLAY_FIELDS, "params", "gmp"];
 
 /** 저장 토글 파싱 — v2 키 우선, 레거시 키(파라미터 토글 도입 전)는 params ON으로 이관. 저장값 없으면 null. */
 export function parseDisplayToggles(
@@ -62,7 +69,21 @@ export interface NodeActions {
   onCancelRename: (() => void) | null;
   // Ctrl/⌘+드래그 복제 중인 노드 id 집합 — "+" 배지 표시용(Provider 없으면 항상 빈 집합).
   ctrlDragIds: ReadonlySet<string>;
+  // GMP 필 클릭 → 분류 피커 오픈(편집 모드 전용, null=비활성 — 뷰어·비교·프리뷰) (design 2026-08-20)
+  onEditGmp: ((nodeId: string, x: number, y: number) => void) | null;
+  // 노드 IO 체크리스트(#9) — 화면 한정 체크 상태. 키=링크 itemId(그룹 동반) 또는 `${nodeId}:in|out:${줄}`.
+  // null이면 비활성(비교·프리뷰 등 Provider 부재 표면).
+  ioChecks: ReadonlySet<string>;
+  onToggleIoCheck: ((key: string) => void) | null;
+  // 체크리스트 표시 상태(#2) — 키 `${nodeId}:${side}`, 미지정=capped(3.5줄). 화면 한정
+  ioListStates: ReadonlyMap<string, IoListDisplayState>;
+  onSetIoListState: ((key: string, state: IoListDisplayState) => void) | null;
+  // 체크 동기 애니메이션(#3) — 마지막 체크된 링크 itemId + 재생 논스(같은 키 재체크도 재생)
+  ioCheckPulse: { key: string; nonce: number } | null;
 }
+
+// IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
+export type IoListDisplayState = "collapsed" | "capped" | "all";
 
 const defaultActions: NodeActions = {
   onToggleExpand: null,
@@ -73,6 +94,12 @@ const defaultActions: NodeActions = {
   onRename: null,
   onCancelRename: null,
   ctrlDragIds: new Set<string>(),
+  onEditGmp: null,
+  ioChecks: new Set<string>(),
+  onToggleIoCheck: null,
+  ioListStates: new Map<string, IoListDisplayState>(),
+  onSetIoListState: null,
+  ioCheckPulse: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

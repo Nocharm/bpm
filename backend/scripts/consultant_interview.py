@@ -45,31 +45,11 @@ _KNOWN_KINDS = {"action", "handoff", "decision"}
 # (frontend/src/app/maps/[mapId]/page.tsx COLOR_PRESETS — 색은 chrome이 아니라 노드 데이터)
 EXCEPTION_VARIANT_COLOR = "#c2849a"
 
-# 맵 description 직렬화 순서 — 원문 보존이 목적이라 빈 값 줄만 생략하고 변형하지 않는다
-_MAP_FIELD_LABELS: list[tuple[str, str]] = [
-    ("start_condition", "Start condition"),
-    ("input_data", "Input"),
-    ("output_data", "Output"),
-    ("done_criteria", "Done criteria"),
-    ("systems", "Systems"),
-    ("total_time", "Total time"),
-    ("total_time_min", "Total time (min)"),
-    ("touch_time", "Touch time"),
-    ("touch_time_min", "Touch time (min)"),
-    ("frequency", "Frequency"),
-    ("annual_count", "Annual count"),
-    ("headcount", "Headcount"),
-    ("fte", "FTE"),
-    ("gmp", "GMP"),
-    ("artifact_role", "Artifact role"),
-]
+# 노드 설명 KV — 승격된 키(input/output/system/dataForm)는 고유 필드로 이동해 여기서 제외,
+# 기록성 필드만 텍스트 잔류 (design 2026-08-19 §4.1)
 _ACTION_FIELD_LABELS: list[tuple[str, str]] = [
-    ("input", "Input"),
-    ("output", "Output"),
     ("rule", "Rule"),
-    ("system", "System"),
     ("screen", "Screen"),
-    ("dataForm", "Data form"),
     ("quote", "Quote"),
 ]
 
@@ -132,6 +112,13 @@ def _warn_unknown_keys(obj: dict, allowed: set[str], path: str, issues: list[Ada
             issues.append(AdapterIssue("warning", path, f"unknown key {key!r}"))
 
 
+def _join_multi(value: object) -> str:
+    """str 또는 list → 개행 join — IO 복수 시맨틱(현 전달은 str, list는 확장 대비)."""
+    if isinstance(value, list):
+        return "\n".join(v for v in (_clean(item) for item in value) if v)
+    return _clean(value)
+
+
 def format_node_description(action: dict) -> str:
     """노드 설명 = action.name + KV 줄 직렬화(빈 값 줄 생략) — spec §3."""
     lines: list[str] = []
@@ -154,20 +141,14 @@ def format_node_description(action: dict) -> str:
     return "\n".join(lines)
 
 
-def format_map_description(fields: dict, owner_role: object) -> str:
-    """맵 설명 [Interview] 섹션 — fields 원문 KV + Owner role. 전부 비면 ""."""
-    merged = dict(fields)
-    if "done_criterial" in merged and not _clean(merged.get("done_criteria")):
-        merged["done_criteria"] = merged["done_criterial"]
-    lines = ["[Interview]"]
-    for key, label in _MAP_FIELD_LABELS:
-        value = _clean(merged.get(key))
-        if value:
-            lines.append(f"{label}: {value}")
+def format_map_description(owner_role: object) -> str:
+    """맵 설명 [Interview] 섹션 — 승격 후 Owner role만 잔류(실오너 거버넌스 전까지).
+
+    나머지 fields 키는 전부 고유/폴백 컬럼으로 이동해 직렬화에서 제거(드리프트 방지,
+    design 2026-08-19 §4.1).
+    """
     role = _clean(owner_role)
-    if role:
-        lines.append(f"Owner role: {role}")
-    return "\n".join(lines) if len(lines) > 1 else ""
+    return f"[Interview]\nOwner role: {role}" if role else ""
 
 
 def _truncate(value: str, limit: int, path: str, label: str, issues: list[AdapterIssue]) -> str:
@@ -217,6 +198,16 @@ def _build_nodes_and_edges(
             type="decision" if kind == "decision" else "process",
             system=system,
             seq=seq,
+            # input/output/dataForm은 고유 필드로 승격, system 원문은 폴백에 이중 기록
+            # (라이브러리화 전 표시 무회귀 — design 2026-08-19 §4.1). str 외에 list가 오면
+            # 개행 join — IO 복수 시맨틱과 일치.
+            input=_join_multi(action.get("input")),
+            output=_join_multi(action.get("output")),
+            data_form=_truncate(_clean(action.get("dataForm")), 50, apath, "dataForm", issues),
+            # 폴백은 100자 컷 전 원문 기준 — 대표(system)와 상한이 달라 별도 절단
+            system_fallback=_truncate(
+                _clean(action.get("system")), 200, apath, "system_fallback", issues
+            ),
             description=format_node_description(action),
             color=EXCEPTION_VARIANT_COLOR if variant == "exception" else "",
         ))
@@ -327,15 +318,17 @@ def convert_interview(raw: object) -> AdapterResult:
         nodes, edges = _build_nodes_and_edges(actions, path, issues)
 
         params: dict[str, str] = {
-            "input": _clean(fields.get("input_data")),
-            "output": _clean(fields.get("output_data")),
+            "input": _join_multi(fields.get("input_data")),
+            "output": _join_multi(fields.get("output_data")),
         }
-        total_min = _parse_minutes(fields.get("total_time_min"))
-        if fields.get("total_time_min") not in (None, "") and total_min is None:
-            issues.append(AdapterIssue("warning", f"{path}.fields",
-                                       f"total_time_min not a number: {fields.get('total_time_min')!r}"))
-        if total_min is not None:
-            params["duration"] = format_minutes_hmm(total_min)
+        # *_min(int, 분)이 대표 — 원문 프리텍스트는 아래 폴백 컬럼에 이중 보존 (design 2026-08-19 §1.2)
+        for min_key, param_key in (("total_time_min", "duration"), ("touch_time_min", "touch_time")):
+            minutes = _parse_minutes(fields.get(min_key))
+            if fields.get(min_key) not in (None, "") and minutes is None:
+                issues.append(AdapterIssue("warning", f"{path}.fields",
+                                           f"{min_key} not a number: {fields.get(min_key)!r}"))
+            if minutes is not None:
+                params[param_key] = format_minutes_hmm(minutes)
         for key in ("annual_count", "headcount", "fte"):
             value = _clean(fields.get(key))
             if value:
@@ -347,6 +340,7 @@ def convert_interview(raw: object) -> AdapterResult:
             _clean(a) for a in approvers_raw if _clean(a)
         ] if isinstance(approvers_raw, list) else []
 
+        fpath = f"{path}.fields"
         try:
             result.maps.append(CanonicalMap(
                 code=task_id,
@@ -355,7 +349,22 @@ def convert_interview(raw: object) -> AdapterResult:
                 owner=_clean(row.get("owner")) or None,
                 approvers=approvers,
                 department=_truncate(_clean(row.get("department")), 100, path, "department", issues),
-                description=format_map_description(fields, row.get("ownerRole")),
+                description=format_map_description(row.get("ownerRole")),
+                # 승격 대표 필드 — systems는 sp_system 원문+폴백 이중 기록 (design 2026-08-19 §4.1)
+                system=_truncate(_clean(fields.get("systems")), 100, fpath, "systems", issues),
+                start_condition=_clean(fields.get("start_condition")),
+                # done_criteria/done_criterial 이중 수용 — 표기 모호(실파일 대조 전)
+                end_condition=_clean(fields.get("done_criteria")) or _clean(fields.get("done_criterial")),
+                # 폴백 원문 — 대표는 각각 sp_gmp(검토 선정)·SP노드 annual_count·sp_duration·sp_touch_time
+                gmp_fallback=_clean(fields.get("gmp")),
+                frequency_fallback=_truncate(
+                    _clean(fields.get("frequency")), 200, fpath, "frequency", issues),
+                total_time_fallback=_truncate(
+                    _clean(fields.get("total_time")), 200, fpath, "total_time", issues),
+                touch_time_fallback=_truncate(
+                    _clean(fields.get("touch_time")), 200, fpath, "touch_time", issues),
+                system_fallback=_truncate(
+                    _clean(fields.get("systems")), 200, fpath, "systems", issues),
                 params=params,
                 nodes=nodes,
                 edges=edges,
@@ -380,6 +389,10 @@ def convert_interview(raw: object) -> AdapterResult:
                 result.notes.append(InterviewNote(
                     kind="exception", text=text, title=title, map_code=task_id,
                 ))
+        # tasks[].note — 종전엔 조용히 유실되던 키 (design 2026-08-19 §4.1 동봉)
+        task_note = _clean(task.get("note")) if isinstance(task, dict) else ""
+        if task_note:
+            result.notes.append(InterviewNote(kind="task_note", text=task_note, map_code=task_id))
 
     side_notes = raw.get("sideNotes")
     if side_notes is not None and not isinstance(side_notes, list):
@@ -404,4 +417,23 @@ def convert_interview(raw: object) -> AdapterResult:
             kind=kind, text=text,
             map_code=map_code, category_code=None if map_code else l5_code,
         ))
+
+    # openItems — 종전엔 허용만 되고 미처리(조용히 유실)라 L5 스코프 노트로 보존 (design 2026-08-19 §4.1)
+    open_items = raw.get("openItems")
+    if open_items is not None and not isinstance(open_items, list):
+        issues.append(AdapterIssue("warning", "openItems", "openItems is not a list — ignored"))
+        open_items = None
+    for k, item in enumerate(open_items or []):
+        ipath = f"openItems[{k}]"
+        if isinstance(item, str):
+            text = _clean(item)
+        elif isinstance(item, dict):
+            text = _clean(item.get("text")) or _clean(item.get("name"))
+        else:
+            issues.append(AdapterIssue("warning", ipath, "open item is not an object — skipped"))
+            continue
+        if not text:
+            issues.append(AdapterIssue("warning", ipath, "text missing — skipped"))
+            continue
+        result.notes.append(InterviewNote(kind="open_item", text=text, category_code=l5_code))
     return result

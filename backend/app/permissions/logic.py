@@ -3,8 +3,13 @@
 Frontend mock `permissions-logic.ts`의 우선순위를 Python으로 이식.
 """
 
+from typing import TYPE_CHECKING
+
 from app.ad.org import org_path
 from app.settings import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # 역할 서열 — None 은 role_rank() 에서 0 반환
 ROLE_RANK: dict[str, int] = {"viewer": 1, "editor": 2, "owner": 3}
@@ -40,16 +45,53 @@ def belongs_to_department(emp_org_path: str, principal_id: str) -> bool:
     return emp_org_path == principal_id or emp_org_path.startswith(principal_id + "/")
 
 
+# 설정 화면에서 부여한 sysadmin — local_credentials가 원본, 이건 조회 캐시다 (설계 §3.1).
+# is_sysadmin은 동기 함수이고 앱 33곳이 세션 없이 호출하므로 DB를 직접 읽을 수 없다.
+# 전제: 백엔드는 단일 uvicorn 프로세스(Dockerfile에 --workers 없음). 워커를 늘리면
+# 프로세스별 캐시가 갈라져 부여·회수가 일부 워커에만 반영된다 → 그때는 DB 조회로 전환할 것.
+_granted_sysadmins: set[str] = set()
+
+
+def grant_sysadmin_cache(login_ids: set[str]) -> None:
+    """캐시 전체 교체 — 기동 시 DB 로드용."""
+    global _granted_sysadmins
+    _granted_sysadmins = set(login_ids)
+
+
+def add_granted_sysadmin(login_id: str) -> None:
+    _granted_sysadmins.add(login_id)
+
+
+def remove_granted_sysadmin(login_id: str) -> None:
+    _granted_sysadmins.discard(login_id)
+
+
 def is_sysadmin(login_id: str) -> bool:
     """BPM 시스템 관리자 판정.
 
-    auth OFF + dev_enforce_permissions OFF → 전원 True (로컬 잠금 방지, 현행 동작).
-    auth OFF + dev_enforce_permissions ON  → BPM_SYSADMINS 목록만 True (로컬 권한 시뮬레이션).
-    auth ON                                → BPM_SYSADMINS 목록만 True.
+    dev 모드 + dev_enforce_permissions OFF → 전원 True (로컬 잠금 방지, 현행 동작).
+    그 외 → BPM_SYSADMINS 목록(모든 모드) 또는 설정 화면에서 부여한 로컬 계정
+    (_granted_sysadmins — ldap 모드 한정, 설계 §9.4가 허용한 바이패스는 ldap
+    모드에 한해서만 적용된다. keycloak/dev 전환 후 남은 부여분이 동일 로그인 id의
+    Keycloak 계정에 새어들지 않도록 predicate에서 직접 게이팅한다).
     """
-    if (not settings.auth_enabled) and (not settings.dev_enforce_permissions):
+    if settings.resolved_auth_mode() == "dev" and not settings.dev_enforce_permissions:
         return True
-    return login_id in settings.sysadmin_login_ids()
+    if login_id in settings.sysadmin_login_ids():
+        return True
+    return settings.resolved_auth_mode() == "ldap" and login_id in _granted_sysadmins
+
+
+async def load_granted_sysadmins(session: "AsyncSession") -> None:
+    """기동 시 local_credentials에서 부여분을 읽어 캐시를 채운다."""
+    from sqlalchemy import select
+
+    from app.models import LocalCredential
+
+    rows = await session.execute(
+        select(LocalCredential.login_id).where(LocalCredential.is_sysadmin.is_(True))
+    )
+    grant_sysadmin_cache({row[0] for row in rows})
 
 
 # permission 튜플: (principal_type, principal_id, role)

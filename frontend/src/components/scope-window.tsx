@@ -41,6 +41,7 @@ interface ScopeWindowProps {
   headerLeft?: ReactNode; // 타이틀 대체 커스텀 헤더(배지·타이틀·서브타이틀 등) — flex-1 min-w-0 포함할 것
   headerActions?: ReactNode; // 최소/최대/닫기 앞 추가 버튼(폰트 조절·추출 등)
   titleSlot?: ReactNode; // chromeless(루트) 좌상단 제목 칩 대체 — 스스로 위치(absolute left-2 top-2)를 잡을 것
+  topRightSlot?: ReactNode; // chromeless(루트) 우상단 칩(프레임워크 등) — 스스로 위치(absolute right-2 top-2)를 잡을 것
   children: ReactNode;
 }
 
@@ -60,6 +61,7 @@ export function ScopeWindow({
   headerLeft,
   headerActions,
   titleSlot,
+  topRightSlot,
   children,
 }: ScopeWindowProps) {
   const { t } = useI18n();
@@ -165,6 +167,7 @@ export function ScopeWindow({
               {title}
             </span>
           )}
+          {topRightSlot}
         </div>
       </div>
     );

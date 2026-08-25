@@ -6,7 +6,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { setDevUser } from "@/lib/api";
+import { setAuthToken, setDevUser } from "@/lib/api";
+import { type AuthMode, type AuthModeInfo, getCachedAuthMode } from "@/lib/auth-mode";
 import { saveSsoLogoutHint, setAutoLoginSkip } from "@/lib/auth-return";
 import { getCurrentUser, subscribeCurrentUser, setCurrentUser } from "@/lib/current-user";
 import { storeDevUser } from "@/lib/dev-auth";
@@ -19,12 +20,11 @@ import {
 } from "@/lib/feedback-panel";
 import { useI18n } from "@/lib/i18n";
 import type { Lang, MessageKey } from "@/lib/i18n-messages";
+import { clearLdapToken } from "@/lib/ldap-session";
 import { FeedbackSidePanel } from "@/components/feedback-side-panel";
 import { InboxBadge } from "@/components/inbox-badge";
 import { NotificationBell } from "@/components/notification-bell";
 import { Tooltip } from "@/components/tooltip";
-
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 // 상단 세그먼트 전환 탭 — 맵목록/공지/인박스. 슬라이딩 박스로 현재 경로 강조.
 const NAV_TABS: { href: string; labelKey: MessageKey; Icon: typeof MapIcon }[] = [
@@ -129,6 +129,9 @@ export function TopNav() {
     () => null, // 서버 스냅샷 — SSR에서는 유저 없음
   );
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<AuthMode | null>(null);
+  // 로그아웃 시 UserManager 생성에 필요 — NEXT_PUBLIC_* 빌드 상수 대신 런타임 조회 결과를 재사용
+  const authInfoRef = useRef<AuthModeInfo | null>(null);
   const feedbackOpen = useSyncExternalStore(
     subscribeFeedbackPanel,
     getFeedbackPanelOpen,
@@ -168,6 +171,18 @@ export function TopNav() {
     };
   }, [lang, userName, tabIndex]);
 
+  // 로그아웃 분기용 모드 — Providers·로그인 페이지와 캐시 공유(부팅당 1회만 fetch)
+  useEffect(() => {
+    let alive = true;
+    void getCachedAuthMode().then((info) => {
+      authInfoRef.current = info;
+      if (alive) setMode(info.mode);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // 바깥 클릭 닫기 — 전체화면 오버레이는 페이지 호버를 가로채므로 document 리스너로 대체
   useEffect(() => {
     if (!open) return;
@@ -179,13 +194,22 @@ export function TopNav() {
   }, [open]);
 
   const onLogout = async () => {
-    // 로그아웃은 removeUser()만 하고 Keycloak SSO 세션은 살아있음 — /login 자동 재로그인 차단
+    // 모드 미확정 상태에서 클릭하면 else 분기(keycloak)로 떨어져 authInfoRef가 비어 있어
+    // UserManager가 빈 authority/client_id로 조용히 아무 일도 안 한다 — 확정될 때까지 무시.
+    if (!mode) return;
     setAutoLoginSkip();
-    if (AUTH_ENABLED) {
+    if (mode === "ldap") {
+      clearLdapToken();
+      setAuthToken(null);
+    } else if (mode === "dev") {
+      storeDevUser(null);
+      setDevUser(null);
+    } else {
+      // 로그아웃은 removeUser()만 하고 Keycloak SSO 세션은 살아있음 — /login 자동 재로그인 차단
       const { UserManager } = await import("oidc-client-ts");
       const mgr = new UserManager({
-        authority: process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ?? "",
-        client_id: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "",
+        authority: authInfoRef.current?.keycloakIssuer ?? "",
+        client_id: authInfoRef.current?.keycloakClientId ?? "",
         redirect_uri: window.location.origin,
       });
       // "모든 세션 종료" 패널(/login)용 id_token 확보 — removeUser 후에는 사라지므로 먼저 저장
@@ -194,9 +218,6 @@ export function TopNav() {
         saveSsoLogoutHint(user.id_token);
       }
       await mgr.removeUser();
-    } else {
-      storeDevUser(null);
-      setDevUser(null);
     }
     setCurrentUser(null);
     router.replace("/login");

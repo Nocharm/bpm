@@ -5,7 +5,7 @@ import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
 import { FIELD_KEYS, getLineageKey, type ChangedField } from "@/lib/diff";
 
 export type MergedNodeStatus = "unchanged" | "added" | "removed" | "changed";
-export type MergedEdgeStatus = "unchanged" | "added" | "removed";
+export type MergedEdgeStatus = "unchanged" | "added" | "removed" | "changed";
 
 // 바뀐 필드 하나 — 라벨 + before/after 원시값(빈값은 "", 표시 계층에서 None으로 변환).
 export interface FieldChange {
@@ -27,7 +27,11 @@ export interface MergedEdge {
   source: string; // 계보 키
   target: string; // 계보 키
   label: string;
+  // 저장된 선 모양 — target 우선(없으면 base). 비교 캔버스가 에디터와 같은 경로로 그린다.
+  lineStyle: GraphEdge["line_style"];
   status: MergedEdgeStatus;
+  // 양 버전에 존재하는 엣지의 라벨이 다를 때만 — status는 changed가 된다.
+  labelChange?: { before: string; after: string };
 }
 
 export interface MergedGraph {
@@ -97,17 +101,38 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
   for (const edge of base.edges) {
     const { source, target: tgt } = edgeEndpoints(edge, baseById);
     const id = `${source}->${tgt}`;
-    merged.set(id, { id, source, target: tgt, label: edge.label, status: "removed" });
+    merged.set(id, {
+      id,
+      source,
+      target: tgt,
+      label: edge.label,
+      lineStyle: edge.line_style,
+      status: "removed",
+    });
   }
   for (const edge of target.edges) {
     const { source, target: tgt } = edgeEndpoints(edge, targetById);
     const id = `${source}->${tgt}`;
     const existing = merged.get(id);
     if (existing) {
-      existing.status = "unchanged";
-      existing.label = edge.label; // target 라벨 우선
+      // 양 버전에 존재 — 라벨이 다르면 changed(배선은 유지), 같으면 unchanged. target 값 우선.
+      if (existing.label !== edge.label) {
+        existing.status = "changed";
+        existing.labelChange = { before: existing.label, after: edge.label };
+      } else {
+        existing.status = "unchanged";
+      }
+      existing.label = edge.label;
+      existing.lineStyle = edge.line_style;
     } else {
-      merged.set(id, { id, source, target: tgt, label: edge.label, status: "added" });
+      merged.set(id, {
+        id,
+        source,
+        target: tgt,
+        label: edge.label,
+        lineStyle: edge.line_style,
+        status: "added",
+      });
     }
   }
 

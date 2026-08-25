@@ -148,7 +148,7 @@ export function EmployeeTable() {
             }`;
       setMsg(
         s.aborted_reason
-          ? `aborted — ${s.aborted_reason}`
+          ? `aborted - ${s.aborted_reason}`
           : `scanned ${s.scanned} · upserted ${s.upserted} · deactivated ${s.deactivated} · deleted ${s.deleted} · skipped ${s.skipped} · ${positionInfo}`,
       );
       setRows(await listEmployees());

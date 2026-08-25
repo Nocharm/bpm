@@ -11,7 +11,7 @@ import { COLUMNS } from "./excel-export";
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
   return {
     id, title, description: "", node_type, color: "", assignee: "", department: "", system: "",
-    duration: "", headcount: "", fte: "", cost_krw: "", cost_usd: "", annual_count: "", url: "", url_label: "",
+    duration: "", touch_time: "", headcount: "", fte: "", cost_krw: "", cost_usd: "", annual_count: "", url: "", url_label: "",
     pos_x: 0, pos_y: 0, sort_order, group_ids: [], linked_map_id: null,
     follow_latest: false, linked_version_id: null, is_primary_end: false,
     ...over,
@@ -192,7 +192,7 @@ describe("buildWbsModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: "Ops", assignee: null, system: null, duration: "72",
-          cost_krw: "2000000", cost_usd: null, headcount: "6", url: null, url_label: null,
+          cost_krw: "2000000", cost_usd: null, headcount: "6", touch_time: null, input: null, output: null, input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
           sp_description: "base desc",
         },
       },
@@ -286,7 +286,7 @@ describe("writeWbsSheet", () => {
   const baseRow = {
     kind: "node" as const, no: 1, levels: ["Root", "Sub"], title: "P", type: "process",
     description: "", assignee: "", department: "", system: "",
-    duration: "1.30", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+    duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
     url: "https://example.com/doc", urlLabel: "Doc", groups: "", next: "Next step",
   };
   const model = {

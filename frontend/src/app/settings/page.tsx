@@ -8,6 +8,7 @@
 import { Fragment, useEffect, useState, useSyncExternalStore } from "react";
 
 import { getPendingCheckoutRequests, listPendingApprovalRequests, listPendingGroups } from "@/lib/api";
+import { getCachedAuthMode, type AuthMode } from "@/lib/auth-mode";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -17,6 +18,7 @@ import { GroupsPanel } from "@/components/groups/groups-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
+import { LocalAccountTable } from "@/components/admin/local-account-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
 import { DeletedGroupsPanel } from "@/components/admin/deleted-groups-panel";
@@ -34,6 +36,7 @@ type TabId =
   | "employees"
   | "queue"
   | "depts"
+  | "localAccounts"
   | "tables"
   | "groups"
   | "trash"
@@ -73,6 +76,7 @@ const CATEGORIES: Category[] = [
     tabs: [
       { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
+      { id: "localAccounts", labelKey: "localAccount.tab" },
     ],
   },
   {
@@ -121,6 +125,11 @@ export default function SettingsPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 좌측 nav 승인 큐 배지 건수 — sysadmin만. 큐 탭을 열면 ApprovalQueue가 onCountChange로 갱신.
   const [queueCount, setQueueCount] = useState<number | null>(null);
+  // 로컬 계정 탭은 ldap 모드 전용 — Providers가 이미 채운 캐시를 재사용(재요청 없음). null인 동안은 숨김.
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  useEffect(() => {
+    void getCachedAuthMode().then((info) => setAuthMode(info.mode));
+  }, []);
 
   // 큐 탭을 열지 않아도 배지가 보이도록 마운트 시 선조회(sysadmin 한정).
   useEffect(() => {
@@ -154,7 +163,13 @@ export default function SettingsPage() {
     return Boolean(user?.isSysadmin);
   };
 
-  const visibleCategories = CATEGORIES.filter((c) => canAccess(c.access));
+  const visibleCategories = CATEGORIES.filter((c) => canAccess(c.access))
+    .map((c) => ({
+      ...c,
+      // 로컬 계정 탭은 ldap 모드 전용 — 다른 모드에선 백엔드도 404를 반환한다(설계 §5)
+      tabs: c.tabs.filter((tab) => tab.id !== "localAccounts" || authMode === "ldap"),
+    }))
+    .filter((c) => c.tabs.length > 0);
   const allTabs = visibleCategories.flatMap((c) => c.tabs);
 
   // Groups(모두) 카테고리가 항상 있어 비는 경우는 없지만, 방어적으로 / Defensive guard.
@@ -250,6 +265,9 @@ export default function SettingsPage() {
               </p>
             ))}
           {current === "depts" && <DepartmentTable />}
+          {current === "localAccounts" && (
+            <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
+          )}
           {current === "framework" && (
             <FrameworkPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}

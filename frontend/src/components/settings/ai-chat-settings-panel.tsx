@@ -122,7 +122,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
           <div className="min-w-0 flex-1">
             <div className="text-caption-strong text-ink">AI access</div>
             <div className="text-fine text-ink-tertiary">
-              Turn off while the AI server is down — blocks chat and consultant for everyone, no redeploy.
+              Turn off while the AI server is down - blocks chat and consultant for everyone, no redeploy.
             </div>
           </div>
           <button

@@ -27,6 +27,26 @@ export type NodeData = {
   headcount?: string;
   annual_count?: string;
   fte?: string;
+  // 7번째 회당 파라미터 — duration과 동일 H.MM 계약 (design 2026-08-19 §2)
+  touch_time?: string;
+  // 인터뷰 승격 필드 — input/output은 개행 구분 복수 (design 2026-08-19 §1.1)
+  input?: string;
+  output?: string;
+  // 항목별 데이터 폼 — input/output 줄과 1:1 정렬(빈 줄=미지정) (2026-08-20)
+  input_forms?: string;
+  output_forms?: string;
+  // IO 링크 — output_ids=원본 항목 id, *_links=미러의 원본 itemId, input_flags=필수/선택 (io-linking §3)
+  output_ids?: string;
+  input_links?: string;
+  output_links?: string;
+  input_flags?: string;
+  start_condition?: string;
+  end_condition?: string;
+  data_form?: string;
+  // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정 (design 2026-08-19 §3)
+  system_fallback?: string;
+  // 활동별 GMP — 캔버스 필 태그(토글 노출, null=미분류는 아이콘만) (design 2026-08-20)
+  gmp?: string;
   // 참조 링크(URL) — 노드당 1개, 빈 값 허용
   url?: string;
   // URL 표시 라벨 — url 있을 때만 의미(액션 바 버튼 텍스트 대체)
@@ -72,6 +92,16 @@ export type NodeData = {
   spCostKrw?: string | null;
   spCostUsd?: string | null;
   spHeadcount?: string | null;
+  // 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
+  spTouchTime?: string | null;
+  spInput?: string | null;
+  spOutput?: string | null;
+  // SP IO 항목별 데이터 폼 — 링크 맵 sp_input_forms/sp_output_forms 상속(캔버스 아이콘 표시용)
+  spInputForms?: string | null;
+  spOutputForms?: string | null;
+  spStartCondition?: string | null;
+  spEndCondition?: string | null;
+  spGmp?: string | null;
   spUrl?: string | null;
   spUrlLabel?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)
@@ -150,7 +180,8 @@ const COLLISION_GAP = 8;
 export function nodeSizeOf(nodeType: ProcessNodeType): { w: number; h: number } {
   switch (nodeType) {
     case "decision":
-      return { w: 96, h: 96 };
+      // 1:1.2 가로 확장 마름모 — process-node.tsx 디시전 박스(w-[116px])와 동기화 필수
+      return { w: 116, h: 96 };
     case "start":
     case "end":
       return { w: 96, h: 40 };
@@ -586,14 +617,19 @@ export function canSwapTypes(
 // 시작/끝 노드의 표시 라벨은 i18n·사용자 라벨과 무관하게 항상 영문 고정값.
 const TERMINAL_DEFAULT_LABELS = new Set(["start", "end", "시작", "종료"]);
 
+/** 시작/끝 노드에 사용자 지정 라벨이 있는지 — 있으면 캔버스는 타입 필+라벨 분리 렌더(ProcessNode). */
+export function hasCustomTerminalLabel(label: string): boolean {
+  const custom = label.trim();
+  return custom !== "" && !TERMINAL_DEFAULT_LABELS.has(custom.toLowerCase());
+}
+
 /** 시작/끝 노드 표시명 — 항상 "Start"/"End", 사용자 지정 라벨이 있으면 괄호로 덧붙인다(한영 전환 무관). */
 export function terminalDisplayLabel(nodeType: ProcessNodeType, label: string): string {
   const base = nodeType === "start" ? "Start" : "End";
-  const custom = label.trim();
-  if (!custom || TERMINAL_DEFAULT_LABELS.has(custom.toLowerCase())) {
+  if (!hasCustomTerminalLabel(label)) {
     return base;
   }
-  return `${base} (${custom})`;
+  return `${base} (${label.trim()})`;
 }
 
 // 캔버스 내 이름 중복 방지 — 이미 쓰이는 이름이면 " (2)", " (3)"... 접미사를 붙여 고유화.

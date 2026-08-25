@@ -511,7 +511,7 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
                 <li key={`${file.name}-${i}`} className="flex items-center gap-1.5 text-fine">
                   <span className={`truncate ${file.error ? "text-error" : "text-ink-secondary"}`}>
                     {file.name}
-                    {file.error ? ` — ${file.error}` : ""}
+                    {file.error ? ` - ${file.error}` : ""}
                   </span>
                   <button
                     type="button"

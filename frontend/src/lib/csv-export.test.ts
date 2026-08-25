@@ -48,6 +48,26 @@ describe("buildCsvFromGraph — round trip", () => {
     expect(a.fte).toBe("0.8");
   });
 
+  it("Input_Flags 왕복 — optional 줄(선행 빈 줄 포함)이 export→re-import에서 보존된다 (io-linking)", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("s", "Start", "start", 0),
+        makeNode("a", "A", "process", 1, { input: "PR\n참고자료", input_flags: "\noptional" }),
+        makeNode("e", "End", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("e1", "s", "a"), makeEdge("e2", "a", "e")],
+      groups: [],
+    };
+    const { csv: exported, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual([]);
+    expect(exported.split("\r\n")[0]).toContain("Input,Input_Flags,Output");
+    const re = buildGraphFromCsv(exported, { base: graph });
+    expect(re.errors).toEqual([]);
+    const a = re.graph!.nodes.find((n) => n.title === "A")!;
+    expect(a.input).toBe("PR\n참고자료");
+    expect(a.input_flags).toBe("\noptional");
+  });
+
   it("분기 라벨(대상:라벨)이 왕복에서 보존된다", () => {
     const csv = [
       "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
@@ -60,7 +80,7 @@ describe("buildCsvFromGraph — round trip", () => {
     const { csv: exported } = buildCsvFromGraph(graph);
     const bCells = exported.split("\r\n").find((line) => line.startsWith("B,"))?.split(",");
     expect(bCells?.[0]).toBe("B"); // Name
-    expect(bCells?.[13]).toBe("C:approved;D:rejected"); // Next (14번째 컬럼)
+    expect(bCells?.[20]).toBe("C:approved;D:rejected"); // Next (21번째 컬럼 — Input_Flags 추가로 +1)
   });
 
   it("따옴표·쉼표·줄바꿈 셀 이스케이프 — export → re-import에서 원문 보존", () => {
@@ -90,7 +110,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Secondary end node "Extra End" is not expressible in CSV — skipped']);
+    expect(warnings).toEqual(['Secondary end node "Extra End" is not expressible in CSV - skipped']);
     const lines = csv.split("\r\n");
     expect(lines.length).toBe(2); // header + A만 (start/end/extra end 모두 행이 아님)
     expect(lines[1].startsWith("A,")).toBe(true);
@@ -108,12 +128,12 @@ describe("buildCsvFromGraph — round trip", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([
-      'Edge "A" → End (label "reject") is not expressible in CSV — dropped',
-      'Decision "A" has fewer than 2 branches — re-import will infer process',
+      'Edge "A" → End (label "reject") is not expressible in CSV - dropped',
+      'Decision "A" has fewer than 2 branches - re-import will infer process',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[0]).toBe("A"); // Name
-    expect(aCells?.[13]).toBe("B:approve"); // Next — reject 브랜치는 드롭됨
+    expect(aCells?.[20]).toBe("B:approve"); // Next(21번째) — reject 브랜치는 드롭됨
   });
 
   it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
@@ -128,9 +148,9 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV — dropped']);
+    expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[13]).toBe("B"); // Next — End행 엣지는 드랍, B만 남는다
+    expect(aCells?.[20]).toBe("B"); // Next(21번째) — End행 엣지는 드랍, B만 남는다
   });
 
   it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
@@ -146,11 +166,11 @@ describe("buildCsvFromGraph — round trip", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([
-      'Next target "C:review" contains ";" or ":" — re-import will misparse this reference',
-      'Edge label "ok;fine" (from "A") contains ";" — re-import will misparse this reference',
+      'Next target "C:review" contains ";" or ":" - re-import will misparse this reference',
+      'Edge label "ok;fine" (from "A") contains ";" - re-import will misparse this reference',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[13]).toBe("C:review;B:ok;fine"); // 드랍 없이 그대로 직렬화
+    expect(aCells?.[20]).toBe("C:review;B:ok;fine"); // Next(21번째) — 드랍 없이 그대로 직렬화
   });
 
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
@@ -160,7 +180,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(['Duplicate title "A" — re-import will fail on this file']);
+    expect(warnings).toEqual(['Duplicate title "A" - re-import will fail on this file']);
   });
 
   it("start의 outgoing 대상이 진입 엣지 없는 노드 집합과 다르면 경고", () => {
@@ -176,7 +196,7 @@ describe("buildCsvFromGraph — round trip", () => {
       groups: [],
     };
     const { warnings } = buildCsvFromGraph(graph);
-    expect(warnings).toEqual(["Start connections differ from computed roots — re-import will recompute them"]);
+    expect(warnings).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
   });
 
   it("숫자 파라미터 4필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {
