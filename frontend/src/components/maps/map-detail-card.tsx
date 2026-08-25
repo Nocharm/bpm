@@ -43,6 +43,7 @@ import {
   type MapDetail,
   type MapPermission,
   type PrincipalType,
+  type VersionSummary,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
@@ -156,8 +157,8 @@ interface MapDetailCardProps {
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
   onDelete?: (mapId: number) => void;
-  // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
-  onCopy?: (mapId: number, name: string) => void;
+  // 맵 복사 — 홈이 이름·버전 선택 모달을 처리 (F12). versions는 모달 버전 드롭다운용. 없으면 버튼 미노출.
+  onCopy?: (mapId: number, name: string, versions: VersionSummary[]) => void;
   // word 맵 승격 진입 — 홈이 승격 다이얼로그를 처리(design 2026-07-24 §6). 없으면 버튼 미노출.
   onPromote?: (mapId: number, name: string) => void;
   // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
@@ -1305,11 +1306,9 @@ export function MapDetailCard({
     );
   }
 
-  // 승인본(approved/published)이 있어야 복사 가능 — 없으면 버튼 숨김(백엔드 409 회피) /
-  // Copy needs an approved/published version; hide otherwise (avoids backend 409).
-  const hasApprovedVersion = detail.versions.some(
-    (v) => v.status === "approved" || v.status === "published",
-  );
+  // 복사는 버전 선택식 — 승인 여부 무관, 버전이 하나라도 있으면 가능 /
+  // Copy is version-select based; any version qualifies.
+  const hasCopyableVersion = detail.versions.length > 0;
 
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
   return (
@@ -1324,12 +1323,12 @@ export function MapDetailCard({
             <Settings size={14} strokeWidth={1.5} />
             {t("perm.settingsTitle")}
           </Link>
-          {hasApprovedVersion && onCopy && (
+          {hasCopyableVersion && onCopy && (
             <button
               type="button"
               data-id="map-detail-copy"
               className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
-              onClick={() => onCopy(detail.id, detail.name)}
+              onClick={() => onCopy(detail.id, detail.name, detail.versions)}
             >
               <Copy size={14} strokeWidth={1.5} />
               {t("home.copyFromApproved")}

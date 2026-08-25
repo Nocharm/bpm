@@ -331,22 +331,25 @@ async def copy_map(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
-    """승인본(approved/published) 기준으로 맵 복사 — 새 맵의 초기 draft에 그래프 복제 (request #12).
+    """맵 복사 — 새 맵의 초기 draft에 그래프 복제 (request #12).
 
-    복사 가능 조건: 원본 맵에 승인된 버전이 1개 이상. 없으면 409.
+    version_id 지정 시 그 버전(승인 여부 무관)을 원본으로, 미지정이면 최신 승인본
+    (approved/published) — 없으면 409.
     """
     source_map = await session.get(ProcessMap, map_id)
     if source_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    # 최신 승인본 1개 — 그래프 즉시 클론을 위해 nodes/edges/groups eager-load
+    # 원본 버전 1개 — 그래프 즉시 클론을 위해 nodes/edges/groups eager-load
+    version_query = select(MapVersion).where(MapVersion.map_id == map_id)
+    if payload.version_id is not None:
+        version_query = version_query.where(MapVersion.id == payload.version_id)
+    else:
+        version_query = version_query.where(
+            MapVersion.status.in_([workflow.APPROVED, workflow.PUBLISHED])
+        )
     source_version = (
         await session.scalars(
-            select(MapVersion)
-            .where(
-                MapVersion.map_id == map_id,
-                MapVersion.status.in_([workflow.APPROVED, workflow.PUBLISHED]),
-            )
-            .order_by(MapVersion.id.desc())
+            version_query.order_by(MapVersion.id.desc())
             .limit(1)
             .options(
                 selectinload(MapVersion.nodes),
@@ -356,6 +359,11 @@ async def copy_map(
         )
     ).first()
     if source_version is None:
+        if payload.version_id is not None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"version {payload.version_id} not found in map {map_id}",
+            )
         raise HTTPException(status_code=409, detail="map has no approved version to copy")
 
     copy_name = payload.name or f"{source_map.name} (Copy)"

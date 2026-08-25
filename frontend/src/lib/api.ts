@@ -356,12 +356,13 @@ export function createMap(
   });
 }
 
-// 승인본(approved/published) 기준 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
+// 맵 복사 — 새 private 맵의 초기 draft에 그래프 복제 (F12)
+// versionId: 원본 버전 선택(승인 여부 무관) — 미지정이면 최신 승인본(approved/published)
 // convertToNormal: word 맵 승격 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
 export function copyMap(
   mapId: number,
   name?: string,
-  opts?: { convertToNormal?: boolean; owningDepartment?: string },
+  opts?: { convertToNormal?: boolean; owningDepartment?: string; versionId?: number },
 ): Promise<MapDetail> {
   return request<MapDetail>(`/maps/${mapId}/copy`, {
     method: "POST",
@@ -369,6 +370,7 @@ export function copyMap(
       ...(name ? { name } : {}),
       ...(opts?.convertToNormal ? { convert_to_normal: true } : {}),
       ...(opts?.owningDepartment ? { owning_department: opts.owningDepartment } : {}),
+      ...(opts?.versionId ? { version_id: opts.versionId } : {}),
     }),
   });
 }

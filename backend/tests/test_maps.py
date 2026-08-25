@@ -443,3 +443,50 @@ def test_copy_survives_null_doc_sections(client: TestClient) -> None:
     res = client.post(f"/api/maps/{map_id}/copy", json={})
     assert res.status_code == 201
     assert res.json()["doc_sections"] == []
+
+
+def _seed_two_version_map(name: str) -> tuple[int, int, int]:
+    """published(PubNode) + draft(DraftNode) 2버전 맵 시드 → (map_id, pub_id, draft_id)."""
+
+    async def _seed() -> tuple[int, int, int]:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=name, visibility="public")
+            pub = MapVersion(label="As-Is", status="published", version_number=1)
+            draft = MapVersion(label="To-Be", status="draft")
+            m.versions.append(pub)
+            m.versions.append(draft)
+            session.add(m)
+            await session.flush()
+            session.add(Node(id=f"{name}-p", version_id=pub.id, title="PubNode", node_type="process"))
+            session.add(Node(id=f"{name}-d", version_id=draft.id, title="DraftNode", node_type="process"))
+            await session.commit()
+            return m.id, pub.id, draft.id
+
+    return asyncio.run(_seed())
+
+
+def test_copy_with_version_id_copies_that_version(client: TestClient) -> None:
+    """복사 모달 버전 선택 — version_id 지정 시 승인 여부와 무관하게 그 버전 그래프를 복제한다."""
+    map_id, _pub_id, draft_id = _seed_two_version_map(f"vsel-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={"version_id": draft_id})
+    assert res.status_code == 201
+    body = res.json()
+    graph = client.get(f"/api/versions/{body['versions'][0]['id']}/graph").json()
+    assert [n["title"] for n in graph["nodes"]] == ["DraftNode"]
+
+
+def test_copy_defaults_to_latest_approved(client: TestClient) -> None:
+    """version_id 미지정이면 기존 동작 유지 — 최신 승인본(published) 그래프를 복제한다."""
+    map_id, _pub_id, _draft_id = _seed_two_version_map(f"vdef-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={})
+    assert res.status_code == 201
+    graph = client.get(f"/api/versions/{res.json()['versions'][0]['id']}/graph").json()
+    assert [n["title"] for n in graph["nodes"]] == ["PubNode"]
+
+
+def test_copy_rejects_foreign_version_id(client: TestClient) -> None:
+    """다른 맵의 version_id는 404 — 맵 소속 검증."""
+    map_id, _pub, _draft = _seed_two_version_map(f"vown-{uuid4().hex[:8]}")
+    _other_map, other_pub, _other_draft = _seed_two_version_map(f"vown2-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={"version_id": other_pub})
+    assert res.status_code == 404
