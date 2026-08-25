@@ -18,6 +18,7 @@ BPM_SYSADMINS=admin.sys,jane.doe
 - With authentication **off** (development default), every user is effectively sysadmin.
 - With `DEV_ENFORCE_PERMISSIONS=true` or real Keycloak auth, only IDs listed in `BPM_SYSADMINS` are sysadmin.
 - The Permissions console shows a **Sysadmin** tag on such users, noted as *env-managed* — you cannot toggle it from the UI.
+- When the server runs in **ldap auth mode**, sysadmin can also be granted per account with the **Sysadmin toggle** on the Local Accounts screen (section 7) — that grant only takes effect in ldap mode. Users listed in the env show as "Set by environment" and cannot be turned off from the UI.
 
 ### What sysadmin unlocks
 
@@ -39,6 +40,7 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **AI chat** | Settings → Content | Retention-cap settings, chat loading-tips management (see section 12) |
 | **Employees** | Settings → Directory | Org directory table — HR-webhook full sync, sysadmin tags, CSV export |
 | **Departments** | Settings → Directory | Org-basis department table, department remap, CSV export |
+| **Local Accounts** | Settings → Directory | ldap auth mode only — local login accounts for external consultants (see section 7) |
 | **Framework** | Settings → Framework | Work-framework category management and JSON import — pilot stage (see section 13) |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
@@ -137,6 +139,16 @@ Each entry shows the requester and context; decide with Approve / Reject (reject
 - **Department-head determination** — heads are determined from EDW position (FRNM) data collected via webhook and shown with a **Manager** tag on the department-head chain. The position pass only runs when both the EDW webhook (`N8N_POSITION_URL`) and AD (employee-number mapping) are configured.
 - **Exposed positions** — a card on the Employees tab lets you check which collected EDW titles are shown as a person's position across the app (defaults: 그룹장·파트장·팀장·센터장). This is an app setting saved from the screen, not an env variable.
 - **Missing departments remap** — department paths that disappeared in a reorg but are still referenced by map permissions, group members, or map owning departments appear on the Departments tab; reassign each to a current department.
+
+### Local Accounts (ldap mode only)
+
+The **Settings → Directory → Local Accounts** tab appears **only while the server's auth mode is `ldap`**. It issues ID/password logins to **external consultants** who have no directory (HR) account.
+
+- **Create account** — login ID, name, department code (optional), and password.
+- **Login order** — a sign-in checks local accounts first, then falls back to AD (company account) authentication. Attempts are throttled to **5 per 5 minutes**.
+- **Management** — per account: **Reset password**, **Deactivate / Reactivate**, and **Delete** (permanent — no undo). When a consultant's engagement ends, deactivate the account first before deleting.
+- **Sysadmin toggle** — grants sysadmin to local/AD accounts (see section 1 — effective in ldap mode only).
+- Token lifetime, secret rotation (invalidates every session), and other operational contracts live in `docs/deploy/deploy.md` §2.1.
 
 ---
 
@@ -252,6 +264,8 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `BPM_SYSADMINS` | backend `.env` | Comma-separated login IDs granted sysadmin |
 | `AUTH_MODE` | backend `.env` | Auth mode — `keycloak` \| `ldap` \| `dev`. Empty falls back to legacy `AUTH_ENABLED` (`true`→keycloak, `false`→dev). The frontend has no build-time equivalent — it reads the resolved mode at boot from `GET /api/auth/mode` |
 | `AUTH_ENABLED` | backend `.env` | Legacy on/off switch, superseded by `AUTH_MODE` — kept for backward compatibility |
+| `AUTH_JWT_SECRET` | backend `.env` | Signing key for ldap-mode session tokens — **required in ldap mode**. Rotating it invalidates every issued session immediately (kill switch) |
+| `AUTH_JWT_TTL_HOURS` | backend `.env` | ldap-mode session token lifetime in hours. Default 8 |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | Enforce RBAC locally even with auth off |
 | `MANUAL_URL` | `.env` (compose) | Manual-site button on the editor toolbar — hidden when empty |
 | `N8N_HR_URL` | backend `.env` | n8n HR webhook URL (single source for people and org chart) — sync activates only with the token set too |
@@ -270,4 +284,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-08-19*
+*Business Process Map — Administrator Manual · updated 2026-08-25*

@@ -18,6 +18,7 @@ BPM_SYSADMINS=admin.sys,jane.doe
 - 인증이 **꺼진** 상태(개발 기본값)에서는 사실상 모든 사용자가 sysadmin입니다.
 - `DEV_ENFORCE_PERMISSIONS=true` 또는 실제 Keycloak 인증이 켜지면 `BPM_SYSADMINS`에 등록된 ID만 sysadmin입니다.
 - 권한 콘솔에서 해당 사용자에게 **Sysadmin** 태그가 표시되며 *env 관리*로 안내됩니다 — UI에서는 켜고 끌 수 없습니다.
+- 서버가 **ldap 인증 모드**일 때는 로컬 계정 화면(7장)의 계정별 **Sysadmin 토글**로도 부여할 수 있습니다 — 이 부여는 ldap 모드에서만 효력이 있습니다. env로 지정된 사용자는 "환경변수로 지정됨"으로 표시되며 화면에서 끌 수 없습니다.
 
 ### Sysadmin이 여는 것들
 
@@ -39,6 +40,7 @@ BPM_SYSADMINS=admin.sys,jane.doe
 | **AI 챗(AI chat)** | 설정 → 콘텐츠 | 대화 보존 상한 설정·채팅 로딩 팁 관리 (12장 참고) |
 | **임직원(Employees)** | 설정 → 조직 | 조직 디렉터리 테이블 — HR 웹훅 전체 동기화, sysadmin 태그, CSV 내보내기 |
 | **부서(Departments)** | 설정 → 조직 | 조직 기준 부서 테이블, 부서 재지정, CSV 내보내기 |
+| **로컬 계정(Local Accounts)** | 설정 → 조직 | ldap 인증 모드 전용 — 외부 컨설턴트용 로컬 로그인 계정 관리 (7장 참고) |
 | **Framework(업무체계)** | 설정 → 프레임워크 | 업무체계 카테고리 관리·JSON 임포트 — 시범 단계 (13장 참고) |
 | **테이블(Tables)** | 설정 → 데이터베이스 | 읽기 전용 DB 브라우저(로그인 기록 포함), 서버 CSV 내보내기 |
 | **승인 큐(Approval Queue)** | 설정 → 승인 | 전 맵 대상 대기 요청 |
@@ -137,6 +139,16 @@ BPM_SYSADMINS=admin.sys,jane.doe
 - **부서장 판정** — EDW 직책(FRNM) 웹훅으로 수집한 직책으로 부서장을 판정해 부서장 체인에 **Manager** 태그로 표시합니다. 직책 패스는 EDW 웹훅(`N8N_POSITION_URL`)과 AD(사번 매핑)가 모두 설정된 경우에만 실행됩니다.
 - **노출 직책(Exposed positions)** — 임직원 탭의 카드에서 수집된 EDW 직책 중 앱에 직책으로 표시할 항목을 체크해 저장합니다(기본: 그룹장·파트장·팀장·센터장). env가 아니라 화면에서 저장하는 앱 설정입니다.
 - **부서 재지정(Missing departments)** — 조직개편으로 사라진 부서 경로가 맵 권한·그룹 멤버·오우닝 부서에 아직 참조로 남아 있으면 부서 탭에 표시되며, 각각을 현재 부서로 재지정합니다.
+
+### 로컬 계정 (ldap 모드 전용)
+
+**설정 → 조직 → 로컬 계정** 탭은 서버 인증 모드가 **`ldap`일 때만** 나타납니다. 디렉터리(HR) 계정이 없는 **외부 컨설턴트**에게 아이디/비밀번호를 발급하는 화면입니다.
+
+- **계정 생성** — 로그인 아이디·이름·부서 코드(선택)·비밀번호를 입력합니다.
+- **로그인 순서** — 로그인 시 로컬 계정을 먼저 확인하고, 없으면 AD(사내 계정) 인증으로 폴백합니다. 로그인 시도는 **5분당 5회**로 제한됩니다.
+- **관리** — 계정별로 **비밀번호 재설정**, **비활성(Deactivate) / 재활성**, **삭제**(영구 — 복구 불가)를 지원합니다. 프로젝트가 끝난 컨설턴트 계정은 삭제 전에 우선 비활성으로 차단하세요.
+- **Sysadmin 토글** — 로컬/AD 계정에 sysadmin을 부여합니다(1장 참고 — ldap 모드에서만 효력).
+- 토큰 수명·시크릿 교체(전체 세션 무효화) 등 운영 계약은 `docs/deploy/deploy.md` §2.1을 참고하세요.
 
 ---
 
@@ -251,6 +263,8 @@ PUT /api/manual
 | `BPM_SYSADMINS` | backend `.env` | sysadmin으로 지정할 로그인 ID 콤마 목록 |
 | `AUTH_MODE` | backend `.env` | 인증 모드 — `keycloak` \| `ldap` \| `dev`. 비우면 구 `AUTH_ENABLED`로 유도(`true`→keycloak, `false`→dev). 프론트는 빌드타임 대응값이 없고, 부팅 시 `GET /api/auth/mode`로 런타임 조회한다 |
 | `AUTH_ENABLED` | backend `.env` | 구 온/오프 스위치 — `AUTH_MODE`로 대체됨, 하위호환용으로 유지 |
+| `AUTH_JWT_SECRET` | backend `.env` | ldap 모드 세션 토큰 서명 키 — **ldap 모드에서 필수**. 교체하면 발급된 모든 로그인 세션이 즉시 무효화됩니다(kill switch) |
+| `AUTH_JWT_TTL_HOURS` | backend `.env` | ldap 모드 세션 토큰 수명(시간). 기본 8 |
 | `DEV_ENFORCE_PERMISSIONS` | backend `.env` | 인증 없이도 로컬에서 RBAC 강제 |
 | `MANUAL_URL` | `.env` (compose) | 에디터 툴바의 매뉴얼 사이트 버튼 — 비우면 숨김 |
 | `N8N_HR_URL` | backend `.env` | n8n HR 웹훅 주소(사용자·조직도 단일 소스) — 토큰과 함께 설정해야 동기화 활성 |
@@ -269,4 +283,4 @@ PUT /api/manual
 
 ---
 
-*Business Process Map — 관리자 매뉴얼 · 2026-08-19 갱신*
+*Business Process Map — 관리자 매뉴얼 · 2026-08-25 갱신*
