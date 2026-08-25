@@ -4,6 +4,7 @@ import asyncio
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.models import MapVersion, Node, ProcessMap
@@ -406,3 +407,39 @@ def test_copy_rejects_unknown_owning_department(client: TestClient) -> None:
         json={"convert_to_normal": True, "owning_department": "No Such Division"},
     )
     assert res.status_code == 422
+
+
+def test_copy_survives_null_doc_sections(client: TestClient) -> None:
+    """운영 DB pre-ALTER 행(doc_sections NULL) 복사 회귀 — list(None) TypeError로 500 나던 버그.
+
+    doc_sections DDL엔 DEFAULT가 없어(db.py _ADDED_COLUMNS) 컬럼 추가 전 행은 NULL로 남는다.
+    """
+    name = f"null-docsec-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=name, visibility="public")
+            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            session.add(m)
+            await session.commit()
+            map_id = m.id
+        # 서버 자동 ALTER 재현 — 컬럼을 nullable로 재추가해 대상 행만 NULL로 만든다
+        async with SessionLocal() as session:
+            rows = (
+                await session.execute(text("SELECT id, doc_sections FROM process_maps"))
+            ).all()
+            await session.execute(text("ALTER TABLE process_maps DROP COLUMN doc_sections"))
+            await session.execute(text("ALTER TABLE process_maps ADD COLUMN doc_sections JSON"))
+            for rid, val in rows:
+                if rid != map_id:
+                    await session.execute(
+                        text("UPDATE process_maps SET doc_sections = :v WHERE id = :i"),
+                        {"v": val, "i": rid},
+                    )
+            await session.commit()
+        return map_id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(f"/api/maps/{map_id}/copy", json={})
+    assert res.status_code == 201
+    assert res.json()["doc_sections"] == []

@@ -373,7 +373,8 @@ async def copy_map(
         # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 승격(convert)은 일반 맵으로 소거 (design 2026-07-24 §6)
         mode="normal" if convert else source_map.mode,
         doc_name="" if convert else source_map.doc_name,
-        doc_sections=[] if convert else list(source_map.doc_sections),
+        # or [] — pre-ALTER 운영 행은 doc_sections NULL(DDL DEFAULT 없음, db.py _ADDED_COLUMNS)
+        doc_sections=[] if convert else list(source_map.doc_sections or []),
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
