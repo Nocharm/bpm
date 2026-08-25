@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp, LockKeyhole, TriangleAlert, User as UserIcon } from "lucide-react";
+import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -707,10 +707,16 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           </div>
         )}
 
-        {/* 원본 은퇴(오너 전용) — 복사 후 기존 맵 휴지통행. SP 지정 맵은 사용처 목록+확인 체크 (B4·B5) */}
+        {/* 원본 은퇴(오너 전용) — 선택 카드(체크 시 앰버 틴트) + 아이콘 라인 요약박스.
+            SP 지정 맵은 앰버 경고 박스 + 사용처 아코디언 + 최하단 확인 체크 (B4·B5) */}
         {copy && copy.myRole === "owner" && (
-          <div className="flex flex-col gap-2 rounded-sm border border-hairline p-3">
-            <label className="flex cursor-pointer items-start gap-2">
+          <div className="flex flex-col gap-2">
+            <label
+              data-id="copy-retire-card"
+              className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-3 transition-colors duration-150 ${
+                retire ? "border-changed/40 bg-changed/10" : "border-hairline hover:bg-surface-alt"
+              }`}
+            >
               <input
                 type="checkbox"
                 data-id="copy-retire-checkbox"
@@ -719,31 +725,58 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                 onChange={(e) => toggleRetire(e.target.checked)}
                 disabled={submitting}
               />
-              <span className="min-w-0">
-                <span className="block text-caption text-ink">{t("copyDialog.retireCheckbox")}</span>
-                <span className="block text-fine text-ink-tertiary">{t("copyDialog.retireHint")}</span>
+              <Trash2
+                size={16}
+                strokeWidth={1.5}
+                className={`mt-0.5 shrink-0 ${retire ? "text-changed" : "text-ink-tertiary"}`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-caption-strong text-ink">
+                  {t("copyDialog.retireCheckbox")}
+                </span>
+                {!retire && (
+                  <span className="block text-fine text-ink-tertiary">
+                    {t("copyDialog.retireHint")}
+                  </span>
+                )}
               </span>
             </label>
+            {/* 체크 시 — 무엇이 일어나는지 아이콘 라인으로 요약 (ConfirmDialog lines 어법) */}
             {retire && (
-              <p data-id="copy-retire-notify-note" className="text-fine text-ink-tertiary">
-                {t("copyDialog.retireNotifyNote")}
-              </p>
+              <ul
+                data-id="copy-retire-details"
+                className="flex flex-col gap-1 rounded-sm bg-surface-alt p-2"
+              >
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Tag size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireLineRename")}</span>
+                </li>
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Hourglass size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireLineTrash")}</span>
+                </li>
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Bell size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireNotifyNote")}</span>
+                </li>
+              </ul>
             )}
             {retire && spUsage === null && (
               <p className="text-fine text-ink-tertiary">…</p>
             )}
+            {/* SP 지정 맵 — 앰버 경고 박스가 아코디언·확인 체크까지 감싼다 (approval-panel changed 톤 어법) */}
             {retire && spUsage !== null && spUsage.designated && (
-              <div className="flex flex-col gap-1.5">
-                <p className="flex items-start gap-1.5 text-fine text-changed">
+              <div className="flex flex-col gap-2 rounded-sm border border-changed/40 bg-changed/10 p-2.5">
+                <p className="flex items-start gap-1.5 text-caption text-changed">
                   <TriangleAlert size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" />
-                  {t("copyDialog.retireSpWarning")}
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireSpWarning")}</span>
                 </p>
                 <button
                   type="button"
                   data-id="copy-retire-sp-accordion"
                   aria-expanded={spOpen}
                   onClick={() => setSpOpen((open) => !open)}
-                  className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-caption text-ink hover:bg-surface"
+                  className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
                 >
                   {spOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
                   <span className="truncate">
@@ -753,7 +786,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                   </span>
                 </button>
                 {spOpen && (
-                  <div className="flex flex-col gap-1 rounded-sm border border-hairline px-3 py-2">
+                  <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-3 py-2">
                     <ul className="scroll-soft flex max-h-[7rem] flex-col gap-1 overflow-y-auto">
                       {spUsage.used_by.map((u) => (
                         <li
@@ -776,8 +809,8 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                         <li className="text-fine text-ink-tertiary">{t("copyDialog.retireSpNone")}</li>
                       )}
                     </ul>
-                    {/* 확인 체크 — 아코디언 최하단(B4) */}
-                    <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-hairline pt-2">
+                    {/* 확인 체크 — 아코디언 최하단, 라인들과 위계 구분 (B4) */}
+                    <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-divider pt-2">
                       <input
                         type="checkbox"
                         data-id="copy-retire-sp-confirm"
@@ -786,7 +819,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                         onChange={(e) => setSpConfirm(e.target.checked)}
                         disabled={submitting}
                       />
-                      <span className="text-fine text-ink">{t("copyDialog.retireSpConfirm")}</span>
+                      <span className="text-caption-strong text-ink">
+                        {t("copyDialog.retireSpConfirm")}
+                      </span>
                     </label>
                   </div>
                 )}
