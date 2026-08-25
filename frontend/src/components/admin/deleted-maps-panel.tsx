@@ -3,11 +3,11 @@
 // 삭제 예정(휴지통) — 소프트삭제된 맵 목록 + 복구. 오너는 본인 것만, sysadmin은 전체(서버 필터). (DL)
 
 import { useEffect, useState } from "react";
-import { PlayCircle, RotateCcw } from "lucide-react";
+import { PlayCircle, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { IconActionButton } from "@/components/icon-action-button";
-import { listDeletedMaps, restoreMap, type MapSummary } from "@/lib/api";
+import { listDeletedMaps, purgeMap, restoreMap, type MapSummary } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
@@ -18,11 +18,19 @@ const HOUR_MS = 60 * 60 * 1000;
 // 백엔드 RECOVERY_WINDOW(routers/maps.py)와 일치 — 변경 시 양쪽 함께 / mirrors backend RECOVERY_WINDOW.
 const RETENTION_DAYS = 7;
 
-export function DeletedMapsPanel({ onToast }: { onToast: (msg: string, tone?: "error") => void }) {
+export function DeletedMapsPanel({
+  onToast,
+  isSysadmin = false,
+}: {
+  onToast: (msg: string, tone?: "error") => void;
+  // 즉시 영구삭제 버튼 게이팅 — sysadmin만 (백엔드도 403으로 강제)
+  isSysadmin?: boolean;
+}) {
   const { t } = useI18n();
   const [maps, setMaps] = useState<MapSummary[] | null>(null);
   const [reloadKey, setReloadKey] = useState(0); // 복구 후 재조회 트리거
   const [pendingRestore, setPendingRestore] = useState<MapSummary | null>(null); // 복구 확인 대상
+  const [pendingPurge, setPendingPurge] = useState<MapSummary | null>(null); // 즉시삭제 확인 대상
   // 마운트 시점 1회 — 렌더 중 Date.now()는 순수성 규칙 위반이라 상태로 고정 / lazy now for purity.
   const [now] = useState(() => Date.now());
   // 25개씩 증분 렌더 — sysadmin 전체 뷰에서 삭제분이 몰려도 렌더 부하 없음
@@ -62,6 +70,16 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string, tone?: "e
     }
   };
 
+  const handlePurge = async (id: number) => {
+    try {
+      await purgeMap(id);
+      onToast(t("trash.purged"));
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      onToast(humanizeApiError(err, t), "error");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -91,16 +109,47 @@ export function DeletedMapsPanel({ onToast }: { onToast: (msg: string, tone?: "e
                   </span>
                 )}
               </span>
-              <IconActionButton
-                icon={<RotateCcw size={14} strokeWidth={1.5} />}
-                label={t("trash.restore")}
-                align="right"
-                onClick={() => setPendingRestore(m)}
-              />
+              <span className="flex shrink-0 items-center gap-1">
+                <IconActionButton
+                  icon={<RotateCcw size={14} strokeWidth={1.5} />}
+                  label={t("trash.restore")}
+                  align="right"
+                  onClick={() => setPendingRestore(m)}
+                />
+                {isSysadmin && (
+                  <IconActionButton
+                    icon={<Trash2 size={14} strokeWidth={1.5} />}
+                    label={t("trash.purgeNow")}
+                    align="right"
+                    onClick={() => setPendingPurge(m)}
+                  />
+                )}
+              </span>
             </div>
           ))}
           {hasMore && <div ref={sentinelRef} className="h-px" />}
         </div>
+      )}
+
+      {pendingPurge && (
+        <ConfirmDialog
+          danger
+          icon={<Trash2 size={28} strokeWidth={1.5} />}
+          title={t("trash.confirmPurgeMapTitle")}
+          message={pendingPurge.name}
+          lines={[
+            { icon: <Trash2 size={14} strokeWidth={1.5} />, text: t("trash.confirmPurgeMapL1") },
+            { icon: <TriangleAlert size={14} strokeWidth={1.5} />, text: t("trash.confirmPurgeMapL2") },
+          ]}
+          confirmLabel={t("trash.purgeNow")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => {
+            const target = pendingPurge;
+            setPendingPurge(null);
+            void handlePurge(target.id);
+          }}
+          onClose={() => setPendingPurge(null)}
+        />
       )}
 
       {pendingRestore && (

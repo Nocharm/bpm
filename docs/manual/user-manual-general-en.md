@@ -11,7 +11,8 @@ This manual covers everything outside of editing — from signing in through map
 ### Signing in
 
 1. Open the app and click **Sign in with Keycloak** — your company SSO account signs you in. Once you've signed in, later visits sign you in automatically and take you straight to the screen you were opening (deep link).
-2. In development environments, **Sign in with a test account** lets you pick a test user instead.
+2. On servers that run company-account (LDAP) authentication, an **ID/password form** appears instead of the Keycloak button — sign in with your company account or a local account issued by an administrator.
+3. In development environments, **Sign in with a test account** lets you pick a test user instead.
 
 ### Screens at a glance
 
@@ -125,13 +126,16 @@ The **approval dashboard** at the bottom of the right inspector shows the steppe
 
 ## 4. Comparing Versions
 
-Open **Compare** from the editor top bar (requires at least one published version).
+Open **Compare** from the editor top bar (requires at least one published version). The compare button in the inspector Map tab's version row opens it too.
 
 - Pick **Base** and **Target** versions — **Swap** flips them.
-- Differences are highlighted: **Added** (green), **Removed** (red), **Changed** (yellow), with a "Changed: fields" detail and a summary line.
+- Differences are highlighted: **Added** (green), **Removed** (red), **Changed** (yellow) — **edge label changes** show in yellow alongside node changes — with a "Changed: fields" detail and a summary line.
+- Connectors render with the **line style saved on the map** (curved/stepped/straight).
 - Toggle **Horizontal layout** / **Vertical layout** to re-arrange both canvases.
-- The **Changes** list filters by All / Nodes / Edges; the **Properties** pane shows the selected node's fields (including per-run metrics) side by side.
-- **Apply To-Be** carries the target's changes forward; **Export** saves the comparison.
+- Overlapping nodes can be **dragged aside temporarily** — the move is view-only, never saved, and everything snaps back when you switch versions or layout.
+- The **Changes** list filters by All / Nodes / Edges; the **Properties** pane shows the selected node's fields (per-run metrics, GMP, I/O & conditions included) side by side. Selecting an edge shows its label and line-style changes.
+- The **Summary tab** compares the two versions as numbers — version totals of the seven per-run metrics (base → target with deltas), the contributing node list (click to focus on canvas), plus **Structure** (node/edge counts), **Systems**, **Departments & assignees** (coverage), and **GMP** distribution sections. The **Summary items** dropdown at the top right picks which sections show.
+- **Apply To-Be** carries the target's changes forward; **Export** saves the comparison as a PNG — with an info card at the bottom carrying the map name, versions (base → target), and published date.
 
 ---
 
@@ -197,4 +201,4 @@ Groups let you grant map access to several people in one step.
 
 ---
 
-*Business Process Map — Getting Around · Updated 2026-08-19*
+*Business Process Map — Getting Around · Updated 2026-08-25*

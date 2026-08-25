@@ -21,6 +21,7 @@ import {
   Pin,
   Play,
   Plus,
+  RefreshCw,
   Server,
   ShieldCheck,
   User,
@@ -63,9 +64,10 @@ const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = 
 
 // 캔버스 규범 순서(#10) — 표시 순서는 토글을 켠 순서가 아니라 고정: 속성 → 지표(NodeParams) →
 // 조건 → 인풋 → 아웃풋. 속성 줄은 NodeFields, 조건·IO는 NodeIoDetails(지표 뒤)가 담당.
-const ATTR_FIELD_ORDER = ["assignee", "department", "system", "url"] as const;
+// url 줄은 폐기 — 좌하단 UrlBadge + 액션 바 링크가 전부 (사용자 결정 2026-08-25).
+const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 
-// 노드 속성 줄(담당자/부서/시스템/URL) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
+// 노드 속성 줄(담당자/부서/시스템) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
 // start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
@@ -75,15 +77,11 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
     assignee: data.spAssignee,
     department: data.spDepartment,
     system: data.spSystem,
-    url: data.spUrl,
   };
   return (
     <>
       {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
-        const raw = isSubprocess ? spValues[field] : data[field];
-        // url — 라벨 있으면 라벨만, 없으면 고정 텍스트 LINK(원문 미노출) (batch2 ⑦)
-        const urlLabel = isSubprocess ? data.spUrlLabel : data.urlLabel;
-        const value = field === "url" ? (raw ? urlLabel || "LINK" : null) : raw;
+        const value = isSubprocess ? spValues[field] : data[field];
         if (!value) return null;
         const Icon = FIELD_ICON[field];
         return (
@@ -101,7 +99,20 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
 
 // 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
 // 체크는 화면 한정(저장 안 함) 상태이고, 키가 링크 itemId면 원본·미러가 동반 체크된다.
-function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"] }) {
+function NodeIoDetails({
+  nodeId,
+  data,
+  nodeSelected = true,
+  framed = false,
+}: {
+  nodeId: string;
+  data: AppNode["data"];
+  // 미선택 노드의 헤더 클릭은 접힘/열림 대신 선택(포커스 이동)만 — 클릭 버블이 RF onNodeClick으로
+  // 흘러 선택되고, 선택된 뒤의 클릭부터 토글로 동작한다 (사용자 요청 2026-08-25).
+  nodeSelected?: boolean;
+  // 분기(decision)처럼 노드 밖(캔버스 위)에 뜰 때 — 배경과 구분되도록 보더/그림자 강조
+  framed?: boolean;
+}) {
   const { t } = useI18n();
   const { displayFields, ioChecks, onToggleIoCheck, ioListStates, onSetIoListState, ioCheckPulse } =
     useNodeActions();
@@ -153,20 +164,24 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
           <div
             key={side}
             data-id={`node-io-list-${side}`}
-            className="group/iobox nodrag nopan mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
+            className={`group/iobox nodrag nopan mt-1 rounded-sm border bg-surface px-1.5 py-1 ${
+              framed ? "border-ink-tertiary/40 shadow-sm" : "border-hairline"
+            }`}
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >
-            {/* 헤더 클릭 = 접기(0줄)↔기본(3.5줄) 토글(#2) */}
+            {/* 헤더 클릭 = 접기(0줄)↔기본(3.5줄) 토글(#2). 미선택 노드에선 토글 없이 선택만(버블). */}
             <button
               type="button"
               data-id={`node-io-list-${side}-toggle`}
               tabIndex={-1}
               disabled={onSetIoListState === null}
-              className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted"
-              onClick={() =>
-                onSetIoListState?.(listKey, listState === "collapsed" ? "capped" : "collapsed")
-              }
+              // 호버 = 행과 같은 배경 하이라이트 + 글자 진하게(클릭 가능 암시). 비활성(비교뷰)은 제외
+              className="-mx-0.5 flex w-full items-center gap-1 rounded-xs px-0.5 py-px text-[10px] uppercase tracking-wide text-ink-muted transition-colors duration-150 enabled:hover:bg-surface-alt enabled:hover:text-ink-secondary"
+              onClick={() => {
+                if (!nodeSelected) return;
+                onSetIoListState?.(listKey, listState === "collapsed" ? "capped" : "collapsed");
+              }}
             >
               <ChevronRight
                 size={10}
@@ -180,8 +195,15 @@ function NodeIoDetails({ nodeId, data }: { nodeId: string; data: AppNode["data"]
               <span className="normal-case tracking-normal">({visible.length})</span>
             </button>
             {listState !== "collapsed" && (
-              // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2)
-              <div className={listState === "capped" && hiddenCount > 0 ? "max-h-[63px] overflow-hidden" : undefined}>
+              // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2).
+              // nowheel+overflow-y-auto — 호버 중 휠은 캔버스 팬 대신 이 목록을 스크롤 (사용자 요청 2026-08-25).
+              <div
+                className={
+                  listState === "capped" && hiddenCount > 0
+                    ? "nowheel scroll-quiet max-h-[63px] overflow-y-auto"
+                    : undefined
+                }
+              >
                 {visible.map(({ text, index }) => {
                   // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
                   const checkKey = isSubprocess
@@ -283,12 +305,19 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   const value = (isSubprocess ? data.spGmp : data.gmp) ?? "";
   const label = formatGmp(value);
   const editable = !isSubprocess && onEditGmp !== null;
+  // 미분류(Unclassified)는 공간을 차지하지 않고 기본 숨김 — 노드 호버 시 좌상단에 부유로만 노출
+  // (분류 진입점은 유지, 사용자 요청 2026-08-25). 이때 호출부 위치 className(extra)은 무시한다.
+  const floating = !label;
+  // 미분류인데 수정 불가(SP는 링크 맵 상속·읽기전용 모드) — 클릭만 유도하는 필이라 아예 미노출
+  if (floating && (isSubprocess || onEditGmp === null)) return null;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
   // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =
     "nodrag nopan inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] leading-4 " +
     (label ? "border-transparent " : "border-hairline bg-surface text-ink-muted ") +
-    (extra ?? "");
+    (floating
+      ? "absolute -left-2 -top-2 z-10 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+      : (extra ?? ""));
   const body = (
     <>
       <ShieldCheck size={10} strokeWidth={1.5} className="shrink-0" />
@@ -668,12 +697,35 @@ function CopyDragBadge({ className = "-right-2 -top-2" }: { className?: string }
 
 // 하위프로세스 노드의 핸들 — 좌측 단일 입력, 우측 끝 노드별 출력 (끝 없으면 단일 PRIMARY_END_HANDLE)
 // connectable — 노드 레벨 connectable(임베드 읽기전용 자식 false)을 Handle에 전달해야 실제로 끌기가 막힌다 (F3)
-function SubprocessHandles({ ends, connectable }: { ends: SubEnd[]; connectable: boolean }) {
+// anchorTop — 좌 인핸들·단일 대표출력을 세로 중앙 대신 라벨 라인 높이(px)에 고정. 다중 끝 핸들은
+// 종료 지점별 분산 배치가 기능이라 유지 (사용자 요청 2026-08-25 — 프로세스 노드 18px 고정과 정합).
+function SubprocessHandles({
+  ends,
+  connectable,
+  anchorTop,
+}: {
+  ends: SubEnd[];
+  connectable: boolean;
+  anchorTop?: number;
+}) {
+  const anchorStyle = anchorTop !== undefined ? { top: anchorTop } : undefined;
   return (
     <>
-      <Handle id={SUBPROCESS_IN_HANDLE} type="target" position={Position.Left} isConnectable={connectable} />
+      <Handle
+        id={SUBPROCESS_IN_HANDLE}
+        type="target"
+        position={Position.Left}
+        isConnectable={connectable}
+        style={anchorStyle}
+      />
       {ends.length === 0 ? (
-        <Handle id={PRIMARY_END_HANDLE} type="source" position={Position.Right} isConnectable={connectable} />
+        <Handle
+          id={PRIMARY_END_HANDLE}
+          type="source"
+          position={Position.Right}
+          isConnectable={connectable}
+          style={anchorStyle}
+        />
       ) : (
         ends.map((end, i) => (
           <Handle
@@ -681,7 +733,13 @@ function SubprocessHandles({ ends, connectable }: { ends: SubEnd[]; connectable:
             id={end.key}
             type="source"
             position={Position.Right}
-            style={{ top: `${((i + 1) / (ends.length + 1)) * 100}%` }}
+            // 단일 끝은 라벨 라인 앵커(좌 인핸들과 동일) — 50% 중앙 dot이 엣지 앵커와 어긋나던 것.
+            // 다중 끝만 세로 분산 유지 (사용자 리포트 2026-08-25)
+            style={
+              ends.length === 1 && anchorStyle
+                ? anchorStyle
+                : { top: `${((i + 1) / (ends.length + 1)) * 100}%` }
+            }
             title={end.title}
             isConnectable={connectable}
           />
@@ -742,7 +800,7 @@ function nodeStyle(color: string, fill: string): CSSProperties {
 
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
-export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
+export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
   const { ctrlDragIds } = useNodeActions();
   const showCopyBadge = ctrlDragIds.has(id);
@@ -760,8 +818,9 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
 
   if (data.nodeType === "subprocess") {
     return (
+      // justify-start — 라벨을 상단 고정해 좌/우 핸들 라벨 라인 앵커(18px)와 정합 (사용자 요청 2026-08-25)
       <div
-        className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-center rounded-sm px-3 py-2 text-sm transition-all duration-150"
+        className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={style}
         title={data.diffNote}
       >
@@ -779,7 +838,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
         <NodeFields data={data} />
         <NodeParams data={data} />
-        <NodeIoDetails nodeId={id} data={data} />
+        <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
         {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
             점+텍스트보다 가시성 강화: 전체 폭 틴트 배너 (사용자 요청 2026-08-23) */}
         {data.updateAvailable ? (
@@ -792,6 +851,26 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             <CircleArrowUp size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.updateBanner")}</span>
           </div>
+        ) : data.undesignated ? (
+          // 지정 해제 — 코너 경고 뱃지와 같은 에러 톤으로 사유를 글로도 안내 (사용자 요청 2026-08-25)
+          <div
+            data-id="sp-banner-undesignated"
+            title={t("subprocess.undesignated")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error"
+          >
+            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
+          </div>
+        ) : data.linkedMapId == null ? (
+          // 플레이스홀더(링크 미지정) — 셋업 미완 앰버 톤(해제=에러와 강도 구분) (사용자 요청 2026-08-25)
+          <div
+            data-id="sp-banner-placeholder"
+            title={t("subprocess.placeholderNotice")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-changed/40 bg-changed/10 px-1.5 py-0.5 text-xs text-changed"
+          >
+            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.placeholderBanner")}</span>
+          </div>
         ) : data.followLatest === false ? (
           <div
             data-id="sp-banner-pinned"
@@ -800,6 +879,18 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
           >
             <Pin size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.pinnedBanner")}</span>
+          </div>
+        ) : data.followLatest === true ? (
+          // 최신본 추종 중(기본 상태) — 박스 없는 강조 글자 한 줄. 기본 상태가 배너 박스까지 두르면
+          // 과해서 가장 조용한 표현으로: 색은 조치 필요 상태에만, 정보 박스는 핀 고정까지만
+          // (사용자 결정 2026-08-25). 위에서 미지정/해제를 걸렀으니 여기 오면 실링크+지정 유효.
+          <div
+            data-id="sp-banner-following"
+            title={t("subprocess.followingNotice")}
+            className="mt-1 flex items-center gap-1 text-xs font-semibold text-ink-secondary"
+          >
+            <RefreshCw size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.followingBanner")}</span>
           </div>
         ) : null}
         {data.hasDescendantChange && <DescendantChangeBadge />}
@@ -818,7 +909,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
         {diff || data.sideHandles ? (
           <NodeHandles connectable={isConnectable ?? true} />
         ) : (
-          <SubprocessHandles ends={data.subEnds ?? []} connectable={isConnectable ?? true} />
+          <SubprocessHandles ends={data.subEnds ?? []} connectable={isConnectable ?? true} anchorTop={18} />
         )}
       </div>
     );
@@ -849,10 +940,18 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
             </div>
           )}
         </div>
-        {/* 파라미터 칩 — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로.
-            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향 */}
-        <div className="absolute left-1/2 top-full w-max max-w-40 -translate-x-1/2">
+        {/* 어트리뷰트·파라미터·조건/IO — 마름모 박스(h-24 w-[116px])를 넘치지 않게 아래 절대배치 캡션으로
+            (규범 순서 #10: 속성→지표→조건→IO — 프로세스/서브프로세스와 동일 수준 표시, 사용자 요청 2026-08-25).
+            절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향. IO 박스는 framed(보더 강조).
+            조건/IO 박스는 노드 밖이라 상시 노출이 산만 — 선택(활성) 시에만 (사용자 요청 2026-08-25). */}
+        {/* data-id: 액션 바(node-action-bar)가 이 확장 블록 높이를 실측해 겹치지 않게 내려간다 */}
+        <div
+          data-id="node-below-extension"
+          className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2"
+        >
+          <NodeFields data={data} />
           <NodeParams data={data} className="justify-center" />
+          {selected && <NodeIoDetails nodeId={id} data={data} nodeSelected framed />}
         </div>
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
@@ -916,7 +1015,7 @@ export function ProcessNode({ id, data, isConnectable }: NodeProps<AppNode>) {
       </div>
       <NodeFields data={data} />
       <NodeParams data={data} />
-      <NodeIoDetails nodeId={id} data={data} />
+      <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
       {data.hasChildren && (
         <div className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-accent">
           <CornerDownRight size={12} strokeWidth={1.5} />

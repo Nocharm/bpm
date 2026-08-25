@@ -54,6 +54,7 @@ import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
+import { Tooltip } from "@/components/tooltip";
 import { OrgInfoModal } from "@/components/org-info-modal";
 import { PersonInfoPopup } from "@/components/person-hover-card";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
@@ -156,8 +157,8 @@ interface MapDetailCardProps {
   // 하단 버튼바(열기·설정·삭제) 표시 — 홈=true, 에디터 인스펙터=false / footer toggle.
   showFooter?: boolean;
   onDelete?: (mapId: number) => void;
-  // 승인본 복사 — 홈이 이름 입력 모달·생성·강조를 처리 (F12). 없으면 복사 버튼 미노출.
-  onCopy?: (mapId: number, name: string) => void;
+  // 맵 복사 — 홈이 복사 모달(CreateMapDialog copy 모드)을 연다. detail 통째 전달(버전·역할·오우닝 부서).
+  onCopy?: (detail: MapDetail) => void;
   // word 맵 승격 진입 — 홈이 승격 다이얼로그를 처리(design 2026-07-24 §6). 없으면 버튼 미노출.
   onPromote?: (mapId: number, name: string) => void;
   // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
@@ -1305,10 +1306,10 @@ export function MapDetailCard({
     );
   }
 
-  // 승인본(approved/published)이 있어야 복사 가능 — 없으면 버튼 숨김(백엔드 409 회피) /
-  // Copy needs an approved/published version; hide otherwise (avoids backend 409).
-  const hasApprovedVersion = detail.versions.some(
-    (v) => v.status === "approved" || v.status === "published",
+  // 복사는 게시(published/expired) 이력 1회 이상인 맵만 — 미달이면 버튼 비활성+툴팁 안내 (A2·A3).
+  // version_number는 pre-ALTER 게시본이 NULL일 수 있어 status로 판정(백엔드 게이트와 동일).
+  const hasPublishHistory = detail.versions.some(
+    (v) => v.status === "published" || v.status === "expired",
   );
 
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
@@ -1324,17 +1325,30 @@ export function MapDetailCard({
             <Settings size={14} strokeWidth={1.5} />
             {t("perm.settingsTitle")}
           </Link>
-          {hasApprovedVersion && onCopy && (
-            <button
-              type="button"
-              data-id="map-detail-copy"
-              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
-              onClick={() => onCopy(detail.id, detail.name)}
-            >
-              <Copy size={14} strokeWidth={1.5} />
-              {t("home.copyFromApproved")}
-            </button>
-          )}
+          {onCopy &&
+            (hasPublishHistory ? (
+              <button
+                type="button"
+                data-id="map-detail-copy"
+                className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
+                onClick={() => onCopy(detail)}
+              >
+                <Copy size={14} strokeWidth={1.5} />
+                {t("home.copyFromApproved")}
+              </button>
+            ) : (
+              <Tooltip label={t("home.copyNeedsPublished")}>
+                <button
+                  type="button"
+                  disabled
+                  data-id="map-detail-copy"
+                  className="flex cursor-not-allowed items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-tertiary opacity-60"
+                >
+                  <Copy size={14} strokeWidth={1.5} />
+                  {t("home.copyFromApproved")}
+                </button>
+              </Tooltip>
+            ))}
           {detail.mode === "word" && onPromote && (
             <button
               type="button"

@@ -9,6 +9,7 @@ import {
   type EdgeProps,
   type EdgeTypes,
   EdgeLabelRenderer,
+  applyNodeChanges,
   getBezierPath,
   getSmoothStepPath,
   getStraightPath,
@@ -90,6 +91,8 @@ import {
 } from "@/lib/params";
 import { sumVersionParam } from "@/lib/param-sum";
 import { PARAM_ICON } from "@/components/param-icons";
+import { findPublishedAt } from "@/components/version/requester-comment-banner";
+import { formatKst } from "@/lib/datetime";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -585,10 +588,19 @@ interface ChangeItem {
   fields?: DiffFieldRow[];
 }
 
+// PNG 정보 카드에 쓰는 맵 메타 — 부서/오너/프레임워크 경로 + 버전별 게시 시각(events에서 추출).
+interface CompareMapMeta {
+  owningDept: string | null;
+  ownerName: string | null;
+  categoryPath: string | null;
+  publishedById: ReadonlyMap<number, string | null>;
+}
+
 function ComparePane({
   mapId,
   mapName,
   versions,
+  mapMeta,
   baseId,
   targetId,
   baseGraph,
@@ -599,6 +611,7 @@ function ComparePane({
   mapId: number;
   mapName: string;
   versions: VersionSummary[];
+  mapMeta: CompareMapMeta;
   baseId: number;
   targetId: number;
   baseGraph: VersionGraph;
@@ -636,14 +649,18 @@ function ComparePane({
       return next;
     });
   const layoutKey = `${flowDir}|${baseId}>${targetId}`;
-  const handleNodesChange = (changes: NodeChange[]) => {
+  // 드래그 프레임은 rfNodes에만 반영(applyNodeChanges — 움직인 노드만 identity 교체).
+  // 매 프레임 sessionPos를 갱신하면 laidNodes·nodeCenters·handleSides·appEdges가 전부
+  // 재계산되어 전 노드/엣지가 새 identity로 재렌더 → 캔버스 전체가 새로고침되듯 끊겼다.
+  const handleNodesChange = (changes: NodeChange<AppNode>[]) => {
+    setRfNodes((nds) => applyNodeChanges(changes, nds));
+  };
+  // 드롭 시점에만 세션 위치 커밋 — 핸들 변(handleSides)·센터 재계산이 1회로 끝난다.
+  const handleNodeDragStop = (_e: unknown, _node: AppNode, nodes: AppNode[]) => {
     setSessionPos((prev) => {
-      let next: Map<string, { x: number; y: number }> | null = null;
-      for (const change of changes) {
-        if (change.type !== "position" || !change.position) continue;
-        (next ??= new Map(prev)).set(`${layoutKey}|${change.id}`, change.position);
-      }
-      return next ?? prev;
+      const next = new Map(prev);
+      for (const node of nodes) next.set(`${layoutKey}|${node.id}`, node.position);
+      return next;
     });
   };
 
@@ -817,6 +834,13 @@ function ComparePane({
     [positioned, focusId, sessionPos, layoutKey],
   );
 
+  // React Flow에 넘기는 실제 노드 배열 — 드래그는 applyNodeChanges로 이 state에만 쌓이고,
+  // 레이아웃/포커스 산출물(laidNodes)이 바뀔 때만 통째로 리셋한다(드롭 커밋 포함 — 위치 동일해 점프 없음).
+  const [rfNodes, setRfNodes] = useState<AppNode[]>(laidNodes);
+  useEffect(() => {
+    // laidNodes는 rfNodes와 무관하게 산출 — cascade 루프 없음 (lessons react-ts §3)
+    setRfNodes(laidNodes);
+  }, [laidNodes]);
 
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
@@ -938,15 +962,37 @@ function ComparePane({
     onChangeTarget(baseId);
   }, [onChangeBase, onChangeTarget, baseId, targetId]);
 
-  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000에 맞춰 렌더(공용 export, png-export 보정 포함).
+  // 병합 캔버스를 PNG로 저장 — 저장 노드 범위를 1600×1000(대형 맵은 프레임 확장)에 맞춰 렌더.
+  // 좌하단 정보 카드: 이름·부서·오너·버전(base → target)·게시일(있으면)·프레임워크(등록 시).
   const handleExport = useCallback(() => {
-    void exportFramedPng(flow.getNodes(), `${mapName}-compare.png`, {
-      width: 1600,
-      height: 1000,
-      minZoom: 0.5,
-      backgroundColor: "#F6F6F8", // bg-canvas — export 배경(데이터/출력 예외, design.md §1)
-    });
-  }, [flow, mapName]);
+    const baseLabel = versions.find((v) => v.id === baseId)?.label ?? "-";
+    const targetLabel = versions.find((v) => v.id === targetId)?.label ?? "-";
+    const basePub = mapMeta.publishedById.get(baseId) ?? null;
+    const targetPub = mapMeta.publishedById.get(targetId) ?? null;
+    const fmtPub = (iso: string | null) => (iso ? formatKst(iso) : "-");
+    void exportFramedPng(
+      flow.getNodes(),
+      `${mapName}-compare.png`,
+      { width: 1600, height: 1000, minZoom: 0.5 },
+      {
+        title: mapName,
+        rows: [
+          {
+            label: t("export.infoOwningDept"),
+            value: mapMeta.owningDept?.split("/").filter(Boolean).pop() ?? "-",
+          },
+          { label: t("export.infoOwner"), value: mapMeta.ownerName ?? "-" },
+          { label: t("export.infoVersion"), value: `${baseLabel} → ${targetLabel}` },
+          ...(basePub || targetPub
+            ? [{ label: t("export.infoPublished"), value: `${fmtPub(basePub)} → ${fmtPub(targetPub)}` }]
+            : []),
+          ...(mapMeta.categoryPath
+            ? [{ label: t("export.infoFramework"), value: mapMeta.categoryPath }]
+            : []),
+        ],
+      },
+    );
+  }, [flow, mapName, versions, baseId, targetId, mapMeta, t]);
 
   const badgeClass: Record<MergedNodeStatus, string> = {
     added: "bg-added/10 text-added",
@@ -1430,7 +1476,7 @@ function ComparePane({
           <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
             key={flowDir}
-            nodes={laidNodes}
+            nodes={rfNodes}
             edges={appEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -1438,6 +1484,7 @@ function ComparePane({
                저장하지 않으며 방향 토글·버전 전환 시 원위치(sessionPos 키에 레이아웃 기준 포함). */
             nodesDraggable
             onNodesChange={handleNodesChange}
+            onNodeDragStop={handleNodeDragStop}
             nodesConnectable={false}
             elementsSelectable={false}
             nodesFocusable={false}
@@ -2000,6 +2047,8 @@ export default function ComparePage() {
 
   const [mapName, setMapName] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
+  // PNG 정보 카드 소스 — getMap 상세에서 1회 조립(게시일은 버전 events에서 추출)
+  const [mapMeta, setMapMeta] = useState<CompareMapMeta | null>(null);
   const [baseId, setBaseId] = useState<number | null>(null);
   const [targetId, setTargetId] = useState<number | null>(null);
   const [baseGraph, setBaseGraph] = useState<VersionGraph | null>(null);
@@ -2016,6 +2065,12 @@ export default function ComparePage() {
         if (!active) return;
         setMapName(detail.name);
         setVersions(detail.versions);
+        setMapMeta({
+          owningDept: detail.owning_department ?? null,
+          ownerName: detail.owner_name ?? detail.created_by ?? null,
+          categoryPath: detail.category_path ?? null,
+          publishedById: new Map(detail.versions.map((v) => [v.id, findPublishedAt(v.events)])),
+        });
         // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
         const published = detail.versions.find((version) => version.status === "published");
         setBaseId((published ?? detail.versions[0]).id);
@@ -2065,6 +2120,7 @@ export default function ComparePage() {
     baseId !== null &&
     targetId !== null &&
     versions.length > 0 &&
+    mapMeta !== null &&
     baseGraph !== null &&
     targetGraph !== null;
 
@@ -2076,6 +2132,7 @@ export default function ComparePage() {
             mapId={mapId}
             mapName={mapName}
             versions={versions}
+            mapMeta={mapMeta}
             baseId={baseId}
             targetId={targetId}
             baseGraph={baseGraph}

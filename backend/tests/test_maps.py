@@ -1,12 +1,16 @@
 """Map CRUD endpoint tests."""
 
 import asyncio
+from typing import Iterator
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.models import MapVersion, Node, ProcessMap
+from app.settings import settings
 
 
 def test_create_map_returns_default_version(client: TestClient) -> None:
@@ -133,6 +137,15 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     assert "owner_name" in row
 
 
+def test_get_map_detail_includes_owner_name(client: TestClient) -> None:
+    """상세 응답도 소유자 직원명을 동봉 — PNG 정보 카드 소스. conftest가 테스트 유저를 name=login_id로 시드."""
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "상세오너"}).json()
+
+    detail = client.get(f"/api/maps/{created['id']}").json()
+
+    assert detail["owner_name"] == detail["created_by"]
+
+
 def test_update_map_changes_name(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "old"}).json()
 
@@ -241,7 +254,8 @@ def test_copy_inherits_word_mode_and_catalog(client: TestClient) -> None:
                 doc_name="sop.docx",
                 doc_sections=[{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
             )
-            m.versions.append(MapVersion(label="As-Is", status="approved"))
+            # published — 일반 복사는 게시 이력 1회 이상 필요 (copy workflow 재편)
+            m.versions.append(MapVersion(label="As-Is", status="published"))
             session.add(m)
             await session.commit()
             return m.id
@@ -397,3 +411,126 @@ def test_copy_rejects_unknown_owning_department(client: TestClient) -> None:
         json={"convert_to_normal": True, "owning_department": "No Such Division"},
     )
     assert res.status_code == 422
+
+
+def test_copy_survives_null_doc_sections(client: TestClient) -> None:
+    """운영 DB pre-ALTER 행(doc_sections NULL) 복사 회귀 — list(None) TypeError로 500 나던 버그.
+
+    doc_sections DDL엔 DEFAULT가 없어(db.py _ADDED_COLUMNS) 컬럼 추가 전 행은 NULL로 남는다.
+    """
+    name = f"null-docsec-{uuid4().hex[:8]}"
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=name, visibility="public")
+            # published — 일반 복사는 게시 이력 1회 이상 필요 (copy workflow 재편)
+            m.versions.append(MapVersion(label="As-Is", status="published"))
+            session.add(m)
+            await session.commit()
+            map_id = m.id
+        # 서버 자동 ALTER 재현 — 컬럼을 nullable로 재추가해 대상 행만 NULL로 만든다
+        async with SessionLocal() as session:
+            rows = (
+                await session.execute(text("SELECT id, doc_sections FROM process_maps"))
+            ).all()
+            await session.execute(text("ALTER TABLE process_maps DROP COLUMN doc_sections"))
+            await session.execute(text("ALTER TABLE process_maps ADD COLUMN doc_sections JSON"))
+            for rid, val in rows:
+                if rid != map_id:
+                    await session.execute(
+                        text("UPDATE process_maps SET doc_sections = :v WHERE id = :i"),
+                        {"v": val, "i": rid},
+                    )
+            await session.commit()
+        return map_id
+
+    map_id = asyncio.run(_seed())
+    res = client.post(f"/api/maps/{map_id}/copy", json={})
+    assert res.status_code == 201
+    assert res.json()["doc_sections"] == []
+
+
+def _seed_two_version_map(name: str) -> tuple[int, int, int]:
+    """published(PubNode) + draft(DraftNode) 2버전 맵 시드 → (map_id, pub_id, draft_id)."""
+
+    async def _seed() -> tuple[int, int, int]:
+        async with SessionLocal() as session:
+            m = ProcessMap(name=name, visibility="public")
+            pub = MapVersion(label="As-Is", status="published", version_number=1)
+            draft = MapVersion(label="To-Be", status="draft")
+            m.versions.append(pub)
+            m.versions.append(draft)
+            session.add(m)
+            await session.flush()
+            session.add(Node(id=f"{name}-p", version_id=pub.id, title="PubNode", node_type="process"))
+            session.add(Node(id=f"{name}-d", version_id=draft.id, title="DraftNode", node_type="process"))
+            await session.commit()
+            return m.id, pub.id, draft.id
+
+    return asyncio.run(_seed())
+
+
+def test_copy_with_version_id_copies_that_version(client: TestClient) -> None:
+    """복사 모달 버전 선택 — version_id 지정 시 승인 여부와 무관하게 그 버전 그래프를 복제한다."""
+    map_id, _pub_id, draft_id = _seed_two_version_map(f"vsel-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={"version_id": draft_id})
+    assert res.status_code == 201
+    body = res.json()
+    graph = client.get(f"/api/versions/{body['versions'][0]['id']}/graph").json()
+    assert [n["title"] for n in graph["nodes"]] == ["DraftNode"]
+
+
+def test_copy_defaults_to_latest_approved(client: TestClient) -> None:
+    """version_id 미지정이면 기존 동작 유지 — 최신 승인본(published) 그래프를 복제한다."""
+    map_id, _pub_id, _draft_id = _seed_two_version_map(f"vdef-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={})
+    assert res.status_code == 201
+    graph = client.get(f"/api/versions/{res.json()['versions'][0]['id']}/graph").json()
+    assert [n["title"] for n in graph["nodes"]] == ["PubNode"]
+
+
+def test_copy_rejects_foreign_version_id(client: TestClient) -> None:
+    """다른 맵의 version_id는 404 — 맵 소속 검증."""
+    map_id, _pub, _draft = _seed_two_version_map(f"vown-{uuid4().hex[:8]}")
+    _other_map, other_pub, _other_draft = _seed_two_version_map(f"vown2-{uuid4().hex[:8]}")
+    res = client.post(f"/api/maps/{map_id}/copy", json={"version_id": other_pub})
+    assert res.status_code == 404
+
+
+@pytest.fixture
+def sysadmin_enforced(client: TestClient) -> Iterator[None]:
+    """auth OFF + enforce ON + sysadmin=admin.kim — 휴지통 즉시삭제 게이트 검증용."""
+    prev_auth = settings.auth_enabled
+    prev_enforce = settings.dev_enforce_permissions
+    prev_sys = settings.bpm_sysadmins
+    settings.auth_enabled = False
+    settings.dev_enforce_permissions = True
+    settings.bpm_sysadmins = "admin.kim"
+    yield
+    settings.auth_enabled = prev_auth
+    settings.dev_enforce_permissions = prev_enforce
+    settings.bpm_sysadmins = prev_sys
+
+
+def test_purge_map_sysadmin_only(client: TestClient, sysadmin_enforced: None) -> None:
+    """휴지통 즉시 영구삭제 — sysadmin 전용(403), 휴지통 밖이면 409, 성공 시 목록에서 소거."""
+    admin = {"X-Dev-User": "admin.kim"}
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"purge-{uuid4().hex[:8]}"},
+        headers=admin,
+    ).json()
+    map_id = created["id"]
+
+    # 휴지통에 없으면 409
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 409
+
+    assert client.delete(f"/api/maps/{map_id}", headers=admin).status_code == 204
+    # 비-sysadmin은 403
+    res = client.delete(f"/api/maps/{map_id}/permanent", headers={"X-Dev-User": "user.lee"})
+    assert res.status_code == 403
+
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 204
+    deleted_ids = [m["id"] for m in client.get("/api/maps/deleted/list", headers=admin).json()]
+    assert map_id not in deleted_ids
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 404

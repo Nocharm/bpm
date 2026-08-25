@@ -17,6 +17,16 @@ export function findLatestSubmitComment(events: VersionEvent[] | undefined): str
   return null;
 }
 
+// 최신 게시 이벤트 시각 — PNG 정보 카드의 게시일 소스(재게시가 쌓이면 최신 것).
+export function findPublishedAt(events: VersionEvent[] | undefined): string | null {
+  if (!events) return null;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const evt = events[i];
+    if (evt && evt.event_type === "published") return evt.created_at;
+  }
+  return null;
+}
+
 // 최신 반려 이벤트 — 재요청(submit) 모달의 "이전 반려" 배너 소스(사유=note, 반려자=actor).
 export function findLatestRejection(events: VersionEvent[] | undefined): VersionEvent | null {
   if (!events) return null;

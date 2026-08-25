@@ -274,7 +274,10 @@ export default function SettingsPage() {
           {current === "tables" && <TableViewer />}
           {current === "trash" && (
             <div className="flex flex-col gap-8">
-              <DeletedMapsPanel onToast={(message) => showToast({ id: genId(), message })} />
+              <DeletedMapsPanel
+                isSysadmin={user?.isSysadmin ?? false}
+                onToast={(message) => showToast({ id: genId(), message })}
+              />
               <DeletedGroupsPanel onToast={(message) => showToast({ id: genId(), message })} />
             </div>
           )}

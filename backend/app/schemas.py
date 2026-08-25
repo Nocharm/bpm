@@ -52,6 +52,12 @@ class WordDocIn(BaseModel):
 class MapCopy(BaseModel):
     # 새 맵 이름 — 비우면 "<원본명> (Copy)" (F12 승인본 복사)
     name: str | None = Field(default=None, min_length=1, max_length=200)
+    # 복사 원본 버전 선택 — 지정 시 상태 무관(게시 이력 게이트는 별도), 미지정이면 최신 게시본
+    version_id: int | None = None
+    # 새 맵 초기 공개 범위 — 복사자가 owner라 즉시 반영 (create와 동형)
+    visibility: Literal["private", "public"] = "private"
+    # 원본 은퇴 — 오너 전용: 원본을 "(Pending deletion)" rename 후 휴지통으로, 승인자·editor+ 알림
+    retire_source: bool = False
     # Word 맵 → 일반 맵 승격 복사 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
     convert_to_normal: bool = False
     # 승격 관문에서 지정한 오우닝 부서 — 없으면 원본 상속

@@ -6,7 +6,7 @@
 
 ## 1. Editor at a Glance
 
-Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all).
+Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all). On maps registered in the business **Framework**, a **Framework chip** at the top right of the canvas shows the classification path — expand the chip and click a category row to see the other maps in that category, and click one to jump to it (a confirmation guards unsaved changes).
 
 ### Moving around the canvas
 
@@ -22,7 +22,7 @@ Open a map to enter the editor. The top bar holds the version selector, **New ve
 
 Selecting a node shows that node's properties in the inspector; with nothing selected, two tabs appear: **Map** and **Approval**.
 
-- **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and a manage icon. Below it sit collapsed sections: **Node display** (what each node shows — grouped into **Attributes / Metrics / I/O & Conditions** steps, and any part of a row toggles it; the same section also appears in the Properties tab's empty state under the map summary), **Edge style**, and — on maps that have them — **Notes** (interview exception rules · VOC, collapsed by default). Edge style applies a line style to **all connections at once** (a confirm dialog summarizes what will change), and that choice also becomes the default for newly drawn connections. Individual edges can still be styled one by one from the edge's inspector panel or right-click menu. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
+- **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and manage icons (the leftmost opens **version compare** — disabled until a version is published). Below it sit collapsed sections: **Node display** (what each node shows — grouped into **Attributes / Metrics / I/O & Conditions** steps, and any part of a row toggles it; the same section also appears in the Properties tab's empty state under the map summary), **Edge style**, and — on maps that have them — **Notes** (interview exception rules · VOC, collapsed by default). Edge style applies a line style to **all connections at once** (a confirm dialog summarizes what will change), and that choice also becomes the default for newly drawn connections. Individual edges can still be styled one by one from the edge's inspector panel or right-click menu. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
 - **Approval tab** — from top to bottom: **Pending Approvals** (this map's pending requests — count badge, collapsed by default) → a draft CTA (**Switch to draft for approval** when a draft exists, **Create draft for approval** otherwise) → the **Approval workflow** section (collapsible, with a status badge in its header even while collapsed) → the **Subprocess** designation card → the version card list. See section 7 and the Getting Around manual for running an approval.
 
 ---
@@ -41,6 +41,8 @@ Right-click the canvas and choose a shape, or use **Add node** in the inspector.
 | **End** | pill | An exit point — exactly one **primary end** per process |
 | **Subprocess** | framed box | A step that references another map (see section 5) |
 
+Renaming a Start or End node shows a **Start / End type pill** next to the title on the node, so the type stays visible. Start/End descriptions (notes) never render on the canvas — they show only in the inspector and the node edit dialog.
+
 ### Node properties
 
 Select a node and edit in the right inspector:
@@ -48,12 +50,15 @@ Select a node and edit in the right inspector:
 - **Title** and **Description** — double-click a node (or press `F2`) to rename in place. In the inspector the description is **read-only** — hover it for an edit icon, or double-click the text, to open the node edit dialog with the description focused. While typing a name, `Enter` commits and **`Shift+Enter` (or `Alt+Enter`) inserts a line break** — the same rule in the canvas, the inspector, and the node edit dialog, and the break shows on the canvas too.
 - **Color** — preset swatches or a custom hex color (`#RRGGBB`).
 - **BPM attributes** — **Assignee** (picked from the org directory), **Department** (auto-set from the assignee), **System**, and the **per-run metrics** (see section 3).
-- **I/O & Conditions** — **Input** and **Output** hold multiple items (one per row). Hover a row and click the small file icon to set that item's **data form**: an autocomplete list matches by extension, English program name, or Korean (`.xlsx` / `Excel` / `엑셀` all find the same entry), navigated with ↑/↓ and picked with Enter or Space. A value outside the list is added via the **Add "…"** row at the bottom. A set form shows as a small pill (catalog entries carry their icon); click the pill to change it, ✕ to remove. **Start / End conditions** are free text. The node-level *Data form* row is an import fallback — it shows only while no per-item form is set.
+- **GMP classification** — classify a node as **GMP Direct / GMP Indirect / Non-GMP**. The classification shows as a **pill tag** at the node's top left (toggle its visibility with the GMP row in the Map tab's Node display), and clicking the pill in edit mode opens the classification picker in place. Picking a classification **locks the node color to the classification color** (Direct = red, Indirect = amber, Non-GMP = green); the notice dialog offers **Undo classification / Restore color only**. On unclassified nodes the pill takes no space and appears only on hover. Subprocess nodes inherit the linked map's GMP designation read-only.
+- **I/O & Conditions** — **Input** and **Output** hold multiple items (one per row). Hover a row and click the small file icon to set that item's **data form**: an autocomplete list matches by extension, English program name, or Korean (`.xlsx` / `Excel` / `엑셀` all find the same entry), navigated with ↑/↓ and picked with Enter or Space. A value outside the list is added via the **Add "…"** row at the bottom. A set form shows as a small pill (catalog entries carry their icon); click the pill to change it, ✕ to remove. **Start / End conditions** are free text. The node-level *Data form* row is an import fallback — it shows only while no per-item form is set. On the canvas, the I/O & Conditions boxes appear below a node **while it is selected** (what shows is picked in the Map tab's Node display).
+- **Import from another node** — the **Import from node…** row in the Input/Output list **pulls in an item another node in the connected flow already has** — Input offers upstream nodes' outputs, Output offers downstream nodes' inputs. An imported item stays **Linked** to its origin: edit the origin and every linked copy follows, while on the mirror side you **Disconnect** to turn it into an editable copy instead of editing in place. If the flow path back to the origin breaks, the item shows a warning.
 - **Link (URL)** — attach an external document or system link to a node; a badge appears on the canvas, and you can click it to preview or open in a new tab. You can also give it a display label.
 
 ### Connecting nodes
 
 - Drag from a node's handle onto another node to connect them.
+- No need to aim for the handle — **drop the line anywhere on a node's body** and it connects to the default handle. While hovering the body, a preview snaps to where the connection will land.
 - A plain node has a **single output** — to branch, use a **Decision** node. Its outgoing edges get branch labels (**Yes** / **No** / **Other**).
 - Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`. Labels take line breaks the same way: `Enter` commits, **`Shift+Enter` / `Alt+Enter`** breaks the line.
 - **Line style is per edge** — Curved, Stepped, or Straight. Select an edge and pick it in the inspector's **Line style** row, or from the edge's right-click menu. The choice is saved with the map, so everyone sees the same shape.
@@ -120,6 +125,7 @@ When you designate a map as a subprocess (see Map Settings in the Getting Around
 - **`Shift`+drag — axis-locked move**: drag a node (single, multi, or group) while holding `Shift` to move it along one axis only (horizontal or vertical) for easy line-ups.
 - With 2+ nodes selected: **Align left** `Alt+W`, **Center** `Alt+C`, **Align top** `Alt+T`, **Middle** `Alt+X`.
 - With 3+ nodes selected: **Distribute horizontally** `Alt+R`, **Distribute vertically** `Alt+V`.
+- **Automatic spacing** — when a node grows vertically (I/O boxes and the like), the nodes below it shift down on screen so nothing overlaps. This is a **display-only** adjustment — saved coordinates never change, and everything returns once the node shrinks back. Stepped connectors that would now cut through a grown node route around it with a right-angled detour automatically.
 
 ---
 
@@ -214,7 +220,7 @@ Save the current map to a file from the export button in the right inspector (or
 
 | Format | Contents |
 | --- | --- |
-| **PNG** | The current canvas as a 2× resolution image — every connector renders as a solid black line. `Ctrl+Shift+E`. |
+| **PNG** | The current canvas as a 2× resolution image — every connector renders as a solid black line. Drawn on the canvas background (dot grid) with a **map info card** at the bottom (map name, owning department, owner, version, published date, framework path). `Ctrl+Shift+E`. |
 | **Excel** | **Choose one of two formats** — ① Structured: a node table (assignee, department, system, per-run metrics) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
 | **CSV** | The same 14-column table as import — you can round-trip by editing an exported CSV and importing it again. |
 | **Word** | A `.docx` document with a shape-based flowchart — node links (URL) are included as hyperlinks. Use **Download Word**. |
@@ -270,4 +276,4 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-*Business Process Map — Editing Maps · Updated 2026-08-19*
+*Business Process Map — Editing Maps · Updated 2026-08-25*

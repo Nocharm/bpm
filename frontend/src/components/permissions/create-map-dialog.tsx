@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, ChevronDown, ChevronRight, FileUp, LockKeyhole } from "lucide-react";
+import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -18,12 +18,15 @@ import {
   copyMap,
   createMap,
   getDirectory,
+  getSubprocessUsage,
   listGroups,
   saveGraph,
   setApprovers as setMapApprovers,
   type DirectoryUser,
   type DirectoryDept,
   type Group,
+  type SubprocessUsage,
+  type VersionSummary,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
@@ -84,9 +87,23 @@ interface Props {
   onCreatedMap?: (mapId: number, name: string) => void;
   /** Word 맵 승격 복사 — 지정 시 createMap 대신 copyMap(convertToNormal)으로 생성 (design 2026-07-24 §6). */
   promote?: { mapId: number; defaultName: string };
+  /** 맵 복사 — 지정 시 copyMap으로 생성. 버전 선택·오너 알림 안내·원본 은퇴(retire) 지원 (copy workflow 재편). */
+  copy?: {
+    mapId: number;
+    sourceName: string;
+    versions: VersionSummary[];
+    myRole: "viewer" | "editor" | "owner" | null;
+    owningDepartment: string | null;
+  };
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote }: Props) {
+// 복사 버전 드롭다운 표기 — 게시 번호(v3)·라벨·상태(상태 문자열은 영어 고정 규칙)
+function formatVersionOption(v: VersionSummary): string {
+  const number = v.version_number ? `v${v.version_number} · ` : "";
+  return `${number}${v.label} · ${v.status}`;
+}
+
+export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote, copy }: Props) {
   const { t, lang } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -95,6 +112,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path). 아래 마운트 이펙트(복사 프리필)가
+  // setter를 참조하므로 이펙트보다 먼저 선언한다(react-hooks/immutability TDZ).
+  const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   useEffect(() => {
     let active = true;
     void Promise.all([getDirectory(), listGroups()])
@@ -103,6 +123,11 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           setDirUsers(dir.users);
           setDirDepts(dir.departments);
           setGroups(groupRows);
+          // 복사 모드 — 오우닝 부서를 원본 값으로 프리필(변경 가능). 직접 set: 스크롤/플래시 부수효과 없이.
+          if (copy?.owningDepartment) {
+            const inherited = dir.departments.find((d) => d.id === copy.owningDepartment);
+            if (inherited) setOwningDept((prev) => prev ?? inherited);
+          }
         }
       })
       .catch((err) => {
@@ -110,7 +135,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         console.warn("Directory/groups fetch failed; pickers will be empty.", err);
       });
     return () => { active = false; };
-  }, []);
+  }, [copy]);
 
   // 실 디렉터리 데이터를 피커 prop 형식으로 변환 (미사용 필드 빈 값으로 채움) /
   // Adapt real directory data to picker's MockUser / Department shapes.
@@ -138,8 +163,23 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const csvBaseName = csv ? stripCsvExtension(csv.fileName) : "";
   // Word 문서로 만들 때는 문서명(확장자 제외)을 이름 기본값으로 — csvBaseName과 동일한 우선순위로 합류
   const wordBaseName = word ? word.docName.replace(/\.docx$/i, "") : "";
-  const [name, setName] = useState(initialName ?? promote?.defaultName ?? (csvBaseName || wordBaseName));
+  const [name, setName] = useState(
+    initialName ?? promote?.defaultName ?? (copy ? `${copy.sourceName} (Copy)` : csvBaseName || wordBaseName),
+  );
   const [description, setDescription] = useState(csvBaseName);
+  // ── 복사 모드 상태 — 원본 버전 선택 + 원본 은퇴(retire) + SP 사용처 확인 ──
+  const copyVersions = copy ? [...copy.versions].sort((a, b) => b.id - a.id) : [];
+  const [copyVersionId, setCopyVersionId] = useState<number | undefined>(() => {
+    if (!copy) return undefined;
+    const sorted = [...copy.versions].sort((a, b) => b.id - a.id);
+    // 기본 = 최신 게시본 — 없으면(이론상 게이트로 차단) 최신 버전
+    return (sorted.find((v) => v.status === "published") ?? sorted[0])?.id;
+  });
+  const [retire, setRetire] = useState(false);
+  // SP 사용처 — retire 첫 체크 시 lazy fetch. null=미로드(로드 전 제출 차단)
+  const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
+  const [spOpen, setSpOpen] = useState(true); // 확인 체크가 아코디언 최하단이라 기본 펼침
+  const [spConfirm, setSpConfirm] = useState(false);
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
   const [wordOpen, setWordOpen] = useState(false);
@@ -165,8 +205,6 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   // 공개범위 변경 확인 대기 — 승인자 초기화 안내 모달용 / pending visibility change awaiting confirm.
   const [pendingVisibility, setPendingVisibility] = useState<MapVisibility | null>(null);
   const router = useRouter();
-  // 오우닝 부서(필수) — DirectoryDept 그대로 보관(id=org_path)
-  const [owningDept, setOwningDept] = useState<DirectoryDept | null>(null);
   // 자동 추가한 리더 승인자 추적 — 부서 변경 시 자동분만 교체하고 수동 추가는 보존
   const autoLeaderRef = useRef<string | null>(null);
   // 결재자 섹션 — 오우닝 부서 선택 후 여기로 스크롤 다운(맨 아래 피커를 상단 피커로 착각 방지)
@@ -248,6 +286,22 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     setOwningDept(null);
   };
 
+  // ── 원본 은퇴 토글(복사 모드) — 체크 시 이름을 원본명으로 고정(B5) + SP 사용처 lazy 로드 ──
+  const toggleRetire = (next: boolean) => {
+    if (!copy) return;
+    setRetire(next);
+    setSpConfirm(false);
+    if (next) {
+      setName(copy.sourceName);
+      if (spUsage === null) {
+        getSubprocessUsage(copy.mapId)
+          .then(setSpUsage)
+          // 로드 실패 시 null 유지 → 제출 차단. 체크 해제 후 재체크로 재시도.
+          .catch((err) => setError(humanizeApiError(err, t)));
+      }
+    }
+  };
+
   // ── 협업자 제거 / remove collaborator ──
   const handleRemoveCollab = useCallback((key: string) => {
     setCollaborators((prev) => prev.filter((c) => c.key !== key));
@@ -294,13 +348,20 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
               convertToNormal: true,
               owningDepartment: owningDept.id,
             })
-          : await createMap(
-              trimmed,
-              description.trim(),
-              visibility,
-              owningDept.id,
-              word ? { docName: word.docName, sections: word.sections } : undefined,
-            );
+          : copy
+            ? await copyMap(copy.mapId, trimmed, {
+                versionId: copyVersionId,
+                owningDepartment: owningDept.id,
+                visibility,
+                retireSource: retire,
+              })
+            : await createMap(
+                trimmed,
+                description.trim(),
+                visibility,
+                owningDept.id,
+                word ? { docName: word.docName, sections: word.sections } : undefined,
+              );
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
@@ -356,7 +417,11 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, onCreated, onClose, onCreatedMap, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, copy, copyVersionId, retire, onCreated, onClose, onCreatedMap, router, t]);
+
+  // 복사+은퇴 시 SP 게이트 — 사용처 로드 전엔 차단, SP 지정 맵은 확인 체크 필수 (B4)
+  const retireBlocked =
+    retire && (spUsage === null || (spUsage.designated && !spConfirm));
 
   // ── 버튼 활성 / button enabled ──
   const canCreate =
@@ -364,7 +429,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     name.trim().length > 0 &&
     approvers.length >= 1 &&
     owningDept !== null &&
-    !submitting;
+    !submitting &&
+    (!copy || copyVersionId !== undefined) &&
+    !retireBlocked;
 
   // ── 부서 조회 맵 (사용자 ID → 부서명) / department lookup map for picker ──
   const userDepartments = Object.fromEntries(dirUsers.map((u) => [u.id, u.department]));
@@ -439,7 +506,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         {/* 헤더 / header */}
         <div className="flex items-center justify-between">
           <h2 className="text-body-strong text-ink">
-            {promote ? "Convert to process map" : t("perm.createDialog.title")}
+            {promote ? "Convert to process map" : copy ? t("home.copyTitle") : t("perm.createDialog.title")}
           </h2>
           <button
             type="button"
@@ -465,6 +532,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           </label>
           <input
             type="text"
+            data-id="create-map-name"
             className="rounded-sm border border-hairline bg-surface px-3 py-1.5 text-body text-ink outline-none placeholder:text-ink-tertiary focus:border-accent"
             placeholder={t("perm.createDialog.namePlaceholder")}
             value={name}
@@ -472,13 +540,45 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleCreate();
             }}
-            disabled={submitting}
+            disabled={submitting || retire}
             autoFocus
           />
+          {retire && (
+            <p data-id="copy-name-locked-note" className="text-fine text-ink-tertiary">
+              {t("copyDialog.nameLockedNote")}
+            </p>
+          )}
         </div>
 
-        {/* 설명 / description — promote 모드에선 description이 백엔드에 무시되므로 UI 숨김 */}
-        {!promote && (
+        {/* 복사 원본 버전 — 전체 버전 최신순, 기본=최신 게시본. 비게시 버전 선택 시 안내 (B1) */}
+        {copy && (
+          <div className="flex flex-col gap-1">
+            <label className="text-caption text-ink-secondary">{t("home.copyVersionLabel")}</label>
+            <select
+              data-id="copy-version-select"
+              className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
+              value={copyVersionId ?? ""}
+              onChange={(e) => setCopyVersionId(Number(e.target.value))}
+              disabled={submitting}
+            >
+              {copyVersions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {formatVersionOption(v)}
+                </option>
+              ))}
+            </select>
+            {copyVersions.find((v) => v.id === copyVersionId)?.status !== "published" && (
+              <p data-id="copy-version-unpublished-note" className="flex items-center gap-1 text-fine text-changed">
+                <TriangleAlert size={12} strokeWidth={1.5} />
+                {t("copyDialog.versionNotPublished")}
+              </p>
+            )}
+            <span className="text-fine text-ink-tertiary">{t("home.copyOpensDraft")}</span>
+          </div>
+        )}
+
+        {/* 설명 / description — promote·copy 모드에선 원본 설명 상속(백엔드)이라 UI 숨김 */}
+        {!promote && !copy && (
           <div className="flex flex-col gap-1">
             <label className="text-caption text-ink-secondary">
               {t("perm.createDialog.descriptionLabel")}
@@ -539,7 +639,33 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           )}
         </div>
 
-        {/* 공개 범위 / visibility — copy는 항상 private로 생성되므로 promote 모드에선 무의미해 통째로 숨김 */}
+        {/* 오너(사용자) — 복사자는 새 맵의 오너로 자동 부여(변경 불가) + 원본 오너 알림 안내 (B2·B3) */}
+        {copy && (
+          <div className="flex flex-col gap-1">
+            <label className="text-caption text-ink-secondary">{t("home.owner")}</label>
+            <div
+              data-id="copy-owner-row"
+              className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink"
+            >
+              <UserIcon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="min-w-0 flex-1 truncate">
+                {currentUser?.name || currentUser?.id}
+                {currentUser && (
+                  <span className="ml-1.5 text-fine text-ink-tertiary">{currentUser.id}</span>
+                )}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
+                <LockKeyhole size={12} strokeWidth={1.5} />
+                {t("copyDialog.ownerYou")}
+              </span>
+            </div>
+            <p data-id="copy-notify-owner-note" className="text-fine text-ink-tertiary">
+              {t("copyDialog.notifyOwnerNote")}
+            </p>
+          </div>
+        )}
+
+        {/* 공개 범위 / visibility — promote 모드는 항상 private 생성이라 숨김(copy는 선택 가능) */}
         {!promote && (
           <div className="flex flex-col gap-1">
             <span className="text-caption text-ink-secondary">
@@ -577,6 +703,129 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
               <p className="text-fine text-ink-tertiary">
                 {t("perm.createDialog.visibilityViewerNote")}
               </p>
+            )}
+          </div>
+        )}
+
+        {/* 원본 은퇴(오너 전용) — 선택 카드(체크 시 앰버 틴트) + 아이콘 라인 요약박스.
+            SP 지정 맵은 앰버 경고 박스 + 사용처 아코디언 + 최하단 확인 체크 (B4·B5) */}
+        {copy && copy.myRole === "owner" && (
+          <div className="flex flex-col gap-2">
+            <label
+              data-id="copy-retire-card"
+              className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-3 transition-colors duration-150 ${
+                retire ? "border-changed/40 bg-changed/10" : "border-hairline hover:bg-surface-alt"
+              }`}
+            >
+              <input
+                type="checkbox"
+                data-id="copy-retire-checkbox"
+                className="mt-0.5 accent-[var(--color-accent)]"
+                checked={retire}
+                onChange={(e) => toggleRetire(e.target.checked)}
+                disabled={submitting}
+              />
+              <Trash2
+                size={16}
+                strokeWidth={1.5}
+                className={`mt-0.5 shrink-0 ${retire ? "text-changed" : "text-ink-tertiary"}`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-caption-strong text-ink">
+                  {t("copyDialog.retireCheckbox")}
+                </span>
+                {!retire && (
+                  <span className="block text-fine text-ink-tertiary">
+                    {t("copyDialog.retireHint")}
+                  </span>
+                )}
+              </span>
+            </label>
+            {/* 체크 시 — 무엇이 일어나는지 아이콘 라인으로 요약 (ConfirmDialog lines 어법) */}
+            {retire && (
+              <ul
+                data-id="copy-retire-details"
+                className="flex flex-col gap-1 rounded-sm bg-surface-alt p-2"
+              >
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Tag size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireLineRename")}</span>
+                </li>
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Hourglass size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireLineTrash")}</span>
+                </li>
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Bell size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireNotifyNote")}</span>
+                </li>
+              </ul>
+            )}
+            {retire && spUsage === null && (
+              <p className="text-fine text-ink-tertiary">…</p>
+            )}
+            {/* SP 지정 맵 — 앰버 경고 박스가 아코디언·확인 체크까지 감싼다 (approval-panel changed 톤 어법) */}
+            {retire && spUsage !== null && spUsage.designated && (
+              <div className="flex flex-col gap-2 rounded-sm border border-changed/40 bg-changed/10 p-2.5">
+                <p className="flex items-start gap-1.5 text-caption text-changed">
+                  <TriangleAlert size={14} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireSpWarning")}</span>
+                </p>
+                <button
+                  type="button"
+                  data-id="copy-retire-sp-accordion"
+                  aria-expanded={spOpen}
+                  onClick={() => setSpOpen((open) => !open)}
+                  className="flex items-center gap-1.5 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
+                >
+                  {spOpen ? <ChevronDown size={14} strokeWidth={1.5} /> : <ChevronRight size={14} strokeWidth={1.5} />}
+                  <span className="truncate">
+                    {t("copyDialog.retireSpListTitle", {
+                      n: spUsage.used_by.length + spUsage.hidden_count,
+                    })}
+                  </span>
+                </button>
+                {spOpen && (
+                  <div className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface px-3 py-2">
+                    <ul className="scroll-soft flex max-h-[7rem] flex-col gap-1 overflow-y-auto">
+                      {spUsage.used_by.map((u) => (
+                        <li
+                          key={u.map_id}
+                          data-id={`copy-retire-sp-row-${u.map_id}`}
+                          className="flex items-center justify-between gap-2 text-caption text-ink-secondary"
+                        >
+                          <span className="min-w-0 truncate">{u.name}</span>
+                          <span className="shrink-0 text-fine text-ink-tertiary">
+                            {u.node_count} node{u.node_count === 1 ? "" : "s"}
+                          </span>
+                        </li>
+                      ))}
+                      {spUsage.hidden_count > 0 && (
+                        <li className="text-fine text-ink-tertiary">
+                          {t("copyDialog.retireSpHidden", { n: spUsage.hidden_count })}
+                        </li>
+                      )}
+                      {spUsage.used_by.length === 0 && spUsage.hidden_count === 0 && (
+                        <li className="text-fine text-ink-tertiary">{t("copyDialog.retireSpNone")}</li>
+                      )}
+                    </ul>
+                    {/* 확인 체크 — 아코디언 최하단, 라인들과 위계 구분 (B4) */}
+                    <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-divider pt-2">
+                      <input
+                        type="checkbox"
+                        data-id="copy-retire-sp-confirm"
+                        className="accent-[var(--color-accent)]"
+                        checked={spConfirm}
+                        onChange={(e) => setSpConfirm(e.target.checked)}
+                        disabled={submitting}
+                      />
+                      <span className="text-caption-strong text-ink">
+                        {t("copyDialog.retireSpConfirm")}
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -824,11 +1073,12 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           </button>
           <button
             type="button"
+            data-id="create-map-submit"
             onClick={() => void handleCreate()}
             disabled={!canCreate}
             className="rounded-sm bg-accent px-4 py-1.5 text-caption text-surface hover:opacity-90 disabled:opacity-40"
           >
-            {submitting ? "…" : t("perm.createDialog.createBtn")}
+            {submitting ? "…" : copy ? t("home.copyFromApproved") : t("perm.createDialog.createBtn")}
           </button>
         </div>
       </div>
