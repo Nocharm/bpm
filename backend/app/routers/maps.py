@@ -1350,3 +1350,23 @@ async def restore_map(
         for version_id in published_ids:
             indexing.spawn(indexing.index_map_version(version_id))
     return found_map
+
+
+@router.delete("/{map_id}/permanent", status_code=204)
+async def purge_map(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> None:
+    """휴지통 맵 즉시 영구삭제 — sysadmin 전용. 7일 보존을 기다리지 않고 바로 제거."""
+    if not logic.is_sysadmin(user):
+        raise HTTPException(status_code=403, detail="sysadmin required")
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.deleted_at is None:
+        # 활성 맵 오삭제 방지 — 소프트삭제(휴지통) 상태만 영구삭제 허용
+        raise HTTPException(status_code=409, detail="map is not in trash")
+    await _delete_map_kb_chunks(session, [map_id])
+    await session.delete(found_map)
+    await session.commit()

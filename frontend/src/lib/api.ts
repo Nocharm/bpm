@@ -630,6 +630,10 @@ export function listDeletedMaps(): Promise<MapSummary[]> {
 export function restoreMap(mapId: number): Promise<MapSummary> {
   return request<MapSummary>(`/maps/${mapId}/restore`, { method: "POST" });
 }
+// 휴지통 즉시 영구삭제 — sysadmin 전용, 7일 보존 대기 없이 바로 제거
+export function purgeMap(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/permanent`, { method: "DELETE" });
+}
 
 export function deleteMap(mapId: number): Promise<void> {
   return request<void>(`/maps/${mapId}`, { method: "DELETE" });

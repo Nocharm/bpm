@@ -1,13 +1,16 @@
 """Map CRUD endpoint tests."""
 
 import asyncio
+from typing import Iterator
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.models import MapVersion, Node, ProcessMap
+from app.settings import settings
 
 
 def test_create_map_returns_default_version(client: TestClient) -> None:
@@ -490,3 +493,42 @@ def test_copy_rejects_foreign_version_id(client: TestClient) -> None:
     _other_map, other_pub, _other_draft = _seed_two_version_map(f"vown2-{uuid4().hex[:8]}")
     res = client.post(f"/api/maps/{map_id}/copy", json={"version_id": other_pub})
     assert res.status_code == 404
+
+
+@pytest.fixture
+def sysadmin_enforced(client: TestClient) -> Iterator[None]:
+    """auth OFF + enforce ON + sysadmin=admin.kim — 휴지통 즉시삭제 게이트 검증용."""
+    prev_auth = settings.auth_enabled
+    prev_enforce = settings.dev_enforce_permissions
+    prev_sys = settings.bpm_sysadmins
+    settings.auth_enabled = False
+    settings.dev_enforce_permissions = True
+    settings.bpm_sysadmins = "admin.kim"
+    yield
+    settings.auth_enabled = prev_auth
+    settings.dev_enforce_permissions = prev_enforce
+    settings.bpm_sysadmins = prev_sys
+
+
+def test_purge_map_sysadmin_only(client: TestClient, sysadmin_enforced: None) -> None:
+    """휴지통 즉시 영구삭제 — sysadmin 전용(403), 휴지통 밖이면 409, 성공 시 목록에서 소거."""
+    admin = {"X-Dev-User": "admin.kim"}
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"purge-{uuid4().hex[:8]}"},
+        headers=admin,
+    ).json()
+    map_id = created["id"]
+
+    # 휴지통에 없으면 409
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 409
+
+    assert client.delete(f"/api/maps/{map_id}", headers=admin).status_code == 204
+    # 비-sysadmin은 403
+    res = client.delete(f"/api/maps/{map_id}/permanent", headers={"X-Dev-User": "user.lee"})
+    assert res.status_code == 403
+
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 204
+    deleted_ids = [m["id"] for m in client.get("/api/maps/deleted/list", headers=admin).json()]
+    assert map_id not in deleted_ids
+    assert client.delete(f"/api/maps/{map_id}/permanent", headers=admin).status_code == 404
