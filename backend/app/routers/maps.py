@@ -556,6 +556,13 @@ async def get_map(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
     found_map.my_role = await get_effective_role(session, user, map_id)
+    # 소유자 직원명 — 목록 응답과 동일 소스(Employee). PNG 정보 카드 등 상세 화면 표기용.
+    if found_map.created_by:
+        found_map.owner_name = (
+            await session.execute(
+                select(Employee.name).where(Employee.login_id == found_map.created_by)
+            )
+        ).scalars().first()
     if found_map.category_id is not None:
         category_paths = build_category_paths(
             (

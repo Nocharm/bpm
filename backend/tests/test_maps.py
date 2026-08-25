@@ -133,6 +133,15 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     assert "owner_name" in row
 
 
+def test_get_map_detail_includes_owner_name(client: TestClient) -> None:
+    """상세 응답도 소유자 직원명을 동봉 — PNG 정보 카드 소스. conftest가 테스트 유저를 name=login_id로 시드."""
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "상세오너"}).json()
+
+    detail = client.get(f"/api/maps/{created['id']}").json()
+
+    assert detail["owner_name"] == detail["created_by"]
+
+
 def test_update_map_changes_name(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "old"}).json()
 

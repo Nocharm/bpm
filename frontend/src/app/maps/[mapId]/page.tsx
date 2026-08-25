@@ -88,7 +88,7 @@ import { PromptDialog } from "@/components/prompt-dialog";
 import { TransferCheckoutDialog } from "@/components/version/transfer-checkout-dialog";
 import { SubmitConfirmDialog } from "@/components/version/submit-confirm-dialog";
 import { ApproveConfirmDialog } from "@/components/version/approve-confirm-dialog";
-import { findLatestRejection, findLatestSubmitComment } from "@/components/version/requester-comment-banner";
+import { findLatestRejection, findLatestSubmitComment, findPublishedAt } from "@/components/version/requester-comment-banner";
 import { VersionSwitchConfirm } from "@/components/version/version-switch-confirm";
 import { PublishConfirmDialog } from "@/components/version/publish-confirm-dialog";
 import { WithdrawConfirmDialog } from "@/components/version/withdraw-confirm-dialog";
@@ -1058,6 +1058,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
+  // PNG 정보 카드 소스 — getMap 상세에서 채움 (2026-08-25)
+  const [mapOwnerName, setMapOwnerName] = useState<string | null>(null);
+  const [mapOwningDept, setMapOwningDept] = useState<string | null>(null);
+  const [mapCategoryPath, setMapCategoryPath] = useState<string | null>(null);
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spUsageReload, setSpUsageReload] = useState(0);
@@ -2294,6 +2298,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
         setMapName(detail.name);
         setMapOwner(detail.created_by);
+        setMapOwnerName(detail.owner_name ?? null);
+        setMapOwningDept(detail.owning_department ?? null);
+        setMapCategoryPath(detail.category_path ?? null);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
@@ -5223,11 +5230,28 @@ function MapEditor({ mapId }: { mapId: number }) {
                 ? { ...node, position: { x: node.position.x, y: node.position.y + yOff } }
                 : node;
             });
-      await exportCanvasPng(exportNodes, buildExportFileName("png"));
+      // 좌하단 정보 카드 — 이름·부서(org_path 리프)·오너·버전·게시일(있으면)·프레임워크(등록 시)
+      const version = versions.find((v) => v.id === versionId);
+      const publishedAt = findPublishedAt(version?.events);
+      const info = {
+        title: mapName,
+        rows: [
+          { label: t("export.infoOwningDept"), value: mapOwningDept?.split("/").filter(Boolean).pop() ?? "-" },
+          { label: t("export.infoOwner"), value: mapOwnerName ?? mapOwner ?? "-" },
+          { label: t("export.infoVersion"), value: version?.label ?? "-" },
+          ...(publishedAt
+            ? [{ label: t("export.infoPublished"), value: formatKst(publishedAt) }]
+            : []),
+          ...(mapCategoryPath
+            ? [{ label: t("export.infoFramework"), value: mapCategoryPath }]
+            : []),
+        ],
+      };
+      await exportCanvasPng(exportNodes, buildExportFileName("png"), info);
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     }
-  }, [buildExportFileName, t]);
+  }, [buildExportFileName, t, versions, versionId, mapName, mapOwningDept, mapOwnerName, mapOwner, mapCategoryPath]);
 
   const handleExportCsv = useCallback(() => {
     // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
