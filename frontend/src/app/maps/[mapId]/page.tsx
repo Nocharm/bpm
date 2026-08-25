@@ -8,6 +8,7 @@ import {
   BackgroundVariant,
   type Connection,
   type Edge,
+  type FinalConnectionState,
   MarkerType,
   type NodeChange,
   type NodeTypes,
@@ -31,6 +32,7 @@ import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { FrameworkChip } from "@/components/framework-chip";
+import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
@@ -3370,6 +3372,45 @@ function MapEditor({ mapId }: { mapId: number }) {
       .nodeType;
     return !violatesTerminalRule(sourceType, targetType);
   }, []);
+
+  // 몸체 드롭 빠른 연결 — 핸들 미포착 드롭(isValid 아님)이 노드 위에서 끝나면 기본 핸들
+  // (정방향=왼쪽 타깃, 역방향=오른쪽 소스)로 연결. 판정은 미리보기(QuickConnectLine)와 공유.
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+      if (readOnly || connectionState.isValid) return;
+      const { fromNode, fromHandle } = connectionState;
+      if (!fromNode || !fromHandle) return;
+      const point = "changedTouches" in event ? event.changedTouches[0] : event;
+      const nodeEl = document
+        .elementFromPoint(point.clientX, point.clientY)
+        ?.closest(".react-flow__node");
+      const overId = nodeEl?.getAttribute("data-id");
+      if (!overId || overId === fromNode.id) return;
+      // 루트 스코프 노드만 — 임베드 자식/고스트는 nodes state에 없어 자연 제외
+      const over = nodesRef.current.find((n) => n.id === overId);
+      if (!over) return;
+      const reverse = fromHandle.type === "target";
+      // FinalConnectionState의 fromNode.data는 제네릭(Record) — 우리 노드 데이터로 좁혀 읽는다
+      const fromType = (fromNode.data as AppNode["data"]).nodeType;
+      if (!canQuickConnect(fromType, over.data.nodeType, reverse)) return;
+      const connection: Connection = reverse
+        ? {
+            source: over.id,
+            sourceHandle: sourceHandleId("right"),
+            target: fromNode.id,
+            targetHandle: fromHandle.id ?? null,
+          }
+        : {
+            source: fromNode.id,
+            sourceHandle: fromHandle.id ?? null,
+            target: over.id,
+            targetHandle: getQuickTargetHandleId(over.data.nodeType),
+          };
+      if (!isValidConnection(connection)) return;
+      onConnect(connection);
+    },
+    [readOnly, isValidConnection, onConnect],
+  );
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
   // 핸들 드래그(isValidConnection)와 동일 규칙을 드롭존에도 적용 (양방향 모두 고려).
@@ -8480,6 +8521,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
                       onConnect={onConnect}
+                      onConnectEnd={handleConnectEnd}
+                      connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}
                       onNodeClick={(_, node) => {
                         // 인라인 자식(읽기전용) — 선택 효과(테두리·불투명)는 RF가 처리하고, selectedId도
