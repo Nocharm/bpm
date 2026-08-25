@@ -21,6 +21,7 @@ import {
   Pin,
   Play,
   Plus,
+  RefreshCw,
   Server,
   ShieldCheck,
   User,
@@ -857,6 +858,17 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           >
             <Pin size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.pinnedBanner")}</span>
+          </div>
+        ) : data.followLatest === true && data.linkedMapId != null && !data.undesignated ? (
+          // 최신본 추종 중(기본 상태)도 같은 배너 결로 상시 안내 — 핀 고정과 구분되는 아이콘만 다르게
+          // (사용자 요청 2026-08-25). follow_latest는 전 노드 공통 불리언이라 실링크(+지정 유효)로 게이트.
+          <div
+            data-id="sp-banner-following"
+            title={t("subprocess.followingNotice")}
+            className="mt-1 flex items-center gap-1 rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-xs text-ink-secondary"
+          >
+            <RefreshCw size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{t("subprocess.followingBanner")}</span>
           </div>
         ) : null}
         {data.hasDescendantChange && <DescendantChangeBadge />}
