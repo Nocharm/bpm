@@ -109,13 +109,16 @@ if (spUsage.designated) {
     (await page.locator("[data-id='copy-retire-sp-accordion']").count()) === 0);
 }
 
-// [7] 승인자 추가(필수) — 마지막 'Search by name' 피커에서 첫 후보 선택
-const approverInput = page.locator('input[placeholder^="Search by name"]').last();
-await approverInput.scrollIntoViewIfNeeded();
-await approverInput.click();
-await page.waitForSelector("[data-id='principal-picker-dropdown']", { timeout: 5000 });
-await page.locator("[data-id='principal-picker-dropdown'] button").first().click();
-await page.waitForSelector("[data-id^='create-approver-pill-']", { timeout: 5000 });
+// [7] 협업자·승인자 자동 이어받기 — 원본 승인자 전원 pill 등장(수동 추가 없이 제출 성립)
+const srcApprovers = await (
+  await fetch(`${API}/maps/${source.id}/approvers`, { headers: HDR })
+).json();
+for (const aid of srcApprovers) {
+  await page.waitForSelector(`[data-id='create-approver-pill-${aid}']`, { timeout: 10000 });
+}
+check("approvers carried over from source", srcApprovers.length >= 1, `${srcApprovers.length} pills`);
+const collabRows = await page.locator("[data-id^='create-collab-row-']").count();
+check("collaborators carried over from source", collabRows >= 1, `${collabRows} rows`);
 
 // [8] 제출 → 새 맵 에디터로 이동, 새 맵 이름 = 원본명
 await page.click("[data-id='create-map-submit']");
@@ -171,13 +174,8 @@ if (spMap) {
   await page.check("[data-id='copy-retire-checkbox']");
   await page.waitForSelector("[data-id='copy-retire-sp-confirm']", { timeout: 10000 });
   check("SP map: warning + confirm gate shown", true);
-  // 승인자 추가 후에도 확인 체크 전엔 제출 비활성 — 체크하면 활성
-  const spApproverInput = page.locator('input[placeholder^="Search by name"]').last();
-  await spApproverInput.scrollIntoViewIfNeeded();
-  await spApproverInput.click();
-  await page.waitForSelector("[data-id='principal-picker-dropdown']", { timeout: 5000 });
-  await page.locator("[data-id='principal-picker-dropdown'] button").first().click();
-  await page.waitForSelector("[data-id^='create-approver-pill-']", { timeout: 5000 });
+  // 승인자는 자동 이어받기로 충족 — 확인 체크 전엔 제출 비활성, 체크하면 활성
+  await page.waitForSelector("[data-id^='create-approver-pill-']", { timeout: 10000 });
   check("submit blocked until SP confirm",
     await page.locator("[data-id='create-map-submit']").isDisabled());
   await page.check("[data-id='copy-retire-sp-confirm']");

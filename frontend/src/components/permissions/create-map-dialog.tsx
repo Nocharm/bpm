@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon } from "lucide-react";
+import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon, Users } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -19,12 +19,15 @@ import {
   createMap,
   getDirectory,
   getSubprocessUsage,
+  listApprovers,
   listGroups,
+  listMapPermissions,
   saveGraph,
   setApprovers as setMapApprovers,
   type DirectoryUser,
   type DirectoryDept,
   type Group,
+  type MapPermission,
   type SubprocessUsage,
   type VersionSummary,
 } from "@/lib/api";
@@ -180,6 +183,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spOpen, setSpOpen] = useState(true); // 확인 체크가 아코디언 최하단이라 기본 펼침
   const [spConfirm, setSpConfirm] = useState(false);
+  // retire 시 원본 협업자·승인자 자동 불러오기 추적 — 해제 시 자동분만 제거(수동 추가 보존, autoLeaderRef 패턴)
+  const importedCollabKeysRef = useRef<Set<string>>(new Set());
+  const importedApproverKeysRef = useRef<Set<string>>(new Set());
   // 파일 아코디언 접힘 상태
   const [csvOpen, setCsvOpen] = useState(false);
   const [wordOpen, setWordOpen] = useState(false);
@@ -286,7 +292,66 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     setOwningDept(null);
   };
 
-  // ── 원본 은퇴 토글(복사 모드) — 체크 시 이름을 원본명으로 고정(B5) + SP 사용처 lazy 로드 ──
+  // 불러온 principal/유저의 표시 이름 — 디렉터리(마운트 시 로드)에서 해석, 미해석 시 id 폴백
+  const resolveImportName = (type: PrincipalType, id: string): string => {
+    if (type === "user") {
+      const u = dirUsers.find((x) => x.id === id);
+      return u ? (lang === "ko" && u.korean_name ? u.korean_name : u.name) : id;
+    }
+    if (type === "department") {
+      const d = dirDepts.find((x) => x.id === id);
+      return d ? d.korean_name || d.name : id;
+    }
+    return groups.find((g) => String(g.id) === id)?.name ?? id;
+  };
+
+  // 원본 협업자·승인자 이어받기 — 협업자 스테이징 → 승인자 스테이징 순(제출 체인도 grant → PUT 순).
+  // 본인 행·오우닝 부서 파생분은 제외, 타인 owner 행은 editor로 강등 이어받기(sysadmin 대행 케이스).
+  // 새 맵 접근이 없는 승인자는 viewer로 보강 — private 복사본에서도 결재 가능하게.
+  const importOriginalMembers = (perms: MapPermission[], approverIds: string[]) => {
+    const selfId = currentUser?.id;
+    const rows = perms
+      .filter((p) => !(p.principal_type === "user" && p.principal_id === selfId))
+      .filter((p) => !(p.principal_type === "department" && p.principal_id === owningDept?.id))
+      .map((p) => ({
+        principalType: p.principal_type as PrincipalType,
+        principalId: p.principal_id,
+        role: (p.role === "viewer" ? "viewer" : "editor") as "viewer" | "editor",
+      }));
+    const coveredUserIds = new Set(
+      rows.filter((r) => r.principalType === "user").map((r) => r.principalId),
+    );
+    for (const aid of approverIds) {
+      if (aid !== selfId && !coveredUserIds.has(aid)) {
+        rows.push({ principalType: "user", principalId: aid, role: "viewer" });
+        coveredUserIds.add(aid);
+      }
+    }
+    setCollaborators((prev) => {
+      const existing = new Set(prev.map((c) => c.principalId));
+      const added = rows
+        .filter((r) => !existing.has(r.principalId))
+        .map((r) => ({
+          key: genId(),
+          principalType: r.principalType,
+          principalId: r.principalId,
+          displayName: resolveImportName(r.principalType, r.principalId),
+          role: r.role as MapRole,
+        }));
+      for (const a of added) importedCollabKeysRef.current.add(a.key);
+      return [...prev, ...added];
+    });
+    setApprovers((prev) => {
+      const existing = new Set(prev.map((a) => a.userId));
+      const added = approverIds
+        .filter((id) => !existing.has(id))
+        .map((id) => ({ key: genId(), userId: id, displayName: resolveImportName("user", id) }));
+      for (const a of added) importedApproverKeysRef.current.add(a.key);
+      return [...prev, ...added];
+    });
+  };
+
+  // ── 원본 은퇴 토글(복사 모드) — 체크 시 이름 고정(B5) + SP 사용처 + 협업자·승인자 이어받기 ──
   const toggleRetire = (next: boolean) => {
     if (!copy) return;
     setRetire(next);
@@ -299,6 +364,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           // 로드 실패 시 null 유지 → 제출 차단. 체크 해제 후 재체크로 재시도.
           .catch((err) => setError(humanizeApiError(err, t)));
       }
+      void Promise.all([listMapPermissions(copy.mapId), listApprovers(copy.mapId)])
+        .then(([perms, approverIds]) => importOriginalMembers(perms, approverIds))
+        .catch((err) => setError(humanizeApiError(err, t)));
+    } else {
+      // 자동 불러온 항목만 제거 — 사용자가 손으로 추가·수정한 항목은 보존
+      setCollaborators((prev) => prev.filter((c) => !importedCollabKeysRef.current.has(c.key)));
+      setApprovers((prev) => prev.filter((a) => !importedApproverKeysRef.current.has(a.key)));
+      importedCollabKeysRef.current = new Set();
+      importedApproverKeysRef.current = new Set();
     }
   };
 
@@ -758,6 +832,10 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                 <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
                   <Bell size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                   <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireNotifyNote")}</span>
+                </li>
+                <li className="flex items-center gap-2 px-1.5 py-1 text-caption text-ink">
+                  <Users size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 break-keep">{t("copyDialog.retireLineMembers")}</span>
                 </li>
               </ul>
             )}
