@@ -910,7 +910,11 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             (규범 순서 #10: 속성→지표→조건→IO — 프로세스/서브프로세스와 동일 수준 표시, 사용자 요청 2026-08-25).
             절대배치라 React Flow 측정 크기가 불변 → 핸들·엣지 앵커 무영향. IO 박스는 framed(보더 강조).
             조건/IO 박스는 노드 밖이라 상시 노출이 산만 — 선택(활성) 시에만 (사용자 요청 2026-08-25). */}
-        <div className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2">
+        {/* data-id: 액션 바(node-action-bar)가 이 확장 블록 높이를 실측해 겹치지 않게 내려간다 */}
+        <div
+          data-id="node-below-extension"
+          className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2"
+        >
           <NodeFields data={data} />
           <NodeParams data={data} className="justify-center" />
           {selected && <NodeIoDetails nodeId={id} data={data} nodeSelected framed />}
@@ -918,9 +922,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {/* 배지는 박스 진짜 코너로 — 마름모 내접 3줄 제목을 가리지 않게 아래·바깥으로 이동(#5) */}
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
-        {/* bottom-6 — 하단 절대배치 콘텐츠(파라미터/조건/IO)가 코너를 덮지 않게 위로. 마름모는
-            아래로 갈수록 좁아져 좌하단 대각선 바깥이 비어 있다 (사용자 요청 2026-08-25) */}
-        {data.url && <UrlBadge url={data.url} className="bottom-6 left-0" />}
+        {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
         {data.assigneeWarning && <AssigneeWarningBadge className="bottom-0 right-0" />}
         {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
         <NodeHandles connectable={isConnectable ?? true} />

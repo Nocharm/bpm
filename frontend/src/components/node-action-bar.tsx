@@ -6,6 +6,7 @@
 
 import { useStore } from "@xyflow/react";
 import { ChevronDown, ExternalLink, Link, LogOut } from "lucide-react";
+import { useLayoutEffect, useState } from "react";
 
 import type { NodeData } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
@@ -82,6 +83,27 @@ export function NodeActionBar({
     return found;
   }, eq);
 
+  // 노드 밖 하단 확장 블록(분기 파라미터/조건/IO — data-id=node-below-extension) 높이 실측 —
+  // measured 높이엔 절대배치 오버플로가 안 잡혀 바가 그 위를 덮는다(사용자 리포트 2026-08-25).
+  // offsetHeight는 RF 줌 transform 미적용 레이아웃값이라 flow 좌표로 바로 쓸 수 있다.
+  // 초기값은 페인트 전 동기 실측(1프레임 어긋남 방지), 이후 변화(IO 접힘/펼침)는 ResizeObserver.
+  const targetId = target?.id ?? null;
+  const [extensionHeight, setExtensionHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = targetId
+      ? document.querySelector<HTMLElement>(
+          `.react-flow__node[data-id="${CSS.escape(targetId)}"] [data-id="node-below-extension"]`,
+        )
+      : null;
+    // 자기 상태만 갱신 — extensionHeight는 deps가 아니라 cascade 없음 (lessons react-ts §3)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExtensionHeight(el?.offsetHeight ?? 0);
+    if (!el) return;
+    const observer = new ResizeObserver(() => setExtensionHeight(el.offsetHeight));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [targetId]);
+
   if (!target || target.dragging) return null;
 
   const expanded = expandedInlineIds.has(target.id);
@@ -104,7 +126,7 @@ export function NodeActionBar({
       style={{
         left: 0,
         top: 0,
-        transform: `translate(${target.cx}px, ${target.bottom + BAR_GAP}px) translateX(-50%)`,
+        transform: `translate(${target.cx}px, ${target.bottom + extensionHeight + BAR_GAP}px) translateX(-50%)`,
         zIndex: 8,
       }}
     >
