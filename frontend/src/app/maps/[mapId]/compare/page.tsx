@@ -9,6 +9,7 @@ import {
   type EdgeProps,
   type EdgeTypes,
   EdgeLabelRenderer,
+  applyNodeChanges,
   getBezierPath,
   getSmoothStepPath,
   getStraightPath,
@@ -636,14 +637,18 @@ function ComparePane({
       return next;
     });
   const layoutKey = `${flowDir}|${baseId}>${targetId}`;
-  const handleNodesChange = (changes: NodeChange[]) => {
+  // 드래그 프레임은 rfNodes에만 반영(applyNodeChanges — 움직인 노드만 identity 교체).
+  // 매 프레임 sessionPos를 갱신하면 laidNodes·nodeCenters·handleSides·appEdges가 전부
+  // 재계산되어 전 노드/엣지가 새 identity로 재렌더 → 캔버스 전체가 새로고침되듯 끊겼다.
+  const handleNodesChange = (changes: NodeChange<AppNode>[]) => {
+    setRfNodes((nds) => applyNodeChanges(changes, nds));
+  };
+  // 드롭 시점에만 세션 위치 커밋 — 핸들 변(handleSides)·센터 재계산이 1회로 끝난다.
+  const handleNodeDragStop = (_e: unknown, _node: AppNode, nodes: AppNode[]) => {
     setSessionPos((prev) => {
-      let next: Map<string, { x: number; y: number }> | null = null;
-      for (const change of changes) {
-        if (change.type !== "position" || !change.position) continue;
-        (next ??= new Map(prev)).set(`${layoutKey}|${change.id}`, change.position);
-      }
-      return next ?? prev;
+      const next = new Map(prev);
+      for (const node of nodes) next.set(`${layoutKey}|${node.id}`, node.position);
+      return next;
     });
   };
 
@@ -817,6 +822,13 @@ function ComparePane({
     [positioned, focusId, sessionPos, layoutKey],
   );
 
+  // React Flow에 넘기는 실제 노드 배열 — 드래그는 applyNodeChanges로 이 state에만 쌓이고,
+  // 레이아웃/포커스 산출물(laidNodes)이 바뀔 때만 통째로 리셋한다(드롭 커밋 포함 — 위치 동일해 점프 없음).
+  const [rfNodes, setRfNodes] = useState<AppNode[]>(laidNodes);
+  useEffect(() => {
+    // laidNodes는 rfNodes와 무관하게 산출 — cascade 루프 없음 (lessons react-ts §3)
+    setRfNodes(laidNodes);
+  }, [laidNodes]);
 
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
@@ -1430,7 +1442,7 @@ function ComparePane({
           <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
           <ReactFlow
             key={flowDir}
-            nodes={laidNodes}
+            nodes={rfNodes}
             edges={appEdges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
@@ -1438,6 +1450,7 @@ function ComparePane({
                저장하지 않으며 방향 토글·버전 전환 시 원위치(sessionPos 키에 레이아웃 기준 포함). */
             nodesDraggable
             onNodesChange={handleNodesChange}
+            onNodeDragStop={handleNodeDragStop}
             nodesConnectable={false}
             elementsSelectable={false}
             nodesFocusable={false}
