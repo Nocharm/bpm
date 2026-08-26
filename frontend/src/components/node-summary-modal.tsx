@@ -19,7 +19,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { AutoHeight } from "@/components/auto-height";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -45,6 +45,9 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { useDirectory } from "@/lib/directory";
+import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 import {
   formatParamValue,
   getEditableParamFields,
@@ -372,6 +375,14 @@ export function NodeSummaryModal({
   // 부서 변경 시 담당자가 있으면 확인 오버레이 표시 — 확인 후 담당자 초기화.
   const [pendingDept, setPendingDept] = useState<string | null>(null);
   const users = eligible?.users ?? [];
+  // 담당자 기본 노출 — 내 조직 근접도 우선(3다리 내, org 빈 사람 최후순위). eligible 응답엔
+  // org_path가 없어 디렉터리 스토어로 보강. 검색 랭킹(SearchSelect filterByQuery)은 그대로.
+  const dir = useDirectory();
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const proximityUsers = sortUsersByOrgProximity(
+    users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" })),
+    me?.orgPath ?? "",
+  );
   const assignees = parseAssignees(form.assignee);
   const drifted = driftedAssignees(form.department, assignees, users);
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
@@ -911,7 +922,7 @@ export function NodeSummaryModal({
                           addMode
                           value=""
                           options={buildAssigneeOptions(
-                            users
+                            proximityUsers
                               .filter((u) => form.department === "" || u.department === form.department)
                               .filter((u) => !assignees.includes(u.name)),
                             lang,

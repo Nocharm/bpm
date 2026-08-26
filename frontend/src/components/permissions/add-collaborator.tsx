@@ -5,11 +5,13 @@
 // 우측에 role을 미리 선택해두는 방식은 어떤 이름을 눌렀는지 헷갈려 폐기 (R2 QA 피드백).
 // RolePopover는 role-popover.tsx로 추출 — create-map-dialog.tsx도 쓰는 두 번째 사용처 등장 (T3).
 
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 
 import type { DirectoryDept, DirectoryUser, Group, PrincipalType } from "@/lib/api";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
+import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 
 import { PrincipalPicker, type PrincipalOption } from "./principal-picker";
@@ -62,9 +64,12 @@ export function AddCollaborator({
     null,
   );
 
+  // 기본(무검색) 목록 — 내 조직 근접도 우선(3다리 내 우선 노출, org 빈 사람 최후순위).
+  // 검색 랭킹(lib/search)은 입력 순서와 무관해 그대로 유지된다.
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   // 실 디렉터리 데이터를 피커 prop 형식으로 변환 — 미사용 필드는 빈 값으로 채움.
   // Adapt real directory data to picker's MockUser / Department shapes (unused fields stubbed).
-  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+  const pickerUsers: MockUser[] = sortUsersByOrgProximity(dirUsers, me?.orgPath ?? "").map((u) => ({
     id: u.id,
     name: u.name,
     email: "",

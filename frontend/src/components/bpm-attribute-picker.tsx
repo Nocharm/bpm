@@ -2,15 +2,18 @@
 
 // 노드 BPM 속성 담당자·부서 피커 — 복수 담당자 칩+SearchSelect, 부서 변경 시 담당자 초기화 확인.
 // 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
 
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SearchSelect } from "@/components/search-select";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
+import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 
 interface BpmAttributePickerProps {
   versionId: number | null;
@@ -56,6 +59,15 @@ export function BpmAttributePicker({
 
   const assignees = parseAssignees(assignee);
   const drifted = driftedAssignees(department, assignees, data.users);
+
+  // 담당자 기본 노출 — 내 조직 근접도 우선(3다리 내, org 빈 사람 최후순위). eligible 응답엔
+  // org_path가 없어 디렉터리 스토어로 보강. 검색 랭킹(SearchSelect filterByQuery)은 그대로.
+  const dir = useDirectory();
+  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const proximityUsers = sortUsersByOrgProximity(
+    data.users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" })),
+    me?.orgPath ?? "",
+  );
 
   // 부서 변경 — 담당자 있으면 확인 후 초기화, 없으면 즉시 적용
   const handleDeptChange = (newDept: string) => {
@@ -132,7 +144,7 @@ export function BpmAttributePicker({
               addMode
               value=""
               options={buildAssigneeOptions(
-                data.users
+                proximityUsers
                   .filter((u) => department === "" || u.department === department)
                   .filter((u) => !assignees.includes(u.name)),
                 lang,

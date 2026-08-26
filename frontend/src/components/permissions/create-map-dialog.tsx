@@ -8,7 +8,7 @@
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
 
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon, Users } from "lucide-react";
 
@@ -32,6 +32,8 @@ import {
   type VersionSummary,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
+import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
+import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -142,7 +144,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
 
   // 실 디렉터리 데이터를 피커 prop 형식으로 변환 (미사용 필드 빈 값으로 채움) /
   // Adapt real directory data to picker's MockUser / Department shapes.
-  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+  const toPickerUser = (u: DirectoryUser): MockUser => ({
     id: u.id,
     name: u.name,
     email: "",
@@ -150,7 +152,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     status: "active" as const,
     isSysadmin: false,
     korean_name: u.korean_name ?? "",
-  }));
+  });
+  const pickerUsers: MockUser[] = dirUsers.map(toPickerUser);
+  // 협업자 피커 전용 기본 순서 — 내 조직 근접도 우선(3다리 내, org 빈 사람 최후순위).
+  // 승인자 피커는 기존 순서 유지, 검색 랭킹은 입력 순서와 무관해 그대로.
+  const meStore = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
+  const collabPickerUsers: MockUser[] = sortUsersByOrgProximity(
+    dirUsers,
+    meStore?.orgPath ?? "",
+  ).map(toPickerUser);
   const pickerDepts: Department[] = dirDepts.map((d) => ({
     id: d.id,
     code: "",
@@ -972,7 +982,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             {/* picker — 선택(클릭/Enter) 시 클릭 위치(또는 입력창 하단 폴백)에 역할 팝오버 2-step (T3, add-collaborator.tsx와 공용 RolePopover) */}
             <div ref={collabPickerWrapRef}>
               <PrincipalPicker
-                users={pickerUsers}
+                users={collabPickerUsers}
                 departments={pickerDepts}
                 groups={toPickerGroups(groups)}
                 excludeIds={collabExcludeIds}
