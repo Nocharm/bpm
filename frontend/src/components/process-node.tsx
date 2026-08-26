@@ -199,11 +199,13 @@ function NodeIoDetails({
               // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2).
               // nowheel+overflow-y-auto — 호버 중 휠은 캔버스 팬 대신 이 목록을 스크롤 (사용자 요청 2026-08-25).
               <div
-                className={
+                // space-y-[3px] — 행 사이 간격으로 항 분리(2줄 클램프 항목이 뭉쳐 보이는 문제).
+                // 캡 72px = 새 행 스트라이드(18+3px) 기준 3.5줄 — 4번째 줄이 반쯤 보이는 어포던스 유지.
+                className={`space-y-[3px] ${
                   listState === "capped" && hiddenCount > 0
-                    ? "nowheel scroll-quiet max-h-[63px] overflow-y-auto"
-                    : undefined
-                }
+                    ? "nowheel scroll-quiet max-h-[72px] overflow-y-auto"
+                    : ""
+                }`}
               >
                 {visible.map(({ text, index }) => {
                   // 링크 항목은 itemId가 키 — 미러 인풋 체크 시 원본 아웃풋·형제 미러가 함께 체크(#9)
@@ -258,26 +260,17 @@ function NodeIoDetails({
                           : "hover:bg-surface-alt"
                       } ${pulsing ? "bpm-io-pulse" : ""}`}
                     >
-                      <span className="relative mt-0.5 flex h-3 w-3 shrink-0 items-center justify-center">
-                        {/* 기본 표시 — 짧은 대시(헤더 쉐브론 10px보다 작게), 호버·체크 시 체크박스로 교대 */}
-                        {!checked && (
-                          <span
-                            aria-hidden
-                            className="pointer-events-none absolute h-px w-1.5 rounded-full bg-ink-muted transition-opacity duration-150 group-hover/iorow:opacity-0"
-                          />
-                        )}
-                        <input
-                          type="checkbox"
-                          data-id={`node-io-check-${side}-${index}`}
-                          tabIndex={-1}
-                          className={`h-3 w-3 accent-[var(--color-accent)] transition-opacity duration-150 ${
-                            checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
-                          }`}
-                          checked={checked}
-                          disabled={onToggleIoCheck === null}
-                          onChange={() => onToggleIoCheck?.(checkKey)}
-                        />
-                      </span>
+                      <input
+                        type="checkbox"
+                        data-id={`node-io-check-${side}-${index}`}
+                        tabIndex={-1}
+                        className={`mt-0.5 h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                          checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
+                        }`}
+                        checked={checked}
+                        disabled={onToggleIoCheck === null}
+                        onChange={() => onToggleIoCheck?.(checkKey)}
+                      />
                       <span
                         className={`line-clamp-2 min-w-0 flex-1 break-words ${
                           checked
