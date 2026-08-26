@@ -81,7 +81,10 @@ async def create_notice(
         recipients = list(
             await session.scalars(select(Employee.login_id).where(Employee.active))
         )
-        await create_notifications(session, recipients, type="notice", message=payload.title)
+        await create_notifications(
+            session, recipients, type="notice", message=payload.title,
+            payload={"title": payload.title},
+        )
     await session.commit()
     await session.refresh(notice)
     return notice

@@ -4,7 +4,6 @@
 
 import {
   ArrowLeftRight,
-  Bell,
   CalendarClock,
   Check,
   CheckSquare,
@@ -12,7 +11,6 @@ import {
   List,
   Mail,
   Megaphone,
-  MessageSquareReply,
   Network,
   ShieldCheck,
   Square,
@@ -24,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   approveVersion,
@@ -57,7 +55,9 @@ import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { genId } from "@/lib/id";
+import { formatKst } from "@/lib/datetime";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
+import { formatNotification, getNotificationIcon } from "@/lib/notification-format";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useQuietScroll } from "@/lib/use-quiet-scroll";
@@ -140,16 +140,7 @@ function DeciderPills({ logins, t }: { logins: string[]; t: Translate }) {
   );
 }
 
-// 알림 유형별 아이콘 — 공지/승인요청/기타
-function typeIcon(type: string): LucideIcon {
-  if (type === "notice") return Megaphone;
-  if (type === "review_requested") return FileCheck;
-  if (type.startsWith("checkout_")) return ArrowLeftRight;
-  if (type.startsWith("permission_")) return ShieldCheck;
-  if (type === "subprocess_registered") return Network;
-  if (type === "feedback_reply") return MessageSquareReply;
-  return Bell;
-}
+// 알림 유형별 아이콘은 lib/notification-format.getNotificationIcon 공용 (2026-08-26)
 
 // 승인 항목 유형별 아이콘 — 버전 승인/점유권 이전/권한·가시성. 구체 JSX 반환(파생 컴포넌트 금지).
 function ApprovalKindIcon({
@@ -234,9 +225,15 @@ export default function InboxPage() {
     categoryFilter === "all"
       ? byRead
       : byRead.filter((n) => getNotificationCategory(n.type) === categoryFilter);
-  const filtered = filterByQuery(byCategory, search, (n) => [
-    { field: "message", text: n.message },
-  ]).map((hit) => hit.item);
+  const filtered = filterByQuery(byCategory, search, (n) => {
+    // 언어 토글 렌더 텍스트로도 검색 — 원문 message는 레거시·영어 검색용으로 유지
+    const view = formatNotification(n, t);
+    return [
+      { field: "message", text: n.message },
+      { field: "title", text: view.title },
+      { field: "body", text: view.body },
+    ];
+  }).map((hit) => hit.item);
   // 25개씩 증분 렌더 — 알림·승인 두 목록 각각(읽음/카테고리 필터·검색 변경 시 리셋)
   const {
     visible: shownItems,
@@ -651,7 +648,8 @@ export default function InboxPage() {
             ) : (
               <ul ref={notificationsScrollRef} className="scroll-quiet flex flex-1 flex-col gap-2 overflow-y-auto pr-3 pb-3">
                 {shownItems.map((n) => {
-                  const TypeIcon = typeIcon(n.type);
+                  const TypeIcon = getNotificationIcon(n.type);
+                  const view = formatNotification(n, t);
                   return (
                     <li key={n.id} className="flex flex-col">
                       {/* div role=button — 내부 삭제 버튼과의 button-in-button 중첩(validateDOMNesting) 회피 */}
@@ -687,6 +685,8 @@ export default function InboxPage() {
                                 <Square size={14} strokeWidth={1.5} className="text-ink-tertiary" />
                               ))}
                             <TypeIcon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+                            {/* 유형 라벨 — 언어 토글 반영 (notification-format) */}
+                            <span className="text-fine text-ink-tertiary">{view.label}</span>
                           </span>
                           {n.read ? (
                             <span className="text-fine text-ink-tertiary">{t("notices.read")}</span>
@@ -696,12 +696,22 @@ export default function InboxPage() {
                         </div>
                         <span
                           className={
-                            "line-clamp-2 text-caption " +
+                            "line-clamp-1 text-caption " +
                             (n.read ? "text-ink-tertiary" : "font-semibold text-ink")
                           }
                         >
-                          {n.message}
+                          {view.title}
                         </span>
+                        {view.body && (
+                          <span
+                            className={
+                              "line-clamp-2 text-fine " +
+                              (n.read ? "text-ink-tertiary" : "text-ink-secondary")
+                            }
+                          >
+                            {view.body}
+                          </span>
+                        )}
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
@@ -845,11 +855,27 @@ function NotificationDetail({
   nowMs: number;
   t: Translate;
 }) {
+  const view = formatNotification(notification, t);
   return (
     <article className="px-6 py-4">
-      <p className="whitespace-pre-wrap text-body text-ink">{notification.message}</p>
-      <div className="mt-2 flex">
+      {/* 유형 칩 + 제목(맵 이름) — 언어 토글 반영, 본문은 상세 문장.
+          아이콘은 createElement — 렌더 중 파생 컴포넌트 변수 금지(react-hooks/static-components) */}
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
+          {createElement(getNotificationIcon(notification.type), { size: 12, strokeWidth: 1.5 })}
+          {view.label}
+        </span>
+      </div>
+      <h3 className="mt-2 break-keep text-body-strong text-ink">{view.title}</h3>
+      {view.body && (
+        <p className="mt-1 whitespace-pre-wrap break-keep text-body text-ink-secondary">
+          {view.body}
+        </p>
+      )}
+      <div className="mt-3 flex items-center gap-2">
         <TimePills iso={notification.created_at} nowMs={nowMs} />
+        {/* 절대 시각(KST) — 상대 필과 병기 */}
+        <span className="text-fine text-ink-tertiary">{formatKst(notification.created_at)}</span>
       </div>
       {notification.map_id !== null && (
         <Link

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { deleteNotification, listNotifications, markNotificationRead, type NotificationItem } from "@/lib/api";
+import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { formatNotification, getNotificationIcon } from "@/lib/notification-format";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 const POLL_MS = 5000;
@@ -99,46 +101,80 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-7 z-[1300] w-72 rounded-md bg-surface p-2 shadow-lg">
+        <div className="absolute right-0 top-7 z-[1300] w-96 rounded-md bg-surface p-2 shadow-lg">
           <p className="px-1 pb-1 text-caption-strong text-ink">{t("notif.title")}</p>
           {items.length === 0 ? (
             <p className="px-1 py-2 text-fine text-ink-tertiary">{t("notif.empty")}</p>
           ) : (
-            <ul className="max-h-80 overflow-y-auto">
-              {visible.map((item) => (
-                <li
-                  key={item.id}
-                  onClick={() => handleOpen(item.id)}
-                  className={`flex cursor-pointer items-start gap-2 rounded-sm px-1 py-1.5 text-caption hover:bg-surface-alt ${
-                    item.read ? "text-ink-tertiary" : "text-ink"
-                  }`}
-                >
-                  <span className="flex-1">{item.message}</span>
-                  {!item.read && (
-                    <button
-                      type="button"
-                      className="text-fine text-accent"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleRead(item.id);
-                      }}
-                    >
-                      {t("notif.markRead")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={t("notif.delete")}
-                    className="mt-0.5 shrink-0 text-ink-tertiary hover:text-error"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleDelete(item.id);
-                    }}
+            <ul className="max-h-96 overflow-y-auto">
+              {visible.map((item) => {
+                // 언어 토글 렌더 — 제목(맵 이름)+유형 칩+상세 문장, 레거시는 원문 폴백
+                const view = formatNotification(item, t);
+                const TypeIcon = getNotificationIcon(item.type);
+                return (
+                  <li
+                    key={item.id}
+                    data-id={`notif-bell-row-${item.id}`}
+                    onClick={() => handleOpen(item.id)}
+                    className="group flex cursor-pointer items-start gap-2 rounded-sm px-1.5 py-2 hover:bg-surface-alt"
                   >
-                    <X size={12} strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
+                    <TypeIcon
+                      size={14}
+                      strokeWidth={1.5}
+                      className={`mt-0.5 shrink-0 ${item.read ? "text-ink-tertiary" : "text-accent"}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className={`min-w-0 truncate text-caption ${
+                            item.read ? "text-ink-tertiary" : "font-semibold text-ink"
+                          }`}
+                        >
+                          {view.title}
+                        </span>
+                        <span className="shrink-0 text-fine text-ink-tertiary">{view.label}</span>
+                        <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
+                          {formatKstShort(item.created_at)}
+                        </span>
+                      </span>
+                      {view.body && (
+                        <span
+                          className={`mt-0.5 line-clamp-2 block text-fine ${
+                            item.read ? "text-ink-tertiary" : "text-ink-secondary"
+                          }`}
+                        >
+                          {view.body}
+                        </span>
+                      )}
+                      <span className="mt-0.5 flex items-center justify-end gap-2">
+                        {!item.read && (
+                          <button
+                            type="button"
+                            className="text-fine text-accent"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleRead(item.id);
+                            }}
+                          >
+                            {t("notif.markRead")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={t("notif.delete")}
+                          className="text-ink-tertiary hover:text-error"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleDelete(item.id);
+                          }}
+                        >
+                          <X size={12} strokeWidth={1.5} />
+                        </button>
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
               {hasMore && <li ref={sentinelRef} className="h-px" />}
             </ul>
           )}

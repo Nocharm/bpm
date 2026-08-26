@@ -40,6 +40,12 @@ async def get_display_name(session: AsyncSession, login_id: str) -> str:
     return emp.name if emp is not None and emp.name else login_id
 
 
+async def get_map_name(session: AsyncSession, map_id: int) -> str:
+    """map_id → 맵 이름. 삭제 등으로 못 찾으면 빈 문자열 — 알림 payload/message용."""
+    found = await session.get(ProcessMap, map_id)
+    return found.name if found is not None else ""
+
+
 NOTIFICATION_CAP = 100  # 인당 알림 보존 상한 — 초과분은 읽음 여부 무관 오래된 순 삭제 (design 2026-07-16)
 
 
@@ -51,10 +57,12 @@ async def create_notifications(
     map_id: int | None = None,
     version_id: int | None = None,
     message: str,
+    payload: dict | None = None,
 ) -> None:
     """수신자별 알림 행 추가 + 인당 NOTIFICATION_CAP 초과분 트리밍 — commit은 호출자 책임.
 
     map_id/version_id는 선택 — 맵/버전과 무관한 알림(공지 등)은 생략.
+    payload는 FE 언어 토글 렌더용 구조화 컨텍스트 — message는 영어 폴백 겸 레거시 표시용.
     트리밍의 select가 autoflush로 pending add를 먼저 flush한다.
     """
     for recipient in recipients:
@@ -65,6 +73,7 @@ async def create_notifications(
                 map_id=map_id,
                 version_id=version_id,
                 message=message,
+                payload=payload,
             )
         )
     for recipient in dict.fromkeys(recipients):  # 중복 수신자 1회만 트리밍
@@ -163,25 +172,31 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                 for r in dict.fromkeys([found_map.owner_id if found_map else None, submitter])
                 if r
             ]
+            map_name = found_map.name if found_map else ""
             await create_notifications(
                 session,
                 recipients,
                 type="approval_cancelled",
                 map_id=version.map_id,
                 version_id=version.id,
-                message=f"approval for '{version.label}' was cancelled — its approver(s) left the company",
+                message=f"approval for '{version.label}' of '{map_name}' was cancelled — its approver(s) left the company",
+                payload={"map_name": map_name, "version_label": version.label,
+                         "version_number": version.version_number},
             )
         elif all(approver in approvals for approver in active):
             # 퇴사자가 마지막 미승인자였음 — 남은 전원 기승인이므로 즉시 전이
             version.status = APPROVED
             if submitter:
+                map_name = found_map.name if found_map else ""
                 await create_notifications(
                     session,
                     [submitter],
                     type="approved",
                     map_id=version.map_id,
                     version_id=version.id,
-                    message=f"'{version.label}' is fully approved — ready to publish",
+                    message=f"'{version.label}' of '{map_name}' is fully approved — ready to publish",
+                    payload={"map_name": map_name, "version_label": version.label,
+                             "version_number": version.version_number},
                 )
 
 
@@ -213,4 +228,6 @@ async def notify_map_renamed(
         type="map_renamed",
         map_id=map_id,
         message=f"{actor_name} renamed '{old_name}' to '{new_name}'",
+        payload={"map_name": new_name, "from_name": old_name, "to_name": new_name,
+                 "actor": actor, "actor_name": actor_name},
     )

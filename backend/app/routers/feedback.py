@@ -223,12 +223,14 @@ async def notify_feedback_author(
         if not feedback.reply.strip():
             raise HTTPException(status_code=400, detail="no reply to notify about")
         message = f'Your feedback received a reply — "{snippet}"'
+        notif_payload = {"snippet": snippet, "kind": payload.kind}
         feedback.reply_notified_at = now()
     else:
         if feedback.status_notified_at is not None:
             raise HTTPException(status_code=400, detail="status change already notified")
         label = _STATUS_LABELS.get(feedback.status, feedback.status)
         message = f'Your feedback status changed to {label} — "{snippet}"'
+        notif_payload = {"snippet": snippet, "kind": payload.kind, "status_label": label}
         feedback.status_notified_at = now()
 
     await create_notifications(
@@ -236,6 +238,7 @@ async def notify_feedback_author(
         [feedback.author],
         type=f"feedback_{payload.kind}",
         message=message,
+        payload=notif_payload,
     )
     await session.commit()
     await session.refresh(feedback)

@@ -132,6 +132,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "input_flags", "TEXT DEFAULT ''"),
     ("process_maps", "sp_input_ids", "TEXT"),
     ("process_maps", "sp_output_ids", "TEXT"),
+    # 알림 구조화 컨텍스트 — FE 언어 토글 렌더용, 레거시 행은 NULL→message 폴백 (2026-08-26)
+    ("notifications", "payload", "JSON"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

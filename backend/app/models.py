@@ -468,6 +468,9 @@ class Notification(Base):
     map_id: Mapped[int | None] = mapped_column(Integer, default=None)
     version_id: Mapped[int | None] = mapped_column(Integer, default=None)
     message: Mapped[str] = mapped_column(Text, default="")
+    # 구조화 컨텍스트(map_name·version_label·actor 등) — FE가 언어 토글에 맞춰 렌더.
+    # NULL(레거시 행)이면 FE가 message 원문 폴백 (2026-08-26)
+    payload: Mapped[dict | None] = mapped_column(JSON, default=None)
     read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

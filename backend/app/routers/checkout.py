@@ -88,13 +88,17 @@ async def request_checkout(
     ).all()
     holder = [version.checked_out_by] if version.checked_out_by else []
     recipients = [r for r in dict.fromkeys(holder + list(owner_ids)) if r != user]
+    map_name = await workflow.get_map_name(session, version.map_id)
     await workflow.create_notifications(
         session,
         recipients,
         type="checkout_requested",
         map_id=version.map_id,
         version_id=version_id,
-        message=f"{requester_name} requested checkout of '{version.label}'",
+        message=f"{requester_name} requested checkout of '{version.label}' of '{map_name}'",
+        payload={"map_name": map_name, "version_label": version.label,
+                 "version_number": version.version_number,
+                 "actor": user, "actor_name": requester_name},
     )
 
     await session.commit()
@@ -181,13 +185,18 @@ async def decide_checkout_request(
 
     # 벨 알림 — 결과를 요청자에게, 자동 거절된 다른 요청자에게도 (design 2026-07-16)
     outcome = "approved" if payload.approve else "rejected"
+    map_name = await workflow.get_map_name(session, version.map_id)
+    actor_name = await workflow.get_display_name(session, user)
     await workflow.create_notifications(
         session,
         [req.requested_by],
         type=f"checkout_{outcome}",
         map_id=version.map_id,
         version_id=version.id,
-        message=f"Your checkout request for '{version.label}' was {outcome}",
+        message=f"Your checkout request for '{version.label}' of '{map_name}' was {outcome}",
+        payload={"map_name": map_name, "version_label": version.label,
+                 "version_number": version.version_number,
+                 "actor": user, "actor_name": actor_name, "outcome": outcome},
     )
     if auto_rejected:
         await workflow.create_notifications(
@@ -196,7 +205,10 @@ async def decide_checkout_request(
             type="checkout_rejected",
             map_id=version.map_id,
             version_id=version.id,
-            message=f"Your checkout request for '{version.label}' was rejected",
+            message=f"Your checkout request for '{version.label}' of '{map_name}' was rejected",
+            payload={"map_name": map_name, "version_label": version.label,
+                     "version_number": version.version_number,
+                     "outcome": "rejected", "reason": "auto"},
         )
 
     await session.commit()

@@ -426,6 +426,7 @@ async def copy_map(
             type="map_retired",
             map_id=map_id,
             message=f"{actor_name} copied '{original_name}' and moved the original to the trash",
+            payload={"map_name": original_name, "actor": user, "actor_name": actor_name},
         )
     await _assert_unique_name(session, copy_name)
     new_map = ProcessMap(
@@ -480,6 +481,8 @@ async def copy_map(
         type="map_copied",
         map_id=map_id,
         message=f"{actor_name} copied '{original_name}' as '{copy_name}'",
+        payload={"map_name": original_name, "copy_name": copy_name,
+                 "actor": user, "actor_name": actor_name},
     )
     await session.commit()
     await session.refresh(new_map, attribute_names=["versions"])
@@ -721,6 +724,7 @@ async def _supersede_pending_rename(
         type="rename_superseded",
         map_id=map_id,
         message=f"Your rename request was superseded — the map is now '{new_name}'",
+        payload={"map_name": new_name, "to_name": new_name},
     )
 
 
@@ -775,6 +779,8 @@ async def create_rename_request(
         type="rename_requested",
         map_id=map_id,
         message=f"{requester_name} requested to rename '{found_map.name}' to '{to_name}'",
+        payload={"map_name": found_map.name, "from_name": found_map.name,
+                 "to_name": to_name, "actor": user, "actor_name": requester_name},
     )
     await session.commit()
     await session.refresh(req)
@@ -895,6 +901,7 @@ async def create_sp_designation_request(
         type="sp_designation_requested",
         map_id=map_id,
         message=f"{requester_name} requested to register '{found_map.name}' as a subprocess",
+        payload={"map_name": found_map.name, "actor": user, "actor_name": requester_name},
     )
     await session.commit()
     await session.refresh(req)
@@ -1163,6 +1170,7 @@ async def designate_subprocess(
                 type="subprocess_registered",
                 map_id=map_id,
                 message=f"'{found_map.name}' was registered as a subprocess",
+                payload={"map_name": found_map.name},
             )
         # pending SP 등록 요청은 지정 저장으로 수락 완결 — Inbox 수락 체인·직접 지정 모두 이 경로 (spec 2026-07-19)
         await _apply_pending_sp_designation(
@@ -1195,6 +1203,7 @@ async def _apply_pending_sp_designation(
         type="sp_designation_approved",
         map_id=map_id,
         message=f"Your subprocess registration request for '{map_name}' was approved",
+        payload={"map_name": map_name, "outcome": "approved"},
     )
 
 

@@ -629,6 +629,7 @@ async def submit_version(
                 type="permission_superseded",
                 map_id=version.map_id,
                 message=f"Your visibility change request on '{found_map.name}' was superseded — it is now bundled with a version submission",
+                payload={"map_name": found_map.name, "reason": "bundled"},
             )
         session.add(
             ApprovalRequest(
@@ -653,13 +654,17 @@ async def submit_version(
     version.checked_out_by = None
     version.checked_out_at = None
     requester_name = await workflow.get_display_name(session, user)
+    map_name = await workflow.get_map_name(session, version.map_id)
     await workflow.create_notifications(
         session,
         approvers,
         type="review_requested",
         map_id=version.map_id,
         version_id=version_id,
-        message=f"{requester_name} requested approval for '{version.label}'",
+        message=f"{requester_name} requested approval for '{version.label}' of '{map_name}'",
+        payload={"map_name": map_name, "version_label": version.label,
+                 "version_number": version.version_number,
+                 "actor": user, "actor_name": requester_name},
     )
     record_version_event(
         session, version_id, "submitted", user,
@@ -716,13 +721,18 @@ async def approve_version(
     if approved_count is not None and approved_count >= len(approvers):
         version.status = workflow.APPROVED
         if version.submitted_by:
+            map_name = await workflow.get_map_name(session, version.map_id)
             await workflow.create_notifications(
                 session,
                 [version.submitted_by],
                 type="approved",
                 map_id=version.map_id,
                 version_id=version_id,
-                message=f"'{version.label}' is fully approved — ready to publish",
+                message=f"'{version.label}' of '{map_name}' is fully approved — ready to publish",
+                payload={"map_name": map_name, "version_label": version.label,
+                         "version_number": version.version_number,
+                         "actor": user,
+                         "actor_name": await workflow.get_display_name(session, user)},
             )
     await session.commit()
     await session.refresh(version)
@@ -759,6 +769,8 @@ async def reject_version(
             VersionApproval.approver == user,
         )
     )
+    map_name = await workflow.get_map_name(session, version.map_id)
+    actor_name = await workflow.get_display_name(session, user)
     if version.submitted_by:
         await workflow.create_notifications(
             session,
@@ -766,7 +778,11 @@ async def reject_version(
             type="rejected",
             map_id=version.map_id,
             version_id=version_id,
-            message=f"'{version.label}' was rejected: {payload.reason}",
+            message=f"'{version.label}' of '{map_name}' was rejected: {payload.reason}",
+            payload={"map_name": map_name, "version_label": version.label,
+                     "version_number": version.version_number,
+                     "actor": user, "actor_name": actor_name,
+                     "reason": payload.reason},
         )
 
     # 동봉 가시성 변경 거절
@@ -780,7 +796,9 @@ async def reject_version(
             [bundled.requested_by],
             type="permission_rejected",
             map_id=version.map_id,
-            message=f"Your bundled visibility change on '{version.label}' was rejected with the version",
+            message=f"Your bundled visibility change on '{map_name}' was rejected with the version",
+            payload={"map_name": map_name, "version_label": version.label,
+                     "reason": "bundled"},
         )
 
     record_version_event(session, version_id, "rejected", user, note=payload.reason)
@@ -838,22 +856,30 @@ async def publish_version(
         bundled.status = "applied"
         bundled.decided_by = user
         bundled.decided_at = _now()
+        bundled_map_name = await workflow.get_map_name(session, version.map_id)
         await workflow.create_notifications(
             session,
             [bundled.requested_by],
             type="permission_approved",
             map_id=version.map_id,
-            message=f"Your bundled visibility change on '{version.label}' was applied with the publish",
+            message=f"Your bundled visibility change on '{bundled_map_name}' was applied with the publish",
+            payload={"map_name": bundled_map_name, "version_label": version.label,
+                     "reason": "bundled"},
         )
 
     version.status = workflow.PUBLISHED
+    map_name = await workflow.get_map_name(session, version.map_id)
+    actor_name = await workflow.get_display_name(session, user)
     await workflow.create_notifications(
         session,
         approvers,
         type="published",
         map_id=version.map_id,
         version_id=version_id,
-        message=f"'{version.label}' was published",
+        message=f"'{version.label}' (v{version.version_number}) of '{map_name}' was published by {actor_name}",
+        payload={"map_name": map_name, "version_label": version.label,
+                 "version_number": version.version_number,
+                 "actor": user, "actor_name": actor_name},
     )
     record_version_event(
         session, version_id, "published", user,

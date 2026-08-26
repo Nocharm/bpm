@@ -354,6 +354,7 @@ async def _supersede_pending_downgrades(
         type="permission_superseded",
         map_id=map_id,
         message=f"Your permission change request on '{map_name}' was superseded — the owner applied a change directly",
+        payload={"map_name": map_name, "reason": "direct"},
     )
 
 
@@ -692,6 +693,8 @@ async def _notify_permission_request(
         type="permission_requested",
         map_id=map_id,
         message=f"{requester_name} requested {what} on '{map_name}'",
+        payload={"map_name": map_name, "actor": requested_by,
+                 "actor_name": requester_name, "kind": kind},
     )
 
 
@@ -709,6 +712,8 @@ async def _notify_permission_decision(
             type=f"rename_{outcome}",
             map_id=req.map_id,
             message=f"Your request to rename '{from_name}' to '{to_name}' was {outcome}{suffix}",
+            payload={"map_name": from_name, "from_name": from_name, "to_name": to_name,
+                     "outcome": outcome, "reason": reason},
         )
         return
     if req.kind == "sp_designation":
@@ -721,6 +726,7 @@ async def _notify_permission_decision(
             message=(
                 f"Your subprocess registration request for '{map_name}' was {outcome}{suffix}"
             ),
+            payload={"map_name": map_name, "outcome": outcome, "reason": reason},
         )
         return
     found_map = await session.get(ProcessMap, req.map_id)
@@ -731,6 +737,8 @@ async def _notify_permission_decision(
         type=f"permission_{outcome}",
         map_id=req.map_id,
         message=f"Your request on '{map_name}' was {outcome}{suffix}",
+        payload={"map_name": map_name, "outcome": outcome, "reason": reason,
+                 "kind": req.kind},
     )
 
 

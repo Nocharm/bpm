@@ -339,3 +339,31 @@ def test_bulk_delete_requires_exactly_one_criterion(
         == 422
     )
     assert client.post("/api/notifications/bulk-delete", json={"read_only": False}).status_code == 422
+
+
+def test_version_notifications_carry_map_context(client) -> None:
+    """게시/승인요청 알림 payload — 맵 이름·버전 라벨/번호·행위자 동봉, message에도 맵 이름 (2026-08-26)."""
+    from uuid import uuid4
+
+    created = client.post(
+        "/api/maps",
+        json={"owning_department": "Owning Anchor Division", "name": f"notif-ctx-{uuid4().hex[:8]}"},
+    ).json()
+    map_id, vid = created["id"], created["versions"][0]["id"]
+    assert client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a"]}).status_code == 200
+    client.post(f"/api/versions/{vid}/checkout", json={})  # submit은 점유 전제
+    assert client.post(f"/api/versions/{vid}/submit", json={}).status_code == 200
+    assert client.post(f"/api/versions/{vid}/approve", json={}, headers={"X-Dev-User": "a"}).status_code == 200
+    assert client.post(f"/api/versions/{vid}/publish", json={}).status_code == 200
+
+    rows = client.get("/api/notifications", headers={"X-Dev-User": "a"}).json()
+    pub = next(n for n in rows if n["type"] == "published" and n["map_id"] == map_id)
+    assert pub["payload"]["map_name"] == created["name"]
+    assert pub["payload"]["version_label"] == "As-Is"
+    assert pub["payload"]["version_number"] == 1
+    assert pub["payload"]["actor_name"]
+    assert created["name"] in pub["message"]
+
+    review = next(n for n in rows if n["type"] == "review_requested" and n["map_id"] == map_id)
+    assert review["payload"]["map_name"] == created["name"]
+    assert created["name"] in review["message"]

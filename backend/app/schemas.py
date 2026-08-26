@@ -1175,6 +1175,8 @@ class NotificationOut(BaseModel):
     map_id: int | None
     version_id: int | None
     message: str
+    # 구조화 컨텍스트 — FE가 언어 토글에 맞춰 렌더, None(레거시)이면 message 폴백
+    payload: dict | None = None
     read: bool
     created_at: datetime
 

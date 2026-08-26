@@ -1762,12 +1762,32 @@ export function deleteLocalAccount(loginId: string): Promise<void> {
   });
 }
 
+// 알림 구조화 컨텍스트 — 백엔드 create_notifications payload 계약(유형별 부분 집합).
+// FE가 언어 토글에 맞춰 렌더(lib/notification-format.ts), null(레거시)이면 message 폴백.
+export interface NotificationPayload {
+  map_name?: string;
+  version_label?: string;
+  version_number?: number | null;
+  actor?: string;
+  actor_name?: string;
+  from_name?: string;
+  to_name?: string;
+  copy_name?: string;
+  outcome?: string;
+  reason?: string | null;
+  kind?: string;
+  snippet?: string;
+  status_label?: string;
+  title?: string;
+}
+
 export interface NotificationItem {
   id: number;
   type: string;
   map_id: number | null;
   version_id: number | null;
   message: string;
+  payload?: NotificationPayload | null;
   read: boolean;
   created_at: string;
 }
