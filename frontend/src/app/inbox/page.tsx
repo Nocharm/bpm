@@ -855,7 +855,8 @@ function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: 
     (lang === "ko" ? user?.korean_name || user?.name : user?.name) || fallbackName || loginId;
   return (
     <PersonHoverCard userId={loginId} className="align-baseline">
-      <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary transition-colors hover:bg-accent-tint hover:text-accent">
+      {/* 상세 패널 배경이 surface-alt — 필은 surface+헤어라인으로 분리, 크기는 본문과 어울리는 caption */}
+      <span className="inline-flex items-baseline rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-caption text-ink transition-colors hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent">
         {display}
       </span>
     </PersonHoverCard>
