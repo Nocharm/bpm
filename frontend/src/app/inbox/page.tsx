@@ -71,6 +71,7 @@ import {
 } from "@/components/version/requester-comment-banner";
 import { IconPillFilter, type IconPillOption } from "@/components/icon-pill-filter";
 import { MarkdownView } from "@/components/markdown-view";
+import { PersonHoverCard } from "@/components/person-hover-card";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
@@ -845,6 +846,22 @@ export default function InboxPage() {
   );
 }
 
+// 알림 상세 행위자 필 — 필 스타일 트리거 + 인물 카드(부서 경로 아코디언 포함, PersonHoverCard 공용).
+// 이름은 디렉터리 해석(ko는 한글명 우선), 미해석 시 payload actor_name → login_id 폴백.
+function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: string }) {
+  const { lang } = useI18n();
+  const user = useDirectory().get(loginId);
+  const display =
+    (lang === "ko" ? user?.korean_name || user?.name : user?.name) || fallbackName || loginId;
+  return (
+    <PersonHoverCard userId={loginId} className="align-baseline">
+      <span className="rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary transition-colors hover:bg-accent-tint hover:text-accent">
+        {display}
+      </span>
+    </PersonHoverCard>
+  );
+}
+
 // 알림 본문 — 우측 패널(넓은 화면)과 카드 아래 아코디언(좁은 화면)이 공유.
 function NotificationDetail({
   notification,
@@ -869,12 +886,12 @@ function NotificationDetail({
       <h3 className="mt-2 break-keep text-body-strong text-ink">{view.title}</h3>
       {view.body && (
         <p className="mt-1 whitespace-pre-wrap break-keep text-body text-ink-secondary">
-          {/* 행위자는 유저 필 — 호버/클릭 시 유저 정보 카드(UserPill 공용) */}
+          {/* 행위자는 유저 필 — 0.7초 호버/클릭 시 인물 카드(이름·직급·메신저·부서 경로 아코디언, PersonHoverCard 공용) */}
           {formatNotificationBodyParts(notification, t).map((part, i) =>
             typeof part === "string" ? (
               <span key={i}>{part}</span>
             ) : (
-              <UserPill key={i} loginId={part.actorLogin} className="align-baseline" />
+              <ActorPill key={i} loginId={part.actorLogin} fallbackName={part.actorName} />
             ),
           )}
         </p>

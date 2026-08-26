@@ -125,7 +125,7 @@ export function formatNotification(item: NotificationItem, t: Translate): Notifi
 
 /** 상세 문장의 행위자 필 삽입 지점 — {actor} 자리를 기준으로 분할한 파츠.
  *  행위자가 없거나(레거시·미행위자 유형) 템플릿에 {actor}가 없으면 전체 문장 1파츠. */
-export type NotificationBodyPart = string | { actorLogin: string };
+export type NotificationBodyPart = string | { actorLogin: string; actorName?: string };
 
 const ACTOR_SENTINEL = "⟬actor⟭"; // 번역 문구에 등장할 수 없는 구분자
 
@@ -145,7 +145,7 @@ export function formatNotificationBodyParts(
   const [before, after] = withSentinel.split(ACTOR_SENTINEL);
   const parts: NotificationBodyPart[] = [];
   if (before) parts.push(before);
-  parts.push({ actorLogin: p.actor });
+  parts.push({ actorLogin: p.actor, actorName: p.actor_name });
   if (after) parts.push(after);
   return parts;
 }

@@ -99,9 +99,12 @@ describe("formatNotificationBodyParts", () => {
                  actor: "kim.a", actor_name: "Kim A" },
     };
     const parts = formatNotificationBodyParts(item, makeT("ko"));
-    expect(parts).toEqual([{ actorLogin: "kim.a" }, "님이 'R5' (v5)을 게시했습니다"]);
+    expect(parts).toEqual([
+      { actorLogin: "kim.a", actorName: "Kim A" },
+      "님이 'R5' (v5)을 게시했습니다",
+    ]);
     const en = formatNotificationBodyParts(item, makeT("en"));
-    expect(en).toEqual([{ actorLogin: "kim.a" }, " published 'R5' (v5)"]);
+    expect(en).toEqual([{ actorLogin: "kim.a", actorName: "Kim A" }, " published 'R5' (v5)"]);
   });
 
   it("행위자 없는 유형·레거시는 전체 문장 1파츠", () => {
