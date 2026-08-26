@@ -135,9 +135,9 @@ describe("formatNotificationBodyParts", () => {
     expect(formatNotificationBodyParts(item, makeT("en"))).toEqual([
       { actorLogin: "kim.a", actorName: "Kim A" },
       " renamed ",
-      { chip: "Old" },
+      { chip: "Old", kind: "name" },
       " to ",
-      { chip: "New" },
+      { chip: "New", kind: "name" },
     ]);
   });
 
@@ -148,7 +148,7 @@ describe("formatNotificationBodyParts", () => {
     };
     expect(formatNotificationBodyParts(item, makeT("ko"))).toEqual([
       "피드백에 답글이 달렸습니다 — ",
-      { chip: "빠른 답변 감사합니다" },
+      { chip: "빠른 답변 감사합니다", kind: "quote" },
     ]);
   });
 });

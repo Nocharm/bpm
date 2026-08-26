@@ -23,6 +23,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import {
   approveVersion,
@@ -45,12 +46,14 @@ import {
   type MapDetail,
   type MapPermission,
   type NotificationItem,
+  type VersionDetail,
   type WorkflowState,
 } from "@/lib/api";
 import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
+import { clampToViewport } from "@/lib/clamp-viewport";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -863,16 +866,135 @@ function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: 
   );
 }
 
-// 알림 상세 텍스트 칩 — 따옴표 표기 대신 칩. 버전이면 v번호 뱃지 동반(복사 모달 드롭다운과 동일 v 규칙).
-function DetailChip({ label, version }: { label: string; version?: number | null }) {
+// 버전 v번호 뱃지 — 칩·카드 공용 (복사 모달 드롭다운과 동일 v 규칙)
+function VersionBadge({ number }: { number?: number | null }) {
+  if (number == null) return null;
   return (
-    <span className="inline-flex max-w-full items-baseline gap-1 truncate rounded-sm border border-hairline bg-surface px-1.5 py-0.5 align-baseline text-caption text-ink">
-      {label}
-      {version != null && (
-        <span className="rounded-xs bg-accent-tint px-1 text-fine font-semibold text-accent">
-          v{version}
-        </span>
-      )}
+    <span className="rounded-xs bg-accent-tint px-1 text-fine font-semibold text-accent">
+      v{number}
+    </span>
+  );
+}
+
+// 버전 칩 — 인터랙티브(0.7초 호버/클릭)로 버전 카드(상태·생성 시각·해당 버전 열기)를 연다.
+// PersonHoverCard 인터랙션 어법 축약판 — 칩 스타일이 곧 "카드 열림" 어포던스라 행위자 필과 동형.
+function VersionChipWithCard({
+  label,
+  number,
+  mapId,
+  versionId,
+  t,
+}: {
+  label: string;
+  number?: number | null;
+  mapId: number;
+  versionId: number;
+  t: Translate;
+}) {
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [info, setInfo] = useState<VersionDetail | "missing" | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  useEffect(
+    () => () => {
+      if (openTimer.current !== null) window.clearTimeout(openTimer.current);
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+  const openNow = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    // 버전 정보 lazy 1회 — 맵 상세에서 해당 버전 행을 찾는다(삭제·권한 없음은 missing)
+    if (info === null) {
+      getMap(mapId)
+        .then((d) => setInfo(d.versions.find((v) => v.id === versionId) ?? "missing"))
+        .catch(() => setInfo("missing"));
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPos(clampToViewport(rect.left, rect.bottom + 6, 264, 150));
+  };
+  const scheduleClose = () => {
+    if (openTimer.current !== null) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+    if (pos === null) return;
+    closeTimer.current = window.setTimeout(() => setPos(null), 120);
+  };
+  const cancelClose = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  return (
+    <span
+      ref={triggerRef}
+      className="inline-flex cursor-pointer align-baseline"
+      onMouseEnter={() => {
+        cancelClose();
+        if (pos === null && openTimer.current === null) {
+          openTimer.current = window.setTimeout(() => {
+            openTimer.current = null;
+            openNow();
+          }, 700);
+        }
+      }}
+      onMouseLeave={scheduleClose}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (pos !== null) setPos(null);
+        else openNow();
+      }}
+    >
+      <span className="inline-flex items-baseline gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-caption text-ink transition-colors hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent">
+        {label}
+        <VersionBadge number={number} />
+      </span>
+      {pos !== null &&
+        createPortal(
+          <span
+            className="fixed z-[1400] block w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+            style={{ left: pos.left, top: pos.top }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="min-w-0 truncate text-caption-strong text-ink">{label}</span>
+              <VersionBadge number={number} />
+              {typeof info === "object" && info !== null && (
+                // 상태 문자열은 영어 고정 규칙 — 버전 타임라인과 동일
+                <span className="ml-auto shrink-0 rounded-xs border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
+                  {info.status}
+                </span>
+              )}
+            </span>
+            {info === null && <span className="mt-1 block text-fine text-ink-tertiary">…</span>}
+            {info === "missing" && (
+              <span className="mt-1 block text-fine text-ink-tertiary">
+                {t("notif.versionCard.missing")}
+              </span>
+            )}
+            {typeof info === "object" && info !== null && (
+              <span className="mt-1 block text-fine text-ink-tertiary">
+                {formatKst(info.created_at)}
+              </span>
+            )}
+            <Link
+              href={`/maps/${mapId}?version=${versionId}`}
+              className="mt-2 inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus"
+            >
+              {t("notif.versionCard.open")}
+            </Link>
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
@@ -901,16 +1023,33 @@ function NotificationDetail({
       <h3 className="mt-2 break-keep text-body-strong text-ink">{view.title}</h3>
       {view.body && (
         <p className="mt-1 whitespace-pre-wrap break-keep text-body text-ink-secondary">
-          {/* 행위자=유저 필(인물 카드), 버전/이름/인용=칩 — 따옴표 없는 리치 렌더 */}
+          {/* 칩=카드 열림 어포던스로 통일 — 행위자 필(인물 카드)·버전 칩(버전 카드)만 칩 형태.
+              카드가 애매한 이름류는 볼드, 인용은 이탤릭 인용 표기로 구분(혼동 방지). */}
           {formatNotificationBodyParts(notification, t).map((part, i) =>
             typeof part === "string" ? (
               <span key={i}>{part}</span>
             ) : "actorLogin" in part ? (
               <ActorPill key={i} loginId={part.actorLogin} fallbackName={part.actorName} />
             ) : "versionLabel" in part ? (
-              <DetailChip key={i} label={part.versionLabel} version={part.versionNumber} />
+              notification.map_id !== null && notification.version_id !== null ? (
+                <VersionChipWithCard
+                  key={i}
+                  label={part.versionLabel}
+                  number={part.versionNumber}
+                  mapId={notification.map_id}
+                  versionId={notification.version_id}
+                  t={t}
+                />
+              ) : (
+                <span key={i} className="font-semibold text-ink">
+                  {part.versionLabel}
+                  {part.versionNumber != null ? ` (v${part.versionNumber})` : ""}
+                </span>
+              )
+            ) : part.kind === "quote" ? (
+              <span key={i} className="italic text-ink-tertiary">“{part.chip}”</span>
             ) : (
-              <DetailChip key={i} label={part.chip} />
+              <span key={i} className="font-semibold text-ink">{part.chip}</span>
             ),
           )}
         </p>

@@ -137,7 +137,8 @@ export type NotificationBodyPart =
   | string
   | { actorLogin: string; actorName?: string }
   | { versionLabel: string; versionNumber?: number | null }
-  | { chip: string };
+  // name=맵 이름류(볼드 강조, 비인터랙티브) · quote=인용문(이탤릭 인용 표기)
+  | { chip: string; kind: "name" | "quote" };
 
 // 번역 문구에 등장할 수 없는 구분자들 — RichVar별 1:1
 const SENTINELS: Record<RichVar, string> = {
@@ -191,10 +192,10 @@ export function formatNotificationBodyParts(
       if (seg === SENTINELS.version && p.version_label) {
         return { versionLabel: p.version_label, versionNumber: p.version_number };
       }
-      if (seg === SENTINELS.from && p.from_name) return { chip: p.from_name };
-      if (seg === SENTINELS.to && p.to_name) return { chip: p.to_name };
-      if (seg === SENTINELS.copy && p.copy_name) return { chip: p.copy_name };
-      if (seg === SENTINELS.snippet && p.snippet) return { chip: p.snippet };
+      if (seg === SENTINELS.from && p.from_name) return { chip: p.from_name, kind: "name" };
+      if (seg === SENTINELS.to && p.to_name) return { chip: p.to_name, kind: "name" };
+      if (seg === SENTINELS.copy && p.copy_name) return { chip: p.copy_name, kind: "name" };
+      if (seg === SENTINELS.snippet && p.snippet) return { chip: p.snippet, kind: "quote" };
       return seg;
     });
 }
