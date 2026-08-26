@@ -13,6 +13,7 @@ import {
   CornerDownRight,
   Flag,
   Link as LinkIcon,
+  Link2,
   Lock,
   LogIn,
   LogOut,
@@ -220,6 +221,19 @@ function NodeIoDetails({
                   // 고정 노출+호버 툴팁 — 긴 이름은 2줄 클램프라 텍스트가 잘려도 아이콘은 남는다
                   const isOptional =
                     !isSubprocess && side === "input" && getIoLine(data.input_flags, index) === "optional";
+                  // 링크 항목 판정 — 아웃풋: output_ids=원본·output_links=미러 / 인풋: input_links=미러.
+                  // SP는 지정 IO 상속(로컬 링크 필드 없음)이라 표시 제외 — 체크 키 규칙과 동일 (io-linking §3)
+                  const linkState = isSubprocess
+                    ? "plain"
+                    : side === "input"
+                      ? getIoLine(data.input_links, index) !== ""
+                        ? "mirror"
+                        : "plain"
+                      : getIoLine(data.output_ids, index) !== ""
+                        ? "origin"
+                        : getIoLine(data.output_links, index) !== ""
+                          ? "mirror"
+                          : "plain";
                   // SP는 링크 맵 지정의 sp_*_forms 상속(subprocess_refs 경유) — 플래그는 소비자 로컬이라 없음
                   const formsRaw = isSubprocess
                     ? ((side === "input" ? data.spInputForms : data.spOutputForms) ?? "")
@@ -232,9 +246,17 @@ function NodeIoDetails({
                     // 하이라이트+진한 글자 — 취소선·딤 대신 "확인됨" 강조 (사용자 결정 2026-08-23)
                     <label
                       key={pulsing ? `${index}-p${ioCheckPulse.nonce}` : index}
-                      className={`group/iorow -mx-0.5 flex cursor-pointer items-start gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary hover:bg-surface-alt ${
-                        pulsing ? "bpm-io-pulse" : ""
-                      }`}
+                      // 인풋 행 호버 색으로 필수/선택 구분 — 필수=로즈 틴트·선택=중립(아웃풋·SP도 중립)
+                      title={
+                        !isSubprocess && side === "input"
+                          ? t(isOptional ? "node.ioOptional" : "node.ioRequired")
+                          : undefined
+                      }
+                      className={`group/iorow -mx-0.5 flex cursor-pointer items-start gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary ${
+                        !isSubprocess && side === "input" && !isOptional
+                          ? "hover:bg-error/10"
+                          : "hover:bg-surface-alt"
+                      } ${pulsing ? "bpm-io-pulse" : ""}`}
                     >
                       <input
                         type="checkbox"
@@ -258,6 +280,16 @@ function NodeIoDetails({
                       >
                         {text}
                       </span>
+                      {/* 링크 항목 표식 — 원본·미러 공통 아이콘, 독립(plain) 항과 구별 (툴팁으로 방향 안내) */}
+                      {linkState !== "plain" && (
+                        <span
+                          data-id={`node-io-linked-${side}-${index}`}
+                          title={t(linkState === "origin" ? "node.ioLinkedOrigin" : "node.ioLinkedMirror")}
+                          className="mt-0.5 shrink-0 text-accent"
+                        >
+                          <Link2 size={10} strokeWidth={1.5} />
+                        </span>
+                      )}
                       {form && (
                         <span title={form.value} className="mt-0.5 shrink-0 text-ink-muted">
                           <form.icon size={10} strokeWidth={1.5} />
