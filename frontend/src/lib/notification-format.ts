@@ -78,16 +78,23 @@ export function getNotificationIcon(type: string): LucideIcon {
   return Bell;
 }
 
-function buildBody(item: NotificationItem, t: Translate, actorText: string): string {
+// 리치 렌더로 치환 가능한 변수 — 파츠 분할 시 센티널로 대체된다
+type RichVar = "actor" | "version" | "from" | "to" | "copy" | "snippet";
+
+function buildBody(
+  item: NotificationItem,
+  t: Translate,
+  overrides: Partial<Record<RichVar, string>> = {},
+): string {
   const p = item.payload as NotificationPayload;
   const vars: Record<string, string | number> = {
     map: p.map_name ?? "",
-    version: formatVersion(p),
-    actor: actorText,
-    from: p.from_name ?? "",
-    to: p.to_name ?? "",
-    copy: p.copy_name ?? "",
-    snippet: p.snippet ?? "",
+    version: overrides.version ?? formatVersion(p),
+    actor: overrides.actor ?? p.actor_name ?? p.actor ?? "",
+    from: overrides.from ?? p.from_name ?? "",
+    to: overrides.to ?? p.to_name ?? "",
+    copy: overrides.copy ?? p.copy_name ?? "",
+    snippet: overrides.snippet ?? p.snippet ?? "",
     status: p.status_label ?? "",
   };
   // permission_requested는 kind(visibility_change)별 문구 분기
@@ -118,34 +125,76 @@ export function formatNotification(item: NotificationItem, t: Translate): Notifi
     return { label, title: p.title ?? item.message, body: "" };
   }
 
-  const body = buildBody(item, t, p.actor_name || p.actor || "");
+  const body = buildBody(item, t);
   const title = item.type.startsWith("feedback_") ? label : p.map_name || label;
   return { label, title, body };
 }
 
-/** 상세 문장의 행위자 필 삽입 지점 — {actor} 자리를 기준으로 분할한 파츠.
- *  행위자가 없거나(레거시·미행위자 유형) 템플릿에 {actor}가 없으면 전체 문장 1파츠. */
-export type NotificationBodyPart = string | { actorLogin: string; actorName?: string };
+/** 상세 문장의 리치 렌더 파츠 — {actor}는 유저 필, {version}은 버전 칩,
+ *  따옴표로 감싸던 나머지({from}/{to}/{copy}/{snippet})는 텍스트 칩 자리로 분할.
+ *  치환 대상이 없으면(레거시·공지) 전체 문장 1파츠. 감싸던 따옴표는 칩이 대신하므로 제거. */
+export type NotificationBodyPart =
+  | string
+  | { actorLogin: string; actorName?: string }
+  | { versionLabel: string; versionNumber?: number | null }
+  | { chip: string };
 
-const ACTOR_SENTINEL = "⟬actor⟭"; // 번역 문구에 등장할 수 없는 구분자
+// 번역 문구에 등장할 수 없는 구분자들 — RichVar별 1:1
+const SENTINELS: Record<RichVar, string> = {
+  actor: "⟬actor⟭",
+  version: "⟬version⟭",
+  from: "⟬from⟭",
+  to: "⟬to⟭",
+  copy: "⟬copy⟭",
+  snippet: "⟬snippet⟭",
+};
+const SENTINEL_SPLIT = /(⟬actor⟭|⟬version⟭|⟬from⟭|⟬to⟭|⟬copy⟭|⟬snippet⟭)/;
 
 export function formatNotificationBodyParts(
   item: NotificationItem,
   t: Translate,
 ): NotificationBodyPart[] {
   const p = item.payload;
-  if (!p || !KNOWN_TYPES.has(item.type) || item.type === "notice" || !p.actor) {
+  const richValues: Partial<Record<RichVar, string>> = p
+    ? {
+        actor: p.actor ?? undefined,
+        version: p.version_label ?? undefined,
+        from: p.from_name ?? undefined,
+        to: p.to_name ?? undefined,
+        copy: p.copy_name ?? undefined,
+        snippet: p.snippet ?? undefined,
+      }
+    : {};
+  const hasRich = Object.values(richValues).some(Boolean);
+  if (!p || !KNOWN_TYPES.has(item.type) || item.type === "notice" || !hasRich) {
     const { body } = formatNotification(item, t);
     return body ? [body] : [];
   }
-  const withSentinel = buildBody(item, t, ACTOR_SENTINEL);
-  if (!withSentinel.includes(ACTOR_SENTINEL)) {
-    return [buildBody(item, t, p.actor_name || p.actor)];
+  const overrides: Partial<Record<RichVar, string>> = {};
+  for (const key of Object.keys(SENTINELS) as RichVar[]) {
+    if (richValues[key]) overrides[key] = SENTINELS[key];
   }
-  const [before, after] = withSentinel.split(ACTOR_SENTINEL);
-  const parts: NotificationBodyPart[] = [];
-  if (before) parts.push(before);
-  parts.push({ actorLogin: p.actor, actorName: p.actor_name });
-  if (after) parts.push(after);
-  return parts;
+  let withSentinels = buildBody(item, t, overrides);
+  // 템플릿이 감싸던 따옴표('…'/"…")는 칩이 구분을 대신하므로 제거
+  for (const sentinel of Object.values(SENTINELS)) {
+    withSentinels = withSentinels
+      .replaceAll(`'${sentinel}'`, sentinel)
+      .replaceAll(`"${sentinel}"`, sentinel);
+  }
+  return withSentinels
+    .split(SENTINEL_SPLIT)
+    .filter((seg) => seg !== "")
+    .map((seg): NotificationBodyPart => {
+      if (seg === SENTINELS.actor && p.actor) {
+        return { actorLogin: p.actor, actorName: p.actor_name };
+      }
+      if (seg === SENTINELS.version && p.version_label) {
+        return { versionLabel: p.version_label, versionNumber: p.version_number };
+      }
+      if (seg === SENTINELS.from && p.from_name) return { chip: p.from_name };
+      if (seg === SENTINELS.to && p.to_name) return { chip: p.to_name };
+      if (seg === SENTINELS.copy && p.copy_name) return { chip: p.copy_name };
+      if (seg === SENTINELS.snippet && p.snippet) return { chip: p.snippet };
+      return seg;
+    });
 }

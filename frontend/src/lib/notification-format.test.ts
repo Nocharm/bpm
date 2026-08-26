@@ -101,21 +101,54 @@ describe("formatNotificationBodyParts", () => {
     const parts = formatNotificationBodyParts(item, makeT("ko"));
     expect(parts).toEqual([
       { actorLogin: "kim.a", actorName: "Kim A" },
-      "님이 'R5' (v5)을 게시했습니다",
+      "님이 ",
+      { versionLabel: "R5", versionNumber: 5 },
+      "을 게시했습니다",
     ]);
     const en = formatNotificationBodyParts(item, makeT("en"));
-    expect(en).toEqual([{ actorLogin: "kim.a", actorName: "Kim A" }, " published 'R5' (v5)"]);
+    expect(en).toEqual([
+      { actorLogin: "kim.a", actorName: "Kim A" },
+      " published ",
+      { versionLabel: "R5", versionNumber: 5 },
+    ]);
   });
 
-  it("행위자 없는 유형·레거시는 전체 문장 1파츠", () => {
+  it("행위자 없는 유형은 버전 칩만, 레거시는 전체 문장 1파츠", () => {
     const noActor: NotificationItem = {
       ...base, type: "approved", message: "x",
       payload: { map_name: "M", version_label: "R5", version_number: null },
     };
     expect(formatNotificationBodyParts(noActor, makeT("en"))).toEqual([
-      "'R5' is fully approved — ready to publish",
+      { versionLabel: "R5", versionNumber: null },
+      " is fully approved — ready to publish",
     ]);
     const legacy: NotificationItem = { ...base, type: "published", message: "raw", payload: null };
     expect(formatNotificationBodyParts(legacy, makeT("en"))).toEqual(["raw"]);
+  });
+
+  it("이름 변경 — from/to가 텍스트 칩으로, 감싸던 따옴표는 제거", () => {
+    const item: NotificationItem = {
+      ...base, type: "map_renamed", message: "x",
+      payload: { map_name: "New", from_name: "Old", to_name: "New",
+                 actor: "kim.a", actor_name: "Kim A" },
+    };
+    expect(formatNotificationBodyParts(item, makeT("en"))).toEqual([
+      { actorLogin: "kim.a", actorName: "Kim A" },
+      " renamed ",
+      { chip: "Old" },
+      " to ",
+      { chip: "New" },
+    ]);
+  });
+
+  it("피드백 인용 — snippet 칩, 큰따옴표 제거", () => {
+    const item: NotificationItem = {
+      ...base, type: "feedback_reply", message: "x",
+      payload: { snippet: "빠른 답변 감사합니다", kind: "reply" },
+    };
+    expect(formatNotificationBodyParts(item, makeT("ko"))).toEqual([
+      "피드백에 답글이 달렸습니다 — ",
+      { chip: "빠른 답변 감사합니다" },
+    ]);
   });
 });

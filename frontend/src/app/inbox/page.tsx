@@ -863,6 +863,20 @@ function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: 
   );
 }
 
+// 알림 상세 텍스트 칩 — 따옴표 표기 대신 칩. 버전이면 v번호 뱃지 동반(복사 모달 드롭다운과 동일 v 규칙).
+function DetailChip({ label, version }: { label: string; version?: number | null }) {
+  return (
+    <span className="inline-flex max-w-full items-baseline gap-1 truncate rounded-sm border border-hairline bg-surface px-1.5 py-0.5 align-baseline text-caption text-ink">
+      {label}
+      {version != null && (
+        <span className="rounded-xs bg-accent-tint px-1 text-fine font-semibold text-accent">
+          v{version}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // 알림 본문 — 우측 패널(넓은 화면)과 카드 아래 아코디언(좁은 화면)이 공유.
 function NotificationDetail({
   notification,
@@ -887,12 +901,16 @@ function NotificationDetail({
       <h3 className="mt-2 break-keep text-body-strong text-ink">{view.title}</h3>
       {view.body && (
         <p className="mt-1 whitespace-pre-wrap break-keep text-body text-ink-secondary">
-          {/* 행위자는 유저 필 — 0.7초 호버/클릭 시 인물 카드(이름·직급·메신저·부서 경로 아코디언, PersonHoverCard 공용) */}
+          {/* 행위자=유저 필(인물 카드), 버전/이름/인용=칩 — 따옴표 없는 리치 렌더 */}
           {formatNotificationBodyParts(notification, t).map((part, i) =>
             typeof part === "string" ? (
               <span key={i}>{part}</span>
-            ) : (
+            ) : "actorLogin" in part ? (
               <ActorPill key={i} loginId={part.actorLogin} fallbackName={part.actorName} />
+            ) : "versionLabel" in part ? (
+              <DetailChip key={i} label={part.versionLabel} version={part.versionNumber} />
+            ) : (
+              <DetailChip key={i} label={part.chip} />
             ),
           )}
         </p>
