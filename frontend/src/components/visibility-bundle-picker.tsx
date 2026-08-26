@@ -69,7 +69,9 @@ export function VisibilityBundlePicker({ current, value, onChange }: VisibilityB
           <ChevronDown size={14} strokeWidth={1.5} />
         </button>
         {open && (
-          <div className="absolute right-0 top-full z-[1320] mt-1 min-w-full rounded-md border border-hairline bg-surface p-1 shadow-lg">
+          // w-max — 트리거(ko "공개"처럼 짧음)보다 옵션+Current 필이 넓을 때 메뉴가 콘텐츠 폭으로 커지게.
+          // nowrap — 옵션 라벨("비공개")이 필에 밀려 한 글자씩 세로로 꺾이는 것 방지 (ko 실측 버그).
+          <div className="absolute right-0 top-full z-[1320] mt-1 w-max min-w-full rounded-md border border-hairline bg-surface p-1 shadow-lg">
             {options.map((v) => {
               const OptIcon = v === "public" ? Globe : Lock;
               return (
@@ -77,15 +79,15 @@ export function VisibilityBundlePicker({ current, value, onChange }: VisibilityB
                   key={v}
                   type="button"
                   data-id={v === "public" ? "bundle-opt-public" : "bundle-opt-private"}
-                  className={`flex w-full items-center gap-1.5 rounded-sm px-2 py-1 text-caption hover:bg-surface-alt ${
+                  className={`flex w-full items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-1 text-caption hover:bg-surface-alt ${
                     value === v ? "text-accent" : "text-ink"
                   }`}
                   onClick={() => handlePick(v)}
                 >
-                  <OptIcon size={14} strokeWidth={1.5} />
+                  <OptIcon size={14} strokeWidth={1.5} className="shrink-0" />
                   {label(v)}
                   {v === current && (
-                    <span className="ml-auto rounded-full bg-accent-tint px-1.5 py-px text-fine font-medium text-accent">
+                    <span className="ml-auto shrink-0 rounded-full bg-accent-tint px-1.5 py-px text-fine font-medium text-accent">
                       Current
                     </span>
                   )}
