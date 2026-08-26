@@ -160,6 +160,9 @@ function NodeIoDetails({
         const listKey = `${nodeId}:${side}`;
         const listState = ioListStates.get(listKey) ?? "capped";
         const hiddenCount = Math.max(0, visible.length - 3);
+        // 단일 항목은 목록 대신 행 하나로 — 헤더 생략, side 구분은 체크박스 자리 호버 아이콘이 담당.
+        // 접힘 상태도 무시(헤더가 없어 다시 펼 수 없으므로) (사용자 요청 2026-08-27)
+        const isSingle = visible.length === 1;
         return (
           // nodrag/nopan + 전파 차단 — 체크 조작이 드래그·더블클릭(요약 모달)로 새지 않게
           <div
@@ -172,6 +175,7 @@ function NodeIoDetails({
             onDoubleClick={(event) => event.stopPropagation()}
           >
             {/* 헤더 클릭 = 접기(0줄)↔기본(3.5줄) 토글(#2). 미선택 노드에선 토글 없이 선택만(버블). */}
+            {!isSingle && (
             <button
               type="button"
               data-id={`node-io-list-${side}-toggle`}
@@ -195,7 +199,8 @@ function NodeIoDetails({
               {side === "input" ? "Input" : "Output"}
               <span className="normal-case tracking-normal">({visible.length})</span>
             </button>
-            {listState !== "collapsed" && (
+            )}
+            {(isSingle || listState !== "collapsed") && (
               // 3.5줄 캡 — 4번째 줄이 반쯤 보여 "더 있음"이 드러난다(#2).
               // nowheel+overflow-y-auto — 호버 중 휠은 캔버스 팬 대신 이 목록을 스크롤 (사용자 요청 2026-08-25).
               <div
@@ -260,6 +265,30 @@ function NodeIoDetails({
                           : "hover:bg-surface-alt"
                       } ${pulsing ? "bpm-io-pulse" : ""}`}
                     >
+                      {isSingle ? (
+                        // 단일 항 모드 — 헤더가 없어 side 구분을 이 슬롯이 담당: 휴식=인풋/아웃풋
+                        // 아이콘 상시, 호버·체크=체크박스(일반 행과 동일) (사용자 요청 2026-08-27)
+                        <span className="relative mt-0.5 h-3 w-3 shrink-0">
+                          <input
+                            type="checkbox"
+                            data-id={`node-io-check-${side}-${index}`}
+                            tabIndex={-1}
+                            className={`absolute inset-0 h-3 w-3 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                              checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
+                            }`}
+                            checked={checked}
+                            disabled={onToggleIoCheck === null}
+                            onChange={() => onToggleIoCheck?.(checkKey)}
+                          />
+                          {!checked && (
+                            <Icon
+                              size={12}
+                              strokeWidth={1.5}
+                              className="pointer-events-none absolute inset-0 text-ink-muted transition-opacity duration-150 group-hover/iorow:opacity-0"
+                            />
+                          )}
+                        </span>
+                      ) : (
                       <input
                         type="checkbox"
                         data-id={`node-io-check-${side}-${index}`}
@@ -271,6 +300,7 @@ function NodeIoDetails({
                         disabled={onToggleIoCheck === null}
                         onChange={() => onToggleIoCheck?.(checkKey)}
                       />
+                      )}
                       <span
                         className={`line-clamp-2 min-w-0 flex-1 break-words ${
                           checked
