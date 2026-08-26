@@ -258,17 +258,26 @@ function NodeIoDetails({
                           : "hover:bg-surface-alt"
                       } ${pulsing ? "bpm-io-pulse" : ""}`}
                     >
-                      <input
-                        type="checkbox"
-                        data-id={`node-io-check-${side}-${index}`}
-                        tabIndex={-1}
-                        className={`mt-0.5 h-3 w-3 shrink-0 accent-[var(--color-accent)] transition-opacity duration-150 ${
-                          checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
-                        }`}
-                        checked={checked}
-                        disabled={onToggleIoCheck === null}
-                        onChange={() => onToggleIoCheck?.(checkKey)}
-                      />
+                      <span className="relative mt-0.5 flex h-3 w-3 shrink-0 items-center justify-center">
+                        {/* 기본 표시 — 짧은 대시(헤더 쉐브론 10px보다 작게), 호버·체크 시 체크박스로 교대 */}
+                        {!checked && (
+                          <span
+                            aria-hidden
+                            className="pointer-events-none absolute h-px w-1.5 rounded-full bg-ink-muted transition-opacity duration-150 group-hover/iorow:opacity-0"
+                          />
+                        )}
+                        <input
+                          type="checkbox"
+                          data-id={`node-io-check-${side}-${index}`}
+                          tabIndex={-1}
+                          className={`h-3 w-3 accent-[var(--color-accent)] transition-opacity duration-150 ${
+                            checked ? "" : "opacity-0 group-hover/iorow:opacity-100"
+                          }`}
+                          checked={checked}
+                          disabled={onToggleIoCheck === null}
+                          onChange={() => onToggleIoCheck?.(checkKey)}
+                        />
+                      </span>
                       <span
                         className={`line-clamp-2 min-w-0 flex-1 break-words ${
                           checked
