@@ -850,12 +850,18 @@ export default function InboxPage() {
 }
 
 // 알림 상세 행위자 필 — 필 스타일 트리거 + 인물 카드(부서 경로 아코디언 포함, PersonHoverCard 공용).
-// 이름은 디렉터리 해석(ko는 한글명 우선), 미해석 시 payload actor_name → login_id 폴백.
+// 이름은 언어선택 기준 병기 — ko: 한글명(영문명) / en: 영문명(한글명). 한글명 없으면 영문 단독,
+// 디렉터리 미해석 시 payload actor_name → login_id 폴백.
 function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: string }) {
   const { lang } = useI18n();
   const user = useDirectory().get(loginId);
-  const display =
-    (lang === "ko" ? user?.korean_name || user?.name : user?.name) || fallbackName || loginId;
+  const englishName = user?.name || fallbackName || loginId;
+  const koreanName = user?.korean_name || "";
+  const display = !koreanName
+    ? englishName
+    : lang === "ko"
+      ? `${koreanName} (${englishName})`
+      : `${englishName} (${koreanName})`;
   return (
     <PersonHoverCard userId={loginId} className="align-baseline">
       {/* 상세 패널 배경이 surface-alt — 필은 surface+헤어라인으로 분리, 크기는 본문과 어울리는 caption */}
@@ -866,14 +872,10 @@ function ActorPill({ loginId, fallbackName }: { loginId: string; fallbackName?: 
   );
 }
 
-// 버전 v번호 뱃지 — 칩·카드 공용 (복사 모달 드롭다운과 동일 v 규칙)
+// 버전 v번호 — 칩·카드 공용, 라벨 앞 톤 다운 표기 (복사 모달 드롭다운 "v5 · Release 5"와 동일 v 규칙)
 function VersionBadge({ number }: { number?: number | null }) {
   if (number == null) return null;
-  return (
-    <span className="rounded-xs bg-accent-tint px-1 text-fine font-semibold text-accent">
-      v{number}
-    </span>
-  );
+  return <span className="text-fine text-ink-tertiary">v{number}</span>;
 }
 
 // 버전 칩 — 인터랙티브(0.7초 호버/클릭)로 버전 카드(상태·생성 시각·해당 버전 열기)를 연다.
@@ -952,8 +954,8 @@ function VersionChipWithCard({
       }}
     >
       <span className="inline-flex items-baseline gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-caption text-ink transition-colors hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent">
-        {label}
         <VersionBadge number={number} />
+        {label}
       </span>
       {pos !== null &&
         createPortal(
@@ -966,8 +968,8 @@ function VersionChipWithCard({
             onClick={(e) => e.stopPropagation()}
           >
             <span className="flex items-center gap-1.5">
-              <span className="min-w-0 truncate text-caption-strong text-ink">{label}</span>
               <VersionBadge number={number} />
+              <span className="min-w-0 truncate text-caption-strong text-ink">{label}</span>
               {typeof info === "object" && info !== null && (
                 // 상태 문자열은 영어 고정 규칙 — 버전 타임라인과 동일
                 <span className="ml-auto shrink-0 rounded-xs border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
