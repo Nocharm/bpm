@@ -57,7 +57,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import { genId } from "@/lib/id";
 import { formatKst } from "@/lib/datetime";
 import { getNotificationCategory, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/notification-categories";
-import { formatNotification, getNotificationIcon } from "@/lib/notification-format";
+import { formatNotification, formatNotificationBodyParts, getNotificationIcon } from "@/lib/notification-format";
 import { filterByQuery } from "@/lib/search";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { useQuietScroll } from "@/lib/use-quiet-scroll";
@@ -869,7 +869,14 @@ function NotificationDetail({
       <h3 className="mt-2 break-keep text-body-strong text-ink">{view.title}</h3>
       {view.body && (
         <p className="mt-1 whitespace-pre-wrap break-keep text-body text-ink-secondary">
-          {view.body}
+          {/* 행위자는 유저 필 — 호버/클릭 시 유저 정보 카드(UserPill 공용) */}
+          {formatNotificationBodyParts(notification, t).map((part, i) =>
+            typeof part === "string" ? (
+              <span key={i}>{part}</span>
+            ) : (
+              <UserPill key={i} loginId={part.actorLogin} className="align-baseline" />
+            ),
+          )}
         </p>
       )}
       <div className="mt-3 flex items-center gap-2">

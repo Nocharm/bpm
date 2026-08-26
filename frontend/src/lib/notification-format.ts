@@ -78,23 +78,12 @@ export function getNotificationIcon(type: string): LucideIcon {
   return Bell;
 }
 
-export function formatNotification(item: NotificationItem, t: Translate): NotificationView {
-  const known = KNOWN_TYPES.has(item.type);
-  const label = t((known ? `notifLabel.${item.type}` : "notifLabel.unknown") as MessageKey);
-  const p = item.payload;
-  if (!p || !known) {
-    // 레거시 행·미지 유형 — 저장된 영어 message 원문 폴백
-    return { label, title: label, body: item.message };
-  }
-
-  if (item.type === "notice") {
-    return { label, title: p.title ?? item.message, body: "" };
-  }
-
+function buildBody(item: NotificationItem, t: Translate, actorText: string): string {
+  const p = item.payload as NotificationPayload;
   const vars: Record<string, string | number> = {
     map: p.map_name ?? "",
     version: formatVersion(p),
-    actor: p.actor_name || p.actor || "",
+    actor: actorText,
     from: p.from_name ?? "",
     to: p.to_name ?? "",
     copy: p.copy_name ?? "",
@@ -113,7 +102,50 @@ export function formatNotification(item: NotificationItem, t: Translate): Notifi
       : p.reason;
     body = `${body} — ${reasonText}`;
   }
+  return body;
+}
 
+export function formatNotification(item: NotificationItem, t: Translate): NotificationView {
+  const known = KNOWN_TYPES.has(item.type);
+  const label = t((known ? `notifLabel.${item.type}` : "notifLabel.unknown") as MessageKey);
+  const p = item.payload;
+  if (!p || !known) {
+    // 레거시 행·미지 유형 — 저장된 영어 message 원문 폴백
+    return { label, title: label, body: item.message };
+  }
+
+  if (item.type === "notice") {
+    return { label, title: p.title ?? item.message, body: "" };
+  }
+
+  const body = buildBody(item, t, p.actor_name || p.actor || "");
   const title = item.type.startsWith("feedback_") ? label : p.map_name || label;
   return { label, title, body };
+}
+
+/** 상세 문장의 행위자 필 삽입 지점 — {actor} 자리를 기준으로 분할한 파츠.
+ *  행위자가 없거나(레거시·미행위자 유형) 템플릿에 {actor}가 없으면 전체 문장 1파츠. */
+export type NotificationBodyPart = string | { actorLogin: string };
+
+const ACTOR_SENTINEL = "⟬actor⟭"; // 번역 문구에 등장할 수 없는 구분자
+
+export function formatNotificationBodyParts(
+  item: NotificationItem,
+  t: Translate,
+): NotificationBodyPart[] {
+  const p = item.payload;
+  if (!p || !KNOWN_TYPES.has(item.type) || item.type === "notice" || !p.actor) {
+    const { body } = formatNotification(item, t);
+    return body ? [body] : [];
+  }
+  const withSentinel = buildBody(item, t, ACTOR_SENTINEL);
+  if (!withSentinel.includes(ACTOR_SENTINEL)) {
+    return [buildBody(item, t, p.actor_name || p.actor)];
+  }
+  const [before, after] = withSentinel.split(ACTOR_SENTINEL);
+  const parts: NotificationBodyPart[] = [];
+  if (before) parts.push(before);
+  parts.push({ actorLogin: p.actor });
+  if (after) parts.push(after);
+  return parts;
 }

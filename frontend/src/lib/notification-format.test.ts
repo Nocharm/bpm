@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { NotificationItem } from "@/lib/api";
 import { messages, type Lang, type MessageKey } from "@/lib/i18n-messages";
-import { formatNotification } from "@/lib/notification-format";
+import { formatNotification, formatNotificationBodyParts } from "@/lib/notification-format";
 
 const makeT = (lang: Lang) => (key: MessageKey, vars?: Record<string, string | number>) => {
   let str: string = messages[lang][key] ?? key;
@@ -88,5 +88,31 @@ describe("formatNotification", () => {
     const view = formatNotification(item, makeT("en"));
     expect(view.label).toBe("Notification");
     expect(view.body).toBe("raw text");
+  });
+});
+
+describe("formatNotificationBodyParts", () => {
+  it("행위자 자리를 파츠로 분할 — [앞, {actorLogin}, 뒤]", () => {
+    const item: NotificationItem = {
+      ...base, type: "published", message: "x",
+      payload: { map_name: "M", version_label: "R5", version_number: 5,
+                 actor: "kim.a", actor_name: "Kim A" },
+    };
+    const parts = formatNotificationBodyParts(item, makeT("ko"));
+    expect(parts).toEqual([{ actorLogin: "kim.a" }, "님이 'R5' (v5)을 게시했습니다"]);
+    const en = formatNotificationBodyParts(item, makeT("en"));
+    expect(en).toEqual([{ actorLogin: "kim.a" }, " published 'R5' (v5)"]);
+  });
+
+  it("행위자 없는 유형·레거시는 전체 문장 1파츠", () => {
+    const noActor: NotificationItem = {
+      ...base, type: "approved", message: "x",
+      payload: { map_name: "M", version_label: "R5", version_number: null },
+    };
+    expect(formatNotificationBodyParts(noActor, makeT("en"))).toEqual([
+      "'R5' is fully approved — ready to publish",
+    ]);
+    const legacy: NotificationItem = { ...base, type: "published", message: "raw", payload: null };
+    expect(formatNotificationBodyParts(legacy, makeT("en"))).toEqual(["raw"]);
   });
 });
