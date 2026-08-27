@@ -49,6 +49,10 @@ POSTGRES_USER=processmap
 POSTGRES_PASSWORD=<강한 비밀번호>
 POSTGRES_DB=processmap
 
+# DB 자동 백업(db-backup 사이드카) — 저장 위치·보존 일수 (backup.md)
+BACKUP_DIR=./backups
+BACKUP_RETENTION_DAYS=14
+
 # 인증 모드 — 빈 값이면 AUTH_ENABLED로 하위호환 유도(§2.1). 3값 중 하나로 명시 권장.
 AUTH_MODE=keycloak
 AUTH_ENABLED=true
@@ -130,8 +134,9 @@ docker compose up -d --build
 ## 4. 헬스체크 + 인증/AD 검증
 
 ```bash
-docker compose ps                                  # 4개 서비스 Up, db healthy
+docker compose ps                                  # 5개 서비스 Up(db-backup 포함), db healthy
 curl -s http://localhost:3333/api/health           # {"status":"ok"} (인증 면제)
+docker compose logs --tail 3 db-backup             # "[db-backup] ... ok bpm-....dump" — 첫 덤프 확인 (backup.md §2)
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3333/   # 200
 # backend가 LDAP 설정을 받았는지
 docker compose exec backend python -c "from app.settings import settings; print('ldap_enabled=', settings.ldap_enabled, 'admins=', settings.admin_login_ids())"

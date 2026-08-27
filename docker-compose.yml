@@ -1,5 +1,5 @@
 # 서버(사내 71번) 배포용 — 로컬 Windows PC는 Docker 없이 네이티브 실행 (CLAUDE.md Operations 참고)
-# 메모리 예약/상한: 공용 서버라 과예약 방지 — reservations 합계 ~800M, limits 합계 ~2.9G.
+# 메모리 예약/상한: 공용 서버라 과예약 방지 — reservations 합계 ~816M, limits 합계 ~3.0G.
 # docker compose v2는 swarm 없이도 deploy.resources.limits/reservations(memory)를 적용한다.
 services:
   proxy:
@@ -120,6 +120,31 @@ services:
           memory: 1G
         reservations:
           memory: 256M
+
+  # 일간 DB 백업 사이드카 — 정책·복구 절차: docs/deploy/backup.md
+  db-backup:
+    image: postgres:16-alpine  # db와 동일 이미지 — pg_dump 버전 호환 보장, 추가 다운로드 없음
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-processmap}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      PGDATABASE: ${POSTGRES_DB:-processmap}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./scripts/db-backup.sh:/db-backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["sh", "/db-backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    # 백업 루프가 죽으면 조용히 백업이 멈추므로 자동 재기동 (다른 서비스는 기존 정책 유지)
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
 
 volumes:
   pgdata:

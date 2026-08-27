@@ -14,6 +14,9 @@ Thumbs.db
 # Local sqlite DB (로컬 네이티브 개발용 — 서버는 postgres). dev.db도 추적 제외(시드로 재생성).
 *.db
 
+# DB 백업 덤프 (db-backup 사이드카 기본 출력 위치 — docs/deploy/backup.md)
+backups/
+
 # Python
 .venv/
 __pycache__/
