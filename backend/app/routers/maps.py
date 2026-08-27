@@ -668,6 +668,21 @@ async def get_map(
             ).all()
         )
         found_map.category_path = category_paths.get(found_map.category_id)
+    if found_map.mode == "framework":
+        # 캔버스 → 결착 카테고리 역조회 — FrameworkChip·자동 보강 호출 소스 (design 2026-08-28 §8)
+        linkage_cat_id = await session.scalar(
+            select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == map_id)
+        )
+        if linkage_cat_id is not None:
+            found_map.linkage_category_id = linkage_cat_id
+            linkage_paths = build_category_paths(
+                (
+                    await session.execute(
+                        select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                    )
+                ).all()
+            )
+            found_map.linkage_category_path = linkage_paths.get(linkage_cat_id)
     return found_map
 
 

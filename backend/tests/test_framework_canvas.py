@@ -304,3 +304,36 @@ def test_framework_guards(client: TestClient, enforce: None) -> None:
     res = client.delete(f"/api/categories/{l5b}")
     assert res.status_code == 409
     assert "linkage" in res.json()["detail"]
+
+
+def test_surface_fields(client: TestClient, enforce: None) -> None:
+    l1 = _seed_category(client, "FWC-S1", "표면L1")
+    l5 = _seed_category(client, "FWC-S5", "표면L5", level=5, parent_id=l1)
+    m1 = _seed_l6_map(client, l5, "표면업무1", "FWC-SM1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.surfer"}]})
+    act_as("fwc.surfer")
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+
+    # 트리: L5 행에 linkage_map_id + can_edit_linkage(권한자 상속)
+    nodes = client.get(f"/api/categories/nodes?parent_id={l1}").json()
+    row = next(n for n in nodes if n["id"] == l5)
+    assert row["linkage_map_id"] == map_id and row["can_edit_linkage"] is True
+    act_as("fwc.pleb")
+    row = next(n for n in client.get(f"/api/categories/nodes?parent_id={l1}").json()
+               if n["id"] == l5)
+    assert row["linkage_map_id"] == map_id and row["can_edit_linkage"] is False
+    # chain에도 동일 필드
+    chain = client.get(f"/api/categories/{l5}/chain").json()
+    assert chain[-1]["linkage_map_id"] == map_id
+
+    # MapOut: 캔버스에 linkage_category_id/path
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["linkage_category_id"] == l5
+    assert detail["linkage_category_path"] == "표면L1/표면L5"
+
+    # SubprocessRefOut: 그래프 refs에 category_path
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    assert graph["subprocess_refs"][str(m1)]["category_path"] == "표면L1/표면L5"

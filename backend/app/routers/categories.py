@@ -231,10 +231,48 @@ async def _apply_card_metrics(session: AsyncSession, maps: list[ProcessMap]) -> 
         m.owner_name = owner_name.get(m.created_by) if m.created_by else None
 
 
+async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
+    """호출자가 권한자인 카테고리 id 전체 — 직접 부여 + 그 서브트리(하향 상속). sysadmin은 전체."""
+    rows = (
+        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
+    ).all()
+    if logic.is_sysadmin(user):
+        return {cid for cid, _ in rows}
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission.category_id, CategoryPermission.principal_type,
+                   CategoryPermission.principal_id)
+        )
+    ).all()
+    if not perm_rows:
+        return set()
+    emp = await session.get(Employee, user)
+    emp_org_path = (
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+    )
+    group_ids = await get_user_active_group_ids(session, user, emp_org_path)
+    seeds = {
+        cid for cid, ptype, pid in perm_rows
+        if (ptype == "user" and pid == user) or (ptype == "group" and pid in group_ids)
+    }
+    if not seeds:
+        return set()
+    children_by_parent: dict[int | None, list[int]] = {}
+    for cid, pid in rows:
+        children_by_parent.setdefault(pid, []).append(cid)
+    admin_ids = set(seeds)
+    frontier = [c for s in seeds for c in children_by_parent.get(s, [])]
+    while frontier:
+        admin_ids.update(frontier)
+        frontier = [c for f in frontier for c in children_by_parent.get(f, []) if c not in admin_ids]
+    return admin_ids
+
+
 @router.get("/nodes", response_model=list[CategoryNodeOut])
 async def list_category_nodes(
     parent_id: int | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
 ) -> list[CategoryNodeOut]:
     """자식 카테고리 lazy 조회 — parent_id 미지정=루트(L1). map_count는 가시성 무관 서브트리 총계."""
     rows = (
@@ -246,6 +284,7 @@ async def list_category_nodes(
                 ProcessCategory.name,
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
+                ProcessCategory.linkage_map_id,
             )
         )
     ).all()
@@ -268,6 +307,7 @@ async def list_category_nodes(
         if row.parent_id is not None:
             subtree_count[row.parent_id] = subtree_count.get(row.parent_id, 0) + subtree_count[row.id]
 
+    admin_ids = await _admin_category_ids(session, user)
     targets = sorted(children_by_parent.get(parent_id, []), key=lambda r: (r.sort_order, r.code))
     return [
         CategoryNodeOut(
@@ -278,6 +318,8 @@ async def list_category_nodes(
             sort_order=r.sort_order,
             child_count=len(children_by_parent.get(r.id, [])),
             map_count=subtree_count.get(r.id, 0),
+            linkage_map_id=r.linkage_map_id,
+            can_edit_linkage=r.id in admin_ids,
         )
         for r in targets
     ]
@@ -383,6 +425,7 @@ async def import_interview_delivery(
 async def get_category_chain(
     category_id: int,
     session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
 ) -> list[CategoryNodeOut]:
     """조상 체인 루트→자신 순 — 프론트 캐스케이드 셀렉트가 기존 연결 카테고리로 시딩할 때 사용
     (fix round 1 #2). map_count는 이 응답의 소비처(시딩)에 불필요해 0 고정 — /nodes가 진실.
@@ -396,6 +439,7 @@ async def get_category_chain(
                 ProcessCategory.name,
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
+                ProcessCategory.linkage_map_id,
             )
         )
     ).all()
@@ -414,6 +458,7 @@ async def get_category_chain(
         cursor = row.parent_id
     chain.reverse()
 
+    admin_ids = await _admin_category_ids(session, user)
     return [
         CategoryNodeOut(
             id=r.id,
@@ -423,6 +468,8 @@ async def get_category_chain(
             sort_order=r.sort_order,
             child_count=len(children_by_parent.get(r.id, [])),
             map_count=0,
+            linkage_map_id=r.linkage_map_id,
+            can_edit_linkage=r.id in admin_ids,
         )
         for r in chain
     ]

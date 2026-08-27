@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import MapVersion, Node, ProcessMap
+from app.models import MapVersion, Node, ProcessCategory, ProcessMap
 from app.schemas import NodeIn, SubprocessRefOut
 
 
@@ -100,11 +100,41 @@ async def get_subprocess_refs(
                 ProcessMap.sp_url,
                 ProcessMap.sp_url_label,
                 ProcessMap.sp_description,
+                ProcessMap.category_id,
             ).where(ProcessMap.id.in_(targets))
         )
     ).all()
-    refs = {
-        mid: SubprocessRefOut(
+    refs: dict[int, SubprocessRefOut] = {}
+    category_id_by_map: dict[int, int | None] = {}
+    for (
+        mid,
+        name,
+        designated_at,
+        deleted_at,
+        department,
+        assignee,
+        system,
+        duration,
+        cost_krw,
+        cost_usd,
+        headcount,
+        touch_time,
+        sp_input,
+        sp_output,
+        sp_input_forms,
+        sp_output_forms,
+        sp_input_ids,
+        sp_output_ids,
+        start_condition,
+        end_condition,
+        frequency_fallback,
+        sp_gmp,
+        url,
+        url_label,
+        sp_description,
+        category_id,
+    ) in rows:
+        refs[mid] = SubprocessRefOut(
             designated=designated_at is not None and deleted_at is None,
             name=name,
             department=department,
@@ -129,34 +159,20 @@ async def get_subprocess_refs(
             url_label=url_label,
             sp_description=sp_description,
         )
-        for (
-            mid,
-            name,
-            designated_at,
-            deleted_at,
-            department,
-            assignee,
-            system,
-            duration,
-            cost_krw,
-            cost_usd,
-            headcount,
-            touch_time,
-            sp_input,
-            sp_output,
-            sp_input_forms,
-            sp_output_forms,
-            sp_input_ids,
-            sp_output_ids,
-            start_condition,
-            end_condition,
-            frequency_fallback,
-            sp_gmp,
-            url,
-            url_label,
-            sp_description,
-        ) in rows
-    }
+        category_id_by_map[mid] = category_id
+    # 링크맵 체계 경로 — 캔버스 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)
+    if any(cid is not None for cid in category_id_by_map.values()):
+        from app.routers.categories import build_category_paths  # 지역 관례 — 순환 회피(maps.py:66)
+
+        cat_rows = (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            )
+        ).all()
+        paths = build_category_paths(cat_rows)
+        for mid, cid in category_id_by_map.items():
+            if cid is not None:
+                refs[mid].category_path = paths.get(cid)
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
         refs[missing] = SubprocessRefOut(designated=False)
     return refs

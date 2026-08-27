@@ -731,6 +731,9 @@ class MapOut(BaseModel):
     # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
     category_path: str | None = None
     consultant_code: str | None = None
+    # framework 캔버스 전용 — 결착 카테고리(트랜지언트, get_map이 역조회로 주입) (design 2026-08-28 §8)
+    linkage_category_id: int | None = None
+    linkage_category_path: str | None = None
     # L6 Input/Output — 자유 텍스트(개행 구분 복수)
     sp_input: str | None = None
     sp_output: str | None = None
@@ -782,6 +785,9 @@ class CategoryNodeOut(BaseModel):
     sort_order: int
     child_count: int = 0  # 직계 자식 카테고리 수
     map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
+    # L5 연계 캔버스 — 결착 맵 id(없으면 None)·호출자 편집 가능 여부(권한자 체인, 배치 계산)
+    linkage_map_id: int | None = None
+    can_edit_linkage: bool = False
 
 
 class CategoryPermissionEntry(BaseModel):
@@ -1108,6 +1114,8 @@ class SubprocessRefOut(BaseModel):
     gmp: str | None = None
     url: str | None = None
     url_label: str | None = None
+    # 링크맵의 체계 경로 — 캔버스에서 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)
+    category_path: str | None = None
     sp_description: str | None = None
 
     @field_validator("duration", "touch_time", mode="after")
