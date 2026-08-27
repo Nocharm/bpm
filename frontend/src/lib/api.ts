@@ -82,6 +82,9 @@ export interface MapSummary {
   category_id?: number | null;
   category_path?: string | null;
   consultant_code?: string | null;
+  // framework 캔버스 전용 — 결착 카테고리(상세 응답에서만 채움) (design 2026-08-28 §8)
+  linkage_category_id?: number | null;
+  linkage_category_path?: string | null;
   sp_input?: string | null;
   sp_output?: string | null;
   sp_input_forms?: string | null;
@@ -222,6 +225,8 @@ export interface SubprocessRef {
   gmp: string | null;
   url: string | null;
   url_label: string | null;
+  // 링크맵의 체계 경로 — 캔버스 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)
+  category_path?: string | null;
   // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
   sp_description: string | null;
 }
@@ -2513,6 +2518,9 @@ export interface CategoryNode {
   child_count: number;
   // 서브트리 누적(직속 아님) — backend가 역-레벨 순회로 산정 (Task 1)
   map_count: number;
+  // L5 연계 캔버스 — 결착 맵 id(없으면 null)·호출자 생성/편집 가능 여부(권한자 체인) (design 2026-08-28)
+  linkage_map_id: number | null;
+  can_edit_linkage: boolean;
 }
 
 export interface CategoryMaps {
@@ -2534,6 +2542,47 @@ export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Pr
 // 조상 체인 루트→자신 — 캐스케이드 셀렉트를 기존 연결 카테고리로 시딩할 때 사용 (fix round 1 #2).
 export function getCategoryChain(categoryId: number): Promise<CategoryNode[]> {
   return request<CategoryNode[]>(`/categories/${categoryId}/chain`);
+}
+
+export interface LinkageMapResult {
+  map_id: number;
+  added_count: number;
+  missing_count: number;
+}
+
+// 연계 캔버스 멱등 열기 — 없으면 생성+시드(권한자), 있으면 자동 보강. 뷰어는 missing_count만.
+export function openLinkageMap(categoryId: number): Promise<LinkageMapResult> {
+  return request<LinkageMapResult>(`/categories/${categoryId}/linkage-map`, { method: "POST" });
+}
+
+// 라이브 draft를 스냅샷으로 확정 — major=true면 다음 메이저.0 (design 2026-08-28 §6)
+export function confirmFrameworkVersion(mapId: number, major: boolean): Promise<VersionSummary> {
+  return request<VersionSummary>(`/maps/${mapId}/framework-confirm`, {
+    method: "POST",
+    body: JSON.stringify({ major }),
+  });
+}
+
+export interface CategoryPermissionEntry {
+  principal_type: "user" | "group";
+  principal_id: string;
+}
+
+export function listCategoryPermissions(
+  categoryId: number,
+): Promise<{ permissions: CategoryPermissionEntry[] }> {
+  return request<{ permissions: CategoryPermissionEntry[] }>(`/categories/${categoryId}/permissions`);
+}
+
+// 권한자 전체 교체 — 멱등 PUT(setApprovers 선례), sysadmin 전용(서버 가드)
+export function setCategoryPermissions(
+  categoryId: number,
+  permissions: CategoryPermissionEntry[],
+): Promise<{ permissions: CategoryPermissionEntry[] }> {
+  return request<{ permissions: CategoryPermissionEntry[] }>(`/categories/${categoryId}/permissions`, {
+    method: "PUT",
+    body: JSON.stringify({ permissions }),
+  });
 }
 
 // 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.

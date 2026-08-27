@@ -34,7 +34,7 @@ beforeEach(() => {
 describe("fetchRootChildren", () => {
   it("루트 로드 — parentId 없이 listCategoryNodes 호출, children_loaded로 리듀스", async () => {
     const rootNodes: CategoryNode[] = [
-      { id: 1, code: "A", name: "Root A", level: 1, sort_order: 0, child_count: 2, map_count: 5 },
+      { id: 1, code: "A", name: "Root A", level: 1, sort_order: 0, child_count: 2, map_count: 5, linkage_map_id: null, can_edit_linkage: false },
     ];
     listNodesMock.mockResolvedValue(rootNodes);
 
@@ -53,7 +53,7 @@ describe("fetchRootChildren", () => {
 describe("펼침 캐시", () => {
   it("펼침 시 자식+맵을 1회만 fetch — 접었다 재펼침해도 캐시라 재요청 없음", async () => {
     const children: CategoryNode[] = [
-      { id: 11, code: "A1", name: "Sub A1", level: 2, sort_order: 0, child_count: 0, map_count: 2 },
+      { id: 11, code: "A1", name: "Sub A1", level: 2, sort_order: 0, child_count: 0, map_count: 2, linkage_map_id: null, can_edit_linkage: false },
     ];
     const maps: CategoryMaps = { total: 2, hidden: 0, maps: [] };
     listNodesMock.mockResolvedValue(children);
@@ -88,7 +88,7 @@ describe("펼침 캐시", () => {
 
   it("펼침 중(fetch 미완료) 접었다 재펼침해도 fetch는 1회만 발생한다 — loadingIds 가드 회귀", async () => {
     const children: CategoryNode[] = [
-      { id: 21, code: "B1", name: "Sub B1", level: 2, sort_order: 0, child_count: 0, map_count: 1 },
+      { id: 21, code: "B1", name: "Sub B1", level: 2, sort_order: 0, child_count: 0, map_count: 1, linkage_map_id: null, can_edit_linkage: false },
     ];
     const maps: CategoryMaps = { total: 1, hidden: 0, maps: [] };
     let resolveNodes!: (v: CategoryNode[]) => void;
@@ -134,6 +134,8 @@ describe("hidden·빈 카테고리 표시", () => {
       sort_order: 1,
       child_count: 0,
       map_count: 0,
+      linkage_map_id: null,
+      can_edit_linkage: false,
     };
     const maps: CategoryMaps = {
       total: 3,
@@ -261,7 +263,7 @@ describe("hasMoreMaps", () => {
 
 describe("collectCascadeTargets", () => {
   const makeNode = (id: number, mapCount: number): CategoryNode => ({
-    id, code: `C${id}`, name: `Cat ${id}`, level: 2, sort_order: id, child_count: 0, map_count: mapCount,
+    id, code: `C${id}`, name: `Cat ${id}`, level: 2, sort_order: id, child_count: 0, map_count: mapCount, linkage_map_id: null, can_edit_linkage: false,
   });
 
   it("맵 있는(서브트리 rollup>0) 자식만 예산 내에서 — 빈 가지는 제외, 초과분은 잘린다", () => {
