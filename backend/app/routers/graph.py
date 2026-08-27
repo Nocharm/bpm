@@ -12,10 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
-from app.subprocess import assert_no_cycle, get_subprocess_refs, validate_process
+from app.subprocess import (
+    assert_no_cycle,
+    get_subprocess_refs,
+    validate_framework_canvas,
+    validate_process,
+)
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.models import Comment, Edge, Group, MapVersion, Node
+from app.models import Comment, Edge, Group, MapVersion, Node, ProcessMap
 from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
@@ -173,8 +178,13 @@ async def replace_graph(
                     detail=f"node {node.id} references a group not in the payload",
                 )
 
+    # framework 캔버스는 별도 규칙(start 불요·subprocess-only) — 일반 맵은 기존 검증 유지
+    canvas_map = await session.get(ProcessMap, version.map_id)
     try:
-        validate_process(payload.nodes)
+        if canvas_map is not None and canvas_map.mode == "framework":
+            validate_framework_canvas(payload.nodes)
+        else:
+            validate_process(payload.nodes)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

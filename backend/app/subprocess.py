@@ -30,6 +30,13 @@ def validate_process(nodes: list[NodeIn]) -> None:
         first_end.is_primary_end = True
 
 
+def validate_framework_canvas(nodes: list[NodeIn]) -> None:
+    """framework 연계 캔버스 규칙 — 링크된 subprocess 노드만 허용, start/end 불요 (design 2026-08-28 §7)."""
+    for n in nodes:
+        if n.node_type != "subprocess" or not n.linked_map_id:
+            raise ValueError("framework canvas allows linked subprocess nodes only")
+
+
 async def resolve_linked_version(
     session: AsyncSession,
     map_id: int,

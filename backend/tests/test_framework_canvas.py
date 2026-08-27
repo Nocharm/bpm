@@ -221,3 +221,35 @@ def test_linkage_map_open_create_seed_and_reconcile(client: TestClient, enforce:
     act_as("fwc.pleb")
     viewed = client.post(f"/api/categories/{l5}/linkage-map").json()
     assert viewed["added_count"] == 0 and viewed["missing_count"] == 1
+
+
+def _checkout(client: TestClient, version_id: int) -> None:
+    res = client.post(f"/api/versions/{version_id}/checkout", json={})
+    assert res.status_code in (200, 201), res.text
+
+
+def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
+    """캔버스 저장: subprocess-only 허용(start 없음 OK), 타 타입 유입은 422. 일반 맵은 start 강제 유지."""
+    l5 = _seed_category(client, "FWC-V5", "검증L5", level=5)
+    _seed_l6_map(client, l5, "검증업무1", "FWC-VM1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.editor"}]})
+    act_as("fwc.editor")
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    node = graph["nodes"][0]
+    # start 없이 subprocess 노드만 + 엣지 없이 저장 — 통과해야 한다
+    payload = {"nodes": [node], "edges": [], "groups": []}
+    assert client.put(f"/api/versions/{draft['id']}/graph", json=payload).status_code == 200, (
+        client.put(f"/api/versions/{draft['id']}/graph", json=payload).text
+    )
+    # process 노드 유입 → 422
+    bad = dict(node, id="fwcbadnode000000000000000000000001", node_type="process", linked_map_id=None)
+    res = client.put(f"/api/versions/{draft['id']}/graph",
+                     json={"nodes": [node, bad], "edges": [], "groups": []})
+    assert res.status_code == 422
+    assert "framework" in res.json()["detail"]
