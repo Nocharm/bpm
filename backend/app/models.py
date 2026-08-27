@@ -107,6 +107,11 @@ class ProcessCategory(Base):
         ForeignKey("process_categories.id"), default=None
     )
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # L5 연계 캔버스 1:1 결착 — mode="framework" 맵. category_id 미사용(L6 목록 오염 차단)
+    # (design 2026-08-28). 레거시 DB는 ALTER가 FK 없이 추가 — 앱 계층이 정합 보장.
+    linkage_map_id: Mapped[int | None] = mapped_column(
+        ForeignKey("process_maps.id", ondelete="SET NULL"), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -250,6 +255,9 @@ class MapVersion(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     # 맵 내 게시 순번 — publish 시 채번, 만료 후에도 불변. 미게시 버전은 NULL.
     version_number: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    # framework 캔버스 확정 스냅샷 번호 — 일반 맵/라이브 draft는 NULL (design 2026-08-28)
+    fw_major: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    fw_minor: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     # 현재 사이클 제출자(=submit 시점 체크아웃 보유자 박제) — 게시/회수 권한자
     submitted_by: Mapped[str | None] = mapped_column(String(100), default=None)
     # 최신 반려 사유만 보관 (전이 이력 로그는 두지 않음)
@@ -652,6 +660,27 @@ class MapPermission(Base):
     # 'viewer' | 'editor' | 'owner'
     role: Mapped[str] = mapped_column(String(20))
     granted_by: Mapped[str] = mapped_column(String(100))  # 부여자 login_id
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CategoryPermission(Base):
+    """카테고리 권한자 행 — 행 존재=권한자(role 없음), 하향 상속은 판정 시 조상 체인 매치.
+
+    principal_type은 user|group만 — 카테고리는 조직도와 별개 축이라 department 미지원
+    (design 2026-08-28 §3). 부여는 sysadmin 전용.
+    """
+
+    __tablename__ = "category_permissions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("process_categories.id", ondelete="CASCADE"), index=True
+    )
+    # 'user' | 'group'
+    principal_type: Mapped[str] = mapped_column(String(20))
+    # user→login_id; group→그룹 id 문자열(MapPermission 규약과 동일)
+    principal_id: Mapped[str] = mapped_column(String(200))
+    granted_by: Mapped[str] = mapped_column(String(100))
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

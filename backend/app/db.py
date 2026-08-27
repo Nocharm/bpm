@@ -134,6 +134,10 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_output_ids", "TEXT"),
     # 알림 구조화 컨텍스트 — FE 언어 토글 렌더용, 레거시 행은 NULL→message 폴백 (2026-08-26)
     ("notifications", "payload", "JSON"),
+    # Framework L5 연계 캔버스 (design 2026-08-28) — 카테고리↔캔버스 1:1 · 확정 스냅샷 번호
+    ("process_categories", "linkage_map_id", "INTEGER"),
+    ("map_versions", "fw_major", "INTEGER"),
+    ("map_versions", "fw_minor", "INTEGER"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.
