@@ -18,6 +18,7 @@ from app.clock import KST
 from app.db import get_session
 from app.models import (
     Base,
+    BatchJobRun,
     Employee,
     FeedbackNote,
     FeedbackNoteRevision,
@@ -35,6 +36,7 @@ from app.orgchart import (
 from app.permissions.logic import is_sysadmin, role_rank
 from app.schemas import (
     AdminDeptOut,
+    BatchRunOut,
     AdminDirectoryOut,
     AdminUserOut,
     DeptRemapIn,
@@ -251,6 +253,17 @@ async def remap_dept_refs(
     return DeptRemapOut(
         map_grants=moved_grants, group_members=moved_members, owning_maps=len(owning_maps)
     )
+
+
+@router.get("/batch-runs", response_model=list[BatchRunOut])
+async def list_batch_runs(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BatchJobRun]:
+    """sysadmin 전용 — 배치 작업(백업·인원동기화) 잡·결과별 최신 실행 기록."""
+    _require_sysadmin(login_id)
+    rows = (await session.execute(select(BatchJobRun))).scalars().all()
+    return list(rows)
 
 
 @router.get("/tables", response_model=list[TableInfoOut])

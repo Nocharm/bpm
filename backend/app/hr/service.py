@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.batch_runs import JOB_HR_SYNC, record_batch_run
 from app.clock import now as now_kst
 from app.hr import client
 from app.hr.client import RawHrEmployee
@@ -251,15 +252,37 @@ class SyncTooSoon(Exception):
         self.remaining_seconds = remaining_seconds
 
 
+def _summarize_for_record(summary: HrSyncSummary) -> str:
+    """성공 기록 detail — 요약 카운트 압축 한 줄."""
+    return (
+        f"scanned {summary.scanned} · upserted {summary.upserted}"
+        f" · deactivated {summary.deactivated} · deleted {summary.deleted}"
+        f" · skipped {summary.skipped}"
+    )
+
+
 async def run_full_sync(session: AsyncSession) -> HrSyncSummary:
-    """5분 가드 적용 전체 동기화 — 실패·중단 시 가드 미소모(재시도 가능)."""
+    """5분 가드 적용 전체 동기화 — 실패·중단 시 가드 미소모(재시도 가능).
+
+    실행 기록(batch_job_runs): 정상 완료=success, 가드 중단·예외=failure.
+    스로틀(SyncTooSoon)은 시도가 아니므로 기록하지 않는다.
+    """
     global _last_full_sync_at
     now = time.monotonic()
     if _last_full_sync_at is not None and now - _last_full_sync_at < _FULL_SYNC_MIN_INTERVAL:
         raise SyncTooSoon(int(_FULL_SYNC_MIN_INTERVAL - (now - _last_full_sync_at)))
-    summary = await sync_all(session)
+    try:
+        summary = await sync_all(session)
+    except Exception as exc:
+        # 실패 기록 전 rollback — sync_all이 중간 상태로 남긴 세션을 정리
+        await session.rollback()
+        await record_batch_run(session, JOB_HR_SYNC, "failure", str(exc)[:500])
+        raise
     if summary.aborted_reason is None:
         _last_full_sync_at = now
+        await record_batch_run(session, JOB_HR_SYNC, "success", _summarize_for_record(summary))
+    else:
+        await record_batch_run(session, JOB_HR_SYNC, "failure", summary.aborted_reason)
     return summary
 
 

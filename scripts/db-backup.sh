@@ -17,16 +17,29 @@ has_dump_today() {
   ls "$BACKUP_DIR/bpm-$today-"*.dump >/dev/null 2>&1
 }
 
+# 실행 기록(batch_job_runs) — 설정 Batch jobs 탭 소스. backend 모델(models.BatchJobRun)과 스키마 계약:
+# 변경 시 양쪽 함께 갱신. CREATE IF NOT EXISTS는 backend 최초 create_all 전 첫 백업 대비.
+# 기록 실패(예: db 재기동 중)는 백업 흐름을 막지 않는다 — 로그만 남긴다.
+record_status() {
+  psql -q \
+    -c "CREATE TABLE IF NOT EXISTS batch_job_runs (job VARCHAR(40) NOT NULL, outcome VARCHAR(10) NOT NULL, ran_at TIMESTAMPTZ NOT NULL, detail TEXT, PRIMARY KEY (job, outcome))" \
+    -c "INSERT INTO batch_job_runs (job, outcome, ran_at, detail) VALUES ('db_backup', '$1', now(), '$2') ON CONFLICT (job, outcome) DO UPDATE SET ran_at = EXCLUDED.ran_at, detail = EXCLUDED.detail" \
+    >/dev/null || log "status write failed ($1)"
+}
+
 run_backup() {
   ts=$(TZ=$KST date +%Y%m%d-%H%M%S)
   tmp="$BACKUP_DIR/bpm-$ts.dump.tmp"
   if pg_dump -Fc -f "$tmp" && pg_restore --list "$tmp" >/dev/null; then
     mv "$tmp" "$BACKUP_DIR/bpm-$ts.dump"
-    log "ok bpm-$ts.dump ($(du -h "$BACKUP_DIR/bpm-$ts.dump" | cut -f1))"
+    size=$(du -h "$BACKUP_DIR/bpm-$ts.dump" | cut -f1)
+    log "ok bpm-$ts.dump ($size)"
+    record_status success "bpm-$ts.dump ($size)"
     find "$BACKUP_DIR" -name 'bpm-*.dump' -mtime +"$RETENTION_DAYS" -delete
   else
     rm -f "$tmp"
     log "FAIL - dump or verify failed, retry in 60s"
+    record_status failure "pg_dump or verify failed"
     return 1
   fi
 }

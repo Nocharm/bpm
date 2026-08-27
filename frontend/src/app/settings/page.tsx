@@ -15,6 +15,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { GroupsPanel } from "@/components/groups/groups-panel";
+import { BatchRunsPanel } from "@/components/admin/batch-runs-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
@@ -38,6 +39,7 @@ type TabId =
   | "depts"
   | "localAccounts"
   | "tables"
+  | "batch"
   | "groups"
   | "trash"
   | "notices"
@@ -88,7 +90,10 @@ const CATEGORIES: Category[] = [
   {
     labelKey: "admin.catDatabase",
     access: "sysadmin",
-    tabs: [{ id: "tables", labelKey: "db.tablesTab" }],
+    tabs: [
+      { id: "tables", labelKey: "db.tablesTab" },
+      { id: "batch", labelKey: "batch.tab" },
+    ],
   },
   {
     // 승인큐 — 누구나 접근(추후 개인별 승인 모음 페이지). 현재 큐 내용은 sysadmin만, 그 외는 준비중 안내.
@@ -272,6 +277,7 @@ export default function SettingsPage() {
             <FrameworkPanel onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "tables" && <TableViewer />}
+          {current === "batch" && <BatchRunsPanel />}
           {current === "trash" && (
             <div className="flex flex-col gap-8">
               <DeletedMapsPanel

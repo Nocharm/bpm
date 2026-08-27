@@ -767,6 +767,24 @@ class LoginRecord(Base):
     )
 
 
+class BatchJobRun(Base):
+    """배치 작업 실행 기록 — (job, outcome)별 최신 1행만 upsert 보전(설정 Batch jobs 탭 소스).
+
+    db-backup 사이드카는 psql로 같은 테이블에 기록한다 — 스키마 변경 시
+    scripts/db-backup.sh의 CREATE TABLE IF NOT EXISTS/INSERT도 함께 갱신할 것.
+    """
+
+    __tablename__ = "batch_job_runs"
+
+    # 잡 식별자 — 'db_backup' | 'hr_sync'
+    job: Mapped[str] = mapped_column(String(40), primary_key=True)
+    # 'success' | 'failure' — 결과별 최신 1행이 PK로 강제된다
+    outcome: Mapped[str] = mapped_column(String(10), primary_key=True)
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 성공=요약 카운트, 실패=사유
+    detail: Mapped[str | None] = mapped_column(Text, default=None)
+
+
 class LocalCredential(Base):
     """로컬 계정(외부 컨설턴트) 자격증명 — AD 계정이 없는 사용자용 (설계 §3).
 

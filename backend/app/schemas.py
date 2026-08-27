@@ -1805,6 +1805,17 @@ class AiProposal(BaseModel):
         return self
 
 
+class BatchRunOut(BaseModel):
+    """배치 작업 실행 기록 — 잡·결과별 최신 1행 (설정 Batch jobs 탭) / latest run per (job, outcome)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    job: str
+    outcome: str
+    ran_at: datetime
+    detail: str | None
+
+
 class TableInfoOut(BaseModel):
     """admin 테이블 뷰어 — 테이블명 + 행수(선택 pill 표시용) / table name + row count for selector pills."""
 

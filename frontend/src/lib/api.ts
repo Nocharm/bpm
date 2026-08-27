@@ -893,6 +893,18 @@ export function listDbTables(): Promise<TableInfo[]> {
   return request<TableInfo[]>("/admin/tables");
 }
 
+// 배치 작업 실행 기록 — 잡·결과별 최신 1행 (설정 Batch jobs 탭) / latest run per (job, outcome).
+export interface BatchRun {
+  job: string;
+  outcome: "success" | "failure";
+  ran_at: string;
+  detail: string | null;
+}
+
+export function listBatchRuns(): Promise<BatchRun[]> {
+  return request<BatchRun[]>("/admin/batch-runs");
+}
+
 export function getDbTable(name: string, query: TableQuery = {}): Promise<TableData> {
   const params = new URLSearchParams();
   if (query.page) params.set("page", String(query.page));

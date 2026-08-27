@@ -28,6 +28,10 @@ ls -lh backups/                         # 일자별 덤프 누적
 
 FAIL 로그가 반복되면 db 상태(`docker compose ps db`)와 `.env`의 `POSTGRES_*` 값을 확인한다.
 
+앱에서도 확인 가능 — **설정 > Batch jobs 탭(sysadmin)**: 잡별(백업·인원동기화) 최근 시도 시각과
+성공/실패, 최신 성공·실패 기록(`batch_job_runs` 테이블 — 사이드카가 psql로 기록, 스키마는
+`backend/app/models.py` `BatchJobRun`과 계약).
+
 ## 3. 복구 — 기존 스택에 덮어쓰기 복원
 
 운영 DB를 특정 시점 덤프로 되돌린다. **파괴적 작업** — 현재 DB 내용이 덤프 시점으로 교체된다.
