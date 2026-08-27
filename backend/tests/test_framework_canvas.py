@@ -253,3 +253,33 @@ def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
                      json={"nodes": [node, bad], "edges": [], "groups": []})
     assert res.status_code == 422
     assert "framework" in res.json()["detail"]
+
+
+def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None:
+    l5 = _seed_category(client, "FWC-C5", "확정L5", level=5)
+    _seed_l6_map(client, l5, "확정업무1", "FWC-CM1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.confirmer"}]})
+    act_as("fwc.confirmer")
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+
+    act_as("fwc.pleb")
+    assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 403
+    act_as("fwc.confirmer")
+    v1 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
+    assert (v1["label"], v1["status"]) == ("v1.0", "published")
+    v2 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
+    assert v2["label"] == "v1.1"
+    v3 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": True}).json()
+    assert v3["label"] == "v2.0"
+    detail = client.get(f"/api/maps/{map_id}").json()
+    statuses = [v["status"] for v in detail["versions"]]
+    assert statuses.count("published") == 3  # 이전 스냅샷 expired 전환 없음
+    assert statuses.count("draft") == 1      # 라이브는 계속 draft
+    # 일반 맵에는 422
+    act_as(SYSADMIN)
+    normal = client.post("/api/maps", json={"name": "확정검증 일반맵",
+                                            "owning_department": "Owning Anchor Division"}).json()
+    assert client.post(f"/api/maps/{normal['id']}/framework-confirm",
+                       json={"major": False}).status_code == 422

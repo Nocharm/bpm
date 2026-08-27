@@ -807,6 +807,12 @@ class LinkageMapOut(BaseModel):
     missing_count: int  # 보강 못한(뷰어·타인 점유) 미반영 소속 L6 수
 
 
+class FrameworkConfirmIn(BaseModel):
+    """연계 캔버스 확정 — major 체크 시 다음 메이저.0 (design 2026-08-28 §6)."""
+
+    major: bool = False
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 

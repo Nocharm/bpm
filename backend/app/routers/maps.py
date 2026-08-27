@@ -20,7 +20,9 @@ from app.permissions.access import (
     assert_map_role,
     get_effective_role,
     get_eligible_users,
+    get_framework_category_id,
     get_user_active_group_ids,
+    is_category_admin,
 )
 from app.permissions.deps import require_map_role
 from app.routers.categories import build_category_paths
@@ -29,6 +31,7 @@ from app.schemas import (
     ApprovalRequestOut,
     DirectoryUserOut,
     EligibleApproverOut,
+    FrameworkConfirmIn,
     FrameworkTransferIn,
     MapCategoryIn,
     MapCopy,
@@ -44,6 +47,7 @@ from app.schemas import (
     SubprocessDesignationIn,
     SubprocessUsageOut,
     SubprocessUsedByOut,
+    VersionOut,
     WordDocIn,
 )
 from app.version_events import record_version_event
@@ -1108,6 +1112,72 @@ async def transfer_framework_slot(
     source.consultant_code = None
     await session.commit()
     return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
+
+
+@router.post("/{map_id}/framework-confirm", response_model=VersionOut)
+async def confirm_framework_version(
+    map_id: int,
+    payload: FrameworkConfirmIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> MapVersion:
+    """라이브 draft를 스냅샷(published)으로 확정 — 권한자/sysadmin 본인 확정, 상위 승인 없음.
+
+    일반 게시와 달리 이전 스냅샷을 expired로 전환하지 않는다 — 모든 확정본이 이력으로
+    남아 비교 가능 (design 2026-08-28 §6).
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode != "framework":
+        raise HTTPException(status_code=422, detail="not a framework linkage canvas")
+    if not logic.is_sysadmin(user):
+        category_id = await get_framework_category_id(session, map_id)
+        if category_id is None or not await is_category_admin(session, user, category_id):
+            raise HTTPException(status_code=403, detail="category admin only")
+
+    draft = await session.scalar(
+        select(MapVersion)
+        .where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+        .order_by(MapVersion.id.desc())
+        .options(
+            selectinload(MapVersion.nodes),
+            selectinload(MapVersion.edges),
+            selectinload(MapVersion.groups),
+        )
+    )
+    if draft is None:
+        raise HTTPException(status_code=409, detail="canvas has no draft version")
+
+    # fw 채번 — (major,minor) 최댓값 기준. 최초 1.0
+    fw_rows = (
+        await session.execute(
+            select(MapVersion.fw_major, MapVersion.fw_minor).where(
+                MapVersion.map_id == map_id, MapVersion.fw_major.is_not(None)
+            )
+        )
+    ).all()
+    if not fw_rows:
+        major, minor = 1, 0
+    else:
+        cur_major, cur_minor = max(fw_rows)
+        major, minor = (cur_major + 1, 0) if payload.major else (cur_major, cur_minor + 1)
+
+    snapshot = MapVersion(
+        map_id=map_id, label=f"v{major}.{minor}", status="published",
+        fw_major=major, fw_minor=minor, submitted_by=user,
+    )
+    session.add(snapshot)
+    await session.flush()
+    max_num = await session.scalar(
+        select(func.max(MapVersion.version_number)).where(MapVersion.map_id == map_id)
+    )
+    snapshot.version_number = (max_num or 0) + 1
+    await clone_graph(session, draft, snapshot.id)
+    record_version_event(session, snapshot.id, "published", user)
+    await session.commit()
+    await session.refresh(snapshot)
+    return snapshot
 
 
 @router.put(
