@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
-import { deleteMap, getDirectory, getMe, listMaps, setWordDoc, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
+import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
@@ -870,7 +870,21 @@ export default function MapListPage() {
                 </ul>
               ) : homeView === "framework" ? (
                 // Framework 브라우즈 — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
-                <FrameworkTree key={frameworkVersion} renderCard={renderCard} filterMap={frameworkFilterMap} />
+                <FrameworkTree
+                  key={frameworkVersion}
+                  renderCard={renderCard}
+                  filterMap={frameworkFilterMap}
+                  onOpenLinkage={(node) => {
+                    // 캔버스 존재 시 바로 이동(자동 보강은 에디터가 수행), 미존재면 생성 후 이동
+                    if (node.linkage_map_id !== null) {
+                      router.push(`/maps/${node.linkage_map_id}`);
+                      return;
+                    }
+                    void openLinkageMap(node.id)
+                      .then((r) => router.push(`/maps/${r.map_id}`))
+                      .catch((err) => showToast(humanizeApiError(err, t), "error"));
+                  }}
+                />
               ) : mapHits.length === 0 ? (
                 /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">

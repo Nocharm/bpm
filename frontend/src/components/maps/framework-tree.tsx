@@ -3,7 +3,7 @@
 // 플랫 검색 모드가 커버하고, 여기선 활성 필터(filterMap)를 로드된 맵 카드에만 적용한다.
 "use client";
 
-import { ChevronDown, ChevronRight, FolderTree } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderTree, Workflow } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { CategoryMaps, CategoryNode, MapSummary } from "@/lib/api";
@@ -39,9 +39,11 @@ interface FrameworkTreeProps {
   // 활성 필터 술어(가시성·상태·역할) — null이면 필터 없음. 로드된 맵 카드에만 적용하고
   // 카운트 태그·total은 서버 전체 기준 그대로 둔다(lazy 트리라 전수 재계산 불가).
   filterMap: ((map: MapSummary) => boolean) | null;
+  // L5 행 연계 캔버스 열기 — 캔버스 존재 시 전원, 미존재 시 권한자만 버튼 노출 (design 2026-08-28 §8)
+  onOpenLinkage: (node: CategoryNode) => void;
 }
 
-export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
+export function FrameworkTree({ renderCard, filterMap, onOpenLinkage }: FrameworkTreeProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   // 캐스케이드 예산 — 펼침 제스처마다 리셋. 재귀 loadChildren들이 공유 차감한다.
@@ -248,23 +250,39 @@ export function FrameworkTree({ renderCard, filterMap }: FrameworkTreeProps) {
     const boxed = showContent && !initialLoading && !loadFailed && (mapsData?.total ?? 0) > 0;
 
     const header = (
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => handleToggle(node.id)}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
-      >
-        {open
-          ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
-          : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
-        <span
-          className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
+      <div className="group flex w-full items-center gap-1 rounded-sm hover:bg-divider">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => handleToggle(node.id)}
+          style={{ paddingLeft: `${depth * 12 + 4}px` }}
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
         >
-          {node.name}
-        </span>
-        {!open && <CountTag count={node.map_count} />}
-      </button>
+          {open
+            ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
+            : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+          <span
+            className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
+          >
+            {node.name}
+          </span>
+          {!open && <CountTag count={node.map_count} />}
+        </button>
+        {node.level === 5 && (node.linkage_map_id !== null || node.can_edit_linkage) && (
+          <button
+            type="button"
+            data-id={`framework-linkage-${node.id}`}
+            title={t("framework.openLinkage")}
+            className="hidden shrink-0 rounded-sm p-1 text-ink-muted hover:bg-surface-alt hover:text-accent group-hover:block"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenLinkage(node);
+            }}
+          >
+            <Workflow size={14} strokeWidth={1.5} />
+          </button>
+        )}
+      </div>
     );
 
     // 헤더 우측 다시 접기 조건은 렌더 목록과 같은 기준(필터 적용 후 개수)이어야 한다 — renderMapList와 동일 필터.
