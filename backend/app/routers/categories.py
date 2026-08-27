@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
-from app.permissions.access import get_user_active_group_ids
+from app.permissions.access import get_user_active_group_ids, is_category_admin
 from app.schemas import (
     CategoryCreateIn,
     CategoryMapsOut,
@@ -37,10 +37,17 @@ from app.schemas import (
     InterviewImportIn,
     InterviewImportOut,
     InterviewIssueOut,
+    LinkageMapOut,
     MapOut,
 )
+from app.version_events import record_version_event
 
 MAX_CATEGORY_LEVEL = 5  # 컨설턴트 체계 L1~L5 (design 2026-08-08 §2.1)
+
+# 연계 캔버스 시드/보강 그리드 — import_consultant.place()와 동일 리듬 (design 2026-08-28 §6)
+_LINKAGE_X0, _LINKAGE_Y0 = 120, 120
+_LINKAGE_X_STEP, _LINKAGE_Y_STEP = 240, 120
+_LINKAGE_COLS = 4
 
 router = APIRouter(
     prefix="/api/categories", tags=["categories"], dependencies=[Depends(get_current_user)]
@@ -738,6 +745,132 @@ async def _load_category_permissions(
     return CategoryPermissionsOut(
         permissions=[CategoryPermissionEntry(principal_type=t, principal_id=p) for t, p in rows]
     )
+
+
+async def _unique_linkage_name(
+    session: AsyncSession, category: ProcessCategory, exclude_map_id: int | None = None
+) -> str:
+    """캔버스 맵 이름 자동 — "{카테고리명} 연계", 전역 충돌 시 코드/카운터 서픽스."""
+    base = f"{category.name} 연계"
+    candidates = [base, f"{base} ({category.code})"]
+    n = 2
+    while True:
+        for candidate in candidates:
+            query = select(ProcessMap.id).where(ProcessMap.name == candidate)
+            if exclude_map_id is not None:
+                query = query.where(ProcessMap.id != exclude_map_id)
+            if await session.scalar(query) is None:
+                return candidate
+        candidates = [f"{base} ({category.code}) ({n})"]
+        n += 1
+
+
+def _grid_positions(start_index: int, count: int, base_y: float) -> list[tuple[float, float]]:
+    """row-major 그리드 좌표 — start_index부터 count개."""
+    out: list[tuple[float, float]] = []
+    for i in range(start_index, start_index + count):
+        col, row = i % _LINKAGE_COLS, i // _LINKAGE_COLS
+        out.append((_LINKAGE_X0 + col * _LINKAGE_X_STEP, base_y + row * _LINKAGE_Y_STEP))
+    return out
+
+
+@router.post("/{category_id}/linkage-map", response_model=LinkageMapOut)
+async def open_linkage_map(
+    category_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LinkageMapOut:
+    """연계 캔버스 멱등 열기 — 없으면 생성+소속 L6 시드, 있으면 부족분 자동 보강 (design 2026-08-28 §5).
+
+    보강은 권한자이면서 체크아웃이 비었거나 본인일 때만 — 타인 편집 중 서버가 draft를
+    건드리지 않는다(체크아웃 규약과 일관). 뷰어는 missing_count만 받는다.
+    """
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    if category.level != 5:
+        raise HTTPException(status_code=422, detail="linkage canvas exists only at level 5")
+
+    is_admin = logic.is_sysadmin(user) or await is_category_admin(session, user, category_id)
+    contained_rows = (
+        await session.execute(
+            select(ProcessMap.id, ProcessMap.name)
+            .where(ProcessMap.category_id == category_id, ProcessMap.deleted_at.is_(None))
+            .order_by(ProcessMap.name)
+        )
+    ).all()
+
+    canvas = (
+        await session.get(ProcessMap, category.linkage_map_id)
+        if category.linkage_map_id is not None
+        else None
+    )
+    if canvas is None or canvas.deleted_at is not None:
+        # 생성 — 권한자만. 소프트삭제/영구삭제된 캔버스는 새로 만든다(포인터 덮어씀).
+        if not is_admin:
+            raise HTTPException(status_code=404, detail="no linkage canvas for this category")
+        canvas = ProcessMap(
+            name=await _unique_linkage_name(session, category),
+            created_by=user, owner_id=user, visibility="public", mode="framework",
+        )
+        canvas.versions.append(MapVersion(label="Linkage"))
+        session.add(canvas)
+        await session.flush()
+        version_id = canvas.versions[0].id
+        for i, ((map_id, map_name), (px, py)) in enumerate(
+            zip(contained_rows, _grid_positions(0, len(contained_rows), _LINKAGE_Y0))
+        ):
+            session.add(
+                Node(id=uuid4().hex, version_id=version_id, title=map_name,
+                     node_type="subprocess", linked_map_id=map_id, follow_latest=True,
+                     pos_x=px, pos_y=py, sort_order=i)
+            )
+        record_version_event(session, version_id, "created", user)
+        category.linkage_map_id = canvas.id
+        await session.commit()
+        return LinkageMapOut(map_id=canvas.id, added_count=len(contained_rows), missing_count=0)
+
+    # 기존 캔버스 — draft(라이브)에서 부족분 보강
+    draft = await session.scalar(
+        select(MapVersion)
+        .where(MapVersion.map_id == canvas.id, MapVersion.status == "draft")
+        .order_by(MapVersion.id.desc())
+    )
+    if draft is None:  # 방어 — 라이브 draft는 생성 시 항상 만들어진다
+        raise HTTPException(status_code=409, detail="linkage canvas has no draft version")
+    linked_ids = set(
+        (
+            await session.scalars(
+                select(Node.linked_map_id).where(
+                    Node.version_id == draft.id, Node.node_type == "subprocess",
+                    Node.linked_map_id.is_not(None),
+                )
+            )
+        ).all()
+    )
+    missing = [(mid, name) for mid, name in contained_rows if mid not in linked_ids]
+    can_append = is_admin and (draft.checked_out_by is None or draft.checked_out_by == user)
+    if not missing or not can_append:
+        return LinkageMapOut(map_id=canvas.id, added_count=0, missing_count=len(missing))
+
+    max_y, max_sort, node_count = (
+        await session.execute(
+            select(func.max(Node.pos_y), func.max(Node.sort_order), func.count())
+            .where(Node.version_id == draft.id)
+        )
+    ).one()
+    base_y = (max_y + _LINKAGE_Y_STEP) if node_count else _LINKAGE_Y0
+    next_sort = (max_sort + 1) if node_count else 0
+    for i, ((map_id, map_name), (px, py)) in enumerate(
+        zip(missing, _grid_positions(0, len(missing), base_y))
+    ):
+        session.add(
+            Node(id=uuid4().hex, version_id=draft.id, title=map_name,
+                 node_type="subprocess", linked_map_id=map_id, follow_latest=True,
+                 pos_x=px, pos_y=py, sort_order=next_sort + i)
+        )
+    await session.commit()
+    return LinkageMapOut(map_id=canvas.id, added_count=len(missing), missing_count=0)
 
 
 @router.get("/{category_id}/permissions", response_model=CategoryPermissionsOut)

@@ -158,3 +158,66 @@ def test_framework_role_derivation(client: TestClient, enforce: None) -> None:
     assert ancestor == "editor"
     assert pleb == "viewer"
     assert sysadmin == "owner"
+
+
+def _seed_l6_map(client: TestClient, category_id: int, name: str, code: str) -> int:
+    """카테고리에 연결된 게시본 있는 L6 맵 멱등 시드."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            row = await session.scalar(select(ProcessMap).where(ProcessMap.consultant_code == code))
+            if row is None:
+                row = ProcessMap(name=name, created_by=SYSADMIN, visibility="public",
+                                 category_id=category_id, consultant_code=code)
+                row.versions.append(MapVersion(label="As-Is", status="published", version_number=1))
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+            return row.id
+
+    return asyncio.run(_run())
+
+
+def test_linkage_map_open_create_seed_and_reconcile(client: TestClient, enforce: None) -> None:
+    l1 = _seed_category(client, "FWC-O1", "열기L1")
+    l5 = _seed_category(client, "FWC-O5", "열기L5", level=5, parent_id=l1)
+    m1 = _seed_l6_map(client, l5, "열기업무1", "FWC-OM1")
+    m2 = _seed_l6_map(client, l5, "열기업무2", "FWC-OM2")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.opener"}]})
+
+    # level!=5 → 422
+    assert client.post(f"/api/categories/{l1}/linkage-map").status_code == 422
+    # 캔버스 없음 + 비권한자 → 404
+    act_as("fwc.pleb")
+    assert client.post(f"/api/categories/{l5}/linkage-map").status_code == 404
+    # 권한자 생성 — 소속 L6 2개가 subprocess 노드로 시드
+    act_as("fwc.opener")
+    created = client.post(f"/api/categories/{l5}/linkage-map").json()
+    assert created["added_count"] == 2 and created["missing_count"] == 0
+    map_id = created["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["mode"] == "framework"
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    linked = {n["linked_map_id"] for n in graph["nodes"]}
+    assert linked == {m1, m2}
+    assert all(n["node_type"] == "subprocess" for n in graph["nodes"])
+    # 멱등 재호출 — 추가 없음
+    again = client.post(f"/api/categories/{l5}/linkage-map").json()
+    assert again["map_id"] == map_id and again["added_count"] == 0
+    # 새 L6 유입 후 재열기 → 자동 보강 append
+    _seed_l6_map(client, l5, "열기업무3", "FWC-OM3")
+    assert client.post(f"/api/categories/{l5}/linkage-map").json()["added_count"] == 1
+    # 뷰어 열람 — 보강 없이 missing_count만
+    _seed_l6_map(client, l5, "열기업무4", "FWC-OM4")
+    act_as("fwc.pleb")
+    viewed = client.post(f"/api/categories/{l5}/linkage-map").json()
+    assert viewed["added_count"] == 0 and viewed["missing_count"] == 1

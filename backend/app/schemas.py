@@ -799,6 +799,14 @@ class CategoryPermissionsOut(BaseModel):
     permissions: list[CategoryPermissionEntry]
 
 
+class LinkageMapOut(BaseModel):
+    """연계 캔버스 멱등 열기 응답 (design 2026-08-28 §5)."""
+
+    map_id: int
+    added_count: int  # 이번 호출이 시드/보강으로 추가한 소속 L6 노드 수
+    missing_count: int  # 보강 못한(뷰어·타인 점유) 미반영 소속 L6 수
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 
