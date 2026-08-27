@@ -7,7 +7,11 @@ export function splitMapsByMode<T extends { mode?: string }>(
 ): { processMaps: T[]; wordMaps: T[] } {
   const processMaps: T[] = [];
   const wordMaps: T[] = [];
-  for (const m of maps) (m.mode === "word" ? wordMaps : processMaps).push(m);
+  for (const m of maps) {
+    // 연계 캔버스는 홈 목록 제외 — 트리 L5 행으로만 진입 (design 2026-08-28 §9)
+    if (m.mode === "framework") continue;
+    (m.mode === "word" ? wordMaps : processMaps).push(m);
+  }
   return { processMaps, wordMaps };
 }
 

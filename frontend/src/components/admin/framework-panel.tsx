@@ -17,6 +17,7 @@ import {
   Move as MoveIcon,
   Pencil,
   Plus,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
@@ -26,17 +27,26 @@ import {
   createCategory,
   deleteCategory,
   getApiErrorDetail,
+  getDirectory,
   importInterview,
   listCategoryNodes,
+  listCategoryPermissions,
+  listGroups,
+  setCategoryPermissions,
   updateCategory,
   type CategoryNode,
+  type CategoryPermissionEntry,
+  type DirectoryUser,
+  type Group,
   type InterviewImportResult,
 } from "@/lib/api";
 import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
+import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
@@ -74,6 +84,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
   const [rootError, setRootError] = useState(false);
   const [namePrompt, setNamePrompt] = useState<NamePrompt | null>(null);
   const [movingNode, setMovingNode] = useState<CategoryNode | null>(null);
+  // L5 연계 캔버스 권한자 관리 — 모든 레벨에서 부여 가능(하향 상속) (design 2026-08-28 §3)
+  const [permsNode, setPermsNode] = useState<CategoryNode | null>(null);
   const [deletingNode, setDeletingNode] = useState<CategoryNode | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -347,6 +359,15 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
               }
             >
               <Pencil size={14} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              data-id={`framework-admin-perms-${node.id}`}
+              title={t("framework.adminPerms")}
+              className={ROW_ICON_BTN}
+              onClick={() => setPermsNode(node)}
+            >
+              <ShieldCheck size={14} strokeWidth={1.5} />
             </button>
             <button
               type="button"
@@ -671,6 +692,13 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
         />
       )}
 
+      {permsNode && (
+        <CategoryPermsModal
+          node={permsNode}
+          onClose={() => setPermsNode(null)}
+          onToast={onToast}
+        />
+      )}
       {movingNode && (
         <MoveCategoryModal
           node={movingNode}
@@ -941,6 +969,177 @@ function MoveCategoryModal({ node, onClose, onMoved }: MoveCategoryModalProps) {
             {t("framework.adminMove")}
           </button>
         </div>
+      </div>
+    </ModalBackdrop>,
+    document.body,
+  );
+}
+
+
+// 연계 캔버스 권한자 관리 모달 — 행 존재=권한자(user/group), 변경 즉시 replace PUT 저장
+// (setApprovers 선례). 상속은 서버 판정이라 여기선 이 카테고리의 직접 부여분만 보여준다
+// (design 2026-08-28 §3).
+function CategoryPermsModal({
+  node,
+  onClose,
+  onToast,
+}: {
+  node: CategoryNode;
+  onClose: () => void;
+  onToast: (message: string) => void;
+}) {
+  const { t, lang } = useI18n();
+  const [entries, setEntries] = useState<CategoryPermissionEntry[] | null>(null);
+  const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([listCategoryPermissions(node.id), getDirectory(), listGroups()])
+      .then(([perms, dir, groupRows]) => {
+        if (!active) return;
+        setEntries(perms.permissions);
+        setDirUsers(dir.users);
+        setGroups(groupRows);
+      })
+      .catch(() => {
+        if (active) setError(t("framework.permsLoadError"));
+      });
+    return () => {
+      active = false;
+    };
+  }, [node.id, t]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // 실 데이터를 피커 prop 형식으로 — add-collaborator.tsx 어댑터와 동일 결정(미사용 필드 스텁)
+  const pickerUsers: MockUser[] = dirUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: "",
+    departmentId: "",
+    status: "active" as const,
+    isSysadmin: false,
+    korean_name: u.korean_name ?? "",
+  }));
+  const pickerGroups: UserGroup[] = groups
+    .filter((g) => g.status === "active")
+    .map((g) => ({
+      id: String(g.id),
+      name: g.name,
+      description: g.description,
+      status: "active" as const,
+      managerIds: [],
+      members: [],
+    }));
+  const pickerDepts: Department[] = [];
+
+  function save(next: CategoryPermissionEntry[]) {
+    setEntries(next); // 낙관 반영 — 실패 시 서버 재조회 대신 에러 안내(재열기로 복구)
+    void setCategoryPermissions(node.id, next)
+      .then((result) => setEntries(result.permissions))
+      .catch(() => onToast(t("framework.permsSaveError")));
+  }
+
+  const displayName = (entry: CategoryPermissionEntry): string => {
+    if (entry.principal_type === "group") {
+      return groups.find((g) => String(g.id) === entry.principal_id)?.name ?? entry.principal_id;
+    }
+    const found = dirUsers.find((u) => u.id === entry.principal_id);
+    if (!found) return entry.principal_id;
+    return lang === "ko" && found.korean_name ? found.korean_name : found.name;
+  };
+
+  return createPortal(
+    <ModalBackdrop
+      onClose={onClose}
+      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+    >
+      <div
+        data-id="framework-perms-modal"
+        className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+              <ShieldCheck size={18} strokeWidth={1.5} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h2 className="text-body-strong text-ink">{t("framework.adminPerms")}</h2>
+              <p className="truncate text-fine text-ink-tertiary">{node.name}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label={t("summary.close")}
+            title={t("summary.close")}
+            className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt"
+            onClick={onClose}
+          >
+            <X size={14} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        {error ? (
+          <p data-id="framework-perms-error" className="text-caption text-error">{error}</p>
+        ) : entries === null ? (
+          <p className="text-caption text-ink-tertiary">{t("common.loading")}</p>
+        ) : (
+          <>
+            {entries.length > 0 && (
+              <ul data-id="framework-perms-list" className="flex flex-wrap gap-1.5">
+                {entries.map((entry) => (
+                  <li
+                    key={`${entry.principal_type}:${entry.principal_id}`}
+                    data-id={`framework-perms-pill-${entry.principal_id}`}
+                    className="flex items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink"
+                  >
+                    <PrincipalIcon type={entry.principal_type} />
+                    <span className="max-w-[140px] truncate">{displayName(entry)}</span>
+                    <button
+                      type="button"
+                      data-id={`framework-perms-remove-${entry.principal_id}`}
+                      aria-label={t("dashboard.accessRemove")}
+                      className="rounded-xs p-0.5 text-ink-tertiary hover:bg-divider hover:text-error"
+                      onClick={() =>
+                        save(
+                          entries.filter(
+                            (e) =>
+                              !(e.principal_type === entry.principal_type &&
+                                e.principal_id === entry.principal_id),
+                          ),
+                        )
+                      }
+                    >
+                      <X size={12} strokeWidth={1.5} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <PrincipalPicker
+              users={pickerUsers}
+              departments={pickerDepts}
+              groups={pickerGroups}
+              excludeIds={new Set(entries.map((e) => e.principal_id))}
+              onSelect={(opt: PrincipalOption) => {
+                if (opt.principalType !== "user" && opt.principalType !== "group") return;
+                save([
+                  ...entries,
+                  { principal_type: opt.principalType, principal_id: opt.principalId },
+                ]);
+              }}
+            />
+          </>
+        )}
       </div>
     </ModalBackdrop>,
     document.body,
