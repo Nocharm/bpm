@@ -283,3 +283,24 @@ def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None
                                             "owning_department": "Owning Anchor Division"}).json()
     assert client.post(f"/api/maps/{normal['id']}/framework-confirm",
                        json={"major": False}).status_code == 422
+
+
+def test_framework_guards(client: TestClient, enforce: None) -> None:
+    l5 = _seed_category(client, "FWC-G5", "가드L5", level=5)
+    _seed_l6_map(client, l5, "가드업무1", "FWC-GM1")
+    act_as(SYSADMIN)
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    # SP 지정 거부
+    res = client.put(f"/api/maps/{map_id}/subprocess-designation", json={"department": "X"})
+    assert res.status_code == 422
+    # 복사 거부
+    assert client.post(f"/api/maps/{map_id}/copy", json={"name": "가드 복사본"}).status_code == 422
+    # 카테고리 개명 → 캔버스 이름 동기
+    client.patch(f"/api/categories/{l5}", json={"name": "가드L5개명"})
+    assert client.get(f"/api/maps/{map_id}").json()["name"].startswith("가드L5개명 연계")
+    # 캔버스만 있는 카테고리 삭제 → 409 (detail에 linkage 명시)
+    l5b = _seed_category(client, "FWC-G5B", "가드빈L5", level=5)
+    client.post(f"/api/categories/{l5b}/linkage-map")
+    res = client.delete(f"/api/categories/{l5b}")
+    assert res.status_code == 409
+    assert "linkage" in res.json()["detail"]

@@ -571,6 +571,13 @@ async def update_category(
 
     if payload.name is not None:
         category.name = payload.name
+        # 캔버스 이름 동기 — 생성 시 자동 명명("{이름} 연계")과 동일 규칙 (design 2026-08-28 §9)
+        if category.linkage_map_id is not None:
+            canvas = await session.get(ProcessMap, category.linkage_map_id)
+            if canvas is not None and canvas.deleted_at is None:
+                canvas.name = await _unique_linkage_name(
+                    session, category, exclude_map_id=canvas.id
+                )
 
     moved = False
     if "parent_id" in payload.model_fields_set:
@@ -710,6 +717,18 @@ async def delete_category(
     if map_count:
         raise HTTPException(
             status_code=409, detail=f"{map_count} maps are linked in this subtree"
+        )
+
+    # 연계 캔버스도 맵과 동일 취급 — 서브트리에 캔버스가 남아 있으면 삭제 불가 (design 2026-08-28 §9)
+    canvas_count = await session.scalar(
+        select(func.count())
+        .select_from(ProcessCategory)
+        .where(ProcessCategory.id.in_(subtree_ids), ProcessCategory.linkage_map_id.is_not(None))
+    )
+    if canvas_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{canvas_count} linkage canvases exist in this subtree",
         )
 
     # 자식부터 명시적 벌크 DELETE(레벨 역순 배치) — ORM 개별 delete는 플러시 순서가 보장되지

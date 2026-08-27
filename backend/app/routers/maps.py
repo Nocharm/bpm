@@ -356,6 +356,11 @@ async def copy_map(
     source_map = await session.get(ProcessMap, map_id)
     if source_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if source_map.mode == "framework":
+        # 캔버스는 카테고리와 1:1 — 복제본은 결착이 없어 의미 불명 (design 2026-08-28 §9)
+        raise HTTPException(
+            status_code=422, detail="framework linkage canvas cannot be copied"
+        )
     original_name = source_map.name
     convert = payload.convert_to_normal
     # 게시 이력 게이트 — 프론트 버튼 비활성과 동일 판정(status 기준: version_number는
@@ -1195,6 +1200,11 @@ async def designate_subprocess(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework":
+        # 캔버스를 다른 맵의 링크노드로 삼는 것 차단 (design 2026-08-28 §9)
+        raise HTTPException(
+            status_code=422, detail="framework linkage canvas cannot be designated"
+        )
     has_published = await session.scalar(
         select(MapVersion.id).where(
             MapVersion.map_id == map_id, MapVersion.status == "published"
