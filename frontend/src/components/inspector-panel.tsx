@@ -70,6 +70,8 @@ interface InspectorPanelProps {
   subprocessSlot?: ReactNode;
   // Node display 토글 섹션 — 속성 빈상태(맵 요약 아래) 노출. page.tsx 주입 (2026-08-20)
   nodeDisplaySlot?: ReactNode;
+  // 소유·승인자 섹션 — 속성 빈상태(맵 요약 위) 노출. page.tsx 주입 (2026-08-27)
+  ownershipSlot?: ReactNode;
   // Subprocess 탭(지정 메타+역참조 목록) — 지정된 맵에서만 슬롯이 오고, 있을 때만 탭이 나타난다
   subprocessTabSlot?: ReactNode;
   // 속성 빈상태 헤더 — 맵 타이틀 + 버전 전환 컨트롤(VersionPill). page.tsx 주입.
@@ -102,6 +104,7 @@ export function InspectorPanel({
   lockTabs,
   subprocessSlot,
   nodeDisplaySlot,
+  ownershipSlot,
   subprocessTabSlot,
   mapName,
   mapVersionMarker,
@@ -260,6 +263,7 @@ export function InspectorPanel({
             versionControl={versionControl}
             subprocessSlot={subprocessSlot}
             nodeDisplaySlot={nodeDisplaySlot}
+            ownershipSlot={ownershipSlot}
           />
         )}
         {tab === "properties" &&
@@ -320,8 +324,11 @@ function PropertiesEmpty({
   versionControl,
   subprocessSlot,
   nodeDisplaySlot,
+  ownershipSlot,
 }: Omit<InspectorPanelProps, "onCollapse" | "selectionKind" | "mapId" | "canCompare">) {
   const { t } = useI18n();
+  // 맵 요약 아코디언 — 기본 접힘(접힘 헤더가 아이콘+숫자로 요약을 대신함), 영속 없음
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const action =
     "flex w-full items-center gap-2 rounded-sm border border-hairline px-3 py-2 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40";
   return (
@@ -360,12 +367,52 @@ function PropertiesEmpty({
         </div>
       )}
 
+      {/* 소유·승인자 — 맵 요약 위 (2026-08-27) */}
+      {ownershipSlot}
+
+      {/* 맵 요약 아코디언 — 접힘 시 헤더 우측에 아이콘+숫자만 (2026-08-27) */}
       <div className="rounded-md border border-hairline bg-surface-alt/50 p-3">
-        <div className="mb-2 text-fine font-semibold text-ink-tertiary">{t("inspector.summary")}</div>
-        <SummaryRow icon={Boxes} label={t("inspector.sumNodes")} value={`${nodeCount}`} />
-        <SummaryRow icon={Network} label={t("inspector.sumEdges")} value={`${edgeCount}`} />
-        <SummaryRow icon={LayoutGrid} label={t("inspector.sumSubprocess")} value={`${subprocessCount}`} />
-        <SummaryRow icon={Boxes} label={t("inspector.sumSaved")} value={saveLabel} muted />
+        <button
+          type="button"
+          data-id="inspector-summary-toggle"
+          data-acc-toggle
+          aria-expanded={summaryOpen}
+          className="flex w-full items-center justify-between gap-2 text-left"
+          onClick={() => setSummaryOpen((v) => !v)}
+        >
+          <span className="flex items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
+            <ChevronRight
+              size={12}
+              strokeWidth={1.5}
+              className={`shrink-0 transition-transform duration-150 ${summaryOpen ? "rotate-90" : ""}`}
+            />
+            {t("inspector.summary")}
+          </span>
+          {!summaryOpen && (
+            <span className="flex shrink-0 items-center gap-2.5 text-fine text-ink-secondary">
+              <span className="flex items-center gap-1" title={t("inspector.sumNodes")}>
+                <Boxes size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+                {nodeCount}
+              </span>
+              <span className="flex items-center gap-1" title={t("inspector.sumEdges")}>
+                <Network size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+                {edgeCount}
+              </span>
+              <span className="flex items-center gap-1" title={t("inspector.sumSubprocess")}>
+                <LayoutGrid size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+                {subprocessCount}
+              </span>
+            </span>
+          )}
+        </button>
+        {summaryOpen && (
+          <div className="mt-2">
+            <SummaryRow icon={Boxes} label={t("inspector.sumNodes")} value={`${nodeCount}`} />
+            <SummaryRow icon={Network} label={t("inspector.sumEdges")} value={`${edgeCount}`} />
+            <SummaryRow icon={LayoutGrid} label={t("inspector.sumSubprocess")} value={`${subprocessCount}`} />
+            <SummaryRow icon={Boxes} label={t("inspector.sumSaved")} value={saveLabel} muted />
+          </div>
+        )}
       </div>
 
       {/* Node display 토글 — 맵 탭과 동일 섹션(맵 요약 바로 아래, 사용자 결정 2026-08-20) */}

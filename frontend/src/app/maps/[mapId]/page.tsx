@@ -36,6 +36,7 @@ import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/com
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
+import { MapOwnershipSection } from "@/components/map-ownership-section";
 import { ApproverManager } from "@/components/approver-manager";
 import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
@@ -10054,6 +10055,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onToast={showToast}
                     onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                     onGoToPublished={(id) => void switchVersion(id)}
+                    usage={spUsage}
+                  />
+                }
+                ownershipSlot={
+                  // 속성 빈상태 — 오우닝 부서·오너·승인자 표시(맵 요약 위, 2026-08-27)
+                  <MapOwnershipSection
+                    owningDept={mapOwningDept}
+                    ownerId={mapOwner}
+                    approvers={workflow?.approvers ?? []}
                   />
                 }
                 nodeDisplaySlot={
@@ -10268,6 +10278,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                       onGoToPublished={(id) => void switchVersion(id)}
+                      usage={spUsage}
                     />
                     <div className="flex gap-1.5">
                       <button
@@ -10489,6 +10500,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onToast={showToast}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                       onGoToPublished={(id) => void switchVersion(id)}
+                      usage={spUsage}
                     />
                     <MapDetailCard
                       mapId={mapId}

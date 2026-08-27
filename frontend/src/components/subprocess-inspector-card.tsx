@@ -4,7 +4,8 @@
 // 지정은 다른 맵이 이 맵을 서브프로세스 노드로 연결(임베드)하기 위한 절차 — 노트로 안내.
 // 변경은 게시된 버전이 열린 상태에서 오너·관리자만 가능(비활성 시 사유 노트 표시).
 
-import { ArrowRight, BadgeCheck, Boxes, ChevronRight, Info, Network, Workflow } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BadgeCheck, Boxes, ChevronRight, Info, Network, Workflow } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -15,6 +16,7 @@ import {
   getPendingSpDesignationRequest,
   type ApprovalRequest,
   type MapDetail,
+  type SubprocessUsage,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -41,6 +43,8 @@ interface SubprocessInspectorCardProps {
   onDesignationChange?: () => void;
   // needPublished 사유일 때 "게시본 가기" 버튼 — page.tsx의 switchVersion 위임(R10)
   onGoToPublished?: (versionId: number) => void;
+  // 역참조(Linked from) — page.tsx의 spUsage 공유(카드별 재조회 방지). 지정된 맵에서만 섹션 노출.
+  usage?: SubprocessUsage | null;
 }
 
 export function SubprocessInspectorCard({
@@ -51,6 +55,7 @@ export function SubprocessInspectorCard({
   onToast,
   onDesignationChange,
   onGoToPublished,
+  usage,
 }: SubprocessInspectorCardProps) {
   const { t } = useI18n();
   const [detail, setDetail] = useState<MapDetail | null>(null);
@@ -88,10 +93,13 @@ export function SubprocessInspectorCard({
       setOpen(stored === "1"); // one-time hydration restore from sessionStorage
     }
   }, []);
+  // Linked from 하위 아코디언 — 기본 접힘·영속 없음(매번 눌러서 연다, 사용자 결정 2026-08-27)
+  const [linkedOpen, setLinkedOpen] = useState(false);
   const toggleOpen = () => {
     const next = !open;
     window.sessionStorage.setItem(SP_OPEN_KEY, next ? "1" : "0");
     setOpen(next);
+    if (!next) setLinkedOpen(false); // 카드를 접으면 하위 섹션도 초기화
   };
 
   useEffect(() => {
@@ -381,6 +389,81 @@ export function SubprocessInspectorCard({
             <p data-id="sp-request-error" className="mt-1 text-fine text-error">
               {spRequestError}
             </p>
+          )}
+
+          {/* Linked from — 역참조 목록(Subprocess 탭과 동일 행 디자인). 지정된 맵에서만. */}
+          {designated && usage?.designated && (
+            <div className="mt-2 border-t border-divider pt-2">
+              <button
+                type="button"
+                data-id="sp-linked-from-toggle"
+                data-acc-toggle
+                aria-expanded={linkedOpen}
+                className="flex w-full items-center justify-between gap-2 text-left"
+                onClick={() => setLinkedOpen((v) => !v)}
+              >
+                <span className="flex items-center gap-1.5 text-fine font-semibold text-ink-tertiary">
+                  <ChevronRight
+                    size={12}
+                    strokeWidth={1.5}
+                    className={`shrink-0 transition-transform duration-150 ${linkedOpen ? "rotate-90" : ""}`}
+                  />
+                  {t("inspector.spUsageLinkedFrom")}
+                </span>
+                <span className="shrink-0 text-fine text-ink-tertiary">{usage.used_by.length}</span>
+              </button>
+              {linkedOpen && (
+                <div className="mt-1.5">
+                  {usage.used_by.length === 0 ? (
+                    <p className="rounded-sm border border-hairline bg-surface px-2.5 py-2 text-fine text-ink-tertiary">
+                      {t("inspector.spUsageEmpty")}
+                    </p>
+                  ) : (
+                    <ul className="flex flex-col gap-1">
+                      {usage.used_by.map((entry) => (
+                        <li key={entry.map_id}>
+                          <Link
+                            href={`/maps/${entry.map_id}`}
+                            data-id="sp-card-linked-row"
+                            className="group flex items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 transition-colors hover:bg-surface-alt"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-caption text-ink">{entry.name}</span>
+                              {entry.owning_department && (
+                                <span
+                                  title={entry.owning_department}
+                                  className="block truncate text-fine text-ink-tertiary"
+                                >
+                                  {entry.owning_department}
+                                </span>
+                              )}
+                            </span>
+                            {entry.node_count > 1 && (
+                              <span
+                                title={t("inspector.spUsageLinkCount", { n: entry.node_count })}
+                                className="shrink-0 rounded-xs bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+                              >
+                                ×{entry.node_count}
+                              </span>
+                            )}
+                            <ArrowUpRight
+                              size={14}
+                              strokeWidth={1.5}
+                              className="shrink-0 text-ink-tertiary transition-colors group-hover:text-accent"
+                            />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {usage.hidden_count > 0 && (
+                    <p className="mt-1.5 text-fine text-ink-tertiary">
+                      {t("inspector.spUsageHidden", { n: usage.hidden_count })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </>
       )}
