@@ -48,6 +48,7 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   ioListStates: new Map<string, IoListDisplayState>(),
   onSetIoListState: null,
   ioCheckPulse: null,
+  onHoverIoLink: null,
 };
 
 interface InterviewPreviewProps {

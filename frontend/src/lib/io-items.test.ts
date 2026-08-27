@@ -5,6 +5,7 @@ import type { Edge } from "@xyflow/react";
 
 import {
   applyIoImport, assignSpIoIds, buildIoIndex, buildIoMirrorIndex, canReachForward, collectIoImportCandidates,
+  computeIoLinkHighlight,
   countIoLines, getBrokenInputMirrorIndexes, getFlowPathBetween, getIoItemState, getIoLine, getIoLinkPeers,
   propagateIoLinks, setIoLine,
   type IoImportCandidate, type IoNode, type SpRefMap,
@@ -656,6 +657,35 @@ describe("getIoLinkPeers", () => {
   it("SP 노드지만 링크맵 미지정/ref 없음 — groupId null", () => {
     const nodes: IoNode[] = [node("S", { nodeType: "subprocess" })];
     expect(getIoLinkPeers(nodes, NO_SP, "S", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
+  });
+});
+
+describe("computeIoLinkHighlight", () => {
+  const nodes: IoNode[] = [
+    node("A", { output: "산출물", output_ids: "itm_1" }),
+    node("B", { input: "산출물", input_links: "itm_1" }),
+    node("C", { output: "산출물", output_links: "itm_1" }),
+  ];
+  const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
+
+  it("원본 행 — 미러 전부 점등, 경로는 존재하는 엣지만(경로 없는 미러도 노드는 점등)", () => {
+    const hl = computeIoLinkHighlight(nodes, edges, NO_SP, "A", "output", 0);
+    expect(hl).not.toBeNull();
+    expect([...hl!.nodeIds].sort()).toEqual(["B", "C"]);
+    expect(hl!.edgeIds).toEqual(["e1"]);
+  });
+
+  it("미러 행 — 원본만 점등(형제 미러 제외), 역방향 경로도 취득", () => {
+    const hl = computeIoLinkHighlight(nodes, edges, NO_SP, "B", "input", 0);
+    expect(hl).toEqual({ nodeIds: ["A"], edgeIds: ["e1"] });
+  });
+
+  it("plain 행·원본 소실(댕글링)은 null", () => {
+    expect(
+      computeIoLinkHighlight([node("P", { input: "평문" })], [], NO_SP, "P", "input", 0),
+    ).toBeNull();
+    const dangling = [node("B", { input: "산출물", input_links: "itm_gone" })];
+    expect(computeIoLinkHighlight(dangling, [], NO_SP, "B", "input", 0)).toBeNull();
   });
 });
 

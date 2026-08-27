@@ -115,8 +115,15 @@ function NodeIoDetails({
   framed?: boolean;
 }) {
   const { t } = useI18n();
-  const { displayFields, ioChecks, onToggleIoCheck, ioListStates, onSetIoListState, ioCheckPulse } =
-    useNodeActions();
+  const {
+    displayFields,
+    ioChecks,
+    onToggleIoCheck,
+    ioListStates,
+    onSetIoListState,
+    ioCheckPulse,
+    onHoverIoLink,
+  } = useNodeActions();
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const conditionLines = displayFields.includes("conditions")
@@ -257,6 +264,17 @@ function NodeIoDetails({
                       title={
                         !isSubprocess && side === "input"
                           ? t(isOptional ? "node.ioOptional" : "node.ioRequired")
+                          : undefined
+                      }
+                      // 링크 항목 hover → 상대(원본/미러) 노드·경로 엣지 하이라이트 — 인스펙터 행 hover와 동일 효과
+                      onMouseEnter={
+                        linkState !== "plain" && onHoverIoLink !== null
+                          ? () => onHoverIoLink(nodeId, side, index)
+                          : undefined
+                      }
+                      onMouseLeave={
+                        linkState !== "plain" && onHoverIoLink !== null
+                          ? () => onHoverIoLink(nodeId, side, null)
                           : undefined
                       }
                       className={`group/iorow -mx-0.5 flex cursor-pointer items-start gap-1 rounded-xs px-0.5 py-px text-xs text-ink-tertiary ${

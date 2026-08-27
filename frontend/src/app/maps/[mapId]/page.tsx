@@ -245,6 +245,7 @@ import {
   buildIoIndex,
   buildIoMirrorIndex,
   collectIoImportCandidates,
+  computeIoLinkHighlight,
   getBrokenInputMirrorIndexes,
   getFlowPathBetween,
   getIoLinkPeers,
@@ -5905,35 +5906,16 @@ function MapEditor({ mapId }: { mapId: number }) {
   const ioBrokenInputIndexes = selectedNode
     ? getBrokenInputMirrorIndexes(nodes, edges, subprocessRefs, selectedNode.id)
     : new Set<number>();
-  // 항목 hover → 상대편(원본이면 미러 전부, 미러면 원본) 노드 + 흐름 경로 엣지 하이라이트.
-  // 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는 유지 (io-linking §2)
+  // 항목 hover → 상대편 노드 + 흐름 경로 엣지 하이라이트 — 계산은 computeIoLinkHighlight 공용
+  // (캔버스 노드 내 IO 행 hover와 동일 효과, io-linking §2·§4-5)
   const handleIoHoverItem = (side: IoSide, index: number | null) => {
     if (selectedNode === null || index === null) {
       setIoHighlight(null);
       return;
     }
-    const peers = getIoLinkPeers(nodes, subprocessRefs, selectedNode.id, side, index);
-    // 미러 행 호버 = 원본만, 원본 행 호버 = 미러 전부 — 형제 미러 동시 점등 금지 (§4-5, QA 이슈 #1)
-    const peerIds =
-      peers.origin === null
-        ? [] // 원본 소실(댕글링) — 비출 상대 없음
-        : peers.origin.nodeId !== selectedNode.id
-          ? [peers.origin.nodeId]
-          : peers.mirrors.map((m) => m.nodeId).filter((id) => id !== selectedNode.id);
-    const nodeIds = [...new Set(peerIds)];
-    if (nodeIds.length === 0) {
-      setIoHighlight(null);
-      return;
-    }
-    const edgeIds = new Set<string>();
-    for (const peerId of nodeIds) {
-      const forward = getFlowPathBetween(edges, selectedNode.id, peerId);
-      const path = forward.length > 0 ? forward : getFlowPathBetween(edges, peerId, selectedNode.id);
-      for (const edgeId of path) {
-        edgeIds.add(edgeId);
-      }
-    }
-    setIoHighlight({ nodeIds, edgeIds: [...edgeIds] });
+    setIoHighlight(
+      computeIoLinkHighlight(nodes, edges, subprocessRefs, selectedNode.id, side, index),
+    );
   };
   // 불러오기 후보 — 모달이 열린 동안 hover가 ioHighlight 리렌더를 유발하므로 memo로 재스캔 방지
   const ioImportCandidates = useMemo(
@@ -7216,6 +7198,25 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     [ioChecks, subprocessRefs],
   );
+  // 캔버스 노드 IO 링크 행 hover — 인스펙터 행 hover(handleIoHoverItem)와 같은 하이라이트를
+  // 노드 내부에서도 점등. nodes/edges는 ref 미러로 읽어 콜백을 stable하게 유지(컨텍스트 memo churn 방지)
+  const handleNodeIoHoverLink = useCallback(
+    (nodeId: string, side: IoSide, index: number | null) => {
+      setIoHighlight(
+        index === null
+          ? null
+          : computeIoLinkHighlight(
+              nodesRef.current,
+              edgesRef.current,
+              subprocessRefs,
+              nodeId,
+              side,
+              index,
+            ),
+      );
+    },
+    [subprocessRefs],
+  );
   const nodeActions = useMemo(
     () => ({
       onToggleExpand: toggleInlineExpand,
@@ -7234,6 +7235,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ioListStates,
       onSetIoListState: setIoListState,
       ioCheckPulse,
+      onHoverIoLink: handleNodeIoHoverLink,
     }),
     [
       toggleInlineExpand,
@@ -7251,6 +7253,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       ioListStates,
       setIoListState,
       ioCheckPulse,
+      handleNodeIoHoverLink,
     ],
   );
 

@@ -3,6 +3,8 @@
 
 import { createContext, useContext } from "react";
 
+import type { IoSide } from "./io-items";
+
 // 노드에 표시할 정보 필드 — 인스펙터 Node display 토글 (BPM 속성 + URL + 승격 IO/조건, 2026-08-20).
 // 조건은 시작/종료를 "conditions" 하나로 묶어 토글(표시는 두 줄) — 사용자 결정 2026-08-20.
 export type NodeDisplayField =
@@ -80,6 +82,9 @@ export interface NodeActions {
   onSetIoListState: ((key: string, state: IoListDisplayState) => void) | null;
   // 체크 동기 애니메이션(#3) — 마지막 체크된 링크 itemId + 재생 논스(같은 키 재체크도 재생)
   ioCheckPulse: { key: string; nonce: number } | null;
+  // 캔버스 IO 링크 행 hover → 상대(원본/미러) 노드·경로 엣지 하이라이트 — 인스펙터 행 hover와
+  // 동일 효과(computeIoLinkHighlight 공용). index null = 해제. null이면 비활성(Provider 부재 표면).
+  onHoverIoLink: ((nodeId: string, side: IoSide, index: number | null) => void) | null;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
@@ -100,6 +105,7 @@ const defaultActions: NodeActions = {
   ioListStates: new Map<string, IoListDisplayState>(),
   onSetIoListState: null,
   ioCheckPulse: null,
+  onHoverIoLink: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

@@ -345,6 +345,32 @@ export function getIoLinkPeers(
   return { groupId, origin, mirrors };
 }
 
+// 링크 항목 hover 하이라이트 — 상대편(원본 행=미러 전부, 미러 행=원본만 — 형제 미러 동시 점등 금지 §4-5)
+// 노드 + 흐름 경로 엣지. 경로는 양방향 중 존재하는 쪽만 취한다 — 엣지가 끊겨 있어도 노드 하이라이트는
+// 유지 (§2). 인스펙터 행 hover와 캔버스 노드 내 IO 행 hover 공용. null = 비출 상대 없음(해제).
+export function computeIoLinkHighlight(
+  nodes: IoNode[], edges: Edge[], spRefs: SpRefMap, nodeId: string, side: IoSide, index: number,
+): { nodeIds: string[]; edgeIds: string[] } | null {
+  const peers = getIoLinkPeers(nodes, spRefs, nodeId, side, index);
+  const peerIds =
+    peers.origin === null
+      ? [] // 원본 소실(댕글링) — 비출 상대 없음
+      : peers.origin.nodeId !== nodeId
+        ? [peers.origin.nodeId]
+        : peers.mirrors.map((m) => m.nodeId).filter((id) => id !== nodeId);
+  const nodeIds = [...new Set(peerIds)];
+  if (nodeIds.length === 0) return null;
+  const edgeIds = new Set<string>();
+  for (const peerId of nodeIds) {
+    const forward = getFlowPathBetween(edges, nodeId, peerId);
+    const path = forward.length > 0 ? forward : getFlowPathBetween(edges, peerId, nodeId);
+    for (const edgeId of path) {
+      edgeIds.add(edgeId);
+    }
+  }
+  return { nodeIds, edgeIds: [...edgeIds] };
+}
+
 export function collectIoImportCandidates(opts: {
   nodes: IoNode[]; edges: Edge[]; spRefs: SpRefMap; nodeId: string; side: IoSide;
 }): IoImportCandidate[] {

@@ -198,6 +198,7 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   ioListStates: new Map<string, IoListDisplayState>(),
   onSetIoListState: null,
   ioCheckPulse: null,
+  onHoverIoLink: null,
 };
 
 const FIELD_MSG: Record<ChangedField, MessageKey> = {
