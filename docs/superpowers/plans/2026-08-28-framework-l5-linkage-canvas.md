@@ -62,7 +62,7 @@
 **Interfaces:**
 - Produces: `models.CategoryPermission(category_id, principal_type, principal_id, granted_by, granted_at)` · `ProcessCategory.linkage_map_id: int|None` · `MapVersion.fw_major/fw_minor: int|None` — 이후 모든 태스크가 소비.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_framework_canvas.py` 신규:
+- [x] **Step 1: 실패하는 테스트 작성** — `backend/tests/test_framework_canvas.py` 신규:
 
 ```python
 """Framework L5 연계 캔버스 — 모델·권한·linkage-map·검증·확정·가드 (design 2026-08-28)."""
@@ -128,12 +128,12 @@ def test_models_roundtrip(client: TestClient) -> None:
     asyncio.run(_run())
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run(backend/에서): `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/test_framework_canvas.py -q`
 Expected: FAIL — `ImportError: cannot import name 'CategoryPermission'`
 
-- [ ] **Step 3: 모델 구현** — `backend/app/models.py`:
+- [x] **Step 3: 모델 구현** — `backend/app/models.py`:
 
 ① `ProcessCategory`의 `sort_order` 컬럼 아래에 추가(줄 109 뒤):
 
@@ -186,11 +186,11 @@ class CategoryPermission(Base):
     ("map_versions", "fw_minor", "INTEGER"),
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: 위 pytest 명령. Expected: PASS (1 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/models.py backend/app/db.py backend/tests/test_framework_canvas.py
@@ -210,7 +210,7 @@ git commit -m "feat(framework): add category permission and linkage canvas colum
 - Consumes: Task 1 `CategoryPermission`.
 - Produces: `GET/PUT /api/categories/{category_id}/permissions` — body/응답 `{"permissions": [{"principal_type": "user"|"group", "principal_id": str}]}`. FE Task 9가 소비.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — test_framework_canvas.py에 추가:
+- [x] **Step 1: 실패하는 테스트 작성** — test_framework_canvas.py에 추가:
 
 ```python
 def _seed_category(client: TestClient, code: str, name: str, level: int = 1,
@@ -254,9 +254,9 @@ def test_category_permissions_put_replaces_and_gates(client: TestClient, enforce
     assert client.get("/api/categories/999999/permissions").status_code == 404
 ```
 
-- [ ] **Step 2: 실패 확인** — 같은 pytest 명령. Expected: FAIL (405/404 — 라우트 없음)
+- [x] **Step 2: 실패 확인** — 같은 pytest 명령. Expected: FAIL (405/404 — 라우트 없음)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `backend/app/schemas.py` — `CategoryCreateIn` 클래스 바로 앞에:
 
@@ -333,8 +333,8 @@ async def set_category_permissions(
 
 주의: 마지막 줄 재호출이 Depends 시그니처 때문에 어색하면 조회 로직을 `_load_category_permissions(session, category_id)` 내부 함수로 추출해 양쪽에서 호출한다(동작 동일).
 
-- [ ] **Step 4: 통과 확인** — pytest 같은 명령. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — pytest 같은 명령. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas.py backend/app/routers/categories.py backend/tests/test_framework_canvas.py
@@ -353,7 +353,7 @@ git commit -m "feat(framework): category admin list/replace API — 카테고리
 - Consumes: Task 1 모델.
 - Produces: `access.is_category_admin(session, login_id, category_id) -> bool` · `access.get_framework_category_id(session, map_id) -> int | None` · `get_effective_role`이 framework 맵에서 sysadmin→owner / 권한자→editor / 그 외→viewer 반환. Task 4·6·8이 소비.
 
-- [ ] **Step 1: 실패하는 테스트 작성** — 추가:
+- [x] **Step 1: 실패하는 테스트 작성** — 추가:
 
 ```python
 def _seed_canvas_map(client: TestClient, category_id: int, name: str) -> int:
@@ -414,9 +414,9 @@ def test_framework_role_derivation(client: TestClient, enforce: None) -> None:
     assert sysadmin == "owner"
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL (`direct == "viewer"` — 분기 없음. public 맵이라 viewer 폴백)
+- [x] **Step 2: 실패 확인** — Expected: FAIL (`direct == "viewer"` — 분기 없음. public 맵이라 viewer 폴백)
 
-- [ ] **Step 3: 구현** — `backend/app/permissions/access.py`:
+- [x] **Step 3: 구현** — `backend/app/permissions/access.py`:
 
 ① import에 `CategoryPermission, ProcessCategory` 추가(models), `select`는 기존.
 
@@ -482,8 +482,8 @@ async def is_category_admin(
         return "viewer" if found_map.visibility == "public" else None
 ```
 
-- [ ] **Step 4: 통과 확인** — pytest. Expected: PASS. 기존 스위트 회귀 확인: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q` 전체 그린.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — pytest. Expected: PASS. 기존 스위트 회귀 확인: `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q` 전체 그린.
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/permissions/access.py backend/tests/test_framework_canvas.py
@@ -503,7 +503,7 @@ git commit -m "feat(framework): derive canvas roles from category admin chain �
 - Consumes: Task 3 `is_category_admin`.
 - Produces: `POST /api/categories/{category_id}/linkage-map` → `{"map_id": int, "added_count": int, "missing_count": int}`. FE Task 9·10·11이 소비. 시드/보강 그리드 상수 `_LINKAGE_X0=120, _LINKAGE_Y0=120, _LINKAGE_X_STEP=240, _LINKAGE_Y_STEP=120, _LINKAGE_COLS=4`.
 
-- [ ] **Step 1: 실패하는 테스트 작성**:
+- [x] **Step 1: 실패하는 테스트 작성**:
 
 ```python
 def _seed_l6_map(client: TestClient, category_id: int, name: str, code: str) -> int:
@@ -570,9 +570,9 @@ def test_linkage_map_open_create_seed_and_reconcile(client: TestClient, enforce:
     assert {m3} <= linked | {m3}  # m3는 이미 반영됨(위 보강)
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL (404 라우트 없음 — 첫 단언 422에서)
+- [x] **Step 2: 실패 확인** — Expected: FAIL (404 라우트 없음 — 첫 단언 422에서)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `backend/app/schemas.py`:
 
@@ -723,8 +723,8 @@ async def open_linkage_map(
 
 주의: FastAPI 등록 순서 — literal 경로 `/import-interview`처럼 `/{category_id}/linkage-map`은 파라미터 경로라 순서 무관. `func`는 categories.py에 이미 import됨.
 
-- [ ] **Step 4: 통과 확인** — pytest 파일 단위 → 전체. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — pytest 파일 단위 → 전체. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas.py backend/app/routers/categories.py backend/tests/test_framework_canvas.py
@@ -744,7 +744,7 @@ git commit -m "feat(framework): idempotent linkage-map open with seed and reconc
 - Consumes: Task 4의 캔버스(draft 버전).
 - Produces: framework 맵 저장은 subprocess-only 강제(start 불요), 일반 맵은 기존 그대로.
 
-- [ ] **Step 1: 실패하는 테스트 작성**:
+- [x] **Step 1: 실패하는 테스트 작성**:
 
 ```python
 def _checkout(client: TestClient, version_id: int) -> None:
@@ -776,9 +776,9 @@ def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
     assert "framework" in res.json()["detail"]
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL — 첫 PUT이 422("시작 노드는 정확히 1개여야 합니다")
+- [x] **Step 2: 실패 확인** — Expected: FAIL — 첫 PUT이 422("시작 노드는 정확히 1개여야 합니다")
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `backend/app/subprocess.py` — `validate_process` 아래에:
 
@@ -805,8 +805,8 @@ def validate_framework_canvas(nodes: list[NodeIn]) -> None:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 ```
 
-- [ ] **Step 4: 통과 확인** — 파일 pytest → **전체 스위트**(기존 그래프 저장 테스트 회귀 필수). Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — 파일 pytest → **전체 스위트**(기존 그래프 저장 테스트 회귀 필수). Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/subprocess.py backend/app/routers/graph.py backend/tests/test_framework_canvas.py
@@ -826,7 +826,7 @@ git commit -m "feat(framework): subprocess-only graph validation for canvas mode
 - Consumes: Task 3 `is_category_admin`·`get_framework_category_id`, `clone_graph`(maps.py 기존 import).
 - Produces: `POST /api/maps/{map_id}/framework-confirm` body `{"major": bool}` → VersionOut(스냅샷). 채번: 최초 1.0 → minor+1, major 체크 시 major+1·minor 0. 이전 스냅샷 expired 전환 **안 함**.
 
-- [ ] **Step 1: 실패하는 테스트 작성**:
+- [x] **Step 1: 실패하는 테스트 작성**:
 
 ```python
 def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None:
@@ -859,9 +859,9 @@ def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None
                        json={"major": False}).status_code == 422
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL (404 라우트 없음)
+- [x] **Step 2: 실패 확인** — Expected: FAIL (404 라우트 없음)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `backend/app/schemas.py`:
 
@@ -943,8 +943,8 @@ async def confirm_framework_version(
 
 주의: `VersionOut`이 maps.py schemas import에 없으면 추가. `record_version_event` import가 maps.py에 없으면 추가(`from app.version_events import record_version_event`).
 
-- [ ] **Step 4: 통과 확인** — 파일 → 전체 스위트. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — 파일 → 전체 스위트. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas.py backend/app/routers/maps.py backend/tests/test_framework_canvas.py
@@ -964,7 +964,7 @@ git commit -m "feat(framework): self-serve confirm snapshots with maj.min number
 - Consumes: Task 4의 캔버스.
 - Produces: 캔버스 SP지정 422 · 캔버스 복사 422 · 카테고리 개명 시 캔버스 이름 동기 · 서브트리에 캔버스 있으면 카테고리 삭제 409.
 
-- [ ] **Step 1: 실패하는 테스트 작성**:
+- [x] **Step 1: 실패하는 테스트 작성**:
 
 ```python
 def test_framework_guards(client: TestClient, enforce: None) -> None:
@@ -989,9 +989,9 @@ def test_framework_guards(client: TestClient, enforce: None) -> None:
     assert "linkage" in res.json()["detail"]
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL (SP 지정이 409 "no published version"으로 — 422 아님)
+- [x] **Step 2: 실패 확인** — Expected: FAIL (SP 지정이 409 "no published version"으로 — 422 아님)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `maps.py` `designate_subprocess` — `found_map` 404 체크 직후:
 
@@ -1040,8 +1040,8 @@ def test_framework_guards(client: TestClient, enforce: None) -> None:
         )
 ```
 
-- [ ] **Step 4: 통과 확인** — 파일 → 전체 스위트. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — 파일 → 전체 스위트. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/routers/maps.py backend/app/routers/categories.py backend/tests/test_framework_canvas.py
@@ -1062,7 +1062,7 @@ git commit -m "feat(framework): canvas leak guards and rename/delete coupling �
 **Interfaces:**
 - Produces: `CategoryNodeOut.linkage_map_id: int|None`·`can_edit_linkage: bool` / `MapOut.linkage_category_id: int|None`·`linkage_category_path: str|None` / `SubprocessRefOut.category_path: str|None`. FE Task 9~14가 소비.
 
-- [ ] **Step 1: 실패하는 테스트 작성**:
+- [x] **Step 1: 실패하는 테스트 작성**:
 
 ```python
 def test_surface_fields(client: TestClient, enforce: None) -> None:
@@ -1098,9 +1098,9 @@ def test_surface_fields(client: TestClient, enforce: None) -> None:
     assert graph["subprocess_refs"][str(m1)]["category_path"] == "표면L1/표면L5"
 ```
 
-- [ ] **Step 2: 실패 확인** — Expected: FAIL (KeyError `linkage_map_id`)
+- [x] **Step 2: 실패 확인** — Expected: FAIL (KeyError `linkage_map_id`)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ① `schemas.py` — `CategoryNodeOut`에:
 
@@ -1218,8 +1218,8 @@ async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
 
 `ProcessCategory`를 subprocess.py import에 추가(`from app.models import MapVersion, Node, ProcessCategory, ProcessMap`).
 
-- [ ] **Step 4: 통과 확인** — 파일 → 전체 스위트 + ruff: `.venv/bin/ruff check app/ tests/`. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 통과 확인** — 파일 → 전체 스위트 + ruff: `.venv/bin/ruff check app/ tests/`. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas.py backend/app/routers/categories.py backend/app/routers/maps.py backend/app/subprocess.py backend/tests/test_framework_canvas.py
@@ -1237,7 +1237,7 @@ git commit -m "feat(framework): expose linkage fields on tree, map and subproces
 - Consumes: Task 2·4·6·8 API.
 - Produces: `CategoryNode.linkage_map_id/can_edit_linkage` · `MapSummary.linkage_category_id/linkage_category_path` · `SubprocessRef.category_path` · `openLinkageMap(categoryId)` · `confirmFrameworkVersion(mapId, major)` · `listCategoryPermissions/setCategoryPermissions` · `CategoryPermissionEntry`. Task 10~16이 소비.
 
-- [ ] **Step 1: 타입·함수 추가**
+- [x] **Step 1: 타입·함수 추가**
 
 `CategoryNode`(api.ts:2507 근처)에:
 
@@ -1306,12 +1306,12 @@ export function setCategoryPermissions(
 
 주의: `VersionSummary`는 api.ts:33 근처에 기존 존재(`VersionDetail extends VersionSummary`) — import 불필요(동일 파일).
 
-- [ ] **Step 2: 타입 게이트**
+- [x] **Step 2: 타입 게이트**
 
 Run(frontend/에서): `npx tsc --noEmit`
 Expected: PASS (CategoryNode 필수 필드 추가로 기존 mock/테스트 픽스처가 깨지면 — `framework-tree-state.test.ts`의 CategoryNode 리터럴에 두 필드 추가)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/api.ts frontend/src/lib/framework-tree-state.test.ts
@@ -1331,7 +1331,7 @@ git commit -m "feat(frontend): api client for linkage canvas endpoints — 연�
 - Consumes: Task 9 `openLinkageMap`, `CategoryNode.linkage_map_id/can_edit_linkage`.
 - Produces: L5 행 우측 버튼 → 캔버스 열기/생성 후 `/maps/{id}` 이동.
 
-- [ ] **Step 1: FrameworkTree에 prop 추가**
+- [x] **Step 1: FrameworkTree에 prop 추가**
 
 `FrameworkTreeProps`에:
 
@@ -1361,7 +1361,7 @@ git commit -m "feat(frontend): api client for linkage canvas endpoints — 연�
 
 주의: 기존 header `<button>`이 `group` 클래스 보유 — 래퍼 `<div>`로 옮긴다(`group flex w-full items-center gap-1 rounded-sm hover:bg-divider` → 래퍼, 내부 버튼은 `flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left`). lucide `Workflow` import 추가. 캔버스 미존재+비권한자는 버튼 자체가 안 보인다.
 
-- [ ] **Step 2: page.tsx 핸들러 연결**
+- [x] **Step 2: page.tsx 핸들러 연결**
 
 `frontend/src/app/page.tsx`의 `<FrameworkTree renderCard=... filterMap=... />`(줄 873 근처)에:
 
@@ -1375,15 +1375,15 @@ git commit -m "feat(frontend): api client for linkage canvas endpoints — 연�
 
 import: `openLinkageMap`(api). `router`·토스트 헬퍼는 page.tsx 기존 것 사용 — 홈에 토스트 유틸이 없으면 기존 에러 표시 관례(`setStatus`류)를 따른다(구현 시 실측).
 
-- [ ] **Step 3: i18n 키** — en 블록(1845 근처)과 ko 블록(3757 근처)에:
+- [x] **Step 3: i18n 키** — en 블록(1845 근처)과 ko 블록(3757 근처)에:
 
 ```ts
   "framework.openLinkage": "Linkage canvas",        // en
   "framework.openLinkage": "연계 캔버스",             // ko
 ```
 
-- [ ] **Step 4: 게이트** — `npx tsc --noEmit && npm run lint && npx vitest run`. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 게이트** — `npx tsc --noEmit && npm run lint && npx vitest run`. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/maps/framework-tree.tsx frontend/src/app/page.tsx frontend/src/lib/i18n-messages.ts
@@ -1402,7 +1402,7 @@ git commit -m "feat(frontend): linkage canvas entry on L5 tree rows — 홈 트�
 - Consumes: Task 9 `openLinkageMap`, `MapSummary.linkage_category_id/path`.
 - Produces: `isFrameworkMap`·`linkageCategoryId/Path` state — Task 12~14가 소비. `frameworkPickerOpen` state — Task 13이 소비.
 
-- [ ] **Step 1: 상태·파생 추가** (933 근처):
+- [x] **Step 1: 상태·파생 추가** (933 근처):
 
 ```ts
   const isFrameworkMap = mapMode === "framework";
@@ -1417,7 +1417,7 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
   const [reconcileNotice, setReconcileNotice] = useState<{ added: number; missing: number } | null>(null);
 ```
 
-- [ ] **Step 2: 로드 effect 확장** (2318-2356) — `setMapMode(detail.mode ?? "normal")` 뒤에:
+- [x] **Step 2: 로드 effect 확장** (2318-2356) — `setMapMode(detail.mode ?? "normal")` 뒤에:
 
 ```ts
         setLinkageCategoryId(detail.linkage_category_id ?? null);
@@ -1458,7 +1458,7 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
 
 주의: 보강이 노드를 추가했을 수 있으므로 **보강 호출은 setVersionId 전에** 끝난다(그래프 로드는 versionId effect가 수행 — 순서상 최신 그래프를 읽는다).
 
-- [ ] **Step 3: 보강 토스트/칩** — `reconcileNotice`를 소비: 에디터 마운트 후 토스트(`showToast`) 1회 + 뷰어 캡션. versionId 설정 직후(로드 effect 말미)나 별도 effect 대신 **로드 effect 안에서 직접**:
+- [x] **Step 3: 보강 토스트/칩** — `reconcileNotice`를 소비: 에디터 마운트 후 토스트(`showToast`) 1회 + 뷰어 캡션. versionId 설정 직후(로드 effect 말미)나 별도 effect 대신 **로드 effect 안에서 직접**:
 
 ```ts
         // (setVersionId 이후) 보강 알림 — 권한자는 토스트, 뷰어는 상단 칩(Task 12의 캡션 영역에서 렌더)
@@ -1466,7 +1466,7 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
 
 토스트는 상태 세팅으로 갈음하고 실제 표시는: `reconcileNotice.added > 0`이면 `showToast(t("framework.reconciled", { n: ... }))`를 로드 effect에서 직접 호출(에디터 showToast는 기존 유틸), `missing > 0`은 Task 12의 캡션에서 `{t("framework.missing", { n })}` 칩으로 렌더.
 
-- [ ] **Step 4: 팔레트 제한** — pane 컨텍스트 메뉴(5590-5597):
+- [x] **Step 4: 팔레트 제한** — pane 컨텍스트 메뉴(5590-5597):
 
 ```ts
       return [
@@ -1489,7 +1489,7 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
 
 (handleAddNode가 useCallback이면 deps에 isFrameworkMap 추가 — React Compiler 제약 준수.)
 
-- [ ] **Step 5: 패널 seam 통일** — 5개 지점(5580-5585, 7723, 8180, 8349, 10554)의 `isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)` 패턴을 plain function으로 추출해 교체:
+- [x] **Step 5: 패널 seam 통일** — 5개 지점(5580-5585, 7723, 8180, 8349, 10554)의 `isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)` 패턴을 plain function으로 추출해 교체:
 
 ```ts
   function openMapPalette() {
@@ -1501,7 +1501,7 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
 
 라벨(5580)은 `isWordMap ? "Add section" : isFrameworkMap ? t("framework.pickerOpen") : t("library.open")`. 토글형(8180)은 대칭으로 `setFrameworkPickerOpen((open) => !open)` 분기.
 
-- [ ] **Step 6: i18n 키** (en/ko 각각):
+- [x] **Step 6: i18n 키** (en/ko 각각):
 
 ```ts
   "framework.pickerOpen": "Add L6 process",            // en
@@ -1512,8 +1512,8 @@ state 선언부(mapCategoryId 근처, 2318 참조)에:
   "framework.missing": "미반영 L6 {n}개",
 ```
 
-- [ ] **Step 7: 게이트** — `npx tsc --noEmit && npm run lint && npx vitest run`. Expected: PASS
-- [ ] **Step 8: Commit**
+- [x] **Step 7: 게이트** — `npx tsc --noEmit && npm run lint && npx vitest run`. Expected: PASS
+- [x] **Step 8: Commit**
 
 ```bash
 git add "frontend/src/app/maps/[mapId]/page.tsx" frontend/src/lib/i18n-messages.ts
@@ -1534,7 +1534,7 @@ git commit -m "feat(editor): framework canvas mode plumbing — 캔버스 모드
 - Consumes: Task 9 `confirmFrameworkVersion`, Task 11 state, Task 8 chain의 `linkage_map_id`.
 - Produces: 캔버스 확정 UI·최신 확정 캡션·캔버스/L6 칩 진입.
 
-- [ ] **Step 1: FrameworkConfirmSection 컴포넌트**:
+- [x] **Step 1: FrameworkConfirmSection 컴포넌트**:
 
 ```tsx
 "use client";
@@ -1609,7 +1609,7 @@ export function FrameworkConfirmSection({
 
 주의: `humanizeApiError`의 실제 모듈 경로는 구현 시 grep(`humanizeApiError` — page.tsx import 참조)해 맞춘다. `text-white`가 토큰 규칙에 걸리면 기존 accent 버튼(예: 게시 버튼)의 클래스를 그대로 미러한다.
 
-- [ ] **Step 2: page.tsx 통합** — 10427 승인 아코디언 내부의 `<ApprovalPanel …/>`을:
+- [x] **Step 2: page.tsx 통합** — 10427 승인 아코디언 내부의 `<ApprovalPanel …/>`을:
 
 ```tsx
                               {isFrameworkMap ? (
@@ -1634,7 +1634,7 @@ export function FrameworkConfirmSection({
 
 주의: `versions` state의 타입이 `VersionDetail[]`이면 `setVersions` append 시 스냅샷(VersionSummary)과 형이 안 맞을 수 있다 — 그 경우 `getMap(mapId)` 재조회로 `setVersions(detail.versions)` 하는 쪽을 택한다(구현 시 타입 실측, 재조회가 안전).
 
-- [ ] **Step 3: FrameworkChip 소스 확장** — page.tsx 8497-8504:
+- [x] **Step 3: FrameworkChip 소스 확장** — page.tsx 8497-8504:
 
 ```tsx
                 topRightSlot={
@@ -1648,7 +1648,7 @@ export function FrameworkConfirmSection({
                 }
 ```
 
-- [ ] **Step 4: FrameworkChip L5 행에 캔버스 열기** — framework-chip.tsx 체인 행 렌더(153-183)에서, `cat.level === 5 && cat.linkage_map_id != null && cat.linkage_map_id !== mapId`이면 행 우측(map_count 스팬 앞)에 작은 아이콘 버튼:
+- [x] **Step 4: FrameworkChip L5 행에 캔버스 열기** — framework-chip.tsx 체인 행 렌더(153-183)에서, `cat.level === 5 && cat.linkage_map_id != null && cat.linkage_map_id !== mapId`이면 행 우측(map_count 스팬 앞)에 작은 아이콘 버튼:
 
 ```tsx
                     {cat.level === 5 && cat.linkage_map_id != null && cat.linkage_map_id !== mapId && (
@@ -1671,7 +1671,7 @@ export function FrameworkConfirmSection({
 
 주의: 부모가 `<button>`이라 중첩 button 금지 — `<span role="button">` 대신 위처럼 span+onClick(stopPropagation)으로. `Workflow` lucide import. map_count 스팬의 `ml-auto`와 겹치면 순서 조정(캔버스 버튼이 먼저 ml-auto를 가져가고 count는 `shrink-0`만).
 
-- [ ] **Step 5: 뷰어 미반영 칩** — Task 11의 `reconcileNotice.missing > 0`을 캔버스 상단(FrameworkChip 아래가 아닌 좌상단 titleSlot 근처 기존 readOnly 배너 영역)에 `text-fine` 칩으로 렌더:
+- [x] **Step 5: 뷰어 미반영 칩** — Task 11의 `reconcileNotice.missing > 0`을 캔버스 상단(FrameworkChip 아래가 아닌 좌상단 titleSlot 근처 기존 readOnly 배너 영역)에 `text-fine` 칩으로 렌더:
 
 ```tsx
           {isFrameworkMap && reconcileNotice !== null && reconcileNotice.missing > 0 && (
@@ -1683,7 +1683,7 @@ export function FrameworkConfirmSection({
 
 배치는 readOnlyNotice 배너 렌더 지점 옆(구현 시 실측) — 겹치면 배너 desc 뒤에 붙인다.
 
-- [ ] **Step 6: i18n 키** (en/ko):
+- [x] **Step 6: i18n 키** (en/ko):
 
 ```ts
   "framework.latestConfirmed": "Linkage canvas · latest {label}",
@@ -1699,8 +1699,8 @@ export function FrameworkConfirmSection({
   "framework.confirmedToast": "{label}로 확정됨",
 ```
 
-- [ ] **Step 7: 게이트** — tsc/lint/vitest. Expected: PASS
-- [ ] **Step 8: Commit**
+- [x] **Step 7: 게이트** — tsc/lint/vitest. Expected: PASS
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/src/components/framework-confirm-section.tsx frontend/src/components/framework-chip.tsx "frontend/src/app/maps/[mapId]/page.tsx" frontend/src/lib/i18n-messages.ts
@@ -1720,7 +1720,7 @@ git commit -m "feat(editor): confirm section and framework chip for canvases —
 - Consumes: `framework-tree-state`(리듀서·fetch 유틸), 드래그 규약 `application/bpm-process(-name/-pinned/-unregistered)` → 기존 `handleLibraryDrop`/`createLinkNodeAt` 무변경 재사용.
 - Produces: 캔버스 좌측 트리 피커(fetch-all 없음, L6≈20,000 대응).
 
-- [ ] **Step 1: 컴포넌트 작성**:
+- [x] **Step 1: 컴포넌트 작성**:
 
 ```tsx
 "use client";
@@ -1883,7 +1883,7 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
 }
 ```
 
-- [ ] **Step 2: 에디터 seam** — page.tsx 8415 뒤(SectionPanel과 형제):
+- [x] **Step 2: 에디터 seam** — page.tsx 8415 뒤(SectionPanel과 형제):
 
 ```tsx
         {frameworkPickerOpen && (
@@ -1897,15 +1897,15 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
 
 import 추가. `linkedMapIds`는 라이브러리 패널에 이미 넘기는 기존 값 재사용.
 
-- [ ] **Step 3: i18n 키** (en/ko):
+- [x] **Step 3: i18n 키** (en/ko):
 
 ```ts
   "framework.pickerTitle": "Framework L6",   // en
   "framework.pickerTitle": "업무 체계 L6",     // ko
 ```
 
-- [ ] **Step 4: 게이트** — tsc/lint/vitest. Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 게이트** — tsc/lint/vitest. Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/framework-tree-picker.tsx "frontend/src/app/maps/[mapId]/page.tsx" frontend/src/lib/i18n-messages.ts
@@ -1924,7 +1924,7 @@ git commit -m "feat(editor): framework tree picker panel for canvas — 캔버�
 - Consumes: Task 8 `SubprocessRef.category_path`, Task 11 `linkageCategoryPath`.
 - Produces: 캔버스에서 다른 L5 소속 L6 노드에 출신 경로 배지.
 
-- [ ] **Step 1: injectSubEnds에 필드 주입** — designated 분기(1503-1543)의 spGmp 등 주입 목록에:
+- [x] **Step 1: injectSubEnds에 필드 주입** — designated 분기(1503-1543)의 spGmp 등 주입 목록에:
 
 ```ts
         // 캔버스 전용 — 링크맵의 현 소속이 이 캔버스의 L5와 다르면 출신 경로 배지 (라이브 파생)
@@ -1936,7 +1936,7 @@ git commit -m "feat(editor): framework tree picker panel for canvas — 캔버�
 
 미지정 분기(null 주입 목록)에도 `spOriginPath: null` 추가. `injectSubEnds`가 useCallback이면 deps에 `isFrameworkMap`·`linkageCategoryPath` 추가.
 
-- [ ] **Step 2: 노드 렌더** — `process-node.tsx`의 subprocess 노드 데이터 타입에 `spOriginPath?: string | null` 추가(노드 data 타입 선언 위치는 구현 시 grep `spDepartment`로 실측 — 같은 자리), 부서 칩(`spDepartment` 렌더부) 근처에:
+- [x] **Step 2: 노드 렌더** — `process-node.tsx`의 subprocess 노드 데이터 타입에 `spOriginPath?: string | null` 추가(노드 data 타입 선언 위치는 구현 시 grep `spDepartment`로 실측 — 같은 자리), 부서 칩(`spDepartment` 렌더부) 근처에:
 
 ```tsx
       {data.spOriginPath && (
@@ -1952,8 +1952,8 @@ git commit -m "feat(editor): framework tree picker panel for canvas — 캔버�
 
 (마지막 2세그먼트만 — 전체 경로는 title 툴팁.)
 
-- [ ] **Step 3: 게이트** — tsc/lint/vitest. Expected: PASS
-- [ ] **Step 4: Commit**
+- [x] **Step 3: 게이트** — tsc/lint/vitest. Expected: PASS
+- [x] **Step 4: Commit**
 
 ```bash
 git add "frontend/src/app/maps/[mapId]/page.tsx" frontend/src/components/process-node.tsx
@@ -1973,7 +1973,7 @@ git commit -m "feat(canvas): origin path badge on cross-L5 subprocess nodes — 
 - Consumes: Task 9 `listCategoryPermissions/setCategoryPermissions`, `PrincipalPicker`(`components/permissions/principal-picker.tsx`), `getDirectory`(api.ts:1516)·`listGroups`(api.ts:1552).
 - Produces: 카테고리 행 권한자 관리 모달 · 홈 일반 목록에서 framework 제외.
 
-- [ ] **Step 1: splitMapsByMode 제외 + 테스트**:
+- [x] **Step 1: splitMapsByMode 제외 + 테스트**:
 
 ```ts
 export function splitMapsByMode<T extends { mode?: string }>(
@@ -2006,7 +2006,7 @@ describe("splitMapsByMode", () => {
 });
 ```
 
-- [ ] **Step 2: framework-panel 권한자 모달** — 행 액션(rename 버튼 근처)에 버튼 추가:
+- [x] **Step 2: framework-panel 권한자 모달** — 행 액션(rename 버튼 근처)에 버튼 추가:
 
 ```tsx
             <button
@@ -2082,7 +2082,7 @@ function CategoryPermsModal({ node, onClose, onToast }: {
 
 주의(구현 시 실측 3가지): ① `PrincipalPicker`의 정확한 props(users/departments/groups의 원소 타입, `userDepartments` 필요 여부)는 `approvers-panel.tsx:198`·`principal-picker.tsx:90`을 열어 맞춘다. ② `DirectoryUser`/`Group` 타입명은 api.ts의 `getDirectory`/`listGroups` 반환 타입에서 가져온다. ③ 모달 마크업은 `MoveCategoryModal`(framework-panel.tsx:715 근처)의 ModalBackdrop 구조를 그대로 미러한다. 렌더는 `{permsNode && <CategoryPermsModal node={permsNode} onClose={() => setPermsNode(null)} onToast={onToast} />}`.
 
-- [ ] **Step 3: i18n 키** (en/ko):
+- [x] **Step 3: i18n 키** (en/ko):
 
 ```ts
   "framework.adminPerms": "Linkage admins",
@@ -2094,8 +2094,8 @@ function CategoryPermsModal({ node, onClose, onToast }: {
   "framework.permsSaveError": "권한자 저장 실패",
 ```
 
-- [ ] **Step 4: 게이트** — tsc/lint/vitest(신규 케이스 포함). Expected: PASS
-- [ ] **Step 5: Commit**
+- [x] **Step 4: 게이트** — tsc/lint/vitest(신규 케이스 포함). Expected: PASS
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/admin/framework-panel.tsx frontend/src/lib/word-map-home.ts frontend/src/lib/word-map-home.test.ts frontend/src/lib/i18n-messages.ts
@@ -2114,9 +2114,9 @@ git commit -m "feat(admin): category admin management and home list exclusion �
 - Consumes: 전 태스크.
 - Produces: 전 게이트 그린 + 스모크 통과 + 세션 스크린샷.
 
-- [ ] **Step 1: 백엔드 전체** — backend/에서 `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q` + `.venv/bin/ruff check app/ tests/`. Expected: 전부 그린.
-- [ ] **Step 2: FE 전체** — frontend/에서 `npx vitest run && npx tsc --noEmit && npm run lint`. Expected: 그린.
-- [ ] **Step 3: 스모크 작성** — `pw-smoke-framework.mjs` 하네스(시스템 Chrome·playwright-core·인터뷰 샘플 시드·check/결과 표) 골격을 복사해 시나리오만 교체:
+- [x] **Step 1: 백엔드 전체** — backend/에서 `AI_ENABLED=false DEV_ENFORCE_PERMISSIONS=false BPM_SYSADMINS="" .venv/bin/python -m pytest tests/ -q` + `.venv/bin/ruff check app/ tests/`. Expected: 전부 그린.
+- [x] **Step 2: FE 전체** — frontend/에서 `npx vitest run && npx tsc --noEmit && npm run lint`. Expected: 그린.
+- [x] **Step 3: 스모크 작성** — `pw-smoke-framework.mjs` 하네스(시스템 Chrome·playwright-core·인터뷰 샘플 시드·check/결과 표) 골격을 복사해 시나리오만 교체:
 
 1. admin.sys로 홈 → Framework 뷰 → 샘플 L5 행의 `[data-id^="framework-linkage-"]` 클릭 → 에디터 URL 이동 확인
 2. 캔버스에 소속 L6 개수만큼 `subprocess` 노드 존재(Start/End 없음) 확인
@@ -2126,15 +2126,15 @@ git commit -m "feat(admin): category admin management and home list exclusion �
 6. 뷰어 계정 전환(`page.goto` 재로그인) → 캔버스 열림(라이브)·편집 불가 확인
 
 각 단계 스크린샷 저장(SHOT_DIR은 스크립트 인자/환경변수로 스크래치 지정 — **저장소 루트에 떨구지 말 것**, interview-import-branch 선례). 실행: backend(8000)+frontend(3000) 네이티브 기동, `python -m scripts.reset_db` 시드.
-- [ ] **Step 4: 스모크 실행** — `BASE_URL=http://localhost:3000 node scripts/pw-smoke-framework-canvas.mjs` 전 항목 PASS. 스크린샷을 사용자에게 공유(SendUserFile — frontend-screenshot-share-default 메모리).
-- [ ] **Step 5: PROGRESS.md 1항목 추가**(최상단):
+- [x] **Step 4: 스모크 실행** — `BASE_URL=http://localhost:3000 node scripts/pw-smoke-framework-canvas.mjs` 전 항목 PASS. 스크린샷을 사용자에게 공유(SendUserFile — frontend-screenshot-share-default 메모리).
+- [x] **Step 5: PROGRESS.md 1항목 추가**(최상단):
 
 ```markdown
 ## 2026-08-28 — Framework L5 연계 캔버스 (feature/framework-l5-canvas)
 - L5 "상세보기" 캔버스 — 실맵 mode="framework"+linkage_map_id 1:1, category_permissions 권한자(하향 상속)·라이브 draft+확정 스냅샷(fw_major/minor, published 재사용)·멱등 열기(시드/자동 보강)·subprocess-only 검증·트리/칩/피커/확정 UI. 스펙: docs/superpowers/specs/2026-08-28-framework-l5-linkage-canvas-design.md
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/scripts/pw-smoke-framework-canvas.mjs PROGRESS.md
