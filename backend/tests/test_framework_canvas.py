@@ -59,3 +59,44 @@ def test_models_roundtrip(client: TestClient) -> None:
             assert MapVersion(map_id=1, label="x", fw_major=1, fw_minor=0).fw_major == 1
 
     asyncio.run(_run())
+
+
+def _seed_category(client: TestClient, code: str, name: str, level: int = 1,
+                   parent_id: int | None = None) -> int:
+    """멱등 카테고리 시드 — 세션 스코프 공유 DB라 code 재사용."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            row = await session.scalar(select(ProcessCategory).where(ProcessCategory.code == code))
+            if row is None:
+                row = ProcessCategory(code=code, name=name, level=level,
+                                      parent_id=parent_id, sort_order=0)
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+            return row.id
+
+    return asyncio.run(_run())
+
+
+def test_category_permissions_put_replaces_and_gates(client: TestClient, enforce: None) -> None:
+    cid = _seed_category(client, "FWC-P1", "권한검증")
+    body = {"permissions": [{"principal_type": "user", "principal_id": "fwc.admin1"}]}
+    act_as("fwc.pleb")
+    assert client.put(f"/api/categories/{cid}/permissions", json=body).status_code == 403
+    act_as(SYSADMIN)
+    res = client.put(f"/api/categories/{cid}/permissions", json=body)
+    assert res.status_code == 200
+    assert res.json()["permissions"] == body["permissions"]
+    # replace 멱등 — 다른 목록으로 갈아끼우면 이전 행은 사라진다
+    body2 = {"permissions": [{"principal_type": "group", "principal_id": "7"}]}
+    assert client.put(f"/api/categories/{cid}/permissions", json=body2).status_code == 200
+    got = client.get(f"/api/categories/{cid}/permissions").json()["permissions"]
+    assert got == body2["permissions"]
+    assert client.get("/api/categories/999999/permissions").status_code == 404

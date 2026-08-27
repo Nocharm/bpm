@@ -784,6 +784,21 @@ class CategoryNodeOut(BaseModel):
     map_count: int = 0  # 서브트리 전체(자기 포함)의 연결 맵 수 — 소프트삭제 제외, 가시성 무관
 
 
+class CategoryPermissionEntry(BaseModel):
+    """카테고리 권한자 1행 — 행 존재=권한자(role 없음) (design 2026-08-28 §3)."""
+
+    principal_type: Literal["user", "group"]
+    principal_id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
+class CategoryPermissionsIn(BaseModel):
+    permissions: list[CategoryPermissionEntry]
+
+
+class CategoryPermissionsOut(BaseModel):
+    permissions: list[CategoryPermissionEntry]
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 

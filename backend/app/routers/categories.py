@@ -12,6 +12,7 @@ from app.auth import get_current_user, require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
+    CategoryPermission,
     Employee,
     MapApprover,
     MapPermission,
@@ -27,6 +28,9 @@ from app.schemas import (
     CategoryCreateIn,
     CategoryMapsOut,
     CategoryNodeOut,
+    CategoryPermissionEntry,
+    CategoryPermissionsIn,
+    CategoryPermissionsOut,
     CategoryUpdateIn,
     FrameworkImportRow,
     InterviewImportFileOut,
@@ -719,3 +723,59 @@ async def delete_category(
             delete(ProcessCategory).where(ProcessCategory.id.in_(ids_by_level[lvl]))
         )
     await session.commit()
+
+
+async def _load_category_permissions(
+    session: AsyncSession, category_id: int
+) -> CategoryPermissionsOut:
+    rows = (
+        await session.execute(
+            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
+            .where(CategoryPermission.category_id == category_id)
+            .order_by(CategoryPermission.id)
+        )
+    ).all()
+    return CategoryPermissionsOut(
+        permissions=[CategoryPermissionEntry(principal_type=t, principal_id=p) for t, p in rows]
+    )
+
+
+@router.get("/{category_id}/permissions", response_model=CategoryPermissionsOut)
+async def list_category_permissions(
+    category_id: int,
+    login_id: str = Depends(require_sysadmin),
+    session: AsyncSession = Depends(get_session),
+) -> CategoryPermissionsOut:
+    """카테고리 권한자 목록 — sysadmin 전용 (설정 Framework 탭 관리 화면)."""
+    if await session.get(ProcessCategory, category_id) is None:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    return await _load_category_permissions(session, category_id)
+
+
+@router.put("/{category_id}/permissions", response_model=CategoryPermissionsOut)
+async def set_category_permissions(
+    category_id: int,
+    payload: CategoryPermissionsIn,
+    login_id: str = Depends(require_sysadmin),
+    session: AsyncSession = Depends(get_session),
+) -> CategoryPermissionsOut:
+    """권한자 전체 교체 — 멱등 PUT(setApprovers 선례). 중복 항목은 1개로 접는다."""
+    if await session.get(ProcessCategory, category_id) is None:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    await session.execute(
+        delete(CategoryPermission).where(CategoryPermission.category_id == category_id)
+    )
+    seen: set[tuple[str, str]] = set()
+    for entry in payload.permissions:
+        key = (entry.principal_type, entry.principal_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        session.add(
+            CategoryPermission(
+                category_id=category_id, principal_type=entry.principal_type,
+                principal_id=entry.principal_id, granted_by=login_id,
+            )
+        )
+    await session.commit()
+    return await _load_category_permissions(session, category_id)
