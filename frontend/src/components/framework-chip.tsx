@@ -5,7 +5,7 @@
 // 리프명, 펼침=루트→연결 카테고리 체인을 들여쓰기 트리로. 행 클릭 시 좌측 플라이아웃으로
 // 그 카테고리의 맵 목록을 띄워 프레임워크의 다른 맵으로 이동한다.
 
-import { ChevronRight, FolderTree } from "lucide-react";
+import { ChevronRight, FolderTree, Workflow } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -172,8 +172,32 @@ export function FrameworkChip({
                     >
                       {cat.name}
                     </span>
+                    {/* L5 연계 캔버스 열기 — 부모가 button이라 중첩 금지, span+stopPropagation (design 2026-08-28 §8) */}
+                    {cat.level === 5 && cat.linkage_map_id !== null && cat.linkage_map_id !== mapId && (
+                      <span
+                        data-id={`editor-framework-linkage-${cat.id}`}
+                        title={t("framework.openLinkage")}
+                        className="ml-auto shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const targetId = cat.linkage_map_id;
+                          if (targetId === null) return;
+                          setFlyout(null);
+                          if (onNavigate) onNavigate(targetId, cat.name);
+                          else router.push(`/maps/${targetId}`);
+                        }}
+                      >
+                        <Workflow size={12} strokeWidth={1.5} />
+                      </span>
+                    )}
                     {cat.map_count > 0 && (
-                      <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
+                      <span
+                        className={`shrink-0 text-fine text-ink-tertiary ${
+                          cat.level === 5 && cat.linkage_map_id !== null && cat.linkage_map_id !== mapId
+                            ? ""
+                            : "ml-auto"
+                        }`}
+                      >
                         {cat.map_count}
                       </span>
                     )}

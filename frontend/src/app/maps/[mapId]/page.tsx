@@ -76,6 +76,7 @@ import { SubprocessVersionPicker } from "@/components/subprocess-version-picker"
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
+import { FrameworkConfirmSection } from "@/components/framework-confirm-section";
 import { StatusBadge } from "@/components/status-badge";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
@@ -84,6 +85,7 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
@@ -192,6 +194,7 @@ import {
   getResolvedGraph,
   getSubprocessUsage,
   getWorkflowState,
+  openLinkageMap,
   listComments,
   listLibraryProcesses,
   markWordDocGenerated,
@@ -931,6 +934,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [docSections, setDocSections] = useState<SectionEntry[]>([]);
   const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
   const isWordMap = mapMode === "word";
+  // L5 연계 캔버스 — subprocess-only 팔레트·라이브 draft 우선·트리 피커 (design 2026-08-28)
+  const isFrameworkMap = mapMode === "framework";
+  const [frameworkPickerOpen, setFrameworkPickerOpen] = useState(false);
   // stale 앵커 — 재임포트 후 카탈로그에서 사라진 앵커를 참조하는 섹션 노드 (design 2026-07-24 §5)
   const staleAnchorIds = useMemo(() => {
     if (!isWordMap) return new Set<string>();
@@ -1071,6 +1077,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [mapOwningDept, setMapOwningDept] = useState<string | null>(null);
   const [mapCategoryId, setMapCategoryId] = useState<number | null>(null);
   const [mapCategoryPath, setMapCategoryPath] = useState<string | null>(null);
+  // 캔버스 전용 — 결착 카테고리(칩 소스·자동 보강 호출) + 뷰어 미반영 L6 수 (design 2026-08-28)
+  const [linkageCategoryId, setLinkageCategoryId] = useState<number | null>(null);
+  const [linkageCategoryPath, setLinkageCategoryPath] = useState<string | null>(null);
+  const [reconcileMissing, setReconcileMissing] = useState(0);
+  // FrameworkChip 소스 — 일반 맵은 category_id, 캔버스는 결착 카테고리 (design 2026-08-28 §8)
+  const frameworkChipCategoryId = mapCategoryId ?? linkageCategoryId;
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spUsageReload, setSpUsageReload] = useState(0);
@@ -1524,6 +1536,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             spGmp: ref.gmp,
             spUrl: ref.url,
             spUrlLabel: ref.url_label,
+            // 캔버스 전용 — 링크맵의 현 소속이 이 캔버스의 L5와 다르면 출신 경로 배지(라이브 파생)
+            // (design 2026-08-28 §8). 소속 이동·타 L5 가져오기 모두 이 값으로 표현된다.
+            spOriginPath:
+              isFrameworkMap && ref.category_path && ref.category_path !== linkageCategoryPath
+                ? ref.category_path
+                : null,
           }
         : {
             spDepartment: null,
@@ -1543,6 +1561,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             spGmp: null,
             spUrl: null,
             spUrlLabel: null,
+            spOriginPath: null,
           };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
@@ -1564,7 +1583,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       };
     },
-    [resolvedCache, libByMap, lockedKeys, subprocessRefs],
+    [resolvedCache, libByMap, lockedKeys, subprocessRefs, isFrameworkMap, linkageCategoryPath],
   );
   useEffect(() => {
     nodesRef.current = nodes;
@@ -2317,6 +2336,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapOwningDept(detail.owning_department ?? null);
         setMapCategoryId(detail.category_id ?? null);
         setMapCategoryPath(detail.category_path ?? null);
+        setLinkageCategoryId(detail.linkage_category_id ?? null);
+        setLinkageCategoryPath(detail.linkage_category_path ?? null);
         setMyRole(detail.my_role);
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
@@ -2326,11 +2347,29 @@ function MapEditor({ mapId }: { mapId: number }) {
         setUsername(me.username);
         setAiEnabled(me.ai_enabled);
         setIsSysadmin(me.is_sysadmin);
+        // 연계 캔버스 자동 보강 — 열 때 소속 L6 부족분 append(권한자만 반영, 뷰어는 미반영 수만).
+        // 버전 선택 전에 끝내야 이어지는 그래프 로드가 보강분을 포함한다 (design 2026-08-28 §5)
+        if (detail.mode === "framework" && detail.linkage_category_id != null) {
+          try {
+            const reconciled = await openLinkageMap(detail.linkage_category_id);
+            if (active) {
+              setReconcileMissing(reconciled.missing_count);
+              if (reconciled.added_count > 0) {
+                showToast(t("framework.reconciled", { n: reconciled.added_count }));
+              }
+            }
+          } catch {
+            // 보강 실패는 열람을 막지 않는다 — 다음 열기에서 재시도
+          }
+        }
         // 기본 선택 — 내 draft(점유 보유) > 최신 published > 첫 번째
         const draft = detail.versions.find((v) => v.status === "draft");
         const latestPublished = detail.versions.find((v) => v.status === "published");
         let initialId = latestPublished?.id ?? detail.versions[0]?.id;
-        if (draft) {
+        if (detail.mode === "framework") {
+          // 캔버스는 뷰어 포함 항상 라이브 draft 우선 — 스냅샷은 버전 드롭다운에서 열람 (design 2026-08-28 §8)
+          initialId = draft?.id ?? initialId;
+        } else if (draft) {
           try {
             const ws = await getWorkflowState(draft.id);
             if (active && ws.checkout_holder === me.username) {
@@ -2369,7 +2408,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => {
       active = false;
     };
-  }, [mapId, t]);
+  }, [mapId, t, showToast]);
 
   // 현재 사용자 신원 — 마운트 1회(맵 로드 병렬 호출과 별개로 auth 비활성 시 null 유지)
   useEffect(() => {
@@ -3492,6 +3531,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
+      if (isFrameworkMap) {
+        return; // 캔버스는 subprocess 링크만 — 서버 422의 클라 선제 차단 (design 2026-08-28 §8)
+      }
       // 시작 노드는 맵당 1개만 — 이미 있으면 추가 대신 안내 후 기존 시작 노드로 포커스 이동.
       if (nodeType === "start") {
         const existingStart = nodesRef.current.find((node) => node.data.nodeType === "start");
@@ -3562,6 +3604,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       showToast,
       highlightNode,
       toSavedPoint,
+      isFrameworkMap,
     ],
   );
 
@@ -5577,24 +5620,36 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
       const libraryItem: ContextMenuItem = {
-        label: isWordMap ? "Add section" : t("library.open"),
+        label: isWordMap
+          ? "Add section"
+          : isFrameworkMap
+            ? t("framework.pickerOpen")
+            : t("library.open"),
         icon: Network,
         // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
         accel: "s",
         shortcut: "S",
-        onSelect: () => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)),
+        onSelect: () =>
+          isWordMap
+            ? setSectionsOpen(true)
+            : isFrameworkMap
+              ? setFrameworkPickerOpen(true)
+              : setLibraryOpen(true),
       };
       if (readOnly) {
         return [moreItem, { divider: true }, libraryItem];
       }
       return [
-        ...NODE_TYPE_OPTIONS.map((option, index) => ({
-          label: t(option.labelKey),
-          icon: NODE_TYPE_ICONS[option.value],
-          shortcut: String(index + 1),
-          accel: String(index + 1),
-          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
-        })),
+        // 캔버스는 subprocess 링크만 — 일반 노드 추가 항목 숨김 (design 2026-08-28 §8)
+        ...(isFrameworkMap
+          ? []
+          : NODE_TYPE_OPTIONS.map((option, index) => ({
+              label: t(option.labelKey),
+              icon: NODE_TYPE_ICONS[option.value],
+              shortcut: String(index + 1),
+              accel: String(index + 1),
+              onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
+            }))),
         { divider: true },
         alignItem(null, selectedCount),
         { divider: true },
@@ -5852,6 +5907,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [
     menu,
     readOnly,
+    isFrameworkMap,
     nodes,
     edges,
     expandedInline,
@@ -7720,7 +7776,13 @@ function MapEditor({ mapId }: { mapId: number }) {
         event.code === "KeyS" &&
         !menu
       ) {
-        fire(() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true)));
+        fire(() =>
+          isWordMap
+            ? setSectionsOpen(true)
+            : isFrameworkMap
+              ? setFrameworkPickerOpen(true)
+              : setLibraryOpen(true),
+        );
         return;
       }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
@@ -7799,6 +7861,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleCopy,
     handlePaste,
     isWordMap,
+    isFrameworkMap,
   ]);
 
   // 포인터 화면 좌표 추적 — 엣지 액션/분기 모달을 마우스 위치에 띄우기 위함.
@@ -8177,7 +8240,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : setLibraryOpen((open) => !open))}
+            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : isFrameworkMap ? setFrameworkPickerOpen((open) => !open) : setLibraryOpen((open) => !open))}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
@@ -8346,7 +8409,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       {!readOnly && (
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
-          onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
+          onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
           onAutoLayout={(dir) => {
             // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
             const ids = new Set(
@@ -8422,6 +8485,13 @@ function MapEditor({ mapId }: { mapId: number }) {
             staleCount={staleAnchorIds.size}
           />
         )}
+        {frameworkPickerOpen && (
+          <FrameworkTreePicker
+            currentMapId={mapId}
+            linkedMapIds={linkedMapIds}
+            onClose={() => setFrameworkPickerOpen(false)}
+          />
+        )}
         {wordReimportOpen && (
           <WordCreateModal
             onClose={() => setWordReimportOpen(false)}
@@ -8495,12 +8565,23 @@ function MapEditor({ mapId }: { mapId: number }) {
                 // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함).
                 // 이동은 F6 "링크맵 열기"와 같은 미저장 경고 확인 모달(openMapPrompt)을 거친다.
                 topRightSlot={
-                  index === 0 && mapCategoryId !== null ? (
-                    <FrameworkChip
-                      mapId={mapId}
-                      categoryId={mapCategoryId}
-                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
-                    />
+                  index === 0 && frameworkChipCategoryId !== null ? (
+                    <>
+                      <FrameworkChip
+                        mapId={mapId}
+                        categoryId={frameworkChipCategoryId}
+                        onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                      />
+                      {/* 뷰어 안내 — 권한자가 아니라 자동 보강이 스킵된 미반영 소속 L6 수 (design 2026-08-28 §5) */}
+                      {isFrameworkMap && reconcileMissing > 0 && (
+                        <span
+                          data-id="framework-missing-chip"
+                          className="absolute right-2 top-10 z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm"
+                        >
+                          {t("framework.missing", { n: reconcileMissing })}
+                        </span>
+                      )}
+                    </>
                   ) : undefined
                 }
                 bounds={bounds}
@@ -10424,8 +10505,26 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </button>
                     )}
 
+                    {/* 연계 캔버스 — 승인 워크플로 대신 본인 확정 섹션 (design 2026-08-28 §6) */}
+                    {currentVersion && isFrameworkMap && (
+                      <div data-id="framework-confirm-box" className="rounded-md border border-hairline">
+                        <FrameworkConfirmSection
+                          mapId={mapId}
+                          canConfirm={myRole === "editor" || myRole === "owner"}
+                          latestLabel={
+                            versions.filter((v) => v.status === "published").at(-1)?.label ?? null
+                          }
+                          onConfirmed={(snapshot) => {
+                            showToast(t("framework.confirmedToast", { label: snapshot.label }));
+                            // 스냅샷 목록 갱신 — VersionDetail(events 포함) 형이라 재조회로 동기화
+                            void getMap(mapId).then((detail) => setVersions(detail.versions));
+                          }}
+                          onError={(message) => showToast(message, "error")}
+                        />
+                      </div>
+                    )}
                     {/* 승인 워크플로 — 접힘 섹션(기본 펼침, 탭의 본론), 내부 ApprovalPanel은 무변경(래핑만) (R6 W2) */}
-                    {currentVersion && (
+                    {currentVersion && !isFrameworkMap && (
                       <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
                         <button
                           type="button"
@@ -10551,7 +10650,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
-                onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : setLibraryOpen(true))}
+                onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
                 onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
                 nodeCount={nodes.length}
                 edgeCount={edges.length}

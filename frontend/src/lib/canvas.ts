@@ -104,6 +104,8 @@ export type NodeData = {
   spGmp?: string | null;
   spUrl?: string | null;
   spUrlLabel?: string | null;
+  // 캔버스 전용 — 링크맵의 현 소속 L5 경로(이 캔버스와 다를 때만 주입, 라이브 파생) (design 2026-08-28 §8)
+  spOriginPath?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)
   sideHandles?: boolean;
 };

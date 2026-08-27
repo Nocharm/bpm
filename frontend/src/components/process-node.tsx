@@ -917,6 +917,17 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <NodeTitle id={id} label={data.label} editable={false} />
           </div>
         </div>
+        {/* 외부 L5 출신 배지 — 연계 캔버스에서 링크맵의 현 소속이 이 캔버스 L5와 다를 때(라이브 파생).
+            마지막 2세그먼트만 표시, 전체 경로는 툴팁 (design 2026-08-28 §8) */}
+        {data.spOriginPath && (
+          <div
+            data-id="node-origin-badge"
+            title={data.spOriginPath}
+            className="mt-0.5 max-w-full self-start truncate rounded-xs border border-hairline bg-surface-alt px-1 py-px text-xs text-ink-tertiary"
+          >
+            {data.spOriginPath.split("/").slice(-2).join("/")}
+          </div>
+        )}
         {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
         <NodeFields data={data} />
         <NodeParams data={data} />
