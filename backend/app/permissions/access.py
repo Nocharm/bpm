@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
 from app.models import (
+    CategoryPermission,
     DashboardPermission,
     Employee,
     MapApprover,
     MapPermission,
+    ProcessCategory,
     ProcessMap,
     UserGroup,
     UserGroupMember,
@@ -51,6 +53,52 @@ async def get_user_active_group_ids(
     return group_ids
 
 
+async def get_framework_category_id(session: AsyncSession, map_id: int) -> int | None:
+    """캔버스 맵 → 결착 카테고리 역조회 (linkage_map_id 1:1)."""
+    return await session.scalar(
+        select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == map_id)
+    )
+
+
+async def is_category_admin(
+    session: AsyncSession, login_id: str, category_id: int
+) -> bool:
+    """카테고리 권한자 판정 — 자기+조상 체인에 user 직접 또는 (active 그룹) group 매치 (design 2026-08-28 §4).
+
+    sysadmin은 여기서 판정하지 않는다 — 호출부가 logic.is_sysadmin을 먼저 본다.
+    """
+    rows = (
+        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
+    ).all()
+    parent_by_id = {cid: pid for cid, pid in rows}
+    chain: list[int] = []
+    cursor: int | None = category_id
+    while cursor is not None and cursor in parent_by_id and cursor not in chain:
+        chain.append(cursor)  # not-in-chain 가드 — (동시성) 부모 사이클에도 종료 보장
+        cursor = parent_by_id[cursor]
+    if not chain:
+        return False
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
+            .where(CategoryPermission.category_id.in_(chain))
+        )
+    ).all()
+    if not perm_rows:
+        return False
+    if any(ptype == "user" and pid == login_id for ptype, pid in perm_rows):
+        return True
+    group_pids = {pid for ptype, pid in perm_rows if ptype == "group"}
+    if not group_pids:
+        return False
+    emp = await session.get(Employee, login_id)
+    emp_org_path = (
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+    )
+    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+    return bool(group_pids & user_group_ids)
+
+
 async def get_effective_role(
     session: AsyncSession, login_id: str, map_id: int
 ) -> str | None:
@@ -62,6 +110,15 @@ async def get_effective_role(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         return None
+
+    # framework 캔버스 — map_permissions 무시, 카테고리 권한자 체인에서 파생 (design 2026-08-28 §4)
+    if found_map.mode == "framework":
+        if logic.is_sysadmin(login_id):
+            return "owner"
+        category_id = await get_framework_category_id(session, map_id)
+        if category_id is not None and await is_category_admin(session, login_id, category_id):
+            return "editor"
+        return "viewer" if found_map.visibility == "public" else None
 
     emp = await session.get(Employee, login_id)
     emp_org_path = (

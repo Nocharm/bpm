@@ -100,3 +100,61 @@ def test_category_permissions_put_replaces_and_gates(client: TestClient, enforce
     got = client.get(f"/api/categories/{cid}/permissions").json()["permissions"]
     assert got == body2["permissions"]
     assert client.get("/api/categories/999999/permissions").status_code == 404
+
+
+def _seed_canvas_map(client: TestClient, category_id: int, name: str) -> int:
+    """mode=framework 캔버스 맵 + draft 버전 1개 + linkage 결착 — 권한/검증 테스트용 최소 시드."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessCategory, ProcessMap
+
+    async def _run() -> int:
+        async with SessionLocal() as session:
+            row = await session.scalar(select(ProcessMap).where(ProcessMap.name == name))
+            if row is None:
+                row = ProcessMap(name=name, created_by=SYSADMIN, owner_id=SYSADMIN,
+                                 visibility="public", mode="framework")
+                row.versions.append(MapVersion(label="Linkage"))
+                session.add(row)
+                await session.flush()
+                cat = await session.get(ProcessCategory, category_id)
+                cat.linkage_map_id = row.id
+                await session.commit()
+            return row.id
+
+    return asyncio.run(_run())
+
+
+def test_framework_role_derivation(client: TestClient, enforce: None) -> None:
+    """권한자(자기/조상 체인)=editor, 비권한자=viewer, sysadmin=owner — map_permissions 무시."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.permissions.access import get_effective_role
+
+    l1 = _seed_category(client, "FWC-R1", "역할L1")
+    l5 = _seed_category(client, "FWC-R5", "역할L5", level=5, parent_id=l1)
+    canvas_id = _seed_canvas_map(client, l5, "역할검증 연계")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.ancestor"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.direct"}]})
+
+    async def _roles() -> tuple[str | None, str | None, str | None, str | None]:
+        async with SessionLocal() as session:
+            return (
+                await get_effective_role(session, "fwc.direct", canvas_id),
+                await get_effective_role(session, "fwc.ancestor", canvas_id),  # L1 권한자 → 상속
+                await get_effective_role(session, "fwc.pleb", canvas_id),
+                await get_effective_role(session, SYSADMIN, canvas_id),
+            )
+
+    direct, ancestor, pleb, sysadmin = asyncio.run(_roles())
+    assert direct == "editor"
+    assert ancestor == "editor"
+    assert pleb == "viewer"
+    assert sysadmin == "owner"
