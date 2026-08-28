@@ -1,6 +1,7 @@
 // 버전 간 그래프 diff — 복제 계보(source_node_id) 우선 매칭, 없으면 (부모 계보, 제목) 매칭 (spec §7 Phase B).
 
 import type { FlatNode, VersionGraph } from "@/lib/api";
+import type { MessageKey } from "@/lib/i18n-messages";
 
 export type DiffStatus = "added" | "removed" | "changed";
 
@@ -79,6 +80,33 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["start_condition", "start_condition"],
   ["end_condition", "end_condition"],
 ];
+
+// 변경 필드 라벨 키 — compare 화면·연계 캔버스 확정 요약 공용 (2026-08-28 승격)
+export const FIELD_MSG: Record<ChangedField, MessageKey> = {
+  title: "field.title",
+  description: "field.description",
+  type: "field.type",
+  color: "field.color",
+  assignee: "field.assignee",
+  department: "field.department",
+  system: "field.system",
+  duration: "field.duration",
+  touch_time: "field.touchTime",
+  cost_krw: "field.costKrw",
+  cost_usd: "field.costUsd",
+  headcount: "field.headcount",
+  annual_count: "field.annualCount",
+  fte: "field.fte",
+  input: "field.input",
+  output: "field.output",
+  input_forms: "field.inputForms",
+  output_forms: "field.outputForms",
+  data_form: "field.dataForm",
+  gmp: "field.gmp",
+  start_condition: "field.startCondition",
+  end_condition: "field.endCondition",
+  location: "field.location",
+};
 
 // 계보 키 — 복제본은 원본 노드 ID를 공유한다
 export function getLineageKey(node: FlatNode): string {

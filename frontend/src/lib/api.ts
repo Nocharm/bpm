@@ -229,6 +229,8 @@ export interface SubprocessRef {
   url_label: string | null;
   // 링크맵의 체계 경로 — 캔버스 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)
   category_path?: string | null;
+  // 홈 L5 카테고리 id — 외부 L6 색상 키(같은 L5=같은 색), rename에도 안정 (2026-08-28 개선)
+  category_id?: number | null;
   // backend literal key keeps sp_ prefix unlike siblings (schemas.py SubprocessRefOut.sp_description)
   sp_description: string | null;
 }
@@ -2557,9 +2559,16 @@ export function openLinkageMap(categoryId: number): Promise<LinkageMapResult> {
   return request<LinkageMapResult>(`/categories/${categoryId}/linkage-map`, { method: "POST" });
 }
 
-// 라이브 draft를 스냅샷으로 확정 — major=true면 다음 메이저.0 (design 2026-08-28 §6)
-export function confirmFrameworkVersion(mapId: number, major: boolean): Promise<VersionSummary> {
-  return request<VersionSummary>(`/maps/${mapId}/framework-confirm`, {
+export interface FrameworkConfirmResult {
+  version: VersionSummary;
+  // 메이저 승급 시 영구삭제된 직전 라인 중간 마이너 라벨(X.0·X.최종 유지) (2026-08-28 개선)
+  pruned_labels: string[];
+}
+
+// 라이브 draft를 스냅샷으로 확정 — major=true면 다음 메이저.0 + 직전 라인 프룬.
+// 마이너는 레이아웃 외 변경이 없으면 서버가 409 (2026-08-28 개선)
+export function confirmFrameworkVersion(mapId: number, major: boolean): Promise<FrameworkConfirmResult> {
+  return request<FrameworkConfirmResult>(`/maps/${mapId}/framework-confirm`, {
     method: "POST",
     body: JSON.stringify({ major }),
   });

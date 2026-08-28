@@ -88,7 +88,7 @@ import {
   FieldDiffValues,
   type FieldDiffRowData,
 } from "@/components/compare-field-diff";
-import { type ChangedField, getLineageKey } from "@/lib/diff";
+import { type ChangedField, FIELD_MSG, getLineageKey } from "@/lib/diff";
 import { formatGmp, getGmpBadgeStyle, GMP_OPTIONS } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import {
@@ -211,31 +211,7 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onHoverIoLink: null,
 };
 
-const FIELD_MSG: Record<ChangedField, MessageKey> = {
-  title: "field.title",
-  description: "field.description",
-  type: "field.type",
-  color: "field.color",
-  assignee: "field.assignee",
-  department: "field.department",
-  system: "field.system",
-  duration: "field.duration",
-  touch_time: "field.touchTime",
-  cost_krw: "field.costKrw",
-  cost_usd: "field.costUsd",
-  headcount: "field.headcount",
-  annual_count: "field.annualCount",
-  fte: "field.fte",
-  input: "field.input",
-  output: "field.output",
-  input_forms: "field.inputForms",
-  output_forms: "field.outputForms",
-  data_form: "field.dataForm",
-  gmp: "field.gmp",
-  start_condition: "field.startCondition",
-  end_condition: "field.endCondition",
-  location: "field.location",
-};
+// FIELD_MSG는 lib/diff.ts로 승격 — 확정 요약(연계 캔버스)과 공용 (2026-08-28)
 
 // duration·touch_time은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).

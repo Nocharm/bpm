@@ -1862,6 +1862,22 @@ const en = {
   "framework.adminPerms": "Linkage admins",
   "framework.permsLoadError": "Failed to load admins",
   "framework.permsSaveError": "Failed to save admins",
+  // ── L5 캔버스 개선 (2026-08-28) ──
+  "framework.l5MapTag": "L5 map",
+  "framework.explorerHere": "You are here",
+  "framework.explorerCreating": "Creating...",
+  "framework.containedLocked": "Contained L6 nodes cannot be deleted from this canvas",
+  "framework.majorDesc":
+    "Promote to the next major. Intermediate minors of the previous line are permanently deleted - only X.0 and the final one are kept.",
+  "framework.majorModalTitle": "Promote to {label}?",
+  "framework.majorModalPrune":
+    "Only {keepFirst} and {keepLast} will be kept - {pruned} will be permanently deleted. This cannot be undone.",
+  "framework.majorModalNoPrune": "No intermediate minor versions will be deleted.",
+  "framework.noChanges": "No changes since {label} (node positions don't count)",
+  "framework.changesSince": "Changes since {label}",
+  "framework.moreChanges": "+{n} more",
+  "framework.changesEdges": "Edges: {added} added · {removed} removed · {changed} changed",
+  "framework.confirmedPrunedToast": "Confirmed as {label} - deleted {pruned}",
   "framework.adminTab": "Categories & import",
   "framework.adminReimportHint":
     "Re-imports overwrite category names/structure by code - the last delivery is the source of truth.",
@@ -3790,6 +3806,22 @@ const ko: Record<MessageKey, string> = {
   "framework.adminPerms": "연계 권한자",
   "framework.permsLoadError": "권한자 조회 실패",
   "framework.permsSaveError": "권한자 저장 실패",
+  // ── L5 캔버스 개선 (2026-08-28) ──
+  "framework.l5MapTag": "레벨 5 맵",
+  "framework.explorerHere": "현재 위치",
+  "framework.explorerCreating": "생성 중...",
+  "framework.containedLocked": "이 캔버스 소속 L6 노드는 삭제할 수 없습니다",
+  "framework.majorDesc":
+    "다음 메이저로 승급합니다. 직전 라인의 중간 마이너는 영구 삭제되고 X.0과 최종본만 남습니다.",
+  "framework.majorModalTitle": "{label}로 승급할까요?",
+  "framework.majorModalPrune":
+    "{keepFirst}·{keepLast}만 남고 {pruned}이(가) 영구 삭제됩니다. 되돌릴 수 없습니다.",
+  "framework.majorModalNoPrune": "삭제될 중간 마이너 버전이 없습니다.",
+  "framework.noChanges": "{label} 이후 변경 없음 (노드 위치 이동은 제외)",
+  "framework.changesSince": "{label} 이후 변경",
+  "framework.moreChanges": "외 {n}건",
+  "framework.changesEdges": "엣지: 추가 {added} · 삭제 {removed} · 변경 {changed}",
+  "framework.confirmedPrunedToast": "{label}로 확정 - {pruned} 삭제됨",
   "framework.adminTab": "카테고리·임포트",
   "framework.adminReimportHint":
     "재임포트는 코드 기준으로 카테고리 이름·구조를 덮어씁니다 - 최신 배송본이 항상 최종 진실입니다.",

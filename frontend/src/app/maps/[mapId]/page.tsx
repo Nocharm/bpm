@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -77,6 +77,7 @@ import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { MapInspectorTab } from "@/components/map-inspector-tab";
 import { ApprovalPanel } from "@/components/approval-panel";
 import { FrameworkConfirmSection } from "@/components/framework-confirm-section";
+import { FrameworkL5Explorer } from "@/components/framework-l5-explorer";
 import { StatusBadge } from "@/components/status-badge";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
@@ -1081,8 +1082,6 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [linkageCategoryId, setLinkageCategoryId] = useState<number | null>(null);
   const [linkageCategoryPath, setLinkageCategoryPath] = useState<string | null>(null);
   const [reconcileMissing, setReconcileMissing] = useState(0);
-  // FrameworkChip 소스 — 일반 맵은 category_id, 캔버스는 결착 카테고리 (design 2026-08-28 §8)
-  const frameworkChipCategoryId = mapCategoryId ?? linkageCategoryId;
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spUsageReload, setSpUsageReload] = useState(0);
@@ -1542,6 +1541,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               isFrameworkMap && ref.category_path && ref.category_path !== linkageCategoryPath
                 ? ref.category_path
                 : null,
+            // 외부 L6 = 홈 L5별 색(같은 L5=같은 색, display 전용 — 저장값 불변). 8톤 모듈로라
+            // L5가 9개+면 색 재사용 가능 (2026-08-28 개선). [0]은 기본색이라 1..8만 사용.
+            ...(isFrameworkMap &&
+            ref.category_id != null &&
+            linkageCategoryId !== null &&
+            ref.category_id !== linkageCategoryId
+              ? { color: COLOR_PRESETS[1 + (ref.category_id % (COLOR_PRESETS.length - 1))] }
+              : {}),
           }
         : {
             spDepartment: null,
@@ -1583,7 +1590,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         },
       };
     },
-    [resolvedCache, libByMap, lockedKeys, subprocessRefs, isFrameworkMap, linkageCategoryPath],
+    [resolvedCache, libByMap, lockedKeys, subprocessRefs, isFrameworkMap, linkageCategoryPath, linkageCategoryId],
   );
   useEffect(() => {
     nodesRef.current = nodes;
@@ -2896,12 +2903,13 @@ function MapEditor({ mapId }: { mapId: number }) {
       edgesRef.current.map((edge) => ({ source: edge.source })),
     );
     const blockers: string[] = [];
-    if (!states.start) blockers.push(t("save.checkOneStart"));
-    if (!states.primaryEnd) blockers.push(t("save.checkPrimaryEnd"));
+    // 연계 캔버스는 start·대표끝이 없는 게 정상 — 두 조건은 일반 맵에만 (2026-08-28 개선)
+    if (!isFrameworkMap && !states.start) blockers.push(t("save.checkOneStart"));
+    if (!isFrameworkMap && !states.primaryEnd) blockers.push(t("save.checkPrimaryEnd"));
     if (!states.endUnique) blockers.push(t("save.checkUniqueEnd"));
     if (!states.singleOutput) blockers.push(t("save.checkSingleOutput"));
     return blockers;
-  }, [t]);
+  }, [t, isFrameworkMap]);
 
   const handleSave = useCallback(async () => {
     const blockers = getSaveBlockers();
@@ -3531,8 +3539,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return;
       }
-      if (isFrameworkMap) {
-        return; // 캔버스는 subprocess 링크만 — 서버 422의 클라 선제 차단 (design 2026-08-28 §8)
+      if (isFrameworkMap && nodeType !== "decision" && nodeType !== "end") {
+        return; // 캔버스는 subprocess 링크+분기·끝만 — 서버 422의 클라 선제 차단 (2026-08-28 개선)
       }
       // 시작 노드는 맵당 1개만 — 이미 있으면 추가 대신 안내 후 기존 시작 노드로 포커스 이동.
       if (nodeType === "start") {
@@ -5640,16 +5648,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         return [moreItem, { divider: true }, libraryItem];
       }
       return [
-        // 캔버스는 subprocess 링크만 — 일반 노드 추가 항목 숨김 (design 2026-08-28 §8)
-        ...(isFrameworkMap
-          ? []
-          : NODE_TYPE_OPTIONS.map((option, index) => ({
-              label: t(option.labelKey),
-              icon: NODE_TYPE_ICONS[option.value],
-              shortcut: String(index + 1),
-              accel: String(index + 1),
-              onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
-            }))),
+        // 캔버스는 subprocess 링크+분기·끝만 — process/start 추가 항목 숨김 (2026-08-28 개선)
+        ...NODE_TYPE_OPTIONS.filter(
+          (option) => !isFrameworkMap || option.value === "decision" || option.value === "end",
+        ).map((option, index) => ({
+          label: t(option.labelKey),
+          icon: NODE_TYPE_ICONS[option.value],
+          shortcut: String(index + 1),
+          accel: String(index + 1),
+          onSelect: () => handleAddNode({ x: menu.x, y: menu.y }, option.value),
+        })),
         { divider: true },
         alignItem(null, selectedCount),
         { divider: true },
@@ -8552,9 +8560,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                 zIndex={active ? 1000 : zOrder.indexOf(key) + 1}
                 canClose={index > 0}
                 chromeless={index === 0}
-                // 루트 좌상단 제목 칩 — 편집 모드에선 저장 조건 아코디언과 합친 필로 대체
+                // 루트 좌상단 — 캔버스는 저장 체크리스트 대신 L5 탐색기(전 레벨 트리·내 위치·타 L5 열기),
+                // 일반 맵은 기존 제목+저장 조건 아코디언 (2026-08-28 개선)
                 titleSlot={
-                  index === 0 && !readOnly ? (
+                  index === 0 && isFrameworkMap ? (
+                    <FrameworkL5Explorer
+                      currentCategoryId={linkageCategoryId}
+                      currentName={scope.title}
+                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                      onError={(message) => showToast(message, "error")}
+                    />
+                  ) : index === 0 && !readOnly ? (
                     <MapTitleChecklist
                       mapTitle={scope.title}
                       checklistLabel={t("save.checklistTitle")}
@@ -8562,18 +8578,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                     />
                   ) : undefined
                 }
-                // 프레임워크 등록 맵 — 우상단 체인 트리 칩(다른 맵 이동 플라이아웃 포함).
+                // 우상단 — 캔버스는 "L5 map" 단순 태그(+뷰어 미반영 칩), 일반 등록 맵은 기존 체인 트리 칩.
                 // 이동은 F6 "링크맵 열기"와 같은 미저장 경고 확인 모달(openMapPrompt)을 거친다.
                 topRightSlot={
-                  index === 0 && frameworkChipCategoryId !== null ? (
+                  index === 0 && isFrameworkMap ? (
                     <>
-                      <FrameworkChip
-                        mapId={mapId}
-                        categoryId={frameworkChipCategoryId}
-                        onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
-                      />
+                      <span
+                        data-id="framework-l5-tag"
+                        className="absolute right-2 top-2 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline bg-surface/40 px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm"
+                      >
+                        <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        {t("framework.l5MapTag")}
+                      </span>
                       {/* 뷰어 안내 — 권한자가 아니라 자동 보강이 스킵된 미반영 소속 L6 수 (design 2026-08-28 §5) */}
-                      {isFrameworkMap && reconcileMissing > 0 && (
+                      {reconcileMissing > 0 && (
                         <span
                           data-id="framework-missing-chip"
                           className="absolute right-2 top-10 z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm"
@@ -8582,6 +8600,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </span>
                       )}
                     </>
+                  ) : index === 0 && mapCategoryId !== null ? (
+                    <FrameworkChip
+                      mapId={mapId}
+                      categoryId={mapCategoryId}
+                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                    />
                   ) : undefined
                 }
                 bounds={bounds}
@@ -8778,9 +8802,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map();
                         setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                       }}
-                      onBeforeDelete={async () => {
+                      onBeforeDelete={async ({ nodes: deletingNodes, edges: deletingEdges }) => {
                         if (readOnly) {
                           return false;
+                        }
+                        // 캔버스 소속 L6는 삭제 불가 — 걸러내고 나머지만 진행(서버 422 미러) (2026-08-28 개선)
+                        if (isFrameworkMap) {
+                          const allowedNodes = deletingNodes.filter((node) => {
+                            if (node.data.nodeType !== "subprocess" || node.data.linkedMapId == null) {
+                              return true;
+                            }
+                            const ref = subprocessRefs.get(node.data.linkedMapId);
+                            return !(ref?.category_id != null && ref.category_id === linkageCategoryId);
+                          });
+                          if (allowedNodes.length < deletingNodes.length) {
+                            showToast(t("framework.containedLocked"));
+                            if (allowedNodes.length === 0 && deletingEdges.length === 0) {
+                              return false;
+                            }
+                            pushHistory();
+                            return { nodes: allowedNodes, edges: deletingEdges };
+                          }
                         }
                         pushHistory();
                         return true;
@@ -10511,11 +10553,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                         <FrameworkConfirmSection
                           mapId={mapId}
                           canConfirm={myRole === "editor" || myRole === "owner"}
-                          latestLabel={
-                            versions.filter((v) => v.status === "published").at(-1)?.label ?? null
-                          }
-                          onConfirmed={(snapshot) => {
-                            showToast(t("framework.confirmedToast", { label: snapshot.label }));
+                          versions={versions}
+                          liveNodes={nodes}
+                          liveEdges={edges}
+                          onConfirmed={(result) => {
+                            showToast(
+                              result.pruned_labels.length > 0
+                                ? t("framework.confirmedPrunedToast", {
+                                    label: result.version.label,
+                                    pruned: result.pruned_labels.join(", "),
+                                  })
+                                : t("framework.confirmedToast", { label: result.version.label }),
+                            );
                             // 스냅샷 목록 갱신 — VersionDetail(events 포함) 형이라 재조회로 동기화
                             void getMap(mapId).then((detail) => setVersions(detail.versions));
                           }}
