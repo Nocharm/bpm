@@ -1870,9 +1870,10 @@ const en = {
   "framework.majorDesc":
     "Promote to the next major. Intermediate minors of the previous line are permanently deleted - only X.0 and the final one are kept.",
   "framework.majorModalTitle": "Promote to {label}?",
-  "framework.majorModalPrune":
-    "Only {keepFirst} and {keepLast} will be kept - {pruned} will be permanently deleted. This cannot be undone.",
-  "framework.majorModalNoPrune": "No intermediate minor versions will be deleted.",
+  "framework.majorModalKeep": "Kept",
+  "framework.majorModalDelete": "Permanently deleted",
+  "framework.majorModalNone": "None",
+  "framework.majorModalIrreversible": "This cannot be undone.",
   "framework.noChanges": "No changes since {label} (node positions don't count)",
   "framework.changesSince": "Changes since {label}",
   "framework.moreChanges": "+{n} more",
@@ -3814,9 +3815,10 @@ const ko: Record<MessageKey, string> = {
   "framework.majorDesc":
     "다음 메이저로 승급합니다. 직전 라인의 중간 마이너는 영구 삭제되고 X.0과 최종본만 남습니다.",
   "framework.majorModalTitle": "{label}로 승급할까요?",
-  "framework.majorModalPrune":
-    "{keepFirst}·{keepLast}만 남고 {pruned}이(가) 영구 삭제됩니다. 되돌릴 수 없습니다.",
-  "framework.majorModalNoPrune": "삭제될 중간 마이너 버전이 없습니다.",
+  "framework.majorModalKeep": "유지",
+  "framework.majorModalDelete": "영구 삭제",
+  "framework.majorModalNone": "없음",
+  "framework.majorModalIrreversible": "되돌릴 수 없습니다.",
   "framework.noChanges": "{label} 이후 변경 없음 (노드 위치 이동은 제외)",
   "framework.changesSince": "{label} 이후 변경",
   "framework.moreChanges": "외 {n}건",

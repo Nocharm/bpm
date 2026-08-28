@@ -4,7 +4,7 @@
 // 마이너 확정은 최신 스냅샷 대비 레이아웃 외 변경이 있을 때만(버튼 비활성 + 서버 409 미러),
 // 버튼 아래에 변경 요약(비교 diff 재활용: computeVersionDiff + 엣지 시그니처)을 노출한다.
 // 메이저 승급은 가시성 있는 토글 행 + 확인 모달(직전 라인 중간 마이너 영구삭제 안내) 경유.
-import { BadgeCheck, TriangleAlert } from "lucide-react";
+import { Archive, BadgeCheck, Trash2, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -326,23 +326,70 @@ export function FrameworkConfirmSection({
         </div>
       )}
 
-      {/* 메이저 승급 안내 모달 — 직전 라인 중간 마이너 영구삭제 경고 (2026-08-28 개선) */}
+      {/* 메이저 승급 안내 모달 — 유지/삭제 버전을 아이콘+필 행으로 시각화(시인성) (2026-08-29 개선) */}
       {majorModalOpen && (
         <ConfirmDialog
           title={t("framework.majorModalTitle", { label: nextMajorLabel })}
-          message={
-            pruneTargets.length > 0
-              ? t("framework.majorModalPrune", {
-                  keepFirst: `v${latest?.major ?? 1}.0`,
-                  keepLast: latest?.label ?? "",
-                  pruned: pruneTargets.join(", "),
-                })
-              : t("framework.majorModalNoPrune")
-          }
           confirmLabel={t("framework.confirmChanges")}
           cancelLabel={t("common.cancel")}
           danger={pruneTargets.length > 0}
           icon={<TriangleAlert size={18} strokeWidth={1.5} />}
+          banner={
+            latest === null ? undefined : (
+            <div data-id="framework-major-banner" className="flex flex-col gap-2">
+              {/* 유지되는 버전 — 직전 라인의 X.0과 최종본 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Archive size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                <span className="text-fine text-ink-secondary">{t("framework.majorModalKeep")}</span>
+                {[
+                  `v${latest?.major ?? 1}.0`,
+                  ...(latest !== null && latest.minor > 0 ? [latest.label] : []),
+                ].map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full border border-added/40 bg-added/10 px-1.5 text-fine font-semibold text-added"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              {/* 영구 삭제되는 중간 마이너 — 없으면 muted "없음" 필 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Trash2
+                  size={14}
+                  strokeWidth={1.5}
+                  className={`shrink-0 ${pruneTargets.length > 0 ? "text-error" : "text-ink-tertiary"}`}
+                />
+                <span className="text-fine text-ink-secondary">{t("framework.majorModalDelete")}</span>
+                {pruneTargets.length > 0 ? (
+                  pruneTargets.map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full border border-error/40 bg-error/10 px-1.5 text-fine font-semibold text-error line-through"
+                    >
+                      {label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full border border-hairline bg-surface px-1.5 text-fine text-ink-tertiary">
+                    {t("framework.majorModalNone")}
+                  </span>
+                )}
+              </div>
+            </div>
+            )
+          }
+          lines={
+            pruneTargets.length > 0
+              ? [
+                  {
+                    icon: <TriangleAlert size={14} strokeWidth={1.5} />,
+                    text: t("framework.majorModalIrreversible"),
+                    tone: "error",
+                  },
+                ]
+              : undefined
+          }
           onConfirm={() => {
             setMajorModalOpen(false);
             runConfirm(true);
