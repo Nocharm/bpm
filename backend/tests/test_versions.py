@@ -299,3 +299,12 @@ def test_new_version_clone_preserves_url(client: TestClient) -> None:
     # 복제 노드는 id가 재발급되므로 제목으로 매칭
     node = next(n for n in cloned["nodes"] if n["title"] == "계약")
     assert node["url"] == "https://contract.example.com"
+
+
+def test_version_out_exposes_updated_at(client: TestClient) -> None:
+    """비교화면 드롭다운의 '변경날' 표시용 — 버전 응답에 updated_at 포함."""
+    created = _create_map(client)
+    version = client.get(f"/api/maps/{created['id']}").json()["versions"][0]
+    assert "updated_at" in version
+    # ISO 문자열로 직렬화되는지 (KST 타임스탬프)
+    assert isinstance(version["updated_at"], str) and version["updated_at"]

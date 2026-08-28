@@ -39,6 +39,13 @@ import {
   terminalDisplayLabel,
   toPosition,
 } from "@/lib/canvas";
+import {
+  FIELD_DIFF_BORDER_CLASS,
+  FIELD_DIFF_LABEL_CLASS,
+  FieldDiffHoverable,
+  FieldDiffValues,
+  getFieldDiffPillBg,
+} from "@/components/compare-field-diff";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
@@ -647,6 +654,7 @@ const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-changed) 12%, white)";
 
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.
+// 필드 단위 상태색·부분 강조·잘림 호버 팝오버는 목록 행과 공용(compare-field-diff).
 function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffFields"]> }) {
   const { t } = useI18n();
   const shown = fields.slice(0, 3);
@@ -654,16 +662,17 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
   return (
     <div className="absolute left-0 top-full z-10 mt-1.5 flex flex-col items-start gap-1">
       {shown.map((field) => (
-        <span
+        <FieldDiffHoverable
           key={field.label}
-          className="flex max-w-[220px] items-center gap-1 whitespace-nowrap rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px]"
-          style={{ backgroundColor: CHANGED_PILL_BG }}
+          row={field}
+          className={`flex max-w-[220px] items-center gap-1 whitespace-nowrap rounded-xs border px-1.5 py-0.5 text-[11px] ${FIELD_DIFF_BORDER_CLASS[field.status]}`}
+          style={{ backgroundColor: getFieldDiffPillBg(field.status) }}
         >
-          <span className="shrink-0 font-semibold text-changed">{field.label}</span>
-          <span className="min-w-0 truncate text-ink-muted">{field.before}</span>
-          <span className="shrink-0 text-ink-tertiary">→</span>
-          <span className="min-w-0 truncate font-semibold text-ink">{field.after}</span>
-        </span>
+          <span className={`shrink-0 font-semibold ${FIELD_DIFF_LABEL_CLASS[field.status]}`}>
+            {field.label}
+          </span>
+          <FieldDiffValues row={field} truncate />
+        </FieldDiffHoverable>
       ))}
       {extra > 0 && (
         <span

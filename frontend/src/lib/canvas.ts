@@ -4,6 +4,7 @@ import dagre from "@dagrejs/dagre";
 import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import type { EdgeLineStyle } from "@/lib/api";
+import type { FieldDiffStatus } from "@/lib/compare-field-diff";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -61,8 +62,9 @@ export type NodeData = {
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";
   diffNote?: string;
-  // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값.
-  diffFields?: { label: string; before: string; after: string }[];
+  // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값,
+  // status는 필드 단위 생성/삭제/변경 분류(compare-field-diff).
+  diffFields?: { label: string; before: string; after: string; status: FieldDiffStatus }[];
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;

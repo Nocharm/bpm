@@ -205,6 +205,8 @@ class VersionOut(BaseModel):
     submitted_by: str | None
     reject_reason: str | None
     created_at: datetime
+    # 마지막 변경 시각 — 비교화면 버전 드롭다운 '변경날' 표시용
+    updated_at: datetime
     version_number: int | None = None
 
 
