@@ -80,6 +80,14 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import { humanizeApiError } from "@/lib/api-errors";
+import { classifyFieldDiff } from "@/lib/compare-field-diff";
+import {
+  FIELD_DIFF_LABEL_CLASS,
+  FIELD_DIFF_ROW_CLASS,
+  FieldDiffHoverable,
+  FieldDiffValues,
+  type FieldDiffRowData,
+} from "@/components/compare-field-diff";
 import { type ChangedField, getLineageKey } from "@/lib/diff";
 import { formatGmp, getGmpBadgeStyle, GMP_OPTIONS } from "@/lib/gmp";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
@@ -305,7 +313,7 @@ function formatCoverage(assigned: number, eligible: number): string {
 }
 
 // union 노드를 좌표 없는 AppNode로 — 이후 layoutWithDagre가 위치 산정
-type DiffFieldRow = { label: string; before: string; after: string };
+type DiffFieldRow = FieldDiffRowData;
 
 function buildAppNodes(
   merged: MergedNode[],
@@ -772,14 +780,20 @@ function ComparePane({
   );
 
   // 변경 노드의 before→after 필 표시값 — 필드 라벨 i18n + 빈값은 None.
+  // status는 None 폴백 전 원시 표시값으로 분류(생성/삭제/변경 색 구분).
   const fieldsOf = useCallback(
     (m: MergedNode): DiffFieldRow[] | undefined =>
       m.status === "changed"
-        ? m.fieldChanges.map((fc) => ({
-            label: t(FIELD_MSG[fc.field]),
-            before: displayFieldValue(fc.field, fc.before) || t("summary.none"),
-            after: displayFieldValue(fc.field, fc.after) || t("summary.none"),
-          }))
+        ? m.fieldChanges.map((fc) => {
+            const rawBefore = displayFieldValue(fc.field, fc.before);
+            const rawAfter = displayFieldValue(fc.field, fc.after);
+            return {
+              label: t(FIELD_MSG[fc.field]),
+              before: rawBefore || t("summary.none"),
+              after: rawAfter || t("summary.none"),
+              status: classifyFieldDiff(rawBefore, rawAfter),
+            };
+          })
         : undefined,
     [t],
   );
@@ -951,11 +965,16 @@ function ComparePane({
         title: m.node.title,
         fields:
           m.status === "changed"
-            ? m.fieldChanges.map((fc) => ({
-                label: t(FIELD_MSG[fc.field]),
-                before: displayFieldValue(fc.field, fc.before) || t("summary.none"),
-                after: displayFieldValue(fc.field, fc.after) || t("summary.none"),
-              }))
+            ? m.fieldChanges.map((fc) => {
+                const rawBefore = displayFieldValue(fc.field, fc.before);
+                const rawAfter = displayFieldValue(fc.field, fc.after);
+                return {
+                  label: t(FIELD_MSG[fc.field]),
+                  before: rawBefore || t("summary.none"),
+                  after: rawAfter || t("summary.none"),
+                  status: classifyFieldDiff(rawBefore, rawAfter),
+                };
+              })
             : undefined,
       }));
     // 노드 추가/삭제로 딸려온 엣지는 제외 — 양끝이 모두 "기존"(양 버전 존재=unchanged/changed) 노드인,
@@ -988,6 +1007,7 @@ function ComparePane({
                 label: t("compare.edgeLabelField"),
                 before: e.labelChange.before || t("summary.none"),
                 after: e.labelChange.after || t("summary.none"),
+                status: classifyFieldDiff(e.labelChange.before, e.labelChange.after),
               },
             ]
           : undefined,
@@ -1524,19 +1544,21 @@ function ComparePane({
                             </span>
                           </span>
                           {item.fields && item.fields.length > 0 && (
-                            // 필드별 세로 행 — 인라인 랩 필은 긴 값에서 줄바꿈 난장. 긴 값은 truncate+툴팁.
+                            // 필드별 세로 행 — 상태색(생성/삭제/변경)·부분 강조, 잘린 값은 호버 팝오버로 전체 표시.
                             <span className="mt-1 flex flex-col gap-0.5">
                               {item.fields.map((f) => (
-                                <span
+                                <FieldDiffHoverable
                                   key={f.label}
-                                  title={`${f.label}: ${f.before} → ${f.after}`}
-                                  className="flex min-w-0 items-center gap-1 rounded-xs border border-changed/30 bg-changed/10 px-1 py-px text-fine"
+                                  row={f}
+                                  className={`flex min-w-0 items-center gap-1 rounded-xs border px-1 py-px text-fine ${FIELD_DIFF_ROW_CLASS[f.status]}`}
                                 >
-                                  <span className="shrink-0 font-semibold text-changed">{f.label}</span>
-                                  <span className="min-w-0 truncate text-ink-muted">{f.before}</span>
-                                  <span className="shrink-0 text-ink-tertiary">→</span>
-                                  <span className="min-w-0 truncate font-semibold text-ink">{f.after}</span>
-                                </span>
+                                  <span
+                                    className={`shrink-0 font-semibold ${FIELD_DIFF_LABEL_CLASS[f.status]}`}
+                                  >
+                                    {f.label}
+                                  </span>
+                                  <FieldDiffValues row={f} truncate />
+                                </FieldDiffHoverable>
                               ))}
                             </span>
                           )}
