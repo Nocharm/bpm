@@ -319,14 +319,25 @@ export function FrameworkConfirmSection({
                   {nextMajorLabel}
                 </span>
               </span>
-              {/* 산문 설명 대신 구체 라벨 필 — 유지/영구삭제 실제 대상 노출 (사용자 피드백 2026-08-29) */}
-              {latest !== null ? (
-                <MajorImpactRows compact keep={keepLabels} pruned={pruneTargets} />
-              ) : (
-                <span className="text-fine text-ink-tertiary">
-                  {t("framework.majorDescFirst", { label: nextMajorLabel })}
+              {/* 영향 요약은 체크 시에만 아코디언 리빌 — 체크 행위가 읽기를 유도 (사용자 피드백 2026-08-29).
+                  grid-rows 0fr→1fr 하우스 패턴, span에 display:grid 적용(라벨 내부 유효 마크업 유지). */}
+              <span
+                className={`grid transition-all duration-350 ease-smooth ${
+                  major ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <span className="min-w-0 overflow-hidden">
+                  <span className="block pt-0.5">
+                    {latest !== null ? (
+                      <MajorImpactRows compact keep={keepLabels} pruned={pruneTargets} />
+                    ) : (
+                      <span className="text-fine text-ink-tertiary">
+                        {t("framework.majorDescFirst", { label: nextMajorLabel })}
+                      </span>
+                    )}
+                  </span>
                 </span>
-              )}
+              </span>
             </span>
           </label>
           <button

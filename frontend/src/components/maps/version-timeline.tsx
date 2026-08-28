@@ -134,7 +134,7 @@ export function VersionTimeline({
   // 표시 아이템 — 기본은 버전 카드 나열. 그룹핑 모드에선 vX.Y(메이저 동일) 연속 구간을
   // 마이너 2개↑일 때 그룹 헤더로 접고, 펼치면 멤버 카드를 헤더 뒤에 평면 삽입한다 (2026-08-29).
   type TimelineItem =
-    | { kind: "version"; version: VersionDetail }
+    | { kind: "version"; version: VersionDetail; indent?: boolean }
     | { kind: "group"; major: number; members: VersionDetail[] };
   const FW_LABEL = /^v(\d+)\.(\d+)$/;
   const items: TimelineItem[] = [];
@@ -163,7 +163,8 @@ export function VersionTimeline({
       if (members.length >= 2) {
         items.push({ kind: "group", major, members });
         if (openMajors.has(major)) {
-          for (const member of members) items.push({ kind: "version", version: member });
+          // 하위(멤버)임이 보이게 들여쓰기 마킹 — 렌더에서 좌측 여백 (사용자 피드백 2026-08-29)
+          for (const member of members) items.push({ kind: "version", version: member, indent: true });
         }
       } else {
         items.push({ kind: "version", version: head });
@@ -203,7 +204,7 @@ export function VersionTimeline({
                       strokeWidth={1.5}
                       className={`shrink-0 text-ink-tertiary transition-transform duration-150 ${groupOpen ? "rotate-90" : ""}`}
                     />
-                    <span className="text-caption-strong text-ink">{`v${major}.x`}</span>
+                    <span className="text-caption-strong text-ink">{t("home.verMajorGroup", { n: major })}</span>
                     <span className="rounded-full border border-hairline bg-surface-alt px-1.5 text-fine text-ink-secondary">
                       {members.length}
                     </span>
@@ -221,6 +222,7 @@ export function VersionTimeline({
         }
         const version = item.version;
         const isNewest = version.id === newestId;
+        const indentClass = item.indent ? " ml-7" : "";
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
         const events: VersionEvent[] = [...version.events].reverse();
@@ -254,7 +256,7 @@ export function VersionTimeline({
             ? "bg-accent-tint/30 group-hover/vercard:bg-accent-tint/50"
             : "bg-surface group-hover/vercard:bg-surface-alt";
         return (
-          <div key={version.id} className="relative flex gap-2.5">
+          <div key={version.id} className={`relative flex gap-2.5${indentClass}`}>
             <span
               className={`z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${node.cls}`}
             >

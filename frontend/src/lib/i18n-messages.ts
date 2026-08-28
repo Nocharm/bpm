@@ -1829,6 +1829,8 @@ const en = {
   "home.listShowAll": "Show all ({n})",
   "home.listCollapse": "Collapse",
   "home.frameworkMore": "Load more",
+  // 버전 타임라인 메이저 그룹 헤더 (연계 캔버스, 2026-08-29)
+  "home.verMajorGroup": "Version {n}",
   "home.frameworkLoadError": "Failed to load - click to retry.",
   // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
   "home.frameworkTitle": "Framework category",
@@ -3773,6 +3775,8 @@ const ko: Record<MessageKey, string> = {
   "home.listShowAll": "전체 펼치기 ({n})",
   "home.listCollapse": "다시 접기",
   "home.frameworkMore": "더 보기",
+  // 버전 타임라인 메이저 그룹 헤더 (연계 캔버스, 2026-08-29)
+  "home.verMajorGroup": "버전 {n}",
   "home.frameworkLoadError": "불러오기 실패 - 클릭해서 재시도하세요.",
   // ── 상세 카드 카테고리 뱃지/I/O + 연결·이양 모달 (Phase 2) ──
   "home.frameworkTitle": "업무 체계 카테고리",
