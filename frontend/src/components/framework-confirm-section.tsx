@@ -4,7 +4,7 @@
 // 마이너 확정은 최신 스냅샷 대비 레이아웃 외 변경이 있을 때만(버튼 비활성 + 서버 409 미러),
 // 버튼 아래에 변경 요약(비교 diff 재활용: computeVersionDiff + 엣지 시그니처)을 노출한다.
 // 메이저 승급은 가시성 있는 토글 행 + 확인 모달(직전 라인 중간 마이너 영구삭제 안내) 경유.
-import { Archive, BadgeCheck, Trash2, TriangleAlert } from "lucide-react";
+import { Archive, BadgeCheck, GitCompare, Info, Spline, Trash2, TriangleAlert, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -225,11 +225,20 @@ export function FrameworkConfirmSection({
 
   return (
     <div data-id="framework-confirm-section" className="flex flex-col gap-2 p-3">
-      <p className="text-caption text-ink-secondary">
-        {latest !== null
-          ? t("framework.latestConfirmed", { label: latest.label })
-          : t("framework.notConfirmed")}
-      </p>
+      {/* 최신 확정 캡션 — 라벨은 초록 필, 이력 없음은 muted 필 (2026-08-29 시인성) */}
+      <div data-id="framework-latest-caption" className="flex flex-wrap items-center gap-1.5">
+        <Workflow size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <span className="text-caption text-ink-secondary">{t("framework.latestLabel")}</span>
+        {latest !== null ? (
+          <span className="rounded-full border border-added/40 bg-added/10 px-1.5 text-fine font-semibold text-added">
+            {latest.label}
+          </span>
+        ) : (
+          <span className="rounded-full border border-hairline bg-surface-alt px-1.5 text-fine text-ink-tertiary">
+            {t("framework.notConfirmedShort")}
+          </span>
+        )}
+      </div>
       {canConfirm && (
         <>
           {/* 메이저 승급 토글 — 체크박스보다 가시성 있는 설명 행 (2026-08-28 개선) */}
@@ -246,8 +255,14 @@ export function FrameworkConfirmSection({
               onChange={() => setMajor((value) => !value)}
             />
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className={`text-caption-strong ${major ? "text-accent" : "text-ink"}`}>
-                {t("framework.majorVersion")} · {nextMajorLabel}
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className={`text-caption-strong ${major ? "text-accent" : "text-ink"}`}>
+                  {t("framework.majorVersion")}
+                </span>
+                {/* 승급 목표 버전 필 — 체크 시에도 대비 유지되게 bg-surface (2026-08-29 시인성) */}
+                <span className="rounded-full border border-accent-tint-border bg-surface px-1.5 text-fine font-semibold text-accent">
+                  {nextMajorLabel}
+                </span>
               </span>
               <span className="text-fine text-ink-tertiary">{t("framework.majorDesc")}</span>
             </span>
@@ -266,8 +281,12 @@ export function FrameworkConfirmSection({
             {t("framework.confirmChanges")}
           </button>
           {!major && !hasChanges && (
-            <p data-id="framework-no-changes" className="text-fine text-ink-tertiary">
-              {t("framework.noChanges", { label: latest?.label ?? "" })}
+            <p data-id="framework-no-changes" className="flex flex-wrap items-center gap-1.5 text-fine text-ink-tertiary">
+              <Info size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="rounded-full border border-hairline bg-surface-alt px-1.5 font-semibold text-ink-secondary">
+                {latest?.label ?? ""}
+              </span>
+              <span>{t("framework.noChangesAfter")}</span>
             </p>
           )}
         </>
@@ -276,8 +295,12 @@ export function FrameworkConfirmSection({
       {/* 변경 요약 — 최신 확정본 대비, 좌표 이동은 제외 (비교 diff 재활용) */}
       {latest !== null && summary !== null && hasChanges && (
         <div data-id="framework-change-summary" className="flex flex-col gap-1 border-t border-divider pt-2">
-          <p className="text-fine font-semibold text-ink-secondary">
-            {t("framework.changesSince", { label: latest.label })}
+          <p className="flex flex-wrap items-center gap-1.5 text-fine font-semibold text-ink-secondary">
+            <GitCompare size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <span>{t("framework.changesTitle")}</span>
+            <span className="rounded-full border border-hairline bg-surface-alt px-1.5 font-semibold text-ink-secondary">
+              {latest.label}
+            </span>
           </p>
           <ul className="flex flex-col gap-0.5">
             {shownEntries.map((entry) => (
@@ -314,12 +337,24 @@ export function FrameworkConfirmSection({
               </li>
             )}
             {summary.edgesAdded + summary.edgesRemoved + summary.edgesChanged > 0 && (
-              <li data-id="framework-change-edges" className="text-fine text-ink-tertiary">
-                {t("framework.changesEdges", {
-                  added: summary.edgesAdded,
-                  removed: summary.edgesRemoved,
-                  changed: summary.edgesChanged,
-                })}
+              <li data-id="framework-change-edges" className="flex flex-wrap items-center gap-1.5 text-fine text-ink-tertiary">
+                <Spline size={14} strokeWidth={1.5} className="shrink-0" />
+                <span>{t("framework.edgesLabel")}</span>
+                {summary.edgesAdded > 0 && (
+                  <span className="rounded-full bg-added/10 px-1.5 font-semibold text-added">
+                    +{summary.edgesAdded}
+                  </span>
+                )}
+                {summary.edgesRemoved > 0 && (
+                  <span className="rounded-full bg-removed/10 px-1.5 font-semibold text-removed">
+                    -{summary.edgesRemoved}
+                  </span>
+                )}
+                {summary.edgesChanged > 0 && (
+                  <span className="rounded-full bg-changed/10 px-1.5 font-semibold text-changed">
+                    ~{summary.edgesChanged}
+                  </span>
+                )}
               </li>
             )}
           </ul>
