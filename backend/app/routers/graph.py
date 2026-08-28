@@ -20,7 +20,7 @@ from app.subprocess import (
 )
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
-from app.models import Comment, Edge, Group, MapVersion, Node, ProcessMap
+from app.models import Comment, Edge, Group, MapVersion, Node, ProcessCategory, ProcessMap
 from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
@@ -178,15 +178,58 @@ async def replace_graph(
                     detail=f"node {node.id} references a group not in the payload",
                 )
 
-    # framework 캔버스는 별도 규칙(start 불요·subprocess-only) — 일반 맵은 기존 검증 유지
+    # framework 캔버스는 별도 규칙(start 불요·subprocess+분기·끝) — 일반 맵은 기존 검증 유지
     canvas_map = await session.get(ProcessMap, version.map_id)
+    is_framework_canvas = canvas_map is not None and canvas_map.mode == "framework"
     try:
-        if canvas_map is not None and canvas_map.mode == "framework":
+        if is_framework_canvas:
             validate_framework_canvas(payload.nodes)
         else:
             validate_process(payload.nodes)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if is_framework_canvas:
+        # 소속 L6 삭제 금지 — 이미 저장돼 있던 소속 L6 노드가 payload에서 사라지면 422.
+        # 신규 소속 L6 미반영은 허용(열 때 자동 보강 담당) (2026-08-28 개선).
+        linkage_cat_id = await session.scalar(
+            select(ProcessCategory.id).where(
+                ProcessCategory.linkage_map_id == version.map_id
+            )
+        )
+        if linkage_cat_id is not None:
+            contained_ids = set(
+                (
+                    await session.scalars(
+                        select(ProcessMap.id).where(
+                            ProcessMap.category_id == linkage_cat_id,
+                            ProcessMap.deleted_at.is_(None),
+                        )
+                    )
+                ).all()
+            )
+            stored_linked = set(
+                (
+                    await session.scalars(
+                        select(Node.linked_map_id).where(
+                            Node.version_id == version_id,
+                            Node.node_type == "subprocess",
+                            Node.linked_map_id.is_not(None),
+                        )
+                    )
+                ).all()
+            )
+            payload_linked = {
+                n.linked_map_id
+                for n in payload.nodes
+                if n.node_type == "subprocess" and n.linked_map_id is not None
+            }
+            missing = sorted((stored_linked & contained_ids) - payload_linked)
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"contained L6 nodes cannot be removed from the canvas: {missing}",
+                )
 
     try:
         await assert_no_cycle(session, version_id, payload.nodes)

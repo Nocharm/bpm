@@ -13,7 +13,7 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
+from app.models import ApprovalRequest, CheckoutRequest, Comment, Edge, Employee, Group, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, VersionApproval, VersionEvent, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
@@ -32,6 +32,7 @@ from app.schemas import (
     DirectoryUserOut,
     EligibleApproverOut,
     FrameworkConfirmIn,
+    FrameworkConfirmOut,
     FrameworkTransferIn,
     MapCategoryIn,
     MapCopy,
@@ -1134,17 +1135,52 @@ async def transfer_framework_slot(
     return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
 
 
-@router.post("/{map_id}/framework-confirm", response_model=VersionOut)
+def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
+    """레이아웃 무시 콘텐츠 시그니처 — 확정 게이트용 (2026-08-28 개선).
+
+    노드는 계보 키(source_node_id∥id)로 정렬해 FE computeVersionDiff(FIELD_KEYS)와 같은
+    콘텐츠 필드 + 링크 정체성만 비교한다. 좌표·sort_order·엣지 시각 필드(side/line_style)·
+    그룹 멤버십은 배치 취급이라 제외 — FE 게이트와 판정 기준을 맞춘다(lib/diff.ts).
+    """
+    lineage = {n.id: (n.source_node_id or n.id) for n in nodes}
+    node_sig = sorted(
+        (
+            n.source_node_id or n.id, n.title, n.description, n.node_type, n.color,
+            n.assignee, n.department, n.system, n.duration, n.touch_time,
+            n.cost_krw, n.cost_usd, n.headcount, n.annual_count, n.fte,
+            n.input, n.output, n.input_forms, n.output_forms, n.data_form, n.gmp,
+            n.start_condition, n.end_condition,
+            n.linked_map_id, n.follow_latest, n.is_primary_end,
+        )
+        for n in nodes
+    )
+    edge_sig = sorted(
+        (
+            lineage.get(e.source_node_id, e.source_node_id),
+            lineage.get(e.target_node_id, e.target_node_id),
+            e.label, e.source_handle or "", e.target_handle or "",
+        )
+        for e in edges
+    )
+    return (tuple(node_sig), tuple(edge_sig))
+
+
+# 스냅샷 영구삭제 스윕 대상 — sqlite는 FK CASCADE 미강제라 명시 벌크 삭제(delete_category 선례)
+_VERSION_CHILD_MODELS = (Node, Edge, Group, Comment, VersionApproval, VersionEvent, CheckoutRequest)
+
+
+@router.post("/{map_id}/framework-confirm", response_model=FrameworkConfirmOut)
 async def confirm_framework_version(
     map_id: int,
     payload: FrameworkConfirmIn,
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
-) -> MapVersion:
+) -> FrameworkConfirmOut:
     """라이브 draft를 스냅샷(published)으로 확정 — 권한자/sysadmin 본인 확정, 상위 승인 없음.
 
-    일반 게시와 달리 이전 스냅샷을 expired로 전환하지 않는다 — 모든 확정본이 이력으로
-    남아 비교 가능 (design 2026-08-28 §6).
+    마이너 확정은 직전 스냅샷 대비 레이아웃 외 변경이 있을 때만(없으면 409 — 손쉬운 버전
+    남발 방지). 메이저 승급은 의도된 의식이라 게이트를 우회하되, 직전 메이저 라인의 중간
+    마이너를 영구삭제한다(X.0·X.최종만 유지, 삭제 라벨은 응답 동봉) (2026-08-28 개선).
     """
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
@@ -1181,7 +1217,47 @@ async def confirm_framework_version(
         major, minor = 1, 0
     else:
         cur_major, cur_minor = max(fw_rows)
+        if not payload.major:
+            # 무변경 게이트 — 최신 스냅샷과 콘텐츠 동일하면 409 (좌표만 이동은 변경 아님)
+            latest = await session.scalar(
+                select(MapVersion)
+                .where(
+                    MapVersion.map_id == map_id,
+                    MapVersion.fw_major == cur_major,
+                    MapVersion.fw_minor == cur_minor,
+                )
+                .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+            )
+            if latest is not None and _canvas_content_signature(
+                draft.nodes, draft.edges
+            ) == _canvas_content_signature(latest.nodes, latest.edges):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"no content changes since v{cur_major}.{cur_minor}",
+                )
         major, minor = (cur_major + 1, 0) if payload.major else (cur_major, cur_minor + 1)
+
+    pruned_labels: list[str] = []
+    if payload.major and fw_rows:
+        # 직전 메이저 라인 정리 — X.0과 X.최종만 유지, 중간 마이너 영구삭제 (사용자 결정 2026-08-28)
+        prev_major, prev_max_minor = cur_major, cur_minor
+        prune_rows = (
+            await session.execute(
+                select(MapVersion.id, MapVersion.label)
+                .where(
+                    MapVersion.map_id == map_id,
+                    MapVersion.fw_major == prev_major,
+                    MapVersion.fw_minor > 0,
+                    MapVersion.fw_minor < prev_max_minor,
+                )
+                .order_by(MapVersion.fw_minor)
+            )
+        ).all()
+        for vid, label in prune_rows:
+            for child in _VERSION_CHILD_MODELS:
+                await session.execute(sa_delete(child).where(child.version_id == vid))
+            await session.execute(sa_delete(MapVersion).where(MapVersion.id == vid))
+            pruned_labels.append(label)
 
     snapshot = MapVersion(
         map_id=map_id, label=f"v{major}.{minor}", status="published",
@@ -1197,7 +1273,9 @@ async def confirm_framework_version(
     record_version_event(session, snapshot.id, "published", user)
     await session.commit()
     await session.refresh(snapshot)
-    return snapshot
+    return FrameworkConfirmOut(
+        version=VersionOut.model_validate(snapshot), pruned_labels=pruned_labels
+    )
 
 
 @router.put(

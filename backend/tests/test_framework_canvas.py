@@ -255,7 +255,14 @@ def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
     assert "framework" in res.json()["detail"]
 
 
+def _put_graph(client: TestClient, version_id: int, nodes: list, edges: list | None = None) -> None:
+    res = client.put(f"/api/versions/{version_id}/graph",
+                     json={"nodes": nodes, "edges": edges or [], "groups": []})
+    assert res.status_code == 200, res.text
+
+
 def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None:
+    """확정 게이트(마이너=내용 변경 필수, 좌표만은 불가)·메이저 프룬(X.0·최종만 유지) (2026-08-28 개선)."""
     l5 = _seed_category(client, "FWC-C5", "확정L5", level=5)
     _seed_l6_map(client, l5, "확정업무1", "FWC-CM1")
     act_as(SYSADMIN)
@@ -263,26 +270,113 @@ def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None
                json={"permissions": [{"principal_type": "user", "principal_id": "fwc.confirmer"}]})
     act_as("fwc.confirmer")
     map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
 
     act_as("fwc.pleb")
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 403
     act_as("fwc.confirmer")
+    # 최초 확정 — 스냅샷이 없으므로 항상 허용
     v1 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
-    assert (v1["label"], v1["status"]) == ("v1.0", "published")
+    assert (v1["version"]["label"], v1["version"]["status"]) == ("v1.0", "published")
+    assert v1["pruned_labels"] == []
+    # 무변경 재확정 → 409
+    assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 409
+    # 좌표만 이동해도 409 — 노드 내 위치는 변경으로 안 친다
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    moved = [dict(n, pos_x=n["pos_x"] + 200) for n in graph["nodes"]]
+    _put_graph(client, draft["id"], moved, graph["edges"])
+    assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 409
+    # 내용 변경(분기 노드 추가) → v1.1
+    base = dict(graph["nodes"][0])
+    decision = dict(base, id="fwcconfdec0000000000000000000001", node_type="decision",
+                    linked_map_id=None, title="확정 분기", is_primary_end=False)
+    _put_graph(client, draft["id"], moved + [decision], graph["edges"])
     v2 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
-    assert v2["label"] == "v1.1"
-    v3 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": True}).json()
-    assert v3["label"] == "v2.0"
+    assert v2["version"]["label"] == "v1.1"
+    # 또 내용 변경(분기 이름) → v1.2
+    decision2 = dict(decision, title="확정 분기 개정")
+    _put_graph(client, draft["id"], moved + [decision2], graph["edges"])
+    v3 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
+    assert v3["version"]["label"] == "v1.2"
+    # 메이저 승급 — 게이트 우회(무변경이어도 승급 가능), 직전 라인은 1.0·1.2만 남고 1.1 영구삭제
+    v4 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": True}).json()
+    assert v4["version"]["label"] == "v2.0"
+    assert v4["pruned_labels"] == ["v1.1"]
     detail = client.get(f"/api/maps/{map_id}").json()
+    labels = [v["label"] for v in detail["versions"]]
+    assert "v1.0" in labels and "v1.2" in labels and "v2.0" in labels
+    assert "v1.1" not in labels
     statuses = [v["status"] for v in detail["versions"]]
-    assert statuses.count("published") == 3  # 이전 스냅샷 expired 전환 없음
-    assert statuses.count("draft") == 1      # 라이브는 계속 draft
+    assert statuses.count("published") == 3 and statuses.count("draft") == 1
     # 일반 맵에는 422
     act_as(SYSADMIN)
     normal = client.post("/api/maps", json={"name": "확정검증 일반맵",
                                             "owning_department": "Owning Anchor Division"}).json()
     assert client.post(f"/api/maps/{normal['id']}/framework-confirm",
                        json={"major": False}).status_code == 422
+
+
+def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:
+    """분기·끝 노드 생성 허용(끝 규칙 적용), start/process는 계속 차단 (2026-08-28 개선)."""
+    l5 = _seed_category(client, "FWC-D5", "분기L5", level=5)
+    _seed_l6_map(client, l5, "분기업무1", "FWC-DM1")
+    act_as(SYSADMIN)
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    node = graph["nodes"][0]
+    decision = dict(node, id="fwcdecnode0000000000000000000001", node_type="decision",
+                    linked_map_id=None, title="판정", is_primary_end=False)
+    end = dict(node, id="fwcendnode0000000000000000000001", node_type="end",
+               linked_map_id=None, title="완료", is_primary_end=False)
+    _put_graph(client, draft["id"], [node, decision, end])
+    saved = client.get(f"/api/versions/{draft['id']}/graph").json()
+    end_saved = next(n for n in saved["nodes"] if n["node_type"] == "end")
+    assert end_saved["is_primary_end"] is True  # 대표 끝 자동 지정
+    # start 유입 → 422
+    start = dict(node, id="fwcstartnode00000000000000000001", node_type="start",
+                 linked_map_id=None, title="Start", is_primary_end=False)
+    res = client.put(f"/api/versions/{draft['id']}/graph",
+                     json={"nodes": [node, start], "edges": [], "groups": []})
+    assert res.status_code == 422
+    # process 유입 → 422
+    proc = dict(node, id="fwcprocnode000000000000000000001", node_type="process",
+                linked_map_id=None, title="일반", is_primary_end=False)
+    res = client.put(f"/api/versions/{draft['id']}/graph",
+                     json={"nodes": [node, proc], "edges": [], "groups": []})
+    assert res.status_code == 422
+
+
+def test_framework_contained_l6_cannot_be_removed(client: TestClient, enforce: None) -> None:
+    """소속 L6 노드는 저장에서 제거 불가(422), 외부 L6는 추가·제거 자유 (2026-08-28 개선)."""
+    l5 = _seed_category(client, "FWC-X5", "삭제금지L5", level=5)
+    m1 = _seed_l6_map(client, l5, "삭제금지업무1", "FWC-XM1")
+    m2 = _seed_l6_map(client, l5, "삭제금지업무2", "FWC-XM2")
+    l5b = _seed_category(client, "FWC-X5B", "삭제금지외부L5", level=5)
+    ext = _seed_l6_map(client, l5b, "삭제금지외부업무", "FWC-XME")
+    act_as(SYSADMIN)
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    nodes = graph["nodes"]
+    assert {n["linked_map_id"] for n in nodes} == {m1, m2}
+    # 외부 L6 추가 → OK
+    ext_node = dict(nodes[0], id="fwcextnode0000000000000000000001", linked_map_id=ext)
+    _put_graph(client, draft["id"], nodes + [ext_node])
+    # 소속 L6(m2) 제거 → 422
+    without_m2 = [n for n in nodes if n["linked_map_id"] != m2] + [ext_node]
+    res = client.put(f"/api/versions/{draft['id']}/graph",
+                     json={"nodes": without_m2, "edges": [], "groups": []})
+    assert res.status_code == 422
+    assert "contained" in res.json()["detail"]
+    # 외부 L6 제거 → OK
+    _put_graph(client, draft["id"], nodes)
 
 
 def test_framework_guards(client: TestClient, enforce: None) -> None:
@@ -337,3 +431,5 @@ def test_surface_fields(client: TestClient, enforce: None) -> None:
     draft = next(v for v in detail["versions"] if v["status"] == "draft")
     graph = client.get(f"/api/versions/{draft['id']}/graph").json()
     assert graph["subprocess_refs"][str(m1)]["category_path"] == "표면L1/표면L5"
+    # 홈 L5 id — 외부 L6 색상 키 (2026-08-28 개선)
+    assert graph["subprocess_refs"][str(m1)]["category_id"] == l5

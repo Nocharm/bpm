@@ -31,10 +31,28 @@ def validate_process(nodes: list[NodeIn]) -> None:
 
 
 def validate_framework_canvas(nodes: list[NodeIn]) -> None:
-    """framework 연계 캔버스 규칙 — 링크된 subprocess 노드만 허용, start/end 불요 (design 2026-08-28 §7)."""
+    """framework 연계 캔버스 규칙 — 링크된 subprocess + 분기·끝 허용, start/process 차단 (2026-08-28 개선).
+
+    끝 노드는 일반 맵과 동일 규칙(이름 유니크·대표 ≤1·자동 대표 지정)을 적용한다.
+    """
     for n in nodes:
-        if n.node_type != "subprocess" or not n.linked_map_id:
-            raise ValueError("framework canvas allows linked subprocess nodes only")
+        if n.node_type == "subprocess":
+            if not n.linked_map_id:
+                raise ValueError("framework canvas allows linked subprocess nodes only")
+        elif n.node_type not in ("decision", "end"):
+            raise ValueError(
+                "framework canvas allows linked subprocess, decision, and end nodes only"
+            )
+    ends = [n for n in nodes if n.node_type == "end"]
+    names = [e.title for e in ends]
+    if len(names) != len(set(names)):
+        raise ValueError("끝 노드 이름이 중복되었습니다 (끝 이름은 유니크해야 함).")
+    primaries = [e for e in ends if e.is_primary_end]
+    if len(primaries) > 1:
+        raise ValueError(f"대표 끝은 1개여야 합니다 (현재 {len(primaries)}개).")
+    if ends and not primaries:
+        first_end = min(ends, key=lambda e: e.sort_order)
+        first_end.is_primary_end = True
 
 
 async def resolve_linked_version(
@@ -173,6 +191,8 @@ async def get_subprocess_refs(
         for mid, cid in category_id_by_map.items():
             if cid is not None:
                 refs[mid].category_path = paths.get(cid)
+                # 홈 L5 id — 캔버스 외부 L6 색상 키(같은 L5=같은 색) (2026-08-28 개선)
+                refs[mid].category_id = cid
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
         refs[missing] = SubprocessRefOut(designated=False)
     return refs

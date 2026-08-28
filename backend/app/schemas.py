@@ -821,6 +821,13 @@ class FrameworkConfirmIn(BaseModel):
     major: bool = False
 
 
+class FrameworkConfirmOut(BaseModel):
+    """확정 응답 — 생성된 스냅샷 + 메이저 승급 시 영구삭제된 마이너 라벨 (2026-08-28 개선)."""
+
+    version: VersionOut
+    pruned_labels: list[str] = []
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 
@@ -1118,6 +1125,8 @@ class SubprocessRefOut(BaseModel):
     url_label: str | None = None
     # 링크맵의 체계 경로 — 캔버스에서 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)
     category_path: str | None = None
+    # 홈 L5 카테고리 id — 외부 L6 색상 키(같은 L5=같은 색), 경로 rename에도 안정 (2026-08-28 개선)
+    category_id: int | None = None
     sp_description: str | None = None
 
     @field_validator("duration", "touch_time", mode="after")
