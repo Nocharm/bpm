@@ -4,7 +4,7 @@
 // 마이너 확정은 최신 스냅샷 대비 레이아웃 외 변경이 있을 때만(버튼 비활성 + 서버 409 미러),
 // 버튼 아래에 변경 요약(비교 diff 재활용: computeVersionDiff + 엣지 시그니처)을 노출한다.
 // 메이저 승급은 가시성 있는 토글 행 + 확인 모달(직전 라인 중간 마이너 영구삭제 안내) 경유.
-import { Archive, BadgeCheck, GitCompare, Info, Spline, Trash2, TriangleAlert, Workflow } from "lucide-react";
+import { Archive, BadgeCheck, Check, GitCompare, Info, Spline, Trash2, TriangleAlert, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -303,12 +303,20 @@ export function FrameworkConfirmSection({
               major ? "border-accent-tint-border bg-accent-tint" : "border-hairline hover:bg-surface-alt"
             }`}
           >
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={major}
-              onChange={() => setMajor((value) => !value)}
-            />
+            {/* 커스텀 체크 — 네이티브 대신 앱 공통 언어(rounded-sm·hairline→accent·Check 아이콘) (2026-08-29) */}
+            <span className="relative mt-0.5 h-4 w-4 shrink-0">
+              <input
+                type="checkbox"
+                checked={major}
+                onChange={() => setMajor((value) => !value)}
+                className="peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-sm border border-hairline bg-surface transition-colors duration-150 checked:border-accent checked:bg-accent hover:border-accent"
+              />
+              <Check
+                size={12}
+                strokeWidth={2.5}
+                className="pointer-events-none absolute left-0.5 top-0.5 text-on-accent opacity-0 transition-opacity duration-150 peer-checked:opacity-100"
+              />
+            </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="flex flex-wrap items-center gap-1.5">
                 <span className={`text-caption-strong ${major ? "text-accent" : "text-ink"}`}>
