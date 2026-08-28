@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 
-import { ArrowRight, Check, Clock, GitCommit, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, Check, ChevronRight, Clock, GitCommit, Layers, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
@@ -82,6 +82,7 @@ export function VersionTimeline({
   onToggle,
   onGoToVersion,
   currentVersionId,
+  groupByMajor = false,
 }: {
   versions: VersionDetail[];
   // login_id → 표시명 / id→name.
@@ -93,6 +94,8 @@ export function VersionTimeline({
   onGoToVersion?: (id: number) => void;
   // 현재 보고 있는 버전 — 그 카드엔 버튼 숨김.
   currentVersionId?: number | null;
+  // 연계 캔버스 — vX.Y 스냅샷을 메이저 단위로 묶음(마이너 2개↑만), 클릭 시 펼침 (2026-08-29)
+  groupByMajor?: boolean;
 }) {
   const { t, lang } = useI18n();
   const users = useDirectory();
@@ -115,16 +118,109 @@ export function VersionTimeline({
     x: number;
     y: number;
   } | null>(null);
+  // 메이저 그룹 펼침 — 그룹핑 모드에서만 사용, 기본 접힘.
+  const [openMajors, setOpenMajors] = useState<Set<number>>(new Set());
+  function toggleMajor(major: number) {
+    setOpenMajors((prev) => {
+      const next = new Set(prev);
+      if (next.has(major)) next.delete(major);
+      else next.add(major);
+      return next;
+    });
+  }
+
   const ordered = [...versions].reverse(); // idx 0 = 최신 = Current
-  const visibleVersions = showAll ? ordered : ordered.slice(0, 3);
-  const hiddenCount = ordered.length - 3;
+  const newestId = ordered[0]?.id ?? null;
+  // 표시 아이템 — 기본은 버전 카드 나열. 그룹핑 모드에선 vX.Y(메이저 동일) 연속 구간을
+  // 마이너 2개↑일 때 그룹 헤더로 접고, 펼치면 멤버 카드를 헤더 뒤에 평면 삽입한다 (2026-08-29).
+  type TimelineItem =
+    | { kind: "version"; version: VersionDetail }
+    | { kind: "group"; major: number; members: VersionDetail[] };
+  const FW_LABEL = /^v(\d+)\.(\d+)$/;
+  const items: TimelineItem[] = [];
+  if (!groupByMajor) {
+    for (const version of ordered) items.push({ kind: "version", version });
+  } else {
+    let i = 0;
+    while (i < ordered.length) {
+      const head = ordered[i];
+      const headMatch = FW_LABEL.exec(head.label);
+      if (!headMatch) {
+        items.push({ kind: "version", version: head });
+        i += 1;
+        continue;
+      }
+      const major = Number(headMatch[1]);
+      const members: VersionDetail[] = [head];
+      let j = i + 1;
+      while (j < ordered.length) {
+        const next = FW_LABEL.exec(ordered[j].label);
+        if (next && Number(next[1]) === major) {
+          members.push(ordered[j]);
+          j += 1;
+        } else break;
+      }
+      if (members.length >= 2) {
+        items.push({ kind: "group", major, members });
+        if (openMajors.has(major)) {
+          for (const member of members) items.push({ kind: "version", version: member });
+        }
+      } else {
+        items.push({ kind: "version", version: head });
+      }
+      i = j;
+    }
+  }
+  const visibleItems = showAll ? items : items.slice(0, 3);
+  const hiddenCount = items.length - 3;
 
   return (
     <div data-id="version-timeline" className="relative flex flex-col gap-3">
       {/* 좌측 세로 연결선 / left timeline rail */}
       <span aria-hidden className="absolute bottom-3 left-[11px] top-3 w-px bg-hairline" />
       {/* 최신 버전이 위로 — idx 0 = 최신 = Current / newest first. */}
-      {visibleVersions.map((version, idx) => {
+      {visibleItems.map((item) => {
+        if (item.kind === "group") {
+          const { major, members } = item;
+          const groupOpen = openMajors.has(major);
+          const latestMember = members[0];
+          return (
+            <div key={`major-${major}`} className="relative flex gap-2.5">
+              <span className="z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-hairline bg-surface text-ink-tertiary">
+                <Layers size={13} strokeWidth={2} />
+              </span>
+              <button
+                type="button"
+                data-id={`version-major-group-${major}`}
+                aria-expanded={groupOpen}
+                onClick={() => toggleMajor(major)}
+                className="min-w-0 flex-1 rounded-md border border-hairline bg-surface p-2.5 text-left transition-colors hover:bg-surface-alt"
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ChevronRight
+                      size={14}
+                      strokeWidth={1.5}
+                      className={`shrink-0 text-ink-tertiary transition-transform duration-150 ${groupOpen ? "rotate-90" : ""}`}
+                    />
+                    <span className="text-caption-strong text-ink">{`v${major}.x`}</span>
+                    <span className="rounded-full border border-hairline bg-surface-alt px-1.5 text-fine text-ink-secondary">
+                      {members.length}
+                    </span>
+                    {!groupOpen && (
+                      <span className="rounded-full border border-added/40 bg-added/10 px-1.5 text-fine font-semibold text-added">
+                        {latestMember.label}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-fine text-ink-tertiary">{formatStamp(latestMember.created_at)}</span>
+                </span>
+              </button>
+            </div>
+          );
+        }
+        const version = item.version;
+        const isNewest = version.id === newestId;
         // 최신 이벤트가 앞으로 — 노드는 최신 이벤트 기준 / events newest-first.
         // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
         const events: VersionEvent[] = [...version.events].reverse();
@@ -154,7 +250,7 @@ export function VersionTimeline({
         const open = expandedIds.has(version.id);
         // sticky 1열 배경 = 카드 배경(현재 카드 연보라)에 맞춤 — 흰 열로 튀지 않게, hover도 동기화
         const cardBg =
-          idx === 0
+          isNewest
             ? "bg-accent-tint/30 group-hover/vercard:bg-accent-tint/50"
             : "bg-surface group-hover/vercard:bg-surface-alt";
         return (
@@ -182,7 +278,7 @@ export function VersionTimeline({
               }}
               // 네임드 그룹 — 인스펙터의 <details class="group"> 조상과 충돌해 호버 리빌이 오작동하던 것 교정(R5-2와 동일 함정)
               className={`group/vercard min-w-0 flex-1 cursor-pointer rounded-md border p-2.5 transition-colors ${
-                idx === 0
+                isNewest
                   ? "border-accent-tint-border bg-accent-tint/30 hover:bg-accent-tint/50"
                   : "border-hairline bg-surface hover:bg-surface-alt"
               }`}

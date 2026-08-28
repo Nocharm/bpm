@@ -1867,8 +1867,7 @@ const en = {
   "framework.explorerHere": "You are here",
   "framework.explorerCreating": "Creating...",
   "framework.containedLocked": "Contained L6 nodes cannot be deleted from this canvas",
-  "framework.majorDesc":
-    "Promote to the next major. Intermediate minors of the previous line are permanently deleted - only X.0 and the final one are kept.",
+  "framework.majorDescFirst": "This first confirmation is recorded as {label}.",
   "framework.majorModalTitle": "Promote to {label}?",
   "framework.majorModalKeep": "Kept",
   "framework.majorModalDelete": "Permanently deleted",
@@ -3812,8 +3811,7 @@ const ko: Record<MessageKey, string> = {
   "framework.explorerHere": "현재 위치",
   "framework.explorerCreating": "생성 중...",
   "framework.containedLocked": "이 캔버스 소속 L6 노드는 삭제할 수 없습니다",
-  "framework.majorDesc":
-    "다음 메이저로 승급합니다. 직전 라인의 중간 마이너는 영구 삭제되고 X.0과 최종본만 남습니다.",
+  "framework.majorDescFirst": "첫 확정이 {label}로 기록됩니다.",
   "framework.majorModalTitle": "{label}로 승급할까요?",
   "framework.majorModalKeep": "유지",
   "framework.majorModalDelete": "영구 삭제",

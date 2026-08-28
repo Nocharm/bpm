@@ -119,6 +119,58 @@ function buildEdgeSignatures(
   return out;
 }
 
+// 메이저 승급 영향 요약 — 유지/영구삭제 버전을 아이콘+필 행으로. 토글(compact)·모달 배너 공용 (2026-08-29)
+function MajorImpactRows({
+  keep, pruned, compact = false,
+}: {
+  keep: string[];
+  pruned: string[];
+  compact?: boolean;
+}) {
+  const { t } = useI18n();
+  const iconSize = compact ? 12 : 14;
+  const pill = compact ? "px-1 text-[11px]" : "px-1.5 text-fine";
+  const label = compact ? "text-[11px]" : "text-fine";
+  return (
+    <span data-id="framework-major-impact" className="flex flex-col gap-1">
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Archive size={iconSize} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <span className={`${label} text-ink-secondary`}>{t("framework.majorModalKeep")}</span>
+        {keep.map((entry) => (
+          <span
+            key={entry}
+            className={`rounded-full border border-added/40 bg-added/10 font-semibold text-added ${pill}`}
+          >
+            {entry}
+          </span>
+        ))}
+      </span>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Trash2
+          size={iconSize}
+          strokeWidth={1.5}
+          className={`shrink-0 ${pruned.length > 0 ? "text-error" : "text-ink-tertiary"}`}
+        />
+        <span className={`${label} text-ink-secondary`}>{t("framework.majorModalDelete")}</span>
+        {pruned.length > 0 ? (
+          pruned.map((entry) => (
+            <span
+              key={entry}
+              className={`rounded-full border border-error/40 bg-error/10 font-semibold text-error line-through ${pill}`}
+            >
+              {entry}
+            </span>
+          ))
+        ) : (
+          <span className={`rounded-full border border-hairline bg-surface text-ink-tertiary ${pill}`}>
+            {t("framework.majorModalNone")}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 export function FrameworkConfirmSection({
   mapId, canConfirm, versions, liveNodes, liveEdges, onConfirmed, onError,
 }: FrameworkConfirmSectionProps) {
@@ -138,6 +190,9 @@ export function FrameworkConfirmSection({
       .filter((s) => s.major === latest.major && s.minor > 0 && s.minor < latest.minor)
       .map((s) => s.label);
   }, [snapshots, latest]);
+  // 승급 시 유지되는 직전 라인 — X.0과 최종본(같으면 1개)
+  const keepLabels =
+    latest === null ? [] : [`v${latest.major}.0`, ...(latest.minor > 0 ? [latest.label] : [])];
 
   // 최신 스냅샷 그래프 — 변경 요약의 왼쪽(비교 기준). 스냅샷이 바뀔 때만 재조회.
   useEffect(() => {
@@ -264,7 +319,14 @@ export function FrameworkConfirmSection({
                   {nextMajorLabel}
                 </span>
               </span>
-              <span className="text-fine text-ink-tertiary">{t("framework.majorDesc")}</span>
+              {/* 산문 설명 대신 구체 라벨 필 — 유지/영구삭제 실제 대상 노출 (사용자 피드백 2026-08-29) */}
+              {latest !== null ? (
+                <MajorImpactRows compact keep={keepLabels} pruned={pruneTargets} />
+              ) : (
+                <span className="text-fine text-ink-tertiary">
+                  {t("framework.majorDescFirst", { label: nextMajorLabel })}
+                </span>
+              )}
             </span>
           </label>
           <button
@@ -371,47 +433,9 @@ export function FrameworkConfirmSection({
           icon={<TriangleAlert size={18} strokeWidth={1.5} />}
           banner={
             latest === null ? undefined : (
-            <div data-id="framework-major-banner" className="flex flex-col gap-2">
-              {/* 유지되는 버전 — 직전 라인의 X.0과 최종본 */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Archive size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                <span className="text-fine text-ink-secondary">{t("framework.majorModalKeep")}</span>
-                {[
-                  `v${latest?.major ?? 1}.0`,
-                  ...(latest !== null && latest.minor > 0 ? [latest.label] : []),
-                ].map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-full border border-added/40 bg-added/10 px-1.5 text-fine font-semibold text-added"
-                  >
-                    {label}
-                  </span>
-                ))}
+              <div data-id="framework-major-banner">
+                <MajorImpactRows keep={keepLabels} pruned={pruneTargets} />
               </div>
-              {/* 영구 삭제되는 중간 마이너 — 없으면 muted "없음" 필 */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Trash2
-                  size={14}
-                  strokeWidth={1.5}
-                  className={`shrink-0 ${pruneTargets.length > 0 ? "text-error" : "text-ink-tertiary"}`}
-                />
-                <span className="text-fine text-ink-secondary">{t("framework.majorModalDelete")}</span>
-                {pruneTargets.length > 0 ? (
-                  pruneTargets.map((label) => (
-                    <span
-                      key={label}
-                      className="rounded-full border border-error/40 bg-error/10 px-1.5 text-fine font-semibold text-error line-through"
-                    >
-                      {label}
-                    </span>
-                  ))
-                ) : (
-                  <span className="rounded-full border border-hairline bg-surface px-1.5 text-fine text-ink-tertiary">
-                    {t("framework.majorModalNone")}
-                  </span>
-                )}
-              </div>
-            </div>
             )
           }
           lines={

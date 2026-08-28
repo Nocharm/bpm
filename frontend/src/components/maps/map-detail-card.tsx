@@ -972,6 +972,7 @@ export function MapDetailCard({
               onToggle={toggleVersion}
               onGoToVersion={onGoToVersion}
               currentVersionId={currentVersionId}
+              groupByMajor={detail.mode === "framework"}
             />
           )}
         </div>
