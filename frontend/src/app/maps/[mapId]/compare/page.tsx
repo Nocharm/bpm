@@ -32,6 +32,7 @@ import {
   ArrowRight,
   Boxes,
   Building2,
+  Check,
   ChevronDown,
   ChevronRight,
   Download,
@@ -92,7 +93,8 @@ import {
 import { sumVersionParam } from "@/lib/param-sum";
 import { PARAM_ICON } from "@/components/param-icons";
 import { findPublishedAt } from "@/components/version/requester-comment-banner";
-import { formatKst } from "@/lib/datetime";
+import { formatKst, formatKstShort } from "@/lib/datetime";
+import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
@@ -419,49 +421,114 @@ const STATUS_DOT: Record<VersionStatus, string> = {
   expired: "bg-ink-tertiary",
 };
 
-// BASE/TARGET 역할 태그 + 상태 색점이 붙은 pill 셀렉터.
+// 역할 캡션(기준/대상) + 상태 색점 트리거 — 행에 상태 필·변경일(updated_at)을 보여주는
+// 커스텀 드롭다운. native select은 option에 rich row를 못 그려 교체(피드백 2026-08-28).
+// 반대편에 이미 선택된 버전 행은 역할 태그로 표시하고 클릭 시 스왑 — 동일 버전 쌍 선택 차단.
 function VersionSelect({
-  role,
+  dataId,
   label,
   versions,
   value,
+  otherValue,
+  otherTag,
   onChange,
+  onSwap,
 }: {
-  role: string;
+  dataId: string;
   label: string;
   versions: VersionSummary[];
   value: number;
+  otherValue: number;
+  otherTag: string;
   onChange: (id: number) => void;
+  onSwap: () => void;
 }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
   const current = versions.find((version) => version.id === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
-    <label className="flex items-center gap-1.5">
-      <span className="text-fine font-semibold tracking-wide text-ink-tertiary">{role}</span>
-      <div className="relative flex h-7 items-center rounded-sm border border-hairline bg-surface pr-6 pl-2 hover:bg-surface-alt">
+    <div className="relative">
+      <button
+        type="button"
+        data-id={dataId}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-7 items-center gap-1.5 rounded-sm border border-hairline bg-surface pl-2 pr-1.5 hover:bg-surface-alt"
+      >
+        <span className="text-fine font-semibold text-ink-tertiary">{label}</span>
         <span
-          className={`mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
             current ? STATUS_DOT[current.status] : "bg-ink-tertiary"
           }`}
         />
-        <select
-          aria-label={label}
-          className="cursor-pointer appearance-none bg-transparent text-caption text-ink focus:outline-none"
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-        >
-          {versions.map((version) => (
-            <option key={version.id} value={version.id}>
-              {version.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          size={12}
-          strokeWidth={1.5}
-          className="pointer-events-none absolute right-1.5 text-ink-tertiary"
-        />
-      </div>
-    </label>
+        <span className="max-w-[11rem] truncate text-caption text-ink">{current?.label ?? "-"}</span>
+        <ChevronDown size={12} strokeWidth={1.5} className="text-ink-tertiary" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div
+            data-id={`${dataId}-menu`}
+            className="absolute left-0 z-[1001] mt-1 w-72 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+          >
+            {versions.map((version) => {
+              const selected = version.id === value;
+              // 반대편(기준↔대상)에 이미 선택된 버전 — 역할 태그 표시, 클릭은 스왑
+              const isOther = !selected && version.id === otherValue;
+              return (
+                <button
+                  key={version.id}
+                  type="button"
+                  title={isOther ? t("compare.swapAria") : undefined}
+                  onClick={() => {
+                    setOpen(false);
+                    if (isOther) onSwap();
+                    else if (!selected) onChange(version.id);
+                  }}
+                  className={`flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-caption hover:bg-surface-alt ${
+                    selected ? "bg-accent-tint/50" : ""
+                  }`}
+                >
+                  {isOther ? (
+                    <span className="shrink-0 rounded-sm border border-hairline bg-surface-alt px-1 text-[10px] leading-4 text-ink-secondary">
+                      {otherTag}
+                    </span>
+                  ) : (
+                    <Check
+                      size={13}
+                      strokeWidth={2}
+                      className={`shrink-0 ${selected ? "text-accent" : "invisible"}`}
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-ink">{version.label}</span>
+                    {/* 변경날(마지막 수정, KST) — 이름 아랫줄 좌정렬·축소 폰트(피드백 2026-08-28) */}
+                    <span className="block text-[10px] leading-tight text-ink-tertiary">
+                      {formatKstShort(version.updated_at)}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-sm border px-1 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}
+                  >
+                    {t(VERSION_STATUS_LABEL[version.status])}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1225,6 +1292,10 @@ function ComparePane({
     return () => window.removeEventListener("keydown", onKey);
   }, [flowEdges, focusId, positioned, flow, sessionPos, layoutKey]);
 
+  // 방향 요약용 현재 선택 버전 이름 (변경 사항 패널 캡션)
+  const baseName = versions.find((v) => v.id === baseId)?.label ?? "-";
+  const targetName = versions.find((v) => v.id === targetId)?.label ?? "-";
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* 메인 캔버스 스타일 참고 — 노드 핸들(히트박스) 숨김 + 노드 호버 시 자기색 강조 링(bpm-node-emph).
@@ -1273,19 +1344,25 @@ function ComparePane({
         <span className="text-caption text-ink-tertiary">{t("compare.title")}</span>
         <div className="ml-2 flex items-center gap-2">
           <VersionSelect
-            role="BASE"
+            dataId="compare-version-base"
             label={t("compare.base")}
             versions={versions}
             value={baseId}
+            otherValue={targetId}
+            otherTag={t("compare.tagTarget")}
             onChange={onChangeBase}
+            onSwap={handleSwap}
           />
           <ArrowRight size={14} strokeWidth={1.5} className="text-ink-tertiary" />
           <VersionSelect
-            role="TARGET"
+            dataId="compare-version-target"
             label={t("compare.target")}
             versions={versions}
             value={targetId}
+            otherValue={baseId}
+            otherTag={t("compare.tagBase")}
             onChange={onChangeTarget}
+            onSwap={handleSwap}
           />
           <button
             type="button"
@@ -1336,9 +1413,22 @@ function ComparePane({
           className="flex w-72 shrink-0 flex-col border-r border-hairline bg-surface"
           data-id="compare-changes"
         >
-          <div className="flex items-center justify-between px-3 pb-2 pt-3">
+          <div className="flex items-center justify-between px-3 pb-1 pt-3">
             <h2 className="text-body-strong text-ink">{t("compare.changes")}</h2>
             <span className="text-caption text-ink-tertiary">{changeItems.length}</span>
+          </div>
+          {/* 방향 요약 — 이 목록이 '무엇에서 무엇으로'의 변경인지 상시 표기 */}
+          <div
+            className="flex min-w-0 items-center gap-1 px-3 pb-2 text-fine text-ink-tertiary"
+            data-id="compare-direction"
+          >
+            <span className="min-w-0 truncate" title={baseName}>
+              {baseName}
+            </span>
+            <ArrowRight size={11} strokeWidth={1.5} className="shrink-0" />
+            <span className="min-w-0 truncate font-semibold text-ink-secondary" title={targetName}>
+              {targetName}
+            </span>
           </div>
           {hasChanges && (
             <div className="flex flex-col gap-1.5 border-b border-hairline px-3 pb-2">
