@@ -162,18 +162,25 @@ export function VersionTimeline({
       }
       if (members.length >= 2) {
         items.push({ kind: "group", major, members });
-        if (openMajors.has(major)) {
-          // 하위(멤버)임이 보이게 들여쓰기 마킹 — 렌더에서 좌측 여백 (사용자 피드백 2026-08-29)
-          for (const member of members) items.push({ kind: "version", version: member, indent: true });
-        }
       } else {
         items.push({ kind: "version", version: head });
       }
       i = j;
     }
   }
-  const visibleItems = showAll ? items : items.slice(0, 3);
+  // 더보기(3개 클램프)는 최상위(그룹=1개) 기준 — 그룹을 펼쳐도 예산을 안 먹는다 (사용자 피드백 2026-08-29).
+  const visibleTop = showAll ? items : items.slice(0, 3);
   const hiddenCount = items.length - 3;
+  // 펼친 그룹의 하위(멤버)는 슬라이스와 무관하게 전부 — 헤더 뒤에 들여쓰기로 평면 삽입.
+  const visibleItems: TimelineItem[] = [];
+  for (const item of visibleTop) {
+    visibleItems.push(item);
+    if (item.kind === "group" && openMajors.has(item.major)) {
+      for (const member of item.members) {
+        visibleItems.push({ kind: "version", version: member, indent: true });
+      }
+    }
+  }
 
   return (
     <div data-id="version-timeline" className="relative flex flex-col gap-3">
