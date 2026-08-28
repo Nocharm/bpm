@@ -89,9 +89,20 @@ try {
   await shot(page, "canvas-seeded");
 
   // ── 3) FrameworkChip — 캔버스는 category_id 없이 linkage_category_id로 렌더 ──
-  const chipVisible = await page.locator('[data-id="editor-framework-chip"]')
+  // 우상단은 L5 map 태그, 좌상단은 L5 탐색기 — FrameworkChip·저장 체크리스트 대체 (2026-08-28 개선)
+  const tagVisible = await page.locator('[data-id="framework-l5-tag"]')
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-  check("framework chip renders from linkage category", chipVisible);
+  const explorerVisible = await page.locator('[data-id="framework-l5-explorer"]')
+    .isVisible().catch(() => false);
+  check("L5 tag (top-right) and L5 explorer (top-left) render", tagVisible && explorerVisible,
+    `tag=${tagVisible} explorer=${explorerVisible}`);
+  // 탐색기 펼침 — 내 위치(현재 L5) 하이라이트 행 노출
+  await page.locator('[data-id="l5-explorer-toggle"]').click();
+  const hereVisible = await page.locator('[data-id="framework-l5-explorer"] .bg-accent-tint')
+    .first().waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  check("L5 explorer highlights current position", hereVisible);
+  await shot(page, "l5-explorer-open");
+  await page.locator('[data-id="l5-explorer-toggle"]').click();
 
   // ── 4) S 단축키 → 라이브러리 대신 framework 트리 피커 ─────────────────────
   await page.locator(".react-flow").first().click({ position: { x: 60, y: 400 } });
@@ -123,8 +134,20 @@ try {
     });
     return { status: res.status, body: await res.json() };
   }, mapId);
-  check("framework-confirm creates v1.0 snapshot", confirm1.status === 200 && confirm1.body.label === "v1.0",
+  check("framework-confirm creates v1.0 snapshot",
+    confirm1.status === 200 && confirm1.body.version?.label === "v1.0",
     JSON.stringify(confirm1.body).slice(0, 120));
+
+  // 무변경 재확정 → 409 게이트 (노드 위치 이동은 변경으로 안 침) (2026-08-28 개선)
+  const confirm2 = await page.evaluate(async (id) => {
+    const res = await fetch(`/api/maps/${id}/framework-confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ major: false }),
+    });
+    return res.status;
+  }, mapId);
+  check("no-change reconfirm is rejected (409)", confirm2 === 409, `status=${confirm2}`);
 
   const detail = await page.evaluate(async (id) => {
     const res = await fetch(`/api/maps/${id}`);
@@ -137,8 +160,9 @@ try {
   // 재로드 — 캔버스는 published 스냅샷이 있어도 라이브 draft를 기본으로 연다
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".react-flow__node", { timeout: 15000 });
-  const chipAfter = await page.locator('[data-id="editor-framework-chip"]').isVisible().catch(() => false);
-  check("reload keeps canvas usable (draft-first selection)", chipAfter);
+  const tagAfter = await page.locator('[data-id="framework-l5-tag"]')
+    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  check("reload keeps canvas usable (draft-first selection)", tagAfter);
   await shot(page, "canvas-after-confirm");
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));

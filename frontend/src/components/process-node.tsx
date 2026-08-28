@@ -895,10 +895,11 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   const { t } = useI18n();
   const { ctrlDragIds } = useNodeActions();
   const showCopyBadge = ctrlDragIds.has(id);
-  // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9)
+  // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9).
+  // 예외: 연계 캔버스의 외부 L6(spOriginPath 주입)는 홈 L5별 색을 그대로 쓴다 (2026-08-28 개선)
   const color =
     data.nodeType === "subprocess"
-      ? DEFAULT_COLORS.subprocess
+      ? (data.spOriginPath ? data.color : "") || DEFAULT_COLORS.subprocess
       : data.color || DEFAULT_COLORS[data.nodeType];
   const fill = deriveFill(color);
   const commentCount = data.commentCount ?? 0;
