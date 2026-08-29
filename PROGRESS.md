@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-29 — 플레이스홀더 그릇 준비 (dev)
+- nodes.placeholder_category_id(_ADDED_COLUMNS 등록·미지 카테고리 422)·연계 캔버스 검증 완화(linked 필수 해제)·응답 경로 주입·clone/시그니처 포함·에디터 왕복+에러톤 출처 배지 — 임포트 착지 지점 완성 (§10.1). CSV/AI 병합은 ...existing 스프레드가 보존이라 무변경.
+
 ## 2026-08-29 — 외부 L6 C안·플레이스홀더 에러레드 (dev)
 - 연계 캔버스 외부 L6 = 뉴트럴 바디+좌측 5px 홈 L5 컬러 탭+틴트 배지·아이콘(시안 4종 중 사용자 선정 C안 — 기존 18% 파스텔은 홈과 구분 약함).
 - 플레이스홀더(linked_map_id 빈 SP) = 점선 에러레드 바디+동톤 배너. 개념 확정(§10.1): 임포트가 타 L5 소속 L6를 자리로 파두고 후차 연결 — 출처 L5 컬럼·검증 완화는 임포트 트랙으로 분리.

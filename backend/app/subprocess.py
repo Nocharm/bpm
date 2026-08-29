@@ -31,17 +31,15 @@ def validate_process(nodes: list[NodeIn]) -> None:
 
 
 def validate_framework_canvas(nodes: list[NodeIn]) -> None:
-    """framework 연계 캔버스 규칙 — 링크된 subprocess + 분기·끝 허용, start/process 차단 (2026-08-28 개선).
+    """framework 연계 캔버스 규칙 — subprocess(링크드·플레이스홀더) + 분기·끝 허용, start/process 차단.
 
-    끝 노드는 일반 맵과 동일 규칙(이름 유니크·대표 ≤1·자동 대표 지정)을 적용한다.
+    링크 없는 subprocess = 플레이스홀더(미등록 L6 자리, design 2026-08-28 §10.1) — 임포트가 파두고
+    후차 연결한다. 끝 노드는 일반 맵과 동일 규칙(이름 유니크·대표 ≤1·자동 대표 지정)을 적용한다.
     """
     for n in nodes:
-        if n.node_type == "subprocess":
-            if not n.linked_map_id:
-                raise ValueError("framework canvas allows linked subprocess nodes only")
-        elif n.node_type not in ("decision", "end"):
+        if n.node_type not in ("subprocess", "decision", "end"):
             raise ValueError(
-                "framework canvas allows linked subprocess, decision, and end nodes only"
+                "framework canvas allows subprocess, decision, and end nodes only"
             )
     ends = [n for n in nodes if n.node_type == "end"]
     names = [e.title for e in ends]
@@ -196,6 +194,30 @@ async def get_subprocess_refs(
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
         refs[missing] = SubprocessRefOut(designated=False)
     return refs
+
+
+async def get_placeholder_category_paths(
+    session: AsyncSession, nodes: list[NodeIn]
+) -> dict[int, str]:
+    """플레이스홀더(미등록 SP)의 출처 L5 경로 — 배지 표시 소스 (design 2026-08-28 §10.1)."""
+    targets = {
+        n.placeholder_category_id
+        for n in nodes
+        if n.node_type == "subprocess"
+        and n.linked_map_id is None
+        and n.placeholder_category_id
+    }
+    if not targets:
+        return {}
+    from app.routers.categories import build_category_paths  # 지역 관례 — 순환 회피(maps.py:66)
+
+    cat_rows = (
+        await session.execute(
+            select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+        )
+    ).all()
+    paths = build_category_paths(cat_rows)
+    return {cid: path for cid in targets if (path := paths.get(cid)) is not None}
 
 
 async def assert_no_cycle(

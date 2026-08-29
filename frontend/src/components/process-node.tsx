@@ -931,6 +931,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   // SP 바디 상태 — 미등록(명시 null만: linkedMapId 미전달 표면 오적용 방지)=점선 에러, 외부 L6=뉴트럴+컬러 탭
   const spPlaceholder = data.nodeType === "subprocess" && data.linkedMapId === null;
   const spExternal = data.nodeType === "subprocess" && !!data.spOriginPath && !spPlaceholder;
+  // 출처 배지 경로 — 외부 L6는 라이브 파생(spOriginPath), 플레이스홀더는 저장된 출처 L5 (design §10.1)
+  const originPath =
+    data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
   const style = diff
     ? diffNodeStyle(diff)
     : spPlaceholder
@@ -974,11 +977,16 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         </div>
         {/* 외부 L5 출신 배지 — 연계 캔버스에서 링크맵의 현 소속이 이 캔버스 L5와 다를 때(라이브 파생).
             마지막 2세그먼트만 표시, 전체 경로는 툴팁 (design 2026-08-28 §8) */}
-        {data.spOriginPath && (
+        {originPath && (
           <div
             data-id="node-origin-badge"
-            title={data.spOriginPath}
-            className="mt-0.5 max-w-full self-start truncate rounded-xs border border-hairline bg-surface-alt px-1 py-px text-xs text-ink-tertiary"
+            title={originPath}
+            className={`mt-0.5 max-w-full self-start truncate rounded-xs border px-1 py-px text-xs ${
+              // 플레이스홀더는 바디와 동톤(에러) — 외부 L6는 아래 inline 틴트가 덮는다
+              spPlaceholder
+                ? "border-error/40 bg-error/10 text-error"
+                : "border-hairline bg-surface-alt text-ink-tertiary"
+            }`}
             style={
               // C안 — 배지도 홈 L5 색 틴트(inline이 클래스 색을 덮는다)
               spExternal
@@ -990,7 +998,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
                 : undefined
             }
           >
-            {data.spOriginPath.split("/").slice(-2).join("/")}
+            {originPath.split("/").slice(-2).join("/")}
           </div>
         )}
         {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}

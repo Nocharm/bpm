@@ -74,6 +74,9 @@ export type NodeData = {
   linkedMapId?: number | null;
   followLatest?: boolean;
   linkedVersionId?: number | null;
+  // 플레이스홀더 출처 L5 — 미등록(linkedMapId null) SP의 소속 자리 (design 2026-08-28 §10.1)
+  placeholderCategoryId?: number | null;
+  placeholderCategoryPath?: string | null;
   // 대표 끝 (nodeType==="end")
   isPrimaryEnd?: boolean;
   // 연결된 맵의 최신 버전이 핀된 버전과 다를 때 true — UI 업데이트 알림용

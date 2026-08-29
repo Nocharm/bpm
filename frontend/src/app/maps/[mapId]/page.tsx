@@ -649,6 +649,8 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       linkedMapId: node.linked_map_id,
       followLatest: node.follow_latest,
       linkedVersionId: node.linked_version_id,
+      placeholderCategoryId: node.placeholder_category_id ?? null,
+      placeholderCategoryPath: node.placeholder_category_path ?? null,
       isPrimaryEnd: node.is_primary_end,
     },
   }));
@@ -807,6 +809,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       linked_map_id: node.data.linkedMapId ?? null,
       follow_latest: node.data.followLatest ?? false,
       linked_version_id: node.data.linkedVersionId ?? null,
+      // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (design 2026-08-28 §10.1)
+      placeholder_category_id: node.data.placeholderCategoryId ?? null,
       is_primary_end: node.data.isPrimaryEnd ?? false,
     })),
     // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거

@@ -1151,6 +1151,7 @@ def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
             n.input, n.output, n.input_forms, n.output_forms, n.data_form, n.gmp,
             n.start_condition, n.end_condition,
             n.linked_map_id, n.follow_latest, n.is_primary_end,
+            n.placeholder_category_id,  # 플레이스홀더 출처도 링크 정체성 (design §10.1)
         )
         for n in nodes
     )

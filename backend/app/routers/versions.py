@@ -107,6 +107,8 @@ async def clone_graph(
             linked_map_id=node.linked_map_id,
             follow_latest=node.follow_latest,
             linked_version_id=node.linked_version_id,
+            # 플레이스홀더 출처 L5 보존 — 후차 연결까지 스냅샷에도 유지 (design 2026-08-28 §10.1)
+            placeholder_category_id=node.placeholder_category_id,
             # 대표 끝 플래그 보존
             is_primary_end=node.is_primary_end,
         )

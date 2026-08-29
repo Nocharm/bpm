@@ -161,6 +161,10 @@ export interface GraphNode {
   linked_map_id: number | null;
   follow_latest: boolean;
   linked_version_id: number | null;
+  // 플레이스홀더 출처 L5 — linked_map_id가 빈 SP만 의미 (design 2026-08-28 §10.1)
+  placeholder_category_id?: number | null;
+  // 출처 경로 — 응답 전용 트랜지언트(그래프 라우터 주입), PUT 에코는 서버가 무시
+  placeholder_category_path?: string | null;
   // 대표 끝 (node_type==="end")
   is_primary_end: boolean;
 }

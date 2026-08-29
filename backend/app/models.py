@@ -373,6 +373,9 @@ class Node(Base):
     follow_latest: Mapped[bool] = mapped_column(Boolean, default=True)
     # follow_latest=False면 고정 버전. True면 무시하고 렌더 시 최신 발행본 해석.
     linked_version_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    # 플레이스홀더 출처 L5 — linked_map_id가 빈 SP가 소속될 카테고리(임포트가 기록, 후차 연결용).
+    # 링크 지정 뒤에는 미사용(라이브 출처는 링크맵 카테고리). 노드 FK 부재 관례라 앱 경계 검증 (design 2026-08-28 §10.1)
+    placeholder_category_id: Mapped[int | None] = mapped_column(Integer, default=None)
     # 끝 노드(node_type="end") — 대표 끝(프로세스당 1개, 버전업에도 유지되는 주 출구)
     is_primary_end: Mapped[bool] = mapped_column(Boolean, default=False)
 

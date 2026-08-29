@@ -995,6 +995,8 @@ class NodeIn(BaseModel):
     linked_map_id: int | None = None
     follow_latest: bool = True
     linked_version_id: int | None = None
+    # 플레이스홀더 출처 L5 — linked_map_id가 빈 SP만 의미 (design 2026-08-28 §10.1)
+    placeholder_category_id: int | None = None
     # 대표 끝 (node_type="end")
     is_primary_end: bool = False
 
@@ -1068,7 +1070,8 @@ class EdgeIn(BaseModel):
 
 
 class NodeOut(NodeIn):
-    pass
+    # 플레이스홀더 출처 경로 — 응답 전용 트랜지언트(그래프 라우터가 build_category_paths로 주입)
+    placeholder_category_path: str | None = None
 
 
 class FlatNodeOut(NodeIn):

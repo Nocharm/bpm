@@ -14,6 +14,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.subprocess import (
     assert_no_cycle,
+    get_placeholder_category_paths,
     get_subprocess_refs,
     validate_framework_canvas,
     validate_process,
@@ -71,6 +72,19 @@ async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
     groups = [GroupIn.model_validate(g) for g in group_rows]
     # subprocess 링크 대상 지정 정보 동봉 — 에디터 그래프·임베드 resolved 공통 (spec 2026-07-06)
     refs = await get_subprocess_refs(session, nodes)
+    # 플레이스홀더 출처 L5 경로 주입 — 에디터 출처 배지 소스 (design 2026-08-28 §10.1)
+    ph_paths = await get_placeholder_category_paths(session, nodes)
+    if ph_paths:
+        nodes = [
+            n.model_copy(
+                update={"placeholder_category_path": ph_paths.get(n.placeholder_category_id)}
+            )
+            if n.node_type == "subprocess"
+            and n.linked_map_id is None
+            and n.placeholder_category_id
+            else n
+            for n in nodes
+        ]
     return GraphOut(nodes=nodes, edges=edges, groups=groups, subprocess_refs=refs)
 
 
@@ -177,6 +191,27 @@ async def replace_graph(
                     status_code=422,
                     detail=f"node {node.id} references a group not in the payload",
                 )
+
+    # 플레이스홀더 출처 카테고리 실존 검증 — 노드 FK 부재 관례라 앱 경계에서 (design 2026-08-28 §10.1)
+    ph_cat_ids = {
+        n.placeholder_category_id
+        for n in payload.nodes
+        if n.placeholder_category_id is not None
+    }
+    if ph_cat_ids:
+        found_cats = set(
+            (
+                await session.scalars(
+                    select(ProcessCategory.id).where(ProcessCategory.id.in_(ph_cat_ids))
+                )
+            ).all()
+        )
+        unknown_cats = sorted(ph_cat_ids - found_cats)
+        if unknown_cats:
+            raise HTTPException(
+                status_code=422,
+                detail=f"placeholder_category_id references unknown categories: {unknown_cats}",
+            )
 
     # framework 캔버스는 별도 규칙(start 불요·subprocess+분기·끝) — 일반 맵은 기존 검증 유지
     canvas_map = await session.get(ProcessMap, version.map_id)
@@ -375,6 +410,7 @@ async def replace_graph(
             existing.linked_map_id = node.linked_map_id
             existing.follow_latest = node.follow_latest
             existing.linked_version_id = node.linked_version_id
+            existing.placeholder_category_id = node.placeholder_category_id
             existing.is_primary_end = node.is_primary_end
         else:
             session.add(Node(version_id=version_id, **node.model_dump()))

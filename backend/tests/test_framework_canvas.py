@@ -255,6 +255,50 @@ def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
     assert "framework" in res.json()["detail"]
 
 
+def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> None:
+    """플레이스홀더(linked 없음) 허용 + 출처 L5 저장·경로 주입·스냅샷 보존 (design §10.1 그릇)."""
+    l1 = _seed_category(client, "FWC-PH1", "자리L1")
+    l5 = _seed_category(client, "FWC-PH5", "자리L5", level=5, parent_id=l1)
+    other_l5 = _seed_category(client, "FWC-PHX", "타L5", level=5, parent_id=l1)
+    _seed_l6_map(client, l5, "자리업무1", "FWC-PHM1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.ph"}]})
+    act_as("fwc.ph")
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
+    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    node = graph["nodes"][0]
+    ph = dict(node, id="fwcphnode000000000000000000000001", title="미등록 자리",
+              linked_map_id=None, placeholder_category_id=other_l5)
+    # 미지 카테고리 → 422 (노드 FK 부재 — 앱 경계 검증)
+    bad = dict(ph, id="fwcphnode000000000000000000000002", placeholder_category_id=99999999)
+    res = client.put(f"/api/versions/{draft['id']}/graph",
+                     json={"nodes": [node, bad], "edges": [], "groups": []})
+    assert res.status_code == 422
+    assert "placeholder_category_id" in res.json()["detail"]
+    # 플레이스홀더 저장 허용 + 응답에 출처 경로 주입
+    _put_graph(client, draft["id"], [node, ph])
+    got = client.get(f"/api/versions/{draft['id']}/graph").json()
+    saved = next(n for n in got["nodes"] if n["id"] == ph["id"])
+    assert saved["linked_map_id"] is None
+    assert saved["placeholder_category_id"] == other_l5
+    assert saved["placeholder_category_path"] == "자리L1/타L5"
+    # 확정 스냅샷 복제 보존 + 게이트 시그니처에 출처 포함(변경으로 판정)
+    first = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert first.status_code == 200, first.text
+    snap = client.get(f"/api/versions/{first.json()['version']['id']}/graph").json()
+    cloned = next(n for n in snap["nodes"] if n["title"] == "미등록 자리")
+    assert cloned["placeholder_category_id"] == other_l5
+    # 무변경 재확정 → 409, 출처만 바꾸면 콘텐츠 변경으로 통과
+    assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 409
+    third_l5 = _seed_category(client, "FWC-PHY", "타L5b", level=5, parent_id=l1)
+    _put_graph(client, draft["id"], [node, dict(ph, placeholder_category_id=third_l5)])
+    assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 200
+
+
 def _put_graph(client: TestClient, version_id: int, nodes: list, edges: list | None = None) -> None:
     res = client.put(f"/api/versions/{version_id}/graph",
                      json={"nodes": nodes, "edges": edges or [], "groups": []})
