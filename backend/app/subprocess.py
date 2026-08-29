@@ -117,11 +117,14 @@ async def get_subprocess_refs(
                 ProcessMap.sp_url_label,
                 ProcessMap.sp_description,
                 ProcessMap.category_id,
+                ProcessMap.retired_to_map_id,
             ).where(ProcessMap.id.in_(targets))
         )
     ).all()
     refs: dict[int, SubprocessRefOut] = {}
     category_id_by_map: dict[int, int | None] = {}
+    # 은퇴 체인 출발점 — 삭제된 링크맵의 retired_to (후계자 추적용, 2026-08-30)
+    retire_heads: dict[int, int] = {}
     for (
         mid,
         name,
@@ -149,9 +152,13 @@ async def get_subprocess_refs(
         url_label,
         sp_description,
         category_id,
+        retired_to_map_id,
     ) in rows:
+        if deleted_at is not None and retired_to_map_id is not None:
+            retire_heads[mid] = retired_to_map_id
         refs[mid] = SubprocessRefOut(
             designated=designated_at is not None and deleted_at is None,
+            deleted=deleted_at is not None,
             name=name,
             department=department,
             assignee=assignee,
@@ -192,7 +199,32 @@ async def get_subprocess_refs(
                 # 홈 L5 id — 캔버스 외부 L6 색상 키(같은 L5=같은 색) (2026-08-28 개선)
                 refs[mid].category_id = cid
     for missing in targets - refs.keys():  # 링크 대상 맵이 영구삭제된 경우
-        refs[missing] = SubprocessRefOut(designated=False)
+        refs[missing] = SubprocessRefOut(designated=False, deleted=True)
+    # 이양 후계자 — 은퇴 체인을 살아있는 맵까지 추적해 동봉(교체 다이얼로그 추천 소스) (2026-08-30)
+    for mid, head in retire_heads.items():
+        cursor: int | None = head
+        seen: set[int] = set()
+        for _ in range(5):  # 연쇄 이양 상한 — 순환·폭주 방어
+            if cursor is None or cursor in seen:
+                break
+            seen.add(cursor)
+            row = (
+                await session.execute(
+                    select(
+                        ProcessMap.id,
+                        ProcessMap.name,
+                        ProcessMap.deleted_at,
+                        ProcessMap.retired_to_map_id,
+                    ).where(ProcessMap.id == cursor)
+                )
+            ).first()
+            if row is None:
+                break
+            if row.deleted_at is None:
+                refs[mid].successor_map_id = row.id
+                refs[mid].successor_name = row.name
+                break
+            cursor = row.retired_to_map_id
     return refs
 
 

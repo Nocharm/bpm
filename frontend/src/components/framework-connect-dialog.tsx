@@ -7,6 +7,7 @@ import {
   ArrowRight,
   ChevronRight,
   CornerDownLeft,
+  CornerUpRight,
   Link2,
   Map as MapIcon,
   Search,
@@ -33,9 +34,16 @@ export interface FrameworkConnectDialogProps {
   nodeTitle: string;
   originCategoryId: number | null;
   originPath: string | null;
+  // 이양 후계자 — 스테일 링크 교체 플로우에서 최우선 추천으로 고정 노출 (2026-08-30)
+  successor?: { id: number; name: string } | null;
   linkedMapIds: Set<number>;
   currentMapId: number;
-  onConnect: (map: MapSummary) => void;
+  // 적용에 필요한 건 id·이름뿐 — 후계자 추천(전체 MapSummary 없음)도 같은 경로를 쓴다.
+  // origin은 낙관 참조용 스코프 정보(리스트 픽만 제공) — 즉시 외부 L6 스타일 렌더 (#4)
+  onConnect: (
+    map: Pick<MapSummary, "id" | "name">,
+    origin?: { categoryId: number; categoryPath: string | null; designated: boolean },
+  ) => void;
   onClose: () => void;
 }
 
@@ -43,6 +51,7 @@ export function FrameworkConnectDialog({
   nodeTitle,
   originCategoryId,
   originPath,
+  successor = null,
   linkedMapIds,
   currentMapId,
   onConnect,
@@ -135,10 +144,16 @@ export function FrameworkConnectDialog({
 
   const isGuidedScope = origin !== null && scope !== null && scope.id === origin.id;
 
+  function pickMeta(map: MapSummary) {
+    return scope !== null
+      ? { categoryId: scope.id, categoryPath: scope.path || null, designated: map.sp_designated_at != null }
+      : undefined;
+  }
+
   function handlePick(map: MapSummary) {
     // 안내와 같은 L5(또는 안내 자체가 없음) → 직결. 그 외 → 확인 게이트 (사용자 요구 2026-08-29)
     if (origin === null || isGuidedScope) {
-      onConnect(map);
+      onConnect(map, pickMeta(map));
       return;
     }
     setPendingConfirm(map);
@@ -222,6 +237,28 @@ export function FrameworkConnectDialog({
             )}
           </div>
 
+          {/* 이양 후계자 추천 — 시스템이 아는 대체 맵을 고정 노출(탐색 모드 포함, 직결·게이트 없음) */}
+          {successor !== null && (
+            <div className="border-b border-hairline p-2">
+              <button
+                type="button"
+                data-id="framework-connect-successor"
+                disabled={linkedMapIds.has(successor.id)}
+                onClick={() => onConnect({ id: successor.id, name: successor.name })}
+                className={`flex w-full items-center gap-2 rounded-sm border border-accent-tint-border bg-accent-tint px-3 py-2 text-left text-caption ${
+                  linkedMapIds.has(successor.id) ? "opacity-45" : "hover:border-accent"
+                }`}
+              >
+                <CornerUpRight size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+                <span className="min-w-0 flex-1 truncate font-semibold">{successor.name}</span>
+                <span className="shrink-0 rounded-full border border-accent-tint-border bg-surface px-2 py-0.5 text-fine text-accent">
+                  {linkedMapIds.has(successor.id)
+                    ? t("framework.connectOnCanvas")
+                    : t("framework.successorPill")}
+                </span>
+              </button>
+            </div>
+          )}
           {trail === null ? (
             <>
               {/* 검색 */}
@@ -420,7 +457,7 @@ export function FrameworkConnectDialog({
           onConfirm={() => {
             const map = pendingConfirm;
             setPendingConfirm(null);
-            onConnect(map);
+            onConnect(map, pickMeta(map));
           }}
           onClose={() => setPendingConfirm(null)}
         />

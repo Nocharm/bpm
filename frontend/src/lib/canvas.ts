@@ -13,6 +13,25 @@ import {
   type SubEnd,
 } from "@/lib/subprocess-embed";
 
+// 노드 색 팔레트 (#8) — 세련된 무채도 8톤 stroke(데이터/출력 예외라 raw hex 허용). [0]=""=타입 기본색.
+// 에디터 인스펙터 피커와 외부 L6 색상 키가 공유 — 비교 화면도 같은 색을 쓴다 (2026-08-30 #5 승격)
+export const COLOR_PRESETS = [
+  "",
+  "#6e84a3", // slate blue
+  "#5e988f", // teal
+  "#84a07c", // sage
+  "#c7a062", // amber
+  "#c58a6b", // clay
+  "#c2849a", // rose
+  "#9183c0", // violet
+  "#909098", // stone
+];
+
+// 외부 L6 색상 키 — 같은 L5=같은 색(8톤 모듈로, L5 9개+면 재사용 가능) (2026-08-28 개선)
+export function getExternalL5Color(categoryId: number): string {
+  return COLOR_PRESETS[1 + (categoryId % (COLOR_PRESETS.length - 1))];
+}
+
 export type NodeData = {
   label: string;
   description: string;
@@ -77,6 +96,8 @@ export type NodeData = {
   // 플레이스홀더 출처 L5 — 미등록(linkedMapId null) SP의 소속 자리 (design 2026-08-28 §10.1)
   placeholderCategoryId?: number | null;
   placeholderCategoryPath?: string | null;
+  // 링크맵 삭제(휴지통/영구)됨 — 스테일 링크 교체 CTA 게이트 (2026-08-30, 렌더 시 refs에서 주입)
+  spLinkDeleted?: boolean;
   // 대표 끝 (nodeType==="end")
   isPrimaryEnd?: boolean;
   // 연결된 맵의 최신 버전이 핀된 버전과 다를 때 true — UI 업데이트 알림용

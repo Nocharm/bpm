@@ -86,7 +86,9 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import { ChangeSummarySection } from "@/components/change-summary-section";
 import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
+import { makeOptimisticRef } from "@/lib/framework-connect";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
@@ -169,6 +171,8 @@ import {
   type BranchKind,
   type DropZone,
   type HandleSide,
+  COLOR_PRESETS,
+  getExternalL5Color,
   type NodeData,
   type OutlineEdge,
   type OutlineNode,
@@ -343,18 +347,6 @@ const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 
 type ScreenRect = { left: number; top: number; width: number; height: number; radius: number };
 
 // 색 프리셋 — 첫 항목(빈 값)은 타입 기본색. 세련된 무채도(muted) 8톤 stroke(데이터/출력 예외).
-const COLOR_PRESETS = [
-  "",
-  "#6e84a3", // slate blue
-  "#5e988f", // teal
-  "#84a07c", // sage
-  "#c7a062", // amber
-  "#c58a6b", // clay
-  "#c2849a", // rose
-  "#9183c0", // violet
-  "#909098", // stone
-];
-
 // 노드 타입별 사용 가능 색 세트 (#8) — 첫 항목 ""=타입 기본색.
 // 메인 6 · start/end 3 · 분기(decision) 4. 헥스는 인스펙터에서 아이콘→입력으로 별도 지정.
 const NODE_COLORS = ["", "#6e84a3", "#5e988f", "#84a07c", "#c7a062", "#c58a6b"]; // 6
@@ -1476,6 +1468,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     return m;
   }, [libraryList]);
 
+  // 낙관 참조 — 드롭·연결 직후 서버 refs 도착 전 외부 L6 스타일 즉시 표시 (2026-08-30 #4)
+  const [optimisticRefs, setOptimisticRefs] = useState<Map<number, SubprocessRef>>(new Map());
   // linked_map_id → 지정 정보 — 루트 그래프 + 임베드 resolved의 subprocess_refs 병합(중첩 임베드 커버).
   // 노드에 값을 저장하지 않는 라이브 참조 소스 (spec 2026-07-06).
   const subprocessRefs = useMemo(() => {
@@ -1488,13 +1482,17 @@ function MapEditor({ mapId }: { mapId: number }) {
         m.set(Number(refMapId), ref);
       }
     };
+    // 낙관 참조가 가장 약함 — 서버 refs가 도착하는 즉시 아래 병합이 덮는다 (#4)
+    for (const [mid, ref] of optimisticRefs) {
+      m.set(mid, ref);
+    }
     // resolvedCache는 linkKey별 1회 fetch라 스테일 가능 — 루트 그래프 refs(매 로드/저장 응답 갱신)가 이긴다
     for (const g of resolvedCache.values()) {
       addAll(g.subprocess_refs);
     }
     addAll(rootGraph?.subprocess_refs);
     return m;
-  }, [rootGraph, resolvedCache]);
+  }, [rootGraph, resolvedCache, optimisticRefs]);
 
   // 하위프로세스 노드에 subEnds + updateAvailable 주입 — 캐시된 링크맵 resolved의 끝 노드들에서 파생. NodeActionBar 펼침 게이트·핸들이 읽음.
   // 미로드면 그대로 둔다(로드되면 재계산되어 펼침 가능). data의 링크 메타로 linkKey를 만들어 캐시 조회.
@@ -1553,7 +1551,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             ref.category_id != null &&
             linkageCategoryId !== null &&
             ref.category_id !== linkageCategoryId
-              ? { color: COLOR_PRESETS[1 + (ref.category_id % (COLOR_PRESETS.length - 1))] }
+              ? { color: getExternalL5Color(ref.category_id) }
               : {}),
           }
         : {
@@ -1578,11 +1576,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, undesignated, ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, spLinkDeleted: ref?.deleted === true, ...spAttrs, ...liveLabel, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, undesignated, ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, spLinkDeleted: ref?.deleted === true, ...spAttrs, ...liveLabel, updateAvailable } };
       }
       return {
         ...node,
@@ -1590,6 +1588,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           ...node.data,
           subEnds: deriveSubEnds(resolved),
           undesignated,
+          spLinkDeleted: ref?.deleted === true,
           ...spAttrs,
           ...liveLabel,
           updateAvailable,
@@ -4573,8 +4572,27 @@ function MapEditor({ mapId }: { mapId: number }) {
       const mapName = e.dataTransfer.getData("application/bpm-process-name") || "Subprocess";
       const pinnedRaw = e.dataTransfer.getData("application/bpm-process-pinned");
       const pinned = pinnedRaw ? Number(pinnedRaw) : null;
+      const unregistered = e.dataTransfer.getData("application/bpm-process-unregistered") === "1";
+      // 낙관 참조 — 드롭 즉시 외부 L6 색·출처 배지가 그려지도록(서버 refs 도착 전) (2026-08-30 #4)
+      const categoryRaw = e.dataTransfer.getData("application/bpm-process-category");
+      if (isFrameworkMap && categoryRaw) {
+        const categoryPath = e.dataTransfer.getData("application/bpm-process-category-path");
+        setOptimisticRefs((current) => {
+          const next = new Map(current);
+          next.set(
+            linkedMapId,
+            makeOptimisticRef({
+              name: mapName,
+              categoryId: Number(categoryRaw),
+              categoryPath: categoryPath || null,
+              designated: !unregistered,
+            }),
+          );
+          return next;
+        });
+      }
       const position = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-      if (e.dataTransfer.getData("application/bpm-process-unregistered") === "1") {
+      if (unregistered) {
         setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
         return;
       }
@@ -4582,7 +4600,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     },
     // setUnregDrop(useState setter)은 참조가 늘 안정적이나, React Compiler가 이 렌더의
     // 재구조화 이후 추론한 의존성과 수동 배열을 일치시키기 위해 명시(동작 변화 없음).
-    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint],
+    [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint, isFrameworkMap, setOptimisticRefs],
   );
 
   // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
@@ -5166,32 +5184,64 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
-  // 플레이스홀더 후차 연결 (design §10.1) — 배너 클릭 → 다이얼로그, 확정 시 링크 지정+출처 소거
+  // 플레이스홀더 후차 연결 + 스테일 링크 교체 (design §10.1) — 배너 클릭 → 다이얼로그
   const [connectTarget, setConnectTarget] = useState<{
     nodeId: string;
     title: string;
     originId: number | null;
     originPath: string | null;
+    successor: { id: number; name: string } | null;
   } | null>(null);
   const openConnectPlaceholder = useCallback(
     (nodeId: string) => {
       const node = reactFlow.getNode(nodeId) as AppNode | undefined;
-      if (!node || node.data.linkedMapId != null) {
+      if (!node) {
+        return;
+      }
+      const linked = node.data.linkedMapId ?? null;
+      if (linked === null) {
+        setConnectTarget({
+          nodeId,
+          title: node.data.label,
+          originId: node.data.placeholderCategoryId ?? null,
+          originPath: node.data.placeholderCategoryPath ?? null,
+          successor: null,
+        });
+        return;
+      }
+      // 스테일 링크(삭제·이양된 맵) 교체 — 출처는 옛 맵의 카테고리, 추천은 이양 후계자 (2026-08-30)
+      const ref = subprocessRefs.get(linked);
+      if (ref?.deleted !== true) {
         return;
       }
       setConnectTarget({
         nodeId,
         title: node.data.label,
-        originId: node.data.placeholderCategoryId ?? null,
-        originPath: node.data.placeholderCategoryPath ?? null,
+        originId: ref.category_id ?? null,
+        originPath: ref.category_path ?? null,
+        successor:
+          ref.successor_map_id != null && ref.successor_name != null
+            ? { id: ref.successor_map_id, name: ref.successor_name }
+            : null,
       });
     },
-    [reactFlow],
+    [reactFlow, subprocessRefs],
   );
   const applyConnectPlaceholder = useCallback(
-    (map: MapSummary) => {
+    (
+      map: Pick<MapSummary, "id" | "name">,
+      origin?: { categoryId: number; categoryPath: string | null; designated: boolean },
+    ) => {
       if (connectTarget === null || readOnly) {
         return;
+      }
+      if (origin) {
+        // 낙관 참조 — 연결 직후 refs 도착 전에도 외부 L6 스타일 즉시 반영 (2026-08-30 #4)
+        setOptimisticRefs((current) => {
+          const next = new Map(current);
+          next.set(map.id, makeOptimisticRef({ name: map.name, ...origin }));
+          return next;
+        });
       }
       pushHistory();
       setNodes((current) =>
@@ -5217,7 +5267,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       setConnectTarget(null);
       showToast(t("framework.connectedToast", { name: map.name }));
     },
-    [connectTarget, readOnly, pushHistory, setNodes, scheduleAutoSave, showToast, t],
+    [connectTarget, readOnly, pushHistory, setNodes, scheduleAutoSave, showToast, t, setOptimisticRefs],
+  );
+
+  // 게시본 기준 — 승인 탭 변경 요약의 왼쪽(최신 published, 없으면 섹션 미노출) (2026-08-30 #3)
+  const latestPublishedBase = useMemo(() => {
+    const published = versions.filter((v) => v.status === "published");
+    return published.length > 0 ? published[published.length - 1] : null;
+  }, [versions]);
+  // 라이브 노드 계보 루트 — rootGraph(전체)의 source_node_id. 스냅샷 쪽 번역과 대칭이어야
+  // 게시본 열람 중 전량 삭제+추가 오탐이 없다 (2026-08-30 픽스)
+  const liveLineageById = useMemo(
+    () => new Map((rootGraph?.nodes ?? []).map((n) => [n.id, n.source_node_id ?? n.id])),
+    [rootGraph],
   );
 
   const updateSelectedEdgeLabel = useCallback(
@@ -8570,6 +8632,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             nodeTitle={connectTarget.title}
             originCategoryId={connectTarget.originId}
             originPath={connectTarget.originPath}
+            successor={connectTarget.successor}
             linkedMapIds={linkedMapIds}
             currentMapId={mapId}
             onConnect={applyConnectPlaceholder}
@@ -10713,6 +10776,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                         )}
                       </div>
+                    )}
+                    {/* 게시본 대비 변경 요약 — 승인 워크플로(승인자) 아래, 접힘 1줄→펼침 상세 (2026-08-30 #3) */}
+                    {currentVersion && !isFrameworkMap && latestPublishedBase !== null && (
+                      <ChangeSummarySection
+                        baseVersionId={latestPublishedBase.id}
+                        baseLabel={formatVersionMarker(latestPublishedBase, versions)}
+                        liveNodes={nodes}
+                        liveEdges={edges}
+                        lineageById={liveLineageById}
+                      />
                     )}
 
                     {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}

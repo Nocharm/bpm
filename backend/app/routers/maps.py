@@ -456,6 +456,9 @@ async def copy_map(
     new_map.versions.append(new_version)
     session.add(new_map)
     await session.flush()
+    if payload.retire_source:
+        # 이양 계보 기록 — 은퇴 맵을 가리키는 SP 노드의 교체 추천이 이 체인을 따른다 (2026-08-30)
+        source_map.retired_to_map_id = new_map.id
     await clone_graph(session, source_version, new_version.id)
     if convert:
         # 승격: 섹션 노드 → 일반 process 노드 일괄 변환(앵커 소거·url은 유지) (design 2026-07-24 §6)

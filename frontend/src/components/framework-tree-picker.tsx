@@ -67,16 +67,24 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
     }
   }
 
-  function handleDragStart(e: DragEvent<HTMLDivElement>, row: MapSummary) {
+  function handleDragStart(
+    e: DragEvent<HTMLDivElement>,
+    row: MapSummary,
+    categoryId: number,
+    categoryPath: string,
+  ) {
     e.dataTransfer.effectAllowed = "copy";
     e.dataTransfer.setData("application/bpm-process", String(row.id));
     e.dataTransfer.setData("application/bpm-process-name", row.name);
     // 캔버스 노드는 최신 추종(핀 없음) — 임포트 시드와 동일 계약 (design 2026-08-28 §6)
     e.dataTransfer.setData("application/bpm-process-pinned", "");
     if (!row.sp_designated_at) e.dataTransfer.setData("application/bpm-process-unregistered", "1");
+    // 소속 L5 정보 동봉 — 드롭 즉시 외부 L6 색·출처 배지를 그리는 낙관 참조 소스 (2026-08-30 #4)
+    e.dataTransfer.setData("application/bpm-process-category", String(categoryId));
+    e.dataTransfer.setData("application/bpm-process-category-path", categoryPath);
   }
 
-  const renderMapRow = (row: MapSummary) => {
+  const renderMapRow = (row: MapSummary, categoryId: number, categoryPath: string) => {
     // 캔버스 자신·기링크·다른 캔버스는 드래그 불가 — 링크 유일성/의미 없는 대상 선제 차단
     const blocked = row.id === currentMapId || linkedMapIds.has(row.id) || row.mode === "framework";
     return (
@@ -84,7 +92,7 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
         key={row.id}
         data-id={`framework-picker-map-${row.id}`}
         draggable={!blocked}
-        onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
+        onDragStart={blocked ? undefined : (e) => handleDragStart(e, row, categoryId, categoryPath)}
         title={blocked ? t("library.alreadyLinked") : row.name}
         className={`flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-fine text-ink ${
           blocked ? "cursor-not-allowed opacity-40" : "cursor-grab hover:bg-surface-alt active:cursor-grabbing"
@@ -96,10 +104,12 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
     );
   };
 
-  const renderNode = (node: CategoryNode, depth: number) => {
+  const renderNode = (node: CategoryNode, depth: number, trailNames: string[]) => {
     const open = state.openIds.has(node.id);
     const children = state.childrenByParent.get(node.id) ?? [];
     const mapsData = state.mapsByCategory.get(node.id);
+    // 루트→현재 노드 이름 경로 — 드래그 페이로드의 출처 배지 소스 (#4)
+    const pathNames = [...trailNames, node.name].join("/");
     return (
       <li key={node.id} className="flex flex-col">
         <button
@@ -122,11 +132,11 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
           <>
             {mapsData !== undefined && mapsData.maps.length > 0 && (
               <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">
-                {mapsData.maps.map(renderMapRow)}
+                {mapsData.maps.map((row) => renderMapRow(row, node.id, pathNames))}
               </div>
             )}
             {children.length > 0 && (
-              <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
+              <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1, [...trailNames, node.name]))}</ul>
             )}
           </>
         )}
@@ -161,7 +171,7 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
         ) : !hasCachedChildren(state, ROOT) ? (
           <p className="p-2 text-fine text-ink-tertiary">{t("common.loading")}</p>
         ) : (
-          <ul className="flex flex-col">{roots.map((r) => renderNode(r, 0))}</ul>
+          <ul className="flex flex-col">{roots.map((r) => renderNode(r, 0, []))}</ul>
         )}
       </div>
     </div>

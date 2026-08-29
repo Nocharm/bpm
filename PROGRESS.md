@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — L5 캔버스 개선 5종 배치 (dev)
+- ①이양 후계자: process_maps.retired_to_map_id(copy retire 기록)·refs 체인추적 successor 동봉·스테일 배너=Replace CTA→다이얼로그 추천 카드(직결). ②undesignated 바디를 플레이스홀더 점선 에러 룩으로 통일(코너 삼각 배지 제거·잠금 억제). ③변경 요약을 접힘 1줄(카운트 필)→펼침로, change-summary-section으로 추출해 일반 맵 승인 탭(승인자 아래)에도 게시본 기준 요약 추가 — 라이브 계보를 rootGraph에서 주입해 게시본 열람 시 전량 삭제+추가 오탐 픽스. ④트리 피커 드래그에 카테고리 동봉→낙관 참조로 드롭·연결 즉시 외부 L6 스타일. ⑤COLOR_PRESETS lib 승격 + 비교 화면에 외부 C안·플레이스홀더 스타일 재현(full-graph 출처 경로 주입 포함). E2E 12/12.
+
 ## 2026-08-29 — 플레이스홀더 수동 연결 UX (dev)
 - 배너 CTA→연결 다이얼로그: 출처 L5 후보 우선(유사도 랭킹 lib/framework-connect·정확 일치 배지)·트리 드릴로 타 L5 탐색·이미 캔버스 맵 비활성. 안내 밖 L5 선택 시 경로 비교 확인 모달 게이트(사용자 요구). 연결 시 출처 소거+follow_latest, E2E 8/8.
 

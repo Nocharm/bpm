@@ -1077,6 +1077,8 @@ class NodeOut(NodeIn):
 class FlatNodeOut(NodeIn):
     # 전체 그래프 조회용 — 계보 정보 포함 (검색·버전 diff, spec §7 Phase B)
     source_node_id: str | None = None
+    # 플레이스홀더 출처 경로 — 비교 화면 배지 소스, /graph와 동일 주입 (2026-08-30 #5)
+    placeholder_category_path: str | None = None
 
 
 class GroupIn(BaseModel):
@@ -1100,6 +1102,11 @@ class SubprocessRefOut(BaseModel):
     designated: bool
     # 링크맵의 현재 이름 — subprocess 노드 라벨은 이 이름을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 None.
     name: str | None = None
+    # 링크맵이 삭제(휴지통/영구)됨 — 스테일 링크 교체 CTA 게이트 (design §10.1 확장 2026-08-30)
+    deleted: bool = False
+    # 이양 후계자 — 은퇴 체인을 살아있는 맵까지 추적한 결과(없으면 None). 교체 다이얼로그 추천 소스
+    successor_map_id: int | None = None
+    successor_name: str | None = None
     department: str | None = None
     assignee: str | None = None
     system: str | None = None

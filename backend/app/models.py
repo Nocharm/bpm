@@ -137,6 +137,9 @@ class ProcessMap(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # 이양(retire_source) 시 역할을 이어받은 새 맵 — 은퇴 맵을 가리키는 SP 노드의 교체 추천 소스.
+    # FK 미사용(노드 관례와 동일 앱 계층) (design 2026-08-28 §10.1 확장, 2026-08-30)
+    retired_to_map_id: Mapped[int | None] = mapped_column(Integer, default=None)
     # 오우닝 부서 — org_path 문자열(예: "Division/Office/Team"). NULL=누락(레거시 맵).
     # 소속 직원은 effective_role에서 editor 바닥값을 파생받는다 — 권한 행 없음 (spec 2026-07-10)
     owning_department: Mapped[str | None] = mapped_column(String(200), default=None)

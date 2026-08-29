@@ -166,6 +166,25 @@ class TestRetireSource:
             assert expected in recipients
         assert OWNER not in recipients
         assert VIEWER not in recipients
+        # 이양 계보 기록 + refs 후계자 동봉 — 은퇴 맵 SP 노드의 교체 추천 소스 (2026-08-30)
+        new_id = r.json()["id"]
+
+        async def _refs(session):
+            from app.models import ProcessMap
+            from app.schemas import NodeIn
+            from app.subprocess import get_subprocess_refs
+
+            row = await session.get(ProcessMap, map_id)
+            assert row.retired_to_map_id == new_id
+            refs = await get_subprocess_refs(
+                session,
+                [NodeIn(id="t-stale-node", title="x", node_type="subprocess", linked_map_id=map_id)],
+            )
+            assert refs[map_id].deleted is True
+            assert refs[map_id].successor_map_id == new_id
+            assert refs[map_id].successor_name == src
+
+        _run(_refs)
 
     def test_retire_name_collision_gets_counter(self, client, enforce):
         src = f"retire2-{uuid4().hex[:8]}"

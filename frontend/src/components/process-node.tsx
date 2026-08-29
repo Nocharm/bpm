@@ -750,20 +750,6 @@ function AssigneeWarningBadge({ className = "-bottom-2 -right-2" }: { className?
   );
 }
 
-// 미지정 서브프로세스 뱃지 — 링크맵이 지정 해제/미지정이면 경고 삼각형 + 잠금(권한 무관). (spec 2026-07-06)
-function UndesignatedBadge() {
-  const { t } = useI18n();
-  return (
-    <span
-      data-id="subprocess-undesignated-badge"
-      className="absolute -right-2 -top-2 rounded-xs border border-error/40 bg-error/10 p-0.5 shadow-sm"
-      title={t("subprocess.undesignated")}
-    >
-      <AlertTriangle size={14} strokeWidth={1.5} className="text-error" />
-    </span>
-  );
-}
-
 // 잠긴 하위프로세스 뱃지 — 권한 없는 링크맵은 펼침/드릴 대신 자물쇠 표시(봉인 박스). 펼침 버튼 자리를 대체.
 function LockedBadge() {
   const { t } = useI18n();
@@ -889,8 +875,8 @@ function nodeStyle(color: string, fill: string): CSSProperties {
   } as unknown as CSSProperties;
 }
 
-// 미등록 플레이스홀더 SP — 점선+에러 톤으로 "링크 지정 필요"를 바디에서도 표시 (사용자 선정 2026-08-29).
-// 임포트 생성·라이브러리 드래그 구분 없이 linked_map_id 빈 상태 공통.
+// F/U 필요 SP 공통 바디 — 점선+에러 톤 (사용자 선정 2026-08-29, 통일 2026-08-30).
+// 미등록 플레이스홀더(linked 없음)와 지정해제/삭제 링크(undesignated)가 같은 언어를 쓴다.
 function placeholderNodeStyle(): CSSProperties {
   return {
     borderColor: "var(--color-error)",
@@ -930,13 +916,15 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   const diff = data.diffStatus;
   // SP 바디 상태 — 미등록(명시 null만: linkedMapId 미전달 표면 오적용 방지)=점선 에러, 외부 L6=뉴트럴+컬러 탭
   const spPlaceholder = data.nodeType === "subprocess" && data.linkedMapId === null;
+  // 지정해제·삭제된 링크도 같은 F/U 룩 — 에러 배너+삼각 배지 혼합을 플레이스홀더 언어로 통일 (2026-08-30)
+  const spUndesignated = data.nodeType === "subprocess" && !!data.undesignated;
   const spExternal = data.nodeType === "subprocess" && !!data.spOriginPath && !spPlaceholder;
   // 출처 배지 경로 — 외부 L6는 라이브 파생(spOriginPath), 플레이스홀더는 저장된 출처 L5 (design §10.1)
   const originPath =
     data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
   const style = diff
     ? diffNodeStyle(diff)
-    : spPlaceholder
+    : spPlaceholder || spUndesignated
       ? placeholderNodeStyle()
       : spExternal
         ? externalSpNodeStyle(color)
@@ -1018,15 +1006,32 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <span className="truncate">{t("subprocess.updateBanner")}</span>
           </div>
         ) : data.undesignated ? (
-          // 지정 해제 — 코너 경고 뱃지와 같은 에러 톤으로 사유를 글로도 안내 (사용자 요청 2026-08-25)
-          <div
-            data-id="sp-banner-undesignated"
-            title={t("subprocess.undesignated")}
-            className="mt-1 flex items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error"
-          >
-            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
-            <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
-          </div>
+          data.spLinkDeleted && onConnectPlaceholder ? (
+            // 스테일 링크(삭제·이양된 맵) 교체 CTA — 연결 다이얼로그 재사용, 후계자 추천 동반 (2026-08-30)
+            <button
+              type="button"
+              data-id="sp-banner-undesignated"
+              title={t("framework.replaceCta")}
+              onClick={(event) => {
+                event.stopPropagation();
+                onConnectPlaceholder(id);
+              }}
+              className="nodrag nopan mt-1 flex w-full items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error transition-colors duration-150 hover:border-error"
+            >
+              <Link2 size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("framework.replaceCta")}</span>
+            </button>
+          ) : (
+            // 지정 해제 — 점선 바디와 같은 에러 톤으로 사유를 글로도 안내 (사용자 요청 2026-08-25)
+            <div
+              data-id="sp-banner-undesignated"
+              title={t("subprocess.undesignated")}
+              className="mt-1 flex items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error"
+            >
+              <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
+            </div>
+          )
         ) : data.linkedMapId == null ? (
           spPlaceholder && onConnectPlaceholder ? (
             // 후차 연결 CTA — 배너 자체가 진입점(연계 캔버스 편집 모드 전용) (design §10.1, 2026-08-29)
@@ -1083,12 +1088,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
         {data.assigneeWarning && <AssigneeWarningBadge />}
-        {/* 미지정 경고가 권한 잠금보다 우선 — 원인(지정 해제)을 보여야 오너가 조치 가능 */}
-        {data.undesignated ? (
-          <UndesignatedBadge />
-        ) : data.locked ? (
-          <LockedBadge />
-        ) : null}
+        {/* 미지정 상태는 점선 바디+배너가 신호 — 코너 삼각 배지는 제거, 잠금 배지도 그동안 억제 (2026-08-30 통일) */}
+        {!data.undesignated && data.locked ? <LockedBadge /> : null}
         {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨.
             비교뷰는 모든 엣지를 4변 핸들로 재매핑하므로 diff 여부와 무관하게 NodeHandles 필요
             (unchanged subprocess가 SubprocessHandles를 렌더하면 엣지가 앵커 실패 — F1). */}

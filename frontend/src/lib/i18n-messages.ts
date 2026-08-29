@@ -1885,6 +1885,8 @@ const en = {
   "framework.connectConfirmLine": "This placeholder was guided to a different L5. Connect anyway?",
   "framework.connectAnyway": "Connect anyway",
   "framework.connectedToast": "Connected to {name}",
+  "framework.replaceCta": "Replace map",
+  "framework.successorPill": "Took over this map",
   // ── L5 캔버스 개선 (2026-08-28) ──
   "framework.l5MapTag": "L5 map",
   "framework.explorerHere": "You are here",
@@ -3852,6 +3854,8 @@ const ko: Record<MessageKey, string> = {
   "framework.connectConfirmLine": "이 자리는 다른 L5 소속으로 안내되어 있습니다. 그래도 연결할까요?",
   "framework.connectAnyway": "그래도 연결",
   "framework.connectedToast": "{name}에 연결됨",
+  "framework.replaceCta": "맵 교체하기",
+  "framework.successorPill": "이 맵을 이양받음",
   // ── L5 캔버스 개선 (2026-08-28) ──
   "framework.l5MapTag": "레벨 5 맵",
   "framework.explorerHere": "현재 위치",

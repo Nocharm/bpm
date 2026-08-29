@@ -205,6 +205,10 @@ export interface SubprocessRef {
   designated: boolean;
   // 링크맵의 현재 이름 — subprocess 노드 라벨을 라이브로 따른다(맵 개명 즉시 반영). 영구삭제 맵은 null.
   name: string | null;
+  // 링크맵 삭제됨 + 이양 후계자(살아있는 맵까지 추적) — 교체 CTA·추천 소스 (2026-08-30)
+  deleted?: boolean;
+  successor_map_id?: number | null;
+  successor_name?: string | null;
   department: string | null;
   assignee: string | null;
   system: string | null;

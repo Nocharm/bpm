@@ -29,6 +29,7 @@ from app.schemas import (
     GraphIn,
     GraphOut,
     GroupIn,
+    NodeIn,
     NodeOut,
     VersionGraphOut,
 )
@@ -73,19 +74,28 @@ async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
     # subprocess 링크 대상 지정 정보 동봉 — 에디터 그래프·임베드 resolved 공통 (spec 2026-07-06)
     refs = await get_subprocess_refs(session, nodes)
     # 플레이스홀더 출처 L5 경로 주입 — 에디터 출처 배지 소스 (design 2026-08-28 §10.1)
-    ph_paths = await get_placeholder_category_paths(session, nodes)
-    if ph_paths:
-        nodes = [
-            n.model_copy(
-                update={"placeholder_category_path": ph_paths.get(n.placeholder_category_id)}
-            )
-            if n.node_type == "subprocess"
-            and n.linked_map_id is None
-            and n.placeholder_category_id
-            else n
-            for n in nodes
-        ]
+    nodes = _apply_placeholder_paths(
+        nodes, await get_placeholder_category_paths(session, nodes)
+    )
     return GraphOut(nodes=nodes, edges=edges, groups=groups, subprocess_refs=refs)
+
+
+def _apply_placeholder_paths[NodeT: NodeIn](
+    nodes: list[NodeT], ph_paths: dict[int, str]
+) -> list[NodeT]:
+    """플레이스홀더 노드에 출처 경로 트랜지언트 주입 — /graph·/graph/all 공용 (2026-08-30 #5)."""
+    if not ph_paths:
+        return nodes
+    return [
+        n.model_copy(
+            update={"placeholder_category_path": ph_paths.get(n.placeholder_category_id)}
+        )
+        if n.node_type == "subprocess"
+        and n.linked_map_id is None
+        and n.placeholder_category_id
+        else n
+        for n in nodes
+    ]
 
 
 async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVersion:
@@ -121,6 +131,10 @@ async def get_full_graph(
         )
         for n in node_rows
     ]
+    # 비교 화면 배지 소스 — /graph와 동일한 플레이스홀더 출처 주입 (2026-08-30 #5)
+    nodes = _apply_placeholder_paths(
+        nodes, await get_placeholder_category_paths(session, nodes)
+    )
     return VersionGraphOut(
         nodes=nodes,
         edges=[EdgeIn.model_validate(e) for e in edge_rows],

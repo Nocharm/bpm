@@ -140,6 +140,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("map_versions", "fw_minor", "INTEGER"),
     # 플레이스홀더 출처 L5 — 미등록 SP의 소속 카테고리(임포트 기록·후차 연결) (design §10.1)
     ("nodes", "placeholder_category_id", "INTEGER"),
+    # 이양 후계자 — retire_source가 기록, 은퇴 맵 SP 노드의 교체 추천 소스 (2026-08-30)
+    ("process_maps", "retired_to_map_id", "INTEGER"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

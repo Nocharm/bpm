@@ -62,6 +62,7 @@ import {
   type FlatNode,
   getFullGraph,
   getMap,
+  type SubprocessRef,
   type VersionGraph,
   type VersionStatus,
   type VersionSummary,
@@ -70,6 +71,7 @@ import {
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
   type HandleSide,
+  getExternalL5Color,
   hasBpmAttributes,
   hasCustomTerminalLabel,
   layoutWithDagre,
@@ -292,10 +294,41 @@ function formatCoverage(assigned: number, eligible: number): string {
 // union 노드를 좌표 없는 AppNode로 — 이후 layoutWithDagre가 위치 산정
 type DiffFieldRow = FieldDiffRowData;
 
+// 연계 캔버스 비교 — 에디터와 같은 외부 L6(C안)·플레이스홀더 시각 재현 컨텍스트 (2026-08-30 #5)
+interface SpVisualContext {
+  linkageCategoryId: number | null;
+  linkageCategoryPath: string | null;
+  refs: Record<number, SubprocessRef>;
+}
+
+function buildSpVisual(node: FlatNode, ctx: SpVisualContext): Partial<AppNode["data"]> {
+  if (node.node_type !== "subprocess") {
+    return {};
+  }
+  if (node.linked_map_id == null) {
+    // 플레이스홀더 — 바디(점선 에러)는 linkedMapId로, 배지는 저장된 출처 경로로
+    return { placeholderCategoryPath: node.placeholder_category_path ?? null };
+  }
+  const ref = ctx.refs[node.linked_map_id];
+  if (!ref?.designated) {
+    return {};
+  }
+  return {
+    spOriginPath:
+      ref.category_path && ref.category_path !== ctx.linkageCategoryPath ? ref.category_path : null,
+    ...(ref.category_id != null &&
+    ctx.linkageCategoryId !== null &&
+    ref.category_id !== ctx.linkageCategoryId
+      ? { color: getExternalL5Color(ref.category_id) }
+      : {}),
+  };
+}
+
 function buildAppNodes(
   merged: MergedNode[],
   noteOf: (node: MergedNode) => string | undefined,
   fieldsOf: (node: MergedNode) => DiffFieldRow[] | undefined,
+  spVisual: SpVisualContext | null,
 ): AppNode[] {
   return merged.map((m) => ({
     id: m.id,
@@ -317,6 +350,8 @@ function buildAppNodes(
       fte: m.node.fte,
       // 링크 상태 전달 — 미전달이면 모든 SP 노드가 "링크 미지정" 배너로 오표시된다 (2026-08-29 픽스)
       linkedMapId: m.node.linked_map_id ?? null,
+      // 연계 캔버스면 외부 L6 색·출처 배지·플레이스홀더 배지를 에디터와 동일 파생 (#5)
+      ...(spVisual ? buildSpVisual(m.node, spVisual) : {}),
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),
@@ -649,6 +684,10 @@ interface CompareMapMeta {
   ownerName: string | null;
   categoryPath: string | null;
   publishedById: ReadonlyMap<number, string | null>;
+  // 연계 캔버스 비교 — 외부 L6(C안)·플레이스홀더 스타일 재현용 결착 정보 (2026-08-30 #5)
+  framework: boolean;
+  linkageCategoryId: number | null;
+  linkageCategoryPath: string | null;
 }
 
 function ComparePane({
@@ -785,11 +824,20 @@ function ComparePane({
     // 전개방향(흐름축=ranksep) 간격을 촘촘히(한눈에), 수직축(nodesep)은 방향별로. TB는 좌우(nodesep)를
     // 조금 더 벌려 곁가지 구분. LR: nodesep 120·ranksep 120, TB: nodesep 120·ranksep 150.
     const spacing = flowDir === "TB" ? { nodesep: 120, ranksep: 150 } : { nodesep: 120, ranksep: 120 };
+    // 연계 캔버스 비교 — 양쪽 refs 병합(타깃 우선)으로 에디터와 같은 SP 시각 재현 (#5)
+    const spVisual: SpVisualContext | null = mapMeta.framework
+      ? {
+          linkageCategoryId: mapMeta.linkageCategoryId,
+          linkageCategoryPath: mapMeta.linkageCategoryPath,
+          refs: { ...baseGraph.subprocess_refs, ...targetGraph.subprocess_refs },
+        }
+      : null;
     const laid = layoutWithDagre(
       buildAppNodes(
         merged.nodes.filter((node) => node.status !== "removed"),
         noteOf,
         fieldsOf,
+        spVisual,
       ),
       buildAppEdges(layoutEdges, keptKeys),
       flowDir,
@@ -813,6 +861,7 @@ function ComparePane({
       merged.nodes.filter((node) => node.status === "removed"),
       noteOf,
       fieldsOf,
+      spVisual,
     ).map((node) => {
       const neighbors = merged.edges
         .filter((edge) => edge.status === "removed" && (edge.source === node.id || edge.target === node.id))
@@ -832,7 +881,7 @@ function ComparePane({
       return { ...node, position: { x, y } };
     });
     return [...aligned, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds]);
+  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -2162,6 +2211,9 @@ export default function ComparePage() {
           ownerName: detail.owner_name ?? detail.created_by ?? null,
           categoryPath: detail.category_path ?? null,
           publishedById: new Map(detail.versions.map((v) => [v.id, findPublishedAt(v.events)])),
+          framework: detail.mode === "framework",
+          linkageCategoryId: detail.linkage_category_id ?? null,
+          linkageCategoryPath: detail.linkage_category_path ?? null,
         });
         // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
         const published = detail.versions.find((version) => version.status === "published");
