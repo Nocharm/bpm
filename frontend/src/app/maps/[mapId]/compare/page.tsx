@@ -314,6 +314,8 @@ function buildAppNodes(
       headcount: m.node.headcount,
       annual_count: m.node.annual_count,
       fte: m.node.fte,
+      // 링크 상태 전달 — 미전달이면 모든 SP 노드가 "링크 미지정" 배너로 오표시된다 (2026-08-29 픽스)
+      linkedMapId: m.node.linked_map_id ?? null,
       groupIds: m.node.group_ids ?? [],
       hasChildren: false,
       diffStatus: toDiffStatus(m.status),

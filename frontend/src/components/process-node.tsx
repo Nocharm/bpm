@@ -889,6 +889,29 @@ function nodeStyle(color: string, fill: string): CSSProperties {
   } as unknown as CSSProperties;
 }
 
+// 미등록 플레이스홀더 SP — 점선+에러 톤으로 "링크 지정 필요"를 바디에서도 표시 (사용자 선정 2026-08-29).
+// 임포트 생성·라이브러리 드래그 구분 없이 linked_map_id 빈 상태 공통.
+function placeholderNodeStyle(): CSSProperties {
+  return {
+    borderColor: "var(--color-error)",
+    borderWidth: "1.5px",
+    borderStyle: "dashed",
+    background: "color-mix(in srgb, var(--color-error) 7%, white)",
+    "--nc": "var(--color-error)",
+  } as unknown as CSSProperties;
+}
+
+// 연계 캔버스 외부 L6 — 흰 바디+헤어라인 보더, L5 색은 좌측 탭·아이콘·배지로만 (사용자 선정 2026-08-29 C안).
+function externalSpNodeStyle(color: string): CSSProperties {
+  return {
+    borderColor: "var(--color-hairline)",
+    borderWidth: "1.5px",
+    borderStyle: "solid",
+    background: "var(--color-surface)",
+    "--nc": color,
+  } as unknown as CSSProperties;
+}
+
 // 프로세스 단계 노드 — node_type별 모양(사각/마름모/알약), 좌(입력)/우(출력) 핸들로 선후 연결.
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
@@ -905,7 +928,16 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   const commentCount = data.commentCount ?? 0;
   // 비교화면 diff — diff색 테두리/틴트/뱃지로 표시(에디터에선 diffStatus 미설정 → 자기색). 선택 링은 오버레이 담당.
   const diff = data.diffStatus;
-  const style = diff ? diffNodeStyle(diff) : nodeStyle(color, fill);
+  // SP 바디 상태 — 미등록(명시 null만: linkedMapId 미전달 표면 오적용 방지)=점선 에러, 외부 L6=뉴트럴+컬러 탭
+  const spPlaceholder = data.nodeType === "subprocess" && data.linkedMapId === null;
+  const spExternal = data.nodeType === "subprocess" && !!data.spOriginPath && !spPlaceholder;
+  const style = diff
+    ? diffNodeStyle(diff)
+    : spPlaceholder
+      ? placeholderNodeStyle()
+      : spExternal
+        ? externalSpNodeStyle(color)
+        : nodeStyle(color, fill);
   const diffFields = data.diffFields ?? [];
 
   if (data.nodeType === "subprocess") {
@@ -918,10 +950,23 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       >
         {diff && <DiffBadge status={diff} />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+        {/* 좌측 컬러 탭(C안) — 보더 위를 덮도록 음수 오프셋, 홈 L5 색 표시 (2026-08-29) */}
+        {spExternal && !diff && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute rounded-l-sm"
+            style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: color }}
+          />
+        )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
         {/* SP 마크는 라벨 앞에만 — 아래 줄들(필드·IO)이 노드 전체 폭을 쓴다 (사용자 요청 2026-08-23) */}
         <div className="flex items-center gap-1.5 font-medium text-ink">
-          <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
+          <Workflow
+            size={16}
+            strokeWidth={1.5}
+            className="shrink-0 text-ink-secondary"
+            style={spExternal ? { color } : undefined}
+          />
           <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
@@ -934,6 +979,16 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             data-id="node-origin-badge"
             title={data.spOriginPath}
             className="mt-0.5 max-w-full self-start truncate rounded-xs border border-hairline bg-surface-alt px-1 py-px text-xs text-ink-tertiary"
+            style={
+              // C안 — 배지도 홈 L5 색 틴트(inline이 클래스 색을 덮는다)
+              spExternal
+                ? {
+                    background: `color-mix(in srgb, ${color} 12%, white)`,
+                    borderColor: `color-mix(in srgb, ${color} 38%, white)`,
+                    color: `color-mix(in srgb, ${color} 72%, var(--color-ink))`,
+                  }
+                : undefined
+            }
           >
             {data.spOriginPath.split("/").slice(-2).join("/")}
           </div>
@@ -969,7 +1024,10 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <div
             data-id="sp-banner-placeholder"
             title={t("subprocess.placeholderNotice")}
-            className="mt-1 flex items-center gap-1 rounded-xs border border-changed/40 bg-changed/10 px-1.5 py-0.5 text-xs text-changed"
+            className={`mt-1 flex items-center gap-1 rounded-xs border px-1.5 py-0.5 text-xs ${
+              // 바디가 점선 에러 톤일 때(명시 null) 배너도 동톤 — 미전달 표면(undefined)은 기존 앰버 유지
+              spPlaceholder ? "border-error/40 bg-error/10 text-error" : "border-changed/40 bg-changed/10 text-changed"
+            }`}
           >
             <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.placeholderBanner")}</span>
