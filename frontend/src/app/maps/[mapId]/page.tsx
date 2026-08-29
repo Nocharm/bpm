@@ -1574,13 +1574,19 @@ function MapEditor({ mapId }: { mapId: number }) {
             spUrlLabel: null,
             spOriginPath: null,
           };
+      // 일반 맵 한정 — 링크맵 프레임워크 소속 필(이름 옆 아이콘+3초 호버 피크) 소스 (2026-08-30).
+      // 연계 캔버스에선 출신 배지(spOriginPath)가 같은 정보를 담당하므로 제외.
+      const frameworkPill = (r: SubprocessRef | undefined) =>
+        !isFrameworkMap && r?.designated && r.category_id != null
+          ? { spFrameworkCategoryId: r.category_id, spFrameworkPath: r.category_path ?? null }
+          : { spFrameworkCategoryId: null, spFrameworkPath: null };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, undesignated, spLinkDeleted: ref?.deleted === true, ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, undesignated, spLinkDeleted: ref?.deleted === true, ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, updateAvailable } };
       }
       return {
         ...node,
@@ -1589,6 +1595,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           subEnds: deriveSubEnds(resolved),
           undesignated,
           spLinkDeleted: ref?.deleted === true,
+          ...frameworkPill(ref),
           ...spAttrs,
           ...liveLabel,
           updateAvailable,

@@ -48,6 +48,7 @@ import {
 } from "@/components/compare-field-diff";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { FrameworkPeekPill } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
@@ -962,6 +963,14 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
           </div>
+          {/* 업무체계 필 — 일반 맵에서 링크맵이 프레임워크 소속일 때, 3초 호버로 체계 피크 (2026-08-30) */}
+          {data.spFrameworkCategoryId != null && data.linkedMapId != null && (
+            <FrameworkPeekPill
+              categoryId={data.spFrameworkCategoryId}
+              linkedMapId={data.linkedMapId}
+              path={data.spFrameworkPath ?? ""}
+            />
+          )}
         </div>
         {/* 외부 L5 출신 배지 — 연계 캔버스에서 링크맵의 현 소속이 이 캔버스 L5와 다를 때(라이브 파생).
             마지막 2세그먼트만 표시, 전체 경로는 툴팁 (design 2026-08-28 §8) */}

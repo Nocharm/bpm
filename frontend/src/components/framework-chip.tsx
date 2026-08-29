@@ -17,22 +17,29 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
-const CHIP_BASE =
-  "absolute right-2 top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+// 위치(우상단 고정)와 스킨(반투명 카드)을 분리 — 노드 피크 팝오버가 같은 스킨을 재사용한다 (2026-08-30)
+const CHIP_SKIN = "rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+const CHIP_BASE = `absolute right-2 top-2 z-10 ${CHIP_SKIN}`;
 
 export function FrameworkChip({
   mapId,
   categoryId,
   onNavigate,
+  defaultOpen = false,
+  floating = true,
 }: {
   mapId: number;
   categoryId: number;
   // 이동 게이트 — 주면 직접 이동(router.push) 대신 호출측이 확인 모달을 띄운다(에디터 이탈 미저장 경고)
   onNavigate?: (targetMapId: number, name: string) => void;
+  // 피크 팝오버 재사용 — 처음부터 체인 펼침(드릴인) (사용자 요청 2026-08-30)
+  defaultOpen?: boolean;
+  // false면 우상단 고정 배치 없이 스킨만 — 호출측(포털)이 위치를 잡는다
+  floating?: boolean;
 }) {
   const { t } = useI18n();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [chain, setChain] = useState<CategoryNode[] | null>(null);
   const [chainError, setChainError] = useState(false);
   // 플라이아웃 — 아코디언 클립(inner overflow-hidden)을 벗어나야 해서 루트 직속으로 렌더하고,
@@ -102,7 +109,7 @@ export function FrameworkChip({
     <div
       ref={rootRef}
       data-id="editor-framework-chip"
-      className={`${CHIP_BASE} w-max max-w-[240px] select-none`}
+      className={`${floating ? CHIP_BASE : `relative ${CHIP_SKIN}`} w-max max-w-[240px] select-none`}
     >
       <button
         type="button"
