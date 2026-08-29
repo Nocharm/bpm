@@ -916,7 +916,7 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds } = useNodeActions();
+  const { ctrlDragIds, onConnectPlaceholder } = useNodeActions();
   const showCopyBadge = ctrlDragIds.has(id);
   // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9).
   // 예외: 연계 캔버스의 외부 L6(spOriginPath 주입)는 홈 L5별 색을 그대로 쓴다 (2026-08-28 개선)
@@ -1028,18 +1028,35 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
           </div>
         ) : data.linkedMapId == null ? (
-          // 플레이스홀더(링크 미지정) — 셋업 미완 앰버 톤(해제=에러와 강도 구분) (사용자 요청 2026-08-25)
-          <div
-            data-id="sp-banner-placeholder"
-            title={t("subprocess.placeholderNotice")}
-            className={`mt-1 flex items-center gap-1 rounded-xs border px-1.5 py-0.5 text-xs ${
-              // 바디가 점선 에러 톤일 때(명시 null) 배너도 동톤 — 미전달 표면(undefined)은 기존 앰버 유지
-              spPlaceholder ? "border-error/40 bg-error/10 text-error" : "border-changed/40 bg-changed/10 text-changed"
-            }`}
-          >
-            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
-            <span className="truncate">{t("subprocess.placeholderBanner")}</span>
-          </div>
+          spPlaceholder && onConnectPlaceholder ? (
+            // 후차 연결 CTA — 배너 자체가 진입점(연계 캔버스 편집 모드 전용) (design §10.1, 2026-08-29)
+            <button
+              type="button"
+              data-id="sp-banner-placeholder"
+              title={t("framework.connectCta")}
+              onClick={(event) => {
+                event.stopPropagation();
+                onConnectPlaceholder(id);
+              }}
+              className="nodrag nopan mt-1 flex w-full items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-xs text-error transition-colors duration-150 hover:border-error"
+            >
+              <Link2 size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("framework.connectCta")}</span>
+            </button>
+          ) : (
+            // 플레이스홀더(링크 미지정) — 셋업 미완 앰버 톤(해제=에러와 강도 구분) (사용자 요청 2026-08-25)
+            <div
+              data-id="sp-banner-placeholder"
+              title={t("subprocess.placeholderNotice")}
+              className={`mt-1 flex items-center gap-1 rounded-xs border px-1.5 py-0.5 text-xs ${
+                // 바디가 점선 에러 톤일 때(명시 null) 배너도 동톤 — 미전달 표면(undefined)은 기존 앰버 유지
+                spPlaceholder ? "border-error/40 bg-error/10 text-error" : "border-changed/40 bg-changed/10 text-changed"
+              }`}
+            >
+              <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("subprocess.placeholderBanner")}</span>
+            </div>
+          )
         ) : data.followLatest === false ? (
           <div
             data-id="sp-banner-pinned"

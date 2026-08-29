@@ -85,6 +85,8 @@ export interface NodeActions {
   // 캔버스 IO 링크 행 hover → 상대(원본/미러) 노드·경로 엣지 하이라이트 — 인스펙터 행 hover와
   // 동일 효과(computeIoLinkHighlight 공용). index null = 해제. null이면 비활성(Provider 부재 표면).
   onHoverIoLink: ((nodeId: string, side: IoSide, index: number | null) => void) | null;
+  // 플레이스홀더 배너 클릭 → 후차 연결 다이얼로그 (연계 캔버스 편집 모드 전용, design §10.1)
+  onConnectPlaceholder: ((nodeId: string) => void) | null;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
@@ -106,6 +108,7 @@ const defaultActions: NodeActions = {
   onSetIoListState: null,
   ioCheckPulse: null,
   onHoverIoLink: null,
+  onConnectPlaceholder: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

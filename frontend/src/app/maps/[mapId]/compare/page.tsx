@@ -209,6 +209,7 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
   onSetIoListState: null,
   ioCheckPulse: null,
   onHoverIoLink: null,
+  onConnectPlaceholder: null,
 };
 
 // FIELD_MSG는 lib/diff.ts로 승격 — 확정 요약(연계 캔버스)과 공용 (2026-08-28)

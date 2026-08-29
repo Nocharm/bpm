@@ -86,6 +86,7 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
@@ -225,6 +226,7 @@ import {
   type GraphGroup,
   type GraphNode,
   type LibraryProcess,
+  type MapSummary,
   type SubprocessRef,
   type SubprocessUsage,
   type VersionGraph,
@@ -5164,6 +5166,60 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, pushHistory, setNodes, scheduleAutoSave],
   );
 
+  // 플레이스홀더 후차 연결 (design §10.1) — 배너 클릭 → 다이얼로그, 확정 시 링크 지정+출처 소거
+  const [connectTarget, setConnectTarget] = useState<{
+    nodeId: string;
+    title: string;
+    originId: number | null;
+    originPath: string | null;
+  } | null>(null);
+  const openConnectPlaceholder = useCallback(
+    (nodeId: string) => {
+      const node = reactFlow.getNode(nodeId) as AppNode | undefined;
+      if (!node || node.data.linkedMapId != null) {
+        return;
+      }
+      setConnectTarget({
+        nodeId,
+        title: node.data.label,
+        originId: node.data.placeholderCategoryId ?? null,
+        originPath: node.data.placeholderCategoryPath ?? null,
+      });
+    },
+    [reactFlow],
+  );
+  const applyConnectPlaceholder = useCallback(
+    (map: MapSummary) => {
+      if (connectTarget === null || readOnly) {
+        return;
+      }
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === connectTarget.nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  // 라벨은 링크맵 이름 고정(F5) — 연결 즉시 이름을 따라간다
+                  label: map.name,
+                  linkedMapId: map.id,
+                  followLatest: true,
+                  linkedVersionId: null,
+                  placeholderCategoryId: null,
+                  placeholderCategoryPath: null,
+                },
+              }
+            : node,
+        ),
+      );
+      scheduleAutoSave();
+      setConnectTarget(null);
+      showToast(t("framework.connectedToast", { name: map.name }));
+    },
+    [connectTarget, readOnly, pushHistory, setNodes, scheduleAutoSave, showToast, t],
+  );
+
   const updateSelectedEdgeLabel = useCallback(
     (label: string) => {
       if (readOnly) {
@@ -7305,6 +7361,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       onSetIoListState: setIoListState,
       ioCheckPulse,
       onHoverIoLink: handleNodeIoHoverLink,
+      // 후차 연결은 연계 캔버스 편집 모드에서만 — 일반 맵·읽기전용은 기존 배너 유지 (design §10.1)
+      onConnectPlaceholder: isFrameworkMap && !readOnly ? openConnectPlaceholder : null,
     }),
     [
       toggleInlineExpand,
@@ -7323,6 +7381,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       setIoListState,
       ioCheckPulse,
       handleNodeIoHoverLink,
+      isFrameworkMap,
+      readOnly,
+      openConnectPlaceholder,
     ],
   );
 
@@ -8502,6 +8563,17 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             onClose={() => setFrameworkPickerOpen(false)}
+          />
+        )}
+        {connectTarget !== null && (
+          <FrameworkConnectDialog
+            nodeTitle={connectTarget.title}
+            originCategoryId={connectTarget.originId}
+            originPath={connectTarget.originPath}
+            linkedMapIds={linkedMapIds}
+            currentMapId={mapId}
+            onConnect={applyConnectPlaceholder}
+            onClose={() => setConnectTarget(null)}
           />
         )}
         {wordReimportOpen && (
