@@ -100,9 +100,6 @@ export type NodeEditPatch = Partial<{
   linkedVersionId: number | null;
 }>;
 
-// SP 모달 기본(=최소) 폭 px — 우측 드래그로 120%(504px)까지 (사용자 요청 2026-08-30)
-const SUMMARY_BASE_WIDTH = 420;
-
 const ATTR_FIELDS: { key: "system"; labelKey: "field.system" }[] = [
   { key: "system", labelKey: "field.system" },
 ];
@@ -276,10 +273,6 @@ export function NodeSummaryModal({
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // SP 모달 폭 조절 — 기본 폭이 최소, 우측 경계 드래그로 120%까지 (사용자 요청 2026-08-30).
-  // 모달이 중앙 정렬이라 우측 경계가 커서를 따르려면 이동량의 2배를 폭에 반영한다.
-  const [panelWidth, setPanelWidth] = useState(SUMMARY_BASE_WIDTH);
-  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
   const [colorMoreOpen, setColorMoreOpen] = useState(false);
   // Parameters 그룹 접기 — 기본 접힘, 인스펙터와 공유 키(bpm.paramsCollapsed)로 localStorage 퍼시스트
   const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
@@ -607,37 +600,9 @@ export function NodeSummaryModal({
       onClose={onClose}
     >
       <div
-        className="relative flex max-h-[80%] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
-        style={{ width: panelWidth }}
+        className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* 우측 경계 리사이즈 핸들 — subprocess 모달 한정 (사용자 요청 2026-08-30) */}
-        {nodeType === "subprocess" && (
-          <div
-            data-id="summary-resize-handle"
-            title={t("summary.resizeHint")}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              event.currentTarget.setPointerCapture(event.pointerId);
-              resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: panelWidth };
-            }}
-            onPointerMove={(event) => {
-              const drag = resizeRef.current;
-              if (drag === null || drag.pointerId !== event.pointerId) return;
-              const next = drag.startWidth + (event.clientX - drag.startX) * 2;
-              setPanelWidth(
-                Math.round(
-                  Math.min(SUMMARY_BASE_WIDTH * 1.2, Math.max(SUMMARY_BASE_WIDTH, next)),
-                ),
-              );
-            }}
-            onPointerUp={(event) => {
-              resizeRef.current = null;
-              event.currentTarget.releasePointerCapture(event.pointerId);
-            }}
-            className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize transition-colors duration-150 hover:bg-accent/40"
-          />
-        )}
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
           {/* 말줄임 대신 줄바꿈 — 긴 노드 제목(읽기전용 헤더)도 전문 표시 (F7) */}
           <span className="flex min-w-0 flex-1 items-center gap-2 break-keep text-body-strong text-ink">

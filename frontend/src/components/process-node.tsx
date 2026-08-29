@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useRef, type CSSProperties } from "react";
+import { Fragment, useRef, useState, type CSSProperties } from "react";
 
-import { Handle, type NodeProps, Position } from "@xyflow/react";
+import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
 import {
   AlertTriangle,
   Building2,
@@ -876,6 +876,11 @@ function nodeStyle(color: string, fill: string): CSSProperties {
   } as unknown as CSSProperties;
 }
 
+// SP 노드 폭 조절 — 기본 180px가 최소, 우측 그립 드래그로 120%(216px)까지 (사용자 요청 2026-08-30).
+// 표시 전용(저장 없음) — 새로고침 시 기본 폭 복귀. 드래그 환산은 시작 시점 zoom으로 나눈다.
+const SP_BASE_WIDTH = 180;
+const SP_MAX_WIDTH = SP_BASE_WIDTH * 1.2;
+
 // F/U 필요 SP 공통 바디 — 점선+에러 톤 (사용자 선정 2026-08-29, 통일 2026-08-30).
 // 미등록 플레이스홀더(linked 없음)와 지정해제/삭제 링크(undesignated)가 같은 언어를 쓴다.
 function placeholderNodeStyle(): CSSProperties {
@@ -905,6 +910,10 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   const { t } = useI18n();
   const { ctrlDragIds, onConnectPlaceholder } = useNodeActions();
   const showCopyBadge = ctrlDragIds.has(id);
+  // SP 폭 조절 — 표시 전용 상태. zoom 구독 없이(전 노드 리렌더 방지) 드래그 시작 때 스토어에서 읽는다.
+  const rfStore = useStoreApi();
+  const [spWidth, setSpWidth] = useState<number | null>(null);
+  const spResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; zoom: number } | null>(null);
   // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9).
   // 예외: 연계 캔버스의 외부 L6(spOriginPath 주입)는 홈 L5별 색을 그대로 쓴다 (2026-08-28 개선)
   const color =
@@ -937,9 +946,37 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       // justify-start — 라벨을 상단 고정해 좌/우 핸들 라벨 라인 앵커(18px)와 정합 (사용자 요청 2026-08-25)
       <div
         className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
-        style={style}
+        style={spWidth !== null ? ({ ...style, width: spWidth } as CSSProperties) : style}
         title={data.diffNote}
       >
+        {/* 폭 조절 그립 — 우측 경계 하단(출력 핸들과 간섭 회피), 편집 표면 전용·표시 전용 (2026-08-30) */}
+        {(isConnectable ?? true) && data.sideHandles !== true && !diff && (
+          <div
+            data-id="sp-resize-grip"
+            title={t("node.resizeHint")}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              spResizeRef.current = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startWidth: spWidth ?? SP_BASE_WIDTH,
+                zoom: rfStore.getState().transform[2] || 1,
+              };
+            }}
+            onPointerMove={(event) => {
+              const drag = spResizeRef.current;
+              if (drag === null || drag.pointerId !== event.pointerId) return;
+              const next = drag.startWidth + (event.clientX - drag.startX) / drag.zoom;
+              setSpWidth(Math.round(Math.min(SP_MAX_WIDTH, Math.max(SP_BASE_WIDTH, next))));
+            }}
+            onPointerUp={(event) => {
+              spResizeRef.current = null;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            className="nodrag nopan absolute bottom-1 right-0 z-10 h-6 w-1.5 cursor-ew-resize rounded-l-xs transition-colors duration-150 hover:bg-accent/50"
+          />
+        )}
         {diff && <DiffBadge status={diff} />}
         {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
         {/* 좌측 컬러 탭(C안) — 보더 위를 덮도록 음수 오프셋, 홈 L5 색 표시 (2026-08-29) */}
