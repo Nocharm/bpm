@@ -116,9 +116,13 @@ export function SubprocessPreviewPeek({
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [anchorEl, onClose]);
 
-  // 세로 클램프 — 패널 대략 높이(헤더+미리보기+정보 4행) 기준으로 화면 밖 잘림 방지
-  const PANEL_H = 360;
-  const top = Math.max(8, Math.min(anchor.y, window.innerHeight - PANEL_H - 8));
+  // 크기 = 브라우저 창 비례(고정 높이 대신) — 폭 40vw·미리보기 32vh, 상하한 클램프 (사용자 피드백 2026-08-30).
+  // 열림 시점 창 기준(리스너 없음) — 피크는 스크롤·바깥클릭으로 닫히는 일시 표면이라 리사이즈 추적은 과함.
+  const panelW = Math.round(Math.min(Math.max(window.innerWidth * 0.4, 480), 800));
+  const previewH = Math.round(Math.min(Math.max(window.innerHeight * 0.32, 220), 460));
+  // 화면 밖 잘림 방지 클램프 — 헤더(~40px)+미리보기 행 기준
+  const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
+  const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
 
   const infoRows: { key: string; label: string; value: string }[] = designated
     ? [
@@ -137,8 +141,8 @@ export function SubprocessPreviewPeek({
     <div
       ref={panelRef}
       data-id="library-peek"
-      style={{ left: anchor.x, top, boxShadow: "var(--shadow-lg)" }}
-      className="fixed z-[1250] flex w-80 flex-col overflow-hidden rounded-md border border-hairline bg-surface"
+      style={{ left, top, width: panelW, boxShadow: "var(--shadow-lg)" }}
+      className="fixed z-[1250] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface"
       onMouseLeave={onClose}
     >
       {/* header — 맵 이름 + 게시본 기준 표기 */}
@@ -151,63 +155,69 @@ export function SubprocessPreviewPeek({
           <span className="shrink-0 text-fine text-ink-tertiary">{t("library.peekPublishedBasis")}</span>
         )}
       </div>
-      {/* preview — 마우스가 이 영역에 있으면 우상단 추가 버튼 노출 */}
-      <div className="group relative h-44 shrink-0 border-b border-hairline bg-canvas">
-        {!designated ? (
-          <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-            <p className="text-fine text-ink-secondary">{t("library.peekUnregisteredNote")}</p>
-          </div>
-        ) : fetchState.status === "loading" ? (
-          <div className="flex h-full items-center justify-center text-fine text-ink-tertiary">
-            {t("common.loading")}
-          </div>
-        ) : fetchState.status === "locked" ? (
-          <div data-id="library-peek-locked" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-            <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-            <p className="text-fine text-ink-secondary">{t("library.peekNoPermission")}</p>
-            <p className="text-fine text-ink-tertiary">{t("library.peekCanStillAdd")}</p>
-          </div>
-        ) : fetchState.status === "error" ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
-            {t("library.peekLoadError")}
-          </div>
-        ) : fetchState.graph.nodes.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
-            {t("library.peekEmptyGraph")}
-          </div>
-        ) : (
-          <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} />
-        )}
-        {/* Add to map — 미리보기 영역 호버 시 표시. 잠금/미등록 상태에서도 추가는 가능 */}
-        <button
-          type="button"
-          data-id="library-peek-add"
-          disabled={addDisabledReason !== null}
-          title={addDisabledReason ?? t("library.peekAdd")}
-          onClick={onAdd}
-          className={`absolute right-2 top-2 flex items-center gap-1 rounded-sm border px-2 py-1 text-fine font-medium opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100 ${
-            addDisabledReason !== null
-              ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
-              : "border-accent-tint-border bg-accent text-white hover:opacity-90"
-          }`}
-        >
-          <Plus size={12} strokeWidth={1.5} />
-          {t("library.peekAdd")}
-        </button>
-      </div>
-      {/* SP 등록 정보 — 미등록 행은 서버가 값 마스킹(전부 null)이라 섹션 생략 */}
-      {designated && (
-        <div data-id="library-peek-info" className="flex flex-col gap-1 px-3 py-2">
-          <span className="text-fine font-semibold text-ink-secondary">{t("library.peekInfoTitle")}</span>
-          {infoRows.map((row) => (
-            <div key={row.key} className="flex items-baseline gap-2">
-              <span className="w-24 shrink-0 text-fine text-ink-tertiary">{row.label}</span>
-              <span className="min-w-0 truncate text-fine text-ink">{row.value || "—"}</span>
+      {/* body — 미리보기(좌, 확대) + SP 등록 정보(우측 컬럼) (사용자 피드백 2026-08-30) */}
+      <div className="flex min-h-0">
+        {/* preview — 마우스가 이 영역에 있으면 우상단 추가 버튼 노출 */}
+        <div className="group relative min-w-0 flex-1 bg-canvas" style={{ height: previewH }}>
+          {!designated ? (
+            <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
+              <p className="text-fine text-ink-secondary">{t("library.peekUnregisteredNote")}</p>
             </div>
-          ))}
+          ) : fetchState.status === "loading" ? (
+            <div className="flex h-full items-center justify-center text-fine text-ink-tertiary">
+              {t("common.loading")}
+            </div>
+          ) : fetchState.status === "locked" ? (
+            <div data-id="library-peek-locked" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
+              <p className="text-fine text-ink-secondary">{t("library.peekNoPermission")}</p>
+              <p className="text-fine text-ink-tertiary">{t("library.peekCanStillAdd")}</p>
+            </div>
+          ) : fetchState.status === "error" ? (
+            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
+              {t("library.peekLoadError")}
+            </div>
+          ) : fetchState.graph.nodes.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
+              {t("library.peekEmptyGraph")}
+            </div>
+          ) : (
+            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} />
+          )}
+          {/* Add to map — 미리보기 영역 호버 시 표시. 잠금/미등록 상태에서도 추가는 가능 */}
+          <button
+            type="button"
+            data-id="library-peek-add"
+            disabled={addDisabledReason !== null}
+            title={addDisabledReason ?? t("library.peekAdd")}
+            onClick={onAdd}
+            className={`absolute right-2 top-2 flex items-center gap-1 rounded-sm border px-2 py-1 text-fine font-medium opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100 ${
+              addDisabledReason !== null
+                ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
+                : "border-accent-tint-border bg-accent text-white hover:opacity-90"
+            }`}
+          >
+            <Plus size={12} strokeWidth={1.5} />
+            {t("library.peekAdd")}
+          </button>
         </div>
-      )}
+        {/* SP 등록 정보 — 미등록 행은 서버가 값 마스킹(전부 null)이라 컬럼 생략(미리보기가 전폭 사용) */}
+        {designated && (
+          <div
+            data-id="library-peek-info"
+            className="flex w-52 shrink-0 flex-col gap-1.5 overflow-y-auto border-l border-hairline px-3 py-2"
+          >
+            <span className="text-fine font-semibold text-ink-secondary">{t("library.peekInfoTitle")}</span>
+            {infoRows.map((row) => (
+              <div key={row.key} className="flex flex-col gap-0.5">
+                <span className="text-fine text-ink-tertiary">{row.label}</span>
+                <span className="min-w-0 truncate text-fine text-ink">{row.value || "-"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>,
     document.body,
   );
