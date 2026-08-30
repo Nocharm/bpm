@@ -30,17 +30,23 @@ export interface FrameworkTreePickerProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
   readOnly: boolean;
+  // 캔버스의 결착 L5 — 타 L5 출신 판정(피크 목업을 캔버스 규칙=L5 색+출처 배지로) (design 2026-08-28 §8)
+  linkageCategoryId: number | null;
   onClose: () => void;
   // 미리보기 피크의 "Add to map" — 드롭과 동일 생성 체인(뷰포트 중앙, 출처 배지 낙관 참조 포함) (2026-08-30)
   onPeekAdd: (payload: PeekAddPayload) => void;
+  // 피크 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)로 연결
+  onPeekOpenMap: (mapId: number, name: string) => void;
 }
 
 export function FrameworkTreePicker({
   currentMapId,
   linkedMapIds,
   readOnly,
+  linkageCategoryId,
   onClose,
   onPeekAdd,
+  onPeekOpenMap,
 }: FrameworkTreePickerProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
@@ -272,6 +278,11 @@ export function FrameworkTreePicker({
           anchor={peek.anchor}
           anchorEl={peek.anchorEl}
           addDisabledReason={peek.blocked}
+          externalOrigin={
+            linkageCategoryId !== null && peek.categoryId !== linkageCategoryId
+              ? { categoryId: peek.categoryId, categoryPath: peek.categoryPath }
+              : null
+          }
           onAdd={() => {
             const { row, categoryId, categoryPath } = peek;
             setPeek(null);
@@ -284,6 +295,11 @@ export function FrameworkTreePicker({
               categoryId,
               categoryPath,
             });
+          }}
+          onOpenMap={() => {
+            const { row } = peek;
+            setPeek(null);
+            onPeekOpenMap(row.id, row.name);
           }}
           onClose={() => setPeek(null)}
         />

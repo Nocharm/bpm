@@ -8737,6 +8737,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             onClose={() => setLibraryOpen(false)}
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
             onPeekAdd={addLinkNodeFromPeek}
+            onPeekOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
           />
         )}
         {sectionsOpen && (
@@ -8753,8 +8754,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             readOnly={readOnly}
+            linkageCategoryId={linkageCategoryId}
             onClose={() => setFrameworkPickerOpen(false)}
             onPeekAdd={addLinkNodeFromPeek}
+            onPeekOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
           />
         )}
         {connectTarget !== null && (

@@ -27,6 +27,8 @@ export interface ProcessLibraryPanelProps {
   onAddLinkNode: (linkedMapId: number, name: string) => void;
   // 미리보기 피크의 "Add to map" — 드롭과 동일 생성 체인(뷰포트 중앙) (2026-08-30)
   onPeekAdd: (payload: PeekAddPayload) => void;
+  // 피크 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)로 연결
+  onPeekOpenMap: (mapId: number, name: string) => void;
 }
 
 export function ProcessLibraryPanel({
@@ -36,6 +38,7 @@ export function ProcessLibraryPanel({
   onClose,
   onAddLinkNode,
   onPeekAdd,
+  onPeekOpenMap,
 }: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
@@ -311,6 +314,11 @@ export function ProcessLibraryPanel({
                 : null,
               unregistered: !row.designated,
             });
+          }}
+          onOpenMap={() => {
+            const row = peek.row;
+            setPeek(null);
+            onPeekOpenMap(row.map_id, row.name);
           }}
           onClose={() => setPeek(null)}
         />

@@ -50,12 +50,31 @@ async function newPage(devUser) {
     (await page.locator('[data-id="library-peek"] .pointer-events-none svg rect').count()) > 0,
     "[1] published SVG preview rendered",
   );
-  const infoText = await page.locator('[data-id="library-peek-info"]').innerText();
-  check(infoText.length > 0, "[1] SP info section rendered");
   const addBtn = page.locator('[data-id="library-peek-add"]');
   check(await addBtn.isVisible(), "[1] add button visible in header");
-  check(await page.locator('[data-id="library-peek-node-mock"]').isVisible(), "[1] to-be-added node mock rendered");
+  // 기본 탭 = 노드 목업(우측 최상단) — 클릭 시 추가/이동 드롭다운
+  check(await page.locator('[data-id="library-peek-node-mock"]').isVisible(), "[1] node mock on default tab");
+  await page.click('[data-id="library-peek-node-mock"]');
+  check(await page.locator('[data-id="library-peek-mock-add"]').isVisible(), "[1] mock menu shows add");
+  check(await page.locator('[data-id="library-peek-mock-open"]').isVisible(), "[1] mock menu shows open-map");
   await page.screenshot({ path: `${SHOT_DIR}/peek-1-preview.png` });
+  // 맵 이동 → 에디터 이탈 확인 게이트(취소) — 피크는 이동 선택 시 닫힘
+  await page.click('[data-id="library-peek-mock-open"]');
+  await page.waitForSelector('[data-id="confirm-dialog-cancel"]', { timeout: 5000 });
+  check(true, "[1] open-map goes through confirm gate");
+  await page.click('[data-id="confirm-dialog-cancel"]');
+  await page.waitForTimeout(200);
+  check(page.url().includes("/maps/26"), "[1] cancel keeps current editor");
+  // 재오픈 → 상세 탭: 아이콘+라벨+값 필 3요소
+  await page.click('[data-id="process-library-panel"] [data-map-id="6"]');
+  await page.waitForSelector('[data-id="library-peek"]');
+  await page.click('[data-id="library-peek-tab-details"]');
+  const infoText = await page.locator('[data-id="library-peek-info"]').innerText();
+  check(
+    infoText.includes("Growth Team") && infoText.length > "Growth Team".length,
+    "[1] detail tab lists label+value rows",
+  );
+  await page.screenshot({ path: `${SHOT_DIR}/peek-1-details.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await addBtn.click();
   await page.waitForTimeout(600);
@@ -146,6 +165,11 @@ async function newPage(devUser) {
   check(
     (await page.locator('[data-id="library-peek"] .pointer-events-none svg rect').count()) > 0,
     "[5] preview rendered",
+  );
+  // 타 L5 출신 행 — 목업이 캔버스 규칙(홈 L5 색+출처 배지)로 미리 변경돼야 함
+  check(
+    await page.locator('[data-id="library-peek-mock-origin"]').isVisible(),
+    "[5] external-origin mock shows L5 badge",
   );
   await page.screenshot({ path: `${SHOT_DIR}/peek-5-framework.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();

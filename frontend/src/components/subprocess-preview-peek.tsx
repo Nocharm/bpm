@@ -8,6 +8,8 @@
 import {
   Building2,
   Clock,
+  ExternalLink,
+  FolderTree,
   Lock,
   Network,
   Plus,
@@ -23,6 +25,7 @@ import { createPortal } from "react-dom";
 import { getResolvedGraph, type VersionGraph } from "@/lib/api";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
+import { getExternalL5Color } from "@/lib/canvas";
 import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 
@@ -61,7 +64,9 @@ export function SubprocessPreviewPeek({
   anchor,
   anchorEl,
   addDisabledReason,
+  externalOrigin = null,
   onAdd,
+  onOpenMap,
   onClose,
 }: {
   mapId: number;
@@ -74,7 +79,11 @@ export function SubprocessPreviewPeek({
   anchorEl: Element | null;
   // null=추가 가능. 문자열이면 비활성 사유(이미 링크됨·순환·읽기전용 등)
   addDisabledReason: string | null;
+  // L5 연계 캔버스 전용 — 타 L5 출신 맵이면 캔버스 규칙(홈 L5별 색+출처 배지)로 목업 렌더 (design 2026-08-28 §8)
+  externalOrigin?: { categoryId: number; categoryPath: string } | null;
   onAdd: () => void;
+  // 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)는 호출측이 담당
+  onOpenMap: () => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -137,22 +146,38 @@ export function SubprocessPreviewPeek({
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
 
-  // 캔버스 속성 줄 규범 순서(담당자→부서→시스템) + 소요시간 — 아이콘은 process-node FIELD_ICON과 동일
-  const infoRows: { key: string; label: string; icon: LucideIcon; value: string }[] = designated
-    ? [
-        { key: "assignee", label: t("field.assignee"), icon: User, value: info.assignee ?? "" },
-        { key: "department", label: t("field.department"), icon: Building2, value: info.department ?? "" },
-        { key: "system", label: t("field.system"), icon: Server, value: info.system ?? "" },
-        {
-          key: "duration",
-          label: t("field.duration"),
-          icon: Clock,
-          value: info.duration ? formatDurationHm(info.duration) : "",
-        },
-      ]
-    : [];
-  // 추가될 SP 노드 목업 색 — 캔버스 정본(resolveNodeStroke, subprocess=단일 바이올렛 고정)
-  const spStroke = resolveNodeStroke("", "subprocess");
+  // 캔버스 속성 줄 규범 순서(담당자→부서→시스템) + 소요시간 — 아이콘은 process-node FIELD_ICON과 동일.
+  // 미등록 행도 4행 유지(값은 서버 마스킹으로 전부 대시) — 상세 탭 형태 고정.
+  const infoRows: { key: string; label: string; icon: LucideIcon; value: string }[] = [
+    { key: "assignee", label: t("field.assignee"), icon: User, value: info.assignee ?? "" },
+    { key: "department", label: t("field.department"), icon: Building2, value: info.department ?? "" },
+    { key: "system", label: t("field.system"), icon: Server, value: info.system ?? "" },
+    {
+      key: "duration",
+      label: t("field.duration"),
+      icon: Clock,
+      value: info.duration ? formatDurationHm(info.duration) : "",
+    },
+  ];
+  // 목업 색 — 기본은 캔버스 정본 SP 바이올렛, L5 캔버스의 타 L5 출신은 홈 L5별 색(캔버스 규칙 미러)
+  const mockStroke = externalOrigin
+    ? getExternalL5Color(externalOrigin.categoryId)
+    : resolveNodeStroke("", "subprocess");
+
+  // 우측 탭(노드 목업/상세 값) + 목업 클릭 드롭다운(추가/맵 이동)
+  const [tab, setTab] = useState<"node" | "detail">("node");
+  const [mockMenu, setMockMenu] = useState(false);
+  const mockAreaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mockMenu) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.target instanceof globalThis.Element && !mockAreaRef.current?.contains(event.target)) {
+        setMockMenu(false);
+      }
+    };
+    window.addEventListener("mousedown", handleMouseDown, true);
+    return () => window.removeEventListener("mousedown", handleMouseDown, true);
+  }, [mockMenu]);
 
   return createPortal(
     <div
@@ -185,29 +210,8 @@ export function SubprocessPreviewPeek({
           {t("library.peekAdd")}
         </button>
       </div>
-      {/* body — 추가될 노드 목업(좌) + 미리보기(중) + SP 등록 정보(우) (사용자 피드백 2026-08-30) */}
+      {/* body — 미리보기(좌, 전폭)와 우측 탭 컬럼(노드 목업/상세) (사용자 피드백 2026-08-30) */}
       <div className="flex min-h-0">
-        {/* 추가될 노드 — Add 시 캔버스에 렌더될 SP 노드 목업(캔버스 정본 색·필 파생·최신 추종 표기) */}
-        <div className="flex w-44 shrink-0 flex-col justify-center gap-2 border-r border-hairline px-3">
-          <span className="text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
-          <div
-            data-id="library-peek-node-mock"
-            className="rounded-sm px-2.5 py-2"
-            style={{
-              border: `1.5px solid ${spStroke}`,
-              background: `color-mix(in srgb, ${spStroke} 18%, white)`,
-            }}
-          >
-            <div className="flex items-start gap-1.5">
-              <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: spStroke }} />
-              <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-1 text-fine text-ink-tertiary">
-              <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">{t("subprocess.followingBanner")}</span>
-            </div>
-          </div>
-        </div>
         {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
         <div className="relative min-w-0 flex-1 bg-canvas" style={{ height: previewH }}>
           {!designated ? (
@@ -243,31 +247,137 @@ export function SubprocessPreviewPeek({
             </span>
           )}
         </div>
-        {/* SP 등록 정보 — 미등록 행은 서버가 값 마스킹(전부 null)이라 컬럼 생략(미리보기가 전폭 사용) */}
-        {designated && (
-          <div
-            data-id="library-peek-info"
-            className="flex w-52 shrink-0 flex-col gap-1.5 overflow-y-auto border-l border-hairline px-3 py-2"
-          >
-            <span className="text-fine font-semibold text-ink-secondary">{t("library.peekInfoTitle")}</span>
-            {infoRows.map((row) => {
-              const Icon = row.icon;
-              return (
-                // 아이콘 + 값 필 태그 — 라벨은 툴팁으로(가시성 재배열, 사용자 피드백 2026-08-30)
-                <div key={row.key} title={row.label} className="flex items-center gap-1.5">
-                  <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  {row.value ? (
-                    <span className="min-w-0 truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
-                      {row.value}
-                    </span>
-                  ) : (
-                    <span className="text-fine text-ink-tertiary">-</span>
-                  )}
-                </div>
-              );
-            })}
+        {/* 우측 — 탭: 노드 목업(최상단, 클릭=추가/이동 드롭다운) / 상세(아이콘+라벨+값 필) */}
+        <div className="flex w-60 shrink-0 flex-col border-l border-hairline">
+          <div className="flex gap-0.5 border-b border-hairline p-1.5">
+            <button
+              type="button"
+              data-id="library-peek-tab-node"
+              onClick={() => {
+                setMockMenu(false);
+                setTab("node");
+              }}
+              className={`flex-1 rounded-sm px-2 py-1 text-fine font-medium ${
+                tab === "node" ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+              }`}
+            >
+              {t("library.peekTabNode")}
+            </button>
+            <button
+              type="button"
+              data-id="library-peek-tab-details"
+              onClick={() => {
+                setMockMenu(false);
+                setTab("detail");
+              }}
+              className={`flex-1 rounded-sm px-2 py-1 text-fine font-medium ${
+                tab === "detail" ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+              }`}
+            >
+              {t("library.peekTabDetails")}
+            </button>
           </div>
-        )}
+          {tab === "node" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              {/* 추가될 노드 목업 — 일반 맵=SP 바이올렛, L5 캔버스 타 L5 출신=홈 L5 색+출처 배지(캔버스 규칙) */}
+              <div ref={mockAreaRef} className="relative">
+                <span className="mb-1.5 block text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
+                <button
+                  type="button"
+                  data-id="library-peek-node-mock"
+                  aria-expanded={mockMenu}
+                  onClick={() => setMockMenu((cur) => !cur)}
+                  className="w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm"
+                  style={{
+                    border: `1.5px solid ${mockStroke}`,
+                    background: `color-mix(in srgb, ${mockStroke} 18%, white)`,
+                  }}
+                >
+                  <div className="flex items-start gap-1.5">
+                    <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: mockStroke }} />
+                    <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
+                  </div>
+                  {externalOrigin && (
+                    <span
+                      data-id="library-peek-mock-origin"
+                      title={externalOrigin.categoryPath}
+                      className="mt-1.5 flex w-fit max-w-full items-center gap-1 rounded-xs border px-1 py-px text-fine"
+                      style={{
+                        background: `color-mix(in srgb, ${mockStroke} 12%, white)`,
+                        borderColor: `color-mix(in srgb, ${mockStroke} 38%, white)`,
+                        color: `color-mix(in srgb, ${mockStroke} 72%, var(--color-ink))`,
+                      }}
+                    >
+                      <FolderTree size={10} strokeWidth={1.5} className="shrink-0" />
+                      <span className="truncate">{externalOrigin.categoryPath.split("/").pop()}</span>
+                    </span>
+                  )}
+                  <div className="mt-1.5 flex items-center gap-1 text-fine text-ink-tertiary">
+                    <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />
+                    <span className="truncate">{t("subprocess.followingBanner")}</span>
+                  </div>
+                </button>
+                {mockMenu && (
+                  <div
+                    data-id="library-peek-mock-menu"
+                    className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-sm border border-hairline bg-surface"
+                    style={{ boxShadow: "var(--shadow-md)" }}
+                  >
+                    <button
+                      type="button"
+                      data-id="library-peek-mock-add"
+                      disabled={addDisabledReason !== null}
+                      title={addDisabledReason ?? t("library.peekAdd")}
+                      onClick={() => {
+                        setMockMenu(false);
+                        onAdd();
+                      }}
+                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-fine text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:text-ink-tertiary disabled:hover:bg-surface"
+                    >
+                      <Plus size={12} strokeWidth={1.5} className="shrink-0" />
+                      {t("library.peekAdd")}
+                    </button>
+                    <button
+                      type="button"
+                      data-id="library-peek-mock-open"
+                      onClick={() => {
+                        setMockMenu(false);
+                        onOpenMap();
+                      }}
+                      className="flex w-full items-center gap-1.5 border-t border-hairline px-2.5 py-1.5 text-left text-fine text-ink hover:bg-surface-alt"
+                    >
+                      <ExternalLink size={12} strokeWidth={1.5} className="shrink-0" />
+                      {t("library.peekOpenMap")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div
+              data-id="library-peek-info"
+              className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-2"
+            >
+              {infoRows.map((row) => {
+                const Icon = row.icon;
+                return (
+                  // 아이콘 + 라벨 + 값 필 — 세 요소 모두 노출 (사용자 피드백 2026-08-30)
+                  <div key={row.key} title={row.label} className="flex items-center gap-1.5">
+                    <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
+                    {row.value ? (
+                      <span className="max-w-[55%] truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
+                        {row.value}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-fine text-ink-tertiary">-</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>,
     document.body,
