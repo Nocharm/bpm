@@ -159,17 +159,19 @@ export function FrameworkChip({
             )}
             {chain?.map((cat, depth) => {
               const isLeaf = depth === chain.length - 1;
+              // 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨 행은 맵 플라이아웃 없이 표시만
+              const canFlyout = cat.level === 5;
               return (
                 <li key={cat.id}>
                   <button
                     type="button"
                     data-id={`editor-framework-row-${cat.id}`}
-                    onClick={(event) => toggleFlyout(cat.id, event)}
+                    onClick={canFlyout ? (event) => toggleFlyout(cat.id, event) : undefined}
                     title={`${cat.code} ${cat.name}`}
                     style={{ paddingLeft: 4 + depth * 12 }}
-                    className={`flex w-full items-center gap-1.5 rounded-xs py-0.5 pr-1 text-left hover:bg-surface-alt/70 ${
-                      flyout?.catId === cat.id ? "bg-surface-alt/70" : ""
-                    }`}
+                    className={`flex w-full items-center gap-1.5 rounded-xs py-0.5 pr-1 text-left ${
+                      canFlyout ? "hover:bg-surface-alt/70" : "cursor-default"
+                    } ${flyout?.catId === cat.id ? "bg-surface-alt/70" : ""}`}
                   >
                     <ChevronRight size={10} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                     <span

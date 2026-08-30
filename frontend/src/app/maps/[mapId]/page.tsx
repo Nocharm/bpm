@@ -645,6 +645,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       linkedVersionId: node.linked_version_id,
       placeholderCategoryId: node.placeholder_category_id ?? null,
       placeholderCategoryPath: node.placeholder_category_path ?? null,
+      nodeWidth: node.width ?? null,
       isPrimaryEnd: node.is_primary_end,
     },
   }));
@@ -805,6 +806,7 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
       linked_version_id: node.data.linkedVersionId ?? null,
       // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (design 2026-08-28 §10.1)
       placeholder_category_id: node.data.placeholderCategoryId ?? null,
+      width: node.data.nodeWidth ?? null,
       is_primary_end: node.data.isPrimaryEnd ?? false,
     })),
     // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
@@ -5277,6 +5279,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     [connectTarget, readOnly, pushHistory, setNodes, scheduleAutoSave, showToast, t, setOptimisticRefs],
   );
 
+  // SP 폭 그립 확정 — 노드 데이터에 영속(자동저장), 기본(180)이면 null 소거 (2026-08-30)
+  const resizeSpNode = useCallback(
+    (nodeId: string, width: number | null) => {
+      if (readOnly) {
+        return;
+      }
+      pushHistory();
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === nodeId ? { ...node, data: { ...node.data, nodeWidth: width } } : node,
+        ),
+      );
+      scheduleAutoSave();
+    },
+    [readOnly, pushHistory, setNodes, scheduleAutoSave],
+  );
+
   // 게시본 기준 — 승인 탭 변경 요약의 왼쪽(최신 published, 없으면 섹션 미노출) (2026-08-30 #3)
   const latestPublishedBase = useMemo(() => {
     const published = versions.filter((v) => v.status === "published");
@@ -7432,6 +7451,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       onHoverIoLink: handleNodeIoHoverLink,
       // 후차 연결은 연계 캔버스 편집 모드에서만 — 일반 맵·읽기전용은 기존 배너 유지 (design §10.1)
       onConnectPlaceholder: isFrameworkMap && !readOnly ? openConnectPlaceholder : null,
+      // SP 폭 그립 — 편집 표면에서만(비교·프리뷰·읽기전용은 null → 그립 미노출) (2026-08-30)
+      onResizeNode: readOnly ? null : resizeSpNode,
     }),
     [
       toggleInlineExpand,
@@ -7453,6 +7474,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       isFrameworkMap,
       readOnly,
       openConnectPlaceholder,
+      resizeSpNode,
     ],
   );
 

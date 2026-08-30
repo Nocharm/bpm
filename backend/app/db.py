@@ -142,6 +142,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "placeholder_category_id", "INTEGER"),
     # 이양 후계자 — retire_source가 기록, 은퇴 맵 SP 노드의 교체 추천 소스 (2026-08-30)
     ("process_maps", "retired_to_map_id", "INTEGER"),
+    # 노드 표시 폭 — SP 그립 조절 영속(180~216, NULL=기본) (2026-08-30)
+    ("nodes", "width", "INTEGER"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

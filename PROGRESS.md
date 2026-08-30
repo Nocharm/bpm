@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 후속 6종: 필 개선·폭 영속·rejected 점유·L5 전용 슬롯·그립 UX (dev)
+- ①필: 배경 제거·첫줄 정렬(self-start)·호버 배경만·클릭 즉시 피크(3초 호버 유지). ②nodes.width 컬럼(_ADDED_COLUMNS·ge100 le400)로 폭 영속 — 드래그 중 로컬, 확정 시 onResizeNode→autosave, 리로드 유지 E2E. ③반려 시 점유를 제출자에게 복귀(빈 점유를 먼저 연 editor+/관리자가 자동 점유로 편집권 가져가는 구멍 픽스, 테스트 동반 — withdraw 경로는 동일 갭 후속 검토). ④맵 슬롯 L5 전용 확정: 배정 422·이양 시 레거시 비-L5 슬롯 409·칩/피커/홈트리 상위 레벨 맵 목록 미노출(아코디언만). ⑤⑥그립: 노드 호버 시 표시·전체 높이·호버 액센트. E2E 9/9.
+
 ## 2026-08-30 — SP 업무체계 필+피크·SP 노드 폭 조절 (dev)
 - 일반 맵 SP 노드: 링크맵이 프레임워크 소속이면 이름 옆 FolderTree 필, 3초 호버 시 FrameworkChip 재사용 팝오버(defaultOpen 드릴인·floating=false 스킨 분리, 포털 고정 좌표). E2E 7/7.
 - SP 노드 자체 폭 조절(요약 모달 리사이즈는 사용자 정정으로 원복): 우측 하단 그립 드래그 180=최소→120%(216) 클램프, zoom 보정(드래그 시작 시 스토어 read — 전 노드 zoom 구독 금지), 표시 전용(저장 없음)·편집 표면 한정(isConnectable 게이트). E2E 6/6.

@@ -165,6 +165,8 @@ export interface GraphNode {
   placeholder_category_id?: number | null;
   // 출처 경로 — 응답 전용 트랜지언트(그래프 라우터 주입), PUT 에코는 서버가 무시
   placeholder_category_path?: string | null;
+  // 노드 표시 폭 px — SP 그립 조절값(180~216), null=기본. 배치성이라 diff 제외 (2026-08-30)
+  width?: number | null;
   // 대표 끝 (node_type==="end")
   is_primary_end: boolean;
 }

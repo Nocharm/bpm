@@ -109,6 +109,8 @@ async def clone_graph(
             linked_version_id=node.linked_version_id,
             # 플레이스홀더 출처 L5 보존 — 후차 연결까지 스냅샷에도 유지 (design 2026-08-28 §10.1)
             placeholder_category_id=node.placeholder_category_id,
+            # 노드 표시 폭 보존 — SP 그립 조절값 (2026-08-30)
+            width=node.width,
             # 대표 끝 플래그 보존
             is_primary_end=node.is_primary_end,
         )
@@ -764,6 +766,11 @@ async def reject_version(
 
     version.status = workflow.REJECTED
     version.reject_reason = payload.reason
+    # 반려 시 점유는 제출자에게 복귀 — 빈 점유를 두면 먼저 연 editor+(관리자 포함)가 자동
+    # 점유로 편집권을 조용히 가져간다. 기본룰(점유자만 편집·sysadmin은 force만) 유지 (2026-08-30 픽스)
+    if version.submitted_by:
+        version.checked_out_by = version.submitted_by
+        version.checked_out_at = now_kst()
     # 승인했던 사람이 거절하면 그 사람의 승인은 철회 — 승인자 목록에 'Approved'로 남지 않게.
     await session.execute(
         delete(VersionApproval).where(

@@ -272,7 +272,7 @@ def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> N
     graph = client.get(f"/api/versions/{draft['id']}/graph").json()
     node = graph["nodes"][0]
     ph = dict(node, id="fwcphnode000000000000000000000001", title="미등록 자리",
-              linked_map_id=None, placeholder_category_id=other_l5)
+              linked_map_id=None, placeholder_category_id=other_l5, width=216)
     # 미지 카테고리 → 422 (노드 FK 부재 — 앱 경계 검증)
     bad = dict(ph, id="fwcphnode000000000000000000000002", placeholder_category_id=99999999)
     res = client.put(f"/api/versions/{draft['id']}/graph",
@@ -286,12 +286,14 @@ def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> N
     assert saved["linked_map_id"] is None
     assert saved["placeholder_category_id"] == other_l5
     assert saved["placeholder_category_path"] == "자리L1/타L5"
+    assert saved["width"] == 216  # 표시 폭 왕복 (2026-08-30)
     # 확정 스냅샷 복제 보존 + 게이트 시그니처에 출처 포함(변경으로 판정)
     first = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
     assert first.status_code == 200, first.text
     snap = client.get(f"/api/versions/{first.json()['version']['id']}/graph").json()
     cloned = next(n for n in snap["nodes"] if n["title"] == "미등록 자리")
     assert cloned["placeholder_category_id"] == other_l5
+    assert cloned["width"] == 216  # 스냅샷 clone도 폭 보존
     # 무변경 재확정 → 409, 출처만 바꾸면 콘텐츠 변경으로 통과
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 409
     third_l5 = _seed_category(client, "FWC-PHY", "타L5b", level=5, parent_id=l1)

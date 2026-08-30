@@ -187,8 +187,21 @@ def test_delete_guards_and_ok(client: TestClient) -> None:
             "visibility": "public",
         },
     ).json()
-    link = client.put(
+    # 맵 슬롯은 L5 전용(2026-08-30 확정) — 배정 가능한 말단(L5)까지 체인 생성 후 연결
+    c3 = client.post(
+        "/api/categories", json={"name": "DC3", "parent_id": child["id"], "code": "ADM-DEL-C3"}
+    ).json()
+    c4 = client.post(
+        "/api/categories", json={"name": "DC4", "parent_id": c3["id"], "code": "ADM-DEL-C4"}
+    ).json()
+    c5 = client.post(
+        "/api/categories", json={"name": "DC5", "parent_id": c4["id"], "code": "ADM-DEL-C5"}
+    ).json()
+    assert client.put(
         f"/api/maps/{created_map['id']}/category", json={"category_id": child["id"]}
+    ).status_code == 422  # 비-L5 배정 차단
+    link = client.put(
+        f"/api/maps/{created_map['id']}/category", json={"category_id": c5["id"]}
     )
     assert link.status_code == 200
 

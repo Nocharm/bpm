@@ -908,12 +908,17 @@ function externalSpNodeStyle(color: string): CSSProperties {
 // isConnectable — 노드 레벨 connectable(임베드 자식 false)이 여기로 전달됨. Handle에 명시 forward 필수 (F3).
 export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<AppNode>) {
   const { t } = useI18n();
-  const { ctrlDragIds, onConnectPlaceholder } = useNodeActions();
+  const { ctrlDragIds, onConnectPlaceholder, onResizeNode } = useNodeActions();
   const showCopyBadge = ctrlDragIds.has(id);
-  // SP 폭 조절 — 표시 전용 상태. zoom 구독 없이(전 노드 리렌더 방지) 드래그 시작 때 스토어에서 읽는다.
+  // SP 폭 조절 — 드래그 중엔 로컬(전 캔버스 리렌더 방지), 종료 시 onResizeNode로 영속.
+  // zoom은 구독 없이 드래그 시작 때 스토어에서 읽는다(줌 변경마다 전 노드 리렌더 금지).
   const rfStore = useStoreApi();
-  const [spWidth, setSpWidth] = useState<number | null>(null);
+  const [spDragWidth, setSpDragWidth] = useState<number | null>(null);
   const spResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; zoom: number } | null>(null);
+  // 표시 폭 — 드래그 로컬 > 저장값 > 기본. 저장값도 렌더에서 클램프(경계 밖 값 방어)
+  const spStoredWidth =
+    data.nodeWidth != null ? Math.min(SP_MAX_WIDTH, Math.max(SP_BASE_WIDTH, data.nodeWidth)) : null;
+  const spWidth = spDragWidth ?? spStoredWidth;
   // subprocess는 단일색 고정 — 과거 저장된 color도 렌더에서 무시(데이터 무변경) (spec 2026-07-06 §9).
   // 예외: 연계 캔버스의 외부 L6(spOriginPath 주입)는 홈 L5별 색을 그대로 쓴다 (2026-08-28 개선)
   const color =
@@ -949,8 +954,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         style={spWidth !== null ? ({ ...style, width: spWidth } as CSSProperties) : style}
         title={data.diffNote}
       >
-        {/* 폭 조절 그립 — 우측 경계 하단(출력 핸들과 간섭 회피), 편집 표면 전용·표시 전용 (2026-08-30) */}
-        {(isConnectable ?? true) && data.sideHandles !== true && !diff && (
+        {/* 폭 조절 그립 — 우측 경계 전체 높이, 노드 호버 시 히트박스 표시→그립 호버 시 강조 (2026-08-30 #5·#6).
+            DOM 첫 자식 배치라 뒤에 오는 출력 핸들이 자연히 위에 얹혀 연결 드래그와 공존한다. */}
+        {onResizeNode !== null && data.sideHandles !== true && !diff && (
           <div
             data-id="sp-resize-grip"
             title={t("node.resizeHint")}
@@ -968,13 +974,19 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
               const drag = spResizeRef.current;
               if (drag === null || drag.pointerId !== event.pointerId) return;
               const next = drag.startWidth + (event.clientX - drag.startX) / drag.zoom;
-              setSpWidth(Math.round(Math.min(SP_MAX_WIDTH, Math.max(SP_BASE_WIDTH, next))));
+              setSpDragWidth(Math.round(Math.min(SP_MAX_WIDTH, Math.max(SP_BASE_WIDTH, next))));
             }}
             onPointerUp={(event) => {
+              const drag = spResizeRef.current;
               spResizeRef.current = null;
               event.currentTarget.releasePointerCapture(event.pointerId);
+              if (drag === null) return;
+              // 확정 — 기본 폭이면 null 소거(저장 안 함), 아니면 영속. 로컬은 데이터가 이어받는다.
+              const final = spDragWidth ?? drag.startWidth;
+              onResizeNode(id, final <= SP_BASE_WIDTH ? null : final);
+              setSpDragWidth(null);
             }}
-            className="nodrag nopan absolute bottom-1 right-0 z-10 h-6 w-1.5 cursor-ew-resize rounded-l-xs transition-colors duration-150 hover:bg-accent/50"
+            className="nodrag nopan absolute inset-y-1 right-0 w-1.5 cursor-ew-resize rounded-l-xs bg-ink/10 opacity-0 transition-all duration-150 hover:bg-accent/60 group-hover:opacity-100"
           />
         )}
         {diff && <DiffBadge status={diff} />}

@@ -208,6 +208,22 @@ def test_reject_sets_reason_and_resets_tally(
     assert state["approvals"] == []
 
 
+def test_reject_returns_checkout_to_submitter(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """반려 시 점유가 제출자에게 복귀 — 빈 점유를 먼저 연 editor+(관리자 포함)가
+    자동 점유로 편집권을 조용히 가져가는 구멍 방지 (2026-08-30 픽스)."""
+    _map_id, version_id = _submit_with_approvers(client, ["a"])  # submit이 점유 해제
+    monkeypatch.setattr(settings, "dev_user", "a")
+    client.post(f"/api/versions/{version_id}/reject", json={"reason": "rework"})
+
+    # 타 사용자(관리자 시나리오와 동형)의 비강제 획득 → 제출자 점유라 못 가져간다
+    monkeypatch.setattr(settings, "dev_user", "someone.else")
+    got = client.post(f"/api/versions/{version_id}/checkout", json={}).json()
+    assert got["mine"] is False
+    assert got["checked_out_by"] == "local-dev"
+
+
 def test_reject_requires_reason(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -87,6 +87,8 @@ export interface NodeActions {
   onHoverIoLink: ((nodeId: string, side: IoSide, index: number | null) => void) | null;
   // 플레이스홀더 배너 클릭 → 후차 연결 다이얼로그 (연계 캔버스 편집 모드 전용, design §10.1)
   onConnectPlaceholder: ((nodeId: string) => void) | null;
+  // SP 폭 그립 확정 — 드래그 종료 시 폭 저장(null=기본 복귀). 편집 표면에서만 제공 (2026-08-30)
+  onResizeNode: ((nodeId: string, width: number | null) => void) | null;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
@@ -109,6 +111,7 @@ const defaultActions: NodeActions = {
   ioCheckPulse: null,
   onHoverIoLink: null,
   onConnectPlaceholder: null,
+  onResizeNode: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

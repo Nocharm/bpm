@@ -213,15 +213,44 @@ def test_designation_saves_input_output(client: TestClient) -> None:
     assert body["sp_input"] == "PR 문서" and body["sp_output"] == "PO 문서"
 
 
+def _seed_l5_slot(client: TestClient, ids: dict[str, int]) -> int:
+    """A1 아래 L5 슬롯 카테고리 — 맵 슬롯 L5 전용 확정(2026-08-30)에 맞춘 배정 대상."""
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            row = await session.scalar(
+                select(ProcessCategory).where(ProcessCategory.code == "CAT-A5")
+            )
+            if row is None:
+                row = ProcessCategory(
+                    code="CAT-A5", name="슬롯말단", level=5, parent_id=ids["A1"], sort_order=0
+                )
+                session.add(row)
+                await session.commit()
+                await session.refresh(row)
+            return row.id
+
+    return asyncio.run(_seed())
+
+
 def test_category_assign_and_unassign(client: TestClient) -> None:
     ids = _seed_tree(client)
+    l5 = _seed_l5_slot(client, ids)
     created = client.post("/api/maps", json={
         "name": "framework assign target", "description": "",
         "owning_department": "Owning Anchor Division", "visibility": "public",
     }).json()
     mid = created["id"]
-    assert client.put(f"/api/maps/{mid}/category", json={"category_id": ids["A1"]}).status_code == 200
-    assert client.get(f"/api/maps/{mid}").json()["category_path"] == "구매/직접구매"
+    # 비-L5 배정 차단 (2026-08-30 확정) — 상위 레벨엔 맵 슬롯이 없다
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": ids["A1"]}).status_code == 422
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": l5}).status_code == 200
+    assert client.get(f"/api/maps/{mid}").json()["category_path"] == "구매/직접구매/슬롯말단"
     assert client.put(f"/api/maps/{mid}/category", json={"category_id": None}).status_code == 200
     assert client.get(f"/api/maps/{mid}").json()["category_id"] is None
     assert client.put(f"/api/maps/{mid}/category", json={"category_id": 999999}).status_code == 404
@@ -229,17 +258,24 @@ def test_category_assign_and_unassign(client: TestClient) -> None:
 
 def test_framework_transfer_moves_slot(client: TestClient) -> None:
     ids = _seed_tree(client)
+    l5 = _seed_l5_slot(client, ids)
     created = client.post("/api/maps", json={
         "name": "framework transfer target", "description": "",
         "owning_department": "Owning Anchor Division", "visibility": "public",
     }).json()
     target = created["id"]
+    # 레거시 비-L5 슬롯(pub은 시드에서 A1/L2에 직결) — 이양 대신 정리 유도 409 (2026-08-30 보완)
+    legacy = client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target})
+    assert legacy.status_code == 409
+    assert "level-5" in legacy.json()["detail"]
+    # L5로 재배정 후 이양 → 성공
+    assert client.put(f"/api/maps/{ids['pub']}/category", json={"category_id": l5}).status_code == 200
     resp = client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target})
     assert resp.status_code == 200
     src = client.get(f"/api/maps/{ids['pub']}").json()
     dst = client.get(f"/api/maps/{target}").json()
     assert src["category_id"] is None and src["consultant_code"] is None
-    assert dst["category_path"] == "구매/직접구매" and dst["consultant_code"] == "CAT-M1"
+    assert dst["category_path"] == "구매/직접구매/슬롯말단" and dst["consultant_code"] == "CAT-M1"
     # 재이양 시 source에 슬롯 없음 → 409
     assert client.post(f"/api/maps/{ids['pub']}/framework-transfer", json={"to_map_id": target}).status_code == 409
 
@@ -261,7 +297,7 @@ def test_framework_transfer_target_not_owned_403(client: TestClient, enforce: No
         "owning_department": "Owning Anchor Division",
     }).json()
     sid = source["id"]
-    assert client.put(f"/api/maps/{sid}/category", json={"category_id": ids["A1"]}).status_code == 200
+    assert client.put(f"/api/maps/{sid}/category", json={"category_id": _seed_l5_slot(client, ids)}).status_code == 200
 
     act_as("cat.tgt_owner")
     target = client.post("/api/maps", json={

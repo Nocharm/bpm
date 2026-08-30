@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 
 import { FrameworkChip } from "@/components/framework-chip";
 
-const HOVER_DELAY_MS = 3000; // 사용자 요구 — 3초 호버 후 표시(스침 오픈 방지)
+const HOVER_DELAY_MS = 3000; // 스침 오픈 방지 — 클릭은 즉시 오픈(2026-08-30 개선)
 
 export function FrameworkPeekPill({
   categoryId,
@@ -49,22 +49,31 @@ export function FrameworkPeekPill({
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [peek]);
 
+  function openPeek() {
+    clearTimer();
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (rect) setPeek({ x: rect.right + 8, y: Math.max(8, rect.top - 4) });
+  }
+
   return (
+    // 배경 없는 아이콘 — 라벨 첫 줄 높이에 정렬(self-start), 호버 시에만 배경·클릭 즉시 오픈 (2026-08-30 개선)
     <span
       ref={rootRef}
       data-id="node-framework-pill"
       title={path}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (peek !== null) setPeek(null);
+        else openPeek();
+      }}
       onMouseEnter={() => {
         clearTimer();
-        timerRef.current = window.setTimeout(() => {
-          const rect = rootRef.current?.getBoundingClientRect();
-          if (rect) setPeek({ x: rect.right + 8, y: Math.max(8, rect.top - 4) });
-        }, HOVER_DELAY_MS);
+        timerRef.current = window.setTimeout(openPeek, HOVER_DELAY_MS);
       }}
       onMouseLeave={clearTimer}
-      className="nodrag nopan shrink-0 rounded-xs border border-hairline bg-surface-alt p-0.5 text-ink-tertiary transition-colors duration-150 hover:border-accent hover:text-accent"
+      className="nodrag nopan mt-0.5 shrink-0 cursor-pointer self-start rounded-xs p-0.5 text-ink-tertiary transition-colors duration-150 hover:bg-surface-alt hover:text-accent"
     >
-      <FolderTree size={11} strokeWidth={1.5} />
+      <FolderTree size={12} strokeWidth={1.5} />
       {peek !== null &&
         createPortal(
           <div

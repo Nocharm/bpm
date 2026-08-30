@@ -1068,7 +1068,7 @@ async def set_map_category(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
-    """체계 카테고리 연결/해제 — 모든 레벨 허용, null=해제. owner/sysadmin 전용 (design 2026-08-08)."""
+    """체계 카테고리 연결/해제 — 맵 슬롯은 L5 전용(2026-08-30 확정), null=해제. owner/sysadmin 전용."""
     found_map = await session.get(
         ProcessMap,
         map_id,
@@ -1081,6 +1081,12 @@ async def set_map_category(
         if category is None:
             raise HTTPException(
                 status_code=404, detail=f"category {payload.category_id} not found"
+            )
+        # 맵 슬롯은 L5 전용 — 상위 레벨엔 업무 맵이 들어가지 않는다 (사용자 확정 2026-08-30)
+        if category.level != 5:
+            raise HTTPException(
+                status_code=422,
+                detail="maps can only be attached to a level-5 category",
             )
     found_map.category_id = payload.category_id
     await session.commit()
@@ -1129,6 +1135,13 @@ async def transfer_framework_slot(
     if target.category_id is not None or target.consultant_code is not None:
         raise HTTPException(
             status_code=409, detail="target map already has a framework slot"
+        )
+    # 슬롯 이양 보완 — L5 전용 확정에 따라 비-L5(레거시) 슬롯은 이양 대신 정리 대상 (2026-08-30)
+    slot_category = await session.get(ProcessCategory, source.category_id)
+    if slot_category is None or slot_category.level != 5:
+        raise HTTPException(
+            status_code=409,
+            detail="framework slot must point to a level-5 category — reassign before transfer",
         )
     target.category_id = source.category_id
     target.consultant_code = source.consultant_code

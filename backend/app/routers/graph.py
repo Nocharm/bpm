@@ -425,6 +425,7 @@ async def replace_graph(
             existing.follow_latest = node.follow_latest
             existing.linked_version_id = node.linked_version_id
             existing.placeholder_category_id = node.placeholder_category_id
+            existing.width = node.width
             existing.is_primary_end = node.is_primary_end
         else:
             session.add(Node(version_id=version_id, **node.model_dump()))

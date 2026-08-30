@@ -997,6 +997,8 @@ class NodeIn(BaseModel):
     linked_version_id: int | None = None
     # 플레이스홀더 출처 L5 — linked_map_id가 빈 SP만 의미 (design 2026-08-28 §10.1)
     placeholder_category_id: int | None = None
+    # 노드 표시 폭 px — SP 그립 조절값, None=타입 기본(180). 배치성이라 diff/확정 시그니처 제외 (2026-08-30)
+    width: int | None = Field(default=None, ge=100, le=400)
     # 대표 끝 (node_type="end")
     is_primary_end: bool = False
 

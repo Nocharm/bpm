@@ -247,7 +247,9 @@ export function FrameworkTree({ renderCard, filterMap, onOpenLinkage }: Framewor
     const mapsData = state.mapsByCategory.get(node.id);
     // 직접 보유 맵이 있는 카테고리를 펼치면 헤더+자기 맵만 틴트 박스로 묶는다 — 부서 목록(org-accordion)과
     // 동일 규칙: 박스의 뜻은 "이 카테고리가 직접 가진 맵", 자식 카테고리는 박스 밖(중첩 금지).
-    const boxed = showContent && !initialLoading && !loadFailed && (mapsData?.total ?? 0) > 0;
+    // 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 레거시 직결 맵이 있어도 목록을 열지 않는다(아코디언만).
+    const boxed =
+      showContent && !initialLoading && !loadFailed && node.level === 5 && (mapsData?.total ?? 0) > 0;
 
     const header = (
       <div className="group flex w-full items-center gap-1 rounded-sm hover:bg-divider">

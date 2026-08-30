@@ -130,7 +130,8 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
         </button>
         {open && (
           <>
-            {mapsData !== undefined && mapsData.maps.length > 0 && (
+            {/* 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 하위 카테고리 아코디언만 */}
+            {node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0 && (
               <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">
                 {mapsData.maps.map((row) => renderMapRow(row, node.id, pathNames))}
               </div>

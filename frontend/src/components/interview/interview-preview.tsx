@@ -50,6 +50,7 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   ioCheckPulse: null,
   onHoverIoLink: null,
   onConnectPlaceholder: null,
+  onResizeNode: null,
 };
 
 interface InterviewPreviewProps {
