@@ -1,6 +1,6 @@
 // SP 라이브러리/체계 피커 미리보기 피크 검증 — 5 시나리오:
-//  [1] admin.sys, 일반 맵(26): 행 클릭 → 피크(게시본 SVG 미리보기 + SP 등록정보) → 미리보기 호버 →
-//      "Add to map" 클릭 → 캔버스에 subprocess 노드 생성 + 행 blocked 전환
+//  [1] admin.sys, 일반 맵(26): 행 클릭 → 피크(추가될 노드 목업 + 게시본 SVG 미리보기 + SP 등록정보 필태그)
+//      → 헤더 "Add to map" 클릭 → 캔버스에 subprocess 노드 생성 + 행 blocked 전환
 //  [2] 바깥 클릭 닫기 → 행 2.5s 호버 → 자동 오픈
 //  [3] 미등록 토글 → 미등록 행 클릭 → 미등록 안내 → Add → 확인 체인 모달 오픈
 //  [4] bora.choi(권한 없음), draft 전용 맵 27(editor)에서 라이브러리 → 'Incident Response'(map 3)
@@ -44,14 +44,17 @@ async function newPage(devUser) {
   await page.click('[data-id="process-library-panel"] [data-map-id="6"]');
   await page.waitForSelector('[data-id="library-peek"]');
   check(true, "[1] peek opens on row click");
-  check((await page.locator('[data-id="library-peek"] svg rect').count()) > 0, "[1] published SVG preview rendered");
+  // ScopePreview 루트(.pointer-events-none)로 스코프 — 목업/아이콘 svg rect 오탐 방지
+  await page.waitForSelector('[data-id="library-peek"] .pointer-events-none svg', { timeout: 10000 });
+  check(
+    (await page.locator('[data-id="library-peek"] .pointer-events-none svg rect').count()) > 0,
+    "[1] published SVG preview rendered",
+  );
   const infoText = await page.locator('[data-id="library-peek-info"]').innerText();
   check(infoText.length > 0, "[1] SP info section rendered");
-  await page.hover('[data-id="library-peek"] .group');
-  await page.waitForTimeout(250);
   const addBtn = page.locator('[data-id="library-peek-add"]');
-  check(await addBtn.isVisible(), "[1] add button appears on preview hover");
-  await page.mkdirShot?.();
+  check(await addBtn.isVisible(), "[1] add button visible in header");
+  check(await page.locator('[data-id="library-peek-node-mock"]').isVisible(), "[1] to-be-added node mock rendered");
   await page.screenshot({ path: `${SHOT_DIR}/peek-1-preview.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await addBtn.click();
@@ -82,7 +85,6 @@ async function newPage(devUser) {
   await page.waitForSelector('[data-id="library-peek-unregistered"]');
   check(true, "[3] unregistered note rendered");
   await page.screenshot({ path: `${SHOT_DIR}/peek-3-unregistered.png` });
-  await page.hover('[data-id="library-peek"] .group');
   await page.click('[data-id="library-peek-add"]');
   await page.waitForTimeout(500);
   const dialogText = await page.evaluate(() => document.body.innerText);
@@ -110,7 +112,6 @@ async function newPage(devUser) {
     (await page.locator('[data-id="library-peek"] .pointer-events-none svg').count()) === 0,
     "[4] no graph leaked in locked peek",
   );
-  await page.hover('[data-id="library-peek"] .group');
   check(await page.locator('[data-id="library-peek-add"]').isEnabled(), "[4] add still enabled (등록은 가능)");
   await page.screenshot({ path: `${SHOT_DIR}/peek-4-locked.png` });
   check(errors.length === 0, `[4] no console errors (${errors.slice(0, 2).join("|")})`);
@@ -141,9 +142,11 @@ async function newPage(devUser) {
   await firstRow.click();
   await page.waitForSelector('[data-id="library-peek"]');
   check(true, "[5] peek opens in framework picker");
-  check((await page.locator('[data-id="library-peek"] svg rect').count()) > 0, "[5] preview rendered");
-  await page.hover('[data-id="library-peek"] .group');
-  await page.waitForTimeout(200);
+  await page.waitForSelector('[data-id="library-peek"] .pointer-events-none svg', { timeout: 10000 });
+  check(
+    (await page.locator('[data-id="library-peek"] .pointer-events-none svg rect').count()) > 0,
+    "[5] preview rendered",
+  );
   await page.screenshot({ path: `${SHOT_DIR}/peek-5-framework.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await page.click('[data-id="library-peek-add"]');

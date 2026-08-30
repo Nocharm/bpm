@@ -5,11 +5,23 @@
 // 렌더하고 SP 등록 정보를 함께 보여준다. viewer 미만은 locked 응답 → 권한 안내 + "추가는 가능" 안내.
 // 미리보기 영역에 마우스가 있으면 우상단에 "Add to map" 버튼이 나타난다 (사용자 요청 2026-08-30).
 
-import { Lock, Network, Plus } from "lucide-react";
+import {
+  Building2,
+  Clock,
+  Lock,
+  Network,
+  Plus,
+  RefreshCw,
+  Server,
+  User,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getResolvedGraph, type VersionGraph } from "@/lib/api";
+import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
@@ -118,24 +130,29 @@ export function SubprocessPreviewPeek({
 
   // 크기 = 브라우저 창 비례(고정 높이 대신) — 폭 40vw·미리보기 32vh, 상하한 클램프 (사용자 피드백 2026-08-30).
   // 열림 시점 창 기준(리스너 없음) — 피크는 스크롤·바깥클릭으로 닫히는 일시 표면이라 리사이즈 추적은 과함.
-  const panelW = Math.round(Math.min(Math.max(window.innerWidth * 0.4, 480), 800));
+  // 하한 640 — 좌 노드목업(176)+우 정보(208) 고정 컬럼을 빼고도 미리보기가 최소 ~250px 확보되게
+  const panelW = Math.round(Math.min(Math.max(window.innerWidth * 0.4, 640), 800));
   const previewH = Math.round(Math.min(Math.max(window.innerHeight * 0.32, 220), 460));
   // 화면 밖 잘림 방지 클램프 — 헤더(~40px)+미리보기 행 기준
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
 
-  const infoRows: { key: string; label: string; value: string }[] = designated
+  // 캔버스 속성 줄 규범 순서(담당자→부서→시스템) + 소요시간 — 아이콘은 process-node FIELD_ICON과 동일
+  const infoRows: { key: string; label: string; icon: LucideIcon; value: string }[] = designated
     ? [
-        { key: "department", label: t("field.department"), value: info.department ?? "" },
-        { key: "assignee", label: t("field.assignee"), value: info.assignee ?? "" },
-        { key: "system", label: t("field.system"), value: info.system ?? "" },
+        { key: "assignee", label: t("field.assignee"), icon: User, value: info.assignee ?? "" },
+        { key: "department", label: t("field.department"), icon: Building2, value: info.department ?? "" },
+        { key: "system", label: t("field.system"), icon: Server, value: info.system ?? "" },
         {
           key: "duration",
           label: t("field.duration"),
+          icon: Clock,
           value: info.duration ? formatDurationHm(info.duration) : "",
         },
       ]
     : [];
+  // 추가될 SP 노드 목업 색 — 캔버스 정본(resolveNodeStroke, subprocess=단일 바이올렛 고정)
+  const spStroke = resolveNodeStroke("", "subprocess");
 
   return createPortal(
     <div
@@ -145,20 +162,54 @@ export function SubprocessPreviewPeek({
       className="fixed z-[1250] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface"
       onMouseLeave={onClose}
     >
-      {/* header — 맵 이름 + 게시본 기준 표기 */}
+      {/* header — 맵 이름 + Add to map(항시 노출, 게시본 표기는 미리보기 안 워터마크로 이동 — 사용자 피드백 2026-08-30) */}
       <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
         <span className="flex min-w-0 items-center gap-1.5 text-caption font-semibold text-ink">
           <Network size={14} strokeWidth={1.5} className="shrink-0 text-ink/50" />
           <span className="truncate">{name}</span>
         </span>
-        {designated && (
-          <span className="shrink-0 text-fine text-ink-tertiary">{t("library.peekPublishedBasis")}</span>
-        )}
+        {/* Add to map — 잠금/미등록 상태에서도 추가는 가능 */}
+        <button
+          type="button"
+          data-id="library-peek-add"
+          disabled={addDisabledReason !== null}
+          title={addDisabledReason ?? t("library.peekAdd")}
+          onClick={onAdd}
+          className={`flex shrink-0 items-center gap-1 rounded-sm border px-2 py-0.5 text-fine font-medium ${
+            addDisabledReason !== null
+              ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
+              : "border-accent-tint-border bg-accent text-white hover:opacity-90"
+          }`}
+        >
+          <Plus size={12} strokeWidth={1.5} />
+          {t("library.peekAdd")}
+        </button>
       </div>
-      {/* body — 미리보기(좌, 확대) + SP 등록 정보(우측 컬럼) (사용자 피드백 2026-08-30) */}
+      {/* body — 추가될 노드 목업(좌) + 미리보기(중) + SP 등록 정보(우) (사용자 피드백 2026-08-30) */}
       <div className="flex min-h-0">
-        {/* preview — 마우스가 이 영역에 있으면 우상단 추가 버튼 노출 */}
-        <div className="group relative min-w-0 flex-1 bg-canvas" style={{ height: previewH }}>
+        {/* 추가될 노드 — Add 시 캔버스에 렌더될 SP 노드 목업(캔버스 정본 색·필 파생·최신 추종 표기) */}
+        <div className="flex w-44 shrink-0 flex-col justify-center gap-2 border-r border-hairline px-3">
+          <span className="text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
+          <div
+            data-id="library-peek-node-mock"
+            className="rounded-sm px-2.5 py-2"
+            style={{
+              border: `1.5px solid ${spStroke}`,
+              background: `color-mix(in srgb, ${spStroke} 18%, white)`,
+            }}
+          >
+            <div className="flex items-start gap-1.5">
+              <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: spStroke }} />
+              <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-1 text-fine text-ink-tertiary">
+              <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("subprocess.followingBanner")}</span>
+            </div>
+          </div>
+        </div>
+        {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
+        <div className="relative min-w-0 flex-1 bg-canvas" style={{ height: previewH }}>
           {!designated ? (
             <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
               <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -185,22 +236,12 @@ export function SubprocessPreviewPeek({
           ) : (
             <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} />
           )}
-          {/* Add to map — 미리보기 영역 호버 시 표시. 잠금/미등록 상태에서도 추가는 가능 */}
-          <button
-            type="button"
-            data-id="library-peek-add"
-            disabled={addDisabledReason !== null}
-            title={addDisabledReason ?? t("library.peekAdd")}
-            onClick={onAdd}
-            className={`absolute right-2 top-2 flex items-center gap-1 rounded-sm border px-2 py-1 text-fine font-medium opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100 ${
-              addDisabledReason !== null
-                ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
-                : "border-accent-tint-border bg-accent text-white hover:opacity-90"
-            }`}
-          >
-            <Plus size={12} strokeWidth={1.5} />
-            {t("library.peekAdd")}
-          </button>
+          {/* 게시본 기준 표기 — 그래프 위 워터마크(헤더에서 이동 — 사용자 피드백 2026-08-30) */}
+          {designated && fetchState.status === "ready" && (
+            <span className="pointer-events-none absolute bottom-1.5 right-2 rounded-xs border border-hairline bg-surface/85 px-1.5 py-px text-fine text-ink-tertiary">
+              {t("library.peekPublishedBasis")}
+            </span>
+          )}
         </div>
         {/* SP 등록 정보 — 미등록 행은 서버가 값 마스킹(전부 null)이라 컬럼 생략(미리보기가 전폭 사용) */}
         {designated && (
@@ -209,12 +250,22 @@ export function SubprocessPreviewPeek({
             className="flex w-52 shrink-0 flex-col gap-1.5 overflow-y-auto border-l border-hairline px-3 py-2"
           >
             <span className="text-fine font-semibold text-ink-secondary">{t("library.peekInfoTitle")}</span>
-            {infoRows.map((row) => (
-              <div key={row.key} className="flex flex-col gap-0.5">
-                <span className="text-fine text-ink-tertiary">{row.label}</span>
-                <span className="min-w-0 truncate text-fine text-ink">{row.value || "-"}</span>
-              </div>
-            ))}
+            {infoRows.map((row) => {
+              const Icon = row.icon;
+              return (
+                // 아이콘 + 값 필 태그 — 라벨은 툴팁으로(가시성 재배열, 사용자 피드백 2026-08-30)
+                <div key={row.key} title={row.label} className="flex items-center gap-1.5">
+                  <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  {row.value ? (
+                    <span className="min-w-0 truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
+                      {row.value}
+                    </span>
+                  ) : (
+                    <span className="text-fine text-ink-tertiary">-</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
