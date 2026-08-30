@@ -394,12 +394,14 @@ function GmpPill({ nodeId, data, className: extra }: { nodeId: string; data: App
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
   const value = (isSubprocess ? data.spGmp : data.gmp) ?? "";
   const label = formatGmp(value);
-  const editable = !isSubprocess && onEditGmp !== null;
+  // 인라인 임베드 자식(scopeId 보유)은 읽기전용 — 피커를 열어도 저장이 없어 잠깐 렌더 후 되돌아가던 문제 차단
+  const isEmbeddedChild = data.scopeId != null;
+  const editable = !isSubprocess && onEditGmp !== null && !isEmbeddedChild;
   // 미분류(Unclassified)는 공간을 차지하지 않고 기본 숨김 — 노드 호버 시 좌상단에 부유로만 노출
   // (분류 진입점은 유지, 사용자 요청 2026-08-25). 이때 호출부 위치 className(extra)은 무시한다.
   const floating = !label;
-  // 미분류인데 수정 불가(SP는 링크 맵 상속·읽기전용 모드) — 클릭만 유도하는 필이라 아예 미노출
-  if (floating && (isSubprocess || onEditGmp === null)) return null;
+  // 미분류인데 수정 불가(SP는 링크 맵 상속·임베드 자식·읽기전용 모드) — 클릭만 유도하는 필이라 아예 미노출
+  if (floating && !editable) return null;
   // 노드 안쪽 배치(사용자 결정 2026-08-20) — 배치는 호출부 className이 담당(사각=본문 첫 줄, 마름모=상단 중앙)
   // whitespace-nowrap — 좁은 노드에서 "GMP Indirect"가 두 줄로 꺾이지 않게 (사용자 요청 2026-08-21 #8)
   const className =

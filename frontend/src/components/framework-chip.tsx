@@ -146,22 +146,7 @@ export function FrameworkChip({
             {t("framework.chipLabel")}
           </span>
         </span>
-        {onBrowse ? (
-          // 탐색 버튼 — 부모가 button이라 중첩 금지, span+stopPropagation (연계 아이콘과 동일 패턴)
-          <span
-            data-id="framework-chip-browse"
-            title={t("framework.browseTitle")}
-            className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
-            onClick={(event) => {
-              event.stopPropagation();
-              onBrowse();
-            }}
-          >
-            <FolderTree size={12} strokeWidth={1.5} />
-          </span>
-        ) : (
-          <FolderTree size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-        )}
+        <FolderTree size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
       </button>
 
       {/* 아코디언 — grid-rows 0fr→1fr (save-checklist와 동일, 오버플로 클립) */}
@@ -233,6 +218,19 @@ export function FrameworkChip({
               );
             })}
           </ul>
+          {/* 다른 체계 검색 — 아이콘 전용 헤더 버튼에서 라벨 있는 풋터 행으로 승격(가시성·호버 피드백) (사용자 요청 2026-08-30) */}
+          {onBrowse && (
+            <button
+              type="button"
+              data-id="framework-chip-browse"
+              title={t("framework.browseTitle")}
+              onClick={onBrowse}
+              className="flex w-full items-center gap-1.5 border-t border-divider px-2 py-1 text-fine text-ink-secondary transition-colors duration-150 hover:bg-accent-tint hover:text-accent"
+            >
+              <FolderTree size={12} strokeWidth={1.5} className="shrink-0" />
+              <span>{t("framework.browseAction")}</span>
+            </button>
+          )}
         </div>
       </div>
 

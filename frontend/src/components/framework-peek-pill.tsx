@@ -11,6 +11,9 @@ import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
 import { FrameworkChip } from "@/components/framework-chip";
 
 const HOVER_DELAY_MS = 3000; // 스침 오픈 방지 — 클릭은 즉시 오픈
+// 패널 이탈 후 닫힘 유예 — 칩→플라이아웃(right-full, 6px 갭) 이동처럼 잠깐 패널 밖을 지나는
+// 경로에서 즉시 닫히지 않게. 패널/트리거 재진입 시 취소 (사용자 요청 2026-08-30)
+const CLOSE_GRACE_MS = 400;
 
 export function FrameworkPeekTrigger({
   categoryId,
@@ -36,6 +39,7 @@ export function FrameworkPeekTrigger({
   // 형제 브랜치 탐색 모달 — 피크는 유지한 채 위에 추가 창으로 띄운다 (사용자 정정 2026-08-30)
   const [browse, setBrowse] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -45,7 +49,26 @@ export function FrameworkPeekTrigger({
       timerRef.current = null;
     }
   }
-  useEffect(() => clearTimer, []);
+  function cancelClose() {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+  function scheduleClose() {
+    cancelClose();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      setPeek(null);
+    }, CLOSE_GRACE_MS);
+  }
+  useEffect(
+    () => () => {
+      clearTimer();
+      cancelClose();
+    },
+    [],
+  );
 
   // 바깥 클릭 닫기 — FrameworkChip 플라이아웃과 동일 캡처 패턴.
   // 탐색 모달이 위에 떠 있는 동안엔 억제 — 피크를 유지한 채 추가 창으로 연다 (사용자 정정 2026-08-30)
@@ -66,6 +89,7 @@ export function FrameworkPeekTrigger({
 
   function openPeek() {
     clearTimer();
+    cancelClose();
     const rect = rootRef.current?.getBoundingClientRect();
     if (rect) setPeek({ x: rect.right + 8, y: Math.max(8, rect.top - 4) });
   }
@@ -85,7 +109,8 @@ export function FrameworkPeekTrigger({
         else openPeek();
       }}
       onMouseEnter={() => {
-        if (hoverDelayMs === null) return;
+        cancelClose(); // 패널→트리거 복귀도 닫힘 취소
+        if (hoverDelayMs === null || peek !== null) return;
         clearTimer();
         timerRef.current = window.setTimeout(openPeek, hoverDelayMs);
       }}
@@ -100,8 +125,11 @@ export function FrameworkPeekTrigger({
             data-id="node-framework-peek"
             style={{ left: peek.x, top: peek.y }}
             className="fixed z-[1250]"
+            onMouseEnter={cancelClose}
             onMouseLeave={() => {
-              if (!browse) setPeek(null);
+              // 즉시 닫지 않고 유예 — 플라이아웃(패널 밖 6px 갭 너머)으로 가는 경로에서 꺼지지 않게.
+              // 플라이아웃도 패널 DOM 자손이라 재진입 시 mouseenter로 취소된다.
+              if (!browse) scheduleClose();
             }}
           >
             {/* 링크맵 기준 체인 — mapId=링크맵이라 플라이아웃에서 해당 맵이 현재로 하이라이트된다 */}

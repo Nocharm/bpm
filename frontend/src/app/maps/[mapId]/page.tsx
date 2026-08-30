@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -32,6 +32,7 @@ import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { FrameworkChip } from "@/components/framework-chip";
+import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
@@ -451,14 +452,21 @@ const EMPTY_CTRL_DRAG_IDS: ReadonlySet<string> = new Set();
 // 인라인 펼침 영역 — 콘텐츠 Y범위로 상하좌우 경계를 잡은 반투명 틴트 박스. 모든 영역이 동일 y/height라
 // 중첩 시 바깥이 안을 항상 덮는다(box.y/height는 buildScope가 전체 콘텐츠 기준으로 산정).
 // ViewportPortal(flow 좌표계) 안이라 box.x/y/width/height를 그대로 사용 — 별도 뷰포트 구독 불필요.
+// 틴트는 pointer-events:none 유지 — 호버/우클릭은 pane 이벤트에서 좌표 히트테스트로 판정해 내려온다(hoverId).
 function InlineRegionBands({
   regions,
   baseDepth,
+  hoverId,
+  frameworks,
   onCollapse,
   onOpenMap,
 }: {
   regions: RegionBox[];
   baseDepth: number; // 현재 스코프의 절대깊이 — 셰브론을 절대깊이(루트 기준)로 표시해 포커스 레인과 통일
+  // pane 히트테스트가 판정한 최상단(바깥) 영역 id — 해당 박스만 틴트/보더 강조
+  hoverId: string | null;
+  // hostId → 링크맵의 업무체계 소속(지정 링크맵 한정) — 라벨 옆 5단계 전체 경로 + 클릭 시 체계 피크
+  frameworks: ReadonlyMap<string, { categoryId: number; path: string; linkedMapId: number }>;
   onCollapse: (id: string) => void;
   // 레인 헤더의 "링크맵 열기" — hostId(RegionBox.id)로 링크 대상 맵을 해석해 이동 확인 모달을 띄움 (F6)
   onOpenMap: (hostId: string) => void;
@@ -466,63 +474,82 @@ function InlineRegionBands({
   const { t } = useI18n();
   return (
     <>
-      {regions.map((box) => (
-        <Fragment key={`region:${box.id}`}>
-          {/* 상하좌우 경계 박스 + 반투명 틴트 — 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              transform: `translate(${box.x}px, ${box.y}px)`,
-              width: box.width,
-              height: box.height,
-              zIndex: -1,
-              pointerEvents: "none",
-              borderRadius: 12,
-              background: "color-mix(in srgb, var(--color-accent) 5%, transparent)",
-              border: "1.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)",
-            }}
-          />
-          {/* 깊이 표시(›×depth) + 이름 — 콘텐츠 상단 근처, 클릭 시 접기 */}
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              transform: `translate(${box.x + 6}px, ${box.y + 4}px)`,
-              zIndex: 1,
-            }}
-          >
-            <div className="pointer-events-auto inline-flex items-center gap-0.5">
-              {/* 맵 이름 — 호버 시 이름이 액센트+밑줄로 또렷하게(클릭=접기) (F6) */}
-              <button
-                type="button"
-                className="group inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-fine transition-colors hover:bg-accent-tint"
-                title={t("node.collapseChildTitle")}
-                onClick={() => onCollapse(box.id)}
-              >
-                <span className="font-semibold tracking-tight text-accent">
-                  {"›".repeat(baseDepth + box.depth)}
-                </span>
-                <span className="text-ink-secondary underline-offset-2 transition-colors group-hover:text-accent group-hover:underline">
-                  {box.label || t("node.childBadge")}
-                </span>
-              </button>
-              {/* 링크맵 열기 — 작은 아이콘 버튼, 클릭 시 미저장 경고 확인 모달 (F6) */}
-              <button
-                type="button"
-                data-id="region-open-map"
-                className="rounded-xs p-0.5 text-ink-tertiary transition-colors hover:bg-accent-tint hover:text-accent"
-                title={t("subprocess.openMap")}
-                onClick={() => onOpenMap(box.id)}
-              >
-                <ExternalLink size={12} strokeWidth={1.5} />
-              </button>
+      {regions.map((box) => {
+        const hovered = hoverId === box.id;
+        const framework = frameworks.get(box.id);
+        return (
+          <Fragment key={`region:${box.id}`}>
+            {/* 상하좌우 경계 박스 + 반투명 틴트 — 깊을수록 틴트가 겹쳐 진해짐. 노드 뒤(z<0), 비상호작용 */}
+            <div
+              data-id={`region-band-${box.id}`}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                transform: `translate(${box.x}px, ${box.y}px)`,
+                width: box.width,
+                height: box.height,
+                zIndex: -1,
+                pointerEvents: "none",
+                borderRadius: 12,
+                background: `color-mix(in srgb, var(--color-accent) ${hovered ? 9 : 5}%, transparent)`,
+                border: `1.5px solid color-mix(in srgb, var(--color-accent) ${hovered ? 55 : 35}%, transparent)`,
+                transition: "background 150ms, border-color 150ms",
+              }}
+            />
+            {/* 깊이 표시(›×depth) + 이름 + 열기 + 업무체계 — 콘텐츠 상단 근처. 서피스 필로 틴트/도트 위 가독 확보 */}
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                transform: `translate(${box.x + 6}px, ${box.y + 4}px)`,
+                zIndex: 1,
+              }}
+            >
+              <div className="pointer-events-auto inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface/85 px-0.5 py-0.5 shadow-sm backdrop-blur-[2px]">
+                {/* 맵 이름 — 호버 시 이름이 액센트+밑줄로 또렷하게(클릭=접기) (F6) */}
+                <button
+                  type="button"
+                  className="group inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-caption transition-colors hover:bg-accent-tint"
+                  title={t("node.collapseChildTitle")}
+                  onClick={() => onCollapse(box.id)}
+                >
+                  <span className="font-semibold tracking-tight text-accent">
+                    {"›".repeat(baseDepth + box.depth)}
+                  </span>
+                  <span className="font-semibold text-ink underline-offset-2 transition-colors group-hover:text-accent group-hover:underline">
+                    {box.label || t("node.childBadge")}
+                  </span>
+                </button>
+                {/* 링크맵 열기 — 아이콘 버튼, 클릭 시 미저장 경고 확인 모달 (F6) */}
+                <button
+                  type="button"
+                  data-id="region-open-map"
+                  className="rounded-xs p-1 text-accent transition-colors hover:bg-accent-tint"
+                  title={t("subprocess.openMap")}
+                  onClick={() => onOpenMap(box.id)}
+                >
+                  <ExternalLink size={14} strokeWidth={1.5} />
+                </button>
+                {/* 업무체계 소속 — 5단계 전체 경로, 클릭 시 체계 드릴인 피크(FrameworkChip 재활용) */}
+                {framework && (
+                  <FrameworkPeekTrigger
+                    dataId={`region-framework-${box.id}`}
+                    categoryId={framework.categoryId}
+                    linkedMapId={framework.linkedMapId}
+                    title={framework.path}
+                    className="inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary transition-colors hover:bg-accent-tint hover:text-accent"
+                  >
+                    <FolderTree size={11} strokeWidth={1.5} className="shrink-0" />
+                    <span>{framework.path}</span>
+                  </FrameworkPeekTrigger>
+                )}
+              </div>
             </div>
-          </div>
-        </Fragment>
-      ))}
+          </Fragment>
+        );
+      })}
     </>
   );
 }
@@ -587,7 +614,7 @@ function FocusScopeBands({
 type MenuState = {
   x: number;
   y: number;
-  kind: "pane" | "node" | "edge" | "group" | "selection";
+  kind: "pane" | "node" | "edge" | "group" | "selection" | "region";
   targetId: string | null;
 };
 
@@ -1392,7 +1419,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
-    regions: { id: string; x: number; width: number; depth: number }[];
+    regions: RegionBox[];
+    childEdges: Edge[];
     scopeOffsets: Map<string, { x: number; y: number }>;
     rootOffsets: Map<string, { x: number; y: number }>;
     rootShiftSteps: { x: number; footprint: number }[];
@@ -1706,6 +1734,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 드롭 확정(dragging=false, RF 마지막 flush)은 기존 계단 역변환 → 저장 좌표 의미(갭=앵커 클램프) 보존.
       const ySteps2 = yStepsRef.current;
       const gestureOffsets = dragYOffsetsRef.current;
+      const suppress = suppressPosIdsRef.current;
       for (const change of changes) {
         if (change.type === "position" && change.position) {
           const frozen = change.dragging === true ? gestureOffsets.get(change.id) : undefined;
@@ -1718,10 +1747,20 @@ function MapEditor({ mapId }: { mapId: number }) {
               x: change.position.x,
               y: displayToSavedX(change.position.y, ySteps2),
             };
+          } else if (!suppress.has(change.id)) {
+            // 펼침 중 비제스처 이동(방향키 등, dragging=false) — ySteps는 게이트로 비어 있고
+            // 드래그 억제도 없어서 RF 표시좌표가 그대로 저장 state로 들어가 footprint/height-shift만큼
+            // 점프하던 버그. 해당 노드의 rootOffsets(표시−저장)를 빼 저장좌표로 역변환한다.
+            const offset = inlineCompositionRef.current?.rootOffsets.get(change.id);
+            if (offset !== undefined && (offset.x !== 0 || offset.y !== 0)) {
+              change.position = {
+                x: change.position.x - offset.x,
+                y: change.position.y - offset.y,
+              };
+            }
           }
         }
       }
-      const suppress = suppressPosIdsRef.current;
       if (suppress.size === 0) {
         return changes;
       }
@@ -3203,13 +3242,14 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 펼침 레인 헤더 "링크맵 열기" 확인 — 에디터 이탈이라 미저장 경고 후 이동 (F6)
   const [openMapPrompt, setOpenMapPrompt] = useState<{ mapId: number; name: string } | null>(null);
 
-  // 레인 헤더의 열기 버튼 → 호스트 노드의 링크 대상 맵 해석 후 확인 모달 (트리비얼 setter라 plain 함수)
-  const promptOpenLinkedMap = (hostId: string) => {
+  // 레인 헤더의 열기 버튼/영역 우클릭 메뉴 → 호스트 노드의 링크 대상 맵 해석 후 확인 모달.
+  // menuItems useMemo의 dep이라 useCallback으로 identity 고정(ref+setter만 읽어 deps 없음).
+  const promptOpenLinkedMap = useCallback((hostId: string) => {
     const host = fullGraphRef.current?.nodes.find((node) => node.id === hostId);
     if (host?.linked_map_id != null) {
       setOpenMapPrompt({ mapId: host.linked_map_id, name: host.title });
     }
-  };
+  }, []);
 
   // 트리비얼 핸들러는 plain 함수로 — React Compiler 자동 메모(수동 useCallback은 setter 추론과 충돌).
   const handleCreateVersion = () => {
@@ -5735,8 +5775,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (event.ctrlKey) {
         return;
       }
-      // 읽기 전용에서는 노드 메뉴(드릴다운)만 의미가 있다
-      if (readOnly && kind !== "node") {
+      // 읽기 전용에서는 노드 메뉴(드릴다운)와 펼침 영역 메뉴(이동·접기 = 조회 동작)만 의미가 있다
+      if (readOnly && kind !== "node" && kind !== "region") {
         return;
       }
       setMenu({ x: event.clientX, y: event.clientY, kind, targetId });
@@ -5836,6 +5876,29 @@ function MapEditor({ mapId }: { mapId: number }) {
       submenu: alignSubmenu(ids, count),
     });
 
+    // 펼침 영역(틴트) 우클릭 — 겹침 시 pane 히트테스트가 최상단(바깥) 영역만 넘겨준다 (2026-08-30)
+    if (menu.kind === "region") {
+      return [
+        {
+          label: t("subprocess.openMap"),
+          icon: ExternalLink,
+          onSelect: () => {
+            if (menu.targetId) {
+              promptOpenLinkedMap(menu.targetId); // 확인 게이트(미저장 경고) 후 이동
+            }
+          },
+        },
+        {
+          label: t("node.collapseChildTitle"),
+          icon: X,
+          onSelect: () => {
+            if (menu.targetId) {
+              toggleInlineExpandRef.current?.(menu.targetId);
+            }
+          },
+        },
+      ];
+    }
     if (menu.kind === "pane") {
       // 기타 하위메뉴 — PNG 내보내기 등 보조 동작(추후 확장 지점). 실제 키는 전역 Ctrl/⌘+⇧+E(라벨 그대로).
       const moreItem: ContextMenuItem = {
@@ -6158,6 +6221,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     reactFlow,
     isWordMap,
+    promptOpenLinkedMap,
     t,
   ]);
 
@@ -6675,6 +6739,50 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     inlineCompositionRef.current = inlineComposition;
   }, [inlineComposition]);
+
+  // 펼침 영역 헤더의 업무체계 라벨 소스 — hostId → 링크맵의 지정 체계(카테고리 id + 5단계 전체 경로).
+  // 지정(designated) 링크맵만 category를 갖는다. 라벨 클릭 시 FrameworkPeekTrigger가 체계 피크를 연다.
+  const regionFrameworks = useMemo(() => {
+    const out = new Map<string, { categoryId: number; path: string; linkedMapId: number }>();
+    if (!inlineComposition || !fullGraph) {
+      return out;
+    }
+    const flatById = new Map(fullGraph.nodes.map((node) => [node.id, node]));
+    for (const region of inlineComposition.regions) {
+      const linkedMapId = flatById.get(region.id)?.linked_map_id;
+      if (linkedMapId == null) {
+        continue;
+      }
+      const ref = subprocessRefs.get(linkedMapId);
+      if (ref?.designated && ref.category_id != null && ref.category_path) {
+        out.set(region.id, { categoryId: ref.category_id, path: ref.category_path, linkedMapId });
+      }
+    }
+    return out;
+  }, [inlineComposition, fullGraph, subprocessRefs]);
+
+  // 펼침 영역 호버/우클릭 히트테스트 — 틴트 박스는 pointer-events:none(패닝 보존)이라 pane 이벤트의
+  // flow 좌표로 판정한다. 겹침(중첩 펼침)은 마지막 매치 = DOM상 가장 위(바깥) 영역 하나만 반환.
+  const [hoverRegionId, setHoverRegionId] = useState<string | null>(null);
+  const findRegionAtClient = (clientX: number, clientY: number): string | null => {
+    const regions = inlineCompositionRef.current?.regions;
+    if (!regions || regions.length === 0) {
+      return null;
+    }
+    const point = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
+    let hit: string | null = null;
+    for (const region of regions) {
+      if (
+        point.x >= region.x &&
+        point.x <= region.x + region.width &&
+        point.y >= region.y &&
+        point.y <= region.y + region.height
+      ) {
+        hit = region.id;
+      }
+    }
+    return hit;
+  };
 
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
@@ -7667,9 +7775,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           locked: flatKey != null && lockedKeys.has(flatKey),
         });
       }
-      const seenEdges = new Set(outlineEdges.map((edge) => `${edge.source} ${edge.target}`));
+      const seenEdges = new Set(outlineEdges.map((edge) => `${edge.source}\u0000${edge.target}`));
       for (const graphEdge of fullGraph.edges) {
-        const key = `${graphEdge.source_node_id} ${graphEdge.target_node_id}`;
+        const key = `${graphEdge.source_node_id}\u0000${graphEdge.target_node_id}`;
         if (liveIds.has(graphEdge.source_node_id) || seenEdges.has(key)) {
           continue;
         }
@@ -7736,6 +7844,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     [isSubprocessRow, scopes, collapseSubprocessRow],
   );
 
+  // 포커스 비행(setCenter/fitView) 도중의 getZoom()은 d3 interpolateZoom의 일시 축소값 — 연속 이동 시
+  // 그 값을 다음 목표 줌으로 캡처하면 이동을 반복할수록 줌아웃이 눌러앉는다. 비행 시작 시점의 안정
+  // 줌을 앵커로 기억해 비행 중 재이동도 같은 앵커로 향하게 한다(연속 이동에도 줌 확장은 일시적).
+  const focusFlightRef = useRef<{ zoom: number; until: number } | null>(null);
+  const getFocusAnchorZoom = useCallback(
+    (duration: number): number => {
+      const now = performance.now();
+      const flight = focusFlightRef.current;
+      const zoom = flight !== null && now < flight.until ? flight.zoom : reactFlow.getZoom();
+      focusFlightRef.current = { zoom, until: now + duration + 150 };
+      return zoom;
+    },
+    [reactFlow],
+  );
+
   // 노드가 화면 밖일 때만 현재 줌 유지한 채 부드럽게 가운데로 — 이미 보이면 이동 없음(매 클릭 점프/줌변경 방지).
   const revealNodeIfOffscreen = useCallback(
     (id: string) => {
@@ -7757,12 +7880,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         sy + h * zoom <= paneHeight - margin;
       if (!visible) {
         void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
-          zoom,
+          zoom: getFocusAnchorZoom(500), // 비행 중 재이동은 앵커 줌 — 일시 축소값 목표화 방지
           duration: 500,
         });
       }
     },
-    [reactFlow, paneWidth, paneHeight],
+    [reactFlow, paneWidth, paneHeight, getFocusAnchorZoom],
   );
 
   // fit 버튼 — 현재 스코프를 화면에 맞추되 가운데가 아니라 좌상단 정렬(왼쪽위 고정). 줌은 맞추되 콘텐츠는 좌상단에.
@@ -7843,7 +7966,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             node.selected === (node.id === id) ? node : { ...node, selected: node.id === id },
           ),
         );
-        const zoom = reactFlow.getZoom();
+        const zoom = getFocusAnchorZoom(500); // 비행 중 재이동은 앵커 줌 — 연속 이동 줌아웃 눌러앉음 방지
         void reactFlow.fitView({
           nodes: [{ id }],
           padding: 0.4,
@@ -7853,7 +7976,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         });
       }, 160);
     },
-    [fullGraph, currentParentId, reactFlow, setNodes, setChildNodes, commitExpanded, revealNodeIfOffscreen],
+    [fullGraph, currentParentId, reactFlow, setNodes, setChildNodes, commitExpanded, revealNodeIfOffscreen, getFocusAnchorZoom],
   );
 
   // 아웃라인 Tab/↓ — 다음(아래) 가시 행으로 이동. 펼치기는 자동으로 하지 않는다(→/F가 담당).
@@ -8297,23 +8420,39 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // Tab / Shift+Tab : 흐름상 다음/이전 노드로 포커스 이동(+화면 중앙으로).
+      // 임베드 자식 엣지도 포함 — 펼친 하위프로세스 안 노드를 클릭한 뒤에도 아웃라인과 동일하게 순회된다.
       if (event.key === "Tab") {
+        const flowEdges = [
+          ...edgesRef.current,
+          ...(inlineCompositionRef.current?.childEdges ?? []),
+        ];
         const nextId = event.shiftKey
-          ? getPrevNodeAlongFlow(edgesRef.current, selectedId)
-          : getNextNodeAlongFlow(edgesRef.current, selectedId);
+          ? getPrevNodeAlongFlow(flowEdges, selectedId)
+          : getNextNodeAlongFlow(flowEdges, selectedId);
         if (!nextId) {
           return;
         }
         event.preventDefault();
         setSelectedId(nextId);
-        setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nextId })));
+        // 다음 노드가 임베드 자식이면 childNodes에 선택을 싣는다 — 반대편 state는 전부 해제(단일 선택).
+        const isChild = childNodesRef.current.some((node) => node.id === nextId);
+        setNodes((current) =>
+          current.map((node) => ({ ...node, selected: !isChild && node.id === nextId })),
+        );
+        setChildNodes((current) =>
+          current.map((node) =>
+            node.selected === (isChild && node.id === nextId)
+              ? node
+              : { ...node, selected: isChild && node.id === nextId },
+          ),
+        );
         const node = reactFlow.getNode(nextId);
         if (node) {
           const w = node.measured?.width ?? NODE_WIDTH;
           const h = node.measured?.height ?? NODE_HEIGHT;
           void reactFlow.setCenter(node.position.x + w / 2, node.position.y + h / 2, {
             duration: 350,
-            zoom: reactFlow.getZoom(),
+            zoom: getFocusAnchorZoom(350), // 연속 Tab에도 줌아웃이 눌러앉지 않게 앵커 줌으로
           });
         }
       }
@@ -8326,10 +8465,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     readOnly,
     reactFlow,
     setNodes,
+    setChildNodes,
     setSelectedId,
     setMenu,
     startRename,
     startEdgeLabelEdit,
+    getFocusAnchorZoom,
   ]);
 
   // 인스펙터 좌측 가장자리 드래그로 폭 조절 (왼쪽으로 끌면 넓어짐)
@@ -8899,6 +9040,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                   <div
                     className={`relative h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
+                    // 펼침 영역 호버 — 상시 selection 모드라 RF onPaneMouseMove가 바인딩되지 않아(pane은
+                    // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
+                    onPointerMove={(event) => {
+                      setHoverRegionId(findRegionAtClient(event.clientX, event.clientY));
+                    }}
+                    onPointerLeave={() => setHoverRegionId(null)}
                   >
                     <ReactFlow
                       nodes={displayNodes}
@@ -8964,7 +9111,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setSummaryNodeId(null);
                         setFlow({ anchor: null, reach: 0 }); // 흐름 하이라이트 초기화(재선택 시 잔존 방지, F14)
                       }}
-                      onPaneContextMenu={(event) => openMenu(event, "pane", null)}
+                      onPaneContextMenu={(event) => {
+                        // 펼침 영역(틴트) 위 우클릭 — 겹침이면 최상단(바깥) 영역만. 밖이면 기존 pane 메뉴.
+                        const regionId = findRegionAtClient(event.clientX, event.clientY);
+                        if (regionId !== null) {
+                          openMenu(event, "region", regionId);
+                          return;
+                        }
+                        openMenu(event, "pane", null);
+                      }}
                       onNodeContextMenu={(event, node) => {
                         // 인라인 자식(읽기전용)도 메뉴를 연다 — 빌더가 "(읽기전용)" 안내 1항목을 내려
                         // 액션 불가를 인지시킴(아웃라인 자식 행 우클릭과 동일 경로·동일 결과).
@@ -9142,6 +9297,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <InlineRegionBands
                             regions={inlineComposition.regions}
                             baseDepth={currentScopeDepth}
+                            hoverId={hoverRegionId}
+                            frameworks={regionFrameworks}
                             onCollapse={toggleInlineExpand}
                             onOpenMap={promptOpenLinkedMap}
                           />
