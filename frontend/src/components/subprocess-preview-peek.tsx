@@ -505,25 +505,44 @@ export function SubprocessPreviewPeek({
                     mockConditionLines.map((line) => {
                       const Icon = line.icon;
                       return (
-                        <div key={line.key} className="mt-1 flex items-start gap-1 text-fine text-ink-tertiary">
-                          <Icon size={11} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                        <div key={line.key} className="mt-1 flex items-start gap-1 text-xs text-ink-tertiary">
+                          <Icon size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
                           <span className="min-w-0 break-words">{line.value}</span>
                         </div>
                       );
                     })}
-                  {/* 인풋/아웃풋 — 개행 항목 나열(LogIn/LogOut) */}
+                  {/* 인풋/아웃풋 — 캔버스 NodeIoDetails 체크리스트 박스 미러(휴식 상태): 흰 박스 +
+                      대문자 헤더(셰브런·아이콘·(N)) + 항목 행(체크박스 슬롯 자리 유지, 단일 항은 헤더 생략+아이콘). */}
                   {mockIoSides.map((entry) => {
                     const Icon = entry.icon;
+                    const single = entry.lines.length === 1;
                     return (
-                      <div key={entry.side} className="mt-1 flex items-start gap-1 text-fine text-ink-tertiary">
-                        <Icon size={11} strokeWidth={1.5} className="mt-0.5 shrink-0" />
-                        <span className="flex min-w-0 flex-col gap-0.5">
+                      <div
+                        key={entry.side}
+                        data-id={`library-peek-mock-io-${entry.side}`}
+                        className="mt-1 rounded-sm border border-hairline bg-surface px-1.5 py-1"
+                      >
+                        {!single && (
+                          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-ink-muted">
+                            <ChevronRight size={10} strokeWidth={1.5} className="shrink-0 rotate-90" />
+                            <Icon size={10} strokeWidth={1.5} />
+                            {entry.side === "input" ? "Input" : "Output"}
+                            <span className="normal-case tracking-normal">({entry.lines.length})</span>
+                          </div>
+                        )}
+                        <div className="space-y-[3px]">
                           {entry.lines.map((line, index) => (
-                            <span key={`${index}-${line}`} className="truncate">
-                              {line}
-                            </span>
+                            <div key={`${index}-${line}`} className="flex items-start gap-1 text-xs text-ink-tertiary">
+                              {single ? (
+                                <Icon size={12} strokeWidth={1.5} className="mt-0.5 shrink-0 text-ink-muted" />
+                              ) : (
+                                // 실노드의 호버 노출 체크박스 자리(12px) 유지 — 텍스트 들여쓰기 동일
+                                <span className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+                              )}
+                              <span className="line-clamp-2 min-w-0 flex-1 break-words">{line}</span>
+                            </div>
                           ))}
-                        </span>
+                        </div>
                       </div>
                     );
                   })}
