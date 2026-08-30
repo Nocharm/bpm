@@ -7,8 +7,11 @@
 
 import {
   Building2,
+  CalendarClock,
+  ChevronRight,
   ExternalLink,
   FolderTree,
+  GitBranch,
   Lock,
   Network,
   Plus,
@@ -21,11 +24,12 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { getResolvedGraph, type VersionGraph } from "@/lib/api";
+import { getMap, getResolvedGraph, type VersionGraph } from "@/lib/api";
 import { PARAM_ICON } from "@/components/param-icons";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { getExternalL5Color } from "@/lib/canvas";
+import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
@@ -131,6 +135,51 @@ export function SubprocessPreviewPeek({
     };
   }, [mapId, designated]);
 
+  // 상세 탭 메타 — 게시 버전 정보(마커·게시 시각=published 이벤트)와 업무체계 경로.
+  // 지정 맵은 미리보기 응답이 권한을 확정한 뒤(ready)에만 조회 — locked면 맵 상세도 403이 확실하므로
+  // 요청을 생략해 콘솔 403 스팸 없이 톤다운 대시로 남긴다. 미등록 행은 목록 노출=가시(viewer+)라 즉시 조회.
+  const [meta, setMeta] = useState<
+    | { status: "loading" }
+    | { status: "none" }
+    | {
+        status: "ready";
+        version: { label: string; number: number | null; publishedAt: string | null } | null;
+        categoryPath: string | null;
+      }
+  >({ status: "loading" });
+  const canFetchMeta = !designated || fetchState.status === "ready";
+  useEffect(() => {
+    if (!canFetchMeta) return;
+    let cancelled = false;
+    getMap(mapId)
+      .then((detail) => {
+        if (cancelled) return;
+        const published = [...detail.versions]
+          .filter((version) => version.status === "published")
+          .sort((a, b) => b.id - a.id)[0];
+        setMeta({
+          status: "ready",
+          version: published
+            ? {
+                label: published.label,
+                number: published.version_number ?? null,
+                publishedAt:
+                  [...(published.events ?? [])]
+                    .filter((event) => event.event_type === "published")
+                    .sort((a, b) => b.id - a.id)[0]?.created_at ?? published.updated_at,
+              }
+            : null,
+          categoryPath: detail.category_path ?? null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setMeta({ status: "none" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mapId, canFetchMeta]);
+
   // 바깥 클릭 닫기 — 포털 자식은 DOM 트리 밖이라 contains로 판정(모달 컨벤션과 동일 mousedown 캡처)
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -179,6 +228,21 @@ export function SubprocessPreviewPeek({
       value: formatParamValue(field, spParamValue(field)),
     })),
   ];
+  // 상세 탭 메타 표시값 — 게시 버전 마커(v번호 · 라벨)·게시 시각(KST)·업무체계 전체 경로
+  const metaVersion =
+    meta.status === "ready" && meta.version
+      ? `${meta.version.number != null ? `v${meta.version.number} · ` : ""}${meta.version.label}`
+      : "";
+  const metaPublishedAt =
+    meta.status === "ready" && meta.version?.publishedAt
+      ? formatKstShort(meta.version.publishedAt)
+      : "";
+  const metaCategoryPath = meta.status === "ready" ? meta.categoryPath : null;
+  const metaRows: { key: string; label: string; icon: LucideIcon; value: string }[] = [
+    { key: "version", label: t("library.peekVersion"), icon: GitBranch, value: metaVersion },
+    { key: "publishedAt", label: t("library.peekPublishedAt"), icon: CalendarClock, value: metaPublishedAt },
+  ];
+
   // 목업 색 — 기본은 캔버스 정본 SP 바이올렛, L5 캔버스의 타 L5 출신은 홈 L5별 색(캔버스 규칙 미러)
   const mockStroke = externalOrigin
     ? getExternalL5Color(externalOrigin.categoryId)
@@ -434,8 +498,12 @@ export function SubprocessPreviewPeek({
               {infoRows.map((row) => {
                 const Icon = row.icon;
                 return (
-                  // 아이콘 + 라벨 + 값 필 — 세 요소 모두 노출 (사용자 피드백 2026-08-30)
-                  <div key={row.key} title={row.label} className="flex items-center gap-1.5">
+                  // 아이콘 + 라벨 + 값 필 — 값 없는 행도 나열하되 톤 다운 (사용자 피드백 2026-08-30)
+                  <div
+                    key={row.key}
+                    title={row.label}
+                    className={`flex items-center gap-1.5 ${row.value ? "" : "opacity-40"}`}
+                  >
                     <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                     <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
                     {row.value ? (
@@ -448,6 +516,54 @@ export function SubprocessPreviewPeek({
                   </div>
                 );
               })}
+              {/* 메타 — 게시 버전·게시 시각·업무체계(전체 레벨). 없는 값은 동일하게 톤다운 대시 */}
+              <div data-id="library-peek-meta" className="mt-0.5 flex flex-col gap-1.5 border-t border-hairline pt-2">
+                {metaRows.map((row) => {
+                  const Icon = row.icon;
+                  return (
+                    <div
+                      key={row.key}
+                      title={row.label}
+                      className={`flex items-center gap-1.5 ${row.value ? "" : "opacity-40"}`}
+                    >
+                      <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
+                      {row.value ? (
+                        <span className="max-w-[55%] truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
+                          {row.value}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-fine text-ink-tertiary">-</span>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className={metaCategoryPath ? "" : "opacity-40"} title={t("library.peekFramework")}>
+                  <div className="flex items-center gap-1.5">
+                    <FolderTree size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
+                      {t("library.peekFramework")}
+                    </span>
+                    {!metaCategoryPath && <span className="shrink-0 text-fine text-ink-tertiary">-</span>}
+                  </div>
+                  {/* 소속 시 전체 레벨 나열 — 줄바꿈 허용(레벨 모두 표시, 사용자 피드백 2026-08-30) */}
+                  {metaCategoryPath && (
+                    <div
+                      data-id="library-peek-framework-path"
+                      className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 pl-5 text-fine text-ink"
+                    >
+                      {metaCategoryPath.split("/").map((segment, index) => (
+                        <span key={`${index}-${segment}`} className="flex min-w-0 items-center gap-1">
+                          {index > 0 && (
+                            <ChevronRight size={10} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          )}
+                          <span className="break-words">{segment}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

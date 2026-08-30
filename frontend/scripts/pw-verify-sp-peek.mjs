@@ -87,6 +87,24 @@ async function newPage(devUser) {
     infoText.includes("Growth Team") && infoText.length > "Growth Team".length,
     "[1] detail tab lists label+value rows",
   );
+  // 값 없는 행 톤다운(대시) — 시드에서 담당자/터치타임/달러비용 비어 있음
+  check(
+    (await page.locator('[data-id="library-peek-info"] .opacity-40').count()) >= 2,
+    "[1] empty rows listed but toned down",
+  );
+  // 메타 — 게시 버전 마커(v번호) + 게시 시각 로드, 비체계 맵은 업무체계 톤다운 대시
+  await page.waitForFunction(
+    () => /v\d/.test(document.querySelector('[data-id="library-peek-meta"]')?.textContent ?? ""),
+    null,
+    { timeout: 8000 },
+  );
+  const metaText = await page.locator('[data-id="library-peek-meta"]').innerText();
+  check(/v\d+/.test(metaText), "[1] meta shows published version marker");
+  check(/\d{2}-\d{2} \d{2}:\d{2}/.test(metaText), "[1] meta shows publish time (MM-DD HH:mm)");
+  check(
+    (await page.locator('[data-id="library-peek-framework-path"]').count()) === 0,
+    "[1] non-framework map shows toned dash for framework",
+  );
   await page.screenshot({ path: `${SHOT_DIR}/peek-1-details.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await addBtn.click();
@@ -184,6 +202,11 @@ async function newPage(devUser) {
     await page.locator('[data-id="library-peek-mock-origin"]').isVisible(),
     "[5] external-origin mock shows L5 badge",
   );
+  // 상세 탭 — 체계 소속 맵은 전체 레벨 경로 표시
+  await page.click('[data-id="library-peek-tab-details"]');
+  await page.waitForSelector('[data-id="library-peek-framework-path"]', { timeout: 8000 });
+  const pathSeparators = await page.locator('[data-id="library-peek-framework-path"] svg').count();
+  check(pathSeparators >= 4, `[5] framework path lists all levels (separators=${pathSeparators})`);
   await page.screenshot({ path: `${SHOT_DIR}/peek-5-framework.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await page.click('[data-id="library-peek-add"]');
