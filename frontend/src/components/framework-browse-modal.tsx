@@ -4,13 +4,19 @@
 // 캔버스 트리 피커와 같은 상태 엔진(lib/framework-tree-state)을 재사용하고, 현재 경로(체인)를
 // 미리 펼친 채 열어 형제 브랜치(옆)·상위(뒤)로 바로 이동할 수 있게 한다. 맵 행 클릭·L5 연계
 // 아이콘은 우상단 칩 플라이아웃과 동일하게 해당 에디터로 이동한다.
-import { ChevronDown, ChevronRight, FolderTree, Network, Workflow, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderTree, Network, Search, Workflow, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import { getCategoryChain, type CategoryNode, type MapSummary } from "@/lib/api";
+import {
+  getCategoryChain,
+  searchFramework,
+  type CategoryNode,
+  type FrameworkSearchResult,
+  type MapSummary,
+} from "@/lib/api";
 import {
   applyCategoryLoaded,
   createInitialState,
@@ -39,6 +45,10 @@ export function FrameworkBrowseModal({
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   const [chainIds, setChainIds] = useState<ReadonlySet<number>>(new Set());
   const [initFailed, setInitFailed] = useState(false);
+  // 검색 — 입력 디바운스 후 서버 검색(pair-state: 쿼리 불일치=로딩) (2026-08-30)
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [searchResult, setSearchResult] = useState<{ q: string; data: FrameworkSearchResult } | null>(null);
 
   // 초기 로드 — 루트 + 체인 각 노드의 자식·맵을 받아 경로를 펼친 상태로 연다
   useEffect(() => {
@@ -65,6 +75,47 @@ export function FrameworkBrowseModal({
       active = false;
     };
   }, [chainCategoryId]);
+
+  // 입력 디바운스 — 타이머 콜백에서만 setState(동기 set-state-in-effect 회피)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (debouncedQuery === "") return;
+    let active = true;
+    void searchFramework(debouncedQuery)
+      .then((data) => {
+        if (active) setSearchResult({ q: debouncedQuery, data });
+      })
+      .catch(() => {
+        if (active) setSearchResult({ q: debouncedQuery, data: { categories: [], maps: [] } });
+      });
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery]);
+  const results =
+    debouncedQuery !== "" && searchResult?.q === debouncedQuery ? searchResult.data : null;
+
+  // 검색 결과의 카테고리로 점프 — 경로를 펼쳐 트리에 합류(기존 펼침 유지) 후 검색 종료
+  async function expandTo(categoryId: number) {
+    const chain = await getCategoryChain(categoryId);
+    const ids = chain.map((c) => c.id);
+    const loaded = await Promise.all(ids.map((id) => fetchCategoryChildren(id)));
+    setChainIds(new Set(ids));
+    setState((prev) => {
+      let next = prev;
+      ids.forEach((id, i) => {
+        next = reduceFrameworkTree(next, { type: "opened", categoryId: id });
+        next = applyCategoryLoaded(next, id, loaded[i].nodes, loaded[i].maps);
+      });
+      return next;
+    });
+    setQuery("");
+    setDebouncedQuery("");
+  }
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
@@ -196,8 +247,81 @@ export function FrameworkBrowseModal({
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
+        {/* 검색 — 카테고리·맵 이름 부분일치, 결과에서 점프/이동 (2026-08-30) */}
+        <div className="flex items-center gap-2 border-b border-hairline px-4 py-2">
+          <Search size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          <input
+            data-id="framework-browse-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("framework.browseSearch")}
+            className="w-full bg-transparent text-caption outline-none placeholder:text-ink-tertiary"
+          />
+        </div>
         <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-2">
-          {initFailed ? (
+          {query.trim() !== "" ? (
+            results === null ? (
+              <p className="px-2 py-4 text-fine text-ink-tertiary">{t("common.loading")}</p>
+            ) : results.categories.length === 0 && results.maps.length === 0 ? (
+              <p className="px-2 py-4 text-fine text-ink-tertiary">{t("framework.searchNoResults")}</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {results.categories.length > 0 && (
+                  <div>
+                    <p className="px-1.5 pb-0.5 text-fine font-semibold text-ink-tertiary">
+                      {t("framework.searchCategories")}
+                    </p>
+                    <ul className="flex flex-col">
+                      {results.categories.map((cat) => (
+                        <li key={cat.id}>
+                          <button
+                            type="button"
+                            data-id={`framework-search-cat-${cat.id}`}
+                            onClick={() => void expandTo(cat.id)}
+                            title={cat.path ?? cat.name}
+                            className="flex w-full flex-col items-start rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
+                          >
+                            <span className="max-w-full truncate text-fine text-ink">{cat.name}</span>
+                            {cat.path && (
+                              <span className="max-w-full truncate text-fine text-ink-tertiary">{cat.path}</span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {results.maps.length > 0 && (
+                  <div>
+                    <p className="px-1.5 pb-0.5 text-fine font-semibold text-ink-tertiary">
+                      {t("framework.searchMaps")}
+                    </p>
+                    <ul className="flex flex-col">
+                      {results.maps.map((row) => (
+                        <li key={row.id}>
+                          <button
+                            type="button"
+                            data-id={`framework-search-map-${row.id}`}
+                            onClick={() => goToMap(row.id)}
+                            title={row.path ? `${row.path}/${row.name}` : row.name}
+                            className="flex w-full flex-col items-start rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
+                          >
+                            <span className="flex max-w-full items-center gap-1.5 truncate text-fine text-ink">
+                              <Network size={11} strokeWidth={1.5} className="shrink-0 opacity-60" />
+                              {row.name}
+                            </span>
+                            {row.path && (
+                              <span className="max-w-full truncate text-fine text-ink-tertiary">{row.path}</span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )
+          ) : initFailed ? (
             <p className="px-2 py-4 text-fine text-error">{t("framework.chipError")}</p>
           ) : roots.length === 0 ? (
             <p className="px-2 py-4 text-fine text-ink-tertiary">{t("common.loading")}</p>

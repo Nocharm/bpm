@@ -2553,6 +2553,32 @@ export function listCategoryMaps(categoryId: number, offset = 0, limit = 50): Pr
   return request<CategoryMaps>(`/categories/${categoryId}/maps?offset=${offset}&limit=${limit}`);
 }
 
+// 체계 탐색 검색 — 카테고리·맵 이름 부분일치, 비가시 맵은 서버가 제외 (탐색 모달, 2026-08-30)
+export interface FrameworkSearchCategory {
+  id: number;
+  name: string;
+  level: number;
+  path: string | null;
+}
+
+export interface FrameworkSearchMap {
+  id: number;
+  name: string;
+  category_id: number;
+  path: string | null;
+}
+
+export interface FrameworkSearchResult {
+  categories: FrameworkSearchCategory[];
+  maps: FrameworkSearchMap[];
+}
+
+export function searchFramework(q: string, limit = 20): Promise<FrameworkSearchResult> {
+  return request<FrameworkSearchResult>(
+    `/categories/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
+}
+
 // 조상 체인 루트→자신 — 캐스케이드 셀렉트를 기존 연결 카테고리로 시딩할 때 사용 (fix round 1 #2).
 export function getCategoryChain(categoryId: number): Promise<CategoryNode[]> {
   return request<CategoryNode[]>(`/categories/${categoryId}/chain`);

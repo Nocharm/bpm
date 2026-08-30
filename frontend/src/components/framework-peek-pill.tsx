@@ -33,7 +33,7 @@ export function FrameworkPeekTrigger({
   children: ReactNode;
 }) {
   const [peek, setPeek] = useState<{ x: number; y: number } | null>(null);
-  // 형제 브랜치 탐색 모달 — 피크 헤더 버튼으로 전환(피크는 닫고 모달로) (사용자 요청 2026-08-30)
+  // 형제 브랜치 탐색 모달 — 피크는 유지한 채 위에 추가 창으로 띄운다 (사용자 정정 2026-08-30)
   const [browse, setBrowse] = useState(false);
   const timerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -47,9 +47,10 @@ export function FrameworkPeekTrigger({
   }
   useEffect(() => clearTimer, []);
 
-  // 바깥 클릭 닫기 — FrameworkChip 플라이아웃과 동일 캡처 패턴
+  // 바깥 클릭 닫기 — FrameworkChip 플라이아웃과 동일 캡처 패턴.
+  // 탐색 모달이 위에 떠 있는 동안엔 억제 — 피크를 유지한 채 추가 창으로 연다 (사용자 정정 2026-08-30)
   useEffect(() => {
-    if (peek === null) return;
+    if (peek === null || browse) return;
     const handleMouseDown = (event: MouseEvent) => {
       if (
         event.target instanceof Element &&
@@ -61,7 +62,7 @@ export function FrameworkPeekTrigger({
     };
     window.addEventListener("mousedown", handleMouseDown, true);
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
-  }, [peek]);
+  }, [peek, browse]);
 
   function openPeek() {
     clearTimer();
@@ -77,6 +78,9 @@ export function FrameworkPeekTrigger({
       style={style}
       onClick={(event) => {
         event.stopPropagation();
+        // 포털 자식(피크 패널·탐색 모달)의 클릭도 React 트리로 여기까지 버블된다 —
+        // DOM 포함 여부로 걸러 토글 오작동(모달 안 클릭 = 피크 닫힘)을 막는다
+        if (event.target instanceof Element && !event.currentTarget.contains(event.target)) return;
         if (peek !== null) setPeek(null);
         else openPeek();
       }}
@@ -96,7 +100,9 @@ export function FrameworkPeekTrigger({
             data-id="node-framework-peek"
             style={{ left: peek.x, top: peek.y }}
             className="fixed z-[1250]"
-            onMouseLeave={() => setPeek(null)}
+            onMouseLeave={() => {
+              if (!browse) setPeek(null);
+            }}
           >
             {/* 링크맵 기준 체인 — mapId=링크맵이라 플라이아웃에서 해당 맵이 현재로 하이라이트된다 */}
             <FrameworkChip
@@ -104,10 +110,7 @@ export function FrameworkPeekTrigger({
               categoryId={categoryId}
               defaultOpen
               floating={false}
-              onBrowse={() => {
-                setPeek(null);
-                setBrowse(true);
-              }}
+              onBrowse={() => setBrowse(true)} // 피크는 유지 — 추가 창으로 (사용자 정정 2026-08-30)
             />
           </div>,
           document.body,

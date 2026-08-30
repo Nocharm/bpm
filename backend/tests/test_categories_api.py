@@ -239,6 +239,23 @@ def _seed_l5_slot(client: TestClient, ids: dict[str, int]) -> int:
     return asyncio.run(_seed())
 
 
+def test_framework_search(client: TestClient) -> None:
+    """체계 검색 — 카테고리·맵 이름 부분일치 + 경로 동봉 (탐색 모달, 2026-08-30)."""
+    ids = _seed_tree(client)
+    body = client.get("/api/categories/search", params={"q": "직접구매"}).json()
+    assert any(c["id"] == ids["A1"] and c["path"] == "구매/직접구매" for c in body["categories"])
+    body = client.get("/api/categories/search", params={"q": "framework pub"}).json()
+    assert any(m["id"] == ids["pub"] and m["path"] == "구매/직접구매" for m in body["maps"])
+
+
+def test_framework_search_masks_private(client: TestClient, enforce: None) -> None:
+    """검색도 목록과 동일 마스킹 — 비가시 맵은 결과에서 제외(존재 노출 없음)."""
+    _seed_tree(client)
+    act_as("cat.stranger")
+    body = client.get("/api/categories/search", params={"q": "framework private"}).json()
+    assert body["maps"] == []
+
+
 def test_category_assign_and_unassign(client: TestClient) -> None:
     ids = _seed_tree(client)
     l5 = _seed_l5_slot(client, ids)

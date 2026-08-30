@@ -862,6 +862,29 @@ class CategoryMapsOut(BaseModel):
     maps: list[MapOut]
 
 
+class FrameworkSearchCategory(BaseModel):
+    # 체계 검색 결과(카테고리) — path는 루트→자기 이름 조인 (2026-08-30)
+    id: int
+    name: str
+    level: int
+    path: str | None = None
+
+
+class FrameworkSearchMap(BaseModel):
+    # 체계 검색 결과(맵) — path는 소속 카테고리 경로. 비가시 맵은 결과에서 제외(마스킹)
+    id: int
+    name: str
+    category_id: int
+    path: str | None = None
+
+
+class FrameworkSearchOut(BaseModel):
+    """체계 탐색 검색 — 이름 부분일치 카테고리·맵 (탐색 모달 검색, 2026-08-30)."""
+
+    categories: list[FrameworkSearchCategory]
+    maps: list[FrameworkSearchMap]
+
+
 class MapCategoryIn(BaseModel):
     # 체계 카테고리 연결/해제 — null=해제, 존재 검증은 라우터에서 (design 2026-08-08)
     category_id: int | None = None

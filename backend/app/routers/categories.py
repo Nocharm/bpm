@@ -33,6 +33,9 @@ from app.schemas import (
     CategoryPermissionsOut,
     CategoryUpdateIn,
     FrameworkImportRow,
+    FrameworkSearchCategory,
+    FrameworkSearchMap,
+    FrameworkSearchOut,
     InterviewImportFileOut,
     InterviewImportIn,
     InterviewImportOut,
@@ -266,6 +269,64 @@ async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
         admin_ids.update(frontier)
         frontier = [c for f in frontier for c in children_by_parent.get(f, []) if c not in admin_ids]
     return admin_ids
+
+
+@router.get("/search", response_model=FrameworkSearchOut)
+async def search_framework(
+    q: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=20, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> FrameworkSearchOut:
+    """체계 탐색 검색 — 카테고리·맵 이름 부분일치(대소문자 무시), 경로 동봉 (탐색 모달, 2026-08-30).
+
+    맵은 카테고리 연결분만 대상이며 목록과 동일한 가시성 마스킹(_split_visible_maps)을 지나
+    비가시 맵은 결과에서 제외한다(개수 힌트도 없음 — 검색 표면에선 존재 노출 자체를 피함).
+    """
+    like = f"%{q}%"
+    cat_rows = (
+        await session.scalars(
+            select(ProcessCategory)
+            .where(ProcessCategory.name.ilike(like))
+            .order_by(ProcessCategory.level, ProcessCategory.name)
+            .limit(limit)
+        )
+    ).all()
+    map_rows = list(
+        (
+            await session.scalars(
+                select(ProcessMap)
+                .where(
+                    ProcessMap.deleted_at.is_(None),
+                    ProcessMap.category_id.is_not(None),
+                    ProcessMap.name.ilike(like),
+                )
+                .order_by(ProcessMap.name)
+                # 마스킹으로 줄어들 수 있어 여유분 조회 후 절단
+                .limit(limit * 3)
+            )
+        ).all()
+    )
+    visible, _hidden = await _split_visible_maps(session, user, map_rows)
+    visible = visible[:limit]
+    paths = build_category_paths(
+        (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            )
+        ).all()
+    )
+    return FrameworkSearchOut(
+        categories=[
+            FrameworkSearchCategory(id=c.id, name=c.name, level=c.level, path=paths.get(c.id))
+            for c in cat_rows
+        ],
+        maps=[
+            FrameworkSearchMap(id=m.id, name=m.name, category_id=m.category_id, path=paths.get(m.category_id))
+            for m in visible
+            if m.category_id is not None
+        ],
+    )
 
 
 @router.get("/nodes", response_model=list[CategoryNodeOut])
