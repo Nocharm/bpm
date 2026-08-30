@@ -347,10 +347,11 @@ export function SubprocessPreviewPeek({
           {t("library.peekAdd")}
         </button>
       </div>
-      {/* body — 미리보기(좌, 전폭)와 우측 탭 컬럼(노드 목업/상세) (사용자 피드백 2026-08-30) */}
-      <div className="flex min-h-0">
+      {/* body — 미리보기(좌, 전폭)와 우측 탭 컬럼(노드 목업/상세). 행 높이를 미리보기 높이로 고정해
+          우측이 길어도 패널이 안 늘어나고(미리보기 아래 공백 방지) 우측은 내부 스크롤 (사용자 피드백 2026-08-30) */}
+      <div className="flex min-h-0" style={{ height: previewH }}>
         {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
-        <div className="relative min-w-0 flex-1 bg-canvas" style={{ height: previewH }}>
+        <div className="relative h-full min-w-0 flex-1 bg-canvas">
           {!designated ? (
             <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
               <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -384,8 +385,8 @@ export function SubprocessPreviewPeek({
             </span>
           )}
         </div>
-        {/* 우측 — 탭: 노드 목업(최상단, 클릭=추가/이동 드롭다운) / 상세(아이콘+라벨+값 필) */}
-        <div className="flex w-60 shrink-0 flex-col border-l border-hairline">
+        {/* 우측 — 탭: 노드 목업(최상단, 클릭=추가/이동 드롭다운) / 상세(아이콘+라벨+값 필). 내용은 내부 스크롤 */}
+        <div className="flex min-h-0 w-60 shrink-0 flex-col overflow-hidden border-l border-hairline">
           <div className="flex gap-0.5 border-b border-hairline p-1.5">
             <button
               type="button"
