@@ -986,8 +986,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
               onResizeNode(id, final <= SP_BASE_WIDTH ? null : final);
               setSpDragWidth(null);
             }}
-            // right-[7px] — 핸들(11px, 경계 중앙 배치)의 안쪽 침범 5.5px과 겹치지 않게 이격 (사용자 요청 2026-08-30)
-            className="nodrag nopan absolute inset-y-1 right-[7px] w-1.5 cursor-ew-resize rounded-full bg-ink/10 opacity-0 transition-all duration-150 hover:bg-accent/60 group-hover:opacity-100"
+            // top-7(28px) — 우측 출력 핸들(anchorTop 18, 11px → 세로 12.5~23.5px) 아래에서 시작해
+            // 경계 위에 그대로 두고도 히트박스가 안 겹친다 (사용자 정정 2026-08-30: 수평 이동 금지)
+            className="nodrag nopan absolute bottom-1 right-0 top-7 w-1.5 cursor-ew-resize rounded-l-xs bg-ink/10 opacity-0 transition-all duration-150 hover:bg-accent/60 group-hover:opacity-100"
           />
         )}
         {diff && <DiffBadge status={diff} />}
