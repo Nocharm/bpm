@@ -7,6 +7,7 @@ import { FolderTree } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
 import { FrameworkChip } from "@/components/framework-chip";
 
 const HOVER_DELAY_MS = 3000; // 스침 오픈 방지 — 클릭은 즉시 오픈
@@ -32,6 +33,8 @@ export function FrameworkPeekTrigger({
   children: ReactNode;
 }) {
   const [peek, setPeek] = useState<{ x: number; y: number } | null>(null);
+  // 형제 브랜치 탐색 모달 — 피크 헤더 버튼으로 전환(피크는 닫고 모달로) (사용자 요청 2026-08-30)
+  const [browse, setBrowse] = useState(false);
   const timerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -96,10 +99,26 @@ export function FrameworkPeekTrigger({
             onMouseLeave={() => setPeek(null)}
           >
             {/* 링크맵 기준 체인 — mapId=링크맵이라 플라이아웃에서 해당 맵이 현재로 하이라이트된다 */}
-            <FrameworkChip mapId={linkedMapId} categoryId={categoryId} defaultOpen floating={false} />
+            <FrameworkChip
+              mapId={linkedMapId}
+              categoryId={categoryId}
+              defaultOpen
+              floating={false}
+              onBrowse={() => {
+                setPeek(null);
+                setBrowse(true);
+              }}
+            />
           </div>,
           document.body,
         )}
+      {browse && (
+        <FrameworkBrowseModal
+          chainCategoryId={categoryId}
+          currentMapId={linkedMapId}
+          onClose={() => setBrowse(false)}
+        />
+      )}
     </span>
   );
 }

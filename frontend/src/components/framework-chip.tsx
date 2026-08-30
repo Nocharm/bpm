@@ -27,6 +27,7 @@ export function FrameworkChip({
   onNavigate,
   defaultOpen = false,
   floating = true,
+  onBrowse,
 }: {
   mapId: number;
   categoryId: number;
@@ -36,6 +37,8 @@ export function FrameworkChip({
   defaultOpen?: boolean;
   // false면 우상단 고정 배치 없이 스킨만 — 호출측(포털)이 위치를 잡는다
   floating?: boolean;
+  // 주면 헤더 우측 아이콘이 "형제 브랜치 탐색" 버튼이 된다(피크 전용) (사용자 요청 2026-08-30)
+  onBrowse?: () => void;
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -143,7 +146,22 @@ export function FrameworkChip({
             {t("framework.chipLabel")}
           </span>
         </span>
-        <FolderTree size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        {onBrowse ? (
+          // 탐색 버튼 — 부모가 button이라 중첩 금지, span+stopPropagation (연계 아이콘과 동일 패턴)
+          <span
+            data-id="framework-chip-browse"
+            title={t("framework.browseTitle")}
+            className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+            onClick={(event) => {
+              event.stopPropagation();
+              onBrowse();
+            }}
+          >
+            <FolderTree size={12} strokeWidth={1.5} />
+          </span>
+        ) : (
+          <FolderTree size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        )}
       </button>
 
       {/* 아코디언 — grid-rows 0fr→1fr (save-checklist와 동일, 오버플로 클립) */}

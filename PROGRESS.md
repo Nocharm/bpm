@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 피크→체계 탐색 모달 (dev)
+- 드릴인 피크 헤더에 탐색 버튼(FolderTree) → FrameworkBrowseModal: framework-tree-state 엔진 재사용, 체인 openIds 시드로 현재 경로 펼침·형제 브랜치 아코디언·맵/연계 클릭 이동(현재 링크맵 하이라이트). E2E 5/5.
+
 ## 2026-08-30 — 외부 L6 출처 배지 클릭 드릴인 (dev)
 - FrameworkPeekTrigger로 피크 범용화(필=아이콘+3초 호버/클릭, 배지=클릭 전용) — 캔버스 외부 L6의 출처 배지 클릭 시 출신 L5 드릴인 피크(FrameworkChip 재활용). spOriginCategoryId 주입(spAttrs). E2E 2/2.
 

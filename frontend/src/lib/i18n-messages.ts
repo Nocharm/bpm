@@ -1889,6 +1889,7 @@ const en = {
   "framework.connectedToast": "Connected to {name}",
   "framework.replaceCta": "Replace map",
   "framework.successorPill": "Took over this map",
+  "framework.browseTitle": "Browse framework",
   "node.resizeHint": "Drag to widen",
   // ── L5 캔버스 개선 (2026-08-28) ──
   "framework.l5MapTag": "L5 map",
@@ -3861,6 +3862,7 @@ const ko: Record<MessageKey, string> = {
   "framework.connectedToast": "{name}에 연결됨",
   "framework.replaceCta": "맵 교체하기",
   "framework.successorPill": "이 맵을 이양받음",
+  "framework.browseTitle": "체계 탐색",
   "node.resizeHint": "끌어서 넓히기",
   // ── L5 캔버스 개선 (2026-08-28) ──
   "framework.l5MapTag": "레벨 5 맵",
