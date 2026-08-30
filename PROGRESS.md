@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 탐색 모달 이동 확인 게이트 (dev)
+- 탐색 모달의 이동 3지점(맵 행·L5 연계 아이콘·검색 맵 결과)을 F6 "링크맵 열기"(openMapPrompt)와 동일 문구·아이콘의 ConfirmDialog 게이트로 전환 — 확인 시에만 에디터 이탈, Esc/Cancel은 최상위(확인)만 닫고 탐색 모달·피크 유지. E2E 6/6.
+
 ## 2026-08-30 — 탐색 모달 = 추가 창(피크 유지) + 검색 (dev)
 - 사용자 정정 반영: 탐색 모달은 피크를 대체하지 않고 위에 추가로 뜬다 — 바깥닫기/마우스리브 억제 + **포털 자식 클릭이 React 트리로 트리거 onClick까지 버블돼 토글이 피크를 닫던 버그**를 DOM 포함 가드로 픽스(포털 버블 랜드마인 재발 사례).
 - 탐색 모달 검색: BE `GET /api/categories/search`(ilike 카테고리+맵, 가시성 마스킹, 경로 동봉 — /nodes보다 앞 등록) + FE 디바운스 300ms, 카테고리 결과 클릭=해당 경로 펼침 합류(expandTo)·맵 결과 클릭=이동. E2E 5/5.

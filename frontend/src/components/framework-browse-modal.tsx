@@ -3,12 +3,13 @@
 // 업무체계 탐색 모달 — 드릴인 피크의 "탐색" 버튼이 연다 (사용자 요청 2026-08-30).
 // 캔버스 트리 피커와 같은 상태 엔진(lib/framework-tree-state)을 재사용하고, 현재 경로(체인)를
 // 미리 펼친 채 열어 형제 브랜치(옆)·상위(뒤)로 바로 이동할 수 있게 한다. 맵 행 클릭·L5 연계
-// 아이콘은 우상단 칩 플라이아웃과 동일하게 해당 에디터로 이동한다.
-import { ChevronDown, ChevronRight, FolderTree, Network, Search, Workflow, X } from "lucide-react";
+// 아이콘·검색 맵 결과는 에디터 이탈이므로 확인 모달(openMapPrompt와 동일 문구)을 거쳐 이동한다.
+import { ChevronDown, ChevronRight, ExternalLink, FolderTree, Network, Search, Workflow, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import {
   getCategoryChain,
@@ -135,6 +136,9 @@ export function FrameworkBrowseModal({
     }
   }
 
+  // 이동 확인 게이트 — 에디터 이탈이므로 바로 이동하지 않고 확인 모달을 거친다 (사용자 요청 2026-08-30)
+  const [pendingNav, setPendingNav] = useState<{ mapId: number; name: string } | null>(null);
+
   function goToMap(mapId: number) {
     onClose();
     router.push(`/maps/${mapId}`);
@@ -147,7 +151,7 @@ export function FrameworkBrowseModal({
         <button
           type="button"
           data-id={`framework-browse-map-${row.id}`}
-          onClick={() => goToMap(row.id)}
+          onClick={() => setPendingNav({ mapId: row.id, name: row.name })}
           title={row.name}
           className={`flex w-full items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-fine ${
             isCurrent ? "bg-accent-tint font-semibold text-accent" : "text-ink hover:bg-surface-alt"
@@ -199,7 +203,7 @@ export function FrameworkBrowseModal({
               className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-accent"
               onClick={() => {
                 const target = node.linkage_map_id;
-                if (target !== null) goToMap(target);
+                if (target !== null) setPendingNav({ mapId: target, name: node.name });
               }}
             >
               <Workflow size={12} strokeWidth={1.5} />
@@ -302,7 +306,7 @@ export function FrameworkBrowseModal({
                           <button
                             type="button"
                             data-id={`framework-search-map-${row.id}`}
-                            onClick={() => goToMap(row.id)}
+                            onClick={() => setPendingNav({ mapId: row.id, name: row.name })}
                             title={row.path ? `${row.path}/${row.name}` : row.name}
                             className="flex w-full flex-col items-start rounded-sm px-1.5 py-1 text-left hover:bg-surface-alt"
                           >
@@ -330,6 +334,19 @@ export function FrameworkBrowseModal({
           )}
         </div>
       </div>
+      {/* 이동 확인 — F6 "링크맵 열기"(openMapPrompt)와 동일 문구·아이콘, 확인 시에만 이탈 */}
+      {pendingNav && (
+        <ConfirmDialog
+          dialogId="framework-browse-nav-confirm"
+          icon={<ExternalLink size={28} strokeWidth={1.5} />}
+          title={pendingNav.name}
+          message={t("subprocess.openMapBody")}
+          confirmLabel={t("common.confirm")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => goToMap(pendingNav.mapId)}
+          onClose={() => setPendingNav(null)}
+        />
+      )}
     </ModalBackdrop>,
     document.body,
   );
