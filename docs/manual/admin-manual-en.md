@@ -37,12 +37,15 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | --- | --- | --- |
 | **Notices** | Settings → Content | Create, edit, and delete announcements |
 | **Manual** | Settings → Content | Edit and publish the in-app manual (see section 11) |
+| **Knowledge base** | Settings → Content | Upload org documents the AI consultant cites in interviews (see section 12) |
 | **AI chat** | Settings → Content | Retention-cap settings, chat loading-tips management (see section 12) |
+| **AI prompts** | Settings → Content | Manage overrides of the built-in AI prompts (see section 12) |
 | **Employees** | Settings → Directory | Org directory table — HR-webhook full sync, sysadmin tags, CSV export |
 | **Departments** | Settings → Directory | Org-basis department table, department remap, CSV export |
 | **Local Accounts** | Settings → Directory | ldap auth mode only — local login accounts for external consultants (see section 7) |
 | **Framework** | Settings → Framework | Work-framework category management and JSON import — pilot stage (see section 13) |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
+| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
 | **Dashboard** | Settings → Analytics | Operational metrics from the live database — access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
@@ -169,6 +172,19 @@ Selecting `notifications` in **Tables** adds a from–to date range and a **Dele
 2. A **preview dialog** groups that range's notifications by content (type + message), showing recipient counts and the date span — everything is **selected by default**.
 3. Uncheck any groups you want to keep, then confirm — every recipient row in the selected groups, within the range, is **hard-deleted**. **There is no undo** — use with care.
 
+### Batch Job Status (Settings → Database → Batch jobs)
+
+Shows the latest attempts of the **DB backup** and the **HR (people) sync**, per job — the last **success** and the last **failure** each keep their time and summary, so you can tell at a glance in the morning whether the overnight batches ran clean. A failure row newer than the last success is your signal to act.
+
+### Daily Automatic DB Backup (production server)
+
+The server compose stack includes a **`db-backup` sidecar**:
+
+- It runs `pg_dump` once a day after **04:00 KST**, plus once right after the container starts when today's dump doesn't exist yet (deploy baseline).
+- A dump is **kept only after it passes `pg_restore --list` verification**, and the outcome is recorded on the Batch jobs tab.
+- Dumps land on the host at `${BACKUP_DIR}` (default `./backups`); retention is `${BACKUP_RETENTION_DAYS}` (default **14 days**) — older dumps are pruned automatically.
+- For now backups live **only on the server disk** — that leaves disk failure uncovered, so periodic off-server copies are recommended. **Recovery procedures (overwrite restore, fresh server) follow the `docs/deploy/backup.md` runbook.**
+
 ### Dashboard (Settings → Analytics)
 
 Live operational metrics from the database, at a glance:
@@ -190,6 +206,7 @@ Deleting a map or group is a **soft delete** — it moves to the trash and is pe
 - Owners see their own deleted maps in **Settings → Scheduled deletion**; a sysadmin sees **everyone's**.
 - **Restore** brings a map back intact (versions, nodes, permissions).
 - After the 7-day window the purge is permanent — there is no undo beyond that point.
+- **Instant purge (sysadmin only)** — the instant-delete button on a trash row removes a map immediately without waiting out the 7 days. It only works on maps already in the trash (soft-deleted), and **cannot be undone** — use with care.
 
 ---
 
@@ -244,6 +261,14 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 - **Chat loading tips**: manage the feature tips shown while earlier messages load in chat. One tip per line (200 chars each, up to 50). **Save an empty list to restore the 20 defaults.**
 
+### Knowledge Base (Settings → Content → Knowledge base)
+
+A library of **organization documents the AI consultant can cite during interviews** — upload SOPs and guides to ground its answers. Supported formats are pdf, docx, xlsx, txt, and md (max 20 MB per file); add files with **Upload** and reload the list with **Refresh**.
+
+### AI Prompts (Settings → Content → AI prompts)
+
+**Override the built-in prompts** used by the AI features (chat, interviewer, drafter, …) from the screen — saving applies immediately without a redeploy, and clearing an override falls back to the prompt shipped with the build. **While an override is in place, prompt improvements shipped in code are not picked up**, so re-check after deployments whether each override is still needed.
+
 ---
 
 ## 13. Framework Management
@@ -252,7 +277,9 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 **Settings → Framework → Categories & import** (sysadmin only) manages the work-framework category tree.
 
-- **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted.
+- **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted. **Maps can be assigned only to leaf categories (L5).**
+- **Linkage admins** — the admins button on a category row appoints the **linkage-canvas editors** (users/groups). The grant **inherits downward** — appointing at a higher level (L1–L4) covers every L5 canvas underneath. Only a sysadmin can appoint admins, and category CRUD/import stays sysadmin-only.
+- **Linkage-canvas governance** — an L5's linkage canvas exists as a real map (`mode=framework`) but never appears in the regular map list or the subprocess library. Renaming a category renames its canvas map along with it, and **a category (subtree) that has a canvas cannot be deleted until the canvas is cleaned up** (409). A category admin's major confirmation permanently prunes the previous major's minor snapshots — the confirm dialog previews what goes.
 - **Interview import** — upload the consultant-delivered L5 interview result JSON files (multiple files at once), check the per-file validation report (errors / warnings / unknown-key paths) and the impact (created / updated / unchanged / notes) with **Dry run**, then **Apply**. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe. Per-task exception rules and VOC land in each map's **Notes** section (map detail card and editor inspector). Interview fields land as real fields — an activity's input/output/data form/system go to node fields, and start/end conditions, total time (min), touch time (min), and systems go to map fields, while the free-text originals (GMP, frequency, time wording) are kept as **fallbacks** shown behind the speech-bubble icon next to each field. Classify GMP (GMP Direct / Indirect / Non-GMP) and settle conditions/times in **Map Settings → Details → Conditions & GMP**; the GMP you select survives redeliveries. Open items and per-task notes are also preserved as notes.
 
 ---
@@ -277,6 +304,8 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `AI_MODEL` | backend `.env` | Default model id — after the SGLang move this is **just `glm-5.2`** (the old `-think` / `-high` / `-nothink` aliases are gone) |
 | `AI_MAX_TOKENS` | backend `.env` | Response token cap, thinking tokens included. Default 8000 — **too low and replies come back empty** |
 | `AI_TIMEOUT_SECONDS` | backend `.env` | Per-call timeout in seconds. Max-thinking calls are slow; 120–180 is recommended |
+| `BACKUP_DIR` | `.env` (compose) | Host path for db-backup sidecar dumps. Default `./backups` — point it at a NAS mount to get off-server copies |
+| `BACKUP_RETENTION_DAYS` | `.env` (compose) | Backup retention in days. Default 14 |
 
 - Environment changes require a backend restart (`--reload` does not re-read `.env`).
 - Keycloak endpoints and all deployment-specific values come from `.env` — never hardcoded.
@@ -284,4 +313,4 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-08-25*
+*Business Process Map — Administrator Manual · updated 2026-08-30*

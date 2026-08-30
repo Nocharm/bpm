@@ -6,7 +6,7 @@
 
 ## 1. Editor at a Glance
 
-Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all). On maps registered in the business **Framework**, a **Framework chip** at the top right of the canvas shows the classification path — expand the chip and click a category row to see the other maps in that category, and click one to jump to it (a confirmation guards unsaved changes).
+Open a map to enter the editor. The top bar holds the version selector, **New version**, **Compare**, **Undo** / **Redo**, **Save**, the process library, **Import CSV**, and the **AI assistant**. Edit the selected node's properties in the right inspector; the left sidebar holds the outline tree and a keyboard-shortcut card. The icon at the far right of the inspector's tab bar **collapses or expands every section** of the current tab at once (if any section is open it collapses all; if all are closed it expands all). On maps registered in the business **Framework**, a **Framework chip** at the top right of the canvas shows the classification path — expand the chip and click a category row to see the other maps in that category, and click one to jump to it (a confirmation guards unsaved changes). The L5 row also opens the **linkage canvas** (section 11).
 
 ### Moving around the canvas
 
@@ -20,7 +20,7 @@ Open a map to enter the editor. The top bar holds the version selector, **New ve
 
 ### The right inspector — Map / Approval tabs
 
-Selecting a node shows that node's properties in the inspector; with nothing selected, two tabs appear: **Map** and **Approval**.
+Selecting a node shows that node's properties in the inspector; with nothing selected, two tabs appear: **Map** and **Approval**. While nothing is selected, the properties area shows an **Ownership & approvers section** (owning department, owner, and approvers — display-only, with names and departments following your language setting) and a **map summary accordion** (collapsed by default — while collapsed, icon+number pairs in its header stand in for the summary).
 
 - **Map tab** — the version row at the top holds the **version pill** (current version and status — click to switch versions) and manage icons (the leftmost opens **version compare** — disabled until a version is published). Below it sit collapsed sections: **Node display** (what each node shows — grouped into **Attributes / Metrics / I/O & Conditions** steps, and any part of a row toggles it; the same section also appears in the Properties tab's empty state under the map summary), **Edge style**, and — on maps that have them — **Notes** (interview exception rules · VOC, collapsed by default). Edge style applies a line style to **all connections at once** (a confirm dialog summarizes what will change), and that choice also becomes the default for newly drawn connections. Individual edges can still be styled one by one from the edge's inspector panel or right-click menu. The collaborator list clamps to about 3.3 rows when individual collaborators exceed 4, with a **Show all (n)** / **Collapse** toggle (adding collaborators and changing roles is covered in the Getting Around manual).
 - **Approval tab** — from top to bottom: **Pending Approvals** (this map's pending requests — count badge, collapsed by default) → a draft CTA (**Switch to draft for approval** when a draft exists, **Create draft for approval** otherwise) → the **Approval workflow** section (collapsible, with a status badge in its header even while collapsed) → the **Subprocess** designation card → the version card list. See section 7 and the Getting Around manual for running an approval.
@@ -53,6 +53,7 @@ Select a node and edit in the right inspector:
 - **GMP classification** — classify a node as **GMP Direct / GMP Indirect / Non-GMP**. The classification shows as a **pill tag** at the node's top left (toggle its visibility with the GMP row in the Map tab's Node display), and clicking the pill in edit mode opens the classification picker in place. Picking a classification **locks the node color to the classification color** (Direct = red, Indirect = amber, Non-GMP = green); the notice dialog offers **Undo classification / Restore color only**. On unclassified nodes the pill takes no space and appears only on hover. Subprocess nodes inherit the linked map's GMP designation read-only.
 - **I/O & Conditions** — **Input** and **Output** hold multiple items (one per row). Hover a row and click the small file icon to set that item's **data form**: an autocomplete list matches by extension, English program name, or Korean (`.xlsx` / `Excel` / `엑셀` all find the same entry), navigated with ↑/↓ and picked with Enter or Space. A value outside the list is added via the **Add "…"** row at the bottom. A set form shows as a small pill (catalog entries carry their icon); click the pill to change it, ✕ to remove. **Start / End conditions** are free text. The node-level *Data form* row is an import fallback — it shows only while no per-item form is set. On the canvas, the I/O & Conditions boxes appear below a node **while it is selected** (what shows is picked in the Map tab's Node display).
 - **Import from another node** — the **Import from node…** row in the Input/Output list **pulls in an item another node in the connected flow already has** — Input offers upstream nodes' outputs, Output offers downstream nodes' inputs. An imported item stays **Linked** to its origin: edit the origin and every linked copy follows, while on the mirror side you **Disconnect** to turn it into an editable copy instead of editing in place. If the flow path back to the origin breaks, the item shows a warning.
+- **Link markers and highlight** — items linked to another node (origin or mirror) carry a **link icon**, with a direction tooltip showing which side is the origin. Hover a linked row and **the peer node and the flow path between them light up on the canvas** — the same from the inspector list and from the I/O rows inside a canvas node. Input items can carry a **Required / Optional** flag, told apart by hover color (required = red tint) and a tooltip. An I/O box with a **single item** renders as one header-less row, with the input/output icon standing in the checkbox slot.
 - **Link (URL)** — attach an external document or system link to a node; a badge appears on the canvas, and you can click it to preview or open in a new tab. You can also give it a display label.
 
 ### Connecting nodes
@@ -139,9 +140,13 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 - By default only maps **designated as subprocesses** appear in the library picker. The map's owner designates it in **Map Settings → Subprocess designation** with representative attributes (department required; assignee, system, duration, cost, headcount, and a **description** optional) — these show live on every node linking the map.
 - With the published version open, the owner or an admin can also manage designation from the editor inspector's **Subprocess** card (same card on the Map and Approval tabs — body collapsed by default, with an ⓘ hover note in the header). The **Designate as subprocess** button shares its row with contextual buttons on the right — **Go to published version** while you're viewing a non-published version, and **Request registration** (ask the owner) when you're not the owner.
 - A link node pointing to an **undesignated** map shows a warning badge and is locked until the map is designated.
+- **Preview peek** — **click a map row in the library (or hover it for 2.5 s)** to open a **preview peek of its published version**. The left side shows the flow preview (same type colors as the canvas); the right side has two tabs, **Node / Details** — the **Node tab** is a live mock-up of the node you'd add (key attributes, metric chips, GMP, conditions, and the I/O checklist; hovering switches it to the current map's display settings), and the **Details tab** lists the designated attributes, subprocess metrics, conditions / I/O / GMP, the published version (v-number), publish time, and the framework path (empty values are toned-down dashes). Maps you can't view show a lock notice but can still be added.
+- **Expand in place (inline)** — right-click a subprocess node and choose **Expand** (while the node is designated and unlocked) to embed the child map's published version **read-only in a tinted region** on the current canvas. The region's header shows the map name with an open icon, and — when the linked map belongs to the framework — the **full five-level classification path label** (click it to open the classification peek). Hovering the region highlights it gently, and right-clicking inside offers **Open linked map** (with a confirmation gate) and **Collapse**. `Tab` traversal includes the expanded child nodes in flow order, and child GMP pills render read-only.
 - **Deep view:** double-click a subprocess node to drill into the child map in a stacked overlay with breadcrumbs — the embedded content is **read-only**. `Esc` goes up one level.
+- **Node width** — hover a subprocess node and a **grip** appears on its right edge. Drag it to resize the node (from the default 180 px up to 120%); the width is saved with the map, so it persists across reloads and for everyone.
+- **Framework pill** — when the linked map is registered in the business **Framework**, a folder-shaped pill sits next to the node's name. Click it (or hover 3 s) to open the classification-path peek, and its **"Search other frameworks"** footer leads to the full framework browse modal. The peek forgives brief mouse departures — it closes only after a 0.4 s grace period.
 - If you lack permission on the linked map, the node shows **No access**.
-- **Inspector Subprocess tab** — selecting a subprocess node shows the linked map's designation meta (department, assignee, system, …) and a **used-by list** of maps that link it.
+- **Inspector Subprocess tab** — selecting a subprocess node shows the linked map's designation meta (department, assignee, system, …) and a **used-by list** of maps that link it. The map's own **Subprocess designation card** also carries a **Linked from** accordion (reverse references — the maps linking this one), so a designated map shows where it is used right on the card.
 
 ### Linking maps that are not registered yet (placeholders)
 
@@ -187,6 +192,7 @@ The approval process itself (who approves, publish and expiry rules) is covered 
 - **Comments on transitions** — the submit, approve, publish, and withdraw dialogs take an optional comment ("Add a comment (optional)"), and the reject dialog takes a reason (**Reason**). Approve and reject dialogs show the requester's submit comment (**Requester comment**) banner, and the submit dialog shows the latest rejection (**Previous rejection**) banner when there is one.
 - **Comment history** — the speech-bubble count button on a version card (hidden at zero) opens that version's comment history modal. **Right-click** a version card for **Go to this version** (goes through the switch-confirmation dialog while you're editing) and **View comments**.
 - **Rejection banner** — opening a rejected version shows an error-tinted banner at the top of the editor: a **Rejected** chip, the rejecter's pill, and the reason.
+- **Change summary** — below the approvers, the Approval tab shows a **summary of changes against the published version**. It rests as a single line with count pills; expanded, it lists per-node changes and the edge delta (+N / −N / ~N) — for checking what differs from the published version before and after submitting.
 
 ---
 
@@ -234,7 +240,7 @@ Save the current map to a file from the export button in the right inspector (or
 Open the **AI assistant** from the editor top bar (it appears only when AI is enabled on the server).
 
 - **Generate** a flowchart from a plain-language description — nodes, edges, groups, and BPM attributes (assignee, department, system, per-run metrics) are filled to match the org directory.
-- **Edit incrementally** — ask for changes and the existing layout, colors, assignees, and groups are preserved. Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions and links (URL). Review the preview, then **Add to map (Apply)** or Discard.
+- **Edit incrementally** — ask for changes and the existing layout, colors, assignees, and groups are preserved. Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions, inputs/outputs, start/end conditions, and links (URL). Review the preview, then **Add to map (Apply)** or Discard.
 - **Analyze** ("Find issues"), **summarize**, and **walk through** the flow step by step (prev / next / autoplay).
 - Ask **how-to questions** — answers are grounded in this manual; anything outside the manual it reports it doesn't know.
 - **Multiple chats** — Chats are stored on the server and follow you across devices. Open past chats from the list in the chat bar, or start a new one with the **+** icon in the window header. Titles are derived from the first question, and you can delete chats from the list.
@@ -246,7 +252,36 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-## 11. Keyboard Shortcuts
+## 11. Framework Linkage Canvas (L5)
+
+Every leaf category (L5) of the business **Framework** can open a **linkage canvas** — a special canvas where all the processes (L6) in that category sit as **subprocess nodes**, and the work linkage between them is drawn with connectors. It has no Start/End nodes (decision and end nodes are allowed as helpers) and does not appear in the regular map list.
+
+### Viewing and editing
+
+- **Open it** — from the **linkage-canvas button** on an L5 row of the home Framework tree, or from the L5 row of the editor's Framework chip. Once the canvas exists, anyone signed in can view it.
+- **Edit rights** — only **category admins**, appointed by a system administrator, can edit. Admins on a higher category (L1–L4) can edit every L5 canvas underneath (downward inheritance). Everyone else opens it read-only.
+- **Live draft** — the canvas always shows its **live draft** (checkout rules match regular maps). When new L6 maps join the category, entering edit **auto-reconciles** them in with an "N new L6 added (unplaced)" toast.
+- **Contained L6 locked** — L6 nodes belonging to this category **cannot be deleted** from the canvas (the classification is the source). Nodes brought in from other categories can be removed.
+
+### Confirm and versions
+
+- **Confirm changes** — a category admin freezes the current state as a snapshot. Numbers run v1.0 → v1.1 …; checking **Major version** bumps the major (v2.0) and **prunes (permanently deletes) the previous major's minor snapshots** — a dialog lists what is kept and what is deleted before you confirm.
+- With only layout moves and no substantive change, confirming is blocked ("no changes since this version"). The confirm section shows a **change summary** (node and edge deltas) since the last confirmation.
+- Confirmed snapshots open read-only from the version dropdown and can be compared against each other on the **Compare** screen. On the version timeline, snapshots of the same major fold into a group.
+
+### Bringing in processes from other categories
+
+- Expand another category in the left **L5 explorer** (tree) and **drag an L6 card onto the canvas** to add an external L6 node — it renders with a neutral body, a **colored left tab, and an origin badge** (its home L5 color). Clicking the origin badge opens that L5's **drill-in peek**.
+- The drill-in peek's **"Search other frameworks"** button opens the full **browse modal** — explore sibling categories in a tree opened to the current path, search categories and maps by name, and click a map to travel there (leaving the editor goes through a confirmation gate).
+
+### Placeholders and link replacement
+
+- **Placeholders** — the slot for an L6 that is not registered in the system yet shows as a **dashed error-toned node**. The **Connect a map** banner opens a connect dialog: candidates from the guided L5 come first, sorted by similarity (with an exact-match badge), and you can drill the tree to pick from another L5 — picking outside the guided L5 goes through a path-comparison confirmation.
+- **Replacing stale links** — when a linked map moves to the trash or is replaced by a copy (retired), the node switches to the same dashed error look with a **Replace map** banner. The **successor map is pinned as a recommendation card**, so you can swap it in with one click.
+
+---
+
+## 12. Keyboard Shortcuts
 
 | Shortcut | Action |
 | --- | --- |
@@ -276,4 +311,4 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 ---
 
-*Business Process Map — Editing Maps · Updated 2026-08-25*
+*Business Process Map — Editing Maps · Updated 2026-08-30*

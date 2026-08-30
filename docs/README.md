@@ -22,6 +22,7 @@
 ## 매뉴얼 ([`manual/`](manual/))
 - 사용자 매뉴얼 — 일반([EN](manual/user-manual-general-en.md)·[KO](manual/user-manual-general-ko.md)) / 편집([EN](manual/user-manual-editing-en.md)·[KO](manual/user-manual-editing-ko.md))
 - 관리자 매뉴얼 — [EN](manual/admin-manual-en.md)·[KO](manual/admin-manual-ko.md)
+- 슬라이드 매뉴얼([`manual/slides/`](manual/slides/)) — 실화면 스크린샷이 담긴 PPT형 스탠드얼론 HTML(←/→ 이동)+PDF. 사용자([KO](manual/slides/bpm-manual-user-ko.html)·[EN](manual/slides/bpm-manual-user-en.html)) / 관리자([KO](manual/slides/bpm-manual-admin-ko.html)·[EN](manual/slides/bpm-manual-admin-en.html)) — md 매뉴얼이 원본이며 갱신 시 함께 재생성한다.
 
 ## 교훈 ([`lessons/`](lessons/README.md))
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
