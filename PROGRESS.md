@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 드래그 Y 연속화 + SP 라이브러리 미리보기 피크 (feature/ux-drag-preview)
+- 노드정보 노출(height-shift) 중 드래그가 밴드 갭에서 스톨→점프하던 것을 제스처 오프셋 동결(선형 항등 왕복)로 연속화 — 드롭 확정만 기존 계단 역변환이라 저장 좌표 의미 불변. pw-verify-drag-continuity 실측(스텝점프 23.8px·드리프트 5.6px·저장=표시 일치).
+- 라이브러리/체계 피커 행 클릭·2.5s 호버 → 게시본 미리보기 피크(ScopePreview 재사용) + SP 등록정보 + 미리보기 호버 시 "맵에 추가"(드롭과 동일 체인, 미등록=확인 체인). viewer 미만은 잠금 안내 + 추가 가능 안내. pw-verify-sp-peek 5시나리오 22단언 통과.
+
 ## 2026-08-30 — 탐색 모달 이동 확인 게이트 (dev)
 - 탐색 모달의 이동 3지점(맵 행·L5 연계 아이콘·검색 맵 결과)을 F6 "링크맵 열기"(openMapPrompt)와 동일 문구·아이콘의 ConfirmDialog 게이트로 전환 — 확인 시에만 에디터 이탈, Esc/Cancel은 최상위(확인)만 닫고 탐색 모달·피크 유지. E2E 6/6.
 

@@ -8,6 +8,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import {
+  PEEK_HOVER_DELAY_MS,
+  SubprocessPreviewPeek,
+  type PeekAddPayload,
+} from "@/components/subprocess-preview-peek";
 import { filterByQuery } from "@/lib/search";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
@@ -16,16 +21,21 @@ import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
+  readOnly: boolean;
   onClose: () => void;
   // 새 맵 생성 즉시 링크 — 에디터의 addLinkNodeFromMap 스레딩
   onAddLinkNode: (linkedMapId: number, name: string) => void;
+  // 미리보기 피크의 "Add to map" — 드롭과 동일 생성 체인(뷰포트 중앙) (2026-08-30)
+  onPeekAdd: (payload: PeekAddPayload) => void;
 }
 
 export function ProcessLibraryPanel({
   currentMapId,
   linkedMapIds,
+  readOnly,
   onClose,
   onAddLinkNode,
+  onPeekAdd,
 }: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
@@ -70,7 +80,37 @@ export function ProcessLibraryPanel({
   // 25개씩 증분 렌더 — 라이브러리 맵이 수백 개여도 패널 오픈 부하 없음
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
 
+  // 행 미리보기 피크 — 클릭 즉시·2.5초 호버로 오픈(패널당 1개). 스크롤·드래그 시작 시 닫는다 (2026-08-30)
+  const panelRef = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const [peek, setPeek] = useState<{
+    row: LibraryProcess;
+    blocked: string | null;
+    anchor: { x: number; y: number };
+    anchorEl: Element;
+  } | null>(null);
+  function clearHoverTimer() {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }
+  useEffect(() => clearHoverTimer, []);
+  function openPeek(row: LibraryProcess, blocked: string | null, rowEl: Element) {
+    clearHoverTimer();
+    // x는 패널 우측 고정(행 들여쓰기와 무관하게 일정), y는 행 기준 — 세로 클램프는 피크가 수행
+    const panelRight = panelRef.current?.getBoundingClientRect().right ?? rowEl.getBoundingClientRect().right;
+    setPeek({
+      row,
+      blocked,
+      anchor: { x: panelRight + 8, y: rowEl.getBoundingClientRect().top - 4 },
+      anchorEl: rowEl,
+    });
+  }
+
   function handleDragStart(e: React.DragEvent<HTMLDivElement>, row: LibraryProcess) {
+    clearHoverTimer();
+    setPeek(null);
     e.dataTransfer.effectAllowed = "copy";
     e.dataTransfer.setData("application/bpm-process", String(row.map_id));
     // stash name + pinned version to avoid needing a shared-state lookup on drop
@@ -86,6 +126,7 @@ export function ProcessLibraryPanel({
 
   return (
     <div
+      ref={panelRef}
       data-id="process-library-panel"
       className="flex w-56 flex-col border-r border-hairline bg-surface"
       style={{ boxShadow: "var(--shadow-md)" }}
@@ -133,7 +174,14 @@ export function ProcessLibraryPanel({
       </div>
 
       {/* list */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto"
+        onScroll={() => {
+          // 스크롤하면 앵커 rect가 어긋난다 — 피크·호버 타이머 모두 정리
+          clearHoverTimer();
+          setPeek((cur) => (cur ? null : cur));
+        }}
+      >
         {filtered.length === 0 ? (
           // 전체가 비면 지정 안내(지정된 맵만 노출), 검색 결과만 비면 기존 문구
           <p data-id="library-empty-state" className="px-3 py-4 text-center text-fine text-ink/40">
@@ -148,6 +196,12 @@ export function ProcessLibraryPanel({
               closesCycle(row.map_id, currentMapId, refsByMap);
             const blockedReason = alreadyLinked ? t("library.alreadyLinked") : t("library.cycleBlocked");
             const unregistered = !row.designated;
+            // 피크 add 비활성 사유 — 행 드래그 차단과 동일 + 읽기전용
+            const peekBlocked = readOnly
+              ? t("editor.readonly.viewerDesc")
+              : blocked
+                ? blockedReason
+                : null;
             // 미등록 맵도 다른 맵과 같은 드래그로 — 드롭 시 캔버스 쪽에서 경고 확인+등록 요청 체인
             return (
               <div
@@ -155,6 +209,20 @@ export function ProcessLibraryPanel({
                 data-map-id={row.map_id}
                 draggable={!blocked}
                 onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
+                onClick={(e) => {
+                  // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 차단 행도 미리보기는 제공
+                  if (peek && peek.row.map_id === row.map_id) setPeek(null);
+                  else openPeek(row, peekBlocked, e.currentTarget);
+                }}
+                onMouseEnter={(e) => {
+                  const rowEl = e.currentTarget;
+                  clearHoverTimer();
+                  hoverTimerRef.current = window.setTimeout(
+                    () => openPeek(row, peekBlocked, rowEl),
+                    PEEK_HOVER_DELAY_MS,
+                  );
+                }}
+                onMouseLeave={clearHoverTimer}
                 title={blocked ? blockedReason : row.name}
                 className={[
                   "flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
@@ -215,6 +283,37 @@ export function ProcessLibraryPanel({
             )}
           </button>
         </div>
+      )}
+      {peek && (
+        <SubprocessPreviewPeek
+          key={peek.row.map_id}
+          mapId={peek.row.map_id}
+          name={peek.row.name}
+          designated={peek.row.designated}
+          info={{
+            department: peek.row.department,
+            assignee: peek.row.assignee,
+            system: peek.row.system,
+            duration: peek.row.duration,
+          }}
+          anchor={peek.anchor}
+          anchorEl={peek.anchorEl}
+          addDisabledReason={peek.blocked}
+          onAdd={() => {
+            const row = peek.row;
+            setPeek(null);
+            // 드래그 페이로드와 동일 계약 — 지정 맵은 게시본 핀, 미등록은 확인 체인(핀 없음)
+            onPeekAdd({
+              linkedMapId: row.map_id,
+              name: row.name,
+              pinned: row.designated
+                ? (row.latest_published_version_id ?? row.latest_version_id)
+                : null,
+              unregistered: !row.designated,
+            });
+          }}
+          onClose={() => setPeek(null)}
+        />
       )}
       {showCreate && (
         <CreateMapDialog

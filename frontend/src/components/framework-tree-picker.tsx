@@ -5,9 +5,14 @@
 // 규약으로 캔버스에 드롭한다(handleLibraryDrop 무변경 재사용). 상태는 lib/framework-tree-state.ts
 // 리듀서 재사용 — 캐스케이드·영속은 없음(패널은 임시 탐색).
 import { ChevronDown, ChevronRight, Network, X } from "lucide-react";
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import type { CategoryNode, MapSummary } from "@/lib/api";
+import {
+  PEEK_HOVER_DELAY_MS,
+  SubprocessPreviewPeek,
+  type PeekAddPayload,
+} from "@/components/subprocess-preview-peek";
 import {
   applyCategoryLoaded,
   createInitialState,
@@ -24,13 +29,60 @@ import { useI18n } from "@/lib/i18n";
 export interface FrameworkTreePickerProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
+  readOnly: boolean;
   onClose: () => void;
+  // 미리보기 피크의 "Add to map" — 드롭과 동일 생성 체인(뷰포트 중앙, 출처 배지 낙관 참조 포함) (2026-08-30)
+  onPeekAdd: (payload: PeekAddPayload) => void;
 }
 
-export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: FrameworkTreePickerProps) {
+export function FrameworkTreePicker({
+  currentMapId,
+  linkedMapIds,
+  readOnly,
+  onClose,
+  onPeekAdd,
+}: FrameworkTreePickerProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   const [rootError, setRootError] = useState(false);
+
+  // 행 미리보기 피크 — 클릭 즉시·2.5초 호버로 오픈(패널당 1개). 스크롤·드래그 시작 시 닫는다 (2026-08-30)
+  const panelRef = useRef<HTMLDivElement>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const [peek, setPeek] = useState<{
+    row: MapSummary;
+    categoryId: number;
+    categoryPath: string;
+    blocked: string | null;
+    anchor: { x: number; y: number };
+    anchorEl: Element;
+  } | null>(null);
+  function clearHoverTimer() {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }
+  useEffect(() => clearHoverTimer, []);
+  function openPeek(
+    row: MapSummary,
+    categoryId: number,
+    categoryPath: string,
+    blocked: string | null,
+    rowEl: Element,
+  ) {
+    clearHoverTimer();
+    // x는 패널 우측 고정(트리 들여쓰기와 무관하게 일정), y는 행 기준 — 세로 클램프는 피크가 수행
+    const panelRight = panelRef.current?.getBoundingClientRect().right ?? rowEl.getBoundingClientRect().right;
+    setPeek({
+      row,
+      categoryId,
+      categoryPath,
+      blocked,
+      anchor: { x: panelRight + 8, y: rowEl.getBoundingClientRect().top - 4 },
+      anchorEl: rowEl,
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -73,6 +125,8 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
     categoryId: number,
     categoryPath: string,
   ) {
+    clearHoverTimer();
+    setPeek(null);
     e.dataTransfer.effectAllowed = "copy";
     e.dataTransfer.setData("application/bpm-process", String(row.id));
     e.dataTransfer.setData("application/bpm-process-name", row.name);
@@ -87,12 +141,32 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
   const renderMapRow = (row: MapSummary, categoryId: number, categoryPath: string) => {
     // 캔버스 자신·기링크·다른 캔버스는 드래그 불가 — 링크 유일성/의미 없는 대상 선제 차단
     const blocked = row.id === currentMapId || linkedMapIds.has(row.id) || row.mode === "framework";
+    // 피크 add 비활성 사유 — 행 드래그 차단과 동일 + 읽기전용
+    const peekBlocked = readOnly
+      ? t("editor.readonly.viewerDesc")
+      : blocked
+        ? t("library.alreadyLinked")
+        : null;
     return (
       <div
         key={row.id}
         data-id={`framework-picker-map-${row.id}`}
         draggable={!blocked}
         onDragStart={blocked ? undefined : (e) => handleDragStart(e, row, categoryId, categoryPath)}
+        onClick={(e) => {
+          // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 차단 행도 미리보기는 제공
+          if (peek && peek.row.id === row.id) setPeek(null);
+          else openPeek(row, categoryId, categoryPath, peekBlocked, e.currentTarget);
+        }}
+        onMouseEnter={(e) => {
+          const rowEl = e.currentTarget;
+          clearHoverTimer();
+          hoverTimerRef.current = window.setTimeout(
+            () => openPeek(row, categoryId, categoryPath, peekBlocked, rowEl),
+            PEEK_HOVER_DELAY_MS,
+          );
+        }}
+        onMouseLeave={clearHoverTimer}
         title={blocked ? t("library.alreadyLinked") : row.name}
         className={`flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-fine text-ink ${
           blocked ? "cursor-not-allowed opacity-40" : "cursor-grab hover:bg-surface-alt active:cursor-grabbing"
@@ -148,6 +222,7 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
   const roots = state.childrenByParent.get(ROOT) ?? [];
   return (
     <div
+      ref={panelRef}
       data-id="framework-tree-picker"
       className="flex w-56 flex-col border-r border-hairline bg-surface"
       style={{ boxShadow: "var(--shadow-md)" }}
@@ -166,7 +241,14 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
           <X size={14} strokeWidth={1.5} />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-1"
+        onScroll={() => {
+          // 스크롤하면 앵커 rect가 어긋난다 — 피크·호버 타이머 모두 정리
+          clearHoverTimer();
+          setPeek((cur) => (cur ? null : cur));
+        }}
+      >
         {rootError ? (
           <p className="p-2 text-fine text-error">{t("home.frameworkLoadError")}</p>
         ) : !hasCachedChildren(state, ROOT) ? (
@@ -175,6 +257,37 @@ export function FrameworkTreePicker({ currentMapId, linkedMapIds, onClose }: Fra
           <ul className="flex flex-col">{roots.map((r) => renderNode(r, 0, []))}</ul>
         )}
       </div>
+      {peek && (
+        <SubprocessPreviewPeek
+          key={peek.row.id}
+          mapId={peek.row.id}
+          name={peek.row.name}
+          designated={!!peek.row.sp_designated_at}
+          info={{
+            department: peek.row.sp_department ?? null,
+            assignee: peek.row.sp_assignee ?? null,
+            system: peek.row.sp_system ?? null,
+            duration: peek.row.sp_duration ?? null,
+          }}
+          anchor={peek.anchor}
+          anchorEl={peek.anchorEl}
+          addDisabledReason={peek.blocked}
+          onAdd={() => {
+            const { row, categoryId, categoryPath } = peek;
+            setPeek(null);
+            // 드래그 페이로드와 동일 계약 — 캔버스 노드는 최신 추종(핀 없음) + 출처 L5 동봉 (design 2026-08-28 §6)
+            onPeekAdd({
+              linkedMapId: row.id,
+              name: row.name,
+              pinned: null,
+              unregistered: !row.sp_designated_at,
+              categoryId,
+              categoryPath,
+            });
+          }}
+          onClose={() => setPeek(null)}
+        />
+      )}
     </div>
   );
 }

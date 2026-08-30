@@ -86,6 +86,7 @@ import { formatVersionMarker } from "@/lib/version-name";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { ProcessLibraryPanel } from "@/components/process-library-panel";
+import type { PeekAddPayload } from "@/components/subprocess-preview-peek";
 import { ChangeSummarySection } from "@/components/change-summary-section";
 import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
 import { makeOptimisticRef } from "@/lib/framework-connect";
@@ -1386,6 +1387,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // height-shift(#1) 렌더 오프셋(트윈 중간값) 미러 — findGroupAt·handleExportPng(정의가 앞선 useCallback)에서
   // 읽기 위한 ref — TDZ 회피(renderYOffsets state는 뒤에서 선언). 미러링 useEffect는 state 선언부 옆에 유지.
   const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
+  // 드래그 제스처 동결 오프셋 미러 — dropDraggingPositions(정의가 앞선 useCallback)의 선형 역변환용. TDZ 회피.
+  const dragYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
@@ -1698,13 +1701,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
       // nodes state(저장 좌표)에 그대로 넣으면 드래그마다 오프셋이 누적된다. 축 고정과 무관하게 항상 적용.
+      // 드래그 중(dragging=true) 제스처 노드는 시작 시점 오프셋 상수를 빼는 선형 역변환 — 표시(displayNodes)도
+      // 같은 상수를 더해 항등 왕복이 되므로, 계단 역변환의 도달불가 갭에서 스톨→점프하지 않고 커서를 1:1 추종.
+      // 드롭 확정(dragging=false, RF 마지막 flush)은 기존 계단 역변환 → 저장 좌표 의미(갭=앵커 클램프) 보존.
       const ySteps2 = yStepsRef.current;
+      const gestureOffsets = dragYOffsetsRef.current;
       for (const change of changes) {
-        if (change.type === "position" && change.position && ySteps2.length > 0) {
-          change.position = {
-            x: change.position.x,
-            y: displayToSavedX(change.position.y, ySteps2),
-          };
+        if (change.type === "position" && change.position) {
+          const frozen = change.dragging === true ? gestureOffsets.get(change.id) : undefined;
+          if (frozen !== undefined) {
+            if (frozen !== 0) {
+              change.position = { x: change.position.x, y: change.position.y - frozen };
+            }
+          } else if (ySteps2.length > 0) {
+            change.position = {
+              x: change.position.x,
+              y: displayToSavedX(change.position.y, ySteps2),
+            };
+          }
         }
       }
       const suppress = suppressPosIdsRef.current;
@@ -4511,9 +4525,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
-  // 드롭 위치에 하위프로세스 노드 생성 — 일반 드롭·미등록 확인 체인 공용
+  // 드롭 위치에 하위프로세스 노드 생성 — 일반 드롭·미등록 확인 체인·피크 추가 공용. 생성 노드 id 반환(피크 flash용).
   const createLinkNodeAt = useCallback(
-    async (linkedMapId: number, mapName: string, pinned: number | null, position: { x: number; y: number }) => {
+    async (linkedMapId: number, mapName: string, pinned: number | null, position: { x: number; y: number }): Promise<string> => {
       let subEnds: SubEnd[] = [];
       try {
         const resolved = await getResolvedGraph(linkedMapId, pinned === null, pinned);
@@ -4549,6 +4563,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       setNodes((cur) => [...cur, node]);
       scheduleAutoSave();
+      return node.id;
     },
     [setNodes, scheduleAutoSave],
   );
@@ -4742,6 +4757,58 @@ function MapEditor({ mapId }: { mapId: number }) {
       findFreeSpot,
       flashNode,
       toSavedPoint,
+    ],
+  );
+
+  // 라이브러리/체계 피커 피크의 "Add to map" — 드롭(handleLibraryDrop)과 동일 생성 체인을 뷰포트 중앙에
+  // 적용(미등록=확인+등록요청 체인, 체계 출처 낙관 참조 포함). 좌표만 드롭점 대신 중앙+빈자리 탐색 (2026-08-30).
+  const addLinkNodeFromPeek = useCallback(
+    (payload: PeekAddPayload) => {
+      if (readOnly) return;
+      const { linkedMapId, name, pinned, unregistered, categoryId, categoryPath } = payload;
+      if (isFrameworkMap && categoryId !== undefined) {
+        setOptimisticRefs((current) => {
+          const next = new Map(current);
+          next.set(
+            linkedMapId,
+            makeOptimisticRef({
+              name,
+              categoryId,
+              categoryPath: categoryPath || null,
+              designated: !unregistered,
+            }),
+          );
+          return next;
+        });
+      }
+      const center = toSavedPoint(
+        reactFlow.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        }),
+      );
+      const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
+      if (unregistered) {
+        setUnregDrop({ stage: "confirm", linkedMapId, name, position });
+        return;
+      }
+      void createLinkNodeAt(linkedMapId, name, pinned, position).then((id) => {
+        flashNode(id);
+        showToast(t("editor.linkNodeAdded", { name }));
+      });
+    },
+    [
+      readOnly,
+      isFrameworkMap,
+      setOptimisticRefs,
+      toSavedPoint,
+      reactFlow,
+      findFreeSpot,
+      setUnregDrop,
+      createLinkNodeAt,
+      flashNode,
+      showToast,
+      t,
     ],
   );
 
@@ -6316,6 +6383,23 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [heightSteps]);
   const yOffsets = useMemo(() => buildYOffsets(nodes, heightSteps), [nodes, heightSteps]);
 
+  // 드래그 제스처 동안 게스처 노드들의 렌더 Y오프셋을 시작 시점 값으로 동결 — 표시(displayNodes)와
+  // 역변환(dropDraggingPositions)이 같은 상수를 쓰는 선형(항등) 왕복이 되어, 밴드 경계의 도달불가 갭에서
+  // 노드가 스톨→점프하지 않고 커서를 1:1 연속 추종한다. 드롭 시 해제 → 계단 오프셋으로 트윈 정착.
+  const [dragYOffsets, setDragYOffsets] = useState<ReadonlyMap<string, number> | null>(null);
+  function captureDragYOffsets(dragged: { id: string }[]) {
+    // 인라인 펼침 중엔 rootOffsets 라이브 경로(dragLiveById)가 표시를 담당 — 이 경로는 비활성(빈 맵).
+    const captured = inlineCompositionRef.current
+      ? new Map<string, number>()
+      : new Map(dragged.map((n) => [n.id, renderYOffsetsRef.current.get(n.id) ?? 0]));
+    dragYOffsetsRef.current = captured;
+    setDragYOffsets(captured.size > 0 ? captured : null);
+  }
+  function clearDragYOffsets() {
+    dragYOffsetsRef.current = new Map();
+    setDragYOffsets(null);
+  }
+
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
@@ -6830,7 +6914,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       const injected = injectSubEnds(withGmpPreview);
       // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동.
       // 펼침 중엔 합성 입력에 이미 베이크돼 있어 여기서 더하면 이중 적용 — 스킵.
-      const yOff = inlineComposition ? 0 : (renderYOffsets.get(node.id) ?? 0);
+      // 드래그 제스처 노드는 동결 오프셋 우선 — 역변환(선형)과 짝을 이뤄 커서 1:1 추종(위 dragYOffsets 주석).
+      const yOff = inlineComposition
+        ? 0
+        : (dragYOffsets?.get(node.id) ?? renderYOffsets.get(node.id) ?? 0);
       return yOff === 0
         ? injected
         : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
@@ -6875,6 +6962,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     ioHighlight,
     gmpPreview,
     renderYOffsets,
+    dragYOffsets,
   ]);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
@@ -8645,8 +8733,10 @@ function MapEditor({ mapId }: { mapId: number }) {
           <ProcessLibraryPanel
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
+            readOnly={readOnly}
             onClose={() => setLibraryOpen(false)}
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
+            onPeekAdd={addLinkNodeFromPeek}
           />
         )}
         {sectionsOpen && (
@@ -8662,7 +8752,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           <FrameworkTreePicker
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
+            readOnly={readOnly}
             onClose={() => setFrameworkPickerOpen(false)}
+            onPeekAdd={addLinkNodeFromPeek}
           />
         )}
         {connectTarget !== null && (
@@ -8890,6 +8982,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
                         setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
+                        captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
                         captureRootDragStart([node]);
                         beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
@@ -8927,6 +9020,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPosRef.current = null;
                         dragStartPositionsRef.current = new Map();
                         setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
+                        clearDragYOffsets();
                       }}
                       onSelectionDragStart={(event, nodes) => {
                         pushHistory();
@@ -8936,6 +9030,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
                         setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
+                        captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
                         captureRootDragStart(nodes);
                         // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
                         beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
@@ -8978,6 +9073,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
                         dragStartPositionsRef.current = new Map();
                         setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
+                        clearDragYOffsets();
                       }}
                       onBeforeDelete={async ({ nodes: deletingNodes, edges: deletingEdges }) => {
                         if (readOnly) {
