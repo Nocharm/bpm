@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 그립-핸들 이격·배정/이양 모달 L5 반영 (dev)
+- 그립 right-[7px] 안쪽 이동 — 핸들(11px 경계 중앙, 내부 5.5px)과 히트박스 비중첩 실증(E2E 4/4). 배정 모달: L5만 선택·시딩(레거시 비-L5 지정은 미시딩)·비-L5 말단 muted, 이양 섹션은 currentLevel!==5면 재배정 유도 문구로 대체(서버 409 미러). PickLeafHint 문구 L5로 갱신.
+
 ## 2026-08-30 — 후속 6종: 필 개선·폭 영속·rejected 점유·L5 전용 슬롯·그립 UX (dev)
 - ①필: 배경 제거·첫줄 정렬(self-start)·호버 배경만·클릭 즉시 피크(3초 호버 유지). ②nodes.width 컬럼(_ADDED_COLUMNS·ge100 le400)로 폭 영속 — 드래그 중 로컬, 확정 시 onResizeNode→autosave, 리로드 유지 E2E. ③반려 시 점유를 제출자에게 복귀(빈 점유를 먼저 연 editor+/관리자가 자동 점유로 편집권 가져가는 구멍 픽스, 테스트 동반 — withdraw 경로는 동일 갭 후속 검토). ④맵 슬롯 L5 전용 확정: 배정 422·이양 시 레거시 비-L5 슬롯 409·칩/피커/홈트리 상위 레벨 맵 목록 미노출(아코디언만). ⑤⑥그립: 노드 호버 시 표시·전체 높이·호버 액센트. E2E 9/9.
 

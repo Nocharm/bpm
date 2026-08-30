@@ -986,7 +986,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
               onResizeNode(id, final <= SP_BASE_WIDTH ? null : final);
               setSpDragWidth(null);
             }}
-            className="nodrag nopan absolute inset-y-1 right-0 w-1.5 cursor-ew-resize rounded-l-xs bg-ink/10 opacity-0 transition-all duration-150 hover:bg-accent/60 group-hover:opacity-100"
+            // right-[7px] — 핸들(11px, 경계 중앙 배치)의 안쪽 침범 5.5px과 겹치지 않게 이격 (사용자 요청 2026-08-30)
+            className="nodrag nopan absolute inset-y-1 right-[7px] w-1.5 cursor-ew-resize rounded-full bg-ink/10 opacity-0 transition-all duration-150 hover:bg-accent/60 group-hover:opacity-100"
           />
         )}
         {diff && <DiffBadge status={diff} />}

@@ -53,6 +53,8 @@ export function FrameworkAssignModal({
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferMaps, setTransferMaps] = useState<MapSummary[] | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
+  // 현 슬롯 카테고리 레벨 — 레거시 비-L5 슬롯은 이양 차단(서버 409 미러, 2026-08-30 확정)
+  const [currentLevel, setCurrentLevel] = useState<number | null>(null);
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -76,7 +78,9 @@ export function FrameworkAssignModal({
       // 자식 있는 조상만 펼침 — 리프(현재 지정)는 펼칠 게 없다.
       setOpenIds(new Set(ids.filter((_, i) => lists[i + 1].length > 0)));
       const last = chainNodes[chainNodes.length - 1];
-      if (last && last.child_count === 0) setSelectedId(last.id);
+      setCurrentLevel(last?.level ?? null);
+      // 선택 시딩도 L5만 — 레거시 비-L5 지정을 그대로 재배정 대상으로 올리지 않는다 (2026-08-30)
+      if (last && last.level === 5) setSelectedId(last.id);
       setLoadingRoot(false);
     }
     void init().catch((err: unknown) => {
@@ -101,9 +105,13 @@ export function FrameworkAssignModal({
 
   // 행 클릭 — 리프(child_count 0)는 선택, 상위 카테고리는 펼침/접힘 전용(선택 불가).
   function handleNodeClick(node: CategoryNode) {
-    if (node.child_count === 0) {
+    // 맵 슬롯은 L5 전용(2026-08-30 확정) — 리프여도 L5가 아니면 선택 불가(서버 422 미러)
+    if (node.level === 5) {
       setSelectedId(node.id);
       return;
+    }
+    if (node.child_count === 0) {
+      return; // 비-L5 말단 — 선택도 펼침도 없음
     }
     if (openIds.has(node.id)) {
       setOpenIds((prev) => {
@@ -184,9 +192,10 @@ export function FrameworkAssignModal({
     }
   }
 
-  // 트리 행 — 상위는 쉐브론 토글, 리프는 선택(가능 대상). 선택 행은 accent 틴트+체크로 강조.
+  // 트리 행 — 상위는 쉐브론 토글, L5만 선택 가능(맵 슬롯 L5 전용, 2026-08-30). 선택 행은 accent 틴트+체크.
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const isLeaf = node.child_count === 0;
+    const selectable = node.level === 5;
     const open = openIds.has(node.id);
     const children = childrenByParent.get(node.id) ?? [];
     const selected = selectedId === node.id;
@@ -195,16 +204,18 @@ export function FrameworkAssignModal({
         <button
           type="button"
           data-id={`framework-pick-${node.id}`}
-          aria-pressed={isLeaf ? selected : undefined}
+          aria-pressed={selectable ? selected : undefined}
           aria-expanded={isLeaf ? undefined : open}
           onClick={() => handleNodeClick(node)}
           style={{ paddingLeft: `${depth * 14 + 4}px` }}
           className={`flex w-full items-center gap-1.5 rounded-sm py-1 pr-1.5 text-left text-caption ${
             selected
               ? "bg-accent-tint text-accent"
-              : isLeaf
+              : selectable
                 ? "text-ink hover:bg-divider"
-                : "text-ink-secondary hover:bg-divider"
+                : isLeaf
+                  ? "cursor-default text-ink-tertiary" // 비-L5 말단 — 선택 불가 표시
+                  : "text-ink-secondary hover:bg-divider"
           }`}
         >
           {isLeaf ? (
@@ -309,7 +320,12 @@ export function FrameworkAssignModal({
 
         {hasConsultantCode && (
           <div className="flex flex-col gap-2 border-t border-hairline pt-3">
-            {!transferOpen ? (
+            {currentLevel !== null && currentLevel !== 5 ? (
+              // 레거시 비-L5 슬롯 — 이양 대신 L5 재배정 유도 (서버 409 미러)
+              <p data-id="framework-transfer-l5only" className="text-fine text-changed">
+                {t("home.frameworkTransferL5Only")}
+              </p>
+            ) : !transferOpen ? (
               <button
                 type="button"
                 data-id="framework-transfer-open"
