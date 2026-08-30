@@ -4,6 +4,7 @@
 // viewBox로 창 크기에 자동 맞춤. 라이브 인스턴스 N개의 부하를 피하는 경량 렌더(시각 전용).
 
 import type { VersionGraph } from "@/lib/api";
+import { resolveNodeStroke } from "@/components/process-node";
 import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 
 export function ScopePreview({
@@ -24,7 +25,8 @@ export function ScopePreview({
   }
 
   const boxes = scopeNodes.map((node) => {
-    const size = nodeSizeOf(normalizeNodeType(node.node_type));
+    const type = normalizeNodeType(node.node_type);
+    const size = nodeSizeOf(type);
     return {
       id: node.id,
       x: node.pos_x,
@@ -33,7 +35,8 @@ export function ScopePreview({
       h: size.h,
       cx: node.pos_x + size.w / 2,
       cy: node.pos_y + size.h / 2,
-      color: node.color || "var(--color-border-strong)",
+      // 캔버스 정본 색 해석(resolveNodeStroke) — 무지정 노드도 타입 기본색으로 실캔버스와 동일하게
+      color: resolveNodeStroke(node.color, type),
       title: node.title,
     };
   });

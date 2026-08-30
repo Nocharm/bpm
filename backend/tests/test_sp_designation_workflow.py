@@ -189,6 +189,11 @@ class TestLibraryUndesignated:
         assert row["assignee"] is None
         assert row["system"] is None
         assert row["duration"] is None
+        # SP 파라미터 4종(피커 미리보기 목업 소스)도 동일 마스킹 (2026-08-30)
+        assert row["touch_time"] is None
+        assert row["cost_krw"] is None
+        assert row["cost_usd"] is None
+        assert row["headcount"] is None
 
     def test_flag_hides_private_undesignated_from_stranger(self, client, enforce):
         private_id = seed_sp_map("Lib Private Undesignated", visibility="private")
