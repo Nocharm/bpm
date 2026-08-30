@@ -25,11 +25,14 @@ import {
   type FrameworkTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
+import type { NodeDisplayToggle } from "@/lib/node-actions";
 
 export interface FrameworkTreePickerProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
   readOnly: boolean;
+  // 현재 맵의 노드 표시 설정 — 피크 목업 호버 시 "현재 맵 기준" 렌더 필터 (2026-08-30)
+  nodeDisplayFields: NodeDisplayToggle[];
   // 캔버스의 결착 L5 — 타 L5 출신 판정(피크 목업을 캔버스 규칙=L5 색+출처 배지로) (design 2026-08-28 §8)
   linkageCategoryId: number | null;
   onClose: () => void;
@@ -43,6 +46,7 @@ export function FrameworkTreePicker({
   currentMapId,
   linkedMapIds,
   readOnly,
+  nodeDisplayFields,
   linkageCategoryId,
   onClose,
   onPeekAdd,
@@ -274,10 +278,15 @@ export function FrameworkTreePicker({
             assignee: peek.row.sp_assignee ?? null,
             system: peek.row.sp_system ?? null,
             duration: peek.row.sp_duration ?? null,
+            touch_time: peek.row.sp_touch_time ?? null,
+            cost_krw: peek.row.sp_cost_krw ?? null,
+            cost_usd: peek.row.sp_cost_usd ?? null,
+            headcount: peek.row.sp_headcount ?? null,
           }}
           anchor={peek.anchor}
           anchorEl={peek.anchorEl}
           addDisabledReason={peek.blocked}
+          displayFields={nodeDisplayFields}
           externalOrigin={
             linkageCategoryId !== null && peek.categoryId !== linkageCategoryId
               ? { categoryId: peek.categoryId, categoryPath: peek.categoryPath }

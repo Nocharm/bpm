@@ -99,6 +99,11 @@ async def list_processes(
                 ProcessMap.sp_designated_at,
                 ProcessMap.visibility,
                 ProcessMap.owning_department,
+                # SP 파라미터 4종 — 피커 미리보기 목업 "전체 파라미터" 소스 (2026-08-30)
+                ProcessMap.sp_touch_time,
+                ProcessMap.sp_cost_krw,
+                ProcessMap.sp_cost_usd,
+                ProcessMap.sp_headcount,
             )
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
             .where(*where_clauses)
@@ -112,15 +117,19 @@ async def list_processes(
                 ProcessMap.sp_designated_at,
                 ProcessMap.visibility,
                 ProcessMap.owning_department,
+                ProcessMap.sp_touch_time,
+                ProcessMap.sp_cost_krw,
+                ProcessMap.sp_cost_usd,
+                ProcessMap.sp_headcount,
             )
             .order_by(ProcessMap.name)
         )
     ).all()
     # 미지정 맵은 비공개 이름 유출 방지를 위해 가시성 판정 후 남긴다 (지정 맵은 기존대로 전체 공개 라이브러리)
     undesignated_candidates = [
-        (mid, visibility, owning_department)
-        for (mid, _, _, _, _, _, _, designated_at, visibility, owning_department) in latest_rows
-        if designated_at is None
+        (row[0], row[8], row[9])
+        for row in latest_rows
+        if row[7] is None  # sp_designated_at
     ]
     visible_undesignated = await _filter_visible_map_ids(session, user, undesignated_candidates)
     latest_rows = [
@@ -165,8 +174,15 @@ async def list_processes(
             "duration": (normalize_duration(duration) if duration else duration)
             if designated_at is not None
             else None,
+            # SP 파라미터 4종 — 마스킹 규칙 동일. touch_time은 duration과 같은 H.MM 계약이라 동일 소거 (2026-08-30)
+            "touch_time": (normalize_duration(touch_time) if touch_time else touch_time)
+            if designated_at is not None
+            else None,
+            "cost_krw": cost_krw if designated_at is not None else None,
+            "cost_usd": cost_usd if designated_at is not None else None,
+            "headcount": headcount if designated_at is not None else None,
         }
-        for mid, name, latest, department, assignee, system, duration, designated_at, _, _ in latest_rows
+        for mid, name, latest, department, assignee, system, duration, designated_at, _, _, touch_time, cost_krw, cost_usd, headcount in latest_rows
     ]
 
 

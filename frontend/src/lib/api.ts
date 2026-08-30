@@ -607,6 +607,11 @@ export interface LibraryProcess {
   assignee: string | null;
   system: string | null;
   duration: string | null;
+  // SP 파라미터 4종 — 피커 미리보기 목업 "전체 파라미터" 소스, 마스킹 규칙 동일 (2026-08-30)
+  touch_time: string | null;
+  cost_krw: string | null;
+  cost_usd: string | null;
+  headcount: string | null;
 }
 
 // includeUndesignated: 미지정 맵도 포함(가시성 필터는 서버) — 피커 "Show unregistered maps" 토글용

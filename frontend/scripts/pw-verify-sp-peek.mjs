@@ -52,8 +52,21 @@ async function newPage(devUser) {
   );
   const addBtn = page.locator('[data-id="library-peek-add"]');
   check(await addBtn.isVisible(), "[1] add button visible in header");
-  // 기본 탭 = 노드 목업(우측 최상단) — 클릭 시 추가/이동 드롭다운
+  // 기본 탭 = 노드 목업(우측 최상단) — 기본: 전체 파라미터, 호버: 현재 맵 표시 기준(기본 토글 assignee+params)
   check(await page.locator('[data-id="library-peek-node-mock"]').isVisible(), "[1] node mock on default tab");
+  const mockTextFull = await page.locator('[data-id="library-peek-node-mock"]').innerText();
+  check(
+    mockTextFull.includes("Zendesk") && mockTextFull.includes("₩"),
+    "[1] mock full mode shows attrs + all params",
+  );
+  await page.hover('[data-id="library-peek-node-mock"]');
+  await page.waitForTimeout(150);
+  const mockTextMap = await page.locator('[data-id="library-peek-node-mock"]').innerText();
+  check(
+    !mockTextMap.includes("Zendesk") && mockTextMap.includes("₩"),
+    "[1] hover switches to current-map display basis",
+  );
+  // 클릭 시 추가/이동 드롭다운(그대로)
   await page.click('[data-id="library-peek-node-mock"]');
   check(await page.locator('[data-id="library-peek-mock-add"]').isVisible(), "[1] mock menu shows add");
   check(await page.locator('[data-id="library-peek-mock-open"]').isVisible(), "[1] mock menu shows open-map");

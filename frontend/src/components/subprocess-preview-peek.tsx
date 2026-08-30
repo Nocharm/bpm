@@ -7,7 +7,6 @@
 
 import {
   Building2,
-  Clock,
   ExternalLink,
   FolderTree,
   Lock,
@@ -23,11 +22,13 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getResolvedGraph, type VersionGraph } from "@/lib/api";
+import { PARAM_ICON } from "@/components/param-icons";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { getExternalL5Color } from "@/lib/canvas";
-import { formatDurationHm } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
+import type { NodeDisplayToggle } from "@/lib/node-actions";
+import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
 
 // 행 호버로 피크가 열리기까지의 지연 — 스침 오픈 방지(클릭은 즉시)
 export const PEEK_HOVER_DELAY_MS = 2500;
@@ -37,6 +38,11 @@ export interface SubprocessPeekInfo {
   assignee: string | null;
   system: string | null;
   duration: string | null;
+  // SP 파라미터 나머지 4종 — 목업 "전체 파라미터" 표시 소스 (2026-08-30)
+  touch_time: string | null;
+  cost_krw: string | null;
+  cost_usd: string | null;
+  headcount: string | null;
 }
 
 // 피크 "Add to map" → 에디터 생성 경로 페이로드 — 드래그 dataTransfer 규약과 1:1 대응(드롭과 동일 체인)
@@ -65,6 +71,7 @@ export function SubprocessPreviewPeek({
   anchorEl,
   addDisabledReason,
   externalOrigin = null,
+  displayFields,
   onAdd,
   onOpenMap,
   onClose,
@@ -81,6 +88,8 @@ export function SubprocessPreviewPeek({
   addDisabledReason: string | null;
   // L5 연계 캔버스 전용 — 타 L5 출신 맵이면 캔버스 규칙(홈 L5별 색+출처 배지)로 목업 렌더 (design 2026-08-28 §8)
   externalOrigin?: { categoryId: number; categoryPath: string } | null;
+  // 현재 맵의 노드 표시 설정 — 목업 호버 시 "현재 맵 기준" 렌더 필터 (2026-08-30)
+  displayFields: NodeDisplayToggle[];
   onAdd: () => void;
   // 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)는 호출측이 담당
   onOpenMap: () => void;
@@ -146,18 +155,29 @@ export function SubprocessPreviewPeek({
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
 
-  // 캔버스 속성 줄 규범 순서(담당자→부서→시스템) + 소요시간 — 아이콘은 process-node FIELD_ICON과 동일.
-  // 미등록 행도 4행 유지(값은 서버 마스킹으로 전부 대시) — 상세 탭 형태 고정.
+  // SP 파라미터 값 조회 — SP 지정 5종(연간 건수·FTE는 부모 노드 맥락이라 제외, lib/params SP_PARAM_FIELDS)
+  const spParamValue = (field: SpParamField): string | null =>
+    field === "duration"
+      ? info.duration
+      : field === "touch_time"
+        ? info.touch_time
+        : field === "cost_krw"
+          ? info.cost_krw
+          : field === "cost_usd"
+            ? info.cost_usd
+            : info.headcount;
+  // 상세 탭 — 캔버스 속성 줄 규범 순서(담당자→부서→시스템) + SP 파라미터 5종(아이콘=PARAM_ICON 단일 소스).
+  // 미등록 행도 행 형태 유지(값은 서버 마스킹으로 전부 대시).
   const infoRows: { key: string; label: string; icon: LucideIcon; value: string }[] = [
     { key: "assignee", label: t("field.assignee"), icon: User, value: info.assignee ?? "" },
     { key: "department", label: t("field.department"), icon: Building2, value: info.department ?? "" },
     { key: "system", label: t("field.system"), icon: Server, value: info.system ?? "" },
-    {
-      key: "duration",
-      label: t("field.duration"),
-      icon: Clock,
-      value: info.duration ? formatDurationHm(info.duration) : "",
-    },
+    ...SP_PARAM_FIELDS.map((field) => ({
+      key: field as string,
+      label: t(PARAM_LABEL_KEY[field]),
+      icon: PARAM_ICON[field],
+      value: formatParamValue(field, spParamValue(field)),
+    })),
   ];
   // 목업 색 — 기본은 캔버스 정본 SP 바이올렛, L5 캔버스의 타 L5 출신은 홈 L5별 색(캔버스 규칙 미러)
   const mockStroke = externalOrigin
@@ -167,6 +187,20 @@ export function SubprocessPreviewPeek({
   // 우측 탭(노드 목업/상세 값) + 목업 클릭 드롭다운(추가/맵 이동)
   const [tab, setTab] = useState<"node" | "detail">("node");
   const [mockMenu, setMockMenu] = useState(false);
+  // 목업 표시 모드 — 기본: 전체 파라미터, 호버: 현재 맵 노드 표시 설정 기준(실제 렌더 미리보기) (2026-08-30)
+  const [mockHover, setMockHover] = useState(false);
+  const mockAttrRows = (
+    [
+      { key: "assignee", icon: User, value: info.assignee ?? "" },
+      { key: "department", icon: Building2, value: info.department ?? "" },
+      { key: "system", icon: Server, value: info.system ?? "" },
+    ] as const
+  ).filter((row) => row.value && (!mockHover || displayFields.includes(row.key)));
+  const mockParamChips = SP_PARAM_FIELDS.map((field) => ({
+    field,
+    text: formatParamValue(field, spParamValue(field)),
+  })).filter((chip) => chip.text);
+  const showMockParams = !mockHover || displayFields.includes("params");
   const mockAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!mockMenu) return;
@@ -281,12 +315,20 @@ export function SubprocessPreviewPeek({
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
               {/* 추가될 노드 목업 — 일반 맵=SP 바이올렛, L5 캔버스 타 L5 출신=홈 L5 색+출처 배지(캔버스 규칙) */}
               <div ref={mockAreaRef} className="relative">
-                <span className="mb-1.5 block text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
+                {/* 캡션 — 기본 "전체 파라미터", 호버 시 "현재 맵 표시 기준" 스왑 안내 */}
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="shrink-0 text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
+                  <span data-id="library-peek-mock-mode" className="truncate text-fine text-ink-muted">
+                    {mockHover ? t("library.peekMockMapBasis") : t("library.peekMockAllParams")}
+                  </span>
+                </div>
                 <button
                   type="button"
                   data-id="library-peek-node-mock"
                   aria-expanded={mockMenu}
                   onClick={() => setMockMenu((cur) => !cur)}
+                  onMouseEnter={() => setMockHover(true)}
+                  onMouseLeave={() => setMockHover(false)}
                   className="w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm"
                   style={{
                     border: `1.5px solid ${mockStroke}`,
@@ -311,6 +353,37 @@ export function SubprocessPreviewPeek({
                       <FolderTree size={10} strokeWidth={1.5} className="shrink-0" />
                       <span className="truncate">{externalOrigin.categoryPath.split("/").pop()}</span>
                     </span>
+                  )}
+                  {/* 속성 줄(담당자/부서/시스템) — 기본: 값 있는 전부, 호버: 현재 맵 토글 기준 */}
+                  {mockAttrRows.length > 0 && (
+                    <div className="mt-1 flex flex-col gap-0.5">
+                      {mockAttrRows.map((row) => {
+                        const Icon = row.icon;
+                        return (
+                          <span key={row.key} className="flex items-center gap-1 text-fine text-ink-secondary">
+                            <Icon size={11} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                            <span className="min-w-0 truncate">{row.value}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* 파라미터 칩 — 캔버스 NodeParams 미러(아이콘+표시형), 호버 시 "params" 토글 기준 */}
+                  {showMockParams && mockParamChips.length > 0 && (
+                    <div
+                      data-id="library-peek-mock-params"
+                      className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-fine text-ink-tertiary"
+                    >
+                      {mockParamChips.map((chip) => {
+                        const Icon = PARAM_ICON[chip.field];
+                        return (
+                          <span key={chip.field} className="inline-flex items-center gap-1">
+                            <Icon size={11} strokeWidth={1.5} />
+                            {chip.text}
+                          </span>
+                        );
+                      })}
+                    </div>
                   )}
                   <div className="mt-1.5 flex items-center gap-1 text-fine text-ink-tertiary">
                     <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />

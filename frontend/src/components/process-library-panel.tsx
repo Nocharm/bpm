@@ -16,12 +16,15 @@ import {
 import { filterByQuery } from "@/lib/search";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
+import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
   linkedMapIds: Set<number>;
   readOnly: boolean;
+  // 현재 맵의 노드 표시 설정 — 피크 목업 호버 시 "현재 맵 기준" 렌더 필터 (2026-08-30)
+  nodeDisplayFields: NodeDisplayToggle[];
   onClose: () => void;
   // 새 맵 생성 즉시 링크 — 에디터의 addLinkNodeFromMap 스레딩
   onAddLinkNode: (linkedMapId: number, name: string) => void;
@@ -35,6 +38,7 @@ export function ProcessLibraryPanel({
   currentMapId,
   linkedMapIds,
   readOnly,
+  nodeDisplayFields,
   onClose,
   onAddLinkNode,
   onPeekAdd,
@@ -298,10 +302,15 @@ export function ProcessLibraryPanel({
             assignee: peek.row.assignee,
             system: peek.row.system,
             duration: peek.row.duration,
+            touch_time: peek.row.touch_time,
+            cost_krw: peek.row.cost_krw,
+            cost_usd: peek.row.cost_usd,
+            headcount: peek.row.headcount,
           }}
           anchor={peek.anchor}
           anchorEl={peek.anchorEl}
           addDisabledReason={peek.blocked}
+          displayFields={nodeDisplayFields}
           onAdd={() => {
             const row = peek.row;
             setPeek(null);

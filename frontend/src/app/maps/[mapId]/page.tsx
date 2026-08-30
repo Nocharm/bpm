@@ -8734,6 +8734,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             readOnly={readOnly}
+            nodeDisplayFields={displayFields}
             onClose={() => setLibraryOpen(false)}
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
             onPeekAdd={addLinkNodeFromPeek}
@@ -8754,6 +8755,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             currentMapId={mapId}
             linkedMapIds={linkedMapIds}
             readOnly={readOnly}
+            nodeDisplayFields={displayFields}
             linkageCategoryId={linkageCategoryId}
             onClose={() => setFrameworkPickerOpen(false)}
             onPeekAdd={addLinkNodeFromPeek}
