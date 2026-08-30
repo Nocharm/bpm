@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-31 — 서버 기동 불능 핫픽스: PEP 695 제네릭 → TypeVar (dev)
+- 9910 로그인 무반응의 진범은 인증이 아니라 backend 기동 실패였다 — `graph.py`의 `def _apply_placeholder_paths[NodeT: NodeIn]`(PEP 695, 3.12+)이 배포 런타임 `python:3.11-slim`에서 import SyntaxError → 크래시 루프 → `/api/auth/mode` 무응답 → FE가 fail-closed로 빈 issuer/client_id의 Keycloak 카드를 그려 버튼이 죽은 것처럼 보였다(bb05acbc, 8/29 도입).
+- 로컬 venv가 3.12라 pytest 1193·ruff 전부 green이었다 — **런타임 버전 갭이 게이트를 통째로 우회**. `backend/ruff.toml` 신설(`target-version = "py311"`)로 같은 문법을 기존 린트 게이트가 잡도록 고정(Dockerfile 베이스 상향 시 동반 상향).
+- 검증: 3.11 venv에 requirements.txt 실설치 후 `import app.main` 성공(188 routes) — 컨테이너 기동과 동등. 수정 전 원본은 동일 조건에서 SyntaxError 재현.
+
 ## 2026-08-31 — 매뉴얼 최신화 + 슬라이드 매뉴얼(HTML/PDF) (main)
 - md 매뉴얼 6종을 8/25 이후 델타(81커밋)로 최신화 — L5 연계 캔버스 신규 챕터(편집 §11), 복사/원본 대체(retire) 재편, 비교 필드 diff 상태색·버전 선택, 알림 리치 렌더, SP 피크/인라인 펼침/폭 조절/업무체계 필, IO 링크 표식·필수/선택, 인스펙터 소유·승인자/요약 아코디언, 반려 시 체크아웃 복귀, 피커 근접도 정렬, 관리자(Batch jobs·DB 백업 사이드카·휴지통 즉시삭제·연계 권한자·지식기반·AI 프롬프트·BACKUP_* env).
 - `docs/manual/slides/` 신설 — 사용자/관리자 × 한/영 4종 PPT형 스탠드얼론 HTML(←/→·클릭 이동, 전환 애니, 목차 점프, 인쇄=1슬라이드 1페이지) + PDF 4종. 실화면 스크린샷 127컷을 로컬 시드(org+compare+inbox+프레임워크 임포트 5종+연계 캔버스 v1.0/외부 L6/플레이스홀더 주입)로 Playwright 캡처(ko/en 각각) 후 내장. md가 원본 — 갱신 시 함께 재생성.

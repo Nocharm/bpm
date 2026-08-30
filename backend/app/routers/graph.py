@@ -4,6 +4,7 @@
 """
 
 from collections import Counter
+from typing import TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, or_, select
@@ -80,7 +81,11 @@ async def _load_graph(session: AsyncSession, version_id: int) -> GraphOut:
     return GraphOut(nodes=nodes, edges=edges, groups=groups, subprocess_refs=refs)
 
 
-def _apply_placeholder_paths[NodeT: NodeIn](
+# 배포 런타임이 python:3.11-slim이라 PEP 695 제네릭 문법(`def f[T]()`, 3.12+)은 쓸 수 없다 — TypeVar로 표기.
+NodeT = TypeVar("NodeT", bound=NodeIn)
+
+
+def _apply_placeholder_paths(
     nodes: list[NodeT], ph_paths: dict[int, str]
 ) -> list[NodeT]:
     """플레이스홀더 노드에 출처 경로 트랜지언트 주입 — /graph·/graph/all 공용 (2026-08-30 #5)."""
