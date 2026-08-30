@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 비-L5 이양 차단 배너 재디자인 (dev)
+- 앰버 텍스트 한 줄 → TriangleAlert+틴트 박스(볼드 제목/설명 2단, Title/Desc 키 분리)로 시인성 강화.
+
 ## 2026-08-30 — 그립-핸들 이격·배정/이양 모달 L5 반영 (dev)
 - 그립 이격(사용자 정정 반영): 수평 이동 대신 경계 위(right-0) 유지 + 시작 높이 top-7(28px)로 낮춰 출력 핸들(anchorTop 18, 12.5~23.5px) 아래부터 — 세로 비중첩 실증(E2E 5/5). 배정 모달: L5만 선택·시딩(레거시 비-L5 지정은 미시딩)·비-L5 말단 muted, 이양 섹션은 currentLevel!==5면 재배정 유도 문구로 대체(서버 409 미러). PickLeafHint 문구 L5로 갱신.
 

@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Network, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Network, TriangleAlert, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
@@ -321,10 +321,19 @@ export function FrameworkAssignModal({
         {hasConsultantCode && (
           <div className="flex flex-col gap-2 border-t border-hairline pt-3">
             {currentLevel !== null && currentLevel !== 5 ? (
-              // 레거시 비-L5 슬롯 — 이양 대신 L5 재배정 유도 (서버 409 미러)
-              <p data-id="framework-transfer-l5only" className="text-fine text-changed">
-                {t("home.frameworkTransferL5Only")}
-              </p>
+              // 레거시 비-L5 슬롯 — 이양 대신 L5 재배정 유도. 아이콘+틴트 배너로 시인성 확보 (서버 409 미러)
+              <div
+                data-id="framework-transfer-l5only"
+                className="flex items-start gap-2 rounded-sm border border-changed/40 bg-changed/10 px-2.5 py-2"
+              >
+                <TriangleAlert size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-changed" />
+                <div className="flex min-w-0 flex-col gap-0.5 text-fine">
+                  <span className="font-semibold text-changed">
+                    {t("home.frameworkTransferL5OnlyTitle")}
+                  </span>
+                  <span className="text-ink-secondary">{t("home.frameworkTransferL5OnlyDesc")}</span>
+                </div>
+              </div>
             ) : !transferOpen ? (
               <button
                 type="button"
