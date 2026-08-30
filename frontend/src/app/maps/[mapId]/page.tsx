@@ -1547,6 +1547,14 @@ function MapEditor({ mapId }: { mapId: number }) {
               isFrameworkMap && ref.category_path && ref.category_path !== linkageCategoryPath
                 ? ref.category_path
                 : null,
+            // 출신 L5 카테고리 id — 출처 배지 클릭 드릴인 피크 소스 (2026-08-30)
+            spOriginCategoryId:
+              isFrameworkMap &&
+              ref.category_id != null &&
+              ref.category_path &&
+              ref.category_path !== linkageCategoryPath
+                ? ref.category_id
+                : null,
             // 외부 L6 = 홈 L5별 색(같은 L5=같은 색, display 전용 — 저장값 불변). 8톤 모듈로라
             // L5가 9개+면 색 재사용 가능 (2026-08-28 개선). [0]은 기본색이라 1..8만 사용.
             ...(isFrameworkMap &&
@@ -1575,6 +1583,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             spUrl: null,
             spUrlLabel: null,
             spOriginPath: null,
+            spOriginCategoryId: null,
           };
       // 일반 맵 한정 — 링크맵 프레임워크 소속 필(이름 옆 아이콘+3초 호버 피크) 소스 (2026-08-30).
       // 연계 캔버스에선 출신 배지(spOriginPath)가 같은 정보를 담당하므로 제외.

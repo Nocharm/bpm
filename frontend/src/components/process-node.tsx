@@ -48,7 +48,7 @@ import {
 } from "@/components/compare-field-diff";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
-import { FrameworkPeekPill } from "@/components/framework-peek-pill";
+import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
@@ -1025,30 +1025,37 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         </div>
         {/* 외부 L5 출신 배지 — 연계 캔버스에서 링크맵의 현 소속이 이 캔버스 L5와 다를 때(라이브 파생).
             마지막 2세그먼트만 표시, 전체 경로는 툴팁 (design 2026-08-28 §8) */}
-        {originPath && (
-          <div
-            data-id="node-origin-badge"
-            title={originPath}
-            className={`mt-0.5 max-w-full self-start truncate rounded-xs border px-1 py-px text-xs ${
-              // 플레이스홀더는 바디와 동톤(에러) — 외부 L6는 아래 inline 틴트가 덮는다
-              spPlaceholder
-                ? "border-error/40 bg-error/10 text-error"
-                : "border-hairline bg-surface-alt text-ink-tertiary"
-            }`}
-            style={
-              // C안 — 배지도 홈 L5 색 틴트(inline이 클래스 색을 덮는다)
-              spExternal
-                ? {
-                    background: `color-mix(in srgb, ${color} 12%, white)`,
-                    borderColor: `color-mix(in srgb, ${color} 38%, white)`,
-                    color: `color-mix(in srgb, ${color} 72%, var(--color-ink))`,
-                  }
-                : undefined
-            }
-          >
-            {originPath.split("/").slice(-2).join("/")}
-          </div>
-        )}
+        {originPath &&
+          (spExternal && data.spOriginCategoryId != null && data.linkedMapId != null ? (
+            // 외부 L6 출처 배지 — 클릭 시 출신 L5 드릴인 피크(FrameworkChip 재활용) (사용자 요청 2026-08-30)
+            <FrameworkPeekTrigger
+              dataId="node-origin-badge"
+              categoryId={data.spOriginCategoryId}
+              linkedMapId={data.linkedMapId}
+              title={originPath}
+              className="nodrag nopan mt-0.5 inline-block max-w-full cursor-pointer self-start truncate rounded-xs border px-1 py-px text-xs transition-opacity duration-150 hover:opacity-80"
+              style={{
+                background: `color-mix(in srgb, ${color} 12%, white)`,
+                borderColor: `color-mix(in srgb, ${color} 38%, white)`,
+                color: `color-mix(in srgb, ${color} 72%, var(--color-ink))`,
+              }}
+            >
+              {originPath.split("/").slice(-2).join("/")}
+            </FrameworkPeekTrigger>
+          ) : (
+            <div
+              data-id="node-origin-badge"
+              title={originPath}
+              className={`mt-0.5 max-w-full self-start truncate rounded-xs border px-1 py-px text-xs ${
+                // 플레이스홀더는 바디와 동톤(에러) — 외부 L6는 위 트리거 분기가 담당
+                spPlaceholder
+                  ? "border-error/40 bg-error/10 text-error"
+                  : "border-hairline bg-surface-alt text-ink-tertiary"
+              }`}
+            >
+              {originPath.split("/").slice(-2).join("/")}
+            </div>
+          ))}
         {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
         <NodeFields data={data} />
         <NodeParams data={data} />

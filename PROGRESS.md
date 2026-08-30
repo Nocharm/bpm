@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-30 — 외부 L6 출처 배지 클릭 드릴인 (dev)
+- FrameworkPeekTrigger로 피크 범용화(필=아이콘+3초 호버/클릭, 배지=클릭 전용) — 캔버스 외부 L6의 출처 배지 클릭 시 출신 L5 드릴인 피크(FrameworkChip 재활용). spOriginCategoryId 주입(spAttrs). E2E 2/2.
+
 ## 2026-08-30 — 비-L5 이양 차단 배너 재디자인 (dev)
 - 앰버 텍스트 한 줄 → TriangleAlert+틴트 박스(볼드 제목/설명 2단, Title/Desc 키 분리)로 시인성 강화.
 
