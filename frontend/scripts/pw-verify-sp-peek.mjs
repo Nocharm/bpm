@@ -105,6 +105,11 @@ async function newPage(devUser) {
     (await page.locator('[data-id="library-peek-framework-path"]').count()) === 0,
     "[1] non-framework map shows toned dash for framework",
   );
+  // GMP·조건·IO 섹션 — 값 없는 org 시드 맵은 전부 톤다운 대시로 나열
+  check(
+    (await page.locator('[data-id="library-peek-io"] .opacity-40').count()) >= 4,
+    "[1] gmp/conditions/io rows listed toned when empty",
+  );
   await page.screenshot({ path: `${SHOT_DIR}/peek-1-details.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await addBtn.click();
@@ -207,6 +212,12 @@ async function newPage(devUser) {
   await page.waitForSelector('[data-id="library-peek-framework-path"]', { timeout: 8000 });
   const pathSeparators = await page.locator('[data-id="library-peek-framework-path"] svg').count();
   check(pathSeparators >= 4, `[5] framework path lists all levels (separators=${pathSeparators})`);
+  // 인터뷰 임포트 맵 — 조건·인풋/아웃풋 실데이터 항목 나열
+  await page.waitForSelector('[data-id="library-peek-io"] .pl-5', { timeout: 8000 });
+  check(
+    (await page.locator('[data-id="library-peek-io"] .pl-5 span').count()) > 0,
+    "[5] details list input/output items",
+  );
   await page.screenshot({ path: `${SHOT_DIR}/peek-5-framework.png` });
   const nodesBefore = await page.locator(".react-flow__node").count();
   await page.click('[data-id="library-peek-add"]');

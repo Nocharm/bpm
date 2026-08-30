@@ -10,13 +10,18 @@ import {
   CalendarClock,
   ChevronRight,
   ExternalLink,
+  Flag,
   FolderTree,
   GitBranch,
   Lock,
+  LogIn,
+  LogOut,
   Network,
+  Play,
   Plus,
   RefreshCw,
   Server,
+  ShieldCheck,
   User,
   Workflow,
   type LucideIcon,
@@ -30,6 +35,7 @@ import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { getExternalL5Color } from "@/lib/canvas";
 import { formatKstShort } from "@/lib/datetime";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
@@ -145,6 +151,14 @@ export function SubprocessPreviewPeek({
         status: "ready";
         version: { label: string; number: number | null; publishedAt: string | null } | null;
         categoryPath: string | null;
+        // SP 지정의 표시 필드 나머지 — 조건·IO·GMP (목업 전체 파라미터·상세 탭 소스)
+        sp: {
+          input: string | null;
+          output: string | null;
+          startCondition: string | null;
+          endCondition: string | null;
+          gmp: string | null;
+        };
       }
   >({ status: "loading" });
   const canFetchMeta = !designated || fetchState.status === "ready";
@@ -170,6 +184,13 @@ export function SubprocessPreviewPeek({
               }
             : null,
           categoryPath: detail.category_path ?? null,
+          sp: {
+            input: detail.sp_input ?? null,
+            output: detail.sp_output ?? null,
+            startCondition: detail.sp_start_condition ?? null,
+            endCondition: detail.sp_end_condition ?? null,
+            gmp: detail.sp_gmp ?? null,
+          },
         });
       })
       .catch(() => {
@@ -265,6 +286,24 @@ export function SubprocessPreviewPeek({
     text: formatParamValue(field, spParamValue(field)),
   })).filter((chip) => chip.text);
   const showMockParams = !mockHover || displayFields.includes("params");
+  // 조건·IO·GMP — SP 지정의 나머지 표시 필드(getMap 소스, 잠금 맵은 meta 미조회라 미표시/대시)
+  const spExtra = meta.status === "ready" ? meta.sp : null;
+  const splitIoLines = (raw: string | null | undefined): string[] =>
+    (raw ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  const mockGmpLabel = formatGmp(spExtra?.gmp);
+  const showMockGmp = !mockHover || displayFields.includes("gmp");
+  const mockConditionLines = [
+    { key: "start_condition", icon: Play, value: spExtra?.startCondition ?? "" },
+    { key: "end_condition", icon: Flag, value: spExtra?.endCondition ?? "" },
+  ].filter((line) => line.value);
+  const showMockConditions = !mockHover || displayFields.includes("conditions");
+  const mockIoSides = [
+    { side: "input" as const, icon: LogIn, lines: splitIoLines(spExtra?.input) },
+    { side: "output" as const, icon: LogOut, lines: splitIoLines(spExtra?.output) },
+  ].filter((entry) => entry.lines.length > 0 && (!mockHover || displayFields.includes(entry.side)));
   const mockAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!mockMenu) return;
@@ -403,6 +442,17 @@ export function SubprocessPreviewPeek({
                     <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: mockStroke }} />
                     <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
                   </div>
+                  {/* GMP 필 — 캔버스 GmpPill 미러(분류된 경우만, 신호등 배지) */}
+                  {showMockGmp && mockGmpLabel && (
+                    <span
+                      data-id="library-peek-mock-gmp"
+                      className="mt-1 inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border border-transparent px-1.5 py-0 text-[10px] leading-4"
+                      style={getGmpBadgeStyle(spExtra?.gmp)}
+                    >
+                      <ShieldCheck size={10} strokeWidth={1.5} className="shrink-0" />
+                      {mockGmpLabel}
+                    </span>
+                  )}
                   {externalOrigin && (
                     <span
                       data-id="library-peek-mock-origin"
@@ -449,6 +499,33 @@ export function SubprocessPreviewPeek({
                       })}
                     </div>
                   )}
+                  {/* 조건 줄(시작/종료) — 캔버스 NodeIoDetails 미러(Play/Flag) */}
+                  {showMockConditions &&
+                    mockConditionLines.map((line) => {
+                      const Icon = line.icon;
+                      return (
+                        <div key={line.key} className="mt-1 flex items-start gap-1 text-fine text-ink-tertiary">
+                          <Icon size={11} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                          <span className="min-w-0 break-words">{line.value}</span>
+                        </div>
+                      );
+                    })}
+                  {/* 인풋/아웃풋 — 개행 항목 나열(LogIn/LogOut) */}
+                  {mockIoSides.map((entry) => {
+                    const Icon = entry.icon;
+                    return (
+                      <div key={entry.side} className="mt-1 flex items-start gap-1 text-fine text-ink-tertiary">
+                        <Icon size={11} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          {entry.lines.map((line, index) => (
+                            <span key={`${index}-${line}`} className="truncate">
+                              {line}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    );
+                  })}
                   <div className="mt-1.5 flex items-center gap-1 text-fine text-ink-tertiary">
                     <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />
                     <span className="truncate">{t("subprocess.followingBanner")}</span>
@@ -516,6 +593,82 @@ export function SubprocessPreviewPeek({
                   </div>
                 );
               })}
+              {/* 조건·IO·GMP — SP 지정의 나머지 표시 필드. 없는 값은 동일하게 톤다운 대시 (사용자 피드백 2026-08-30) */}
+              <div data-id="library-peek-io" className="mt-0.5 flex flex-col gap-1.5 border-t border-hairline pt-2">
+                <div title={t("field.gmp")} className={`flex items-center gap-1.5 ${mockGmpLabel ? "" : "opacity-40"}`}>
+                  <ShieldCheck size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                  <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{t("field.gmp")}</span>
+                  {mockGmpLabel ? (
+                    <span
+                      className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border border-transparent px-1.5 py-0 text-[10px] leading-4"
+                      style={getGmpBadgeStyle(spExtra?.gmp)}
+                    >
+                      <ShieldCheck size={10} strokeWidth={1.5} className="shrink-0" />
+                      {mockGmpLabel}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-fine text-ink-tertiary">-</span>
+                  )}
+                </div>
+                {[
+                  {
+                    key: "start_condition",
+                    label: t("field.startCondition"),
+                    icon: Play,
+                    value: spExtra?.startCondition ?? "",
+                  },
+                  {
+                    key: "end_condition",
+                    label: t("field.endCondition"),
+                    icon: Flag,
+                    value: spExtra?.endCondition ?? "",
+                  },
+                ].map((row) => {
+                  const Icon = row.icon;
+                  return (
+                    <div
+                      key={row.key}
+                      title={row.value || row.label}
+                      className={`flex items-center gap-1.5 ${row.value ? "" : "opacity-40"}`}
+                    >
+                      <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
+                      {row.value ? (
+                        <span className="max-w-[55%] truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
+                          {row.value}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-fine text-ink-tertiary">-</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {[
+                  { key: "input", label: t("field.input"), icon: LogIn, lines: splitIoLines(spExtra?.input) },
+                  { key: "output", label: t("field.output"), icon: LogOut, lines: splitIoLines(spExtra?.output) },
+                ].map((row) => {
+                  const Icon = row.icon;
+                  return (
+                    <div key={row.key} className={row.lines.length > 0 ? "" : "opacity-40"}>
+                      <div className="flex items-center gap-1.5">
+                        <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
+                        {row.lines.length === 0 && <span className="shrink-0 text-fine text-ink-tertiary">-</span>}
+                      </div>
+                      {/* 항목 전부 나열 — 개행 구분 복수 항목(줄바꿈 허용) */}
+                      {row.lines.length > 0 && (
+                        <div className="mt-0.5 flex flex-col gap-0.5 pl-5">
+                          {row.lines.map((line, index) => (
+                            <span key={`${index}-${line}`} className="break-words text-fine text-ink">
+                              {line}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
               {/* 메타 — 게시 버전·게시 시각·업무체계(전체 레벨). 없는 값은 동일하게 톤다운 대시 */}
               <div data-id="library-peek-meta" className="mt-0.5 flex flex-col gap-1.5 border-t border-hairline pt-2">
                 {metaRows.map((row) => {
