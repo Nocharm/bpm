@@ -47,13 +47,11 @@ const frameRadius = (page) =>
     const host = flow?.closest('div[class*="bg-canvas"]');
     return host ? getComputedStyle(host).borderRadius : null;
   });
-// 모드 링 — 차콜 프레임의 2px 액센트 보더 (라이트는 0px none)
-const frameBorder = (page) =>
+// 모드 링 — 풀블리드 차콜 위 뷰포트 고정 흰 테두리 오버레이(별도 요소, 라이트/일반 맵엔 없음)
+const modeRing = (page) =>
   page.evaluate(() => {
-    const flow = document.querySelector(".react-flow");
-    const host = flow?.closest('div[class*="bg-canvas"]');
-    const cs = host ? getComputedStyle(host) : null;
-    return cs ? `${cs.borderTopWidth} ${cs.borderTopStyle}` : null;
+    const ring = document.querySelector('[data-id="l5-mode-ring"]');
+    return ring ? getComputedStyle(ring).borderTopWidth : null;
   });
 // 노드 타이틀 잉크 — 다크 셸에서도 노드 내부는 라이트(#16161d) 유지되어야 한다(viewport 제외 재정의)
 const nodeTitleColor = (page) =>
@@ -91,14 +89,14 @@ try {
   await page.getByRole("button", { name: "fit view" }).first().click().catch(() => {});
   await page.waitForTimeout(600);
   check("L5 default charcoal bg", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
-  // 차콜은 민 무대 — 도트 그리드 미렌더, 모드 링(2px 액센트 보더)이 신호
+  // 차콜은 민 무대 — 도트 그리드 미렌더, 흰 모드 링 오버레이가 신호
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
-  check("mode ring on framed viewport", (await frameBorder(page)) === "2px solid", String(await frameBorder(page)));
+  check("white mode ring overlay (2px)", (await modeRing(page)) === "2px", String(await modeRing(page)));
+  check("charcoal is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
   check("chrome stays light in charcoal", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
-  check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
-  // 칩 안쪽 배치 — 프레임 라운드 코너를 덮지 않게 20px (라이트는 8px 복귀)
+  // 칩 안쪽 배치 — 모드 링(inset 6px) 안쪽으로 20px (라이트는 8px 복귀)
   check("tag inset in charcoal (top 20px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "20px");
   check("node title ink stays light-mode", (await nodeTitleColor(page)) === "rgb(22, 22, 29)", String(await nodeTitleColor(page)));
   await shot(page, "l5-charcoal-default");
@@ -110,8 +108,7 @@ try {
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
   check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
-  // Tailwind preflight가 border: 0 solid를 깔아 스타일은 solid로 남는다 — 폭 0이면 링 없음
-  check("no mode ring in light", (await frameBorder(page)) === "0px solid", String(await frameBorder(page)));
+  check("no mode ring in light", (await modeRing(page)) === null, String(await modeRing(page)));
   check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");
