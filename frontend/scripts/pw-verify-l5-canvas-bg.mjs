@@ -47,6 +47,14 @@ const frameRadius = (page) =>
     const host = flow?.closest('div[class*="bg-canvas"]');
     return host ? getComputedStyle(host).borderRadius : null;
   });
+// 모드 링 — 차콜 프레임의 2px 액센트 보더 (라이트는 0px none)
+const frameBorder = (page) =>
+  page.evaluate(() => {
+    const flow = document.querySelector(".react-flow");
+    const host = flow?.closest('div[class*="bg-canvas"]');
+    const cs = host ? getComputedStyle(host) : null;
+    return cs ? `${cs.borderTopWidth} ${cs.borderTopStyle}` : null;
+  });
 // 노드 타이틀 잉크 — 다크 셸에서도 노드 내부는 라이트(#16161d) 유지되어야 한다(viewport 제외 재정의)
 const nodeTitleColor = (page) =>
   page.evaluate(() => {
@@ -83,7 +91,9 @@ try {
   await page.getByRole("button", { name: "fit view" }).first().click().catch(() => {});
   await page.waitForTimeout(600);
   check("L5 default charcoal bg", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
-  check("L5 charcoal dot color", (await dotColor(page)) === "rgb(95, 97, 112)", String(await dotColor(page)));
+  // 차콜은 민 무대 — 도트 그리드 미렌더, 모드 링(2px 액센트 보더)이 신호
+  check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
+  check("mode ring on framed viewport", (await frameBorder(page)) === "2px solid", String(await frameBorder(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
   check("chrome stays light in charcoal", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
@@ -100,6 +110,8 @@ try {
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
   check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
+  // Tailwind preflight가 border: 0 solid를 깔아 스타일은 solid로 남는다 — 폭 0이면 링 없음
+  check("no mode ring in light", (await frameBorder(page)) === "0px solid", String(await frameBorder(page)));
   check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");

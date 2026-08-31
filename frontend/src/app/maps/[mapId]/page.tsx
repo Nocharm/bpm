@@ -9123,7 +9123,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 컨테이너 padding으론 불가: absolute inset-0 자식(ScopeWindow)은 패딩 박스에 그대로 겹침
                     className={`${
                       index === 0 && l5Charcoal
-                        ? "absolute inset-2.5 overflow-hidden rounded-md bg-canvas-l5 shadow-md"
+                        ? "absolute inset-2.5 overflow-hidden rounded-md border-2 border-accent/70 bg-canvas-l5 shadow-md"
                         : "relative h-full w-full bg-canvas"
                     }${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
@@ -9460,12 +9460,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                         ))}
                       </ViewportPortal>
                       {/* 편집 가능 시에만 모눈(dot) 배경. 뷰모드는 점 없이 워터마크로 표시(아래) */}
-                      {!readOnly && (
+                      {/* 차콜 L5는 무늬 없는 민 무대 — 도트를 걷고 모드 링(프레임 액센트 테두리)이 신호를 담당 */}
+                      {!readOnly && !(index === 0 && l5Charcoal) && (
                         <Background
                           variant={BackgroundVariant.Dots}
                           gap={20}
                           size={1.8}
-                          color={index === 0 && l5Charcoal ? "var(--color-canvas-l5-dot)" : "var(--color-canvas-dot)"}
+                          color="var(--color-canvas-dot)"
                         />
                       )}
                       {/* Word 맵 1페이지 경계 — 크기 감각용(노드가 이 안이면 산출물 1페이지). ViewportPortal=flow 좌표(팬/줌 정합). */}

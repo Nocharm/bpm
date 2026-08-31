@@ -24,8 +24,7 @@
   --color-surface-chip: #d2d2d7;
   --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
-  --color-canvas-l5: #363843; /* L5 연계 캔버스 기본 배경(차콜) — 파스텔 노드 대비 무대, L5 태그로 라이트 토글 */
-  --color-canvas-l5-dot: #5f6170; /* 차콜 캔버스 dot-grid 점 */
+  --color-canvas-l5: #363843; /* L5 연계 캔버스 배경(차콜 민면, 도트 없음) — 액센트 모드 링과 세트, L5 태그로 라이트 토글 */
 
   /* Ink */
   --color-ink: #16161d;
