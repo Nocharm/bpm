@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-31 — 중첩 펼침 영역 메뉴는 가장 안쪽 맵 기준 (dev)
+- A>B>C로 하위프로세스를 겹쳐 펼친 상태에서 **C 안에서 우클릭해도 B가 대상**이 됐다 — 좌표 히트테스트가 "마지막 매치=바깥"을 돌려줬기 때문. 바깥 영역이 안쪽을 항상 포함하므로 `depth`가 가장 큰 매치를 고르도록 뒤집었다(호버 강조도 같은 함수라 함께 교정).
+- 대상이 헷갈리지 않게 **영역 메뉴 첫 줄에 그 링크맵 이름**을 박았다(`ContextMenuItem`에 `title` 변형 추가 — `caption`은 대문자 변환이라 고유명사에 부적합).
+- **영역 헤더의 맵 이름 클릭 = 즉시 접기 → 그 영역 기준 메뉴 열기**(사용자 요청). 실수로 전체가 닫히는 사고를 없앤다. 이름을 눌러 연 메뉴는 대상이 자명해 헤더를 생략한다. 헤더 버튼들의 클릭/우클릭은 pane으로 새지 않게 `stopPropagation`.
+- 검증: 신규 `pw-verify-nested-region-menu.mjs` 12/12(중첩 2단 펼침·안쪽 우클릭 헤더 이름·접기는 C만·이름 클릭은 미접힘+메뉴·이름 메뉴 접기도 C·열기 이동 대상 /maps/3). 게이트 tsc 0·lint 0·vitest 807·build OK.
+
 ## 2026-08-31 — 오우닝 부서 미지정 필에서 바로 지정 (dev)
 - 홈 상세 카드의 "Dept unassigned" 필(권한 필 오른쪽)을 **오너/시스템 관리자에 한해 버튼으로** 바꿔 클릭 시 부서 지정 모달을 연다 — 경고만 띄우고 조치 경로가 없던 것을 이었다. 좌측 맵 카드의 태그는 목록 밀도상 그대로 둔다(비클릭 span).
 - 피커는 설정 화면 오우닝 지정과 동일 컴포넌트·옵션(`PrincipalPicker` `deptTreeBrowse`), 저장은 기존 `PUT /maps/{id}/owning-department`. 게이트는 `my_role === "owner"` 하나로 충분 — sysadmin은 `effective_role`이 owner로 해석돼 서버 `require_map_role("owner")`와 판정이 일치한다.

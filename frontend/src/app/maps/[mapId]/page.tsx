@@ -458,7 +458,7 @@ function InlineRegionBands({
   baseDepth,
   hoverId,
   frameworks,
-  onCollapse,
+  onTitleMenu,
   onOpenMap,
 }: {
   regions: RegionBox[];
@@ -467,7 +467,8 @@ function InlineRegionBands({
   hoverId: string | null;
   // hostId → 링크맵의 업무체계 소속(지정 링크맵 한정) — 라벨 옆 5단계 전체 경로 + 클릭 시 체계 피크
   frameworks: ReadonlyMap<string, { categoryId: number; path: string; linkedMapId: number }>;
-  onCollapse: (id: string) => void;
+  // 헤더의 맵 이름 클릭 — 바로 접지 않고 그 영역 기준 메뉴를 연다(오조작 방지, 사용자 요청 2026-08-31)
+  onTitleMenu: (event: React.MouseEvent, hostId: string, label: string) => void;
   // 레인 헤더의 "링크맵 열기" — hostId(RegionBox.id)로 링크 대상 맵을 해석해 이동 확인 모달을 띄움 (F6)
   onOpenMap: (hostId: string) => void;
 }) {
@@ -508,12 +509,21 @@ function InlineRegionBands({
               }}
             >
               <div className="pointer-events-auto inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface/85 px-0.5 py-0.5 shadow-sm backdrop-blur-[2px]">
-                {/* 맵 이름 — 호버 시 이름이 액센트+밑줄로 또렷하게(클릭=접기) (F6) */}
+                {/* 맵 이름 — 클릭하면 이 영역 기준 메뉴(이동·접기). 바로 접히면 실수로 다 닫히는 사고가 난다.
+                    캔버스(pane)로 새는 클릭/우클릭은 여기서 끊는다 — 바깥 영역이 대신 처리하지 않도록. */}
                 <button
                   type="button"
+                  data-id={`region-title-${box.id}`}
                   className="group inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-caption transition-colors hover:bg-accent-tint"
-                  title={t("node.collapseChildTitle")}
-                  onClick={() => onCollapse(box.id)}
+                  title={t("region.titleMenu")}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onTitleMenu(event, box.id, box.label);
+                  }}
+                  onContextMenu={(event) => {
+                    event.stopPropagation();
+                    onTitleMenu(event, box.id, box.label);
+                  }}
                 >
                   <span className="font-semibold tracking-tight text-accent">
                     {"›".repeat(baseDepth + box.depth)}
@@ -528,7 +538,10 @@ function InlineRegionBands({
                   data-id="region-open-map"
                   className="rounded-xs p-1 text-accent transition-colors hover:bg-accent-tint"
                   title={t("subprocess.openMap")}
-                  onClick={() => onOpenMap(box.id)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenMap(box.id);
+                  }}
                 >
                   <ExternalLink size={14} strokeWidth={1.5} />
                 </button>
@@ -616,6 +629,10 @@ type MenuState = {
   y: number;
   kind: "pane" | "node" | "edge" | "group" | "selection" | "region";
   targetId: string | null;
+  /** region 메뉴 헤더에 띄울 링크맵 이름 — 중첩 펼침(A>B>C)에서 어느 맵이 대상인지 못 박는다. */
+  regionLabel?: string;
+  /** 영역 헤더(맵 이름)를 눌러 연 메뉴 — 이름을 이미 클릭했으므로 헤더 항목은 생략. */
+  viaTitle?: boolean;
 };
 
 // 링크맵 임베드 캐시 키 — 맵 + (최신 추종 | 핀 버전). null=비하위프로세스. 같은 맵/버전 임베드는 캐시 공유.
@@ -5768,7 +5785,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
-    (event: React.MouseEvent | MouseEvent, kind: MenuState["kind"], targetId: string | null) => {
+    (
+      event: React.MouseEvent | MouseEvent,
+      kind: MenuState["kind"],
+      targetId: string | null,
+      meta?: { regionLabel?: string; viaTitle?: boolean },
+    ) => {
       event.preventDefault();
       // Ctrl은 복사(Ctrl+드래그) modifier — macOS는 Ctrl+클릭=네이티브 우클릭이라 contextmenu가 발화한다.
       // Ctrl이 눌린 채면 메뉴를 열지 않아 Ctrl+드래그 복사와 충돌하지 않게 한다(우클릭/투핑거는 그대로 동작).
@@ -5779,7 +5801,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly && kind !== "node" && kind !== "region") {
         return;
       }
-      setMenu({ x: event.clientX, y: event.clientY, kind, targetId });
+      setMenu({ x: event.clientX, y: event.clientY, kind, targetId, ...meta });
     },
     [readOnly],
   );
@@ -5876,9 +5898,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       submenu: alignSubmenu(ids, count),
     });
 
-    // 펼침 영역(틴트) 우클릭 — 겹침 시 pane 히트테스트가 최상단(바깥) 영역만 넘겨준다 (2026-08-30)
+    // 펼침 영역(틴트) 우클릭 — 겹침(중첩 펼침)이면 히트테스트가 가장 안쪽 영역을 넘겨준다.
+    // 대상이 헷갈리지 않게 메뉴 첫 줄에 그 맵 이름을 박는다(이름 필을 눌러 연 메뉴는 이미 자명해 생략).
     if (menu.kind === "region") {
       return [
+        ...(menu.viaTitle
+          ? []
+          : ([
+              { title: menu.regionLabel || t("node.childBadge"), icon: Network },
+              { divider: true },
+            ] as ContextMenuItem[])),
         {
           label: t("subprocess.openMap"),
           icon: ExternalLink,
@@ -6762,7 +6791,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [inlineComposition, fullGraph, subprocessRefs]);
 
   // 펼침 영역 호버/우클릭 히트테스트 — 틴트 박스는 pointer-events:none(패닝 보존)이라 pane 이벤트의
-  // flow 좌표로 판정한다. 겹침(중첩 펼침)은 마지막 매치 = DOM상 가장 위(바깥) 영역 하나만 반환.
+  // flow 좌표로 판정한다. 중첩 펼침(A>B>C)은 바깥 영역이 안쪽을 항상 포함하므로 **가장 깊은(안쪽)**
+  // 매치를 돌려준다 — 안쪽에서 우클릭했는데 바깥 맵이 이동/접기 대상이 되던 것을 막는다(사용자 신고 2026-08-31).
   const [hoverRegionId, setHoverRegionId] = useState<string | null>(null);
   const findRegionAtClient = (clientX: number, clientY: number): string | null => {
     const regions = inlineCompositionRef.current?.regions;
@@ -6770,18 +6800,19 @@ function MapEditor({ mapId }: { mapId: number }) {
       return null;
     }
     const point = reactFlow.screenToFlowPosition({ x: clientX, y: clientY });
-    let hit: string | null = null;
+    let hit: RegionBox | null = null;
     for (const region of regions) {
       if (
         point.x >= region.x &&
         point.x <= region.x + region.width &&
         point.y >= region.y &&
-        point.y <= region.y + region.height
+        point.y <= region.y + region.height &&
+        (hit === null || region.depth >= hit.depth)
       ) {
-        hit = region.id;
+        hit = region;
       }
     }
-    return hit;
+    return hit?.id ?? null;
   };
 
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
@@ -9128,10 +9159,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setFlow({ anchor: null, reach: 0 }); // 흐름 하이라이트 초기화(재선택 시 잔존 방지, F14)
                       }}
                       onPaneContextMenu={(event) => {
-                        // 펼침 영역(틴트) 위 우클릭 — 겹침이면 최상단(바깥) 영역만. 밖이면 기존 pane 메뉴.
+                        // 펼침 영역(틴트) 위 우클릭 — 겹침이면 가장 안쪽 영역. 밖이면 기존 pane 메뉴.
                         const regionId = findRegionAtClient(event.clientX, event.clientY);
                         if (regionId !== null) {
-                          openMenu(event, "region", regionId);
+                          openMenu(event, "region", regionId, {
+                            regionLabel: inlineCompositionRef.current?.regions.find(
+                              (region) => region.id === regionId,
+                            )?.label,
+                          });
                           return;
                         }
                         openMenu(event, "pane", null);
@@ -9315,7 +9350,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                             baseDepth={currentScopeDepth}
                             hoverId={hoverRegionId}
                             frameworks={regionFrameworks}
-                            onCollapse={toggleInlineExpand}
+                            onTitleMenu={(event, hostId, label) =>
+                              openMenu(event, "region", hostId, { regionLabel: label, viaTitle: true })
+                            }
                             onOpenMap={promptOpenLinkedMap}
                           />
                         )}

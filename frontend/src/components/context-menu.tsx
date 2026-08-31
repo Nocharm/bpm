@@ -12,6 +12,8 @@ export type ContextMenuItem =
   | { divider: true }
   // 섹션 캡션 — 클릭 불가 그룹 라벨(예: 정렬/분배). 엣지 메뉴 "연결 면"과 같은 톤
   | { caption: string }
+  // 메뉴 제목 — 이 메뉴가 어느 대상에 걸린 건지 못 박는 헤더(예: 중첩 펼침 영역의 링크맵 이름). 이름 그대로 표기
+  | { title: string; icon?: LucideIcon }
   // 안내 전용 — 액션 없는 상태 안내(회색·기울임). 예: 읽기전용 임베드 자식
   | { note: string }
   | { colors: string[]; current: string; onPick: (color: string) => void; moreLabel?: string }
@@ -154,6 +156,7 @@ export function ContextMenu({ x, y, items, onClose, wide = false }: ContextMenuP
   return (
     <div
       ref={menuRef}
+      data-id="context-menu"
       className={`fixed z-[1200] ${wide ? WIDE_PANEL_CLASS : PANEL_CLASS}`}
       style={{ left, top }}
     >
@@ -177,6 +180,15 @@ function MenuList({
       {items.map((item, index) =>
         "divider" in item && item.divider ? (
           <hr key={`divider-${index}`} className="my-1 border-t border-divider" />
+        ) : "title" in item ? (
+          // 대상 이름 헤더 — caption과 달리 대소문자를 보존한다(맵 이름은 고유명사)
+          <div
+            key={`title-${index}`}
+            className="flex items-center gap-1.5 px-3 pb-1 pt-0.5 text-caption-strong text-ink"
+          >
+            {item.icon && <item.icon size={14} strokeWidth={1.5} className="shrink-0 text-accent" />}
+            <span className="min-w-0 truncate">{item.title}</span>
+          </div>
         ) : "caption" in item ? (
           <div
             key={`caption-${index}`}
