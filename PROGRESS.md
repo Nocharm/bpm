@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-31 — 오우닝 부서 미지정 필에서 바로 지정 (dev)
+- 홈 상세 카드의 "Dept unassigned" 필(권한 필 오른쪽)을 **오너/시스템 관리자에 한해 버튼으로** 바꿔 클릭 시 부서 지정 모달을 연다 — 경고만 띄우고 조치 경로가 없던 것을 이었다. 좌측 맵 카드의 태그는 목록 밀도상 그대로 둔다(비클릭 span).
+- 피커는 설정 화면 오우닝 지정과 동일 컴포넌트·옵션(`PrincipalPicker` `deptTreeBrowse`), 저장은 기존 `PUT /maps/{id}/owning-department`. 게이트는 `my_role === "owner"` 하나로 충분 — sysadmin은 `effective_role`이 owner로 해석돼 서버 `require_map_role("owner")`와 판정이 일치한다.
+- 검증: 신규 `pw-verify-owning-assign.mjs` 8/8(카드 태그는 span 유지·상세 필은 button·모달·서버 저장·필 전환). 게이트 tsc 0·lint 0·vitest 807·build OK.
+
 ## 2026-08-31 — 미리보기 팬·링크 행 포커스·피커 드릴인 (dev)
 - **미리보기 줌은 스크롤바 대신 드래그(그랩)** — 좁은 피크 안에서 스크롤바는 조준이 어렵고 클릭도 안 먹었다. `overflow:hidden` 상태에서도 동작하는 scrollLeft/Top을 포인터 드래그로 움직인다(캡처 기반, 절대 좌표 환산이라 드리프트 없음).
 - **목업 호버 방향 반전**(사용자 지적) — 기본=현재 맵 표시 기준, 호버=전체 파라미터. 호버로 *줄어들면* 커서가 목업 밖으로 나가 unhover→확대→재hover 점프 루프가 생긴다. 항상 아래로 자라는 방향이면 커서가 계속 안쪽이라 루프가 사라진다.

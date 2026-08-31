@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   Building2,
@@ -36,6 +37,7 @@ import {
   getMap,
   listGroups,
   listMapPermissions,
+  setOwningDepartment,
   withdrawApprovalRequest,
   type DirectoryDept,
   type DirectoryUser,
@@ -52,6 +54,7 @@ import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
 import { Tooltip } from "@/components/tooltip";
@@ -60,6 +63,7 @@ import { PersonInfoPopup } from "@/components/person-hover-card";
 import { AddCollaborator } from "@/components/permissions/add-collaborator";
 import { HoverSwapPill } from "@/components/permissions/hover-swap-pill";
 import { PendingChangePill } from "@/components/permissions/pending-change-pill";
+import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { RoleBadge } from "@/components/permissions/role-badge";
 import { UndoLastApplyModal } from "@/components/permissions/undo-last-apply-modal";
 import { useI18n } from "@/lib/i18n";
@@ -67,6 +71,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 import {
   buildKoreanDeptByPath,
   buildOrgPathChain,
+  deriveDeptKoreanKeywords,
   formatDeptName,
   formatTitleWithPosition,
 } from "@/lib/korean-dept";
@@ -227,6 +232,10 @@ export function MapDetailCard({
   const [dirUsersRaw, setDirUsersRaw] = useState<DirectoryUser[]>([]);
   const [dirDeptsRaw, setDirDeptsRaw] = useState<DirectoryDept[]>([]);
   const [groupsRaw, setGroupsRaw] = useState<Group[]>([]);
+  // 오우닝 부서 미지정 필 → 지정 모달 (오너/시스템 관리자만 — 서버 가드 require_map_role("owner")와 동일.
+  // sysadmin은 effective_role이 'owner'로 해석되므로 isOwner 하나로 두 경우가 덮인다) (사용자 요청 2026-08-31)
+  const [owningPickerOpen, setOwningPickerOpen] = useState(false);
+  const [owningError, setOwningError] = useState<string | null>(null);
   // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
   const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
   const [savingStaged, setSavingStaged] = useState(false);
@@ -826,6 +835,21 @@ export function MapDetailCard({
               <Building2 size={12} strokeWidth={1.5} />
               {formatDeptName(detail.owning_department, lang, koreanDeptByPath)}
             </span>
+          ) : isOwner ? (
+            // 오너/시스템 관리자는 여기서 바로 지정 — 미지정 경고만 띄우고 조치 경로가 없던 것을 잇는다
+            <button
+              type="button"
+              data-id="map-detail-owning-missing"
+              title={t("perm.owningDept.assignHint")}
+              onClick={() => {
+                setOwningError(null);
+                setOwningPickerOpen(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error hover:bg-error/20"
+            >
+              <TriangleAlert size={12} strokeWidth={1.5} />
+              {t("home.owningMissingBadge")}
+            </button>
           ) : (
             <span
               data-id="map-detail-owning-missing"
@@ -928,6 +952,68 @@ export function MapDetailCard({
       )}
 
       <MapNotesSection mapId={detail.id} />
+
+      {owningPickerOpen &&
+        createPortal(
+        <ModalBackdrop
+          onClose={() => setOwningPickerOpen(false)}
+          className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+        >
+          <div
+            data-id="owning-dept-modal"
+            className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+                <Building2 size={18} strokeWidth={1.5} />
+              </div>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <h2 className="text-body-strong text-ink">{t("perm.owningDept.title")}</h2>
+                <p className="text-fine text-ink-tertiary">{t("perm.owningDept.assignHint")}</p>
+              </div>
+            </div>
+            {/* 부서 전용 피커 — 설정 화면 오우닝 지정과 동일 컴포넌트/옵션(조직도 트리 브라우즈) */}
+            <PrincipalPicker
+              users={[]}
+              departments={dirDeptsRaw.map((d) => ({
+                id: d.id,
+                code: "",
+                name: d.name,
+                orgLevels: [],
+                parentId: null,
+                rawDn: "",
+                korean_name: d.korean_name,
+              }))}
+              groups={[]}
+              excludeIds={new Set<string>()}
+              deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsersRaw)}
+              deptTreeBrowse
+              onSelect={(opt: PrincipalOption) => {
+                void setOwningDepartment(detail.id, opt.principalId)
+                  .then(() => {
+                    setOwningPickerOpen(false);
+                    setLocalReloadKey((n) => n + 1);
+                    onFrameworkChanged?.(); // 홈 목록/트리도 새 오우닝을 반영해야 한다
+                  })
+                  .catch((err) => setOwningError(humanizeApiError(err, t)));
+              }}
+            />
+            {owningError && <p className="text-caption text-error">{owningError}</p>}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                data-id="owning-dept-cancel"
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={() => setOwningPickerOpen(false)}
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </ModalBackdrop>,
+        document.body,
+      )}
 
       {frameworkModalOpen && (
         <FrameworkAssignModal
