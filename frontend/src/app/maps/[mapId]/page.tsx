@@ -8569,8 +8569,9 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
-      <div className="flex h-full flex-col">
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}.bpm-l5-dark .react-flow__viewport{--color-surface:#ffffff;--color-surface-alt:#f5f5f7;--color-surface-pearl:#fafafc;--color-surface-chip:#d2d2d7;--color-ink:#16161d;--color-ink-secondary:#333333;--color-ink-tertiary:#7a7a7a;--color-ink-muted:#a0a0a8;--color-divider:#f0f0f0;--color-hairline:#e6e6ea;--color-accent-tint:#efebff;--color-accent-tint-border:#d7ccff}`}</style>
+      {/* bpm-l5-dark — 차콜 캔버스일 때 에디터 크롬 전체 토큰 플립(globals.css). 글로벌 네비는 이 루트 밖이라 라이트 유지 */}
+      <div className={`flex h-full flex-col${l5Charcoal ? " bpm-l5-dark" : ""}`}>
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
         <button
@@ -9502,9 +9503,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         <span
                           className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
-                            // 차콜 캔버스에선 accent/회색이 묻힘 — 흰색으로 동일한 은은함 유지
+                            // 차콜 캔버스에선 accent/회색이 묻힘 — 밝은색으로 동일한 은은함 유지.
+                            // text-canvas(#f6f6f8) — 다크 셸이 --color-surface를 뒤집어도 라이트로 남는 토큰
                             index === 0 && l5Charcoal
-                              ? "text-surface"
+                              ? "text-canvas"
                               : currentVersion?.status === "expired"
                                 ? "text-ink-tertiary"
                                 : "text-accent"

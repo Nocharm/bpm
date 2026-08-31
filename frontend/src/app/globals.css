@@ -110,6 +110,28 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* L5 다크 셸 — 차콜 캔버스일 때 에디터 크롬(헤더·툴바·패널)을 서브트리 토큰 플립으로 동조
+   (라이트 전용 원칙의 L5 연계 캔버스 한정 예외, design.md §7). 에디터 루트에 부착되며
+   body 포털(모달·드롭다운·토스트)은 라이트 유지 — 다크 무대 위 라이트 팝업(스포트라이트).
+   --color-canvas(-dot)는 유지 — 펼친 하위 스코프 창(일반 맵 임베드)은 라이트 캔버스 그대로. */
+.bpm-l5-dark {
+  --color-surface: #2b2c35;
+  --color-surface-alt: #34353f;
+  --color-surface-pearl: #30313b;
+  --color-surface-chip: #4a4b58;
+  --color-ink: #f2f2f6;
+  --color-ink-secondary: #d6d6de;
+  --color-ink-tertiary: #a2a3b0;
+  --color-ink-muted: #7c7d8a;
+  --color-divider: #3d3e49;
+  --color-hairline: #43444f;
+  --color-accent-tint: #38305c;
+  --color-accent-tint-border: #55499b;
+}
+/* 캔버스 콘텐츠(노드·엣지 라벨 = .react-flow__viewport 서브트리)의 라이트 복원은 page.tsx의
+   raw <style> 주입에 있다 — 런타임 클래스(.react-flow__*) 대상 규칙은 Turbopack이 여기서 purge함
+   (page.tsx bpm-expand-anim 주석과 동일 함정). 값은 @theme 원본과 동기 필수. */
+
 /* 스크롤바 기본 숨김 — 스크롤은 동작하되 막대만 비표시(채팅 등 컴팩트 영역). */
 .scrollbar-hidden {
   scrollbar-width: none; /* Firefox */

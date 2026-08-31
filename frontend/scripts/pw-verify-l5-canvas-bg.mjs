@@ -34,6 +34,19 @@ const dotColor = (page) =>
     const dot = document.querySelector(".react-flow__background circle, .react-flow__background pattern circle");
     return dot ? getComputedStyle(dot).fill : null;
   });
+// 다크 셸 — 에디터 헤더(브레드크럼 바)의 computed 배경으로 크롬 동조 판정
+const chromeBg = (page) =>
+  page.evaluate(() => {
+    const header = document.querySelector('div[class*="flex h-full flex-col"] > header');
+    return header ? getComputedStyle(header).backgroundColor : null;
+  });
+const hasDarkShell = (page) => page.evaluate(() => document.querySelector(".bpm-l5-dark") !== null);
+// 노드 타이틀 잉크 — 다크 셸에서도 노드 내부는 라이트(#16161d) 유지되어야 한다(viewport 제외 재정의)
+const nodeTitleColor = (page) =>
+  page.evaluate(() => {
+    const title = document.querySelector('.react-flow__node [class*="font-medium"]');
+    return title ? getComputedStyle(title).color : null;
+  });
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -67,6 +80,9 @@ try {
   check("L5 charcoal dot color", (await dotColor(page)) === "rgb(95, 97, 112)", String(await dotColor(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
+  check("dark shell class on editor root", await hasDarkShell(page));
+  check("chrome header darkened", (await chromeBg(page)) === "rgb(43, 44, 53)", String(await chromeBg(page)));
+  check("node title ink stays light-mode", (await nodeTitleColor(page)) === "rgb(22, 22, 29)", String(await nodeTitleColor(page)));
   await shot(page, "l5-charcoal-default");
 
   // ── 2) 태그 클릭 → 라이트 전환 ───────────────────────────────────────────
@@ -75,6 +91,8 @@ try {
   check("toggle to light bg", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
+  check("dark shell removed on light", !(await hasDarkShell(page)));
+  check("chrome header back to light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");
 
   // ── 3) 새로고침 — 라이트 영속 ────────────────────────────────────────────
@@ -98,6 +116,7 @@ try {
   await page.waitForTimeout(400);
   check("plain map stays light", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
   check("plain map has no L5 tag", (await page.locator('[data-id="framework-l5-tag"]').count()) === 0);
+  check("plain map has no dark shell", !(await hasDarkShell(page)));
   await shot(page, "plain-map-light");
 
   check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
