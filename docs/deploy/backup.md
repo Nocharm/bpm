@@ -2,6 +2,8 @@
 
 운영 서버(사내 71번) Postgres의 자동 백업 정책과 복구 절차. 백업 주체는 compose의 `db-backup` 사이드카(`scripts/db-backup.sh`, `postgres:16-alpine` — db와 동일 이미지).
 
+> 스택당 1회 준비(`BACKUP_DIR`·`BACKUP_RETENTION_DAYS` 결정, `.env` 사본 별도 보관)는 [`setup-once.md`](setup-once.md) A5·A6. 이 문서는 정책과 **복구 절차**를 다룬다.
+
 ## 1. 백업 정책
 
 | 항목 | 값 |

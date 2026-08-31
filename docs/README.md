@@ -6,7 +6,8 @@
 - [`spec.md`](spec.md) — 기능 명세(데이터 모델·UX·구현 순서). **살아있는 명세**.
 
 ## 배포 · DB ([`deploy/`](deploy/))
-- [`deploy/deploy.md`](deploy/deploy.md) — 서버 docker-compose 배포 절차(포트 3333·nginx 토폴로지·Keycloak·AD 동기화).
+- [`deploy/setup-once.md`](deploy/setup-once.md) — **초기 1회 셋업 모음**(스택 구축 1회 A절 · 릴리스 이후 1회 B절). 다른 배포 문서가 여기를 참조한다.
+- [`deploy/deploy.md`](deploy/deploy.md) — 서버 docker-compose 배포 절차(매 배포 반복분 — 포트·nginx 토폴로지·인증 모드·헬스체크·트러블슈팅·롤백).
 - [`deploy/backup.md`](deploy/backup.md) — DB 자동 백업 정책(db-backup 사이드카, 일간 04:00 KST·14일 보존)·복구 런북.
 - [`deploy/db-seed.md`](deploy/db-seed.md) — DB 초기화·데모 시드(`python -m scripts.reset_db`).
 - [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 검증 스택(9910) 마이그레이션 절차.

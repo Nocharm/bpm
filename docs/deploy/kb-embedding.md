@@ -36,6 +36,8 @@ curl -s http://<임베딩서버>/v1/embeddings -H "Content-Type: application/jso
 
 ## 3. 기존 게시본 백필 (1회)
 
+> `EMBED_URL`을 처음 설정한 뒤 딱 한 번 하는 작업이다 — 1회성 목록은 [`setup-once.md`](setup-once.md) B2에도 실려 있다.
+
 publish 훅 도입 이전의 게시본은 수동 백필한다 — 서버 backend 컨테이너에서:
 
 ```bash

@@ -107,8 +107,9 @@ docker-compose.yml
 | **앱 nginx는 443/80 미점유** | 서버 엣지 nginx가 이미 443/80 사용 | compose nginx는 **3333** 노출. 우선 포트 직접 접속, 도메인 라우팅은 추후 엣지 nginx에 추가 |
 | **서버는 평문 HTTP(원격 IP)** | 브라우저 secure context 아님(HTTPS·localhost만) → `crypto.subtle`/`crypto.randomUUID` 등 Web Crypto 미동작 | id는 `frontend/src/lib/id.ts`의 `genId()` 사용(`crypto.randomUUID` 금지), Keycloak 로그인은 PKCE 비활성(`disablePKCE`). **localhost는 secure context라 재현 안 됨 — 서버/원격 IP로 검증** |
 | **로컬↔서버 실행 경로 이원화** | 로컬=네이티브, 서버=Docker | 같은 코드가 양쪽에서 돌도록 환경 의존 값은 하드코딩 금지, 전부 `.env` 경유 |
+| **배포 런타임이 로컬보다 낮음** | 이미지는 `python:3.11-slim` · `node:20-alpine`(사내 서버에서 node:22 풀 실패) — 로컬은 3.12+/24 | 상위 문법을 쓰면 **로컬 게이트는 전부 green인데 컨테이너에서 import SyntaxError로 기동 불능**(2026-08-31 PEP 695 실사고). `backend/ruff.toml`의 `target-version = "py311"`이 가드 — Dockerfile 베이스 상향 시 같이 올린다. 확실한 검증은 3.11 venv로 `import app.main` |
 
-**검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다.
+**검증 단계:** 로컬 네이티브 실행으로 기능 확인 → 서버 docker-compose로 배포 확인. 로컬에서 통과해도 컨테이너 네트워크/포트/줄바꿈/**런타임 버전** 차이로 서버에서 깨질 수 있으니 양쪽 모두 검증한다. 배포 절차는 `docs/deploy/deploy.md`, 최초 1회 셋업은 `docs/deploy/setup-once.md`.
 
 ---
 

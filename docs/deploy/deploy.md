@@ -1,39 +1,23 @@
 # 서버 배포 런북 (docker-compose)
 
-로컬에서 검증한 코드를 서버(사내 71번)로 옮겨 docker-compose로 올리는 절차. 파이프라인 전체는 `CLAUDE.md` Operations 참고. Keycloak 로그인·사내 AD(LDAP) 동기화 설정도 이 문서에 통합돼 있다.
+로컬에서 검증한 코드를 서버(사내 71번)로 옮겨 docker-compose로 올리는 절차. 파이프라인 전체는 `CLAUDE.md` Operations 참고.
+
+> **최초 1회 셋업은 [`setup-once.md`](setup-once.md)로 분리했다** — Keycloak 클라이언트 등록, AD/LDAP 인프라, n8n 웹훅, 시크릿 발급, 서브넷 분리, 릴리스별 1회 보정까지. 이 문서는 **매 배포마다 반복하는 절차**를 다룬다.
 
 ## 0. 전제조건
 
-- 서버에 Docker / Docker Compose v2 설치
+- 서버에 Docker / Docker Compose v2 설치 → [`setup-once.md`](setup-once.md) A1
 - 코드 전송 완료(scp 또는 gitlab pull) — 줄바꿈은 `.gitattributes`로 LF 고정되어 Windows 경유해도 안전
-- Keycloak public 클라이언트 등록(§1), 인증/AD 인프라 확인(§1)
+- Keycloak public 클라이언트 등록 + 인증/AD 인프라 확인 → 아래 §1
 
 ## 1. Keycloak 클라이언트 + AD 사전 준비 (최초 1회)
 
-realm `ai-portal`에 frontend용 **public(PKCE)** 클라이언트 생성:
+**→ [`setup-once.md`](setup-once.md) A2(Keycloak public 클라이언트·redirect URI·Web origins·post logout URI·`preferred_username` 매퍼) · A3(AD/LDAP 서비스 계정·검색 DN·초기 관리자)로 이전했다.**
 
-| 항목 | 값 |
-|------|-----|
-| Client ID | `bpm-frontend` (= `KEYCLOAK_CLIENT_ID`) |
-| Client authentication | **Off** (public) |
-| Standard flow | On (Authorization Code + PKCE) |
-| Valid redirect URIs | `http://<서버호스트>:3333/*` (도메인 추가 시 `https://g-ai-agent.sbiologics.com/*`도) |
-| Valid post logout redirect URIs | 위와 동일 |
-| Web origins | `http://<서버호스트>:3333` (+ 도메인). **token 교환 CORS는 redirect URI가 아니라 Web origins가 푼다** |
+여기서 기억할 두 가지만 다시 적어둔다 — 배포 때 실제로 밟는 지뢰다:
 
-- redirect_uri는 앱 origin이다 — 포트 직접 접속 단계는 `:3333`, 엣지 nginx에 도메인 붙이면 그 도메인도 추가.
-- **post logout redirect URI는 실제 사용된다** — 로그아웃 직후 `/login`의 "Sign out of all sessions" 패널이 Keycloak `end_session`(`post_logout_redirect_uri=<origin>/login`)을 호출한다. 미등록이면 Keycloak이 에러/확인 화면에 멈춘다.
-- **Mappers**: 토큰 `preferred_username`이 AD `sAMAccountName`(= loginId)을 담아야 한다(백엔드가 이 값으로 employees 매칭). Keycloak LDAP federation 기본 매핑이면 OK.
-
-**AD 인프라 (인프라 담당과 확인)** — Keycloak federation(로그인·토큰 발급용)과 백엔드 LDAP 동기화(employees 채우기용 독립 bind 계정)는 **별개**다. 둘 다 같은 AD를 보지만 접속 경로가 다르다.
-
-| 항목 | 내용 |
-|------|------|
-| Keycloak realm | 기존 `ai-portal` — AD LDAP user federation 구성됨 |
-| LDAP 서비스 계정 | AD 읽기 권한 bind 계정(DN + 비밀번호) — 동기화 전용, 읽기 전용 최소 권한 |
-| LDAP 접속 | 주소/포트, LDAPS(636) 권장. StartTLS면 `LDAP_START_TLS=true` |
-| 검색 기준 DN | 사용자 enumerate 기준 OU/DN (`LDAP_USER_SEARCH_BASE`) |
-| 초기 관리자 | admin 권한 줄 loginId 목록 (`SYSTEM_ADMIN_LOGIN_IDS`) — 최소 1명 |
+- **URI 등록은 realm당 1회가 아니라 포트·도메인마다 1회다.** `redirect_uri`를 코드가 `window.location.origin`으로 만들기 때문에 `:3333`·`:9900`·`:9910`이 전부 다른 origin이다. 새 포트로 스택을 열었는데 로그인이 안 되면 여기부터 본다.
+- **Web origins는 redirect URI와 별개 항목이다.** 빼먹으면 로그인 왕복은 되는데 토큰 교환이 CORS로 죽는다(`failed to fetch` / `No matching state found`).
 
 ## 2. `.env` 작성
 
@@ -122,14 +106,10 @@ docker compose up -d --build
 - `AUTH_MODE`/`AUTH_ENABLED`/`KEYCLOAK_*`/`AUTH_JWT_SECRET`는 backend **런타임** 환경변수(§2.1) → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영. frontend는 부팅 시 backend에 조회하므로 재빌드 불필요.
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
 - `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
-- DB 스키마는 backend 起動 시 `create_all`로 생성(마이그레이션은 후속). 신규 테이블은 자동 생성되지만 **제거된 테이블은 드롭되지 않는다** — 아래 업그레이드 노트.
-- **업그레이드 노트(2026-07-09, AI 챗 서버 저장 머지)**: 기존 배포 DB에는 더 이상 코드가 쓰지 않는 `ai_chat_logs` 테이블이 남는다. 배포 후 1회 정리:
-
-  ```bash
-  docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} -c 'DROP TABLE IF EXISTS ai_chat_logs;'
-  ```
+- DB 스키마는 backend 기동 시 `create_all` + `_add_missing_columns`로 보강(마이그레이션은 후속). 신규 테이블·컬럼은 자동 생성되지만 **제거된 테이블은 드롭되지 않는다.**
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
-- **데모 데이터 시드**(선택, 미런칭 빈 DB일 때): 시드 스크립트는 backend 이미지에 포함돼 있다 → `docker compose exec backend python -m scripts.reset_db`. ⚠️ `reset_db`는 `drop_all`로 전체 삭제 후 재시드 — 데이터가 있으면 날아간다. 상세·부분 시드는 `db-seed.md`.
+- **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
+- **데모 데이터 시드**는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `reset_db`는 `drop_all`이라 **운영에서 실행 금지**.
 
 ## 4. 헬스체크 + 인증/AD 검증
 
@@ -146,9 +126,21 @@ docker compose exec backend python -c "from app.settings import settings; print(
 
 ## 5. 트러블슈팅
 
+**로그인이 안 되면 인증 설정보다 backend 생존을 먼저 본다.** 프론트의 인증 모드 조회(`GET /api/auth/mode`)는 fail-closed라, backend가 죽어 무응답이면 에러를 띄우지 않고 **빈 issuer/client_id의 Keycloak 카드**를 그린다 — 화면은 멀쩡한데 버튼만 죽은 것처럼 보인다. 순서대로:
+
+```bash
+docker compose ps                                  # backend가 restarting/exited인가
+docker compose logs --tail 120 backend             # 기동 실패 사유
+curl -s http://localhost:3333/api/auth/mode; echo  # issuer·clientId가 채워져 있는가
+```
+
 | 증상 | 확인 |
 |------|------|
-| 로그인 후 redirect 오류 | Keycloak Valid redirect URIs에 `:3333/*` 등록됐는지 |
+| **로그인 버튼 무반응 + `/api/auth/mode` 무응답** | backend 기동 실패. 아래 두 행을 먼저 볼 것 |
+| backend 로그에 `SyntaxError`(import 단계) | **로컬 파이썬이 배포 런타임보다 높다.** 배포 이미지는 `python:3.11-slim` — 로컬 3.12+에서 짠 상위 문법(PEP 695 제네릭 `def f[T]()` 등)은 서버에서만 죽는다. `backend/ruff.toml`의 `target-version = "py311"`이 린트에서 잡는다(2026-08-31 실사고) |
+| backend 로그에 `AUTH_MODE=ldap requires AUTH_JWT_SECRET` | `.env`에 서명키 누락 — `openssl rand -hex 32` |
+| `/api/auth/mode`의 `keycloakClientId`가 빈 문자열 | `.env`에 `KEYCLOAK_CLIENT_ID` 누락. compose 기본값이 빈 문자열이라 **에러 없이 조용히** 빈 값이 들어간다 → Keycloak `Invalid parameter: client_id` |
+| 로그인 후 redirect 오류 | Keycloak Valid redirect URIs에 접속 포트(`:3333/*` 등) 등록됐는지 |
 | `/api/*` 401 | 토큰 만료 / `KEYCLOAK_ISSUER`가 realm URL(`/realms/ai-portal`까지)과 일치하는지 |
 | frontend가 인증 안 함 | backend `GET /api/auth/mode` 응답 확인(`curl http://localhost:3333/api/auth/mode`) — `AUTH_MODE`/`AUTH_ENABLED`가 의도대로 설정됐는지, backend가 재기동됐는지 |
 | db 연결 실패 | `docker compose logs db`, healthcheck 통과 여부 |
