@@ -236,6 +236,9 @@ export function MapDetailCard({
   // sysadmin은 effective_role이 'owner'로 해석되므로 isOwner 하나로 두 경우가 덮인다) (사용자 요청 2026-08-31)
   const [owningPickerOpen, setOwningPickerOpen] = useState(false);
   const [owningError, setOwningError] = useState<string | null>(null);
+  // 클릭은 선택까지만 — 확정은 Confirm 버튼(선택 전엔 비활성). 오지정 즉시 저장을 막는다 (사용자 요청 2026-08-31)
+  const [owningChoice, setOwningChoice] = useState<PrincipalOption | null>(null);
+  const [owningSaving, setOwningSaving] = useState(false);
   // 편집 스택 — 화면에 쌓인 add/remove, Save 전까지 서버에 반영되지 않는다(R2 QA 피드백, 협업자 패널과 대칭).
   const [stagedOps, setStagedOps] = useState<StagedOp[]>([]);
   const [savingStaged, setSavingStaged] = useState(false);
@@ -430,6 +433,31 @@ export function MapDetailCard({
 
   // 오너 행 — 오우닝 부서 블록 바로 아래 별도 섹션으로 노출(R2 QA 피드백). user 그룹 루프에서는 제외된다.
   const ownerRows = members?.filter((m) => m.principal_type === "user" && m.role === "owner") ?? [];
+
+  // 오우닝 지정 모달 — 닫을 때 스테이징된 선택도 버린다(다음 개방은 항상 빈 상태에서 시작)
+  const closeOwningPicker = () => {
+    setOwningPickerOpen(false);
+    setOwningChoice(null);
+    setOwningError(null);
+  };
+
+  // Confirm에서만 실제 저장 — 홈 목록/트리도 새 오우닝을 반영해야 해 상위에 알린다.
+  // 화살표 const — 함수 선언은 호이스팅돼 위 `if (!detail)` 가드의 narrowing이 유지되지 않는다.
+  const handleOwningConfirm = async () => {
+    if (!owningChoice || owningSaving) return;
+    setOwningSaving(true);
+    setOwningError(null);
+    try {
+      await setOwningDepartment(detail.id, owningChoice.principalId);
+      closeOwningPicker();
+      setLocalReloadKey((n) => n + 1);
+      onFrameworkChanged?.();
+    } catch (err) {
+      setOwningError(humanizeApiError(err, t));
+    } finally {
+      setOwningSaving(false);
+    }
+  };
 
   // 되돌리기 모달의 이름 해석 — 스택 추가행(위 stagedAdds 렌더)과 동일 소스(nameById/groupNameById/formatDeptName).
   function resolveUndoName(type: PrincipalType, id: string): string {
@@ -843,6 +871,7 @@ export function MapDetailCard({
               title={t("perm.owningDept.assignHint")}
               onClick={() => {
                 setOwningError(null);
+                setOwningChoice(null);
                 setOwningPickerOpen(true);
               }}
               className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error hover:bg-error/20"
@@ -956,8 +985,10 @@ export function MapDetailCard({
       {owningPickerOpen &&
         createPortal(
         <ModalBackdrop
-          onClose={() => setOwningPickerOpen(false)}
-          className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+          onClose={closeOwningPicker}
+          // z=1200 — 피커 드롭다운(포털 z=1250)이 이 모달 **위**에 떠야 목록이 보인다.
+          // 1300이면 목록이 backdrop 뒤로 깔려 아무것도 안 뜬 것처럼 보인다(피커 주석의 계약).
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
         >
           <div
             data-id="owning-dept-modal"
@@ -973,41 +1004,76 @@ export function MapDetailCard({
                 <p className="text-fine text-ink-tertiary">{t("perm.owningDept.assignHint")}</p>
               </div>
             </div>
-            {/* 부서 전용 피커 — 설정 화면 오우닝 지정과 동일 컴포넌트/옵션(조직도 트리 브라우즈) */}
-            <PrincipalPicker
-              users={[]}
-              departments={dirDeptsRaw.map((d) => ({
-                id: d.id,
-                code: "",
-                name: d.name,
-                orgLevels: [],
-                parentId: null,
-                rawDn: "",
-                korean_name: d.korean_name,
-              }))}
-              groups={[]}
-              excludeIds={new Set<string>()}
-              deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsersRaw)}
-              deptTreeBrowse
-              onSelect={(opt: PrincipalOption) => {
-                void setOwningDepartment(detail.id, opt.principalId)
-                  .then(() => {
-                    setOwningPickerOpen(false);
-                    setLocalReloadKey((n) => n + 1);
-                    onFrameworkChanged?.(); // 홈 목록/트리도 새 오우닝을 반영해야 한다
-                  })
-                  .catch((err) => setOwningError(humanizeApiError(err, t)));
-              }}
-            />
+            {/* 부서 전용 피커 — 설정 화면 오우닝 지정과 동일 컴포넌트/옵션(조직도 트리 브라우즈).
+                선택 후엔 새 맵 모달과 같이 선택 행으로 교체 — 드롭다운이 Confirm을 덮지 않는다. */}
+            {owningChoice === null ? (
+              <PrincipalPicker
+                users={[]}
+                departments={dirDeptsRaw.map((d) => ({
+                  id: d.id,
+                  code: "",
+                  name: d.name,
+                  orgLevels: [],
+                  parentId: null,
+                  rawDn: "",
+                  korean_name: d.korean_name,
+                }))}
+                groups={[]}
+                excludeIds={new Set<string>()}
+                deptKoreanKeywords={deriveDeptKoreanKeywords(dirUsersRaw)}
+                deptTreeBrowse
+                onSelect={(opt: PrincipalOption) => {
+                  setOwningError(null);
+                  setOwningChoice(opt);
+                }}
+              />
+            ) : (
+              <div
+                data-id="owning-dept-selected"
+                className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-2 py-1.5 text-caption text-ink"
+              >
+                <DeptLevelIcon
+                  leaf={deptLeaf(owningChoice.principalId)}
+                  className="shrink-0 text-ink-tertiary"
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {lang === "ko"
+                    ? owningChoice.koreanName || owningChoice.displayName
+                    : owningChoice.displayName}
+                  <span className="ml-1.5 text-fine text-ink-tertiary">{owningChoice.principalId}</span>
+                </span>
+                <button
+                  type="button"
+                  data-id="owning-dept-clear"
+                  aria-label={t("perm.removeButton")}
+                  className="shrink-0 text-ink-tertiary hover:text-ink disabled:opacity-40"
+                  disabled={owningSaving}
+                  onClick={() => setOwningChoice(null)}
+                >
+                  <X size={16} strokeWidth={1.5} />
+                </button>
+              </div>
+            )}
             {owningError && <p className="text-caption text-error">{owningError}</p>}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
                 data-id="owning-dept-cancel"
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                onClick={() => setOwningPickerOpen(false)}
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                disabled={owningSaving}
+                onClick={closeOwningPicker}
               >
                 {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                data-id="owning-dept-confirm"
+                className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={owningChoice === null || owningSaving}
+                onClick={() => void handleOwningConfirm()}
+              >
+                {owningSaving && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
+                {t("common.confirm")}
               </button>
             </div>
           </div>
