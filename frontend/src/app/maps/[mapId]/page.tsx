@@ -9045,6 +9045,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <FrameworkL5Explorer
                       currentCategoryId={linkageCategoryId}
                       currentName={scope.title}
+                      inset={l5Charcoal}
                       onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
                       onError={(message) => showToast(message, "error")}
                     />
@@ -9068,8 +9069,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                         data-id="framework-l5-tag"
                         title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
                         onClick={toggleL5CanvasBg}
-                        className={`absolute right-2 top-2 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
-                          l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
+                        className={`absolute z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                          // 차콜 프레임에선 안쪽(20px)으로 — 라운드 코너를 칩이 덮지 않게
+                          l5Charcoal
+                            ? "right-5 top-5 bg-surface/85 hover:bg-surface"
+                            : "right-2 top-2 bg-surface/40 hover:bg-surface/70"
                         }`}
                       >
                         <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -9084,7 +9088,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       {reconcileMissing > 0 && (
                         <span
                           data-id="framework-missing-chip"
-                          className="absolute right-2 top-10 z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm"
+                          className={`absolute z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm ${
+                            l5Charcoal ? "right-5 top-[52px]" : "right-2 top-10"
+                          }`}
                         >
                           {t("framework.missing", { n: reconcileMissing })}
                         </span>

@@ -17,19 +17,22 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
-// bg-surface/85 — 차콜 캔버스(기본) 위에서 /40 반투명은 탁하게 묻힘, 라이트에서도 무해한 불투명도
+// bg-surface/85 — 차콜 캔버스(기본) 위에서 /40 반투명은 탁하게 묻힘, 라이트에서도 무해한 불투명도.
+// 위치(left/top)는 inset prop이 결정 — 차콜 프레임의 라운드 코너를 가리지 않게 안쪽 배치
 const CHIP_BASE =
-  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/85 shadow-sm backdrop-blur-sm";
+  "absolute z-10 rounded-sm border border-hairline bg-surface/85 shadow-sm backdrop-blur-sm";
 
 export interface FrameworkL5ExplorerProps {
   currentCategoryId: number | null; // 이 캔버스가 결착된 L5 — null이면 렌더 안 함(방어)
   currentName: string; // 결착 카테고리명 로드 전 접힘 라벨 폴백(캔버스 맵 이름)
+  // true면 차콜 프레임 뷰포트 안쪽(20px)으로 — 라운드 코너를 칩이 덮지 않게 (라이트 풀블리드는 8px)
+  inset?: boolean;
   onNavigate: (targetMapId: number, name: string) => void;
   onError: (message: string) => void;
 }
 
 export function FrameworkL5Explorer({
-  currentCategoryId, currentName, onNavigate, onError,
+  currentCategoryId, currentName, inset = false, onNavigate, onError,
 }: FrameworkL5ExplorerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -165,7 +168,10 @@ export function FrameworkL5Explorer({
   const roots = childrenByParent.get(null) ?? [];
 
   return (
-    <div data-id="framework-l5-explorer" className={`${CHIP_BASE} w-max max-w-[260px] select-none`}>
+    <div
+      data-id="framework-l5-explorer"
+      className={`${inset ? "left-5 top-5" : "left-2 top-2"} ${CHIP_BASE} w-max max-w-[260px] select-none`}
+    >
       <button
         type="button"
         data-id="l5-explorer-toggle"

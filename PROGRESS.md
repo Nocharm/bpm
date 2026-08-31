@@ -8,7 +8,8 @@
 - **우상단 "L5 map" 태그 = 배경 토글 버튼**(Moon/Sun 상태 표시, readOnly 허용) — 신호와 스위치를 한자리에. 선택은 사용자 전역 `bpm.l5CanvasBg`로 영속(영속은 핸들러에서 — StrictMode persist-effect 함정 회피). 차콜은 루트 캔버스만: 하위 스코프 창·일반 맵·PNG export 무영향, 비활성 루트 프리뷰(ScopePreview `charcoal`)와 읽기전용 워터마크(흰색 전환)도 동조. L5 탐색기 헤더 칩은 `bg-surface/85`로 불투명도 상향(다크 위 탁함 해소).
 - 검증: 신규 `pw-verify-l5-canvas-bg.mjs` 12/12(기본 차콜·도트색·Moon/Sun·토글·양방향 새로고침 영속·일반 맵 무영향·콘솔 0). 게이트 tsc 0·lint 0·vitest 807·build OK.
 - **다크 셸 시도 → 프레임 무대화로 확정**: 차콜 캔버스+흰 크롬이 "깨진 다크모드"처럼 어색 → `.bpm-l5-dark` 토큰 플립으로 크롬까지 다크 동조해 봤으나 "다크모드 수준"이라는 피드백으로 폐기. 최종(안 E): **크롬은 항상 라이트, 차콜 캔버스를 `absolute inset-2.5 rounded-md shadow-md` 라운드 뷰포트로 액자화** — 흰 거터는 ScopeWindow 자체 bg가 담당(컨테이너 padding으론 불가: absolute inset-0 자식은 패딩 박스에 그대로 겹침). 비활성 루트 ScopePreview도 rounded 동조, design.md §7은 "크롬 다크 분기 금지·차콜은 작업면" 문구로 정리.
-- 과정에서 확인한 함정 2건: ① 런타임 클래스(`.react-flow__*`) 대상 규칙은 Turbopack이 globals.css에서 purge(bpm-expand-anim 주석 함정 재확인 — 다크 셸 폐기로 해당 코드는 제거됨). ② 스크린샷 톤 판정은 눈이 아니라 픽셀 실측으로(다크 렌더를 라이트로 오독한 선례). 검증 `pw-verify-l5-canvas-bg.mjs` 18/18(프레임 라운드 11px·크롬 라이트 유지·풀블리드 복귀) + 거터 4면 픽셀 실측. 게이트 tsc 0·lint 0·vitest 807·build OK. 작업 일체는 **feature/l5-dark-shell** 브랜치(dev는 ea4ee464 — origin 포함 복귀 완료).
+- 과정에서 확인한 함정 2건: ① 런타임 클래스(`.react-flow__*`) 대상 규칙은 Turbopack이 globals.css에서 purge(bpm-expand-anim 주석 함정 재확인 — 다크 셸 폐기로 해당 코드는 제거됨). ② 스크린샷 톤 판정은 눈이 아니라 픽셀 실측으로(다크 렌더를 라이트로 오독한 선례). 검증 `pw-verify-l5-canvas-bg.mjs` 20/20(프레임 라운드 11px·크롬 라이트 유지·풀블리드 복귀·**칩 인셋**) + 거터 4면 픽셀 실측. 게이트 tsc 0·lint 0·vitest 807·build OK. 작업 일체는 **feature/l5-dark-shell** 브랜치(dev는 ea4ee464 — origin 포함 복귀 완료).
+- 후속: 좌상단 L5 탐색기 칩·우상단 L5 태그가 프레임 라운드 코너를 덮음 → 차콜일 때만 안쪽 20px 인셋(`inset` prop·조건부 오프셋, 미반영 칩은 top-[52px]) — 라이트 풀블리드에선 기존 8px 복귀.
 
 ## 2026-08-31 — 중첩 펼침 영역 메뉴는 가장 안쪽 맵 기준 (dev)
 - A>B>C로 하위프로세스를 겹쳐 펼친 상태에서 **C 안에서 우클릭해도 B가 대상**이 됐다 — 좌표 히트테스트가 "마지막 매치=바깥"을 돌려줬기 때문. 바깥 영역이 안쪽을 항상 포함하므로 `depth`가 가장 큰 매치를 고르도록 뒤집었다(호버 강조도 같은 함수라 함께 교정).

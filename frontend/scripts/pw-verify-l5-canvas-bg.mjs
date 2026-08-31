@@ -88,6 +88,8 @@ try {
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
   check("chrome stays light in charcoal", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
+  // 칩 안쪽 배치 — 프레임 라운드 코너를 덮지 않게 20px (라이트는 8px 복귀)
+  check("tag inset in charcoal (top 20px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "20px");
   check("node title ink stays light-mode", (await nodeTitleColor(page)) === "rgb(22, 22, 29)", String(await nodeTitleColor(page)));
   await shot(page, "l5-charcoal-default");
 
@@ -98,6 +100,7 @@ try {
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
   check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
+  check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");
 
