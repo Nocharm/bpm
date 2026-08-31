@@ -115,7 +115,8 @@ async def get_subprocess_refs(
                 ProcessMap.sp_gmp,
                 ProcessMap.sp_url,
                 ProcessMap.sp_url_label,
-                ProcessMap.sp_description,
+                # 지정 설명 = 맵 설명(sp_description 폐기, 2026-08-31)
+                ProcessMap.description,
                 ProcessMap.category_id,
                 ProcessMap.retired_to_map_id,
             ).where(ProcessMap.id.in_(targets))
@@ -150,7 +151,7 @@ async def get_subprocess_refs(
         sp_gmp,
         url,
         url_label,
-        sp_description,
+        map_description,
         category_id,
         retired_to_map_id,
     ) in rows:
@@ -180,7 +181,8 @@ async def get_subprocess_refs(
             gmp=sp_gmp,
             url=url,
             url_label=url_label,
-            sp_description=sp_description,
+            # 빈 문자열은 None으로 — 소비측(캔버스 설명 합성·Excel)이 "값 없음"으로 다루게
+            sp_description=map_description or None,
         )
         category_id_by_map[mid] = category_id
     # 링크맵 체계 경로 — 캔버스 외부 L6 출신 배지 소스(라이브 파생) (design 2026-08-28 §8)

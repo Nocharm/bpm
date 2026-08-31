@@ -1337,7 +1337,8 @@ async def designate_subprocess(
     found_map.sp_touch_time = payload.touch_time or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
-    found_map.sp_description = payload.description or None
+    # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31)
+    found_map.description = payload.description or ""
     found_map.sp_input = payload.input or None
     found_map.sp_output = payload.output or None
     found_map.sp_input_forms = payload.input_forms or None

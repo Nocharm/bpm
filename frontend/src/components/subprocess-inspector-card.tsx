@@ -182,7 +182,7 @@ export function SubprocessInspectorCard({
       output: detail.sp_output ?? "",
       output_forms: detail.sp_output_forms ?? "",
       output_ids: detail.sp_output_ids ?? "",
-      description: detail.sp_description ?? "",
+      description: detail.description ?? "",
     });
     setShowModal(true);
   };
@@ -218,7 +218,7 @@ export function SubprocessInspectorCard({
     { label: t("field.headcount"), value: detail.sp_headcount },
     ...(detail.sp_input ? [{ label: t("sp.input"), value: detail.sp_input }] : []),
     ...(detail.sp_output ? [{ label: t("sp.output"), value: detail.sp_output }] : []),
-    ...(detail.sp_description ? [{ label: t("field.description"), value: detail.sp_description }] : []),
+    ...(detail.description ? [{ label: t("field.description"), value: detail.description }] : []),
   ];
 
   return (

@@ -12,12 +12,14 @@ import { Check, ChevronDown, ChevronRight, Network, TriangleAlert, X } from "luc
 import {
   getApiErrorDetail,
   getCategoryChain,
+  getSubprocessUsage,
   listCategoryNodes,
   listMaps,
   postFrameworkTransfer,
   putMapCategory,
   type CategoryNode,
   type MapSummary,
+  type SubprocessUsage,
 } from "@/lib/api";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
@@ -55,6 +57,28 @@ export function FrameworkAssignModal({
   const [transferTargetId, setTransferTargetId] = useState("");
   // 현 슬롯 카테고리 레벨 — 레거시 비-L5 슬롯은 이양 차단(서버 409 미러, 2026-08-30 확정)
   const [currentLevel, setCurrentLevel] = useState<number | null>(null);
+  // 파급효과 게이트 — 이미 슬롯이 있는 맵의 "해제"·"다른 L5로 변경"은 되돌리기 어려운 영향이 있어
+  // 즉시 실행하지 않고 영향 요약을 먼저 보여준다. 최초 연결(슬롯 없음)은 게이트 없음 (사용자 요청 2026-08-31)
+  const [gate, setGate] = useState<{ kind: "unassign" } | { kind: "reassign"; categoryId: number } | null>(
+    null,
+  );
+  // 이 맵을 서브프로세스로 참조하는 상위 맵 — 게이트 열 때 1회 조회(실패해도 게이트는 뜬다)
+  const [usage, setUsage] = useState<SubprocessUsage | null>(null);
+
+  useEffect(() => {
+    if (gate === null) return;
+    let active = true;
+    void getSubprocessUsage(mapId)
+      .then((result) => {
+        if (active) setUsage(result);
+      })
+      .catch(() => {
+        // 참조 수는 부가 정보 — 조회 실패해도 안내와 확인 버튼은 그대로 제공한다
+      });
+    return () => {
+      active = false;
+    };
+  }, [gate, mapId]);
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -146,6 +170,16 @@ export function FrameworkAssignModal({
         .then(setTransferMaps)
         .catch((err: unknown) => setError(getApiErrorDetail(err)));
     }
+  }
+
+  // 연결 버튼 — 슬롯이 이미 있고 다른 L5를 고른 경우(=변경)면 게이트를 먼저 띄운다
+  function requestAssign() {
+    if (selectedId === null) return;
+    if (currentCategoryId != null && selectedId !== currentCategoryId) {
+      setGate({ kind: "reassign", categoryId: selectedId });
+      return;
+    }
+    void handleAssign();
   }
 
   async function handleAssign() {
@@ -295,28 +329,109 @@ export function FrameworkAssignModal({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-id="framework-assign-btn"
-            disabled={selectedId === null || submitting}
-            className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            onClick={() => void handleAssign()}
+        {gate !== null ? (
+          // 파급효과 게이트 — 해제/변경만. 되돌리려면 같은 화면에서 다시 지정해야 하므로 영향을 먼저 보여준다.
+          <div
+            data-id="framework-slot-gate"
+            className={`flex flex-col gap-2.5 rounded-sm border px-3 py-2.5 ${
+              gate.kind === "unassign"
+                ? "border-error/40 bg-error/10"
+                : "border-changed/40 bg-changed/10"
+            }`}
           >
-            {t("home.frameworkAssign")}
-          </button>
-          {currentCategoryId != null && (
+            <div className="flex items-start gap-2">
+              <TriangleAlert
+                size={16}
+                strokeWidth={1.5}
+                className={`mt-0.5 shrink-0 ${gate.kind === "unassign" ? "text-error" : "text-changed"}`}
+              />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span
+                  className={`text-caption font-semibold ${
+                    gate.kind === "unassign" ? "text-error" : "text-changed"
+                  }`}
+                >
+                  {gate.kind === "unassign"
+                    ? t("home.frameworkGateUnassignTitle")
+                    : t("home.frameworkGateReassignTitle")}
+                </span>
+                <span className="text-fine text-ink-secondary">
+                  {gate.kind === "unassign"
+                    ? t("home.frameworkGateUnassignDesc", { path: currentPath ?? "" })
+                    : t("home.frameworkGateReassignDesc", { path: currentPath ?? "" })}
+                </span>
+              </div>
+            </div>
+            {/* 영향 목록 — 체계 트리에서의 이동/제거는 항상, 참조 맵 수는 조회되면 */}
+            <ul className="flex flex-col gap-1 pl-6 text-fine text-ink-secondary">
+              <li className="list-disc">
+                {gate.kind === "unassign"
+                  ? t("home.frameworkGateImpactTreeRemove")
+                  : t("home.frameworkGateImpactTreeMove")}
+              </li>
+              {usage !== null && usage.used_by.length + usage.hidden_count > 0 && (
+                <li data-id="framework-gate-refs" className="list-disc">
+                  {t("home.frameworkGateImpactRefs", {
+                    count: String(usage.used_by.length + usage.hidden_count),
+                  })}
+                </li>
+              )}
+              <li className="list-disc">{t("home.frameworkGateImpactCanvas")}</li>
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                data-id="framework-gate-cancel"
+                disabled={submitting}
+                className="rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => setGate(null)}
+              >
+                {t("summary.cancel")}
+              </button>
+              <button
+                type="button"
+                data-id="framework-gate-confirm"
+                disabled={submitting}
+                className={`rounded-sm px-3 py-1.5 text-caption text-on-accent disabled:opacity-40 ${
+                  gate.kind === "unassign" ? "bg-error hover:opacity-90" : "bg-accent hover:bg-accent-focus"
+                }`}
+                onClick={() => {
+                  const pending = gate;
+                  setGate(null);
+                  if (pending.kind === "unassign") void handleUnassign();
+                  else void handleAssign();
+                }}
+              >
+                {gate.kind === "unassign"
+                  ? t("home.frameworkUnassign")
+                  : t("home.frameworkAssign")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              data-id="framework-unassign-btn"
-              disabled={submitting}
-              className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
-              onClick={() => void handleUnassign()}
+              data-id="framework-assign-btn"
+              disabled={selectedId === null || submitting}
+              className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+              onClick={requestAssign}
             >
-              {t("home.frameworkUnassign")}
+              {t("home.frameworkAssign")}
             </button>
-          )}
-        </div>
+            {currentCategoryId != null && (
+              <button
+                type="button"
+                data-id="framework-unassign-btn"
+                disabled={submitting}
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => setGate({ kind: "unassign" })}
+              >
+                {t("home.frameworkUnassign")}
+              </button>
+            )}
+          </div>
+        )}
 
         {hasConsultantCode && (
           <div className="flex flex-col gap-2 border-t border-hairline pt-3">

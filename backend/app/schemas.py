@@ -716,7 +716,7 @@ class MapOut(BaseModel):
     sp_headcount: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
-    sp_description: str | None = None
+    # sp_description 폐기(2026-08-31) — 지정 설명은 위 description 필드가 그대로 담는다
     sp_changed_by: str | None = None
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)

@@ -375,7 +375,7 @@ export default function InboxPage() {
         output: spModal.detail.sp_output ?? "",
         output_forms: spModal.detail.sp_output_forms ?? "",
         output_ids: spModal.detail.sp_output_ids ?? "",
-        description: spModal.detail.sp_description ?? "",
+        description: spModal.detail.description ?? "",
       }
     : null;
 

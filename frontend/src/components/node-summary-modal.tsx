@@ -63,6 +63,7 @@ import {
   type ParamField,
   type SpParamField,
 } from "@/lib/params";
+import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
@@ -189,8 +190,10 @@ interface NodeSummaryModalProps {
   } | null;
   // 표시용 GMP 분류(SP는 링크 맵 상속값을 호출부가 해석) — 읽기전용 배지(#13)
   gmp?: string;
-  // subprocess 설명 베이스(링크 맵 sp_description, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
+  // subprocess 설명 베이스(링크 맵 설명, 읽기전용) — 이 맵의 추가분(description)과 분리 표시
   inheritedDescription?: string | null;
+  // subprocess 링크맵 id — 링크맵 노트(예외/VOC) 섹션 소스. null이면 섹션 없음 (2026-08-31)
+  linkedMapId?: number | null;
   // subprocess 연결 버전 피커(인스펙터와 동일 컴포넌트) — 호출부가 렌더해 주입
   versionPickerSlot?: ReactNode;
   // process·decision만 true — start/end/subprocess는 BPM 속성 입력 없음
@@ -249,6 +252,7 @@ export function NodeSummaryModal({
   sp,
   gmp,
   inheritedDescription,
+  linkedMapId = null,
   versionPickerSlot,
   showAttributes,
   onPatch,
@@ -1158,6 +1162,10 @@ export function NodeSummaryModal({
 
           {/* subprocess 연결 버전(최신 추종 토글·버전 고정) — 인스펙터와 동일 컴포넌트를 슬롯으로 주입(패리티) */}
           {versionPickerSlot}
+
+          {/* 링크맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용 아코디언(기본 접힘, 영속 없음).
+              노트가 없는 맵이 대다수라 그 경우 섹션 자체가 렌더되지 않는다 (사용자 요청 2026-08-31) */}
+          {linkedMapId != null && <MapNotesSection mapId={linkedMapId} />}
 
           {hasChildren && (
             <div>

@@ -9767,6 +9767,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                 inheritedDescription={
                   node.data.nodeType === "subprocess" ? (summarySpRef?.sp_description ?? null) : null
                 }
+                // 링크맵 노트 섹션 소스 — SP만 (사용자 요청 2026-08-31)
+                linkedMapId={
+                  node.data.nodeType === "subprocess" ? (node.data.linkedMapId ?? null) : null
+                }
                 versionPickerSlot={
                   node.data.nodeType === "subprocess" && node.data.linkedMapId != null ? (
                     <SubprocessVersionPicker

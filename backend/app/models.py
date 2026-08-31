@@ -160,8 +160,9 @@ class ProcessMap(Base):
     sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
-    # 지정 설명 — 자유 텍스트, 자간 제한 없음(Text) (design 2026-07-17)
-    sp_description: Mapped[str | None] = mapped_column(Text, default=None)
+    # 지정 설명은 별도 컬럼(sp_description)을 두지 않고 맵 description을 그대로 쓴다 —
+    # 운영에서 둘을 따로 채우는 사례가 없어 이중 관리만 남았다. 지정 화면에서 고치면 맵 설명이
+    # 함께 바뀐다 (사용자 결정 2026-08-31). 구 컬럼은 nullable이라 DB에 남겨둔 채 무시.
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
     sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_changed_at: Mapped[datetime | None] = mapped_column(

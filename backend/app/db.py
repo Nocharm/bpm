@@ -66,8 +66,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_cost_krw", "VARCHAR(50)"),
     ("process_maps", "sp_cost_usd", "VARCHAR(50)"),
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
-    # 지정 설명 — 자유 텍스트 (design 2026-07-17)
-    ("process_maps", "sp_description", "TEXT"),
+    # sp_description은 2026-08-31에 폐기(맵 description으로 일원화) — 보강 대상에서 제외한다.
+    # 기존 DB의 컬럼은 nullable이라 남아 있어도 INSERT를 깨지 않는다(드랍은 별도 정리 시점에).
     # 문서 내부 섹션 앵커 — Word 맵 섹션 노드의 주 링크 (design 2026-07-18)
     ("nodes", "section_anchor", "VARCHAR(200) DEFAULT ''"),
     # Word 맵 모드 & 임포트 카탈로그 — mode="word"만 doc_name·doc_sections 사용 (design 2026-07-18)

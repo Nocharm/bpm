@@ -128,7 +128,8 @@ def test_designate_happy_path(client: TestClient, enforce) -> None:
     assert data["sp_changed_at"] is not None
 
 
-def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
+def test_designate_description_writes_map_description(client: TestClient, enforce) -> None:
+    """지정 설명은 맵 설명 그 자체 — sp_description 컬럼 폐기 후 계약 (2026-08-31)."""
     map_id = seed_map("desig-description", published=True)
     act_as(OWNER)
     res = client.put(
@@ -136,8 +137,19 @@ def test_designate_roundtrips_description(client: TestClient, enforce) -> None:
         json={**BODY, "description": "설명 텍스트"},
     )
     assert res.status_code == 200
-    assert res.json()["sp_description"] == "설명 텍스트"
-    assert client.get(f"/api/maps/{map_id}").json()["sp_description"] == "설명 텍스트"
+    assert res.json()["description"] == "설명 텍스트"
+    detail = client.get(f"/api/maps/{map_id}").json()
+    assert detail["description"] == "설명 텍스트"
+    # 폐기된 필드는 응답에서 사라진다 — 소비측이 description으로 옮겨왔는지 회귀 고정
+    assert "sp_description" not in detail
+
+    # 지정 화면에서 다시 고치면 맵 설명도 함께 바뀐다(단일 소스)
+    res2 = client.put(
+        f"/api/maps/{map_id}/subprocess-designation",
+        json={**BODY, "description": "고친 설명"},
+    )
+    assert res2.status_code == 200
+    assert client.get(f"/api/maps/{map_id}").json()["description"] == "고친 설명"
 
 
 def test_designate_roundtrips_io_item_forms(client: TestClient, enforce) -> None:
