@@ -87,3 +87,43 @@ def test_added_indexes_bootstrap_idempotent(client) -> None:  # noqa: ARG001
     names = asyncio.run(_run())
     assert "ix_notifications_recipient_read" in names
     assert "ix_notifications_recipient_created" in names
+
+
+def test_drops_legacy_sp_description(tmp_path: pathlib.Path) -> None:
+    """폐기 컬럼 물리 삭제 — 값이 있어도 드랍하고, 이미 없으면 no-op(멱등) (2026-08-31)."""
+    from app.db import _drop_legacy_sp_description
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE process_maps "
+                "(id INTEGER PRIMARY KEY, name VARCHAR, description TEXT, sp_description TEXT)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO process_maps (id, name, description, sp_description) "
+                "VALUES (1, 'm', '맵 설명', '구 지정 설명')"
+            )
+        )
+
+    with engine.begin() as conn:
+        _drop_legacy_sp_description(conn)
+    with engine.begin() as conn:
+        _drop_legacy_sp_description(conn)  # 멱등 — 컬럼이 이미 없어도 예외 없이 통과
+
+    with engine.connect() as conn:
+        columns = {col["name"] for col in inspect(conn).get_columns("process_maps")}
+        assert "sp_description" not in columns
+        # 맵 설명은 그대로 — 일원화 대상이라 손대지 않는다
+        assert conn.execute(text("SELECT description FROM process_maps WHERE id = 1")).scalar() == "맵 설명"
+
+
+def test_drop_legacy_sp_description_skips_missing_table(tmp_path: pathlib.Path) -> None:
+    """테이블 자체가 없는 DB(첫 기동)에서도 조용히 통과."""
+    from app.db import _drop_legacy_sp_description
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
+    with engine.begin() as conn:
+        _drop_legacy_sp_description(conn)

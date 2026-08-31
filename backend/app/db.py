@@ -247,6 +247,20 @@ def _relax_employees_email_not_null(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE employees ALTER COLUMN email DROP NOT NULL"))
 
 
+def _drop_legacy_sp_description(conn: Connection) -> None:
+    """폐기된 process_maps.sp_description 물리 삭제 — 맵 description으로 일원화 (사용자 결정 2026-08-31).
+
+    운영에서 두 값을 따로 채운 사례가 없음을 확인하고 드랍한다. 비치명 스텝이라 실패해도
+    기동은 계속된다. ⚠️ 드랍 후 구버전 코드로 롤백하면 이 컬럼에 쓰다 죽으므로, 롤백은
+    이 커밋 이후 버전 사이에서만 안전하다. sqlite는 3.35+에서 DROP COLUMN 지원.
+    """
+    inspector = inspect(conn)
+    if "process_maps" not in inspector.get_table_names():
+        return
+    if "sp_description" in {col["name"] for col in inspector.get_columns("process_maps")}:
+        conn.execute(text("ALTER TABLE process_maps DROP COLUMN sp_description"))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
@@ -260,6 +274,7 @@ async def init_models() -> None:
         _sweep_orphan_kb_chunks,
         _widen_interview_message_kind,
         _relax_employees_email_not_null,
+        _drop_legacy_sp_description,
     ):
         try:
             async with engine.begin() as conn:

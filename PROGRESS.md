@@ -7,7 +7,8 @@
 - **`sp_description` 폐기, 맵 `description`으로 일원화** — 운영에서 둘을 따로 채우는 사례가 없어 이중 관리만 남아 있었다(사용자 확인). 지정 화면에서 고치면 맵 설명이 함께 바뀐다. 모델 컬럼·`_ADDED_COLUMNS`·`MapOut.sp_description` 제거, `SubprocessRefOut.sp_description`은 소비처(캔버스 설명 합성·Excel)가 많아 이름을 유지한 채 소스만 맵 설명으로 교체(빈 문자열은 None 정규화). **기존 DB 컬럼은 nullable이라 남겨둔 채 무시** — 드랍은 별도 정리 시점에.
 - SP 더블클릭 상세 모달에 **링크맵 노트 섹션** 추가 — 기존 `MapNotesSection` 재사용(기본 접힘·영속 없음·노트 없으면 섹션 자체가 안 뜸)이라 신규 상태 없음.
 - **슬롯 해제/변경 파급효과 게이트** — 되돌리기 어려운 두 동작만 즉시 실행 대신 영향 패널로 막는다(최초 연결은 게이트 없음). 해제=에러 톤, 변경=changed 톤 + 현재 경로·영향 목록(체계 트리 이동/제거·연계 캔버스 소속/외부 전환)·`subprocess-usage` 기반 참조 맵 수(있을 때만).
-- 검증: 신규 `pw-verify-slot-notes-desc.mjs` 10/10. 게이트 BE pytest 1193·ruff 0·3.11 compileall 0 / FE tsc 0·lint 0·vitest 807·build OK.
+- **폐기 컬럼 물리 삭제**(사용자 결정) — `_drop_legacy_sp_description`를 비치명 부트스트랩 스텝에 추가해 배포 1회 기동으로 `process_maps.sp_description`을 드랍한다. ⚠️ 드랍 후 이 커밋 이전 코드로 롤백하면 해당 컬럼에 쓰다 죽는다.
+- 검증: 신규 `pw-verify-slot-notes-desc.mjs` 10/10 · `pw-shot-external-l6-mock.mjs` 6/6(외부 L6 목업 흰 바디+5px 좌측 탭, 같은 L5는 파스텔 필 유지 회귀 포함). 게이트 BE pytest 1195·ruff 0·3.11 compileall 0 / FE tsc 0·lint 0·vitest 807·build OK.
 
 ## 2026-08-31 — 캔버스/피크 UX 8종 (dev)
 - 팝오버 앵커를 **커서 좌상단 기준**으로 전환 — 체계 피크(FrameworkPeekTrigger)와 피크 목업 드롭다운이 트리거 오른쪽/아래 고정이라 화면 끝에서 뷰포트를 벗어나 찾기 어려웠다. 렌더 후 실측 클램프(ResizeObserver, state 대신 DOM style write로 set-state-in-effect 회피).
