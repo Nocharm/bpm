@@ -24,9 +24,11 @@ import {
   ShieldCheck,
   User,
   Workflow,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getMap, getResolvedGraph, type VersionGraph } from "@/lib/api";
@@ -42,6 +44,14 @@ import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField }
 
 // 행 호버로 피크가 열리기까지의 지연 — 스침 오픈 방지(클릭은 즉시)
 export const PEEK_HOVER_DELAY_MS = 2500;
+// 패널 이탈 후 닫힘 유예 — 줌 버튼·스크롤바로 가는 도중 커서가 잠깐 패널을 벗어나도 안 꺼지게.
+// 재진입 시 취소 (사용자 요청 2026-08-31). FrameworkPeekTrigger와 같은 값.
+const CLOSE_GRACE_MS = 400;
+const ZOOM_STEP = 0.25;
+const ZOOM_MIN = 1; // 1=창 맞춤 — 그보다 축소하면 더 안 읽힌다(확대 전용)
+const ZOOM_MAX = 3;
+// 목업 높이 전환 — 호버 시 표시 필드가 바뀌며 점프하던 것을 아코디언으로 (사용자 요청 2026-08-31)
+const MOCK_HEIGHT_MS = 200;
 
 export interface SubprocessPeekInfo {
   department: string | null;
@@ -216,11 +226,16 @@ export function SubprocessPreviewPeek({
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [anchorEl, onClose]);
 
-  // 크기 = 브라우저 창 비례(고정 높이 대신) — 폭 40vw·미리보기 32vh, 상하한 클램프 (사용자 피드백 2026-08-30).
+  // 크기 = 브라우저 창 비례(고정 높이 대신) — 상하한 클램프 (사용자 피드백 2026-08-30).
   // 열림 시점 창 기준(리스너 없음) — 피크는 스크롤·바깥클릭으로 닫히는 일시 표면이라 리사이즈 추적은 과함.
-  // 하한 640 — 좌 노드목업(176)+우 정보(208) 고정 컬럼을 빼고도 미리보기가 최소 ~250px 확보되게
-  const panelW = Math.round(Math.min(Math.max(window.innerWidth * 0.4, 640), 800));
-  const previewH = Math.round(Math.min(Math.max(window.innerHeight * 0.32, 220), 460));
+  // 2026-08-31: 글자가 안 읽힌다는 피드백으로 폭·높이 전부 1.5배(40vw→60vw, 32vh→48vh).
+  // 창보다 커지지 않게 뷰포트에서 여백을 뺀 값으로 한 번 더 상한을 건다.
+  const panelW = Math.round(
+    Math.min(Math.max(window.innerWidth * 0.6, 960), 1200, window.innerWidth - 32),
+  );
+  const previewH = Math.round(
+    Math.min(Math.max(window.innerHeight * 0.48, 330), 690, window.innerHeight - 160),
+  );
   // 화면 밖 잘림 방지 클램프 — 헤더(~40px)+미리보기 행 기준
   const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
@@ -272,6 +287,8 @@ export function SubprocessPreviewPeek({
   // 우측 탭(노드 목업/상세 값) + 목업 클릭 드롭다운(추가/맵 이동)
   const [tab, setTab] = useState<"node" | "detail">("node");
   const [mockMenu, setMockMenu] = useState(false);
+  // 메뉴를 띄운 커서 위치(뷰포트 고정) — 포털이라 목업 기준 좌표가 아니다
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   // 목업 표시 모드 — 기본: 전체 파라미터, 호버: 현재 맵 노드 표시 설정 기준(실제 렌더 미리보기) (2026-08-30)
   const [mockHover, setMockHover] = useState(false);
   const mockAttrRows = (
@@ -305,10 +322,16 @@ export function SubprocessPreviewPeek({
     { side: "output" as const, icon: LogOut, lines: splitIoLines(spExtra?.output) },
   ].filter((entry) => entry.lines.length > 0 && (!mockHover || displayFields.includes(entry.side)));
   const mockAreaRef = useRef<HTMLDivElement>(null);
+  const mockMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!mockMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof globalThis.Element && !mockAreaRef.current?.contains(event.target)) {
+      if (
+        event.target instanceof globalThis.Element &&
+        !mockAreaRef.current?.contains(event.target) &&
+        // 메뉴는 커서 위치에 포털로 뜨므로 목업 영역 밖이다 — 별도로 제외 (2026-08-31)
+        !mockMenuRef.current?.contains(event.target)
+      ) {
         setMockMenu(false);
       }
     };
@@ -316,13 +339,50 @@ export function SubprocessPreviewPeek({
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [mockMenu]);
 
+  // 목업 본문 높이 아코디언 — 호버로 표시 필드가 바뀔 때 실측 높이를 outer에 써서 전환시킨다.
+  // state 대신 DOM style 직접 write(set-state-in-effect 회피), ResizeObserver로 내용 변화를 추적.
+  const mockOuterRef = useRef<HTMLDivElement>(null);
+  const mockInnerRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const outer = mockOuterRef.current;
+    const inner = mockInnerRef.current;
+    if (outer === null || inner === null) return;
+    const apply = () => {
+      outer.style.height = `${inner.offsetHeight}px`;
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, [tab]); // 탭 전환으로 목업이 언마운트/재마운트되면 다시 붙인다
+
+  // 미리보기 줌 — 1=창 맞춤, 확대 시 ScopePreview가 컨테이너 스크롤로 이동시킨다
+  const [zoom, setZoom] = useState(1);
+  // 패널 이탈 닫힘 유예
+  const closeTimerRef = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      onClose();
+    }, CLOSE_GRACE_MS);
+  };
+  useEffect(() => cancelClose, []);
+
   return createPortal(
     <div
       ref={panelRef}
       data-id="library-peek"
       style={{ left, top, width: panelW, boxShadow: "var(--shadow-lg)" }}
       className="fixed z-[1250] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface"
-      onMouseLeave={onClose}
+      onMouseEnter={cancelClose}
+      onMouseLeave={scheduleClose}
     >
       {/* header — 맵 이름 + Add to map(항시 노출, 게시본 표기는 미리보기 안 워터마크로 이동 — 사용자 피드백 2026-08-30) */}
       <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
@@ -376,7 +436,38 @@ export function SubprocessPreviewPeek({
               {t("library.peekEmptyGraph")}
             </div>
           ) : (
-            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} />
+            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} />
+          )}
+          {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배가 창 맞춤이라 하한 */}
+          {designated && fetchState.status === "ready" && fetchState.graph.nodes.length > 0 && (
+            <div
+              data-id="library-peek-zoom"
+              className="absolute left-2 top-2 flex overflow-hidden rounded-sm border border-hairline bg-surface/85"
+            >
+              <button
+                type="button"
+                data-id="library-peek-zoom-out"
+                title={t("library.peekZoomOut")}
+                disabled={zoom <= ZOOM_MIN}
+                onClick={() => setZoom((cur) => Math.max(ZOOM_MIN, Math.round((cur - ZOOM_STEP) * 100) / 100))}
+                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ZoomOut size={14} strokeWidth={1.5} />
+              </button>
+              <span className="flex w-10 items-center justify-center border-x border-hairline text-fine text-ink-tertiary">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                data-id="library-peek-zoom-in"
+                title={t("library.peekZoomIn")}
+                disabled={zoom >= ZOOM_MAX}
+                onClick={() => setZoom((cur) => Math.min(ZOOM_MAX, Math.round((cur + ZOOM_STEP) * 100) / 100))}
+                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ZoomIn size={14} strokeWidth={1.5} />
+              </button>
+            </div>
           )}
           {/* 게시본 기준 표기 — 그래프 위 워터마크(헤더에서 이동 — 사용자 피드백 2026-08-30) */}
           {designated && fetchState.status === "ready" && (
@@ -430,15 +521,43 @@ export function SubprocessPreviewPeek({
                   type="button"
                   data-id="library-peek-node-mock"
                   aria-expanded={mockMenu}
-                  onClick={() => setMockMenu((cur) => !cur)}
+                  onClick={(event) => {
+                    // 메뉴는 커서 좌상단 기준 — 목업 아래 고정이면 패널 하단에서 잘린다 (사용자 요청 2026-08-31)
+                    setMenuPos({ x: event.clientX, y: event.clientY });
+                    setMockMenu((cur) => !cur);
+                  }}
                   onMouseEnter={() => setMockHover(true)}
                   onMouseLeave={() => setMockHover(false)}
-                  className="w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm"
-                  style={{
-                    border: `1.5px solid ${mockStroke}`,
-                    background: `color-mix(in srgb, ${mockStroke} 18%, white)`,
-                  }}
+                  className="relative w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm"
+                  // 외부 L6는 캔버스 C안(externalSpNodeStyle)과 동일하게 — 흰 바디+헤어라인 보더,
+                  // L5 색은 좌측 탭으로만. 목업이 파스텔 필이면 실제 렌더와 달라 보인다 (사용자 지적 2026-08-31)
+                  style={
+                    externalOrigin
+                      ? {
+                          border: "1.5px solid var(--color-hairline)",
+                          background: "var(--color-surface)",
+                        }
+                      : {
+                          border: `1.5px solid ${mockStroke}`,
+                          background: `color-mix(in srgb, ${mockStroke} 18%, white)`,
+                        }
+                  }
                 >
+                  {/* 좌측 컬러 탭 — 캔버스 노드와 같은 음수 오프셋으로 보더 위를 덮는다 */}
+                  {externalOrigin && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute rounded-l-sm"
+                      style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: mockStroke }}
+                    />
+                  )}
+                  {/* 높이 아코디언 — 호버로 표시 필드가 바뀔 때 점프 대신 전환. 높이는 useLayoutEffect가 실측해 쓴다 */}
+                  <div
+                    ref={mockOuterRef}
+                    className="overflow-hidden"
+                    style={{ transition: `height ${MOCK_HEIGHT_MS}ms var(--ease-smooth, ease)` }}
+                  >
+                  <div ref={mockInnerRef}>
                   <div className="flex items-start gap-1.5">
                     <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: mockStroke }} />
                     <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
@@ -550,12 +669,21 @@ export function SubprocessPreviewPeek({
                     <RefreshCw size={10} strokeWidth={1.5} className="shrink-0" />
                     <span className="truncate">{t("subprocess.followingBanner")}</span>
                   </div>
+                  </div>
+                  </div>
                 </button>
-                {mockMenu && (
+                {mockMenu &&
+                  menuPos !== null &&
+                  createPortal(
                   <div
+                    ref={mockMenuRef}
                     data-id="library-peek-mock-menu"
-                    className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-sm border border-hairline bg-surface"
-                    style={{ boxShadow: "var(--shadow-md)" }}
+                    className="fixed z-[1300] w-44 overflow-hidden rounded-sm border border-hairline bg-surface"
+                    style={{
+                      left: Math.min(menuPos.x, window.innerWidth - 176 - 8),
+                      top: Math.min(menuPos.y, window.innerHeight - 80 - 8),
+                      boxShadow: "var(--shadow-md)",
+                    }}
                   >
                     <button
                       type="button"
@@ -583,7 +711,8 @@ export function SubprocessPreviewPeek({
                       <ExternalLink size={12} strokeWidth={1.5} className="shrink-0" />
                       {t("library.peekOpenMap")}
                     </button>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </div>
             </div>

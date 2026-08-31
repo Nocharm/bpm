@@ -4,7 +4,14 @@
 // 트리거는 범용(FrameworkPeekTrigger): 클릭 즉시 오픈 + (옵션) 지연 호버 오픈. 포털 고정
 // 좌표라 캔버스 줌 스케일의 영향을 받지 않는다 (2026-08-30, 출처 배지 재사용을 위해 분리).
 import { FolderTree } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
@@ -14,6 +21,9 @@ const HOVER_DELAY_MS = 3000; // 스침 오픈 방지 — 클릭은 즉시 오픈
 // 패널 이탈 후 닫힘 유예 — 칩→플라이아웃(right-full, 6px 갭) 이동처럼 잠깐 패널 밖을 지나는
 // 경로에서 즉시 닫히지 않게. 패널/트리거 재진입 시 취소 (사용자 요청 2026-08-30)
 const CLOSE_GRACE_MS = 400;
+// 커서와 패널 좌상단 사이 간격 — 붙여두면 패널이 커서를 가린다
+const POINTER_OFFSET = 6;
+const VIEWPORT_MARGIN = 8;
 
 export function FrameworkPeekTrigger({
   categoryId,
@@ -42,6 +52,9 @@ export function FrameworkPeekTrigger({
   const closeTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // 마지막 커서 위치 — 패널을 트리거 오른쪽이 아니라 커서 기준으로 띄운다. 트리거가 화면
+  // 오른쪽 끝에 있으면 오른쪽 배치는 뷰포트 밖으로 나가 찾기 어렵다 (사용자 요청 2026-08-31)
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
 
   function clearTimer() {
     if (timerRef.current !== null) {
@@ -87,12 +100,37 @@ export function FrameworkPeekTrigger({
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [peek, browse]);
 
+  // 커서를 좌상단 기준으로 — 커서를 못 잡았으면(키보드 등) 트리거 아래로 폴백.
+  // 뷰포트 밖으로 나가는 보정은 렌더 후 실측으로 처리한다(아래 useLayoutEffect).
   function openPeek() {
     clearTimer();
     cancelClose();
+    const pointer = pointerRef.current;
+    if (pointer) {
+      setPeek({ x: pointer.x + POINTER_OFFSET, y: pointer.y + POINTER_OFFSET });
+      return;
+    }
     const rect = rootRef.current?.getBoundingClientRect();
-    if (rect) setPeek({ x: rect.right + 8, y: Math.max(8, rect.top - 4) });
+    if (rect) setPeek({ x: rect.left, y: rect.bottom + POINTER_OFFSET });
   }
+
+  // 뷰포트 클램프 — 패널 크기는 체인 로드 후에야 확정되므로 ResizeObserver로 재보정한다.
+  // state 대신 DOM style을 직접 써서 set-state-in-effect 루프를 만들지 않는다.
+  useLayoutEffect(() => {
+    const el = panelRef.current;
+    if (peek === null || el === null) return;
+    const clamp = () => {
+      const rect = el.getBoundingClientRect();
+      const maxX = window.innerWidth - rect.width - VIEWPORT_MARGIN;
+      const maxY = window.innerHeight - rect.height - VIEWPORT_MARGIN;
+      el.style.left = `${Math.max(VIEWPORT_MARGIN, Math.min(peek.x, maxX))}px`;
+      el.style.top = `${Math.max(VIEWPORT_MARGIN, Math.min(peek.y, maxY))}px`;
+    };
+    clamp();
+    const observer = new ResizeObserver(clamp);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [peek]);
 
   return (
     <span
@@ -105,14 +143,22 @@ export function FrameworkPeekTrigger({
         // 포털 자식(피크 패널·탐색 모달)의 클릭도 React 트리로 여기까지 버블된다 —
         // DOM 포함 여부로 걸러 토글 오작동(모달 안 클릭 = 피크 닫힘)을 막는다
         if (event.target instanceof Element && !event.currentTarget.contains(event.target)) return;
+        pointerRef.current = { x: event.clientX, y: event.clientY };
         if (peek !== null) setPeek(null);
         else openPeek();
       }}
-      onMouseEnter={() => {
+      // 노드 더블클릭은 편집 모달을 연다 — 아이콘 위 더블클릭이 거기까지 새지 않게 (사용자 요청 2026-08-31)
+      onDoubleClick={(event) => event.stopPropagation()}
+      onMouseEnter={(event) => {
+        pointerRef.current = { x: event.clientX, y: event.clientY };
         cancelClose(); // 패널→트리거 복귀도 닫힘 취소
         if (hoverDelayMs === null || peek !== null) return;
         clearTimer();
         timerRef.current = window.setTimeout(openPeek, hoverDelayMs);
+      }}
+      onMouseMove={(event) => {
+        // 호버 오픈은 진입 후 3초 뒤라 그동안 커서가 움직인다 — 최신 위치로 갱신
+        if (peek === null) pointerRef.current = { x: event.clientX, y: event.clientY };
       }}
       onMouseLeave={clearTimer}
       className={className}

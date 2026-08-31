@@ -110,6 +110,36 @@ export function FrameworkTreePicker({
     };
   }, []);
 
+  // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(대량 전달 방어)
+  const AUTO_DRILL_MAX = 6;
+  // 캐시된 자식/맵을 비동기 루프에서 읽기 위한 ref 미러 (react-ts-patterns §deps)
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // 하위 후보가 하나뿐이면 계속 펼쳐 L6 목록까지 한 번에 도달한다. 중간에 직속 맵이 있거나
+  // 갈래가 둘 이상이면 거기서 멈춘다 — 선택지가 생기는 지점은 사용자가 고른다 (사용자 요청 2026-08-31)
+  async function autoDrillIn(categoryId: number, hop: number): Promise<void> {
+    if (hop >= AUTO_DRILL_MAX) return;
+    setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
+    let kids = stateRef.current.childrenByParent.get(categoryId);
+    let maps = stateRef.current.mapsByCategory.get(categoryId);
+    if (kids === undefined) {
+      try {
+        const loaded = await fetchCategoryChildren(categoryId);
+        setState((prev) => applyCategoryLoaded(prev, categoryId, loaded.nodes, loaded.maps));
+        kids = loaded.nodes;
+        maps = loaded.maps;
+      } catch {
+        return; // 자동 펼침 실패는 조용히 중단 — 수동 펼침으로 재시도 가능
+      }
+    }
+    if (kids.length === 1 && (maps?.maps.length ?? 0) === 0) {
+      await autoDrillIn(kids[0].id, hop + 1);
+    }
+  }
+
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
@@ -121,11 +151,19 @@ export function FrameworkTreePicker({
       void fetchCategoryChildren(categoryId)
         .then(({ nodes, maps }) => {
           setState((prev) => applyCategoryLoaded(prev, categoryId, nodes, maps));
+          if (nodes.length === 1 && maps.maps.length === 0) void autoDrillIn(nodes[0].id, 0);
         })
         .catch(() => {
           // loading_ended만 지우면 재펼침으로 재시도 가능 (framework-tree.tsx와 동일 결정)
           setState((prev) => reduceFrameworkTree(prev, { type: "loading_ended", categoryId }));
         });
+      return;
+    }
+    // 캐시 적중 경로도 같은 규칙 적용
+    const cachedKids = state.childrenByParent.get(categoryId) ?? [];
+    const cachedMaps = state.mapsByCategory.get(categoryId);
+    if (cachedKids.length === 1 && (cachedMaps?.maps.length ?? 0) === 0) {
+      void autoDrillIn(cachedKids[0].id, 0);
     }
   }
 
@@ -194,22 +232,35 @@ export function FrameworkTreePicker({
     const mapsData = state.mapsByCategory.get(node.id);
     // 루트→현재 노드 이름 경로 — 드래그 페이로드의 출처 배지 소스 (#4)
     const pathNames = [...trailNames, node.name].join("/");
+    // 이 캔버스가 결착된 L5 — 트리에서 내 위치를 바로 찾게 강조 (사용자 요청 2026-08-31)
+    const isCurrentL5 = node.id === linkageCategoryId;
     return (
       <li key={node.id} className="flex flex-col">
         <button
           type="button"
           aria-expanded={open}
+          aria-current={isCurrentL5 ? "true" : undefined}
           data-id={`framework-picker-node-${node.id}`}
           onClick={() => handleToggle(node.id)}
           style={{ paddingLeft: `${depth * 10 + 4}px` }}
-          className="flex w-full items-center gap-1 rounded-sm py-0.5 text-left hover:bg-surface-alt"
+          className={`flex w-full items-center gap-1 rounded-sm py-0.5 text-left ${
+            isCurrentL5 ? "bg-accent-tint" : "hover:bg-surface-alt"
+          }`}
         >
           {open
-            ? <ChevronDown size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-            : <ChevronRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
-          <span className="min-w-0 truncate text-fine text-ink-secondary">{node.name}</span>
+            ? <ChevronDown size={12} strokeWidth={1.5} className={`shrink-0 ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"}`} />
+            : <ChevronRight size={12} strokeWidth={1.5} className={`shrink-0 ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"}`} />}
+          <span
+            className={`min-w-0 truncate text-fine ${
+              isCurrentL5 ? "font-semibold text-accent" : "text-ink-secondary"
+            }`}
+          >
+            {node.name}
+          </span>
           {node.map_count > 0 && (
-            <span className="ml-auto shrink-0 pr-1 text-fine text-ink-muted">{node.map_count}</span>
+            <span className={`ml-auto shrink-0 pr-1 text-fine ${isCurrentL5 ? "text-accent" : "text-ink-muted"}`}>
+              {node.map_count}
+            </span>
           )}
         </button>
         {open && (

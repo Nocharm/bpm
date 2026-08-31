@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-08-31 — 캔버스/피크 UX 8종 (dev)
+- 팝오버 앵커를 **커서 좌상단 기준**으로 전환 — 체계 피크(FrameworkPeekTrigger)와 피크 목업 드롭다운이 트리거 오른쪽/아래 고정이라 화면 끝에서 뷰포트를 벗어나 찾기 어려웠다. 렌더 후 실측 클램프(ResizeObserver, state 대신 DOM style write로 set-state-in-effect 회피).
+- SP 미리보기 피크: 폭·높이 1.5배(40vw→60vw, 32vh→48vh) + 줌 1~3배(ScopePreview에 `zoom` — viewBox를 좁히는 대신 SVG를 키워 브라우저 스크롤로 이동, 팬 구현 불필요) + 이탈 400ms 유예 닫힘 + 목업 높이 아코디언(호버로 표시 필드가 바뀔 때 점프하던 것). 외부 L6 목업을 캔버스 C안(흰 바디+좌측 컬러 탭)과 일치시킴 — 파스텔 필이라 실제 렌더와 달라 보였다.
+- 트리 피커: 하위 후보가 하나뿐인 단계는 자동 드릴인(갈래가 생기면 정지), 현재 L5 `aria-current` 하이라이트. SP 노드의 체계 아이콘 더블클릭이 노드 편집 모달까지 새던 것 차단. PNG 출력에서 "최신본 따르는 중" 배너 생략(화면 전용 상태 표시 — 노드 높이도 그만큼 감소).
+- 검증: 신규 `pw-verify-ux8-round.mjs` 14/14 + 기존 `pw-smoke-framework-canvas.mjs` 12/12(자동 드릴인으로 이미 열린 행을 재클릭해 닫던 단계를 aria-expanded 가드로 수정). 게이트 tsc 0·lint 0·vitest 807·build OK.
+
 ## 2026-08-31 — 배포 문서 최신화 + 1회성 셋업 분리 (dev)
 - `docs/deploy/setup-once.md` 신설 — 배포 문서 전반에 흩어져 있던 1회성 작업을 **A. 스택 구축 1회**(Docker 전제·Keycloak 클라이언트/URI·AD 서비스 계정·n8n 웹훅 2종·`.env`+시크릿 발급·백업 디렉터리·서브넷 분리·빈 DB 시드)와 **B. 릴리스 이후 1회**(ai_chat_logs 드랍·KB 백필·필드 승격 재임포트·HR 첫 sync+고아 경로 이관·노출 직책 확정)로 갈라 모았다. 성격이 달라서(B4만 재실행 위험) 항목마다 재실행 안전성을 명시.
 - `db-migration-9910.md` 전면 재작성 — **`dc910` alias 전제 제거**(셸 새로 열면 조용히 깨지는 전제였다), 모든 명령을 `docker compose -p bpm-9910 --env-file .env.9910 …` 완전형으로. 회차마다 갱신할 스키마 델타 표를 현재 dev 기준(L5 연계 캔버스 6컬럼+`category_permissions`)으로 교체하고 델타 산출법(`git diff … db.py models.py`)을 명시. §5 로그인 확인 절과 §9 backend 기동 실패 트러블슈팅을 신설 — 이번 사고(3.11 SyntaxError)와 fail-closed 오진 경로를 여기서 끊는다.

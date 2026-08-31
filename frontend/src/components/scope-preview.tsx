@@ -11,11 +11,15 @@ export function ScopePreview({
   fullGraph,
   scopeParentId,
   interactive = false,
+  zoom = 1,
 }: {
   fullGraph: VersionGraph | null;
   scopeParentId: string | null;
   // true면 노드에 호버 효과 + 포인터 이벤트 허용(요약 모달 미리보기용). 기본은 정적(조상 창)
   interactive?: boolean;
+  // 1=창에 맞춤(기본). >1이면 SVG 자체를 키워 컨테이너 스크롤로 이동 — viewBox를 좁히는 방식과
+  // 달리 팬 구현 없이 브라우저 스크롤을 그대로 쓴다 (라이브러리 피크 줌, 사용자 요청 2026-08-31)
+  zoom?: number;
 }) {
   const scopeNodes = (fullGraph?.nodes ?? []).filter(
     (node) => node.parent_node_id === scopeParentId,
@@ -55,9 +59,15 @@ export function ScopePreview({
 
   return (
     <div
-      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} h-full w-full bg-canvas`}
+      className={`${interactive ? "pointer-events-auto" : "pointer-events-none"} h-full w-full bg-canvas ${
+        zoom > 1 ? "overflow-auto" : ""
+      }`}
     >
-      <svg className="h-full w-full" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+      <svg
+        style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}
+        viewBox={viewBox}
+        preserveAspectRatio="xMidYMid meet"
+      >
         {edges.map((edge) => {
           const source = centerById.get(edge.source_node_id);
           const target = centerById.get(edge.target_node_id);

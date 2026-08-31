@@ -111,11 +111,14 @@ try {
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("S opens framework tree picker on canvas", pickerVisible);
   if (pickerVisible) {
-    // 피커는 캐스케이드 없음 — L1→L5 체인을 순서대로 드릴해야 L6 맵 행이 나온다
+    // 체인을 순서대로 드릴한다. 단, 하위 후보가 하나뿐인 단계는 자동 드릴인으로 이미 펼쳐져 있으므로
+    // (2026-08-31) aria-expanded를 보고 열린 행은 건너뛴다 — 다시 클릭하면 토글로 닫혀버린다.
     for (const name of CHAIN) {
       const row = page.locator('[data-id^="framework-picker-node-"]').filter({ hasText: name }).first();
       await row.waitFor({ state: "visible", timeout: 12000 });
-      await row.click();
+      if ((await row.getAttribute("aria-expanded")) !== "true") {
+        await row.click();
+      }
     }
     const anyMapRow = await page.locator('[data-id^="framework-picker-map-"]').first()
       .waitFor({ state: "visible", timeout: 12000 }).then(() => true).catch(() => false);

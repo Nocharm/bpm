@@ -80,6 +80,11 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     setImportant(span, "display", "inline");
     setImportant(span, "overflow", "visible");
   }
+  // SP "최신본 따르는 중"은 화면 전용 상태 표시(정상 상태 안내) — 출력물엔 불필요.
+  // display:none이라 노드 높이도 그만큼 줄어든다 (사용자 요청 2026-08-31)
+  for (const banner of viewport.querySelectorAll('[data-id="sp-banner-following"]')) {
+    setImportant(banner, "display", "none");
+  }
   return () => {
     for (const undo of undos) undo();
   };
