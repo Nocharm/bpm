@@ -1885,6 +1885,8 @@ const en = {
   "framework.chipLoading": "Loading...",
   "framework.chipNoMaps": "No maps in this category",
   "framework.chipError": "Failed to load framework",
+  "framework.bgToLight": "Switch to light background",
+  "framework.bgToCharcoal": "Switch to charcoal background",
   // ── L5 연계 캔버스 (design 2026-08-28) ──
   "framework.openLinkage": "Linkage canvas",
   "framework.pickerOpen": "Add L6 process",
@@ -3896,6 +3898,8 @@ const ko: Record<MessageKey, string> = {
   "framework.chipLoading": "불러오는 중...",
   "framework.chipNoMaps": "이 카테고리에 맵이 없습니다",
   "framework.chipError": "프레임워크를 불러오지 못했습니다",
+  "framework.bgToLight": "라이트 배경으로 전환",
+  "framework.bgToCharcoal": "차콜 배경으로 전환",
   // ── L5 연계 캔버스 (design 2026-08-28) ──
   "framework.openLinkage": "연계 캔버스",
   "framework.pickerOpen": "L6 업무 추가",

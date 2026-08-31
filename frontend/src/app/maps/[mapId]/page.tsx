@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -982,6 +982,22 @@ function MapEditor({ mapId }: { mapId: number }) {
   const isWordMap = mapMode === "word";
   // L5 연계 캔버스 — subprocess-only 팔레트·라이브 draft 우선·트리 피커 (design 2026-08-28)
   const isFrameworkMap = mapMode === "framework";
+  // L5 캔버스 배경 — 기본 차콜("L5 화면" 즉시 인지 + 파스텔 노드 대비), 우상단 L5 태그로 토글.
+  // 서버·클라 첫 렌더 모두 charcoal로 결정적 — 저장값 복원은 마운트 후 effect (hydration mismatch 방지)
+  const [l5CanvasBg, setL5CanvasBg] = useState<"charcoal" | "light">("charcoal");
+  useEffect(() => {
+    if (window.localStorage.getItem("bpm.l5CanvasBg") === "light") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setL5CanvasBg("light");
+    }
+  }, []);
+  const l5Charcoal = isFrameworkMap && l5CanvasBg === "charcoal";
+  // 영속은 핸들러에서 — StrictMode에서 persist effect가 초기값으로 되덮는 문제 회피 (lessons: react-ts-patterns)
+  const toggleL5CanvasBg = () => {
+    const next = l5CanvasBg === "charcoal" ? "light" : "charcoal";
+    window.localStorage.setItem("bpm.l5CanvasBg", next);
+    setL5CanvasBg(next);
+  };
   const [frameworkPickerOpen, setFrameworkPickerOpen] = useState(false);
   // stale 앵커 — 재임포트 후 카탈로그에서 사라진 앵커를 참조하는 섹션 노드 (design 2026-07-24 §5)
   const staleAnchorIds = useMemo(() => {
@@ -8986,7 +9002,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
-          className="relative flex-1 select-none overflow-hidden bg-canvas"
+          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}`}
           onDragOver={(e) => {
             if (
               e.dataTransfer.types.includes("application/bpm-process") ||
@@ -9045,13 +9061,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                 topRightSlot={
                   index === 0 && isFrameworkMap ? (
                     <>
-                      <span
+                      {/* 클릭 = 캔버스 배경 토글(차콜↔라이트) — "L5" 신호와 스위치를 한자리에.
+                          표시 전용 설정이라 readOnly에도 허용, 선택은 사용자 전역 localStorage */}
+                      <button
+                        type="button"
                         data-id="framework-l5-tag"
-                        className="absolute right-2 top-2 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline bg-surface/40 px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm"
+                        title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
+                        onClick={toggleL5CanvasBg}
+                        className={`absolute right-2 top-2 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                          l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
+                        }`}
                       >
                         <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                         {t("framework.l5MapTag")}
-                      </span>
+                        {l5Charcoal ? (
+                          <Moon size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        ) : (
+                          <Sun size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        )}
+                      </button>
                       {/* 뷰어 안내 — 권한자가 아니라 자동 보강이 스킵된 미반영 소속 L6 수 (design 2026-08-28 §5) */}
                       {reconcileMissing > 0 && (
                         <span
@@ -9085,7 +9113,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
-                    className={`relative h-full w-full bg-canvas${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    className={`relative h-full w-full ${index === 0 && l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
                     // 펼침 영역 호버 — 상시 selection 모드라 RF onPaneMouseMove가 바인딩되지 않아(pane은
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
@@ -9425,7 +9453,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           variant={BackgroundVariant.Dots}
                           gap={20}
                           size={1.8}
-                          color="var(--color-canvas-dot)"
+                          color={index === 0 && l5Charcoal ? "var(--color-canvas-l5-dot)" : "var(--color-canvas-dot)"}
                         />
                       )}
                       {/* Word 맵 1페이지 경계 — 크기 감각용(노드가 이 안이면 산출물 1페이지). ViewportPortal=flow 좌표(팬/줌 정합). */}
@@ -9474,7 +9502,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         <span
                           className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
-                            currentVersion?.status === "expired" ? "text-ink-tertiary" : "text-accent"
+                            // 차콜 캔버스에선 accent/회색이 묻힘 — 흰색으로 동일한 은은함 유지
+                            index === 0 && l5Charcoal
+                              ? "text-surface"
+                              : currentVersion?.status === "expired"
+                                ? "text-ink-tertiary"
+                                : "text-accent"
                           }`}
                         >
                           {currentVersion?.status === "published"
@@ -9487,7 +9520,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                     )}
                   </div>
                 ) : (
-                  <ScopePreview fullGraph={fullGraph} scopeParentId={scopeHostId(scope)} />
+                  <ScopePreview
+                    fullGraph={fullGraph}
+                    scopeParentId={scopeHostId(scope)}
+                    charcoal={index === 0 && l5Charcoal}
+                  />
                 )}
               </ScopeWindow>
             );

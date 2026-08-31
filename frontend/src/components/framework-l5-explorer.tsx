@@ -17,8 +17,9 @@ import {
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 
+// bg-surface/85 — 차콜 캔버스(기본) 위에서 /40 반투명은 탁하게 묻힘, 라이트에서도 무해한 불투명도
 const CHIP_BASE =
-  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/85 shadow-sm backdrop-blur-sm";
 
 export interface FrameworkL5ExplorerProps {
   currentCategoryId: number | null; // 이 캔버스가 결착된 L5 — null이면 렌더 안 함(방어)

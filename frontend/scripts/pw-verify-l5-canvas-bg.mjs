@@ -1,0 +1,110 @@
+// L5 캔버스 차콜 배경 + 태그 토글 검증 — 기본 차콜·태그 클릭 토글·localStorage 영속·일반 맵 무영향.
+// 실행(frontend/ 에서): BASE_URL=http://localhost:3000 SHOT_DIR=/tmp/shots node scripts/pw-verify-l5-canvas-bg.mjs
+// 전제: backend(8000)+frontend(3000) 네이티브 기동, dev.db에 mode=framework 맵 존재(기본 id 17).
+// docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
+import { chromium } from "playwright-core";
+import path from "node:path";
+
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const ADMIN = "admin.sys";
+const FW_MAP = process.env.FW_MAP ?? "17"; // mode=framework 맵
+const PLAIN_MAP = process.env.PLAIN_MAP ?? "1"; // 일반 맵(무영향 확인)
+const SHOT_DIR = process.env.SHOT_DIR ?? "/tmp/bpm-l5-bg-verify";
+
+const CHARCOAL = "rgb(54, 56, 67)"; // --color-canvas-l5 #363843
+const LIGHT = "rgb(246, 246, 248)"; // --color-canvas #f6f6f8
+
+const results = [];
+const check = (name, ok, detail = "") => {
+  results.push({ name, ok });
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+};
+
+// 활성 캔버스(.react-flow를 품은 bg-canvas* 래퍼)의 computed 배경색
+const canvasBg = (page) =>
+  page.evaluate(() => {
+    const flow = document.querySelector(".react-flow");
+    const host = flow?.closest('div[class*="bg-canvas"]');
+    return host ? getComputedStyle(host).backgroundColor : null;
+  });
+// dot-grid 점 색 — React Flow Background 패턴의 circle fill
+const dotColor = (page) =>
+  page.evaluate(() => {
+    const dot = document.querySelector(".react-flow__background circle, .react-flow__background pattern circle");
+    return dot ? getComputedStyle(dot).fill : null;
+  });
+
+const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+const consoleErrors = [];
+let shotIndex = 0;
+const shot = (page, name) =>
+  page.screenshot({ path: path.join(SHOT_DIR, `${String(++shotIndex).padStart(2, "0")}-${name}.png`), fullPage: false });
+
+try {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript((user) => {
+    window.localStorage.setItem("bpm.devUser", user);
+    window.localStorage.setItem("bpm.lang", "en");
+    // 이전 실행 잔재 초기화 — 기본값 단언용. initScript는 reload마다 재실행되므로
+    // sessionStorage 마커로 첫 로드 1회만 지운다(영속 단언이 스스로 깨지지 않게)
+    if (!window.sessionStorage.getItem("l5bg-cleared")) {
+      window.localStorage.removeItem("bpm.l5CanvasBg");
+      window.sessionStorage.setItem("l5bg-cleared", "1");
+    }
+  }, ADMIN);
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+
+  // ── 1) L5 캔버스 — 기본 차콜 + Moon 태그 ─────────────────────────────────
+  await page.goto(`${BASE}/maps/${FW_MAP}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+  const tag = page.locator('[data-id="framework-l5-tag"]');
+  await tag.waitFor({ state: "visible", timeout: 10000 });
+  await page.getByRole("button", { name: "fit view" }).first().click().catch(() => {});
+  await page.waitForTimeout(600);
+  check("L5 default charcoal bg", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
+  check("L5 charcoal dot color", (await dotColor(page)) === "rgb(95, 97, 112)", String(await dotColor(page)));
+  check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
+  check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
+  await shot(page, "l5-charcoal-default");
+
+  // ── 2) 태그 클릭 → 라이트 전환 ───────────────────────────────────────────
+  await tag.click();
+  await page.waitForTimeout(300);
+  check("toggle to light bg", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
+  check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
+  check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
+  await shot(page, "l5-light-after-toggle");
+
+  // ── 3) 새로고침 — 라이트 영속 ────────────────────────────────────────────
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+  await page.waitForTimeout(400);
+  check("light persists after reload", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
+
+  // ── 4) 다시 차콜 → 새로고침 영속 ─────────────────────────────────────────
+  await page.locator('[data-id="framework-l5-tag"]').click();
+  await page.waitForTimeout(300);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+  await page.waitForTimeout(400);
+  check("charcoal persists after reload", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
+  await shot(page, "l5-charcoal-persisted");
+
+  // ── 5) 일반 맵 — 라이트 유지 + L5 태그 없음 ──────────────────────────────
+  await page.goto(`${BASE}/maps/${PLAIN_MAP}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 20000 });
+  await page.waitForTimeout(400);
+  check("plain map stays light", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
+  check("plain map has no L5 tag", (await page.locator('[data-id="framework-l5-tag"]').count()) === 0);
+  await shot(page, "plain-map-light");
+
+  check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
+} finally {
+  await browser.close();
+}
+
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} PASS`);
+process.exit(failed.length === 0 ? 0 : 1);

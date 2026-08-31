@@ -14,11 +14,14 @@ export function ScopePreview({
   scopeParentId,
   interactive = false,
   zoom = 1,
+  charcoal = false,
 }: {
   fullGraph: VersionGraph | null;
   scopeParentId: string | null;
   // true면 노드에 호버 효과 + 포인터 이벤트 허용(요약 모달 미리보기용). 기본은 정적(조상 창)
   interactive?: boolean;
+  // true면 배경을 L5 차콜로 — 프레임워크 루트 창의 비활성 프리뷰가 라이트로 번쩍이지 않게
+  charcoal?: boolean;
   // 1=창에 맞춤(기본). >1이면 SVG 자체를 키워 넘치는 만큼을 드래그(그랩)로 이동한다.
   // 스크롤바를 띄우면 좁은 피크 안에서 조준이 어렵고 클릭도 안 먹어 숨기고 드래그만 남겼다
   // (사용자 요청 2026-08-31). 이동은 overflow:hidden 상태에서도 동작하는 scrollLeft/Top로.
@@ -32,7 +35,7 @@ export function ScopePreview({
     (node) => node.parent_node_id === scopeParentId,
   );
   if (scopeNodes.length === 0) {
-    return <div className="h-full w-full bg-canvas" />;
+    return <div className={`h-full w-full ${charcoal ? "bg-canvas-l5" : "bg-canvas"}`} />;
   }
 
   const boxes = scopeNodes.map((node) => {
@@ -69,7 +72,7 @@ export function ScopePreview({
       ref={panRef}
       data-id="scope-preview-pane"
       // 확대 중에는 드래그를 받아야 하므로 포인터 이벤트를 연다(정적 프리뷰라도)
-      className={`${interactive || pannable ? "pointer-events-auto" : "pointer-events-none"} h-full w-full bg-canvas ${
+      className={`${interactive || pannable ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "bg-canvas-l5" : "bg-canvas"} ${
         pannable ? "cursor-grab overflow-hidden active:cursor-grabbing" : ""
       }`}
       onPointerDown={
