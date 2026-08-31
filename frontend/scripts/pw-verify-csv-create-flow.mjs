@@ -12,8 +12,8 @@
 //   bash:       node scripts/pw-verify-csv-create-flow.mjs
 //   PowerShell: node scripts\pw-verify-csv-create-flow.mjs
 //   서버(평문 HTTP) 대상 — ①이 실검증되는 유일한 오리진:
-//     bash:       BASE_URL=http://<서버IP>:3333 node scripts/pw-verify-csv-create-flow.mjs
-//     PowerShell: $env:BASE_URL="http://<서버IP>:3333"; node scripts\pw-verify-csv-create-flow.mjs
+//     bash:       BASE_URL=http://<서버IP>:9900 node scripts/pw-verify-csv-create-flow.mjs
+//     PowerShell: $env:BASE_URL="http://<서버IP>:9900"; node scripts\pw-verify-csv-create-flow.mjs
 // 전제:
 //   backend :8000 기동
 //     bash:       cd backend && AUTH_ENABLED=false .venv/bin/uvicorn app.main:app --port 8000
@@ -191,7 +191,7 @@ try {
     skip(
       "clipboard fallback (execCommand) works without navigator.clipboard",
       `SECURE CONTEXT ${origin.protocol}//${origin.hostname} — navigator.clipboard exists here, so the old bug` +
-        " cannot reproduce and a pass proves nothing. Rerun with BASE_URL=http://<server-ip>:3333",
+        " cannot reproduce and a pass proves nothing. Rerun with BASE_URL=http://<server-ip>:9900",
     );
   } else {
     check(

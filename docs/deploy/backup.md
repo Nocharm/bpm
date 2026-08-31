@@ -45,7 +45,7 @@ docker compose stop backend frontend    # 쓰기 중단 (db는 유지, 그동안
 docker compose exec -T db pg_restore -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} \
   --clean --if-exists --no-owner < backups/bpm-YYYYMMDD-HHMMSS.dump
 docker compose start backend frontend
-curl -s http://localhost:3333/api/health   # {"status":"ok"}
+curl -s http://localhost:9900/api/health   # {"status":"ok"}
 # 내용 확인: 브라우저 접속 또는
 docker compose exec db psql -U ${POSTGRES_USER:-processmap} -d ${POSTGRES_DB:-processmap} -c "SELECT count(*) FROM maps;"
 ```

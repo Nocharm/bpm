@@ -79,9 +79,9 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 | frontend | Next.js + TypeScript + **@xyflow/react** (React Flow) | 캔버스/노드/엣지 에디터 표준 |
 | backend | **FastAPI** + SQLAlchemy + Pydantic | 비동기 API, 검증은 Pydantic |
 | db | PostgreSQL | |
-| proxy | nginx — **서버 노출 포트 3333** | `/` → frontend, `/api` → backend |
+| proxy | nginx — **서버 노출 포트 9900** | `/` → frontend, `/api` → backend |
 
-- 접속: 우선 `http://<서버IP or g-ai-agent.sbiologics.com>:3333` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
+- 접속: 우선 `http://<서버IP or g-ai-agent.sbiologics.com>:9900` 포트 직접 접속 → 추후 서버 엣지 nginx(직접 편집 가능)에 도메인 라우팅 추가
 - Keycloak(8080)은 이 compose 외부의 기존 서비스 — 주소는 `.env`로만 참조
 
 ## 6. 단계별 구현 순서 (제안)
@@ -92,7 +92,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 4. ~~**버전 관리 + 비교 화면**~~ ✅ — 버전 복제(깊은 복사, ID 재발급)/이름변경/삭제, 두 버전 나란히 읽기 전용 비교
 5. ~~**Keycloak 인증 연동**~~ ✅ — OIDC 로그인 + JWT 검증, AUTH_ENABLED 플래그로 로컬 우회
 6. ~~**기능 확장 Phase A/B/C** — §7. 캔버스 UX → 데이터·조회 → 협업~~ ✅
-7. ~~**서버 docker-compose 배포 (3333)**~~ ✅ — 런북 `docs/deploy/deploy.md`(Keycloak 로그인 + 사내 AD 동기화 포함). compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
+7. ~~**서버 docker-compose 배포 (9900)**~~ ✅ — 런북 `docs/deploy/deploy.md`(Keycloak 로그인 + 사내 AD 동기화 포함). compose config 정적 검증 완료, 실제 빌드/기동은 서버에서
 8. ~~**하위프로세스 참조 모델(Call Activity)**~~ ✅ — 인라인 계층 편집(`parent_node_id`) 폐기 → 평면 노드 + 다른 맵 링크(읽기전용 임베드·드릴인). 설계 `…/2026-06-20-subprocess-reference-model-design.md`
 9. ~~**권한 관리(RBAC) 백엔드**~~ ✅ — 맵 가시성/소유자/협업자(user·dept·group 3종 principal)·승인자·버전 게시 워크플로·유저그룹. 게이트는 `DEV_ENFORCE_PERMISSIONS`로 로컬 검증. 설계 `…/2026-06-20-permission-management-design.md`
 

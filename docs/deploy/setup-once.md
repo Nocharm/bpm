@@ -22,7 +22,7 @@ docker --version && docker compose version   # Compose v2
 df -h .                                      # 덤프+볼륨 여유 확인
 ```
 
-앱 nginx는 **443/80을 쓰지 않는다** — 서버 엣지 nginx가 이미 점유 중이라 앱은 `APP_PORT`로만 노출한다(운영 9900 · 검증 9910 · `.env.example` 기본 3333).
+앱 nginx는 **443/80을 쓰지 않는다** — 서버 엣지 nginx가 이미 점유 중이라 앱은 `APP_PORT`로만 노출한다: **운영 9900 · 검증 9910**.
 
 ### A2. Keycloak public 클라이언트 (realm당 1회)
 

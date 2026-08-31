@@ -16,7 +16,7 @@
 
 여기서 기억할 두 가지만 다시 적어둔다 — 배포 때 실제로 밟는 지뢰다:
 
-- **URI 등록은 realm당 1회가 아니라 포트·도메인마다 1회다.** `redirect_uri`를 코드가 `window.location.origin`으로 만들기 때문에 `:3333`·`:9900`·`:9910`이 전부 다른 origin이다. 새 포트로 스택을 열었는데 로그인이 안 되면 여기부터 본다.
+- **URI 등록은 realm당 1회가 아니라 포트·도메인마다 1회다.** `redirect_uri`를 코드가 `window.location.origin`으로 만들기 때문에 운영 `:9900`과 검증 `:9910`이 서로 다른 origin이다. 새 포트로 스택을 열었는데 로그인이 안 되면 여기부터 본다.
 - **Web origins는 redirect URI와 별개 항목이다.** 빼먹으면 로그인 왕복은 되는데 토큰 교환이 CORS로 죽는다(`failed to fetch` / `No matching state found`).
 
 ## 2. `.env` 작성
@@ -28,7 +28,7 @@ cp .env.example .env
 ```
 
 ```
-APP_PORT=3333
+APP_PORT=9900
 POSTGRES_USER=processmap
 POSTGRES_PASSWORD=<강한 비밀번호>
 POSTGRES_DB=processmap
@@ -115,14 +115,14 @@ docker compose up -d --build
 
 ```bash
 docker compose ps                                  # 5개 서비스 Up(db-backup 포함), db healthy
-curl -s http://localhost:3333/api/health           # {"status":"ok"} (인증 면제)
+curl -s http://localhost:9900/api/health           # {"status":"ok"} (인증 면제)
 docker compose logs --tail 3 db-backup             # "[db-backup] ... ok bpm-....dump" — 첫 덤프 확인 (backup.md §2)
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3333/   # 200
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:9900/   # 200
 # backend가 LDAP 설정을 받았는지
 docker compose exec backend python -c "from app.settings import settings; print('ldap_enabled=', settings.ldap_enabled, 'admins=', settings.admin_login_ids())"
 ```
 
-브라우저(`http://<서버>:3333`) 플로우: ① 미인증 → `/login` 리다이렉트 ② "Keycloak으로 로그인" → 메인 진입 ③ 유저명 클릭 → `SYSTEM_ADMIN_LOGIN_IDS` 계정이면 관리자 페이지 노출 ④ 관리자 페이지 → "AD 전체 동기화" → `scanned/upserted/excluded` 요약 ⑤ 5분 내 재클릭 → 429(throttled). **로그인 시 1인 동기화**: 각 사용자가 로그인하면 `/api/me`에서 본인 1명을 AD에서 upsert(전체 동기화 없이도 점진 충전).
+브라우저(`http://<서버>:9900`) 플로우: ① 미인증 → `/login` 리다이렉트 ② "Keycloak으로 로그인" → 메인 진입 ③ 유저명 클릭 → `SYSTEM_ADMIN_LOGIN_IDS` 계정이면 관리자 페이지 노출 ④ 관리자 페이지 → "AD 전체 동기화" → `scanned/upserted/excluded` 요약 ⑤ 5분 내 재클릭 → 429(throttled). **로그인 시 1인 동기화**: 각 사용자가 로그인하면 `/api/me`에서 본인 1명을 AD에서 upsert(전체 동기화 없이도 점진 충전).
 
 ## 5. 트러블슈팅
 
@@ -131,7 +131,7 @@ docker compose exec backend python -c "from app.settings import settings; print(
 ```bash
 docker compose ps                                  # backend가 restarting/exited인가
 docker compose logs --tail 120 backend             # 기동 실패 사유
-curl -s http://localhost:3333/api/auth/mode; echo  # issuer·clientId가 채워져 있는가
+curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워져 있는가
 ```
 
 | 증상 | 확인 |
@@ -140,9 +140,9 @@ curl -s http://localhost:3333/api/auth/mode; echo  # issuer·clientId가 채워�
 | backend 로그에 `SyntaxError`(import 단계) | **로컬 파이썬이 배포 런타임보다 높다.** 배포 이미지는 `python:3.11-slim` — 로컬 3.12+에서 짠 상위 문법(PEP 695 제네릭 `def f[T]()` 등)은 서버에서만 죽는다. `backend/ruff.toml`의 `target-version = "py311"`이 린트에서 잡는다(2026-08-31 실사고) |
 | backend 로그에 `AUTH_MODE=ldap requires AUTH_JWT_SECRET` | `.env`에 서명키 누락 — `openssl rand -hex 32` |
 | `/api/auth/mode`의 `keycloakClientId`가 빈 문자열 | `.env`에 `KEYCLOAK_CLIENT_ID` 누락. compose 기본값이 빈 문자열이라 **에러 없이 조용히** 빈 값이 들어간다 → Keycloak `Invalid parameter: client_id` |
-| 로그인 후 redirect 오류 | Keycloak Valid redirect URIs에 접속 포트(`:3333/*` 등) 등록됐는지 |
+| 로그인 후 redirect 오류 | Keycloak Valid redirect URIs에 접속 포트(`:9900/*` 등) 등록됐는지 |
 | `/api/*` 401 | 토큰 만료 / `KEYCLOAK_ISSUER`가 realm URL(`/realms/ai-portal`까지)과 일치하는지 |
-| frontend가 인증 안 함 | backend `GET /api/auth/mode` 응답 확인(`curl http://localhost:3333/api/auth/mode`) — `AUTH_MODE`/`AUTH_ENABLED`가 의도대로 설정됐는지, backend가 재기동됐는지 |
+| frontend가 인증 안 함 | backend `GET /api/auth/mode` 응답 확인(`curl http://localhost:9900/api/auth/mode`) — `AUTH_MODE`/`AUTH_ENABLED`가 의도대로 설정됐는지, backend가 재기동됐는지 |
 | db 연결 실패 | `docker compose logs db`, healthcheck 통과 여부 |
 | 관리자 페이지가 아무에게도 안 보임 | `SYSTEM_ADMIN_LOGIN_IDS`에 loginId 정확히(대소문자) 들었는지. 변경 후 backend 재생성 |
 | 로그인은 되는데 이름/부서 빔 | `/api/me`의 AD 조회 실패 — `ldap_enabled`(4종)·bind 권한·`LDAP_USER_SEARCH_BASE` 확인 |
