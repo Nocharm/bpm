@@ -35,7 +35,7 @@ export function ScopePreview({
     (node) => node.parent_node_id === scopeParentId,
   );
   if (scopeNodes.length === 0) {
-    return <div className={`h-full w-full ${charcoal ? "bg-canvas-l5" : "bg-canvas"}`} />;
+    return <div className={`h-full w-full ${charcoal ? "rounded-md bg-canvas-l5" : "bg-canvas"}`} />;
   }
 
   const boxes = scopeNodes.map((node) => {
@@ -72,7 +72,7 @@ export function ScopePreview({
       ref={panRef}
       data-id="scope-preview-pane"
       // 확대 중에는 드래그를 받아야 하므로 포인터 이벤트를 연다(정적 프리뷰라도)
-      className={`${interactive || pannable ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "bg-canvas-l5" : "bg-canvas"} ${
+      className={`${interactive || pannable ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "overflow-hidden rounded-md bg-canvas-l5" : "bg-canvas"} ${
         pannable ? "cursor-grab overflow-hidden active:cursor-grabbing" : ""
       }`}
       onPointerDown={

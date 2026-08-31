@@ -8569,9 +8569,8 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}.bpm-l5-dark .react-flow__viewport{--color-surface:#ffffff;--color-surface-alt:#f5f5f7;--color-surface-pearl:#fafafc;--color-surface-chip:#d2d2d7;--color-ink:#16161d;--color-ink-secondary:#333333;--color-ink-tertiary:#7a7a7a;--color-ink-muted:#a0a0a8;--color-divider:#f0f0f0;--color-hairline:#e6e6ea;--color-accent-tint:#efebff;--color-accent-tint-border:#d7ccff}`}</style>
-      {/* bpm-l5-dark — 차콜 캔버스일 때 에디터 크롬 전체 토큰 플립(globals.css). 글로벌 네비는 이 루트 밖이라 라이트 유지 */}
-      <div className={`flex h-full flex-col${l5Charcoal ? " bpm-l5-dark" : ""}`}>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
+      <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
         <button
@@ -9003,7 +9002,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
-          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}`}
+          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-surface" : "bg-canvas"}`}
           onDragOver={(e) => {
             if (
               e.dataTransfer.types.includes("application/bpm-process") ||
@@ -9114,7 +9113,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
-                    className={`relative h-full w-full ${index === 0 && l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    // 차콜은 프레임 무대화 — absolute inset으로 흰 거터(ScopeWindow bg) 위에 라운드 뷰포트를 띄운다.
+                    // 컨테이너 padding으론 불가: absolute inset-0 자식(ScopeWindow)은 패딩 박스에 그대로 겹침
+                    className={`${
+                      index === 0 && l5Charcoal
+                        ? "absolute inset-2.5 overflow-hidden rounded-md bg-canvas-l5 shadow-md"
+                        : "relative h-full w-full bg-canvas"
+                    }${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
                     // 펼침 영역 호버 — 상시 selection 모드라 RF onPaneMouseMove가 바인딩되지 않아(pane은
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
