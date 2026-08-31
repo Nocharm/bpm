@@ -32,6 +32,8 @@ export interface ProcessLibraryPanelProps {
   onPeekAdd: (payload: PeekAddPayload) => void;
   // 피크 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)로 연결
   onPeekOpenMap: (mapId: number, name: string) => void;
+  // 이미 이 맵에 들어와 있는 행 클릭 — 미리보기 대신 캔버스의 그 노드로 포커스 (사용자 요청 2026-08-31)
+  onFocusLinkedNode: (linkedMapId: number) => void;
 }
 
 export function ProcessLibraryPanel({
@@ -43,6 +45,7 @@ export function ProcessLibraryPanel({
   onAddLinkNode,
   onPeekAdd,
   onPeekOpenMap,
+  onFocusLinkedNode,
 }: ProcessLibraryPanelProps) {
   const { t } = useI18n();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
@@ -217,11 +220,19 @@ export function ProcessLibraryPanel({
                 draggable={!blocked}
                 onDragStart={blocked ? undefined : (e) => handleDragStart(e, row)}
                 onClick={(e) => {
-                  // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 차단 행도 미리보기는 제공
+                  // 이미 이 맵에 있는 행은 미리보기가 무의미하다(추가도 못 함) — 캔버스의 그 노드로 보낸다
+                  if (alreadyLinked) {
+                    clearHoverTimer();
+                    setPeek(null);
+                    onFocusLinkedNode(row.map_id);
+                    return;
+                  }
+                  // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 그 외 차단 행도 미리보기는 제공
                   if (peek && peek.row.map_id === row.map_id) setPeek(null);
                   else openPeek(row, peekBlocked, e.currentTarget);
                 }}
                 onMouseEnter={(e) => {
+                  if (alreadyLinked) return; // 호버 자동 오픈도 억제 — 클릭은 포커스 이동이다
                   const rowEl = e.currentTarget;
                   clearHoverTimer();
                   hoverTimerRef.current = window.setTimeout(
@@ -230,12 +241,15 @@ export function ProcessLibraryPanel({
                   );
                 }}
                 onMouseLeave={clearHoverTimer}
-                title={blocked ? blockedReason : row.name}
+                title={alreadyLinked ? t("library.focusLinkedNode") : blocked ? blockedReason : row.name}
                 className={[
                   "flex cursor-grab items-center gap-2 border-b border-hairline px-3 py-2 text-caption text-ink",
-                  blocked
-                    ? "cursor-not-allowed opacity-40"
-                    : "hover:bg-surface-alt active:cursor-grabbing",
+                  // 이미 포함된 행은 "금지"가 아니라 "이동" — 커서·호버를 그렇게 바꿔 클릭 가능함을 알린다
+                  alreadyLinked
+                    ? "cursor-pointer opacity-60 hover:bg-accent-tint hover:opacity-100"
+                    : blocked
+                      ? "cursor-not-allowed opacity-40"
+                      : "hover:bg-surface-alt active:cursor-grabbing",
                 ]
                   .filter(Boolean)
                   .join(" ")}

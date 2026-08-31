@@ -7888,6 +7888,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     [reactFlow, paneWidth, paneHeight, getFocusAnchorZoom],
   );
 
+  // 라이브러리/트리 피커에서 "이미 이 맵에 있는" 행을 눌렀을 때 — 그 링크맵을 쓰는 노드를 선택+화면에 노출.
+  // 추가가 불가능한 행이라 미리보기는 의미가 없고, 어디 있는지 찾아주는 게 실제로 원하는 동작이다
+  // (사용자 요청 2026-08-31). 같은 링크맵 노드가 여럿이면 첫 노드로 — 링크 유일성 규칙상 통상 1개.
+  const focusLinkedNode = useCallback(
+    (linkedMapId: number) => {
+      const target = nodesRef.current.find((node) => node.data?.linkedMapId === linkedMapId);
+      if (!target) return;
+      setSelectedId(target.id);
+      setNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === target.id })));
+      revealNodeIfOffscreen(target.id);
+    },
+    [setNodes, revealNodeIfOffscreen],
+  );
+
   // fit 버튼 — 현재 스코프를 화면에 맞추되 가운데가 아니라 좌상단 정렬(왼쪽위 고정). 줌은 맞추되 콘텐츠는 좌상단에.
   const fitScopeTopLeft = useCallback(() => {
     const idSet = new Set(nodesRef.current.map((node) => node.id));
@@ -8880,6 +8894,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             onAddLinkNode={(linkedMapId, name) => void addLinkNodeFromMap(linkedMapId, name)}
             onPeekAdd={addLinkNodeFromPeek}
             onPeekOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
+            onFocusLinkedNode={focusLinkedNode}
           />
         )}
         {sectionsOpen && (
@@ -8901,6 +8916,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             onClose={() => setFrameworkPickerOpen(false)}
             onPeekAdd={addLinkNodeFromPeek}
             onPeekOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
+            onFocusLinkedNode={focusLinkedNode}
           />
         )}
         {connectTarget !== null && (

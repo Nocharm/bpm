@@ -44,39 +44,69 @@ await page.waitForSelector(".react-flow__node", { timeout: 20000 });
 await page.locator(".react-flow").first().click({ position: { x: 60, y: 400 } });
 await page.keyboard.press("s");
 await page.locator('[data-id="framework-tree-picker"]').waitFor({ state: "visible", timeout: 8000 });
-// 루트(EPCV, 자식 1개) 클릭 → 단일 후보라 Facility까지 자동으로 내려가야 한다.
-// Facility는 자식이 2개라 거기서 멈추는 게 의도된 동작(선택지가 생기면 사용자가 고른다).
-const firstRoot = page.locator('[data-id^="framework-picker-node-"]').first();
-await firstRoot.click();
-const facility = page.locator('[data-id^="framework-picker-node-"]').filter({ hasText: "Facility" }).first();
-await facility.waitFor({ state: "visible", timeout: 12000 });
-const facilityExpanded = await facility.getAttribute("aria-expanded");
-check(
-  "[7] 단일 후보 자동 드릴인 — 루트 1클릭에 다음 단계가 펼쳐짐",
-  facilityExpanded === "true",
-  `Facility aria-expanded=${facilityExpanded}`,
-);
-await shot(page, "07a-autodrill-one-click");
-
-// 나머지 체인은 갈래가 있어 수동 — 이미 열린 단계는 건너뛴다(재클릭=닫힘)
-for (const name of ["계측 보전", "Calibration 기획 및 운영", "Calibration 수행 및 결과 보고"]) {
-  const row = page.locator('[data-id^="framework-picker-node-"]').filter({ hasText: name }).first();
-  await row.waitFor({ state: "visible", timeout: 12000 });
-  if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
-}
+// 피커는 마운트 시 캔버스 결착 L5 체인을 자동으로 펼친다(#14) — 먼저 그 결과를 기다린다.
 const mapRowVisible = await page
   .locator('[data-id^="framework-picker-map-"]').first()
   .waitFor({ state: "visible", timeout: 12000 })
   .then(() => true)
   .catch(() => false);
-check("[7] L5까지 드릴하면 L6 목록 노출", mapRowVisible);
+check("[14] 열자마자 내 위치(L5)까지 드릴인 — L6 목록 노출", mapRowVisible);
+await shot(page, "14-picker-drilled-on-open");
+
+// [7] 단일 후보 자동 드릴인 — 자동 펼침 체인 밖 가지("유틸리티 운전")는 자식이 하나뿐이라
+// 한 번 누르면 그 아래 L5까지 내려가 L6 목록이 드러나야 한다.
+const otherBranch = page
+  .locator('[data-id^="framework-picker-node-"]')
+  .filter({ hasText: "유틸리티 운전" })
+  .first();
+await otherBranch.waitFor({ state: "visible", timeout: 12000 });
+const beforeMaps = await page.locator('[data-id^="framework-picker-map-"]').count();
+await otherBranch.click();
+await page.waitForTimeout(2000);
+const afterMaps = await page.locator('[data-id^="framework-picker-map-"]').count();
+const leafL5 = page
+  .locator('[data-id^="framework-picker-node-"]')
+  .filter({ hasText: "정제수 일상 점검" })
+  .first();
+check(
+  "[7] 단일 후보 자동 드릴인 — 1클릭에 L5까지 내려가 L6가 늘어남",
+  afterMaps > beforeMaps && (await leafL5.count()) > 0,
+  `maps ${beforeMaps} → ${afterMaps}`,
+);
+await shot(page, "07a-autodrill-one-click");
 
 const highlighted = await page.locator('[data-id^="framework-picker-node-"][aria-current="true"]').count();
 check("[7] 현재 L5 하이라이트(aria-current)", highlighted === 1, `count=${highlighted}`);
 await shot(page, "07b-picker-highlight");
 
-// ── 항목 2·3·4·8: 맵 행 클릭 → 피크 ──────────────────────────────────────────
-const mapRow = page.locator('[data-id^="framework-picker-map-"]').first();
+// ── 항목 13: 이미 이 캔버스에 있는 행 클릭 = 미리보기가 아니라 노드 포커스 ────────
+// 링크 여부는 행 title로 구분한다(이미 포함 행은 "이동" 안내 문구)
+const LINKED_TITLE = /이미 이 맵|Already on this map/;
+const linkedRow = page.locator('[data-id^="framework-picker-map-"]').first();
+const linkedTitle = await linkedRow.getAttribute("title");
+const isLinkedRow = LINKED_TITLE.test(linkedTitle ?? "");
+check("[13] 이미 포함된 행은 '이동' 안내로 표시", isLinkedRow, `title=${linkedTitle}`);
+if (isLinkedRow) {
+  await linkedRow.click();
+  await page.waitForTimeout(900);
+  const selected = await page.locator(".react-flow__node.selected").count();
+  const peekOpened = await page.locator('[data-id="library-peek"]').count();
+  check("[13] 클릭 시 미리보기 대신 노드가 선택된다", selected === 1 && peekOpened === 0, `selected=${selected} peek=${peekOpened}`);
+  await shot(page, "13-linked-row-focus");
+}
+
+// ── 항목 2·3·4·8: 아직 안 들어온 맵 행 클릭 → 피크 ───────────────────────────
+const rows = page.locator('[data-id^="framework-picker-map-"]');
+const rowTotal = await rows.count();
+let mapRow = null;
+for (let i = 0; i < rowTotal; i++) {
+  const title = await rows.nth(i).getAttribute("title");
+  if (!LINKED_TITLE.test(title ?? "")) {
+    mapRow = rows.nth(i);
+    break;
+  }
+}
+check("미링크 맵 행 확보(피크 검증용)", mapRow !== null, `rows=${rowTotal}`);
 await mapRow.click();
 const peek = page.locator('[data-id="library-peek"]');
 await peek.waitFor({ state: "visible", timeout: 12000 });
@@ -86,6 +116,28 @@ check("[2] 피크 폭 1.5배(>=940px)", (box?.width ?? 0) >= 940, `width=${Math.
 await page.waitForTimeout(1200); // 그래프 로드 대기
 await shot(page, "02-peek-enlarged");
 
+// ── 항목 16: 헤더의 "맵으로 이동" 버튼 → 확인 게이트 ─────────────────────────
+const openMapBtn = page.locator('[data-id="library-peek-open-map"]');
+check("[16] 피크 헤더에 '맵으로 이동' 버튼(추가 버튼 왼쪽)", (await openMapBtn.count()) > 0);
+if (await openMapBtn.count()) {
+  const openBox = await openMapBtn.boundingBox();
+  const addBox = await page.locator('[data-id="library-peek-add"]').boundingBox();
+  check("[16] 추가 버튼보다 왼쪽에 배치", (openBox?.x ?? 0) < (addBox?.x ?? 0), `open=${Math.round(openBox?.x ?? 0)} add=${Math.round(addBox?.x ?? 0)}`);
+  await openMapBtn.click();
+  const gate = page.locator('[data-id="confirm-dialog-confirm"]');
+  const gateUp = await gate.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  check("[16] 클릭 시 바로 이동하지 않고 확인 게이트", gateUp);
+  await shot(page, "16-peek-open-map-gate");
+  // 취소 — 실제 이동은 하지 않는다(이후 검증이 이 페이지를 계속 쓴다)
+  await page.locator('[data-id="confirm-dialog-cancel"]').click().catch(() => {});
+  await page.waitForTimeout(500);
+  if (!(await peek.isVisible().catch(() => false))) {
+    await mapRow.click();
+    await peek.waitFor({ state: "visible", timeout: 12000 });
+    await page.waitForTimeout(800);
+  }
+}
+
 const zoomVisible = await page.locator('[data-id="library-peek-zoom"]').isVisible().catch(() => false);
 check("[2] 줌 컨트롤 노출", zoomVisible);
 if (zoomVisible) {
@@ -94,6 +146,23 @@ if (zoomVisible) {
   const label = await page.locator('[data-id="library-peek-zoom"] span').first().textContent();
   check("[2] 줌인 반영", label?.includes("150"), `label=${label}`);
   await shot(page, "02-peek-zoomed-150");
+
+  // ── 항목 12: 확대 중 스크롤바 없이 드래그(그랩)로 이동 ──────────────────────
+  const pane = page.locator('[data-id="library-peek"] [data-id="scope-preview-pane"]').first();
+  const overflow = await pane.evaluate((el) => getComputedStyle(el).overflow);
+  const cursor = await pane.evaluate((el) => getComputedStyle(el).cursor);
+  check("[12] 확대 중 스크롤바 없음(overflow hidden)", overflow === "hidden", `overflow=${overflow}`);
+  check("[12] 그랩 커서", cursor === "grab", `cursor=${cursor}`);
+  const paneBox = await pane.boundingBox();
+  const before = await pane.evaluate((el) => el.scrollLeft);
+  await page.mouse.move(paneBox.x + paneBox.width / 2, paneBox.y + paneBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(paneBox.x + paneBox.width / 2 - 120, paneBox.y + paneBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const after = await pane.evaluate((el) => el.scrollLeft);
+  check("[12] 드래그로 미리보기가 이동한다", after > before, `scrollLeft ${before} → ${after}`);
+  await shot(page, "12-peek-drag-pan");
+
   await page.locator('[data-id="library-peek-zoom-out"]').click();
   await page.locator('[data-id="library-peek-zoom-out"]').click();
 }
@@ -152,8 +221,17 @@ await shot(page, "04-mock-menu-at-cursor");
 await page.keyboard.press("Escape");
 await page.mouse.click(800, 950);
 
-// ── 항목 1: 노드 업무체계 아이콘 → 피크가 커서 기준 ──────────────────────────
+// ── 항목 1: 영역 헤더 업무체계 라벨 → 피크가 커서 기준 ───────────────────────
+// 피크·트리 피커를 먼저 치운다 — 열려 있으면 캔버스 클릭이 가려진다
 await page.keyboard.press("Escape");
+await page.waitForTimeout(400);
+// 피커가 열려 있으면 캔버스가 좁아져 영역 헤더가 오른쪽으로 잘린다 — 닫기 버튼으로 확실히 닫는다
+const pickerClose = page.locator('[data-id="framework-tree-picker"] button[aria-label="Close"]');
+if (await pickerClose.count()) {
+  await pickerClose.click({ timeout: 5000 }).catch(() => {});
+  await page.locator('[data-id="framework-tree-picker"]').waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(500);
+}
 // SP 노드를 펼치면 영역 헤더에 업무체계 5단계 라벨(= 같은 FrameworkPeekTrigger)이 뜬다
 const spNode = page.locator(".react-flow__node").first();
 await spNode.click();
@@ -163,25 +241,36 @@ if (await expandBtn.count()) {
   await expandBtn.click();
   await page.waitForSelector('[data-id^="region-band-"]', { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(1400);
+  // 펼친 영역이 화면 밖으로 나가면 헤더 라벨을 못 누른다 — 전체 보기로 맞춘다
+  await page.keyboard.press("Shift+1").catch(() => {});
+  await page.waitForTimeout(900);
 }
 const pill = page.locator('[data-id^="region-framework-"]').first();
 const pillCount = await pill.count();
 if (pillCount > 0) {
+  await pill.scrollIntoViewIfNeeded().catch(() => {});
+  await page.waitForTimeout(300);
   const pillBox = await pill.boundingBox();
   const px = Math.round((pillBox?.x ?? 0) + 4);
   const py = Math.round((pillBox?.y ?? 0) + 4);
+  await page.mouse.move(px, py); // 커서 위치를 트리거가 기록하게 — 클릭 좌표가 곧 앵커다
   await page.mouse.click(px, py);
   const fwPeek = page.locator('[data-id="node-framework-peek"]');
-  await fwPeek.waitFor({ state: "visible", timeout: 8000 });
-  const fwBox = await fwPeek.boundingBox();
-  const fdx = (fwBox?.x ?? 0) - px;
-  const fdy = (fwBox?.y ?? 0) - py;
-  check(
-    "[1] 체계 피크가 커서 좌상단 기준(오른쪽 고정 아님)",
-    fdx >= -2 && fdx <= 20 && fdy >= -2 && fdy <= 20,
-    `dx=${Math.round(fdx)} dy=${Math.round(fdy)}`,
-  );
-  await shot(page, "01-framework-peek-at-cursor");
+  const opened = await fwPeek.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  if (!opened) {
+    check("[1] 체계 피크가 커서 좌상단 기준", false, "피크가 안 열림");
+    await shot(page, "01-framework-peek-FAILED");
+  } else {
+    const fwBox = await fwPeek.boundingBox();
+    const fdx = (fwBox?.x ?? 0) - px;
+    const fdy = (fwBox?.y ?? 0) - py;
+    check(
+      "[1] 체계 피크가 커서 좌상단 기준(오른쪽 고정 아님)",
+      fdx >= -2 && fdx <= 20 && fdy >= -2 && fdy <= 20,
+      `dx=${Math.round(fdx)} dy=${Math.round(fdy)}`,
+    );
+    await shot(page, "01-framework-peek-at-cursor");
+  }
 } else {
   check("[1] 체계 피크가 커서 좌상단 기준", false, "region-framework 라벨 없음(시드 한계)");
 }

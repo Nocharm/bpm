@@ -7,7 +7,7 @@
 import { ChevronDown, ChevronRight, Network, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 
-import type { CategoryNode, MapSummary } from "@/lib/api";
+import { getCategoryChain, type CategoryNode, type MapSummary } from "@/lib/api";
 import {
   PEEK_HOVER_DELAY_MS,
   SubprocessPreviewPeek,
@@ -40,6 +40,8 @@ export interface FrameworkTreePickerProps {
   onPeekAdd: (payload: PeekAddPayload) => void;
   // 피크 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)로 연결
   onPeekOpenMap: (mapId: number, name: string) => void;
+  // 이미 이 캔버스에 들어와 있는 행 클릭 — 미리보기 대신 그 노드로 포커스 (사용자 요청 2026-08-31)
+  onFocusLinkedNode: (linkedMapId: number) => void;
 }
 
 export function FrameworkTreePicker({
@@ -51,6 +53,7 @@ export function FrameworkTreePicker({
   onClose,
   onPeekAdd,
   onPeekOpenMap,
+  onFocusLinkedNode,
 }: FrameworkTreePickerProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
@@ -94,21 +97,44 @@ export function FrameworkTreePicker({
     });
   }
 
+  // 마운트 시 루트 + "내 위치"(캔버스 결착 L5) 체인을 미리 펼친다 — 매번 L1부터 파고들지 않게
+  // (사용자 요청 2026-08-31). L5 자신은 열어서 소속 L6 목록까지 바로 보이게 한다.
   useEffect(() => {
     let active = true;
-    void fetchRootChildren()
-      .then((nodes) => {
-        if (active) {
-          setState((prev) => reduceFrameworkTree(prev, { type: "children_loaded", parentId: ROOT, nodes }));
-        }
-      })
-      .catch(() => {
+    void (async () => {
+      try {
+        const roots = await fetchRootChildren();
+        if (!active) return;
+        setState((prev) =>
+          reduceFrameworkTree(prev, { type: "children_loaded", parentId: ROOT, nodes: roots }),
+        );
+      } catch {
         if (active) setRootError(true);
-      });
+        return;
+      }
+      if (linkageCategoryId === null) return;
+      try {
+        const chain = await getCategoryChain(linkageCategoryId);
+        if (!active) return;
+        // 체인 전 단계의 자식+맵을 병렬로 받아 한 번에 펼침 — 순차 클릭 시뮬레이션보다 빠르다
+        const loaded = await Promise.all(chain.map((cat) => fetchCategoryChildren(cat.id)));
+        if (!active) return;
+        setState((prev) => {
+          let next = prev;
+          chain.forEach((cat, i) => {
+            next = applyCategoryLoaded(next, cat.id, loaded[i].nodes, loaded[i].maps);
+            next = reduceFrameworkTree(next, { type: "opened", categoryId: cat.id });
+          });
+          return next;
+        });
+      } catch {
+        // 자동 드릴인 실패는 조용히 — 루트는 이미 떠 있어 수동 탐색이 가능하다
+      }
+    })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [linkageCategoryId]);
 
   // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(대량 전달 방어)
   const AUTO_DRILL_MAX = 6;
@@ -188,7 +214,8 @@ export function FrameworkTreePicker({
 
   const renderMapRow = (row: MapSummary, categoryId: number, categoryPath: string) => {
     // 캔버스 자신·기링크·다른 캔버스는 드래그 불가 — 링크 유일성/의미 없는 대상 선제 차단
-    const blocked = row.id === currentMapId || linkedMapIds.has(row.id) || row.mode === "framework";
+    const alreadyLinked = linkedMapIds.has(row.id);
+    const blocked = row.id === currentMapId || alreadyLinked || row.mode === "framework";
     // 피크 add 비활성 사유 — 행 드래그 차단과 동일 + 읽기전용
     const peekBlocked = readOnly
       ? t("editor.readonly.viewerDesc")
@@ -202,11 +229,19 @@ export function FrameworkTreePicker({
         draggable={!blocked}
         onDragStart={blocked ? undefined : (e) => handleDragStart(e, row, categoryId, categoryPath)}
         onClick={(e) => {
-          // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 차단 행도 미리보기는 제공
+          // 이미 이 캔버스에 있는 행은 추가가 불가능하다 — 미리보기 대신 그 노드로 보낸다
+          if (alreadyLinked) {
+            clearHoverTimer();
+            setPeek(null);
+            onFocusLinkedNode(row.id);
+            return;
+          }
+          // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 그 외 차단 행도 미리보기는 제공
           if (peek && peek.row.id === row.id) setPeek(null);
           else openPeek(row, categoryId, categoryPath, peekBlocked, e.currentTarget);
         }}
         onMouseEnter={(e) => {
+          if (alreadyLinked) return; // 호버 자동 오픈 억제 — 클릭은 포커스 이동이다
           const rowEl = e.currentTarget;
           clearHoverTimer();
           hoverTimerRef.current = window.setTimeout(
@@ -215,9 +250,13 @@ export function FrameworkTreePicker({
           );
         }}
         onMouseLeave={clearHoverTimer}
-        title={blocked ? t("library.alreadyLinked") : row.name}
+        title={alreadyLinked ? t("library.focusLinkedNode") : blocked ? t("library.alreadyLinked") : row.name}
         className={`flex items-center gap-1.5 rounded-sm px-1.5 py-1 text-fine text-ink ${
-          blocked ? "cursor-not-allowed opacity-40" : "cursor-grab hover:bg-surface-alt active:cursor-grabbing"
+          alreadyLinked
+            ? "cursor-pointer opacity-60 hover:bg-accent-tint hover:opacity-100"
+            : blocked
+              ? "cursor-not-allowed opacity-40"
+              : "cursor-grab hover:bg-surface-alt active:cursor-grabbing"
         }`}
       >
         <Network size={12} strokeWidth={1.5} className="shrink-0 text-ink/50" />

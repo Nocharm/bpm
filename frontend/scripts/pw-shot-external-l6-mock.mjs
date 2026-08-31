@@ -82,7 +82,6 @@ await page.waitForTimeout(1500);
 
 const mock = page.locator('[data-id="library-peek-node-mock"]');
 const bg = await mock.evaluate((el) => getComputedStyle(el).backgroundColor);
-const borderColor = await mock.evaluate((el) => getComputedStyle(el).borderTopColor);
 const originBadge = await page.locator('[data-id="library-peek-mock-origin"]').count();
 // 좌측 컬러 탭 — 목업 첫 자식 span(absolute, width 5px)
 const tabWidth = await mock.evaluate((el) => {

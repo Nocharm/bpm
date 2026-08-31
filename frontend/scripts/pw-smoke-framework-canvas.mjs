@@ -111,17 +111,23 @@ try {
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("S opens framework tree picker on canvas", pickerVisible);
   if (pickerVisible) {
-    // 체인을 순서대로 드릴한다. 단, 하위 후보가 하나뿐인 단계는 자동 드릴인으로 이미 펼쳐져 있으므로
-    // (2026-08-31) aria-expanded를 보고 열린 행은 건너뛴다 — 다시 클릭하면 토글로 닫혀버린다.
-    for (const name of CHAIN) {
-      const row = page.locator('[data-id^="framework-picker-node-"]').filter({ hasText: name }).first();
-      await row.waitFor({ state: "visible", timeout: 12000 });
-      if ((await row.getAttribute("aria-expanded")) !== "true") {
-        await row.click();
-      }
-    }
-    const anyMapRow = await page.locator('[data-id^="framework-picker-map-"]').first()
+    // 2026-08-31부터 피커는 열릴 때 "내 위치"(캔버스 결착 L5) 체인까지 자동으로 펼친다 —
+    // 먼저 그 결과를 기다리고, 안 되면(구동작·권한 등) 체인을 수동으로 드릴한다.
+    // ⚠️ 자동 드릴인이 끝나기 전에 클릭하면 이미 열린 행을 토글로 닫아버려 트리가 사라진다.
+    let anyMapRow = await page.locator('[data-id^="framework-picker-map-"]').first()
       .waitFor({ state: "visible", timeout: 12000 }).then(() => true).catch(() => false);
+    check("picker auto-drills to the canvas L5 on open", anyMapRow);
+    if (!anyMapRow) {
+      for (const name of CHAIN) {
+        const row = page.locator('[data-id^="framework-picker-node-"]').filter({ hasText: name }).first();
+        await row.waitFor({ state: "visible", timeout: 12000 });
+        if ((await row.getAttribute("aria-expanded")) !== "true") {
+          await row.click();
+        }
+      }
+      anyMapRow = await page.locator('[data-id^="framework-picker-map-"]').first()
+        .waitFor({ state: "visible", timeout: 12000 }).then(() => true).catch(() => false);
+    }
     check("picker lazy tree reveals L6 map rows", anyMapRow);
     await shot(page, "framework-picker");
   } else {

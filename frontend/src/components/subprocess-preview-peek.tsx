@@ -108,7 +108,7 @@ export function SubprocessPreviewPeek({
   addDisabledReason: string | null;
   // L5 연계 캔버스 전용 — 타 L5 출신 맵이면 캔버스 규칙(홈 L5별 색+출처 배지)로 목업 렌더 (design 2026-08-28 §8)
   externalOrigin?: { categoryId: number; categoryPath: string } | null;
-  // 현재 맵의 노드 표시 설정 — 목업 호버 시 "현재 맵 기준" 렌더 필터 (2026-08-30)
+  // 현재 맵의 노드 표시 설정 — 목업의 기본 렌더 필터(=추가하면 실제로 이렇게 보인다)
   displayFields: NodeDisplayToggle[];
   onAdd: () => void;
   // 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)는 호출측이 담당
@@ -289,7 +289,9 @@ export function SubprocessPreviewPeek({
   const [mockMenu, setMockMenu] = useState(false);
   // 메뉴를 띄운 커서 위치(뷰포트 고정) — 포털이라 목업 기준 좌표가 아니다
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  // 목업 표시 모드 — 기본: 전체 파라미터, 호버: 현재 맵 노드 표시 설정 기준(실제 렌더 미리보기) (2026-08-30)
+  // 목업 표시 모드 — 기본: 현재 맵 표시 설정 기준(실제 렌더), 호버: 전체 파라미터.
+  // 2026-08-31 반전: 호버로 "줄어들면" 커서가 목업 밖으로 나가 unhover→확대→재hover 점프 루프가 생긴다.
+  // 호버가 항상 아래로 자라는 방향이면 커서는 계속 안쪽이라 루프가 없다 (사용자 지적).
   const [mockHover, setMockHover] = useState(false);
   const mockAttrRows = (
     [
@@ -297,12 +299,12 @@ export function SubprocessPreviewPeek({
       { key: "department", icon: Building2, value: info.department ?? "" },
       { key: "system", icon: Server, value: info.system ?? "" },
     ] as const
-  ).filter((row) => row.value && (!mockHover || displayFields.includes(row.key)));
+  ).filter((row) => row.value && (mockHover || displayFields.includes(row.key)));
   const mockParamChips = SP_PARAM_FIELDS.map((field) => ({
     field,
     text: formatParamValue(field, spParamValue(field)),
   })).filter((chip) => chip.text);
-  const showMockParams = !mockHover || displayFields.includes("params");
+  const showMockParams = mockHover || displayFields.includes("params");
   // 조건·IO·GMP — SP 지정의 나머지 표시 필드(getMap 소스, 잠금 맵은 meta 미조회라 미표시/대시)
   const spExtra = meta.status === "ready" ? meta.sp : null;
   const splitIoLines = (raw: string | null | undefined): string[] =>
@@ -311,16 +313,16 @@ export function SubprocessPreviewPeek({
       .map((line) => line.trim())
       .filter(Boolean);
   const mockGmpLabel = formatGmp(spExtra?.gmp);
-  const showMockGmp = !mockHover || displayFields.includes("gmp");
+  const showMockGmp = mockHover || displayFields.includes("gmp");
   const mockConditionLines = [
     { key: "start_condition", icon: Play, value: spExtra?.startCondition ?? "" },
     { key: "end_condition", icon: Flag, value: spExtra?.endCondition ?? "" },
   ].filter((line) => line.value);
-  const showMockConditions = !mockHover || displayFields.includes("conditions");
+  const showMockConditions = mockHover || displayFields.includes("conditions");
   const mockIoSides = [
     { side: "input" as const, icon: LogIn, lines: splitIoLines(spExtra?.input) },
     { side: "output" as const, icon: LogOut, lines: splitIoLines(spExtra?.output) },
-  ].filter((entry) => entry.lines.length > 0 && (!mockHover || displayFields.includes(entry.side)));
+  ].filter((entry) => entry.lines.length > 0 && (mockHover || displayFields.includes(entry.side)));
   const mockAreaRef = useRef<HTMLDivElement>(null);
   const mockMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -390,22 +392,36 @@ export function SubprocessPreviewPeek({
           <Network size={14} strokeWidth={1.5} className="shrink-0 text-ink/50" />
           <span className="truncate">{name}</span>
         </span>
-        {/* Add to map — 잠금/미등록 상태에서도 추가는 가능 */}
-        <button
-          type="button"
-          data-id="library-peek-add"
-          disabled={addDisabledReason !== null}
-          title={addDisabledReason ?? t("library.peekAdd")}
-          onClick={onAdd}
-          className={`flex shrink-0 items-center gap-1 rounded-sm border px-2 py-0.5 text-fine font-medium ${
-            addDisabledReason !== null
-              ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
-              : "border-accent-tint-border bg-accent text-white hover:opacity-90"
-          }`}
-        >
-          <Plus size={12} strokeWidth={1.5} />
-          {t("library.peekAdd")}
-        </button>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31).
+              목업 드롭다운에만 있던 동선을 헤더로 올려 미리보기 중 바로 갈 수 있게. */}
+          <button
+            type="button"
+            data-id="library-peek-open-map"
+            title={t("library.peekOpenNamedMap", { name })}
+            onClick={onOpenMap}
+            className="flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary hover:bg-surface-alt hover:text-accent"
+          >
+            <ExternalLink size={12} strokeWidth={1.5} />
+            {t("library.peekOpenMap")}
+          </button>
+          {/* Add to map — 잠금/미등록 상태에서도 추가는 가능 */}
+          <button
+            type="button"
+            data-id="library-peek-add"
+            disabled={addDisabledReason !== null}
+            title={addDisabledReason ?? t("library.peekAdd")}
+            onClick={onAdd}
+            className={`flex shrink-0 items-center gap-1 rounded-sm border px-2 py-0.5 text-fine font-medium ${
+              addDisabledReason !== null
+                ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
+                : "border-accent-tint-border bg-accent text-white hover:opacity-90"
+            }`}
+          >
+            <Plus size={12} strokeWidth={1.5} />
+            {t("library.peekAdd")}
+          </button>
+        </span>
       </div>
       {/* body — 미리보기(좌, 전폭)와 우측 탭 컬럼(노드 목업/상세). 행 높이를 미리보기 높이로 고정해
           우측이 길어도 패널이 안 늘어나고(미리보기 아래 공백 방지) 우측은 내부 스크롤 (사용자 피드백 2026-08-30) */}
@@ -510,11 +526,11 @@ export function SubprocessPreviewPeek({
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
               {/* 추가될 노드 목업 — 일반 맵=SP 바이올렛, L5 캔버스 타 L5 출신=홈 L5 색+출처 배지(캔버스 규칙) */}
               <div ref={mockAreaRef} className="relative">
-                {/* 캡션 — 기본 "전체 파라미터", 호버 시 "현재 맵 표시 기준" 스왑 안내 */}
+                {/* 캡션 — 기본 "현재 맵 표시 기준", 호버 시 "전체 파라미터" 스왑 안내 */}
                 <div className="mb-1.5 flex items-center justify-between gap-2">
                   <span className="shrink-0 text-fine text-ink-tertiary">{t("library.peekNodePreview")}</span>
                   <span data-id="library-peek-mock-mode" className="truncate text-fine text-ink-muted">
-                    {mockHover ? t("library.peekMockMapBasis") : t("library.peekMockAllParams")}
+                    {mockHover ? t("library.peekMockAllParams") : t("library.peekMockMapBasis")}
                   </span>
                 </div>
                 <button
@@ -588,7 +604,7 @@ export function SubprocessPreviewPeek({
                       <span className="truncate">{externalOrigin.categoryPath.split("/").pop()}</span>
                     </span>
                   )}
-                  {/* 속성 줄(담당자/부서/시스템) — 기본: 값 있는 전부, 호버: 현재 맵 토글 기준 */}
+                  {/* 속성 줄(담당자/부서/시스템) — 기본: 현재 맵 토글 기준, 호버: 값 있는 전부 */}
                   {mockAttrRows.length > 0 && (
                     <div className="mt-1 flex flex-col gap-0.5">
                       {mockAttrRows.map((row) => {
@@ -602,7 +618,7 @@ export function SubprocessPreviewPeek({
                       })}
                     </div>
                   )}
-                  {/* 파라미터 칩 — 캔버스 NodeParams 미러(아이콘+표시형), 호버 시 "params" 토글 기준 */}
+                  {/* 파라미터 칩 — 캔버스 NodeParams 미러(아이콘+표시형), 기본은 "params" 토글 기준 */}
                   {showMockParams && mockParamChips.length > 0 && (
                     <div
                       data-id="library-peek-mock-params"
