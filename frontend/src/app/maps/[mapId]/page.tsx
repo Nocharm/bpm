@@ -9138,21 +9138,23 @@ function MapEditor({ mapId }: { mapId: number }) {
                         data-id="l5-brand-watermark"
                         className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
                       >
-                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-14 text-canvas opacity-[0.06]">
-                          {Array.from({ length: 14 }, (_, row) => (
+                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.06]">
+                          {Array.from({ length: 10 }, (_, row) => (
                             <div
                               key={row}
-                              className="flex items-center gap-16 whitespace-nowrap text-[15px] tracking-[0.18em]"
+                              className="flex items-center gap-28 whitespace-nowrap text-[15px] tracking-[0.18em]"
                               // 홀수 행 오프셋 — 격자 정렬을 깨 자연스러운 벽지 리듬
-                              style={row % 2 === 1 ? { transform: "translateX(130px)" } : undefined}
+                              style={row % 2 === 1 ? { transform: "translateX(170px)" } : undefined}
                             >
-                              {Array.from({ length: 5 }, (_, col) =>
-                                (row + col) % 3 === 0 ? (
+                              {Array.from({ length: 4 }, (_, col) =>
+                                (row + col) % 2 === 0 ? (
                                   <span key={col} className="font-semibold">SAMSUNG BIOLOGICS</span>
-                                ) : (row + col) % 3 === 1 ? (
-                                  <Workflow key={col} size={18} strokeWidth={1.5} className="shrink-0" />
                                 ) : (
-                                  <span key={col} className="font-light">Business Process Map</span>
+                                  // 아이콘은 시스템명에 붙여 한 덩어리 — 2종만 교차 (사용자 요청 2026-09-01)
+                                  <span key={col} className="inline-flex items-center gap-2.5 font-light">
+                                    <Workflow size={16} strokeWidth={1.5} className="shrink-0" />
+                                    Business Process Map
+                                  </span>
                                 ),
                               )}
                             </div>

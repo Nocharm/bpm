@@ -112,14 +112,14 @@ body {
 
 /* L5 새벽 조감도 캔버스 — 위 깊은 남색 → 아래 차콜로 흐르는 하늘(뷰포트 고정, 팬 무관).
    장식(별·비네트) 없이 그라데이션만 — 임원 보고에 맞는 플랫·절제 톤 (사용자 결정 2026-09-01).
-   80% 알파 — 뒤의 흰 거터가 배어들어 밝고 부드러운 스모크 (사용자 확정: 더 투명=더 밝게). */
+   86% 알파 — 80%는 밝고 94%는 어두웠던 사이의 절충(사용자 톤 조정 2026-09-01). */
 .bpm-l5-sky {
   /* background-color 없음 — 색 언더레이가 깔리면 그라데이션 알파와 이중 적층돼 투명 효과가 상쇄됨 */
   background-image: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--color-canvas-l5-sky) 80%, transparent) 0%,
-    color-mix(in srgb, color-mix(in srgb, var(--color-canvas-l5-sky) 45%, var(--color-canvas-l5)) 80%, transparent) 52%,
-    color-mix(in srgb, var(--color-canvas-l5) 80%, transparent) 100%
+    color-mix(in srgb, var(--color-canvas-l5-sky) 86%, transparent) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--color-canvas-l5-sky) 45%, var(--color-canvas-l5)) 86%, transparent) 52%,
+    color-mix(in srgb, var(--color-canvas-l5) 86%, transparent) 100%
   );
 }
 

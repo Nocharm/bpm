@@ -90,7 +90,7 @@ try {
   await page.waitForTimeout(600);
   // 새벽 조감도 — 90% 알파 그라데이션 하늘(스모크 글라스, 언더레이 없음) + 라운드 프레임, 도트·별 없음
   const skyDefault = String(await skyGradient(page));
-  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.8"), skyDefault.slice(0, 80));
+  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.86"), skyDefault.slice(0, 80));
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
   check("brand watermark on charcoal", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 1);
   check("react-flow attribution hidden", (await page.locator(".react-flow__attribution").count()) === 0);
