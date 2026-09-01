@@ -15,7 +15,7 @@ import {
   type EdgeTypes,
 } from "@xyflow/react";
 
-import type { AppNode } from "@/lib/canvas";
+import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
 import {
   buildDetourPoints,
   buildRoundedOrthPath,
@@ -118,8 +118,9 @@ function renderEdge(
             className="nodrag nopan pointer-events-none absolute whitespace-pre-wrap text-center leading-tight"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6)
-              maxWidth: 160,
+              // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6).
+              // 임포트 자동배치가 이 값으로 랭크 간격을 잡는다 — canvas.ts 주석 참조
+              maxWidth: EDGE_LABEL_MAX_WIDTH,
               overflowWrap: "break-word",
               // labelStyle/labelBgStyle은 SVG 어휘(fill/stroke)로 들어온다 — HTML 속성으로 변환
               color: labelStyle?.fill,

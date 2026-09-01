@@ -165,3 +165,52 @@ def test_existing_link_is_not_overwritten() -> None:
 def test_blank_lines_are_ignored() -> None:
     nodes = [_node("n1", 1, out="\n  \n"), _node("n2", 2, inp="\n")]
     assert link_matching_io(nodes, [_edge("n1", "n2")], "L6-1") == 0
+
+
+def test_label_width_estimate_clamps_and_takes_widest_line() -> None:
+    from scripts.consultant_layout import EDGE_LABEL_MAX_WIDTH, estimate_label_width
+
+    assert estimate_label_width("") == 0
+    # 한글은 대략 1em(11px) — 5자면 55px 안팎
+    assert 45 <= estimate_label_width("표준기 선정") <= 70
+    # 논리 줄이 여럿이면 가장 넓은 줄이 상자 폭
+    assert estimate_label_width("짧음\n아주 많이 긴 조건 문장입니다") > estimate_label_width("짧음")
+    # 최대폭을 넘으면 자동 줄바꿈 — 상자 폭은 최대폭에서 고정
+    assert estimate_label_width("가" * 200) == EDGE_LABEL_MAX_WIDTH
+
+
+def _gap(nodes: list[LayoutNode], a: str, b: str) -> float:
+    """노드 a의 오른쪽 끝과 b의 왼쪽 끝 사이 빈 가로 공간."""
+    from scripts.consultant_layout import node_size
+
+    by_id = {n.id: n for n in nodes}
+    return by_id[b].x - (by_id[a].x + node_size(by_id[a].node_type)[0])
+
+
+def test_labeled_gap_fits_the_label_box() -> None:
+    """첫 자동배치에서 라벨이 노드를 덮지 않으려면 그 구간이 라벨 상자보다 넓어야 한다."""
+    from scripts.consultant_layout import EDGE_LABEL_PAD_X, estimate_label_width
+
+    label = "표준기 라인\n작업지시 확인 후 표준기 선정과 양식 준비를 동시에 진행"
+    nodes, pairs = _chain(2)
+    layout_flow(nodes, pairs, primary_end_id="e", labeled=[("a1", "a2", label)])
+    assert _gap(nodes, "a1", "a2") >= estimate_label_width(label) + EDGE_LABEL_PAD_X
+
+
+def test_unlabeled_gap_stays_compact() -> None:
+    """라벨이 없는 구간까지 넓히면 맵이 쓸데없이 커진다 — 기본 간격을 유지한다."""
+    nodes, pairs = _chain(2)
+    layout_flow(nodes, pairs, primary_end_id="e", labeled=[("a1", "a2", "긴 조건 문장입니다 " * 3)])
+    narrow = _gap(nodes, "s", "a1")
+    wide = _gap(nodes, "a1", "a2")
+    assert wide > narrow
+    assert narrow == 240 - 96  # 기본 스텝 − Start 노드 폭
+
+
+def test_multi_rank_edge_widens_every_gap_it_crosses() -> None:
+    """여러 랭크를 건너뛰는 엣지는 라벨 위치를 확정할 수 없다 — 지나는 구간을 전부 넓힌다."""
+    nodes, pairs = _chain(3)
+    long_label = "이 구간을 지나는 아주 긴 조건 문장"
+    layout_flow(nodes, pairs, primary_end_id="e", labeled=[("a1", "a3", long_label)])
+    assert _gap(nodes, "a1", "a2") > 240 - 170
+    assert _gap(nodes, "a2", "a3") > 240 - 170

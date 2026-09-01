@@ -20,7 +20,17 @@ _NODE_SIZE: dict[str, tuple[int, int]] = {
 }
 _DEFAULT_SIZE = (170, 52)  # NODE_WIDTH · NODE_HEIGHT
 
-_X_STEP = 240  # rank 간 가로 간격 — create_map Start/End 시드(120→480)와 동일 리듬
+# 엣지 라벨 최대폭 + 좌우 패딩 — frontend/src/lib/canvas.ts EDGE_LABEL_MAX_WIDTH·EDGE_LABEL_PAD_X와
+# 수동 동기. 라벨은 경로 중앙(랭크 사이)에 놓이므로 이 폭만큼은 노드가 비켜 줘야 한다.
+EDGE_LABEL_MAX_WIDTH = 160
+EDGE_LABEL_PAD_X = 12
+_LABEL_MARGIN = 20  # 라벨 상자와 노드 사이 최소 여백(좌우 각각)
+_MAX_NODE_W = max(w for w, _ in [*_NODE_SIZE.values(), _DEFAULT_SIZE])
+
+# rank 간 가로 간격 — 라벨 없는 구간의 기본값. create_map Start/End 시드(120→480)와 같은 리듬
+_X_STEP = 240
+# 라벨이 있는 구간은 그 라벨이 들어갈 만큼만 넓힌다. 240 고정이던 시절엔 틈이 70px뿐이라
+# 160px 라벨이 양옆 노드를 덮었다(2026-09-01 실측 17건).
 _Y_STEP = 120  # rank 내 세로 간격
 _X0, _Y0 = 120, 200
 _BRANCH_PUSH = 60  # 곁가지 추가 이격 — flow-layout.ts와 동일 상수
@@ -46,6 +56,52 @@ class LayoutNode:
     @property
     def cy(self) -> float:
         return self.y + node_size(self.node_type)[1] / 2
+
+
+def estimate_label_width(label: str) -> float:
+    """엣지 라벨 렌더 폭(px) 추정 — 줄바꿈으로 나뉜 논리 줄 중 가장 넓은 것, 최대폭에서 클램프.
+
+    canvas가 없는 서버에서 텍스트를 실측할 수 없어 글자폭을 근사한다(11px/600 기준):
+    한글·CJK는 1em, 그 외는 0.55em, 공백은 0.32em. 과소평가하면 라벨이 노드를 덮으므로
+    올림 처리한다. 최대폭을 넘는 줄은 자동 줄바꿈되어 상자 폭이 최대폭으로 고정된다.
+    """
+    if not label:
+        return 0.0
+    widest = 0.0
+    for line in label.split("\n"):
+        width = 0.0
+        for ch in line:
+            if ch == " ":
+                width += 3.5
+            elif ord(ch) > 0x1100:  # 한글·CJK·전각 — 대략 1em
+                width += 11.0
+            else:
+                width += 6.1
+        widest = max(widest, width)
+    return min(float(EDGE_LABEL_MAX_WIDTH), widest)
+
+
+def _gap_steps(
+    layers: dict[int, list[str]],
+    ranks: dict[str, int],
+    labeled: list[tuple[str, str, str]],
+) -> dict[int, float]:
+    """랭크 구간(g = rank g→g+1)별 가로 간격 — 그 구간을 지나는 라벨이 들어갈 만큼만 넓힌다.
+
+    엣지가 여러 랭크를 건너뛰면(bypass 등) 라벨이 어느 구간에 놓일지 확정할 수 없어 지나는
+    구간 전부를 후보로 본다 — 과소평가(=겹침)보다 과대평가(=여백)가 낫다.
+    """
+    steps = {g: float(_X_STEP) for g in range(max(layers, default=0))}
+    for src, dst, label in labeled:
+        need = estimate_label_width(label)
+        if need <= 0:
+            continue
+        want = _MAX_NODE_W + need + EDGE_LABEL_PAD_X + 2 * _LABEL_MARGIN
+        lo, hi = sorted((ranks[src], ranks[dst]))
+        for g in range(lo, hi):
+            if g in steps:
+                steps[g] = max(steps[g], want)
+    return steps
 
 
 def compute_ranks(codes: list[str], pairs: list[tuple[str, str]]) -> dict[str, int]:
@@ -243,6 +299,7 @@ def layout_flow(
     *,
     primary_end_id: str | None = None,
     back_pairs: set[tuple[str, str]] | None = None,
+    labeled: list[tuple[str, str, str]] | None = None,
 ) -> None:
     """가로 자동정렬 전체 파이프라인 — 제자리 변형(nodes의 x/y를 채운다).
 
@@ -264,11 +321,22 @@ def layout_flow(
         layers.setdefault(ranks[nid], []).append(nid)
     layers = _order_by_barycenter(layers, forward)
 
+    # 구간별 간격 — 라벨이 놓이는 구간만 그 라벨 폭만큼 넓힌다
+    steps = _gap_steps(layers, ranks, [
+        (s, d, text) for s, d, text in (labeled or [])
+        if s in present and d in present and text
+    ])
+    rank_x: dict[int, float] = {}
+    cursor = float(_X0)
+    for rank in sorted(layers):
+        rank_x[rank] = cursor
+        cursor += steps.get(rank, float(_X_STEP))
+
     by_id = {n.id: n for n in nodes}
     for rank in sorted(layers):
         for row, nid in enumerate(layers[rank]):
             node = by_id[nid]
-            node.x = _X0 + rank * _X_STEP
+            node.x = rank_x[rank]
             node.y = _Y0 + row * _Y_STEP
 
     all_pairs = [(s, d) for s, d in pairs if s in present and d in present]

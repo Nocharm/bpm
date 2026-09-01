@@ -222,7 +222,8 @@ def build_graph_rows(
     # loop(재수행)은 rank 계산에서 제외 — 선행으로 세면 사이클로 떨어져 전체가 뒤로 밀린다
     back_pairs = {(s, d) for s, d, _, kind in flow if kind == "loop"}
     layout_nodes = [LayoutNode(id=code, node_type=node_types[code]) for code in all_codes]
-    layout_flow(layout_nodes, pairs, primary_end_id=end, back_pairs=back_pairs)
+    layout_flow(layout_nodes, pairs, primary_end_id=end, back_pairs=back_pairs,
+                labeled=[(s, d, label) for s, d, label, _ in flow if label])
     spine = compute_spine_for(layout_nodes, pairs, end, back_pairs)
     sides = resolve_handles(layout_nodes, pairs, spine)
     pos = {n.id: (n.x, n.y) for n in layout_nodes}
@@ -1006,11 +1007,12 @@ async def apply_interview_linkage(
         if is_new_canvas and missing:
             layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
             present = set(missing)
+            canvas_edges = [(e.source, e.target) for e in linkage.edges
+                            if e.source in present and e.target in present]
             layout_flow(
-                layout_nodes,
-                [(e.source, e.target) for e in linkage.edges
-                 if e.source in present and e.target in present],
-                primary_end_id=None,
+                layout_nodes, canvas_edges, primary_end_id=None,
+                labeled=[(e.source, e.target, e.label) for e in linkage.edges
+                         if e.source in present and e.target in present and e.label],
             )
             placed = {n.id: (n.x, n.y) for n in layout_nodes}
         added = 0
