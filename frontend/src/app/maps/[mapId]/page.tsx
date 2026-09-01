@@ -342,14 +342,6 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
-// L5 커서 스포트라이트 — 지름(px)과 겹층. 좁힐수록 밝기를 올려야 같은 존재감이 난다(사용자 요청 2026-09-01).
-// ms가 다른 3겹이 같은 좌표를 각자 속도로 쫓아가며 잔상을 만든다 — 겹칠수록(정지 시) 코어가 진해진다.
-const L5_GLOW_SIZE = 300;
-const L5_GLOW_LAYERS: { core: number; edge: number; ms: number }[] = [
-  { core: 16, edge: 6, ms: 80 },
-  { core: 11, edge: 4, ms: 240 },
-  { core: 7, edge: 3, ms: 440 },
-];
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채꼴 배치 반경(오버레이 렌더·hit-test 공용)
 const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
@@ -6842,52 +6834,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     return hit?.id ?? null;
   };
 
-  // L5 커서 스포트라이트 — 커서 주변 하늘만 은은하게 밝힌다(사용자 요청 2026-09-01).
-  // 리렌더 없이 transform/opacity만 쓰는 합성 레이어 — 상태로 좌표를 올리면 에디터 전체가
-  // 매 프레임 리렌더된다. 원은 정적 그라데이션이라 이동은 GPU 합성만 하고 리페인트가 없다.
-  // 잔상은 **따라오는 속도가 다른 3겹** — 같은 좌표를 각자 다른 transition으로 쫓아가 뒤로 끌린다.
-  const l5GlowRef = useRef<HTMLDivElement | null>(null);
-  const moveL5Glow = useCallback((clientX: number, clientY: number) => {
-    const wrap = l5GlowRef.current;
-    const host = wrap?.parentElement;
-    if (!wrap || !host) {
-      return;
-    }
-    const rect = host.getBoundingClientRect();
-    const transform = `translate3d(${clientX - rect.left}px, ${clientY - rect.top}px, 0) translate(-50%, -50%)`;
-    // 처음 나타날 때는 잔상 없이 제자리에서 — 안 그러면 좌상단(0,0)에서 커서까지 줄이 그어진다
-    const jump = wrap.dataset.on !== "1";
-    const layers = Array.from(wrap.children).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    );
-    for (const layer of layers) {
-      if (jump) {
-        layer.style.transition = "none";
-      }
-      layer.style.transform = transform;
-      layer.style.opacity = "1";
-    }
-    if (jump) {
-      void wrap.offsetWidth; // 강제 리플로우 — transition:none 상태로 위치를 확정한 뒤 되돌린다
-      for (const layer of layers) {
-        layer.style.transition = layer.dataset.tr ?? "";
-      }
-      wrap.dataset.on = "1";
-    }
-  }, []);
-  const hideL5Glow = useCallback(() => {
-    const wrap = l5GlowRef.current;
-    if (!wrap) {
-      return;
-    }
-    wrap.dataset.on = "";
-    const layers = Array.from(wrap.children).filter(
-      (node): node is HTMLElement => node instanceof HTMLElement,
-    );
-    for (const layer of layers) {
-      layer.style.opacity = "0";
-    }
-  }, []);
 
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
@@ -9184,42 +9130,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
                     onPointerMove={(event) => {
                       setHoverRegionId(findRegionAtClient(event.clientX, event.clientY));
-                      // 스포트라이트는 L5 본 캔버스에서만 따라간다 — 떠 있는 드릴인 창 위 이동엔 반응하지 않게.
-                      if (index === 0) {
-                        moveL5Glow(event.clientX, event.clientY);
-                      }
                     }}
-                    onPointerLeave={() => {
-                      setHoverRegionId(null);
-                      hideL5Glow();
-                    }}
+                    onPointerLeave={() => setHoverRegionId(null)}
                   >
-                    {index === 0 && l5Charcoal && (
-                      // 커서 스포트라이트 — 워터마크보다 아래(하늘 바로 위)라 밝아지는 건 배경뿐.
-                      <div
-                        aria-hidden
-                        data-id="l5-cursor-glow"
-                        ref={l5GlowRef}
-                        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-                      >
-                        {L5_GLOW_LAYERS.map((layer) => (
-                          <div
-                            key={layer.ms}
-                            data-glow-layer
-                            // 위 moveL5Glow가 첫 등장 때 transition을 잠시 끄고 되돌리려면 원본 값이 필요하다
-                            data-tr={`transform ${layer.ms}ms ease-out, opacity 450ms ease-out`}
-                            className="absolute left-0 top-0 rounded-full opacity-0"
-                            style={{
-                              width: L5_GLOW_SIZE,
-                              height: L5_GLOW_SIZE,
-                              background: `radial-gradient(closest-side, color-mix(in srgb, var(--color-canvas) ${layer.core}%, transparent), color-mix(in srgb, var(--color-canvas) ${layer.edge}%, transparent) 45%, transparent 75%)`,
-                              transition: `transform ${layer.ms}ms ease-out, opacity 450ms ease-out`,
-                              willChange: "transform",
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
                     {index === 0 && l5Charcoal && (
                       // 브랜드 워터마크 — 회사 로고·시스템명·플랫 아이콘을 번갈아 사선 타일링(단조로움 완화).
                       // ReactFlow보다 앞 DOM + 저불투명이라 노드/엣지를 가리지 않는다. 뷰포트 고정(팬 무관)
