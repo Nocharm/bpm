@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — Framework L5 퍼블리시 기준·거버넌스 설계 스펙 (main)
+- L5 캔버스 확정에 완결성 게이트 6종(하드 블록)·`confirmed` 상태 분리(published 재사용 폐기)·옆문 11종 봉쇄·레벨별 권한 차등(행 위치=역할)·확정 요청 워크플로(상위→L5 관리자, ApprovalRequest kind 확장)·현황판을 브레인스토밍으로 확정. 조사에서 실파손 옆문 확인(확정 후 create-version→빈 draft 확정, created_by 게이트로 승인자 심어 draft 잠금, publish 옆문 시 스냅샷 전량 expired).
+- 스펙: `docs/superpowers/specs/2026-09-02-framework-l5-publish-governance-design.md` — 구현은 트랙 A(상태·봉쇄)→B(게이트·요청)→C(권한·현황판) 순.
+
 ## 2026-08-31 — 중첩 펼침 영역 메뉴는 가장 안쪽 맵 기준 (dev)
 - A>B>C로 하위프로세스를 겹쳐 펼친 상태에서 **C 안에서 우클릭해도 B가 대상**이 됐다 — 좌표 히트테스트가 "마지막 매치=바깥"을 돌려줬기 때문. 바깥 영역이 안쪽을 항상 포함하므로 `depth`가 가장 큰 매치를 고르도록 뒤집었다(호버 강조도 같은 함수라 함께 교정).
 - 대상이 헷갈리지 않게 **영역 메뉴 첫 줄에 그 링크맵 이름**을 박았다(`ContextMenuItem`에 `title` 변형 추가 — `caption`은 대문자 변환이라 고유명사에 부적합).
