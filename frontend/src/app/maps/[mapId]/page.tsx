@@ -9133,6 +9133,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                     }}
                     onPointerLeave={() => setHoverRegionId(null)}
                   >
+                    {index === 0 && l5Charcoal && (
+                      // 브랜드 워터마크 — 사선 리버스(화이트 저불투명) 도장, 뷰포트 고정(팬 무관).
+                      // ReactFlow보다 앞 DOM이라 노드/엣지 아래에 깔린다. 실 로고 SVG 제공 시 교체 여지
+                      <div
+                        aria-hidden
+                        data-id="l5-brand-watermark"
+                        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden"
+                      >
+                        <span className="-rotate-[24deg] select-none whitespace-nowrap text-[64px] tracking-[0.18em] text-canvas opacity-[0.06]">
+                          <span className="font-semibold">SAMSUNG</span>{" "}
+                          <span className="font-light">BIOLOGICS</span>
+                        </span>
+                      </div>
+                    )}
                     <ReactFlow
                       nodes={displayNodes}
                       edges={styledEdges}

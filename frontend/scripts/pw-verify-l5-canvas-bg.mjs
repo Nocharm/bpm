@@ -90,8 +90,9 @@ try {
   await page.waitForTimeout(600);
   // 새벽 조감도 — 90% 알파 그라데이션 하늘(스모크 글라스, 언더레이 없음) + 라운드 프레임, 도트·별 없음
   const skyDefault = String(await skyGradient(page));
-  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.9"), skyDefault.slice(0, 80));
+  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.94"), skyDefault.slice(0, 80));
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
+  check("brand watermark on charcoal", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 1);
   check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
@@ -109,6 +110,7 @@ try {
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
   check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
   check("no gradient in light", (await skyGradient(page)) === "none", String(await skyGradient(page)));
+  check("no brand watermark in light", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 0);
   check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");
