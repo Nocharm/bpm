@@ -2277,7 +2277,7 @@ const ko: Record<MessageKey, string> = {
   "editor.readonly.approvedDesc": "승인 완료 후 게시 대기 중인 버전입니다 - 읽기 전용.",
   "editor.readonly.publishedTitle": "Published",
   "editor.readonly.publishedDesc": "현재 게시본입니다 - 읽기 전용. 수정은 초안 버전에서 하세요.",
-  "editor.readonly.confirmedTitle": "확정 스냅샷",
+  "editor.readonly.confirmedTitle": "Confirmed snapshot",
   "editor.readonly.confirmedDesc": "담당자가 확정한 스냅샷입니다 - 읽기 전용. 라이브 초안은 계속 편집할 수 있습니다.",
   "editor.readonly.expiredTitle": "Expired",
   "editor.readonly.expiredDesc": "이전 게시본 이력입니다 - 읽기 전용.",

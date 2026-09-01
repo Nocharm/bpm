@@ -9705,8 +9705,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                     {readOnly && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         {currentVersion?.status === "confirmed" ? (
-                          /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프. 다크 하늘 위에서도 토큰 그대로(범위 밖: 커스텀 다크 대응) */
-                          <span className="flex -rotate-[18deg] select-none items-center gap-4 rounded-md border-[6px] border-accent px-10 py-4 text-[96px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
+                          /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프.
+                             차콜 캔버스에선 옆 텍스트 워터마크와 동일 조건으로 text-canvas 톤 전환(저시인성 방지). */
+                          <span
+                            className={`flex -rotate-[18deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                              index === 0 && l5Charcoal ? "border-canvas text-canvas" : "border-accent text-accent"
+                            }`}
+                          >
                             <BadgeCheck size={96} strokeWidth={1.5} />
                             {t("editor.watermarkConfirmed")}
                           </span>
