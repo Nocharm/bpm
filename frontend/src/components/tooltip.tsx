@@ -22,28 +22,42 @@ export function Tooltip({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLSpanElement>(null);
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; top: number; bottom: number } | null>(null);
   const body = content ?? label;
 
   const show = () => {
     const rect = ref.current?.getBoundingClientRect();
     if (rect) {
-      setPos({ x: rect.left + rect.width / 2, y: rect.top });
+      setPos({ x: rect.left + rect.width / 2, top: rect.top, bottom: rect.bottom });
     }
   };
 
-  // 화면 가장자리 보정 — 앵커 기준으로 배치한 뒤 실측해 안쪽으로 민다(리치 카드는 높이가 가변,
-  // 가로는 -translate-x-1/2로 중앙정렬돼 있어 추정 배치로는 잘린다). left/top·visibility는 이 이펙트가 단독 소유.
+  // 배치는 위쪽 기본 + 공간 없으면 아래로 플립, 그 뒤 실측 클램프 — 상단 경계에서 위로 밀어붙이면
+  // 툴팁이 앵커 행을 덮어 정작 가리키는 내용이 안 보인다(리치 카드는 높이가 가변이라 추정 불가).
+  // 가로는 -translate-x-1/2 중앙정렬이라 클램프로만 민다. left/top/transform·visibility는 이 이펙트가 단독 소유.
   useLayoutEffect(() => {
     const tip = tipRef.current;
     if (!tip || pos === null) {
       return;
     }
+    const gap = 6;
+    const margin = 8;
+    // 정렬은 CSS translate 속성으로 — Tailwind v4의 -translate-* 도 같은 속성이라, transform으로 덮으면
+    // 둘이 합성돼 두 번 밀린다. 높이는 최종 폭이 정해진 뒤에만 정확하니(줄바꿈) 위쪽에 한 번 붙여 재고 플립을 판정한다.
+    tip.style.translate = "-50% -100%";
     tip.style.left = `${pos.x}px`;
-    tip.style.top = `${pos.y - 6}px`;
+    tip.style.top = `${pos.top - gap}px`;
+    const height = tip.getBoundingClientRect().height;
+    const flipDown =
+      pos.top - gap - height < margin && pos.bottom + gap + height <= window.innerHeight - margin;
+    const anchorY = flipDown ? pos.bottom + gap : pos.top - gap;
+    if (flipDown) {
+      tip.style.translate = "-50% 0";
+      tip.style.top = `${anchorY}px`;
+    }
     const { dx, dy } = getViewportOverflow(tip);
     tip.style.left = `${pos.x + dx}px`;
-    tip.style.top = `${pos.y - 6 + dy}px`;
+    tip.style.top = `${anchorY + dy}px`;
     tip.style.visibility = "visible";
   }, [pos]);
 
@@ -62,7 +76,7 @@ export function Tooltip({
             ref={tipRef}
             role="tooltip"
             // content(리치 카드)는 라벨보다 크게 — 본문 caption·넓은 폭·여유 패딩으로 가독 확보 (사용자 결정 2026-08-20)
-            className={`pointer-events-none fixed z-[1400] -translate-x-1/2 -translate-y-full rounded-sm border border-hairline bg-surface shadow-lg ${
+            className={`pointer-events-none fixed z-[1400] rounded-sm border border-hairline bg-surface shadow-lg ${
               content
                 ? "max-w-72 px-2.5 py-2 text-caption leading-snug text-ink"
                 : "whitespace-nowrap px-2 py-1 text-fine text-ink"

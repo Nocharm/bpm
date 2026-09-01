@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 임포트 dry-run 리포트 가독성 재구성 (dev)
+- 리포트가 코드(taskId)·영문 상세 500행 평면 테이블이라 같은 경고가 20번 반복돼 읽히지 않았다. **파일 → L5 연계 캔버스 → 맵** 계층으로 접고, 1열을 사람이 아는 이름(L6 라벨·카테고리 경로)으로 바꿨다. 반복 경고는 상단 "확인 필요" 다이제스트에 종류별 1줄(영향 맵 이름 + 개수)로 접는다. 고유키(taskId·unitId·카테고리 코드)는 Hash 아이콘 호버 툴팁으로만 노출.
+- 맵 이름은 서버 rows에 없다 — 업로드한 인터뷰 JSON에서 코드→이름 색인을 만들어 붙인다(`lib/interview-report.ts`, 백엔드 스키마 무변경). 미등록 상세 문구는 원문 그대로 통과시켜 정보 손실 없음.
+- 툴팁은 위 공간이 없으면 **아래로 플립**한다(경계에서 클램프만 하면 앵커 행을 덮었다). 정렬은 CSS `translate` 속성으로 — Tailwind v4 `-translate-*`와 같은 속성이라 `transform`으로 덮으면 두 번 밀린다.
+
 ## 2026-09-01 — 0.4 임포트 트랙 핸드오프 문서 (dev)
 - `docs/design/2026-09-01-interview-import-v04-result.md` — 이번 트랙의 최종 결과문서(확정 계약·검증 수치·한계 7건·확장 계획 5건·후속 점검 6건). 시행착오는 뺐고, 규칙 근거는 같은 날 설계 스냅샷, 필드 대조는 `docs/qa/interview-import-field-map.md`로 분리.
 - 최우선 후속은 **실파일 0.4 dry-run 대조** — unknown key 리포트가 그대로 어댑터 수정 목록이 된다.

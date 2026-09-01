@@ -6,21 +6,25 @@
 // 인터뷰 임포트 섹션(트리 하단)은 클라이언트 JSON 파싱만 하고, 키/스키마 검증은 서버 어댑터
 // dry-run(POST /categories/import-interview apply=false)이 진실 — 실제 저장은 apply 확인 후에만.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
   FolderPlus,
   FolderTree,
+  Hash,
   Move as MoveIcon,
   Pencil,
   Plus,
   ShieldCheck,
   Trash2,
   Upload,
+  Workflow,
   X,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -42,12 +46,20 @@ import {
 } from "@/lib/api";
 import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
+import {
+  buildImportReportView,
+  buildInterviewIndex,
+  type DigestGroup,
+  type ReportMapEntry,
+  type ReportMessage,
+} from "@/lib/interview-report";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
+import { Tooltip } from "@/components/tooltip";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
 
@@ -57,6 +69,21 @@ const ROW_ICON_BTN =
 const IMPORT_FILE_BTN =
   "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline px-2.5 py-1.5 " +
   "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
+
+// dry-run 리포트 맵 행의 결과 배지 — 색은 diff 토큰과 같은 의미축(added/changed/error)을 쓴다.
+const OUTCOME_PILL = {
+  created: "border-added/40 bg-added/10 text-added",
+  updated: "border-changed/40 bg-changed/10 text-changed",
+  unchanged: "border-hairline bg-surface-alt text-ink-tertiary",
+  error: "border-error/40 bg-error/10 text-error",
+} as const;
+
+const OUTCOME_LABEL = {
+  created: "framework.importCreated",
+  updated: "framework.importUpdated",
+  unchanged: "framework.importUnchanged",
+  error: "framework.interviewFileError",
+} as const;
 
 interface InterviewFileState {
   name: string;
@@ -185,8 +212,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     try {
       const result = await importInterview({ files: getInterviewPayloadFiles(), apply: false });
       setInterviewResult(result);
-      // 문제 있는 파일은 자동 펼침 — 키 검증 리포트가 이 화면의 존재 이유 (design 2026-08-18 §6)
-      setOpenReportFiles(new Set(result.files.flatMap((f, i) => (f.ok ? [] : [i]))));
+      // 전 파일 자동 펼침 — 결과 본문(맵·연계 캔버스)이 파일 카드 안에 있어 접힌 채로는 읽을 게 없다.
+      setOpenReportFiles(new Set(result.files.map((_, i) => i)));
     } catch (err) {
       onToast(getApiErrorDetail(err));
     } finally {
@@ -411,57 +438,195 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     );
   };
 
-  // 엔진 리포트 rows 테이블 — 인터뷰 임포트 응답 rows(코드/동작/상세) 렌더.
-  function renderEngineRows(result: { rows: InterviewImportResult["rows"]; truncated: boolean }) {
+  // 상세 문구 사람말 — 백엔드 영문 원문(kind 미등록)은 그대로 통과시켜 정보를 잃지 않는다.
+  function describeMessage(kind: ReportMessage["kind"], subject: string, raw: string): string {
+    switch (kind) {
+      case "owner-fallback":
+        return t("framework.importMsgOwnerFallback");
+      case "owner-not-found":
+        return `${t("framework.importMsgOwnerNotFound")}: ${subject}`;
+      case "approver-not-found":
+        return `${t("framework.importMsgApproverNotFound")}: ${subject}`;
+      case "sp-department-empty":
+        return t("framework.importMsgSpDepartment");
+      case "duplicate-name":
+        return `${t("framework.importMsgDuplicateName")}: ${subject}`;
+      case "duplicate-code":
+        return t("framework.importMsgDuplicateCode");
+      case "unknown-category":
+        return `${t("framework.importMsgUnknownCategory")}: ${subject}`;
+      case "in-trash":
+        return t("framework.importMsgInTrash");
+      case "no-landing":
+        return t("framework.importMsgNoLanding");
+      case "linkage-skipped":
+        return `${t("framework.importMsgLinkageSkipped")} — ${subject}`;
+      case "canvas":
+        return subject === "created"
+          ? t("framework.importMsgCanvasCreated")
+          : t("framework.importMsgCanvasAugmented");
+      default:
+        return raw;
+    }
+  }
+
+  // 고유키 카드 — 행에는 이름만 두고, 실데이터 키는 Hash 아이콘 호버로만 꺼내 본다.
+  // 폭 고정(w-60)이 필수: 툴팁은 fixed라 화면 오른쪽 끝 앵커에서 가용폭이 0에 수렴해 한 글자씩 세로로 접힌다.
+  function renderKeyCard(entries: [string, string][]) {
     return (
-      <>
-        <div className="scroll-soft max-h-64 overflow-y-auto rounded-sm border border-hairline">
-          <table className="w-full text-fine">
-            <thead className="sticky top-0 z-[1]">
-              <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
-                <th className="px-2 py-1.5">{t("framework.importColCode")}</th>
-                <th className="px-2 py-1.5">{t("framework.importColAction")}</th>
-                <th className="px-2 py-1.5">{t("framework.importColDetail")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.rows.map((row, i) => (
-                <tr
-                  key={i}
-                  className={`border-b border-divider last:border-0 ${
-                    row.action === "error"
-                      ? "bg-error/10"
-                      : row.action === "warning"
-                        ? "bg-changed/10"
-                        : ""
-                  }`}
+      <span className="flex w-60 flex-col gap-1">
+        {entries
+          .filter(([, value]) => value)
+          .map(([label, value]) => (
+            <span key={label} className="flex gap-2">
+              <span className="shrink-0 text-fine text-ink-tertiary">{label}</span>
+              <span className="min-w-0 flex-1 break-all font-mono text-fine text-ink">{value}</span>
+            </span>
+          ))}
+      </span>
+    );
+  }
+
+  function renderKeyIcon(entries: [string, string][], dataId: string) {
+    return (
+      <Tooltip content={renderKeyCard(entries)}>
+        <span data-id={dataId} className="shrink-0 cursor-help text-ink-muted hover:text-ink-secondary">
+          <Hash size={13} strokeWidth={1.5} />
+        </span>
+      </Tooltip>
+    );
+  }
+
+  // 반복 경고 접기 — 같은 종류를 한 줄로 모으고, 영향받은 맵은 이름으로(코드는 툴팁) 보여준다.
+  function renderDigest(digest: DigestGroup[]) {
+    if (digest.length === 0) return null;
+    return (
+      <div className="rounded-sm border border-hairline" data-id="interview-import-digest">
+        <p className="border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
+          {t("framework.importAttention")}
+        </p>
+        <ul className="flex flex-col">
+          {digest.map((group) => (
+            <li
+              key={group.key}
+              data-id={`interview-digest-${group.key}`}
+              className="flex items-center gap-2 border-b border-divider px-2 py-1.5 last:border-b-0"
+            >
+              {group.severity === "error" ? (
+                <XCircle size={14} strokeWidth={1.5} className="shrink-0 text-error" />
+              ) : (
+                <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0 text-changed" />
+              )}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-caption text-ink">
+                  {/* 가변부(승인자 id 등)는 3개까지만 — 나머지 수는 옆 배지 툴팁이 전부 보여준다 */}
+                  {describeMessage(
+                    group.kind,
+                    group.subjects.slice(0, 3).join(", ") +
+                      (group.subjects.length > 3 ? ` +${group.subjects.length - 3}` : ""),
+                    group.raw,
+                  )}
+                </span>
+                <span className="truncate text-fine text-ink-tertiary">
+                  {group.maps
+                    .slice(0, 4)
+                    .map((m) => m.name)
+                    .join(" · ")}
+                  {group.maps.length > 4 ? ` +${group.maps.length - 4}` : ""}
+                </span>
+              </span>
+              <Tooltip
+                content={renderKeyCard(group.maps.map((m) => [m.name, m.code] as [string, string]))}
+              >
+                <span className="shrink-0 cursor-help rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
+                  {t("framework.importAffectedMaps", { count: group.maps.length })}
+                </span>
+              </Tooltip>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  // 맵 1행 = [결과 배지][맵 이름][버전][경고 수(호버=문구)][고유키(호버=코드)] — 코드는 화면에서 뺀다.
+  function renderMapRows(entries: ReportMapEntry[], dataId: string) {
+    return (
+      <ul className="flex flex-col" data-id={dataId}>
+        {entries.map((entry) => {
+          const hasError = entry.messages.some((m) => m.severity === "error");
+          return (
+            <li
+              key={entry.code}
+              data-id={`interview-map-${entry.code}`}
+              className="flex items-center gap-2 border-t border-divider px-2 py-1 first:border-t-0"
+            >
+              <span
+                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${
+                  OUTCOME_PILL[entry.outcome ?? "unchanged"]
+                }`}
+              >
+                {t(OUTCOME_LABEL[entry.outcome ?? "unchanged"])}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-caption text-ink">{entry.name}</span>
+              {entry.version !== null && (
+                <span className="shrink-0 text-fine text-ink-muted">v{entry.version}</span>
+              )}
+              {entry.messages.length > 0 && (
+                <Tooltip
+                  content={
+                    <span className="flex w-60 flex-col gap-1">
+                      {entry.messages.map((msg, i) => (
+                        <span key={i} className="text-fine text-ink">
+                          {describeMessage(msg.kind, msg.subject, msg.raw)}
+                        </span>
+                      ))}
+                    </span>
+                  }
                 >
-                  <td className="px-2 py-1 text-ink">{row.code}</td>
-                  <td
-                    className={`px-2 py-1 ${
-                      row.action === "error"
-                        ? "text-error"
-                        : row.action === "warning"
-                          ? "text-changed"
-                          : "text-ink-secondary"
+                  <span
+                    className={`inline-flex shrink-0 cursor-help items-center gap-0.5 text-fine ${
+                      hasError ? "text-error" : "text-changed"
                     }`}
                   >
-                    {row.action}
-                  </td>
-                  <td className="px-2 py-1 text-ink-tertiary">{row.detail}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {result.truncated && (
-          <p className="text-fine text-ink-tertiary">{t("framework.importTruncated")}</p>
-        )}
-      </>
+                    <AlertTriangle size={12} strokeWidth={1.5} />
+                    {entry.messages.length}
+                  </span>
+                </Tooltip>
+              )}
+              {renderKeyIcon(
+                [
+                  [t("framework.importIdTask"), entry.code],
+                  [t("framework.importIdUnit"), entry.unitId],
+                  [t("framework.importIdDept"), entry.department],
+                  [t("framework.importIdRole"), entry.ownerRole],
+                ],
+                `interview-map-key-${entry.code}`,
+              )}
+            </li>
+          );
+        })}
+      </ul>
     );
   }
 
   const roots = childrenByParent.get(null) ?? [];
+
+  // 리포트 뷰모델 — 맵 이름·카테고리 경로는 업로드한 JSON에서만 나온다(서버 rows는 코드만 싣는다).
+  // 파일 목록이 바뀌면 결과를 지우므로(handleInterviewFiles/RemoveFile) 둘은 항상 같은 전달분이다.
+  const interviewView = useMemo(
+    () =>
+      interviewResult
+        ? buildImportReportView(
+            interviewResult.rows,
+            buildInterviewIndex(
+              interviewFiles.filter((f) => !f.error).map((f) => ({ name: f.name, content: f.content })),
+            ),
+          )
+        : null,
+    [interviewResult, interviewFiles],
+  );
+  const orphanGroup = interviewView?.groups.find((g) => g.file === "") ?? null;
 
   return (
     <div className="flex flex-col gap-4" data-id="framework-panel">
@@ -577,12 +742,17 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
           </button>
         </div>
 
-        {interviewResult && (
+        {interviewResult && interviewView && (
           <div className="flex flex-col gap-2" data-id="interview-import-report">
             {renderImportSummary(interviewResult)}
+            {renderDigest(interviewView.digest)}
             <ul className="flex flex-col gap-1" data-id="interview-import-file-reports">
               {interviewResult.files.map((file, i) => {
                 const open = openReportFiles.has(i);
+                // 파일 순서는 요청 payload 그대로 돌아온다 — 이름까지 맞을 때만 그룹을 붙인다.
+                const group =
+                  interviewView.groups[i]?.file === file.name ? interviewView.groups[i] : undefined;
+                const canvas = group?.canvas;
                 return (
                   <li key={`${file.name}-${i}`} className="rounded-sm border border-hairline">
                     <button
@@ -606,7 +776,13 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
                       ) : (
                         <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-caption text-ink">{file.name}</span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        {/* 파일명보다 사람이 아는 이름(L5 프로세스)이 먼저 — 파일명은 출처 표시로 강등 */}
+                        <span className="truncate text-caption text-ink">{canvas?.name ?? file.name}</span>
+                        <span className="truncate text-fine text-ink-tertiary">
+                          {canvas ? `${file.name}${canvas.path ? ` · ${canvas.path}` : ""}` : ""}
+                        </span>
+                      </span>
                       <span
                         className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${
                           file.ok
@@ -621,49 +797,98 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
                         {file.note_count}
                       </span>
                     </button>
-                    {open &&
-                      (file.issues.length === 0 ? (
-                        <p className="border-t border-divider px-2 py-1.5 text-fine text-ink-tertiary">
-                          {t("framework.interviewNoIssues")}
-                        </p>
-                      ) : (
-                        <div className="scroll-soft max-h-48 overflow-y-auto border-t border-divider">
-                          <table className="w-full text-fine">
-                            <thead className="sticky top-0 z-[1]">
-                              <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
-                                <th className="px-2 py-1.5">{t("framework.interviewIssueColSeverity")}</th>
-                                <th className="px-2 py-1.5">{t("framework.interviewIssueColPath")}</th>
-                                <th className="px-2 py-1.5">{t("framework.interviewIssueColMessage")}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {file.issues.map((issue, j) => (
-                                <tr
-                                  key={j}
-                                  className={`border-b border-divider last:border-0 ${
-                                    issue.severity === "error" ? "bg-error/10" : "bg-changed/10"
-                                  }`}
-                                >
-                                  <td
-                                    className={`px-2 py-1 ${
-                                      issue.severity === "error" ? "text-error" : "text-changed"
+                    {open && (
+                      <div className="border-t border-divider">
+                        {file.issues.length > 0 && (
+                          <div className="scroll-soft max-h-48 overflow-y-auto">
+                            <table className="w-full text-fine">
+                              <thead className="sticky top-0 z-[1]">
+                                <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
+                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColSeverity")}</th>
+                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColPath")}</th>
+                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColMessage")}</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {file.issues.map((issue, j) => (
+                                  <tr
+                                    key={j}
+                                    className={`border-b border-divider last:border-0 ${
+                                      issue.severity === "error" ? "bg-error/10" : "bg-changed/10"
                                     }`}
                                   >
-                                    {issue.severity}
-                                  </td>
-                                  <td className="px-2 py-1 font-mono text-ink-secondary">{issue.path}</td>
-                                  <td className="px-2 py-1 text-ink-tertiary">{issue.message}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
+                                    <td
+                                      className={`px-2 py-1 ${
+                                        issue.severity === "error" ? "text-error" : "text-changed"
+                                      }`}
+                                    >
+                                      {issue.severity}
+                                    </td>
+                                    <td className="px-2 py-1 font-mono text-ink-secondary">{issue.path}</td>
+                                    <td className="px-2 py-1 text-ink-tertiary">{issue.message}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        {canvas && (
+                          <div
+                            data-id={`interview-file-canvas-${i}`}
+                            className="flex items-center gap-2 bg-surface-pearl px-2 py-1.5"
+                          >
+                            <Workflow size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                            <span className="min-w-0 flex-1 truncate text-caption text-ink">
+                              {t("framework.importCanvas")}
+                            </span>
+                            {canvas.messages.map((msg, j) => (
+                              <span
+                                key={j}
+                                className={`shrink-0 text-fine ${
+                                  msg.severity === "info" ? "text-ink-tertiary" : "text-changed"
+                                }`}
+                              >
+                                {describeMessage(msg.kind, msg.subject, msg.raw)}
+                                {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
+                                  ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
+                                  : ""}
+                              </span>
+                            ))}
+                            {renderKeyIcon(
+                              [
+                                [t("framework.importIdCategory"), canvas.code],
+                                [t("framework.importIdPath"), canvas.path],
+                              ],
+                              `interview-canvas-key-${i}`,
+                            )}
+                          </div>
+                        )}
+                        {group && group.maps.length > 0 ? (
+                          renderMapRows(group.maps, `interview-file-maps-${i}`)
+                        ) : (
+                          <p className="px-2 py-1.5 text-fine text-ink-tertiary">
+                            {file.issues.length > 0
+                              ? t("framework.importNoMaps")
+                              : t("framework.interviewNoIssues")}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </li>
                 );
               })}
             </ul>
-            {renderEngineRows(interviewResult)}
+            {orphanGroup && orphanGroup.maps.length > 0 && (
+              <div className="rounded-sm border border-hairline" data-id="interview-import-unmatched">
+                <p className="border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
+                  {t("framework.importUnmatched")}
+                </p>
+                {renderMapRows(orphanGroup.maps, "interview-unmatched-maps")}
+              </div>
+            )}
+            {interviewResult.truncated && (
+              <p className="text-fine text-ink-tertiary">{t("framework.importTruncated")}</p>
+            )}
           </div>
         )}
       </div>
