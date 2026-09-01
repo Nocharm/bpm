@@ -772,6 +772,11 @@ async def create_rename_request(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework":
+        # framework 캔버스는 확정(framework-confirm) 전용 — 이름변경 승인 워크플로 옆문 차단 (spec 2026-09-02 §6)
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
     to_name = payload.to_name.strip()
     if not to_name:
         raise HTTPException(status_code=422, detail="name must not be blank")
@@ -884,6 +889,12 @@ async def create_sp_designation_request(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework":
+        # framework 캔버스는 확정(framework-confirm) 전용 — SP 등록 요청은 승인자 없는 영구
+        # pending 좀비를 만든다(spec 2026-09-02 §6)
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
     if found_map.sp_designated_at is not None:
         raise HTTPException(status_code=409, detail="map is already designated")
     pending = await session.scalar(

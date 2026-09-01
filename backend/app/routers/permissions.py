@@ -44,6 +44,20 @@ async def _get_map_or_404(session: AsyncSession, map_id: int) -> ProcessMap:
     return found_map
 
 
+async def _assert_not_framework(session: AsyncSession, map_id: int) -> None:
+    """framework 캔버스는 확정(framework-confirm) 전용 — 협업자 옆문 차단 (spec 2026-09-02 §6).
+
+    map_permissions 자체가 framework 맵에선 무시(access.get_effective_role)되므로
+    써져도 판정이 사일런트 노옵이 되던 것을 명시 422로 바꾼다. versions.py의 동명
+    헬퍼와 같은 로컬 패턴 — 순환 import 방지를 위해 여기서 별도 정의한다.
+    """
+    mode = await session.scalar(select(ProcessMap.mode).where(ProcessMap.id == map_id))
+    if mode == "framework":
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
+
+
 async def _assert_owner_or_approver(
     session: AsyncSession, user: str, map_id: int
 ) -> None:
@@ -145,6 +159,7 @@ async def add_permission(
 ) -> MapPermission:
     """grant 추가 — 즉시 적용. group 도 저장하나 effective_role 은 무시(Layer 4)."""
     found_map = await _get_map_or_404(session, map_id)
+    await _assert_not_framework(session, map_id)
     # 퍼블릭 맵은 전원 열람이라 viewer 부여 불가 — editor만 (request #9)
     if payload.role == "viewer" and found_map.visibility == "public":
         raise HTTPException(
@@ -199,6 +214,7 @@ async def update_permission(
 
     owner grant 는 여기서 변경 불가 → owner 이전 경로(§B)로만.
     """
+    await _assert_not_framework(session, map_id)
     grant = await _get_grant_or_404(session, map_id, permission_id)
     if grant.role == "owner":
         raise HTTPException(
@@ -267,6 +283,7 @@ async def delete_permission(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """grant 제거. editor 제거는 승인 지연, viewer 등은 즉시. owner 는 거부(이전 경로)."""
+    await _assert_not_framework(session, map_id)
     grant = await _get_grant_or_404(session, map_id, permission_id)
     if grant.role == "owner":
         raise HTTPException(

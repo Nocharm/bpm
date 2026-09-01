@@ -602,3 +602,41 @@ def test_surface_fields(client: TestClient, enforce: None) -> None:
     assert graph["subprocess_refs"][str(m1)]["category_path"] == "표면L1/표면L5"
     # 홈 L5 id — 외부 L6 색상 키 (2026-08-28 개선)
     assert graph["subprocess_refs"][str(m1)]["category_id"] == l5
+
+
+def test_framework_map_rejects_permission_side_doors(client: TestClient, enforce: None) -> None:
+    """승인자 지정(작성자 게이트 우회 경로)·협업자·개명요청·SP지정요청 전건 422 (spec §6).
+
+    실위험이었던 것: approvers PUT은 created_by 기준이라 캔버스를 만든 카테고리 권한자가
+    승인자를 심을 수 있었다. 협업자 POST/PATCH/DELETE는 써져도 role 판정이 무시하는
+    사일런트 노옵이었고, sp-designation-requests는 영구 pending 좀비를 만들었다.
+    """
+    detail_msg = "framework maps use the confirm workflow"
+    map_id, draft_id = _make_canvas(client, "FWC-SD5", "옆문차단")
+    # _make_canvas 종료 시점 act_as는 fwc.confirmer(=created_by, category editor) — 각 옆문의
+    # 기존 게이트를 모두 통과하는 신원이라 422가 순수하게 framework 가드에서 나온다.
+
+    res = client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["fwc.confirmer"]})
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    res = client.post(
+        f"/api/maps/{map_id}/permissions",
+        json={"principal_type": "user", "principal_id": "fwc.pleb", "role": "editor"},
+    )
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    # PATCH/DELETE는 기존 grant가 필요 — framework 맵은 permissions 자체가 무시되므로
+    # 존재하지 않는 permission_id(0)로도 가드가 404보다 먼저 걸리는지 확인한다.
+    res = client.patch(f"/api/maps/{map_id}/permissions/0", json={"role": "viewer"})
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    res = client.delete(f"/api/maps/{map_id}/permissions/0")
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    res = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": "hack"})
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    res = client.post(
+        f"/api/maps/{map_id}/sp-designation-requests", json={"from_map_id": draft_id}
+    )
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg

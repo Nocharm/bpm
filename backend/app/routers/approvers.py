@@ -41,6 +41,12 @@ async def set_approvers(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework":
+        # created_by 기준 게이트는 캔버스를 만든 카테고리 권한자를 통과시켜 옆문이 된다 —
+        # framework 캔버스는 확정(framework-confirm) 전용, 승인자 개념 자체가 없음 (spec 2026-09-02 §6)
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
     # 소유자 미상(created_by=None, seed/legacy 맵)은 잠그지 않고 개방 — 누구나 관리 허용.
     # 오너 외 sysadmin도 허용(세팅은 sysadmin=owner로 UI 개방 → 백엔드도 일치).
     if (
