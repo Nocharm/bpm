@@ -9282,9 +9282,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                     }}
                     onPointerLeave={() => setHoverRegionId(null)}
                   >
-                    {index === 0 && l5Charcoal && (
+                    {index === 0 && l5Charcoal && currentVersion?.status !== "confirmed" && (
                       // 브랜드 워터마크 — 회사 로고·시스템명·플랫 아이콘을 번갈아 사선 타일링(단조로움 완화).
                       // ReactFlow보다 앞 DOM + 저불투명이라 노드/엣지를 가리지 않는다. 뷰포트 고정(팬 무관)
+                      // confirmed 열람 시엔 CONFIRMED 스탬프만 단독 노출 — 브랜드 워터마크 숨김 (사용자 지시 2026-09-02)
                       <div
                         aria-hidden
                         data-id="l5-brand-watermark"
@@ -9708,7 +9709,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프.
                              차콜 캔버스에선 옆 텍스트 워터마크와 동일 조건으로 text-canvas 톤 전환(저시인성 방지). */
                           <span
-                            className={`flex -rotate-[18deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                            className={`flex -rotate-[24deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
                               index === 0 && l5Charcoal ? "border-canvas text-canvas" : "border-accent text-accent"
                             }`}
                           >
