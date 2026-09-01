@@ -21,11 +21,11 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
 };
 
-// 활성 캔버스(.react-flow를 품은 bg-canvas* 래퍼)의 computed 배경색
+// 활성 캔버스(.react-flow를 품은 bg-canvas*/bpm-l5-sky 래퍼)의 computed 배경색
 const canvasBg = (page) =>
   page.evaluate(() => {
     const flow = document.querySelector(".react-flow");
-    const host = flow?.closest('div[class*="bg-canvas"]');
+    const host = flow?.closest('div[class*="bg-canvas"], div[class*="bpm-l5-sky"]');
     return host ? getComputedStyle(host).backgroundColor : null;
   });
 // dot-grid 점 색 — React Flow Background 패턴의 circle fill
@@ -44,14 +44,15 @@ const chromeBg = (page) =>
 const frameRadius = (page) =>
   page.evaluate(() => {
     const flow = document.querySelector(".react-flow");
-    const host = flow?.closest('div[class*="bg-canvas"]');
+    const host = flow?.closest('div[class*="bg-canvas"], div[class*="bpm-l5-sky"]');
     return host ? getComputedStyle(host).borderRadius : null;
   });
-// 모드 링 — 풀블리드 차콜 위 뷰포트 고정 흰 테두리 오버레이(별도 요소, 라이트/일반 맵엔 없음)
-const modeRing = (page) =>
+// 새벽 그라데이션 — 차콜 뷰포트의 background-image 판정(라이트/일반 맵은 none)
+const skyGradient = (page) =>
   page.evaluate(() => {
-    const ring = document.querySelector('[data-id="l5-mode-ring"]');
-    return ring ? getComputedStyle(ring).borderTopWidth : null;
+    const flow = document.querySelector(".react-flow");
+    const host = flow?.closest('div[class*="bg-canvas"], div[class*="bpm-l5-sky"]');
+    return host ? getComputedStyle(host).backgroundImage : null;
   });
 // 노드 타이틀 잉크 — 다크 셸에서도 노드 내부는 라이트(#16161d) 유지되어야 한다(viewport 제외 재정의)
 const nodeTitleColor = (page) =>
@@ -89,10 +90,10 @@ try {
   await page.getByRole("button", { name: "fit view" }).first().click().catch(() => {});
   await page.waitForTimeout(600);
   check("L5 default charcoal bg", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
-  // 차콜은 민 무대 — 도트 그리드 미렌더, 흰 모드 링 오버레이가 신호
+  // 새벽 조감도 — 도트·별 없는 그라데이션 하늘 + 라운드 프레임
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
-  check("white mode ring overlay (2px)", (await modeRing(page)) === "2px", String(await modeRing(page)));
-  check("charcoal is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
+  check("dawn sky gradient", String(await skyGradient(page)).includes("linear-gradient"), String(await skyGradient(page)).slice(0, 60));
+  check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
   check("chrome stays light in charcoal", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
@@ -108,7 +109,7 @@ try {
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
   check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
-  check("no mode ring in light", (await modeRing(page)) === null, String(await modeRing(page)));
+  check("no gradient in light", (await skyGradient(page)) === "none", String(await skyGradient(page)));
   check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");

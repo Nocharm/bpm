@@ -9002,7 +9002,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
-          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}`}
+          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-surface" : "bg-canvas"}`}
           onDragOver={(e) => {
             if (
               e.dataTransfer.types.includes("application/bpm-process") ||
@@ -9119,7 +9119,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
-                    className={`relative h-full w-full ${index === 0 && l5Charcoal ? "bg-canvas-l5" : "bg-canvas"}${expandAnimating ? " bpm-expand-anim" : ""}`}
+                    // 새벽 조감도 — 흰 거터 위 라운드 뷰포트(absolute inset: 패딩으론 불가)에 남색→차콜 하늘(.bpm-l5-sky)
+                    className={`${
+                      index === 0 && l5Charcoal
+                        ? "bpm-l5-sky absolute inset-2.5 overflow-hidden rounded-md shadow-md"
+                        : "relative h-full w-full bg-canvas"
+                    }${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
                     // 펼침 영역 호버 — 상시 selection 모드라 RF onPaneMouseMove가 바인딩되지 않아(pane은
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
@@ -9128,14 +9133,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                     }}
                     onPointerLeave={() => setHoverRegionId(null)}
                   >
-                    {index === 0 && l5Charcoal && (
-                      // 모드 링 — 화면공유식 뷰포트 고정 흰 테두리(팬/줌 무관). 풀블리드 차콜 위 "L5 모드" 신호
-                      <div
-                        aria-hidden
-                        data-id="l5-mode-ring"
-                        className="pointer-events-none absolute inset-1.5 z-[5] rounded-md border-2 border-surface/60"
-                      />
-                    )}
                     <ReactFlow
                       nodes={displayNodes}
                       edges={styledEdges}

@@ -24,7 +24,8 @@
   --color-surface-chip: #d2d2d7;
   --color-canvas: #f6f6f8; /* 무한 캔버스 배경 */
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
-  --color-canvas-l5: #363843; /* L5 연계 캔버스 배경(풀블리드 차콜 민면, 도트 없음) — 흰 모드 링과 세트, L5 태그로 라이트 토글 */
+  --color-canvas-l5: #363843; /* L5 새벽 조감도 — 그라데이션 하단(차콜)·미니맵 등 단색 폴백. L5 태그로 라이트 토글 */
+  --color-canvas-l5-sky: #1e222d; /* L5 새벽 조감도 — 그라데이션 상단(깊은 남색) */
 
   /* Ink */
   --color-ink: #16161d;
@@ -107,6 +108,18 @@ body {
   font-family: var(--font-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* L5 새벽 조감도 캔버스 — 위 깊은 남색 → 아래 차콜로 흐르는 하늘(뷰포트 고정, 팬 무관).
+   장식(별·비네트) 없이 그라데이션만 — 임원 보고에 맞는 플랫·절제 톤 (사용자 결정 2026-09-01). */
+.bpm-l5-sky {
+  background-color: var(--color-canvas-l5);
+  background-image: linear-gradient(
+    180deg,
+    var(--color-canvas-l5-sky) 0%,
+    color-mix(in srgb, var(--color-canvas-l5-sky) 45%, var(--color-canvas-l5)) 52%,
+    var(--color-canvas-l5) 100%
+  );
 }
 
 /* 스크롤바 기본 숨김 — 스크롤은 동작하되 막대만 비표시(채팅 등 컴팩트 영역). */
