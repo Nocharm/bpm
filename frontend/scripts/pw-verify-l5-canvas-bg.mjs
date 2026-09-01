@@ -114,10 +114,11 @@ try {
   check("toggle to light bg", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
   check("light dot color", (await dotColor(page)) === "rgb(189, 189, 201)", String(await dotColor(page)));
   check("tag shows Sun (light state)", (await tag.locator("svg.lucide-sun").count()) === 1);
-  check("light is full-bleed (no frame)", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
+  // L5는 라이트에서도 프레임 유지 — 전환 시 태그/칩 위치 불변 (사용자 요청 2026-09-01)
+  check("light keeps the frame (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
   check("no gradient in light", (await skyGradient(page)) === "none", String(await skyGradient(page)));
   check("no brand watermark in light", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 0);
-  check("tag back to edge in light (top 8px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "8px");
+  check("tag stays put in light (top 20px)", (await tag.evaluate((el) => getComputedStyle(el).top)) === "20px");
   check("chrome header stays light", (await chromeBg(page)) === "rgb(255, 255, 255)", String(await chromeBg(page)));
   await shot(page, "l5-light-after-toggle");
 

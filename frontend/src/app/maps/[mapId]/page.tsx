@@ -9002,7 +9002,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
-          className={`relative flex-1 select-none overflow-hidden ${l5Charcoal ? "bg-surface" : "bg-canvas"}`}
+          className={`relative flex-1 select-none overflow-hidden ${isFrameworkMap ? "bg-surface" : "bg-canvas"}`}
           onDragOver={(e) => {
             if (
               e.dataTransfer.types.includes("application/bpm-process") ||
@@ -9045,7 +9045,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     <FrameworkL5Explorer
                       currentCategoryId={linkageCategoryId}
                       currentName={scope.title}
-                      inset={l5Charcoal}
+                      inset
                       onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
                       onError={(message) => showToast(message, "error")}
                     />
@@ -9069,11 +9069,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         data-id="framework-l5-tag"
                         title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
                         onClick={toggleL5CanvasBg}
-                        className={`absolute z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
-                          // 차콜 프레임에선 안쪽(20px)으로 — 라운드 코너를 칩이 덮지 않게
-                          l5Charcoal
-                            ? "right-5 top-5 bg-surface/85 hover:bg-surface"
-                            : "right-2 top-2 bg-surface/40 hover:bg-surface/70"
+                        className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                          // 프레임 상시 유지라 위치 고정(20px) — 라이트/차콜 전환에도 버튼이 안 움직임
+                          l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
                         }`}
                       >
                         <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -9088,9 +9086,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       {reconcileMissing > 0 && (
                         <span
                           data-id="framework-missing-chip"
-                          className={`absolute z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm ${
-                            l5Charcoal ? "right-5 top-[52px]" : "right-2 top-10"
-                          }`}
+                          className="absolute right-5 top-[52px] z-10 rounded-sm border border-hairline bg-surface/70 px-1.5 py-0.5 text-fine text-ink-tertiary shadow-sm backdrop-blur-sm"
                         >
                           {t("framework.missing", { n: reconcileMissing })}
                         </span>
@@ -9119,10 +9115,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {active ? (
                   // 그룹 오버레이·복수 선택 영역 우클릭 시 브라우저 기본 메뉴 차단 (ReactFlow 핸들러가 안 타는 영역)
                   <div
-                    // 새벽 조감도 — 흰 거터 위 라운드 뷰포트(absolute inset: 패딩으론 불가)에 남색→차콜 하늘(.bpm-l5-sky)
+                    // L5는 라이트 토글에서도 프레임 유지 — 전환 시 태그/칩 위치가 안 움직이게. 프레임은
+                    // absolute inset(패딩으론 불가), 채움만 차콜 하늘(.bpm-l5-sky) ↔ 라이트 캔버스 교체
                     className={`${
-                      index === 0 && l5Charcoal
-                        ? "bpm-l5-sky absolute inset-2.5 overflow-hidden rounded-md shadow-md"
+                      index === 0 && isFrameworkMap
+                        ? `absolute inset-2.5 overflow-hidden rounded-md shadow-md ${l5Charcoal ? "bpm-l5-sky" : "bg-canvas"}`
                         : "relative h-full w-full bg-canvas"
                     }${expandAnimating ? " bpm-expand-anim" : ""}`}
                     onContextMenu={(event) => event.preventDefault()}
