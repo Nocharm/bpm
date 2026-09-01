@@ -571,6 +571,7 @@ class DashboardVersionStatusOut(BaseModel):
     draft: int
     approved: int
     pending: int
+    confirmed: int = 0
     rejected: int
 
 

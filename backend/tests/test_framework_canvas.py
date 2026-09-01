@@ -440,6 +440,16 @@ def test_confirmed_snapshot_cannot_be_deleted(client: TestClient, enforce: None)
     assert res.status_code == 409
 
 
+def test_confirmed_snapshot_shows_in_dashboard(client: TestClient, enforce: None) -> None:
+    """대시보드 집계에서 confirmed 스냅샷 카운트를 포함한다 (spec §3.1)."""
+    map_id, _draft_id = _make_canvas(client, "FWC-DASH5", "대시보드확정")
+    act_as("fwc.confirmer")
+    client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+    act_as(SYSADMIN)
+    summary = client.get("/api/dashboard/summary").json()
+    assert summary["version_status"]["confirmed"] >= 1
+
+
 def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:
     """분기·끝 노드 생성 허용(끝 규칙 적용), start/process는 계속 차단 (2026-08-28 개선)."""
     l5 = _seed_category(client, "FWC-D5", "분기L5", level=5)
