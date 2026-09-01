@@ -10994,8 +10994,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             <GitCompare size={16} strokeWidth={1.5} />
                           </button>
                         </Tooltip>
-                        {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약) */}
-                        {isEditorRole && !hasDraft && (
+                        {/* 새 버전 — editor+ 이고 진행 중 draft 없을 때만 (맵당 draft 1개 규약). L5는 버전 워크플로 대신 확정(Confirm) 사용 */}
+                        {isEditorRole && !hasDraft && !isFrameworkMap && (
                           <Tooltip label={t("editor.newVersion")}>
                             <button
                               type="button"
@@ -11081,8 +11081,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </>
                         )}
 
-                        {/* editor + expired + draft 없음: 재게시 */}
-                        {isEditorRole && currentVersion?.status === "expired" && !hasDraft && (
+                        {/* editor + expired + draft 없음: 재게시. L5는 게시 워크플로 대상 아님 */}
+                        {isEditorRole && !isFrameworkMap && currentVersion?.status === "expired" && !hasDraft && (
                           <Tooltip label={t("approval.checkoutRepublish")}>
                             <button
                               type="button"

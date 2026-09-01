@@ -67,6 +67,8 @@ export default function SettingsPage() {
   const [owningDepartment, setOwningDept] = useState<string | null>(null);
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
+  // 맵 모드 — "framework"는 게시/승인자/협업자/SP 지정 탭을 숨긴다 (spec 2026-09-02 §6)
+  const [mapMode, setMapMode] = useState<string>("normal");
 
   // 맵 데이터 재조회 — 결재 승인 후 역할/가시성이 바뀌었을 수 있어 재호출(서버 진실) /
   // Refetch map data; role/visibility may have changed after an approval was applied server-side.
@@ -80,6 +82,7 @@ export default function SettingsPage() {
         detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
       );
       setOwningDept(detail.owning_department ?? null);
+      setMapMode(detail.mode ?? "normal");
     } catch {
       // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
     }
@@ -99,6 +102,7 @@ export default function SettingsPage() {
             detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
           );
           setOwningDept(detail.owning_department ?? null);
+          setMapMode(detail.mode ?? "normal");
         }
       } catch {
         // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
@@ -184,13 +188,17 @@ export default function SettingsPage() {
   // Checkout requests tab: owner or sysadmin only (holder acts via editor approval tab).
   const canDecideCheckout = currentMockUser !== null && isOwner;
 
+  // framework 캔버스 — 게시/승인자/협업자/SP 지정 탭 숨김. 확정은 에디터 승인 탭에서 (spec 2026-09-02 §6)
+  const FRAMEWORK_HIDDEN_TABS = new Set<TabId>(["subprocess", "collaborators", "approvers", "versions"]);
+
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
   const visibleTabs = ALL_TABS.filter(
     (tab) =>
       (tab.id !== "approvals" || canSeeApprovals) &&
       (tab.id !== "checkout" || canDecideCheckout) &&
       // 서브프로세스 지정은 오너 전용 섹션 / Subprocess designation is owner-only.
-      (tab.id !== "subprocess" || isOwner),
+      (tab.id !== "subprocess" || isOwner) &&
+      (mapMode !== "framework" || !FRAMEWORK_HIDDEN_TABS.has(tab.id)),
   );
   const sectionKey = visibleTabs.map((tab) => tab.id).join(",");
 
@@ -387,6 +395,14 @@ export default function SettingsPage() {
                   </h2>
                   {tab.id === "details" ? (
                     <>
+                      {mapMode === "framework" && (
+                        <p
+                          data-id="map-settings-framework-note"
+                          className="rounded-sm border border-accent-tint-border bg-accent-tint/40 px-3 py-2 text-caption text-ink-secondary"
+                        >
+                          {t("perm.frameworkNote")}
+                        </p>
+                      )}
                       <MapDetailsPanel
                         mapId={mapIdStr}
                         canEdit={canEdit}
