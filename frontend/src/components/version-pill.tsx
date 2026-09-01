@@ -30,7 +30,9 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
   const current = versions.find((v) => v.id === versionId) ?? null;
   // 게시 안 된(진행 중) 버전 — 현재 제외, 최근 순. 호버 아코디언 바로가기용.
   const unpublished = versions
-    .filter((v) => v.id !== versionId && v.status !== "published" && v.status !== "expired")
+    .filter(
+      (v) => v.id !== versionId && v.status !== "published" && v.status !== "expired" && v.status !== "confirmed",
+    )
     .reverse();
   const showHover = hovering && !open && unpublished.length > 0;
 

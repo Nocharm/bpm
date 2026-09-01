@@ -2217,9 +2217,13 @@ export default function ComparePage() {
           linkageCategoryId: detail.linkage_category_id ?? null,
           linkageCategoryPath: detail.linkage_category_path ?? null,
         });
-        // base=게시(published) 버전 우선(없으면 최초), target=최신 — 게시본을 기준선으로 비교.
-        const published = detail.versions.find((version) => version.status === "published");
-        setBaseId((published ?? detail.versions[0]).id);
+        // base=게시본(일반) 또는 최신 확정 스냅샷(framework) 우선 — 없으면 최초 버전.
+        const isFw = detail.mode === "framework";
+        const baseCandidates = detail.versions.filter((version) =>
+          isFw ? version.status === "confirmed" : version.status === "published",
+        );
+        const base = baseCandidates.length > 0 ? baseCandidates[baseCandidates.length - 1] : detail.versions[0];
+        setBaseId(base.id);
         setTargetId(detail.versions[detail.versions.length - 1].id);
       } catch (err) {
         if (active) applyLoadError(err, t, setAccessDenied, setLoadError);

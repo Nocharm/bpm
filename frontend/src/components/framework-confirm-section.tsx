@@ -39,11 +39,11 @@ interface FwSnapshot {
   minor: number;
 }
 
-// versions에서 확정 스냅샷(vX.Y published)만 파싱 — 서버 fw_major/minor를 라벨로 복원
+// versions에서 확정 스냅샷(vX.Y confirmed)만 파싱 — 서버 fw_major/minor를 라벨로 복원
 function parseSnapshots(versions: VersionSummary[]): FwSnapshot[] {
   const out: FwSnapshot[] = [];
   for (const v of versions) {
-    if (v.status !== "published") continue;
+    if (v.status !== "confirmed") continue;
     const m = /^v(\d+)\.(\d+)$/.exec(v.label);
     if (!m) continue;
     out.push({ id: v.id, label: v.label, major: Number(m[1]), minor: Number(m[2]) });

@@ -5719,7 +5719,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           { label: t("export.infoOwner"), value: mapOwnerName ?? mapOwner ?? "-" },
           { label: t("export.infoVersion"), value: version?.label ?? "-" },
           ...(publishedAt
-            ? [{ label: t("export.infoPublished"), value: formatKst(publishedAt) }]
+            ? [
+                {
+                  label: isFrameworkMap ? t("export.infoConfirmed") : t("export.infoPublished"),
+                  value: formatKst(publishedAt),
+                },
+              ]
             : []),
           ...(mapCategoryPath
             ? [{ label: t("export.infoFramework"), value: mapCategoryPath }]
@@ -5730,7 +5735,18 @@ function MapEditor({ mapId }: { mapId: number }) {
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     }
-  }, [buildExportFileName, t, versions, versionId, mapName, mapOwningDept, mapOwnerName, mapOwner, mapCategoryPath]);
+  }, [
+    buildExportFileName,
+    t,
+    versions,
+    versionId,
+    mapName,
+    mapOwningDept,
+    mapOwnerName,
+    mapOwner,
+    mapCategoryPath,
+    isFrameworkMap,
+  ]);
 
   const handleExportCsv = useCallback(() => {
     // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
@@ -10242,7 +10258,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                 onCollapse={() => setInspectorOpen(false)}
                 propertiesTabNonce={propertiesTabNonce}
                 mapId={mapId}
-                canCompare={versions.some((version) => version.status === "published")}
+                canCompare={versions.some(
+                  (version) => version.status === "published" || version.status === "confirmed",
+                )}
                 selectionKind={selectedNode ? "node" : selectedEdge ? "edge" : null}
                 propertiesSlot={
                   selectedNode ? (
@@ -10934,7 +10952,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {/* 버전 비교 — 액션 최좌측(사용자 요청 2026-08-25). 게시본 없으면 비활성(하단 CTA와 동일 게이트) */}
                         <Tooltip
                           label={
-                            versions.some((version) => version.status === "published")
+                            versions.some(
+                              (version) => version.status === "published" || version.status === "confirmed",
+                            )
                               ? t("inspector.compareVersions")
                               : t("inspector.compareNeedsPublished")
                           }
@@ -10943,7 +10963,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                             type="button"
                             data-id="map-tab-compare"
                             className="rounded-sm p-1.5 text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary"
-                            disabled={!versions.some((version) => version.status === "published")}
+                            disabled={
+                              !versions.some(
+                                (version) => version.status === "published" || version.status === "confirmed",
+                              )
+                            }
                             onClick={() => router.push(`/maps/${mapId}/compare`)}
                             aria-label={t("inspector.compareVersions")}
                           >
