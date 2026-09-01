@@ -929,6 +929,49 @@ export function listBatchRuns(): Promise<BatchRun[]> {
   return request<BatchRun[]>("/admin/batch-runs");
 }
 
+// 백업 파일 관리 — 목록·온디맨드 실행·다운로드 (설정 Batch jobs 탭, sysadmin 전용).
+export interface BackupFile {
+  filename: string;
+  size: number;
+  modified_at: string;
+}
+
+export function listBackups(): Promise<BackupFile[]> {
+  return request<BackupFile[]>("/admin/backups");
+}
+
+export interface BackupRunResult {
+  // sqlite(로컬)=completed 즉시 파일 생성, postgres(서버)=requested — 사이드카가 수 초 내 수행
+  status: "completed" | "requested";
+  filename: string | null;
+}
+
+export function runBackupNow(): Promise<BackupRunResult> {
+  return request<BackupRunResult>("/admin/backups/run", { method: "POST" });
+}
+
+// 백업 파일 다운로드 — request<T>는 json 계약이라 바이너리는 별도 함수(exportDbTableCsv와 동일 사유).
+export async function downloadBackupFile(filename: string): Promise<Blob> {
+  const path = `/admin/backups/${encodeURIComponent(filename)}`;
+  const headers: Record<string, string> = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  } else if (devUser) {
+    headers["X-Dev-User"] = devUser;
+  }
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error(`API GET ${path} failed: ${response.status}`, detail);
+    throw new ApiError(
+      `API GET ${path} failed: ${response.status}${detail ? ` - ${detail}` : ""}`,
+      response.status,
+      detail,
+    );
+  }
+  return response.blob();
+}
+
 export function getDbTable(name: string, query: TableQuery = {}): Promise<TableData> {
   const params = new URLSearchParams();
   if (query.page) params.set("page", String(query.page));

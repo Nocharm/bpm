@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 온디맨드 백업 + 백업파일 로컬 다운로드 (dev)
+- 일간 사이드카만 있던 백업에 **온디맨드 경로** 추가 — 설정 > Batch jobs DB 백업 카드에 "Backup now"·백업 파일 목록·다운로드. postgres는 backend가 `${BACKUP_DIR}/backup.request` 트리거를 쓰고 사이드카(60s→5s 폴링)가 소비해 pg_dump, 로컬 sqlite는 backend가 backup API로 즉시 사본. backend 컨테이너에 `${BACKUP_DIR}` 마운트 추가(compose).
+- 파일명 화이트리스트(`bpm-*.dump|sqlite`)로 경로 탈출 차단, 전부 sysadmin 게이트. 검증: pytest 1200 그린(신규 6), `pw-verify-backup-ui.mjs` E2E(실행→목록→다운로드 577KB) 통과.
+
 ## 2026-09-01 — 캔버스 드래그 성능 라운드 1 (dev)
 - 352노드·351엣지 스트레스 맵 실측(프로드): 드래그 평균 41.5ms/frame·p95 125ms → **35.5ms·p95 100ms**. 최대 병목은 꺾은선 엣지의 장애물 회피 — 엣지마다 `useNodes` 전체를 filter+map+inflate해 **매 프레임 엣지×노드 규모 객체 생성**(GC 폭증) → 노드 배열 identity당 1회 공유 캐시 + 양끝 노드는 스캔 중 스킵 + 밴드 프루닝·최근접 후보 조기종료.
 - displayNodes의 프레임당 낭비 2건 제거 — 담당자 드리프트 판정을 users 선형 스캔에서 name→dept Map으로, height-shift 오프셋 적용 노드는 WeakMap identity 캐시로 무변경 노드 리렌더 차단. 남은 병목은 페이지 전체 리렌더(거대 JSX)+RF 스토어 팬아웃 — 다음 라운드는 드래그 중 `nodes` 동결(dragLive 일반화) 검토.

@@ -1899,6 +1899,21 @@ class BatchRunOut(BaseModel):
     detail: str | None
 
 
+class BackupFileOut(BaseModel):
+    """백업 파일 목록 항목 — 설정 Batch jobs 탭의 다운로드 리스트 / one downloadable backup file."""
+
+    filename: str
+    size: int
+    modified_at: datetime
+
+
+class BackupRunOut(BaseModel):
+    """온디맨드 백업 결과 — sqlite=completed(즉시 파일 생성), postgres=requested(사이드카가 트리거 처리)."""
+
+    status: Literal["completed", "requested"]
+    filename: str | None = None
+
+
 class TableInfoOut(BaseModel):
     """admin 테이블 뷰어 — 테이블명 + 행수(선택 pill 표시용) / table name + row count for selector pills."""
 

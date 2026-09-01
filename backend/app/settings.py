@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # auth 비활성 시 created_by에 기록할 개발용 사용자명
     dev_user: str = "local-dev"
 
+    # DB 백업 디렉터리 — 온디맨드 백업(목록·다운로드·트리거 파일)의 루트.
+    # 로컬 네이티브는 저장소 루트 backups/(backend cwd 기준 상대), 서버 compose는 /backups 마운트로 오버라이드.
+    backup_dir: str = "../backups"
+
     # Tuning — 버전 체크아웃 잠금의 무활동 자동 해제 시간(분). spec §7 Phase C
     checkout_ttl_minutes: int = 30
 

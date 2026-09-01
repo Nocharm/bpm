@@ -44,13 +44,23 @@ run_backup() {
   fi
 }
 
+# 온디맨드 트리거 — backend(설정 > Batch jobs "Backup now")가 이 파일을 쓰면 지우고 즉시 1회 덤프.
+# 파일명은 backend routers/admin.py BACKUP_TRIGGER_FILENAME과 계약.
+TRIGGER="$BACKUP_DIR/backup.request"
+
 mkdir -p "$BACKUP_DIR"
 log "started (daily at $BACKUP_TIME KST, retention ${RETENTION_DAYS}d)"
 has_dump_today || run_backup
 
 while :; do
-  sleep 60
-  # HH:MM → HHMM 숫자 비교(문자열 > 는 POSIX test 미보장). 실패 시 오늘자 덤프가 없어 다음 분에 재시도.
+  sleep 5
+  if [ -e "$TRIGGER" ]; then
+    rm -f "$TRIGGER"
+    log "on-demand trigger received"
+    run_backup
+    continue
+  fi
+  # HH:MM → HHMM 숫자 비교(문자열 > 는 POSIX test 미보장). 실패 시 오늘자 덤프가 없어 다음 턴에 재시도.
   now=$(TZ=$KST date +%H%M)
   if ! has_dump_today && [ "$now" -ge "$(echo "$BACKUP_TIME" | tr -d ':')" ]; then
     run_backup

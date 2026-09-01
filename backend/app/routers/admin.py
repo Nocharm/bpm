@@ -4,17 +4,23 @@
 Admin console directory — richer fields than /api/directory, sysadmin-gated.
 """
 
+import asyncio
 import json
+import re
+import sqlite3
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import String, Text, and_, asc, cast, delete, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.batch_runs import record_batch_run
 from app.clock import KST
+from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
     Base,
@@ -34,8 +40,11 @@ from app.orgchart import (
     resolve_org_path,
 )
 from app.permissions.logic import is_sysadmin, role_rank
+from app.settings import settings
 from app.schemas import (
     AdminDeptOut,
+    BackupFileOut,
+    BackupRunOut,
     BatchRunOut,
     AdminDirectoryOut,
     AdminUserOut,
@@ -264,6 +273,85 @@ async def list_batch_runs(
     _require_sysadmin(login_id)
     rows = (await session.execute(select(BatchJobRun))).scalars().all()
     return list(rows)
+
+
+# 백업 파일명 화이트리스트 — 사이드카 pg_dump(bpm-*.dump)·로컬 sqlite 사본(bpm-*.sqlite)만 노출.
+# 경로 구분자가 못 들어가는 형식이라 다운로드 경로 탈출이 원천 차단된다.
+_BACKUP_NAME_RE = re.compile(r"^bpm-\d{8}-\d{6}\.(dump|sqlite)$")
+# 온디맨드 트리거 — 백엔드가 이 파일을 쓰면 db-backup 사이드카(≤5s 폴링)가 지우고 즉시 pg_dump 1회.
+BACKUP_TRIGGER_FILENAME = "backup.request"
+
+
+def _get_backup_dir() -> Path:
+    return Path(settings.backup_dir)
+
+
+def _copy_sqlite(src: str, dest: Path) -> None:
+    """sqlite 온라인 백업 — 파일 cp 대신 backup API(쓰기 중에도 일관 스냅샷)."""
+    with sqlite3.connect(src) as source, sqlite3.connect(dest) as target:
+        source.backup(target)
+
+
+@router.get("/backups", response_model=list[BackupFileOut])
+async def list_backups(login_id: str = Depends(get_current_user)) -> list[BackupFileOut]:
+    """sysadmin 전용 — 백업 디렉터리의 다운로드 가능 파일 목록(최신순)."""
+    _require_sysadmin(login_id)
+    backup_dir = _get_backup_dir()
+    if not backup_dir.is_dir():
+        return []
+    files = [
+        BackupFileOut(
+            filename=path.name,
+            size=path.stat().st_size,
+            modified_at=datetime.fromtimestamp(path.stat().st_mtime, tz=KST),
+        )
+        for path in backup_dir.iterdir()
+        if _BACKUP_NAME_RE.match(path.name)
+    ]
+    return sorted(files, key=lambda f: f.filename, reverse=True)
+
+
+@router.post("/backups/run", response_model=BackupRunOut)
+async def run_backup_now(
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> BackupRunOut:
+    """sysadmin 전용 — 온디맨드 백업. sqlite=즉시 사본 생성, postgres=사이드카 트리거 파일 기록."""
+    _require_sysadmin(login_id)
+    backup_dir = _get_backup_dir()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    if settings.database_url.startswith("sqlite"):
+        src = settings.database_url.rsplit("///", 1)[-1]
+        filename = f"bpm-{now_kst():%Y%m%d-%H%M%S}.sqlite"
+        dest = backup_dir / filename
+        try:
+            await asyncio.to_thread(_copy_sqlite, src, dest)
+        except Exception as exc:
+            dest.unlink(missing_ok=True)
+            await record_batch_run(session, "db_backup", "failure", f"on-demand: {exc}")
+            raise HTTPException(status_code=500, detail=f"backup failed: {exc}") from exc
+        await record_batch_run(
+            session, "db_backup", "success", f"{filename} (on-demand by {login_id})"
+        )
+        return BackupRunOut(status="completed", filename=filename)
+    # postgres — pg_dump는 db와 버전이 맞는 사이드카가 수행(트리거 소비·검증·기록까지)
+    trigger = backup_dir / BACKUP_TRIGGER_FILENAME
+    trigger.write_text(f"{login_id} {now_kst().isoformat()}\n")
+    return BackupRunOut(status="requested")
+
+
+@router.get("/backups/{filename}")
+async def download_backup(
+    filename: str, login_id: str = Depends(get_current_user)
+) -> FileResponse:
+    """sysadmin 전용 — 백업 파일 다운로드(사이드카 덤프를 관리자 로컬 PC로 내려받기)."""
+    _require_sysadmin(login_id)
+    if not _BACKUP_NAME_RE.match(filename):
+        raise HTTPException(status_code=404, detail="unknown backup file")
+    path = _get_backup_dir() / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="unknown backup file")
+    return FileResponse(path, filename=filename, media_type="application/octet-stream")
 
 
 @router.get("/tables", response_model=list[TableInfoOut])
