@@ -1,0 +1,548 @@
+{
+  "_readme": [
+    "합성 더미 — 실전달물 아님. 0.4-bpm-interface-draft 전 기능 시연용 1세트.",
+    "L5 흐름: 접수 → 영향평가 → 실행 → 완료 (+ 반려 loop 2건, 경미변경 bypass 1건) — 분기 노드 3개가 생긴다.",
+    "L6 내부: seq·branch(exclusive/parallel)·loop·bypass, decision/handoff kind, exception variant를 모두 포함.",
+    "IO 자동 연결 확인용으로 노드 간 input/output 텍스트를 일부러 완전일치시켰다.",
+    "rows[0]의 '분류 확정 CR'은 두 노드(경미/중대 확정)가 같은 아웃풋을 내므로 최근접 상류 선택이 걸린다."
+  ],
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
+  "framework": {
+    "categories": [
+      { "code": "21", "name": "Quality System", "level": 1, "parent": null },
+      { "code": "21-03", "name": "변경관리", "level": 2, "parent": "21" },
+      { "code": "21-03-02", "name": "제조 변경관리", "level": 3, "parent": "21-03" },
+      { "code": "21-03-02-01", "name": "변경 실행 및 완료", "level": 4, "parent": "21-03-02" },
+      { "code": "21-03-02-01-01", "name": "공정 변경관리 실행", "level": 5, "parent": "21-03-02-01" }
+    ]
+  },
+  "l5": { "label": "공정 변경관리 실행", "nodeCode": "21-03-02-01-01" },
+  "relations": {
+    "entry": {
+      "taskId": "cc-task-0001",
+      "triggerType": "message",
+      "label": "현업이 QMS에 변경 요청서(CR)를 제출하면 시작",
+      "quote": "변경이 필요하면 현업에서 QMS에 CR을 올려요. 그게 시작점입니다."
+    },
+    "edges": [
+      {
+        "src": "cc-task-0001",
+        "dst": "cc-task-0002",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "중대 변경으로 분류된 건",
+        "label": "영향평가로",
+        "quote": "중대로 분류되면 무조건 영향평가를 탑니다."
+      },
+      {
+        "src": "cc-task-0001",
+        "dst": "cc-task-0004",
+        "kind": "bypass",
+        "gateway": null,
+        "condition": "like-for-like 경미 변경",
+        "label": "평가 생략하고 완료로",
+        "quote": "부품 동등 교체 같은 건 평가 없이 바로 문서만 정리하고 닫아요."
+      },
+      {
+        "src": "cc-task-0002",
+        "dst": "cc-task-0003",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "변경계획이 승인된 경우",
+        "label": "승인 → 실행",
+        "quote": null
+      },
+      {
+        "src": "cc-task-0002",
+        "dst": "cc-task-0001",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "평가에 필요한 정보가 부족한 경우",
+        "label": "반려 → 재접수",
+        "quote": "자료가 부족하면 반려해서 다시 올리게 합니다."
+      },
+      {
+        "src": "cc-task-0003",
+        "dst": "cc-task-0004",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "검증 완료 기록 산출 시",
+        "label": "검증 완료 → 종결",
+        "quote": null
+      },
+      {
+        "src": "cc-task-0003",
+        "dst": "cc-task-0002",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "검증이 실패해 변경계획을 다시 세워야 하는 경우",
+        "label": "재평가",
+        "quote": "검증에서 깨지면 계획부터 다시 봐야죠."
+      }
+    ]
+  },
+  "rows": [
+    {
+      "taskId": "cc-task-0001",
+      "unitId": "cc-unit-0001",
+      "l6": "변경 요청 접수 및 분류",
+      "owner": null,
+      "ownerRole": "변경관리 담당자",
+      "approvers": ["jihoon.park"],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "현업이 QMS에 변경 요청서(CR) 제출",
+        "input_data": "변경 요청서(CR)",
+        "output_data": "분류 확정 CR",
+        "done_criteria": "변경 등급이 확정되고 평가 담당이 지정되면 끝",
+        "systems": "QMS",
+        "total_time": "건당 하루 정도",
+        "total_time_min": 90,
+        "touch_time": "실제 손대는 건 40분",
+        "touch_time_min": 40,
+        "frequency": "주 3~4건",
+        "annual_count": 180,
+        "headcount": 1,
+        "fte": 0.14,
+        "gmp": "GMP 문서 — 변경관리 SOP(QA-CC-001)",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1, "label": "요청서 접수", "name": "QMS에 올라온 CR을 열어 접수 대장에 등록한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "변경 요청서(CR)", "output": "접수 대장 등록 건",
+          "system": "QMS", "screen": "CR 접수화면", "dataForm": "structured",
+          "quote": "QMS에 뜨면 일단 접수 대장에 올립니다."
+        },
+        {
+          "seq": 2, "label": "기재 완결성 확인",
+          "name": "변경 사유·범위·근거 자료가 다 붙어 있는지 확인한다",
+          "kind": "decision", "variant": "normal", "rule": "필수 항목이 하나라도 비면 보완 요청",
+          "input": "접수 대장 등록 건", "output": "완결성 판정",
+          "system": null, "screen": null, "dataForm": "tacit",
+          "quote": "근거 자료가 빠져 있는 경우가 제일 많아요."
+        },
+        {
+          "seq": 3, "label": "요청자 보완 요청",
+          "name": "누락 항목을 적어 요청자에게 반송한다",
+          "kind": "action", "variant": "exception", "rule": "필수 항목 누락 시에만",
+          "input": "완결성 판정", "output": "보완 요청 회신",
+          "system": "QMS", "screen": null, "dataForm": "document",
+          "quote": "빠진 걸 적어서 돌려보내요."
+        },
+        {
+          "seq": 4, "label": "변경 등급 분류",
+          "name": "제품 품질·규제 영향 기준으로 경미/중대를 가른다",
+          "kind": "decision", "variant": "normal", "rule": "품질 영향 가능성이 있으면 중대",
+          "input": "완결성 판정", "output": "변경 등급",
+          "system": null, "screen": null, "dataForm": "tacit",
+          "quote": "품질에 닿을 여지가 있으면 무조건 중대로 봅니다."
+        },
+        {
+          "seq": 5, "label": "경미 변경 확정",
+          "name": "like-for-like 수준으로 판단해 경미 변경으로 확정한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "변경 등급", "output": "분류 확정 CR",
+          "system": "QMS", "screen": null, "dataForm": "structured", "quote": null
+        },
+        {
+          "seq": 6, "label": "중대 변경 확정",
+          "name": "품질 영향 가능성이 있어 중대 변경으로 확정한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "변경 등급", "output": "분류 확정 CR",
+          "system": "QMS", "screen": null, "dataForm": "structured", "quote": null
+        },
+        {
+          "seq": 7, "label": "평가 담당 지정",
+          "name": "확정된 등급에 맞춰 영향평가 담당자를 지정해 넘긴다",
+          "kind": "handoff", "variant": "normal", "rule": null,
+          "input": "분류 확정 CR", "output": "평가 담당 지정",
+          "system": "QMS", "screen": null, "dataForm": "structured",
+          "quote": "등급이 정해지면 평가 담당한테 넘깁니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          {
+            "src": 2, "dst": 3, "kind": "branch", "gateway": "exclusive",
+            "condition": "필수 항목이 누락된 경우", "label": "보완 요청",
+            "quote": "빠진 걸 적어서 돌려보내요."
+          },
+          {
+            "src": 3, "dst": 1, "kind": "loop", "gateway": null,
+            "condition": "보완 회신이 들어온 경우", "label": "재접수", "quote": null
+          },
+          {
+            "src": 2, "dst": 4, "kind": "branch", "gateway": "exclusive",
+            "condition": "기재가 완결된 경우", "label": "분류 진행", "quote": null
+          },
+          {
+            "src": 4, "dst": 5, "kind": "branch", "gateway": "exclusive",
+            "condition": "설비·문서 like-for-like 수준", "label": "경미", "quote": null
+          },
+          {
+            "src": 4, "dst": 6, "kind": "branch", "gateway": "exclusive",
+            "condition": "제품 품질에 영향 가능", "label": "중대",
+            "quote": "품질에 닿을 여지가 있으면 무조건 중대로 봅니다."
+          },
+          { "src": 5, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 6, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null }
+        ]
+      }
+    },
+    {
+      "taskId": "cc-task-0002",
+      "unitId": "cc-unit-0002",
+      "l6": "영향평가 및 승인",
+      "owner": null,
+      "ownerRole": "품질보증 심사자",
+      "approvers": ["jihoon.park", "sujin.han"],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "평가 담당 지정 접수",
+        "input_data": "평가 담당 지정",
+        "output_data": "승인된 변경계획",
+        "done_criteria": "변경계획이 심의를 통과하면 끝",
+        "systems": "QMS",
+        "total_time": "건당 3~5일",
+        "total_time_min": 300,
+        "touch_time": "실제 작성·검토는 3시간",
+        "touch_time_min": 180,
+        "frequency": "주 2건",
+        "annual_count": 104,
+        "headcount": 2,
+        "fte": 0.42,
+        "gmp": "GMP 기록 — 영향평가서는 CR 첨부",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1, "label": "영향 범위 식별",
+          "name": "변경이 닿는 설비·문서·제품·공정을 목록화한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "평가 담당 지정", "output": "영향 범위 목록",
+          "system": "QMS", "screen": null, "dataForm": "document",
+          "quote": "뭐가 걸리는지부터 다 뽑아 놓습니다."
+        },
+        {
+          "seq": 2, "label": "품질 영향평가",
+          "name": "제품 품질·밸리데이션 상태에 미치는 영향을 평가한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "영향 범위 목록", "output": "품질 영향평가서",
+          "system": null, "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 3, "label": "규제 영향평가",
+          "name": "허가사항 변경 여부와 보고 의무를 판단한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "영향 범위 목록", "output": "규제 영향평가서",
+          "system": null, "screen": null, "dataForm": "document",
+          "quote": "허가사항이 걸리면 규제팀이 따로 봅니다."
+        },
+        {
+          "seq": 4, "label": "평가 결과 취합",
+          "name": "품질·규제 평가서를 하나로 묶어 결론을 정리한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "품질 영향평가서\n규제 영향평가서", "output": "통합 평가 결과",
+          "system": "QMS", "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 5, "label": "변경계획 수립",
+          "name": "실행 항목·검증 방법·일정을 담은 변경계획을 만든다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "통합 평가 결과", "output": "변경계획(초안)",
+          "system": "QMS", "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 6, "label": "승인 심의",
+          "name": "변경관리 위원회가 계획의 타당성을 심의한다",
+          "kind": "decision", "variant": "normal", "rule": "보완 지시가 나오면 계획 재수립",
+          "input": "변경계획(초안)", "output": "심의 결과",
+          "system": null, "screen": null, "dataForm": "tacit",
+          "quote": "위원회에서 한 번에 통과되는 경우는 많지 않아요."
+        },
+        {
+          "seq": 7, "label": "승인",
+          "name": "심의를 통과한 변경계획을 승인하고 실행팀에 넘긴다",
+          "kind": "handoff", "variant": "normal", "rule": null,
+          "input": "심의 결과", "output": "승인된 변경계획",
+          "system": "QMS", "screen": null, "dataForm": "structured", "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1, "dst": 2, "kind": "branch", "gateway": "parallel",
+            "condition": "영향 범위 확정 후 품질·규제 평가를 병행",
+            "label": "품질 라인", "quote": "품질이랑 규제는 동시에 돌립니다."
+          },
+          {
+            "src": 1, "dst": 3, "kind": "branch", "gateway": "parallel",
+            "condition": "영향 범위 확정 후 품질·규제 평가를 병행",
+            "label": "규제 라인", "quote": null
+          },
+          { "src": 2, "dst": 4, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 3, "dst": 4, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 4, "dst": 5, "kind": "seq", "gateway": null, "condition": "통합 평가 결과 산출 시", "label": null, "quote": null },
+          { "src": 5, "dst": 6, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          {
+            "src": 6, "dst": 7, "kind": "branch", "gateway": "exclusive",
+            "condition": "심의를 통과한 경우", "label": "승인", "quote": null
+          },
+          {
+            "src": 6, "dst": 5, "kind": "loop", "gateway": null,
+            "condition": "보완 지시가 나온 경우", "label": "계획 재수립",
+            "quote": "지적 나오면 계획을 다시 짜서 올려요."
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "cc-task-0003",
+      "unitId": "cc-unit-0003",
+      "l6": "변경 실행 및 검증",
+      "owner": null,
+      "ownerRole": "실행 담당자",
+      "approvers": ["sujin.han"],
+      "department": "Manufacturing Center/Production Department/Process Engineering Team",
+      "fields": {
+        "start_condition": "승인된 변경계획 접수",
+        "input_data": "승인된 변경계획",
+        "output_data": "검증 완료 기록",
+        "done_criteria": "검증 기준을 충족한 기록이 확정되면 끝",
+        "systems": "MES",
+        "total_time": "건당 1~2주",
+        "total_time_min": 480,
+        "touch_time": "실제 작업은 6시간",
+        "touch_time_min": 360,
+        "frequency": "월 6건",
+        "annual_count": 72,
+        "headcount": 3,
+        "fte": 0.52,
+        "gmp": "GMP 기록 — 검증 데이터는 원시자료 보관",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1, "label": "실행 준비",
+          "name": "변경계획의 실행 항목을 체크리스트로 풀고 자원을 확보한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "승인된 변경계획", "output": "실행 체크리스트",
+          "system": "MES", "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 2, "label": "변경 실행",
+          "name": "체크리스트대로 설비·문서·공정을 변경하고 기록을 남긴다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "실행 체크리스트", "output": "실행 기록",
+          "system": "MES", "screen": "작업 기록화면", "dataForm": "structured",
+          "quote": "한 줄씩 체크하면서 진행하고 바로 기록해요."
+        },
+        {
+          "seq": 3, "label": "검증 시험",
+          "name": "변경계획에 정의된 검증 항목을 시험해 데이터를 얻는다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "실행 기록", "output": "검증 데이터",
+          "system": null, "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 4, "label": "검증 판정",
+          "name": "검증 데이터가 사전 정의한 기준을 충족하는지 판정한다",
+          "kind": "decision", "variant": "normal", "rule": "미달이면 원복 후 재실행",
+          "input": "검증 데이터", "output": "검증 판정",
+          "system": null, "screen": null, "dataForm": "tacit",
+          "quote": "기준 미달이면 그냥 되돌립니다."
+        },
+        {
+          "seq": 5, "label": "원복 조치",
+          "name": "변경 전 상태로 되돌리고 원복 기록을 남긴다",
+          "kind": "action", "variant": "exception", "rule": "검증 실패 시에만",
+          "input": "검증 판정", "output": "원복 기록",
+          "system": "MES", "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 6, "label": "검증 기록 확정",
+          "name": "판정 결과와 데이터를 묶어 검증 완료 기록을 확정한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "검증 판정", "output": "검증 완료 기록",
+          "system": "MES", "screen": null, "dataForm": "structured", "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 2, "dst": 3, "kind": "seq", "gateway": null, "condition": "실행 기록 산출 시", "label": null, "quote": null },
+          { "src": 3, "dst": 4, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          {
+            "src": 4, "dst": 5, "kind": "branch", "gateway": "exclusive",
+            "condition": "검증 기준에 미달한 경우", "label": "원복",
+            "quote": "기준 미달이면 그냥 되돌립니다."
+          },
+          {
+            "src": 5, "dst": 2, "kind": "loop", "gateway": null,
+            "condition": "원복 후 계획을 고쳐 다시 실행", "label": "재실행", "quote": null
+          },
+          {
+            "src": 4, "dst": 6, "kind": "branch", "gateway": "exclusive",
+            "condition": "검증 기준을 충족한 경우", "label": "기록 확정", "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "cc-task-0004",
+      "unitId": "cc-unit-0004",
+      "l6": "변경 완료 및 문서화",
+      "owner": null,
+      "ownerRole": "변경관리 담당자",
+      "approvers": ["jihoon.park"],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "검증 완료 기록 인수(경미 변경은 분류 확정 후 바로)",
+        "input_data": "검증 완료 기록",
+        "output_data": "변경 완료 보고서\nSOP 개정본",
+        "done_criteria": "CR이 QMS에서 종결되면 끝",
+        "systems": "QMS",
+        "total_time": "건당 이틀",
+        "total_time_min": 150,
+        "touch_time": "실제 작성은 한 시간 반",
+        "touch_time_min": 90,
+        "frequency": "주 3건",
+        "annual_count": 156,
+        "headcount": 1,
+        "fte": 0.2,
+        "gmp": "GMP 문서 — SOP 개정본은 문서관리 대상",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1, "label": "관련 문서 개정",
+          "name": "변경 내용을 SOP·양식에 반영해 개정본을 낸다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "검증 완료 기록", "output": "SOP 개정본",
+          "system": "QMS", "screen": "문서 개정화면", "dataForm": "document",
+          "quote": "SOP를 안 고치면 실제로 바뀐 게 아니죠."
+        },
+        {
+          "seq": 2, "label": "교육 시행",
+          "name": "개정본으로 해당 부서 교육을 시행하고 이수를 확인한다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "SOP 개정본", "output": "교육 기록",
+          "system": "LMS", "screen": null, "dataForm": "structured", "quote": null
+        },
+        {
+          "seq": 3, "label": "완료 보고서 작성",
+          "name": "실행·검증·문서화 결과를 묶어 완료 보고서를 만든다",
+          "kind": "action", "variant": "normal", "rule": null,
+          "input": "교육 기록", "output": "변경 완료 보고서",
+          "system": "QMS", "screen": null, "dataForm": "document", "quote": null
+        },
+        {
+          "seq": 4, "label": "CR 종결",
+          "name": "완료 보고서를 붙여 QMS에서 CR을 종결 처리한다",
+          "kind": "handoff", "variant": "normal", "rule": null,
+          "input": "변경 완료 보고서", "output": "종결 처리",
+          "system": "QMS", "screen": "CR 종결화면", "dataForm": "structured",
+          "quote": "보고서 붙여서 닫으면 그걸로 끝입니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": "SOP 개정본 산출 시", "label": null, "quote": null },
+          { "src": 2, "dst": 3, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 3, "dst": 4, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "cc-task-0001", "doc": null, "seq": 1, "name": "변경 요청 접수 및 분류",
+      "note": "보완 요청으로 되돌아오는 비율이 높아 접수 단계에서 시간이 가장 많이 샌다",
+      "state": "confirmed",
+      "evidence": [
+        { "id": "cc-ev-0001", "quote": "QMS에 뜨면 일단 접수 대장에 올립니다.", "sourceKind": "chat" },
+        { "id": "cc-ev-0002", "quote": "근거 자료가 빠져 있는 경우가 제일 많아요.", "sourceKind": "chat" }
+      ],
+      "revision": 1, "ownerRole": "변경관리 담당자",
+      "exceptions": [
+        {
+          "name": "필수 항목 누락으로 요청자에게 반송한다",
+          "rule": "변경 사유·범위·근거 자료 중 하나라도 비면 접수하지 않고 보완 요청으로 돌린다.",
+          "evidence": []
+        }
+      ],
+      "endCondition": "변경 등급이 확정되고 평가 담당이 지정되면 끝",
+      "startCondition": "현업이 QMS에 변경 요청서(CR) 제출"
+    },
+    {
+      "id": "cc-task-0002", "doc": null, "seq": 2, "name": "영향평가 및 승인",
+      "note": null, "state": "confirmed",
+      "evidence": [
+        { "id": "cc-ev-0003", "quote": "품질이랑 규제는 동시에 돌립니다.", "sourceKind": "chat" }
+      ],
+      "revision": 1, "ownerRole": "품질보증 심사자",
+      "exceptions": [
+        {
+          "name": "자료 부족으로 접수 단계로 반려한다",
+          "rule": "평가에 필요한 근거가 부족하면 평가를 중단하고 접수로 되돌린다.",
+          "evidence": []
+        }
+      ],
+      "endCondition": "변경계획이 심의를 통과하면 끝",
+      "startCondition": "평가 담당 지정 접수"
+    },
+    {
+      "id": "cc-task-0003", "doc": null, "seq": 3, "name": "변경 실행 및 검증",
+      "note": "검증 실패 시 원복 비용이 커서 실행 전 체크리스트 검토를 두 번 한다",
+      "state": "confirmed",
+      "evidence": [
+        { "id": "cc-ev-0004", "quote": "기준 미달이면 그냥 되돌립니다.", "sourceKind": "chat" }
+      ],
+      "revision": 1, "ownerRole": "실행 담당자",
+      "exceptions": [
+        {
+          "name": "검증 실패 시 변경 전 상태로 원복한다",
+          "rule": "검증 데이터가 사전 정의 기준에 미달하면 즉시 원복하고 재실행 계획을 다시 받는다.",
+          "evidence": []
+        }
+      ],
+      "endCondition": "검증 기준을 충족한 기록이 확정되면 끝",
+      "startCondition": "승인된 변경계획 접수"
+    },
+    {
+      "id": "cc-task-0004", "doc": null, "seq": 4, "name": "변경 완료 및 문서화",
+      "note": null, "state": "confirmed",
+      "evidence": [
+        { "id": "cc-ev-0005", "quote": "SOP를 안 고치면 실제로 바뀐 게 아니죠.", "sourceKind": "chat" }
+      ],
+      "revision": 1, "ownerRole": "변경관리 담당자",
+      "exceptions": [],
+      "endCondition": "CR이 QMS에서 종결되면 끝",
+      "startCondition": "검증 완료 기록 인수(경미 변경은 분류 확정 후 바로)"
+    }
+  ],
+  "summary": {
+    "kept": { "files": 0, "messages": 72, "free_texts": 0, "evidence_total": 5 },
+    "l6_total": 4,
+    "l7_total": 24,
+    "l6_edge_total": 6,
+    "l7_edge_total": 25,
+    "voc_total": 2,
+    "rows_total": 4,
+    "open_items_total": 2,
+    "side_notes_total": 3
+  },
+  "openItems": [
+    { "text": "경미 변경 bypass 기준을 SOP에 명문화 — QA와 협의 필요", "unitId": null },
+    { "text": "영향평가 템플릿 전자화 범위 — IT 협의", "unitId": "cc-unit-0002" }
+  ],
+  "sideNotes": [
+    { "kind": "voc", "text": "위원회 일정이 격주라 승인 대기로만 평균 5일이 샌다", "unitId": "cc-unit-0002" },
+    { "kind": "voc", "text": "보완 요청은 QMS 알림만 가고 별도 연락이 없어 회신이 늦다", "unitId": "cc-unit-0001" },
+    { "kind": "rule_basis", "text": "변경 등급 기준은 변경관리 SOP(QA-CC-001) 부속서 2를 따른다", "unitId": null }
+  ]
+}

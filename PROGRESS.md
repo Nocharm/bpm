@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 0.4 전 기능 더미 1세트 (dev)
+- `docs/samples/framework-linkage-dummy/change-control-l5.json` — 변경관리 L5 + L6 4건. seq·branch(exclusive/parallel)·loop·bypass, decision/handoff kind, exception variant, IO 완전일치 체인을 한 파일에 다 태운 시연용 세트.
+- 실 임포트 확인: 어댑터 이슈 0 · L6 4맵(24노드/25엣지, 분기 승격 4) · 연계 캔버스 7노드(분기 3개, 위/아래 팬아웃) · IO 자동 연결 21건 · 자동 draft 4건 · L5 노트 8건. `분류 확정 CR`을 두 노드가 내는 경우 최근접 상류(동률이면 낮은 seq)가 선택되는 것까지 확인.
+
 ## 2026-09-01 — L5 분기 출구 팬아웃 배치 (dev)
 - 분기 노드를 세워도 캔버스가 한 줄이라 어디서 갈라지는지 선만으론 안 읽혔다. 분기 출구를 **오른쪽 위 → 아래 → 옆 순**으로 벌리고 엣지 출구 핸들(`s-top`/`s-bottom`/`s-right`)을 기하에 맞췄다. 분기 노드는 일반 노드라 4면 핸들을 다 쓸 수 있다(SP는 좌 `in`·우 `__primary__` 고정).
 - 행 배정은 먼저 배정된 쪽이 이긴다 — 두 갈래가 같은 L6로 합류할 때 나중 분기가 위치를 흔들면 안 된다. 출구 변은 최종 행에서 되뽑아 기하와 항상 일치시킨다(4번째부터는 위/아래로 한 칸씩 더).
