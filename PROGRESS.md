@@ -3,8 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-01 — L5 브랜드 워터마크 가시성 상향 (dev)
-- 회사(SΛMSUNG BIOLOGICS)·서비스(Business Process Map) 워터마크가 하늘에 묻혀 읽히지 않는다는 지적 — 화이트 **6% → 16%**. 런타임 override로 0.06/0.10/0.13/0.16/0.20을 실화면 대조해 고른 값(노드·엣지보다 확실히 뒤로 물러나되 워드마크는 읽힘).
+## 2026-09-01 — L5 워터마크 가시성 상향 + 커서 스포트라이트 (dev)
+- 회사(SΛMSUNG BIOLOGICS)·서비스(Business Process Map) 워터마크가 하늘에 묻혀 읽히지 않는다는 지적 — 화이트 **6% → 24%**(0.06/0.10/0.13/0.16/0.20을 런타임 override로 실화면 대조 후 사용자 지정값 24%로 확정).
+- **커서 스포트라이트**(`l5-cursor-glow`) — 커서 주변 하늘만 은은하게 밝힌다. 좌표를 state로 올리면 에디터 전체가 매 프레임 리렌더되므로 **ref로 transform/opacity만 직접 쓴다**(리렌더 0). 원은 정적 radial-gradient 900px이라 이동이 GPU 합성만 하고 리페인트가 없다 — 커서 위치를 `background-position`으로 옮기면 매 프레임 그라데이션 재래스터라 이 방식이 아니다. 워터마크보다 아래에 깔아 "배경만" 밝아진다. 드릴인 창(index>0) 위 이동엔 반응하지 않음.
+- 실측(마우스 스윕 60틱 ×3회, 글로우 유무 대조): median 16.7ms / p95 16.7~16.8ms / long task 0 — **차이 없음**. 1회 나온 233ms 프레임은 재현되지 않아 dev 재컴파일 노이즈로 판단.
 - 검증 중 확인: 오래 떠 있던 dev 서버는 **Turbopack CSS 영속 캐시 탓에 `.bpm-l5-sky` 규칙이 비어(`background-image: none`) L5 캔버스가 흰 배경으로 렌더**된다 — 소스·프로덕션 빌드는 정상. 톤 판정 전 `frontend/.next` 삭제 후 재기동이 필요하다(기존 랜드마인 재확인).
 
 ## 2026-09-01 — 펼친 하위프로세스 안에서 Tab이 캔버스를 벗어나던 버그 (fix/sp-tab-focus)

@@ -6834,6 +6834,26 @@ function MapEditor({ mapId }: { mapId: number }) {
     return hit?.id ?? null;
   };
 
+  // L5 커서 스포트라이트 — 커서 주변 하늘만 은은하게 밝힌다(사용자 요청 2026-09-01).
+  // 리렌더 없이 transform/opacity만 쓰는 합성 레이어 — 상태로 좌표를 올리면 에디터 전체가
+  // 매 프레임 리렌더된다. 원은 정적 그라데이션이라 이동은 GPU 합성만 하고 리페인트가 없다.
+  const l5GlowRef = useRef<HTMLDivElement | null>(null);
+  const moveL5Glow = useCallback((clientX: number, clientY: number) => {
+    const glow = l5GlowRef.current;
+    const host = glow?.parentElement;
+    if (!glow || !host) {
+      return;
+    }
+    const rect = host.getBoundingClientRect();
+    glow.style.transform = `translate3d(${clientX - rect.left}px, ${clientY - rect.top}px, 0) translate(-50%, -50%)`;
+    glow.style.opacity = "1";
+  }, []);
+  const hideL5Glow = useCallback(() => {
+    if (l5GlowRef.current) {
+      l5GlowRef.current.style.opacity = "0";
+    }
+  }, []);
+
   // 펼침/접힘은 줌·팬을 바꾸지 않는다(사용자 요청 — 자동 fitView 제거). 슬라이드 전환만 잠깐 켰다 끈다.
   useEffect(() => {
     if (!expandAnimating) {
@@ -9129,9 +9149,34 @@ function MapEditor({ mapId }: { mapId: number }) {
                     // 내부 셀렉션 핸들러 사용) 래퍼에서 버블링 pointermove로 판정. 동일 값은 setState 베일아웃.
                     onPointerMove={(event) => {
                       setHoverRegionId(findRegionAtClient(event.clientX, event.clientY));
+                      // 스포트라이트는 L5 본 캔버스에서만 따라간다 — 떠 있는 드릴인 창 위 이동엔 반응하지 않게.
+                      if (index === 0) {
+                        moveL5Glow(event.clientX, event.clientY);
+                      }
                     }}
-                    onPointerLeave={() => setHoverRegionId(null)}
+                    onPointerLeave={() => {
+                      setHoverRegionId(null);
+                      hideL5Glow();
+                    }}
                   >
+                    {index === 0 && l5Charcoal && (
+                      // 커서 스포트라이트 — 워터마크보다 아래(하늘 바로 위)라 밝아지는 건 배경뿐.
+                      <div
+                        aria-hidden
+                        data-id="l5-cursor-glow"
+                        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+                      >
+                        <div
+                          ref={l5GlowRef}
+                          className="absolute left-0 top-0 h-[900px] w-[900px] rounded-full opacity-0 transition-opacity duration-450 ease-smooth"
+                          style={{
+                            background:
+                              "radial-gradient(closest-side, color-mix(in srgb, var(--color-canvas) 16%, transparent), color-mix(in srgb, var(--color-canvas) 6%, transparent) 45%, transparent 75%)",
+                            willChange: "transform",
+                          }}
+                        />
+                      </div>
+                    )}
                     {index === 0 && l5Charcoal && (
                       // 브랜드 워터마크 — 회사 로고·시스템명·플랫 아이콘을 번갈아 사선 타일링(단조로움 완화).
                       // ReactFlow보다 앞 DOM + 저불투명이라 노드/엣지를 가리지 않는다. 뷰포트 고정(팬 무관)
@@ -9140,9 +9185,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         data-id="l5-brand-watermark"
                         className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
                       >
-                        {/* 불투명도 0.16 — 6%는 하늘에 묻혀 로고가 읽히지 않았다(사용자 요청 2026-09-01).
-                            노드·엣지보다는 확실히 뒤로 물러나되 워드마크가 읽히는 선. */}
-                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.16]">
+                        {/* 불투명도 0.24 — 6%는 하늘에 묻혀 로고가 읽히지 않았다(사용자 요청 2026-09-01). */}
+                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.24]">
                           {Array.from({ length: 10 }, (_, row) => (
                             <div
                               key={row}
