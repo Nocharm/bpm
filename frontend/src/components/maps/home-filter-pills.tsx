@@ -11,7 +11,7 @@ import type { FilterDisplayMode } from "@/lib/filter-display";
 import { FilterDropdown } from "@/components/maps/filter-dropdown";
 
 // 상태 필터 필 순서 — 초안/검토중/승인됨/반려/게시 / status filter pills order.
-const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published"] as const;
+const STATUS_ORDER = ["draft", "pending", "approved", "rejected", "published", "confirmed"] as const;
 
 export function HomeFilterPills({
   display,

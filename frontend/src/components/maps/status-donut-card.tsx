@@ -15,10 +15,11 @@ const STATUS_COLOR: Record<VersionStatus, string> = {
   pending: "--color-changed",
   approved: "--color-accent",
   published: "--color-added",
+  confirmed: "--color-accent-elevated",
   rejected: "--color-error",
   expired: "--color-ink-muted",
 };
-const ORDER: VersionStatus[] = ["draft", "pending", "approved", "published", "rejected", "expired"];
+const ORDER: VersionStatus[] = ["draft", "pending", "approved", "published", "confirmed", "rejected", "expired"];
 
 interface StatusDonutCardProps {
   maps: MapSummary[];

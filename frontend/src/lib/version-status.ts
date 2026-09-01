@@ -8,6 +8,7 @@ export const VERSION_STATUS_LABEL: Record<VersionStatus, MessageKey> = {
   pending: "home.verStatus.pending",
   approved: "home.verStatus.approved",
   published: "home.verStatus.published",
+  confirmed: "home.verStatus.confirmed",
   rejected: "home.verStatus.rejected",
   expired: "home.verStatus.expired",
 };
@@ -18,6 +19,7 @@ export const VERSION_STATUS_STYLE: Record<VersionStatus, string> = {
   pending: "border-changed text-changed",
   approved: "border-accent text-accent",
   published: "border-added text-added",
+  confirmed: "border-accent text-accent",
   rejected: "border-error text-error",
   expired: "border-hairline text-ink-tertiary",
 };

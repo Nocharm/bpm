@@ -440,6 +440,7 @@ const STATUS_DOT: Record<VersionStatus, string> = {
   pending: "bg-changed",
   approved: "bg-accent",
   published: "bg-added",
+  confirmed: "bg-accent",
   rejected: "bg-error",
   expired: "bg-ink-tertiary",
 };

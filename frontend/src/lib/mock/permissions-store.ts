@@ -13,7 +13,7 @@ import type {
 
 // StoreState: SeedState에 versionFlow 추가 — SeedState는 변경하지 않음 / Do NOT modify SeedState.
 export interface VersionFlowEntry {
-  status: 'draft' | 'pending' | 'approved' | 'published' | 'rejected';
+  status: 'draft' | 'pending' | 'approved' | 'published' | 'confirmed' | 'rejected';
   requestedBy: string;
   label: string;
   /** 승인·반려한 사용자 ID (approve/reject 시 기록) / User who approved or rejected. */

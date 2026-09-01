@@ -7,6 +7,7 @@ export type VersionStatus =
   | "pending"
   | "approved"
   | "published"
+  | "confirmed"
   | "rejected"
   | "expired";
 

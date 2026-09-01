@@ -10,6 +10,7 @@ const STYLES: Record<VersionStatus, string> = {
   pending: "border-changed text-changed",
   approved: "border-added text-added",
   published: "border-accent text-accent",
+  confirmed: "border-accent text-accent",
   rejected: "border-error text-error",
   expired: "border-hairline text-ink-tertiary",
 };
@@ -19,6 +20,7 @@ const LABEL_KEY: Record<VersionStatus, MessageKey> = {
   pending: "status.pending",
   approved: "status.approved",
   published: "status.published",
+  confirmed: "status.confirmed",
   rejected: "status.rejected",
   expired: "status.expired",
 };
