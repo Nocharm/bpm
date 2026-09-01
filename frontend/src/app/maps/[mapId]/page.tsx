@@ -10741,16 +10741,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                   ) : null
                 }
                 subprocessSlot={
-                  <SubprocessInspectorCard
-                    mapId={mapId}
-                    canManage={spCanManage}
-                    disabledReason={spDisabledReason}
-                    disabledReasonKind={spDisabledReasonKind}
-                    onToast={showToast}
-                    onDesignationChange={() => setSpUsageReload((n) => n + 1)}
-                    onGoToPublished={(id) => void switchVersion(id)}
-                    usage={spUsage}
-                  />
+                  // L5 연계 캔버스는 SP 지정 불가(서버 422, design 2026-08-28 §9) — 카드 자체를 숨겨 혼동 차단
+                  isFrameworkMap ? undefined : (
+                    <SubprocessInspectorCard
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      disabledReason={spDisabledReason}
+                      disabledReasonKind={spDisabledReasonKind}
+                      onToast={showToast}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                      onGoToPublished={(id) => void switchVersion(id)}
+                      usage={spUsage}
+                    />
+                  )
                 }
                 ownershipSlot={
                   // 속성 빈상태 — 오우닝 부서·오너·승인자 표시(맵 요약 위, 2026-08-27)

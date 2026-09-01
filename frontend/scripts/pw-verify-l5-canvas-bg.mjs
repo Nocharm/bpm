@@ -94,6 +94,8 @@ try {
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
   check("brand watermark on charcoal", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 1);
   check("react-flow attribution hidden", (await page.locator(".react-flow__attribution").count()) === 0);
+  // L5는 SP 지정 불가(서버 422) — 인스펙터 지정 카드를 숨겨 혼동 차단 (사용자 요청 2026-09-01)
+  check("no SP designation card on L5", (await page.locator('[data-id="sp-inspector-card"]').count()) === 0);
   // 타일링 — 로고·시스템명·아이콘이 여러 번 교차 반복되는지(단일 대형 도장 아님)
   check("watermark is tiled (many items)", await page.evaluate(() => {
     const wm = document.querySelector('[data-id="l5-brand-watermark"]');
@@ -144,6 +146,7 @@ try {
   check("plain map stays light", (await canvasBg(page)) === LIGHT, String(await canvasBg(page)));
   check("plain map has no L5 tag", (await page.locator('[data-id="framework-l5-tag"]').count()) === 0);
   check("plain map is full-bleed", (await frameRadius(page)) === "0px", String(await frameRadius(page)));
+  check("plain map keeps SP designation card", (await page.locator('[data-id="sp-inspector-card"]').count()) === 1);
   await shot(page, "plain-map-light");
 
   check("no console errors", consoleErrors.length === 0, consoleErrors.join(" | "));
