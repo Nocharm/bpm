@@ -1,0 +1,894 @@
+{
+  "_readme": [
+    "합성 더미 — L5 연계 캔버스 데모용. L6는 서로 연계(links) 없이 독립 노드로만 구성(2026-08-28 규칙).",
+    "qc-raw-material-l5.json, qc-finished-product-l5.json과 함께 임포트한다.",
+    "0.4 변환본 — 0.3의 중복 seq(병렬) 관례를 relations.edges(kind=seq)로 명시화했다."
+  ],
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
+  "framework": {
+    "categories": [
+      {
+        "code": "20",
+        "name": "Quality",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "20-02",
+        "name": "품질보증(QA)",
+        "level": 2,
+        "parent": "20"
+      },
+      {
+        "code": "20-02-01",
+        "name": "품질 이벤트 관리",
+        "level": 3,
+        "parent": "20-02"
+      },
+      {
+        "code": "20-02-01-01",
+        "name": "일탈 관리",
+        "level": 4,
+        "parent": "20-02-01"
+      },
+      {
+        "code": "20-02-01-01-01",
+        "name": "시험 일탈·OOS 관리",
+        "level": 5,
+        "parent": "20-02-01-01"
+      }
+    ]
+  },
+  "l5": {
+    "label": "시험 일탈·OOS 관리",
+    "nodeCode": "20-02-01-01-01"
+  },
+  "relations": {
+    "entry": {
+      "taskId": "dmy-qa-task-0001",
+      "triggerType": "manual",
+      "label": "시험 부서 OOS 보고 접수(QMS)",
+      "quote": null
+    },
+    "edges": [
+      {
+        "src": "dmy-qa-task-0001",
+        "dst": "dmy-qa-task-0002",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-qa-task-0002",
+        "dst": "dmy-qa-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-qa-task-0003",
+        "dst": "dmy-qa-task-0004",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "taskId": "dmy-qa-task-0001",
+      "unitId": "dmy-qa-unit-0001",
+      "l6": "OOS 접수 및 초동 평가",
+      "owner": null,
+      "ownerRole": "QA 이벤트 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "시험 부서 OOS 보고 접수(QMS)",
+        "input_data": "OOS 보고서, 해당 시험 원시데이터",
+        "output_data": "OOS 접수 번호, 초동 평가 기록",
+        "done_criteria": "조사 경로(실험실 오류/정식 조사) 결정",
+        "systems": "QMS, LIMS",
+        "total_time": "건당 반나절",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 90,
+        "frequency": "월 3~4건",
+        "annual_count": 40,
+        "headcount": 1,
+        "fte": null,
+        "gmp": "OOS 기록 전체 GMP, 접수 후 24시간 내 초동 평가 규정",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "OOS 접수 등록",
+          "name": "QMS에 OOS를 접수하고 이벤트 번호를 채번한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "OOS 보고서",
+          "output": "OOS 접수 번호",
+          "system": "QMS",
+          "screen": "Event Intake",
+          "dataForm": "structured",
+          "quote": "접수 시각이 규정 시계의 시작이에요."
+        },
+        {
+          "seq": 2,
+          "label": "시험 담당 인터뷰",
+          "name": "시험 담당자와 초동 인터뷰로 상황을 파악한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "OOS 접수 번호",
+          "output": "인터뷰 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "기억이 살아 있을 때 바로 물어봐야 해요."
+        },
+        {
+          "seq": 3,
+          "label": "원시데이터 1차 확인",
+          "name": "해당 시험의 원시데이터·기기 로그를 1차 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "해당 시험 원시데이터",
+          "output": "1차 확인 메모",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "계산 실수인지부터 봅니다."
+        },
+        {
+          "seq": 4,
+          "label": "명백한 실험실 오류 판정",
+          "name": "명백한 실험실 오류인지 판정한다 — 오류면 무효화 절차, 아니면 정식 조사 개시",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "명백 오류면 결과 무효화·재시험, 아니면 Phase 1 조사 개시",
+          "input": "1차 확인 메모",
+          "output": "조사 경로 결정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "여기서 갈리는 게 제일 중요해요 — 근거 없이 무효화는 못 합니다."
+        },
+        {
+          "seq": 5,
+          "label": "관련 배치 잠정 보류",
+          "name": "영향 가능 배치를 식별해 잠정 출하 보류를 건다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "조사 경로 결정",
+          "output": "보류 배치 목록",
+          "system": "SAP",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "조사 끝나기 전엔 그 배치들 못 나가게 걸어 둡니다."
+        },
+        {
+          "seq": 6,
+          "label": "초동 평가 보고",
+          "name": "초동 평가 결과를 QA 리더에게 보고하고 조사 담당을 지정한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "보류 배치 목록",
+          "output": "초동 평가 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "document",
+          "quote": "보고까지가 초동 24시간 안에 끝나야 해요."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-qa-task-0002",
+      "unitId": "dmy-qa-unit-0002",
+      "l6": "실험실 조사 수행(Phase 1)",
+      "owner": null,
+      "ownerRole": "QA 조사 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "정식 조사 개시 결정",
+        "input_data": "초동 평가 기록, 시험 전 과정 기록",
+        "output_data": "Phase 1 조사 보고서",
+        "done_criteria": "원인 확정 또는 Phase 2 확대 결정",
+        "systems": "QMS, LIMS",
+        "total_time": "건당 일주일",
+        "total_time_min": null,
+        "touch_time": "여덟 시간쯤",
+        "touch_time_min": 480,
+        "frequency": "월 2~3건",
+        "annual_count": 30,
+        "headcount": 2,
+        "fte": 0.8,
+        "gmp": "조사 체크리스트는 OOS SOP 부속서 양식",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "조사 계획 수립",
+          "name": "체크리스트 기반 조사 범위와 일정 계획을 수립한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "초동 평가 기록",
+          "output": "조사 계획",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "document",
+          "quote": "체크리스트 항목부터 배치 특이사항까지 범위를 잡아요."
+        },
+        {
+          "seq": 2,
+          "label": "시약·표준품 이력 조사",
+          "name": "사용 시약·표준품의 로트 이력과 유효기간을 조사한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "조사 계획",
+          "output": "시약 이력 조사 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "표준품 로트 바뀐 시점이랑 겹치는지 봐요."
+        },
+        {
+          "seq": 3,
+          "label": "기기 적격성 이력 조사",
+          "name": "사용 기기의 적격성·교정 이력을 조사한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "조사 계획",
+          "output": "기기 이력 조사 기록",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "교정 만료 직전 데이터인지 확인합니다."
+        },
+        {
+          "seq": 4,
+          "label": "재측정 수행",
+          "name": "보존 시액으로 동일 조건 재측정을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "시약 이력 조사 기록",
+          "output": "재측정 결과",
+          "system": "Empower",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "보존 시액 남아 있으면 그걸로 먼저 재봅니다."
+        },
+        {
+          "seq": 5,
+          "label": "원인 확정 여부 판정",
+          "name": "실험실 원인으로 확정 가능한지 판정한다 — 불명이면 Phase 2 확대",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "원인 확정이면 보고서 종결 경로, 불명이면 Phase 2 확대",
+          "input": "재측정 결과",
+          "output": "원인 판정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "애매하면 무리해서 닫지 않고 확대로 넘겨요."
+        },
+        {
+          "seq": 6,
+          "label": "Phase 1 보고서 작성",
+          "name": "조사 결과와 판정 근거로 Phase 1 보고서를 작성한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "원인 판정",
+          "output": "Phase 1 조사 보고서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "document",
+          "quote": "판정 근거 문장이 제일 오래 걸려요."
+        },
+        {
+          "seq": 7,
+          "label": "시험 부서 결과 공유",
+          "name": "조사 결론을 시험 부서에 공유하고 후속 조치를 안내한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "Phase 1 조사 보고서",
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "결론 공유까지 해야 현장이 움직입니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-qa-task-0003",
+      "unitId": "dmy-qa-unit-0003",
+      "l6": "확대 조사 및 CAPA 수립(Phase 2)",
+      "owner": null,
+      "ownerRole": "QA 조사 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "Phase 2 확대 결정",
+        "input_data": "Phase 1 조사 보고서, 배치 제조 기록",
+        "output_data": "확대 조사 보고서, CAPA 계획",
+        "done_criteria": "배치 영향 평가·CAPA 승인 완료",
+        "systems": "QMS, MES",
+        "total_time": "건당 2~4주",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 600,
+        "frequency": "분기 2~3건",
+        "annual_count": 10,
+        "headcount": 3,
+        "fte": null,
+        "gmp": "확대 조사는 제조·QC 합동, CAPA는 QMS 워크플로 승인",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "합동 조사팀 구성",
+          "name": "제조·QC·QA 합동 조사팀을 구성하고 킥오프한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "Phase 1 조사 보고서",
+          "output": "조사팀 구성 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "부서별 담당을 정해 놓고 시작해야 안 늘어져요."
+        },
+        {
+          "seq": 2,
+          "label": "제조 공정 이력 검토",
+          "name": "배치 제조 기록과 공정 파라미터 추이를 검토한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배치 제조 기록",
+          "output": "공정 검토 기록",
+          "system": "MES",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "트렌드 벗어난 파라미터가 있는지 훑습니다."
+        },
+        {
+          "seq": 3,
+          "label": "근본 원인 분석",
+          "name": "피시본·5Why로 근본 원인을 분석하고 가설을 검증한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "공정 검토 기록",
+          "output": "근본 원인 분석서",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "가설 하나씩 지워 가면서 좁혀요."
+        },
+        {
+          "seq": 4,
+          "label": "배치 영향 평가",
+          "name": "동일 원인 노출 배치 범위를 평가한다 — 영향 있으면 처분 결정 상정",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "영향 배치 있으면 처분(재시험/폐기) 상정, 없으면 해당 배치 한정 종결",
+          "input": "근본 원인 분석서",
+          "output": "배치 영향 평가서",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "몇 배치까지 번지는지가 제일 무거운 판단입니다."
+        },
+        {
+          "seq": 5,
+          "label": "CAPA 계획 수립",
+          "name": "시정·예방 조치 계획을 수립하고 완료 기한을 정한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배치 영향 평가서",
+          "output": "CAPA 계획",
+          "system": "QMS",
+          "screen": "CAPA Plan",
+          "dataForm": "structured",
+          "quote": "기한 없는 CAPA는 안 만든 거나 같아요."
+        },
+        {
+          "seq": 6,
+          "label": "확대 조사 보고서 승인 상신",
+          "name": "확대 조사 보고서를 작성해 QA 책임자 승인에 상신한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "CAPA 계획",
+          "output": "확대 조사 보고서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "document",
+          "quote": "승인 라인 타는 데도 며칠 잡아야 해요."
+        },
+        {
+          "seq": 7,
+          "label": "규제기관 보고 검토(예외)",
+          "name": "출하 배치 영향 시 규제기관 보고 필요성을 검토한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "기출하 배치 영향 시",
+          "input": null,
+          "output": "보고 필요성 검토 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "이미 나간 배치가 걸리면 보고 검토까지 갑니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-qa-task-0004",
+      "unitId": "dmy-qa-unit-0004",
+      "l6": "일탈 종결 및 효과성 평가",
+      "owner": null,
+      "ownerRole": "QA 파트 리더",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "CAPA 조치 완료 보고 접수",
+        "input_data": "CAPA 완료 증빙, 조사 보고서",
+        "output_data": "종결 승인 기록, 효과성 평가 보고",
+        "done_criteria": "이벤트 종결·효과성 평가 완료",
+        "systems": "QMS",
+        "total_time": "건당 두어 시간, 효과성은 3개월 후",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 60,
+        "frequency": "월 3건",
+        "annual_count": 36,
+        "headcount": 1,
+        "fte": null,
+        "gmp": "종결 승인·효과성 평가는 QMS 전자 워크플로",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "CAPA 완료 증빙 검토",
+          "name": "조치별 완료 증빙이 계획과 일치하는지 검토한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "CAPA 완료 증빙",
+          "output": "증빙 검토 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "증빙 없는 완료 보고는 돌려보냅니다."
+        },
+        {
+          "seq": 2,
+          "label": "보류 배치 처분 확정",
+          "name": "잠정 보류 배치의 처분(해제/재시험/폐기)을 확정한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "증빙 검토 기록",
+          "output": "배치 처분 확정 기록",
+          "system": "SAP",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "보류 걸어 둔 배치를 여기서 풀거나 처분해요."
+        },
+        {
+          "seq": 3,
+          "label": "이벤트 종결 승인",
+          "name": "QMS에서 이벤트를 종결 승인하고 관련 부서에 통보한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배치 처분 확정 기록",
+          "output": "종결 승인 기록",
+          "system": "QMS",
+          "screen": "Event Close",
+          "dataForm": "structured",
+          "quote": "종결 서명하면서 시계가 멈춥니다."
+        },
+        {
+          "seq": 4,
+          "label": "효과성 평가 예약",
+          "name": "3개월 후 효과성 평가 일정을 예약 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "종결 승인 기록",
+          "output": "효과성 평가 예약",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "예약 안 걸어 두면 그냥 잊혀요."
+        },
+        {
+          "seq": 5,
+          "label": "CAPA 효과성 판정",
+          "name": "재발 여부·지표로 효과성을 판정한다 — 미흡이면 CAPA 재수립",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "재발 없고 지표 개선이면 종결 확정, 미흡이면 CAPA 재수립",
+          "input": "효과성 평가 예약",
+          "output": "효과성 판정",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "document",
+          "quote": "같은 유형이 또 나오면 효과 없던 걸로 봐요."
+        },
+        {
+          "seq": 6,
+          "label": "월간 품질 이벤트 보고",
+          "name": "이벤트 통계를 월간 품질 회의에 보고한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "효과성 판정",
+          "output": "월간 이벤트 보고",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "유형별 건수 추이를 매달 봅니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "dmy-qa-task-0001",
+      "doc": null,
+      "seq": 1,
+      "name": "OOS 접수 및 초동 평가",
+      "note": "초동 24시간 규정 준수율이 KPI",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "dmy-qa-ev-1",
+          "quote": "접수가 시작이고 초동이 반이에요.",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "QA 이벤트 담당자",
+      "exceptions": [],
+      "endCondition": "조사 경로 결정",
+      "startCondition": "시험 부서 OOS 보고 접수(QMS)"
+    },
+    {
+      "id": "dmy-qa-task-0002",
+      "doc": null,
+      "seq": 2,
+      "name": "실험실 조사 수행(Phase 1)",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "QA 조사 담당자",
+      "exceptions": [],
+      "endCondition": "원인 확정 또는 Phase 2 확대 결정",
+      "startCondition": "정식 조사 개시 결정"
+    },
+    {
+      "id": "dmy-qa-task-0003",
+      "doc": null,
+      "seq": 3,
+      "name": "확대 조사 및 CAPA 수립(Phase 2)",
+      "note": "합동 조사 일정 조율이 리드타임 변수",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "QA 조사 담당자",
+      "exceptions": [
+        {
+          "name": "규제기관 보고 검토",
+          "rule": "기출하 배치 영향 시 > 보고 필요성 검토 수행",
+          "evidence": []
+        }
+      ],
+      "endCondition": "배치 영향 평가·CAPA 승인 완료",
+      "startCondition": "Phase 2 확대 결정"
+    },
+    {
+      "id": "dmy-qa-task-0004",
+      "doc": null,
+      "seq": 4,
+      "name": "일탈 종결 및 효과성 평가",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "QA 파트 리더",
+      "exceptions": [],
+      "endCondition": "이벤트 종결·효과성 평가 완료",
+      "startCondition": "CAPA 조치 완료 보고 접수"
+    }
+  ],
+  "summary": {
+    "kept": {
+      "files": 0,
+      "messages": 81,
+      "free_texts": 0,
+      "evidence_total": 1
+    },
+    "l6_total": 4,
+    "l7_total": 26,
+    "voc_total": 2,
+    "rows_total": 4,
+    "open_items_total": 1,
+    "side_notes_total": 3,
+    "l6_edge_total": 3,
+    "l7_edge_total": 23
+  },
+  "openItems": [
+    {
+      "text": "OOS 재시험 횟수 상한 규정 개정 — 규제 가이드라인 대비 검토",
+      "unitId": "dmy-qa-unit-0002"
+    }
+  ],
+  "sideNotes": [
+    {
+      "kind": "voc",
+      "text": "시험 부서 OOS 보고 양식이 파트별로 달라 접수 때 재작성이 잦음",
+      "unitId": "dmy-qa-unit-0001"
+    },
+    {
+      "kind": "voc",
+      "text": "합동 조사 회의체가 없어 매번 일정 잡기가 오래 걸림",
+      "unitId": "dmy-qa-unit-0003"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "tacit: 효과성 평가 3개월 주기는 관행 — SOP 명문화 예정",
+      "unitId": "dmy-qa-unit-0004"
+    }
+  ]
+}

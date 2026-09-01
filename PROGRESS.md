@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 컨설턴트 인터뷰 JSON 0.4 임포트 (dev)
+- 전달 스키마가 흐름 그래프를 싣기 시작(`relations`) — 0.3에선 seq 순서로 추측하던 흐름이 이제 명시 엣지(seq/branch/loop/bypass + exclusive/parallel 게이트웨이·조건·근거 발화)로 온다. **0.3은 거부**(수용하면 흐름이 조용히 일직선으로 뭉개짐), 저장소 샘플 5종은 0.4로 변환.
+- L7 엣지는 맵 그래프로(라벨=label+condition 2줄, branch면 src를 decision 승격 — `actions[].kind`는 분기를 안 알려준다, loop은 Start 배선 판정에서만 제외), 최상위 L6 엣지는 **L5 연계 캔버스를 시드/보강**(추가만·이동 없음, 타인 체크아웃이면 스킵). 이걸로 0.4에서 처음 값이 실리는 `annual_count`/`fte`가 SP 노드에 착지 — 종전엔 착지면이 없어 경고 후 버려졌다.
+- ⚠️ 실브라우저에서 밟은 함정: 서버가 만든 SP 끝점 엣지에 전용 핸들(`in`/`__primary__`)을 안 넣으면 **React Flow가 엣지를 조용히 버린다**(DB엔 있는데 캔버스엔 선이 없음) → `docs/lessons/canvas-react-flow.md` §6에 기록, 회귀 테스트 추가.
+- 필드 착지·무시·조용한 오변환 전수 대조표: `docs/qa/interview-import-field-map.md`. 검증: pytest 1214(신규 20)·ruff·vitest 812·tsc·lint 그린 + 실 서버 dry-run/apply(경고 0)·연계 캔버스/분기·루프 스크린샷.
+
 ## 2026-09-01 — 핫픽스: 피크 목업 드롭다운 "해당 맵으로 이동" 무반응 (dev)
 - 목업 드롭다운 메뉴가 body 포털이라 피크의 바깥클릭 닫기(mousedown 캡처)에 걸려 **click 전에 피크째 언마운트** → 이동 게이트(openMapPrompt) 미표시·추가 항목도 동일 사망. 내부 mockMenu 닫기 핸들러엔 제외가 있었는데 피크 레벨 핸들러에 누락 — mockMenuRef를 공유해 양쪽 모두 제외.
 - 검증: 신규 `pw-verify-peek-mock-open.mjs` RED(gateVisible 0)→GREEN(게이트 표시·콘솔 에러 0), lint·vitest 812·build 그린.

@@ -14,6 +14,7 @@
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
 ## QA · 검증 ([`qa/`](qa/))
+- [`qa/interview-import-field-map.md`](qa/interview-import-field-map.md) — 인터뷰 JSON 0.4 전달 스키마 필드 대조표(착지·무시·조용한 오변환·파일 거부 조건). 실파일 dry-run 리포트를 읽는 기준.
 - [`qa/node-spacing-qa.md`](qa/node-spacing-qa.md) — height-shift(노드 간격 자동 재조정) 브라우저 QA T라운드 8항목(워스트 겹침·트윈·그룹/PNG·무오염·인라인 배제).
 - [`qa/2026-08-20-field-promotion-qa.md`](qa/2026-08-20-field-promotion-qa.md) — 인터뷰 필드 승격 실브라우저 QA 29항목(스모크 `pw-smoke-field-promotion.mjs` 주도).
 - [`qa/governance-ux-checklist.md`](qa/governance-ux-checklist.md) — 거버넌스 UX 4페이즈(P0 라이프사이클·C 승인 탭·B 카드 멤버·A 게시 동봉) 사용자 실검증 체크리스트.
@@ -37,4 +38,5 @@
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
-[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON 합성 샘플 2파일(설정 > Framework > Interview import 입력, 실전달물 아님). canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.
+[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON(0.4) 합성 샘플 2파일(설정 > Framework > Interview import 입력, 실전달물 아님). 흐름 그래프(relations) 포함. canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.
+[`samples/framework-linkage-dummy/`](samples/framework-linkage-dummy/) — L5 연계 캔버스 시연용 더미 L5 3종(0.4).

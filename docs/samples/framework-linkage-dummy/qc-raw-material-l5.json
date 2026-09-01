@@ -1,0 +1,932 @@
+{
+  "_readme": [
+    "합성 더미 — L5 연계 캔버스 데모용. L6는 서로 연계(links) 없이 독립 노드로만 구성(2026-08-28 규칙).",
+    "설정 > Framework > Interview import에 qc-finished-product-l5.json, qa-deviation-oos-l5.json과 함께 올린다.",
+    "0.4 변환본 — 0.3의 중복 seq(병렬) 관례를 relations.edges(kind=seq)로 명시화했다."
+  ],
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
+  "framework": {
+    "categories": [
+      {
+        "code": "20",
+        "name": "Quality",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "20-01",
+        "name": "품질관리(QC)",
+        "level": 2,
+        "parent": "20"
+      },
+      {
+        "code": "20-01-01",
+        "name": "시험 운영",
+        "level": 3,
+        "parent": "20-01"
+      },
+      {
+        "code": "20-01-01-01",
+        "name": "원자재 시험",
+        "level": 4,
+        "parent": "20-01-01"
+      },
+      {
+        "code": "20-01-01-01-01",
+        "name": "원자재 입고 시험 관리",
+        "level": 5,
+        "parent": "20-01-01-01"
+      }
+    ]
+  },
+  "l5": {
+    "label": "원자재 입고 시험 관리",
+    "nodeCode": "20-01-01-01-01"
+  },
+  "relations": {
+    "entry": {
+      "taskId": "dmy-rm-task-0001",
+      "triggerType": "manual",
+      "label": "입고 검사 의뢰(SAP GR) 발생 시",
+      "quote": null
+    },
+    "edges": [
+      {
+        "src": "dmy-rm-task-0001",
+        "dst": "dmy-rm-task-0002",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-rm-task-0002",
+        "dst": "dmy-rm-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-rm-task-0003",
+        "dst": "dmy-rm-task-0004",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "taskId": "dmy-rm-task-0001",
+      "unitId": "dmy-rm-unit-0001",
+      "l6": "원자재 검체 채취 및 접수",
+      "owner": null,
+      "ownerRole": "QC 검체 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "입고 검사 의뢰(SAP GR) 발생 시",
+        "input_data": "입고 검사 의뢰서, 자재 성적서(공급사 COA)",
+        "output_data": "접수된 검체, LIMS 시험 오더",
+        "done_criteria": "LIMS 검체 접수 완료 상태 전환",
+        "systems": "SAP, LIMS",
+        "total_time": "건당 한두 시간",
+        "total_time_min": null,
+        "touch_time": "한 시간 안쪽",
+        "touch_time_min": 50,
+        "frequency": "일 3~4건",
+        "annual_count": 900,
+        "headcount": 2,
+        "fte": null,
+        "gmp": "검체 채취 기록은 GMP 기록, 채취 SOP(QC-SMP-001) 적용",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "입고 의뢰 확인",
+          "name": "SAP 입고 검사 의뢰를 열어 자재 코드와 로트, 수량을 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "입고 검사 의뢰서",
+          "output": "채취 대상 로트 목록",
+          "system": "SAP",
+          "screen": "QA32",
+          "dataForm": "structured",
+          "quote": "아침에 QA32 열어서 그날 채취 나갈 로트부터 봅니다."
+        },
+        {
+          "seq": 2,
+          "label": "채취 계획 수립",
+          "name": "샘플링 플랜(√n+1)에 따라 채취 용기와 채취량을 산정한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "채취 대상 로트 목록",
+          "output": "채취 계획서",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "용기 수는 루트 엔 플러스 원으로 계산해요."
+        },
+        {
+          "seq": 3,
+          "label": "창고 검체 채취",
+          "name": "샘플링 부스에서 로트별로 검체를 채취하고 채취 라벨을 부착한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "채취 계획서",
+          "output": "채취 검체",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "부스 예약 잡고 들어가서 로트별로 뜹니다."
+        },
+        {
+          "seq": 4,
+          "label": "긴급 로트 우선 채취(예외)",
+          "name": "생산 긴급 요청 로트는 당일 계획과 무관하게 우선 채취한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "생산 긴급 요청 시",
+          "input": null,
+          "output": "채취 검체",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "생산에서 급하다고 하면 그 로트 먼저 뜨러 가요."
+        },
+        {
+          "seq": 5,
+          "label": "라벨·수량 대사",
+          "name": "채취 검체의 라벨과 수량을 의뢰 정보와 대사한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "채취 검체",
+          "output": "대사 결과",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "라벨 찍어서 LIMS 의뢰 건이랑 맞춰 봅니다."
+        },
+        {
+          "seq": 6,
+          "label": "검체 적합성 판정",
+          "name": "라벨 불일치·용기 파손 여부를 판정한다 — 불일치면 반송 후 재채취",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "일치·정상이면 접수 진행, 불일치면 반송 재채취",
+          "input": "대사 결과",
+          "output": "적합 판정된 검체",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "라벨 하나라도 안 맞으면 그 자리에서 돌려보내요."
+        },
+        {
+          "seq": 7,
+          "label": "LIMS 접수 등록",
+          "name": "적합 검체를 LIMS에 접수하고 시험 오더를 생성한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "적합 판정된 검체",
+          "output": "LIMS 시험 오더",
+          "system": "LIMS",
+          "screen": "Sample Login",
+          "dataForm": "structured",
+          "quote": "접수 누르면 시험 항목이 자동으로 걸려요."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-rm-task-0002",
+      "unitId": "dmy-rm-unit-0002",
+      "l6": "원자재 이화학 시험",
+      "owner": null,
+      "ownerRole": "이화학 시험 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "LIMS 시험 오더 배정",
+        "input_data": "LIMS 시험 오더, 접수 검체",
+        "output_data": "이화학 시험 원시데이터, 시험 결과값",
+        "done_criteria": "전 항목 결과 LIMS 입력 완료",
+        "systems": "LIMS, Empower",
+        "total_time": "로트당 이틀",
+        "total_time_min": null,
+        "touch_time": "네 시간쯤",
+        "touch_time_min": 240,
+        "frequency": "주 10로트",
+        "annual_count": 500,
+        "headcount": 3,
+        "fte": 1.5,
+        "gmp": "시험 기록·크로마토그램은 GMP 데이터, 데이터 완전성 SOP 적용",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "시험 항목 확인",
+          "name": "LIMS 오더에서 규격과 시험 항목을 확인하고 작업을 배분한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "LIMS 시험 오더",
+          "output": "항목별 작업 배분",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "오더 열면 규격 버전까지 같이 확인해요."
+        },
+        {
+          "seq": 2,
+          "label": "표준액·시액 조제",
+          "name": "시험법에 따라 표준액과 시액을 조제하고 조제 기록을 남긴다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "항목별 작업 배분",
+          "output": "표준액·시액",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "표준액은 그날 쓸 만큼만 조제합니다."
+        },
+        {
+          "seq": 3,
+          "label": "기기 SST 수행",
+          "name": "HPLC 시스템 적합성 시험을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "표준액·시액",
+          "output": "SST 크로마토그램",
+          "system": "Empower",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "SST 먼저 걸어 놓고 다른 항목 준비해요."
+        },
+        {
+          "seq": 4,
+          "label": "SST 적합 판정",
+          "name": "SST 결과가 허용 기준 내인지 판정한다 — 부적합이면 기기 점검 후 재수행",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "기준 내면 본시험 진행, 아니면 기기 점검 후 SST 재수행",
+          "input": "SST 크로마토그램",
+          "output": "SST 적합 확인",
+          "system": "Empower",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "테일링 걸리면 컬럼부터 봅니다."
+        },
+        {
+          "seq": 5,
+          "label": "본시험 수행",
+          "name": "검체를 주입해 항목별 본시험을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "SST 적합 확인",
+          "output": "이화학 시험 원시데이터",
+          "system": "Empower",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "시퀀스 걸어 두면 밤새 돌아가요."
+        },
+        {
+          "seq": 6,
+          "label": "결과 계산 및 입력",
+          "name": "원시데이터를 계산해 결과값을 LIMS에 입력한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "이화학 시험 원시데이터",
+          "output": "시험 결과값",
+          "system": "LIMS",
+          "screen": "Result Entry",
+          "dataForm": "structured",
+          "quote": "계산식은 LIMS에 박혀 있어서 값만 넣으면 돼요."
+        },
+        {
+          "seq": 7,
+          "label": "동료 검토 인계",
+          "name": "원시데이터와 결과 입력본을 동료 검토자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "시험 결과값",
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "검토는 같은 파트 선임이 바로 봐 줘요."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-rm-task-0003",
+      "unitId": "dmy-rm-unit-0003",
+      "l6": "원자재 미생물 시험",
+      "owner": null,
+      "ownerRole": "미생물 시험 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "미생물 항목 포함 오더 배정",
+        "input_data": "LIMS 시험 오더, 접수 검체",
+        "output_data": "미생물 시험 결과값",
+        "done_criteria": "배양 판독 결과 LIMS 입력 완료",
+        "systems": "LIMS",
+        "total_time": "배양 포함 5~7일",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 90,
+        "frequency": "주 6로트",
+        "annual_count": 300,
+        "headcount": 2,
+        "fte": null,
+        "gmp": "무균 조작 구역 출입 기록 포함 전 기록 GMP",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "배지 준비 및 적합 확인",
+          "name": "시험용 배지의 성장 촉진 시험 적합 여부를 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "LIMS 시험 오더",
+          "output": "적합 배지",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "배지 로트 적합 스티커부터 확인합니다."
+        },
+        {
+          "seq": 2,
+          "label": "검체 전처리",
+          "name": "클린벤치에서 검체를 희석·여과 전처리한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "적합 배지",
+          "output": "전처리 검체",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "여과가 안 되는 원료는 직접 도말로 갑니다."
+        },
+        {
+          "seq": 3,
+          "label": "접종 및 배양 개시",
+          "name": "전처리 검체를 접종하고 배양기를 개시 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "전처리 검체",
+          "output": "배양 개시 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "배양기 넣으면서 LIMS에 개시 시각을 찍어요."
+        },
+        {
+          "seq": 4,
+          "label": "중간 관찰",
+          "name": "배양 3일차에 집락 형성 여부를 중간 관찰한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배양 개시 기록",
+          "output": "중간 관찰 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "3일차에 한 번 눈으로 봐 둡니다."
+        },
+        {
+          "seq": 5,
+          "label": "배양 결과 판정",
+          "name": "최종 판독일에 집락수를 세어 기준 적합 여부를 판정한다 — 이상 집락이면 동정 시험 추가",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "기준 내면 결과 입력, 이상 집락이면 동정 시험 추가 수행",
+          "input": "중간 관찰 기록",
+          "output": "판독 결과",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "이상한 집락 나오면 동정까지 가야 해서 일정이 늘어져요."
+        },
+        {
+          "seq": 6,
+          "label": "결과 입력",
+          "name": "판독 결과를 LIMS에 입력하고 배양 접시를 폐기 처리한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "판독 결과",
+          "output": "미생물 시험 결과값",
+          "system": "LIMS",
+          "screen": "Result Entry",
+          "dataForm": "structured",
+          "quote": "입력 끝나면 접시는 멸균 폐기로 넘깁니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-rm-task-0004",
+      "unitId": "dmy-rm-unit-0004",
+      "l6": "원자재 시험 판정 및 사용 승인",
+      "owner": null,
+      "ownerRole": "QC 파트 리더",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "전 시험 항목 결과 입력 완료",
+        "input_data": "이화학·미생물 시험 결과값, 공급사 COA",
+        "output_data": "시험 성적서, SAP 사용 결정",
+        "done_criteria": "SAP 재고 상태 사용가능(UR→) 전환",
+        "systems": "LIMS, SAP",
+        "total_time": "건당 반나절",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 60,
+        "frequency": "주 10건",
+        "annual_count": 500,
+        "headcount": 1,
+        "fte": null,
+        "gmp": "성적서 승인은 GMP 절차, 전자서명 적용",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "결과 취합 검토",
+          "name": "항목별 결과와 원시데이터 검토 완료 여부를 취합한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "이화학·미생물 시험 결과값",
+          "output": "취합 검토본",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "검토 플래그 안 선 항목 있으면 담당자한테 돌려요."
+        },
+        {
+          "seq": 2,
+          "label": "규격 적합 판정",
+          "name": "전 항목 규격 적합 여부를 판정한다 — 부적합 의심이면 OOS 절차 개시",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "전 항목 적합이면 성적서 발행, 부적합 의심이면 OOS 접수",
+          "input": "취합 검토본",
+          "output": "적합 판정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "규격 밖 값이면 그 자리에서 OOS 번호부터 땁니다."
+        },
+        {
+          "seq": 3,
+          "label": "시험 성적서 발행",
+          "name": "LIMS에서 시험 성적서를 발행하고 전자서명한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "적합 판정",
+          "output": "시험 성적서",
+          "system": "LIMS",
+          "screen": "CoA Print",
+          "dataForm": "structured",
+          "quote": "서명 두 개 들어가야 발행이 떨어져요."
+        },
+        {
+          "seq": 4,
+          "label": "SAP 사용 결정 등록",
+          "name": "SAP에서 사용 결정을 등록해 재고 상태를 전환한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "시험 성적서",
+          "output": "SAP 사용 결정",
+          "system": "SAP",
+          "screen": "QA11",
+          "dataForm": "structured",
+          "quote": "QA11에서 UD 치면 창고에서 바로 쓸 수 있게 돼요."
+        },
+        {
+          "seq": 5,
+          "label": "조건부 사용 결정(예외)",
+          "name": "일부 항목 진행 중이나 생산 긴급 시 조건부 사용 결정을 등록한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "QA 사전 승인 있을 때만",
+          "input": null,
+          "output": "조건부 사용 결정",
+          "system": "SAP",
+          "screen": "QA11",
+          "dataForm": "structured",
+          "quote": "정말 급하면 QA 승인 받고 조건부로 풀 때가 있어요."
+        },
+        {
+          "seq": 6,
+          "label": "성적서 보관 처리",
+          "name": "발행 성적서를 문서 보관 체계에 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "SAP 사용 결정",
+          "output": "보관 등록 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "원본은 문서실, 사본은 파트 캐비닛이에요."
+        },
+        {
+          "seq": 7,
+          "label": "월간 시험 실적 보고",
+          "name": "월 단위 시험 실적을 집계해 팀 회의체에 보고한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "보관 등록 기록",
+          "output": "월간 실적 보고",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "월초에 지난달 건수랑 소요일 뽑아서 보고합니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "dmy-rm-task-0001",
+      "doc": null,
+      "seq": 1,
+      "name": "원자재 검체 채취 및 접수",
+      "note": "채취 부스 예약이 병목 — 부스 증설 검토 중",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "dmy-rm-ev-1",
+          "quote": "채취부터 접수까지가 한 묶음이에요.",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "QC 검체 담당자",
+      "exceptions": [
+        {
+          "name": "긴급 로트 우선 채취",
+          "rule": "생산 긴급 요청 시 > 당일 계획과 무관하게 우선 채취",
+          "evidence": []
+        }
+      ],
+      "endCondition": "LIMS 검체 접수 완료 상태 전환",
+      "startCondition": "입고 검사 의뢰(SAP GR) 발생 시"
+    },
+    {
+      "id": "dmy-rm-task-0002",
+      "doc": null,
+      "seq": 2,
+      "name": "원자재 이화학 시험",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "이화학 시험 담당자",
+      "exceptions": [],
+      "endCondition": "전 항목 결과 LIMS 입력 완료",
+      "startCondition": "LIMS 시험 오더 배정"
+    },
+    {
+      "id": "dmy-rm-task-0003",
+      "doc": null,
+      "seq": 3,
+      "name": "원자재 미생물 시험",
+      "note": "배양 기간이 리드타임의 대부분 — 신속법 도입 논의",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "미생물 시험 담당자",
+      "exceptions": [],
+      "endCondition": "배양 판독 결과 LIMS 입력 완료",
+      "startCondition": "미생물 항목 포함 오더 배정"
+    },
+    {
+      "id": "dmy-rm-task-0004",
+      "doc": null,
+      "seq": 4,
+      "name": "원자재 시험 판정 및 사용 승인",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "QC 파트 리더",
+      "exceptions": [
+        {
+          "name": "조건부 사용 결정",
+          "rule": "QA 사전 승인 있을 때만 > 일부 항목 진행 중에도 조건부 사용 전환",
+          "evidence": []
+        }
+      ],
+      "endCondition": "SAP 재고 상태 사용가능 전환",
+      "startCondition": "전 시험 항목 결과 입력 완료"
+    }
+  ],
+  "summary": {
+    "kept": {
+      "files": 0,
+      "messages": 88,
+      "free_texts": 0,
+      "evidence_total": 1
+    },
+    "l6_total": 4,
+    "l7_total": 27,
+    "voc_total": 2,
+    "rows_total": 4,
+    "open_items_total": 1,
+    "side_notes_total": 3,
+    "l6_edge_total": 3,
+    "l7_edge_total": 25
+  },
+  "openItems": [
+    {
+      "text": "샘플링 부스 예약 시스템화 — 시설과 협의 필요",
+      "unitId": "dmy-rm-unit-0001"
+    }
+  ],
+  "sideNotes": [
+    {
+      "kind": "voc",
+      "text": "공급사 COA 포맷이 제각각이라 대사에 시간이 걸림",
+      "unitId": "dmy-rm-unit-0001"
+    },
+    {
+      "kind": "voc",
+      "text": "OOS 의심 건은 판정 회의 소집까지 하루 이상 걸릴 때가 있음",
+      "unitId": "dmy-rm-unit-0004"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "tacit: 조건부 사용은 문서화된 기준 없이 QA 승인 관행으로 운영",
+      "unitId": "dmy-rm-unit-0004"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 """인터뷰 다중 파일 웹 임포트 — POST /api/categories/import-interview.
 
-설계: docs/design/2026-08-18-interview-import-design.md §1·§6. 파일별 독립(에러 파일 스킵),
-dry-run 기본, 노트 적재 동반.
+설계: docs/design/2026-08-18-interview-import-design.md §1·§6 +
+2026-09-01-interview-import-v04-design.md §3(L5 연계 캔버스 시드). 파일별 독립(에러 파일 스킵),
+dry-run 기본, 노트·연계 캔버스 적재 동반.
 """
 
 from collections.abc import Iterator
@@ -53,8 +54,8 @@ def test_dry_run_reports_files_without_persisting(client: TestClient) -> None:
     assert len(body["files"]) == 1
     f = body["files"][0]
     assert f["name"] == "calibration.json" and f["ok"] is True
-    assert f["map_count"] == 1 and f["note_count"] == 3
-    assert body["summary"]["created"] == 1 and body["summary"]["notes"] == 3
+    assert f["map_count"] == 1 and f["note_count"] == 4  # +entry (0.4 relations)
+    assert body["summary"]["created"] == 1 and body["summary"]["notes"] == 4
     assert any(r["code"] == "task-prep-0001" for r in body["rows"])
     assert _map_row("task-prep-0001") is None  # rollback — DB 무변경
 
@@ -83,7 +84,7 @@ def test_apply_persists_maps_and_notes(client: TestClient) -> None:
 
     on_map, global_notes = _run(_notes())
     assert sorted(n.kind for n in on_map) == ["exception", "rule_basis"]
-    assert [n.kind for n in global_notes] == ["voc"]
+    assert sorted(n.kind for n in global_notes) == ["entry", "voc"]  # entry는 L5 스코프
 
 
 def test_error_file_skipped_but_others_proceed(client: TestClient) -> None:
@@ -135,3 +136,95 @@ def test_non_sysadmin_forbidden(client: TestClient, enforce: None) -> None:
     app.dependency_overrides[auth_mod.get_current_user] = lambda: "iv.regular"
     resp = _post(client, [{"name": "calibration.json", "content": _interview()}])
     assert resp.status_code == 403
+
+
+def _linkage_graph(category_code: str):
+    """L5 카테고리의 연계 캔버스 draft — (SP 노드 목록, 엣지 끝점 쌍)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Edge, MapVersion, Node, ProcessCategory
+
+    async def _load():
+        async with SessionLocal() as session:
+            cat = await session.scalar(
+                select(ProcessCategory).where(ProcessCategory.code == category_code))
+            if cat is None or cat.linkage_map_id is None:
+                return None, None
+            draft = await session.scalar(
+                select(MapVersion).where(MapVersion.map_id == cat.linkage_map_id,
+                                         MapVersion.status == "draft"))
+            nodes = (await session.scalars(
+                select(Node).where(Node.version_id == draft.id))).all()
+            edges = (await session.scalars(
+                select(Edge).where(Edge.version_id == draft.id))).all()
+            return list(nodes), list(edges)
+
+    return _run(_load())
+
+
+def test_apply_seeds_linkage_canvas_and_is_idempotent(client: TestClient) -> None:
+    """L6 흐름 → L5 연계 캔버스. 재임포트는 보강만 — 노드·엣지가 중복 생성되지 않는다."""
+    data = _interview()
+    data["l5"]["nodeCode"] = "19-01-06-01-09"
+    data["framework"]["categories"].append(
+        {"code": "19-01-06-01-09", "name": "연계 시드 검증", "level": 5, "parent": "19-01-06-01"})
+    data["rows"][0]["taskId"] = "task-lk-0001"
+    data["rows"][0]["fields"].update({"annual_count": 52, "fte": 0.03})
+    data["rows"].append({
+        "taskId": "task-lk-0002", "unitId": "unit-lk-0002", "l6": "연계 두번째",
+        "owner": None, "ownerRole": None, "approvers": [], "department": None,
+        "fields": {}, "actions": [{"seq": 1, "label": "단일 활동"}],
+        "relations": {"edges": []},
+    })
+    data["relations"]["entry"]["taskId"] = "task-lk-0002"  # 진입 L6 = 배치 첫 자리
+    data["relations"]["edges"] = [
+        {"src": "task-lk-0002", "dst": "task-lk-0001", "kind": "seq",
+         "gateway": None, "condition": "준비 완료 시", "label": "다음 단계", "quote": None},
+    ]
+
+    assert _post(client, [{"name": "lk.json", "content": data}], apply=True).status_code == 200
+    nodes, edges = _linkage_graph("19-01-06-01-09")
+    assert nodes is not None
+    assert [n.node_type for n in nodes] == ["subprocess", "subprocess"]
+    first = min(nodes, key=lambda n: n.sort_order)
+    assert first.title == "연계 두번째"  # entry가 맨 앞
+    seeded = next(n for n in nodes if n.title == "교정 준비")
+    assert (seeded.annual_count, seeded.fte) == ("52", "0.03")
+    assert len(edges) == 1 and edges[0].label == "다음 단계\n준비 완료 시"
+    # SP 끝점 전용 핸들 — 없으면 React Flow가 엣지를 통째로 못 붙여 캔버스에서 선이 사라진다
+    assert (edges[0].source_handle, edges[0].target_handle) == ("__primary__", "in")
+
+    # 재임포트 — 보강만(추가 없음)
+    assert _post(client, [{"name": "lk.json", "content": data}], apply=True).status_code == 200
+    nodes2, edges2 = _linkage_graph("19-01-06-01-09")
+    assert len(nodes2) == 2 and len(edges2) == 1
+
+
+def test_linkage_keeps_user_edited_sp_params(client: TestClient) -> None:
+    """SP 노드 annual_count/fte는 사용자 직접 편집 필드 — 재전달이 덮지 않고 경고만 남긴다."""
+    from app.db import SessionLocal
+    from app.models import Node
+
+    data = _interview()
+    data["l5"]["nodeCode"] = "19-01-06-01-10"
+    data["framework"]["categories"].append(
+        {"code": "19-01-06-01-10", "name": "연계 보존 검증", "level": 5, "parent": "19-01-06-01"})
+    data["rows"][0]["taskId"] = "task-keep-0001"
+    data["rows"][0]["fields"].update({"annual_count": 52, "fte": None})
+    assert _post(client, [{"name": "k.json", "content": data}], apply=True).status_code == 200
+
+    nodes, _ = _linkage_graph("19-01-06-01-10")
+    node_id = nodes[0].id
+
+    async def _edit():
+        async with SessionLocal() as session:
+            node = await session.get(Node, node_id)
+            node.annual_count = "999"
+            await session.commit()
+
+    _run(_edit())
+    body = _post(client, [{"name": "k.json", "content": data}], apply=True).json()
+    nodes2, _ = _linkage_graph("19-01-06-01-10")
+    assert nodes2[0].annual_count == "999"
+    assert any("annual_count '999' kept" in r["detail"] for r in body["rows"])

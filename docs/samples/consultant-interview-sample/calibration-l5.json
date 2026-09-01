@@ -1,10 +1,17 @@
 {
   "_readme": [
-    "합성 샘플 — 실전달물 아님. 손타이핑 인터페이스 스펙(0.3-bpm-interface-draft) 기반.",
-    "설정 > Framework > Interview import에 utility-l5.json과 함께 올려 dry-run/apply를 시험한다."
+    "합성 샘플 — 실전달물 아님. 손타이핑 인터페이스 스펙(0.4-bpm-interface-draft) 기반.",
+    "설정 > Framework > Interview import에 utility-l5.json과 함께 올려 dry-run/apply를 시험한다.",
+    "0.3 대비 달라진 것: (1) 최상위 relations = L6 사이 흐름 그래프(edges[].src/dst는 rows[].taskId),",
+    "(2) rows[].relations = 그 L6 내부 L7 흐름 그래프(edges[].src/dst는 actions[].seq),",
+    "(3) edge.kind 4종 seq/branch/loop/bypass + branch에는 gateway(exclusive|parallel),",
+    "(4) relations.entry = 프로세스 시작 이벤트(triggerType: message|timer|condition|manual),",
+    "(5) labelSource=human-confirmed, (6) 수치 병기 필드(total_time_min·touch_time_min·annual_count·",
+    "headcount·fte)와 owner/approvers/department가 실제 값으로 채워짐, (7) summary에 l6_edge_total·l7_edge_total 추가.",
+    "0.4에서 actions[].seq는 relations의 참조키이므로 row 안에서 유일하다(0.3의 중복 seq=병렬 관례는 폐기)."
   ],
-  "schema_version": "0.3-bpm-interface-draft",
-  "labelSource": "llm-generated-draft",
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
   "framework": {
     "categories": [
       { "code": "19", "name": "EPCV", "level": 1, "parent": null },
@@ -14,7 +21,56 @@
       { "code": "19-01-06-01-02", "name": "Calibration 수행 및 결과 보고", "level": 5, "parent": "19-01-06-01" }
     ]
   },
-  "l5": { "label": "Calibration 수행 및 결과 보고", "nodeCode": "19-01-06-01-02" },
+  "l5": {
+    "label": "Calibration 수행 및 결과 보고",
+    "nodeCode": "19-01-06-01-02"
+  },
+  "relations": {
+    "entry": {
+      "taskId": "smp-cal-task-0001",
+      "triggerType": "timer",
+      "label": "교정 주기 도래 시 EAM 작업지시 자동 발생",
+      "quote": "교정은 계측기마다 주기가 정해져 있어서 그 주기가 돌아오면 작업지시가 자동으로 떨어져요."
+    },
+    "edges": [
+      {
+        "src": "smp-cal-task-0001",
+        "dst": "smp-cal-task-0002",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "현장 측정이 필요한 일반 교정 건",
+        "label": "준비 완료 후 현장 수행",
+        "quote": "준비 목록이 나오면 그걸 들고 현장에 나가요."
+      },
+      {
+        "src": "smp-cal-task-0001",
+        "dst": "smp-cal-task-0003",
+        "kind": "bypass",
+        "gateway": null,
+        "condition": "성적서 재발행 등 현장 수행이 불필요한 건",
+        "label": "현장 수행 건너뛰고 보고로",
+        "quote": "재발행만 하는 건은 현장 안 나가고 바로 성적서만 다시 냅니다."
+      },
+      {
+        "src": "smp-cal-task-0002",
+        "dst": "smp-cal-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "현장 기록지 산출 시",
+        "label": "측정 기록 인수 후 보고",
+        "quote": null
+      },
+      {
+        "src": "smp-cal-task-0002",
+        "dst": "smp-cal-task-0001",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "현장에서 표준기 유효기간 경과를 발견한 경우",
+        "label": "표준기 교체 후 처음부터 재수행",
+        "quote": "나가서 보니 표준기 유효기간이 지났으면 그건 다시 준비부터 해야죠."
+      }
+    ]
+  },
   "rows": [
     {
       "taskId": "smp-cal-task-0001",
@@ -22,8 +78,8 @@
       "l6": "교정 준비",
       "owner": null,
       "ownerRole": "교정 담당자",
-      "approvers": [],
-      "department": null,
+      "approvers": ["cheolsu.kim", "younghee.lee"],
+      "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
         "start_condition": "교정 주기 도래 시 EAM에서 작업지시 자동 발생",
         "input_data": "교정 작업지시(EAM)",
@@ -31,14 +87,14 @@
         "done_criteria": "준비 목록 나오면 끝",
         "systems": "EAM",
         "total_time": "한번에 한시간쯤",
-        "total_time_min": null,
+        "total_time_min": 60,
         "touch_time": "한시간쯤",
         "touch_time_min": 60,
         "frequency": "주 1회",
-        "annual_count": null,
-        "headcount": null,
-        "fte": null,
-        "gmp": "GMP 문서 맞음, 교정관리 SOP(EM-CAL-001) 다름",
+        "annual_count": 52,
+        "headcount": 1,
+        "fte": 0.03,
+        "gmp": "GMP 문서 맞음, 교정관리 SOP(EM-CAL-001)에 따름",
         "artifact_role": "deliverable"
       },
       "actions": [
@@ -52,7 +108,7 @@
           "input": "그 주 작업지시",
           "output": "대상 계측기와 측정 범위",
           "system": "EAM",
-          "screen": null,
+          "screen": "작업지시 조회화면",
           "dataForm": "structured",
           "quote": "EAM에서 그 주 작업지시를 열어 대상 계측기랑 측정 범위를 확인해요."
         },
@@ -71,13 +127,27 @@
           "quote": "표준기 관리대장에서 그 범위를 커버하는 표준기를 골라 유효기간을 보고요."
         },
         {
-          "seq": 2,
-          "label": "성적서 양식 준비",
+          "seq": 3,
+          "label": "양식 준비 방식 판단",
+          "name": "성적서 양식을 미리 출력할 수 있는 상황인지 판단한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "여유가 있으면 사전 출력, 급하면 현장 수기",
+          "input": null,
+          "output": "양식 준비 방식",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "시간이 되면 미리 뽑고, 급하면 그냥 나가요."
+        },
+        {
+          "seq": 4,
+          "label": "성적서 양식 사전 출력",
           "name": "교정 성적서 양식을 출력해 현장 지참 목록에 넣는다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": null,
+          "input": "양식 준비 방식",
           "output": "성적서 양식",
           "system": null,
           "screen": null,
@@ -85,34 +155,116 @@
           "quote": "양식은 미리 뽑아서 가지고 나가요."
         },
         {
-          "seq": 2,
-          "label": "현장 수기 기록(예외)",
-          "name": "양식을 못 뽑았으면 현장에서 손으로 적어 온다",
+          "seq": 5,
+          "label": "현장 수기 기록 준비",
+          "name": "양식을 못 뽑았으면 백지 노트를 챙겨 현장에서 손으로 적어 온다",
           "kind": "action",
           "variant": "exception",
-          "rule": "급할 때만",
-          "input": null,
-          "output": "수기 기록",
+          "rule": "급할 때 > 양식을 미리 안 뽑고 현장에서 손으로 적어온다",
+          "input": "양식 준비 방식",
+          "output": "수기 기록지",
           "system": null,
           "screen": null,
           "dataForm": "document",
-          "quote": "급하면 그냥 손으로 적어 와요."
+          "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요."
         },
         {
-          "seq": 3,
+          "seq": 6,
+          "label": "지참 목록 확정",
+          "name": "표준기와 기록 양식을 합쳐 현장 지참 목록을 확정한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "성적서 양식\n수기 기록지",
+          "output": "지참 목록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "가지고 나갈 걸 한 번에 모아서 정리해요."
+        },
+        {
+          "seq": 7,
           "label": "표준기 유효성 판정",
           "name": "표준기 유효기간이 남아 있는지 판정한다 — 지났으면 다른 표준기로 교체",
           "kind": "decision",
           "variant": "normal",
           "rule": "유효기간 내면 진행, 아니면 교체",
-          "input": "표준기 후보",
+          "input": "표준기 후보\n지참 목록",
           "output": "확정 표준기",
           "system": null,
           "screen": null,
           "dataForm": "tacit",
           "quote": "유효기간 지난 표준기면 그걸로는 못 나가죠."
+        },
+        {
+          "seq": 8,
+          "label": "준비 목록 인계",
+          "name": "확정된 준비 목록을 현장 수행 담당에게 넘긴다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "확정 표준기",
+          "output": "준비 목록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "준비 다 되면 현장 나가는 사람한테 넘겨요."
         }
-      ]
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "작업지시 확인 후 표준기 선정과 양식 준비를 동시에 진행",
+            "label": "표준기 라인",
+            "quote": "표준기 고르는 거랑 양식 뽑는 건 따로 동시에 해요."
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "작업지시 확인 후 표준기 선정과 양식 준비를 동시에 진행",
+            "label": "양식 라인",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "평상시, 양식을 미리 출력할 수 있는 경우",
+            "label": "양식 사전 출력",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "급해서 양식을 뽑지 못한 경우",
+            "label": "현장 수기 대체",
+            "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요."
+          },
+          { "src": 4, "dst": 6, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 5, "dst": 6, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 6, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 2, "dst": 7, "kind": "seq", "gateway": null, "condition": "표준기 후보 산출 시", "label": null, "quote": null },
+          {
+            "src": 7,
+            "dst": 2,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "표준기 유효기간이 지난 경우",
+            "label": "표준기 재선정",
+            "quote": "지났으면 다른 표준기로 다시 골라야죠."
+          },
+          { "src": 7, "dst": 8, "kind": "seq", "gateway": null, "condition": "확정 표준기 산출 시", "label": null, "quote": null }
+        ]
+      }
     },
     {
       "taskId": "smp-cal-task-0002",
@@ -120,22 +272,22 @@
       "l6": "현장 교정 수행",
       "owner": null,
       "ownerRole": "교정 담당자",
-      "approvers": [],
-      "department": null,
+      "approvers": ["cheolsu.kim"],
+      "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
         "start_condition": "준비 목록 확정 후 현장 출동",
-        "input_data": "준비 목록, 확정 표준기",
-        "output_data": "교정 측정값",
+        "input_data": "준비 목록\n확정 표준기",
+        "output_data": "현장 기록지",
         "done_criteria": "전 포인트 측정 완료",
         "systems": null,
         "total_time": "건당 반나절",
-        "total_time_min": null,
-        "touch_time": null,
-        "touch_time_min": null,
+        "total_time_min": 240,
+        "touch_time": "실제 측정은 두 시간쯤",
+        "touch_time_min": 120,
         "frequency": "주 5~6건",
-        "annual_count": null,
-        "headcount": null,
-        "fte": null,
+        "annual_count": 286,
+        "headcount": 2,
+        "fte": 0.31,
         "gmp": "교정 성적서는 GMP 기록",
         "artifact_role": "record"
       },
@@ -143,69 +295,160 @@
         {
           "seq": 1,
           "label": "현장 이동 및 안전 확인",
-          "name": "대상 설비 현장으로 이동해 작업 허가와 안전 조건을 확인한다",
+          "name": "대상 설비 위치로 이동해 작업 허가와 안전 조건을 확인한다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
           "input": "준비 목록",
-          "output": null,
+          "output": "작업 허가 확인",
           "system": null,
           "screen": null,
           "dataForm": "tacit",
-          "quote": "현장 가면 허가부터 확인하고 시작해요."
+          "quote": "현장 가면 먼저 작업 허가랑 안전 조건부터 봅니다."
         },
         {
           "seq": 2,
-          "label": "포인트별 측정",
-          "name": "표준기를 연결해 포인트별로 측정값을 기록한다",
+          "label": "계측기 상태 확인",
+          "name": "대상 계측기의 외관과 설치 상태를 확인한다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "확정 표준기",
+          "input": "작업 허가 확인",
+          "output": "계측기 상태",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "계측기 상태부터 눈으로 확인하고 시작해요."
+        },
+        {
+          "seq": 3,
+          "label": "포인트별 측정",
+          "name": "표준기로 측정 범위의 각 포인트를 측정해 값을 적는다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "계측기 상태\n확정 표준기",
           "output": "교정 측정값",
           "system": null,
           "screen": null,
           "dataForm": "document",
-          "quote": "포인트마다 값을 적어 내려가요."
+          "quote": "포인트마다 표준기 값이랑 계측기 값을 같이 적어요."
         },
         {
-          "seq": 3,
-          "label": "결과 인계",
-          "name": "측정 기록을 결과 보고 담당에게 넘긴다",
-          "kind": "handoff",
+          "seq": 4,
+          "label": "허용오차 판정",
+          "name": "측정값이 허용오차 안에 드는지 판정한다",
+          "kind": "decision",
           "variant": "normal",
-          "rule": null,
+          "rule": "허용오차 초과면 재측정, 이내면 기록 확정",
           "input": "교정 측정값",
-          "output": null,
+          "output": "판정 결과",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "값이 튀면 한 번 더 재보고요."
+        },
+        {
+          "seq": 5,
+          "label": "재측정",
+          "name": "허용오차를 벗어난 포인트를 다시 측정한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "허용오차 초과 시에만",
+          "input": "판정 결과",
+          "output": "재측정값",
           "system": null,
           "screen": null,
           "dataForm": "document",
-          "quote": "기록지는 보고 담당한테 바로 넘겨요."
+          "quote": "튀는 포인트는 다시 측정해요."
+        },
+        {
+          "seq": 6,
+          "label": "현장 기록지 작성",
+          "name": "확정된 측정값을 성적서 양식 또는 수기 기록지에 적는다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "판정 결과",
+          "output": "현장 기록지",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "값이 확정되면 양식에 옮겨 적습니다."
+        },
+        {
+          "seq": 7,
+          "label": "결과 인계",
+          "name": "현장 기록지를 보고 담당에게 넘긴다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "현장 기록지",
+          "output": "현장 기록지",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "기록지는 사무실 들어와서 보고 담당한테 넘겨요."
         }
-      ]
+      ],
+      "relations": {
+        "edges": [
+          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 2, "dst": 3, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
+          { "src": 3, "dst": 4, "kind": "seq", "gateway": null, "condition": "교정 측정값 산출 시", "label": null, "quote": null },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "허용오차를 벗어난 포인트가 있는 경우",
+            "label": "재측정",
+            "quote": "값이 튀면 한 번 더 재보고요."
+          },
+          {
+            "src": 5,
+            "dst": 3,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "재측정 후 같은 절차로 다시 측정",
+            "label": "포인트 측정으로 복귀",
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "모든 포인트가 허용오차 이내인 경우",
+            "label": "기록 확정",
+            "quote": null
+          },
+          { "src": 6, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null }
+        ]
+      }
     },
     {
       "taskId": "smp-cal-task-0003",
       "unitId": "smp-cal-unit-0003",
       "l6": "교정 결과 보고 및 이력 등록",
       "owner": null,
-      "ownerRole": "교정 파트 리더",
-      "approvers": [],
-      "department": null,
+      "ownerRole": "교정 담당자",
+      "approvers": ["cheolsu.kim", "younghee.lee"],
+      "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
-        "start_condition": "현장 측정 기록 인수",
-        "input_data": "교정 측정값",
-        "output_data": "교정 성적서, EAM 이력",
+        "start_condition": "현장 기록지 인수",
+        "input_data": "현장 기록지",
+        "output_data": "교정 성적서\nEAM 교정 이력",
         "done_criteria": "EAM 이력 등록 완료",
         "systems": "EAM",
         "total_time": "건당 30분",
-        "total_time_min": null,
-        "touch_time": null,
-        "touch_time_min": null,
+        "total_time_min": 30,
+        "touch_time": "실제 입력은 20분",
+        "touch_time_min": 20,
         "frequency": "주 5~6건",
-        "annual_count": null,
-        "headcount": null,
-        "fte": null,
+        "annual_count": 286,
+        "headcount": 1,
+        "fte": 0.05,
         "gmp": "성적서 승인은 GMP 절차",
         "artifact_role": "record"
       },
@@ -213,32 +456,107 @@
         {
           "seq": 1,
           "label": "성적서 작성",
-          "name": "측정값을 성적서 양식에 옮겨 판정 결과를 기재한다",
+          "name": "현장 기록지를 근거로 교정 성적서를 작성한다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "교정 측정값",
+          "input": "현장 기록지",
+          "output": "교정 성적서(초안)",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "기록지 보고 성적서를 정서해서 만듭니다."
+        },
+        {
+          "seq": 2,
+          "label": "성적서 검토",
+          "name": "성적서 값과 판정이 기록지와 일치하는지 검토한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "불일치나 누락이 있으면 보완",
+          "input": "교정 성적서(초안)",
+          "output": "검토 결과",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "숫자가 안 맞으면 다시 고쳐 옵니다."
+        },
+        {
+          "seq": 3,
+          "label": "성적서 보완",
+          "name": "검토에서 지적된 항목을 수정한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "검토 지적 발생 시에만",
+          "input": "검토 결과",
+          "output": "교정 성적서(수정)",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "지적 나오면 그 부분만 고쳐서 다시 올려요."
+        },
+        {
+          "seq": 4,
+          "label": "성적서 승인",
+          "name": "검토를 통과한 성적서를 승인권자에게 상신해 승인받는다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "검토 결과",
           "output": "교정 성적서",
           "system": null,
           "screen": null,
           "dataForm": "document",
-          "quote": "성적서에 옮겨 적고 합부 판정을 써요."
+          "quote": "이상 없으면 승인 올립니다."
         },
         {
-          "seq": 2,
+          "seq": 5,
           "label": "EAM 이력 등록",
-          "name": "EAM 작업지시를 완료 처리하고 교정 이력을 등록한다",
+          "name": "승인된 성적서를 EAM 교정 이력에 등록하고 작업지시를 종결한다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
           "input": "교정 성적서",
-          "output": "EAM 이력",
+          "output": "EAM 교정 이력",
           "system": "EAM",
-          "screen": "WO Close",
+          "screen": "교정 이력 등록화면",
           "dataForm": "structured",
-          "quote": "EAM에서 작업지시 닫으면서 이력을 남겨요."
+          "quote": "승인 끝나면 EAM에 이력 걸고 작업지시를 닫아요."
         }
-      ]
+      ],
+      "relations": {
+        "edges": [
+          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": "교정 성적서(초안) 산출 시", "label": null, "quote": null },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "검토에서 불일치·누락이 나온 경우",
+            "label": "보완 요청",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "보완 후 성적서를 다시 작성",
+            "label": "성적서 재작성",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "검토 결과 이상이 없는 경우",
+            "label": "승인 상신",
+            "quote": null
+          },
+          { "src": 4, "dst": 5, "kind": "seq", "gateway": null, "condition": "교정 성적서 승인 시", "label": null, "quote": null }
+        ]
+      }
     }
   ],
   "tasks": [
@@ -247,20 +565,18 @@
       "doc": null,
       "seq": 1,
       "name": "교정 준비",
-      "note": "표준기 관리대장은 아직 엑셀 — 시스템화 논의 중",
+      "note": "준비 단계에서 표준기 유효기간을 놓치면 현장에서 되돌아온다 — 재수행 유발 지점",
       "state": "confirmed",
-      "evidence": [{ "id": "smp-ev-1", "quote": "준비하고,", "sourceKind": "chat" }],
+      "evidence": [
+        { "id": "smp-cal-ev-0001", "quote": "EAM에서 그 주 작업지시를 열어 대상 계측기랑 측정 범위를 확인해요.", "sourceKind": "chat" },
+        { "id": "smp-cal-ev-0002", "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요.", "sourceKind": "chat" }
+      ],
       "revision": 1,
       "ownerRole": "교정 담당자",
       "exceptions": [
         {
-          "name": "현장 수기 기록",
-          "rule": "급할 때 > 양식을 미리 안 뽑고 현장에서 손으로 적어 온다",
-          "evidence": []
-        },
-        {
-          "name": "표준기 긴급 대차",
-          "rule": "유효기간 임박 표준기뿐이면 인접 파트에서 빌려 쓴다",
+          "name": "현장에서 성적서 양식에 손으로 적어 온다",
+          "rule": "급할 때 > 양식을 미리 안 뽑고 현장에서 손으로 적어온다.",
           "evidence": []
         }
       ],
@@ -274,10 +590,18 @@
       "name": "현장 교정 수행",
       "note": null,
       "state": "confirmed",
-      "evidence": [],
+      "evidence": [
+        { "id": "smp-cal-ev-0003", "quote": "포인트마다 표준기 값이랑 계측기 값을 같이 적어요.", "sourceKind": "chat" }
+      ],
       "revision": 1,
       "ownerRole": "교정 담당자",
-      "exceptions": [],
+      "exceptions": [
+        {
+          "name": "현장에서 표준기 유효기간 경과를 발견한다",
+          "rule": "표준기 유효기간이 지난 걸 현장에서 발견하면 교체 후 준비 단계부터 다시 한다.",
+          "evidence": []
+        }
+      ],
       "endCondition": "전 포인트 측정 완료",
       "startCondition": "준비 목록 확정 후 현장 출동"
     },
@@ -288,41 +612,33 @@
       "name": "교정 결과 보고 및 이력 등록",
       "note": null,
       "state": "confirmed",
-      "evidence": [],
+      "evidence": [
+        { "id": "smp-cal-ev-0004", "quote": "승인 끝나면 EAM에 이력 걸고 작업지시를 닫아요.", "sourceKind": "chat" }
+      ],
       "revision": 1,
-      "ownerRole": "교정 파트 리더",
+      "ownerRole": "교정 담당자",
       "exceptions": [],
       "endCondition": "EAM 이력 등록 완료",
-      "startCondition": "현장 측정 기록 인수"
+      "startCondition": "현장 기록지 인수"
     }
   ],
   "summary": {
-    "kept": { "files": 0, "messages": 54, "free_texts": 0, "evidence_total": 1 },
+    "kept": { "files": 0, "messages": 54, "free_texts": 0, "evidence_total": 4 },
     "l6_total": 3,
-    "l7_total": 9,
+    "l7_total": 20,
+    "l6_edge_total": 4,
+    "l7_edge_total": 22,
     "voc_total": 2,
     "rows_total": 3,
-    "open_items_total": 0,
+    "open_items_total": 1,
     "side_notes_total": 3
   },
   "openItems": [
     { "text": "교정 성적서 전자화 범위 — IT와 협의 필요", "unitId": null }
   ],
   "sideNotes": [
-    {
-      "kind": "voc",
-      "text": "급한 건은 시스템 상신 외에 팀 메신저로 한번 더 알려야 함 — 이중 소통 채널",
-      "unitId": null
-    },
-    {
-      "kind": "rule_basis",
-      "text": "tacit: 준비목록이 나오면 끝, 정해진 문서 없고 해 오던 방식",
-      "unitId": "smp-cal-unit-0001"
-    },
-    {
-      "kind": "voc",
-      "text": "성적서 양식이 설비 유형별로 달라 현장에서 헷갈림",
-      "unitId": "smp-cal-unit-0002"
-    }
+    { "kind": "voc", "text": "급한 건은 시스템 상신 외에 팀 메신저로 한번 더 알려야 함 — 이중 소통 채널", "unitId": null },
+    { "kind": "voc", "text": "표준기 유효기간을 준비 단계에서 자동 경고해주면 현장 재수행이 줄어든다", "unitId": "smp-cal-unit-0001" },
+    { "kind": "rule_basis", "text": "허용오차 기준은 교정관리 SOP(EM-CAL-001) 부속서를 따른다", "unitId": "smp-cal-unit-0002" }
   ]
 }

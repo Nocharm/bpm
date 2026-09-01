@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scripts.consultant_interview import InterviewNote
+    from scripts.consultant_interview import InterviewLinkage, InterviewNote
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,14 @@ from app.models import (
 )
 from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.schemas import NUMERIC_RE
+from app.subprocess import (
+    LINKAGE_Y0,
+    LINKAGE_Y_STEP,
+    PRIMARY_END_HANDLE,
+    SUBPROCESS_IN_HANDLE,
+    grid_positions,
+    unique_linkage_name,
+)
 from app.version_events import record_version_event
 from scripts.consultant_canonical import (
     CanonicalCategory,
@@ -89,19 +97,22 @@ def build_graph_rows(
     l7_codes = [n.code for n in ordered]
 
     # 흐름 엣지 — 명시 엣지 없으면 seq 체인, 있으면 그대로 + Start/End 보강
-    flow: list[tuple[str, str, str]] = (
-        [(e.source, e.target, e.label) for e in cmap.edges]
+    flow: list[tuple[str, str, str, str]] = (
+        [(e.source, e.target, e.label, e.kind) for e in cmap.edges]
         if cmap.edges
-        else [(a, b, "") for a, b in zip(l7_codes, l7_codes[1:])]
+        else [(a, b, "", "seq") for a, b in zip(l7_codes, l7_codes[1:])]
     )
-    has_in = {dst for _, dst, _ in flow}
-    has_out = {src for src, _, _ in flow}
+    # loop(재수행) 엣지는 Start 배선 판정에서 제외 — 뒤 단계가 되돌아오는 것뿐인데 in-edge로
+    # 세면 진입 노드가 Start와 안 이어져 그래프가 붕 뜬다. End 판정엔 포함한다(보완→재작성처럼
+    # loop이 유일 출구인 노드가 있다). design 2026-09-01 §2.
+    has_in = {dst for _, dst, _, kind in flow if kind != "loop"}
+    has_out = {src for src, _, _, _ in flow}
     start, end = "__start__", "__end__"
     for code in l7_codes:
         if code not in has_in:
-            flow.append((start, code, ""))
+            flow.append((start, code, "", "seq"))
         if code not in has_out:
-            flow.append((code, end, ""))
+            flow.append((code, end, "", "seq"))
 
     # 연계 노드 — after_node 뒤(생략 시 최대 seq 노드 뒤) 병렬 분기, End 배선 불변 (design §4)
     link_rows: list[tuple[str, str, int, CanonicalParams]] = []  # (가상코드, 부착원점, map_id, params)
@@ -113,10 +124,12 @@ def build_graph_rows(
         attach = link.after_node or (l7_codes[-1] if l7_codes else start)
         link_rows.append((f"__link__{link.to_map}", attach, target[0], target[1]))
     for virtual, attach, _, _ in link_rows:
-        flow.append((attach, virtual, ""))
+        flow.append((attach, virtual, "", "seq"))
 
     all_codes = [start, *l7_codes, *[v for v, *_ in link_rows], end]
-    ranks = _compute_ranks(all_codes, [(s, d) for s, d, _ in flow])
+    # 랭크(가로 배치)는 loop 제외 — 되돌아가는 엣지를 선행으로 세면 사이클로 떨어져
+    # 전체가 뒤 rank로 밀린다(레이아웃 붕괴).
+    ranks = _compute_ranks(all_codes, [(s, d) for s, d, _, kind in flow if kind != "loop"])
     row_in_rank: dict[int, int] = {}
 
     def place(code: str) -> tuple[float, float]:
@@ -171,7 +184,7 @@ def build_graph_rows(
             target_node_id=code_to_id[dst],
             label=label,
         )
-        for src, dst, label in flow
+        for src, dst, label, _ in flow
     ]
     return nodes, edges, warnings
 
@@ -346,6 +359,7 @@ async def import_delivery(
     actor: str,
     label: str,
     commit_every: int | None = None,
+    linkage_placed: set[str] | None = None,
 ) -> ImportReport:
     """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
     report = ImportReport()
@@ -390,14 +404,15 @@ async def import_delivery(
     # (예전엔 link_targets가 raw params를 써서 대상 맵의 무효값이 정규화 없이 연계 노드에 그대로 박혔다.)
     normalized: dict[str, CanonicalParams] = {m.code: _normalize_params(m, report) for m in maps}
 
-    # annual_count/fte가 있는데 이번 전달분에 인바운드 연계가 없으면 그 값은 갈 곳이 없다 — 경고만
+    # annual_count/fte가 있는데 착지할 SP 노드가 없으면 그 값은 갈 곳이 없다 — 경고만
     # (design §4 "아무것도 안 잃는다"의 반례를 리포트로 표면화). NORMALIZED 값 기준(무효값 소거 후).
-    inbound_linked = {link.to_map for m in maps for link in m.links}
+    # 착지면은 둘 중 하나 — 전달분 내 인바운드 연계, 또는 L5 연계 캔버스(인터뷰 0.4 경로).
+    landing = {link.to_map for m in maps for link in m.links} | (linkage_placed or set())
     for cmap in maps:
         p = normalized[cmap.code]
-        if (p.annual_count or p.fte) and cmap.code not in inbound_linked:
+        if (p.annual_count or p.fte) and cmap.code not in landing:
             report.add(cmap.code, "warning",
-                       "annual_count/fte have no landing site — no inbound link in this delivery")
+                       "annual_count/fte have no landing site — no inbound link or linkage canvas")
 
     # 맵 이름 중복은 차단·강제개명 대상이 아니다(컨트롤러 결정) — 컨설턴트 식별은 consultant_code,
     # 표시 구분은 카테고리 경로가 맡는다. 경고만 남기고 양쪽 다 정상 진행.
@@ -713,3 +728,160 @@ async def apply_interview_notes(
     return inserted
 
 
+
+
+def _linkage_param(value: str) -> str:
+    """SP 노드 파라미터 방어 — 엔진 무효값 계약과 동형(무효는 "" 소거, 경고는 이미 남았다)."""
+    text = (value or "").strip()
+    return text if text and NUMERIC_RE.fullmatch(text) else ""
+
+
+async def apply_interview_linkage(
+    session: AsyncSession,
+    linkages: list["InterviewLinkage"],
+    *,
+    actor: str,
+    report: ImportReport,
+) -> int:
+    """L6 흐름 → L5 연계 캔버스 시드/보강 (design 2026-09-01 §3). 반환: 추가한 노드+엣지 수.
+
+    규약은 routers/categories.open_linkage_map과 같다 — **추가만, 삭제·이동 없음**. 캔버스가
+    없으면 만들고, 있으면 없는 SP 노드·없는 엣지만 얹는다. draft가 타인 체크아웃 중이면 통째로
+    건너뛴다(서버가 남의 편집본을 건드리지 않는 체크아웃 규약).
+    import_delivery와 같은 세션에서 호출한다 — dry-run rollback에 함께 원복된다.
+
+    캔버스는 게시하지 않는다(draft 유지). start 노드는 쓸 수 없다 —
+    validate_framework_canvas가 subprocess/decision/end만 허용하므로 진입 L6는 배치 첫 자리로만
+    표현하고, entry 이벤트 자체는 어댑터가 L5 스코프 노트로 남긴다.
+    """
+    total = 0
+    for linkage in linkages:
+        code = linkage.category_code
+        category = await session.scalar(
+            select(ProcessCategory).where(ProcessCategory.code == code)
+        )
+        if category is None:
+            report.add(code, "warning", "linkage skipped — category not found")
+            continue
+        if category.level != 5:
+            report.add(code, "warning", f"linkage skipped — category is level {category.level}")
+            continue
+
+        placed = (await session.execute(
+            select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.name).where(
+                ProcessMap.consultant_code.in_(linkage.map_codes),
+                ProcessMap.deleted_at.is_(None),
+            )
+        )).all()
+        map_ids = {c: mid for mid, c, _ in placed if c is not None}
+        map_names = {mid: name for mid, _, name in placed}
+        if not map_ids:
+            report.add(code, "warning", "linkage skipped — no imported maps to place")
+            continue
+
+        canvas = (
+            await session.get(ProcessMap, category.linkage_map_id)
+            if category.linkage_map_id is not None
+            else None
+        )
+        is_new_canvas = canvas is None or canvas.deleted_at is not None
+        if is_new_canvas:
+            canvas = ProcessMap(
+                name=await unique_linkage_name(session, category),
+                created_by=actor, owner_id=actor, visibility="public", mode="framework",
+            )
+            canvas.versions.append(MapVersion(label="Linkage"))
+            session.add(canvas)
+            await session.flush()
+            draft = canvas.versions[0]
+            record_version_event(session, draft.id, "created", actor)
+            category.linkage_map_id = canvas.id
+        else:
+            draft = await session.scalar(
+                select(MapVersion)
+                .where(MapVersion.map_id == canvas.id, MapVersion.status == "draft")
+                .order_by(MapVersion.id.desc())
+            )
+            if draft is None:
+                report.add(code, "warning", "linkage skipped — canvas has no draft version")
+                continue
+            if draft.checked_out_by not in (None, actor):
+                report.add(code, "warning",
+                           f"linkage skipped — canvas checked out by {draft.checked_out_by}")
+                continue
+
+        existing = list((await session.scalars(
+            select(Node).where(Node.version_id == draft.id)
+        )).all())
+        node_by_map: dict[int, Node] = {
+            n.linked_map_id: n for n in existing
+            if n.node_type == "subprocess" and n.linked_map_id is not None
+        }
+        max_y = max((n.pos_y for n in existing), default=None)
+        base_y = (max_y + LINKAGE_Y_STEP) if max_y is not None else LINKAGE_Y0
+        next_sort = max((n.sort_order for n in existing), default=-1) + 1
+
+        # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것
+        missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
+        added = 0
+        for i, (c, (px, py)) in enumerate(zip(missing, grid_positions(0, len(missing), base_y))):
+            annual, fte = linkage.params.get(c, ("", ""))
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id,
+                title=map_names.get(map_ids[c], c),
+                node_type="subprocess", linked_map_id=map_ids[c], follow_latest=True,
+                annual_count=_linkage_param(annual), fte=_linkage_param(fte),
+                pos_x=px, pos_y=py, sort_order=next_sort + i,
+            )
+            session.add(node)
+            node_by_map[map_ids[c]] = node
+            added += 1
+
+        # 기존 SP 노드의 annual_count/fte — 비어 있으면 채우고, 값이 있으면 덮지 않는다
+        # (사용자 직접 편집 필드. 맵 sp_gmp를 엔진이 안 건드리는 것과 같은 관례)
+        new_ids = {map_ids[c] for c in missing}
+        for c, values in linkage.params.items():
+            map_id = map_ids.get(c)
+            node = node_by_map.get(map_id) if map_id is not None else None
+            if node is None or map_id in new_ids:
+                continue
+            for attr, raw in zip(("annual_count", "fte"), values):
+                incoming = _linkage_param(raw)
+                if not incoming:
+                    continue
+                current = (getattr(node, attr) or "").strip()
+                if not current:
+                    setattr(node, attr, incoming)
+                elif current != incoming:
+                    report.add(code, "warning",
+                               f"{c}: {attr} {current!r} kept (delivery has {incoming!r})")
+
+        await session.flush()  # 신규 노드 id 확정 후 엣지를 건다
+        existing_pairs = {
+            (e.source_node_id, e.target_node_id)
+            for e in (await session.scalars(
+                select(Edge).where(Edge.version_id == draft.id)
+            )).all()
+        }
+        for edge in linkage.edges:
+            src = node_by_map.get(map_ids.get(edge.source, -1))
+            dst = node_by_map.get(map_ids.get(edge.target, -1))
+            if src is None or dst is None:
+                report.add(code, "warning",
+                           f"linkage edge {edge.source}→{edge.target} dropped — map not on canvas")
+                continue
+            if (src.id, dst.id) in existing_pairs:
+                continue
+            session.add(Edge(
+                id=uuid.uuid4().hex, version_id=draft.id,
+                source_node_id=src.id, target_node_id=dst.id, label=edge.label,
+                # SP 끝점은 전용 핸들 필수 — 없으면 React Flow가 엣지를 통째로 못 붙인다
+                source_handle=PRIMARY_END_HANDLE, target_handle=SUBPROCESS_IN_HANDLE,
+            ))
+            existing_pairs.add((src.id, dst.id))
+            added += 1
+
+        verb = "created" if is_new_canvas else "augmented"
+        report.add(code, "linkage", f"canvas {verb} (map {canvas.id}, +{added} nodes/edges)")
+        total += added
+    return total
