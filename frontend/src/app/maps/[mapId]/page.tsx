@@ -272,7 +272,7 @@ import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
-import { buildGatewayEdges, checkExpansionLimits } from "@/lib/inline-expand";
+import { buildGatewayEdges, buildStepFlowEdges, checkExpansionLimits } from "@/lib/inline-expand";
 import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
 import {
   NodeActionsContext,
@@ -1454,6 +1454,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const inlineCompositionRef = useRef<{
     regions: RegionBox[];
     childEdges: Edge[];
+    // 게이트웨이/가려진 엣지 — Tab 스테퍼가 펼침 경계(호스트↔자식)를 건너려면 둘 다 필요.
+    gateways: Edge[];
+    hiddenIds: Set<string>;
     scopeOffsets: Map<string, { x: number; y: number }>;
     rootOffsets: Map<string, { x: number; y: number }>;
     rootShiftSteps: { x: number; footprint: number }[];
@@ -8481,19 +8484,18 @@ function MapEditor({ mapId }: { mapId: number }) {
         return;
       }
       // Tab / Shift+Tab : 흐름상 다음/이전 노드로 포커스 이동(+화면 중앙으로).
-      // 임베드 자식 엣지도 포함 — 펼친 하위프로세스 안 노드를 클릭한 뒤에도 아웃라인과 동일하게 순회된다.
+      // 화면에 보이는 흐름(게이트웨이 포함·가려진 A→B 제외)을 따라간다 — 펼친 하위프로세스도 아웃라인처럼
+      // 호스트→자식 진입점→…→자식 끝→후속으로 이어진다.
       if (event.key === "Tab") {
-        const flowEdges = [
-          ...edgesRef.current,
-          ...(inlineCompositionRef.current?.childEdges ?? []),
-        ];
+        // 막다른 노드(끝·고립)에서도 브라우저 기본 Tab을 막는다 — 캔버스 밖 버튼으로 포커스가 새지 않게.
+        event.preventDefault();
+        const flowEdges = buildStepFlowEdges(edgesRef.current, inlineCompositionRef.current);
         const nextId = event.shiftKey
           ? getPrevNodeAlongFlow(flowEdges, selectedId)
           : getNextNodeAlongFlow(flowEdges, selectedId);
         if (!nextId) {
           return;
         }
-        event.preventDefault();
         setSelectedId(nextId);
         // 다음 노드가 임베드 자식이면 childNodes에 선택을 싣는다 — 반대편 state는 전부 해제(단일 선택).
         const isChild = childNodesRef.current.some((node) => node.id === nextId);

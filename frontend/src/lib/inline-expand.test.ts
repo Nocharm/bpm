@@ -1,10 +1,12 @@
 // buildGatewayEdges 단위 테스트 — 진출(끝노드→후속) 게이트웨이가 우측에서 출발하는지 검증.
+// buildStepFlowEdges — Tab 스테퍼가 펼침 경계(호스트↔자식)를 건너는지 검증.
 
 import type { Edge } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
+import { getNextNodeAlongFlow, getPrevNodeAlongFlow } from "@/lib/canvas";
 import type { AppNode, ProcessNodeType } from "@/lib/canvas";
-import { buildGatewayEdges } from "@/lib/inline-expand";
+import { buildGatewayEdges, buildStepFlowEdges } from "@/lib/inline-expand";
 
 function mkChild(id: string, nodeType: ProcessNodeType, scopeId: string): AppNode {
   return {
@@ -53,5 +55,41 @@ describe("buildGatewayEdges", () => {
     const entry = gateways.find((g) => g.source === "host" && g.target === "c-start");
     expect(entry).toBeDefined();
     expect(entry?.targetHandle).toBe("t-left");
+  });
+
+  describe("buildStepFlowEdges", () => {
+    // 루트 스코프 엣지 = host→succ(펼치면 가려짐), 자식 스코프 내부 엣지 = e1·e2.
+    const rootEdges: Edge[] = [{ id: "e3", source: "host", target: "succ" }];
+    const childEdges: Edge[] = [
+      { id: "e1", source: "c-start", target: "c-task" },
+      { id: "e2", source: "c-task", target: "c-end" },
+    ];
+    const composition = {
+      childEdges,
+      gateways: buildGatewayEdges(expanded, children, scopeEdges),
+      hiddenIds: new Set(["e3"]),
+    };
+    const stepEdges = buildStepFlowEdges(rootEdges, composition);
+
+    it("keeps the root edges untouched when nothing is expanded", () => {
+      expect(buildStepFlowEdges(rootEdges, null)).toEqual(rootEdges);
+    });
+
+    it("steps into the child scope from the expanded host", () => {
+      // 가려진 host→succ 대신 진입 게이트웨이를 따라간다(아웃라인의 부모→첫 자식과 동일 순서)
+      expect(getNextNodeAlongFlow(stepEdges, "host")).toBe("c-start");
+    });
+
+    it("steps out of the child scope at the child end node", () => {
+      expect(getNextNodeAlongFlow(stepEdges, "c-end")).toBe("succ");
+    });
+
+    it("steps back to the host from the child start node", () => {
+      expect(getPrevNodeAlongFlow(stepEdges, "c-start")).toBe("host");
+    });
+
+    it("steps back into the child scope from the successor", () => {
+      expect(getPrevNodeAlongFlow(stepEdges, "succ")).toBe("c-end");
+    });
   });
 });

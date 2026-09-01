@@ -128,6 +128,23 @@ export function isGatewayEdge(edge: Edge): boolean {
   return edge.id.startsWith(GATEWAY_PREFIX);
 }
 
+/**
+ * Tab 스테퍼(F14)가 따라갈 "화면에 보이는 흐름" 엣지 — 펼침으로 가려진 A→B를 빼고 게이트웨이를 얹는다.
+ * 게이트웨이를 빼면 자식 스코프가 흐름의 섬이 되어 진입점/진출점에서 다음 노드를 못 찾는다(=Tab 이탈).
+ */
+export function buildStepFlowEdges(
+  rootEdges: Edge[],
+  composition: { childEdges: Edge[]; gateways: Edge[]; hiddenIds: Set<string> } | null,
+): Edge[] {
+  if (!composition) {
+    return rootEdges;
+  }
+  const visible = [...rootEdges, ...composition.childEdges].filter(
+    (edge) => !composition.hiddenIds.has(edge.id),
+  );
+  return [...visible, ...composition.gateways];
+}
+
 /** expanded 적용 시 인라인 추가 노드수·최대 펼침 깊이를 캡과 비교. */
 export function checkExpansionLimits(
   fullGraph: VersionGraph,
