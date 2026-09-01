@@ -64,7 +64,7 @@
 | `name` | 노드 설명 첫 줄 |
 | `kind` | `decision`→decision 노드 / `action`·`handoff`→process(handoff는 설명에 `Kind: handoff`) |
 | `variant` | `normal` 외는 설명에 `Variant: <값>`. `exception`은 노드 색 rose(`#c2849a`) |
-| `input` / `output` | 노드 `input`/`output`(list면 개행 join) |
+| `input` / `output` | 노드 `input`/`output`(list면 개행 join). **텍스트가 완전일치하는 상류 아웃풋이 있으면 IO 링크로 자동 연결**(§2-1) |
 | `dataForm` | 노드 `data_form`(50자) |
 | `system` | 노드 `system`(100자) + `system_fallback`(200자) |
 | `rule` / `screen` / `quote` | 노드 설명 KV 줄(`Rule:` / `Screen:` / `Quote:`) |
@@ -84,6 +84,16 @@
 | `gateway: exclusive` | decision 승격으로 표현 | 다중 out-edge로만 |
 | `gateway: parallel` | 다중 out-edge로 표현(승격 안 함) | 다중 out-edge로만 |
 | `quote` | `map_notes` kind=`flow`(title=`src → dst`, text=quote+`kind/gateway · condition`) | 동일, L5 스코프 |
+
+---
+
+## 2-1. 배치 · IO 링크 · 작업본 (전달 키가 아닌 파생 결과)
+
+| 산출 | 규칙 |
+|---|---|
+| 노드 좌표 · 엣지 변(side) | 노드·엣지를 다 만든 뒤 **가로 자동정렬**(rank + 교차 감소 + 주 흐름 직선화 + 역행 엣지 top 핸들). L5 연계 캔버스는 **새로 만들 때만** 적용(보강은 기존 노드 불변) |
+| IO 링크(`output_ids`·`input_links`) | 아웃풋 줄과 인풋 줄이 **완전일치 + 흐름 순방향**이면 자동 연결. 후보 여럿이면 최근접 상류. 항목 id는 전달 좌표에서 파생한 결정적 값 |
+| 편집용 draft | 게시 직후 게시본을 복제한 draft 1건(점유권자 없음). 이미 draft가 있으면 만들지 않음 |
 
 ---
 
@@ -131,6 +141,10 @@ dry-run 경고를 반드시 읽어야 하는 지점.
 | `owner`/`approvers`가 employees에 없음 | 저장은 되지만 승인 정족수에서 제외된다 | `owner ... not found in employees` |
 | **이미 오너가 확정된 맵에 새 owner/approvers** | **무시된다**(거버넌스 불변 — `consultant_owner_pending`인 맵만 갱신) | 없음 |
 | **`sp_gmp`(검토 선정값)** | 재전달이 절대 못 덮는다 — `gmp`는 fallback 컬럼에만 | 없음(설계 의도) |
+| **내용이 같은 재임포트** | `unchanged`로 끝나 **좌표·엣지 변이 갱신되지 않는다**(레이아웃은 시그니처 밖) | 없음 — 재정렬하려면 내용이 바뀌거나 에디터 "자동 정렬" |
+| **동명 IO 항목이 여러 상류에 있음** | 최근접 상류 **하나만** 연결된다(한 항목=링크 1개) | 없음 |
+| **인풋 항목에 이미 링크가 있음** | 자동 연결이 건너뛴다(사용자 편집 보존) | 없음 |
+| **자동 draft를 손대지 않은 채 재전달** | 그 draft가 새 게시 버전으로 **재사용**된다(내용은 새 전달분으로 교체) | 없음 |
 
 ---
 
