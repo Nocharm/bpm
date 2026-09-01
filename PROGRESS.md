@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 0.4 임포트 트랙 핸드오프 문서 (dev)
+- `docs/design/2026-09-01-interview-import-v04-result.md` — 이번 트랙의 최종 결과문서(확정 계약·검증 수치·한계 7건·확장 계획 5건·후속 점검 6건). 시행착오는 뺐고, 규칙 근거는 같은 날 설계 스냅샷, 필드 대조는 `docs/qa/interview-import-field-map.md`로 분리.
+- 최우선 후속은 **실파일 0.4 dry-run 대조** — unknown key 리포트가 그대로 어댑터 수정 목록이 된다.
+
 ## 2026-09-01 — 0.4 전 기능 더미 1세트 (dev)
 - `docs/samples/framework-linkage-dummy/change-control-l5.json` — 변경관리 L5 + L6 4건. seq·branch(exclusive/parallel)·loop·bypass, decision/handoff kind, exception variant, IO 완전일치 체인을 한 파일에 다 태운 시연용 세트.
 - 실 임포트 확인: 어댑터 이슈 0 · L6 4맵(24노드/25엣지, 분기 승격 4) · 연계 캔버스 7노드(분기 3개, 위/아래 팬아웃) · IO 자동 연결 21건 · 자동 draft 4건 · L5 노트 8건. `분류 확정 CR`을 두 노드가 내는 경우 최근접 상류(동률이면 낮은 seq)가 선택되는 것까지 확인.
