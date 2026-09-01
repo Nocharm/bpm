@@ -9134,20 +9134,38 @@ function MapEditor({ mapId }: { mapId: number }) {
                     onPointerLeave={() => setHoverRegionId(null)}
                   >
                     {index === 0 && l5Charcoal && (
-                      // 브랜드 워터마크 — 사선 리버스(화이트 저불투명) 도장, 뷰포트 고정(팬 무관).
-                      // ReactFlow보다 앞 DOM이라 노드/엣지 아래에 깔린다. 실 로고 SVG 제공 시 교체 여지
+                      // 브랜드 워터마크 — 회사 로고·시스템명·플랫 아이콘을 번갈아 사선 타일링(단조로움 완화).
+                      // ReactFlow보다 앞 DOM + 저불투명이라 노드/엣지를 가리지 않는다. 뷰포트 고정(팬 무관)
                       <div
                         aria-hidden
                         data-id="l5-brand-watermark"
-                        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden"
+                        className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
                       >
-                        <span className="-rotate-[24deg] select-none whitespace-nowrap text-[64px] tracking-[0.18em] text-canvas opacity-[0.06]">
-                          <span className="font-semibold">SAMSUNG</span>{" "}
-                          <span className="font-light">BIOLOGICS</span>
-                        </span>
+                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-14 text-canvas opacity-[0.06]">
+                          {Array.from({ length: 14 }, (_, row) => (
+                            <div
+                              key={row}
+                              className="flex items-center gap-16 whitespace-nowrap text-[15px] tracking-[0.18em]"
+                              // 홀수 행 오프셋 — 격자 정렬을 깨 자연스러운 벽지 리듬
+                              style={row % 2 === 1 ? { transform: "translateX(130px)" } : undefined}
+                            >
+                              {Array.from({ length: 5 }, (_, col) =>
+                                (row + col) % 3 === 0 ? (
+                                  <span key={col} className="font-semibold">SAMSUNG BIOLOGICS</span>
+                                ) : (row + col) % 3 === 1 ? (
+                                  <Workflow key={col} size={18} strokeWidth={1.5} className="shrink-0" />
+                                ) : (
+                                  <span key={col} className="font-light">Business Process Map</span>
+                                ),
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     <ReactFlow
+                      // 우하단 어트리뷰션 마크 숨김(공식 proOptions) — 사내 도구 화면 정리 (사용자 요청 2026-09-01)
+                      proOptions={{ hideAttribution: true }}
                       nodes={displayNodes}
                       edges={styledEdges}
                       nodeTypes={nodeTypes}

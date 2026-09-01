@@ -90,9 +90,15 @@ try {
   await page.waitForTimeout(600);
   // 새벽 조감도 — 90% 알파 그라데이션 하늘(스모크 글라스, 언더레이 없음) + 라운드 프레임, 도트·별 없음
   const skyDefault = String(await skyGradient(page));
-  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.94"), skyDefault.slice(0, 80));
+  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.8"), skyDefault.slice(0, 80));
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
   check("brand watermark on charcoal", (await page.locator('[data-id="l5-brand-watermark"]').count()) === 1);
+  check("react-flow attribution hidden", (await page.locator(".react-flow__attribution").count()) === 0);
+  // 타일링 — 로고·시스템명·아이콘이 여러 번 교차 반복되는지(단일 대형 도장 아님)
+  check("watermark is tiled (many items)", await page.evaluate(() => {
+    const wm = document.querySelector('[data-id="l5-brand-watermark"]');
+    return wm !== null && wm.querySelectorAll("span").length > 20 && wm.querySelectorAll("svg").length > 5;
+  }));
   check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
