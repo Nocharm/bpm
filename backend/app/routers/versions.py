@@ -54,6 +54,15 @@ router = APIRouter(
 )
 
 
+async def _assert_not_framework(session: AsyncSession, map_id: int) -> None:
+    """framework 캔버스는 확정(framework-confirm) 전용 — 일반 버전 워크플로 옆문 차단 (spec 2026-09-02 §6)."""
+    mode = await session.scalar(select(ProcessMap.mode).where(ProcessMap.id == map_id))
+    if mode == "framework":
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
+
+
 async def clone_graph(
     session: AsyncSession, source: MapVersion, target_version_id: int
 ) -> None:
@@ -177,6 +186,10 @@ async def create_version(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "framework":
+        raise HTTPException(
+            status_code=422, detail="framework maps use the confirm workflow"
+        )
 
     # 새 버전은 '현재(최신) 버전이 게시(published)된 뒤'에만 생성 (request #11 강화2).
     # draft/pending/rejected는 물론 approved(승인했지만 미게시)에서도 차단 → 반드시 게시해야 새 작업본 시작.
@@ -274,6 +287,7 @@ async def rename_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     version.label = payload.label
     await session.commit()
     await session.refresh(version)
@@ -572,6 +586,7 @@ async def submit_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     if not workflow.is_editable_status(version.status):
         raise HTTPException(
             status_code=409, detail=f"cannot submit from status {version.status}"
@@ -690,6 +705,7 @@ async def approve_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     if version.status != workflow.PENDING:
         raise HTTPException(
             status_code=409, detail=f"cannot approve from status {version.status}"
@@ -754,6 +770,7 @@ async def reject_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     if version.status != workflow.PENDING:
         raise HTTPException(
             status_code=409, detail=f"cannot reject from status {version.status}"
@@ -827,6 +844,7 @@ async def publish_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     if version.status != workflow.APPROVED:
         raise HTTPException(
             status_code=409, detail=f"cannot publish from status {version.status}"
@@ -925,6 +943,7 @@ async def republish_version(
     )
     if source is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, source.map_id)
 
     role = await get_effective_role(session, user, source.map_id)
     if role not in ("owner", "editor"):
@@ -975,6 +994,7 @@ async def withdraw_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
+    await _assert_not_framework(session, version.map_id)
     if version.status not in (workflow.PENDING, workflow.APPROVED, workflow.REJECTED):
         raise HTTPException(
             status_code=409, detail=f"cannot withdraw from status {version.status}"

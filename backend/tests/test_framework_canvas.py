@@ -450,6 +450,43 @@ def test_confirmed_snapshot_shows_in_dashboard(client: TestClient, enforce: None
     assert summary["version_status"]["confirmed"] >= 1
 
 
+def test_framework_map_rejects_version_workflow(client: TestClient, enforce: None) -> None:
+    """framework 캔버스는 일반 버전 워크플로 옆문 전건 422 (spec 2026-09-02 §6).
+
+    실파손 시나리오였던 것: 확정 후 create-version이 빈 draft를 만들고 다음 확정이 그
+    빈 draft를 복제, 게시 옆문은 confirmed 스냅샷 이력과 충돌. Task 1 이후 확정 직후의
+    최신 버전은 confirmed(≠published)라 create는 원래 409도 뜰 수 있으나, 가드는 404
+    체크 직후·다른 상태 게이트보다 먼저 걸려야 하므로 detail 문자열까지 단언한다.
+    """
+    detail_msg = "framework maps use the confirm workflow"
+    map_id, draft_id = _make_canvas(client, "FWC-VW5", "버전워크플로차단")
+    act_as("fwc.confirmer")
+    client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+
+    res = client.post(f"/api/maps/{map_id}/versions", json={"label": "x"})
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+    action_bodies: dict[str, dict | None] = {
+        "submit": {},
+        "approve": {},
+        "reject": {"reason": "x"},  # RejectIn.reason 필수 — 유효 바디로 가드가 페이로드 검증보다 먼저 걸리는지 확인
+        "publish": {},
+        "republish": None,  # republish는 바디 없음
+        "withdraw": {},
+    }
+    for action, body in action_bodies.items():
+        res = (
+            client.post(f"/api/versions/{draft_id}/{action}")
+            if body is None
+            else client.post(f"/api/versions/{draft_id}/{action}", json=body)
+        )
+        assert res.status_code == 422, f"{action}: {res.status_code} {res.text}"
+        assert res.json()["detail"] == detail_msg, f"{action}: {res.json()}"
+
+    res = client.patch(f"/api/versions/{draft_id}", json={"label": "hack"})
+    assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+
 def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:
     """분기·끝 노드 생성 허용(끝 규칙 적용), start/process는 계속 차단 (2026-08-28 개선)."""
     l5 = _seed_category(client, "FWC-D5", "분기L5", level=5)
