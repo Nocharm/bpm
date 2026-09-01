@@ -34,6 +34,8 @@ _X_STEP = 240
 _Y_STEP = 120  # rank 내 세로 간격
 _X0, _Y0 = 120, 200
 _BRANCH_PUSH = 60  # 곁가지 추가 이격 — flow-layout.ts와 동일 상수
+# 연계 캔버스 분기 출구 세로 간격 — SP 노드(64px)가 겹치지 않을 만큼
+LINKAGE_ROW_STEP = 130
 
 
 def node_size(node_type: str) -> tuple[int, int]:
@@ -363,14 +365,15 @@ def layout_flow(
     primary_end_id: str | None = None,
     back_pairs: set[tuple[str, str]] | None = None,
     labeled: list[tuple[str, str, str]] | None = None,
-) -> None:
-    """가로 자동정렬 전체 파이프라인 — 제자리 변형(nodes의 x/y를 채운다).
+) -> dict[str, int]:
+    """가로 자동정렬 전체 파이프라인 — 제자리 변형(nodes의 x/y를 채운다). 반환: 노드별 rank.
 
     back_pairs(재수행 loop 엣지)는 rank 계산에서 제외한다 — 되돌아가는 엣지를 선행으로 세면
     사이클로 떨어져 전체가 뒤 rank로 밀린다(레이아웃 붕괴).
+    반환한 rank는 연계 캔버스가 분기 팬아웃 순서를 잡는 데 쓴다(`plan_branch_fanout`).
     """
     if not nodes:
-        return
+        return {}
     ids = [n.id for n in nodes]
     present = set(ids)
     scoped = [(s, d) for s, d in pairs if s in present and d in present]
@@ -404,7 +407,61 @@ def layout_flow(
     spine = compute_spine(present, seed, scoped) if seed else set()
     if seed:
         align_backbone(nodes, spine, seed)
+    return ranks
 
+
+
+# 분기 출구 배정 순서 — 오른쪽 위 → 아래 → 옆 (사용자 결정 2026-09-01).
+# 3개를 넘으면 위/아래로 한 칸씩 더 벌린다.
+def _fan_slot(index: int) -> int:
+    """분기 출구 index → 분기 노드 기준 행 오프셋(음수=위, 양수=아래, 0=옆)."""
+    if index == 0:
+        return -1
+    if index == 1:
+        return 1
+    if index == 2:
+        return 0
+    step = (index - 3) // 2 + 2
+    return -step if (index - 3) % 2 == 0 else step
+
+
+def plan_branch_fanout(
+    flow: list[tuple[str, str, str]],
+    branch_of: dict[str, str],
+    ranks: dict[str, int],
+) -> tuple[dict[str, int], dict[tuple[str, str], str]]:
+    """분기 노드 출구를 위/아래/옆으로 벌린다 — 반환: (노드별 행, 엣지별 출구 변).
+
+    연계 캔버스는 노드가 전부 한 줄이라 분기가 어디로 갈라지는지 선만으로 안 읽힌다. 분기 노드는
+    일반 노드라 4면 핸들을 다 쓸 수 있으므로(SP는 좌 in·우 __primary__ 고정) 출구를 실제로 벌린다.
+
+    행 배정은 **먼저 배정된 쪽이 이긴다** — 한 노드가 두 분기의 대상이면(예: 두 갈래가 같은 L6로
+    합류) 나중 분기가 위치를 흔들면 안 된다. 출구 변은 최종 행에서 되뽑아 기하와 항상 일치시킨다.
+    """
+    rows: dict[str, int] = {}
+    targets_of: dict[str, list[str]] = {}
+    source_of: dict[str, str] = {}
+    for src, dst, _ in flow:
+        targets_of.setdefault(src, []).append(dst)
+        source_of.setdefault(dst, src)
+
+    # 상류부터 확정해야 분기 노드가 선행의 행을 물려받는다
+    for key in sorted(branch_of, key=lambda k: ranks.get(k, 0)):
+        feeder = source_of.get(key)
+        base = rows.get(feeder, 0) if feeder else 0
+        rows[key] = base
+        for i, dst in enumerate(targets_of.get(key, [])):
+            if dst in rows:
+                continue  # 이미 배정됨 — 먼저 배정된 쪽 우선
+            rows[dst] = base + _fan_slot(i)
+
+    sides: dict[tuple[str, str], str] = {}
+    for key in branch_of:
+        base = rows.get(key, 0)
+        for dst in targets_of.get(key, []):
+            delta = rows.get(dst, 0) - base
+            sides[(key, dst)] = "top" if delta < 0 else "bottom" if delta > 0 else "right"
+    return rows, sides
 
 def resolve_handles(
     nodes: list[LayoutNode],

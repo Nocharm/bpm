@@ -335,3 +335,56 @@ def test_edges_outside_the_canvas_are_ignored() -> None:
         [_lk("A", "B"), _lk("A", "GONE")], {"A", "B"})
     assert flow == [("A", "B", "")]
     assert branch_of == {}  # 남은 out-edge가 1개 → 분기 아님
+
+
+def test_branch_fanout_goes_top_then_bottom_then_side() -> None:
+    """분기 출구는 오른쪽 위 → 아래 → 옆 순 (사용자 결정 2026-09-01)."""
+    from scripts.consultant_layout import plan_branch_fanout
+
+    flow = [
+        ("A", "◇A", ""),
+        ("◇A", "X", ""),
+        ("◇A", "Y", ""),
+        ("◇A", "Z", ""),
+    ]
+    rows, sides = plan_branch_fanout(flow, {"◇A": "A"}, {"A": 0, "◇A": 1, "X": 2, "Y": 2, "Z": 2})
+    assert rows["X"] == -1 and rows["Y"] == 1 and rows["Z"] == 0
+    assert sides[("◇A", "X")] == "top"
+    assert sides[("◇A", "Y")] == "bottom"
+    assert sides[("◇A", "Z")] == "right"
+
+
+def test_fanout_beyond_three_keeps_spreading() -> None:
+    from scripts.consultant_layout import plan_branch_fanout
+
+    flow = [("A", "◇A", "")] + [("◇A", f"T{i}", "") for i in range(5)]
+    ranks = {"A": 0, "◇A": 1}
+    rows, sides = plan_branch_fanout(flow, {"◇A": "A"}, ranks)
+    assert [rows[f"T{i}"] for i in range(5)] == [-1, 1, 0, -2, 2]
+    assert sides[("◇A", "T3")] == "top" and sides[("◇A", "T4")] == "bottom"
+
+
+def test_shared_target_keeps_its_first_row() -> None:
+    """두 분기가 같은 L6로 합류하면 나중 분기가 위치를 흔들지 않는다."""
+    from scripts.consultant_layout import plan_branch_fanout
+
+    flow = [
+        ("A", "◇A", ""), ("◇A", "M", ""), ("◇A", "N", ""),
+        ("N", "◇N", ""), ("◇N", "M", ""), ("◇N", "Q", ""),
+    ]
+    ranks = {"A": 0, "◇A": 1, "M": 2, "N": 2, "◇N": 3, "Q": 4}
+    rows, sides = plan_branch_fanout(flow, {"◇A": "A", "◇N": "N"}, ranks)
+    assert rows["M"] == -1  # 첫 배정 유지
+    # 변은 최종 행에서 되뽑는다 — 기하와 항상 일치
+    assert rows["◇N"] == rows["N"] == 1
+    assert sides[("◇N", "M")] == "top"  # M(-1)이 ◇N(1)보다 위
+
+
+def test_branch_node_inherits_its_feeder_row() -> None:
+    from scripts.consultant_layout import plan_branch_fanout
+
+    flow = [("A", "◇A", ""), ("◇A", "B", ""), ("◇A", "C", ""), ("B", "◇B", ""), ("◇B", "D", "")]
+    ranks = {"A": 0, "◇A": 1, "B": 2, "C": 2, "◇B": 3, "D": 4}
+    rows, _ = plan_branch_fanout(flow, {"◇A": "A", "◇B": "B"}, ranks)
+    assert rows["B"] == -1 and rows["◇B"] == -1  # 선행 행을 물려받는다
+    assert rows["D"] == -2  # 그 위로 한 칸 더

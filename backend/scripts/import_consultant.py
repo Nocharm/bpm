@@ -43,13 +43,13 @@ from app.models import (
 from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.schemas import NUMERIC_RE
 from app.subprocess import (
-    DEFAULT_SOURCE_HANDLE,
     DEFAULT_TARGET_HANDLE,
     LINKAGE_Y0,
     LINKAGE_Y_STEP,
     PRIMARY_END_HANDLE,
     SUBPROCESS_IN_HANDLE,
     grid_positions,
+    side_source_handle,
     unique_linkage_name,
 )
 from app.routers.versions import clone_graph
@@ -60,9 +60,11 @@ from scripts.consultant_canonical import (
     CanonicalParams,
 )
 from scripts.consultant_layout import (
+    LINKAGE_ROW_STEP,
     LayoutNode,
     compute_spine_for,
     layout_flow,
+    plan_branch_fanout,
     resolve_handles,
 )
 
@@ -1060,20 +1062,26 @@ async def apply_interview_linkage(
         # 캔버스를 **처음 만들 때만** 흐름대로 가로 자동정렬한다. 보강은 기존 노드를 못 옮기므로
         # (추가만·이동 없음 규약) 격자로 아래에 붙인다.
         placed: dict[str, tuple[float, float]] = {}
+        fan_sides: dict[tuple[str, str], str] = {}
         if is_new_canvas and missing:
             layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
             layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
             known = {n.id for n in layout_nodes}
-            layout_flow(
+            scoped_flow = [(a, b, text) for a, b, text in flow if a in known and b in known]
+            ranks = layout_flow(
                 layout_nodes,
-                [(a, b) for a, b, _ in flow if a in known and b in known],
+                [(a, b) for a, b, _ in scoped_flow],
                 primary_end_id=None,
                 # loop(재수행)은 선행이 아니다 — 랭크에서 빼야 선행→분기 순서가 잡히고
                 # 되돌아가는 엣지는 그 위에 그려진다 (사용자 결정 2026-09-01)
                 back_pairs={p for p in back_pairs if p[0] in known and p[1] in known},
-                labeled=[(a, b, text) for a, b, text in flow
-                         if text and a in known and b in known],
+                labeled=[(a, b, text) for a, b, text in scoped_flow if text],
             )
+            # 분기 출구를 위/아래/옆으로 벌린다 — 한 줄이면 어디서 갈라지는지 선만으론 안 읽힌다
+            rows, fan_sides = plan_branch_fanout(
+                scoped_flow, {k: v for k, v in branch_of.items() if k in known}, ranks)
+            for node in layout_nodes:
+                node.y += rows.get(node.id, 0) * LINKAGE_ROW_STEP
             placed = {n.id: (n.x, n.y) for n in layout_nodes}
         added = 0
         grid = grid_positions(0, len(missing) + len(missing_branches), base_y)
@@ -1148,8 +1156,10 @@ async def apply_interview_linkage(
                 source_node_id=src.id, target_node_id=dst.id, label=label,
                 # 끝점 타입별 핸들 — SP는 전용(in/__primary__), 분기는 변별(s-/t-).
                 # 안 맞추면 React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다
+                source_side=fan_sides.get((src_key, dst_key), "right"),
                 source_handle=(
-                    PRIMARY_END_HANDLE if src.node_type == "subprocess" else DEFAULT_SOURCE_HANDLE
+                    PRIMARY_END_HANDLE if src.node_type == "subprocess"
+                    else side_source_handle(fan_sides.get((src_key, dst_key), "right"))
                 ),
                 target_handle=(
                     SUBPROCESS_IN_HANDLE if dst.node_type == "subprocess" else DEFAULT_TARGET_HANDLE
