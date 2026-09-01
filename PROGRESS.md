@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — Framework 트랙 A: confirmed 상태 분리·옆문 봉쇄 (dev)
+- 확정 스냅샷 published→confirmed 분리(멱등 startup 이전 포함)·게시 순번 채번 중단·삭제 보호. versions.py 8종+승인자/협업자/개명·SP요청 옆문 422, 설정 페이지·에디터 버튼 UI 봉쇄. 확정 전용 시각(스탬프 워터마크·타임라인 칩·Confirmed 필). 스펙: docs/superpowers/specs/2026-09-02-framework-l5-publish-governance-design.md §3·§6.
+
 ## 2026-09-02 — Framework L5 퍼블리시 기준·거버넌스 설계 스펙 (main)
 - L5 캔버스 확정에 완결성 게이트 6종(하드 블록)·`confirmed` 상태 분리(published 재사용 폐기)·옆문 11종 봉쇄·레벨별 권한 차등(행 위치=역할)·확정 요청 워크플로(상위→L5 관리자, ApprovalRequest kind 확장)·현황판을 브레인스토밍으로 확정. 조사에서 실파손 옆문 확인(확정 후 create-version→빈 draft 확정, created_by 게이트로 승인자 심어 draft 잠금, publish 옆문 시 스냅샷 전량 expired).
 - 스펙: `docs/superpowers/specs/2026-09-02-framework-l5-publish-governance-design.md` — 구현은 트랙 A(상태·봉쇄)→B(게이트·요청)→C(권한·현황판) 순. §8.3 홈 레벨 요약 카드 추가(트랙 C 최후순). 트랙 A 구현 플랜: `docs/superpowers/plans/2026-09-02-fw-track-a-confirmed-lockdown.md`(10태스크, 코드 앵커 실측).

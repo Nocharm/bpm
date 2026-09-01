@@ -163,16 +163,25 @@ try {
     return res.json();
   }, mapId);
   const statuses = (detail.versions ?? []).map((v) => v.status);
-  check("live draft stays editable next to published snapshot",
-    statuses.includes("draft") && statuses.includes("published"), statuses.join(","));
+  check("live draft stays editable next to confirmed snapshot",
+    statuses.includes("draft") && statuses.includes("confirmed"), statuses.join(","));
 
-  // 재로드 — 캔버스는 published 스냅샷이 있어도 라이브 draft를 기본으로 연다
+  // 재로드 — 캔버스는 confirmed 스냅샷이 있어도 라이브 draft를 기본으로 연다
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".react-flow__node", { timeout: 15000 });
   const tagAfter = await page.locator('[data-id="framework-l5-tag"]')
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("reload keeps canvas usable (draft-first selection)", tagAfter);
   await shot(page, "canvas-after-confirm");
+
+  // 스냅샷 버전으로 전환해 확정 워터마크 확인 — 버전 드롭다운 대신 URL 파라미터로 직행
+  await page.goto(`${BASE}/maps/${mapId}?version=${confirm1.body.version.id}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 15000 });
+  // getByText는 페이지 전역에서 대소문자 구분 없이 매칭될 여지가 있어, 워터마크 span(uppercase 클래스) 텍스트로 특정
+  const stamp = await page.locator('span.uppercase', { hasText: "CONFIRMED" }).first()
+    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  check("confirmed snapshot shows CONFIRMED stamp watermark", stamp);
+  await shot(page, "confirmed-stamp-watermark");
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
   await ctx.close();
