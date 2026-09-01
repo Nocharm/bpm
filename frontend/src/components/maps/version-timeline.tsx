@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 
-import { ArrowRight, Check, ChevronRight, Clock, GitCommit, Layers, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, ChevronRight, Clock, GitCommit, Layers, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
@@ -25,6 +25,7 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   approved: "home.verEvent.approved",
   rejected: "home.verEvent.rejected",
   published: "home.verEvent.published",
+  confirmed: "home.verEvent.confirmed",
   withdrawn: "home.verEvent.withdrawn",
 };
 
@@ -35,21 +36,23 @@ function EventIcon({ type }: { type: string }) {
   if (type === "approved") return <Check size={12} strokeWidth={1.7} />;
   if (type === "rejected") return <X size={12} strokeWidth={1.7} />;
   if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
+  if (type === "confirmed") return <BadgeCheck size={12} strokeWidth={1.7} />;
   if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.7} />;
   return <GitCommit size={12} strokeWidth={1.7} />;
 }
 
-// 이벤트 칩/단계 필 색 — 생성=중립 · 승인요청=accent · 승인/게시=green · 반려=red.
+// 이벤트 칩/단계 필 색 — 생성=중립 · 승인요청=accent · 승인/게시=green · 반려=red · 담당자확정=액센트 틴트(게시 green과 구분).
 const EVENT_CHIP: Record<string, string> = {
   created: "border-hairline bg-surface-alt text-ink-secondary",
   submitted: "border-accent-tint-border bg-accent-tint text-accent",
   approved: "border-added/40 bg-added/10 text-added",
   published: "border-added/40 bg-added/10 text-added",
+  confirmed: "border-accent-tint-border bg-accent-tint text-accent",
   rejected: "border-error/40 bg-error/10 text-error",
   withdrawn: "border-changed/40 bg-changed/10 text-changed",
 };
 
-// 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green).
+// 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green, 담당자확정=채움 액센트).
 function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
   switch (eventType) {
     case "created":
@@ -60,6 +63,8 @@ function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon
       return { cls: "border-added bg-added text-on-accent", Icon: Check };
     case "published":
       return { cls: "border-added bg-added text-on-accent", Icon: Upload };
+    case "confirmed":
+      return { cls: "border-accent bg-accent text-on-accent", Icon: BadgeCheck };
     case "rejected":
       return { cls: "border-error bg-surface text-error", Icon: X };
     case "withdrawn":
@@ -234,8 +239,12 @@ export function VersionTimeline({
         // 회수는 백엔드에서 조건부 기록(승인 1건 이상일 때만) — 남아 있으면 그대로 표시.
         const events: VersionEvent[] = [...version.events].reverse();
         // 접힘 칩 — 게시는 우측 고정·이름 생략(툴팁으로), 나머지 승인내역은 1줄만 (2026-07-11 요청)
-        const publishedEvt = events.find((evt) => evt.event_type === "published");
-        const chipEvents = events.filter((evt) => evt.event_type !== "published");
+        const publishedEvt = events.find(
+          (evt) => evt.event_type === "published" || evt.event_type === "confirmed",
+        );
+        const chipEvents = events.filter(
+          (evt) => evt.event_type !== "published" && evt.event_type !== "confirmed",
+        );
         // 상세행 — 날짜/시각 분리. 같은 날짜 연속이면 날짜 박스 1개가 그 행들 높이만큼 span(rowspan), 날짜 윗 정렬 (H3)
         const rawRows = events.map((evt) => {
           const full = formatStamp(evt.created_at);
@@ -399,11 +408,11 @@ export function VersionTimeline({
                         {publishedEvt && (
                           <span
                             data-id={`version-event-${publishedEvt.id}`}
-                            title={`${t("home.verEvent.published")} - ${nameOf(publishedEvt.actor)}`}
-                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP.published}`}
+                            title={`${t(publishedEvt.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published")} - ${nameOf(publishedEvt.actor)}`}
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP[publishedEvt.event_type] ?? EVENT_CHIP.published}`}
                           >
-                            <EventIcon type="published" />
-                            {t("home.verEvent.published")}
+                            <EventIcon type={publishedEvt.event_type} />
+                            {t(publishedEvt.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published")}
                           </span>
                         )}
                       </div>

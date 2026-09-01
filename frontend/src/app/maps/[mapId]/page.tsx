@@ -1364,33 +1364,40 @@ function MapEditor({ mapId }: { mapId: number }) {
             title: t("editor.readonly.checkoutTitle", { name: checkoutHolderLabel }),
             desc: t("editor.readonly.checkoutDesc"),
           }
-        : currentVersion?.status === "published"
+        : currentVersion?.status === "confirmed"
           ? {
               tone: "accent",
               icon: BadgeCheck,
-              title: t("editor.readonly.publishedTitle"),
-              desc: t("editor.readonly.publishedDesc"),
+              title: t("editor.readonly.confirmedTitle"),
+              desc: t("editor.readonly.confirmedDesc"),
             }
-          : currentVersion?.status === "expired"
+          : currentVersion?.status === "published"
             ? {
-                tone: "neutral",
-                icon: Archive,
-                title: t("editor.readonly.expiredTitle"),
-                desc: t("editor.readonly.expiredDesc"),
+                tone: "accent",
+                icon: BadgeCheck,
+                title: t("editor.readonly.publishedTitle"),
+                desc: t("editor.readonly.publishedDesc"),
               }
-            : currentVersion?.status === "approved"
+            : currentVersion?.status === "expired"
               ? {
-                  tone: "warn",
-                  icon: CircleCheck,
-                  title: t("editor.readonly.approvedTitle"),
-                  desc: t("editor.readonly.approvedDesc"),
+                  tone: "neutral",
+                  icon: Archive,
+                  title: t("editor.readonly.expiredTitle"),
+                  desc: t("editor.readonly.expiredDesc"),
                 }
-              : {
-                  tone: "warn",
-                  icon: Hourglass,
-                  title: t("editor.readonly.pendingTitle"),
-                  desc: t("editor.readonly.pendingDesc"),
-                };
+              : currentVersion?.status === "approved"
+                ? {
+                    tone: "warn",
+                    icon: CircleCheck,
+                    title: t("editor.readonly.approvedTitle"),
+                    desc: t("editor.readonly.approvedDesc"),
+                  }
+                : {
+                    tone: "warn",
+                    icon: Hourglass,
+                    title: t("editor.readonly.pendingTitle"),
+                    desc: t("editor.readonly.pendingDesc"),
+                  };
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
@@ -9697,23 +9704,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                         게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정 */}
                     {readOnly && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
-                        <span
-                          className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
-                            // 차콜 캔버스에선 accent/회색이 묻힘 — 밝은색으로 동일한 은은함 유지.
-                            // text-canvas(#f6f6f8) — 다크 셸이 --color-surface를 뒤집어도 라이트로 남는 토큰
-                            index === 0 && l5Charcoal
-                              ? "text-canvas"
+                        {currentVersion?.status === "confirmed" ? (
+                          /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프. 다크 하늘 위에서도 토큰 그대로(범위 밖: 커스텀 다크 대응) */
+                          <span className="flex -rotate-[18deg] select-none items-center gap-4 rounded-md border-[6px] border-accent px-10 py-4 text-[96px] font-semibold uppercase tracking-widest text-accent opacity-[0.14]">
+                            <BadgeCheck size={96} strokeWidth={1.5} />
+                            {t("editor.watermarkConfirmed")}
+                          </span>
+                        ) : (
+                          <span
+                            className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                              // 차콜 캔버스에선 accent/회색이 묻힘 — 밝은색으로 동일한 은은함 유지.
+                              // text-canvas(#f6f6f8) — 다크 셸이 --color-surface를 뒤집어도 라이트로 남는 토큰
+                              index === 0 && l5Charcoal
+                                ? "text-canvas"
+                                : currentVersion?.status === "expired"
+                                  ? "text-ink-tertiary"
+                                  : "text-accent"
+                            }`}
+                          >
+                            {currentVersion?.status === "published"
+                              ? t("editor.watermarkPublished")
                               : currentVersion?.status === "expired"
-                                ? "text-ink-tertiary"
-                                : "text-accent"
-                          }`}
-                        >
-                          {currentVersion?.status === "published"
-                            ? t("editor.watermarkPublished")
-                            : currentVersion?.status === "expired"
-                              ? t("editor.watermarkExpired")
-                              : t("editor.watermark")}
-                        </span>
+                                ? t("editor.watermarkExpired")
+                                : t("editor.watermark")}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
