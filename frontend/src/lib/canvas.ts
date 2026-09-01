@@ -205,6 +205,13 @@ export function buildNodeData(
 // ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용
 export const NODE_WIDTH = 170;
 export const NODE_HEIGHT = 52;
+
+// 엣지 라벨 최대폭(px) — 넘치면 자동 줄바꿈. 라벨은 경로 중앙에 놓이므로 이 폭이 곧
+// "랭크 사이에 비어 있어야 하는 가로 공간"이다. 임포트 자동배치(backend/scripts/consultant_layout.py
+// EDGE_LABEL_MAX_WIDTH)가 같은 값으로 간격을 잡는다 — 한쪽만 바꾸면 첫 배치에서 라벨이 노드를 덮는다.
+export const EDGE_LABEL_MAX_WIDTH = 160;
+// 라벨 배경 좌우 패딩 합 — maxWidth 밖으로 더해지는 실제 점유폭
+export const EDGE_LABEL_PAD_X = 12;
 // 라벨 wrap 상한 — process·start/end 노드는 이 폭에서 여러 줄로 줄바꿈(process-node.tsx `max-w-[240px]`와 동기화 필수).
 export const NODE_MAX_WIDTH = 240;
 

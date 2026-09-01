@@ -224,6 +224,13 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     if (result.summary.notes !== undefined) {
       chips.push({ key: "notes", label: t("framework.interviewNotes"), count: result.summary.notes });
     }
+    if (result.summary.linkage !== undefined) {
+      chips.push({
+        key: "linkage",
+        label: t("framework.interviewLinkage"),
+        count: result.summary.linkage,
+      });
+    }
     if (result.summary.governance !== undefined) {
       chips.push({
         key: "governance",

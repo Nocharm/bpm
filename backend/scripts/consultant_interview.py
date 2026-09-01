@@ -1,6 +1,7 @@
-"""인터뷰 결과 JSON(0.3-bpm-interface-draft) → canonical 변환 어댑터 — DB 무관 순수 함수.
+"""인터뷰 결과 JSON(0.4-bpm-interface-draft) → canonical 변환 어댑터 — DB 무관 순수 함수.
 
-설계: docs/design/2026-08-18-interview-import-design.md §2·§3. 한 파일 = L5 1건.
+설계: docs/design/2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
+docs/design/2026-08-18-interview-import-design.md §2·§3(원설계). 한 파일 = L5 1건.
 구조 치명 오류는 error issue + 빈 maps로 반환하고 예외를 던지지 않는다 — 파일별 독립
 처리(다중 파일 일괄 임포트에서 한 파일의 오류가 다른 파일을 죽이지 않는다).
 error가 1건이라도 있으면 그 파일 전체를 임포트에서 제외한다(부분 임포트 없음 —
@@ -23,11 +24,11 @@ from scripts.consultant_canonical import (
 
 _TOP_KEYS = {
     "_readme", "schema_version", "labelSource", "framework", "l5",
-    "rows", "tasks", "summary", "openItems", "sideNotes",
+    "relations", "rows", "tasks", "summary", "openItems", "sideNotes",
 }
 _ROW_KEYS = {
     "taskId", "unitId", "l6", "owner", "ownerRole", "approvers",
-    "department", "fields", "actions",
+    "department", "fields", "actions", "relations",
 }
 # done_criteria/done_criterial 이중 수용 — 손타이핑 전달 스펙의 표기 모호(실파일 대조 전)
 _FIELD_KEYS = {
@@ -47,6 +48,13 @@ _TASK_KEYS = {
 }
 _EXCEPTION_KEYS = {"name", "rule", "evidence"}
 _KNOWN_KINDS = {"action", "handoff", "decision"}
+# 0.4 흐름 그래프 — L5(rows 사이)와 L6(actions 사이)가 같은 엣지 스키마를 쓴다
+_RELATIONS_KEYS = {"entry", "edges"}
+_ENTRY_KEYS = {"taskId", "triggerType", "label", "quote"}
+_EDGE_KEYS = {"src", "dst", "kind", "gateway", "condition", "label", "quote"}
+_KNOWN_EDGE_KINDS = {"seq", "branch", "loop", "bypass"}
+_KNOWN_GATEWAYS = {"exclusive", "parallel"}
+_KNOWN_TRIGGERS = {"message", "timer", "condition", "manual"}
 
 # 예외 variant 노드 stroke — 에디터 COLOR_PRESETS의 rose와 수동 동기
 # (frontend/src/app/maps/[mapId]/page.tsx COLOR_PRESETS — 색은 chrome이 아니라 노드 데이터)
@@ -80,11 +88,40 @@ class InterviewNote:
 
 
 @dataclass
+class InterviewLinkageEdge:
+    """L5 연계 캔버스 엣지 원료 — 끝점은 rows[].taskId(=맵 consultant_code).
+
+    kind는 저장되지 않지만 배치에 필요하다 — loop을 선행으로 세면 사이클이라 랭크가 무너진다.
+    """
+
+    source: str
+    target: str
+    label: str = ""
+    kind: str = "seq"
+    gateway: str = ""
+
+
+@dataclass
+class InterviewLinkage:
+    """L6 사이 흐름 — L5 연계 캔버스 시드/보강 원료 (design 2026-09-01 §3).
+
+    map_codes는 캔버스 배치 순서(진입 L6가 맨 앞). params는 code → (annual_count, fte) —
+    연계 캔버스 SP 노드가 이 두 값의 유일한 착지면이다.
+    """
+
+    category_code: str
+    map_codes: list[str] = field(default_factory=list)
+    edges: list[InterviewLinkageEdge] = field(default_factory=list)
+    params: dict[str, tuple[str, str]] = field(default_factory=dict)
+
+
+@dataclass
 class AdapterResult:
     categories: list[CanonicalCategory] = field(default_factory=list)
     maps: list[CanonicalMap] = field(default_factory=list)
     notes: list[InterviewNote] = field(default_factory=list)
     issues: list[AdapterIssue] = field(default_factory=list)
+    linkage: InterviewLinkage | None = None
 
     def has_error(self) -> bool:
         return any(i.severity == "error" for i in self.issues)
@@ -172,12 +209,52 @@ def _truncate(value: str, limit: int, path: str, label: str, issues: list[Adapte
     return value
 
 
-def _build_nodes_and_edges(
+def _param_text(value: object) -> str:
+    r"""JSON 숫자/문자 → 파라미터 문자열.
+
+    float를 str()로 굳히면 지수표기("1e-05")가 나와 엔진 NUMERIC_RE(^\d+(\.\d+)?$)에 걸려
+    조용히 소거된다 — 0.4에서 처음 숫자로 채워지는 필드라 고정소수로 굳힌다.
+    """
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f"{value:.6f}".rstrip("0").rstrip(".") or "0"
+    return _clean(value)
+
+
+def normalize_dept_path(value: object) -> str:
+    """조직 경로 세그먼트 공백 정리 — "A/ B/C" → "A/B/C".
+
+    전달물 부서 경로에 "/" 뒤 공백이 섞이면 known 조직경로 집합과 안 맞아 엔진이 오너 org로
+    조용히 폴백한다(값이 바뀐 줄 모른 채 임포트됨) — 경계에서 미리 맞춘다.
+    """
+    text = _clean(value)
+    if not text:
+        return ""
+    return "/".join(seg for seg in (part.strip() for part in text.split("/")) if seg)
+
+
+def _edge_label(label: object, condition: object) -> str:
+    """엣지 라벨 = label + 줄바꿈 + condition — 엣지 라벨은 다중행 지원(Alt/Shift+Enter)."""
+    return "\n".join(part for part in (_clean(label), _clean(condition)) if part)
+
+
+def _flow_note_text(kind: str, gateway: str, condition: str, quote: str) -> str:
+    """흐름 노트 본문 = 근거 발화 + 엣지 메타 한 줄(Edge 테이블엔 label밖에 없어 여기 보존)."""
+    meta = f"{kind}/{gateway}" if gateway else kind
+    if condition:
+        meta = f"{meta} · {condition}"
+    return f"{quote}\n({meta})"
+
+
+def _build_nodes(
     actions: list, path: str, issues: list[AdapterIssue]
-) -> tuple[list[CanonicalNode], list[CanonicalEdge]]:
-    """seq 그룹 k 전원 → k+1 전원 엣지 — 유일 seq면 순차 체인, 중복 seq면 병렬 분기/합류."""
-    groups: dict[int, list[CanonicalNode]] = {}
-    seen_in_group: dict[int, int] = {}
+) -> tuple[list[CanonicalNode], dict[int, CanonicalNode]]:
+    """actions[] → 노드 + seq 색인. 0.4에서 seq는 relations 참조키라 중복이면 파일 error."""
+    nodes: list[CanonicalNode] = []
+    by_seq: dict[int, CanonicalNode] = {}
     for j, action in enumerate(actions):
         apath = f"{path}.actions[{j}]"
         if not isinstance(action, dict):
@@ -189,8 +266,13 @@ def _build_nodes_and_edges(
         if seq is None:
             parsed = _parse_minutes(seq_raw)  # 숫자 문자열 수용(음수 제외) — 별도 파서 불필요
             seq = parsed if parsed is not None else j + 1
-            if not isinstance(seq_raw, int) or isinstance(seq_raw, bool):
-                issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} — fallback {seq}"))
+            issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} — fallback {seq}"))
+        if seq in by_seq:
+            issues.append(AdapterIssue(
+                "error", apath,
+                f"duplicate seq {seq} — seq is the relations reference key in 0.4",
+            ))
+            continue
         label = _clean(action.get("label"))
         if not label:
             label = f"Step {seq}"
@@ -199,18 +281,13 @@ def _build_nodes_and_edges(
         kind = _clean(action.get("kind"))
         if kind and kind not in _KNOWN_KINDS:
             issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} — treated as action"))
-        system = _truncate(_clean(action.get("system")), 100, apath, "system", issues)
-        occurrence = seen_in_group.get(seq, 0) + 1
-        seen_in_group[seq] = occurrence
-        code = f"a{seq:02d}" if occurrence == 1 else f"a{seq:02d}-{occurrence}"
-        # 예외 variant는 흐름 분기 대신 색으로만 분리 — 앵커(분기 시작/합류) 정보가 전달물에
-        # 없어 진짜 분기는 그릴 수 없다(협의 확장 포인트, design 2026-08-18 §3).
+        # 예외 variant는 흐름 분기 대신 색으로만 분리 — 분기 자체는 relations 엣지가 그린다
         variant = _clean(action.get("variant"))
-        groups.setdefault(seq, []).append(CanonicalNode(
-            code=code,
+        node = CanonicalNode(
+            code=f"a{seq:02d}",
             name=label,
             type="decision" if kind == "decision" else "process",
-            system=system,
+            system=_truncate(_clean(action.get("system")), 100, apath, "system", issues),
             seq=seq,
             # input/output/dataForm은 고유 필드로 승격, system 원문은 폴백에 이중 기록
             # (라이브러리화 전 표시 무회귀 — design 2026-08-19 §4.1). str 외에 list가 오면
@@ -224,18 +301,197 @@ def _build_nodes_and_edges(
             ),
             description=format_node_description(action),
             color=EXCEPTION_VARIANT_COLOR if variant == "exception" else "",
-        ))
+        )
+        by_seq[seq] = node
+        nodes.append(node)
+    nodes.sort(key=lambda n: n.seq)
+    return nodes, by_seq
 
-    nodes: list[CanonicalNode] = []
+
+def _seq_chain(by_seq: dict[int, CanonicalNode]) -> list[CanonicalEdge]:
+    """relations 부재 시 폴백 — seq 오름차순 순차 체인."""
+    ordered = sorted(by_seq)
+    return [
+        CanonicalEdge.model_validate(
+            {"from": by_seq[a].code, "to": by_seq[b].code, "label": "", "kind": "seq"}
+        )
+        for a, b in zip(ordered, ordered[1:])
+    ]
+
+
+def _build_flow_edges(
+    relations: object, by_seq: dict[int, CanonicalNode], path: str, issues: list[AdapterIssue]
+) -> tuple[list[CanonicalEdge], list[InterviewNote]]:
+    """rows[].relations.edges → 엣지 + quote 노트 (design 2026-09-01 §2).
+
+    src/dst는 actions[].seq를 가리킨다. branch 엣지는 src 노드를 decision으로 승격한다 —
+    actions[].kind(action/handoff/decision)는 분기 노드를 신뢰할 수 없고 엣지가 진실이다.
+    """
+    if relations is None:
+        issues.append(AdapterIssue("warning", path, "relations missing — seq chain fallback"))
+        return _seq_chain(by_seq), []
+    if not isinstance(relations, dict):
+        issues.append(AdapterIssue(
+            "warning", f"{path}.relations", "relations is not an object — seq chain fallback"))
+        return _seq_chain(by_seq), []
+    _warn_unknown_keys(relations, _RELATIONS_KEYS, f"{path}.relations", issues)
+    raw_edges = relations.get("edges")
+    if not isinstance(raw_edges, list):
+        issues.append(AdapterIssue(
+            "warning", f"{path}.relations.edges",
+            "edges missing or not a list — seq chain fallback"))
+        return _seq_chain(by_seq), []
+
     edges: list[CanonicalEdge] = []
-    ordered_seqs = sorted(groups)
-    for seq in ordered_seqs:
-        nodes.extend(groups[seq])
-    for prev_seq, next_seq in zip(ordered_seqs, ordered_seqs[1:]):
-        for src in groups[prev_seq]:
-            for dst in groups[next_seq]:
-                edges.append(CanonicalEdge.model_validate({"from": src.code, "to": dst.code}))
-    return nodes, edges
+    notes: list[InterviewNote] = []
+    seen: set[tuple[str, str]] = set()
+    for k, raw in enumerate(raw_edges):
+        epath = f"{path}.relations.edges[{k}]"
+        if not isinstance(raw, dict):
+            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped"))
+            continue
+        _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
+        src, dst = raw.get("src"), raw.get("dst")
+        src_node = by_seq.get(src) if isinstance(src, int) and not isinstance(src, bool) else None
+        dst_node = by_seq.get(dst) if isinstance(dst, int) and not isinstance(dst, bool) else None
+        if src_node is None or dst_node is None:
+            issues.append(AdapterIssue(
+                "warning", epath, f"edge references unknown seq {src!r}→{dst!r} — dropped"))
+            continue
+        if src_node is dst_node:
+            issues.append(AdapterIssue("warning", epath, f"self edge on seq {src!r} — dropped"))
+            continue
+        pair = (src_node.code, dst_node.code)
+        if pair in seen:
+            issues.append(AdapterIssue(
+                "warning", epath, f"duplicate edge {pair[0]}→{pair[1]} — dropped"))
+            continue
+        seen.add(pair)
+        kind = _clean(raw.get("kind")) or "seq"
+        if kind not in _KNOWN_EDGE_KINDS:
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq"))
+            kind = "seq"
+        gateway = _clean(raw.get("gateway"))
+        if gateway and gateway not in _KNOWN_GATEWAYS:
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only"))
+        condition = _clean(raw.get("condition"))
+        edges.append(CanonicalEdge.model_validate({
+            "from": src_node.code,
+            "to": dst_node.code,
+            "label": _truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
+            "kind": kind,
+        }))
+        # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
+        # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2)
+        if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
+            src_node.type = "decision"
+            issues.append(AdapterIssue(
+                "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge)"))
+        quote = _clean(raw.get("quote"))
+        if quote:
+            notes.append(InterviewNote(
+                kind="flow",
+                title=f"{src_node.name} → {dst_node.name}"[:300],
+                text=_flow_note_text(kind, gateway, condition, quote),
+            ))
+    if not edges and by_seq:
+        issues.append(AdapterIssue(
+            "warning", f"{path}.relations.edges", "no usable edges — seq chain fallback"))
+        return _seq_chain(by_seq), notes
+    return edges, notes
+
+
+def _build_linkage(
+    relations: object, l5_code: str, row_names: dict[str, str], issues: list[AdapterIssue]
+) -> tuple[InterviewLinkage, list[InterviewNote]]:
+    """최상위 relations → L5 연계 캔버스 원료 + entry 노트 (design 2026-09-01 §3).
+
+    entry는 Start 노드가 될 수 없다 — validate_framework_canvas가 연계 캔버스에
+    subprocess/decision/end만 허용한다. 대신 진입 L6를 배치 첫 자리로 올리고 L5 노트로 남긴다.
+    L6 레벨 branch는 노드 타입을 못 바꾼다(src가 subprocess) — 다중 out-edge + 라벨로만 표현된다.
+    """
+    linkage = InterviewLinkage(category_code=l5_code, map_codes=list(row_names))
+    notes: list[InterviewNote] = []
+    if relations is None:
+        issues.append(AdapterIssue("warning", "relations", "relations missing — no L6 flow to seed"))
+        return linkage, notes
+    if not isinstance(relations, dict):
+        issues.append(AdapterIssue("warning", "relations", "relations is not an object — ignored"))
+        return linkage, notes
+    _warn_unknown_keys(relations, _RELATIONS_KEYS, "relations", issues)
+
+    entry = relations.get("entry")
+    if entry is not None and not isinstance(entry, dict):
+        issues.append(AdapterIssue("warning", "relations.entry", "entry is not an object — ignored"))
+        entry = None
+    if isinstance(entry, dict):
+        _warn_unknown_keys(entry, _ENTRY_KEYS, "relations.entry", issues)
+        trigger = _clean(entry.get("triggerType"))
+        if trigger and trigger not in _KNOWN_TRIGGERS:
+            issues.append(AdapterIssue("warning", "relations.entry", f"unknown triggerType {trigger!r}"))
+        entry_code = _clean(entry.get("taskId"))
+        if entry_code and entry_code not in row_names:
+            issues.append(AdapterIssue(
+                "warning", "relations.entry", f"taskId {entry_code!r} not in rows — ignored"))
+            entry_code = ""
+        if entry_code:
+            linkage.map_codes = [entry_code] + [c for c in row_names if c != entry_code]
+        text = "\n".join(p for p in (_clean(entry.get("label")), _clean(entry.get("quote"))) if p)
+        if text:
+            notes.append(InterviewNote(
+                kind="entry",
+                title=f"Entry ({trigger})" if trigger else "Entry",
+                text=text,
+                category_code=l5_code,
+            ))
+
+    raw_edges = relations.get("edges")
+    if raw_edges is not None and not isinstance(raw_edges, list):
+        issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list — ignored"))
+        raw_edges = None
+    seen: set[tuple[str, str]] = set()
+    for k, raw in enumerate(raw_edges or []):
+        epath = f"relations.edges[{k}]"
+        if not isinstance(raw, dict):
+            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped"))
+            continue
+        _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
+        src, dst = _clean(raw.get("src")), _clean(raw.get("dst"))
+        if src not in row_names or dst not in row_names:
+            issues.append(AdapterIssue(
+                "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} — dropped"))
+            continue
+        if src == dst:
+            issues.append(AdapterIssue("warning", epath, f"self edge on {src!r} — dropped"))
+            continue
+        if (src, dst) in seen:
+            issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} — dropped"))
+            continue
+        seen.add((src, dst))
+        kind = _clean(raw.get("kind")) or "seq"
+        if kind not in _KNOWN_EDGE_KINDS:
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq"))
+            kind = "seq"
+        gateway = _clean(raw.get("gateway"))
+        if gateway and gateway not in _KNOWN_GATEWAYS:
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only"))
+        condition = _clean(raw.get("condition"))
+        linkage.edges.append(InterviewLinkageEdge(
+            source=src,
+            target=dst,
+            label=_truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
+            kind=kind,
+            gateway=gateway,
+        ))
+        quote = _clean(raw.get("quote"))
+        if quote:
+            notes.append(InterviewNote(
+                kind="flow",
+                title=f"{row_names[src]} → {row_names[dst]}"[:300],
+                text=_flow_note_text(kind, gateway, condition, quote),
+                category_code=l5_code,
+            ))
+    return linkage, notes
 
 
 def convert_interview(raw: object) -> AdapterResult:
@@ -247,10 +503,15 @@ def convert_interview(raw: object) -> AdapterResult:
         return result
     _warn_unknown_keys(raw, _TOP_KEYS, "$", issues)
 
+    # 0.4 전용 — 0.3은 흐름 그래프(relations)가 없어 수용하면 조용히 일직선 맵이 되고 그 사실이
+    # 경고 한 줄에 묻힌다. 하위호환 대신 명시적 거부 (design 2026-09-01 §1).
     version = _clean(raw.get("schema_version"))
-    if not version.startswith("0.3"):
-        issues.append(AdapterIssue("warning", "schema_version",
-                                   f"unexpected schema_version {version!r} (expected 0.3*)"))
+    if not version.startswith("0.4"):
+        issues.append(AdapterIssue(
+            "error", "schema_version",
+            f"unsupported schema_version {version!r} — re-deliver as 0.4-bpm-interface-draft",
+        ))
+        return result
 
     framework = raw.get("framework")
     if not isinstance(framework, dict) or not isinstance(framework.get("categories"), list):
@@ -293,6 +554,7 @@ def convert_interview(raw: object) -> AdapterResult:
 
     unit_to_task: dict[str, str] = {}
     seen_task_ids: set[str] = set()
+    row_names: dict[str, str] = {}  # 성립한 맵만 — 삽입 순서가 연계 캔버스 배치 순서가 된다
     for i, row in enumerate(rows):
         path = f"rows[{i}]"
         if not isinstance(row, dict):
@@ -333,7 +595,8 @@ def convert_interview(raw: object) -> AdapterResult:
             actions = []
         if not actions:
             issues.append(AdapterIssue("warning", path, "no actions — map will only have Start/End"))
-        nodes, edges = _build_nodes_and_edges(actions, path, issues)
+        nodes, by_seq = _build_nodes(actions, path, issues)
+        edges, flow_notes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
 
         params: dict[str, str] = {
             "input": _join_multi(fields.get("input_data")),
@@ -348,7 +611,8 @@ def convert_interview(raw: object) -> AdapterResult:
             if minutes is not None:
                 params[param_key] = format_minutes_hmm(minutes)
         for key in ("annual_count", "headcount", "fte"):
-            value = _clean(fields.get(key))
+            # 0.4는 JSON 숫자로 보낸다 — str()이면 지수표기가 섞여 엔진이 소거한다 (design §4)
+            value = _param_text(fields.get(key))
             if value:
                 # 숫자 검증은 엔진(_normalize_params) 담당 — 여기선 컬럼폭(50)만 방어
                 params[key] = _truncate(value, 50, f"{path}.fields", key, issues)
@@ -366,7 +630,8 @@ def convert_interview(raw: object) -> AdapterResult:
                 category=l5_code,
                 owner=_clean(row.get("owner")) or None,
                 approvers=approvers,
-                department=_truncate(_clean(row.get("department")), 100, path, "department", issues),
+                department=_truncate(
+                    normalize_dept_path(row.get("department")), 100, path, "department", issues),
                 description=format_map_description(row.get("ownerRole"), fields.get("artifact_role")),
                 # 승격 대표 필드 — systems는 sp_system 원문+폴백 이중 기록 (design 2026-08-19 §4.1)
                 system=_truncate(_clean(fields.get("systems")), 100, fpath, "systems", issues),
@@ -390,6 +655,10 @@ def convert_interview(raw: object) -> AdapterResult:
         except (ValidationError, ValueError) as exc:
             issues.append(AdapterIssue("error", path, f"canonical validation failed: {exc}"))
             continue
+        row_names[task_id] = name
+        for note in flow_notes:  # 엣지 근거 발화 — 맵 스코프로 확정 (design 2026-09-01 §2)
+            note.map_code = task_id
+        result.notes.extend(flow_notes)
 
         task = tasks_by_id.get(task_id)
         exceptions = task.get("exceptions") if isinstance(task, dict) else None
@@ -412,6 +681,16 @@ def convert_interview(raw: object) -> AdapterResult:
         task_note = _clean(task.get("note")) if isinstance(task, dict) else ""
         if task_note:
             result.notes.append(InterviewNote(kind="task_note", text=task_note, map_code=task_id))
+
+    # L6 사이 흐름 → L5 연계 캔버스 원료. annual_count/fte는 여기서만 착지한다 (design §3)
+    linkage, entry_notes = _build_linkage(raw.get("relations"), l5_code, row_names, issues)
+    linkage.params = {
+        m.code: (m.params.annual_count, m.params.fte)
+        for m in result.maps
+        if m.params.annual_count or m.params.fte
+    }
+    result.linkage = linkage
+    result.notes.extend(entry_notes)
 
     side_notes = raw.get("sideNotes")
     if side_notes is not None and not isinstance(side_notes, list):

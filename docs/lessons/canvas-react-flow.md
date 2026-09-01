@@ -27,4 +27,10 @@
 ## 5. Turbopack
 - dev에서 `globals.css`의 `.react-flow__node` 대상 규칙을 purge한다 → 인라인 애니메이션 등은 JSX 내 raw `<style>` 태그로 주입.
 
+## 6. 서버가 만드는 엣지 — 핸들 없으면 **조용히 사라진다**
+- 노드 타입마다 렌더하는 핸들이 다르다. **하위프로세스(subprocess) 노드는 `in`(입력)·`__primary__`(대표끝 출력) 두 개만** 낸다(`frontend/src/lib/subprocess-embed.ts`).
+- 서버(임포트·시드)가 `source_handle`/`target_handle` 없이 SP 끝점 엣지를 만들면 **React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다** — 에러도 콘솔 경고도 없다. DB엔 행이 멀쩡히 있는데 캔버스에만 선이 안 보이므로 "저장이 안 됐나?"로 오진하기 쉽다.
+- 판별: `page.locator(".react-flow__edge").count()`와 DB 엣지 수를 대조. 어긋나면 핸들부터 본다.
+- 백엔드 상수는 `app/subprocess.py`의 `SUBPROCESS_IN_HANDLE`·`PRIMARY_END_HANDLE`(프론트와 수동 동기). 2026-09-01 L5 연계 캔버스 시드에서 실제로 밟았다.
+
 관련 메모리: 인라인 자식 React Flow 함정 / 브라우저 검증 하네스.

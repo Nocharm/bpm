@@ -16,16 +16,22 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scripts.consultant_interview import InterviewNote
+    from scripts.consultant_interview import (
+        InterviewLinkage,
+        InterviewLinkageEdge,
+        InterviewNote,
+    )
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.clock import now as now_kst
 from app.duration import normalize_duration
 from app.models import (
     Edge,
     Employee,
+    Group,
     MapApprover,
     MapNote,
     MapPermission,
@@ -36,15 +42,31 @@ from app.models import (
 )
 from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.schemas import NUMERIC_RE
+from app.subprocess import (
+    DEFAULT_TARGET_HANDLE,
+    LINKAGE_Y0,
+    LINKAGE_Y_STEP,
+    PRIMARY_END_HANDLE,
+    SUBPROCESS_IN_HANDLE,
+    grid_positions,
+    side_source_handle,
+    unique_linkage_name,
+)
+from app.routers.versions import clone_graph
 from app.version_events import record_version_event
 from scripts.consultant_canonical import (
     CanonicalCategory,
     CanonicalMap,
     CanonicalParams,
 )
-
-_X_STEP = 240  # rank 간 가로 간격(px) — create_map Start/End 시드(120→480)와 동일 리듬
-_Y_STEP = 120  # rank 내 세로 간격(px)
+from scripts.consultant_layout import (
+    LINKAGE_ROW_STEP,
+    LayoutNode,
+    compute_spine_for,
+    layout_flow,
+    plan_branch_fanout,
+    resolve_handles,
+)
 
 
 def make_node_id(map_code: str, node_code: str) -> str:
@@ -54,30 +76,108 @@ def make_node_id(map_code: str, node_code: str) -> str:
     return "c" + hashlib.sha1(f"{map_code}|{node_code}".encode()).hexdigest()[:24]
 
 
-def _compute_ranks(codes: list[str], pairs: list[tuple[str, str]]) -> dict[str, int]:
-    """Kahn 토폴로지 순서로 rank(=max(선행)+1). 사이클 잔여 노드는 뒤 rank로 순차 배정(전량 배치)."""
-    indeg = {c: 0 for c in codes}
-    out: dict[str, list[str]] = {c: [] for c in codes}
-    for src, dst in pairs:
-        out[src].append(dst)
-        indeg[dst] += 1
-    rank = {c: 0 for c in codes}
-    queue = [c for c in codes if indeg[c] == 0]
-    seen: list[str] = []
-    while queue:
-        cur = queue.pop(0)
-        seen.append(cur)
-        for nxt in out[cur]:
-            rank[nxt] = max(rank[nxt], rank[cur] + 1)
-            indeg[nxt] -= 1
-            if indeg[nxt] == 0:
-                queue.append(nxt)
-    leftover = [c for c in codes if c not in seen]
-    base = (max(rank[c] for c in seen) + 1) if seen and leftover else 0
-    for i, code in enumerate(leftover):
-        rank[code] = base + i
-    return rank
 
+def make_item_id(map_code: str, node_code: str, index: int) -> str:
+    """IO 항목 id — 전달 좌표에서 파생한 **결정적** 값.
+
+    uuid4로 뽑으면 재임포트마다 id가 바뀌어 기존 미러(사용자가 건 링크·클론 계보)가 끊긴다.
+    형식은 FE `genId()` 폴백(32자 hex)과 같게 맞춘다.
+    """
+    return hashlib.sha1(f"io|{map_code}|{node_code}|{index}".encode()).hexdigest()[:32]
+
+
+def _io_lines(value: str | None) -> list[str]:
+    return (value or "").split("\n")
+
+
+def _join_lines(lines: list[str]) -> str:
+    """후행 공백 줄만 소거 — FE setIoLine·백엔드 rstrip 계약과 동치 (io-linking §3)."""
+    return "\n".join(lines).rstrip()
+
+
+def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int:
+    """아웃풋 항목과 인풋 항목의 텍스트가 완전일치하면 IO 링크로 잇는다. 반환: 건 수.
+
+    설계: docs/superpowers/specs/2026-08-21-io-linking-design.md(링크 그룹 불변식) +
+    2026-09-01-interview-import-v04-design.md §7.
+
+    - 매칭 단위는 **줄(항목)**, `strip()` 후 완전일치(대소문자·공백 정규화 없음 — 전달물 표기가 진실)
+    - **흐름 순방향만** — 아웃풋 노드에서 인풋 노드로 엣지 도달 가능할 때만. 역방향·무관 분기의
+      동명 항목을 잇지 않는다
+    - 원본 후보가 여럿이면 **최근접 상류**(홉 수 최소), 동률이면 sort_order 낮은 쪽 — 한 항목은
+      링크 1개라는 불변식상 하나만 고를 수밖에 없다
+    - 이미 링크가 있는 항목(원본이든 미러든)은 건드리지 않는다 — 재임포트가 사용자 편집을 덮지 않는다
+    """
+    adjacency: dict[str, list[str]] = {}
+    for edge in edges:
+        adjacency.setdefault(edge.source_node_id, []).append(edge.target_node_id)
+
+    hops: dict[str, dict[str, int]] = {}  # src → {dst: 최소 홉}
+
+    def distances(src: str) -> dict[str, int]:
+        cached = hops.get(src)
+        if cached is not None:
+            return cached
+        dist: dict[str, int] = {}
+        queue = [(src, 0)]
+        while queue:
+            cur, d = queue.pop(0)
+            for nxt in adjacency.get(cur, []):
+                if nxt in dist or nxt == src:
+                    continue
+                dist[nxt] = d + 1
+                queue.append((nxt, d + 1))
+        hops[src] = dist
+        return dist
+
+    order = {n.id: (n.sort_order or 0) for n in nodes}
+    by_code = {n.id: (n.source_node_id or n.id) for n in nodes}
+
+    # 아웃풋 항목 색인 — 텍스트 → [(노드, 줄번호)]
+    outputs: dict[str, list[tuple[Node, int]]] = {}
+    for node in nodes:
+        for index, raw in enumerate(_io_lines(node.output)):
+            text = raw.strip()
+            if text:
+                outputs.setdefault(text, []).append((node, index))
+
+    linked = 0
+    for node in nodes:
+        in_lines = _io_lines(node.input)
+        links = _io_lines(node.input_links)
+        changed = False
+        for index, raw in enumerate(in_lines):
+            text = raw.strip()
+            if not text:
+                continue
+            if index < len(links) and links[index].strip():
+                continue  # 이미 미러 — 사용자 편집 보존
+            candidates = [
+                (distances(src.id)[node.id], order[src.id], src, out_index)
+                for src, out_index in outputs.get(text, [])
+                if src.id != node.id and node.id in distances(src.id)
+            ]
+            if not candidates:
+                continue
+            candidates.sort(key=lambda c: (c[0], c[1]))
+            _, _, origin, out_index = candidates[0]
+
+            origin_ids = _io_lines(origin.output_ids)
+            while len(origin_ids) <= out_index:
+                origin_ids.append("")
+            item_id = origin_ids[out_index].strip()
+            if not item_id:
+                item_id = make_item_id(map_code, by_code[origin.id], out_index)
+                origin_ids[out_index] = item_id
+                origin.output_ids = _join_lines(origin_ids)
+            while len(links) <= index:
+                links.append("")
+            links[index] = item_id
+            changed = True
+            linked += 1
+        if changed:
+            node.input_links = _join_lines(links)
+    return linked
 
 def build_graph_rows(
     cmap: CanonicalMap,
@@ -89,19 +189,22 @@ def build_graph_rows(
     l7_codes = [n.code for n in ordered]
 
     # 흐름 엣지 — 명시 엣지 없으면 seq 체인, 있으면 그대로 + Start/End 보강
-    flow: list[tuple[str, str, str]] = (
-        [(e.source, e.target, e.label) for e in cmap.edges]
+    flow: list[tuple[str, str, str, str]] = (
+        [(e.source, e.target, e.label, e.kind) for e in cmap.edges]
         if cmap.edges
-        else [(a, b, "") for a, b in zip(l7_codes, l7_codes[1:])]
+        else [(a, b, "", "seq") for a, b in zip(l7_codes, l7_codes[1:])]
     )
-    has_in = {dst for _, dst, _ in flow}
-    has_out = {src for src, _, _ in flow}
+    # loop(재수행) 엣지는 Start 배선 판정에서 제외 — 뒤 단계가 되돌아오는 것뿐인데 in-edge로
+    # 세면 진입 노드가 Start와 안 이어져 그래프가 붕 뜬다. End 판정엔 포함한다(보완→재작성처럼
+    # loop이 유일 출구인 노드가 있다). design 2026-09-01 §2.
+    has_in = {dst for _, dst, _, kind in flow if kind != "loop"}
+    has_out = {src for src, _, _, _ in flow}
     start, end = "__start__", "__end__"
     for code in l7_codes:
         if code not in has_in:
-            flow.append((start, code, ""))
+            flow.append((start, code, "", "seq"))
         if code not in has_out:
-            flow.append((code, end, ""))
+            flow.append((code, end, "", "seq"))
 
     # 연계 노드 — after_node 뒤(생략 시 최대 seq 노드 뒤) 병렬 분기, End 배선 불변 (design §4)
     link_rows: list[tuple[str, str, int, CanonicalParams]] = []  # (가상코드, 부착원점, map_id, params)
@@ -113,30 +216,38 @@ def build_graph_rows(
         attach = link.after_node or (l7_codes[-1] if l7_codes else start)
         link_rows.append((f"__link__{link.to_map}", attach, target[0], target[1]))
     for virtual, attach, _, _ in link_rows:
-        flow.append((attach, virtual, ""))
+        flow.append((attach, virtual, "", "seq"))
 
+    # 노드·엣지를 다 만든 뒤 가로 자동정렬로 최종화 — 에디터 "자동 정렬"(LR)과 동형
+    # (rank 배치 + 교차 감소 + 백본 직선화 + 엣지 핸들). scripts/consultant_layout.py 참조.
     all_codes = [start, *l7_codes, *[v for v, *_ in link_rows], end]
-    ranks = _compute_ranks(all_codes, [(s, d) for s, d, _ in flow])
-    row_in_rank: dict[int, int] = {}
-
-    def place(code: str) -> tuple[float, float]:
-        r = ranks[code]
-        row = row_in_rank.get(r, 0)
-        row_in_rank[r] = row + 1
-        return 120 + r * _X_STEP, 200 + row * _Y_STEP
+    node_types: dict[str, str] = {start: "start", end: "end"}
+    for cn in ordered:
+        node_types[cn.code] = cn.type
+    for virtual, *_ in link_rows:
+        node_types[virtual] = "subprocess"
+    pairs = [(s, d) for s, d, _, _ in flow]
+    # loop(재수행)은 rank 계산에서 제외 — 선행으로 세면 사이클로 떨어져 전체가 뒤로 밀린다
+    back_pairs = {(s, d) for s, d, _, kind in flow if kind == "loop"}
+    layout_nodes = [LayoutNode(id=code, node_type=node_types[code]) for code in all_codes]
+    layout_flow(layout_nodes, pairs, primary_end_id=end, back_pairs=back_pairs,
+                labeled=[(s, d, label) for s, d, label, _ in flow if label])
+    spine = compute_spine_for(layout_nodes, pairs, end, back_pairs)
+    sides = resolve_handles(layout_nodes, pairs, spine)
+    pos = {n.id: (n.x, n.y) for n in layout_nodes}
 
     # code(가상/L7) → 이번 빌드에서 발급한 Node.id — 엣지 배선은 이 id로, 계보는 source_node_id로 별도 기록
     code_to_id: dict[str, str] = {}
 
     nodes: list[Node] = []
-    sx, sy = place(start)
+    sx, sy = pos[start]
     code_to_id[start] = uuid.uuid4().hex
     nodes.append(Node(
         id=code_to_id[start], source_node_id=make_node_id(cmap.code, start),
         title="Start", node_type="start", pos_x=sx, pos_y=sy, sort_order=0,
     ))
     for i, cn in enumerate(ordered, start=1):
-        x, y = place(cn.code)
+        x, y = pos[cn.code]
         code_to_id[cn.code] = uuid.uuid4().hex
         nodes.append(Node(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
@@ -147,7 +258,7 @@ def build_graph_rows(
             pos_x=x, pos_y=y, sort_order=i,
         ))
     for j, (virtual, _, map_id, params) in enumerate(link_rows):
-        x, y = place(virtual)
+        x, y = pos[virtual]
         code_to_id[virtual] = uuid.uuid4().hex
         nodes.append(Node(
             id=code_to_id[virtual], source_node_id=make_node_id(cmap.code, virtual),
@@ -156,7 +267,7 @@ def build_graph_rows(
             annual_count=params.annual_count, fte=params.fte,
             pos_x=x, pos_y=y, sort_order=len(ordered) + 1 + j,
         ))
-    ex, ey = place(end)
+    ex, ey = pos[end]
     code_to_id[end] = uuid.uuid4().hex
     nodes.append(Node(
         id=code_to_id[end], source_node_id=make_node_id(cmap.code, end),
@@ -164,15 +275,25 @@ def build_graph_rows(
         is_primary_end=True, pos_x=ex, pos_y=ey, sort_order=len(nodes),
     ))
 
-    edges = [
-        Edge(
+    edges: list[Edge] = []
+    for src, dst, label, _ in flow:
+        source_side, target_side = sides.get((src, dst), ("right", "left"))
+        edges.append(Edge(
             id=uuid.uuid4().hex,
             source_node_id=code_to_id[src],
             target_node_id=code_to_id[dst],
             label=label,
-        )
-        for src, dst, label in flow
-    ]
+            source_side=source_side,
+            target_side=target_side,
+            # SP 끝점은 전용 핸들 필수 — 없으면 React Flow가 엣지를 통째로 못 붙인다
+            source_handle=(
+                PRIMARY_END_HANDLE if node_types.get(src) == "subprocess" else None
+            ),
+            target_handle=(
+                SUBPROCESS_IN_HANDLE if node_types.get(dst) == "subprocess" else None
+            ),
+        ))
+    link_matching_io(nodes, edges, cmap.code)
     return nodes, edges, warnings
 
 
@@ -249,6 +370,8 @@ class ImportReport:
     """전달분 1건의 임포트 결과 — 맵별 행(action∈created/updated/unchanged/error/warning)."""
 
     rows: list[tuple[str, str, str]] = field(default_factory=list)
+    # 게시본 위에 자동 생성한 편집용 draft 수 — 맵 단위 결과(created/updated/…)가 아니라 부가 카운트
+    drafts: int = 0
 
     def add(self, map_code: str, action: str, detail: str = "") -> None:
         self.rows.append((map_code, action, detail))
@@ -338,6 +461,76 @@ async def _publish(session: AsyncSession, map_id: int, version: MapVersion, acto
     record_version_event(session, version.id, "published", actor)
 
 
+async def _take_reusable_draft(
+    session: AsyncSession,
+    map_id: int,
+    prior_nodes: list[Node],
+    prior_edges: list[Edge],
+    label: str,
+) -> MapVersion | None:
+    """재사용 가능한 자동 draft를 비워서 돌려준다 — 없으면 None(새 버전 생성).
+
+    임포트가 게시본 위에 깔아둔 작업본(`_ensure_trailing_draft`)을 아무도 손대지 않았다면,
+    재전달 때 그걸 그대로 새 버전으로 쓴다. 안 그러면 손 안 댄 구 draft가 게시본들 사이에
+    끼어 이력이 지저분해진다(재전달마다 1건씩 누적).
+
+    재사용 조건 — ① 점유권자 없음(누가 체크아웃했으면 남의 작업 시작으로 본다)
+    ② 그래프가 직전 게시본과 **완전 동일**(편집 흔적 0). 하나라도 어긋나면 건드리지 않는다.
+    """
+    draft = await session.scalar(
+        select(MapVersion)
+        .where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+        .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+        .order_by(MapVersion.id.desc())
+    )
+    if draft is None or draft.checked_out_by is not None or not prior_nodes:
+        return None
+    if _graph_signature(list(draft.nodes), list(draft.edges)) != _graph_signature(
+        prior_nodes, prior_edges
+    ):
+        return None  # 사용자가 편집한 작업본 — 보존
+    await session.execute(delete(Edge).where(Edge.version_id == draft.id))
+    await session.execute(delete(Node).where(Node.version_id == draft.id))
+    await session.execute(delete(Group).where(Group.version_id == draft.id))
+    draft.label = label
+    return draft
+
+
+async def _ensure_trailing_draft(
+    session: AsyncSession, map_id: int, published: MapVersion, actor: str, label: str
+) -> bool:
+    """게시본 위에 편집용 draft를 보장한다 — 없으면 게시본을 복제해 만든다. 반환: 생성 여부.
+
+    임포트로 들어온 맵은 게시본이 읽기전용이라 그대로면 오너가 "새 버전 만들기"를 눌러야 편집을
+    시작할 수 있다 — 초기 작업본을 미리 깔아준다(사용자 결정 2026-09-01).
+    이미 draft가 있으면 손대지 않는다(사용자 작업본 보존).
+    **`checked_out_by`는 비워 둔다** — 실행자(sysadmin)로 잡으면 실오너가 강탈(force) 없이는
+    편집을 못 한다. routers/versions.create_version이 생성자를 점유권자로 두는 것과 의도적 차이.
+    """
+    existing_draft = await session.scalar(
+        select(MapVersion.id).where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+    )
+    if existing_draft is not None:
+        return False
+    source = await session.scalar(
+        select(MapVersion)
+        .where(MapVersion.id == published.id)
+        .options(
+            selectinload(MapVersion.nodes),
+            selectinload(MapVersion.edges),
+            selectinload(MapVersion.groups),
+        )
+    )
+    if source is None:
+        return False
+    draft = MapVersion(map_id=map_id, label=label, status="draft")
+    session.add(draft)
+    await session.flush()
+    await clone_graph(session, source, draft.id)
+    record_version_event(session, draft.id, "created", actor)
+    return True
+
+
 async def import_delivery(
     session: AsyncSession,
     *,
@@ -346,6 +539,7 @@ async def import_delivery(
     actor: str,
     label: str,
     commit_every: int | None = None,
+    linkage_placed: set[str] | None = None,
 ) -> ImportReport:
     """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
     report = ImportReport()
@@ -390,14 +584,15 @@ async def import_delivery(
     # (예전엔 link_targets가 raw params를 써서 대상 맵의 무효값이 정규화 없이 연계 노드에 그대로 박혔다.)
     normalized: dict[str, CanonicalParams] = {m.code: _normalize_params(m, report) for m in maps}
 
-    # annual_count/fte가 있는데 이번 전달분에 인바운드 연계가 없으면 그 값은 갈 곳이 없다 — 경고만
+    # annual_count/fte가 있는데 착지할 SP 노드가 없으면 그 값은 갈 곳이 없다 — 경고만
     # (design §4 "아무것도 안 잃는다"의 반례를 리포트로 표면화). NORMALIZED 값 기준(무효값 소거 후).
-    inbound_linked = {link.to_map for m in maps for link in m.links}
+    # 착지면은 둘 중 하나 — 전달분 내 인바운드 연계, 또는 L5 연계 캔버스(인터뷰 0.4 경로).
+    landing = {link.to_map for m in maps for link in m.links} | (linkage_placed or set())
     for cmap in maps:
         p = normalized[cmap.code]
-        if (p.annual_count or p.fte) and cmap.code not in inbound_linked:
+        if (p.annual_count or p.fte) and cmap.code not in landing:
             report.add(cmap.code, "warning",
-                       "annual_count/fte have no landing site — no inbound link in this delivery")
+                       "annual_count/fte have no landing site — no inbound link or linkage canvas")
 
     # 맵 이름 중복은 차단·강제개명 대상이 아니다(컨트롤러 결정) — 컨설턴트 식별은 consultant_code,
     # 표시 구분은 카테고리 경로가 맡는다. 경고만 남기고 양쪽 다 정상 진행.
@@ -642,14 +837,20 @@ async def import_delivery(
             # 만료되는 이전 버전의 그래프 행은 지우지 않는다 — 새 버전은 build_graph_rows가 매번
             # 새로 발급한 uuid Node/Edge.id를 쓰므로(계보는 source_node_id) PK 충돌이 없고,
             # 버전 비교 화면이 만료본 그래프를 그대로 조회할 수 있어야 한다(append-only 이력).
-            version = MapVersion(map_id=found_map.id, label=label, status="draft")
-            session.add(version)
-            await session.flush()
-            record_version_event(session, version.id, "created", actor)
+            version = await _take_reusable_draft(
+                session, found_map.id, old_nodes, old_edges, label)
+            if version is None:
+                version = MapVersion(map_id=found_map.id, label=label, status="draft")
+                session.add(version)
+                await session.flush()
+                record_version_event(session, version.id, "created", actor)
             for row in (*nodes, *edges):
                 row.version_id = version.id
                 session.add(row)
             await _publish(session, found_map.id, version, actor)
+            # 게시본 위 편집용 draft 자동 생성 — 오너가 바로 작업을 시작할 수 있게
+            if await _ensure_trailing_draft(session, found_map.id, version, actor, label):
+                report.drafts += 1
 
         if is_new:
             report.add(
@@ -713,3 +914,261 @@ async def apply_interview_notes(
     return inserted
 
 
+
+
+def _linkage_param(value: str) -> str:
+    """SP 노드 파라미터 방어 — 엔진 무효값 계약과 동형(무효는 "" 소거, 경고는 이미 남았다)."""
+    text = (value or "").strip()
+    return text if text and NUMERIC_RE.fullmatch(text) else ""
+
+
+def expand_linkage_branches(
+    edges: list["InterviewLinkageEdge"], present: set[str]
+) -> tuple[list[tuple[str, str, str]], dict[str, str], set[tuple[str, str]]]:
+    """분기 팬아웃 앞에 분기 노드를 끼운다 — B→{A,C} ⇒ B→◇, ◇→A, ◇→C.
+
+    L6 맵은 분기 src를 decision으로 **승격**하지만(엣지가 진실, design 2026-09-01 §2), 연계 캔버스의
+    src는 subprocess라 타입을 못 바꾼다 — 대신 분기 노드를 새로 만들어 뒤에 세운다
+    (사용자 결정 2026-09-01). 조건 라벨은 분기 노드에서 나가는 엣지가 들고 간다.
+
+    끼우는 기준: 나가는 엣지 2개 이상 && 전부 `gateway="parallel"`은 아님. 병행 팬아웃은 택일이
+    아니므로 마름모를 세우면 오독된다(L6의 승격 제외 규칙과 같은 판단).
+
+    반환: (재작성 엣지 [(src,dst,label)], 분기노드키→원본 src code, 되돌아가는 쌍).
+    되돌아가는 쌍은 재작성 좌표계 기준 — 안 넘기면 사이클이 되살아나 랭크가 무너진다.
+    """
+    scoped = [e for e in edges if e.source in present and e.target in present]
+    out_by_src: dict[str, list["InterviewLinkageEdge"]] = {}
+    for edge in scoped:
+        out_by_src.setdefault(edge.source, []).append(edge)
+
+    rewritten: list[tuple[str, str, str]] = []
+    branch_of: dict[str, str] = {}
+    back: set[tuple[str, str]] = set()
+    for src, group in out_by_src.items():
+        forks = len(group) >= 2 and not all(e.gateway == "parallel" for e in group)
+        origin = src
+        if forks:
+            origin = f"__branch__{src}"
+            branch_of[origin] = src
+            rewritten.append((src, origin, ""))
+        for edge in group:
+            rewritten.append((origin, edge.target, edge.label))
+            if edge.kind == "loop":
+                back.add((origin, edge.target))
+    return rewritten, branch_of, back
+
+
+async def apply_interview_linkage(
+    session: AsyncSession,
+    linkages: list["InterviewLinkage"],
+    *,
+    actor: str,
+    report: ImportReport,
+) -> int:
+    """L6 흐름 → L5 연계 캔버스 시드/보강 (design 2026-09-01 §3). 반환: 추가한 노드+엣지 수.
+
+    규약은 routers/categories.open_linkage_map과 같다 — **추가만, 삭제·이동 없음**. 캔버스가
+    없으면 만들고, 있으면 없는 SP 노드·없는 엣지만 얹는다. draft가 타인 체크아웃 중이면 통째로
+    건너뛴다(서버가 남의 편집본을 건드리지 않는 체크아웃 규약).
+    import_delivery와 같은 세션에서 호출한다 — dry-run rollback에 함께 원복된다.
+
+    캔버스는 게시하지 않는다(draft 유지). start 노드는 쓸 수 없다 —
+    validate_framework_canvas가 subprocess/decision/end만 허용하므로 진입 L6는 배치 첫 자리로만
+    표현하고, entry 이벤트 자체는 어댑터가 L5 스코프 노트로 남긴다.
+    """
+    total = 0
+    for linkage in linkages:
+        code = linkage.category_code
+        category = await session.scalar(
+            select(ProcessCategory).where(ProcessCategory.code == code)
+        )
+        if category is None:
+            report.add(code, "warning", "linkage skipped — category not found")
+            continue
+        if category.level != 5:
+            report.add(code, "warning", f"linkage skipped — category is level {category.level}")
+            continue
+
+        placed = (await session.execute(
+            select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.name).where(
+                ProcessMap.consultant_code.in_(linkage.map_codes),
+                ProcessMap.deleted_at.is_(None),
+            )
+        )).all()
+        map_ids = {c: mid for mid, c, _ in placed if c is not None}
+        map_names = {mid: name for mid, _, name in placed}
+        if not map_ids:
+            report.add(code, "warning", "linkage skipped — no imported maps to place")
+            continue
+
+        canvas = (
+            await session.get(ProcessMap, category.linkage_map_id)
+            if category.linkage_map_id is not None
+            else None
+        )
+        is_new_canvas = canvas is None or canvas.deleted_at is not None
+        if is_new_canvas:
+            canvas = ProcessMap(
+                name=await unique_linkage_name(session, category),
+                created_by=actor, owner_id=actor, visibility="public", mode="framework",
+            )
+            canvas.versions.append(MapVersion(label="Linkage"))
+            session.add(canvas)
+            await session.flush()
+            draft = canvas.versions[0]
+            record_version_event(session, draft.id, "created", actor)
+            category.linkage_map_id = canvas.id
+        else:
+            draft = await session.scalar(
+                select(MapVersion)
+                .where(MapVersion.map_id == canvas.id, MapVersion.status == "draft")
+                .order_by(MapVersion.id.desc())
+            )
+            if draft is None:
+                report.add(code, "warning", "linkage skipped — canvas has no draft version")
+                continue
+            if draft.checked_out_by not in (None, actor):
+                report.add(code, "warning",
+                           f"linkage skipped — canvas checked out by {draft.checked_out_by}")
+                continue
+
+        existing = list((await session.scalars(
+            select(Node).where(Node.version_id == draft.id)
+        )).all())
+        node_by_map: dict[int, Node] = {
+            n.linked_map_id: n for n in existing
+            if n.node_type == "subprocess" and n.linked_map_id is not None
+        }
+        # 분기 노드는 linked_map_id가 없다 — 계보 키(source_node_id)로 재임포트 시 재사용한다
+        branch_nodes: dict[str, Node] = {
+            n.source_node_id: n for n in existing
+            if n.node_type == "decision" and n.source_node_id
+        }
+        max_y = max((n.pos_y for n in existing), default=None)
+        base_y = (max_y + LINKAGE_Y_STEP) if max_y is not None else LINKAGE_Y0
+        next_sort = max((n.sort_order for n in existing), default=-1) + 1
+
+        # 분기 팬아웃 앞에 분기 노드를 끼운 흐름 — 배치·엣지 모두 이 재작성본을 쓴다
+        placed_codes = {c for c in linkage.map_codes if c in map_ids}
+        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, placed_codes)
+
+        # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
+        missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
+        missing_branches = [
+            key for key in branch_of
+            if make_node_id(code, key) not in branch_nodes
+        ]
+        # 캔버스를 **처음 만들 때만** 흐름대로 가로 자동정렬한다. 보강은 기존 노드를 못 옮기므로
+        # (추가만·이동 없음 규약) 격자로 아래에 붙인다.
+        placed: dict[str, tuple[float, float]] = {}
+        fan_sides: dict[tuple[str, str], str] = {}
+        if is_new_canvas and missing:
+            layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
+            layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
+            known = {n.id for n in layout_nodes}
+            scoped_flow = [(a, b, text) for a, b, text in flow if a in known and b in known]
+            ranks = layout_flow(
+                layout_nodes,
+                [(a, b) for a, b, _ in scoped_flow],
+                primary_end_id=None,
+                # loop(재수행)은 선행이 아니다 — 랭크에서 빼야 선행→분기 순서가 잡히고
+                # 되돌아가는 엣지는 그 위에 그려진다 (사용자 결정 2026-09-01)
+                back_pairs={p for p in back_pairs if p[0] in known and p[1] in known},
+                labeled=[(a, b, text) for a, b, text in scoped_flow if text],
+            )
+            # 분기 출구를 위/아래/옆으로 벌린다 — 한 줄이면 어디서 갈라지는지 선만으론 안 읽힌다
+            rows, fan_sides = plan_branch_fanout(
+                scoped_flow, {k: v for k, v in branch_of.items() if k in known}, ranks)
+            for node in layout_nodes:
+                node.y += rows.get(node.id, 0) * LINKAGE_ROW_STEP
+            placed = {n.id: (n.x, n.y) for n in layout_nodes}
+        added = 0
+        grid = grid_positions(0, len(missing) + len(missing_branches), base_y)
+        for i, (c, (px, py)) in enumerate(zip(missing, grid)):
+            annual, fte = linkage.params.get(c, ("", ""))
+            x, y = placed.get(c, (px, py))
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id,
+                title=map_names.get(map_ids[c], c),
+                node_type="subprocess", linked_map_id=map_ids[c], follow_latest=True,
+                annual_count=_linkage_param(annual), fte=_linkage_param(fte),
+                pos_x=x, pos_y=y, sort_order=next_sort + i,
+            )
+            session.add(node)
+            node_by_map[map_ids[c]] = node
+            added += 1
+        for j, key in enumerate(missing_branches):
+            lineage = make_node_id(code, key)
+            x, y = placed.get(key, grid[len(missing) + j])
+            src_code = branch_of[key]
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=lineage,
+                title=f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
+                node_type="decision",
+                pos_x=x, pos_y=y, sort_order=next_sort + len(missing) + j,
+            )
+            session.add(node)
+            branch_nodes[lineage] = node
+            added += 1
+
+        # 기존 SP 노드의 annual_count/fte — 비어 있으면 채우고, 값이 있으면 덮지 않는다
+        # (사용자 직접 편집 필드. 맵 sp_gmp를 엔진이 안 건드리는 것과 같은 관례)
+        new_ids = {map_ids[c] for c in missing}
+        for c, values in linkage.params.items():
+            map_id = map_ids.get(c)
+            node = node_by_map.get(map_id) if map_id is not None else None
+            if node is None or map_id in new_ids:
+                continue
+            for attr, raw in zip(("annual_count", "fte"), values):
+                incoming = _linkage_param(raw)
+                if not incoming:
+                    continue
+                current = (getattr(node, attr) or "").strip()
+                if not current:
+                    setattr(node, attr, incoming)
+                elif current != incoming:
+                    report.add(code, "warning",
+                               f"{c}: {attr} {current!r} kept (delivery has {incoming!r})")
+
+        await session.flush()  # 신규 노드 id 확정 후 엣지를 건다
+        existing_pairs = {
+            (e.source_node_id, e.target_node_id)
+            for e in (await session.scalars(
+                select(Edge).where(Edge.version_id == draft.id)
+            )).all()
+        }
+        def _node_of(key: str) -> Node | None:
+            if key in branch_of:
+                return branch_nodes.get(make_node_id(code, key))
+            return node_by_map.get(map_ids.get(key, -1))
+
+        for src_key, dst_key, label in flow:
+            src, dst = _node_of(src_key), _node_of(dst_key)
+            if src is None or dst is None:
+                report.add(code, "warning",
+                           f"linkage edge {src_key}→{dst_key} dropped — node not on canvas")
+                continue
+            if (src.id, dst.id) in existing_pairs:
+                continue
+            session.add(Edge(
+                id=uuid.uuid4().hex, version_id=draft.id,
+                source_node_id=src.id, target_node_id=dst.id, label=label,
+                # 끝점 타입별 핸들 — SP는 전용(in/__primary__), 분기는 변별(s-/t-).
+                # 안 맞추면 React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다
+                source_side=fan_sides.get((src_key, dst_key), "right"),
+                source_handle=(
+                    PRIMARY_END_HANDLE if src.node_type == "subprocess"
+                    else side_source_handle(fan_sides.get((src_key, dst_key), "right"))
+                ),
+                target_handle=(
+                    SUBPROCESS_IN_HANDLE if dst.node_type == "subprocess" else DEFAULT_TARGET_HANDLE
+                ),
+            ))
+            existing_pairs.add((src.id, dst.id))
+            added += 1
+
+        verb = "created" if is_new_canvas else "augmented"
+        report.add(code, "linkage", f"canvas {verb} (map {canvas.id}, +{added} nodes/edges)")
+        total += added
+    return total

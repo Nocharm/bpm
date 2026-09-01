@@ -1,0 +1,903 @@
+{
+  "_readme": [
+    "합성 더미 — L5 연계 캔버스 데모용. L6는 서로 연계(links) 없이 독립 노드로만 구성(2026-08-28 규칙).",
+    "qc-raw-material-l5.json, qa-deviation-oos-l5.json과 함께 임포트한다.",
+    "0.4 변환본 — 0.3의 중복 seq(병렬) 관례를 relations.edges(kind=seq)로 명시화했다."
+  ],
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
+  "framework": {
+    "categories": [
+      {
+        "code": "20",
+        "name": "Quality",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "20-01",
+        "name": "품질관리(QC)",
+        "level": 2,
+        "parent": "20"
+      },
+      {
+        "code": "20-01-01",
+        "name": "시험 운영",
+        "level": 3,
+        "parent": "20-01"
+      },
+      {
+        "code": "20-01-01-02",
+        "name": "완제품 시험",
+        "level": 4,
+        "parent": "20-01-01"
+      },
+      {
+        "code": "20-01-01-02-01",
+        "name": "완제품 출하 시험 관리",
+        "level": 5,
+        "parent": "20-01-01-02"
+      }
+    ]
+  },
+  "l5": {
+    "label": "완제품 출하 시험 관리",
+    "nodeCode": "20-01-01-02-01"
+  },
+  "relations": {
+    "entry": {
+      "taskId": "dmy-fp-task-0001",
+      "triggerType": "manual",
+      "label": "배치 생산 완료 통보(MES) 수신",
+      "quote": null
+    },
+    "edges": [
+      {
+        "src": "dmy-fp-task-0001",
+        "dst": "dmy-fp-task-0002",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-fp-task-0002",
+        "dst": "dmy-fp-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      },
+      {
+        "src": "dmy-fp-task-0003",
+        "dst": "dmy-fp-task-0004",
+        "kind": "seq",
+        "gateway": null,
+        "condition": null,
+        "label": null,
+        "quote": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "taskId": "dmy-fp-task-0001",
+      "unitId": "dmy-fp-unit-0001",
+      "l6": "출하 시험 의뢰 접수 및 계획",
+      "owner": null,
+      "ownerRole": "완제품 시험 코디네이터",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "배치 생산 완료 통보(MES) 수신",
+        "input_data": "배치 생산 완료 통보, 출하 일정표",
+        "output_data": "시험 일정 계획, LIMS 배치 오더",
+        "done_criteria": "배치별 시험 일정 확정 공유",
+        "systems": "MES, LIMS",
+        "total_time": "배치당 한 시간",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 40,
+        "frequency": "주 4배치",
+        "annual_count": 200,
+        "headcount": 1,
+        "fte": null,
+        "gmp": "일정 계획 자체는 비GMP, 오더 생성부터 GMP 기록",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "생산 완료 통보 확인",
+          "name": "MES 배치 완료 통보를 확인하고 배치 기본 정보를 확보한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배치 생산 완료 통보",
+          "output": "배치 기본 정보",
+          "system": "MES",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "배치 끝났다는 알림 오면 바로 번호부터 받아 둡니다."
+        },
+        {
+          "seq": 2,
+          "label": "출하 목표일 확인",
+          "name": "출하 일정표에서 배치의 목표 출하일을 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "배치 기본 정보",
+          "output": "목표 출하일",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "출하일 역산해서 시험 마감일을 잡아요."
+        },
+        {
+          "seq": 3,
+          "label": "긴급 출하 여부 판정",
+          "name": "긴급 출하 대상인지 판정한다 — 긴급이면 단축 일정, 아니면 표준 일정",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "긴급 출하면 단축 일정 배정, 아니면 표준 일정",
+          "input": "목표 출하일",
+          "output": "일정 유형 결정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "긴급 배치는 시험실 야간 가동까지 잡아야 해요."
+        },
+        {
+          "seq": 4,
+          "label": "LIMS 배치 오더 생성",
+          "name": "LIMS에서 배치 시험 오더를 생성하고 항목을 확정한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "일정 유형 결정",
+          "output": "LIMS 배치 오더",
+          "system": "LIMS",
+          "screen": "Batch Order",
+          "dataForm": "structured",
+          "quote": "오더 만들면서 규격 버전을 한 번 더 봐요."
+        },
+        {
+          "seq": 5,
+          "label": "담당 배정",
+          "name": "항목별 시험 담당자를 배정하고 일정에 반영한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "LIMS 배치 오더",
+          "output": "담당 배정표",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "휴가자 빼고 배정하는 게 일이에요."
+        },
+        {
+          "seq": 6,
+          "label": "일정 공유",
+          "name": "확정 일정을 시험 파트와 출하 관리 부서에 공유한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "담당 배정표",
+          "output": "시험 일정 계획",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "공유 메일 하나로 다들 그 주 계획을 봅니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-fp-task-0002",
+      "unitId": "dmy-fp-unit-0002",
+      "l6": "완제품 품질 시험 수행",
+      "owner": null,
+      "ownerRole": "완제품 시험 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "배치 오더·검체 입고 완료",
+        "input_data": "LIMS 배치 오더, 완제품 검체",
+        "output_data": "완제품 시험 결과값",
+        "done_criteria": "전 항목 결과 입력·1차 검토 완료",
+        "systems": "LIMS, Empower, SoftMax",
+        "total_time": "배치당 사나흘",
+        "total_time_min": null,
+        "touch_time": "여섯 시간쯤",
+        "touch_time_min": 360,
+        "frequency": "주 4배치",
+        "annual_count": 200,
+        "headcount": 4,
+        "fte": 2.0,
+        "gmp": "전 시험 기록 GMP, 전자 원시데이터는 백업 정책 적용",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "검체 수령 확인",
+          "name": "배치 검체 수량과 보관 조건을 확인하고 수령 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "완제품 검체",
+          "output": "수령 등록 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "콜드체인 온도 로그부터 확인해요."
+        },
+        {
+          "seq": 2,
+          "label": "함량·순도 시험",
+          "name": "HPLC로 함량과 순도 시험을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "수령 등록 기록",
+          "output": "함량·순도 원시데이터",
+          "system": "Empower",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "완제품은 시퀀스가 길어서 먼저 걸어요."
+        },
+        {
+          "seq": 3,
+          "label": "역가 시험",
+          "name": "플레이트 리더로 역가 시험을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "수령 등록 기록",
+          "output": "역가 원시데이터",
+          "system": "SoftMax",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "역가는 이틀짜리라 병렬로 돌립니다."
+        },
+        {
+          "seq": 4,
+          "label": "외관·표시 검사",
+          "name": "표시 기재와 외관을 검사하고 체크리스트를 작성한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "수령 등록 기록",
+          "output": "외관 검사 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "라벨 오탈자는 여기서 다 걸러야 해요."
+        },
+        {
+          "seq": 5,
+          "label": "결과 입력",
+          "name": "항목별 결과를 LIMS에 입력한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "함량·순도 원시데이터",
+          "output": "완제품 시험 결과값",
+          "system": "LIMS",
+          "screen": "Result Entry",
+          "dataForm": "structured",
+          "quote": "입력하면서 유효숫자 규칙을 맞춥니다."
+        },
+        {
+          "seq": 6,
+          "label": "재시험 필요 판정",
+          "name": "이상 결과·기기 이상 여부로 재시험 필요를 판정한다 — 명백한 기기 오류면 무효화 후 재시험",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "명백한 기기 오류면 무효화·재시험, 그 외 이상값은 OOS 절차",
+          "input": "완제품 시험 결과값",
+          "output": "재시험 판정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "기기 로그로 설명되는 건만 재시험으로 돌려요."
+        },
+        {
+          "seq": 7,
+          "label": "1차 검토 완료 처리",
+          "name": "동료 검토를 마치고 검토 완료 플래그를 세운다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "재시험 판정",
+          "output": "1차 검토 완료 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "검토 플래그까지 서야 판정 쪽으로 넘어가요."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-fp-task-0003",
+      "unitId": "dmy-fp-unit-0003",
+      "l6": "안정성 시험 검체 관리",
+      "owner": null,
+      "ownerRole": "안정성 시험 담당자",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "안정성 프로그램 등재 배치 확정",
+        "input_data": "안정성 프로토콜, 등재 배치 검체",
+        "output_data": "보관 개시 기록, 인출 시험 오더",
+        "done_criteria": "시점별 인출·시험 의뢰 완료",
+        "systems": "LIMS",
+        "total_time": "시점당 두어 시간",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 80,
+        "frequency": "월 6시점",
+        "annual_count": 72,
+        "headcount": 1,
+        "fte": 0.5,
+        "gmp": "챔버 온습도 기록 포함 전 기록 GMP",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "등재 배치 접수",
+          "name": "프로토콜에 따라 등재 배치 검체를 접수한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "등재 배치 검체",
+          "output": "접수 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "등재 배치는 수량을 시점별로 미리 쪼개 둡니다."
+        },
+        {
+          "seq": 2,
+          "label": "챔버 보관 개시",
+          "name": "조건별 챔버에 검체를 적재하고 보관 개시를 기록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "접수 기록",
+          "output": "보관 개시 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "25도, 40도 챔버에 나눠 넣어요."
+        },
+        {
+          "seq": 3,
+          "label": "시점 도래 인출",
+          "name": "시점 도래 알림에 따라 검체를 인출한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "보관 개시 기록",
+          "output": "인출 검체",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "인출은 도래일 당일이 원칙이에요."
+        },
+        {
+          "seq": 4,
+          "label": "보관 조건 일탈 판정",
+          "name": "챔버 온습도 이력에 일탈이 있었는지 판정한다 — 일탈이면 영향 평가 의뢰",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "이력 정상이면 시험 의뢰, 일탈이면 영향 평가 의뢰 후 진행",
+          "input": "인출 검체",
+          "output": "조건 적합 확인",
+          "system": null,
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "챔버 알람 이력이 있으면 그것부터 정리해야 해요."
+        },
+        {
+          "seq": 5,
+          "label": "시점 시험 의뢰",
+          "name": "인출 검체의 시점 시험 오더를 생성해 시험 파트에 의뢰한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "조건 적합 확인",
+          "output": "인출 시험 오더",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "의뢰 걸면 완제품 파트 일정에 같이 실려요."
+        },
+        {
+          "seq": 6,
+          "label": "재고 잔량 갱신",
+          "name": "시점별 검체 잔량을 갱신하고 부족 예상 시 보충을 요청한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "인출 시험 오더",
+          "output": "잔량 갱신 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "잔량 안 맞으면 나중 시점이 통째로 흔들려요."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "dmy-fp-task-0004",
+      "unitId": "dmy-fp-unit-0004",
+      "l6": "시험 성적서 발행 및 출하 승인",
+      "owner": null,
+      "ownerRole": "완제품 QC 파트 리더",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "배치 전 항목 시험·검토 완료",
+        "input_data": "완제품 시험 결과값, 배치 기록 검토 의견",
+        "output_data": "완제품 COA, 출하 승인 기록",
+        "done_criteria": "출하 승인 전자서명 완료",
+        "systems": "LIMS, SAP",
+        "total_time": "배치당 반나절",
+        "total_time_min": null,
+        "touch_time": null,
+        "touch_time_min": 70,
+        "frequency": "주 4배치",
+        "annual_count": 200,
+        "headcount": 1,
+        "fte": null,
+        "gmp": "COA 발행·출하 승인은 GMP 핵심 절차",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "결과 종합 검토",
+          "name": "배치 전 항목 결과와 재시험 이력을 종합 검토한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "완제품 시험 결과값",
+          "output": "종합 검토본",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "재시험 붙은 항목은 사유까지 다시 봅니다."
+        },
+        {
+          "seq": 2,
+          "label": "COA 승인 판정",
+          "name": "COA 발행 가능 여부를 판정한다 — 미결 이벤트가 있으면 보류",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "미결 OOS·일탈 없으면 발행, 있으면 종결까지 보류",
+          "input": "종합 검토본",
+          "output": "발행 가부 판정",
+          "system": null,
+          "screen": null,
+          "dataForm": "tacit",
+          "quote": "미결 이벤트 달린 배치는 절대 못 나가요."
+        },
+        {
+          "seq": 3,
+          "label": "COA 발행",
+          "name": "LIMS에서 완제품 COA를 발행하고 전자서명한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "발행 가부 판정",
+          "output": "완제품 COA",
+          "system": "LIMS",
+          "screen": "CoA Print",
+          "dataForm": "structured",
+          "quote": "COA는 고객사로 바로 나가는 문서라 두 번 봅니다."
+        },
+        {
+          "seq": 4,
+          "label": "출하 승인 등록",
+          "name": "SAP에서 배치 출하 승인을 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "완제품 COA",
+          "output": "출하 승인 기록",
+          "system": "SAP",
+          "screen": "QA11",
+          "dataForm": "structured",
+          "quote": "여기 서명이 배치 릴리즈예요."
+        },
+        {
+          "seq": 5,
+          "label": "고객사 사전 통보(예외)",
+          "name": "계약상 사전 통보 대상 고객사엔 COA 초안을 먼저 송부한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "사전 통보 계약 고객사만",
+          "input": null,
+          "output": "COA 초안 송부 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "몇몇 고객사는 초안을 먼저 보자고 해요."
+        },
+        {
+          "seq": 6,
+          "label": "출하 부서 인계",
+          "name": "승인 배치 정보를 출하 관리 부서에 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "출하 승인 기록",
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "인계까지 해야 우리 손을 떠난 거죠."
+        },
+        {
+          "seq": 7,
+          "label": "발행 이력 정리",
+          "name": "COA 발행 이력을 대장에 정리하고 보관한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "출하 승인 기록",
+          "output": "발행 이력 대장",
+          "system": null,
+          "screen": null,
+          "dataForm": "document",
+          "quote": "감사 때 제일 먼저 찾는 게 이 대장입니다."
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "dmy-fp-task-0001",
+      "doc": null,
+      "seq": 1,
+      "name": "출하 시험 의뢰 접수 및 계획",
+      "note": "긴급 출하 기준이 구두 관행 — 문서화 필요 의견",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "dmy-fp-ev-1",
+          "quote": "일정 잡는 게 반이에요.",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "완제품 시험 코디네이터",
+      "exceptions": [],
+      "endCondition": "배치별 시험 일정 확정 공유",
+      "startCondition": "배치 생산 완료 통보(MES) 수신"
+    },
+    {
+      "id": "dmy-fp-task-0002",
+      "doc": null,
+      "seq": 2,
+      "name": "완제품 품질 시험 수행",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "완제품 시험 담당자",
+      "exceptions": [],
+      "endCondition": "전 항목 결과 입력·1차 검토 완료",
+      "startCondition": "배치 오더·검체 입고 완료"
+    },
+    {
+      "id": "dmy-fp-task-0003",
+      "doc": null,
+      "seq": 3,
+      "name": "안정성 시험 검체 관리",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "안정성 시험 담당자",
+      "exceptions": [],
+      "endCondition": "시점별 인출·시험 의뢰 완료",
+      "startCondition": "안정성 프로그램 등재 배치 확정"
+    },
+    {
+      "id": "dmy-fp-task-0004",
+      "doc": null,
+      "seq": 4,
+      "name": "시험 성적서 발행 및 출하 승인",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "완제품 QC 파트 리더",
+      "exceptions": [
+        {
+          "name": "고객사 사전 통보",
+          "rule": "사전 통보 계약 고객사만 > COA 초안 선송부",
+          "evidence": []
+        }
+      ],
+      "endCondition": "출하 승인 전자서명 완료",
+      "startCondition": "배치 전 항목 시험·검토 완료"
+    }
+  ],
+  "summary": {
+    "kept": {
+      "files": 0,
+      "messages": 76,
+      "free_texts": 0,
+      "evidence_total": 1
+    },
+    "l6_total": 4,
+    "l7_total": 26,
+    "voc_total": 2,
+    "rows_total": 4,
+    "open_items_total": 1,
+    "side_notes_total": 3,
+    "l6_edge_total": 3,
+    "l7_edge_total": 24
+  },
+  "openItems": [
+    {
+      "text": "긴급 출하 판정 기준 문서화 — QA와 협의",
+      "unitId": "dmy-fp-unit-0001"
+    }
+  ],
+  "sideNotes": [
+    {
+      "kind": "voc",
+      "text": "역가 시험 리드타임이 배치 릴리즈의 최장 경로",
+      "unitId": "dmy-fp-unit-0002"
+    },
+    {
+      "kind": "voc",
+      "text": "챔버 알람이 야간에 몰려 다음날 일탈 판정 부담이 큼",
+      "unitId": "dmy-fp-unit-0003"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "tacit: COA 보류 판정은 파트 리더 재량 관행",
+      "unitId": "dmy-fp-unit-0004"
+    }
+  ]
+}

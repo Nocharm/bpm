@@ -1,17 +1,57 @@
 {
-  "_readme": ["합성 샘플 — 실전달물 아님. calibration-l5.json과 함께 다중 파일 임포트 시험용."],
-  "schema_version": "0.3-bpm-interface-draft",
-  "labelSource": "llm-generated-draft",
+  "_readme": [
+    "합성 샘플 — 실전달물 아님. calibration-l5.json과 함께 다중 파일 임포트 시험용.",
+    "0.4 변환본 — 0.3의 중복 seq(병렬) 관례를 relations.edges(kind=seq)로 명시화했다."
+  ],
+  "schema_version": "0.4-bpm-interface-draft",
+  "labelSource": "human-confirmed",
   "framework": {
     "categories": [
-      { "code": "19", "name": "EPCV", "level": 1, "parent": null },
-      { "code": "19-01", "name": "Facility", "level": 2, "parent": "19" },
-      { "code": "19-01-02", "name": "유틸리티 운전", "level": 3, "parent": "19-01" },
-      { "code": "19-01-02-01", "name": "정제수 시스템 운전", "level": 4, "parent": "19-01-02" },
-      { "code": "19-01-02-01-01", "name": "정제수 일상 점검", "level": 5, "parent": "19-01-02-01" }
+      {
+        "code": "19",
+        "name": "EPCV",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "19-01",
+        "name": "Facility",
+        "level": 2,
+        "parent": "19"
+      },
+      {
+        "code": "19-01-02",
+        "name": "유틸리티 운전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-02-01",
+        "name": "정제수 시스템 운전",
+        "level": 4,
+        "parent": "19-01-02"
+      },
+      {
+        "code": "19-01-02-01-01",
+        "name": "정제수 일상 점검",
+        "level": 5,
+        "parent": "19-01-02-01"
+      }
     ]
   },
-  "l5": { "label": "정제수 일상 점검", "nodeCode": "19-01-02-01-01" },
+  "l5": {
+    "label": "정제수 일상 점검",
+    "nodeCode": "19-01-02-01-01"
+  },
+  "relations": {
+    "entry": {
+      "taskId": "smp-util-task-0001",
+      "triggerType": "manual",
+      "label": "매일 오전 점검 라운드 시작",
+      "quote": null
+    },
+    "edges": []
+  },
   "rows": [
     {
       "taskId": "smp-util-task-0001",
@@ -67,7 +107,20 @@
           "dataForm": "document",
           "quote": "적고 서명하면 그날 점검은 끝이에요."
         }
-      ]
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
     }
   ],
   "tasks": [
@@ -87,13 +140,20 @@
     }
   ],
   "summary": {
-    "kept": { "files": 0, "messages": 12, "free_texts": 0, "evidence_total": 0 },
+    "kept": {
+      "files": 0,
+      "messages": 12,
+      "free_texts": 0,
+      "evidence_total": 0
+    },
     "l6_total": 1,
     "l7_total": 2,
     "voc_total": 1,
     "rows_total": 1,
     "open_items_total": 0,
-    "side_notes_total": 1
+    "side_notes_total": 1,
+    "l6_edge_total": 0,
+    "l7_edge_total": 1
   },
   "openItems": [],
   "sideNotes": [

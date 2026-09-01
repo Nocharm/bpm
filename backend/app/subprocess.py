@@ -7,6 +7,54 @@ from app.models import MapVersion, Node, ProcessCategory, ProcessMap
 from app.schemas import NodeIn, SubprocessRefOut
 
 
+# 하위프로세스 노드 전용 핸들 — SP 노드는 이 두 핸들만 렌더한다(입력 "in" / 대표끝 출력 "__primary__").
+# 서버가 SP 끝점 엣지를 만들 때 이 값을 안 넣으면 React Flow가 붙일 핸들을 못 찾아 **엣지를 조용히
+# 버린다**(노드만 뜨고 선이 안 보임). frontend/src/lib/subprocess-embed.ts와 수동 동기.
+SUBPROCESS_IN_HANDLE = "in"
+PRIMARY_END_HANDLE = "__primary__"
+# 일반 노드(분기·끝)의 변별 핸들 id — frontend process-node.tsx의 `s-{side}`/`t-{side}`와 동기.
+# 연계 캔버스에 분기 노드를 끼울 때 SP 전용 핸들을 그대로 쓰면 또 엣지가 사라진다.
+DEFAULT_TARGET_HANDLE = "t-left"
+
+
+def side_source_handle(side: str) -> str:
+    """변 이름 → 출구 핸들 id. 분기 노드는 4면을 다 쓴다(SP는 __primary__ 고정)."""
+    return f"s-{side}"
+
+# L5 연계 캔버스 그리드 레이아웃 — 캔버스 열기(routers/categories)와 인터뷰 임포트(scripts/import_consultant)가
+# 같은 좌표 규칙을 쓴다. 한쪽만 바꾸면 임포트가 보강한 노드가 사용자 캔버스와 어긋난 격자에 놓인다.
+LINKAGE_X0, LINKAGE_Y0 = 120, 120
+LINKAGE_X_STEP, LINKAGE_Y_STEP = 240, 120
+LINKAGE_COLS = 4
+
+
+def grid_positions(start_index: int, count: int, base_y: float) -> list[tuple[float, float]]:
+    """row-major 그리드 좌표 — start_index부터 count개."""
+    out: list[tuple[float, float]] = []
+    for i in range(start_index, start_index + count):
+        col, row = i % LINKAGE_COLS, i // LINKAGE_COLS
+        out.append((LINKAGE_X0 + col * LINKAGE_X_STEP, base_y + row * LINKAGE_Y_STEP))
+    return out
+
+
+async def unique_linkage_name(
+    session: AsyncSession, category: ProcessCategory, exclude_map_id: int | None = None
+) -> str:
+    """캔버스 맵 이름 자동 — "{카테고리명} 연계", 전역 충돌 시 코드/카운터 서픽스."""
+    base = f"{category.name} 연계"
+    candidates = [base, f"{base} ({category.code})"]
+    n = 2
+    while True:
+        for candidate in candidates:
+            query = select(ProcessMap.id).where(ProcessMap.name == candidate)
+            if exclude_map_id is not None:
+                query = query.where(ProcessMap.id != exclude_map_id)
+            if await session.scalar(query) is None:
+                return candidate
+        candidates = [f"{base} ({category.code}) ({n})"]
+        n += 1
+
+
 def validate_process(nodes: list[NodeIn]) -> None:
     """프로세스 그래프 규칙 검증 + 대표 끝 기본값 설정 — 위반 시 ValueError. (spec §3.3)
 

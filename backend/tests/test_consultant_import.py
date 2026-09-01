@@ -306,7 +306,9 @@ def test_initial_import_creates_published_map(client) -> None:
     async def _load():
         async with SessionLocal() as session:
             m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
-            v = (await session.scalars(select(MapVersion).where(MapVersion.map_id == m.id))).one()
+            # 게시본 위에 편집용 draft가 자동으로 깔린다 (design 2026-09-01 §8) — 게시본만 집어온다
+            v = (await session.scalars(select(MapVersion).where(
+                MapVersion.map_id == m.id, MapVersion.status == "published"))).one()
             nodes = (await session.scalars(select(Node).where(Node.version_id == v.id))).all()
             perms = (await session.scalars(select(MapPermission).where(MapPermission.map_id == m.id))).all()
             apprs = (await session.scalars(select(MapApprover).where(MapApprover.map_id == m.id))).all()
@@ -318,6 +320,7 @@ def test_initial_import_creates_published_map(client) -> None:
     assert m.sp_designated_at is not None and m.sp_input == "PR" and m.sp_output == "PO"
     assert m.sp_duration == "1.30"
     assert v.status == "published" and v.version_number == 1
+    assert report.drafts == 1  # 게시본 위 편집용 draft
     assert {n.node_type for n in nodes} == {"start", "process", "end"}
     assert [(p.principal_id, p.role) for p in perms] == [("cons.owner", "owner")]
     assert [a.user_id for a in apprs] == ["cons.appr"]
@@ -347,7 +350,7 @@ def test_reimport_unchanged_is_noop(client) -> None:
             m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "L6-01"))).one()
             return await session.scalar(select(func.count()).select_from(MapVersion).where(MapVersion.map_id == m.id))
 
-    assert _run(_count()) == 1  # 새 버전 없음
+    assert _run(_count()) == 2  # 게시본 + 자동 draft — 재전달로 늘지 않음
 
     # 내용 무변경 재전달은 아무것도 쓰지 않는다 — 안 그러면 updated_at이 갱신돼 홈 목록
     # (updated_at desc)이 무변경 맵으로 도배되고 sp_changed_at 이력도 오염된다 (finding I-1).
@@ -377,7 +380,8 @@ def test_reimport_changed_publishes_new_version(client) -> None:
             )).all()
 
     versions = _run(_versions())
-    assert [v.status for v in versions] == ["expired", "published"]
+    # 손 안 댄 자동 draft는 새 버전으로 재사용된다 — 재전달마다 구 draft가 쌓이지 않는다
+    assert [v.status for v in versions] == ["expired", "published", "draft"]
     assert versions[1].version_number == 2  # 현업 편집 있어도 같은 규칙 — 아무것도 안 막는다
 
 
@@ -450,7 +454,7 @@ def test_partial_redelivery_preserves_link_node_params(client) -> None:
         return version_count, sp
 
     version_count, sp = _run(_load())
-    assert version_count == 1  # 새 버전 안 찍힘
+    assert version_count == 2  # 게시본 + 자동 draft, 새 게시 버전 없음
     assert sp.annual_count == "42" and sp.fte == "3.0"  # 값 유실 없음
 
 
@@ -541,7 +545,7 @@ def test_reimport_trashed_map_errors(client) -> None:
 
     m, version_count = _run(_load())
     assert m.deleted_at is not None  # 휴지통 상태 불변 — 되살아나지 않음
-    assert version_count == 1  # 재게시 없음(휴지통 맵은 pass 2에서 제외)
+    assert version_count == 2  # 게시본 + 자동 draft, 재게시 없음(휴지통 맵은 pass 2에서 제외)
 
 
 def test_duplicate_name_different_codes_warns_but_both_import(client) -> None:
@@ -714,12 +718,12 @@ def test_description_changes_detected_and_stable(client) -> None:
 
     m, version_count = _run(_counts())
     assert m.description == "[Interview]\nStart condition: 주기 도래"
-    assert version_count == 2
+    assert version_count == 3  # expired + published + 자동 draft
 
     # 동일 내용 재전달(새 객체) → unchanged — description이 시그니처를 흔들지 않는다
     report3 = _run(_import_once(maps=[_make_node_desc()]))
     assert report3.counts() == {"unchanged": 1}
-    assert _run(_counts())[1] == 2
+    assert _run(_counts())[1] == 3  # 무변경 재전달은 버전을 늘리지 않는다
 
 
 def test_build_graph_rows_carries_color_and_signature_detects_it() -> None:
@@ -909,3 +913,74 @@ def test_node_io_forms_survive_redelivery_unless_io_changed(client) -> None:
     report = _run(_import_once(maps=[_make("개정된 설명", node_input="작업지시\n교정 대장")]))
     assert report.counts() == {"updated": 1}
     assert _run(_load_latest_forms()) == ""
+
+
+def test_trailing_draft_is_created_and_reused_on_redelivery(client) -> None:
+    """게시본 위 편집용 draft 자동 생성 + 손 안 댄 draft는 재전달이 재사용(누적 금지)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="L6-DRAFT-1")]))
+
+    async def _versions():
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-DRAFT-1")
+            )).one()
+            return (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id).order_by(MapVersion.id)
+            )).all()
+
+    first = _run(_versions())
+    assert [v.status for v in first] == ["published", "draft"]
+    # 실오너가 강탈 없이 바로 편집할 수 있어야 한다 — 실행자로 점유하지 않는다
+    assert first[1].checked_out_by is None
+
+    changed = _canonical_map(code="L6-DRAFT-1")
+    changed.nodes[0].name = "요청(개정)"
+    _run(_import_once(maps=[changed], label="Delivery 2"))
+    second = _run(_versions())
+    assert [v.status for v in second] == ["expired", "published", "draft"]
+    assert second[1].id == first[1].id  # 손 안 댄 draft가 새 게시 버전으로 재사용됨
+
+
+def test_edited_draft_survives_redelivery(client) -> None:
+    """사용자가 편집한 draft는 재전달이 재사용하지 않는다 — 그대로 보존되고 새 버전이 따로 게시된다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="L6-DRAFT-2")]))
+
+    async def _edit_draft() -> int:
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-DRAFT-2")
+            )).one()
+            draft = await session.scalar(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "draft"))
+            node = (await session.scalars(
+                select(Node).where(Node.version_id == draft.id, Node.node_type == "process"))).first()
+            node.title = "현업이 고친 제목"
+            await session.commit()
+            return draft.id
+
+    edited_id = _run(_edit_draft())
+    changed = _canonical_map(code="L6-DRAFT-2")
+    changed.nodes[0].name = "요청(개정)"
+    _run(_import_once(maps=[changed], label="Delivery 2"))
+
+    async def _load():
+        async with SessionLocal() as session:
+            kept = await session.get(MapVersion, edited_id)
+            titles = (await session.scalars(
+                select(Node.title).where(Node.version_id == edited_id))).all()
+            return kept.status, list(titles)
+
+    status, titles = _run(_load())
+    assert status == "draft" and "현업이 고친 제목" in titles

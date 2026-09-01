@@ -43,14 +43,10 @@ from app.schemas import (
     LinkageMapOut,
     MapOut,
 )
+from app.subprocess import LINKAGE_Y0, LINKAGE_Y_STEP, grid_positions, unique_linkage_name
 from app.version_events import record_version_event
 
 MAX_CATEGORY_LEVEL = 5  # 컨설턴트 체계 L1~L5 (design 2026-08-08 §2.1)
-
-# 연계 캔버스 시드/보강 그리드 — import_consultant.place()와 동일 리듬 (design 2026-08-28 §6)
-_LINKAGE_X0, _LINKAGE_Y0 = 120, 120
-_LINKAGE_X_STEP, _LINKAGE_Y_STEP = 240, 120
-_LINKAGE_COLS = 4
 
 router = APIRouter(
     prefix="/api/categories", tags=["categories"], dependencies=[Depends(get_current_user)]
@@ -405,13 +401,23 @@ async def import_interview_delivery(
     설계: docs/design/2026-08-18-interview-import-design.md §1·§6.
     """
     from scripts.consultant_canonical import CanonicalCategory, CanonicalMap
-    from scripts.consultant_interview import AdapterIssue, InterviewNote, convert_interview
-    from scripts.import_consultant import apply_interview_notes, import_delivery
+    from scripts.consultant_interview import (
+        AdapterIssue,
+        InterviewLinkage,
+        InterviewNote,
+        convert_interview,
+    )
+    from scripts.import_consultant import (
+        apply_interview_linkage,
+        apply_interview_notes,
+        import_delivery,
+    )
 
     files_out: list[InterviewImportFileOut] = []
     merged_cats: dict[str, CanonicalCategory] = {}
     merged_maps: list[CanonicalMap] = []
     merged_notes: list[InterviewNote] = []
+    merged_linkages: list[InterviewLinkage] = []
     seen_task_codes: set[str] = set()
 
     for file in payload.files:
@@ -438,6 +444,8 @@ async def import_interview_delivery(
             merged_maps.extend(result.maps)
             seen_task_codes.update(m.code for m in result.maps)
             merged_notes.extend(result.notes)
+            if result.linkage is not None:
+                merged_linkages.append(result.linkage)
 
         shown = issues[:_INTERVIEW_ISSUE_CAP]
         overflow = len(issues) - len(shown)
@@ -457,8 +465,14 @@ async def import_interview_delivery(
     report = await import_delivery(
         session, categories=list(merged_cats.values()), maps=merged_maps,
         actor=login_id, label=label, commit_every=None,
+        # 연계 캔버스에 놓일 맵은 annual_count/fte 착지면이 있다 — "갈 곳 없음" 경고 대상 아님
+        linkage_placed={code for lk in merged_linkages for code in lk.map_codes},
     )
     inserted_notes = await apply_interview_notes(session, merged_notes, label=label)
+    # L6 흐름 → L5 연계 캔버스. 맵이 다 만들어진 뒤에만 노드를 걸 수 있어 순서가 고정된다.
+    linked_count = await apply_interview_linkage(
+        session, merged_linkages, actor=login_id, report=report
+    )
 
     if payload.apply:
         await session.commit()
@@ -472,6 +486,7 @@ async def import_interview_delivery(
     summary = report.counts()
     summary["warning"] = sum(1 for r in report.rows if r[1] == "warning")
     summary["notes"] = inserted_notes
+    summary["linkage"] = linked_count
 
     return InterviewImportOut(
         applied=payload.apply,
@@ -683,7 +698,7 @@ async def update_category(
         if category.linkage_map_id is not None:
             canvas = await session.get(ProcessMap, category.linkage_map_id)
             if canvas is not None and canvas.deleted_at is None:
-                canvas.name = await _unique_linkage_name(
+                canvas.name = await unique_linkage_name(
                     session, category, exclude_map_id=canvas.id
                 )
 
@@ -874,33 +889,6 @@ async def _load_category_permissions(
     )
 
 
-async def _unique_linkage_name(
-    session: AsyncSession, category: ProcessCategory, exclude_map_id: int | None = None
-) -> str:
-    """캔버스 맵 이름 자동 — "{카테고리명} 연계", 전역 충돌 시 코드/카운터 서픽스."""
-    base = f"{category.name} 연계"
-    candidates = [base, f"{base} ({category.code})"]
-    n = 2
-    while True:
-        for candidate in candidates:
-            query = select(ProcessMap.id).where(ProcessMap.name == candidate)
-            if exclude_map_id is not None:
-                query = query.where(ProcessMap.id != exclude_map_id)
-            if await session.scalar(query) is None:
-                return candidate
-        candidates = [f"{base} ({category.code}) ({n})"]
-        n += 1
-
-
-def _grid_positions(start_index: int, count: int, base_y: float) -> list[tuple[float, float]]:
-    """row-major 그리드 좌표 — start_index부터 count개."""
-    out: list[tuple[float, float]] = []
-    for i in range(start_index, start_index + count):
-        col, row = i % _LINKAGE_COLS, i // _LINKAGE_COLS
-        out.append((_LINKAGE_X0 + col * _LINKAGE_X_STEP, base_y + row * _LINKAGE_Y_STEP))
-    return out
-
-
 @router.post("/{category_id}/linkage-map", response_model=LinkageMapOut)
 async def open_linkage_map(
     category_id: int,
@@ -937,7 +925,7 @@ async def open_linkage_map(
         if not is_admin:
             raise HTTPException(status_code=404, detail="no linkage canvas for this category")
         canvas = ProcessMap(
-            name=await _unique_linkage_name(session, category),
+            name=await unique_linkage_name(session, category),
             created_by=user, owner_id=user, visibility="public", mode="framework",
         )
         canvas.versions.append(MapVersion(label="Linkage"))
@@ -945,7 +933,7 @@ async def open_linkage_map(
         await session.flush()
         version_id = canvas.versions[0].id
         for i, ((map_id, map_name), (px, py)) in enumerate(
-            zip(contained_rows, _grid_positions(0, len(contained_rows), _LINKAGE_Y0))
+            zip(contained_rows, grid_positions(0, len(contained_rows), LINKAGE_Y0))
         ):
             session.add(
                 Node(id=uuid4().hex, version_id=version_id, title=map_name,
@@ -986,10 +974,10 @@ async def open_linkage_map(
             .where(Node.version_id == draft.id)
         )
     ).one()
-    base_y = (max_y + _LINKAGE_Y_STEP) if node_count else _LINKAGE_Y0
+    base_y = (max_y + LINKAGE_Y_STEP) if node_count else LINKAGE_Y0
     next_sort = (max_sort + 1) if node_count else 0
     for i, ((map_id, map_name), (px, py)) in enumerate(
-        zip(missing, _grid_positions(0, len(missing), base_y))
+        zip(missing, grid_positions(0, len(missing), base_y))
     ):
         session.add(
             Node(id=uuid4().hex, version_id=draft.id, title=map_name,
