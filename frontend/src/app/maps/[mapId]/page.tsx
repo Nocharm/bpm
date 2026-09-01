@@ -9148,7 +9148,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                             >
                               {Array.from({ length: 4 }, (_, col) =>
                                 (row + col) % 2 === 0 ? (
-                                  <span key={col} className="font-semibold">SAMSUNG BIOLOGICS</span>
+                                  // 공식 워드마크 관례 — A는 가로선 없는 형태(Λ로 재현), SAMSUNG 굵게·BIOLOGICS 가늘게
+                                  <span key={col} className="whitespace-nowrap">
+                                    <span className="font-semibold">SΛMSUNG</span>{" "}
+                                    <span className="font-light">BIOLOGICS</span>
+                                  </span>
                                 ) : (
                                   // 아이콘은 시스템명에 붙여 한 덩어리 — 2종만 교차 (사용자 요청 2026-09-01)
                                   <span key={col} className="inline-flex items-center gap-2.5 font-light">
