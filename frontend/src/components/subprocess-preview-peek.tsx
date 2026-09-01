@@ -117,6 +117,8 @@ export function SubprocessPreviewPeek({
 }) {
   const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
+  // 목업 드롭다운(body 포털) — 바깥클릭 판정 2곳(피크 닫기·메뉴 닫기)이 공유하므로 최상단 선언
+  const mockMenuRef = useRef<HTMLDivElement>(null);
   const [fetchState, setFetchState] = useState<PeekFetch>({ status: "loading" });
 
   useEffect(() => {
@@ -217,7 +219,10 @@ export function SubprocessPreviewPeek({
       if (
         event.target instanceof globalThis.Element &&
         !panelRef.current?.contains(event.target) &&
-        !anchorEl?.contains(event.target)
+        !anchorEl?.contains(event.target) &&
+        // 목업 드롭다운도 body 포털이라 패널 밖 — 여기서 안 빼면 메뉴 항목 mousedown에 피크가
+        // 언마운트돼 click(추가/맵 이동)이 죽는다(이동 게이트 미표시 실사고 2026-09-01)
+        !mockMenuRef.current?.contains(event.target)
       ) {
         onClose();
       }
@@ -324,7 +329,6 @@ export function SubprocessPreviewPeek({
     { side: "output" as const, icon: LogOut, lines: splitIoLines(spExtra?.output) },
   ].filter((entry) => entry.lines.length > 0 && (mockHover || displayFields.includes(entry.side)));
   const mockAreaRef = useRef<HTMLDivElement>(null);
-  const mockMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!mockMenu) return;
     const handleMouseDown = (event: MouseEvent) => {
