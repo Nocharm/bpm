@@ -405,7 +405,7 @@ async def delete_version(
     version = await session.get(MapVersion, version_id)
     if version is None:
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
-    if version.status in (workflow.PENDING, workflow.PUBLISHED):
+    if version.status in (workflow.PENDING, workflow.PUBLISHED, workflow.CONFIRMED):
         raise HTTPException(
             status_code=409, detail=f"cannot delete a {version.status} version"
         )

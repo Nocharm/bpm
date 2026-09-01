@@ -430,6 +430,16 @@ def test_migrate_framework_confirmed_idempotent(client: TestClient, enforce: Non
     assert event_type == "confirmed"
 
 
+def test_confirmed_snapshot_cannot_be_deleted(client: TestClient, enforce: None) -> None:
+    """확정 스냅샷은 pending/published와 같은 삭제 보호를 받는다 (spec §3.1)."""
+    map_id, _draft_id = _make_canvas(client, "FWC-DEL5", "삭제금지확정")
+    act_as("fwc.confirmer")
+    ver = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()["version"]
+    act_as(SYSADMIN)
+    res = client.delete(f"/api/versions/{ver['id']}")
+    assert res.status_code == 409
+
+
 def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:
     """분기·끝 노드 생성 허용(끝 규칙 적용), start/process는 계속 차단 (2026-08-28 개선)."""
     l5 = _seed_category(client, "FWC-D5", "분기L5", level=5)

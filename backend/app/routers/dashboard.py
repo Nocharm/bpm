@@ -280,7 +280,7 @@ async def set_coverage_depts(
     return CoverageDeptsOut(org_paths=wanted)
 
 
-_VERSION_STATUSES = ("published", "draft", "approved", "pending", "rejected")
+_VERSION_STATUSES = ("published", "draft", "approved", "pending", "confirmed", "rejected")
 _RECENT_EVENT_LIMIT = 10  # 좌측 이벤트 리스트에 담기는 최대 건수
 
 
