@@ -12,6 +12,10 @@ from app.schemas import NodeIn, SubprocessRefOut
 # 버린다**(노드만 뜨고 선이 안 보임). frontend/src/lib/subprocess-embed.ts와 수동 동기.
 SUBPROCESS_IN_HANDLE = "in"
 PRIMARY_END_HANDLE = "__primary__"
+# 일반 노드(분기·끝)의 변별 핸들 id — frontend process-node.tsx의 `s-{side}`/`t-{side}`와 동기.
+# 연계 캔버스에 분기 노드를 끼울 때 SP 전용 핸들을 그대로 쓰면 또 엣지가 사라진다.
+DEFAULT_SOURCE_HANDLE = "s-right"
+DEFAULT_TARGET_HANDLE = "t-left"
 
 # L5 연계 캔버스 그리드 레이아웃 — 캔버스 열기(routers/categories)와 인터뷰 임포트(scripts/import_consultant)가
 # 같은 좌표 규칙을 쓴다. 한쪽만 바꾸면 임포트가 보강한 노드가 사용자 캔버스와 어긋난 격자에 놓인다.

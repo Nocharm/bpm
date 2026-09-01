@@ -267,3 +267,71 @@ def test_undeclared_cycle_still_gets_a_sane_layout() -> None:
     layout_flow(nodes, pairs, primary_end_id=None)
     xs = {n.id: n.x for n in nodes}
     assert xs["a"] < xs["b"] < xs["c"]
+
+
+def _lk(source: str, target: str, *, kind: str = "seq", gateway: str = "", label: str = ""):
+    from scripts.consultant_interview import InterviewLinkageEdge
+
+    return InterviewLinkageEdge(source=source, target=target, label=label, kind=kind, gateway=gateway)
+
+
+def test_branch_node_splits_a_fanout() -> None:
+    """A→B, B→A(loop)/B→C — B 뒤에 분기 노드를 세우고 거기서 A·C로 가른다 (사용자 결정 2026-09-01)."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    edges = [
+        _lk("A", "B"),
+        _lk("B", "A", kind="loop", label="되돌아감"),
+        _lk("B", "C", label="진행"),
+    ]
+    flow, branch_of, back = expand_linkage_branches(edges, {"A", "B", "C"})
+    assert branch_of == {"__branch__B": "B"}
+    assert flow == [
+        ("A", "B", ""),
+        ("B", "__branch__B", ""),
+        ("__branch__B", "A", "되돌아감"),
+        ("__branch__B", "C", "진행"),
+    ]
+    # 되돌아가는 쌍은 재작성 좌표계로 옮겨진다 — 안 그러면 사이클이 되살아나 랭크가 무너진다
+    assert back == {("__branch__B", "A")}
+
+
+def test_single_out_edge_gets_no_branch_node() -> None:
+    from scripts.import_consultant import expand_linkage_branches
+
+    flow, branch_of, _ = expand_linkage_branches([_lk("A", "B"), _lk("B", "C")], {"A", "B", "C"})
+    assert branch_of == {}
+    assert flow == [("A", "B", ""), ("B", "C", "")]
+
+
+def test_parallel_fanout_gets_no_branch_node() -> None:
+    """병행 팬아웃은 택일이 아니다 — 마름모를 세우면 오독된다(L6 승격 제외 규칙과 동일)."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    edges = [
+        _lk("A", "B", kind="branch", gateway="parallel"),
+        _lk("A", "C", kind="branch", gateway="parallel"),
+    ]
+    _, branch_of, _ = expand_linkage_branches(edges, {"A", "B", "C"})
+    assert branch_of == {}
+
+
+def test_mixed_gateway_fanout_still_branches() -> None:
+    """하나라도 병행이 아니면 택일 요소가 있는 것 — 분기 노드를 세운다."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    edges = [
+        _lk("A", "B", kind="branch", gateway="parallel"),
+        _lk("A", "C", kind="bypass"),
+    ]
+    _, branch_of, _ = expand_linkage_branches(edges, {"A", "B", "C"})
+    assert branch_of == {"__branch__A": "A"}
+
+
+def test_edges_outside_the_canvas_are_ignored() -> None:
+    from scripts.import_consultant import expand_linkage_branches
+
+    flow, branch_of, _ = expand_linkage_branches(
+        [_lk("A", "B"), _lk("A", "GONE")], {"A", "B"})
+    assert flow == [("A", "B", "")]
+    assert branch_of == {}  # 남은 out-edge가 1개 → 분기 아님

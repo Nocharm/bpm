@@ -57,8 +57,24 @@
 - entry의 taskId가 가리키는 SP 노드를 **첫 자리(sort_order 0, 그리드 좌상단)** 에 놓고
 - entry 자체는 **L5 스코프 map_notes 1건**(kind=`entry`, title=`Entry (timer)`, text=label+quote)으로 보존
 
-**L6 레벨 `branch`는 노드 타입을 바꾸지 않는다** — src가 subprocess(=L6 맵)라 decision으로 승격할 수 없다.
-분기는 다중 out-edge + 엣지 라벨(조건)로만 표현된다.
+**L6 레벨 분기는 분기 노드를 새로 세운다** — src가 subprocess(=L6 맵)라 L6 맵처럼 타입을 decision으로
+**승격할 수는 없다**. 대신 팬아웃 앞에 분기 노드를 끼운다(`expand_linkage_branches`, 사용자 결정 2026-09-01):
+
+```
+A → B, B → A(loop), B → C      ⇒      A → B → ◇(B 결과) → A
+                                                        └→ C
+```
+
+- 끼우는 기준: 나가는 엣지 **2개 이상** && 전부 `gateway="parallel"`은 아님. 병행 팬아웃은 택일이
+  아니므로 마름모를 세우면 오독된다(L6 승격 제외 규칙과 같은 판단)
+- 조건 라벨(`label`+`condition`)은 **분기 노드에서 나가는 엣지**가 들고 간다. B→◇ 엣지는 무라벨
+- 분기 노드는 `decision` — `validate_framework_canvas`가 캔버스에 subprocess/decision/end를 허용한다
+  (에디터에서도 프레임워크 맵에 추가할 수 있는 정식 타입)
+- 재임포트 재사용 키는 계보(`source_node_id = make_node_id(l5_code, "__branch__{src}")`) —
+  SP 노드처럼 `linked_map_id`로 식별할 수 없다
+- **핸들은 끝점 타입별로** — SP는 `in`/`__primary__`, 분기는 변별 핸들 `t-left`/`s-right`.
+  SP 전용 핸들을 분기 노드에 쓰면 React Flow가 또 엣지를 조용히 버린다
+- 되돌아가는 쌍(loop)은 재작성 좌표계(`◇ → target`)로 옮겨 랭크 계산에서 뺀다 — 안 그러면 사이클 부활
 
 ## 4. 값 정규화 2건 (0.4에서 처음 값이 차며 새로 문제되는 지점)
 
@@ -143,3 +159,4 @@
 | IO 자동 연결 | 줄 단위 완전일치 + 흐름 순방향 + 최근접 상류. L6 내부만. 기존 링크 불변 |
 | 자동 draft | 게시 직후 1건, 점유권자 없음. 손 안 댄 것은 재전달이 재사용 |
 | 사이클 | 되돌아가는 엣지를 랭크에서 빼고 선행 순서를 먼저 확정. 표시(kind=loop)가 확정, DFS가 보완 |
+| L5 분기 | SP는 타입 승격 불가 → 팬아웃 앞에 decision 노드를 끼운다. 조건 라벨은 분기 노드 출구 엣지가 보유 |

@@ -16,7 +16,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scripts.consultant_interview import InterviewLinkage, InterviewNote
+    from scripts.consultant_interview import (
+        InterviewLinkage,
+        InterviewLinkageEdge,
+        InterviewNote,
+    )
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +43,8 @@ from app.models import (
 from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.schemas import NUMERIC_RE
 from app.subprocess import (
+    DEFAULT_SOURCE_HANDLE,
+    DEFAULT_TARGET_HANDLE,
     LINKAGE_Y0,
     LINKAGE_Y_STEP,
     PRIMARY_END_HANDLE,
@@ -914,6 +920,43 @@ def _linkage_param(value: str) -> str:
     return text if text and NUMERIC_RE.fullmatch(text) else ""
 
 
+def expand_linkage_branches(
+    edges: list["InterviewLinkageEdge"], present: set[str]
+) -> tuple[list[tuple[str, str, str]], dict[str, str], set[tuple[str, str]]]:
+    """분기 팬아웃 앞에 분기 노드를 끼운다 — B→{A,C} ⇒ B→◇, ◇→A, ◇→C.
+
+    L6 맵은 분기 src를 decision으로 **승격**하지만(엣지가 진실, design 2026-09-01 §2), 연계 캔버스의
+    src는 subprocess라 타입을 못 바꾼다 — 대신 분기 노드를 새로 만들어 뒤에 세운다
+    (사용자 결정 2026-09-01). 조건 라벨은 분기 노드에서 나가는 엣지가 들고 간다.
+
+    끼우는 기준: 나가는 엣지 2개 이상 && 전부 `gateway="parallel"`은 아님. 병행 팬아웃은 택일이
+    아니므로 마름모를 세우면 오독된다(L6의 승격 제외 규칙과 같은 판단).
+
+    반환: (재작성 엣지 [(src,dst,label)], 분기노드키→원본 src code, 되돌아가는 쌍).
+    되돌아가는 쌍은 재작성 좌표계 기준 — 안 넘기면 사이클이 되살아나 랭크가 무너진다.
+    """
+    scoped = [e for e in edges if e.source in present and e.target in present]
+    out_by_src: dict[str, list["InterviewLinkageEdge"]] = {}
+    for edge in scoped:
+        out_by_src.setdefault(edge.source, []).append(edge)
+
+    rewritten: list[tuple[str, str, str]] = []
+    branch_of: dict[str, str] = {}
+    back: set[tuple[str, str]] = set()
+    for src, group in out_by_src.items():
+        forks = len(group) >= 2 and not all(e.gateway == "parallel" for e in group)
+        origin = src
+        if forks:
+            origin = f"__branch__{src}"
+            branch_of[origin] = src
+            rewritten.append((src, origin, ""))
+        for edge in group:
+            rewritten.append((origin, edge.target, edge.label))
+            if edge.kind == "loop":
+                back.add((origin, edge.target))
+    return rewritten, branch_of, back
+
+
 async def apply_interview_linkage(
     session: AsyncSession,
     linkages: list["InterviewLinkage"],
@@ -995,32 +1038,46 @@ async def apply_interview_linkage(
             n.linked_map_id: n for n in existing
             if n.node_type == "subprocess" and n.linked_map_id is not None
         }
+        # 분기 노드는 linked_map_id가 없다 — 계보 키(source_node_id)로 재임포트 시 재사용한다
+        branch_nodes: dict[str, Node] = {
+            n.source_node_id: n for n in existing
+            if n.node_type == "decision" and n.source_node_id
+        }
         max_y = max((n.pos_y for n in existing), default=None)
         base_y = (max_y + LINKAGE_Y_STEP) if max_y is not None else LINKAGE_Y0
         next_sort = max((n.sort_order for n in existing), default=-1) + 1
 
-        # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것
+        # 분기 팬아웃 앞에 분기 노드를 끼운 흐름 — 배치·엣지 모두 이 재작성본을 쓴다
+        placed_codes = {c for c in linkage.map_codes if c in map_ids}
+        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, placed_codes)
+
+        # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
         missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
+        missing_branches = [
+            key for key in branch_of
+            if make_node_id(code, key) not in branch_nodes
+        ]
         # 캔버스를 **처음 만들 때만** 흐름대로 가로 자동정렬한다. 보강은 기존 노드를 못 옮기므로
         # (추가만·이동 없음 규약) 격자로 아래에 붙인다.
         placed: dict[str, tuple[float, float]] = {}
         if is_new_canvas and missing:
             layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
-            present = set(missing)
-            canvas_edges = [(e.source, e.target) for e in linkage.edges
-                            if e.source in present and e.target in present]
+            layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
+            known = {n.id for n in layout_nodes}
             layout_flow(
-                layout_nodes, canvas_edges, primary_end_id=None,
+                layout_nodes,
+                [(a, b) for a, b, _ in flow if a in known and b in known],
+                primary_end_id=None,
                 # loop(재수행)은 선행이 아니다 — 랭크에서 빼야 선행→분기 순서가 잡히고
                 # 되돌아가는 엣지는 그 위에 그려진다 (사용자 결정 2026-09-01)
-                back_pairs={(e.source, e.target) for e in linkage.edges
-                            if e.kind == "loop" and e.source in present and e.target in present},
-                labeled=[(e.source, e.target, e.label) for e in linkage.edges
-                         if e.source in present and e.target in present and e.label],
+                back_pairs={p for p in back_pairs if p[0] in known and p[1] in known},
+                labeled=[(a, b, text) for a, b, text in flow
+                         if text and a in known and b in known],
             )
             placed = {n.id: (n.x, n.y) for n in layout_nodes}
         added = 0
-        for i, (c, (px, py)) in enumerate(zip(missing, grid_positions(0, len(missing), base_y))):
+        grid = grid_positions(0, len(missing) + len(missing_branches), base_y)
+        for i, (c, (px, py)) in enumerate(zip(missing, grid)):
             annual, fte = linkage.params.get(c, ("", ""))
             x, y = placed.get(c, (px, py))
             node = Node(
@@ -1032,6 +1089,19 @@ async def apply_interview_linkage(
             )
             session.add(node)
             node_by_map[map_ids[c]] = node
+            added += 1
+        for j, key in enumerate(missing_branches):
+            lineage = make_node_id(code, key)
+            x, y = placed.get(key, grid[len(missing) + j])
+            src_code = branch_of[key]
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=lineage,
+                title=f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
+                node_type="decision",
+                pos_x=x, pos_y=y, sort_order=next_sort + len(missing) + j,
+            )
+            session.add(node)
+            branch_nodes[lineage] = node
             added += 1
 
         # 기존 SP 노드의 annual_count/fte — 비어 있으면 채우고, 값이 있으면 덮지 않는다
@@ -1060,20 +1130,30 @@ async def apply_interview_linkage(
                 select(Edge).where(Edge.version_id == draft.id)
             )).all()
         }
-        for edge in linkage.edges:
-            src = node_by_map.get(map_ids.get(edge.source, -1))
-            dst = node_by_map.get(map_ids.get(edge.target, -1))
+        def _node_of(key: str) -> Node | None:
+            if key in branch_of:
+                return branch_nodes.get(make_node_id(code, key))
+            return node_by_map.get(map_ids.get(key, -1))
+
+        for src_key, dst_key, label in flow:
+            src, dst = _node_of(src_key), _node_of(dst_key)
             if src is None or dst is None:
                 report.add(code, "warning",
-                           f"linkage edge {edge.source}→{edge.target} dropped — map not on canvas")
+                           f"linkage edge {src_key}→{dst_key} dropped — node not on canvas")
                 continue
             if (src.id, dst.id) in existing_pairs:
                 continue
             session.add(Edge(
                 id=uuid.uuid4().hex, version_id=draft.id,
-                source_node_id=src.id, target_node_id=dst.id, label=edge.label,
-                # SP 끝점은 전용 핸들 필수 — 없으면 React Flow가 엣지를 통째로 못 붙인다
-                source_handle=PRIMARY_END_HANDLE, target_handle=SUBPROCESS_IN_HANDLE,
+                source_node_id=src.id, target_node_id=dst.id, label=label,
+                # 끝점 타입별 핸들 — SP는 전용(in/__primary__), 분기는 변별(s-/t-).
+                # 안 맞추면 React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다
+                source_handle=(
+                    PRIMARY_END_HANDLE if src.node_type == "subprocess" else DEFAULT_SOURCE_HANDLE
+                ),
+                target_handle=(
+                    SUBPROCESS_IN_HANDLE if dst.node_type == "subprocess" else DEFAULT_TARGET_HANDLE
+                ),
             ))
             existing_pairs.add((src.id, dst.id))
             added += 1

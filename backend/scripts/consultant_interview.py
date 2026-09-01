@@ -98,6 +98,7 @@ class InterviewLinkageEdge:
     target: str
     label: str = ""
     kind: str = "seq"
+    gateway: str = ""
 
 
 @dataclass
@@ -480,6 +481,7 @@ def _build_linkage(
             target=dst,
             label=_truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
             kind=kind,
+            gateway=gateway,
         ))
         quote = _clean(raw.get("quote"))
         if quote:
