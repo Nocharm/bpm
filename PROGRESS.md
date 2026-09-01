@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 대형맵 임포트 스트레스 더미 (dev)
+- `docs/samples/framework-linkage-dummy/brr-large-l5.json` — 대형맵 드래그/렌더 성능 실측용 인터뷰 0.4 세트(완제품 배치기록 검토). L6 6개 중 "제조기록 전수 검토"가 대형맵: 12구획×(착수+점검 20+취합) 팬아웃 격자 = **268노드·497엣지**(R2 실측 규모). 시험기록 대조 100노드, L5 연계 캔버스 8노드(분기 2), 유닛 간 IO 완전일치 5쌍, branch/loop/bypass/exception·decision/handoff 포함.
+- 로컬 검증: dry-run 어댑터 이슈 0(경고는 기존 더미 세트와 동일 클래스 — owner null 관례 + 로컬 데모 db에 없는 승인자 jihoon.park/sujin.han), apply로 6맵+연계 캔버스 생성, 에디터에서 268/497 렌더·드래그·드롭 영속 실측 확인.
+
 ## 2026-09-01 — 캔버스 드래그 성능 라운드 2: 드래그 중 nodes 동결 (perf/canvas-drag-r2)
 - 일반 드래그의 dragging=true 프레임을 `nodes` state에 커밋하지 않고(페이지 리렌더·`[nodes]` memo 재계산 0) 드롭 flush 1회만 커밋. 352노드·351엣지 스트레스 맵 프로드 A/B(순서 교차): **avg 47~49→17.2ms/frame(-64%), p95 150→16.8ms(-89%), over33 176→2** — vsync(16.7ms) 락. 엣지 0 맵도 avg 39→16.9·p95 116.7→16.8.
 - 설계는 인라인 펼침의 suppress+라이브 오버레이 일반화 — 단, **controlled RF는 부모가 position을 되돌려줘야만 노드가 움직인다**(스토어는 `onNodesChange` 디스패치만, 내부 미갱신 — 1302줄 "ref면 안 됨" 주석이 정답이었다). 그래서 프레임당 라이브 좌표를 RF props 동기화와 같은 채널(`useStoreApi().getState().setNodes`)로 직접 흘린다 — 노드·엣지·선택링·액션바(dragging 플래그)가 전부 따라오고, 드래그 중 다른 state 변경 시엔 displayNodes의 모듈 맵(`generalDragLive`) 오버레이가 stale adopt(스냅백)를 막는다. **트레이드오프: 스토어 직행은 세미-내부 API** — RF 메이저 업그레이드 시 이 echo가 첫 점검 대상(깨지면 "드래그 무반응"으로 즉시 드러남).
