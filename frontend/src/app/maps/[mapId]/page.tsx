@@ -5738,7 +5738,8 @@ function MapEditor({ mapId }: { mapId: number }) {
             : []),
         ],
       };
-      await exportCanvasPng(exportNodes, buildExportFileName("png"), info);
+      // L5 새벽 조감도(다크) 캔버스를 보고 있으면 export도 같은 톤(배경·엣지)으로 — 라이트 고정 회귀 없음(그 외엔 dark=false)
+      await exportCanvasPng(exportNodes, buildExportFileName("png"), info, l5Charcoal);
     } catch (err) {
       setStatus(humanizeApiError(err, t));
     }
@@ -5753,6 +5754,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     mapOwner,
     mapCategoryPath,
     isFrameworkMap,
+    l5Charcoal,
   ]);
 
   const handleExportCsv = useCallback(() => {
@@ -9175,6 +9177,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           {scopes.map((scope, index) => {
             const key = scopeKey(scope);
             const geom = windowGeom[key] ?? defaultGeom(index, bounds);
+            // 라이브 draft를 보고 있어도(readOnly 무관) 확정본이 아님을 상시 인지 — DRAFT 스탬프 표시 대상
+            // (framework 캔버스 전용, 사용자 지시 2026-09-02)
+            const isFrameworkDraft = isFrameworkMap && currentVersion?.status === "draft";
             // 포커스 모드 — 루트(index 0)가 유일한 캔버스 호스트라 항상 active(드릴 깊이와 무관).
             const active = index === 0 || index === activeIndex;
             // 포커스 모드 — 드릴인 플로팅 창 억제. 캔버스는 항상 루트에 두고 활성 스코프는 currentParentId로 전환.
@@ -9282,14 +9287,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                     }}
                     onPointerLeave={() => setHoverRegionId(null)}
                   >
-                    {index === 0 && l5Charcoal && currentVersion?.status !== "confirmed" && (
+                    {index === 0 && l5Charcoal && (
                       // 브랜드 워터마크 — 회사 로고·시스템명·플랫 아이콘을 번갈아 사선 타일링(단조로움 완화).
                       // ReactFlow보다 앞 DOM + 저불투명이라 노드/엣지를 가리지 않는다. 뷰포트 고정(팬 무관)
-                      // confirmed 열람 시엔 CONFIRMED 스탬프만 단독 노출 — 브랜드 워터마크 숨김 (사용자 지시 2026-09-02)
                       <div
                         aria-hidden
                         data-id="l5-brand-watermark"
                         className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
+                        // 도장 스탬프(CONFIRMED/DRAFT)가 그려질 때 뷰포트 중앙 1/3 띠만 비워 겹치지 않게 —
+                        // 위아래 타일은 그대로 남기고 스탬프가 앉는 가운데만 투명 처리 (사용자 지시 2026-09-02)
+                        style={
+                          currentVersion?.status === "confirmed" || isFrameworkDraft
+                            ? {
+                                maskImage:
+                                  "linear-gradient(to bottom, black 0%, black 33%, transparent 33%, transparent 67%, black 67%, black 100%)",
+                                WebkitMaskImage:
+                                  "linear-gradient(to bottom, black 0%, black 33%, transparent 33%, transparent 67%, black 67%, black 100%)",
+                              }
+                            : undefined
+                        }
                       >
                         {/* 불투명도 0.24 — 6%는 하늘에 묻혀 로고가 읽히지 않았다(사용자 요청 2026-09-01). */}
                         <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.24]">
@@ -9702,8 +9718,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <CanvasZoomScale onFit={fitScopeTopLeft} />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark
-                        게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정 */}
-                    {readOnly && (
+                        게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정
+                        framework draft는 아래 별도 블록(DRAFT 스탬프)이 담당 — 여기선 제외(중복 렌더 방지) */}
+                    {readOnly && !isFrameworkDraft && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         {currentVersion?.status === "confirmed" ? (
                           /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프.
@@ -9735,6 +9752,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 : t("editor.watermark")}
                           </span>
                         )}
+                      </div>
+                    )}
+                    {/* framework 캔버스의 라이브 draft 스탬프 — readOnly 여부와 무관하게 항상 노출(편집 중에도 확정본이
+                        아님을 상시 인지시키는 게 목적). CONFIRMED 스탬프와 동일 모티프(-24°·보더·다크 톤 분기). */}
+                    {isFrameworkDraft && (
+                      <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
+                        <span
+                          className={`flex -rotate-[24deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                            index === 0 && l5Charcoal ? "border-canvas text-canvas" : "border-accent text-accent"
+                          }`}
+                        >
+                          <PencilLine size={96} strokeWidth={1.5} />
+                          {t("editor.watermarkDraft")}
+                        </span>
                       </div>
                     )}
                   </div>

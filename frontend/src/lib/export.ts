@@ -13,11 +13,14 @@ const PADDING_PX = 50; // 노드 경계 바깥 여백
 const MIN_SIZE_PX = 400;
 const MAX_SIZE_PX = 4096; // 브라우저 캔버스 크기 한계 보호
 const PIXEL_RATIO = 2; // 2배 해상도 — 노드 테두리·텍스트 선명도
-const EDGE_STROKE = "#000000"; // 출력 엣지 — 검은 실선
+const EDGE_STROKE = "#000000"; // 출력 엣지(라이트 배경) — 검은 실선
+const EDGE_STROKE_DARK = "#F6F6F8"; // 출력 엣지(L5 새벽 조감도 다크 배경) — 어두운 실선이 묻혀 라이트 캔버스 톤으로 대비 확보
 const EDGE_STROKE_WIDTH = "1.5";
 
 // 배경/카드 팔레트 — globals.css 토큰 실값 미러(출력물 예외)
 const BG_COLOR = "#F6F6F8"; // --color-canvas
+const BG_TOP_DARK = "#1B2743"; // --color-canvas-l5-sky — L5 새벽 조감도 dark export 배경 상단
+const BG_BOTTOM_DARK = "#363843"; // --color-canvas-l5 — L5 새벽 조감도 dark export 배경 하단
 const DOT_COLOR = "#BDBDC9"; // --color-canvas-dot
 const DOT_GAP = 24; // dot-grid 간격(css px) — 앱 캔버스와 유사한 밀도
 const DOT_RADIUS = 1;
@@ -48,7 +51,9 @@ interface Frame {
 }
 
 // 엣지·화살촉 인라인 보정 — 되돌리기 클로저 반환. 히트박스(edge-interaction)는 투명 유지.
-function applyEdgeFixups(viewport: HTMLElement): () => void {
+// dark(L5 새벽 조감도) 캡처는 엣지 색을 라이트 톤으로 스왑 — 어두운 배경 위 검정 실선은 안 보인다.
+function applyEdgeFixups(viewport: HTMLElement, dark: boolean): () => void {
+  const edgeStroke = dark ? EDGE_STROKE_DARK : EDGE_STROKE;
   const undos: Array<() => void> = [];
   const setImportant = (el: Element, prop: string, value: string) => {
     const style = (el as SVGElement).style;
@@ -61,7 +66,7 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     });
   };
   for (const path of viewport.querySelectorAll(".react-flow__edge-path")) {
-    setImportant(path, "stroke", EDGE_STROKE);
+    setImportant(path, "stroke", edgeStroke);
     setImportant(path, "stroke-width", EDGE_STROKE_WIDTH);
     setImportant(path, "stroke-dasharray", "none"); // animated 점선도 출력에선 실선
   }
@@ -69,9 +74,9 @@ function applyEdgeFixups(viewport: HTMLElement): () => void {
     setImportant(hit, "stroke", "none"); // 히트박스는 지금처럼 안 보이게
   }
   for (const head of viewport.querySelectorAll(".react-flow__arrowhead *")) {
-    // marker 색은 var() 참조 — 클론에서 해석 불가라 엣지와 같은 검정으로 고정
-    setImportant(head, "stroke", EDGE_STROKE);
-    setImportant(head, "fill", EDGE_STROKE);
+    // marker 색은 var() 참조 — 클론에서 해석 불가라 엣지와 같은 색으로 고정
+    setImportant(head, "stroke", edgeStroke);
+    setImportant(head, "fill", edgeStroke);
   }
   // 마름모 제목 — 인쇄(PNG)에선 3줄 클램프만 해제해 전문 노출. 폭은 화면 그대로(max-w-24) 유지
   // — 폭을 늘리면 마름모 밖으로 퍼져 어색 (사용자 결정 2026-08-23)
@@ -118,10 +123,12 @@ function drawRoundedRect(
 }
 
 // 캡처 이미지 아래에 정보 카드 스트립을 붙여 합성 — 배경(캔버스 톤+dot-grid)은 전체에 깐다.
+// dark(L5 새벽 조감도)면 남색→차콜 그라데이션으로 대체하고 dot-grid는 생략(화면과 동일 — 무늬 없는 민 무대).
 async function composePng(
   dataUrl: string,
   frame: Frame,
   info: ExportMapInfo | undefined,
+  dark: boolean,
 ): Promise<string> {
   const image = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -158,14 +165,22 @@ async function composePng(
   ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
 
   const totalHeight = frame.height + stripHeight;
-  ctx.fillStyle = BG_COLOR;
-  ctx.fillRect(0, 0, frame.width, totalHeight);
-  ctx.fillStyle = DOT_COLOR;
-  for (let x = DOT_GAP / 2; x < frame.width; x += DOT_GAP) {
-    for (let y = DOT_GAP / 2; y < totalHeight; y += DOT_GAP) {
-      ctx.beginPath();
-      ctx.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
+  if (dark) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, totalHeight);
+    gradient.addColorStop(0, BG_TOP_DARK);
+    gradient.addColorStop(1, BG_BOTTOM_DARK);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, frame.width, totalHeight);
+  } else {
+    ctx.fillStyle = BG_COLOR;
+    ctx.fillRect(0, 0, frame.width, totalHeight);
+    ctx.fillStyle = DOT_COLOR;
+    for (let x = DOT_GAP / 2; x < frame.width; x += DOT_GAP) {
+      for (let y = DOT_GAP / 2; y < totalHeight; y += DOT_GAP) {
+        ctx.beginPath();
+        ctx.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
   ctx.drawImage(image, 0, 0, frame.width, frame.height);
@@ -213,8 +228,9 @@ async function downloadViewportPng(
   fileName: string,
   frame: Frame,
   info: ExportMapInfo | undefined,
+  dark: boolean,
 ): Promise<void> {
-  const undoFixups = applyEdgeFixups(viewport);
+  const undoFixups = applyEdgeFixups(viewport, dark);
   let dataUrl: string;
   try {
     dataUrl = await toPng(viewport, {
@@ -230,18 +246,20 @@ async function downloadViewportPng(
   } finally {
     undoFixups();
   }
-  const composed = await composePng(dataUrl, frame, info);
+  const composed = await composePng(dataUrl, frame, info, dark);
   const link = document.createElement("a");
   link.href = composed;
   link.download = fileName;
   link.click();
 }
 
-/** 전체 노드 bounds 기준으로 현재 캔버스를 PNG 파일로 저장한다. */
+/** 전체 노드 bounds 기준으로 현재 캔버스를 PNG 파일로 저장한다.
+ *  dark=true면 L5 새벽 조감도 톤(남색→차콜)으로 배경·엣지 색을 맞춘다(캔버스가 그 상태로 보일 때만 전달). */
 export async function exportCanvasPng(
   nodes: Node[],
   fileName: string,
   info?: ExportMapInfo,
+  dark?: boolean,
 ): Promise<void> {
   const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
   if (!viewport || nodes.length === 0) {
@@ -262,6 +280,7 @@ export async function exportCanvasPng(
     fileName,
     { width, height, x: transform.x, y: transform.y, zoom: transform.zoom },
     info,
+    dark ?? false,
   );
 }
 
@@ -297,5 +316,6 @@ export async function exportFramedPng(
     fileName,
     { width: frameWidth, height: frameHeight, x: transform.x, y: transform.y, zoom: transform.zoom },
     info,
+    false,
   );
 }
