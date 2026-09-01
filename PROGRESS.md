@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 캔버스 드래그 성능 라운드 1 (dev)
+- 352노드·351엣지 스트레스 맵 실측(프로드): 드래그 평균 41.5ms/frame·p95 125ms → **35.5ms·p95 100ms**. 최대 병목은 꺾은선 엣지의 장애물 회피 — 엣지마다 `useNodes` 전체를 filter+map+inflate해 **매 프레임 엣지×노드 규모 객체 생성**(GC 폭증) → 노드 배열 identity당 1회 공유 캐시 + 양끝 노드는 스캔 중 스킵 + 밴드 프루닝·최근접 후보 조기종료.
+- displayNodes의 프레임당 낭비 2건 제거 — 담당자 드리프트 판정을 users 선형 스캔에서 name→dept Map으로, height-shift 오프셋 적용 노드는 WeakMap identity 캐시로 무변경 노드 리렌더 차단. 남은 병목은 페이지 전체 리렌더(거대 JSX)+RF 스토어 팬아웃 — 다음 라운드는 드래그 중 `nodes` 동결(dragLive 일반화) 검토.
+- ⚠️ 측정 중 발견한 랜드마인: `nodes.id`/`edges.id`가 **전역 PK**라 다른 버전에 같은 id로 graph PUT하면 upsert가 기존 버전의 노드 행을 새 버전으로 **이관(탈취)**한다 — 실데이터는 uuid라 충돌 없지만 CSV 왕복(export→다른 맵 import) 같은 id 재사용 경로는 위험. 경계 가드 미구현(후속).
+
 ## 2026-09-01 — 운영 대시보드 "새벽 조감도" 재구성 (dev)
 - 설정 > Dashboard를 L5 하늘 프레임 문법으로 전면 재구성 — 상단 네브바만 라이트로 남기고 그 아래 전체(지표+Access 사이드바)가 흰 거터 위 `.bpm-l5-sky` 라운드 프레임 하나(거터가 네브바와의 단절을 잇는다). 좌 요약 레일 폐지 — KPI 4종은 하늘 위 유리 타일 밴드(SkyStat), 운영 카운터 3종은 헤더 우측 승격.
 - 카드·차트까지 전부 다크(사용자 지시) — 섹션 유리면 `bg-surface/10`+`text-canvas` 계열, 차트/막대/상태 톤은 새 파생 토큰 `--color-accent-sky`와 color-mix 라이트닝으로 재조색, StatCard는 SkyStat으로 흡수·삭제. 폼 입력(SearchSelect·date)만 라이트 필드 유지, 프레임 내 스크롤바 `.bpm-sky-scroll`. 워터마크·스포트라이트는 L5 폐기 결정과 동기화해 넣지 않음.

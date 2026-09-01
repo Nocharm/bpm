@@ -2,7 +2,16 @@
 import { Position } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
-import { buildDetourPoints, buildRoundedOrthPath, type ObstacleRect } from "@/lib/edge-detour";
+import {
+  buildDetourPoints,
+  buildRoundedOrthPath,
+  toEdgeObstacle,
+  type ObstacleRect,
+} from "@/lib/edge-detour";
+
+// 호출자(multiline-edge)가 하듯 사전 인플레이트 — buildDetourPoints는 EdgeObstacle을 받는다
+const inflateAll = (rects: ObstacleRect[]) =>
+  rects.map((rect, i) => toEdgeObstacle(`o${i}`, rect));
 
 // 수평쌍 기본 인자 — A(우측 핸들 200,26) → B(좌측 핸들 600,426), 기본 회랑 x=400
 function makeArgsH(obstacles: ObstacleRect[]) {
@@ -13,7 +22,7 @@ function makeArgsH(obstacles: ObstacleRect[]) {
     targetY: 426,
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
-    obstacles,
+    obstacles: inflateAll(obstacles),
   };
 }
 
@@ -78,7 +87,7 @@ describe("buildDetourPoints — 수직쌍(V·H·V)", () => {
       targetY: 500,
       sourcePosition: Position.Bottom,
       targetPosition: Position.Top,
-      obstacles: [{ x: 0, y: 250, w: 400, h: 130 }],
+      obstacles: inflateAll([{ x: 0, y: 250, w: 400, h: 130 }]),
     });
     expect(points).toEqual([
       { x: 100, y: 100 },

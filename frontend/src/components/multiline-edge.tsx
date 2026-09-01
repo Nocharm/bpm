@@ -19,7 +19,8 @@ import type { AppNode } from "@/lib/canvas";
 import {
   buildDetourPoints,
   buildRoundedOrthPath,
-  type ObstacleRect,
+  toEdgeObstacle,
+  type EdgeObstacle,
 } from "@/lib/edge-detour";
 
 type LineVariant = "default" | "smoothstep" | "straight";
@@ -37,6 +38,28 @@ function buildPath(variant: LineVariant, props: EdgeProps): [string, number, num
   return [path, labelX, labelY];
 }
 
+// 장애물 목록 캐시 — RF 스토어 nodes 배열 identity당 1회 산출해 모든 꺾은선 엣지가 공유한다.
+// 종전엔 엣지마다 filter+map+inflate로 노드 수만큼 새 객체를 만들어(엣지×노드/프레임) 드래그 중
+// GC·crossesV가 프레임 예산을 다 먹었다(352노드×351엣지 실측 avg 120ms/frame). 렌더 중 모듈
+// 상태지만 입력 identity 기반 멱등 메모라 호출 순서와 무관하게 결과가 같다(에디터 RF 단일 인스턴스).
+let obstacleSrc: unknown = null;
+let obstacleList: EdgeObstacle[] = [];
+function getObstacles(nodes: AppNode[]): EdgeObstacle[] {
+  if (nodes !== obstacleSrc) {
+    const list: EdgeObstacle[] = [];
+    for (const node of nodes) {
+      const w = node.measured?.width ?? 0;
+      const h = node.measured?.height ?? 0;
+      // section(Word 맵 영역 박스)은 장애물로 치지 않는다 — 배경 성격이라 전 엣지가 우회하게 됨
+      if (node.hidden || node.data.nodeType === "section" || w <= 0 || h <= 0) continue;
+      list.push(toEdgeObstacle(node.id, { x: node.position.x, y: node.position.y, w, h }));
+    }
+    obstacleSrc = nodes;
+    obstacleList = list;
+  }
+  return obstacleList;
+}
+
 // 꺾은선 전용 장애물 회피 — 렌더된 노드(표시 좌표·실측 크기)를 장애물로 보고, 기본 3구간 경로가
 // 관통하면 빈 회랑으로 우회(lib/edge-detour). 직선·곡선은 사용자가 고른 모양 유지라 대상 외.
 // useNodes 훅 때문에 별도 컴포넌트 — variant 분기 안에서 훅을 조건 호출할 수 없다(Rules of Hooks).
@@ -44,23 +67,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
   const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius } =
     props;
   const nodes = useNodes<AppNode>();
-  // section(Word 맵 영역 박스)은 장애물로 치지 않는다 — 배경 성격이라 전 엣지가 우회하게 됨
-  const obstacles: ObstacleRect[] = nodes
-    .filter(
-      (node) =>
-        node.id !== props.source &&
-        node.id !== props.target &&
-        !node.hidden &&
-        node.data.nodeType !== "section" &&
-        (node.measured?.width ?? 0) > 0 &&
-        (node.measured?.height ?? 0) > 0,
-    )
-    .map((node) => ({
-      x: node.position.x,
-      y: node.position.y,
-      w: node.measured?.width ?? 0,
-      h: node.measured?.height ?? 0,
-    }));
+  const obstacles = getObstacles(nodes);
   const detour = buildDetourPoints({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
@@ -69,9 +76,15 @@ function DetourSmoothstepEdge(props: EdgeProps) {
     sourcePosition: props.sourcePosition,
     targetPosition: props.targetPosition,
     obstacles,
+    skipA: props.source,
+    skipB: props.target,
   });
   const [path, labelX, labelY] = detour
-    ? buildRoundedOrthPath(detour, obstacles)
+    ? buildRoundedOrthPath(
+        detour,
+        // 라벨 가림 판정도 양끝 노드 제외 — 우회가 실제로 잡힌 엣지에서만 재구성(희귀 경로)
+        obstacles.filter((o) => o.id !== props.source && o.id !== props.target),
+      )
     : buildPath("smoothstep", props);
   return renderEdge(
     { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius },

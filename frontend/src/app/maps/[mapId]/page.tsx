@@ -280,7 +280,7 @@ import {
   type NodeDisplayToggle,
   parseDisplayToggles,
 } from "@/lib/node-actions";
-import { driftedAssignees, parseAssignees } from "@/lib/assignee";
+import { parseAssignees } from "@/lib/assignee";
 import { buildBulkAttrPatch } from "@/lib/bulk-params";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
@@ -300,6 +300,11 @@ import {
 
 // 모듈 스코프 — 안정적 식별자 유지 (React Flow 권장)
 const nodeTypes: NodeTypes = { process: ProcessNode };
+
+// height-shift 표시 오프셋 적용 결과 캐시 — 같은 입력 노드 객체·같은 오프셋이면 같은 출력 객체를
+// 돌려줘 RF가 무변경 노드를 리렌더하지 않게 한다. 종전엔 오프셋≠0인 노드 전부가 displayNodes
+// 재계산(드래그 프레임마다)에서 새 객체가 돼 전 노드 리렌더를 유발했다. WeakMap이라 노드 교체 시 자동 회수.
+const shiftedNodeCache = new WeakMap<AppNode, { yOff: number; out: AppNode }>();
 
 const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
@@ -6997,6 +7002,21 @@ function MapEditor({ mapId }: { mapId: number }) {
     return () => cancelAnimationFrame(raf);
   }, [yOffsets]);
 
+  // 담당자 드리프트 판정용 name→dept 인덱스 — displayNodes가 매 프레임 노드×담당자마다 users를
+  // 선형 스캔하지 않게 eligible 변경 시 1회만 구성. 동명이인은 users 선두 우선(구 deptOf find와 동일).
+  const eligibleDeptByName = useMemo(() => {
+    if (eligible === null) {
+      return null;
+    }
+    const byName = new Map<string, string>();
+    for (const user of eligible.users) {
+      if (!byName.has(user.name)) {
+        byName.set(user.name, user.department);
+      }
+    }
+    return byName;
+  }, [eligible]);
+
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
     const base = inlineComposition ? inlineComposition.nodes : nodes;
@@ -7050,9 +7070,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           : { ...display, data: { ...display.data, commentCount: count } };
       // 담당자 부서 드리프트 경고 — eligible 로드 완료 후 & BPM 속성 노드만 계산(로드 전 오탐·차단타입 미표시), 읽기전용에서도 표시
       const hasWarning =
-        eligible !== null &&
+        eligibleDeptByName !== null &&
         hasBpmAttributes(withCount.data.nodeType) &&
-        driftedAssignees(withCount.data.department, parseAssignees(withCount.data.assignee), eligible.users).length > 0;
+        parseAssignees(withCount.data.assignee).some((name) => {
+          const dept = eligibleDeptByName.get(name);
+          return dept === undefined || dept !== withCount.data.department;
+        });
       const withWarning =
         hasWarning === (withCount.data.assigneeWarning ?? false)
           ? withCount
@@ -7077,9 +7100,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       const yOff = inlineComposition
         ? 0
         : (dragYOffsets?.get(node.id) ?? renderYOffsets.get(node.id) ?? 0);
-      return yOff === 0
-        ? injected
-        : { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
+      if (yOff === 0) {
+        return injected;
+      }
+      const hit = shiftedNodeCache.get(injected);
+      if (hit && hit.yOff === yOff) {
+        return hit.out;
+      }
+      const out = { ...injected, position: { x: injected.position.x, y: injected.position.y + yOff } };
+      shiftedNodeCache.set(injected, { yOff, out });
+      return out;
     });
     // 조상 컨텍스트(자식 스코프 활성 시)를 dim 읽기전용으로 덧붙임 — 루트(currentParentId=null)에선 빈 배열이라 무영향.
     // Ctrl+드래그 — 원본은 원위치에 그대로(솔리드) 남기고, 커서를 따라 끌리는 실제 노드만 반투명 사본으로
@@ -7110,7 +7140,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     childNodes,
     inlineComposition,
     unresolvedCounts,
-    eligible,
+    eligibleDeptByName,
     ancestorContextNodes,
     currentScopeIsReadOnly,
     dragLiveById,

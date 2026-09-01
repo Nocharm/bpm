@@ -18,7 +18,10 @@ interface DetourArgs {
   targetY: number;
   sourcePosition: Position;
   targetPosition: Position;
-  obstacles: ObstacleRect[];
+  obstacles: readonly EdgeObstacle[];
+  // 엣지 양끝 노드 id — 장애물 스캔에서 스킵(엣지마다 배열을 재구성하지 않기 위한 in-loop 제외)
+  skipA?: string;
+  skipB?: string;
 }
 
 // 노드 여백 + 선 간격 — 회랑이 노드 테두리에 붙지 않게 (px)
@@ -26,15 +29,20 @@ const MARGIN = 12;
 // 모서리 라운드 반경 — RF smoothstep 기본 5와 통일 (px)
 const CORNER_RADIUS = 5;
 
-interface Inflated {
+// 사전 인플레이트 장애물 — 프레임마다 엣지×노드 규모의 inflate 재할당을 없애기 위해
+// 호출자가 노드 배열당 1회 산출해 모든 엣지가 공유한다. left/right/top/bottom = MARGIN 경계.
+export interface EdgeObstacle extends ObstacleRect {
+  id: string;
   left: number;
   right: number;
   top: number;
   bottom: number;
 }
 
-function inflate(rect: ObstacleRect): Inflated {
+export function toEdgeObstacle(id: string, rect: ObstacleRect): EdgeObstacle {
   return {
+    id,
+    ...rect,
     left: rect.x - MARGIN,
     right: rect.x + rect.w + MARGIN,
     top: rect.y - MARGIN,
@@ -43,18 +51,18 @@ function inflate(rect: ObstacleRect): Inflated {
 }
 
 // 축 정렬 선분 [a1,a2]×[b] 가 rect를 지나는지 — H/V 공용 구간 검사
-function crossesH(y: number, x1: number, x2: number, r: Inflated): boolean {
+function crossesH(y: number, x1: number, x2: number, r: EdgeObstacle): boolean {
   const [lo, hi] = x1 <= x2 ? [x1, x2] : [x2, x1];
   return y > r.top && y < r.bottom && hi > r.left && lo < r.right;
 }
 
-function crossesV(x: number, y1: number, y2: number, r: Inflated): boolean {
+function crossesV(x: number, y1: number, y2: number, r: EdgeObstacle): boolean {
   const [lo, hi] = y1 <= y2 ? [y1, y2] : [y2, y1];
   return x > r.left && x < r.right && hi > r.top && lo < r.bottom;
 }
 
 /** 수평쌍(H·V·H) 경로가 mid 회랑에서 장애물과 교차하는가. */
-function isBlockedH(mid: number, a: DetourArgs, rects: Inflated[]): boolean {
+function isBlockedH(mid: number, a: DetourArgs, rects: readonly EdgeObstacle[]): boolean {
   return rects.some(
     (r) =>
       crossesH(a.sourceY, a.sourceX, mid, r) ||
@@ -64,7 +72,7 @@ function isBlockedH(mid: number, a: DetourArgs, rects: Inflated[]): boolean {
 }
 
 /** 수직쌍(V·H·V) 경로가 mid 회랑에서 장애물과 교차하는가. */
-function isBlockedV(mid: number, a: DetourArgs, rects: Inflated[]): boolean {
+function isBlockedV(mid: number, a: DetourArgs, rects: readonly EdgeObstacle[]): boolean {
   return rects.some(
     (r) =>
       crossesV(a.sourceX, a.sourceY, mid, r) ||
@@ -87,7 +95,18 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
     (a.targetPosition === Position.Top || a.targetPosition === Position.Bottom);
   if (!horizontal && !vertical) return null;
 
-  const rects = a.obstacles.map(inflate);
+  // 관련 장애물 프루닝 — 세 구간(H·V·H / V·H·V) 모두 소스↔타깃이 스팬하는 직교 밴드와
+  // 겹치는 rect하고만 교차 가능하므로, 밴드 밖 장애물은 판정·후보에서 제외한다(교차 판정은 동치,
+  // 후보 회랑은 밴드 장애물 경계로 한정 — 어차피 그 경계들이 밴드 안 빈 통로를 모두 커버한다).
+  const bandLo = horizontal ? Math.min(a.sourceY, a.targetY) : Math.min(a.sourceX, a.targetX);
+  const bandHi = horizontal ? Math.max(a.sourceY, a.targetY) : Math.max(a.sourceX, a.targetX);
+  const rects: EdgeObstacle[] = [];
+  for (const r of a.obstacles) {
+    if (r.id === a.skipA || r.id === a.skipB) continue;
+    if (horizontal ? r.bottom > bandLo && r.top < bandHi : r.right > bandLo && r.left < bandHi) {
+      rects.push(r);
+    }
+  }
   const isBlocked = horizontal
     ? (mid: number) => isBlockedH(mid, a, rects)
     : (mid: number) => isBlockedV(mid, a, rects);
@@ -102,15 +121,14 @@ export function buildDetourPoints(a: DetourArgs): { x: number; y: number }[] | n
       candidates.push(r.top - 1, r.bottom + 1);
     }
   }
+  // 기본 이탈 최소 우선(동률은 오른쪽/아래) 정렬 후 첫 무교차 후보에서 종료 — 전 후보×전 rect
+  // 전수 판정(드래그 프레임 예산 킬러)을 최근접 몇 개 판정으로 줄인다. 선택 결과는 전수와 동일.
+  candidates.sort((p, q) => Math.abs(p - mid0) - Math.abs(q - mid0) || q - p);
   let best: number | null = null;
   for (const cand of candidates) {
-    if (isBlocked(cand)) continue;
-    if (
-      best === null ||
-      Math.abs(cand - mid0) < Math.abs(best - mid0) ||
-      (Math.abs(cand - mid0) === Math.abs(best - mid0) && cand > best)
-    ) {
+    if (!isBlocked(cand)) {
       best = cand;
+      break;
     }
   }
   if (best === null) return null; // 빈 회랑 없음 — 기본 경로 유지(현행 동작)
