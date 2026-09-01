@@ -342,6 +342,14 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
+// L5 커서 스포트라이트 — 지름(px)과 겹층. 좁힐수록 밝기를 올려야 같은 존재감이 난다(사용자 요청 2026-09-01).
+// ms가 다른 3겹이 같은 좌표를 각자 속도로 쫓아가며 잔상을 만든다 — 겹칠수록(정지 시) 코어가 진해진다.
+const L5_GLOW_SIZE = 300;
+const L5_GLOW_LAYERS: { core: number; edge: number; ms: number }[] = [
+  { core: 16, edge: 6, ms: 80 },
+  { core: 11, edge: 4, ms: 240 },
+  { core: 7, edge: 3, ms: 440 },
+];
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채꼴 배치 반경(오버레이 렌더·hit-test 공용)
 const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
@@ -6837,20 +6845,47 @@ function MapEditor({ mapId }: { mapId: number }) {
   // L5 커서 스포트라이트 — 커서 주변 하늘만 은은하게 밝힌다(사용자 요청 2026-09-01).
   // 리렌더 없이 transform/opacity만 쓰는 합성 레이어 — 상태로 좌표를 올리면 에디터 전체가
   // 매 프레임 리렌더된다. 원은 정적 그라데이션이라 이동은 GPU 합성만 하고 리페인트가 없다.
+  // 잔상은 **따라오는 속도가 다른 3겹** — 같은 좌표를 각자 다른 transition으로 쫓아가 뒤로 끌린다.
   const l5GlowRef = useRef<HTMLDivElement | null>(null);
   const moveL5Glow = useCallback((clientX: number, clientY: number) => {
-    const glow = l5GlowRef.current;
-    const host = glow?.parentElement;
-    if (!glow || !host) {
+    const wrap = l5GlowRef.current;
+    const host = wrap?.parentElement;
+    if (!wrap || !host) {
       return;
     }
     const rect = host.getBoundingClientRect();
-    glow.style.transform = `translate3d(${clientX - rect.left}px, ${clientY - rect.top}px, 0) translate(-50%, -50%)`;
-    glow.style.opacity = "1";
+    const transform = `translate3d(${clientX - rect.left}px, ${clientY - rect.top}px, 0) translate(-50%, -50%)`;
+    // 처음 나타날 때는 잔상 없이 제자리에서 — 안 그러면 좌상단(0,0)에서 커서까지 줄이 그어진다
+    const jump = wrap.dataset.on !== "1";
+    const layers = Array.from(wrap.children).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    );
+    for (const layer of layers) {
+      if (jump) {
+        layer.style.transition = "none";
+      }
+      layer.style.transform = transform;
+      layer.style.opacity = "1";
+    }
+    if (jump) {
+      void wrap.offsetWidth; // 강제 리플로우 — transition:none 상태로 위치를 확정한 뒤 되돌린다
+      for (const layer of layers) {
+        layer.style.transition = layer.dataset.tr ?? "";
+      }
+      wrap.dataset.on = "1";
+    }
   }, []);
   const hideL5Glow = useCallback(() => {
-    if (l5GlowRef.current) {
-      l5GlowRef.current.style.opacity = "0";
+    const wrap = l5GlowRef.current;
+    if (!wrap) {
+      return;
+    }
+    wrap.dataset.on = "";
+    const layers = Array.from(wrap.children).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    );
+    for (const layer of layers) {
+      layer.style.opacity = "0";
     }
   }, []);
 
@@ -9164,17 +9199,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div
                         aria-hidden
                         data-id="l5-cursor-glow"
+                        ref={l5GlowRef}
                         className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
                       >
-                        <div
-                          ref={l5GlowRef}
-                          className="absolute left-0 top-0 h-[900px] w-[900px] rounded-full opacity-0 transition-opacity duration-450 ease-smooth"
-                          style={{
-                            background:
-                              "radial-gradient(closest-side, color-mix(in srgb, var(--color-canvas) 16%, transparent), color-mix(in srgb, var(--color-canvas) 6%, transparent) 45%, transparent 75%)",
-                            willChange: "transform",
-                          }}
-                        />
+                        {L5_GLOW_LAYERS.map((layer) => (
+                          <div
+                            key={layer.ms}
+                            data-glow-layer
+                            // 위 moveL5Glow가 첫 등장 때 transition을 잠시 끄고 되돌리려면 원본 값이 필요하다
+                            data-tr={`transform ${layer.ms}ms ease-out, opacity 450ms ease-out`}
+                            className="absolute left-0 top-0 rounded-full opacity-0"
+                            style={{
+                              width: L5_GLOW_SIZE,
+                              height: L5_GLOW_SIZE,
+                              background: `radial-gradient(closest-side, color-mix(in srgb, var(--color-canvas) ${layer.core}%, transparent), color-mix(in srgb, var(--color-canvas) ${layer.edge}%, transparent) 45%, transparent 75%)`,
+                              transition: `transform ${layer.ms}ms ease-out, opacity 450ms ease-out`,
+                              willChange: "transform",
+                            }}
+                          />
+                        ))}
                       </div>
                     )}
                     {index === 0 && l5Charcoal && (
