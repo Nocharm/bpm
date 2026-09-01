@@ -54,7 +54,7 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
           className={`rounded-sm px-2.5 py-1 text-fine transition-colors ${
             !custom && activePreset === preset.id
               ? "bg-accent text-on-accent"
-              : "border border-hairline text-ink-secondary hover:bg-surface-alt"
+              : "border border-surface/20 text-canvas/70 hover:bg-surface/10"
           }`}
         >
           {t(preset.labelKey)}
@@ -66,7 +66,7 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
         className={`rounded-sm px-2.5 py-1 text-fine transition-colors ${
           custom
             ? "bg-accent text-on-accent"
-            : "border border-hairline text-ink-secondary hover:bg-surface-alt"
+            : "border border-surface/20 text-canvas/70 hover:bg-surface/10"
         }`}
       >
         {t("dashboard.periodCustom")}
@@ -86,7 +86,7 @@ export function PeriodFilter({ range, onChange }: PeriodFilterProps) {
             aria-label={t("dashboard.periodFrom")}
             className="rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink"
           />
-          <span className="text-fine text-ink-tertiary">–</span>
+          <span className="text-fine text-canvas/60">–</span>
           <input
             type="date"
             value={range.to}

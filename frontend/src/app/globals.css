@@ -26,6 +26,7 @@
   --color-canvas-dot: #bdbdc9; /* dot-grid 점 — 가시성 위해 진하게 */
   --color-canvas-l5: #363843; /* L5 새벽 조감도 — 그라데이션 하단(차콜)·미니맵 등 단색 폴백. L5 태그로 라이트 토글 */
   --color-canvas-l5-sky: #1b2743; /* L5 새벽 조감도 — 그라데이션 상단(네이비, 하단 차콜과 확실히 구분되게) */
+  --color-accent-sky: #ad97ff; /* 새벽 하늘(남색) 위에서 읽히도록 밝힌 액센트 — accent 55% + white (운영 대시보드) */
 
   /* Ink */
   --color-ink: #16161d;
@@ -121,6 +122,19 @@ body {
     color-mix(in srgb, color-mix(in srgb, var(--color-canvas-l5-sky) 45%, var(--color-canvas-l5)) 86%, transparent) 52%,
     color-mix(in srgb, var(--color-canvas-l5) 86%, transparent) 100%
   );
+}
+
+/* 새벽 하늘 프레임 내부 스크롤 — 어두운 배경 위 밝은 얇은 막대(라이트 기본 막대는 하늘에서 이질적). */
+.bpm-sky-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-canvas) 28%, transparent) transparent;
+}
+.bpm-sky-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.bpm-sky-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-canvas) 28%, transparent);
+  border-radius: 3px;
 }
 
 /* 스크롤바 기본 숨김 — 스크롤은 동작하되 막대만 비표시(채팅 등 컴팩트 영역). */

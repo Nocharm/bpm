@@ -1,4 +1,5 @@
-// 시계열 세로 막대 — 값 비례 높이, 최댓값 막대만 액센트. SVG 없이 flex + 높이 %로 그린다.
+// 시계열 세로 막대 — 값 비례 높이, 최댓값 막대만 강조. SVG 없이 flex + 높이 %로 그린다.
+// 다크(하늘) 유리 카드 전제 — 색은 accent-sky 파생만 사용.
 
 import { buildScale } from "@/lib/dashboard-chart";
 
@@ -33,8 +34,8 @@ export function BarChart({ points }: BarChartProps) {
                 height: `${Math.max(ratio * 100, 2)}%`,
                 backgroundColor:
                   point.value === peak && peak > 0
-                    ? "var(--color-accent)"
-                    : "var(--color-accent-tint)",
+                    ? "var(--color-accent-sky)"
+                    : "color-mix(in srgb, var(--color-accent-sky) 30%, transparent)",
               }}
             />
           </div>

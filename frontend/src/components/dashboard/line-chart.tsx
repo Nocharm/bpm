@@ -65,7 +65,7 @@ export function LineChart({ series, labels }: LineChartProps) {
           ),
         )}
       </svg>
-      <div className="flex items-center justify-between text-fine text-ink-tertiary">
+      <div className="flex items-center justify-between text-fine text-canvas/60">
         <span>{labels[0] ?? ""}</span>
         <span className="flex gap-3">
           {series.map((line) => (

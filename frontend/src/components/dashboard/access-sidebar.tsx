@@ -4,6 +4,8 @@
 // Access: 열람 권한(인원·부서·그룹). Coverage: 커버리지 % 분모가 되는 부서 목록.
 // 게이팅(sysadmin 노출 여부)은 이 컴포넌트가 아니라 호출부(설정 패널)가 담당한다.
 // 탭 배열 구조라 추후 일반 유저용 탭을 더할 수 있다 (design 2026-07-11).
+// 스타일은 새벽 하늘 프레임 안 유리 패널 전제(dashboard-panel이 유일한 호출부) — 밝은 텍스트는
+// canvas/불투명도, 액센트는 accent-sky 파생색. SearchSelect는 공용이라 라이트 입력 필드로 남긴다.
 
 import { TriangleAlert, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -173,9 +175,9 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
   return (
     <aside
       data-id="dashboard-sidebar"
-      className="flex w-80 shrink-0 flex-col border-l border-hairline bg-surface"
+      className="relative z-[1] flex w-80 shrink-0 flex-col border-l border-surface/15 bg-surface/5"
     >
-      <div className="flex border-b border-hairline">
+      <div className="flex border-b border-surface/15">
         {SIDEBAR_TABS.map((entry) => (
           <button
             key={entry.id}
@@ -184,8 +186,8 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
             onClick={() => setTab(entry.id)}
             className={`flex-1 px-3 py-2 text-caption transition-colors ${
               tab === entry.id
-                ? "border-b-2 border-accent text-accent"
-                : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                ? "border-b-2 border-accent-sky text-accent-sky"
+                : "text-canvas/50 hover:bg-surface/10 hover:text-canvas"
             }`}
           >
             {t(entry.labelKey)}
@@ -193,21 +195,27 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="bpm-sky-scroll flex-1 overflow-y-auto p-4">
         {loadFailed ? (
           // 로드 실패는 빈 목록과 구별되어야 한다 — "권한 없음" 문구 대신 실패 배너만 렌더.
           <div
             data-id="dashboard-sidebar-load-failed"
-            className="flex items-center gap-2 rounded-sm border border-hairline bg-surface-alt px-3 py-2"
+            className="flex items-center gap-2 rounded-sm border border-surface/15 bg-surface/10 px-3 py-2"
           >
-            <TriangleAlert size={16} strokeWidth={1.5} className="shrink-0 text-error" />
-            <span className="min-w-0 flex-1 text-caption text-ink-secondary">
+            <TriangleAlert
+              size={16}
+              strokeWidth={1.5}
+              className="shrink-0"
+              // error 원색은 남색 하늘에서 가라앉는다 — 밝힌 파생색(inline mix)으로만 사용
+              style={{ color: "color-mix(in srgb, var(--color-error) 55%, white)" }}
+            />
+            <span className="min-w-0 flex-1 text-caption text-canvas/80">
               {t("dashboard.sidebarLoadFailed")}
             </span>
           </div>
         ) : tab === "access" ? (
           <div className="flex flex-col gap-3">
-            <p className="text-fine text-ink-tertiary">{t("dashboard.accessDesc")}</p>
+            <p className="text-fine text-canvas/60">{t("dashboard.accessDesc")}</p>
 
             <div className="flex gap-1">
               {PRINCIPAL_TABS.map((entry) => (
@@ -217,8 +225,8 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
                   onClick={() => setPrincipalType(entry.id)}
                   className={`flex-1 rounded-sm px-2 py-1 text-fine transition-colors ${
                     principalType === entry.id
-                      ? "bg-accent-tint text-accent"
-                      : "border border-hairline text-ink-secondary hover:bg-surface-alt"
+                      ? "bg-accent-sky/15 text-accent-sky"
+                      : "border border-surface/20 text-canvas/70 hover:bg-surface/10"
                   }`}
                 >
                   {t(entry.labelKey)}
@@ -236,20 +244,20 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
             />
 
             {permissions.length === 0 ? (
-              <p className="text-fine text-ink-tertiary">{t("dashboard.accessEmpty")}</p>
+              <p className="text-fine text-canvas/60">{t("dashboard.accessEmpty")}</p>
             ) : (
               <ul className="flex flex-col gap-1">
                 {permissions.map((row) => (
                   <li
                     key={row.id}
                     data-id="dashboard-access-row"
-                    className="flex items-center gap-2 rounded-sm border border-hairline px-2.5 py-1.5"
+                    className="flex items-center gap-2 rounded-sm border border-surface/15 bg-surface/5 px-2.5 py-1.5"
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-caption text-ink">
+                      <span className="block truncate text-caption text-canvas">
                         {row.display_name}
                       </span>
-                      <span className="block truncate text-fine text-ink-tertiary">
+                      <span className="block truncate text-fine text-canvas/55">
                         {principalLabel(row.principal_type, t)}
                       </span>
                     </span>
@@ -258,7 +266,7 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
                       onClick={() => void handleRevoke(row.id)}
                       aria-label={t("dashboard.accessRemove")}
                       title={t("dashboard.accessRemove")}
-                      className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                      className="shrink-0 rounded-sm p-1 text-canvas/50 hover:bg-surface/10 hover:text-canvas"
                     >
                       <X size={16} strokeWidth={1.5} />
                     </button>
@@ -269,7 +277,7 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <p className="text-fine text-ink-tertiary">{t("dashboard.coverageDesc")}</p>
+            <p className="text-fine text-canvas/60">{t("dashboard.coverageDesc")}</p>
 
             <SearchSelect
               value=""
@@ -293,20 +301,20 @@ export function AccessSidebar({ onToast, onCoverageChange }: AccessSidebarProps)
                 <li
                   key={path}
                   data-id="dashboard-coverage-row"
-                  className="flex items-center gap-2 rounded-sm border border-hairline px-2.5 py-1.5"
+                  className="flex items-center gap-2 rounded-sm border border-surface/15 bg-surface/5 px-2.5 py-1.5"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-caption text-ink">
+                    <span className="block truncate text-caption text-canvas">
                       {resolveDeptLabel(path, directory)}
                     </span>
-                    <span className="block truncate text-fine text-ink-tertiary">{path}</span>
+                    <span className="block truncate text-fine text-canvas/55">{path}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => void saveCoverage(coverage.filter((entry) => entry !== path))}
                     aria-label={t("dashboard.accessRemove")}
                     title={t("dashboard.accessRemove")}
-                    className="shrink-0 rounded-sm p-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                    className="shrink-0 rounded-sm p-1 text-canvas/50 hover:bg-surface/10 hover:text-canvas"
                   >
                     <X size={16} strokeWidth={1.5} />
                   </button>
