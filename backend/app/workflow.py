@@ -19,6 +19,7 @@ DRAFT = "draft"
 PENDING = "pending"
 APPROVED = "approved"
 PUBLISHED = "published"
+CONFIRMED = "confirmed"  # framework 캔버스 확정 스냅샷 — 게시(published)와 별도 트랙 (spec 2026-09-02 §3)
 REJECTED = "rejected"
 EXPIRED = "expired"  # terminal — 후속 게시로 대체된 published 버전
 

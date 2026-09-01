@@ -307,10 +307,14 @@ def _put_graph(client: TestClient, version_id: int, nodes: list, edges: list | N
     assert res.status_code == 200, res.text
 
 
-def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None:
-    """확정 게이트(마이너=내용 변경 필수, 좌표만은 불가)·메이저 프룬(X.0·최종만 유지) (2026-08-28 개선)."""
-    l5 = _seed_category(client, "FWC-C5", "확정L5", level=5)
-    _seed_l6_map(client, l5, "확정업무1", "FWC-CM1")
+def _make_canvas(client: TestClient, code: str, name: str) -> tuple[int, int]:
+    """L5+연결맵 생성 후 fwc.confirmer로 draft 체크아웃 — 확정 플로우 테스트 공유 셋업.
+
+    카테고리 코드는 호출자가 고유하게 지정 — client 픽스처가 세션 스코프라 테스트 간 DB를 공유한다.
+    반환값 (map_id, draft_id).
+    """
+    l5 = _seed_category(client, code, name, level=5)
+    _seed_l6_map(client, l5, f"{name}업무1", f"{code}M1")
     act_as(SYSADMIN)
     client.put(f"/api/categories/{l5}/permissions",
                json={"permissions": [{"principal_type": "user", "principal_id": "fwc.confirmer"}]})
@@ -319,31 +323,37 @@ def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None
     detail = client.get(f"/api/maps/{map_id}").json()
     draft = next(v for v in detail["versions"] if v["status"] == "draft")
     _checkout(client, draft["id"])
+    return map_id, draft["id"]
+
+
+def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None:
+    """확정 게이트(마이너=내용 변경 필수, 좌표만은 불가)·메이저 프룬(X.0·최종만 유지) (2026-08-28 개선)."""
+    map_id, draft_id = _make_canvas(client, "FWC-C5", "확정L5")
 
     act_as("fwc.pleb")
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 403
     act_as("fwc.confirmer")
     # 최초 확정 — 스냅샷이 없으므로 항상 허용
     v1 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
-    assert (v1["version"]["label"], v1["version"]["status"]) == ("v1.0", "published")
+    assert (v1["version"]["label"], v1["version"]["status"]) == ("v1.0", "confirmed")
     assert v1["pruned_labels"] == []
     # 무변경 재확정 → 409
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 409
     # 좌표만 이동해도 409 — 노드 내 위치는 변경으로 안 친다
-    graph = client.get(f"/api/versions/{draft['id']}/graph").json()
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
     moved = [dict(n, pos_x=n["pos_x"] + 200) for n in graph["nodes"]]
-    _put_graph(client, draft["id"], moved, graph["edges"])
+    _put_graph(client, draft_id, moved, graph["edges"])
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).status_code == 409
     # 내용 변경(분기 노드 추가) → v1.1
     base = dict(graph["nodes"][0])
     decision = dict(base, id="fwcconfdec0000000000000000000001", node_type="decision",
                     linked_map_id=None, title="확정 분기", is_primary_end=False)
-    _put_graph(client, draft["id"], moved + [decision], graph["edges"])
+    _put_graph(client, draft_id, moved + [decision], graph["edges"])
     v2 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
     assert v2["version"]["label"] == "v1.1"
     # 또 내용 변경(분기 이름) → v1.2
     decision2 = dict(decision, title="확정 분기 개정")
-    _put_graph(client, draft["id"], moved + [decision2], graph["edges"])
+    _put_graph(client, draft_id, moved + [decision2], graph["edges"])
     v3 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
     assert v3["version"]["label"] == "v1.2"
     # 메이저 승급 — 게이트 우회(무변경이어도 승급 가능), 직전 라인은 1.0·1.2만 남고 1.1 영구삭제
@@ -355,13 +365,25 @@ def test_framework_confirm_versioning(client: TestClient, enforce: None) -> None
     assert "v1.0" in labels and "v1.2" in labels and "v2.0" in labels
     assert "v1.1" not in labels
     statuses = [v["status"] for v in detail["versions"]]
-    assert statuses.count("published") == 3 and statuses.count("draft") == 1
+    assert statuses.count("confirmed") == 3 and statuses.count("draft") == 1
     # 일반 맵에는 422
     act_as(SYSADMIN)
     normal = client.post("/api/maps", json={"name": "확정검증 일반맵",
                                             "owning_department": "Owning Anchor Division"}).json()
     assert client.post(f"/api/maps/{normal['id']}/framework-confirm",
                        json={"major": False}).status_code == 422
+
+
+def test_confirm_snapshot_is_confirmed_without_version_number(client: TestClient, enforce: None) -> None:
+    """확정 스냅샷은 confirmed 상태·confirmed 이벤트·게시 순번 없음 (spec 2026-09-02 §3)."""
+    map_id, _draft_id = _make_canvas(client, "FWC-CS5", "확정상태L5")
+    body = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()
+    ver = body["version"]
+    assert ver["status"] == "confirmed"
+    assert ver.get("version_number") in (None, 0)
+    detail = client.get(f"/api/maps/{map_id}").json()
+    snap = next(v for v in detail["versions"] if v["id"] == ver["id"])
+    assert any(e["event_type"] == "confirmed" for e in snap["events"])
 
 
 def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:

@@ -1193,7 +1193,7 @@ async def confirm_framework_version(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> FrameworkConfirmOut:
-    """라이브 draft를 스냅샷(published)으로 확정 — 권한자/sysadmin 본인 확정, 상위 승인 없음.
+    """라이브 draft를 스냅샷(confirmed)으로 확정 — 권한자/sysadmin 본인 확정, 상위 승인 없음.
 
     마이너 확정은 직전 스냅샷 대비 레이아웃 외 변경이 있을 때만(없으면 409 — 손쉬운 버전
     남발 방지). 메이저 승급은 의도된 의식이라 게이트를 우회하되, 직전 메이저 라인의 중간
@@ -1277,17 +1277,13 @@ async def confirm_framework_version(
             pruned_labels.append(label)
 
     snapshot = MapVersion(
-        map_id=map_id, label=f"v{major}.{minor}", status="published",
+        map_id=map_id, label=f"v{major}.{minor}", status="confirmed",
         fw_major=major, fw_minor=minor, submitted_by=user,
     )
     session.add(snapshot)
     await session.flush()
-    max_num = await session.scalar(
-        select(func.max(MapVersion.version_number)).where(MapVersion.map_id == map_id)
-    )
-    snapshot.version_number = (max_num or 0) + 1
     await clone_graph(session, draft, snapshot.id)
-    record_version_event(session, snapshot.id, "published", user)
+    record_version_event(session, snapshot.id, "confirmed", user)
     await session.commit()
     await session.refresh(snapshot)
     return FrameworkConfirmOut(
