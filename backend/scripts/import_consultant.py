@@ -1011,6 +1011,10 @@ async def apply_interview_linkage(
                             if e.source in present and e.target in present]
             layout_flow(
                 layout_nodes, canvas_edges, primary_end_id=None,
+                # loop(재수행)은 선행이 아니다 — 랭크에서 빼야 선행→분기 순서가 잡히고
+                # 되돌아가는 엣지는 그 위에 그려진다 (사용자 결정 2026-09-01)
+                back_pairs={(e.source, e.target) for e in linkage.edges
+                            if e.kind == "loop" and e.source in present and e.target in present},
                 labeled=[(e.source, e.target, e.label) for e in linkage.edges
                          if e.source in present and e.target in present and e.label],
             )

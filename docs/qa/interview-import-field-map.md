@@ -79,7 +79,7 @@
 | `label` + `condition` | 엣지 라벨에 **줄바꿈으로 합쳐** 적재(200자 절단) | 동일 |
 | `kind: seq` | 일반 엣지 | 일반 엣지 |
 | `kind: branch` | 일반 엣지 + **src 노드를 decision으로 승격**(gateway≠parallel일 때) | 엣지만 — src가 SP라 승격 불가 |
-| `kind: loop` | 엣지. **Start 배선 판정에서 제외**(End 판정엔 포함) | 엣지 |
+| `kind: loop` | 엣지. **Start 배선 판정에서 제외**(End 판정엔 포함) | 엣지. **랭크 계산에서 제외** — SP 노드끼리 사이클이 생기면 배치가 전달 순서를 따라가 버린다 |
 | `kind: bypass` | 일반 엣지 | 엣지 |
 | `gateway: exclusive` | decision 승격으로 표현 | 다중 out-edge로만 |
 | `gateway: parallel` | 다중 out-edge로 표현(승격 안 함) | 다중 out-edge로만 |

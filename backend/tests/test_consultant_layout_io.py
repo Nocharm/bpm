@@ -14,6 +14,7 @@ from scripts.consultant_layout import (
     find_main_path,
     layout_flow,
     resolve_handles,
+    split_forward_edges,
 )
 from scripts.import_consultant import link_matching_io, make_item_id
 
@@ -214,3 +215,55 @@ def test_multi_rank_edge_widens_every_gap_it_crosses() -> None:
     layout_flow(nodes, pairs, primary_end_id="e", labeled=[("a1", "a3", long_label)])
     assert _gap(nodes, "a1", "a2") > 240 - 170
     assert _gap(nodes, "a2", "a3") > 240 - 170
+
+
+def test_cycle_would_collapse_ranks_without_back_edge_removal() -> None:
+    """사이클이 남으면 Kahn 큐가 비어 전원이 leftover → 랭크가 입력 순서로 매겨진다(회귀 방지)."""
+    cyclic = [("a", "b"), ("b", "c"), ("b", "a")]
+    # 사이클이 남으면 랭크가 그래프가 아니라 codes 나열 순서를 따라간다 — 순서만 바꿔도 뒤집힌다
+    assert compute_ranks(["a", "b", "c"], cyclic) == {"a": 0, "b": 1, "c": 2}
+    assert compute_ranks(["c", "b", "a"], cyclic) == {"c": 0, "b": 1, "a": 2}
+    ids = ["a", "b", "c"]
+    forward, back = split_forward_edges(ids, cyclic)
+    assert back == {("b", "a")}
+    assert compute_ranks(ids, forward) == {"a": 0, "b": 1, "c": 2}
+
+
+def test_declared_loop_fixes_the_order_regardless_of_node_order() -> None:
+    """전원이 사이클에 묶이면 DFS 시작점에 결과가 좌우된다 — kind="loop" 표시가 확정한다.
+
+    L5 연계 캔버스가 이 모양이다(준비→수행→준비). 표시를 안 주면 노드 나열 순서만 바꿔도 배치가 뒤집힌다.
+    """
+    pairs = [("준비", "수행"), ("준비", "보고"), ("수행", "보고"), ("수행", "준비")]
+    declared = {("수행", "준비")}
+    for ids in (["준비", "수행", "보고"], ["보고", "수행", "준비"]):
+        forward, back = split_forward_edges(ids, pairs, declared)
+        assert back == declared
+        assert compute_ranks(ids, forward) == {"준비": 0, "수행": 1, "보고": 2}
+
+
+def test_back_edge_search_starts_from_entry_nodes() -> None:
+    """사슬에 사이클이 매달린 흔한 모양 — 진입 노드부터 훑어야 진짜 되돌아가는 엣지를 고른다."""
+    ids = ["c", "b", "s", "a"]  # 일부러 진입(s)을 뒤에 둔다
+    pairs = [("s", "a"), ("a", "b"), ("b", "c"), ("c", "a")]
+    forward, back = split_forward_edges(ids, pairs)
+    assert back == {("c", "a")}
+    assert compute_ranks(ids, forward) == {"s": 0, "a": 1, "b": 2, "c": 3}
+
+
+def test_linkage_canvas_cycle_lays_out_in_flow_order() -> None:
+    """SP 노드끼리 loop이 걸려도 선행 순서가 좌→우로 잡힌다 (사용자 지적 2026-09-01)."""
+    nodes = [LayoutNode(id=n, node_type="subprocess") for n in ("준비", "수행", "보고")]
+    pairs = [("준비", "수행"), ("준비", "보고"), ("수행", "보고"), ("수행", "준비")]
+    layout_flow(nodes, pairs, primary_end_id=None, back_pairs={("수행", "준비")})
+    xs = {n.id: n.x for n in nodes}
+    assert xs["준비"] < xs["수행"] < xs["보고"]
+
+
+def test_undeclared_cycle_still_gets_a_sane_layout() -> None:
+    """kind 표시가 없는 사이클(seq 두 개가 서로를 가리킴)도 배치가 무너지지 않는다."""
+    nodes = [LayoutNode(id=n, node_type="subprocess") for n in ("a", "b", "c")]
+    pairs = [("a", "b"), ("b", "c"), ("c", "b")]
+    layout_flow(nodes, pairs, primary_end_id=None)
+    xs = {n.id: n.x for n in nodes}
+    assert xs["a"] < xs["b"] < xs["c"]

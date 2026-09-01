@@ -131,6 +131,69 @@ def compute_ranks(codes: list[str], pairs: list[tuple[str, str]]) -> dict[str, i
     return rank
 
 
+def find_back_edges(
+    codes: list[str], pairs: list[tuple[str, str]]
+) -> set[tuple[str, str]]:
+    """DFS로 되돌아가는 엣지(back edge)를 찾는다 — 이걸 빼면 남는 그래프는 DAG.
+
+    전달물이 `kind:"loop"`으로 표시하지 않은 사이클(예: seq 엣지 두 개가 서로를 가리키는 경우)도
+    잡아야 한다. 사이클이 하나라도 남으면 Kahn 큐가 비어 **전원이 leftover로 떨어지고 랭크가
+    입력 순서로 매겨진다** — 같은 그래프인데 노드 나열 순서만 바뀌어도 배치가 뒤집힌다
+    (2026-09-01 L5 연계 캔버스에서 확인).
+
+    탐색 순서는 codes·pairs 순서에 고정 — 같은 입력이면 항상 같은 결과여야 재임포트가 흔들리지 않는다.
+    """
+    out: dict[str, list[str]] = {c: [] for c in codes}
+    for src, dst in pairs:
+        if src in out and dst in out:
+            out[src].append(dst)
+    # 진입 노드(선행 없음)부터 훑는다 — 사슬에 사이클이 매달린 흔한 모양에서 "진짜 되돌아가는 엣지"를
+    # 고르게 된다. 전원이 사이클에 묶여 진입점이 없으면 순서가 시작점에 좌우되므로, 그런 그래프는
+    # 전달물의 kind="loop" 표시(declared_back)로 확정해야 한다.
+    indeg = dict.fromkeys(codes, 0)
+    for src, dst in pairs:
+        if src in indeg and dst in indeg:
+            indeg[dst] += 1
+    roots = [c for c in codes if indeg[c] == 0] + [c for c in codes if indeg[c] != 0]
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = dict.fromkeys(codes, WHITE)
+    back: set[tuple[str, str]] = set()
+    for root in roots:
+        if color[root] != WHITE:
+            continue
+        stack: list[tuple[str, int]] = [(root, 0)]
+        color[root] = GRAY
+        while stack:
+            node, i = stack[-1]
+            if i < len(out[node]):
+                stack[-1] = (node, i + 1)
+                nxt = out[node][i]
+                if color[nxt] == GRAY:  # 탐색 스택 위 = 되돌아가는 엣지
+                    back.add((node, nxt))
+                elif color[nxt] == WHITE:
+                    color[nxt] = GRAY
+                    stack.append((nxt, 0))
+            else:
+                color[node] = BLACK
+                stack.pop()
+    return back
+
+
+def split_forward_edges(
+    codes: list[str],
+    pairs: list[tuple[str, str]],
+    declared_back: set[tuple[str, str]] | None = None,
+) -> tuple[list[tuple[str, str]], set[tuple[str, str]]]:
+    """(선행 엣지, 되돌아가는 엣지) — 전달물이 표시한 loop + DFS가 찾은 잔여 사이클.
+
+    선행 순서를 이 forward로 먼저 잡고, back은 배치가 끝난 뒤 그냥 그린다 (사용자 결정 2026-09-01).
+    """
+    declared = {p for p in (declared_back or set()) if p in set(pairs)}
+    forward = [p for p in pairs if p not in declared]
+    extra = find_back_edges(codes, forward)
+    return [p for p in forward if p not in extra], declared | extra
+
+
 def _order_by_barycenter(
     layers: dict[int, list[str]], pairs: list[tuple[str, str]]
 ) -> dict[int, list[str]]:
@@ -310,10 +373,8 @@ def layout_flow(
         return
     ids = [n.id for n in nodes]
     present = set(ids)
-    forward = [
-        (s, d) for s, d in pairs
-        if s in present and d in present and (s, d) not in (back_pairs or set())
-    ]
+    scoped = [(s, d) for s, d in pairs if s in present and d in present]
+    forward, _ = split_forward_edges(ids, scoped, back_pairs)
     ranks = compute_ranks(ids, forward)
 
     layers: dict[int, list[str]] = {}
@@ -339,9 +400,8 @@ def layout_flow(
             node.x = rank_x[rank]
             node.y = _Y0 + row * _Y_STEP
 
-    all_pairs = [(s, d) for s, d in pairs if s in present and d in present]
     seed = find_main_path(nodes, forward, primary_end_id)
-    spine = compute_spine(present, seed, all_pairs) if seed else set()
+    spine = compute_spine(present, seed, scoped) if seed else set()
     if seed:
         align_backbone(nodes, spine, seed)
 
@@ -372,12 +432,9 @@ def compute_spine_for(
 ) -> set[str]:
     """layout_flow와 동일한 seed/spine 재계산 — 핸들 지정에 쓴다."""
     present = {n.id for n in nodes}
-    forward = [
-        (s, d) for s, d in pairs
-        if s in present and d in present and (s, d) not in (back_pairs or set())
-    ]
+    scoped = [(s, d) for s, d in pairs if s in present and d in present]
+    forward, _ = split_forward_edges([n.id for n in nodes], scoped, back_pairs)
     seed = find_main_path(nodes, forward, primary_end_id)
     if not seed:
         return set()
-    all_pairs = [(s, d) for s, d in pairs if s in present and d in present]
-    return compute_spine(present, seed, all_pairs)
+    return compute_spine(present, seed, scoped)

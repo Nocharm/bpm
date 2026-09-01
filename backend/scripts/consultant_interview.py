@@ -89,11 +89,15 @@ class InterviewNote:
 
 @dataclass
 class InterviewLinkageEdge:
-    """L5 연계 캔버스 엣지 원료 — 끝점은 rows[].taskId(=맵 consultant_code)."""
+    """L5 연계 캔버스 엣지 원료 — 끝점은 rows[].taskId(=맵 consultant_code).
+
+    kind는 저장되지 않지만 배치에 필요하다 — loop을 선행으로 세면 사이클이라 랭크가 무너진다.
+    """
 
     source: str
     target: str
     label: str = ""
+    kind: str = "seq"
 
 
 @dataclass
@@ -475,6 +479,7 @@ def _build_linkage(
             source=src,
             target=dst,
             label=_truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
+            kind=kind,
         ))
         quote = _clean(raw.get("quote"))
         if quote:
