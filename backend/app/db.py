@@ -261,6 +261,28 @@ def _drop_legacy_sp_description(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE process_maps DROP COLUMN sp_description"))
 
 
+def _migrate_framework_confirmed(conn: Connection) -> None:
+    """fw 확정 스냅샷의 status published→confirmed 일회 이전 — 매 기동 멱등 (spec 2026-09-02 §3).
+
+    fw_major가 있는 버전만 대상이라 일반 게시본은 건드리지 않는다. 이벤트도 함께 전환해
+    타임라인 칩·PNG 확정일 소스가 일관된다.
+    """
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    if "map_versions" not in tables:
+        return
+    conn.execute(text(
+        "UPDATE map_versions SET status = 'confirmed' "
+        "WHERE fw_major IS NOT NULL AND status = 'published'"
+    ))
+    if "version_events" in tables:
+        conn.execute(text(
+            "UPDATE version_events SET event_type = 'confirmed' "
+            "WHERE event_type = 'published' AND version_id IN "
+            "(SELECT id FROM map_versions WHERE fw_major IS NOT NULL)"
+        ))
+
+
 async def init_models() -> None:
     """Create tables if absent + 누락 컬럼 보강. 본격 마이그레이션(Alembic)은 후속 단계."""
     async with engine.begin() as conn:
@@ -275,6 +297,7 @@ async def init_models() -> None:
         _widen_interview_message_kind,
         _relax_employees_email_not_null,
         _drop_legacy_sp_description,
+        _migrate_framework_confirmed,
     ):
         try:
             async with engine.begin() as conn:

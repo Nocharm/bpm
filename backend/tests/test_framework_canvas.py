@@ -386,6 +386,50 @@ def test_confirm_snapshot_is_confirmed_without_version_number(client: TestClient
     assert any(e["event_type"] == "confirmed" for e in snap["events"])
 
 
+def test_migrate_framework_confirmed_idempotent(client: TestClient, enforce: None) -> None:
+    """구버전 published fw 스냅샷을 startup 훅이 confirmed로 이전, 재실행해도 무해 (spec 2026-09-02 §3)."""
+    import asyncio
+
+    from sqlalchemy import text
+
+    from app.db import _migrate_framework_confirmed, engine
+
+    map_id, _draft_id = _make_canvas(client, "FWC-MIG5", "이전L5")
+    act_as("fwc.confirmer")
+    ver = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()["version"]
+
+    async def _run() -> tuple[str, str]:
+        async with engine.begin() as conn:
+            # 운영 DB 시뮬레이션 — Task 1 이전 코드가 남긴 published 상태로 되돌린다.
+            await conn.execute(
+                text("UPDATE map_versions SET status='published' WHERE id=:i"), {"i": ver["id"]}
+            )
+            await conn.execute(
+                text(
+                    "UPDATE version_events SET event_type='published' "
+                    "WHERE version_id=:i AND event_type='confirmed'"
+                ),
+                {"i": ver["id"]},
+            )
+        async with engine.begin() as conn:
+            await conn.run_sync(_migrate_framework_confirmed)
+            await conn.run_sync(_migrate_framework_confirmed)  # 멱등 재실행
+        async with engine.connect() as conn:
+            status = (
+                await conn.execute(text("SELECT status FROM map_versions WHERE id=:i"), {"i": ver["id"]})
+            ).scalar()
+            event_type = (
+                await conn.execute(
+                    text("SELECT event_type FROM version_events WHERE version_id=:i"), {"i": ver["id"]}
+                )
+            ).scalar()
+            return status, event_type
+
+    status, event_type = asyncio.run(_run())
+    assert status == "confirmed"
+    assert event_type == "confirmed"
+
+
 def test_framework_canvas_allows_decision_and_end(client: TestClient, enforce: None) -> None:
     """분기·끝 노드 생성 허용(끝 규칙 적용), start/process는 계속 차단 (2026-08-28 개선)."""
     l5 = _seed_category(client, "FWC-D5", "분기L5", level=5)
