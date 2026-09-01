@@ -12,7 +12,6 @@ const FW_MAP = process.env.FW_MAP ?? "17"; // mode=framework 맵
 const PLAIN_MAP = process.env.PLAIN_MAP ?? "1"; // 일반 맵(무영향 확인)
 const SHOT_DIR = process.env.SHOT_DIR ?? "/tmp/bpm-l5-bg-verify";
 
-const CHARCOAL = "rgb(54, 56, 67)"; // --color-canvas-l5 #363843
 const LIGHT = "rgb(246, 246, 248)"; // --color-canvas #f6f6f8
 
 const results = [];
@@ -89,10 +88,10 @@ try {
   await tag.waitFor({ state: "visible", timeout: 10000 });
   await page.getByRole("button", { name: "fit view" }).first().click().catch(() => {});
   await page.waitForTimeout(600);
-  check("L5 default charcoal bg", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
-  // 새벽 조감도 — 도트·별 없는 그라데이션 하늘 + 라운드 프레임
+  // 새벽 조감도 — 90% 알파 그라데이션 하늘(스모크 글라스, 언더레이 없음) + 라운드 프레임, 도트·별 없음
+  const skyDefault = String(await skyGradient(page));
+  check("L5 default dawn sky (translucent)", skyDefault.includes("linear-gradient") && skyDefault.includes("0.9"), skyDefault.slice(0, 80));
   check("charcoal has no grid (solid stage)", await page.evaluate(() => document.querySelector(".react-flow__background") === null));
-  check("dawn sky gradient", String(await skyGradient(page)).includes("linear-gradient"), String(await skyGradient(page)).slice(0, 60));
   check("charcoal viewport framed (rounded)", (await frameRadius(page)) === "11px", String(await frameRadius(page)));
   check("tag shows Moon (charcoal state)", (await tag.locator("svg.lucide-moon").count()) === 1);
   check("tag is a button with tooltip", (await tag.getAttribute("title")) === "Switch to light background");
@@ -126,7 +125,7 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".react-flow__node", { timeout: 20000 });
   await page.waitForTimeout(400);
-  check("charcoal persists after reload", (await canvasBg(page)) === CHARCOAL, String(await canvasBg(page)));
+  check("charcoal persists after reload", String(await skyGradient(page)).includes("linear-gradient"), String(await skyGradient(page)).slice(0, 60));
   await shot(page, "l5-charcoal-persisted");
 
   // ── 5) 일반 맵 — 라이트 유지 + L5 태그 없음 ──────────────────────────────
