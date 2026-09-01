@@ -3,6 +3,14 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-01 — 캔버스 드래그 성능 라운드 2: 드래그 중 nodes 동결 (perf/canvas-drag-r2)
+- 일반 드래그의 dragging=true 프레임을 `nodes` state에 커밋하지 않고(페이지 리렌더·`[nodes]` memo 재계산 0) 드롭 flush 1회만 커밋. 352노드·351엣지 스트레스 맵 프로드 A/B(순서 교차): **avg 47~49→17.2ms/frame(-64%), p95 150→16.8ms(-89%), over33 176→2** — vsync(16.7ms) 락. 엣지 0 맵도 avg 39→16.9·p95 116.7→16.8.
+- 설계는 인라인 펼침의 suppress+라이브 오버레이 일반화 — 단, **controlled RF는 부모가 position을 되돌려줘야만 노드가 움직인다**(스토어는 `onNodesChange` 디스패치만, 내부 미갱신 — 1302줄 "ref면 안 됨" 주석이 정답이었다). 그래서 프레임당 라이브 좌표를 RF props 동기화와 같은 채널(`useStoreApi().getState().setNodes`)로 직접 흘린다 — 노드·엣지·선택링·액션바(dragging 플래그)가 전부 따라오고, 드래그 중 다른 state 변경 시엔 displayNodes의 모듈 맵(`generalDragLive`) 오버레이가 stale adopt(스냅백)를 막는다. **트레이드오프: 스토어 직행은 세미-내부 API** — RF 메이저 업그레이드 시 이 echo가 첫 점검 대상(깨지면 "드래그 무반응"으로 즉시 드러남).
+- 동결 제외 게이트: Shift 축고정 프레임(보정 좌표를 RF에 되돌려야 시각 잠금 — 기존 per-frame 커밋 유지), 그룹 멤버 제스처(그룹박스가 nodes 기반 memo라 라이브 추종 필요), 인라인 펼침(전용 dragLiveById 경로 유지). 드롭 후 존/충돌/ctrl-복사·autosave는 flush가 stop 콜백보다 먼저 큐잉되는 RF 순서(소스 확인)에 그대로 얹힘.
+- 검증: 신규 `pw-verify-drag-freeze.mjs` 15/15(커서1:1+영속·Shift 중간프레임 이탈0·다중선택·그룹박스 라이브·링 표시/해제·undo)·`pw-verify-zone-swap.mjs`(swap 실행+aStart 계약) + 기존 shift 17/21·ctrl 29/31·밴드 연속성·펼침 드래그 — **전 항목 베이스라인(64dfbc35 별도 빌드)과 픽셀 단위 동일**(mid-drag 엣지 끝점 거리까지 일치). 게이트 lint·vitest 812·build 그린.
+- 기존 이슈 확인(이번 변경 무관, 베이스라인 동일 재현): 다중선택 시 `.react-flow__nodesselection-rect` 오버레이 미렌더, Ctrl 드래그 mid-drag 고스트(`.bpm-node-ghost`) 미표시 — 별도 추적 필요.
+- 측정 랜드마인: `next start`의 `/api` rewrite는 **BACKEND_URL을 빌드 시점에 굽는다** — 런타임 env로 안 바뀌므로 측정용 빌드는 `BACKEND_URL=… npm run build`로 만들 것(안 그러면 기본 8000의 공용 dev.db에 테스트 데이터가 들어간다. 이번에 들어간 5개 맵은 하드 퍼지 완료).
+
 ## 2026-09-01 — 핫픽스: 피크 목업 드롭다운 "해당 맵으로 이동" 무반응 (dev)
 - 목업 드롭다운 메뉴가 body 포털이라 피크의 바깥클릭 닫기(mousedown 캡처)에 걸려 **click 전에 피크째 언마운트** → 이동 게이트(openMapPrompt) 미표시·추가 항목도 동일 사망. 내부 mockMenu 닫기 핸들러엔 제외가 있었는데 피크 레벨 핸들러에 누락 — mockMenuRef를 공유해 양쪽 모두 제외.
 - 검증: 신규 `pw-verify-peek-mock-open.mjs` RED(gateVisible 0)→GREEN(게이트 표시·콘솔 에러 0), lint·vitest 812·build 그린.

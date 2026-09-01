@@ -19,6 +19,7 @@ import {
   useNodesState,
   useReactFlow,
   useStore,
+  useStoreApi,
   useViewport,
   ViewportPortal,
 } from "@xyflow/react";
@@ -305,6 +306,10 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 // 돌려줘 RF가 무변경 노드를 리렌더하지 않게 한다. 종전엔 오프셋≠0인 노드 전부가 displayNodes
 // 재계산(드래그 프레임마다)에서 새 객체가 돼 전 노드 리렌더를 유발했다. WeakMap이라 노드 교체 시 자동 회수.
 const shiftedNodeCache = new WeakMap<AppNode, { yOff: number; out: AppNode }>();
+// 일반 드래그 동결(#R2) 중 제스처 노드의 라이브 표시좌표 — 프레임마다 setState 없이(페이지 리렌더 0)
+// RF 스토어 직행 echo(dropDraggingPositions)와 displayNodes 재계산 시 오버레이가 함께 읽는다.
+// shiftedNodeCache처럼 단일 에디터 인스턴스 전제 모듈 캐시(마운트·제스처 시작/종료 시 clear).
+const generalDragLive = new Map<string, { x: number; y: number }>();
 
 const DWELL_MS = 300; // 노드 위에 머무는 시간이 이만큼 넘으면 드롭 영역(앞/그룹/뒤) 표시
 const DROP_GAP = 24; // 삽입 시 A를 B 좌/우로 떨어뜨리는 간격
@@ -1429,6 +1434,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const hasDraft = versions.some((v) => v.status === "draft");
 
   const reactFlow = useReactFlow();
+  // RF 내부 스토어 핸들 — 일반 드래그 동결(#R2)의 프레임당 라이브 좌표 echo용. controlled 모드에서
+  // props 동기화가 쓰는 것과 같은 채널(store.setNodes)이라 노드·엣지·선택링이 전부 따라온다.
+  const storeApi = useStoreApi();
   // 캔버스 컨테이너 픽셀 크기(리사이즈 시에만 변경 — 줌/팬엔 불변) — translateExtent 우하단 확장 계산용
   const paneWidth = useStore((state) => state.width);
   const paneHeight = useStore((state) => state.height);
@@ -1454,6 +1462,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
   // 드래그 제스처 동결 오프셋 미러 — dropDraggingPositions(정의가 앞선 useCallback)의 선형 역변환용. TDZ 회피.
   const dragYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
+  // 일반 드래그 동결(#R2) 활성 플래그 — 제스처 시작 시 판정(captureGeneralDragFreeze: 그룹 멤버·인라인 제외), 종료 시 해제.
+  const generalFreezeRef = useRef(false);
+  // 마지막 렌더된 RF nodes prop(displayNodes) 미러 — 동결 드래그 프레임의 스토어 echo 베이스(dropDraggingPositions).
+  const displayNodesRef = useRef<AppNode[]>([]);
   // 펼침 합성(영역/스코프 오프셋/루트 오프셋)을 핸들러(handleAddNode·handleNodesChange 등 정의가 앞선)에서
   // 읽기 위한 ref — TDZ 회피.
   const inlineCompositionRef = useRef<{
@@ -1751,6 +1763,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 라이브 표시좌표는 dragLiveById가 따로 추적하고 displayNodes가 직접 렌더한다 → 커서 1:1 추종, 매 프레임
   // offset 보정으로 인한 튐 없음. 표시→저장 환산은 드롭 시점(onNodeDragStop)에 한 번만. select/dimensions/remove
   // 등 비-position 변경은 그대로 통과.
+  // 일반 드래그 동결(#R2): 펼침 밖 드래그도 dragging=true 프레임은 state에 쓰지 않는다 — 아래 라우팅 블록 주석 참고.
   const dropDraggingPositions = useCallback(
     (changes: NodeChange<AppNode>[]): NodeChange<AppNode>[] => {
       // Shift 드래그 축 고정 — 단일·다중선택 드래그 공통 경로(각자 시작점 기준). suppress 필터와 무관하게
@@ -1768,6 +1781,43 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
         }
       }
+      // 일반 드래그 동결(#R2) — dragging=true 프레임은 nodes state에 커밋하지 않고 라이브 맵과 RF 내부
+      // 스토어에만 반영해 프레임당 페이지 전체 리렌더·[nodes] memo 재계산을 제거한다. controlled 모드 RF는
+      // 부모가 position 변경을 되돌려줘야만 노드가 움직이므로(스토어는 onNodesChange 디스패치만 함, 내부
+      // 미갱신), 마지막 렌더 배열(displayNodesRef)에 라이브 좌표를 패치해 store.setNodes로 직접 흘린다 —
+      // props 동기화와 같은 채널이라 노드·엣지·선택링·액션바(dragging 플래그)가 전부 따라온다. 드래그 중
+      // 다른 state 변경으로 displayNodes가 재계산되면 props 동기화가 스토어를 덮는데, 그때는 memo의
+      // generalDragLive 오버레이가 stale 좌표 adopt(스냅백)를 막는다. Shift 축 고정 프레임은 보정 좌표를
+      // RF에 되돌려야 시각적으로 잠기므로 동결하지 않고 기존 per-frame 커밋 경로를 유지한다(라이브 맵은
+      // 오버레이 일관성 위해 같이 갱신). 드롭 flush(dragging=false)는 아래 기존 계단 역변환 경로로 1회
+      // 커밋하고 라이브 항목을 자가 정리한다.
+      let frozenIds: Set<string> | null = null;
+      if (generalFreezeRef.current && inlineCompositionRef.current === null) {
+        for (const change of changes) {
+          if (change.type !== "position") {
+            continue;
+          }
+          if (change.position && change.dragging === true) {
+            generalDragLive.set(change.id, { x: change.position.x, y: change.position.y });
+            if (!shiftHeldRef.current) {
+              if (frozenIds === null) {
+                frozenIds = new Set();
+              }
+              frozenIds.add(change.id);
+            }
+          } else if (change.dragging === false) {
+            generalDragLive.delete(change.id);
+          }
+        }
+        if (frozenIds !== null) {
+          storeApi.getState().setNodes(
+            displayNodesRef.current.map((node) => {
+              const live = generalDragLive.get(node.id);
+              return live ? { ...node, position: { x: live.x, y: live.y }, dragging: true } : node;
+            }),
+          );
+        }
+      }
       // height-shift(#1) 역변환 — RF가 흘려보내는 position은 표시 좌표(오프셋 포함)라
       // nodes state(저장 좌표)에 그대로 넣으면 드래그마다 오프셋이 누적된다. 축 고정과 무관하게 항상 적용.
       // 드래그 중(dragging=true) 제스처 노드는 시작 시점 오프셋 상수를 빼는 선형 역변환 — 표시(displayNodes)도
@@ -1778,6 +1828,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       const suppress = suppressPosIdsRef.current;
       for (const change of changes) {
         if (change.type === "position" && change.position) {
+          if (frozenIds !== null && frozenIds.has(change.id)) {
+            continue; // 동결 라우팅된 프레임 — 아래 필터에서 제거되므로 역변환 불필요
+          }
           const frozen = change.dragging === true ? gestureOffsets.get(change.id) : undefined;
           if (frozen !== undefined) {
             if (frozen !== 0) {
@@ -1802,14 +1855,19 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
         }
       }
-      if (suppress.size === 0) {
+      if (suppress.size === 0 && frozenIds === null) {
         return changes;
       }
       return changes.filter(
-        (change) => !(change.type === "position" && "id" in change && suppress.has(change.id)),
+        (change) =>
+          !(
+            change.type === "position" &&
+            "id" in change &&
+            (suppress.has(change.id) || (frozenIds !== null && frozenIds.has(change.id)))
+          ),
       );
     },
-    [],
+    [storeApi],
   );
 
   // React Flow 변경분을 현재 스코프(nodes)와 자식(childNodes)으로 분배 — 자식 측정/선택/이동이 올바른 state로 가게.
@@ -1829,7 +1887,12 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
       if (childNodes.length === 0) {
-        onNodesChange(dropDraggingPositions(changes));
+        // 동결(#R2)/suppress로 전부 걸러지면 no-op — applyNodeChanges는 빈 변경에도 새 배열을 만들어
+        // setState 리렌더를 유발하므로 호출 자체를 건너뛴다.
+        const processed = dropDraggingPositions(changes);
+        if (processed.length > 0) {
+          onNodesChange(processed);
+        }
         return;
       }
       const childIds = new Set(childNodes.map((node) => node.id));
@@ -1838,7 +1901,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         (change) => !("id" in change) || !childIds.has(change.id),
       );
       if (mainChanges.length > 0) {
-        onNodesChange(dropDraggingPositions(mainChanges));
+        const processed = dropDraggingPositions(mainChanges);
+        if (processed.length > 0) {
+          onNodesChange(processed);
+        }
       }
       if (childChanges.length > 0) {
         setChildNodes((current) => applyNodeChanges(childChanges, current));
@@ -6517,6 +6583,20 @@ function MapEditor({ mapId }: { mapId: number }) {
     setDragYOffsets(null);
   }
 
+  // 일반 드래그 동결(#R2) 게이트 — 제스처 시작 시 판정. 그룹 멤버가 끼면 그룹 박스(nodes 기반 memo)가
+  // 라이브 추종해야 하므로 동결하지 않고 기존 per-frame 커밋 경로를 유지한다. 인라인 펼침 중엔 전용
+  // 경로(dragLiveById·suppressPosIdsRef)가 담당하므로 역시 비활성.
+  function captureGeneralDragFreeze(dragged: AppNode[]) {
+    generalDragLive.clear();
+    generalFreezeRef.current =
+      inlineCompositionRef.current === null &&
+      dragged.every((node) => node.data.groupIds.length === 0);
+  }
+  function clearGeneralDragFreeze() {
+    generalFreezeRef.current = false;
+    generalDragLive.clear();
+  }
+
   const inlineComposition = useMemo(() => {
     if (expandedInline.size === 0 || !fullGraph) {
       return null;
@@ -7029,6 +7109,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     const childById = inlineComposition
       ? new Map(childNodes.map((node) => [node.id, node] as const))
       : null;
+    // 일반 드래그 동결(#R2) 중 재계산이면 제스처 노드를 라이브 표시좌표로 오버라이드 — 동결된 stale
+    // 저장좌표가 props 동기화로 RF에 adopt되며 생기는 스냅백 방지. 라이브 값은 RF가 보고한 표시좌표
+    // 그대로라 yOff를 더하지 않는다(항등).
+    const liveOverlay = !inlineComposition && generalDragLive.size > 0 ? generalDragLive : null;
     const mapped = base.map((node) => {
       const stateChild = childById?.get(node.id);
       let display;
@@ -7094,6 +7178,12 @@ function MapEditor({ mapId }: { mapId: number }) {
           ? { ...withIoHighlight, data: { ...withIoHighlight.data, gmp: gmpPreview.gmp, color: gmpPreview.color } }
           : withIoHighlight;
       const injected = injectSubEnds(withGmpPreview);
+      if (liveOverlay !== null) {
+        const live = liveOverlay.get(node.id);
+        if (live !== undefined) {
+          return { ...injected, position: { x: live.x, y: live.y }, dragging: true };
+        }
+      }
       // height-shift 오프셋 — 저장 좌표는 nodes state에 그대로, 표시 위치만 rAF 트윈된 값으로 이동.
       // 펼침 중엔 합성 입력에 이미 베이크돼 있어 여기서 더하면 이중 적용 — 스킵.
       // 드래그 제스처 노드는 동결 오프셋 우선 — 역변환(선형)과 짝을 이뤄 커서 1:1 추종(위 dragYOffsets 주석).
@@ -7153,6 +7243,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     renderYOffsets,
     dragYOffsets,
   ]);
+  useEffect(() => {
+    displayNodesRef.current = displayNodes; // 동결 드래그 프레임의 스토어 echo 베이스(#R2)
+  }, [displayNodes]);
+  useEffect(() => {
+    generalDragLive.clear(); // 모듈 캐시 — 리마운트 잔존 방지
+  }, []);
 
   // 엣지 렌더 변환 — 선택 노드 기준 앞/뒤 단계 강조(target teal, source orange) 등.
   // 선 모양(type)은 엣지별 저장값 그대로 유지(구 맵 전역 일괄 적용은 "전체 일괄 변경" 액션으로 대체).
@@ -9302,6 +9398,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         );
                         setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
+                        captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart([node]);
                         beginCtrlDrag(event.ctrlKey || event.metaKey, node.id, nodes);
                       }}
@@ -9340,6 +9437,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map();
                         setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                         clearDragYOffsets();
+                        clearGeneralDragFreeze(); // 일반 드래그 동결(#R2) 라이브 맵 정리(백스톱)
                       }}
                       onSelectionDragStart={(event, nodes) => {
                         pushHistory();
@@ -9350,6 +9448,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         );
                         setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
+                        captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart(nodes);
                         // 선택박스 오버레이(빈 공간) 드래그는 항상 의도된 선택 드래그 → grabbedId=null(선택 집합 전체).
                         beginCtrlDrag(event.ctrlKey || event.metaKey, null, nodes);
@@ -9393,6 +9492,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map();
                         setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
                         clearDragYOffsets();
+                        clearGeneralDragFreeze(); // 일반 드래그 동결(#R2) 라이브 맵 정리(백스톱)
                       }}
                       onBeforeDelete={async ({ nodes: deletingNodes, edges: deletingEdges }) => {
                         if (readOnly) {
