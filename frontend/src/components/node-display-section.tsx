@@ -64,6 +64,9 @@ interface NodeDisplaySectionProps {
   idPrefix: string;
 }
 
+// 전체 일괄 토글 대상 — 카테고리에 속한 모든 필드(카테고리 정의가 단일 소스)
+const ALL_TOGGLES: NodeDisplayToggle[] = TOGGLE_CATEGORIES.flatMap(({ fields }) => fields);
+
 export function NodeDisplaySection({ displayFields, onToggle, onSetCategory, idPrefix }: NodeDisplaySectionProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(true);
@@ -71,23 +74,37 @@ export function NodeDisplaySection({ displayFields, onToggle, onSetCategory, idP
 
   return (
     <div data-id={`${idPrefix}-node-display-section`} className="rounded-md border border-hairline p-3">
-      <button
-        type="button"
-        data-id={`${idPrefix}-node-display-toggle`}
-        data-acc-toggle
-        aria-expanded={!collapsed}
-        onClick={() => setCollapsed((v) => !v)}
-        className="flex w-full items-center gap-1 text-fine font-semibold text-ink"
-      >
-        <ChevronRight
-          size={12}
-          strokeWidth={1.5}
-          className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
-        />
-        {t("inspector.nodeDisplay")}
-        {onCount > 0 && <span className="font-normal text-ink-tertiary">({onCount})</span>}
-        <span className="font-normal text-ink-tertiary">· {t("inspector.mapWide")}</span>
-      </button>
+      {/* 헤더는 접힘/펼침 공용 — 전체 일괄 토글을 여기 둬 접은 채로도 쓸 수 있게 (사용자 요청 2026-09-01).
+          접기 버튼 안에 버튼을 중첩할 수 없어 행으로 나눈다. */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          data-id={`${idPrefix}-node-display-toggle`}
+          data-acc-toggle
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink"
+        >
+          <ChevronRight
+            size={12}
+            strokeWidth={1.5}
+            className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
+          />
+          {t("inspector.nodeDisplay")}
+          {onCount > 0 && <span className="font-normal text-ink-tertiary">({onCount})</span>}
+          <span className="truncate font-normal text-ink-tertiary">· {t("inspector.mapWide")}</span>
+        </button>
+        <button
+          type="button"
+          data-id={`${idPrefix}-node-display-all`}
+          title={onCount > 0 ? t("nodeDisplay.hideAll") : t("nodeDisplay.showAll")}
+          aria-label={onCount > 0 ? t("nodeDisplay.hideAll") : t("nodeDisplay.showAll")}
+          className="shrink-0 rounded-sm p-0.5 text-ink-tertiary hover:bg-surface-alt"
+          onClick={() => onSetCategory(ALL_TOGGLES, onCount === 0)}
+        >
+          {onCount > 0 ? <EyeOff size={13} strokeWidth={1.5} /> : <Eye size={13} strokeWidth={1.5} />}
+        </button>
+      </div>
       {!collapsed && (
         <div className="mt-1 flex flex-col gap-1">
           {TOGGLE_CATEGORIES.map(({ key, labelKey, fields }) => {

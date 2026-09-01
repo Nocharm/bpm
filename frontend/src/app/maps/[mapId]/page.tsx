@@ -11020,17 +11020,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </div>
                       )}
                     </div>
-                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨) */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      disabledReasonKind={spDisabledReasonKind}
-                      onToast={showToast}
-                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
-                      onGoToPublished={(id) => void switchVersion(id)}
-                      usage={spUsage}
-                    />
+                    {/* 서브프로세스 지정 — 다른 맵 연결 절차(임베드) 상태/설정. 엣지 스타일 아래 배치 (batch2 ⑨).
+                        L5 연계 캔버스는 지정 불가라 속성 탭과 동일하게 카드째 숨긴다(사용자 신고 2026-09-01) */}
+                    {!isFrameworkMap && (
+                      <SubprocessInspectorCard
+                        mapId={mapId}
+                        canManage={spCanManage}
+                        disabledReason={spDisabledReason}
+                        disabledReasonKind={spDisabledReasonKind}
+                        onToast={showToast}
+                        onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                        onGoToPublished={(id) => void switchVersion(id)}
+                        usage={spUsage}
+                      />
+                    )}
                     <div className="flex gap-1.5">
                       <button
                         type="button"
@@ -11277,17 +11280,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                       />
                     )}
 
-                    {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스 */}
-                    <SubprocessInspectorCard
-                      mapId={mapId}
-                      canManage={spCanManage}
-                      disabledReason={spDisabledReason}
-                      disabledReasonKind={spDisabledReasonKind}
-                      onToast={showToast}
-                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
-                      onGoToPublished={(id) => void switchVersion(id)}
-                      usage={spUsage}
-                    />
+                    {/* 서브프로세스 지정 — 게시본 승인 탭에서도 지정/수정/해제(맵 단위, 오너·관리자). Map 탭 카드와 동일 인스턴스.
+                        L5는 지정 불가라 여기서도 숨긴다(속성·맵 탭과 통일) */}
+                    {!isFrameworkMap && (
+                      <SubprocessInspectorCard
+                        mapId={mapId}
+                        canManage={spCanManage}
+                        disabledReason={spDisabledReason}
+                        disabledReasonKind={spDisabledReasonKind}
+                        onToast={showToast}
+                        onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                        onGoToPublished={(id) => void switchVersion(id)}
+                        usage={spUsage}
+                      />
+                    )}
                     <MapDetailCard
                       mapId={mapId}
                       only="versions"

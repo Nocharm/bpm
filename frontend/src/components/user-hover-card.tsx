@@ -3,10 +3,11 @@
 // 유저 호버 카드 — 앵커를 1초 이상 호버하거나 **클릭하면 즉시** 유저 정보 팝오버. 맵 상세 '허용 인원'
 // 확장 카드 디자인을 미러(아바타+이름 · 아이디/직급/부서 레벨 필). portal+fixed라 컨테이너 overflow에 안 잘림.
 
-import { useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type { DirectoryUser } from "@/lib/api";
+import { getViewportOverflow } from "@/lib/clamp-viewport";
 import { formatTitleWithPosition } from "@/lib/korean-dept";
 
 // 호버 후 카드가 뜨기까지 지연(ms) — 요청: 1초 경과
@@ -27,8 +28,24 @@ export function UserHoverCard({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const cardRef = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  // 화면 가장자리 보정 — 인스펙터는 화면 오른쪽 끝이라 필 왼쪽에 맞춰 띄우면 카드가 밖으로 나간다.
+  // 부서 레벨 필 개수에 따라 높이가 달라져 추정이 불가능하므로 붙인 뒤 실측해 민다.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card || pos === null) {
+      return;
+    }
+    card.style.left = `${pos.x}px`;
+    card.style.top = `${pos.y + 6}px`;
+    const { dx, dy } = getViewportOverflow(card);
+    card.style.left = `${pos.x + dx}px`;
+    card.style.top = `${pos.y + 6 + dy}px`;
+    card.style.visibility = "visible";
+  }, [pos]);
 
   const name = user?.name ?? loginId;
   const title = formatTitleWithPosition(user?.title ?? "", user?.position ?? "");
@@ -74,9 +91,11 @@ export function UserHoverCard({
       {pos !== null &&
         createPortal(
           <span
+            ref={cardRef}
             role="tooltip"
             className="pointer-events-none fixed z-[1400] flex w-56 flex-col gap-2 rounded-sm border border-hairline bg-surface p-3 shadow-lg"
-            style={{ left: pos.x, top: pos.y + 6 }}
+            // 위치는 위 레이아웃 이펙트가 확정 — 측정 전 한 프레임 어긋난 자리에 보이지 않게 숨겨서 붙인다
+            style={{ visibility: "hidden" }}
           >
             {/* 아바타 + 이름 */}
             <span className="flex items-center gap-2">
