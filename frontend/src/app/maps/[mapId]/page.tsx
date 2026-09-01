@@ -9140,7 +9140,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         data-id="l5-brand-watermark"
                         className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
                       >
-                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.06]">
+                        {/* 불투명도 0.16 — 6%는 하늘에 묻혀 로고가 읽히지 않았다(사용자 요청 2026-09-01).
+                            노드·엣지보다는 확실히 뒤로 물러나되 워드마크가 읽히는 선. */}
+                        <div className="absolute -inset-[60%] flex -rotate-[24deg] flex-col items-center justify-center gap-24 text-canvas opacity-[0.16]">
                           {Array.from({ length: 10 }, (_, row) => (
                             <div
                               key={row}
