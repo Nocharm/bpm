@@ -3,7 +3,7 @@
 // 비활성(조상) 창의 정적 프리뷰 — ReactFlow 없이 SVG로 노드 박스+엣지선을 그려
 // viewBox로 창 크기에 자동 맞춤. 라이브 인스턴스 N개의 부하를 피하는 경량 렌더(시각 전용).
 
-import { useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { VersionGraph } from "@/lib/api";
 import { resolveNodeStroke } from "@/components/process-node";
@@ -15,6 +15,7 @@ export function ScopePreview({
   interactive = false,
   zoom = 1,
   charcoal = false,
+  onZoom,
 }: {
   fullGraph: VersionGraph | null;
   scopeParentId: string | null;
@@ -26,15 +27,55 @@ export function ScopePreview({
   // 스크롤바를 띄우면 좁은 피크 안에서 조준이 어렵고 클릭도 안 먹어 숨기고 드래그만 남겼다
   // (사용자 요청 2026-08-31). 이동은 overflow:hidden 상태에서도 동작하는 scrollLeft/Top로.
   zoom?: number;
+  // 넘기면 프리뷰 위 휠이 줌 스텝이 된다(방향 +1/-1 → 적용된 배율 반환, 클램프는 호출측).
+  // 미지정이면 리스너를 안 붙여 정적 프리뷰의 휠은 평소대로 흘러간다.
+  onZoom?: (direction: 1 | -1) => number;
 }) {
   const panRef = useRef<HTMLDivElement>(null);
   // 드래그 시작 시점의 커서·스크롤 위치 — 이동량을 절대 좌표로 환산해 드리프트를 막는다
   const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  // 줌 후 시선 고정 기준점(컨테이너 상대) — 휠은 커서 지점, 그 외(버튼)는 화면 중앙
+  const anchorRef = useRef<{ x: number; y: number } | null>(null);
+  const prevZoomRef = useRef(zoom);
   const pannable = zoom > 1;
   const scopeNodes = (fullGraph?.nodes ?? []).filter(
     (node) => node.parent_node_id === scopeParentId,
   );
-  if (scopeNodes.length === 0) {
+  // 빈 스코프는 팬 컨테이너 없이 조기 반환한다 — 그래프가 늦게 채워지면 리스너를 그때 붙여야 한다
+  const hasNodes = scopeNodes.length > 0;
+
+  // 휠 줌 — 피크 위 휠은 프리뷰가 전부 소비한다(뒤 캔버스·패널 스크롤과 동시 입력 금지).
+  // React onWheel은 루트에 passive로 붙어 preventDefault가 무시되므로 네이티브 리스너로 단다.
+  useEffect(() => {
+    const el = panRef.current;
+    if (el === null || onZoom === undefined) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const next = onZoom(event.deltaY < 0 ? 1 : -1);
+      // 클램프 한계면 앵커를 남기지 않는다 — 다음 버튼 줌이 엉뚱한 지점을 잡는다
+      if (next === prevZoomRef.current) return;
+      const rect = el.getBoundingClientRect();
+      anchorRef.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [onZoom, hasNodes]);
+
+  // 배율이 바뀌면 기준점이 제자리에 남도록 스크롤을 재계산 — SVG는 컨테이너 대비 zoom배라 배율비로 환산된다
+  useLayoutEffect(() => {
+    const el = panRef.current;
+    const prev = prevZoomRef.current;
+    prevZoomRef.current = zoom;
+    if (el === null || prev === zoom) return;
+    const anchor = anchorRef.current ?? { x: el.clientWidth / 2, y: el.clientHeight / 2 };
+    anchorRef.current = null;
+    const ratio = zoom / prev;
+    el.scrollLeft = (el.scrollLeft + anchor.x) * ratio - anchor.x;
+    el.scrollTop = (el.scrollTop + anchor.y) * ratio - anchor.y;
+  }, [zoom]);
+
+  if (!hasNodes) {
     return <div className={`h-full w-full ${charcoal ? "bpm-l5-sky rounded-md" : "bg-canvas"}`} />;
   }
 
@@ -71,8 +112,9 @@ export function ScopePreview({
     <div
       ref={panRef}
       data-id="scope-preview-pane"
-      // 확대 중에는 드래그를 받아야 하므로 포인터 이벤트를 연다(정적 프리뷰라도)
-      className={`${interactive || pannable ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "bpm-l5-sky overflow-hidden rounded-md" : "bg-canvas"} ${
+      // 확대 중 드래그·휠 줌을 받아야 하므로 포인터 이벤트를 연다(정적 프리뷰라도).
+      // 휠 줌은 1배에서 시작하므로 onZoom이 있으면 pannable 이전부터 열려 있어야 한다
+      className={`${interactive || pannable || onZoom !== undefined ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "bpm-l5-sky overflow-hidden rounded-md" : "bg-canvas"} ${
         pannable ? "cursor-grab overflow-hidden active:cursor-grabbing" : ""
       }`}
       onPointerDown={

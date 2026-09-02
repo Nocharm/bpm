@@ -371,6 +371,15 @@ export function SubprocessPreviewPeek({
 
   // 미리보기 줌 — 1=창 맞춤, 확대 시 ScopePreview가 컨테이너 스크롤로 이동시킨다
   const [zoom, setZoom] = useState(1);
+  // 줌 스텝 단일 경로 — 버튼과 휠이 같은 클램프를 쓰고, 휠 앵커 계산용으로 적용된 배율을 돌려준다
+  const applyZoomStep = (direction: 1 | -1) => {
+    const next = Math.min(
+      ZOOM_MAX,
+      Math.max(ZOOM_MIN, Math.round((zoom + direction * ZOOM_STEP) * 100) / 100),
+    );
+    setZoom(next);
+    return next;
+  };
   // 목업 드래그 중 피크 숨김 — 드래그 소스를 언마운트하면 Chrome이 드래그를 취소하므로
   // visibility로만 숨기고(마운트 유지) 드롭/취소 후 dragend에서 닫는다
   const [dragging, setDragging] = useState(false);
@@ -896,7 +905,7 @@ export function SubprocessPreviewPeek({
               {t("library.peekEmptyGraph")}
             </div>
           ) : (
-            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} />
+            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} onZoom={applyZoomStep} />
           )}
           {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배가 창 맞춤이라 하한 */}
           {designated && fetchState.status === "ready" && fetchState.graph.nodes.length > 0 && (
@@ -909,7 +918,7 @@ export function SubprocessPreviewPeek({
                 data-id="library-peek-zoom-out"
                 title={t("library.peekZoomOut")}
                 disabled={zoom <= ZOOM_MIN}
-                onClick={() => setZoom((cur) => Math.max(ZOOM_MIN, Math.round((cur - ZOOM_STEP) * 100) / 100))}
+                onClick={() => applyZoomStep(-1)}
                 className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <ZoomOut size={14} strokeWidth={1.5} />
@@ -922,7 +931,7 @@ export function SubprocessPreviewPeek({
                 data-id="library-peek-zoom-in"
                 title={t("library.peekZoomIn")}
                 disabled={zoom >= ZOOM_MAX}
-                onClick={() => setZoom((cur) => Math.min(ZOOM_MAX, Math.round((cur + ZOOM_STEP) * 100) / 100))}
+                onClick={() => applyZoomStep(1)}
                 className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <ZoomIn size={14} strokeWidth={1.5} />
