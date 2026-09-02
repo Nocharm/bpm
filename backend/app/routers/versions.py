@@ -425,6 +425,8 @@ async def delete_version(
             status_code=409, detail=f"cannot delete a {version.status} version"
         )
 
+    await _assert_not_framework(session, version.map_id)
+
     # 삭제는 점유 보유자(또는 맵 오너·sysadmin)만 — draft 삭제 버튼과 동일 게이트.
     actor_role = await get_effective_role(session, user, version.map_id)
     is_holder = version.checked_out_by == user

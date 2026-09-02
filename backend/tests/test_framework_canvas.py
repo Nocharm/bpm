@@ -477,6 +477,13 @@ def test_confirmed_snapshot_cannot_be_deleted(client: TestClient, enforce: None)
     assert res.status_code == 409
 
 
+def test_framework_live_draft_cannot_be_deleted(client: TestClient, enforce: None) -> None:
+    """캔버스의 라이브 draft 삭제 차단 — 영구 draft 계약 보호 (final review 인계)."""
+    map_id, draft_id = _make_canvas(client, "FWC-DEL5", "드래프트삭제차단")
+    res = client.delete(f"/api/versions/{draft_id}")
+    assert res.status_code == 422 and "confirm workflow" in res.json()["detail"]
+
+
 def test_confirmed_snapshot_shows_in_dashboard(client: TestClient, enforce: None) -> None:
     """대시보드 집계에서 confirmed 스냅샷 카운트를 포함한다 (spec §3.1)."""
     map_id, _draft_id = _make_canvas(client, "FWC-DASH5", "대시보드확정")
