@@ -346,3 +346,21 @@ def test_summary_admins_include_inherited_ancestor_row(client: TestClient, enfor
     admins = {a["login_id"]: a for a in res.json()["admins"]}
     assert admins["smy.l1admin"]["level"] == 1  # 상속 행 — L1의 level로 표기
     assert admins["smy.l2admin"]["level"] == 2  # 직접 행 — L2 자신의 level
+
+
+def test_summary_admins_dedupes_same_person_across_levels(client: TestClient, enforce: None) -> None:
+    """동일인이 조상 행(L1)과 대상 L5 행 양쪽에 걸리면 admins에 1번만, level은 최소(조상) 채택."""
+    l1 = _seed_category(client, "SMY-DUP-L1", "요약중복L1")
+    l5 = _seed_category(client, "SMY-DUP-L5", "요약중복L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "smy.dup"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "smy.dup"}]})
+
+    act_as("smy.viewer")
+    res = client.get(f"/api/categories/{l5}/summary")
+    assert res.status_code == 200, res.text
+    rows = [a for a in res.json()["admins"] if a["login_id"] == "smy.dup"]
+    assert len(rows) == 1  # 조상 행 + 직접 행 2개가 개인 1명으로 dedupe
+    assert rows[0]["level"] == 1  # 최소 level(L1, 조상) 채택 — L5(5)가 아니다

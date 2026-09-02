@@ -650,7 +650,9 @@ async def get_category_summary(
             if r.linkage_map_id is not None and r.linkage_map_id in confirmed_map_ids
         )
         # 우선순위(상호배타, 브리프 고정): no_canvas > 스냅샷≥1이면 confirmed > 나머지 not_ready
-        # — ready==False라도 스냅샷이 있으면 confirmed로 집계(정의 충돌 해소, CLAUDE.md 계약과 동일 표기)
+        # — ready==False라도 스냅샷이 있으면 confirmed로 집계(정의 충돌 해소, CLAUDE.md 계약과 동일 표기).
+        # validate_confirm_readiness_batch(게이트 판정) 미사용 이유: 여기선 스냅샷 존재 여부만 필요하고
+        # 현재 draft의 ready 판정은 무관 — 불필요한 노드/엣지 배치 로드를 피한다.
         not_ready = len(subtree_l5_rows) - no_canvas - confirmed
         subtree_confirm_out = CategorySubtreeConfirmOut(
             confirmed=confirmed, not_ready=not_ready, no_canvas=no_canvas
