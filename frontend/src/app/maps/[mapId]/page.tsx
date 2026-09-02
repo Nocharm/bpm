@@ -929,6 +929,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 승인 트랜지션 시 bump — 하단 버전 기록(MapDetailCard) 재조회 트리거 / bump to refresh version record.
   const [versionsReloadKey, setVersionsReloadKey] = useState(0);
   const [versionId, setVersionId] = useState<number | null>(null);
+  // 상태 배너 닫기 — "버전id:타이틀" 키 저장(영속 없음 — 맵 재진입 시 리마운트로 다시 노출)
+  const [dismissedNoticeKey, setDismissedNoticeKey] = useState<string | null>(null);
   const [scopes, setScopes] = useState<Scope[]>([{ kind: "root", title: "홈" }]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [windowGeom, setWindowGeom] = useState<Record<string, WindowGeom>>({});
@@ -1457,6 +1459,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             }
         : null;
   const editorNotice = frameworkNotice ?? readOnlyNotice;
+  // 배너 닫기 — 세션 상태만(맵 재진입=리마운트로 초기화). 버전/사유가 바뀌면 키가 달라져 다시 노출.
+  const editorNoticeKey = editorNotice ? `${versionId}:${editorNotice.title}` : null;
+  const editorNoticeVisible = editorNotice !== null && editorNoticeKey !== dismissedNoticeKey;
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
@@ -9139,7 +9144,7 @@ function MapEditor({ mapId }: { mapId: number }) {
 
       {/* 상태 배너 — 사유별 톤·아이콘·굵은 타이틀로 즉시 구분(타인 점유는 이름 표기).
           framework 캔버스는 draft/confirmed/superseded 배너가 우선하며 draft는 편집 중에도 상시 (2026-09-02) */}
-      {editorNotice && (
+      {editorNotice && editorNoticeVisible && (
         <div
           data-id="editor-readonly-notice"
           className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[editorNotice.tone]}`}
@@ -9147,6 +9152,16 @@ function MapEditor({ mapId }: { mapId: number }) {
           <editorNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
           <span className="shrink-0 font-semibold">{editorNotice.title}</span>
           <span className="min-w-0">{editorNotice.desc}</span>
+          <button
+            type="button"
+            data-id="editor-notice-close"
+            aria-label={t("action.close")}
+            title={t("action.close")}
+            className="ml-auto shrink-0 rounded-sm p-0.5 hover:bg-ink/5"
+            onClick={() => setDismissedNoticeKey(editorNoticeKey)}
+          >
+            <X size={14} strokeWidth={1.7} />
+          </button>
         </div>
       )}
 
@@ -9873,12 +9888,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                               {isSupersededSnapshot
                                 ? t("editor.watermarkSuperseded")
                                 : t("editor.watermarkConfirmed")}
+                              {/* 최신 확정본은 라벨을 뒤에 붙여 한 줄 — 과거본만 2단(LATEST 안내) */}
+                              {!isSupersededSnapshot && (
+                                <span className="font-light">{currentVersion?.label}</span>
+                              )}
                             </span>
-                            <span className="text-[40px] font-light">
-                              {isSupersededSnapshot
-                                ? t("editor.watermarkLatest", { label: latestConfirmed?.label ?? "-" })
-                                : currentVersion?.label}
-                            </span>
+                            {isSupersededSnapshot && (
+                              <span className="text-[40px] font-light">
+                                {t("editor.watermarkLatest", { label: latestConfirmed?.label ?? "-" })}
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span
