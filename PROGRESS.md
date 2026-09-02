@@ -8,6 +8,7 @@
 
 ## 2026-09-02 — 트랙 B Task 5: 확정 요청 워크플로(kind='fw_confirm') BE (feat/fw-track-b-gates)
 - 상위 카테고리 관리자용 확정 위임 요청 — `POST /{map_id}/fw-confirm-requests`(직속 L5/sysadmin은 409로 직접확정 유도)·decide 재사용(직속 L5/sysadmin만 403 게이트, 승인 시 perform_framework_confirm major=False 실행)·직접확정 성공 시 pending superseded(알림 없음 — 스펙 §5 알림 3종 고정). 신설 `get_category_admin_logins`(is_direct_l5_admin의 역방향, 그룹 멤버 로그인 확장). sysadmin 벨 알림은 미포함 결정(선례 없음+승인큐로 이미 가시) — 상세는 task-5-report.md.
+- **후속 fix**: `_assert_owner_or_approver`(결재 대기 탭 GET 게이트)가 framework 맵에선 owner=sysadmin뿐이라 직속 L5 관리자·요청자(상위 관리자)가 403 — 카테고리 체인 관리자(`is_category_admin`) 분기 추가로 해소(Task 7 리뷰가 실증한 로드베어링 공백).
 
 ## 2026-09-02 — 문서 정리: main 머지 완료 스펙·플랜 폐기 + PROGRESS 아카이브 (dev)
 - 폐기 정책(`rules/common/documentation.md`)에 따라 main 머지 완료분 삭제: superpowers 스펙 5(approval-comments·collab-staging·topnav·io-linking·node-spacing)+플랜 12(거버넌스 r3~r6·8월 트랙 전부·framework-l5-linkage)+design 1(field-promotion — 구현 완료·QA 문서 존치). 코드 주석 참조는 파일명으로 강등(`git grep` 전수 확인). 유지: 미구현·핸드오프·전제 스펙(consultant-hierarchy·governance-ux A/B/C·data-surface-parity·interview-import 8/18·v04 2종·framework 8-28 스펙·트랙 A 스펙/플랜).

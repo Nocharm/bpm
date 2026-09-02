@@ -15,7 +15,13 @@ from app.db import get_session
 from app.framework_confirm import perform_framework_confirm
 from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
 from app.permissions import logic
-from app.permissions.access import assert_map_role, get_effective_role, is_direct_l5_admin
+from app.permissions.access import (
+    assert_map_role,
+    get_effective_role,
+    get_framework_category_id,
+    is_category_admin,
+    is_direct_l5_admin,
+)
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     is_map_approver,
@@ -62,12 +68,22 @@ async def _assert_not_framework(session: AsyncSession, map_id: int) -> None:
 async def _assert_owner_or_approver(
     session: AsyncSession, user: str, map_id: int
 ) -> None:
-    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C)."""
+    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C).
+
+    framework 캔버스는 map_permissions가 무시돼(access.get_effective_role) owner=sysadmin뿐이라
+    카테고리 체인 관리자(직속·상위 모두 is_category_admin)를 별도 허용 — fw_confirm 요청자(상위
+    관리자)·처리자(직속 관리자) 둘 다 자기 맵의 결재 대기 탭을 봐야 한다 (Track B Task 5 후속).
+    """
     role = await get_effective_role(session, user, map_id)
     if role == "owner":
         return
     if await is_map_approver(session, user, map_id):
         return
+    mode = await session.scalar(select(ProcessMap.mode).where(ProcessMap.id == map_id))
+    if mode == "framework":
+        category_id = await get_framework_category_id(session, map_id)
+        if category_id is not None and await is_category_admin(session, user, category_id):
+            return
     raise HTTPException(status_code=403, detail="owner, approver, or sysadmin only")
 
 

@@ -216,3 +216,32 @@ class TestDirectConfirmSupersedesPending:
 
         req = _seed(_req)
         assert req.status == "superseded"
+
+
+class TestListApprovalRequestsFrameworkAccess:
+    """GET /maps/{map_id}/approval-requests — framework 맵에선 owner=sysadmin뿐이라
+    카테고리 체인 관리자(직속·상위)도 통과해야 fw_confirm 카드가 실제 처리자/요청자에게
+    보인다 (Task 7 리뷰가 실증한 공백, Task 5 후속 fix)."""
+
+    def test_direct_l5_admin_lists_pending_fw_confirm(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        map_id, _ = _make_hierarchical_canvas(client, "FWCF-LST-DIR", "목록직속")
+        act_as(UPPER)
+        client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        act_as(DIRECT)
+        r = client.get(f"/api/maps/{map_id}/approval-requests")
+        assert r.status_code == 200, r.text
+        kinds = [row["kind"] for row in r.json()]
+        assert "fw_confirm" in kinds
+
+    def test_requester_lists_own_pending_fw_confirm(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        map_id, _ = _make_hierarchical_canvas(client, "FWCF-LST-UP", "목록상위")
+        act_as(UPPER)
+        client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        r = client.get(f"/api/maps/{map_id}/approval-requests")
+        assert r.status_code == 200, r.text
+        kinds = [row["kind"] for row in r.json()]
+        assert "fw_confirm" in kinds
