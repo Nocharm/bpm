@@ -89,6 +89,38 @@ describe("formatNotification", () => {
     expect(view.label).toBe("Notification");
     expect(view.body).toBe("raw text");
   });
+
+  it("fw_confirm_requested — 상위 관리자가 직속 L5 관리자에게 확정 요청", () => {
+    const item: NotificationItem = {
+      ...base, type: "fw_confirm_requested", message: "x",
+      payload: { map_name: "Framework A", actor: "kim.a", actor_name: "Kim A" },
+    };
+    const en = formatNotification(item, makeT("en"));
+    expect(en.label).toBe("Confirm request");
+    expect(en.body).toBe("Kim A requested to confirm this map");
+    const ko = formatNotification(item, makeT("ko"));
+    expect(ko.body).toBe("Kim A님이 이 맵의 확정을 요청했습니다");
+  });
+
+  it("fw_confirm_done — 사유 없음(승인)", () => {
+    const item: NotificationItem = {
+      ...base, type: "fw_confirm_done", message: "x",
+      payload: { map_name: "Framework A", actor: "lee.b", actor_name: "Lee B",
+                 outcome: "approved", reason: null },
+    };
+    expect(formatNotification(item, makeT("en")).body).toBe("Your confirm request was approved");
+  });
+
+  it("fw_confirm_rejected — 거절 사유는 말미에 동봉", () => {
+    const item: NotificationItem = {
+      ...base, type: "fw_confirm_rejected", message: "x",
+      payload: { map_name: "Framework A", actor: "lee.b", actor_name: "Lee B",
+                 outcome: "rejected", reason: "카테고리 재검토 필요" },
+    };
+    expect(formatNotification(item, makeT("en")).body).toBe(
+      "Your confirm request was rejected — 카테고리 재검토 필요",
+    );
+  });
 });
 
 describe("formatNotificationBodyParts", () => {

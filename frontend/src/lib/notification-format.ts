@@ -42,6 +42,7 @@ const KNOWN_TYPES = new Set([
   "subprocess_registered",
   "permission_requested", "permission_approved", "permission_rejected", "permission_superseded",
   "map_copied", "map_retired", "feedback_reply", "feedback_status", "notice",
+  "fw_confirm_requested", "fw_confirm_done", "fw_confirm_rejected",
 ]);
 
 // 기계 코드 사유(bundled/direct/auto)는 번역, 자유 텍스트(거절 사유)는 원문 유지
@@ -52,7 +53,7 @@ const REASON_SUFFIX_TYPES = new Set([
   "rejected", "rename_approved", "rename_rejected",
   "sp_designation_approved", "sp_designation_rejected",
   "permission_approved", "permission_rejected", "permission_superseded",
-  "checkout_rejected",
+  "checkout_rejected", "fw_confirm_rejected",
 ]);
 
 function formatVersion(p: NotificationPayload): string {
@@ -75,6 +76,7 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type === "map_retired") return Trash2;
   if (type.startsWith("feedback_")) return MessageSquareReply;
   if (type === "notice") return Megaphone;
+  if (type.startsWith("fw_confirm")) return BadgeCheck;
   return Bell;
 }
 
