@@ -33,9 +33,12 @@ from app.schemas import (
     CategoryPermissionsOut,
     CategoryUpdateIn,
     FrameworkImportRow,
+    FrameworkOverviewOut,
+    FrameworkOverviewRow,
     FrameworkSearchCategory,
     FrameworkSearchMap,
     FrameworkSearchOut,
+    GateFailureCountOut,
     InterviewImportFileOut,
     InterviewImportIn,
     InterviewImportOut,
@@ -49,6 +52,7 @@ from app.subprocess import (
     find_missing_l6_ids,
     grid_positions,
     unique_linkage_name,
+    validate_confirm_readiness_batch,
 )
 from app.version_events import record_version_event
 
@@ -242,6 +246,19 @@ async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
     return admin_ids
 
 
+def _subtree_map_counts(rows: Sequence, own_map_count: dict[int, int]) -> dict[int, int]:
+    """서브트리(자기+자손) 맵 수 합산 — 레벨 역순(깊은 노드 먼저)으로 부모에 누적, 순회 1회.
+
+    rows: 전체 (id, parent_id, ..., level, ...) 행(속성 접근 — .id/.parent_id/.level 전제).
+    list_category_nodes에서 추출 — framework-overview 등 다른 배치 조회도 재사용 가능.
+    """
+    subtree_count: dict[int, int] = {row.id: own_map_count.get(row.id, 0) for row in rows}
+    for row in sorted(rows, key=lambda r: -r.level):
+        if row.parent_id is not None:
+            subtree_count[row.parent_id] = subtree_count.get(row.parent_id, 0) + subtree_count[row.id]
+    return subtree_count
+
+
 @router.get("/search", response_model=FrameworkSearchOut)
 async def search_framework(
     q: str = Query(min_length=1, max_length=100),
@@ -333,11 +350,7 @@ async def list_category_nodes(
             )
         ).all()
     )
-    # 서브트리 합산 — 레벨 역순(깊은 노드 먼저)으로 부모에 누적하면 한 번의 순회로 끝난다.
-    subtree_count: dict[int, int] = {row.id: own_map_count.get(row.id, 0) for row in rows}
-    for row in sorted(rows, key=lambda r: -r.level):
-        if row.parent_id is not None:
-            subtree_count[row.parent_id] = subtree_count.get(row.parent_id, 0) + subtree_count[row.id]
+    subtree_count = _subtree_map_counts(rows, own_map_count)
 
     admin_ids = await _admin_category_ids(session, user)
     targets = sorted(children_by_parent.get(parent_id, []), key=lambda r: (r.sort_order, r.code))
@@ -355,6 +368,122 @@ async def list_category_nodes(
         )
         for r in targets
     ]
+
+
+@router.get("/framework-overview", response_model=FrameworkOverviewOut)
+async def get_framework_overview(
+    root_id: int | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> FrameworkOverviewOut:
+    """L5 연계 캔버스 배치 현황판 — 최신 fw·확정자·게이트 준비 상태를 카테고리별로 일괄 (Track C Task 4).
+
+    게이트: sysadmin은 root_id 생략(전사) 또는 임의 root 허용. 카테고리 관리자는 root_id가
+    자기 admin_ids 서브트리 안일 때만(밖이면 403), 생략 시 자기 seed 전체(admin_ids ∩ L5).
+    무권한자는 항상 403 — get_admin_scope의 seeds=={}는 sysadmin과 무권한 공통이라 is_sysadmin으로 분기.
+    """
+    cat_rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
+                ProcessCategory.name, ProcessCategory.linkage_map_id,
+            )
+        )
+    ).all()
+    by_id = {r.id: r for r in cat_rows}
+    admin_ids, seeds = await get_admin_scope(session, user)
+    is_sys = logic.is_sysadmin(user)
+
+    if root_id is not None:
+        if root_id not in by_id:
+            raise HTTPException(status_code=404, detail=f"category {root_id} not found")
+        if not is_sys and root_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="not a category admin for this root")
+        children_by_parent: dict[int | None, list[int]] = {}
+        for r in cat_rows:
+            children_by_parent.setdefault(r.parent_id, []).append(r.id)
+        scope_ids: set[int] = set()
+        frontier = [root_id]
+        while frontier:
+            scope_ids.update(frontier)
+            frontier = [c for f in frontier for c in children_by_parent.get(f, [])]
+    elif is_sys:
+        scope_ids = set(by_id)
+    elif seeds:
+        scope_ids = admin_ids
+    else:
+        raise HTTPException(status_code=403, detail="category admin permission required")
+
+    l5_rows = [r for r in cat_rows if r.level == 5 and r.id in scope_ids]
+    paths = build_category_paths([(r.id, r.parent_id, r.name) for r in cat_rows])
+
+    linkage_map_ids = [r.linkage_map_id for r in l5_rows if r.linkage_map_id is not None]
+    maps_by_id: dict[int, ProcessMap] = {}
+    draft_id_by_map: dict[int, int] = {}
+    latest_snap: dict[int, tuple[int, int, str | None, object]] = {}
+    if linkage_map_ids:
+        maps_by_id = {
+            m.id: m
+            for m in (
+                await session.scalars(select(ProcessMap).where(ProcessMap.id.in_(linkage_map_ids)))
+            ).all()
+        }
+        for mid, vid in (
+            await session.execute(
+                select(MapVersion.map_id, MapVersion.id)
+                .where(MapVersion.map_id.in_(linkage_map_ids), MapVersion.status == workflow.DRAFT)
+                .order_by(MapVersion.id.desc())
+            )
+        ).all():
+            draft_id_by_map.setdefault(mid, vid)  # desc 정렬 첫 매치=최신 draft
+        # 최신 확정 스냅샷 — map_id.in_() 배치 1쿼리(framework_confirm.py 단건 max 패턴 확장)
+        for mid, major, minor, submitted_by, created_at in (
+            await session.execute(
+                select(
+                    MapVersion.map_id, MapVersion.fw_major, MapVersion.fw_minor,
+                    MapVersion.submitted_by, MapVersion.created_at,
+                ).where(MapVersion.map_id.in_(linkage_map_ids), MapVersion.status == workflow.CONFIRMED)
+            )
+        ).all():
+            cur = latest_snap.get(mid)
+            if cur is None or (major, minor) > (cur[0], cur[1]):
+                latest_snap[mid] = (major, minor, submitted_by, created_at)
+
+    canvases = [
+        (maps_by_id[r.linkage_map_id], draft_id_by_map[r.linkage_map_id])
+        for r in l5_rows
+        if r.linkage_map_id is not None and r.linkage_map_id in draft_id_by_map
+    ]
+    failures_by_map = await validate_confirm_readiness_batch(session, canvases)
+
+    rows_out = []
+    for r in l5_rows:
+        map_id = r.linkage_map_id
+        if map_id is None:
+            rows_out.append(
+                FrameworkOverviewRow(category_id=r.id, path=paths.get(r.id, r.name))
+            )
+            continue
+        snap = latest_snap.get(map_id)
+        canvas_failures = failures_by_map.get(map_id)
+        rows_out.append(
+            FrameworkOverviewRow(
+                category_id=r.id,
+                path=paths.get(r.id, r.name),
+                linkage_map_id=map_id,
+                latest_fw=f"v{snap[0]}.{snap[1]}" if snap else None,
+                confirmed_by=snap[2] if snap else None,
+                confirmed_at=snap[3].isoformat() if snap else None,
+                ready=(not canvas_failures) if canvas_failures is not None else None,
+                failures=(
+                    [GateFailureCountOut(code=f.code, count=f.count) for f in canvas_failures]
+                    if canvas_failures
+                    else []
+                ),
+            )
+        )
+    rows_out.sort(key=lambda row: row.path)
+    return FrameworkOverviewOut(rows=rows_out)
 
 
 _INTERVIEW_ISSUE_CAP = 200  # 파일당 이슈 표시 상한 — 초과분은 말미 요약 1행

@@ -854,6 +854,32 @@ class ConfirmReadinessOut(BaseModel):
     failures: list[GateFailureOut] = []
 
 
+class GateFailureCountOut(BaseModel):
+    """확정 게이트 위반 1건 — 배치 현황판용 경량판(node_ids 생략) (Track C Task 4)."""
+
+    code: str
+    count: int
+
+
+class FrameworkOverviewRow(BaseModel):
+    """배치 현황판 1행 — L5 카테고리 1개의 캔버스 상태 요약 (Track C Task 4)."""
+
+    category_id: int
+    path: str
+    linkage_map_id: int | None = None
+    latest_fw: str | None = None  # "v2.1" — 확정 스냅샷 없으면 None
+    confirmed_at: str | None = None
+    confirmed_by: str | None = None
+    ready: bool | None = None  # 캔버스(linkage_map_id) 없으면 None
+    failures: list[GateFailureCountOut] = []
+
+
+class FrameworkOverviewOut(BaseModel):
+    """GET /categories/framework-overview 응답 — path 오름차순 정렬 (Track C Task 4)."""
+
+    rows: list[FrameworkOverviewRow]
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 
