@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 트랙 C 마감: 실브라우저 검증 + 전체 게이트 (feat/fw-track-c-delegation)
+- Task 1~8(레벨 인지 판정·CRUD 위임 5게이트·확정 요청 철회·현황판·요약 카드·설정 스코프)을 신규 스모크(`pw-smoke-framework-delegation.mjs`, 18/18)로 통합 검증 — 설정 Manage↔Status 전환·홈 L5/L2 요약 카드·맵 선택 배타·위임 관리자 자기 서브트리 렌더+add-root 없음. 위임 스코프 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys` 필요(기본 false는 전원 sysadmin 바이패스라 재현 불가 — memory `local-permission-sim-demo`).
+- 전체 게이트 그린: BE pytest 1309 passed·ruff clean, FE tsc·lint·vitest 833 passed·build 성공.
+
 ## 2026-09-02 — 트랙 C Task 3: fw_confirm 요청 철회 + 그룹 수신자 테스트 (feat/fw-track-c-delegation)
 - `DELETE /maps/{id}/fw-confirm-requests/pending`을 rename 철회 템플릿(요청자 게이트+404/403+withdrawn) 그대로 복제. 알림·점유 자동 반환은 없음(스펙 §5 결정, 주석으로 명시). FE는 "Requested by" 캡션 옆 본인 전용 Withdraw 버튼(`framework-request-withdraw`) — 철회 성공 시 pending 재조회로 CTA 복귀, 현재 사용자는 page.tsx `username` state를 신규 prop으로 전달.
 - BE 테스트로 `principal_type='group'` 카테고리 권한자의 그룹 멤버가 `fw_confirm_requested` 알림을 받는 경로(Layer 4 §3a 판정 ↔ Track B 알림 파이프라인 결합)를 실증.
