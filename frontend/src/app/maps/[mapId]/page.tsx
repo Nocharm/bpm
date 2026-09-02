@@ -9373,15 +9373,16 @@ function MapEditor({ mapId }: { mapId: number }) {
                         aria-hidden
                         data-id="l5-brand-watermark"
                         className="pointer-events-none absolute inset-0 z-0 select-none overflow-hidden"
-                        // 도장 스탬프(CONFIRMED/DRAFT)가 그려질 때 뷰포트 중앙 1/3 띠만 비워 겹치지 않게 —
-                        // 위아래 타일은 그대로 남기고 스탬프가 앉는 가운데만 투명 처리 (사용자 지시 2026-09-02)
+                        // 도장 스탬프(CONFIRMED/DRAFT)가 그려질 때 스탬프가 앉는 중앙 띠만 비워 겹치지 않게 —
+                        // 스탬프가 -24° 기울어 수평 띠론 양끝이 위아래 타일을 침범해서, 띠도 같은 각도
+                        // (156deg 그라데이션 = 밴드 축 -24°)로 기울여 스탬프와 평행하게 맞춘다 (2026-09-02)
                         style={
                           currentVersion?.status === "confirmed" || isFrameworkDraft
                             ? {
                                 maskImage:
-                                  "linear-gradient(to bottom, black 0%, black 33%, transparent 33%, transparent 67%, black 67%, black 100%)",
+                                  "linear-gradient(156deg, black 0%, black 36%, transparent 36%, transparent 64%, black 64%, black 100%)",
                                 WebkitMaskImage:
-                                  "linear-gradient(to bottom, black 0%, black 33%, transparent 33%, transparent 67%, black 67%, black 100%)",
+                                  "linear-gradient(156deg, black 0%, black 36%, transparent 36%, transparent 64%, black 64%, black 100%)",
                               }
                             : undefined
                         }
