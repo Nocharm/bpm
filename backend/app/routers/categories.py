@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import delete, func, select
+from sqlalchemy import Row, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
@@ -246,7 +246,7 @@ async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
     return admin_ids
 
 
-def _subtree_map_counts(rows: Sequence, own_map_count: dict[int, int]) -> dict[int, int]:
+def _subtree_map_counts(rows: Sequence[Row], own_map_count: dict[int, int]) -> dict[int, int]:
     """서브트리(자기+자손) 맵 수 합산 — 레벨 역순(깊은 노드 먼저)으로 부모에 누적, 순회 1회.
 
     rows: 전체 (id, parent_id, ..., level, ...) 행(속성 접근 — .id/.parent_id/.level 전제).
@@ -452,7 +452,9 @@ async def get_framework_overview(
     canvases = [
         (maps_by_id[r.linkage_map_id], draft_id_by_map[r.linkage_map_id])
         for r in l5_rows
-        if r.linkage_map_id is not None and r.linkage_map_id in draft_id_by_map
+        if r.linkage_map_id is not None
+        and r.linkage_map_id in maps_by_id  # 고아 linkage_map_id(무결성 위반) 방어 — 있으면 스킵
+        and r.linkage_map_id in draft_id_by_map
     ]
     failures_by_map = await validate_confirm_readiness_batch(session, canvases)
 

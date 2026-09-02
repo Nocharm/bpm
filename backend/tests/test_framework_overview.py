@@ -129,7 +129,12 @@ def test_overview_non_admin_gets_403(client: TestClient, enforce: None) -> None:
 def test_validate_confirm_readiness_batch_matches_single(
     client: TestClient, enforce: None
 ) -> None:
-    """배치 검사기가 단건과 캔버스별로 동일 판정(코드+개수, node_ids는 집합 비교)을 낸다."""
+    """배치 검사기가 단건과 캔버스별로 동일 판정(코드+개수, node_ids는 집합 비교)을 낸다.
+
+    6개 게이트 코드 전부가 최소 1회 이상 이 비교에 등장하도록 캔버스를 구성한다 — 특히
+    stale_link·l6_unpublished·noexit_cycle 3종은 튜플 필드가 재조립되는 배치판에서 가장
+    회귀 취약해, 한 캔버스(combo)에 셋을 동시 발생시켜 상호작용까지 함께 검증한다.
+    """
     clean_map_id, clean_draft_id = _make_canvas(client, "OVR-EQ-CLEAN", "동치클린")
 
     ph_map_id, ph_draft_id = _make_canvas(client, "OVR-EQ-PH", "동치자리")
@@ -158,11 +163,51 @@ def test_validate_confirm_readiness_batch_matches_single(
     miss_l5 = _seed_category(client, miss_l5_code, "동치결측", level=5)
     _seed_l6_map(client, miss_l5, "동치결측업무2", f"{miss_l5_code}M2")  # 캔버스엔 미반영
 
+    # 복합 캔버스 — stale_link + l6_unpublished + noexit_cycle을 한 draft에 동시 발생.
+    # node1(_make_canvas의 기본 링크)의 L6를 소프트삭제해 stale_link, node2는 미게시 L6에
+    # 링크해 l6_unpublished, 둘을 서로 가리키는 2노드 순환으로 엮어 noexit_cycle까지 겹친다.
+    combo_map_id, combo_draft_id = _make_canvas(client, "OVR-EQ-COMBO", "동치복합")
+    combo_graph = client.get(f"/api/versions/{combo_draft_id}/graph").json()
+    node1 = combo_graph["nodes"][0]
+    stale_l6_id = node1["linked_map_id"]
+
+    async def _soften(map_id: int) -> None:
+        from app.clock import now as now_kst
+        from app.models import ProcessMap as _ProcessMap
+
+        async with SessionLocal() as session:
+            m = await session.get(_ProcessMap, map_id)
+            m.deleted_at = now_kst()
+            await session.commit()
+
+    asyncio.run(_soften(stale_l6_id))
+
+    async def _seed_unpublished_l6() -> int:
+        async with SessionLocal() as session:
+            m = ProcessMap(name="동치미게시링크", created_by=SYSADMIN, visibility="public")
+            m.versions.append(MapVersion(label="As-Is", status="draft"))
+            session.add(m)
+            await session.commit()
+            await session.refresh(m)
+            return m.id
+
+    unpub_l6_id = asyncio.run(_seed_unpublished_l6())
+    node2 = dict(node1, id="ovreqcombonode200000000000001", title="동치미게시",
+                 linked_map_id=unpub_l6_id)
+    combo_edges = [
+        {"id": "ovreqcomboedge0000000000001", "source_node_id": node1["id"],
+         "target_node_id": node2["id"]},
+        {"id": "ovreqcomboedge0000000000002", "source_node_id": node2["id"],
+         "target_node_id": node1["id"]},
+    ]
+    _put_graph(client, combo_draft_id, [node1, node2], combo_edges)
+
     targets = [
         (clean_map_id, clean_draft_id),
         (ph_map_id, ph_draft_id),
         (fan_map_id, fan_draft_id),
         (miss_map_id, miss_draft_id),
+        (combo_map_id, combo_draft_id),
     ]
 
     async def _compare() -> tuple[dict, dict]:
@@ -195,3 +240,14 @@ def test_validate_confirm_readiness_batch_matches_single(
             f.code: (f.count, set(f.node_ids)) for f in single_result[map_id]
         }
         assert batch_failures == single_failures, (map_id, batch_failures, single_failures)
+
+    # combo가 실제로 3종을 동시 발생시켰는지 확인 — 빈 결과끼리 우연히 일치하는 거짓 통과 방지
+    combo_codes = {f.code for f in batch_result[combo_map_id]}
+    assert combo_codes == {"stale_link", "l6_unpublished", "noexit_cycle"}
+
+    # 이 테스트가 실제로 6개 게이트 코드 전부를 최소 1회 배치↔단건 비교에 태웠는지 확인
+    all_codes = {f.code for failures in batch_result.values() for f in failures}
+    assert all_codes == {
+        "placeholder", "missing_l6", "stale_link",
+        "l6_unpublished", "noexit_cycle", "plain_fanout",
+    }
