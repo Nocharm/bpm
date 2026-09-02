@@ -53,24 +53,28 @@ export function getSaveCheckStates(
 }
 
 const CHIP_BASE =
-  "absolute left-2 top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
+  "absolute top-2 z-10 rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
 
 export function MapTitleChecklist({
   mapTitle,
   checklistLabel,
   items,
+  side = "left",
 }: {
   mapTitle: string;
   checklistLabel: string;
   items: SaveCheckItem[];
+  // 상단 코너 선택 — 에디터는 우상단(프레임워크 칩과 스왑, 2026-09-03), 기본은 기존 좌상단
+  side?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
+  const chipBase = `${CHIP_BASE} ${side === "left" ? "left-2" : "right-2"}`;
 
   // 검증할 노드가 없으면(빈 맵) 평범한 제목 칩 — 아코디언/배지 없음.
   if (items.length === 0) {
     return (
       <span
-        className={`${CHIP_BASE} max-w-[60%] truncate px-2 py-0.5 text-fine font-medium text-ink-secondary`}
+        className={`${chipBase} max-w-[60%] truncate px-2 py-0.5 text-fine font-medium text-ink-secondary`}
       >
         {mapTitle}
       </span>
@@ -81,7 +85,7 @@ export function MapTitleChecklist({
   const allOk = failed === 0;
 
   return (
-    <div className={`${CHIP_BASE} w-max max-w-[220px] select-none overflow-hidden`}>
+    <div className={`${chipBase} w-max max-w-[220px] select-none overflow-hidden`}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

@@ -28,11 +28,13 @@ export interface FrameworkL5ExplorerProps {
   // true면 차콜 프레임 뷰포트 안쪽(20px)으로 — 라운드 코너를 칩이 덮지 않게 (라이트 풀블리드는 8px)
   inset?: boolean;
   onNavigate: (targetMapId: number, name: string) => void;
+  // 주면 풋터에 "다른 체계 검색" — 탐색 모달(FrameworkBrowseModal)은 호출측이 연다 (2026-09-03)
+  onBrowse?: () => void;
   onError: (message: string) => void;
 }
 
 export function FrameworkL5Explorer({
-  currentCategoryId, currentName, inset = false, onNavigate, onError,
+  currentCategoryId, currentName, inset = false, onNavigate, onBrowse, onError,
 }: FrameworkL5ExplorerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -218,6 +220,19 @@ export function FrameworkL5Explorer({
             )}
             {roots.map((root) => renderNode(root, 0))}
           </ul>
+          {/* 다른 체계 검색 — FrameworkChip 풋터와 동일 디자인(형제 브랜치·검색 탐색) */}
+          {onBrowse && (
+            <button
+              type="button"
+              data-id="l5-explorer-browse"
+              title={t("framework.browseTitle")}
+              onClick={onBrowse}
+              className="flex w-full items-center gap-1.5 border-t border-divider px-2 py-1 text-fine text-ink-secondary transition-colors duration-150 hover:bg-accent-tint hover:text-accent"
+            >
+              <FolderTree size={12} strokeWidth={1.5} className="shrink-0" />
+              <span>{t("framework.browseAction")}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

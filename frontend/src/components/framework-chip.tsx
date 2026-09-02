@@ -17,9 +17,8 @@ import {
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
-// 위치(우상단 고정)와 스킨(반투명 카드)을 분리 — 노드 피크 팝오버가 같은 스킨을 재사용한다 (2026-08-30)
+// 위치(상단 코너 고정)와 스킨(반투명 카드)을 분리 — 노드 피크 팝오버가 같은 스킨을 재사용한다 (2026-08-30)
 const CHIP_SKIN = "rounded-sm border border-hairline bg-surface/40 shadow-sm backdrop-blur-sm";
-const CHIP_BASE = `absolute right-2 top-2 z-10 ${CHIP_SKIN}`;
 
 export function FrameworkChip({
   mapId,
@@ -27,6 +26,7 @@ export function FrameworkChip({
   onNavigate,
   defaultOpen = false,
   floating = true,
+  side = "right",
   onBrowse,
 }: {
   mapId: number;
@@ -35,8 +35,10 @@ export function FrameworkChip({
   onNavigate?: (targetMapId: number, name: string) => void;
   // 피크 팝오버 재사용 — 처음부터 체인 펼침(드릴인) (사용자 요청 2026-08-30)
   defaultOpen?: boolean;
-  // false면 우상단 고정 배치 없이 스킨만 — 호출측(포털)이 위치를 잡는다
+  // false면 코너 고정 배치 없이 스킨만 — 호출측(포털)이 위치를 잡는다
   floating?: boolean;
+  // floating 시 상단 코너 선택 — left면 좌상단 배치·플라이아웃은 우측으로 (에디터 스왑 2026-09-03)
+  side?: "left" | "right";
   // 주면 헤더 우측 아이콘이 "형제 브랜치 탐색" 버튼이 된다(피크 전용) (사용자 요청 2026-08-30)
   onBrowse?: () => void;
 }) {
@@ -112,7 +114,11 @@ export function FrameworkChip({
     <div
       ref={rootRef}
       data-id="editor-framework-chip"
-      className={`${floating ? CHIP_BASE : `relative ${CHIP_SKIN}`} w-max max-w-[240px] select-none`}
+      className={`${
+        floating
+          ? `absolute top-2 z-10 ${side === "left" ? "left-2" : "right-2"} ${CHIP_SKIN}`
+          : `relative ${CHIP_SKIN}`
+      } w-max max-w-[240px] select-none`}
     >
       <button
         type="button"
@@ -234,12 +240,14 @@ export function FrameworkChip({
         </div>
       </div>
 
-      {/* 좌측 플라이아웃 — 카테고리의 맵 목록, 클릭 시 해당 맵 에디터로 이동 */}
+      {/* 맵 목록 플라이아웃 — 칩이 우측이면 좌로, 좌측이면 우로 연다(화면 밖 잘림 방지) */}
       {flyout && (
         <div
           data-id="editor-framework-flyout"
           style={{ top: flyout.top }}
-          className="absolute right-full z-20 mr-1.5 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg"
+          className={`absolute z-20 w-56 rounded-md border border-hairline bg-surface p-1 shadow-lg ${
+            side === "left" ? "left-full ml-1.5" : "right-full mr-1.5"
+          }`}
         >
           <p className="truncate px-1.5 pb-1 pt-0.5 text-fine font-semibold text-ink-secondary">
             {flyoutCat?.name}

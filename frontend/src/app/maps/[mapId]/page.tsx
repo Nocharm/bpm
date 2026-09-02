@@ -32,6 +32,7 @@ import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-
 import { recordRecentMap } from "@/lib/recent-maps";
 
 import { AiChatPanel } from "@/components/ai-chat-panel";
+import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
 import { FrameworkChip } from "@/components/framework-chip";
 import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
@@ -3437,6 +3438,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [deleteVersionOpen, setDeleteVersionOpen] = useState(false);
   // 펼침 레인 헤더 "링크맵 열기" 확인 — 에디터 이탈이라 미저장 경고 후 이동 (F6)
   const [openMapPrompt, setOpenMapPrompt] = useState<{ mapId: number; name: string } | null>(null);
+  // 업무체계 탐색 모달 — L5 탐색기(좌상단)·프레임워크 칩의 "다른 체계 검색" 배선 (2026-09-03).
+  // 체인 시드는 L5 캔버스=결착 카테고리, 일반 등록 맵=등록 카테고리.
+  const [fwBrowseOpen, setFwBrowseOpen] = useState(false);
+  const fwBrowseCategoryId = isFrameworkMap ? linkageCategoryId : mapCategoryId;
 
   // 레인 헤더의 열기 버튼/영역 우클릭 메뉴 → 호스트 노드의 링크 대상 맵 해석 후 확인 모달.
   // menuItems useMemo의 dep이라 useCallback으로 identity 고정(ref+setter만 읽어 deps 없음).
@@ -3444,6 +3449,12 @@ function MapEditor({ mapId }: { mapId: number }) {
     const host = fullGraphRef.current?.nodes.find((node) => node.id === hostId);
     if (host?.linked_map_id != null) {
       setOpenMapPrompt({ mapId: host.linked_map_id, name: host.title });
+      return;
+    }
+    // 방금 추가돼 autosave 반영 전이라 fullGraph에 없는 노드 — 캔버스 state로 폴백 (2026-09-03)
+    const live = nodesRef.current.find((node) => node.id === hostId);
+    if (live?.data.linkedMapId != null) {
+      setOpenMapPrompt({ mapId: live.data.linkedMapId, name: live.data.label });
     }
   }, []);
 
@@ -6390,6 +6401,26 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             ]
           : [];
+      // SP 노드 "링크된 맵 열기" — 링크 부재/삭제·권한 없음(locked)이면 비활성.
+      // 클릭 후엔 레인 헤더(F6)와 동일한 이탈 확인 게이트(openMapPrompt) → 이동, 도착 시 서버 403 모달이 최종 방어
+      const openLinkedItems: ContextMenuItem[] =
+        menuNodeType === "subprocess"
+          ? [
+              {
+                label: t("subprocess.openMap"),
+                icon: ExternalLink,
+                disabled:
+                  injectedTarget?.data.linkedMapId == null ||
+                  injectedTarget.data.spLinkDeleted === true ||
+                  injectedTarget.data.locked === true,
+                onSelect: () => {
+                  if (menu.targetId) {
+                    promptOpenLinkedMap(menu.targetId);
+                  }
+                },
+              },
+            ]
+          : [];
       // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
       // subprocess는 타이틀=링크된 맵 이름 고정이라 항목 자체 숨김 (F5)
       const renameItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
@@ -6423,6 +6454,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         ...colorItems,
         ...openChildItems,
+        ...openLinkedItems,
         ...deleteItems,
       ];
     }
@@ -9263,6 +9295,14 @@ function MapEditor({ mapId }: { mapId: number }) {
             onFocusLinkedNode={focusLinkedNode}
           />
         )}
+        {/* 업무체계 탐색 모달 — 좌상단 L5 탐색기/프레임워크 칩의 "다른 체계 검색"(내부에 자체 이동 확인 게이트) */}
+        {fwBrowseOpen && fwBrowseCategoryId !== null && (
+          <FrameworkBrowseModal
+            chainCategoryId={fwBrowseCategoryId}
+            currentMapId={mapId}
+            onClose={() => setFwBrowseOpen(false)}
+          />
+        )}
         {connectTarget !== null && (
           <FrameworkConnectDialog
             nodeTitle={connectTarget.title}
@@ -9338,8 +9378,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 zIndex={active ? 1000 : zOrder.indexOf(key) + 1}
                 canClose={index > 0}
                 chromeless={index === 0}
-                // 루트 좌상단 — 캔버스는 저장 체크리스트 대신 L5 탐색기(전 레벨 트리·내 위치·타 L5 열기),
-                // 일반 맵은 기존 제목+저장 조건 아코디언 (2026-08-28 개선)
+                // 루트 좌상단 — 캔버스는 L5 탐색기(전 레벨 트리·내 위치·타 L5 열기), 일반 등록 맵은
+                // 프레임워크 칩(우상단에서 스왑 — 프레임워크는 항상 좌상단 자리 인식, 2026-09-03)
                 titleSlot={
                   index === 0 && isFrameworkMap ? (
                     <FrameworkL5Explorer
@@ -9347,18 +9387,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                       currentName={scope.title}
                       inset
                       onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                      onBrowse={() => setFwBrowseOpen(true)}
                       onError={(message) => showToast(message, "error")}
                     />
-                  ) : index === 0 && !readOnly ? (
-                    <MapTitleChecklist
-                      mapTitle={scope.title}
-                      checklistLabel={t("save.checklistTitle")}
-                      items={nodes.length > 0 ? saveCheckItems : []}
+                  ) : index === 0 && mapCategoryId !== null ? (
+                    <FrameworkChip
+                      mapId={mapId}
+                      categoryId={mapCategoryId}
+                      side="left"
+                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                      onBrowse={() => setFwBrowseOpen(true)}
                     />
                   ) : undefined
                 }
-                // 우상단 — 캔버스는 "L5 map" 단순 태그(+뷰어 미반영 칩), 일반 등록 맵은 기존 체인 트리 칩.
-                // 이동은 F6 "링크맵 열기"와 같은 미저장 경고 확인 모달(openMapPrompt)을 거친다.
+                // 우상단 — 캔버스는 "L5 map" 단순 태그(+뷰어 미반영 칩), 일반 맵은 제목+저장 체크리스트
+                // (좌상단에서 스왑 — 프레임워크 칩이 좌상단을 차지, 2026-09-03).
                 topRightSlot={
                   index === 0 && isFrameworkMap ? (
                     <>
@@ -9392,11 +9435,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </span>
                       )}
                     </>
-                  ) : index === 0 && mapCategoryId !== null ? (
-                    <FrameworkChip
-                      mapId={mapId}
-                      categoryId={mapCategoryId}
-                      onNavigate={(targetId, name) => setOpenMapPrompt({ mapId: targetId, name })}
+                  ) : index === 0 && !readOnly ? (
+                    <MapTitleChecklist
+                      side="right"
+                      mapTitle={scope.title}
+                      checklistLabel={t("save.checklistTitle")}
+                      items={nodes.length > 0 ? saveCheckItems : []}
                     />
                   ) : undefined
                 }

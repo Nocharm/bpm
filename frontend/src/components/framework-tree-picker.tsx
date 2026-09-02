@@ -382,6 +382,15 @@ export function FrameworkTreePicker({
               ? { categoryId: peek.categoryId, categoryPath: peek.categoryPath }
               : null
           }
+          // 목업 드래그 페이로드 — onAdd·행 드래그와 동일 계약(핀 없음 + 출처 L5 동봉)
+          dragPayload={{
+            linkedMapId: peek.row.id,
+            name: peek.row.name,
+            pinned: null,
+            unregistered: !peek.row.sp_designated_at,
+            categoryId: peek.categoryId,
+            categoryPath: peek.categoryPath,
+          }}
           onAdd={() => {
             const { row, categoryId, categoryPath } = peek;
             setPeek(null);

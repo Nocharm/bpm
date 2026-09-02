@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-03 — SP 피크 재배치·목업 드래그·우클릭 맵 이동·프레임워크 탐색 좌상단 통일 (dev)
+- **SP 미리보기 피크 재배치**: 헤더를 정보 표면(좌: 맵 이름·오너·게시 버전 / 우: 업무체계 경로·미지정 안내)으로 바꾸고 인스펙터 탭을 좌측, 추가/이동 버튼은 우측 세로 액션 레일로 확대 이동. 목업 노드는 클릭(드롭다운) 유지 + 드래그→캔버스 드롭 추가(`dragPayload`, 행 드래그와 동일 dataTransfer 계약) — 드래그 중 피크는 언마운트 대신 visibility 숨김(언마운트=Chrome 드래그 취소), dragend에서 닫음.
+- **SP 노드 우클릭 "링크된 맵 열기"**: 링크 부재/삭제·권한 없음(locked)이면 비활성, 클릭 시 이탈 확인 게이트(openMapPrompt). autosave 반영 전 신규 노드는 캔버스 state 폴백으로 해석.
+- **프레임워크 탐색 배선·위치 통일**: 헤더 칩의 검색 불능은 회귀가 아니라 `onBrowse` 미배선 — 칩과 L5 탐색기 풋터에 "다른 체계 검색"(FrameworkBrowseModal) 배선. 일반 등록 맵은 칩을 좌상단으로 스왑(제목+저장 체크리스트는 우상단, 플라이아웃 우측 개방) — L5 캔버스와 같은 자리 인식. pw 검증 18/18+스크린샷 7종.
+
 ## 2026-09-02 — 컨설턴트 임포트 미세조정: 오너 표기·부서 트리 해석·라이브러리 호버 카드 (dev)
 - **오너 표기 owner_id 기준 통일**: 카드·상세 owner_name·에디터 인스펙터가 전부 `created_by`를 보고 있어 임포트 맵(created_by=임포터 ≠ owner_id)에서 임포터가 노출되던 간극 교정 — BE 목록/상세 해석·`MapOut.owner_id` 노출·FE 폴백 3표면(`owner_name ?? owner_id ?? created_by`) 일괄 전환. 미등재 오너는 id+퇴사 배지 폴백.
 - **전달물 부서 트리 해석 + L6 owning 등록**: `rows[].department`(루트부터 N단계 슬래시 경로)를 완전일치만 보던 것을 4단 사다리로 — known 완전일치 → 선두 드랍(트림 정렬) → 유일 세그먼트-서픽스 → departments 미러 체인 정렬(직원 없는 부서도 트림 canonical 착지). 실패 시 NULL 대신 정규화 경로 그대로 등록(as delivered), 오너 pending이어도 부서만으로 owning 등록(임포터 org 폴백은 계속 금지). 구 엔진이 owning 없이 만든 pending 맵은 재전달에서 부서만 채움 — 홈 부서 트리에 임포트 부서 그룹이 바로 선다.

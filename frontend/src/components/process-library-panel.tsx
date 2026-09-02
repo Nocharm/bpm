@@ -402,6 +402,15 @@ export function ProcessLibraryPanel({
           anchorEl={peek.anchorEl}
           addDisabledReason={peek.blocked}
           displayFields={nodeDisplayFields}
+          // 목업 드래그 페이로드 — onAdd와 동일 계약(비활성 게이팅은 피크가 addDisabledReason으로 수행)
+          dragPayload={{
+            linkedMapId: peek.row.map_id,
+            name: peek.row.name,
+            pinned: peek.row.designated
+              ? (peek.row.latest_published_version_id ?? peek.row.latest_version_id)
+              : null,
+            unregistered: !peek.row.designated,
+          }}
           onAdd={() => {
             const row = peek.row;
             setPeek(null);

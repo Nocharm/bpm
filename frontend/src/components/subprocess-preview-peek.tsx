@@ -3,7 +3,8 @@
 // 서브프로세스 라이브러리/체계 피커 행의 미리보기 피크 — 행 클릭 즉시·2.5초 호버로 열리는 포털 패널.
 // 게시본 기준 그래프(getResolvedGraph follow_latest → 최신 게시본, 없으면 최신본)를 ScopePreview(경량 SVG)로
 // 렌더하고 SP 등록 정보를 함께 보여준다. viewer 미만은 locked 응답 → 권한 안내 + "추가는 가능" 안내.
-// 미리보기 영역에 마우스가 있으면 우상단에 "Add to map" 버튼이 나타난다 (사용자 요청 2026-08-30).
+// 레이아웃: 헤더(이름·오너·게시버전·업무체계) + 좌 인스펙터 탭 + 중앙 미리보기 + 우 액션 레일(추가/이동).
+// 목업 노드는 클릭=드롭다운, 드래그=캔버스 드롭 추가(dragPayload) (사용자 요청 2026-09-03).
 
 import {
   Building2,
@@ -92,6 +93,7 @@ export function SubprocessPreviewPeek({
   addDisabledReason,
   externalOrigin = null,
   displayFields,
+  dragPayload = null,
   onAdd,
   onOpenMap,
   onClose,
@@ -110,6 +112,8 @@ export function SubprocessPreviewPeek({
   externalOrigin?: { categoryId: number; categoryPath: string } | null;
   // 현재 맵의 노드 표시 설정 — 목업의 기본 렌더 필터(=추가하면 실제로 이렇게 보인다)
   displayFields: NodeDisplayToggle[];
+  // 목업 드래그→캔버스 드롭 페이로드 — 행 드래그와 같은 dataTransfer 계약. null이면 드래그 비활성
+  dragPayload?: PeekAddPayload | null;
   onAdd: () => void;
   // 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)는 호출측이 담당
   onOpenMap: () => void;
@@ -163,6 +167,8 @@ export function SubprocessPreviewPeek({
         status: "ready";
         version: { label: string; number: number | null; publishedAt: string | null } | null;
         categoryPath: string | null;
+        // 헤더 오너 표기 — 서버 owner_name(owner_id ?? created_by 계약)
+        owner: string | null;
         // SP 지정의 표시 필드 나머지 — 조건·IO·GMP (목업 전체 파라미터·상세 탭 소스)
         sp: {
           input: string | null;
@@ -196,6 +202,7 @@ export function SubprocessPreviewPeek({
               }
             : null,
           categoryPath: detail.category_path ?? null,
+          owner: detail.owner_name ?? null,
           sp: {
             input: detail.sp_input ?? null,
             output: detail.sp_output ?? null,
@@ -364,6 +371,9 @@ export function SubprocessPreviewPeek({
 
   // 미리보기 줌 — 1=창 맞춤, 확대 시 ScopePreview가 컨테이너 스크롤로 이동시킨다
   const [zoom, setZoom] = useState(1);
+  // 목업 드래그 중 피크 숨김 — 드래그 소스를 언마운트하면 Chrome이 드래그를 취소하므로
+  // visibility로만 숨기고(마운트 유지) 드롭/취소 후 dragend에서 닫는다
+  const [dragging, setDragging] = useState(false);
   // 패널 이탈 닫힘 유예
   const closeTimerRef = useRef<number | null>(null);
   const cancelClose = () => {
@@ -386,118 +396,58 @@ export function SubprocessPreviewPeek({
       ref={panelRef}
       data-id="library-peek"
       style={{ left, top, width: panelW, boxShadow: "var(--shadow-lg)" }}
-      className="fixed z-[1250] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface"
+      className={`fixed z-[1250] flex flex-col overflow-hidden rounded-md border border-hairline bg-surface ${
+        dragging ? "invisible" : ""
+      }`}
       onMouseEnter={cancelClose}
       onMouseLeave={scheduleClose}
     >
-      {/* header — 맵 이름 + Add to map(항시 노출, 게시본 표기는 미리보기 안 워터마크로 이동 — 사용자 피드백 2026-08-30) */}
-      <div className="flex items-center justify-between gap-2 border-b border-hairline px-3 py-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-caption font-semibold text-ink">
-          <Network size={14} strokeWidth={1.5} className="shrink-0 text-ink/50" />
-          <span className="truncate">{name}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1.5">
-          {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31).
-              목업 드롭다운에만 있던 동선을 헤더로 올려 미리보기 중 바로 갈 수 있게. */}
-          <button
-            type="button"
-            data-id="library-peek-open-map"
-            title={t("library.peekOpenNamedMap", { name })}
-            onClick={onOpenMap}
-            className="flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary hover:bg-surface-alt hover:text-accent"
-          >
-            <ExternalLink size={12} strokeWidth={1.5} />
-            {t("library.peekOpenMap")}
-          </button>
-          {/* Add to map — 잠금/미등록 상태에서도 추가는 가능 */}
-          <button
-            type="button"
-            data-id="library-peek-add"
-            disabled={addDisabledReason !== null}
-            title={addDisabledReason ?? t("library.peekAdd")}
-            onClick={onAdd}
-            className={`flex shrink-0 items-center gap-1 rounded-sm border px-2 py-0.5 text-fine font-medium ${
-              addDisabledReason !== null
-                ? "cursor-not-allowed border-hairline bg-surface text-ink-tertiary"
-                : "border-accent-tint-border bg-accent text-white hover:opacity-90"
-            }`}
-          >
-            <Plus size={12} strokeWidth={1.5} />
-            {t("library.peekAdd")}
-          </button>
-        </span>
-      </div>
-      {/* body — 미리보기(좌, 전폭)와 우측 탭 컬럼(노드 목업/상세). 행 높이를 미리보기 높이로 고정해
-          우측이 길어도 패널이 안 늘어나고(미리보기 아래 공백 방지) 우측은 내부 스크롤 (사용자 피드백 2026-08-30) */}
-      <div className="flex min-h-0" style={{ height: previewH }}>
-        {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
-        <div className="relative h-full min-w-0 flex-1 bg-canvas">
-          {!designated ? (
-            <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-              <p className="text-fine text-ink-secondary">{t("library.peekUnregisteredNote")}</p>
-            </div>
-          ) : fetchState.status === "loading" ? (
-            <div className="flex h-full items-center justify-center text-fine text-ink-tertiary">
-              {t("common.loading")}
-            </div>
-          ) : fetchState.status === "locked" ? (
-            <div data-id="library-peek-locked" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
-              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
-              <p className="text-fine text-ink-secondary">{t("library.peekNoPermission")}</p>
-              <p className="text-fine text-ink-tertiary">{t("library.peekCanStillAdd")}</p>
-            </div>
-          ) : fetchState.status === "error" ? (
-            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
-              {t("library.peekLoadError")}
-            </div>
-          ) : fetchState.graph.nodes.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
-              {t("library.peekEmptyGraph")}
-            </div>
-          ) : (
-            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} />
-          )}
-          {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배가 창 맞춤이라 하한 */}
-          {designated && fetchState.status === "ready" && fetchState.graph.nodes.length > 0 && (
-            <div
-              data-id="library-peek-zoom"
-              className="absolute left-2 top-2 flex overflow-hidden rounded-sm border border-hairline bg-surface/85"
+      {/* header — 좌: 맵 이름·오너·게시 버전 / 우: 업무체계 경로(미지정이면 안내).
+          버튼(추가/이동)은 우측 액션 레일로 내렸다 (사용자 요청 2026-09-03) */}
+      <div className="flex items-center justify-between gap-3 border-b border-hairline px-3 py-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-1.5 text-caption font-semibold text-ink">
+            <Network size={14} strokeWidth={1.5} className="shrink-0 text-ink/50" />
+            <span className="truncate">{name}</span>
+          </span>
+          {meta.status === "ready" && meta.owner && (
+            <span
+              data-id="library-peek-owner"
+              title={t("library.peekOwner")}
+              className="flex shrink-0 items-center gap-1 text-fine text-ink-tertiary"
             >
-              <button
-                type="button"
-                data-id="library-peek-zoom-out"
-                title={t("library.peekZoomOut")}
-                disabled={zoom <= ZOOM_MIN}
-                onClick={() => setZoom((cur) => Math.max(ZOOM_MIN, Math.round((cur - ZOOM_STEP) * 100) / 100))}
-                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <ZoomOut size={14} strokeWidth={1.5} />
-              </button>
-              <span className="flex w-10 items-center justify-center border-x border-hairline text-fine text-ink-tertiary">
-                {Math.round(zoom * 100)}%
-              </span>
-              <button
-                type="button"
-                data-id="library-peek-zoom-in"
-                title={t("library.peekZoomIn")}
-                disabled={zoom >= ZOOM_MAX}
-                onClick={() => setZoom((cur) => Math.min(ZOOM_MAX, Math.round((cur + ZOOM_STEP) * 100) / 100))}
-                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <ZoomIn size={14} strokeWidth={1.5} />
-              </button>
-            </div>
-          )}
-          {/* 게시본 기준 표기 — 그래프 위 워터마크(헤더에서 이동 — 사용자 피드백 2026-08-30) */}
-          {designated && fetchState.status === "ready" && (
-            <span className="pointer-events-none absolute bottom-1.5 right-2 rounded-xs border border-hairline bg-surface/85 px-1.5 py-px text-fine text-ink-tertiary">
-              {t("library.peekPublishedBasis")}
+              <User size={11} strokeWidth={1.5} />
+              <span className="max-w-[9rem] truncate">{meta.owner}</span>
             </span>
           )}
-        </div>
-        {/* 우측 — 탭: 노드 목업(최상단, 클릭=추가/이동 드롭다운) / 상세(아이콘+라벨+값 필). 내용은 내부 스크롤 */}
-        <div className="flex min-h-0 w-60 shrink-0 flex-col overflow-hidden border-l border-hairline">
+          {metaVersion && (
+            <span
+              data-id="library-peek-header-version"
+              title={t("library.peekVersion")}
+              className="flex shrink-0 items-center gap-1 text-fine text-ink-tertiary"
+            >
+              <GitBranch size={11} strokeWidth={1.5} />
+              {metaVersion}
+            </span>
+          )}
+        </span>
+        {/* 잠금/로딩 중엔 meta가 없어 미지정으로 오판할 수 있다 — ready일 때만 렌더 */}
+        {meta.status === "ready" && (
+          <span
+            data-id="library-peek-header-framework"
+            title={meta.categoryPath ?? t("library.peekNoFramework")}
+            className="flex min-w-0 max-w-[45%] shrink items-center gap-1 text-fine text-ink-tertiary"
+          >
+            <FolderTree size={11} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">{meta.categoryPath ?? t("library.peekNoFramework")}</span>
+          </span>
+        )}
+      </div>
+      {/* body — 좌측 인스펙터(노드 목업/상세 탭) + 중앙 미리보기 + 우측 액션 레일(추가/이동).
+          행 높이를 미리보기 높이로 고정해 컬럼이 길어도 패널이 안 늘어나고 내부 스크롤 (2026-09-03 재배치) */}
+      <div className="flex min-h-0" style={{ height: previewH }}>
+        {/* 좌측 — 탭: 노드 목업(최상단, 클릭=추가/이동 드롭다운, 드래그=캔버스 드롭) / 상세. 내용은 내부 스크롤 */}
+        <div className="flex min-h-0 w-60 shrink-0 flex-col overflow-hidden border-r border-hairline">
           <div className="flex gap-0.5 border-b border-hairline p-1.5">
             <button
               type="button"
@@ -541,6 +491,35 @@ export function SubprocessPreviewPeek({
                   type="button"
                   data-id="library-peek-node-mock"
                   aria-expanded={mockMenu}
+                  draggable={dragPayload !== null && addDisabledReason === null}
+                  onDragStart={
+                    dragPayload === null || addDisabledReason !== null
+                      ? undefined
+                      : (event) => {
+                          // 라이브러리 행 드래그와 동일 dataTransfer 계약 — 드롭은 캔버스 handleLibraryDrop 재사용
+                          event.dataTransfer.effectAllowed = "copy";
+                          event.dataTransfer.setData("application/bpm-process", String(dragPayload.linkedMapId));
+                          event.dataTransfer.setData("application/bpm-process-name", dragPayload.name);
+                          event.dataTransfer.setData(
+                            "application/bpm-process-pinned",
+                            dragPayload.pinned !== null ? String(dragPayload.pinned) : "",
+                          );
+                          if (dragPayload.unregistered) {
+                            event.dataTransfer.setData("application/bpm-process-unregistered", "1");
+                          }
+                          if (dragPayload.categoryId !== undefined) {
+                            event.dataTransfer.setData("application/bpm-process-category", String(dragPayload.categoryId));
+                            event.dataTransfer.setData("application/bpm-process-category-path", dragPayload.categoryPath ?? "");
+                          }
+                          setMockMenu(false);
+                          // 동기 숨김은 드래그 고스트가 빈 이미지가 된다 — 캡처 후 한 틱 뒤 숨겨 캔버스 노출
+                          window.setTimeout(() => setDragging(true), 0);
+                        }
+                  }
+                  onDragEnd={() => {
+                    setDragging(false);
+                    onClose();
+                  }}
                   onClick={(event) => {
                     // 메뉴는 커서 좌상단 기준 — 목업 아래 고정이면 패널 하단에서 잘린다 (사용자 요청 2026-08-31)
                     setMenuPos({ x: event.clientX, y: event.clientY });
@@ -548,7 +527,9 @@ export function SubprocessPreviewPeek({
                   }}
                   onMouseEnter={() => setMockHover(true)}
                   onMouseLeave={() => setMockHover(false)}
-                  className="relative w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm"
+                  className={`relative w-full rounded-sm px-2.5 py-2 text-left transition-shadow duration-150 hover:shadow-sm ${
+                    dragPayload !== null && addDisabledReason === null ? "cursor-grab active:cursor-grabbing" : ""
+                  }`}
                   // 외부 L6는 캔버스 C안(externalSpNodeStyle)과 동일하게 — 흰 바디+헤어라인 보더,
                   // L5 색은 좌측 탭으로만. 목업이 파스텔 필이면 실제 렌더와 달라 보인다 (사용자 지적 2026-08-31)
                   style={
@@ -888,6 +869,101 @@ export function SubprocessPreviewPeek({
               </div>
             </div>
           )}
+        </div>
+        {/* preview — 게시본 그래프(타입 색 SVG), 우하단 게시본 표기 워터마크 */}
+        <div className="relative h-full min-w-0 flex-1 bg-canvas">
+          {!designated ? (
+            <div data-id="library-peek-unregistered" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
+              <p className="text-fine text-ink-secondary">{t("library.peekUnregisteredNote")}</p>
+            </div>
+          ) : fetchState.status === "loading" ? (
+            <div className="flex h-full items-center justify-center text-fine text-ink-tertiary">
+              {t("common.loading")}
+            </div>
+          ) : fetchState.status === "locked" ? (
+            <div data-id="library-peek-locked" className="flex h-full flex-col items-center justify-center gap-1.5 px-4 text-center">
+              <Lock size={16} strokeWidth={1.5} className="text-ink-tertiary" />
+              <p className="text-fine text-ink-secondary">{t("library.peekNoPermission")}</p>
+              <p className="text-fine text-ink-tertiary">{t("library.peekCanStillAdd")}</p>
+            </div>
+          ) : fetchState.status === "error" ? (
+            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
+              {t("library.peekLoadError")}
+            </div>
+          ) : fetchState.graph.nodes.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-4 text-center text-fine text-ink-tertiary">
+              {t("library.peekEmptyGraph")}
+            </div>
+          ) : (
+            <ScopePreview fullGraph={fetchState.graph} scopeParentId={null} zoom={zoom} />
+          )}
+          {/* 줌 — 확대는 SVG를 키우고 컨테이너 스크롤로 이동(팬 구현 없이). 1배가 창 맞춤이라 하한 */}
+          {designated && fetchState.status === "ready" && fetchState.graph.nodes.length > 0 && (
+            <div
+              data-id="library-peek-zoom"
+              className="absolute left-2 top-2 flex overflow-hidden rounded-sm border border-hairline bg-surface/85"
+            >
+              <button
+                type="button"
+                data-id="library-peek-zoom-out"
+                title={t("library.peekZoomOut")}
+                disabled={zoom <= ZOOM_MIN}
+                onClick={() => setZoom((cur) => Math.max(ZOOM_MIN, Math.round((cur - ZOOM_STEP) * 100) / 100))}
+                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ZoomOut size={14} strokeWidth={1.5} />
+              </button>
+              <span className="flex w-10 items-center justify-center border-x border-hairline text-fine text-ink-tertiary">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                data-id="library-peek-zoom-in"
+                title={t("library.peekZoomIn")}
+                disabled={zoom >= ZOOM_MAX}
+                onClick={() => setZoom((cur) => Math.min(ZOOM_MAX, Math.round((cur + ZOOM_STEP) * 100) / 100))}
+                className="px-1.5 py-1 text-ink-tertiary hover:bg-surface-alt hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ZoomIn size={14} strokeWidth={1.5} />
+              </button>
+            </div>
+          )}
+          {/* 게시본 기준 표기 — 그래프 위 워터마크(헤더에서 이동 — 사용자 피드백 2026-08-30) */}
+          {designated && fetchState.status === "ready" && (
+            <span className="pointer-events-none absolute bottom-1.5 right-2 rounded-xs border border-hairline bg-surface/85 px-1.5 py-px text-fine text-ink-tertiary">
+              {t("library.peekPublishedBasis")}
+            </span>
+          )}
+        </div>
+        {/* 우측 액션 레일 — 헤더 버튼을 큰 세로 버튼으로 내림: 위=맵 추가, 아래=맵으로 가기 (사용자 요청 2026-09-03) */}
+        <div className="flex w-24 shrink-0 flex-col overflow-hidden border-l border-hairline">
+          <button
+            type="button"
+            data-id="library-peek-add"
+            disabled={addDisabledReason !== null}
+            title={addDisabledReason ?? t("library.peekAdd")}
+            onClick={onAdd}
+            className={`flex flex-1 flex-col items-center justify-center gap-1.5 px-2 text-center text-fine font-medium ${
+              addDisabledReason !== null
+                ? "cursor-not-allowed bg-surface text-ink-tertiary"
+                : "bg-accent text-white hover:opacity-90"
+            }`}
+          >
+            <Plus size={18} strokeWidth={1.5} />
+            {t("library.peekAdd")}
+          </button>
+          {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31) */}
+          <button
+            type="button"
+            data-id="library-peek-open-map"
+            title={t("library.peekOpenNamedMap", { name })}
+            onClick={onOpenMap}
+            className="flex flex-1 flex-col items-center justify-center gap-1.5 border-t border-hairline px-2 text-center text-fine font-medium text-ink-secondary hover:bg-surface-alt hover:text-accent"
+          >
+            <ExternalLink size={18} strokeWidth={1.5} />
+            {t("library.peekOpenMap")}
+          </button>
         </div>
       </div>
     </div>,
