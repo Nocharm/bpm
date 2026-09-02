@@ -299,6 +299,27 @@ def test_summary_l5_reports_canvas_state(client: TestClient, enforce: None) -> N
     assert l5_out["failures"] == []
 
 
+def test_summary_l5_can_edit_linkage_reflects_admin(client: TestClient, enforce: None) -> None:
+    """l5.can_edit_linkage — CategoryNodeOut과 동일 의미(체인 관리자 or sysadmin)로 판정한다.
+
+    무관한 로그인은 False, _make_canvas_under가 l5 카테고리 권한을 부여한 confirmer는 True
+    (Track C Task 8 리뷰: FE Open canvas 노출이 트리 Linkage 버튼과 같은 규칙을 쓰도록).
+    """
+    l5, _map_id, _draft_id = _make_canvas_under(
+        client, "SMY-CEL", "요약편집권", None, confirmer="smy.cel.admin"
+    )
+
+    act_as("smy.cel.stranger")
+    res = client.get(f"/api/categories/{l5}/summary")
+    assert res.status_code == 200, res.text
+    assert res.json()["l5"]["can_edit_linkage"] is False
+
+    act_as("smy.cel.admin")
+    res = client.get(f"/api/categories/{l5}/summary")
+    assert res.status_code == 200, res.text
+    assert res.json()["l5"]["can_edit_linkage"] is True
+
+
 def test_summary_l2_counts_subtree_confirm_states(client: TestClient, enforce: None) -> None:
     """level<5 요약 — 서브트리 L5 3종(confirmed·not_ready·no_canvas) 카운트가 상호배타로 집계된다."""
     parent = _seed_category(client, "SMY-L2", "요약L2")

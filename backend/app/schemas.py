@@ -891,7 +891,7 @@ class CategoryAdminOut(BaseModel):
 
 class CategorySummaryL5Out(BaseModel):
     """CategorySummaryOut.l5 — level==5 캔버스 상태(FrameworkOverviewRow와 필드 동치,
-    category_id/path만 제외) (Track C Task 5)."""
+    category_id/path만 제외 + can_edit_linkage) (Track C Task 5, 8)."""
 
     linkage_map_id: int | None = None
     latest_fw: str | None = None
@@ -899,6 +899,9 @@ class CategorySummaryL5Out(BaseModel):
     confirmed_by: str | None = None
     ready: bool | None = None
     failures: list[GateFailureCountOut] = []
+    # 캔버스 미개설 시 "Open canvas"(생성) 노출 여부 — CategoryNodeOut.can_edit_linkage와 동일 의미
+    # (체인 관리자 or sysadmin), FE 카드가 트리 Linkage 버튼과 같은 규칙을 쓰도록 (Track C Task 8 리뷰).
+    can_edit_linkage: bool = False
 
 
 class CategorySubtreeConfirmOut(BaseModel):

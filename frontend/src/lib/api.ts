@@ -2801,7 +2801,8 @@ export interface CategorySummaryAdmin {
   level: number;
 }
 
-// CategorySummary.l5 — FrameworkOverviewRow와 필드 동치(category_id/path 제외) (Track C Task 8)
+// CategorySummary.l5 — FrameworkOverviewRow와 필드 동치(category_id/path 제외) + can_edit_linkage
+// (CategoryNode와 동일 의미: 체인 관리자 or sysadmin) (Track C Task 8)
 export interface CategorySummaryL5 {
   linkage_map_id: number | null;
   latest_fw: string | null;
@@ -2809,6 +2810,7 @@ export interface CategorySummaryL5 {
   confirmed_by: string | null;
   ready: boolean | null;
   failures: FrameworkOverviewGateFailure[];
+  can_edit_linkage: boolean;
 }
 
 // CategorySummary.subtree_confirm — level<5 서브트리 L5 확정 현황 3종, 상호배타 집계 (Track C Task 8)

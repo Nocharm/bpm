@@ -538,15 +538,17 @@ async def _summary_admins(
     ]
 
 
-async def _summary_l5(session: AsyncSession, map_id: int | None) -> CategorySummaryL5Out:
+async def _summary_l5(
+    session: AsyncSession, map_id: int | None, can_edit_linkage: bool
+) -> CategorySummaryL5Out:
     """level==5 캔버스 상태 — framework-overview 1행과 동치 계산을 단건으로(브리프 지침:
-    배치 대신 validate_confirm_readiness 단건판 사용).
+    배치 대신 validate_confirm_readiness 단건판 사용). can_edit_linkage는 호출부가 판정해 그대로 싣는다.
     """
     if map_id is None:
-        return CategorySummaryL5Out()
+        return CategorySummaryL5Out(can_edit_linkage=can_edit_linkage)
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:  # 고아 linkage_map_id(무결성 위반) 방어 — 포인터는 유지, 나머지는 미상(None)
-        return CategorySummaryL5Out(linkage_map_id=map_id)
+        return CategorySummaryL5Out(linkage_map_id=map_id, can_edit_linkage=can_edit_linkage)
     draft = await load_confirm_draft(session, map_id)
     latest: tuple[int, int, str | None, object] | None = None
     for major, minor, submitted_by, created_at in (
@@ -569,6 +571,7 @@ async def _summary_l5(session: AsyncSession, map_id: int | None) -> CategorySumm
         failures=(
             [GateFailureCountOut(code=f.code, count=f.count) for f in failures] if failures else []
         ),
+        can_edit_linkage=can_edit_linkage,
     )
 
 
@@ -627,7 +630,9 @@ async def get_category_summary(
     l5_out: CategorySummaryL5Out | None = None
     subtree_confirm_out: CategorySubtreeConfirmOut | None = None
     if category.level == 5:
-        l5_out = await _summary_l5(session, category.linkage_map_id)
+        # CategoryNodeOut.can_edit_linkage(list_category_nodes)와 동일 의미: 체인 관리자 or sysadmin.
+        can_edit_linkage = logic.is_sysadmin(user) or await is_category_admin(session, user, category_id)
+        l5_out = await _summary_l5(session, category.linkage_map_id, can_edit_linkage)
     else:
         l5_map_ids = [r.linkage_map_id for r in subtree_l5_rows if r.linkage_map_id is not None]
         confirmed_map_ids: set[int] = set()

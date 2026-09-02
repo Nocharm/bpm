@@ -184,15 +184,18 @@ export function CategorySummaryCard({ categoryId, onOpenCanvas }: CategorySummar
               <span className="text-fine text-ink-tertiary">{t("framework.notConfirmedShort")}</span>
             )}
             {renderGateStatus()}
-            <button
-              type="button"
-              data-id="category-summary-open-canvas"
-              className="inline-flex items-center gap-1 self-start rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt"
-              onClick={() => onOpenCanvas({ id: summary.id, linkage_map_id: l5.linkage_map_id })}
-            >
-              <Workflow size={14} strokeWidth={1.5} />
-              {t("category.summary.openCanvas")}
-            </button>
+            {/* 캔버스 존재 시 전원, 미존재 시 권한자만 — 트리 Linkage 버튼과 동일 규칙(node.can_edit_linkage) */}
+            {(l5.linkage_map_id !== null || l5.can_edit_linkage) && (
+              <button
+                type="button"
+                data-id="category-summary-open-canvas"
+                className="inline-flex items-center gap-1 self-start rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface-alt"
+                onClick={() => onOpenCanvas({ id: summary.id, linkage_map_id: l5.linkage_map_id })}
+              >
+                <Workflow size={14} strokeWidth={1.5} />
+                {t("category.summary.openCanvas")}
+              </button>
+            )}
           </div>
         )}
 

@@ -739,6 +739,8 @@ export default function MapListPage() {
                     }`}
                     onClick={() => {
                       setHomeView(v);
+                      // framework를 벗어나면 카테고리 요약 카드가 스테일하게 남는다 — aside는 selectedCategoryId만 보고 분기.
+                      if (v !== "framework") setSelectedCategoryId(null);
                       writeTree(orgOpen, favOpen, wordOpen, unassignedOpen, treeTouched, v);
                     }}
                   >
@@ -750,7 +752,11 @@ export default function MapListPage() {
                   검색 입력 시 뷰와 무관하게 아래 공용 플랫 검색 리스트로 전환된다. */}
               <SearchBox
                 value={mapQuery}
-                onChange={setMapQuery}
+                onChange={(v) => {
+                  setMapQuery(v);
+                  // 검색 모드 진입 시 플랫 검색 리스트로 전환되며 트리(카테고리 선택)를 벗어난다 — 스테일 카드 방지.
+                  if (v.trim() !== "") setSelectedCategoryId(null);
+                }}
                 placeholder={t("home.searchPlaceholder")}
                 inputRef={searchRef}
                 dataId="home-map-search"
