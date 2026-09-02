@@ -1,9 +1,13 @@
-"""하위프로세스 참조 모델 — 프로세스 검증·순환 탐지·링크 버전 해석."""
+"""하위프로세스 참조 모델 — 프로세스 검증·순환 탐지·링크 버전 해석·확정 게이트."""
+
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import MapVersion, Node, ProcessCategory, ProcessMap
+from app import workflow
+from app.models import Edge, MapVersion, Node, ProcessCategory, ProcessMap
+from app.permissions.access import get_framework_category_id
 from app.schemas import NodeIn, SubprocessRefOut
 
 
@@ -328,3 +332,194 @@ async def assert_no_cycle(
             )
         ).all()
         stack.extend(r for r in refs if r is not None)
+
+
+@dataclass
+class GateFailure:
+    """확정 게이트 위반 1건 — code는 6종 고정, node_ids는 위반 노드(없으면 빈 리스트)."""
+
+    code: str
+    count: int
+    node_ids: list[str]
+
+
+async def find_missing_l6_ids(
+    session: AsyncSession, category_id: int, draft: MapVersion
+) -> list[int]:
+    """소속 L6 중 캔버스 미배치 map_id — linkage-map 보강(categories.py open_linkage_map)과 동일 산식."""
+    contained_ids = (
+        await session.scalars(
+            select(ProcessMap.id).where(
+                ProcessMap.category_id == category_id, ProcessMap.deleted_at.is_(None)
+            )
+        )
+    ).all()
+    linked_ids = set(
+        (
+            await session.scalars(
+                select(Node.linked_map_id).where(
+                    Node.version_id == draft.id,
+                    Node.node_type == "subprocess",
+                    Node.linked_map_id.is_not(None),
+                )
+            )
+        ).all()
+    )
+    return [mid for mid in contained_ids if mid not in linked_ids]
+
+
+def _find_scc_iterative(node_ids: list[str], adj: dict[str, list[str]]) -> list[list[str]]:
+    """반복형 Tarjan SCC — 재귀 없이 대형 캔버스(268노드+ 실존)를 안전 처리한다."""
+    next_index = 0
+    node_stack: list[str] = []
+    on_stack: set[str] = set()
+    indices: dict[str, int] = {}
+    lowlink: dict[str, int] = {}
+    components: list[list[str]] = []
+
+    for start in node_ids:
+        if start in indices:
+            continue
+        # (node, 다음에 살펴볼 이웃 인덱스) 명시적 워크 스택 — 재귀 프레임을 대체
+        work: list[list] = [[start, 0]]
+        indices[start] = lowlink[start] = next_index
+        next_index += 1
+        node_stack.append(start)
+        on_stack.add(start)
+        while work:
+            frame = work[-1]
+            node, i = frame[0], frame[1]
+            neighbors = adj.get(node, [])
+            if i < len(neighbors):
+                frame[1] += 1
+                nxt = neighbors[i]
+                if nxt not in indices:
+                    indices[nxt] = lowlink[nxt] = next_index
+                    next_index += 1
+                    node_stack.append(nxt)
+                    on_stack.add(nxt)
+                    work.append([nxt, 0])
+                elif nxt in on_stack:
+                    lowlink[node] = min(lowlink[node], indices[nxt])
+            else:
+                work.pop()
+                if work:
+                    parent = work[-1][0]
+                    lowlink[parent] = min(lowlink[parent], lowlink[node])
+                if lowlink[node] == indices[node]:
+                    comp: list[str] = []
+                    while True:
+                        w = node_stack.pop()
+                        on_stack.discard(w)
+                        comp.append(w)
+                        if w == node:
+                            break
+                    components.append(comp)
+    return components
+
+
+def _find_noexit_cycle_nodes(nodes: list[Node], edges: list[Edge]) -> list[str]:
+    """탈출구 없는 순환에 속한 노드 id들 — SCC(크기≥2) 또는 자기루프(크기1)이며,
+    그 성분 밖으로 나가는 엣지가 하나도 없는 경우만 위반(§4 게이트 5)."""
+    node_ids = [n.id for n in nodes]
+    node_id_set = set(node_ids)
+    adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
+    self_loops: set[str] = set()
+    for e in edges:
+        if e.source_node_id not in node_id_set or e.target_node_id not in node_id_set:
+            continue  # 방어 — 저장 시점 검증이 막지만 검사기는 이중 방어
+        adj[e.source_node_id].append(e.target_node_id)
+        if e.source_node_id == e.target_node_id:
+            self_loops.add(e.source_node_id)
+
+    violations: list[str] = []
+    for comp in _find_scc_iterative(node_ids, adj):
+        comp_set = set(comp)
+        is_cycle = len(comp) >= 2 or (len(comp) == 1 and comp[0] in self_loops)
+        if not is_cycle:
+            continue
+        has_exit = any(target not in comp_set for nid in comp for target in adj[nid])
+        if not has_exit:
+            violations.extend(comp)
+    return violations
+
+
+async def validate_confirm_readiness(
+    session: AsyncSession, found_map: ProcessMap, draft: MapVersion
+) -> list[GateFailure]:
+    """확정 게이트 6종 — 통과면 빈 리스트 (spec §4). draft는 nodes/edges selectinload 전제.
+
+    저장은 막지 않고 확정(framework-confirm) 시점에만 검사한다.
+    """
+    failures: list[GateFailure] = []
+    sub_nodes = [n for n in draft.nodes if n.node_type == "subprocess"]
+
+    # 1) placeholder — linked_map_id 없는 subprocess (validate_framework_canvas와 동일 정의)
+    ph = [n.id for n in sub_nodes if n.linked_map_id is None]
+    if ph:
+        failures.append(GateFailure("placeholder", len(ph), ph))
+
+    linked = {n.linked_map_id: n.id for n in sub_nodes if n.linked_map_id is not None}
+
+    # 2) missing_l6 — 소속 L6 미배치 (categories.py 보강 산식 공유)
+    category_id = await get_framework_category_id(session, found_map.id)
+    if category_id is not None:
+        missing = await find_missing_l6_ids(session, category_id, draft)
+        if missing:
+            failures.append(GateFailure("missing_l6", len(missing), []))
+
+    if linked:
+        rows = (
+            await session.execute(
+                select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id)
+                .where(ProcessMap.id.in_(linked.keys()))
+            )
+        ).all()
+        by_id = {r[0]: r for r in rows}
+        # 3) stale_link — 삭제/이양/영구삭제(맵 실종)된 링크
+        stale = [
+            nid for mid, nid in linked.items()
+            if mid not in by_id or by_id[mid][1] is not None or by_id[mid][2] is not None
+        ]
+        if stale:
+            failures.append(GateFailure("stale_link", len(stale), stale))
+        # 4) l6_unpublished — 게시본 없는 링크 L6 (stale 대상은 제외 — 이미 다른 코드로 잡힘)
+        pub_ids = set(
+            (
+                await session.scalars(
+                    select(MapVersion.map_id)
+                    .where(
+                        MapVersion.map_id.in_(linked.keys()),
+                        MapVersion.status == workflow.PUBLISHED,
+                    )
+                    .distinct()
+                )
+            ).all()
+        )
+        unpub = [
+            nid for mid, nid in linked.items()
+            if mid in by_id and nid not in stale and mid not in pub_ids
+        ]
+        if unpub:
+            failures.append(GateFailure("l6_unpublished", len(unpub), unpub))
+
+    # 5) noexit_cycle — 밖으로 나가는 엣지가 없는 순환(SCC≥2 또는 탈출구 없는 자기루프)
+    cyclic = _find_noexit_cycle_nodes(draft.nodes, draft.edges)
+    if cyclic:
+        failures.append(GateFailure("noexit_cycle", len(cyclic), cyclic))
+
+    # 6) plain_fanout — 비-decision out-degree≥2, 단 전부 gateway=="parallel"이면 허용
+    node_type_by_id = {n.id: n.node_type for n in draft.nodes}
+    out_by_src: dict[str, list[Edge]] = {}
+    for e in draft.edges:
+        out_by_src.setdefault(e.source_node_id, []).append(e)
+    fanout = [
+        src for src, group in out_by_src.items()
+        if len(group) >= 2
+        and node_type_by_id.get(src) != "decision"
+        and not all(e.gateway == "parallel" for e in group)
+    ]
+    if fanout:
+        failures.append(GateFailure("plain_fanout", len(fanout), fanout))
+
+    return failures

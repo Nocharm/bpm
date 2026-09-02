@@ -43,7 +43,13 @@ from app.schemas import (
     LinkageMapOut,
     MapOut,
 )
-from app.subprocess import LINKAGE_Y0, LINKAGE_Y_STEP, grid_positions, unique_linkage_name
+from app.subprocess import (
+    LINKAGE_Y0,
+    LINKAGE_Y_STEP,
+    find_missing_l6_ids,
+    grid_positions,
+    unique_linkage_name,
+)
 from app.version_events import record_version_event
 
 MAX_CATEGORY_LEVEL = 5  # 컨설턴트 체계 L1~L5 (design 2026-08-08 §2.1)
@@ -953,17 +959,8 @@ async def open_linkage_map(
     )
     if draft is None:  # 방어 — 라이브 draft는 생성 시 항상 만들어진다
         raise HTTPException(status_code=409, detail="linkage canvas has no draft version")
-    linked_ids = set(
-        (
-            await session.scalars(
-                select(Node.linked_map_id).where(
-                    Node.version_id == draft.id, Node.node_type == "subprocess",
-                    Node.linked_map_id.is_not(None),
-                )
-            )
-        ).all()
-    )
-    missing = [(mid, name) for mid, name in contained_rows if mid not in linked_ids]
+    missing_ids = set(await find_missing_l6_ids(session, category_id, draft))
+    missing = [(mid, name) for mid, name in contained_rows if mid in missing_ids]
     can_append = is_admin and (draft.checked_out_by is None or draft.checked_out_by == user)
     if not missing or not can_append:
         return LinkageMapOut(map_id=canvas.id, added_count=0, missing_count=len(missing))

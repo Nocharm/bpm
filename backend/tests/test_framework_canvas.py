@@ -664,3 +664,165 @@ def test_framework_map_rejects_permission_side_doors(client: TestClient, enforce
         f"/api/maps/{map_id}/sp-designation-requests", json={"from_map_id": draft_id}
     )
     assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+
+def _confirm_readiness(map_id: int, draft_id: int) -> list:
+    """validate_confirm_readiness 직접 호출 — GET 엔드포인트 부재(Task 3 이전) 단위 테스트 경로.
+
+    draft를 nodes/edges selectinload로 재조회해 검사기 전제(비지연로드)를 맞춘다.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+    from app.subprocess import validate_confirm_readiness
+
+    async def _run() -> list:
+        async with SessionLocal() as session:
+            found_map = await session.get(ProcessMap, map_id)
+            draft = await session.scalar(
+                select(MapVersion)
+                .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+                .where(MapVersion.id == draft_id)
+            )
+            return await validate_confirm_readiness(session, found_map, draft)
+
+    return asyncio.run(_run())
+
+
+def test_confirm_readiness_missing_l6(client: TestClient, enforce: None) -> None:
+    """소속 L6가 캔버스에 미배치면 missing_l6 (linkage-map을 다시 열지 않아 보강이 안 걸린다)."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-MISS", "게이트결측")
+    l5 = _seed_category(client, "FWC-GT-MISS", "게이트결측", level=5)
+    _seed_l6_map(client, l5, "게이트결측업무2", "FWC-GT-MISSM2")  # 캔버스엔 반영 안 함
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "missing_l6" in failures and failures["missing_l6"].count == 1
+
+
+def test_confirm_readiness_placeholder(client: TestClient, enforce: None) -> None:
+    """linked_map_id=None subprocess가 있으면 placeholder."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-PH", "게이트자리")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    ph = dict(node, id="fwcgtphnode000000000000000000001", title="자리", linked_map_id=None)
+    _put_graph(client, draft_id, [node, ph])
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "placeholder" in failures and failures["placeholder"].node_ids == [ph["id"]]
+
+
+def test_confirm_readiness_stale_link(client: TestClient, enforce: None) -> None:
+    """링크 대상 L6가 소프트삭제되면 stale_link."""
+    import asyncio
+
+    map_id, draft_id = _make_canvas(client, "FWC-GT-STALE", "게이트끊김")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    linked_id = graph["nodes"][0]["linked_map_id"]
+
+    async def _soften() -> None:
+        from app.clock import now as now_kst
+        from app.db import SessionLocal
+        from app.models import ProcessMap
+
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, linked_id)
+            m.deleted_at = now_kst()
+            await session.commit()
+
+    asyncio.run(_soften())
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "stale_link" in failures and failures["stale_link"].count == 1
+
+
+def test_confirm_readiness_l6_unpublished(client: TestClient, enforce: None) -> None:
+    """링크된 맵에 게시본이 없으면 l6_unpublished."""
+    import asyncio
+
+    map_id, draft_id = _make_canvas(client, "FWC-GT-UNPUB", "게이트미게시")
+
+    async def _seed_unpublished() -> int:
+        from app.db import SessionLocal
+        from app.models import MapVersion, ProcessMap
+
+        async with SessionLocal() as session:
+            m = ProcessMap(name="미게시링크", created_by=SYSADMIN, visibility="public")
+            m.versions.append(MapVersion(label="As-Is", status="draft"))
+            session.add(m)
+            await session.commit()
+            await session.refresh(m)
+            return m.id
+
+    unpub_id = asyncio.run(_seed_unpublished())
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    linked_node = dict(node, id="fwcgtunpubnode00000000000000001", title="미게시링크",
+                        linked_map_id=unpub_id)
+    _put_graph(client, draft_id, [node, linked_node])
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "l6_unpublished" in failures
+    assert failures["l6_unpublished"].node_ids == [linked_node["id"]]
+
+
+def test_confirm_readiness_noexit_cycle(client: TestClient, enforce: None) -> None:
+    """A→B→A 순환 + 밖으로 나가는 엣지가 없으면 noexit_cycle."""
+    l5_code = "FWC-GT-CYC"
+    map_id, draft_id = _make_canvas(client, l5_code, "게이트순환")
+    l5 = _seed_category(client, l5_code, "게이트순환", level=5)
+    _seed_l6_map(client, l5, "게이트순환업무2", f"{l5_code}M2")
+    client.post(f"/api/categories/{l5}/linkage-map")  # 2번째 L6 보강(fwc.confirmer=권한자·체크아웃 보유자)
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    nodes = graph["nodes"]
+    assert len(nodes) == 2
+    a, b = nodes
+    edges = [
+        {"id": "fwcgtcycedge000000000000000001", "source_node_id": a["id"], "target_node_id": b["id"]},
+        {"id": "fwcgtcycedge000000000000000002", "source_node_id": b["id"], "target_node_id": a["id"]},
+    ]
+    _put_graph(client, draft_id, nodes, edges)
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "noexit_cycle" in failures and failures["noexit_cycle"].count == 2
+
+
+def test_confirm_readiness_plain_fanout(client: TestClient, enforce: None) -> None:
+    """subprocess에서 엣지 2개가 직접 나가고 전부 병행(gateway=parallel)이 아니면 plain_fanout."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-FAN", "게이트팬아웃")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    e1 = dict(node, id="fwcgtfanend1000000000000000001", node_type="end",
+              linked_map_id=None, title="팬아웃끝1", is_primary_end=False)
+    e2 = dict(node, id="fwcgtfanend2000000000000000001", node_type="end",
+              linked_map_id=None, title="팬아웃끝2", is_primary_end=False)
+    edges = [
+        {"id": "fwcgtfanedge000000000000000001", "source_node_id": node["id"], "target_node_id": e1["id"]},
+        {"id": "fwcgtfanedge000000000000000002", "source_node_id": node["id"], "target_node_id": e2["id"]},
+    ]
+    _put_graph(client, draft_id, [node, e1, e2], edges)
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "plain_fanout" in failures and failures["plain_fanout"].node_ids == [node["id"]]
+
+
+def test_confirm_readiness_parallel_fanout_ok(client: TestClient, enforce: None) -> None:
+    """두 엣지 모두 gateway=parallel이면 plain_fanout 예외 — 게이트 전건 통과([])."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-PAR", "게이트병행")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    e1 = dict(node, id="fwcgtparend1000000000000000001", node_type="end",
+              linked_map_id=None, title="병행끝1", is_primary_end=False)
+    e2 = dict(node, id="fwcgtparend2000000000000000001", node_type="end",
+              linked_map_id=None, title="병행끝2", is_primary_end=False)
+    edges = [
+        {"id": "fwcgtparedge000000000000000001", "source_node_id": node["id"],
+         "target_node_id": e1["id"], "gateway": "parallel"},
+        {"id": "fwcgtparedge000000000000000002", "source_node_id": node["id"],
+         "target_node_id": e2["id"], "gateway": "parallel"},
+    ]
+    _put_graph(client, draft_id, [node, e1, e2], edges)
+    assert _confirm_readiness(map_id, draft_id) == []
+
+
+def test_confirm_readiness_clean_passes(client: TestClient, enforce: None) -> None:
+    """정상 캔버스(링크 완전·게시·순환 없음)는 게이트 전건 통과 → []."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-CLEAN", "게이트클린")
+    assert _confirm_readiness(map_id, draft_id) == []
