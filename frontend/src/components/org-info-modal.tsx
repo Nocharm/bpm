@@ -153,6 +153,8 @@ interface OrgInfoModalProps {
   onHoverEnd?: () => void;
   /** true면 백드롭·중앙 정렬 없이 origin(커서) 근처 고정 호버 카드로 렌더. */
   anchored?: boolean;
+  /** anchored 전용 — true면 페이드아웃 재생(언마운트는 호출측이 애니메이션 길이만큼 늦춘다). */
+  closing?: boolean;
 }
 
 export function OrgInfoModal({
@@ -163,6 +165,7 @@ export function OrgInfoModal({
   onHoverStart,
   onHoverEnd,
   anchored = false,
+  closing = false,
 }: OrgInfoModalProps) {
   const { lang } = useI18n();
   const users = useDirectory();
@@ -256,7 +259,7 @@ export function OrgInfoModal({
       <div
         data-id="org-info-hover-card"
         ref={cardRef}
-        className="animate-item-in fixed z-[1300] flex w-96 flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg"
+        className={`${closing ? "animate-item-out" : "animate-item-in"} fixed z-[1300] flex w-96 flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg`}
         style={{ left: anchorPos.left, top: anchorPos.top }}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}

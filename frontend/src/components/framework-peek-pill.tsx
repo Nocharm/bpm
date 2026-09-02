@@ -33,6 +33,7 @@ export function FrameworkPeekTrigger({
   className,
   style,
   hoverDelayMs = null,
+  onOpenChange,
   children,
 }: {
   categoryId: number;
@@ -43,6 +44,8 @@ export function FrameworkPeekTrigger({
   style?: CSSProperties;
   // null=클릭 전용, 숫자면 해당 ms 호버로도 오픈
   hoverDelayMs?: number | null;
+  // 플라이아웃(+탐색 모달) 개폐 알림 — 호스트가 자기 자동 닫힘을 억제할 수 있게 (SP 피크 헤더용)
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
   const [peek, setPeek] = useState<{ x: number; y: number } | null>(null);
@@ -99,6 +102,12 @@ export function FrameworkPeekTrigger({
     window.addEventListener("mousedown", handleMouseDown, true);
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
   }, [peek, browse]);
+
+  // 개폐를 호스트에 알린다 — 플라이아웃·탐색 모달은 body 포털이라 호스트(SP 피크)의
+  // 바깥 클릭·이탈 닫힘에 그대로 걸린다. 열려 있는 동안 호스트가 자기 닫힘을 멈추게 한다.
+  useEffect(() => {
+    onOpenChange?.(peek !== null);
+  }, [peek, onOpenChange]);
 
   // 커서를 좌상단 기준으로 — 커서를 못 잡았으면(키보드 등) 트리거 아래로 폴백.
   // 뷰포트 밖으로 나가는 보정은 렌더 후 실측으로 처리한다(아래 useLayoutEffect).

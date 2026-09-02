@@ -22,9 +22,10 @@ import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 
-// 부서 칩 호버 모달 타이밍(ms) — 열림은 인텐트 지연, 닫힘은 유예(칩→모달 이동·순간 이탈에 안 닫히게).
+// 부서 칩 호버 모달 타이밍(ms) — 열림은 인텐트 지연, 닫힘은 즉시 시작하는 페이드아웃.
+// 유예 닫기는 답답하다는 피드백으로 폐기 (사용자 요청 2026-09-03). FADE는 globals.css .animate-item-out과 동기.
 const DEPT_HOVER_OPEN_MS = 300;
-const DEPT_HOVER_CLOSE_MS = 500;
+const DEPT_HOVER_FADE_MS = 140;
 
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
@@ -115,7 +116,9 @@ export function ProcessLibraryPanel({
   }
   useEffect(() => clearHoverTimer, []);
   // 부서 칩 호버 → 조직 정보 모달 — 인텐트 지연 오픈·유예 닫힘(모달 위 호버는 닫기 취소) (2026-09-02)
-  const [deptModal, setDeptModal] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
+  const [deptModal, setDeptModal] = useState<
+    { path: string; origin: { x: number; y: number }; closing: boolean } | null
+  >(null);
   const deptOpenTimerRef = useRef<number | null>(null);
   const deptCloseTimerRef = useRef<number | null>(null);
   function clearDeptTimers() {
@@ -134,10 +137,14 @@ export function ProcessLibraryPanel({
       window.clearTimeout(deptCloseTimerRef.current);
       deptCloseTimerRef.current = null;
     }
+    // 페이드 도중 같은 칩으로 되돌아오면 되살린다
+    setDeptModal((cur) => (cur !== null && cur.closing ? { ...cur, closing: false } : cur));
   }
-  function scheduleDeptModalClose() {
+  // 칩을 벗어나면 즉시 페이드아웃 시작, 애니메이션이 끝난 뒤 언마운트
+  function startDeptModalClose() {
     cancelDeptModalClose();
-    deptCloseTimerRef.current = window.setTimeout(() => setDeptModal(null), DEPT_HOVER_CLOSE_MS);
+    setDeptModal((cur) => (cur === null ? null : { ...cur, closing: true }));
+    deptCloseTimerRef.current = window.setTimeout(() => setDeptModal(null), DEPT_HOVER_FADE_MS);
   }
   // 마지막 커서 위치 — 오픈 지연 동안 칩 위에서 움직인 만큼 따라가 카드가 커서 기준으로 뜬다
   const deptPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -148,7 +155,7 @@ export function ProcessLibraryPanel({
     if (deptModal?.path === path) return; // 같은 부서 카드가 이미 열림 — 유지
     if (deptOpenTimerRef.current !== null) window.clearTimeout(deptOpenTimerRef.current);
     deptOpenTimerRef.current = window.setTimeout(
-      () => setDeptModal({ path, origin: { ...deptPointerRef.current } }),
+      () => setDeptModal({ path, origin: { ...deptPointerRef.current }, closing: false }),
       DEPT_HOVER_OPEN_MS,
     );
   }
@@ -157,7 +164,7 @@ export function ProcessLibraryPanel({
       window.clearTimeout(deptOpenTimerRef.current);
       deptOpenTimerRef.current = null;
     }
-    if (deptModal) scheduleDeptModalClose();
+    if (deptModal) startDeptModalClose();
   }
 
   function openPeek(row: LibraryProcess, blocked: string | null, rowEl: Element) {
@@ -371,6 +378,7 @@ export function ProcessLibraryPanel({
       {deptModal && (
         <OrgInfoModal
           anchored
+          closing={deptModal.closing}
           orgPath={deptModal.path}
           koreanDeptByPath={koreanDeptByPath}
           origin={deptModal.origin}
@@ -379,7 +387,7 @@ export function ProcessLibraryPanel({
             setDeptModal(null);
           }}
           onHoverStart={cancelDeptModalClose}
-          onHoverEnd={scheduleDeptModalClose}
+          onHoverEnd={startDeptModalClose}
         />
       )}
       {peek && (

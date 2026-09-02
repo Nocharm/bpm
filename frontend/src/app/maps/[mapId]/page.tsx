@@ -6406,6 +6406,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       const openLinkedItems: ContextMenuItem[] =
         menuNodeType === "subprocess"
           ? [
+              { divider: true },
               {
                 label: t("subprocess.openMap"),
                 icon: ExternalLink,
@@ -6454,8 +6455,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         { divider: true },
         ...colorItems,
         ...openChildItems,
-        ...openLinkedItems,
         ...deleteItems,
+        // 링크된 맵 열기는 캔버스를 떠나는 동작 — 삭제 아래 구분선을 두고 맨 끝 (사용자 요청 2026-09-03)
+        ...openLinkedItems,
       ];
     }
     return [

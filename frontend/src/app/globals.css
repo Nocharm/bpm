@@ -245,8 +245,27 @@ button:not(:disabled):active {
   animation: item-fade-in 220ms var(--ease-smooth);
 }
 
+/* 호버 카드 닫힘 — 지연 없이 즉시 사라지되 급하지 않게. 언마운트는 호출측이 이 길이만큼 늦춘다
+   (frontend: DEPT_HOVER_FADE_MS와 동기). 페이드 중엔 클릭·호버를 받지 않는다. */
+@keyframes item-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.animate-item-out {
+  animation: item-fade-out 140ms var(--ease-smooth) forwards;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-item-in {
+  .animate-item-in,
+  .animate-item-out {
     animation: none;
   }
 }

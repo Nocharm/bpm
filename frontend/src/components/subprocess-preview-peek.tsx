@@ -33,6 +33,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getMap, getResolvedGraph, type VersionGraph } from "@/lib/api";
+import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { PARAM_ICON } from "@/components/param-icons";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
@@ -53,6 +54,8 @@ const ZOOM_MIN = 1; // 1=창 맞춤 — 그보다 축소하면 더 안 읽힌다
 const ZOOM_MAX = 3;
 // 목업 높이 전환 — 호버 시 표시 필드가 바뀌며 점프하던 것을 아코디언으로 (사용자 요청 2026-08-31)
 const MOCK_HEIGHT_MS = 200;
+// 미리보기 위 액션·표기 공통 폭 — 추가/이동 버튼과 게시본 표기를 같은 폭으로 맞춘다(긴 라벨 기준, 한/영 공통)
+const ACTION_WIDTH = "w-[8.5rem]";
 
 export interface SubprocessPeekInfo {
   department: string | null;
@@ -124,6 +127,9 @@ export function SubprocessPreviewPeek({
   // 목업 드롭다운(body 포털) — 바깥클릭 판정 2곳(피크 닫기·메뉴 닫기)이 공유하므로 최상단 선언
   const mockMenuRef = useRef<HTMLDivElement>(null);
   const [fetchState, setFetchState] = useState<PeekFetch>({ status: "loading" });
+  // 헤더 업무체계 플라이아웃/탐색 모달이 떠 있는 동안 피크 자동 닫힘 억제 — 둘 다 body 포털이라
+  // 패널 밖으로 잡혀 바깥클릭·이탈에 피크가 먼저 사라진다
+  const [frameworkOpen, setFrameworkOpen] = useState(false);
 
   useEffect(() => {
     // 미등록 맵은 서버가 권한과 무관하게 잠금 응답 — 요청 생략(전용 안내 렌더)
@@ -167,6 +173,8 @@ export function SubprocessPreviewPeek({
         status: "ready";
         version: { label: string; number: number | null; publishedAt: string | null } | null;
         categoryPath: string | null;
+        // 헤더 업무체계 클릭 → 트리 플라이아웃·탐색 모달의 체인 시작점
+        categoryId: number | null;
         // 헤더 오너 표기 — 서버 owner_name(owner_id ?? created_by 계약)
         owner: string | null;
         // SP 지정의 표시 필드 나머지 — 조건·IO·GMP (목업 전체 파라미터·상세 탭 소스)
@@ -202,6 +210,7 @@ export function SubprocessPreviewPeek({
               }
             : null,
           categoryPath: detail.category_path ?? null,
+          categoryId: detail.category_id ?? null,
           owner: detail.owner_name ?? null,
           sp: {
             input: detail.sp_input ?? null,
@@ -224,6 +233,7 @@ export function SubprocessPreviewPeek({
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
       if (
+        !frameworkOpen &&
         event.target instanceof globalThis.Element &&
         !panelRef.current?.contains(event.target) &&
         !anchorEl?.contains(event.target) &&
@@ -236,7 +246,7 @@ export function SubprocessPreviewPeek({
     };
     window.addEventListener("mousedown", handleMouseDown, true);
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
-  }, [anchorEl, onClose]);
+  }, [anchorEl, onClose, frameworkOpen]);
 
   // 크기 = 브라우저 창 비례(고정 높이 대신) — 상하한 클램프 (사용자 피드백 2026-08-30).
   // 열림 시점 창 기준(리스너 없음) — 피크는 스크롤·바깥클릭으로 닫히는 일시 표면이라 리사이즈 추적은 과함.
@@ -393,6 +403,7 @@ export function SubprocessPreviewPeek({
   };
   const scheduleClose = () => {
     cancelClose();
+    if (frameworkOpen) return; // 체계 트리로 커서가 옮겨간 것 — 피크는 그 뒤에 남아 있어야 한다
     closeTimerRef.current = window.setTimeout(() => {
       closeTimerRef.current = null;
       onClose();
@@ -440,17 +451,31 @@ export function SubprocessPreviewPeek({
             </span>
           )}
         </span>
-        {/* 잠금/로딩 중엔 meta가 없어 미지정으로 오판할 수 있다 — ready일 때만 렌더 */}
-        {meta.status === "ready" && (
-          <span
-            data-id="library-peek-header-framework"
-            title={meta.categoryPath ?? t("library.peekNoFramework")}
-            className="flex min-w-0 max-w-[45%] shrink items-center gap-1 text-fine text-ink-tertiary"
-          >
-            <FolderTree size={11} strokeWidth={1.5} className="shrink-0" />
-            <span className="truncate">{meta.categoryPath ?? t("library.peekNoFramework")}</span>
-          </span>
-        )}
+        {/* 잠금/로딩 중엔 meta가 없어 미지정으로 오판할 수 있다 — ready일 때만 렌더.
+            체계에 속한 맵이면 클릭으로 트리 플라이아웃(+"다른 체계 검색" 모달)을 연다 (사용자 요청 2026-09-03) */}
+        {meta.status === "ready" &&
+          (meta.categoryId !== null ? (
+            <FrameworkPeekTrigger
+              categoryId={meta.categoryId}
+              linkedMapId={mapId}
+              title={meta.categoryPath ?? t("library.peekNoFramework")}
+              dataId="library-peek-header-framework"
+              className="flex min-w-0 max-w-[45%] shrink cursor-pointer items-center gap-1 rounded-xs px-1 py-px text-fine text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+              onOpenChange={setFrameworkOpen}
+            >
+              <FolderTree size={11} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{meta.categoryPath ?? t("library.peekNoFramework")}</span>
+            </FrameworkPeekTrigger>
+          ) : (
+            <span
+              data-id="library-peek-header-framework"
+              title={t("library.peekNoFramework")}
+              className="flex min-w-0 max-w-[45%] shrink items-center gap-1 text-fine text-ink-tertiary"
+            >
+              <FolderTree size={11} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("library.peekNoFramework")}</span>
+            </span>
+          ))}
       </div>
       {/* body — 좌측 인스펙터(노드 목업/상세 탭) + 중앙 미리보기 + 우측 액션 레일(추가/이동).
           행 높이를 미리보기 높이로 고정해 컬럼이 길어도 패널이 안 늘어나고 내부 스크롤 (2026-09-03 재배치) */}
@@ -938,24 +963,18 @@ export function SubprocessPreviewPeek({
               </button>
             </div>
           )}
-          {/* 게시본 기준 표기 — 그래프 위 워터마크(헤더에서 이동 — 사용자 피드백 2026-08-30) */}
-          {designated && fetchState.status === "ready" && (
-            <span className="pointer-events-none absolute bottom-1.5 right-2 rounded-xs border border-hairline bg-surface/85 px-1.5 py-px text-fine text-ink-tertiary">
-              {t("library.peekPublishedBasis")}
-            </span>
-          )}
-          {/* 액션 — 미리보기 위에 떠 있는 독립 버튼 둘(위=맵 추가·강조색, 아래=맵으로 가기).
-              높이를 이분할하던 우측 레일이 과하다는 피드백으로 우상단 플로팅 + 분리로 (사용자 요청 2026-09-03).
-              라벨은 한 줄 고정 — 넘치면 말줄임(한/영 라벨 길이 차 흡수).
+          {/* 액션 — 미리보기 위에 떠 있는 독립 버튼(우상단=맵 추가·강조색, 우하단=맵으로 가기).
+              폭은 ACTION_WIDTH로 통일(긴 라벨 기준) — 게시본 표기까지 같은 폭으로 세로로 쌓는다
+              (사용자 요청 2026-09-03). 라벨은 한 줄 고정, 넘치면 말줄임(한/영 길이 차 흡수).
               미리보기 컨테이너는 잠금/미등록 상태에서도 렌더되므로 "추가는 가능" 경로가 유지된다 */}
-          <div data-id="library-peek-actions" className="absolute right-2 top-2 flex flex-col items-end gap-1.5">
+          <div data-id="library-peek-actions" className={`absolute right-2 top-2 ${ACTION_WIDTH}`}>
             <button
               type="button"
               data-id="library-peek-add"
               disabled={addDisabledReason !== null}
               title={addDisabledReason ?? t("library.peekAdd")}
               onClick={onAdd}
-              className={`flex max-w-[11rem] items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-medium shadow-md ${
+              className={`flex w-full items-center justify-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-medium shadow-md ${
                 addDisabledReason !== null
                   ? "cursor-not-allowed border-hairline bg-surface/85 text-ink-tertiary"
                   : "border-accent bg-accent text-on-accent hover:bg-accent-focus"
@@ -964,13 +983,21 @@ export function SubprocessPreviewPeek({
               <Plus size={14} strokeWidth={1.5} className="shrink-0" />
               <span className="truncate">{t("library.peekAdd")}</span>
             </button>
-            {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31) */}
+          </div>
+          {/* 우하단 — 게시본 기준 표기(그래프 위 워터마크, 헤더에서 이동 2026-08-30) 위,
+              그 아래 "해당 맵으로 이동". 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (2026-08-31) */}
+          <div className={`absolute bottom-1.5 right-2 flex flex-col gap-1.5 ${ACTION_WIDTH}`}>
+            {designated && fetchState.status === "ready" && (
+              <span className="pointer-events-none rounded-xs border border-hairline bg-surface/85 px-1.5 py-px text-center text-fine text-ink-tertiary">
+                {t("library.peekPublishedBasis")}
+              </span>
+            )}
             <button
               type="button"
               data-id="library-peek-open-map"
               title={t("library.peekOpenNamedMap", { name })}
               onClick={onOpenMap}
-              className="flex max-w-[11rem] items-center gap-1.5 rounded-sm border border-hairline bg-surface/90 px-2.5 py-1.5 text-fine font-medium text-ink-secondary shadow-md hover:bg-surface-alt hover:text-accent"
+              className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline bg-surface/90 px-2.5 py-1.5 text-fine font-medium text-ink-secondary shadow-md hover:bg-surface-alt hover:text-accent"
             >
               <ExternalLink size={14} strokeWidth={1.5} className="shrink-0" />
               <span className="truncate">{t("library.peekOpenMap")}</span>

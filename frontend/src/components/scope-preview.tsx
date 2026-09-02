@@ -114,7 +114,8 @@ export function ScopePreview({
       data-id="scope-preview-pane"
       // 확대 중 드래그·휠 줌을 받아야 하므로 포인터 이벤트를 연다(정적 프리뷰라도).
       // 휠 줌은 1배에서 시작하므로 onZoom이 있으면 pannable 이전부터 열려 있어야 한다
-      className={`${interactive || pannable || onZoom !== undefined ? "pointer-events-auto" : "pointer-events-none"} h-full w-full ${charcoal ? "bpm-l5-sky overflow-hidden rounded-md" : "bg-canvas"} ${
+      // select-none — SVG 라벨이 드래그로 선택되면 그 상태에서 팬(초점 이동)이 겉돈다 (사용자 요청 2026-09-03)
+      className={`${interactive || pannable || onZoom !== undefined ? "pointer-events-auto" : "pointer-events-none"} h-full w-full select-none ${charcoal ? "bpm-l5-sky overflow-hidden rounded-md" : "bg-canvas"} ${
         pannable ? "cursor-grab overflow-hidden active:cursor-grabbing" : ""
       }`}
       onPointerDown={
