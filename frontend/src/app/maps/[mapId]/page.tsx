@@ -454,6 +454,23 @@ const NOTICE_TONE_CLASS: Record<EditorNoticeTone, string> = {
   accent: "border-accent-tint-border bg-accent-tint text-accent", // 게시본(정상 운영 상태)
   neutral: "border-hairline bg-surface-alt text-ink-secondary", // 뷰어·만료 이력
 };
+
+// framework 확정 스냅샷 중 최신(vX.Y 최대) — 유효본 판정 단일 규칙 (framework-confirm-section과 동형)
+function findLatestConfirmed<T extends { status: string; label: string }>(list: T[]): T | null {
+  let best: T | null = null;
+  let bestKey: readonly [number, number] = [-1, -1];
+  for (const v of list) {
+    if (v.status !== "confirmed") continue;
+    const m = /^v(\d+)\.(\d+)$/.exec(v.label);
+    if (!m) continue;
+    const key = [Number(m[1]), Number(m[2])] as const;
+    if (key[0] > bestKey[0] || (key[0] === bestKey[0] && key[1] > bestKey[1])) {
+      best = v;
+      bestKey = key;
+    }
+  }
+  return best;
+}
 // 인라인 펼침 하위 영역 박스 — 깊이 틴트 배경 렌더용(flow 좌표 절대배치)
 type RegionBox = {
   id: string;
@@ -1381,40 +1398,65 @@ function MapEditor({ mapId }: { mapId: number }) {
             title: t("editor.readonly.checkoutTitle", { name: checkoutHolderLabel }),
             desc: t("editor.readonly.checkoutDesc"),
           }
-        : currentVersion?.status === "confirmed"
+        : currentVersion?.status === "published"
           ? {
+              tone: "accent",
+              icon: BadgeCheck,
+              title: t("editor.readonly.publishedTitle"),
+              desc: t("editor.readonly.publishedDesc"),
+            }
+          : currentVersion?.status === "expired"
+            ? {
+                tone: "neutral",
+                icon: Archive,
+                title: t("editor.readonly.expiredTitle"),
+                desc: t("editor.readonly.expiredDesc"),
+              }
+            : currentVersion?.status === "approved"
+              ? {
+                  tone: "warn",
+                  icon: CircleCheck,
+                  title: t("editor.readonly.approvedTitle"),
+                  desc: t("editor.readonly.approvedDesc"),
+                }
+              : {
+                  tone: "warn",
+                  icon: Hourglass,
+                  title: t("editor.readonly.pendingTitle"),
+                  desc: t("editor.readonly.pendingDesc"),
+                };
+  // framework 캔버스 상태 배너 — draft(권한자 전용 작업본)·최신 confirmed·과거(superseded) (룰 재정립 2026-09-02).
+  // draft 배너는 편집 중에도 상시 노출하되, 타인 점유 안내가 더 급하므로 점유 배너가 없을 때만.
+  const latestConfirmed = findLatestConfirmed(versions);
+  const isSupersededSnapshot =
+    currentVersion?.status === "confirmed" &&
+    latestConfirmed !== null &&
+    currentVersion.id !== latestConfirmed.id;
+  const frameworkNotice: EditorNotice | null = !isFrameworkMap
+    ? null
+    : currentVersion?.status === "draft" && checkoutHolder === null
+      ? {
+          tone: "warn",
+          icon: PencilLine,
+          title: t("editor.readonly.fwDraftTitle"),
+          desc: t("editor.readonly.fwDraftDesc"),
+        }
+      : currentVersion?.status === "confirmed"
+        ? isSupersededSnapshot
+          ? {
+              tone: "neutral",
+              icon: Archive,
+              title: t("editor.readonly.supersededTitle"),
+              desc: t("editor.readonly.supersededDesc", { label: latestConfirmed?.label ?? "-" }),
+            }
+          : {
               tone: "accent",
               icon: BadgeCheck,
               title: t("editor.readonly.confirmedTitle"),
               desc: t("editor.readonly.confirmedDesc"),
             }
-          : currentVersion?.status === "published"
-            ? {
-                tone: "accent",
-                icon: BadgeCheck,
-                title: t("editor.readonly.publishedTitle"),
-                desc: t("editor.readonly.publishedDesc"),
-              }
-            : currentVersion?.status === "expired"
-              ? {
-                  tone: "neutral",
-                  icon: Archive,
-                  title: t("editor.readonly.expiredTitle"),
-                  desc: t("editor.readonly.expiredDesc"),
-                }
-              : currentVersion?.status === "approved"
-                ? {
-                    tone: "warn",
-                    icon: CircleCheck,
-                    title: t("editor.readonly.approvedTitle"),
-                    desc: t("editor.readonly.approvedDesc"),
-                  }
-                : {
-                    tone: "warn",
-                    icon: Hourglass,
-                    title: t("editor.readonly.pendingTitle"),
-                    desc: t("editor.readonly.pendingDesc"),
-                  };
+        : null;
+  const editorNotice = frameworkNotice ?? readOnlyNotice;
   // 역할 판정 — render 중 파생(useEffect 금지)
   // 소유자 미상(created_by=null, seed/legacy 맵)은 백엔드가 누구에게나 승인자 관리를 허용 — 그 규칙과 정합
   const isMapOwner = username !== null && (mapOwner === null || username === mapOwner);
@@ -2593,8 +2635,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         const latestPublished = detail.versions.find((v) => v.status === "published");
         let initialId = latestPublished?.id ?? detail.versions[0]?.id;
         if (detail.mode === "framework") {
-          // 캔버스는 뷰어 포함 항상 라이브 draft 우선 — 스냅샷은 버전 드롭다운에서 열람 (design 2026-08-28 §8)
-          initialId = draft?.id ?? initialId;
+          // 권한자에게만 draft가 내려온다(룰 재정립 2026-09-02) — 있으면 라이브 draft,
+          // 없으면(일반 뷰어) 최신 확정 스냅샷으로 착지. 스냅샷도 없으면 아래 빈 상태 안내.
+          initialId = draft?.id ?? findLatestConfirmed(detail.versions)?.id ?? initialId;
         } else if (draft) {
           try {
             const ws = await getWorkflowState(draft.id);
@@ -2617,6 +2660,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           setAiOpen(true);
         }
         if (active) {
+          if (initialId == null && detail.versions.length === 0) {
+            // framework 뷰어 + 확정 스냅샷 없음 — draft는 권한자 전용이라 열람할 버전이 없다
+            setStatus(t("framework.noVersionsVisible"));
+            return;
+          }
           setVersionId(initialId ?? detail.versions[0].id);
           setScopes([{ kind: "root", title: detail.name }]);
           setActiveIndex(0);
@@ -9089,15 +9137,16 @@ function MapEditor({ mapId }: { mapId: number }) {
         </div>
       )}
 
-      {/* 읽기 전용 배너 — 사유별 톤·아이콘·굵은 타이틀로 즉시 구분(타인 점유는 이름 표기) */}
-      {readOnlyNotice && (
+      {/* 상태 배너 — 사유별 톤·아이콘·굵은 타이틀로 즉시 구분(타인 점유는 이름 표기).
+          framework 캔버스는 draft/confirmed/superseded 배너가 우선하며 draft는 편집 중에도 상시 (2026-09-02) */}
+      {editorNotice && (
         <div
           data-id="editor-readonly-notice"
-          className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[readOnlyNotice.tone]}`}
+          className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[editorNotice.tone]}`}
         >
-          <readOnlyNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
-          <span className="shrink-0 font-semibold">{readOnlyNotice.title}</span>
-          <span className="min-w-0">{readOnlyNotice.desc}</span>
+          <editorNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
+          <span className="shrink-0 font-semibold">{editorNotice.title}</span>
+          <span className="min-w-0">{editorNotice.desc}</span>
         </div>
       )}
 
@@ -9803,15 +9852,33 @@ function MapEditor({ mapId }: { mapId: number }) {
                     {readOnly && !isFrameworkDraft && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         {currentVersion?.status === "confirmed" ? (
-                          /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프.
+                          /* 담당자 확정 스탬프 — 게시 워터마크와 구분되는 도장 모티프. 2단: 상태 + 버전 라벨.
+                             과거(superseded) 스냅샷은 회색 톤 + 최신 확정 라벨 안내 (룰 재정립 2026-09-02).
                              차콜 캔버스에선 옆 텍스트 워터마크와 동일 조건으로 text-canvas 톤 전환(저시인성 방지). */
                           <span
-                            className={`flex -rotate-[24deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
-                              index === 0 && l5Charcoal ? "border-canvas text-canvas" : "border-accent text-accent"
+                            className={`flex -rotate-[24deg] select-none flex-col items-center rounded-md border-[6px] px-10 py-4 uppercase tracking-widest opacity-[0.14] ${
+                              index === 0 && l5Charcoal
+                                ? "border-canvas text-canvas"
+                                : isSupersededSnapshot
+                                  ? "border-ink-tertiary text-ink-tertiary"
+                                  : "border-accent text-accent"
                             }`}
                           >
-                            <BadgeCheck size={96} strokeWidth={1.5} />
-                            {t("editor.watermarkConfirmed")}
+                            <span className="flex items-center gap-4 text-[96px] font-semibold">
+                              {isSupersededSnapshot ? (
+                                <Archive size={96} strokeWidth={1.5} />
+                              ) : (
+                                <BadgeCheck size={96} strokeWidth={1.5} />
+                              )}
+                              {isSupersededSnapshot
+                                ? t("editor.watermarkSuperseded")
+                                : t("editor.watermarkConfirmed")}
+                            </span>
+                            <span className="text-[40px] font-light">
+                              {isSupersededSnapshot
+                                ? t("editor.watermarkLatest", { label: latestConfirmed?.label ?? "-" })
+                                : currentVersion?.label}
+                            </span>
                           </span>
                         ) : (
                           <span

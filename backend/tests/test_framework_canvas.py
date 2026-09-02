@@ -729,7 +729,9 @@ def test_surface_fields(client: TestClient, enforce: None) -> None:
     chain = client.get(f"/api/categories/{l5}/chain").json()
     assert chain[-1]["linkage_map_id"] == map_id
 
-    # MapOut: 캔버스에 linkage_category_id/path
+    # MapOut: 캔버스에 linkage_category_id/path — draft 접근이 필요하니 권한자로 조회
+    # (비권한자 draft 차단은 test_framework_draft_visible_only_to_chain_admins가 담당)
+    act_as("fwc.surfer")
     detail = client.get(f"/api/maps/{map_id}").json()
     assert detail["linkage_category_id"] == l5
     assert detail["linkage_category_path"] == "표면L1/표면L5"
@@ -1055,3 +1057,62 @@ def test_map_detail_exposes_can_confirm(client: TestClient, enforce: None) -> No
     assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is False
     act_as("fwc.ccpleb")  # public 캔버스라 viewer로 열람은 되나 can_confirm은 false
     assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is False
+
+
+def test_framework_draft_visible_only_to_chain_admins(client: TestClient, enforce: None) -> None:
+    """framework 라이브 draft는 sysadmin·자기/조상 카테고리 권한자만 열람 (룰 재정립 2026-09-02).
+
+    비권한 뷰어는 상세 versions에서 draft가 빠지고(can_view_draft=False) draft 그래프는 403 —
+    확정 스냅샷만 남는다. 조상 권한자는 상위 레벨 권한만으로 draft를 종전대로 열람한다.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion
+
+    parent_id = _seed_category(client, "FWC-DV-P", "드래프트열람 상위")
+    l5 = _seed_category(client, "FWC-DV-L5", "드래프트열람 L5", level=5, parent_id=parent_id)
+    map_id = _seed_canvas_map(client, l5, "드래프트 열람 캔버스")
+
+    async def _arrange() -> tuple[int, int]:
+        async with SessionLocal() as session:
+            draft_id = await session.scalar(
+                select(MapVersion.id).where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+            )
+            snap_id = await session.scalar(
+                select(MapVersion.id).where(MapVersion.map_id == map_id, MapVersion.status == "confirmed")
+            )
+            if snap_id is None:
+                snap = MapVersion(map_id=map_id, label="v1.0", status="confirmed",
+                                  fw_major=1, fw_minor=0)
+                session.add(snap)
+                await session.commit()
+                snap_id = snap.id
+            return draft_id, snap_id
+
+    draft_id, snap_id = asyncio.run(_arrange())
+    act_as(SYSADMIN)
+    assert client.put(
+        f"/api/categories/{parent_id}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": "fwc.dvancestor"}]},
+    ).status_code == 200
+
+    act_as("fwc.dvpleb")  # public 캔버스 뷰어 — draft 열람 불가
+    body = client.get(f"/api/maps/{map_id}").json()
+    assert body["can_view_draft"] is False
+    assert [v["status"] for v in body["versions"]] == ["confirmed"]
+    assert client.get(f"/api/versions/{draft_id}/graph").status_code == 403
+    assert client.get(f"/api/versions/{draft_id}/graph/all").status_code == 403
+    assert client.get(f"/api/versions/{snap_id}/graph").status_code == 200
+
+    act_as("fwc.dvancestor")  # 조상 권한자 — 상위 레벨 권한만으로 draft 열람
+    body = client.get(f"/api/maps/{map_id}").json()
+    assert body["can_view_draft"] is True
+    assert "draft" in [v["status"] for v in body["versions"]]
+    assert client.get(f"/api/versions/{draft_id}/graph").status_code == 200
+
+    act_as(SYSADMIN)
+    body = client.get(f"/api/maps/{map_id}").json()
+    assert body["can_view_draft"] is True and "draft" in [v["status"] for v in body["versions"]]

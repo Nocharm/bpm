@@ -24,6 +24,7 @@ from app.permissions.access import (
     get_eligible_users,
     get_framework_category_id,
     get_user_active_group_ids,
+    is_category_admin,
     is_direct_l5_admin,
 )
 from app.permissions.deps import require_map_role
@@ -700,6 +701,19 @@ async def get_map(
             found_map.can_confirm = logic.is_sysadmin(user) or await is_direct_l5_admin(
                 session, user, linkage_cat_id
             )
+        # 라이브 draft 열람권 — sysadmin·자기/조상 카테고리 권한자만 (룰 재정립 2026-09-02).
+        # 비권한자는 확정 스냅샷만 — draft를 응답 versions에서 제외한다.
+        can_view_draft = logic.is_sysadmin(user) or (
+            linkage_cat_id is not None
+            and await is_category_admin(session, user, linkage_cat_id)
+        )
+        found_map.can_view_draft = can_view_draft
+        if not can_view_draft:
+            # 컬렉션 조작 전 세션에서 분리 — autoflush가 draft 행 삭제로 오인하지 않게
+            session.expunge(found_map)
+            found_map.versions = [
+                v for v in found_map.versions if v.status != workflow.DRAFT
+            ]
     return found_map
 
 

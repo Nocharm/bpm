@@ -23,6 +23,8 @@ from app.subprocess import (
 from app.checkout import is_checkout_active, is_locked_by_other
 from app.db import get_session
 from app.models import Comment, Edge, Group, MapVersion, Node, ProcessCategory, ProcessMap
+from app.permissions import logic
+from app.permissions.access import is_category_admin
 from app.permissions.deps import require_version_map_role
 from app.schemas import (
     EdgeIn,
@@ -110,6 +112,31 @@ async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVers
     return version
 
 
+async def _assert_framework_draft_visible(
+    session: AsyncSession, version: MapVersion, user: str
+) -> None:
+    """framework 라이브 draft 그래프는 sysadmin·자기/조상 카테고리 권한자만 (룰 재정립 2026-09-02).
+
+    maps.get_map의 versions 필터와 짝 — 상세에서 감춰도 그래프 직접 조회로 새면 무의미하다.
+    스냅샷(confirmed)·일반 맵은 무관.
+    """
+    if version.status != workflow.DRAFT:
+        return
+    parent_map = await session.get(ProcessMap, version.map_id)
+    if parent_map is None or parent_map.mode != "framework":
+        return
+    if logic.is_sysadmin(user):
+        return
+    linkage_cat_id = await session.scalar(
+        select(ProcessCategory.id).where(ProcessCategory.linkage_map_id == version.map_id)
+    )
+    if linkage_cat_id is not None and await is_category_admin(session, user, linkage_cat_id):
+        return
+    raise HTTPException(
+        status_code=403, detail="framework draft is visible to framework admins only"
+    )
+
+
 @router.get(
     "/{version_id}/graph/all",
     response_model=VersionGraphOut,
@@ -119,9 +146,11 @@ async def _get_version_or_404(session: AsyncSession, version_id: int) -> MapVers
 async def get_full_graph(
     version_id: int,
     session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
 ) -> VersionGraphOut:
     """버전 전체 노드/엣지 — 노드 검색·버전 diff 용 (spec §7 Phase B)."""
-    await _get_version_or_404(session, version_id)
+    version = await _get_version_or_404(session, version_id)
+    await _assert_framework_draft_visible(session, version, user)
     node_rows = (
         await session.scalars(
             select(Node).where(Node.version_id == version_id).order_by(Node.sort_order)
@@ -156,8 +185,10 @@ async def get_full_graph(
 async def get_graph(
     version_id: int,
     session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
 ) -> GraphOut:
-    await _get_version_or_404(session, version_id)
+    version = await _get_version_or_404(session, version_id)
+    await _assert_framework_draft_visible(session, version, user)
     return await _load_graph(session, version_id)
 
 
