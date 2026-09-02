@@ -5,7 +5,7 @@
 // 버튼 아래에 변경 요약(비교 diff 재활용: computeVersionDiff + 엣지 시그니처)을 노출한다.
 // 메이저 승급은 가시성 있는 토글 행 + 확인 모달(직전 라인 중간 마이너 영구삭제 안내) 경유.
 import { Archive, BadgeCheck, Check, Crosshair, Info, Trash2, TriangleAlert, Workflow, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   confirmFrameworkVersion,
@@ -130,8 +130,15 @@ export function FrameworkConfirmSection({
       .catch(() => { if (active) setReadiness(null); });
     return () => { active = false; };
   }, [canConfirm, mapId, readinessRefreshKey]);
+  // 이 effect의 첫 발화(마운트 시점)는 위 즉시조회 effect와 중복이라 ref로 스킵 —
+  // 이후 liveNodes/liveEdges가 실제로 바뀔 때만 디바운스 재조회한다.
+  const readinessDebounceSkipRef = useRef(true);
   useEffect(() => {
     if (!canConfirm) return;
+    if (readinessDebounceSkipRef.current) {
+      readinessDebounceSkipRef.current = false;
+      return;
+    }
     let active = true;
     const timer = setTimeout(() => {
       void getConfirmReadiness(mapId)
@@ -304,6 +311,8 @@ export function FrameworkConfirmSection({
           <button
             type="button"
             data-id="framework-confirm-button"
+            // readiness===null(로딩 전/실패)도 !readiness?.ready로 잠금 — 첫 게이트 조회가 끝나기 전엔
+            // 확정을 허용하지 않는다(낙관 통과로 바꾸지 말 것).
             disabled={busy || (!major && !hasChanges) || !readiness?.ready}
             className="flex items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
             onClick={() => {
