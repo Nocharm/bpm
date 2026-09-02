@@ -36,6 +36,7 @@
 | `kind: "branch"` | **src 노드를 `decision`으로 승격.** `actions[].kind`(action/handoff/decision)는 분기 여부를 신뢰할 수 없다 — 엣지가 진실이다. 승격 시 리포트 행 |
 | `kind: "loop"` | 엣지로 그린다. **Start 배선 판정(`has_in`)에서만 제외** — 안 그러면 루프 대상 노드가 in-edge를 갖게 돼 Start가 붕 뜬다. End 판정(`has_out`)에는 포함(보완→재작성처럼 loop가 유일 출구인 노드가 있다) |
 | `kind: "seq"` / `"bypass"` | 일반 엣지. 미지 kind는 warning 후 seq 취급 |
+| `src == dst`(자기 반복) | **드랍하지 않는다(2026-09-02)** — 분기 판단 노드 `a{seq}r`(`decision`, 이름 `LOOP_BRANCH_NODE_NAME`="반복 여부(자동 생성됨)")를 합성해 `A→◇`(seq)·`◇→A`(loop, 라벨 탑재)로 풀고, **A의 기존 진출 엣지는 전부 ◇로 이설**(택일은 분기에서 갈라진다). 이설로 승격 근거를 잃은 A는 process 복원(액션 kind가 decision이면 유지). quote 노트 보존, dry-run 노티에 자동 생성 노드명·코드 명시 |
 | `gateway` | 노드 타입 승격 판단엔 `branch`만 쓴다. `exclusive`는 decision 승격으로, `parallel`은 다중 out-edge로 이미 시각 표현된다 — 값 자체는 아래 노트에 부기 |
 | `quote` | quote가 있는 엣지만 **map_notes 1건**(kind=`flow`, title=`"작업지시 확인 → 표준기 선정"`, text=quote + `kind/gateway · condition` 부기) |
 | `relations` 누락 | warning + seq 순서 체인 폴백 |
@@ -75,6 +76,12 @@ A → B, B → A(loop), B → C      ⇒      A → B → ◇(B 결과) → A
 - **핸들은 끝점 타입별로** — SP는 `in`/`__primary__`, 분기는 변별 핸들 `t-left`/`s-right`.
   SP 전용 핸들을 분기 노드에 쓰면 React Flow가 또 엣지를 조용히 버린다
 - 되돌아가는 쌍(loop)은 재작성 좌표계(`◇ → target`)로 옮겨 랭크 계산에서 뺀다 — 안 그러면 사이클 부활
+- **self edge(A→A)도 분기 노드로 푼다(2026-09-02)** — 어댑터가 드랍 대신 `kind:"loop"`으로 강제 유지하고,
+  `expand_linkage_branches`가 **단독 진출이어도** 분기 노드를 세워 `A → ◇ → A` 루프백으로 그린다
+  (셀프 엣지 직접 렌더는 퇴화). self는 kind와 무관하게 back 쌍으로 등록해 랭크를 보호한다.
+  루프(self) 유래 분기 노드 이름은 원본명 없이 고정 `"반복 여부(자동 생성됨)"` —
+  `(origin, src) ∈ back` 시그니처(self 유래에서만 성립)로 판별하며, 팬아웃 유래는 기존
+  `"{이름} 결과"` 유지. 이름 단일 소스는 `consultant_interview.LOOP_BRANCH_NODE_NAME`
 - **출구는 오른쪽 위 → 아래 → 옆 순으로 벌린다**(`plan_branch_fanout`, 사용자 결정 2026-09-01).
   캔버스가 한 줄이면 어디서 갈라지는지 선만으론 안 읽힌다. 분기 노드는 일반 노드라 4면 핸들을 다
   쓸 수 있어(SP는 좌 `in`·우 `__primary__` 고정) 출구 변을 `s-top`/`s-bottom`/`s-right`로 맞춘다.
@@ -166,3 +173,6 @@ A → B, B → A(loop), B → C      ⇒      A → B → ◇(B 결과) → A
 | 사이클 | 되돌아가는 엣지를 랭크에서 빼고 선행 순서를 먼저 확정. 표시(kind=loop)가 확정, DFS가 보완 |
 | L5 분기 | SP는 타입 승격 불가 → 팬아웃 앞에 decision 노드를 끼운다. 조건 라벨은 분기 노드 출구 엣지가 보유 |
 | L5 분기 배치 | 출구를 오른쪽 위→아래→옆 순으로 벌리고 핸들(s-top/s-bottom/s-right)을 맞춘다 |
+| self edge | 드랍 → 분기 노드 합성으로 전환(2026-09-02, 사용자 결정). L6는 `a{seq}r` 합성+진출 이설+승격 복원, L5는 단독 진출이어도 강제 fork+back 등록. quote 노트도 보존 |
+| 루프 분기 이름 | 원본명 없이 고정 "반복 여부(자동 생성됨)"(2026-09-02, 사용자 결정) — 자동 일괄 생성 티를 낸다. 팬아웃 유래는 "{이름} 결과" 유지 |
+| 리포트 언어 | dry-run 이슈 메시지 전수(어댑터 49종+라우터 3종) 영어+한글 병기(2026-09-02, 사용자 요청) |

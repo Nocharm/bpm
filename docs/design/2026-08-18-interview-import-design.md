@@ -100,7 +100,8 @@ id(PK) · map_id(FK, null) · node_id(String(50), null — 추후 활동별 등�
 
 1. **임포트 UI**: 설정 Framework 탭 "Interview import" 서브섹션 — 다중 `.json` 선택 →
    Dry-run: **파일별 아코디언 리포트**(error/warning/unknown key 경로 + 생성/갱신 예정 카운트)
-   → Apply. 기존 canonical 임포트 섹션과 병행 유지.
+   → Apply. 기존 canonical 임포트 섹션과 병행 유지. 이슈 메시지는 **영어 원문 + 한글 설명 병기**
+   (2026-09-02) — 현업이 리포트만으로 원인·처리 결과를 읽는다.
 2. **Notes 섹션(읽기전용)**: 맵 상세 카드 + 에디터 인스펙터 Map 탭 — kind 뱃지 + title + text
    리스트. 데이터 없으면 섹션 숨김.
 
@@ -131,3 +132,4 @@ id(PK) · map_id(FK, null) · node_id(String(50), null — 추후 활동별 등�
 | 실파일 | 반입 불가 → FE dry-run 키 검증 화면이 1차 범위 |
 | variant | 보존(`Variant:` 줄)+exception 색 분리까지만(2026-08-19) — 진짜 분기는 anchor 키 협의 후 |
 | 구 경로 제거 | canonical 수용 표면(웹 `POST /categories/import`·CLI·파일 로더·canonical 샘플) 전체 제거(2026-08-18, 사용자 결정) — 엔진·canonical 모델은 내부 IR로 유지. 임포트 경로는 인터뷰 웹 임포트 단일 |
+| 리포트 언어 | dry-run 이슈 메시지 전수(어댑터+라우터) 영어+한글 병기(2026-09-02, 사용자 요청) — 흐름 그래프 규칙은 v04 설계 §2·§3(self edge → "반복 여부(자동 생성됨)" 분기 합성 포함) 참조 |
