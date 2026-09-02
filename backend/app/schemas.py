@@ -737,6 +737,8 @@ class MapOut(BaseModel):
     # framework 캔버스 전용 — 결착 카테고리(트랜지언트, get_map이 역조회로 주입) (design 2026-08-28 §8)
     linkage_category_id: int | None = None
     linkage_category_path: str | None = None
+    # 확정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true (트랜지언트, Track B Task 3)
+    can_confirm: bool = False
     # L6 Input/Output — 자유 텍스트(개행 구분 복수)
     sp_input: str | None = None
     sp_output: str | None = None
@@ -827,6 +829,21 @@ class FrameworkConfirmOut(BaseModel):
 
     version: VersionOut
     pruned_labels: list[str] = []
+
+
+class GateFailureOut(BaseModel):
+    """확정 게이트 위반 1건 — subprocess.GateFailure 직렬화 (spec §4, Track B Task 3)."""
+
+    code: str
+    count: int
+    node_ids: list[str]
+
+
+class ConfirmReadinessOut(BaseModel):
+    """GET confirm-readiness 응답 — major 토글 전 체크리스트 소스 (spec §4)."""
+
+    ready: bool
+    failures: list[GateFailureOut] = []
 
 
 class CategoryCreateIn(BaseModel):

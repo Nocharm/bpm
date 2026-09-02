@@ -13,27 +13,29 @@ from app import workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
-from app.models import ApprovalRequest, CheckoutRequest, Comment, Edge, Employee, Group, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, VersionApproval, VersionEvent, _now
+from app.framework_confirm import load_confirm_draft, perform_framework_confirm
+from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
     assert_map_role,
     get_effective_role,
     get_eligible_users,
-    get_framework_category_id,
     get_user_active_group_ids,
-    is_category_admin,
+    is_direct_l5_admin,
 )
 from app.permissions.deps import require_map_role
 from app.routers.categories import build_category_paths
 from app.routers.versions import clone_graph
 from app.schemas import (
     ApprovalRequestOut,
+    ConfirmReadinessOut,
     DirectoryUserOut,
     EligibleApproverOut,
     FrameworkConfirmIn,
     FrameworkConfirmOut,
     FrameworkTransferIn,
+    GateFailureOut,
     MapCategoryIn,
     MapCopy,
     MapCreate,
@@ -51,6 +53,7 @@ from app.schemas import (
     VersionOut,
     WordDocIn,
 )
+from app.subprocess import validate_confirm_readiness
 from app.version_events import record_version_event
 
 router = APIRouter(
@@ -687,6 +690,10 @@ async def get_map(
                 ).all()
             )
             found_map.linkage_category_path = linkage_paths.get(linkage_cat_id)
+            # 확정 버튼 노출 — sysadmin or 직속 L5 관리자만 (Track B Task 3)
+            found_map.can_confirm = logic.is_sysadmin(user) or await is_direct_l5_admin(
+                session, user, linkage_cat_id
+            )
     return found_map
 
 
@@ -1162,41 +1169,6 @@ async def transfer_framework_slot(
     return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
 
 
-def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
-    """레이아웃 무시 콘텐츠 시그니처 — 확정 게이트용 (2026-08-28 개선).
-
-    노드는 계보 키(source_node_id∥id)로 정렬해 FE computeVersionDiff(FIELD_KEYS)와 같은
-    콘텐츠 필드 + 링크 정체성만 비교한다. 좌표·sort_order·엣지 시각 필드(side/line_style)·
-    그룹 멤버십은 배치 취급이라 제외 — FE 게이트와 판정 기준을 맞춘다(lib/diff.ts).
-    """
-    lineage = {n.id: (n.source_node_id or n.id) for n in nodes}
-    node_sig = sorted(
-        (
-            n.source_node_id or n.id, n.title, n.description, n.node_type, n.color,
-            n.assignee, n.department, n.system, n.duration, n.touch_time,
-            n.cost_krw, n.cost_usd, n.headcount, n.annual_count, n.fte,
-            n.input, n.output, n.input_forms, n.output_forms, n.data_form, n.gmp,
-            n.start_condition, n.end_condition,
-            n.linked_map_id, n.follow_latest, n.is_primary_end,
-            n.placeholder_category_id,  # 플레이스홀더 출처도 링크 정체성 (design §10.1)
-        )
-        for n in nodes
-    )
-    edge_sig = sorted(
-        (
-            lineage.get(e.source_node_id, e.source_node_id),
-            lineage.get(e.target_node_id, e.target_node_id),
-            e.label, e.source_handle or "", e.target_handle or "",
-        )
-        for e in edges
-    )
-    return (tuple(node_sig), tuple(edge_sig))
-
-
-# 스냅샷 영구삭제 스윕 대상 — sqlite는 FK CASCADE 미강제라 명시 벌크 삭제(delete_category 선례)
-_VERSION_CHILD_MODELS = (Node, Edge, Group, Comment, VersionApproval, VersionEvent, CheckoutRequest)
-
-
 @router.post("/{map_id}/framework-confirm", response_model=FrameworkConfirmOut)
 async def confirm_framework_version(
     map_id: int,
@@ -1204,101 +1176,49 @@ async def confirm_framework_version(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> FrameworkConfirmOut:
-    """라이브 draft를 스냅샷(confirmed)으로 확정 — 권한자/sysadmin 본인 확정, 상위 승인 없음.
+    """라이브 draft를 스냅샷(confirmed)으로 확정 — 얇은 위임(404만 처리, 나머지는 본체).
 
-    마이너 확정은 직전 스냅샷 대비 레이아웃 외 변경이 있을 때만(없으면 409 — 손쉬운 버전
-    남발 방지). 메이저 승급은 의도된 의식이라 게이트를 우회하되, 직전 메이저 라인의 중간
-    마이너를 영구삭제한다(X.0·X.최종만 유지, 삭제 라벨은 응답 동봉) (2026-08-28 개선).
+    게이트 6종·체크아웃 점유·직속 L5 권한·채번/프룬 규칙은 app.framework_confirm 참고.
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    snapshot, pruned_labels = await perform_framework_confirm(
+        session, found_map, user, payload.major
+    )
+    return FrameworkConfirmOut(
+        version=VersionOut.model_validate(snapshot), pruned_labels=pruned_labels
+    )
+
+
+@router.get(
+    "/{map_id}/confirm-readiness",
+    response_model=ConfirmReadinessOut,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_confirm_readiness(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> ConfirmReadinessOut:
+    """확정 게이트 사전 점검 — major 토글 전 체크리스트 소스 (spec §4).
+
+    라이브 draft는 영구 계약(항상 존재)이라 draft 부재 409는 실제로는 발생하지 않는다.
     """
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     if found_map.mode != "framework":
         raise HTTPException(status_code=422, detail="not a framework linkage canvas")
-    if not logic.is_sysadmin(user):
-        category_id = await get_framework_category_id(session, map_id)
-        if category_id is None or not await is_category_admin(session, user, category_id):
-            raise HTTPException(status_code=403, detail="category admin only")
-
-    draft = await session.scalar(
-        select(MapVersion)
-        .where(MapVersion.map_id == map_id, MapVersion.status == "draft")
-        .order_by(MapVersion.id.desc())
-        .options(
-            selectinload(MapVersion.nodes),
-            selectinload(MapVersion.edges),
-            selectinload(MapVersion.groups),
-        )
-    )
+    draft = await load_confirm_draft(session, map_id)
     if draft is None:
         raise HTTPException(status_code=409, detail="canvas has no draft version")
-
-    # fw 채번 — (major,minor) 최댓값 기준. 최초 1.0
-    fw_rows = (
-        await session.execute(
-            select(MapVersion.fw_major, MapVersion.fw_minor).where(
-                MapVersion.map_id == map_id, MapVersion.fw_major.is_not(None)
-            )
-        )
-    ).all()
-    if not fw_rows:
-        major, minor = 1, 0
-    else:
-        cur_major, cur_minor = max(fw_rows)
-        if not payload.major:
-            # 무변경 게이트 — 최신 스냅샷과 콘텐츠 동일하면 409 (좌표만 이동은 변경 아님)
-            latest = await session.scalar(
-                select(MapVersion)
-                .where(
-                    MapVersion.map_id == map_id,
-                    MapVersion.fw_major == cur_major,
-                    MapVersion.fw_minor == cur_minor,
-                )
-                .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
-            )
-            if latest is not None and _canvas_content_signature(
-                draft.nodes, draft.edges
-            ) == _canvas_content_signature(latest.nodes, latest.edges):
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"no content changes since v{cur_major}.{cur_minor}",
-                )
-        major, minor = (cur_major + 1, 0) if payload.major else (cur_major, cur_minor + 1)
-
-    pruned_labels: list[str] = []
-    if payload.major and fw_rows:
-        # 직전 메이저 라인 정리 — X.0과 X.최종만 유지, 중간 마이너 영구삭제 (사용자 결정 2026-08-28)
-        prev_major, prev_max_minor = cur_major, cur_minor
-        prune_rows = (
-            await session.execute(
-                select(MapVersion.id, MapVersion.label)
-                .where(
-                    MapVersion.map_id == map_id,
-                    MapVersion.fw_major == prev_major,
-                    MapVersion.fw_minor > 0,
-                    MapVersion.fw_minor < prev_max_minor,
-                )
-                .order_by(MapVersion.fw_minor)
-            )
-        ).all()
-        for vid, label in prune_rows:
-            for child in _VERSION_CHILD_MODELS:
-                await session.execute(sa_delete(child).where(child.version_id == vid))
-            await session.execute(sa_delete(MapVersion).where(MapVersion.id == vid))
-            pruned_labels.append(label)
-
-    snapshot = MapVersion(
-        map_id=map_id, label=f"v{major}.{minor}", status=workflow.CONFIRMED,
-        fw_major=major, fw_minor=minor, submitted_by=user,
-    )
-    session.add(snapshot)
-    await session.flush()
-    await clone_graph(session, draft, snapshot.id)
-    record_version_event(session, snapshot.id, workflow.CONFIRMED, user)
-    await session.commit()
-    await session.refresh(snapshot)
-    return FrameworkConfirmOut(
-        version=VersionOut.model_validate(snapshot), pruned_labels=pruned_labels
+    failures = await validate_confirm_readiness(session, found_map, draft)
+    return ConfirmReadinessOut(
+        ready=not failures,
+        failures=[
+            GateFailureOut(code=f.code, count=f.count, node_ids=f.node_ids)
+            for f in failures
+        ],
     )
 
 

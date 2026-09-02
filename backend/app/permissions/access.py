@@ -99,6 +99,35 @@ async def is_category_admin(
     return bool(group_pids & user_group_ids)
 
 
+async def is_direct_l5_admin(
+    session: AsyncSession, login_id: str, category_id: int
+) -> bool:
+    """카테고리에 직접 붙은 권한자인지 — 조상 체인은 타지 않는다 (spec §5, 확정 권한 최소형).
+
+    is_category_admin 과 달리 상속을 허용하지 않는다 — 확정(framework-confirm)은
+    직속 L5 관리자 전용이라 상위 체인 관리자는 편집은 되지만 확정은 403.
+    """
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
+            .where(CategoryPermission.category_id == category_id)
+        )
+    ).all()
+    if not perm_rows:
+        return False
+    if any(ptype == "user" and pid == login_id for ptype, pid in perm_rows):
+        return True
+    group_pids = {pid for ptype, pid in perm_rows if ptype == "group"}
+    if not group_pids:
+        return False
+    emp = await session.get(Employee, login_id)
+    emp_org_path = (
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+    )
+    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+    return bool(group_pids & user_group_ids)
+
+
 async def get_effective_role(
     session: AsyncSession, login_id: str, map_id: int
 ) -> str | None:
