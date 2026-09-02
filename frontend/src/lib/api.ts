@@ -2692,6 +2692,11 @@ export function getPendingFwConfirmRequest(mapId: number): Promise<ApprovalReque
   return request<ApprovalRequest | null>(`/maps/${mapId}/fw-confirm-requests/pending`);
 }
 
+// 본인 pending 확정 요청 철회 — rename/sp-designation 철회 선례와 동일 계약
+export function withdrawFwConfirmRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/fw-confirm-requests/pending`, { method: "DELETE" });
+}
+
 export interface CategoryPermissionEntry {
   principal_type: "user" | "group";
   principal_id: string;

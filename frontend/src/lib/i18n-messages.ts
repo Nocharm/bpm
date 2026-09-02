@@ -1985,6 +1985,7 @@ const en = {
   "framework.requestConfirm": "Request confirm",
   "framework.requestedBy": "Requested by {name}",
   "framework.requestNotePlaceholder": "Note (optional)",
+  "framework.withdrawRequest": "Withdraw",
   "framework.adminTab": "Categories & import",
   "framework.adminReimportHint":
     "Re-imports overwrite category names/structure by code - the last delivery is the source of truth.",
@@ -4062,6 +4063,7 @@ const ko: Record<MessageKey, string> = {
   "framework.requestConfirm": "확정 요청",
   "framework.requestedBy": "{name} 님이 확정 요청함",
   "framework.requestNotePlaceholder": "메모 (선택)",
+  "framework.withdrawRequest": "철회",
   "framework.adminTab": "카테고리·임포트",
   "framework.adminReimportHint":
     "재임포트는 코드 기준으로 카테고리 이름·구조를 덮어씁니다 - 최신 배송본이 항상 최종 진실입니다.",

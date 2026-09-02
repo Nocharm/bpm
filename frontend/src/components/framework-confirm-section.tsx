@@ -4,7 +4,7 @@
 // 마이너 확정은 최신 스냅샷 대비 레이아웃 외 변경이 있을 때만(버튼 비활성 + 서버 409 미러),
 // 버튼 아래에 변경 요약(비교 diff 재활용: computeVersionDiff + 엣지 시그니처)을 노출한다.
 // 메이저 승급은 가시성 있는 토글 행 + 확인 모달(직전 라인 중간 마이너 영구삭제 안내) 경유.
-import { Archive, BadgeCheck, Check, Crosshair, Info, Trash2, TriangleAlert, Workflow, X } from "lucide-react";
+import { Archive, BadgeCheck, Check, Crosshair, Info, Trash2, TriangleAlert, Undo2, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -12,6 +12,7 @@ import {
   createFwConfirmRequest,
   getConfirmReadiness,
   getPendingFwConfirmRequest,
+  withdrawFwConfirmRequest,
   type ApprovalRequest,
   type ConfirmReadiness,
   type FrameworkConfirmResult,
@@ -32,6 +33,7 @@ export interface FrameworkConfirmSectionProps {
   mapId: number;
   canConfirm: boolean; // 직속 L5 관리자 또는 sysadmin — 스스로 확정 가능 (Track B Task 6, 의미 변경)
   canRequest: boolean; // 체인 상위 관리자(editor 파생) — 확정 위임 요청만 가능
+  currentUser: string | null; // 요청자 본인 판정(Withdraw 버튼 노출) — page.tsx username 소스
   versions: VersionSummary[]; // 스냅샷 라벨(vX.Y) 파싱 소스 — VersionDetail도 호환
   liveNodes: AppNode[];
   liveEdges: LiveEdgeShape[];
@@ -112,7 +114,7 @@ function MajorImpactRows({
 }
 
 export function FrameworkConfirmSection({
-  mapId, canConfirm, canRequest, versions, liveNodes, liveEdges, onConfirmed, onError, onFocusNode,
+  mapId, canConfirm, canRequest, currentUser, versions, liveNodes, liveEdges, onConfirmed, onError, onFocusNode,
 }: FrameworkConfirmSectionProps) {
   const { t } = useI18n();
   const [major, setMajor] = useState(false);
@@ -153,6 +155,7 @@ export function FrameworkConfirmSection({
   const [pendingRequest, setPendingRequest] = useState<ApprovalRequest | null>(null);
   const [requestNote, setRequestNote] = useState("");
   const [requestBusy, setRequestBusy] = useState(false);
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
   useEffect(() => {
     if (canConfirm || !canRequest) return;
     let active = true;
@@ -169,6 +172,16 @@ export function FrameworkConfirmSection({
       })
       .catch((err) => onError(humanizeApiError(err, t)))
       .finally(() => setRequestBusy(false));
+  }
+
+  // 철회 성공 시 pending 재조회로 CTA(입력폼)에 복귀 — 로컬 null 대입 대신 서버를 다시 신뢰
+  function withdrawRequest() {
+    setWithdrawBusy(true);
+    withdrawFwConfirmRequest(mapId)
+      .then(() => getPendingFwConfirmRequest(mapId))
+      .then((req) => setPendingRequest(req))
+      .catch((err) => onError(humanizeApiError(err, t)))
+      .finally(() => setWithdrawBusy(false));
   }
 
   const snapshots = useMemo(() => parseSnapshots(versions), [versions]);
@@ -347,6 +360,18 @@ export function FrameworkConfirmSection({
               {t("framework.requestedBy", {
                 name: String(pendingRequest.payload?.actor_name ?? pendingRequest.requested_by),
               })}
+              {currentUser !== null && pendingRequest.requested_by === currentUser && (
+                <button
+                  type="button"
+                  data-id="framework-request-withdraw"
+                  className="ml-auto flex items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-50"
+                  onClick={withdrawRequest}
+                  disabled={withdrawBusy}
+                >
+                  <Undo2 size={12} strokeWidth={1.5} />
+                  {t("framework.withdrawRequest")}
+                </button>
+              )}
             </p>
           ) : (
             <>

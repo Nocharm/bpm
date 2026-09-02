@@ -15,7 +15,7 @@ from sqlalchemy import select
 import app.auth as auth_mod
 from app.db import SessionLocal
 from app.main import app
-from app.models import ApprovalRequest, Notification
+from app.models import ApprovalRequest, Employee, Notification, UserGroup, UserGroupMember
 from app.settings import settings
 from tests.test_framework_canvas import (
     SYSADMIN,
@@ -87,6 +87,25 @@ def _pending(map_id: int) -> ApprovalRequest | None:
         )
 
     return _seed(_q)
+
+
+def _seed_group(user_members: list[str]) -> int:
+    """active user 그룹 시드 — 카테고리 principal_type='group' 권한자 대상
+    (test_group_judgment.seed_group_map 선례, 여기는 map grant 대신 category grant라 맵은 만들지 않는다).
+    """
+
+    async def _make(session):
+        for uid in user_members:
+            if await session.get(Employee, uid) is None:
+                session.add(Employee(login_id=uid, name=uid, source="ad", role="user"))
+        grp = UserGroup(name="fwcf-group", status="active", created_by=SYSADMIN)
+        session.add(grp)
+        await session.flush()
+        for uid in user_members:
+            session.add(UserGroupMember(group_id=grp.id, member_type="user", member_id=uid))
+        return grp.id
+
+    return _seed(_make)
 
 
 def _notes_for(map_id: int) -> list[tuple[str, str]]:
@@ -284,3 +303,70 @@ class TestListApprovalRequestsFrameworkAccess:
         assert r.status_code == 200, r.text
         kinds = [row["kind"] for row in r.json()]
         assert "fw_confirm" in kinds
+
+
+class TestWithdrawFwConfirmRequest:
+    """DELETE .../fw-confirm-requests/pending — rename 철회 템플릿 복제(kind='fw_confirm')."""
+
+    def test_requester_withdraws_then_can_request_again(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        map_id, _ = _make_hierarchical_canvas(client, "FWCF-WD-OK", "철회재요청")
+        act_as(UPPER)
+        rid = client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={}).json()["id"]
+
+        r = client.delete(f"/api/maps/{map_id}/fw-confirm-requests/pending")
+        assert r.status_code == 204, r.text
+
+        async def _get(session):
+            return await session.get(ApprovalRequest, rid)
+
+        req = _seed(_get)
+        assert req.status == "withdrawn"
+        assert _pending(map_id) is None
+
+        # 이전 요청이 pending 슬롯을 더 이상 점유하지 않으니 새 요청이 가능해야 한다
+        r2 = client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        assert r2.status_code == 201, r2.text
+
+    def test_other_user_cannot_withdraw(self, client: TestClient, enforce: None) -> None:
+        map_id, _ = _make_hierarchical_canvas(client, "FWCF-WD-403", "철회거부")
+        act_as(UPPER)
+        client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        act_as(DIRECT)  # 요청자가 아닌 직속 L5 관리자
+        r = client.delete(f"/api/maps/{map_id}/fw-confirm-requests/pending")
+        assert r.status_code == 403
+        assert _pending(map_id) is not None
+
+    def test_withdraw_without_pending_404(self, client: TestClient, enforce: None) -> None:
+        map_id, _ = _make_hierarchical_canvas(client, "FWCF-WD-404", "철회없음")
+        act_as(UPPER)
+        r = client.delete(f"/api/maps/{map_id}/fw-confirm-requests/pending")
+        assert r.status_code == 404
+
+
+class TestGroupRecipient:
+    """principal_type='group' 카테고리 권한자 — 그룹 멤버가 fw_confirm_requested 알림 수신
+    (Layer 4 §3a 그룹 판정 + Track B Task 5 알림 파이프라인 결합 실증, Track C Task 3)."""
+
+    def test_group_member_receives_fw_confirm_requested_notification(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        l1 = _seed_category(client, "FWCF-GRP-L1", "그룹수신L1")
+        l5 = _seed_category(client, "FWCF-GRP-L5", "그룹수신L5", level=5, parent_id=l1)
+        _seed_l6_map(client, l5, "그룹수신업무1", "FWCF-GRPM1")
+        act_as(SYSADMIN)
+        client.put(f"/api/categories/{l1}/permissions",
+                   json={"permissions": [{"principal_type": "user", "principal_id": UPPER}]})
+        group_member = "fwct5.groupmem"
+        group_id = _seed_group(user_members=[group_member])
+        client.put(f"/api/categories/{l5}/permissions",
+                   json={"permissions": [{"principal_type": "group", "principal_id": str(group_id)}]})
+        map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+
+        act_as(UPPER)
+        r = client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        assert r.status_code == 201, r.text
+
+        notes = _notes_for(map_id)
+        assert ("fw_confirm_requested", group_member) in notes

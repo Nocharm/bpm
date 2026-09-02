@@ -11356,6 +11356,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           mapId={mapId}
                           canConfirm={canConfirmFw}
                           canRequest={myRole === "editor" && !canConfirmFw}
+                          currentUser={username}
                           versions={versions}
                           liveNodes={nodes}
                           liveEdges={edges}
