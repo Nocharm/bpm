@@ -98,7 +98,7 @@ def _join_lines(lines: list[str]) -> str:
 def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int:
     """아웃풋 항목과 인풋 항목의 텍스트가 완전일치하면 IO 링크로 잇는다. 반환: 건 수.
 
-    설계: docs/superpowers/specs/2026-08-21-io-linking-design.md(링크 그룹 불변식) +
+    설계: 2026-08-21-io-linking-design.md(링크 그룹 불변식) +
     2026-09-01-interview-import-v04-design.md §7.
 
     - 매칭 단위는 **줄(항목)**, `strip()` 후 완전일치(대소문자·공백 정규화 없음 — 전달물 표기가 진실)

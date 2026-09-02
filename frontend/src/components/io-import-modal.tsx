@@ -2,7 +2,7 @@
 
 // IO 항목 불러오기 선택 모달 — EdgeSelectModal의 크롬(포탈·투명 백드롭·헤더+X·Esc·edge-row-in 스태거·
 // 내부 스크롤·하단 Cancel)을 본떠, 후보를 필터+홉 축약(기본 2홉, Show more)으로 노드별 그룹핑해 보여준다.
-// 불러오기 실행은 상위(onPick)에 위임 — 이 컴포넌트는 순수 선택 UI. 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md
+// 불러오기 실행은 상위(onPick)에 위임 — 이 컴포넌트는 순수 선택 UI. 설계: 2026-08-21-io-linking-design.md
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";

@@ -1,6 +1,6 @@
 // 표시 높이(실측)로 커진 노드 아래를 저장 Y 계단함수로 밀어내는 스텝 생성 — 저장 좌표 불변.
 // 오프셋 조회·역변환은 lib/inline-shift(offsetAtSavedX/displayToSavedX)를 Y축으로 재사용.
-// 설계: docs/superpowers/specs/2026-08-23-node-spacing-design.md §4
+// 설계: 2026-08-23-node-spacing-design.md §4
 import {
   estimateNodeHeight,
   estimateNodeWidth,

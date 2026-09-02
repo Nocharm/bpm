@@ -1,6 +1,6 @@
 # 필드 승격 QA 체크리스트 (2026-08-20)
 
-설계 `docs/design/2026-08-19-field-promotion-design.md` · 플랜 Phase V. 실브라우저 검증은 QA 문서 주도(사용자 지시 2026-08-20) — 자동 항목은 `frontend/scripts/pw-smoke-field-promotion.mjs`가 체크하고, 이 표에 결과를 기록한다.
+설계 `2026-08-19-field-promotion-design.md` · 플랜 Phase V. 실브라우저 검증은 QA 문서 주도(사용자 지시 2026-08-20) — 자동 항목은 `frontend/scripts/pw-smoke-field-promotion.mjs`가 체크하고, 이 표에 결과를 기록한다.
 
 **환경**: 격리 sqlite DB(`reset_db` 시드) + backend 8000(`DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys AI_ENABLED=false`) + frontend 3000 네이티브, 시스템 Chrome(playwright-core), devUser=admin.sys. 임포트는 설정 > Framework > Interview import(웹 단일 경로)로 샘플 2파일.
 

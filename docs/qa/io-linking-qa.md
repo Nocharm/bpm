@@ -1,6 +1,6 @@
 # IO 연결(불러오기) 브라우저 QA 검수 — 2026-08-21 (M·N·P·Q·R·S 라운드 2026-08-23)
 
-`feat/io-linking` 전면 브라우저 검수. 실행 환경: 로컬 네이티브(backend :8000 + frontend :3000) + Playwright/시스템 Chrome, `admin.sys`. 스펙: `docs/superpowers/specs/2026-08-21-io-linking-design.md`.
+`feat/io-linking` 전면 브라우저 검수. 실행 환경: 로컬 네이티브(backend :8000 + frontend :3000) + Playwright/시스템 Chrome, `admin.sys`. 스펙: `2026-08-21-io-linking-design.md`.
 
 표기: ✅ 통과 · ❌ 결함(하단 이슈 절에 기록) · ➖ 해당 없음/차단됨(사유 기록) · (스모크) = pw-smoke-io-links.mjs 26체크가 이미 자동 검증한 항목(재확인은 시각 위주).
 

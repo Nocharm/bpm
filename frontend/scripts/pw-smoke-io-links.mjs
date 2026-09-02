@@ -1,6 +1,6 @@
 // IO 링크(불러오기) 엔드투엔드 스모크 — 노드 A(output "회의록") → B에 미러 행 불러오기,
 // 캔버스 하이라이트(.edge-hover-highlight/.io-node-highlight), 리로드 라운드트립, 원본 편집 전파,
-// 해제 draft 취소·영속을 실기동으로 검증. 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md
+// 해제 draft 취소·영속을 실기동으로 검증. 설계: 2026-08-21-io-linking-design.md
 // 실행(frontend/ 에서): node scripts/pw-smoke-io-links.mjs  (playwright-core, 서버 8000/3000 기동 전제,
 // reset_db 시드 — admin.sys sysadmin 필요). 테스트 맵은 API로 생성 후 teardown에서 소프트삭제+ORM 하드퍼지.
 import { execFileSync } from "node:child_process";

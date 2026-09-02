@@ -1,6 +1,6 @@
 // height-shift(#1) 엔드투엔드 스모크 — IO 리스트 펼침/접힘이 아래 노드를 밀어내고 복원하는지,
 // 저장 좌표(pos_y)는 표시 오프셋과 무관히 그대로인지, 펼친 상태에서의 드래그도 오프셋 없이
-// 저장되는지를 실기동으로 검증. 설계: docs/superpowers/specs/2026-08-23-node-spacing-design.md §4·§6·§7
+// 저장되는지를 실기동으로 검증. 설계: 2026-08-23-node-spacing-design.md §4·§6·§7
 // 실행(frontend/ 에서): node scripts/pw-smoke-height-shift.mjs  (playwright-core, 서버 8000/3000 기동 전제,
 // reset_db 시드 — admin.sys sysadmin 필요). 테스트 맵은 API로 생성 후 teardown에서 소프트삭제+ORM 하드퍼지.
 import { execFileSync } from "node:child_process";

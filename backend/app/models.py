@@ -343,7 +343,7 @@ class Node(Base):
     output_forms: Mapped[str] = mapped_column(Text, default="")
     # IO 링크(불러오기) — 줄 정렬 계약은 input_forms와 동일. output_ids=원본 항목 id(원본만),
     # *_links=미러의 원본 itemId 참조, input_flags=필수/선택(빈 줄=required, "optional"만 명시).
-    # 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md §3
+    # 설계: 2026-08-21-io-linking-design.md §3
     output_ids: Mapped[str] = mapped_column(Text, default="")
     input_links: Mapped[str] = mapped_column(Text, default="")
     output_links: Mapped[str] = mapped_column(Text, default="")

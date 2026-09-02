@@ -1,4 +1,4 @@
-// io-items 단위 테스트 — 줄 정렬·판정·인덱스·SP id 부여 + 흐름 경로·불러오기 후보. 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md
+// io-items 단위 테스트 — 줄 정렬·판정·인덱스·SP id 부여 + 흐름 경로·불러오기 후보. 설계: 2026-08-21-io-linking-design.md
 
 import { describe, expect, it } from "vitest";
 import type { Edge } from "@xyflow/react";

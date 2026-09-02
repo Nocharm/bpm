@@ -1,4 +1,4 @@
-// IO 연결(불러오기) 단일 소스 — 줄 정렬·판정·인덱스·후보·불러오기·전파. 설계: docs/superpowers/specs/2026-08-21-io-linking-design.md
+// IO 연결(불러오기) 단일 소스 — 줄 정렬·판정·인덱스·후보·불러오기·전파. 설계: 2026-08-21-io-linking-design.md
 
 import type { Edge } from "@xyflow/react";
 
