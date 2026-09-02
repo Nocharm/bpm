@@ -21,16 +21,26 @@ from app.models import (
     ProcessCategory,
     ProcessMap,
 )
+from app.framework_confirm import load_confirm_draft
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
-from app.permissions.access import get_admin_scope, get_user_active_group_ids, is_category_admin
+from app.permissions.access import (
+    get_admin_scope,
+    get_category_admin_logins,
+    get_user_active_group_ids,
+    is_category_admin,
+)
 from app.schemas import (
+    CategoryAdminOut,
     CategoryCreateIn,
     CategoryMapsOut,
     CategoryNodeOut,
     CategoryPermissionEntry,
     CategoryPermissionsIn,
     CategoryPermissionsOut,
+    CategorySubtreeConfirmOut,
+    CategorySummaryL5Out,
+    CategorySummaryOut,
     CategoryUpdateIn,
     FrameworkImportRow,
     FrameworkOverviewOut,
@@ -52,6 +62,7 @@ from app.subprocess import (
     find_missing_l6_ids,
     grid_positions,
     unique_linkage_name,
+    validate_confirm_readiness,
     validate_confirm_readiness_batch,
 )
 from app.version_events import record_version_event
@@ -486,6 +497,177 @@ async def get_framework_overview(
         )
     rows_out.sort(key=lambda row: row.path)
     return FrameworkOverviewOut(rows=rows_out)
+
+
+async def _summary_admins(
+    session: AsyncSession, category_id: int, by_id: dict[int, Row]
+) -> list[CategoryAdminOut]:
+    """조상 체인 포함 관리자 "개인" 목록 — 동일인이 여러 행(자신+조상)에 걸리면 최소 level(가장
+    상위 조상) 채택 (Track C Task 5, 브리프 지침). get_category_admin_logins(direct_only=False)는
+    login 집합만 줘서 "행이 붙은 카테고리의 level"을 못 담으므로, 체인(최대 5단)을 거슬러 오르며
+    카테고리별로 direct_only=True 재조회한다 — 길이가 짧아 N+1이어도 무해하다.
+    """
+    chain_ids: list[int] = []
+    cursor: int | None = category_id
+    while cursor is not None and cursor in by_id:
+        chain_ids.append(cursor)
+        cursor = by_id[cursor].parent_id
+
+    level_by_login: dict[str, int] = {}
+    for cid in chain_ids:
+        for login in await get_category_admin_logins(session, cid, direct_only=True):
+            level = by_id[cid].level
+            if login not in level_by_login or level < level_by_login[login]:
+                level_by_login[login] = level
+
+    if not level_by_login:
+        return []
+    # get_display_name과 동일 규칙(Employee.name, 없으면 login_id)을 배치 1쿼리로 재현
+    name_by_login = dict(
+        (
+            await session.execute(
+                select(Employee.login_id, Employee.name).where(
+                    Employee.login_id.in_(level_by_login.keys())
+                )
+            )
+        ).all()
+    )
+    return [
+        CategoryAdminOut(login_id=lid, name=name_by_login.get(lid) or lid, level=level_by_login[lid])
+        for lid in sorted(level_by_login)
+    ]
+
+
+async def _summary_l5(session: AsyncSession, map_id: int | None) -> CategorySummaryL5Out:
+    """level==5 캔버스 상태 — framework-overview 1행과 동치 계산을 단건으로(브리프 지침:
+    배치 대신 validate_confirm_readiness 단건판 사용).
+    """
+    if map_id is None:
+        return CategorySummaryL5Out()
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None:  # 고아 linkage_map_id(무결성 위반) 방어 — 포인터는 유지, 나머지는 미상(None)
+        return CategorySummaryL5Out(linkage_map_id=map_id)
+    draft = await load_confirm_draft(session, map_id)
+    latest: tuple[int, int, str | None, object] | None = None
+    for major, minor, submitted_by, created_at in (
+        await session.execute(
+            select(
+                MapVersion.fw_major, MapVersion.fw_minor,
+                MapVersion.submitted_by, MapVersion.created_at,
+            ).where(MapVersion.map_id == map_id, MapVersion.status == workflow.CONFIRMED)
+        )
+    ).all():
+        if latest is None or (major, minor) > (latest[0], latest[1]):
+            latest = (major, minor, submitted_by, created_at)
+    failures = await validate_confirm_readiness(session, found_map, draft) if draft is not None else None
+    return CategorySummaryL5Out(
+        linkage_map_id=map_id,
+        latest_fw=f"v{latest[0]}.{latest[1]}" if latest else None,
+        confirmed_by=latest[2] if latest else None,
+        confirmed_at=latest[3].isoformat() if latest else None,
+        ready=(not failures) if failures is not None else None,
+        failures=(
+            [GateFailureCountOut(code=f.code, count=f.count) for f in failures] if failures else []
+        ),
+    )
+
+
+@router.get("/{category_id}/summary", response_model=CategorySummaryOut)
+async def get_category_summary(
+    category_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> CategorySummaryOut:
+    """카테고리 1노드 레벨 요약 — 담당자 파악 목적이라 로그인 전체 열람(가시성 판정 없음, 404만,
+    spec §8.3). level==5는 자기 캔버스 상태(l5), level<5는 서브트리 L5 확정 현황 3종(subtree_confirm).
+    """
+    cat_rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
+                ProcessCategory.name, ProcessCategory.linkage_map_id,
+            )
+        )
+    ).all()
+    by_id = {r.id: r for r in cat_rows}
+    if category_id not in by_id:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    category = by_id[category_id]
+
+    paths = build_category_paths([(r.id, r.parent_id, r.name) for r in cat_rows])
+
+    children_by_parent: dict[int | None, list[int]] = {}
+    for r in cat_rows:
+        children_by_parent.setdefault(r.parent_id, []).append(r.id)
+    child_count = len(children_by_parent.get(category_id, []))
+
+    # 서브트리(자기 포함) BFS — visited 가드로 (동시성) 부모 사이클에도 종료 보장 (delete_category 선례)
+    subtree_ids: set[int] = {category_id}
+    frontier = children_by_parent.get(category_id, [])
+    while frontier:
+        subtree_ids.update(frontier)
+        frontier = [
+            nid for n in frontier for nid in children_by_parent.get(n, []) if nid not in subtree_ids
+        ]
+    subtree_l5_rows = [by_id[i] for i in subtree_ids if by_id[i].level == 5]
+
+    own_map_count: dict[int, int] = dict(
+        (
+            await session.execute(
+                select(ProcessMap.category_id, func.count())
+                .where(ProcessMap.deleted_at.is_(None), ProcessMap.category_id.is_not(None))
+                .group_by(ProcessMap.category_id)
+            )
+        ).all()
+    )
+    subtree_map_count = _subtree_map_counts(cat_rows, own_map_count).get(category_id, 0)
+
+    admins = await _summary_admins(session, category_id, by_id)
+
+    l5_out: CategorySummaryL5Out | None = None
+    subtree_confirm_out: CategorySubtreeConfirmOut | None = None
+    if category.level == 5:
+        l5_out = await _summary_l5(session, category.linkage_map_id)
+    else:
+        l5_map_ids = [r.linkage_map_id for r in subtree_l5_rows if r.linkage_map_id is not None]
+        confirmed_map_ids: set[int] = set()
+        if l5_map_ids:
+            confirmed_map_ids = set(
+                (
+                    await session.scalars(
+                        select(MapVersion.map_id)
+                        .where(
+                            MapVersion.map_id.in_(l5_map_ids),
+                            MapVersion.status == workflow.CONFIRMED,
+                        )
+                        .distinct()
+                    )
+                ).all()
+            )
+        no_canvas = sum(1 for r in subtree_l5_rows if r.linkage_map_id is None)
+        confirmed = sum(
+            1 for r in subtree_l5_rows
+            if r.linkage_map_id is not None and r.linkage_map_id in confirmed_map_ids
+        )
+        # 우선순위(상호배타, 브리프 고정): no_canvas > 스냅샷≥1이면 confirmed > 나머지 not_ready
+        # — ready==False라도 스냅샷이 있으면 confirmed로 집계(정의 충돌 해소, CLAUDE.md 계약과 동일 표기)
+        not_ready = len(subtree_l5_rows) - no_canvas - confirmed
+        subtree_confirm_out = CategorySubtreeConfirmOut(
+            confirmed=confirmed, not_ready=not_ready, no_canvas=no_canvas
+        )
+
+    return CategorySummaryOut(
+        id=category_id,
+        name=category.name,
+        level=category.level,
+        path=paths.get(category_id, category.name),
+        child_count=child_count,
+        subtree_l5_count=len(subtree_l5_rows),
+        subtree_map_count=subtree_map_count,
+        admins=admins,
+        l5=l5_out,
+        subtree_confirm=subtree_confirm_out,
+    )
 
 
 _INTERVIEW_ISSUE_CAP = 200  # 파일당 이슈 표시 상한 — 초과분은 말미 요약 1행

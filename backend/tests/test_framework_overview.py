@@ -28,6 +28,24 @@ from tests.test_framework_canvas import (
 )
 
 
+def _make_canvas_under(
+    client: TestClient, code: str, name: str, parent_id: int | None, *, confirmer: str
+) -> tuple[int, int, int]:
+    """_make_canvas와 동치 — level<5 요약(subtree_confirm)이 부모 아래 여러 L5를 필요로 해서
+    parent_id를 받는 변형만 로컬로 둔다(Track C Task 5). 반환 (category_id, map_id, draft_id).
+    """
+    l5 = _seed_category(client, code, name, level=5, parent_id=parent_id)
+    _seed_l6_map(client, l5, f"{name}업무1", f"{code}M1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": confirmer}]})
+    act_as(confirmer)
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    return l5, map_id, draft["id"]
+
+
 @pytest.fixture
 def enforce(client: TestClient) -> Iterator[None]:
     """auth ON + test_framework_canvas와 동일 sysadmin (fixture는 각 테스트 파일에 로컬 정의하는 기존 관례)."""
@@ -251,3 +269,80 @@ def test_validate_confirm_readiness_batch_matches_single(
         "placeholder", "missing_l6", "stale_link",
         "l6_unpublished", "noexit_cycle", "plain_fanout",
     }
+
+
+def test_summary_l5_reports_canvas_state(client: TestClient, enforce: None) -> None:
+    """GET /categories/{id}/summary — level==5는 자기 캔버스 확정 상태(l5)를 담고 subtree_confirm은 None."""
+    l5, map_id, _draft_id = _make_canvas_under(
+        client, "SMY-L5", "요약L5", None, confirmer="smy.l5confirmer"
+    )
+    act_as("smy.l5confirmer")
+    confirm = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+    assert confirm.status_code == 200, confirm.text
+
+    # 게이트: 로그인 전체 — 카테고리 권한이 전혀 없는 사용자도 열람 가능
+    act_as("smy.anyone")
+    res = client.get(f"/api/categories/{l5}/summary")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["level"] == 5
+    assert body["child_count"] == 0
+    assert body["subtree_l5_count"] == 1  # 자기 자신 — L5는 항상 리프
+    assert body["subtree_map_count"] == 1  # _make_canvas_under가 소속 L6 1개를 시드
+    assert body["subtree_confirm"] is None
+    l5_out = body["l5"]
+    assert l5_out["linkage_map_id"] == map_id
+    assert l5_out["latest_fw"] == "v1.0"
+    assert l5_out["confirmed_by"] == "smy.l5confirmer"
+    assert l5_out["confirmed_at"] is not None
+    assert l5_out["ready"] is True
+    assert l5_out["failures"] == []
+
+
+def test_summary_l2_counts_subtree_confirm_states(client: TestClient, enforce: None) -> None:
+    """level<5 요약 — 서브트리 L5 3종(confirmed·not_ready·no_canvas) 카운트가 상호배타로 집계된다."""
+    parent = _seed_category(client, "SMY-L2", "요약L2")
+
+    _confirmed_l5, confirmed_map_id, _confirmed_draft_id = _make_canvas_under(
+        client, "SMY-CONF", "요약확정", parent, confirmer="smy.confirmer1"
+    )
+    act_as("smy.confirmer1")
+    confirm = client.post(f"/api/maps/{confirmed_map_id}/framework-confirm", json={})
+    assert confirm.status_code == 200, confirm.text
+
+    _make_canvas_under(client, "SMY-NR", "요약미확정", parent, confirmer="smy.confirmer2")
+
+    _seed_category(client, "SMY-NC", "요약캔버스없음", level=5, parent_id=parent)
+
+    act_as(SYSADMIN)
+    res = client.get(f"/api/categories/{parent}/summary")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["level"] < 5
+    assert body["child_count"] == 3
+    assert body["subtree_l5_count"] == 3
+    assert body["subtree_confirm"] == {"confirmed": 1, "not_ready": 1, "no_canvas": 1}
+    assert body["l5"] is None
+
+
+def test_summary_404_for_unknown_category(client: TestClient, enforce: None) -> None:
+    act_as("smy.anyone")
+    assert client.get("/api/categories/999999/summary").status_code == 404
+
+
+def test_summary_admins_include_inherited_ancestor_row(client: TestClient, enforce: None) -> None:
+    """admins는 직접+조상 체인 행 — level은 그 사람이 걸린 행이 붙은 카테고리 레벨(상속=조상 레벨)."""
+    l1 = _seed_category(client, "SMY-ADM-L1", "요약관리자L1")
+    l2 = _seed_category(client, "SMY-ADM-L2", "요약관리자L2", level=2, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "smy.l1admin"}]})
+    client.put(f"/api/categories/{l2}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "smy.l2admin"}]})
+
+    act_as("smy.viewer")
+    res = client.get(f"/api/categories/{l2}/summary")
+    assert res.status_code == 200, res.text
+    admins = {a["login_id"]: a for a in res.json()["admins"]}
+    assert admins["smy.l1admin"]["level"] == 1  # 상속 행 — L1의 level로 표기
+    assert admins["smy.l2admin"]["level"] == 2  # 직접 행 — L2 자신의 level
