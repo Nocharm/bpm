@@ -58,6 +58,7 @@ import {
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FrameworkOverview } from "@/components/admin/framework-overview";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -122,6 +123,8 @@ type NamePrompt =
 
 export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const { t } = useI18n();
+  // Manage(트리+임포트) ↔ Status(배치 현황판) 세그먼트 — 홈 뷰 토글(home-view-toggle) 스타일 복제 (Track C Task 7)
+  const [panelView, setPanelView] = useState<"manage" | "status">("manage");
   const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(
     new Map(),
   );
@@ -676,6 +679,32 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         )}
       </div>
 
+      {/* 뷰 토글 — Manage(트리+임포트) ↔ Status(배치 현황판). 홈 home-view-toggle과 동일 스타일 */}
+      <div
+        data-id="framework-view-toggle"
+        className="flex shrink-0 items-center gap-0.5 self-start rounded-sm border border-hairline bg-surface p-0.5"
+      >
+        {(["manage", "status"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={panelView === v}
+            className={`rounded-sm px-2.5 py-1 text-caption transition-colors ${
+              panelView === v
+                ? "bg-accent-tint text-accent"
+                : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            }`}
+            onClick={() => setPanelView(v)}
+          >
+            {t(v === "manage" ? "framework.viewManage" : "framework.viewStatus")}
+          </button>
+        ))}
+      </div>
+
+      {panelView === "status" ? (
+        <FrameworkOverview />
+      ) : (
+        <>
       <div data-id="framework-admin-tree" className="rounded-sm border border-hairline p-2">
         {rootError ? (
           <button
@@ -924,6 +953,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </div>
         )}
       </div>
+      )}
+        </>
       )}
 
       {confirmInterviewApply && interviewResult && (

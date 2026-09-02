@@ -2769,6 +2769,31 @@ export function deleteCategory(id: number): Promise<void> {
   return request<void>(`/categories/${id}`, { method: "DELETE" });
 }
 
+// 배치 현황판 게이트 위반 1건 — GateFailureCountOut 미러(node_ids 생략) (Track C Task 7)
+export interface FrameworkOverviewGateFailure {
+  code: string;
+  count: number;
+}
+
+// 배치 현황판 1행 — L5 카테고리 1개의 연계 캔버스 상태 요약 (Track C Task 7)
+export interface FrameworkOverviewRow {
+  category_id: number;
+  path: string;
+  linkage_map_id: number | null;
+  latest_fw: string | null; // "v2.1" — 확정 스냅샷 없으면 null
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  ready: boolean | null; // 캔버스(linkage_map_id) 없으면 null
+  failures: FrameworkOverviewGateFailure[];
+}
+
+// L5 연계 캔버스 배치 현황판 — rootId 생략 시 sysadmin은 전사, 카테고리 관리자는 자기 스코프 전체
+// (서버가 자동 판정, categories.py get_framework_overview) — 생략 1회 호출이 스코프 분기보다 단순.
+export function getFrameworkOverview(rootId?: number): Promise<{ rows: FrameworkOverviewRow[] }> {
+  const qs = rootId === undefined ? "" : `?root_id=${rootId}`;
+  return request<{ rows: FrameworkOverviewRow[] }>(`/categories/framework-overview${qs}`);
+}
+
 export interface FrameworkImportRow {
   code: string;
   action: string;
