@@ -604,10 +604,19 @@ async def _category_metrics(session: AsyncSession, category_id: int) -> tuple[in
 @router.post("", response_model=CategoryNodeOut, status_code=201)
 async def create_category(
     payload: CategoryCreateIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryNodeOut:
-    """카테고리 생성 — parent_id 지정 시 level=parent+1(무부모=1), code 미지정 시 `ui-` 접두 자동채번."""
+    """카테고리 생성 — parent_id 지정 시 level=parent+1(무부모=1), code 미지정 시 `ui-` 접두 자동채번.
+
+    위임 게이트(design 트랙 C §7): 생성은 서브트리 전체(seed 자신 포함) 허용 — parent_id가
+    관리자의 admin_ids 안이면 OK. 루트 생성(parent_id=None)은 sysadmin 전용 유지.
+    """
+    if not logic.is_sysadmin(user):
+        admin_ids, _seeds = await get_admin_scope(session, user)
+        if payload.parent_id is None or payload.parent_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
+
     level = 1
     if payload.parent_id is not None:
         parent = await session.get(ProcessCategory, payload.parent_id)
@@ -659,13 +668,26 @@ async def create_category(
 async def update_category(
     category_id: int,
     payload: CategoryUpdateIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryNodeOut:
-    """이름·정렬 갱신 + 이동(서브트리 level 재계산). parent_id는 fields_set으로 미전송/null 구분."""
+    """이름·정렬 갱신 + 이동(서브트리 level 재계산). parent_id는 fields_set으로 미전송/null 구분.
+
+    위임 게이트(design 트랙 C §7): 개명·정렬은 서브트리 전체(seed 자신 포함) 허용 — category_id가
+    admin_ids 안이면 OK. 이동(parent_id가 실제로 변경될 때만)은 seed 자신 금지 + 새 부모도
+    admin_ids 안이어야 함.
+    """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+
+    is_sysadmin = logic.is_sysadmin(user)
+    admin_ids: set[int] = set()
+    seeds: dict[int, int] = {}
+    if not is_sysadmin:
+        admin_ids, seeds = await get_admin_scope(session, user)
+        if category_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
 
     if payload.name is not None:
         category.name = payload.name
@@ -680,6 +702,14 @@ async def update_category(
     moved = False
     if "parent_id" in payload.model_fields_set:
         new_parent_id = payload.parent_id  # None=루트로 이동
+        wants_move = new_parent_id != category.parent_id
+        if not is_sysadmin and wants_move:
+            if category_id in seeds:
+                raise HTTPException(
+                    status_code=403, detail="cannot move a delegated seed category"
+                )
+            if new_parent_id not in admin_ids:
+                raise HTTPException(status_code=403, detail="outside your delegated subtree")
         rows = (
             await session.execute(
                 select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
@@ -780,14 +810,26 @@ async def update_category(
 @router.delete("/{category_id}", status_code=204)
 async def delete_category(
     category_id: int,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """서브트리 묶음 삭제 — 서브트리 어디든 연결 맵(소프트삭제 포함)이 1개라도 있으면 409,
-    없으면 하위 카테고리까지 통째로 삭제(2026-08-12 정책: 빈 하위는 개별 정리 없이 묶음 처리)."""
+    없으면 하위 카테고리까지 통째로 삭제(2026-08-12 정책: 빈 하위는 개별 정리 없이 묶음 처리).
+
+    위임 게이트(design 트랙 C §7): 삭제는 seed 자신 금지 — 하위(서브트리 내 non-seed)는 허용.
+    """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+
+    if not logic.is_sysadmin(user):
+        admin_ids, seeds = await get_admin_scope(session, user)
+        if category_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
+        if category_id in seeds:
+            raise HTTPException(
+                status_code=403, detail="cannot delete a delegated seed category"
+            )
 
     # 서브트리 수집(자기 포함) — BFS, visited 가드로 (동시성) 부모 사이클에도 종료 보장.
     rows = (
@@ -954,15 +996,36 @@ async def open_linkage_map(
     return LinkageMapOut(map_id=canvas.id, added_count=len(missing), missing_count=0)
 
 
+async def _assert_can_manage_appointments(
+    session: AsyncSession, user: str, category: ProcessCategory
+) -> None:
+    """임명(perms GET·PUT) 위임 게이트 — 서브트리 내 + 대상 level > min(관리자 seed levels).
+
+    구현 단순화(브리프 지시): 다중 seed 케이스에서 최상위(최소 level) seed 기준으로 판정 —
+    가장 관대하지만 §7 의도(하위 레벨만 임명 가능)에 부합한다.
+    """
+    if logic.is_sysadmin(user):
+        return
+    admin_ids, seeds = await get_admin_scope(session, user)
+    if category.id not in admin_ids:
+        raise HTTPException(status_code=403, detail="outside your delegated subtree")
+    if category.level <= min(seeds.values()):
+        raise HTTPException(
+            status_code=403, detail="can only manage lower-level categories"
+        )
+
+
 @router.get("/{category_id}/permissions", response_model=CategoryPermissionsOut)
 async def list_category_permissions(
     category_id: int,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryPermissionsOut:
-    """카테고리 권한자 목록 — sysadmin 전용 (설정 Framework 탭 관리 화면)."""
-    if await session.get(ProcessCategory, category_id) is None:
+    """카테고리 권한자 목록 — sysadmin 또는 상위 위임 관리자 (설정 Framework 탭 관리 화면)."""
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    await _assert_can_manage_appointments(session, user, category)
     return await _load_category_permissions(session, category_id)
 
 
@@ -970,12 +1033,14 @@ async def list_category_permissions(
 async def set_category_permissions(
     category_id: int,
     payload: CategoryPermissionsIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryPermissionsOut:
     """권한자 전체 교체 — 멱등 PUT(setApprovers 선례). 중복 항목은 1개로 접는다."""
-    if await session.get(ProcessCategory, category_id) is None:
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    await _assert_can_manage_appointments(session, user, category)
     await session.execute(
         delete(CategoryPermission).where(CategoryPermission.category_id == category_id)
     )
@@ -988,7 +1053,7 @@ async def set_category_permissions(
         session.add(
             CategoryPermission(
                 category_id=category_id, principal_type=entry.principal_type,
-                principal_id=entry.principal_id, granted_by=login_id,
+                principal_id=entry.principal_id, granted_by=user,
             )
         )
     await session.commit()
