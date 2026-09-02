@@ -153,6 +153,7 @@ import {
   branchKindOf,
   canSwapTypes,
   isCopyableNodeType,
+  styleEdgeLabelPill,
   makeCopyLabel,
   sideFromHandleId,
   sourceHandleId,
@@ -333,9 +334,6 @@ const WORD_SHAPE_H = 540000 / 9525; // 1.5cm(높이) — 540,000 EMU
 const WORD_PAGE_W_PX = 5760720 / 9525 - 40; // ≈ 565px
 const WORD_PAGE_H_PX = 8892540 / 9525 - 40; // ≈ 894px
 // 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
-const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
-const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
-const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
 // 불러오기 실행 결과별 안내 토스트 — 어떤 소유권 판정이 났는지 알려준다 (io-linking §2)
 const IMPORT_TOAST_KEY = {
@@ -7346,32 +7344,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (crossingIds?.has(edge.id)) {
         next = { ...next, style: { ...next.style, opacity: REGION_CROSSING_OPACITY } };
       }
-      // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일
-      if (edge.label) {
-        // Yes/No 분기는 은은한 파스텔 블루/레드로 선·라벨 색 구분(라벨에서 파생, 영속 불필요). 기타는 기본 톤.
-        const branch = branchKindOf(edge.label);
-        const branchColor =
-          branch === "yes"
-            ? "var(--color-branch-yes)"
-            : branch === "no"
-              ? "var(--color-branch-no)"
-              : null;
-        next = {
-          ...next,
-          ...(branchColor
-            ? {
-                style: { ...next.style, stroke: branchColor },
-                markerEnd: { type: MarkerType.ArrowClosed, color: branchColor },
-              }
-            : {}),
-          labelStyle: EDGE_LABEL_STYLE,
-          labelBgStyle: branchColor
-            ? { fill: `color-mix(in srgb, ${branchColor} 14%, white)`, stroke: branchColor }
-            : EDGE_LABEL_BG_STYLE,
-          labelBgPadding: EDGE_LABEL_BG_PADDING,
-          labelBgBorderRadius: 6,
-        };
-      }
+      // 라벨이 있는 엣지(분기 Yes/No/기타 등) — 디자인 알약 스타일(lib/canvas, 펼침 자식과 공용)
+      next = styleEdgeLabelPill(next);
       // 출력선 선택 모달에서 이 엣지 행 hover 시 캔버스 엣지 하이라이트 — className만 부여, 스타일은 globals.css.
       if (edge.id === hoveredEdgeId || ioHighlightEdgeIds?.has(edge.id)) {
         next = {
@@ -7453,10 +7427,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (hiddenIds?.has(edge.id)) {
         return { ...edge, hidden: true } as Edge;
       }
+      // 라벨 알약 스타일 — 미적용 시 labelStyle 없는 HTML 라벨이 상속 폰트(17px 검정, 배경 없음)로 렌더
+      const styled = styleEdgeLabelPill(edge);
       return {
-        ...edge,
+        ...styled,
         selectable: false,
-        style: { ...edge.style, opacity: INACTIVE_SCOPE_OPACITY },
+        style: { ...styled.style, opacity: INACTIVE_SCOPE_OPACITY },
       };
     });
     return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...inlineComposition.gateways, ...syntheticEndEdges]);

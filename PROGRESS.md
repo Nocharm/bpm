@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 에디터·설정 UX 3종 (feat/height-shift-collision-only)
+- **SP 펼침 자식 엣지 라벨 픽스**: 라벨 알약 스타일이 메인 엣지에만 적용되고 인라인 펼침 자식 엣지엔 빠져 상속 폰트(17px 검정, 배경 없음)로 렌더되던 버그. `styleEdgeLabelPill`로 lib/canvas에 추출해 양쪽 공용화(분기 Yes/No 파스텔 포함) — L5·일반 맵 동일 경로. vitest +4, 브라우저 검증 11/11.
+
 ## 2026-09-02 — height-shift 충돌 기반 전환 (feat/height-shift-collision-only)
 - 노드 정보 표시로 커진 노드의 Y축 보정을 전역 계단함수 → **충돌 기반 필드**로 전환(`lib/height-shift.ts` 재작성): 성장분이 저장 여백을 먼저 흡수하고, X 구간이 겹쳐 실제 충돌하는 아래 노드만 `min(저장 간격, 16px)` 유지하며 밀림. 같은 행(저장 Y구간 겹침 체인)은 밀림량 max 동기화(사용자 결정 2건 반영). 자동정렬 후 이중 간격·빈 열 공간 낭비·드롭 즉시 밀림 해소.
 - 역변환은 열 프로브 이분탐색(`invertDisplayY`, 단조 필드·갭 클램프·플래토 최소 y) + 드래그 노드 자기 푸셔 제외. page.tsx 배선은 steps→field 치환(오프셋 소비자 Map 계약 불변 — 트윈·그룹박스·PNG·edge-detour 무수정). BE·임포트 레이아웃 무변경(기준높이 배치 그대로).

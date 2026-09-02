@@ -590,6 +590,43 @@ export function branchKindOf(label: unknown): BranchKind {
   return "other";
 }
 
+// 엣지 라벨 알약 디자인 — multiline-edge가 labelStyle(SVG 어휘)을 HTML로 변환해 그린다.
+const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
+const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
+const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
+
+/**
+ * 라벨 있는 엣지에 디자인 알약 스타일 적용 — 메인 엣지·인라인 펼침 자식 엣지 공용.
+ * Yes/No 분기는 파스텔 블루/레드로 선·마커·라벨 배경을 파생(라벨에서 파생, 영속 불필요).
+ */
+export function styleEdgeLabelPill(edge: Edge): Edge {
+  if (!edge.label) {
+    return edge;
+  }
+  const branch = branchKindOf(edge.label);
+  const branchColor =
+    branch === "yes"
+      ? "var(--color-branch-yes)"
+      : branch === "no"
+        ? "var(--color-branch-no)"
+        : null;
+  return {
+    ...edge,
+    ...(branchColor
+      ? {
+          style: { ...edge.style, stroke: branchColor },
+          markerEnd: { type: MarkerType.ArrowClosed, color: branchColor },
+        }
+      : {}),
+    labelStyle: EDGE_LABEL_STYLE,
+    labelBgStyle: branchColor
+      ? { fill: `color-mix(in srgb, ${branchColor} 14%, white)`, stroke: branchColor }
+      : EDGE_LABEL_BG_STYLE,
+    labelBgPadding: EDGE_LABEL_BG_PADDING,
+    labelBgBorderRadius: 6,
+  };
+}
+
 // 엣지 핸들이 붙는 노드 변 — 엣지의 source/target 각각에 적용(2026-06-17)
 export type HandleSide = "left" | "right" | "top" | "bottom";
 

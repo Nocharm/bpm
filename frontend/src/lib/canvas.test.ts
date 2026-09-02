@@ -17,6 +17,7 @@ import {
   makeCopyLabel,
   normalizeNodeType,
   removeOutgoingEdges,
+  styleEdgeLabelPill,
   swapNodeEdges,
   terminalDisplayLabel,
   violatesTerminalRule,
@@ -379,5 +380,39 @@ describe("buildNodeData", () => {
     expect(d.nodeType).toBe("process");
     expect(d.label).toBe("Step");
     expect(d.section_anchor).toBeUndefined();
+  });
+});
+
+describe("styleEdgeLabelPill", () => {
+  it("라벨 없는 엣지는 그대로 통과", () => {
+    const edge = { id: "e1", source: "a", target: "b" } as Edge;
+    expect(styleEdgeLabelPill(edge)).toBe(edge);
+  });
+  it("라벨 엣지는 알약 스타일(labelStyle·bg·패딩)을 받는다", () => {
+    const edge = { id: "e1", source: "a", target: "b", label: "custom" } as Edge;
+    const styled = styleEdgeLabelPill(edge);
+    expect(styled.labelStyle).toMatchObject({ fontSize: 11, fontWeight: 600 });
+    expect(styled.labelBgStyle).toMatchObject({ fill: "var(--color-surface)" });
+    expect(styled.labelBgPadding).toEqual([6, 3]);
+    expect(styled.labelBgBorderRadius).toBe(6);
+    expect(styled.style?.stroke).toBeUndefined(); // 기타 라벨은 선 색 미변경
+  });
+  it("Yes/No 분기는 파스텔 선·마커·라벨 배경 파생", () => {
+    const yes = styleEdgeLabelPill({ id: "e1", source: "a", target: "b", label: "Yes" } as Edge);
+    expect(yes.style?.stroke).toBe("var(--color-branch-yes)");
+    expect(yes.labelBgStyle?.stroke).toBe("var(--color-branch-yes)");
+    const no = styleEdgeLabelPill({ id: "e2", source: "a", target: "b", label: "No" } as Edge);
+    expect(no.style?.stroke).toBe("var(--color-branch-no)");
+  });
+  it("기존 style은 보존하고 덧입힌다", () => {
+    const styled = styleEdgeLabelPill({
+      id: "e1",
+      source: "a",
+      target: "b",
+      label: "Yes",
+      style: { strokeDasharray: "6 3" },
+    } as Edge);
+    expect(styled.style?.strokeDasharray).toBe("6 3");
+    expect(styled.style?.stroke).toBe("var(--color-branch-yes)");
   });
 });
