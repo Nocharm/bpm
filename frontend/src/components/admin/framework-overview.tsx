@@ -33,6 +33,15 @@ export function FrameworkOverview() {
     };
   }, []);
 
+  // 재시도 — framework-admin-root-retry(framework-panel.tsx handleRetryRoot)와 동일 관례:
+  // 마운트 effect와 별개로 클릭 핸들러에서 직접 재조회(react-hooks/set-state-in-effect 회피).
+  function handleRetry() {
+    setError(false);
+    void getFrameworkOverview()
+      .then((res) => setRows(res.rows))
+      .catch(() => setError(true));
+  }
+
   // 상태 필 — 캔버스 없음(중립) / Ready(added) / Blocked(error) + 실패 게이트 코드 필 나열
   // (라벨은 framework.gate.* 재사용 — framework-confirm-section.tsx의 게이트 체크리스트와 동일 소스).
   function renderStatus(row: FrameworkOverviewRow) {
@@ -70,9 +79,16 @@ export function FrameworkOverview() {
   return (
     <div data-id="framework-overview" className="flex flex-col gap-2">
       {error ? (
-        <p data-id="framework-overview-error" className="p-4 text-caption text-error">
-          {t("framework.overview.error")}
-        </p>
+        // 재시도 버튼 — framework-admin-root-retry(framework-panel.tsx)와 동일 관례:
+        // 에러 문구 자체가 클릭 가능한 버튼(별도 "Retry" 라벨 없이 재사용 키로 안내).
+        <button
+          type="button"
+          data-id="framework-overview-retry"
+          className="p-4 text-left text-caption text-error hover:underline"
+          onClick={handleRetry}
+        >
+          {t("home.frameworkLoadError")}
+        </button>
       ) : rows === null ? (
         <SkeletonRows count={4} />
       ) : rows.length === 0 ? (

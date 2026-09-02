@@ -2023,7 +2023,6 @@ const en = {
   "framework.overview.blocked": "Blocked",
   "framework.overview.noCanvas": "No canvas",
   "framework.overview.empty": "No L5 categories in scope.",
-  "framework.overview.error": "Failed to load the status board.",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "Dry run",
   "framework.importApply": "Apply",
@@ -4113,7 +4112,6 @@ const ko: Record<MessageKey, string> = {
   "framework.overview.blocked": "차단됨",
   "framework.overview.noCanvas": "캔버스 없음",
   "framework.overview.empty": "범위 내 L5 카테고리가 없습니다.",
-  "framework.overview.error": "현황판을 불러오지 못했습니다.",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "드라이런",
   "framework.importApply": "적용",
