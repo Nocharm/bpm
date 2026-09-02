@@ -153,7 +153,7 @@ def format_minutes_hmm(minutes: int) -> str:
 def _warn_unknown_keys(obj: dict, allowed: set[str], path: str, issues: list[AdapterIssue]) -> None:
     for key in obj:
         if key not in allowed:
-            issues.append(AdapterIssue("warning", path, f"unknown key {key!r}"))
+            issues.append(AdapterIssue("warning", path, f"unknown key {key!r} (모르는 항목 — 무시됨)"))
 
 
 def _join_multi(value: object) -> str:
@@ -204,7 +204,7 @@ def format_map_description(owner_role: object, artifact_role: object = None) -> 
 
 def _truncate(value: str, limit: int, path: str, label: str, issues: list[AdapterIssue]) -> str:
     if len(value) > limit:
-        issues.append(AdapterIssue("warning", path, f"{label} truncated to {limit} chars"))
+        issues.append(AdapterIssue("warning", path, f"{label} truncated to {limit} chars (길이 제한으로 잘림)"))
         return value[:limit]
     return value
 
@@ -258,7 +258,7 @@ def _build_nodes(
     for j, action in enumerate(actions):
         apath = f"{path}.actions[{j}]"
         if not isinstance(action, dict):
-            issues.append(AdapterIssue("error", apath, "action is not an object"))
+            issues.append(AdapterIssue("error", apath, "action is not an object (액션 형식이 잘못돼 제외됨)"))
             continue
         _warn_unknown_keys(action, _ACTION_KEYS, apath, issues)
         seq_raw = action.get("seq")
@@ -266,21 +266,21 @@ def _build_nodes(
         if seq is None:
             parsed = _parse_minutes(seq_raw)  # 숫자 문자열 수용(음수 제외) — 별도 파서 불필요
             seq = parsed if parsed is not None else j + 1
-            issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} — fallback {seq}"))
+            issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} — fallback {seq} (순번이 잘못돼 자동 번호로 대체)"))
         if seq in by_seq:
             issues.append(AdapterIssue(
                 "error", apath,
-                f"duplicate seq {seq} — seq is the relations reference key in 0.4",
+                f"duplicate seq {seq} — seq is the relations reference key in 0.4 (순번 중복 — 연결 참조 키라 유일해야 함)",
             ))
             continue
         label = _clean(action.get("label"))
         if not label:
             label = f"Step {seq}"
-            issues.append(AdapterIssue("warning", apath, f"label missing — fallback {label!r}"))
+            issues.append(AdapterIssue("warning", apath, f"label missing — fallback {label!r} (이름 누락 — 자동 이름 사용)"))
         label = _truncate(label, 200, apath, "label", issues)
         kind = _clean(action.get("kind"))
         if kind and kind not in _KNOWN_KINDS:
-            issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} — treated as action"))
+            issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} — treated as action (알 수 없는 유형 — 일반 액션으로 처리)"))
         # 예외 variant는 흐름 분기 대신 색으로만 분리 — 분기 자체는 relations 엣지가 그린다
         variant = _clean(action.get("variant"))
         node = CanonicalNode(
@@ -328,18 +328,18 @@ def _build_flow_edges(
     actions[].kind(action/handoff/decision)는 분기 노드를 신뢰할 수 없고 엣지가 진실이다.
     """
     if relations is None:
-        issues.append(AdapterIssue("warning", path, "relations missing — seq chain fallback"))
+        issues.append(AdapterIssue("warning", path, "relations missing — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), []
     if not isinstance(relations, dict):
         issues.append(AdapterIssue(
-            "warning", f"{path}.relations", "relations is not an object — seq chain fallback"))
+            "warning", f"{path}.relations", "relations is not an object — seq chain fallback (연결 정보 형식 오류 — 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), []
     _warn_unknown_keys(relations, _RELATIONS_KEYS, f"{path}.relations", issues)
     raw_edges = relations.get("edges")
     if not isinstance(raw_edges, list):
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges",
-            "edges missing or not a list — seq chain fallback"))
+            "edges missing or not a list — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), []
 
     edges: list[CanonicalEdge] = []
@@ -348,7 +348,7 @@ def _build_flow_edges(
     for k, raw in enumerate(raw_edges):
         epath = f"{path}.relations.edges[{k}]"
         if not isinstance(raw, dict):
-            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped"))
+            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped (연결 형식이 잘못돼 제외됨)"))
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = raw.get("src"), raw.get("dst")
@@ -356,24 +356,24 @@ def _build_flow_edges(
         dst_node = by_seq.get(dst) if isinstance(dst, int) and not isinstance(dst, bool) else None
         if src_node is None or dst_node is None:
             issues.append(AdapterIssue(
-                "warning", epath, f"edge references unknown seq {src!r}→{dst!r} — dropped"))
+                "warning", epath, f"edge references unknown seq {src!r}→{dst!r} — dropped (존재하지 않는 순번을 가리켜 제외됨)"))
             continue
         if src_node is dst_node:
-            issues.append(AdapterIssue("warning", epath, f"self edge on seq {src!r} — dropped"))
+            issues.append(AdapterIssue("warning", epath, f"self edge on seq {src!r} — dropped (자기 자신으로 되도는 연결 — L6 단계 안에서는 그릴 수 없어 제외)"))
             continue
         pair = (src_node.code, dst_node.code)
         if pair in seen:
             issues.append(AdapterIssue(
-                "warning", epath, f"duplicate edge {pair[0]}→{pair[1]} — dropped"))
+                "warning", epath, f"duplicate edge {pair[0]}→{pair[1]} — dropped (중복 연결 — 한 번만 반영)"))
             continue
         seen.add(pair)
         kind = _clean(raw.get("kind")) or "seq"
         if kind not in _KNOWN_EDGE_KINDS:
-            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq"))
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq (알 수 없는 연결 유형 — 순차 연결로 처리)"))
             kind = "seq"
         gateway = _clean(raw.get("gateway"))
         if gateway and gateway not in _KNOWN_GATEWAYS:
-            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only"))
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only (알 수 없는 게이트웨이 — 라벨로만 기록)"))
         condition = _clean(raw.get("condition"))
         edges.append(CanonicalEdge.model_validate({
             "from": src_node.code,
@@ -386,7 +386,7 @@ def _build_flow_edges(
         if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
             src_node.type = "decision"
             issues.append(AdapterIssue(
-                "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge)"))
+                "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) — 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
         quote = _clean(raw.get("quote"))
         if quote:
             notes.append(InterviewNote(
@@ -396,7 +396,7 @@ def _build_flow_edges(
             ))
     if not edges and by_seq:
         issues.append(AdapterIssue(
-            "warning", f"{path}.relations.edges", "no usable edges — seq chain fallback"))
+            "warning", f"{path}.relations.edges", "no usable edges — seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), notes
     return edges, notes
 
@@ -413,26 +413,26 @@ def _build_linkage(
     linkage = InterviewLinkage(category_code=l5_code, map_codes=list(row_names))
     notes: list[InterviewNote] = []
     if relations is None:
-        issues.append(AdapterIssue("warning", "relations", "relations missing — no L6 flow to seed"))
+        issues.append(AdapterIssue("warning", "relations", "relations missing — no L6 flow to seed (연결 정보가 없어 L6 흐름 미생성)"))
         return linkage, notes
     if not isinstance(relations, dict):
-        issues.append(AdapterIssue("warning", "relations", "relations is not an object — ignored"))
+        issues.append(AdapterIssue("warning", "relations", "relations is not an object — ignored (연결 정보 형식 오류 — 무시됨)"))
         return linkage, notes
     _warn_unknown_keys(relations, _RELATIONS_KEYS, "relations", issues)
 
     entry = relations.get("entry")
     if entry is not None and not isinstance(entry, dict):
-        issues.append(AdapterIssue("warning", "relations.entry", "entry is not an object — ignored"))
+        issues.append(AdapterIssue("warning", "relations.entry", "entry is not an object — ignored (진입 정보 형식 오류 — 무시됨)"))
         entry = None
     if isinstance(entry, dict):
         _warn_unknown_keys(entry, _ENTRY_KEYS, "relations.entry", issues)
         trigger = _clean(entry.get("triggerType"))
         if trigger and trigger not in _KNOWN_TRIGGERS:
-            issues.append(AdapterIssue("warning", "relations.entry", f"unknown triggerType {trigger!r}"))
+            issues.append(AdapterIssue("warning", "relations.entry", f"unknown triggerType {trigger!r} (알 수 없는 트리거 유형)"))
         entry_code = _clean(entry.get("taskId"))
         if entry_code and entry_code not in row_names:
             issues.append(AdapterIssue(
-                "warning", "relations.entry", f"taskId {entry_code!r} not in rows — ignored"))
+                "warning", "relations.entry", f"taskId {entry_code!r} not in rows — ignored (rows에 없는 taskId — 무시됨)"))
             entry_code = ""
         if entry_code:
             linkage.map_codes = [entry_code] + [c for c in row_names if c != entry_code]
@@ -447,34 +447,41 @@ def _build_linkage(
 
     raw_edges = relations.get("edges")
     if raw_edges is not None and not isinstance(raw_edges, list):
-        issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list — ignored"))
+        issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list — ignored (연결 목록 형식 오류 — 무시됨)"))
         raw_edges = None
     seen: set[tuple[str, str]] = set()
     for k, raw in enumerate(raw_edges or []):
         epath = f"relations.edges[{k}]"
         if not isinstance(raw, dict):
-            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped"))
+            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped (연결 형식이 잘못돼 제외됨)"))
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = _clean(raw.get("src")), _clean(raw.get("dst"))
         if src not in row_names or dst not in row_names:
             issues.append(AdapterIssue(
-                "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} — dropped"))
+                "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} — dropped (존재하지 않는 taskId를 가리켜 제외됨)"))
             continue
-        if src == dst:
-            issues.append(AdapterIssue("warning", epath, f"self edge on {src!r} — dropped"))
-            continue
+        is_self = src == dst
+        if is_self:
+            # 자기 반복 — 드랍하지 않고 loop로 강제 유지. 임포트 엔진(expand_linkage_branches)이
+            # 분기 노드(◇)를 세워 ◇→자기 루프백으로 그린다 (사용자 결정 2026-09-02).
+            issues.append(AdapterIssue(
+                "warning", epath,
+                f"self edge on {src!r} — kept as loop via branch node "
+                "(자기 반복 흐름 — 분기 노드를 세워 되도는 연결로 변환)"))
         if (src, dst) in seen:
-            issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} — dropped"))
+            issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} — dropped (중복 연결 — 한 번만 반영)"))
             continue
         seen.add((src, dst))
         kind = _clean(raw.get("kind")) or "seq"
         if kind not in _KNOWN_EDGE_KINDS:
-            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq"))
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq (알 수 없는 연결 유형 — 순차 연결로 처리)"))
             kind = "seq"
+        if is_self:
+            kind = "loop"
         gateway = _clean(raw.get("gateway"))
         if gateway and gateway not in _KNOWN_GATEWAYS:
-            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only"))
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only (알 수 없는 게이트웨이 — 라벨로만 기록)"))
         condition = _clean(raw.get("condition"))
         linkage.edges.append(InterviewLinkageEdge(
             source=src,
@@ -499,7 +506,7 @@ def convert_interview(raw: object) -> AdapterResult:
     result = AdapterResult()
     issues = result.issues
     if not isinstance(raw, dict):
-        issues.append(AdapterIssue("error", "$", "file is not a JSON object"))
+        issues.append(AdapterIssue("error", "$", "file is not a JSON object (파일이 JSON 객체가 아님)"))
         return result
     _warn_unknown_keys(raw, _TOP_KEYS, "$", issues)
 
@@ -509,13 +516,13 @@ def convert_interview(raw: object) -> AdapterResult:
     if not version.startswith("0.4"):
         issues.append(AdapterIssue(
             "error", "schema_version",
-            f"unsupported schema_version {version!r} — re-deliver as 0.4-bpm-interface-draft",
+            f"unsupported schema_version {version!r} — re-deliver as 0.4-bpm-interface-draft (지원하지 않는 스키마 버전 — 0.4로 재전달 필요)",
         ))
         return result
 
     framework = raw.get("framework")
     if not isinstance(framework, dict) or not isinstance(framework.get("categories"), list):
-        issues.append(AdapterIssue("error", "framework", "framework.categories missing"))
+        issues.append(AdapterIssue("error", "framework", "framework.categories missing (업무체계 분류 정보 누락)"))
         return result
     try:
         result.categories = parse_categories({"categories": framework["categories"]})
@@ -530,18 +537,18 @@ def convert_interview(raw: object) -> AdapterResult:
     codes = {c.code: c for c in result.categories}
     if not l5_code or l5_code not in codes:
         issues.append(AdapterIssue("error", "l5.nodeCode",
-                                   f"nodeCode {l5_code!r} not found in framework.categories"))
+                                   f"nodeCode {l5_code!r} not found in framework.categories (업무체계에 없는 코드)"))
         return result
     if codes[l5_code].level != 5:
         issues.append(AdapterIssue("warning", "l5.nodeCode",
-                                   f"nodeCode {l5_code!r} is level {codes[l5_code].level}, expected 5"))
+                                   f"nodeCode {l5_code!r} is level {codes[l5_code].level}, expected 5 (L5 코드가 아님)"))
 
     rows = raw.get("rows")
     if not isinstance(rows, list):
-        issues.append(AdapterIssue("error", "rows", "rows missing or not a list"))
+        issues.append(AdapterIssue("error", "rows", "rows missing or not a list (rows 누락 또는 형식 오류)"))
         return result
     if not rows:
-        issues.append(AdapterIssue("warning", "rows", "rows empty — nothing to import"))
+        issues.append(AdapterIssue("warning", "rows", "rows empty — nothing to import (행이 비어 있어 임포트할 것 없음)"))
 
     tasks_raw = raw.get("tasks")
     tasks_by_id: dict[str, dict] = {}
@@ -558,15 +565,15 @@ def convert_interview(raw: object) -> AdapterResult:
     for i, row in enumerate(rows):
         path = f"rows[{i}]"
         if not isinstance(row, dict):
-            issues.append(AdapterIssue("error", path, "row is not an object"))
+            issues.append(AdapterIssue("error", path, "row is not an object (행 형식이 잘못됨)"))
             continue
         _warn_unknown_keys(row, _ROW_KEYS, path, issues)
         task_id = _clean(row.get("taskId"))
         if not task_id:
-            issues.append(AdapterIssue("error", path, "taskId missing — row skipped"))
+            issues.append(AdapterIssue("error", path, "taskId missing — row skipped (taskId가 없어 이 행 제외)"))
             continue
         if task_id in seen_task_ids:
-            issues.append(AdapterIssue("error", path, f"duplicate taskId {task_id!r}"))
+            issues.append(AdapterIssue("error", path, f"duplicate taskId {task_id!r} (taskId 중복)"))
             continue
         seen_task_ids.add(task_id)
         unit_id = _clean(row.get("unitId"))
@@ -575,7 +582,7 @@ def convert_interview(raw: object) -> AdapterResult:
 
         name = _clean(row.get("l6")) or _clean(tasks_by_id.get(task_id, {}).get("name"))
         if not name:
-            issues.append(AdapterIssue("error", path, "l6 (map name) missing — row skipped"))
+            issues.append(AdapterIssue("error", path, "l6 (map name) missing — row skipped (L6 맵 이름이 없어 이 행 제외)"))
             continue
         name = _truncate(name, 200, path, "l6", issues)
 
@@ -583,7 +590,7 @@ def convert_interview(raw: object) -> AdapterResult:
         if fields is None:
             fields = {}
         elif not isinstance(fields, dict):
-            issues.append(AdapterIssue("warning", path, "fields is not an object — ignored"))
+            issues.append(AdapterIssue("warning", path, "fields is not an object — ignored (필드 형식 오류 — 무시됨)"))
             fields = {}
         _warn_unknown_keys(fields, _FIELD_KEYS, f"{path}.fields", issues)
 
@@ -591,10 +598,10 @@ def convert_interview(raw: object) -> AdapterResult:
         if actions is None:
             actions = []
         elif not isinstance(actions, list):
-            issues.append(AdapterIssue("warning", path, "actions is not a list — ignored"))
+            issues.append(AdapterIssue("warning", path, "actions is not a list — ignored (액션 목록 형식 오류 — 무시됨)"))
             actions = []
         if not actions:
-            issues.append(AdapterIssue("warning", path, "no actions — map will only have Start/End"))
+            issues.append(AdapterIssue("warning", path, "no actions — map will only have Start/End (액션이 없어 Start/End만 생성)"))
         nodes, by_seq = _build_nodes(actions, path, issues)
         edges, flow_notes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
 
@@ -607,7 +614,7 @@ def convert_interview(raw: object) -> AdapterResult:
             minutes = _parse_minutes(fields.get(min_key))
             if fields.get(min_key) not in (None, "") and minutes is None:
                 issues.append(AdapterIssue("warning", f"{path}.fields",
-                                           f"{min_key} not a number: {fields.get(min_key)!r}"))
+                                           f"{min_key} not a number: {fields.get(min_key)!r} (숫자가 아니어서 무시됨)"))
             if minutes is not None:
                 params[param_key] = format_minutes_hmm(minutes)
         for key in ("annual_count", "headcount", "fte"):
@@ -653,7 +660,7 @@ def convert_interview(raw: object) -> AdapterResult:
                 edges=edges,
             ))
         except (ValidationError, ValueError) as exc:
-            issues.append(AdapterIssue("error", path, f"canonical validation failed: {exc}"))
+            issues.append(AdapterIssue("error", path, f"canonical validation failed: {exc} (변환 결과 검증 실패)"))
             continue
         row_names[task_id] = name
         for note in flow_notes:  # 엣지 근거 발화 — 맵 스코프로 확정 (design 2026-09-01 §2)
@@ -666,13 +673,13 @@ def convert_interview(raw: object) -> AdapterResult:
             for k, exc_item in enumerate(exceptions):
                 epath = f"{path}.exceptions[{k}]"
                 if not isinstance(exc_item, dict):
-                    issues.append(AdapterIssue("warning", epath, "exception is not an object — skipped"))
+                    issues.append(AdapterIssue("warning", epath, "exception is not an object — skipped (예외 형식이 잘못돼 제외됨)"))
                     continue
                 _warn_unknown_keys(exc_item, _EXCEPTION_KEYS, epath, issues)
                 title = _clean(exc_item.get("name")) or None
                 text = _clean(exc_item.get("rule")) or (title or "")
                 if not text:
-                    issues.append(AdapterIssue("warning", epath, "exception has no name/rule — skipped"))
+                    issues.append(AdapterIssue("warning", epath, "exception has no name/rule — skipped (예외에 이름/규칙이 없어 제외됨)"))
                     continue
                 result.notes.append(InterviewNote(
                     kind="exception", text=text, title=title, map_code=task_id,
@@ -694,12 +701,12 @@ def convert_interview(raw: object) -> AdapterResult:
 
     side_notes = raw.get("sideNotes")
     if side_notes is not None and not isinstance(side_notes, list):
-        issues.append(AdapterIssue("warning", "sideNotes", "sideNotes is not a list — ignored"))
+        issues.append(AdapterIssue("warning", "sideNotes", "sideNotes is not a list — ignored (비고 목록 형식 오류 — 무시됨)"))
         side_notes = None
     for k, note in enumerate(side_notes or []):
         npath = f"sideNotes[{k}]"
         if not isinstance(note, dict):
-            issues.append(AdapterIssue("warning", npath, "side note is not an object — skipped"))
+            issues.append(AdapterIssue("warning", npath, "side note is not an object — skipped (비고 형식 오류 — 제외됨)"))
             continue
         text = _clean(note.get("text"))
         if not text:
@@ -710,7 +717,7 @@ def convert_interview(raw: object) -> AdapterResult:
         map_code = unit_to_task.get(unit_id) if unit_id else None
         if unit_id and map_code is None:
             issues.append(AdapterIssue("warning", npath,
-                                       f"unitId {unit_id!r} not matched — kept at L5 scope"))
+                                       f"unitId {unit_id!r} not matched — kept at L5 scope (유닛 미매칭 — L5 범위로 유지)"))
         result.notes.append(InterviewNote(
             kind=kind, text=text,
             map_code=map_code, category_code=None if map_code else l5_code,
@@ -719,7 +726,7 @@ def convert_interview(raw: object) -> AdapterResult:
     # openItems — 종전엔 허용만 되고 미처리(조용히 유실)라 L5 스코프 노트로 보존 (design 2026-08-19 §4.1)
     open_items = raw.get("openItems")
     if open_items is not None and not isinstance(open_items, list):
-        issues.append(AdapterIssue("warning", "openItems", "openItems is not a list — ignored"))
+        issues.append(AdapterIssue("warning", "openItems", "openItems is not a list — ignored (미결 목록 형식 오류 — 무시됨)"))
         open_items = None
     for k, item in enumerate(open_items or []):
         ipath = f"openItems[{k}]"
@@ -728,7 +735,7 @@ def convert_interview(raw: object) -> AdapterResult:
         elif isinstance(item, dict):
             text = _clean(item.get("text")) or _clean(item.get("name"))
         else:
-            issues.append(AdapterIssue("warning", ipath, "open item is not an object — skipped"))
+            issues.append(AdapterIssue("warning", ipath, "open item is not an object — skipped (미결 항목 형식 오류 — 제외됨)"))
             continue
         if not text:
             issues.append(AdapterIssue("warning", ipath, "text missing — skipped"))

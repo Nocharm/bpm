@@ -947,8 +947,13 @@ def expand_linkage_branches(
     branch_of: dict[str, str] = {}
     back: set[tuple[str, str]] = set()
     for src, group in out_by_src.items():
-        all_parallel = len(group) >= 2 and all(e.gateway == "parallel" for e in group)
-        forks = len(group) >= 2 and not all_parallel
+        # 자기 반복(A→A)은 단독이어도 분기 노드를 강제 — 셀프 엣지를 캔버스에 직접 그리면
+        # 렌더가 퇴화하므로 ◇→자기 루프백으로 풀어낸다 (사용자 결정 2026-09-02).
+        has_self = any(e.target == src for e in group)
+        all_parallel = (
+            len(group) >= 2 and not has_self and all(e.gateway == "parallel" for e in group)
+        )
+        forks = has_self or (len(group) >= 2 and not all_parallel)
         origin = src
         if forks:
             origin = f"__branch__{src}"
@@ -957,7 +962,8 @@ def expand_linkage_branches(
         gateway = "parallel" if all_parallel else None
         for edge in group:
             rewritten.append((origin, edge.target, edge.label, gateway))
-            if edge.kind == "loop":
+            # self는 kind와 무관하게 back 등록 — 안 하면 ◇↔A 사이클이 랭크를 무너뜨린다
+            if edge.kind == "loop" or edge.target == src:
                 back.add((origin, edge.target))
     return rewritten, branch_of, back
 

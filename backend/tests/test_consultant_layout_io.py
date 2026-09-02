@@ -390,3 +390,29 @@ def test_branch_node_inherits_its_feeder_row() -> None:
     rows, _ = plan_branch_fanout(flow, {"◇A": "A", "◇B": "B"}, ranks)
     assert rows["B"] == -1 and rows["◇B"] == -1  # 선행 행을 물려받는다
     assert rows["D"] == -2  # 그 위로 한 칸 더
+
+
+def test_self_edge_forces_branch_loop() -> None:
+    """자기 반복(A→A)은 분기 노드를 세워 ◇→A 루프백으로 — 셀프 엣지를 캔버스에 직접 그리지 않는다 (2026-09-02)."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    flow, branch_of, back = expand_linkage_branches(
+        [_lk("A", "A", kind="loop", label="반복"), _lk("A", "B", label="진행")], {"A", "B"}
+    )
+    assert branch_of == {"__branch__A": "A"}
+    assert flow == [
+        ("A", "__branch__A", "", None),
+        ("__branch__A", "A", "반복", None),
+        ("__branch__A", "B", "진행", None),
+    ]
+    assert back == {("__branch__A", "A")}
+
+
+def test_solo_self_edge_still_gets_branch_node() -> None:
+    """다른 진출이 없어도 분기 노드를 세운다 — kind가 loop가 아니어도 self는 back 쌍으로 등록(랭크 보호)."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    flow, branch_of, back = expand_linkage_branches([_lk("A", "A", label="재수행")], {"A"})
+    assert branch_of == {"__branch__A": "A"}
+    assert flow == [("A", "__branch__A", "", None), ("__branch__A", "A", "재수행", None)]
+    assert back == {("__branch__A", "A")}

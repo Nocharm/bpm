@@ -400,3 +400,22 @@ def test_variant_preserved_and_exception_colored() -> None:
     normal = next(n for n in m.nodes if n.name == "작업지시 확인")
     assert "Variant" not in normal.description
     assert normal.color == ""
+
+
+def test_l5_self_edge_kept_as_loop_branch() -> None:
+    """L5 self edge는 드랍 대신 loop로 강제 유지 — 엔진이 분기 노드를 세워 반복으로 그린다 (사용자 결정 2026-09-02)."""
+    data = _interview()
+    data["relations"]["edges"] = [
+        _edge("task-prep-0001", "task-prep-0001",
+              condition="재교정 필요 시", label="반복", quote="미흡하면 다시 돌려요."),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    lk = res.linkage
+    assert lk is not None
+    assert [(e.source, e.target, e.kind) for e in lk.edges] == [
+        ("task-prep-0001", "task-prep-0001", "loop"),
+    ]
+    assert any("self edge" in i.message and "loop" in i.message for i in res.issues)
+    # 드랍 시절엔 quote 노트도 함께 증발했다 — 유지 경로에선 flow 노트로 살아남아야 한다
+    assert any(n.kind == "flow" and "미흡하면 다시 돌려요." in n.text for n in res.notes)
