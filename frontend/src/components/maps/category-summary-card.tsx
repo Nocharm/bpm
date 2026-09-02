@@ -78,8 +78,9 @@ export function CategorySummaryCard({ categoryId, onOpenCanvas }: CategorySummar
   const l5 = summary.l5;
   const subtreeConfirm = summary.subtree_confirm;
 
-  // 게이트 상태 필 — 캔버스 없음(중립) / Ready(added) / Blocked(error)+실패 코드 필. 라벨은
-  // framework.overview.*·framework.gate.*(트랙 B) 재사용 — framework-overview.tsx의 renderStatus와 동일 소스.
+  // 게이트 상태 필 — 캔버스 없음(중립) / Ready(added) / Blocked(error)+실패 코드 필. 상태 라벨은
+  // framework.overview.* 재사용, 실패 코드 필은 framework.gateFail.*(긍정문 framework.gate.*와 별도,
+  // error 톤 극성 일치. final review Finding 2) — framework-overview.tsx의 renderStatus와 동일 소스.
   const renderGateStatus = () => {
     if (!l5 || l5.linkage_map_id === null) {
       return (
@@ -105,7 +106,7 @@ export function CategorySummaryCard({ categoryId, onOpenCanvas }: CategorySummar
             key={f.code}
             className="inline-flex items-center rounded-sm border border-error/40 bg-error/10 px-1.5 py-0.5 text-fine text-error"
           >
-            {t(`framework.gate.${f.code}` as MessageKey)} ({f.count})
+            {t(`framework.gateFail.${f.code}` as MessageKey)} ({f.count})
           </span>
         ))}
       </span>

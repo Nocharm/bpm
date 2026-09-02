@@ -43,7 +43,7 @@ export function FrameworkOverview() {
   }
 
   // 상태 필 — 캔버스 없음(중립) / Ready(added) / Blocked(error) + 실패 게이트 코드 필 나열
-  // (라벨은 framework.gate.* 재사용 — framework-confirm-section.tsx의 게이트 체크리스트와 동일 소스).
+  // (실패 필 라벨은 framework.gateFail.* — 긍정문 framework.gate.*와 별도, error 톤 극성 일치. final review Finding 2)
   function renderStatus(row: FrameworkOverviewRow) {
     if (row.linkage_map_id === null) {
       return (
@@ -69,7 +69,7 @@ export function FrameworkOverview() {
             key={f.code}
             className="inline-flex items-center rounded-sm border border-error/40 bg-error/10 px-1.5 py-0.5 text-fine text-error"
           >
-            {t(`framework.gate.${f.code}` as MessageKey)} ({f.count})
+            {t(`framework.gateFail.${f.code}` as MessageKey)} ({f.count})
           </span>
         ))}
       </span>

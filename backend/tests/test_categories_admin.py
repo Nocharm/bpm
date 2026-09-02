@@ -354,6 +354,46 @@ def test_delegated_perms_get_scope(client: TestClient, enforce: None) -> None:
     assert client.get(f"/api/categories/{tree['other']}/permissions").status_code == 403
 
 
+def _seed_deleg_tree_l5(client: TestClient, prefix: str) -> dict[str, int]:
+    """L1(root) > L2(mid) > L3(sub) > L4(leaf) > L5(bottom) — L5-only 가드 검증용(final review
+    Finding 1). mid에 DELEG_ADMIN 권한 부여(서브트리에 L5 포함 시 기존 동작 회귀 가드),
+    bottom에 별도 L5-only 관리자 권한 부여."""
+    act_as(STRANGER_SYSADMIN)
+    tree = _seed_deleg_tree(client, prefix)
+    bottom = client.post(
+        "/api/categories",
+        json={"name": "Deleg Bottom", "parent_id": tree["leaf"], "code": f"{prefix}-BOTTOM"},
+    ).json()
+    assert bottom["level"] == 5
+    client.put(
+        f"/api/categories/{bottom['id']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": DELEG_L5_ADMIN}]},
+    )
+    tree["bottom"] = bottom["id"]
+    return tree
+
+
+DELEG_L5_ADMIN = "deleg.l5only"  # seed 전체가 L5인 관리자 — 구조 변경(개명·정렬·이동) 차단 대상
+
+
+def test_delegated_l5_only_rename_forbidden(client: TestClient, enforce: None) -> None:
+    """L5-only 관리자는 자기 카테고리 개명도 403 — L5는 캔버스 배정만 가능, 구조는 불가(spec §7)."""
+    tree = _seed_deleg_tree_l5(client, "DG11")
+    act_as(DELEG_L5_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['bottom']}", json={"name": "Sneaky Rename"})
+    assert resp.status_code == 403
+    assert "L5 admins cannot modify category structure" in resp.json()["detail"]
+
+
+def test_delegated_l2_with_l5_subtree_rename_still_allowed(client: TestClient, enforce: None) -> None:
+    """회귀 가드: 관리자 seed에 L1~L4가 섞여 있으면(서브트리에 L5가 있어도) 구조 변경은 기존대로 허용."""
+    tree = _seed_deleg_tree_l5(client, "DG12")
+    act_as(DELEG_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['mid']}", json={"name": "Mid Renamed Again"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Mid Renamed Again"
+
+
 def test_nonadmin_still_403_everywhere(client: TestClient, enforce: None) -> None:
     tree = _seed_deleg_tree(client, "DG10")
     act_as(DELEG_STRANGER)

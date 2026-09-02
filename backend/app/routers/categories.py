@@ -995,7 +995,9 @@ async def update_category(
 
     위임 게이트(design 트랙 C §7): 개명·정렬은 서브트리 전체(seed 자신 포함) 허용 — category_id가
     admin_ids 안이면 OK. 이동(parent_id가 실제로 변경될 때만)은 seed 자신 금지 + 새 부모도
-    admin_ids 안이어야 함.
+    admin_ids 안이어야 함. **예외**: seed가 전부 L5인 관리자는 구조 변경(PATCH 전체) 불가
+    (spec §7 — L5 관리자는 카테고리 구조를 못 건드림). seeds에 L1~L4가 하나라도 섞여 있으면
+    그 서브트리 자격으로 기존 동작 유지(final review Finding 1).
     """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
@@ -1006,6 +1008,10 @@ async def update_category(
     seeds: dict[int, int] = {}
     if not is_sysadmin:
         admin_ids, seeds = await get_admin_scope(session, user)
+        if seeds and all(level == 5 for level in seeds.values()):
+            raise HTTPException(
+                status_code=403, detail="L5 admins cannot modify category structure"
+            )
         if category_id not in admin_ids:
             raise HTTPException(status_code=403, detail="outside your delegated subtree")
 
