@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 컨설턴트 임포트 미세조정: 오너 표기·부서 트리 해석·라이브러리 호버 카드 (dev)
+- **오너 표기 owner_id 기준 통일**: 카드·상세 owner_name·에디터 인스펙터가 전부 `created_by`를 보고 있어 임포트 맵(created_by=임포터 ≠ owner_id)에서 임포터가 노출되던 간극 교정 — BE 목록/상세 해석·`MapOut.owner_id` 노출·FE 폴백 3표면(`owner_name ?? owner_id ?? created_by`) 일괄 전환. 미등재 오너는 id+퇴사 배지 폴백.
+
 ## 2026-09-02 — 권한자 관리 UX 3종: 드롭다운 z·버퍼+확인·트리 인라인 표시 (dev)
 - 권한자 모달 백드롭 z-1300이 피커 z 계약(호스트 ≤1200·드롭다운 1250)을 위반해 드롭다운이 블러 뒤로 가던 것 교정. 편집은 로컬 버퍼로 바꾸고 확인 버튼 1회만 서버 저장(부서 지정 Confirm 게이트 선례 — 취소/Esc/백드롭=폐기).
 - 설정 트리 행의 코드 옆에 그 카테고리에 직접 붙은 권한자를 인라인 표시(2명+초과 +N 호버 툴팁) — 이름은 언어 기준 이중 표기 `주이름(보조이름)`(ko: 한글(영문)·en: 영문(한글), person-hover-card 규칙의 한 줄 판, 모달 필 동일) — 신규 `GET /categories/permissions-map`(1쿼리, sysadmin=전체·위임 관리자=스코프 필터) + 모달 확정 시 즉시 갱신.

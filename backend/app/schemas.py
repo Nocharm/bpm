@@ -698,6 +698,8 @@ class MapOut(BaseModel):
     name: str
     description: str
     created_by: str | None
+    # 실소유자 로그인 — 오너 표기·프론트 폴백 기준. 임포트 맵은 created_by(임포터)와 다를 수 있다
+    owner_id: str | None = None
     created_at: datetime
     updated_at: datetime
     # 호출자의 서버 산정 유효 역할 — 프론트 게이팅 단일 소스 (클라 재계산 폐기)

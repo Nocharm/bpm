@@ -2555,7 +2555,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           return;
         }
         setMapName(detail.name);
-        setMapOwner(detail.created_by);
+        // 실소유자 우선 — 임포트 맵은 created_by=임포터라 인스펙터/게이팅 표기가 갈라진다 (2026-09-02)
+        setMapOwner(detail.owner_id ?? detail.created_by);
         setMapOwnerName(detail.owner_name ?? null);
         setMapOwningDept(detail.owning_department ?? null);
         setMapCategoryId(detail.category_id ?? null);

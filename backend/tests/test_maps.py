@@ -146,6 +146,39 @@ def test_get_map_detail_includes_owner_name(client: TestClient) -> None:
     assert detail["owner_name"] == detail["created_by"]
 
 
+def test_owner_display_prefers_owner_id_over_created_by(client: TestClient) -> None:
+    """오너 표기는 owner_id 기준 — created_by(생성자)와 갈라진 맵(컨설턴트 임포트)의 카드/상세 간극 방지.
+
+    임포트 맵은 created_by=임포터·owner_id=실오너 — 표기가 created_by를 보면 카드·인스펙터에
+    임포터가 노출된다 (2026-09-02 적발).
+    """
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.models import Employee, ProcessMap
+
+    created = client.post(
+        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": "오너표기 간극"}
+    ).json()
+
+    async def _assign_owner() -> None:
+        async with SessionLocal() as session:
+            # active=False — 공지 브로드캐스트 수신자 단언 오염 방지 (conftest owning.anchor와 동일)
+            if await session.get(Employee, "real.owner") is None:
+                session.add(Employee(login_id="real.owner", name="Real Owner", source="local", active=False))
+            m = await session.get(ProcessMap, created["id"])
+            m.owner_id = "real.owner"
+            await session.commit()
+
+    asyncio.run(_assign_owner())
+
+    row = next(m for m in client.get("/api/maps").json() if m["id"] == created["id"])
+    detail = client.get(f"/api/maps/{created['id']}").json()
+
+    assert row["owner_id"] == "real.owner" and row["owner_name"] == "Real Owner"
+    assert detail["owner_id"] == "real.owner" and detail["owner_name"] == "Real Owner"
+
+
 def test_update_map_changes_name(client: TestClient) -> None:
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "old"}).json()
 

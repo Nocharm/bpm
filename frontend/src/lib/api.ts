@@ -42,6 +42,8 @@ export interface MapSummary {
   name: string;
   description: string;
   created_by: string | null;
+  // 실소유자 로그인 — 오너 표기 폴백 기준. 임포트 맵은 created_by(임포터)와 다를 수 있다
+  owner_id?: string | null;
   created_at: string;
   updated_at: string;
   // 서버가 산정한 호출자의 유효 역할 — 게이팅 단일 소스 (클라 재계산 폐기)

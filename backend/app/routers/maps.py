@@ -202,7 +202,8 @@ async def list_maps(
                 )
             ).all()
         }
-    owner_ids = {m.created_by for m in maps if m.created_by}
+    # 오너 표기는 owner_id 기준(없으면 created_by) — 임포트 맵은 created_by=임포터라 갈라진다 (2026-09-02)
+    owner_ids = {m.owner_id or m.created_by for m in maps if m.owner_id or m.created_by}
     owner_name: dict[str, str] = {}
     if owner_ids:
         owner_name = {
@@ -232,7 +233,8 @@ async def list_maps(
         tvid = published_vid.get(m.id, latest_vid.get(m.id))
         m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0
         m.member_count = member_count.get(m.id, 0)
-        m.owner_name = owner_name.get(m.created_by) if m.created_by else None
+        owner_login = m.owner_id or m.created_by
+        m.owner_name = owner_name.get(owner_login) if owner_login else None
         m.category_path = category_paths.get(m.category_id) if m.category_id else None
     if is_admin:
         for m in maps:
@@ -662,11 +664,12 @@ async def get_map(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     # 호출자의 서버 산정 역할을 응답에 부착 — 프론트 게이팅 단일 소스
     found_map.my_role = await get_effective_role(session, user, map_id)
-    # 소유자 직원명 — 목록 응답과 동일 소스(Employee). PNG 정보 카드 등 상세 화면 표기용.
-    if found_map.created_by:
+    # 소유자 직원명 — 목록 응답과 동일 소스(Employee)·동일 기준(owner_id 우선). PNG 정보 카드 등 상세 표기용.
+    owner_login = found_map.owner_id or found_map.created_by
+    if owner_login:
         found_map.owner_name = (
             await session.execute(
-                select(Employee.name).where(Employee.login_id == found_map.created_by)
+                select(Employee.name).where(Employee.login_id == owner_login)
             )
         ).scalars().first()
     if found_map.category_id is not None:
