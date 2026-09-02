@@ -4,6 +4,8 @@ logic.effective_role 는 입력값을 받는 순수 함수. 이 모듈이 map/em
 approver 를 DB에서 로드해 그 입력을 채우고, 게이트용 assert 헬퍼를 제공한다.
 """
 
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -60,72 +62,94 @@ async def get_framework_category_id(session: AsyncSession, map_id: int) -> int |
     )
 
 
-async def is_category_admin(
+@dataclass
+class CategoryAdminInfo:
+    """카테고리 (자기+조상) 체인 권한 판정 결과 — resolve_category_admin 반환형.
+
+    admin_level/admin_category_id는 매치된 행 중 최소 level(최상위)을 채택한다(다중 매치 시
+    상위 체인 관리자를 대표로 노출 — 대시보드 스코프용). direct는 category_id 자신에 매치
+    행이 있는지를 레벨 채택과 무관하게 별도로 보므로, 조상도 함께 권한자인 이중 부여
+    상황에서도 True — is_direct_l5_admin(framework-confirm 게이트)이 이런 사용자를
+    잘못 걸러내지 않도록 보존한다.
+    """
+
+    is_admin: bool
+    admin_level: int | None
+    admin_category_id: int | None
+    direct: bool
+
+
+async def resolve_category_admin(
     session: AsyncSession, login_id: str, category_id: int
-) -> bool:
-    """카테고리 권한자 판정 — 자기+조상 체인에 user 직접 또는 (active 그룹) group 매치 (design 2026-08-28 §4).
+) -> CategoryAdminInfo:
+    """카테고리 (자기+조상) 체인 권한자를 레벨 인지로 판정 (design 2026-08-28 §4 확장).
 
     sysadmin은 여기서 판정하지 않는다 — 호출부가 logic.is_sysadmin을 먼저 본다.
     """
     rows = (
-        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
+        await session.execute(
+            select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
+        )
     ).all()
-    parent_by_id = {cid: pid for cid, pid in rows}
+    parent_by_id = {cid: pid for cid, pid, _ in rows}
+    level_by_id = {cid: lvl for cid, _, lvl in rows}
     chain: list[int] = []
     cursor: int | None = category_id
     while cursor is not None and cursor in parent_by_id and cursor not in chain:
         chain.append(cursor)  # not-in-chain 가드 — (동시성) 부모 사이클에도 종료 보장
         cursor = parent_by_id[cursor]
     if not chain:
-        return False
+        return CategoryAdminInfo(False, None, None, False)
     perm_rows = (
         await session.execute(
-            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
-            .where(CategoryPermission.category_id.in_(chain))
+            select(
+                CategoryPermission.category_id,
+                CategoryPermission.principal_type,
+                CategoryPermission.principal_id,
+            ).where(CategoryPermission.category_id.in_(chain))
         )
     ).all()
     if not perm_rows:
-        return False
-    if any(ptype == "user" and pid == login_id for ptype, pid in perm_rows):
-        return True
-    group_pids = {pid for ptype, pid in perm_rows if ptype == "group"}
-    if not group_pids:
-        return False
-    emp = await session.get(Employee, login_id)
-    emp_org_path = (
-        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+        return CategoryAdminInfo(False, None, None, False)
+    group_pids = {pid for _, ptype, pid in perm_rows if ptype == "group"}
+    user_group_ids: set[str] = set()
+    if group_pids:
+        emp = await session.get(Employee, login_id)
+        emp_org_path = (
+            resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+        )
+        user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+    matched_ids = {
+        cid for cid, ptype, pid in perm_rows
+        if (ptype == "user" and pid == login_id) or (ptype == "group" and pid in user_group_ids)
+    }
+    if not matched_ids:
+        return CategoryAdminInfo(False, None, None, False)
+    best_id = min(matched_ids, key=lambda cid: level_by_id[cid])
+    return CategoryAdminInfo(
+        is_admin=True,
+        admin_level=level_by_id[best_id],
+        admin_category_id=best_id,
+        direct=category_id in matched_ids,
     )
-    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
-    return bool(group_pids & user_group_ids)
+
+
+async def is_category_admin(
+    session: AsyncSession, login_id: str, category_id: int
+) -> bool:
+    """카테고리 권한자 판정 — resolve_category_admin의 얇은 래퍼 (design 2026-08-28 §4)."""
+    return (await resolve_category_admin(session, login_id, category_id)).is_admin
 
 
 async def is_direct_l5_admin(
     session: AsyncSession, login_id: str, category_id: int
 ) -> bool:
-    """카테고리에 직접 붙은 권한자인지 — 조상 체인은 타지 않는다 (spec §5, 확정 권한 최소형).
+    """카테고리에 직접 붙은 권한자인지 — resolve_category_admin의 얇은 래퍼 (spec §5).
 
-    is_category_admin 과 달리 상속을 허용하지 않는다 — 확정(framework-confirm)은
+    is_category_admin 과 달리 상속만으로는 True가 안 된다 — 확정(framework-confirm)은
     직속 L5 관리자 전용이라 상위 체인 관리자는 편집은 되지만 확정은 403.
     """
-    perm_rows = (
-        await session.execute(
-            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
-            .where(CategoryPermission.category_id == category_id)
-        )
-    ).all()
-    if not perm_rows:
-        return False
-    if any(ptype == "user" and pid == login_id for ptype, pid in perm_rows):
-        return True
-    group_pids = {pid for ptype, pid in perm_rows if ptype == "group"}
-    if not group_pids:
-        return False
-    emp = await session.get(Employee, login_id)
-    emp_org_path = (
-        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
-    )
-    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
-    return bool(group_pids & user_group_ids)
+    return (await resolve_category_admin(session, login_id, category_id)).direct
 
 
 async def get_category_admin_logins(
@@ -186,6 +210,53 @@ async def get_category_admin_logins(
                 ):
                     logins.add(emp.login_id)
     return sorted(logins)
+
+
+async def get_admin_scope(
+    session: AsyncSession, user: str
+) -> tuple[set[int], dict[int, int]]:
+    """호출자가 권한자인 카테고리 id 전체(직접 부여 + 서브트리 하향 상속) + seed id→level.
+
+    categories.py의 _admin_category_ids 확장판 — CRUD 게이트(Track C 다음 태스크)와 /me가
+    함께 쓰므로 체인 판정과 같은 access.py에 둔다(categories.py→access.py 단방향 import라
+    순환 없음). sysadmin은 (전체 id, {}) — 전권이라 seed(루트) 개념이 없다.
+    """
+    rows = (
+        await session.execute(
+            select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
+        )
+    ).all()
+    if logic.is_sysadmin(user):
+        return {cid for cid, _, _ in rows}, {}
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission.category_id, CategoryPermission.principal_type,
+                   CategoryPermission.principal_id)
+        )
+    ).all()
+    if not perm_rows:
+        return set(), {}
+    emp = await session.get(Employee, user)
+    emp_org_path = (
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+    )
+    group_ids = await get_user_active_group_ids(session, user, emp_org_path)
+    level_by_id = {cid: lvl for cid, _, lvl in rows}
+    seeds: dict[int, int] = {
+        cid: level_by_id[cid] for cid, ptype, pid in perm_rows
+        if (ptype == "user" and pid == user) or (ptype == "group" and pid in group_ids)
+    }
+    if not seeds:
+        return set(), {}
+    children_by_parent: dict[int | None, list[int]] = {}
+    for cid, pid, _ in rows:
+        children_by_parent.setdefault(pid, []).append(cid)
+    admin_ids = set(seeds)
+    frontier = [c for s in seeds for c in children_by_parent.get(s, [])]
+    while frontier:
+        admin_ids.update(frontier)
+        frontier = [c for f in frontier for c in children_by_parent.get(f, []) if c not in admin_ids]
+    return admin_ids, seeds
 
 
 async def get_effective_role(

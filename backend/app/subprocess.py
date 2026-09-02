@@ -523,3 +523,137 @@ async def validate_confirm_readiness(
         failures.append(GateFailure("plain_fanout", len(fanout), fanout))
 
     return failures
+
+
+async def validate_confirm_readiness_batch(
+    session: AsyncSession, canvases: list[tuple[ProcessMap, int]]
+) -> dict[int, list[GateFailure]]:
+    """확정 게이트 6종 배치판 — 판정은 validate_confirm_readiness와 동치, 쿼리 수는 캔버스 수와 무관.
+
+    canvases: (캔버스 맵, draft version_id) 목록. 반환은 map_id → 실패 목록. Node/Edge는
+    version_id.in_() 2쿼리로 일괄 로드하고, 링크맵 상태·published 존재·소속 L6 판정도 전
+    캔버스 합산 1쿼리씩으로 처리해 게이트당 N+1을 피한다 (categories.py framework-overview 전용).
+    """
+    if not canvases:
+        return {}
+    version_id_by_map: dict[int, int] = {m.id: vid for m, vid in canvases}
+    version_ids = list(version_id_by_map.values())
+
+    nodes_by_version: dict[int, list[Node]] = {vid: [] for vid in version_ids}
+    for n in (await session.scalars(select(Node).where(Node.version_id.in_(version_ids)))).all():
+        nodes_by_version.setdefault(n.version_id, []).append(n)
+    edges_by_version: dict[int, list[Edge]] = {vid: [] for vid in version_ids}
+    for e in (await session.scalars(select(Edge).where(Edge.version_id.in_(version_ids)))).all():
+        edges_by_version.setdefault(e.version_id, []).append(e)
+
+    map_ids = list(version_id_by_map.keys())
+    category_by_map: dict[int, int] = dict(
+        (
+            await session.execute(
+                select(ProcessCategory.linkage_map_id, ProcessCategory.id).where(
+                    ProcessCategory.linkage_map_id.in_(map_ids)
+                )
+            )
+        ).all()
+    )
+
+    # 소속 L6(카테고리별) — find_missing_l6_ids 단건 산식(포함 ∖ 링크됨)을 배치 전개
+    category_ids = set(category_by_map.values())
+    contained_by_category: dict[int, set[int]] = {cid: set() for cid in category_ids}
+    if category_ids:
+        for cat_id, l6_id in (
+            await session.execute(
+                select(ProcessMap.category_id, ProcessMap.id).where(
+                    ProcessMap.category_id.in_(category_ids), ProcessMap.deleted_at.is_(None)
+                )
+            )
+        ).all():
+            contained_by_category[cat_id].add(l6_id)
+
+    linked_by_version: dict[int, dict[int, str]] = {
+        vid: {
+            n.linked_map_id: n.id
+            for n in nodes if n.node_type == "subprocess" and n.linked_map_id
+        }
+        for vid, nodes in nodes_by_version.items()
+    }
+    all_linked_ids: set[int] = {mid for linked in linked_by_version.values() for mid in linked}
+
+    link_status: dict[int, tuple] = {}
+    pub_ids: set[int] = set()
+    if all_linked_ids:
+        link_status = {
+            mid: (deleted_at, retired_to)
+            for mid, deleted_at, retired_to in (
+                await session.execute(
+                    select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id)
+                    .where(ProcessMap.id.in_(all_linked_ids))
+                )
+            ).all()
+        }
+        pub_ids = set(
+            (
+                await session.scalars(
+                    select(MapVersion.map_id)
+                    .where(
+                        MapVersion.map_id.in_(all_linked_ids),
+                        MapVersion.status == workflow.PUBLISHED,
+                    )
+                    .distinct()
+                )
+            ).all()
+        )
+
+    results: dict[int, list[GateFailure]] = {}
+    for found_map, draft_id in canvases:
+        nodes = nodes_by_version.get(draft_id, [])
+        edges = edges_by_version.get(draft_id, [])
+        sub_nodes = [n for n in nodes if n.node_type == "subprocess"]
+        failures: list[GateFailure] = []
+
+        ph = [n.id for n in sub_nodes if n.linked_map_id is None]
+        if ph:
+            failures.append(GateFailure("placeholder", len(ph), ph))
+
+        linked = linked_by_version.get(draft_id, {})
+        category_id = category_by_map.get(found_map.id)
+        if category_id is not None:
+            missing = [mid for mid in contained_by_category.get(category_id, set()) if mid not in linked]
+            if missing:
+                failures.append(GateFailure("missing_l6", len(missing), []))
+
+        stale: list[str] = []
+        if linked:
+            stale = [
+                nid for mid, nid in linked.items()
+                if mid not in link_status or link_status[mid][0] is not None or link_status[mid][1] is not None
+            ]
+            if stale:
+                failures.append(GateFailure("stale_link", len(stale), stale))
+            unpub = [
+                nid for mid, nid in linked.items()
+                if mid in link_status and nid not in stale and mid not in pub_ids
+            ]
+            if unpub:
+                failures.append(GateFailure("l6_unpublished", len(unpub), unpub))
+
+        cyclic = _find_noexit_cycle_nodes(nodes, edges)
+        if cyclic:
+            failures.append(GateFailure("noexit_cycle", len(cyclic), cyclic))
+
+        node_type_by_id = {n.id: n.node_type for n in nodes}
+        out_by_src: dict[str, list[Edge]] = {}
+        for e in edges:
+            out_by_src.setdefault(e.source_node_id, []).append(e)
+        fanout = [
+            src for src, group in out_by_src.items()
+            if len(group) >= 2
+            and node_type_by_id.get(src) != "decision"
+            and not all(e.gateway == "parallel" for e in group)
+        ]
+        if fanout:
+            failures.append(GateFailure("plain_fanout", len(fanout), fanout))
+
+        results[found_map.id] = failures
+
+    return results

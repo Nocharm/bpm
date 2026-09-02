@@ -14,6 +14,8 @@ export interface CurrentUser {
   managerIds: string[];
   // 서버(/api/me)가 산정한 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅
   canViewDashboard: boolean;
+  // 카테고리 권한자로 직접 지정된 seed 카테고리 id 목록 — Framework 설정 탭 노출·위임 스코프 게이팅
+  categoryAdminRootIds: number[];
 }
 
 let currentUser: CurrentUser | null = null;

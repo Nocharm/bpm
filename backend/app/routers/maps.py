@@ -1005,6 +1005,39 @@ async def get_pending_fw_confirm_request(
     )
 
 
+@router.delete(
+    "/{map_id}/fw-confirm-requests/pending",
+    status_code=204,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def withdraw_fw_confirm_request(
+    map_id: int,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """본인 pending 확정 요청 취소 → withdrawn (행 보존 — 이력, rename 철회 템플릿 복제).
+
+    알림 없음 — spec §5는 알림 3종(requested/done/rejected)만 고정, 철회는 대상 외.
+    점유 자동 반환 없음 — 요청 시 자동 해제된 편집권을 철회가 되돌리지 않는다(spec §5 결정).
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "fw_confirm",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending confirm request")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
+
+
 @router.post(
     "/{map_id}/sp-designation-requests",
     response_model=ApprovalRequestOut,

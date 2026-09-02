@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import delete, func, select
+from sqlalchemy import Row, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
@@ -21,21 +21,34 @@ from app.models import (
     ProcessCategory,
     ProcessMap,
 )
+from app.framework_confirm import load_confirm_draft
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
-from app.permissions.access import get_user_active_group_ids, is_category_admin
+from app.permissions.access import (
+    get_admin_scope,
+    get_category_admin_logins,
+    get_user_active_group_ids,
+    is_category_admin,
+)
 from app.schemas import (
+    CategoryAdminOut,
     CategoryCreateIn,
     CategoryMapsOut,
     CategoryNodeOut,
     CategoryPermissionEntry,
     CategoryPermissionsIn,
     CategoryPermissionsOut,
+    CategorySubtreeConfirmOut,
+    CategorySummaryL5Out,
+    CategorySummaryOut,
     CategoryUpdateIn,
     FrameworkImportRow,
+    FrameworkOverviewOut,
+    FrameworkOverviewRow,
     FrameworkSearchCategory,
     FrameworkSearchMap,
     FrameworkSearchOut,
+    GateFailureCountOut,
     InterviewImportFileOut,
     InterviewImportIn,
     InterviewImportOut,
@@ -49,6 +62,8 @@ from app.subprocess import (
     find_missing_l6_ids,
     grid_positions,
     unique_linkage_name,
+    validate_confirm_readiness,
+    validate_confirm_readiness_batch,
 )
 from app.version_events import record_version_event
 
@@ -237,40 +252,22 @@ async def _apply_card_metrics(session: AsyncSession, maps: list[ProcessMap]) -> 
 
 
 async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
-    """호출자가 권한자인 카테고리 id 전체 — 직접 부여 + 그 서브트리(하향 상속). sysadmin은 전체."""
-    rows = (
-        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
-    ).all()
-    if logic.is_sysadmin(user):
-        return {cid for cid, _ in rows}
-    perm_rows = (
-        await session.execute(
-            select(CategoryPermission.category_id, CategoryPermission.principal_type,
-                   CategoryPermission.principal_id)
-        )
-    ).all()
-    if not perm_rows:
-        return set()
-    emp = await session.get(Employee, user)
-    emp_org_path = (
-        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
-    )
-    group_ids = await get_user_active_group_ids(session, user, emp_org_path)
-    seeds = {
-        cid for cid, ptype, pid in perm_rows
-        if (ptype == "user" and pid == user) or (ptype == "group" and pid in group_ids)
-    }
-    if not seeds:
-        return set()
-    children_by_parent: dict[int | None, list[int]] = {}
-    for cid, pid in rows:
-        children_by_parent.setdefault(pid, []).append(cid)
-    admin_ids = set(seeds)
-    frontier = [c for s in seeds for c in children_by_parent.get(s, [])]
-    while frontier:
-        admin_ids.update(frontier)
-        frontier = [c for f in frontier for c in children_by_parent.get(f, []) if c not in admin_ids]
+    """호출자가 권한자인 카테고리 id 전체 — get_admin_scope(access.py)의 얇은 래퍼(id만 필요)."""
+    admin_ids, _seeds = await get_admin_scope(session, user)
     return admin_ids
+
+
+def _subtree_map_counts(rows: Sequence[Row], own_map_count: dict[int, int]) -> dict[int, int]:
+    """서브트리(자기+자손) 맵 수 합산 — 레벨 역순(깊은 노드 먼저)으로 부모에 누적, 순회 1회.
+
+    rows: 전체 (id, parent_id, ..., level, ...) 행(속성 접근 — .id/.parent_id/.level 전제).
+    list_category_nodes에서 추출 — framework-overview 등 다른 배치 조회도 재사용 가능.
+    """
+    subtree_count: dict[int, int] = {row.id: own_map_count.get(row.id, 0) for row in rows}
+    for row in sorted(rows, key=lambda r: -r.level):
+        if row.parent_id is not None:
+            subtree_count[row.parent_id] = subtree_count.get(row.parent_id, 0) + subtree_count[row.id]
+    return subtree_count
 
 
 @router.get("/search", response_model=FrameworkSearchOut)
@@ -364,11 +361,7 @@ async def list_category_nodes(
             )
         ).all()
     )
-    # 서브트리 합산 — 레벨 역순(깊은 노드 먼저)으로 부모에 누적하면 한 번의 순회로 끝난다.
-    subtree_count: dict[int, int] = {row.id: own_map_count.get(row.id, 0) for row in rows}
-    for row in sorted(rows, key=lambda r: -r.level):
-        if row.parent_id is not None:
-            subtree_count[row.parent_id] = subtree_count.get(row.parent_id, 0) + subtree_count[row.id]
+    subtree_count = _subtree_map_counts(rows, own_map_count)
 
     admin_ids = await _admin_category_ids(session, user)
     targets = sorted(children_by_parent.get(parent_id, []), key=lambda r: (r.sort_order, r.code))
@@ -386,6 +379,302 @@ async def list_category_nodes(
         )
         for r in targets
     ]
+
+
+@router.get("/framework-overview", response_model=FrameworkOverviewOut)
+async def get_framework_overview(
+    root_id: int | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> FrameworkOverviewOut:
+    """L5 연계 캔버스 배치 현황판 — 최신 fw·확정자·게이트 준비 상태를 카테고리별로 일괄 (Track C Task 4).
+
+    게이트: sysadmin은 root_id 생략(전사) 또는 임의 root 허용. 카테고리 관리자는 root_id가
+    자기 admin_ids 서브트리 안일 때만(밖이면 403), 생략 시 자기 seed 전체(admin_ids ∩ L5).
+    무권한자는 항상 403 — get_admin_scope의 seeds=={}는 sysadmin과 무권한 공통이라 is_sysadmin으로 분기.
+    """
+    cat_rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
+                ProcessCategory.name, ProcessCategory.linkage_map_id,
+            )
+        )
+    ).all()
+    by_id = {r.id: r for r in cat_rows}
+    admin_ids, seeds = await get_admin_scope(session, user)
+    is_sys = logic.is_sysadmin(user)
+
+    if root_id is not None:
+        if root_id not in by_id:
+            raise HTTPException(status_code=404, detail=f"category {root_id} not found")
+        if not is_sys and root_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="not a category admin for this root")
+        children_by_parent: dict[int | None, list[int]] = {}
+        for r in cat_rows:
+            children_by_parent.setdefault(r.parent_id, []).append(r.id)
+        scope_ids: set[int] = set()
+        frontier = [root_id]
+        while frontier:
+            scope_ids.update(frontier)
+            frontier = [c for f in frontier for c in children_by_parent.get(f, [])]
+    elif is_sys:
+        scope_ids = set(by_id)
+    elif seeds:
+        scope_ids = admin_ids
+    else:
+        raise HTTPException(status_code=403, detail="category admin permission required")
+
+    l5_rows = [r for r in cat_rows if r.level == 5 and r.id in scope_ids]
+    paths = build_category_paths([(r.id, r.parent_id, r.name) for r in cat_rows])
+
+    linkage_map_ids = [r.linkage_map_id for r in l5_rows if r.linkage_map_id is not None]
+    maps_by_id: dict[int, ProcessMap] = {}
+    draft_id_by_map: dict[int, int] = {}
+    latest_snap: dict[int, tuple[int, int, str | None, object]] = {}
+    if linkage_map_ids:
+        maps_by_id = {
+            m.id: m
+            for m in (
+                await session.scalars(select(ProcessMap).where(ProcessMap.id.in_(linkage_map_ids)))
+            ).all()
+        }
+        for mid, vid in (
+            await session.execute(
+                select(MapVersion.map_id, MapVersion.id)
+                .where(MapVersion.map_id.in_(linkage_map_ids), MapVersion.status == workflow.DRAFT)
+                .order_by(MapVersion.id.desc())
+            )
+        ).all():
+            draft_id_by_map.setdefault(mid, vid)  # desc 정렬 첫 매치=최신 draft
+        # 최신 확정 스냅샷 — map_id.in_() 배치 1쿼리(framework_confirm.py 단건 max 패턴 확장)
+        for mid, major, minor, submitted_by, created_at in (
+            await session.execute(
+                select(
+                    MapVersion.map_id, MapVersion.fw_major, MapVersion.fw_minor,
+                    MapVersion.submitted_by, MapVersion.created_at,
+                ).where(MapVersion.map_id.in_(linkage_map_ids), MapVersion.status == workflow.CONFIRMED)
+            )
+        ).all():
+            cur = latest_snap.get(mid)
+            if cur is None or (major, minor) > (cur[0], cur[1]):
+                latest_snap[mid] = (major, minor, submitted_by, created_at)
+
+    canvases = [
+        (maps_by_id[r.linkage_map_id], draft_id_by_map[r.linkage_map_id])
+        for r in l5_rows
+        if r.linkage_map_id is not None
+        and r.linkage_map_id in maps_by_id  # 고아 linkage_map_id(무결성 위반) 방어 — 있으면 스킵
+        and r.linkage_map_id in draft_id_by_map
+    ]
+    failures_by_map = await validate_confirm_readiness_batch(session, canvases)
+
+    rows_out = []
+    for r in l5_rows:
+        map_id = r.linkage_map_id
+        if map_id is None:
+            rows_out.append(
+                FrameworkOverviewRow(category_id=r.id, path=paths.get(r.id, r.name))
+            )
+            continue
+        snap = latest_snap.get(map_id)
+        canvas_failures = failures_by_map.get(map_id)
+        rows_out.append(
+            FrameworkOverviewRow(
+                category_id=r.id,
+                path=paths.get(r.id, r.name),
+                linkage_map_id=map_id,
+                latest_fw=f"v{snap[0]}.{snap[1]}" if snap else None,
+                confirmed_by=snap[2] if snap else None,
+                confirmed_at=snap[3].isoformat() if snap else None,
+                ready=(not canvas_failures) if canvas_failures is not None else None,
+                failures=(
+                    [GateFailureCountOut(code=f.code, count=f.count) for f in canvas_failures]
+                    if canvas_failures
+                    else []
+                ),
+            )
+        )
+    rows_out.sort(key=lambda row: row.path)
+    return FrameworkOverviewOut(rows=rows_out)
+
+
+async def _summary_admins(
+    session: AsyncSession, category_id: int, by_id: dict[int, Row]
+) -> list[CategoryAdminOut]:
+    """조상 체인 포함 관리자 "개인" 목록 — 동일인이 여러 행(자신+조상)에 걸리면 최소 level(가장
+    상위 조상) 채택 (Track C Task 5, 브리프 지침). get_category_admin_logins(direct_only=False)는
+    login 집합만 줘서 "행이 붙은 카테고리의 level"을 못 담으므로, 체인(최대 5단)을 거슬러 오르며
+    카테고리별로 direct_only=True 재조회한다 — 길이가 짧아 N+1이어도 무해하다.
+    """
+    chain_ids: list[int] = []
+    cursor: int | None = category_id
+    while cursor is not None and cursor in by_id:
+        chain_ids.append(cursor)
+        cursor = by_id[cursor].parent_id
+
+    level_by_login: dict[str, int] = {}
+    for cid in chain_ids:
+        for login in await get_category_admin_logins(session, cid, direct_only=True):
+            level = by_id[cid].level
+            if login not in level_by_login or level < level_by_login[login]:
+                level_by_login[login] = level
+
+    if not level_by_login:
+        return []
+    # get_display_name과 동일 규칙(Employee.name, 없으면 login_id)을 배치 1쿼리로 재현
+    name_by_login = dict(
+        (
+            await session.execute(
+                select(Employee.login_id, Employee.name).where(
+                    Employee.login_id.in_(level_by_login.keys())
+                )
+            )
+        ).all()
+    )
+    return [
+        CategoryAdminOut(login_id=lid, name=name_by_login.get(lid) or lid, level=level_by_login[lid])
+        for lid in sorted(level_by_login)
+    ]
+
+
+async def _summary_l5(
+    session: AsyncSession, map_id: int | None, can_edit_linkage: bool
+) -> CategorySummaryL5Out:
+    """level==5 캔버스 상태 — framework-overview 1행과 동치 계산을 단건으로(브리프 지침:
+    배치 대신 validate_confirm_readiness 단건판 사용). can_edit_linkage는 호출부가 판정해 그대로 싣는다.
+    """
+    if map_id is None:
+        return CategorySummaryL5Out(can_edit_linkage=can_edit_linkage)
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None:  # 고아 linkage_map_id(무결성 위반) 방어 — 포인터는 유지, 나머지는 미상(None)
+        return CategorySummaryL5Out(linkage_map_id=map_id, can_edit_linkage=can_edit_linkage)
+    draft = await load_confirm_draft(session, map_id)
+    latest: tuple[int, int, str | None, object] | None = None
+    for major, minor, submitted_by, created_at in (
+        await session.execute(
+            select(
+                MapVersion.fw_major, MapVersion.fw_minor,
+                MapVersion.submitted_by, MapVersion.created_at,
+            ).where(MapVersion.map_id == map_id, MapVersion.status == workflow.CONFIRMED)
+        )
+    ).all():
+        if latest is None or (major, minor) > (latest[0], latest[1]):
+            latest = (major, minor, submitted_by, created_at)
+    failures = await validate_confirm_readiness(session, found_map, draft) if draft is not None else None
+    return CategorySummaryL5Out(
+        linkage_map_id=map_id,
+        latest_fw=f"v{latest[0]}.{latest[1]}" if latest else None,
+        confirmed_by=latest[2] if latest else None,
+        confirmed_at=latest[3].isoformat() if latest else None,
+        ready=(not failures) if failures is not None else None,
+        failures=(
+            [GateFailureCountOut(code=f.code, count=f.count) for f in failures] if failures else []
+        ),
+        can_edit_linkage=can_edit_linkage,
+    )
+
+
+@router.get("/{category_id}/summary", response_model=CategorySummaryOut)
+async def get_category_summary(
+    category_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> CategorySummaryOut:
+    """카테고리 1노드 레벨 요약 — 담당자 파악 목적이라 로그인 전체 열람(가시성 판정 없음, 404만,
+    spec §8.3). level==5는 자기 캔버스 상태(l5), level<5는 서브트리 L5 확정 현황 3종(subtree_confirm).
+    """
+    cat_rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
+                ProcessCategory.name, ProcessCategory.linkage_map_id,
+            )
+        )
+    ).all()
+    by_id = {r.id: r for r in cat_rows}
+    if category_id not in by_id:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    category = by_id[category_id]
+
+    paths = build_category_paths([(r.id, r.parent_id, r.name) for r in cat_rows])
+
+    children_by_parent: dict[int | None, list[int]] = {}
+    for r in cat_rows:
+        children_by_parent.setdefault(r.parent_id, []).append(r.id)
+    child_count = len(children_by_parent.get(category_id, []))
+
+    # 서브트리(자기 포함) BFS — visited 가드로 (동시성) 부모 사이클에도 종료 보장 (delete_category 선례)
+    subtree_ids: set[int] = {category_id}
+    frontier = children_by_parent.get(category_id, [])
+    while frontier:
+        subtree_ids.update(frontier)
+        frontier = [
+            nid for n in frontier for nid in children_by_parent.get(n, []) if nid not in subtree_ids
+        ]
+    subtree_l5_rows = [by_id[i] for i in subtree_ids if by_id[i].level == 5]
+
+    own_map_count: dict[int, int] = dict(
+        (
+            await session.execute(
+                select(ProcessMap.category_id, func.count())
+                .where(ProcessMap.deleted_at.is_(None), ProcessMap.category_id.is_not(None))
+                .group_by(ProcessMap.category_id)
+            )
+        ).all()
+    )
+    subtree_map_count = _subtree_map_counts(cat_rows, own_map_count).get(category_id, 0)
+
+    admins = await _summary_admins(session, category_id, by_id)
+
+    l5_out: CategorySummaryL5Out | None = None
+    subtree_confirm_out: CategorySubtreeConfirmOut | None = None
+    if category.level == 5:
+        # CategoryNodeOut.can_edit_linkage(list_category_nodes)와 동일 의미: 체인 관리자 or sysadmin.
+        can_edit_linkage = logic.is_sysadmin(user) or await is_category_admin(session, user, category_id)
+        l5_out = await _summary_l5(session, category.linkage_map_id, can_edit_linkage)
+    else:
+        l5_map_ids = [r.linkage_map_id for r in subtree_l5_rows if r.linkage_map_id is not None]
+        confirmed_map_ids: set[int] = set()
+        if l5_map_ids:
+            confirmed_map_ids = set(
+                (
+                    await session.scalars(
+                        select(MapVersion.map_id)
+                        .where(
+                            MapVersion.map_id.in_(l5_map_ids),
+                            MapVersion.status == workflow.CONFIRMED,
+                        )
+                        .distinct()
+                    )
+                ).all()
+            )
+        no_canvas = sum(1 for r in subtree_l5_rows if r.linkage_map_id is None)
+        confirmed = sum(
+            1 for r in subtree_l5_rows
+            if r.linkage_map_id is not None and r.linkage_map_id in confirmed_map_ids
+        )
+        # 우선순위(상호배타, 브리프 고정): no_canvas > 스냅샷≥1이면 confirmed > 나머지 not_ready
+        # — ready==False라도 스냅샷이 있으면 confirmed로 집계(정의 충돌 해소, CLAUDE.md 계약과 동일 표기).
+        # validate_confirm_readiness_batch(게이트 판정) 미사용 이유: 여기선 스냅샷 존재 여부만 필요하고
+        # 현재 draft의 ready 판정은 무관 — 불필요한 노드/엣지 배치 로드를 피한다.
+        not_ready = len(subtree_l5_rows) - no_canvas - confirmed
+        subtree_confirm_out = CategorySubtreeConfirmOut(
+            confirmed=confirmed, not_ready=not_ready, no_canvas=no_canvas
+        )
+
+    return CategorySummaryOut(
+        id=category_id,
+        name=category.name,
+        level=category.level,
+        path=paths.get(category_id, category.name),
+        child_count=child_count,
+        subtree_l5_count=len(subtree_l5_rows),
+        subtree_map_count=subtree_map_count,
+        admins=admins,
+        l5=l5_out,
+        subtree_confirm=subtree_confirm_out,
+    )
 
 
 _INTERVIEW_ISSUE_CAP = 200  # 파일당 이슈 표시 상한 — 초과분은 말미 요약 1행
@@ -639,10 +928,19 @@ async def _category_metrics(session: AsyncSession, category_id: int) -> tuple[in
 @router.post("", response_model=CategoryNodeOut, status_code=201)
 async def create_category(
     payload: CategoryCreateIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryNodeOut:
-    """카테고리 생성 — parent_id 지정 시 level=parent+1(무부모=1), code 미지정 시 `ui-` 접두 자동채번."""
+    """카테고리 생성 — parent_id 지정 시 level=parent+1(무부모=1), code 미지정 시 `ui-` 접두 자동채번.
+
+    위임 게이트(design 트랙 C §7): 생성은 서브트리 전체(seed 자신 포함) 허용 — parent_id가
+    관리자의 admin_ids 안이면 OK. 루트 생성(parent_id=None)은 sysadmin 전용 유지.
+    """
+    if not logic.is_sysadmin(user):
+        admin_ids, _seeds = await get_admin_scope(session, user)
+        if payload.parent_id is None or payload.parent_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
+
     level = 1
     if payload.parent_id is not None:
         parent = await session.get(ProcessCategory, payload.parent_id)
@@ -694,13 +992,32 @@ async def create_category(
 async def update_category(
     category_id: int,
     payload: CategoryUpdateIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryNodeOut:
-    """이름·정렬 갱신 + 이동(서브트리 level 재계산). parent_id는 fields_set으로 미전송/null 구분."""
+    """이름·정렬 갱신 + 이동(서브트리 level 재계산). parent_id는 fields_set으로 미전송/null 구분.
+
+    위임 게이트(design 트랙 C §7): 개명·정렬은 서브트리 전체(seed 자신 포함) 허용 — category_id가
+    admin_ids 안이면 OK. 이동(parent_id가 실제로 변경될 때만)은 seed 자신 금지 + 새 부모도
+    admin_ids 안이어야 함. **예외**: seed가 전부 L5인 관리자는 구조 변경(PATCH 전체) 불가
+    (spec §7 — L5 관리자는 카테고리 구조를 못 건드림). seeds에 L1~L4가 하나라도 섞여 있으면
+    그 서브트리 자격으로 기존 동작 유지(final review Finding 1).
+    """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+
+    is_sysadmin = logic.is_sysadmin(user)
+    admin_ids: set[int] = set()
+    seeds: dict[int, int] = {}
+    if not is_sysadmin:
+        admin_ids, seeds = await get_admin_scope(session, user)
+        if seeds and all(level == 5 for level in seeds.values()):
+            raise HTTPException(
+                status_code=403, detail="L5 admins cannot modify category structure"
+            )
+        if category_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
 
     if payload.name is not None:
         category.name = payload.name
@@ -715,6 +1032,14 @@ async def update_category(
     moved = False
     if "parent_id" in payload.model_fields_set:
         new_parent_id = payload.parent_id  # None=루트로 이동
+        wants_move = new_parent_id != category.parent_id
+        if not is_sysadmin and wants_move:
+            if category_id in seeds:
+                raise HTTPException(
+                    status_code=403, detail="cannot move a delegated seed category"
+                )
+            if new_parent_id not in admin_ids:
+                raise HTTPException(status_code=403, detail="outside your delegated subtree")
         rows = (
             await session.execute(
                 select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level)
@@ -815,14 +1140,26 @@ async def update_category(
 @router.delete("/{category_id}", status_code=204)
 async def delete_category(
     category_id: int,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """서브트리 묶음 삭제 — 서브트리 어디든 연결 맵(소프트삭제 포함)이 1개라도 있으면 409,
-    없으면 하위 카테고리까지 통째로 삭제(2026-08-12 정책: 빈 하위는 개별 정리 없이 묶음 처리)."""
+    없으면 하위 카테고리까지 통째로 삭제(2026-08-12 정책: 빈 하위는 개별 정리 없이 묶음 처리).
+
+    위임 게이트(design 트랙 C §7): 삭제는 seed 자신 금지 — 하위(서브트리 내 non-seed)는 허용.
+    """
     category = await session.get(ProcessCategory, category_id)
     if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+
+    if not logic.is_sysadmin(user):
+        admin_ids, seeds = await get_admin_scope(session, user)
+        if category_id not in admin_ids:
+            raise HTTPException(status_code=403, detail="outside your delegated subtree")
+        if category_id in seeds:
+            raise HTTPException(
+                status_code=403, detail="cannot delete a delegated seed category"
+            )
 
     # 서브트리 수집(자기 포함) — BFS, visited 가드로 (동시성) 부모 사이클에도 종료 보장.
     rows = (
@@ -989,15 +1326,36 @@ async def open_linkage_map(
     return LinkageMapOut(map_id=canvas.id, added_count=len(missing), missing_count=0)
 
 
+async def _assert_can_manage_appointments(
+    session: AsyncSession, user: str, category: ProcessCategory
+) -> None:
+    """임명(perms GET·PUT) 위임 게이트 — 서브트리 내 + 대상 level > min(관리자 seed levels).
+
+    구현 단순화(브리프 지시): 다중 seed 케이스에서 최상위(최소 level) seed 기준으로 판정 —
+    가장 관대하지만 §7 의도(하위 레벨만 임명 가능)에 부합한다.
+    """
+    if logic.is_sysadmin(user):
+        return
+    admin_ids, seeds = await get_admin_scope(session, user)
+    if category.id not in admin_ids:
+        raise HTTPException(status_code=403, detail="outside your delegated subtree")
+    if category.level <= min(seeds.values()):
+        raise HTTPException(
+            status_code=403, detail="can only manage lower-level categories"
+        )
+
+
 @router.get("/{category_id}/permissions", response_model=CategoryPermissionsOut)
 async def list_category_permissions(
     category_id: int,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryPermissionsOut:
-    """카테고리 권한자 목록 — sysadmin 전용 (설정 Framework 탭 관리 화면)."""
-    if await session.get(ProcessCategory, category_id) is None:
+    """카테고리 권한자 목록 — sysadmin 또는 상위 위임 관리자 (설정 Framework 탭 관리 화면)."""
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    await _assert_can_manage_appointments(session, user, category)
     return await _load_category_permissions(session, category_id)
 
 
@@ -1005,12 +1363,14 @@ async def list_category_permissions(
 async def set_category_permissions(
     category_id: int,
     payload: CategoryPermissionsIn,
-    login_id: str = Depends(require_sysadmin),
+    user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryPermissionsOut:
     """권한자 전체 교체 — 멱등 PUT(setApprovers 선례). 중복 항목은 1개로 접는다."""
-    if await session.get(ProcessCategory, category_id) is None:
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
         raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    await _assert_can_manage_appointments(session, user, category)
     await session.execute(
         delete(CategoryPermission).where(CategoryPermission.category_id == category_id)
     )
@@ -1023,7 +1383,7 @@ async def set_category_permissions(
         session.add(
             CategoryPermission(
                 category_id=category_id, principal_type=entry.principal_type,
-                principal_id=entry.principal_id, granted_by=login_id,
+                principal_id=entry.principal_id, granted_by=user,
             )
         )
     await session.commit()

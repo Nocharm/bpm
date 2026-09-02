@@ -854,6 +854,84 @@ class ConfirmReadinessOut(BaseModel):
     failures: list[GateFailureOut] = []
 
 
+class GateFailureCountOut(BaseModel):
+    """확정 게이트 위반 1건 — 배치 현황판용 경량판(node_ids 생략) (Track C Task 4)."""
+
+    code: str
+    count: int
+
+
+class FrameworkOverviewRow(BaseModel):
+    """배치 현황판 1행 — L5 카테고리 1개의 캔버스 상태 요약 (Track C Task 4)."""
+
+    category_id: int
+    path: str
+    linkage_map_id: int | None = None
+    latest_fw: str | None = None  # "v2.1" — 확정 스냅샷 없으면 None
+    confirmed_at: str | None = None
+    confirmed_by: str | None = None
+    ready: bool | None = None  # 캔버스(linkage_map_id) 없으면 None
+    failures: list[GateFailureCountOut] = []
+
+
+class FrameworkOverviewOut(BaseModel):
+    """GET /categories/framework-overview 응답 — path 오름차순 정렬 (Track C Task 4)."""
+
+    rows: list[FrameworkOverviewRow]
+
+
+class CategoryAdminOut(BaseModel):
+    """레벨 요약 admins 1행 — level은 이 사람의 권한 행이 붙은 카테고리 레벨(상속 시 조상 레벨,
+    동일인 중복이면 최소 level 채택) (Track C Task 5)."""
+
+    login_id: str
+    name: str
+    level: int
+
+
+class CategorySummaryL5Out(BaseModel):
+    """CategorySummaryOut.l5 — level==5 캔버스 상태(FrameworkOverviewRow와 필드 동치,
+    category_id/path만 제외 + can_edit_linkage) (Track C Task 5, 8)."""
+
+    linkage_map_id: int | None = None
+    latest_fw: str | None = None
+    confirmed_at: str | None = None
+    confirmed_by: str | None = None
+    ready: bool | None = None
+    failures: list[GateFailureCountOut] = []
+    # 캔버스 미개설 시 "Open canvas"(생성) 노출 여부 — CategoryNodeOut.can_edit_linkage와 동일 의미
+    # (체인 관리자 or sysadmin), FE 카드가 트리 Linkage 버튼과 같은 규칙을 쓰도록 (Track C Task 8 리뷰).
+    can_edit_linkage: bool = False
+
+
+class CategorySubtreeConfirmOut(BaseModel):
+    """CategorySummaryOut.subtree_confirm — level<5 서브트리 L5 확정 현황 3종, 상호배타 집계.
+
+    우선순위(브리프 고정): no_canvas(연계 캔버스 미개설) > confirmed(확정 스냅샷 ≥1,
+    현재 draft의 ready 여부 무관) > not_ready(캔버스는 있으나 스냅샷 0) (Track C Task 5).
+    """
+
+    confirmed: int
+    not_ready: int
+    no_canvas: int
+
+
+class CategorySummaryOut(BaseModel):
+    """GET /categories/{id}/summary 응답 — 레벨 요약(공통 + level==5면 l5, level<5면
+    subtree_confirm) (Track C Task 5)."""
+
+    id: int
+    name: str
+    level: int
+    path: str
+    child_count: int
+    subtree_l5_count: int
+    subtree_map_count: int
+    admins: list[CategoryAdminOut] = []
+    l5: CategorySummaryL5Out | None = None
+    subtree_confirm: CategorySubtreeConfirmOut | None = None
+
+
 class CategoryCreateIn(BaseModel):
     """카테고리 생성 — sysadmin 전용. code 미지정 시 라우터가 `ui-{uuid8}` 자동 채번."""
 
@@ -1467,6 +1545,8 @@ class MeOut(BaseModel):
     can_view_dashboard: bool = False
     # 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬 (2026-07-09)
     manager_ids: list[str] = []
+    # 카테고리 권한자로 직접 지정된 seed 카테고리 id 목록 — 레벨 위임 UI 게이팅용 (Track C Task 1)
+    category_admin_root_ids: list[int] = []
 
 
 class EmployeeOut(BaseModel):

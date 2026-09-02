@@ -245,6 +245,7 @@ export default function SettingsPage() {
         isSysadmin: me.is_sysadmin,
         managerIds: me.manager_ids ?? [],
         canViewDashboard: me.can_view_dashboard ?? false,
+        categoryAdminRootIds: me.category_admin_root_ids ?? [],
       });
     } catch {
       setCurrentUser(null);

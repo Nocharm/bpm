@@ -82,6 +82,7 @@ L1~L4 관리자는 서브트리 캔버스를 **편집**할 수 있으나 **확�
 - **노출**: ① 에디터 승인 탭 framework 박스에 pending 요청 카드(기존 PendingApprovalsPanel 디자인 준용) ② 설정 > 승인큐(ApprovalQueue)에 kind 행 추가 ③ 알림 3종 신설 — `fw_confirm_requested`(L5 관리자+sysadmin), `fw_confirm_done`/`fw_confirm_rejected`(요청자). 신규 알림 타입은 4곳 동시 갱신(payload 구조화·KNOWN_TYPES·i18n·아이콘) — 알림 리치 렌더 규약.
 - 확정이 요청 없이 직접 이뤄지면 pending 요청은 `superseded` 처리.
 - 요청 생성 시 요청자의 draft 점유는 자동 해제된다(요청=편집권 이양 — sticky 점유와 decide 확정의 교착 방지, 2026-09-02 최종 리뷰 결정).
+- 요청자는 pending 요청을 철회할 수 있다(`DELETE /maps/{id}/fw-confirm-requests/pending` — rename 철회 선례 준용, 트랙 C). 철회해도 점유는 자동 반환하지 않는다(재체크아웃으로 복귀 — sticky 규약 일관, 2026-09-02 결정).
 
 ## 6. 옆문 봉쇄
 
@@ -126,6 +127,7 @@ L1~L4 관리자는 서브트리 캔버스를 **편집**할 수 있으나 **확�
 
 - **API**: `GET /api/categories/framework-overview?root_id=` — L5 단위 행: `{category_id, path, linkage_map_id?, latest_fw: "v2.1"?, confirmed_at?, gate: {missing, placeholder, stale, unpublished_l6, noexit_cycle, plain_fanout}, ready: bool}`. sysadmin은 전사, 관리자는 자기 서브트리 루트만 허용(그 외 403). 집계는 `_category_metrics`(categories.py:587) 선례의 배치 쿼리 + 게이트 검사기(§4) 재사용 — 그래프 검사 2종은 저장된 draft 그래프 기준.
 - **UI**: 설정 > Framework에 뷰 전환(관리 트리 ↔ 현황) — 현황은 L5 행 테이블(경로·최신 확정·게이트 6종 상태 필·바로가기). 미충족 필 클릭 시 해당 캔버스 이동.
+- 미충족 필 클릭 이동·(§8.3) 카운트 클릭 트리 포커스는 후속으로 강등(2026-09-02 최종 리뷰 — Open 링크가 이동을 대체).
 
 ### 8.2 관리자 접근 확장
 
@@ -150,6 +152,7 @@ L1~L4 관리자는 서브트리 캔버스를 **편집**할 수 있으나 **확�
 - 확정 요청은 버전 승인(`version_approvals`)과 별개 트랙 — 승인자 지정 개념을 framework에 도입하지 않는다.
 - L5 새벽 조감도 브랜드 워터마크(dev 브랜치)는 버전 상태와 무관 — 본 스펙 범위 밖.
 - 확정 스냅샷이 published가 아니게 되면서 copy_map의 "게시 이력 필수" 게이트를 framework 캔버스가 더는 충족할 수 없다 — 캔버스는 영구 복사 불가(§6 봉쇄 취지에 부합하는 의도된 결과로 확정).
+- 카테고리 요약(GET summary)은 로그인 전체 공개(관리자 노출 포함 — 담당자 파악 목적 §8.3 의도)라 현황판의 관리자 게이트는 관리 표면 구분이지 정보 은닉이 아니다.
 
 ## 10. 테스트 계획
 

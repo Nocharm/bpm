@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
 
-import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
+import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type CategoryNode, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
@@ -23,6 +23,7 @@ import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
+import { CategorySummaryCard } from "@/components/maps/category-summary-card";
 import { FrameworkTree } from "@/components/maps/framework-tree";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
@@ -65,6 +66,8 @@ export default function MapListPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 마스터-디테일 선택 / selected map for the detail panel.
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Framework 뷰 카테고리 선택(Task 8, 홈 레벨 요약 카드) — 맵 선택과 배타(아래 selectMap/selectCategory 래퍼).
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   // 재임포트 후 열린 상세 카드 강제 리마운트(키에 포함) — refresh()는 리스트만 갱신, 상세는 재조회 안 함.
   const [detailReloadKey, setDetailReloadKey] = useState(0);
   const [mapQuery, setMapQuery] = useState("");
@@ -553,7 +556,7 @@ export default function MapListPage() {
       <MapCard
         map={processMap}
         selected={effectiveSelected === processMap.id}
-        onSelect={setSelectedId}
+        onSelect={selectMap}
         nameRanges={nameRanges}
         recentOpenedAt={recentAt}
       />
@@ -596,9 +599,35 @@ export default function MapListPage() {
 
   // 브라우즈 모드(즐겨찾기·조직도 아코디언)에 전달할 카드 렌더러 — 980px 미만에서도 상세 노출. /
   // Card renderer passed to browse-mode accordions — keeps detail visible below the split breakpoint.
-  // 빈 여백을 "직접" 누르면 선택 해제 — 자식(카드·상세·버튼)에서 올라온 이벤트로는 풀지 않는다
+  // 맵/카테고리 선택 배타 래퍼(Task 8) — 한쪽을 선택하면 다른 쪽은 해제. 맵 선택만 히스토리에 쌓인다
+  // (위 selPushed 이펙트가 selectedId만 감시 — 카테고리 선택은 문서화된 가정으로 미포함, 후속 여지).
+  const selectMap = (id: number) => {
+    setSelectedId(id);
+    setSelectedCategoryId(null);
+  };
+  const selectCategory = (node: CategoryNode) => {
+    setSelectedCategoryId(node.id);
+    setSelectedId(null);
+  };
+
+  // 연계 캔버스 열기 — 있으면 이동, 없으면 생성(권한자) 후 이동. Framework 트리의 Linkage 버튼과
+  // 카테고리 요약 카드의 Open canvas 버튼이 이 핸들러를 공유한다.
+  const handleOpenLinkage = (node: { id: number; linkage_map_id: number | null }) => {
+    if (node.linkage_map_id !== null) {
+      router.push(`/maps/${node.linkage_map_id}`);
+      return;
+    }
+    void openLinkageMap(node.id)
+      .then((r) => router.push(`/maps/${r.map_id}`))
+      .catch((err) => showToast(humanizeApiError(err, t), "error"));
+  };
+
+  // 빈 여백을 "직접" 누르면 선택 해제(맵·카테고리 모두) — 자식(카드·상세·버튼)에서 올라온 이벤트로는 풀지 않는다
   const clearSelectionOnEmptyPress = (event: { target: EventTarget | null; currentTarget: EventTarget | null }) => {
-    if (event.target === event.currentTarget) setSelectedId(null);
+    if (event.target === event.currentTarget) {
+      setSelectedId(null);
+      setSelectedCategoryId(null);
+    }
   };
 
   const renderCard = (processMap: MapSummary) =>
@@ -710,6 +739,8 @@ export default function MapListPage() {
                     }`}
                     onClick={() => {
                       setHomeView(v);
+                      // framework를 벗어나면 카테고리 요약 카드가 스테일하게 남는다 — aside는 selectedCategoryId만 보고 분기.
+                      if (v !== "framework") setSelectedCategoryId(null);
                       writeTree(orgOpen, favOpen, wordOpen, unassignedOpen, treeTouched, v);
                     }}
                   >
@@ -721,7 +752,11 @@ export default function MapListPage() {
                   검색 입력 시 뷰와 무관하게 아래 공용 플랫 검색 리스트로 전환된다. */}
               <SearchBox
                 value={mapQuery}
-                onChange={setMapQuery}
+                onChange={(v) => {
+                  setMapQuery(v);
+                  // 검색 모드 진입 시 플랫 검색 리스트로 전환되며 트리(카테고리 선택)를 벗어난다 — 스테일 카드 방지.
+                  if (v.trim() !== "") setSelectedCategoryId(null);
+                }}
                 placeholder={t("home.searchPlaceholder")}
                 inputRef={searchRef}
                 dataId="home-map-search"
@@ -874,16 +909,9 @@ export default function MapListPage() {
                   key={frameworkVersion}
                   renderCard={renderCard}
                   filterMap={frameworkFilterMap}
-                  onOpenLinkage={(node) => {
-                    // 캔버스 존재 시 바로 이동(자동 보강은 에디터가 수행), 미존재면 생성 후 이동
-                    if (node.linkage_map_id !== null) {
-                      router.push(`/maps/${node.linkage_map_id}`);
-                      return;
-                    }
-                    void openLinkageMap(node.id)
-                      .then((r) => router.push(`/maps/${r.map_id}`))
-                      .catch((err) => showToast(humanizeApiError(err, t), "error"));
-                  }}
+                  onOpenLinkage={handleOpenLinkage}
+                  selectedCategoryId={selectedCategoryId}
+                  onSelectCategory={selectCategory}
                 />
               ) : mapHits.length === 0 ? (
                 /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
@@ -904,7 +932,7 @@ export default function MapListPage() {
                       writeTree(orgOpen, next, wordOpen, unassignedOpen, treeTouched, homeView);
                     }}
                     selectedId={effectiveSelected}
-                    onSelect={setSelectedId}
+                    onSelect={selectMap}
                     renderCard={renderCard}
                   />
                   {WORD_FEATURES_ENABLED ? (
@@ -917,7 +945,7 @@ export default function MapListPage() {
                         writeTree(orgOpen, favOpen, next, unassignedOpen, treeTouched, homeView);
                       }}
                       selectedId={effectiveSelected}
-                      onSelect={setSelectedId}
+                      onSelect={selectMap}
                       onCreate={() => setWordModalOpen(true)}
                       onReimport={(m) => setReimportTarget(m)}
                       onPromote={(m) => setPromoteTarget({ id: m.id, name: m.name })}
@@ -947,7 +975,7 @@ export default function MapListPage() {
                     }}
                     selectedId={effectiveSelected}
                     highlightId={null}
-                    onSelect={setSelectedId}
+                    onSelect={selectMap}
                     unassignedOpen={unassignedOpen}
                     onToggleUnassigned={() => {
                       const next = !unassignedOpen;
@@ -975,8 +1003,14 @@ export default function MapListPage() {
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                   onFrameworkChanged={handleFrameworkChanged}
                 />
+              ) : selectedCategoryId !== null ? (
+                <CategorySummaryCard
+                  key={selectedCategoryId}
+                  categoryId={selectedCategoryId}
+                  onOpenCanvas={handleOpenLinkage}
+                />
               ) : (
-                <HomeDashboard maps={processMaps} onSelect={setSelectedId} />
+                <HomeDashboard maps={processMaps} onSelect={selectMap} />
               )}
             </aside>
           </>

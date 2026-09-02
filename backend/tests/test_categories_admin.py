@@ -236,3 +236,174 @@ def test_crud_requires_sysadmin(client: TestClient, enforce: None) -> None:
     assert client.post("/api/categories", json={"name": "no"}).status_code == 403
     assert client.patch("/api/categories/1", json={"name": "no"}).status_code == 403
     assert client.delete("/api/categories/1").status_code == 403
+
+
+DELEG_ADMIN = "deleg.mid"
+DELEG_STRANGER = "deleg.stranger"  # no permission rows anywhere
+
+
+def _seed_deleg_tree(client: TestClient, prefix: str) -> dict[str, int]:
+    """L1(root) > L2(mid, DELEG_ADMIN 권한 부여) > L3(sub) > L4(leaf). 형제 L2(other)는
+    위임 서브트리 밖(이동/생성 차단 검증용). prefix는 code 네임스페이스 격리용(세션 공유 DB)."""
+    act_as(STRANGER_SYSADMIN)
+    root = client.post("/api/categories", json={"name": "Deleg Root", "code": f"{prefix}-ROOT"}).json()
+    mid = client.post(
+        "/api/categories",
+        json={"name": "Deleg Mid", "parent_id": root["id"], "code": f"{prefix}-MID"},
+    ).json()
+    sub = client.post(
+        "/api/categories",
+        json={"name": "Deleg Sub", "parent_id": mid["id"], "code": f"{prefix}-SUB"},
+    ).json()
+    leaf = client.post(
+        "/api/categories",
+        json={"name": "Deleg Leaf", "parent_id": sub["id"], "code": f"{prefix}-LEAF"},
+    ).json()
+    other = client.post(
+        "/api/categories",
+        json={"name": "Deleg Other", "parent_id": root["id"], "code": f"{prefix}-OTHER"},
+    ).json()
+    client.put(
+        f"/api/categories/{mid['id']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": DELEG_ADMIN}]},
+    )
+    return {
+        "root": root["id"], "mid": mid["id"], "sub": sub["id"],
+        "leaf": leaf["id"], "other": other["id"],
+    }
+
+
+def test_delegated_create_child_inside_subtree(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG1")
+    act_as(DELEG_ADMIN)
+    resp = client.post(
+        "/api/categories", json={"name": "New under sub", "parent_id": tree["sub"]}
+    )
+    assert resp.status_code == 201
+    assert resp.json()["level"] == 4  # sub(L3)의 자식
+
+
+def test_delegated_create_outside_subtree_403(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG2")
+    act_as(DELEG_ADMIN)
+    resp = client.post(
+        "/api/categories", json={"name": "Sneaky", "parent_id": tree["other"]}
+    )
+    assert resp.status_code == 403
+    assert "outside your delegated subtree" in resp.json()["detail"]
+
+
+def test_delegated_root_create_sysadmin_only(client: TestClient, enforce: None) -> None:
+    _seed_deleg_tree(client, "DG3")
+    act_as(DELEG_ADMIN)
+    assert client.post("/api/categories", json={"name": "New root"}).status_code == 403
+    act_as(STRANGER_SYSADMIN)
+    assert client.post("/api/categories", json={"name": "New root ok"}).status_code == 201
+
+
+def test_delegated_rename_own_seed_allowed(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG4")
+    act_as(DELEG_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['mid']}", json={"name": "Mid Renamed"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Mid Renamed"
+
+
+def test_delegated_move_seed_forbidden(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG5")
+    act_as(DELEG_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['mid']}", json={"parent_id": tree["other"]})
+    assert resp.status_code == 403
+
+
+def test_delegated_move_outside_target_parent_403(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG6")
+    act_as(DELEG_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['sub']}", json={"parent_id": tree["other"]})
+    assert resp.status_code == 403
+    assert "outside your delegated subtree" in resp.json()["detail"]
+
+
+def test_delegated_delete_seed_forbidden_child_ok(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG7")
+    act_as(DELEG_ADMIN)
+    assert client.delete(f"/api/categories/{tree['mid']}").status_code == 403
+    assert client.delete(f"/api/categories/{tree['leaf']}").status_code == 204
+
+
+def test_delegated_perms_lower_level_only(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG8")
+    act_as(DELEG_ADMIN)
+    ok = client.put(
+        f"/api/categories/{tree['sub']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": "someone"}]},
+    )
+    assert ok.status_code == 200
+    same_level = client.put(
+        f"/api/categories/{tree['mid']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": "someone"}]},
+    )
+    assert same_level.status_code == 403
+    assert "can only manage lower-level categories" in same_level.json()["detail"]
+
+
+def test_delegated_perms_get_scope(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG9")
+    act_as(DELEG_ADMIN)
+    assert client.get(f"/api/categories/{tree['sub']}/permissions").status_code == 200
+    assert client.get(f"/api/categories/{tree['other']}/permissions").status_code == 403
+
+
+def _seed_deleg_tree_l5(client: TestClient, prefix: str) -> dict[str, int]:
+    """L1(root) > L2(mid) > L3(sub) > L4(leaf) > L5(bottom) — L5-only 가드 검증용(final review
+    Finding 1). mid에 DELEG_ADMIN 권한 부여(서브트리에 L5 포함 시 기존 동작 회귀 가드),
+    bottom에 별도 L5-only 관리자 권한 부여."""
+    act_as(STRANGER_SYSADMIN)
+    tree = _seed_deleg_tree(client, prefix)
+    bottom = client.post(
+        "/api/categories",
+        json={"name": "Deleg Bottom", "parent_id": tree["leaf"], "code": f"{prefix}-BOTTOM"},
+    ).json()
+    assert bottom["level"] == 5
+    client.put(
+        f"/api/categories/{bottom['id']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": DELEG_L5_ADMIN}]},
+    )
+    tree["bottom"] = bottom["id"]
+    return tree
+
+
+DELEG_L5_ADMIN = "deleg.l5only"  # seed 전체가 L5인 관리자 — 구조 변경(개명·정렬·이동) 차단 대상
+
+
+def test_delegated_l5_only_rename_forbidden(client: TestClient, enforce: None) -> None:
+    """L5-only 관리자는 자기 카테고리 개명도 403 — L5는 캔버스 배정만 가능, 구조는 불가(spec §7)."""
+    tree = _seed_deleg_tree_l5(client, "DG11")
+    act_as(DELEG_L5_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['bottom']}", json={"name": "Sneaky Rename"})
+    assert resp.status_code == 403
+    assert "L5 admins cannot modify category structure" in resp.json()["detail"]
+
+
+def test_delegated_l2_with_l5_subtree_rename_still_allowed(client: TestClient, enforce: None) -> None:
+    """회귀 가드: 관리자 seed에 L1~L4가 섞여 있으면(서브트리에 L5가 있어도) 구조 변경은 기존대로 허용."""
+    tree = _seed_deleg_tree_l5(client, "DG12")
+    act_as(DELEG_ADMIN)
+    resp = client.patch(f"/api/categories/{tree['mid']}", json={"name": "Mid Renamed Again"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Mid Renamed Again"
+
+
+def test_nonadmin_still_403_everywhere(client: TestClient, enforce: None) -> None:
+    tree = _seed_deleg_tree(client, "DG10")
+    act_as(DELEG_STRANGER)
+    assert client.post(
+        "/api/categories", json={"name": "no", "parent_id": tree["mid"]}
+    ).status_code == 403
+    assert client.patch(f"/api/categories/{tree['mid']}", json={"name": "no"}).status_code == 403
+    assert client.delete(f"/api/categories/{tree['leaf']}").status_code == 403
+    assert client.get(f"/api/categories/{tree['mid']}/permissions").status_code == 403
+    assert client.put(
+        f"/api/categories/{tree['mid']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": "x"}]},
+    ).status_code == 403

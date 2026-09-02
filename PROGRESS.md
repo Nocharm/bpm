@@ -3,17 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-02 — 에디터·설정 UX 3종 (feat/height-shift-collision-only)
-- **SP 펼침 자식 엣지 라벨 픽스**: 라벨 알약 스타일이 메인 엣지에만 적용되고 인라인 펼침 자식 엣지엔 빠져 상속 폰트(17px 검정, 배경 없음)로 렌더되던 버그. `styleEdgeLabelPill`로 lib/canvas에 추출해 양쪽 공용화(분기 Yes/No 파스텔 포함) — L5·일반 맵 동일 경로. vitest +4, 브라우저 검증 11/11.
-- **라이브러리 부서 칩 리프 표기+호버 조직 모달**: 지정 부서 전체 경로가 칩에서 여러 줄 감기던 것을 최하위 부서 한 줄(truncate)로. 칩 호버 300ms에 기존 OrgInfoModal 재사용 오픈, 닫힘은 500ms 유예(모달 위 호버는 취소) — 칩 호버는 행 피크 인텐트 억제.
-- **대시보드 뒤로가기 배선**: 대시보드 진입 시 히스토리 엔트리 push + popstate 폴백 탭 복귀 — 브라우저 뒤로가기가 /settings 이탈 대신 설정 레일로 돌아오고, 패널 뒤로가기 버튼도 history.back()으로 일원화(엔트리 잔류 없음).
-- **인터뷰 임포트 리포트 한글 병기 + self edge 루프 변환**: dry-run 이슈 메시지 전수(어댑터 49종+라우터 3종)에 한글 설명 병기. L5 self edge(A→A)는 드랍 대신 loop로 강제 유지 — 엔진(`expand_linkage_branches`)이 단독이어도 분기 노드를 세워 ◇→자기 루프백으로 그리고 back 쌍 등록(랭크 보호), 드랍 시 함께 증발하던 quote 노트도 보존. L6(actions)도 후속으로 동일 변환 — `a{seq}r` 판단 노드를 합성해 A→◇→A 루프백, A의 기존 진출은 ◇로 이설(택일은 분기에서 갈라짐), 승격 근거를 잃은 A는 process 복원. 루프 유래 합성 노드 이름은 원본명 없이 고정 "반복 여부(자동 생성됨)"(L5는 `(origin, src) ∈ back_pairs` 시그니처로 판별, 팬아웃 유래는 기존 "{이름} 결과" 유지 — 사용자 결정). pytest 1287(+6)·실 API dry-run/apply·L5/L6 캔버스 렌더 확인. 설계 문서 3종(v04 설계·결과·8/18 원설계) 동기화.
-- **펼침 자식/게이트웨이 엣지 사용감 통일**: F14 하이라이트 순회 입력을 메인+자식+게이트웨이+표시 끝 합집합으로 확장(경계 관통, 숨긴 SP 진출 엣지 제외)·강조 시 dim 해제. 자식 엣지 선택 개방(읽기전용 인스펙터: 소스→타겟·라벨·안내), 게이트웨이/표시 끝은 "흐름 안내 엣지" 안내 패널. selected는 styledEdges에서 직접 세팅(자식은 edges state 밖이라 RF 선택 에코 소실). 라벨편집·삭제·우클릭 편집은 가드(읽기전용 note). 브라우저 검증 14/14.
+## 2026-09-02 — height-shift 충돌 기반 전환 + 에디터·임포트 개선 (feat/height-shift-collision-only)
+- **height-shift 충돌 기반 전환**: 커진 노드의 Y축 보정을 전역 계단함수 → 충돌 기반 필드로(`lib/height-shift.ts` 재작성) — 성장분은 저장 여백을 먼저 흡수, X 겹침 열만 `min(저장 간격, 16px)` 유지하며 밀리고 같은 행은 max 동기화. 역변환은 열 프로브 이분탐색(`invertDisplayY`)+드래그 자기 푸셔 제외, 저장 좌표 불변·BE/임포트 배치 무변경. `pw-smoke-height-shift.mjs` 계약 재작성 14/14.
+- **에디터/설정 UX 4종**: 펼침 자식 엣지 라벨 알약 복원(`styleEdgeLabelPill` 공용화), 라이브러리 부서 칩 리프 한 줄 표기+호버 조직 모달(닫힘 500ms 유예), 대시보드 브라우저 뒤로가기 → 설정 레일 복귀(popstate), 펼침 자식/게이트웨이 엣지 사용감 통일 — F14 하이라이트 경계 관통·자식 엣지 선택 개방(읽기전용 인스펙터)·게이트웨이 "흐름 안내 엣지" 안내(selected는 styledEdges 직접 세팅 — 자식은 edges state 밖이라 RF 에코 소실).
+- **인터뷰 임포트**: dry-run 이슈 메시지 전수(어댑터 49종+라우터 3종) 영어+한글 병기. self edge(A→A)는 드랍 대신 분기 노드 합성 — L6 `a{seq}r` 합성+진출 이설+승격 복원, L5 단독 진출도 강제 fork+back 등록, 이름은 고정 "반복 여부(자동 생성됨)"(`LOOP_BRANCH_NODE_NAME` 단일 소스, 팬아웃 유래는 "{이름} 결과" 유지), quote 노트 보존·자동 생성 노티. 설계 문서 3종 동기화.
 
-## 2026-09-02 — height-shift 충돌 기반 전환 (feat/height-shift-collision-only)
-- 노드 정보 표시로 커진 노드의 Y축 보정을 전역 계단함수 → **충돌 기반 필드**로 전환(`lib/height-shift.ts` 재작성): 성장분이 저장 여백을 먼저 흡수하고, X 구간이 겹쳐 실제 충돌하는 아래 노드만 `min(저장 간격, 16px)` 유지하며 밀림. 같은 행(저장 Y구간 겹침 체인)은 밀림량 max 동기화(사용자 결정 2건 반영). 자동정렬 후 이중 간격·빈 열 공간 낭비·드롭 즉시 밀림 해소.
-- 역변환은 열 프로브 이분탐색(`invertDisplayY`, 단조 필드·갭 클램프·플래토 최소 y) + 드래그 노드 자기 푸셔 제외. page.tsx 배선은 steps→field 치환(오프셋 소비자 Map 계약 불변 — 트윈·그룹박스·PNG·edge-detour 무수정). BE·임포트 레이아웃 무변경(기준높이 배치 그대로).
-- 게이트: vitest 830(+9)·lint·tsc·build 그린, `pw-smoke-height-shift.mjs` 계약 재작성 14/14(간격 흡수·행 동기화·타 열 부동·드래그 왕복), framework-canvas 스모크 14/14(L5 회귀 무).
+## 2026-09-02 — 트랙 C: 레벨 위임·현황판·레벨 요약 카드 머지 — 스펙 §1~§8 전 항목 구현 완료 (dev)
+- 레벨 인지 판정(`resolve_category_admin`·`get_admin_scope`·`/me` category_admin_root_ids)과 카테고리 CRUD 위임 5게이트(생성·개명·정렬=서브트리 seed 포함 / 이동·삭제=seed 금지+새 부모 검사 / 임명=하위 레벨만 / **L5-only 관리자는 구조 변경 전체 403** / 루트 생성·임포트=sysadmin). fw_confirm 요청 철회(`DELETE .../fw-confirm-requests/pending`, 점유 미반환)+그룹 수신자 실증.
+- 현황판 `GET /categories/framework-overview`(배치 검사기 — 캔버스 수 무관 고정 쿼리, 단건 동치 테스트 6코드 전수)+설정>Framework Manage↔Status 테이블, 레벨 요약 `GET /categories/{id}/summary`(전체 공개·can_edit_linkage)+홈 트리 행 선택→aside 요약 카드(맵 선택 배타·빈공간 복귀). 위임 관리자는 설정 탭에서 자기 서브트리만(frameworkAdmin 접근). 실패 필 라벨은 부정형(`framework.gateFail.*`)으로 분리.
+- 검증: 신규 스모크 `pw-smoke-framework-delegation.mjs` 18/18(위임 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys` — 기본 false는 전원 sysadmin 바이패스). 게이트 pytest 1311·vitest 833·build 그린.
 
 ## 2026-09-02 — 트랙 B: 확정 게이트 6종 + 점유·직속 L5 확정권 + 확정 요청 워크플로 (feat/fw-track-b-gates)
 - 확정 게이트 6종(missing_l6·placeholder·stale_link·l6_unpublished·noexit_cycle·plain_fanout — 병행 팬아웃은 전부 `Edge.gateway=parallel`이면 예외)을 체크아웃 점유·직속 L5 관리자(`is_direct_l5_admin`) 자기확정권과 함께 `perform_framework_confirm`에 통합, `GET /maps/{id}/confirm-readiness`(+`can_confirm`)를 체크리스트 단일 소스로 노출하고 라이브 draft 삭제를 차단했다.

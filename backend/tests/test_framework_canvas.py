@@ -160,6 +160,100 @@ def test_framework_role_derivation(client: TestClient, enforce: None) -> None:
     assert sysadmin == "owner"
 
 
+def test_resolve_category_admin_ancestor_match(client: TestClient, enforce: None) -> None:
+    """조상 행 매치 시 그 행의 level/category_id를 반환하고 direct=False (Track C Task 1 ①)."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.permissions.access import resolve_category_admin
+
+    l1 = _seed_category(client, "FWC-RC-1", "판정L1")
+    l5 = _seed_category(client, "FWC-RC-5", "판정L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.rcancestor"}]})
+
+    async def _resolve() -> tuple:
+        async with SessionLocal() as session:
+            info = await resolve_category_admin(session, "fwc.rcancestor", l5)
+            pleb_info = await resolve_category_admin(session, "fwc.rcpleb", l5)
+            return info, pleb_info
+
+    info, pleb_info = asyncio.run(_resolve())
+    assert info.is_admin is True
+    assert info.admin_level == 1
+    assert info.admin_category_id == l1
+    assert info.direct is False
+    assert pleb_info.is_admin is False
+
+
+def test_resolve_category_admin_multi_match_prefers_top(client: TestClient, enforce: None) -> None:
+    """조상+직접 이중 매치 시 최소 level(최상위)을 admin_level/admin_category_id로 채택 (Track C Task 1 ②).
+
+    direct는 category_id 자신에 매치 행이 있는지를 보므로(레벨 채택과 무관) 여전히 True —
+    is_direct_l5_admin(framework-confirm 게이트)이 이중 부여 사용자를 잘못 걸러내지 않게 보존.
+    """
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.permissions.access import resolve_category_admin
+
+    l1 = _seed_category(client, "FWC-RC-M1", "판정중복L1")
+    l5 = _seed_category(client, "FWC-RC-M5", "판정중복L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.rcboth"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.rcboth"}]})
+
+    async def _resolve():
+        async with SessionLocal() as session:
+            return await resolve_category_admin(session, "fwc.rcboth", l5)
+
+    info = asyncio.run(_resolve())
+    assert info.is_admin is True
+    assert info.admin_level == 1
+    assert info.admin_category_id == l1
+    assert info.direct is True
+
+
+def test_get_admin_scope_returns_seed_levels(client: TestClient, enforce: None) -> None:
+    """get_admin_scope가 (서브트리 admin_ids, seed_id→level) 튜플을 반환 (Track C Task 1 ③)."""
+    import asyncio
+
+    from app.db import SessionLocal
+    from app.permissions.access import get_admin_scope
+
+    l1 = _seed_category(client, "FWC-RC-S1", "스코프L1")
+    l5 = _seed_category(client, "FWC-RC-S5", "스코프L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.rcscope"}]})
+
+    async def _scope():
+        async with SessionLocal() as session:
+            return await get_admin_scope(session, "fwc.rcscope")
+
+    admin_ids, seeds = asyncio.run(_scope())
+    assert admin_ids >= {l1, l5}
+    assert seeds == {l1: 1}
+
+
+def test_me_exposes_category_admin_root_ids(client: TestClient, enforce: None) -> None:
+    """GET /me가 카테고리 관리자에게 seed id 목록을, 비관리자에게 빈 배열을 반환 (Track C Task 1 ④)."""
+    l1 = _seed_category(client, "FWC-RC-ME1", "미L1")
+    _seed_category(client, "FWC-RC-ME5", "미L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.rcme"}]})
+    act_as("fwc.rcme")
+    admin_me = client.get("/api/me").json()
+    act_as("fwc.rcmepleb")
+    pleb_me = client.get("/api/me").json()
+    assert admin_me["category_admin_root_ids"] == [l1]
+    assert pleb_me["category_admin_root_ids"] == []
+
+
 def _seed_l6_map(client: TestClient, category_id: int, name: str, code: str) -> int:
     """카테고리에 연결된 게시본 있는 L6 맵 멱등 시드."""
     import asyncio

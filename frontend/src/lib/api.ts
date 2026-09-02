@@ -850,6 +850,8 @@ export interface Me {
   manager_ids?: string[];
   // 서버가 산정한 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅
   can_view_dashboard: boolean;
+  // 카테고리 권한자로 직접 지정된 seed 카테고리 id 목록 — Framework 설정 탭 노출·위임 스코프 게이팅
+  category_admin_root_ids?: number[];
 }
 
 export function getMe(): Promise<Me> {
@@ -2692,6 +2694,11 @@ export function getPendingFwConfirmRequest(mapId: number): Promise<ApprovalReque
   return request<ApprovalRequest | null>(`/maps/${mapId}/fw-confirm-requests/pending`);
 }
 
+// 본인 pending 확정 요청 철회 — rename/sp-designation 철회 선례와 동일 계약
+export function withdrawFwConfirmRequest(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/fw-confirm-requests/pending`, { method: "DELETE" });
+}
+
 export interface CategoryPermissionEntry {
   principal_type: "user" | "group";
   principal_id: string;
@@ -2760,6 +2767,76 @@ export function updateCategory(
 // 카테고리 삭제(sysadmin) — 자식/연결 맵이 있으면 서버가 409.
 export function deleteCategory(id: number): Promise<void> {
   return request<void>(`/categories/${id}`, { method: "DELETE" });
+}
+
+// 배치 현황판 게이트 위반 1건 — GateFailureCountOut 미러(node_ids 생략) (Track C Task 7)
+export interface FrameworkOverviewGateFailure {
+  code: string;
+  count: number;
+}
+
+// 배치 현황판 1행 — L5 카테고리 1개의 연계 캔버스 상태 요약 (Track C Task 7)
+export interface FrameworkOverviewRow {
+  category_id: number;
+  path: string;
+  linkage_map_id: number | null;
+  latest_fw: string | null; // "v2.1" — 확정 스냅샷 없으면 null
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  ready: boolean | null; // 캔버스(linkage_map_id) 없으면 null
+  failures: FrameworkOverviewGateFailure[];
+}
+
+// L5 연계 캔버스 배치 현황판 — rootId 생략 시 sysadmin은 전사, 카테고리 관리자는 자기 스코프 전체
+// (서버가 자동 판정, categories.py get_framework_overview) — 생략 1회 호출이 스코프 분기보다 단순.
+export function getFrameworkOverview(rootId?: number): Promise<{ rows: FrameworkOverviewRow[] }> {
+  const qs = rootId === undefined ? "" : `?root_id=${rootId}`;
+  return request<{ rows: FrameworkOverviewRow[] }>(`/categories/framework-overview${qs}`);
+}
+
+// 홈 레벨 요약 카드 admins 1행 — level은 이 사람의 권한 행이 붙은 카테고리 레벨(상속 시 조상 레벨) (Track C Task 8)
+export interface CategorySummaryAdmin {
+  login_id: string;
+  name: string;
+  level: number;
+}
+
+// CategorySummary.l5 — FrameworkOverviewRow와 필드 동치(category_id/path 제외) + can_edit_linkage
+// (CategoryNode와 동일 의미: 체인 관리자 or sysadmin) (Track C Task 8)
+export interface CategorySummaryL5 {
+  linkage_map_id: number | null;
+  latest_fw: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  ready: boolean | null;
+  failures: FrameworkOverviewGateFailure[];
+  can_edit_linkage: boolean;
+}
+
+// CategorySummary.subtree_confirm — level<5 서브트리 L5 확정 현황 3종, 상호배타 집계 (Track C Task 8)
+export interface CategorySubtreeConfirm {
+  confirmed: number;
+  not_ready: number;
+  no_canvas: number;
+}
+
+// GET /categories/{id}/summary 응답 — 홈 레벨 요약 카드(Track C Task 8). level==5면 l5, level<5면
+// subtree_confirm이 채워진다(둘은 상호배타).
+export interface CategorySummary {
+  id: number;
+  name: string;
+  level: number;
+  path: string;
+  child_count: number;
+  subtree_l5_count: number;
+  subtree_map_count: number;
+  admins: CategorySummaryAdmin[];
+  l5: CategorySummaryL5 | null;
+  subtree_confirm: CategorySubtreeConfirm | null;
+}
+
+export function getCategorySummary(categoryId: number): Promise<CategorySummary> {
+  return request<CategorySummary>(`/categories/${categoryId}/summary`);
 }
 
 export interface FrameworkImportRow {
