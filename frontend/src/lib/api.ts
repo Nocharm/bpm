@@ -2794,6 +2794,49 @@ export function getFrameworkOverview(rootId?: number): Promise<{ rows: Framework
   return request<{ rows: FrameworkOverviewRow[] }>(`/categories/framework-overview${qs}`);
 }
 
+// 홈 레벨 요약 카드 admins 1행 — level은 이 사람의 권한 행이 붙은 카테고리 레벨(상속 시 조상 레벨) (Track C Task 8)
+export interface CategorySummaryAdmin {
+  login_id: string;
+  name: string;
+  level: number;
+}
+
+// CategorySummary.l5 — FrameworkOverviewRow와 필드 동치(category_id/path 제외) (Track C Task 8)
+export interface CategorySummaryL5 {
+  linkage_map_id: number | null;
+  latest_fw: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
+  ready: boolean | null;
+  failures: FrameworkOverviewGateFailure[];
+}
+
+// CategorySummary.subtree_confirm — level<5 서브트리 L5 확정 현황 3종, 상호배타 집계 (Track C Task 8)
+export interface CategorySubtreeConfirm {
+  confirmed: number;
+  not_ready: number;
+  no_canvas: number;
+}
+
+// GET /categories/{id}/summary 응답 — 홈 레벨 요약 카드(Track C Task 8). level==5면 l5, level<5면
+// subtree_confirm이 채워진다(둘은 상호배타).
+export interface CategorySummary {
+  id: number;
+  name: string;
+  level: number;
+  path: string;
+  child_count: number;
+  subtree_l5_count: number;
+  subtree_map_count: number;
+  admins: CategorySummaryAdmin[];
+  l5: CategorySummaryL5 | null;
+  subtree_confirm: CategorySubtreeConfirm | null;
+}
+
+export function getCategorySummary(categoryId: number): Promise<CategorySummary> {
+  return request<CategorySummary>(`/categories/${categoryId}/summary`);
+}
+
 export interface FrameworkImportRow {
   code: string;
   action: string;

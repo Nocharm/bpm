@@ -2023,6 +2023,16 @@ const en = {
   "framework.overview.blocked": "Blocked",
   "framework.overview.noCanvas": "No canvas",
   "framework.overview.empty": "No L5 categories in scope.",
+  // ── 홈 레벨 요약 카드 (Track C Task 8) ──
+  "category.summary.children": "Direct children",
+  "category.summary.subtreeL5": "Subtree L5",
+  "category.summary.subtreeMaps": "Subtree maps",
+  "category.summary.admins": "Admins",
+  "category.summary.noAdmins": "No admins",
+  "category.summary.canvasSection": "Linked canvas",
+  "category.summary.openCanvas": "Open canvas",
+  "category.summary.subtreeSection": "Subtree confirmation",
+  "category.summary.notReady": "Not ready",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "Dry run",
   "framework.importApply": "Apply",
@@ -4112,6 +4122,16 @@ const ko: Record<MessageKey, string> = {
   "framework.overview.blocked": "차단됨",
   "framework.overview.noCanvas": "캔버스 없음",
   "framework.overview.empty": "범위 내 L5 카테고리가 없습니다.",
+  // ── 홈 레벨 요약 카드 (Track C Task 8) ──
+  "category.summary.children": "직계 하위",
+  "category.summary.subtreeL5": "서브트리 L5",
+  "category.summary.subtreeMaps": "서브트리 맵",
+  "category.summary.admins": "관리자",
+  "category.summary.noAdmins": "관리자 없음",
+  "category.summary.canvasSection": "연계 캔버스",
+  "category.summary.openCanvas": "캔버스 열기",
+  "category.summary.subtreeSection": "서브트리 확정 현황",
+  "category.summary.notReady": "미충족",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "드라이런",
   "framework.importApply": "적용",

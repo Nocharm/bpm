@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 트랙 C Task 8: 홈 레벨 요약 카드 (feat/fw-track-c-delegation)
+- 홈 Framework 트리에서 카테고리 행을 클릭하면(펼침 토글과 동시) 우측 패널에 `GET /categories/{id}/summary` 기반 요약 카드를 띄운다 — 집계 3필·관리자 필 목록 + level==5는 연계 캔버스 상태(최신 확정·게이트 Ready/Blocked+실패 코드·Open canvas), level<5는 서브트리 L5 확정 현황 3종. 맵 선택↔카테고리 선택은 배타(`selectMap`/`selectCategory` 래퍼로 기존 `setSelectedId` 5지점 교체) — 카테고리 선택은 히스토리 push 대상 밖(문서화된 가정).
+- Open canvas는 홈 트리 Linkage 버튼과 핸들러(`handleOpenLinkage`) 공유. 게이트 상태 필은 트랙 B `framework.gate.*`·`framework.overview.*` i18n 재사용. 신규 `category-summary-card.tsx`.
+- 게이트: tsc 0·lint 0·vitest 833·build OK.
+
 ## 2026-09-02 — 트랙 C Task 3: fw_confirm 요청 철회 + 그룹 수신자 테스트 (feat/fw-track-c-delegation)
 - `DELETE /maps/{id}/fw-confirm-requests/pending`을 rename 철회 템플릿(요청자 게이트+404/403+withdrawn) 그대로 복제. 알림·점유 자동 반환은 없음(스펙 §5 결정, 주석으로 명시). FE는 "Requested by" 캡션 옆 본인 전용 Withdraw 버튼(`framework-request-withdraw`) — 철회 성공 시 pending 재조회로 CTA 복귀, 현재 사용자는 page.tsx `username` state를 신규 prop으로 전달.
 - BE 테스트로 `principal_type='group'` 카테고리 권한자의 그룹 멤버가 `fw_confirm_requested` 알림을 받는 경로(Layer 4 §3a 판정 ↔ Track B 알림 파이프라인 결합)를 실증.

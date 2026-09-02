@@ -41,9 +41,18 @@ interface FrameworkTreeProps {
   filterMap: ((map: MapSummary) => boolean) | null;
   // L5 행 연계 캔버스 열기 — 캔버스 존재 시 전원, 미존재 시 권한자만 버튼 노출 (design 2026-08-28 §8)
   onOpenLinkage: (node: CategoryNode) => void;
+  // 홈 레벨 요약 카드(Task 8) — 선택된 카테고리 id·선택 콜백. 헤더 클릭이 펼침 토글과 함께 이 카테고리를 선택한다.
+  selectedCategoryId?: number | null;
+  onSelectCategory?: (node: CategoryNode) => void;
 }
 
-export function FrameworkTree({ renderCard, filterMap, onOpenLinkage }: FrameworkTreeProps) {
+export function FrameworkTree({
+  renderCard,
+  filterMap,
+  onOpenLinkage,
+  selectedCategoryId,
+  onSelectCategory,
+}: FrameworkTreeProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   // 캐스케이드 예산 — 펼침 제스처마다 리셋. 재귀 loadChildren들이 공유 차감한다.
@@ -251,12 +260,20 @@ export function FrameworkTree({ renderCard, filterMap, onOpenLinkage }: Framewor
     const boxed =
       showContent && !initialLoading && !loadFailed && node.level === 5 && (mapsData?.total ?? 0) > 0;
 
+    const selected = selectedCategoryId === node.id;
     const header = (
-      <div className="group flex w-full items-center gap-1 rounded-sm hover:bg-divider">
+      <div
+        className={`group flex w-full items-center gap-1 rounded-sm ${
+          selected ? "bg-accent-tint text-accent" : "hover:bg-divider"
+        }`}
+      >
         <button
           type="button"
           aria-expanded={open}
-          onClick={() => handleToggle(node.id)}
+          onClick={() => {
+            handleToggle(node.id);
+            onSelectCategory?.(node);
+          }}
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
         >
@@ -264,7 +281,9 @@ export function FrameworkTree({ renderCard, filterMap, onOpenLinkage }: Framewor
             ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
             : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
           <span
-            className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
+            className={`truncate text-fine ${
+              selected ? "text-accent" : open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"
+            }`}
           >
             {node.name}
           </span>
