@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 트랙 C 착수: 스펙 보강 + 구현 플랜 (feat/fw-track-c-delegation)
+- §5에 요청 철회 경로(DELETE fw-confirm-requests/pending·점유 미반환) 결정 추가. 트랙 C 플랜 9태스크(docs/superpowers/plans/2026-09-02-fw-track-c-delegation.md) — 레벨 인지 판정·CRUD 위임 5게이트·현황판(배치 검사기)·레벨 요약 카드·설정 스코프.
+
 ## 2026-09-02 — 트랙 B: 확정 게이트 6종 + 점유·직속 L5 확정권 + 확정 요청 워크플로 (feat/fw-track-b-gates)
 - 확정 게이트 6종(missing_l6·placeholder·stale_link·l6_unpublished·noexit_cycle·plain_fanout — 병행 팬아웃은 전부 `Edge.gateway=parallel`이면 예외)을 체크아웃 점유·직속 L5 관리자(`is_direct_l5_admin`) 자기확정권과 함께 `perform_framework_confirm`에 통합, `GET /maps/{id}/confirm-readiness`(+`can_confirm`)를 체크리스트 단일 소스로 노출하고 라이브 draft 삭제를 차단했다.
 - 상위 관리자용 확정 위임 요청 워크플로(`kind='fw_confirm'`, 직속 L5/sysadmin은 409→직접확정 유도)를 승인 표면에 통합, FE엔 Approval 탭 게이트 체크리스트+확정 버튼 disabled 연동·요청 CTA·알림 3종을 붙였다. 스모크(`pw-smoke-framework-canvas.mjs`)는 게이트 체크리스트 중심(플레이스홀더 노드 임시 주입으로 위반→해소 결정적 검증) 24/24, 요청 워크플로는 BE 10케이스로 갈음.

@@ -82,6 +82,7 @@ L1~L4 관리자는 서브트리 캔버스를 **편집**할 수 있으나 **확�
 - **노출**: ① 에디터 승인 탭 framework 박스에 pending 요청 카드(기존 PendingApprovalsPanel 디자인 준용) ② 설정 > 승인큐(ApprovalQueue)에 kind 행 추가 ③ 알림 3종 신설 — `fw_confirm_requested`(L5 관리자+sysadmin), `fw_confirm_done`/`fw_confirm_rejected`(요청자). 신규 알림 타입은 4곳 동시 갱신(payload 구조화·KNOWN_TYPES·i18n·아이콘) — 알림 리치 렌더 규약.
 - 확정이 요청 없이 직접 이뤄지면 pending 요청은 `superseded` 처리.
 - 요청 생성 시 요청자의 draft 점유는 자동 해제된다(요청=편집권 이양 — sticky 점유와 decide 확정의 교착 방지, 2026-09-02 최종 리뷰 결정).
+- 요청자는 pending 요청을 철회할 수 있다(`DELETE /maps/{id}/fw-confirm-requests/pending` — rename 철회 선례 준용, 트랙 C). 철회해도 점유는 자동 반환하지 않는다(재체크아웃으로 복귀 — sticky 규약 일관, 2026-09-02 결정).
 
 ## 6. 옆문 봉쇄
 
