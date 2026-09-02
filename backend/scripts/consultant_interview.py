@@ -56,6 +56,9 @@ _KNOWN_EDGE_KINDS = {"seq", "branch", "loop", "bypass"}
 _KNOWN_GATEWAYS = {"exclusive", "parallel"}
 _KNOWN_TRIGGERS = {"message", "timer", "condition", "manual"}
 
+# self 루프에서 합성되는 분기 노드 고정 이름 — dry-run 노티와 L5 창작부(import_consultant)가 공유
+LOOP_BRANCH_NODE_NAME = "반복 여부(자동 생성됨)"
+
 # 예외 variant 노드 stroke — 에디터 COLOR_PRESETS의 rose와 수동 동기
 # (frontend/src/app/maps/[mapId]/page.tsx COLOR_PRESETS — 색은 chrome이 아니라 노드 데이터)
 EXCEPTION_VARIANT_COLOR = "#c2849a"
@@ -369,8 +372,9 @@ def _build_flow_edges(
             # (아래 post-pass, L5 expand_linkage_branches와 같은 결정 — 사용자 결정 2026-09-02).
             issues.append(AdapterIssue(
                 "warning", epath,
-                f"self edge on seq {src!r} — kept as loop via branch node "
-                "(자기 반복 — 분기 판단 노드를 세워 되도는 연결로 변환)"))
+                f"self edge on seq {src!r} — kept as loop via auto-generated branch node "
+                f"{src_node.code}r (자기 반복 — 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
+                "되도는 연결로 변환)"))
         pair = (src_node.code, dst_node.code)
         if pair in seen:
             issues.append(AdapterIssue(
@@ -417,7 +421,7 @@ def _build_flow_edges(
         branch = CanonicalNode(
             code=f"{src_node.code}r",
             # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
-            name="재수행 여부",
+            name=LOOP_BRANCH_NODE_NAME,
             type="decision",
             seq=src_node.seq,
         )
@@ -504,8 +508,9 @@ def _build_linkage(
             # 분기 노드(◇)를 세워 ◇→자기 루프백으로 그린다 (사용자 결정 2026-09-02).
             issues.append(AdapterIssue(
                 "warning", epath,
-                f"self edge on {src!r} — kept as loop via branch node "
-                "(자기 반복 흐름 — 분기 노드를 세워 되도는 연결로 변환)"))
+                f"self edge on {src!r} — kept as loop via auto-generated branch node "
+                f"(자기 반복 흐름 — 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
+                "되도는 연결로 변환)"))
         if (src, dst) in seen:
             issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} — dropped (중복 연결 — 한 번만 반영)"))
             continue

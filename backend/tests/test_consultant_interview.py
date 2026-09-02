@@ -416,7 +416,11 @@ def test_l5_self_edge_kept_as_loop_branch() -> None:
     assert [(e.source, e.target, e.kind) for e in lk.edges] == [
         ("task-prep-0001", "task-prep-0001", "loop"),
     ]
-    assert any("self edge" in i.message and "loop" in i.message for i in res.issues)
+    assert any(
+        "self edge" in i.message and "auto-generated" in i.message
+        and "반복 여부(자동 생성됨)" in i.message
+        for i in res.issues
+    )
     # 드랍 시절엔 quote 노트도 함께 증발했다 — 유지 경로에선 flow 노트로 살아남아야 한다
     assert any(n.kind == "flow" and "미흡하면 다시 돌려요." in n.text for n in res.notes)
 
@@ -435,7 +439,11 @@ def test_l6_self_edge_becomes_loop_branch() -> None:
     branch = next(n for n in m.nodes if n.code == "a02r")
     assert branch.type == "decision"
     # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
-    assert branch.name == "재수행 여부"
+    assert branch.name == "반복 여부(자동 생성됨)"
+    # dry-run 노티 — 자동 생성 사실과 노드명·코드를 리포트에서 바로 읽을 수 있어야 한다
+    notice = next(i for i in res.issues if "self edge" in i.message)
+    assert "auto-generated" in notice.message and "a02r" in notice.message
+    assert "반복 여부(자동 생성됨)" in notice.message
     # 분기 노드는 원 노드 바로 뒤에 놓인다
     codes = [n.code for n in m.nodes]
     assert codes.index("a02r") == codes.index("a02") + 1

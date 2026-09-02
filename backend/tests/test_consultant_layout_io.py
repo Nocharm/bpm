@@ -409,7 +409,7 @@ def test_self_edge_forces_branch_loop() -> None:
 
 
 def test_self_origin_branch_is_detectable_via_back_pairs() -> None:
-    """(origin, 원본 src) ∈ back ⇔ self 유래 — L5 창작부가 이 시그니처로 '재수행 여부' 이름을 고른다."""
+    """(origin, 원본 src) ∈ back ⇔ self 유래 — L5 창작부가 이 시그니처로 '반복 여부(자동 생성됨)' 이름을 고른다."""
     from scripts.import_consultant import expand_linkage_branches
 
     _, branch_of, back = expand_linkage_branches(

@@ -59,6 +59,7 @@ from scripts.consultant_canonical import (
     CanonicalMap,
     CanonicalParams,
 )
+from scripts.consultant_interview import LOOP_BRANCH_NODE_NAME
 from scripts.consultant_layout import (
     LINKAGE_ROW_STEP,
     LayoutNode,
@@ -1111,12 +1112,12 @@ async def apply_interview_linkage(
             lineage = make_node_id(code, key)
             x, y = placed.get(key, grid[len(missing) + j])
             src_code = branch_of[key]
-            # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 "재수행 여부" —
+            # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 LOOP_BRANCH_NODE_NAME —
             # 일괄 생성 티를 낸다(사용자 결정 2026-09-02). 팬아웃 유래는 기존 "{이름} 결과" 유지.
             is_loop_origin = (key, src_code) in back_pairs
             node = Node(
                 id=uuid.uuid4().hex, version_id=draft.id, source_node_id=lineage,
-                title="재수행 여부" if is_loop_origin
+                title=LOOP_BRANCH_NODE_NAME if is_loop_origin
                 else f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
                 node_type="decision",
                 pos_x=x, pos_y=y, sort_order=next_sort + len(missing) + j,
