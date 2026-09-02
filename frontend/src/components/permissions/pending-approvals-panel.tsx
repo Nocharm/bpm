@@ -16,12 +16,13 @@ import { useI18n } from "@/lib/i18n";
 import type { ToastItem } from "@/components/toast-stack";
 import { genId } from "@/lib/id";
 
-// 결재 대기 탭이 다루는 ApprovalRequest 4종 — 결정권은 kind별로 다름(오너 vs 승인자) (설계 §C)
+// 결재 대기 탭이 다루는 ApprovalRequest 5종 — 결정권은 kind별로 다름(오너 vs 승인자 vs 직속 L5 관리자) (설계 §C)
 const APPROVAL_KINDS = new Set([
   "permission_downgrade",
   "visibility_change",
   "map_rename",
   "sp_designation",
+  "fw_confirm",
 ]);
 
 // 버전에 동봉된 visibility_change 행 — 버전 승인으로만 결정되는 읽기전용이라 결재 대기 배지에 세지 않는다.
@@ -39,6 +40,8 @@ interface Props {
   isOwner: boolean;
   /** permission/visibility 행 결정권 — 지정 승인자 또는 sysadmin 여부. */
   isApprover: boolean;
+  /** fw_confirm 행 결정권 — 직속 L5 관리자 또는 sysadmin 여부(`MapDetail.can_confirm`). */
+  canConfirm: boolean;
   /** pending 개수 통지 — 좌측 레일 배지용(로드·결정 후 호출). */
   onCountChange?: (count: number) => void;
   /** 결정 후 호출 — 호스트가 맵/협업자 데이터를 재조회하도록 / Called after a decision so the host can refetch map data. */
@@ -50,6 +53,7 @@ export function PendingApprovalsPanel({
   mapId,
   isOwner,
   isApprover,
+  canConfirm,
   onCountChange,
   onDecided,
   onToast,
@@ -62,9 +66,10 @@ export function PendingApprovalsPanel({
   // 결정 진행 중인 요청 id — 더블클릭/중복 결정 방지 / Ids being decided, to disable buttons.
   const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
 
-  // 목록 열람 권한 — 서버 게이트(오너/승인자/sysadmin)와 동일. 없으면 조회 자체를 건너뛴다:
-  // 403 → 토스트 → 부모 상태 변경 → 이펙트 deps(콜백 아이덴티티) 재실행의 무한 재요청 루프 방지 (QA).
-  const canList = isOwner || isApprover;
+  // 목록 열람 권한 — 서버 게이트(오너/승인자/sysadmin)와 동일 + fw_confirm 결정권(직속 L5 admin).
+  // 없으면 조회 자체를 건너뛴다: 403 → 토스트 → 부모 상태 변경 → 이펙트 deps(콜백 아이덴티티)
+  // 재실행의 무한 재요청 루프 방지 (QA).
+  const canList = isOwner || isApprover || canConfirm;
 
   const reload = useCallback(async () => {
     if (!canList) return;
@@ -134,6 +139,7 @@ export function PendingApprovalsPanel({
   );
 
   function canDecideKind(kind: string): boolean {
+    if (kind === "fw_confirm") return canConfirm;
     return kind === "map_rename" || kind === "sp_designation" ? isOwner : isApprover;
   }
 
@@ -154,6 +160,9 @@ export function PendingApprovalsPanel({
     if (req.kind === "sp_designation") {
       // 요청 발원 맵 표시 — 이 맵을 SP로 등록해달라는 요청
       return String(req.payload.from_map_name ?? req.payload.map_name ?? "");
+    }
+    if (req.kind === "fw_confirm") {
+      return String(req.payload.note ?? "");
     }
     return JSON.stringify(req.payload);
   }
@@ -176,7 +185,9 @@ export function PendingApprovalsPanel({
               ? t("perm.approvals.kindVisibility")
               : req.kind === "map_rename"
                 ? t("perm.approvals.kindRename")
-                : t("perm.approvals.kindSpDesignation");
+                : req.kind === "fw_confirm"
+                  ? t("approval.kindFwConfirm")
+                  : t("perm.approvals.kindSpDesignation");
         const detail = renderDetail(req);
         const isDeciding = decidingIds.has(req.id);
         const isBundled = isBundledRow(req);

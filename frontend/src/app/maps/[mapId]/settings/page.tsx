@@ -466,6 +466,7 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       isOwner={isOwner}
                       isApprover={canDecide}
+                      canConfirm={false}
                       onCountChange={setApprovalsCount}
                       onDecided={() => void refreshMap()}
                       onToast={(item) => showToast(item.message, item.tone)}

@@ -11307,6 +11307,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             mapId={String(mapId)}
                             isOwner={myRole === "owner"}
                             isApprover={isApprover || isSysadmin}
+                            canConfirm={canConfirmFw}
                             onCountChange={setEditorApprovalsCount}
                             onDecided={() => void refreshWorkflow()}
                             onToast={(item) => showToast(item.message, item.tone)}

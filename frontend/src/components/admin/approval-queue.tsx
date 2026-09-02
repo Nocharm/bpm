@@ -9,6 +9,7 @@ import { type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   ArrowLeftRight,
   ArrowRight,
+  BadgeCheck,
   Check,
   ChevronDown,
   Clock,
@@ -48,9 +49,17 @@ interface Props {
   onCountChange?: (count: number) => void;
 }
 
+// 큐가 렌더할 수 있는 ApprovalRequest.kind — 그 외(map_rename/sp_designation 등)는 items 합성 시 제외 (아래 isQueueRequestKind)
+type QueueRequestKind = "permission_downgrade" | "visibility_change" | "fw_confirm";
+const QUEUE_REQUEST_KINDS: ReadonlySet<string> = new Set<QueueRequestKind>([
+  "permission_downgrade",
+  "visibility_change",
+  "fw_confirm",
+]);
+
 type QueueItem =
   | { key: string; kind: "group_create"; group: Group }
-  | { key: string; kind: "permission_downgrade" | "visibility_change"; req: ApprovalRequest }
+  | { key: string; kind: QueueRequestKind; req: ApprovalRequest }
   | { key: string; kind: "checkout_request"; cr: CheckoutRequestQueue };
 
 // 필 / pill chip.
@@ -176,11 +185,18 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
     };
   }, [onToast, onCountChange, t]);
 
+  // kind 판별 가드 — 큐가 렌더 규칙을 아는 3종(permission_downgrade/visibility_change/fw_confirm)만 통과시킨다.
+  // list_pending_approval_requests(BE)는 kind 필터 없이 전 종류를 반환하므로, map_rename/sp_designation 등
+  // 이 큐가 모르는 kind가 섞여 와도 예전처럼 임의 캐스팅으로 오분류 렌더링하지 않고 조용히 제외한다
+  // (그런 요청은 맵별 결재 대기 탭에서 오너가 결정 — 이 큐는 애초에 그 종류를 다루지 않는다).
+  const isQueueRequestKind = (r: ApprovalRequest): r is ApprovalRequest & { kind: QueueRequestKind } =>
+    QUEUE_REQUEST_KINDS.has(r.kind);
+
   const items: QueueItem[] = [
     ...pendingGroups.map((g) => ({ key: `g${g.id}`, kind: "group_create" as const, group: g })),
-    ...pendingRequests.map((r) => ({
+    ...pendingRequests.filter(isQueueRequestKind).map((r) => ({
       key: `r${r.id}`,
-      kind: r.kind as "permission_downgrade" | "visibility_change",
+      kind: r.kind,
       req: r,
     })),
     ...pendingCheckouts.map((cr) => ({ key: `c${cr.id}`, kind: "checkout_request" as const, cr })),
@@ -228,6 +244,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <ShieldAlert size={14} strokeWidth={1.5} className="shrink-0 text-changed" />;
     if (item.kind === "checkout_request")
       return <ArrowLeftRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />;
+    if (item.kind === "fw_confirm")
+      return <BadgeCheck size={14} strokeWidth={1.5} className="shrink-0 text-accent" />;
     const toPublic = String(item.req.payload.to_visibility ?? "") === "public";
     return toPublic ? (
       <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -246,6 +264,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <Pill className="border-changed text-changed">{t("perm.sysadmin.kindDowngrade")}</Pill>;
     if (item.kind === "checkout_request")
       return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindCheckout")}</Pill>;
+    if (item.kind === "fw_confirm")
+      return <Pill className="border-accent text-accent">{t("perm.sysadmin.kindFwConfirm")}</Pill>;
     return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindVisibility")}</Pill>;
   }
   function brief(item: QueueItem): ReactNode {
@@ -261,6 +281,18 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
           <span className="truncate text-caption text-ink-secondary">{item.cr.version_label}</span>
         </>
       );
+    if (item.kind === "fw_confirm") {
+      const note = typeof item.req.payload.note === "string" ? item.req.payload.note : "";
+      return (
+        <>
+          <Pill>
+            <MapIcon size={11} strokeWidth={1.5} />
+            {t("perm.sysadmin.mapLabel")} {item.req.map_id}
+          </Pill>
+          {note && <span className="truncate text-caption text-ink-secondary">{note}</span>}
+        </>
+      );
+    }
     return (
       <Pill>
         <MapIcon size={11} strokeWidth={1.5} />
@@ -364,6 +396,12 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                         : String(item.req.payload.to_role)}
                     </Pill>
                   </DetailRow>
+                ) : item.kind === "fw_confirm" ? (
+                  typeof item.req.payload.note === "string" && item.req.payload.note.trim() ? (
+                    <DetailRow label={t("perm.sysadmin.detailLabel")}>
+                      <span className="text-caption text-ink">{item.req.payload.note}</span>
+                    </DetailRow>
+                  ) : null
                 ) : (
                   <DetailRow label={t("perm.sysadmin.detailLabel")}>
                     {item.req.payload.from_visibility != null && (
@@ -404,9 +442,10 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                     className="inline-flex items-center gap-1 rounded-sm border border-added px-3 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-40"
                     onClick={() => void decideItem(item, "approve")}
                     disabled={deciding}
+                    title={item.kind === "fw_confirm" ? t("perm.sysadmin.approveFwConfirm") : undefined}
                   >
                     <Check size={13} strokeWidth={1.5} />
-                    {t("perm.sysadmin.approve")}
+                    {item.kind === "fw_confirm" ? t("perm.sysadmin.approveFwConfirm") : t("perm.sysadmin.approve")}
                   </button>
                   <button
                     type="button"
