@@ -117,6 +117,17 @@ async function loadScopedRoots(ids: number[]): Promise<CategoryNode[]> {
   return nodes.filter((n): n is CategoryNode => n !== null);
 }
 
+// 권한자 이름 표기 — 언어 기준 주 이름 + 괄호 보조 이름(person-hover-card 규칙의 한 줄 판).
+// ko: 한글명(영문명) · en: 영문명(한글명). 한글명 없으면 영문 단독, 디렉터리 미등록은 login id.
+function formatAdminName(found: DirectoryUser | undefined, fallback: string, lang: string): string {
+  if (!found) return fallback;
+  const en = found.name;
+  const ko = found.korean_name ?? "";
+  const primary = lang === "ko" ? ko || en : en;
+  const secondary = lang === "ko" ? (ko ? en : "") : ko;
+  return secondary ? `${primary}(${secondary})` : primary;
+}
+
 // PromptDialog 하나를 3용도(최상위 추가/하위 추가/이름변경)로 재사용 — 구현 단순화(brief §3).
 type NamePrompt =
   | { kind: "add-root" }
@@ -410,11 +421,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         name = permGroups.find((g) => String(g.id) === row.principal_id)?.name ?? row.principal_id;
       } else {
         const found = permDirUsers.find((u) => u.id === row.principal_id);
-        name = found
-          ? lang === "ko" && found.korean_name
-            ? found.korean_name
-            : found.name
-          : row.principal_id;
+        name = formatAdminName(found, row.principal_id, lang);
       }
       const list = byId.get(row.category_id);
       if (list) list.push(name);
@@ -1462,8 +1469,7 @@ function CategoryPermsModal({
       return groups.find((g) => String(g.id) === entry.principal_id)?.name ?? entry.principal_id;
     }
     const found = dirUsers.find((u) => u.id === entry.principal_id);
-    if (!found) return entry.principal_id;
-    return lang === "ko" && found.korean_name ? found.korean_name : found.name;
+    return formatAdminName(found, entry.principal_id, lang);
   };
 
   return createPortal(
