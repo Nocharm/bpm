@@ -8,7 +8,7 @@
 - **전달물 부서 트리 해석 + L6 owning 등록**: `rows[].department`(루트부터 N단계 슬래시 경로)를 완전일치만 보던 것을 4단 사다리로 — known 완전일치 → 선두 드랍(트림 정렬) → 유일 세그먼트-서픽스 → departments 미러 체인 정렬(직원 없는 부서도 트림 canonical 착지). 실패 시 NULL 대신 정규화 경로 그대로 등록(as delivered), 오너 pending이어도 부서만으로 owning 등록(임포터 org 폴백은 계속 금지). 구 엔진이 owning 없이 만든 pending 맵은 재전달에서 부서만 채움 — 홈 부서 트리에 임포트 부서 그룹이 바로 선다.
 - **라이브러리 부서 칩 호버 카드**: 중앙 모달+백드롭 블러 → 커서 앵커 고정 카드(`OrgInfoModal anchored` 변형 — 백드롭 없음·클램프+실측 보정·마우스 추적 좌표) 전환, 칩엔 호버 어포던스(리프트+보더+섀도) 추가. map-detail-card의 중앙 모달 용법은 불변.
 - **L5 워터마크 마스크 기울임**: 스탬프(CONFIRMED/DRAFT)가 -24°라 수평 중앙 띠 마스크론 스탬프 양끝이 위아래 로고 타일과 겹침 — 마스크 밴드를 같은 각도(156deg 그라데이션, 36~64%)로 기울여 평행 정렬.
-- **framework draft 열람 룰 재정립**(사용자 결정): 라이브 draft는 sysadmin·자기/조상 카테고리 권한자만 열람 — 맵 상세 versions에서 draft 제외(`can_view_draft` 노출)+draft 그래프 403(BE 강제), 뷰어는 최신 confirmed 스냅샷 착지(없으면 빈 상태 안내). 상태 배너 3종(Draft=앰버 상시·Confirmed=액센트·Superseded=회색+최신 라벨) + 확정 스탬프는 최신=한 줄 `CONFIRMED vX.Y`·과거=2단 `SUPERSEDED+LATEST vX.Y`(회색 톤). 상태 배너에 우측 닫기 버튼(버전:사유 키 — 맵 재진입·버전 전환 시 재노출).
+- **framework draft 열람 룰 재정립**(사용자 결정): 라이브 draft는 sysadmin·자기/조상 카테고리 권한자만 열람 — 맵 상세 versions에서 draft 제외(`can_view_draft` 노출)+draft 그래프 403(BE 강제), 뷰어는 최신 confirmed 스냅샷 착지(없으면 빈 상태 안내). 상태 배너 3종(Draft=앰버 상시·Confirmed=액센트·Superseded=회색+최신 라벨) + 확정 스탬프는 최신=한 줄 `CONFIRMED vX.Y`·과거=2단 `SUPERSEDED+LATEST vX.Y`(회색 톤). 상태 배너에 우측 닫기 버튼(버전:사유 키 — 맵 재진입·버전 전환 시 재노출). 워터마크 표기는 전부 Title case(Confirmed/Draft/Superseded/Published/Expired/Read only — 가독성, uppercase 클래스 제거).
 
 ## 2026-09-02 — 권한자 관리 UX 3종: 드롭다운 z·버퍼+확인·트리 인라인 표시 (dev)
 - 권한자 모달 백드롭 z-1300이 피커 z 계약(호스트 ≤1200·드롭다운 1250)을 위반해 드롭다운이 블러 뒤로 가던 것 교정. 편집은 로컬 버퍼로 바꾸고 확인 버튼 1회만 서버 저장(부서 지정 Confirm 게이트 선례 — 취소/Esc/백드롭=폐기).

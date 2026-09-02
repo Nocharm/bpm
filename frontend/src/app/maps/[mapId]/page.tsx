@@ -9871,7 +9871,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                              과거(superseded) 스냅샷은 회색 톤 + 최신 확정 라벨 안내 (룰 재정립 2026-09-02).
                              차콜 캔버스에선 옆 텍스트 워터마크와 동일 조건으로 text-canvas 톤 전환(저시인성 방지). */
                           <span
-                            className={`flex -rotate-[24deg] select-none flex-col items-center rounded-md border-[6px] px-10 py-4 uppercase tracking-widest opacity-[0.14] ${
+                            className={`flex -rotate-[24deg] select-none flex-col items-center rounded-md border-[6px] px-10 py-4 tracking-widest opacity-[0.14] ${
                               index === 0 && l5Charcoal
                                 ? "border-canvas text-canvas"
                                 : isSupersededSnapshot
@@ -9901,7 +9901,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </span>
                         ) : (
                           <span
-                            className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                            className={`-rotate-[18deg] select-none whitespace-nowrap text-[120px] font-semibold tracking-widest opacity-[0.14] ${
                               // 차콜 캔버스에선 accent/회색이 묻힘 — 밝은색으로 동일한 은은함 유지.
                               // text-canvas(#f6f6f8) — 다크 셸이 --color-surface를 뒤집어도 라이트로 남는 토큰
                               index === 0 && l5Charcoal
@@ -9925,7 +9925,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     {isFrameworkDraft && (
                       <div className="pointer-events-none absolute inset-0 z-[4] flex items-center justify-center overflow-hidden">
                         <span
-                          className={`flex -rotate-[24deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold uppercase tracking-widest opacity-[0.14] ${
+                          className={`flex -rotate-[24deg] select-none items-center gap-4 rounded-md border-[6px] px-10 py-4 text-[96px] font-semibold tracking-widest opacity-[0.14] ${
                             index === 0 && l5Charcoal ? "border-canvas text-canvas" : "border-accent text-accent"
                           }`}
                         >
