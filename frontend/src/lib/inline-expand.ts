@@ -48,7 +48,8 @@ export function collectExpandedDescendants(
   return { nodes: resultNodes, edges };
 }
 
-const GATEWAY_PREFIX = "gw:";
+// 게이트웨이 엣지 id 접두 — 파생(비영속) 엣지 판별용(인스펙터 안내·편집 차단)
+export const GATEWAY_PREFIX = "gw:";
 
 /**
  * 게이트웨이는 view 전용(저장·state 비포함). dagre 입력 + 렌더용 — 자식을 P와 후속(A→B의 B) 사이에 끼워 통합 LR 흐름 유지.
