@@ -3,12 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-02 — 트랙 B 착수: 스펙 보강 + 구현 플랜 (feat/fw-track-b-gates)
-- 게이트 6 병행 팬아웃 예외(전부 gateway=parallel이면 합법 — 사용자 확정)·Edge.gateway 컬럼 신설 근거·상시 체크리스트는 GET confirm-readiness 일원화(422 dict-detail은 FE 미수신 실측)·직속 L5 최소형 판정(is_direct_l5_admin)+can_confirm 트랜지언트를 스펙에 반영. 트랙 B 플랜 9태스크(docs/superpowers/plans/2026-09-02-fw-track-b-gates-workflow.md).
-
-## 2026-09-02 — 트랙 B Task 5: 확정 요청 워크플로(kind='fw_confirm') BE (feat/fw-track-b-gates)
-- 상위 카테고리 관리자용 확정 위임 요청 — `POST /{map_id}/fw-confirm-requests`(직속 L5/sysadmin은 409로 직접확정 유도)·decide 재사용(직속 L5/sysadmin만 403 게이트, 승인 시 perform_framework_confirm major=False 실행)·직접확정 성공 시 pending superseded(알림 없음 — 스펙 §5 알림 3종 고정). 신설 `get_category_admin_logins`(is_direct_l5_admin의 역방향, 그룹 멤버 로그인 확장). sysadmin 벨 알림은 미포함 결정(선례 없음+승인큐로 이미 가시) — 상세는 task-5-report.md.
-- **후속 fix**: `_assert_owner_or_approver`(결재 대기 탭 GET 게이트)가 framework 맵에선 owner=sysadmin뿐이라 직속 L5 관리자·요청자(상위 관리자)가 403 — 카테고리 체인 관리자(`is_category_admin`) 분기 추가로 해소(Task 7 리뷰가 실증한 로드베어링 공백).
+## 2026-09-02 — 트랙 B: 확정 게이트 6종 + 점유·직속 L5 확정권 + 확정 요청 워크플로 (feat/fw-track-b-gates)
+- 확정 게이트 6종(missing_l6·placeholder·stale_link·l6_unpublished·noexit_cycle·plain_fanout — 병행 팬아웃은 전부 `Edge.gateway=parallel`이면 예외)을 체크아웃 점유·직속 L5 관리자(`is_direct_l5_admin`) 자기확정권과 함께 `perform_framework_confirm`에 통합, `GET /maps/{id}/confirm-readiness`(+`can_confirm`)를 체크리스트 단일 소스로 노출하고 라이브 draft 삭제를 차단했다.
+- 상위 관리자용 확정 위임 요청 워크플로(`kind='fw_confirm'`, 직속 L5/sysadmin은 409→직접확정 유도)를 승인 표면에 통합, FE엔 Approval 탭 게이트 체크리스트+확정 버튼 disabled 연동·요청 CTA·알림 3종을 붙였다. 스모크(`pw-smoke-framework-canvas.mjs`)는 게이트 체크리스트 중심(플레이스홀더 노드 임시 주입으로 위반→해소 결정적 검증) 24/24, 요청 워크플로는 BE 10케이스로 갈음.
 
 ## 2026-09-02 — 문서 정리: main 머지 완료 스펙·플랜 폐기 + PROGRESS 아카이브 (dev)
 - 폐기 정책(`rules/common/documentation.md`)에 따라 main 머지 완료분 삭제: superpowers 스펙 5(approval-comments·collab-staging·topnav·io-linking·node-spacing)+플랜 12(거버넌스 r3~r6·8월 트랙 전부·framework-l5-linkage)+design 1(field-promotion — 구현 완료·QA 문서 존치). 코드 주석 참조는 파일명으로 강등(`git grep` 전수 확인). 유지: 미구현·핸드오프·전제 스펙(consultant-hierarchy·governance-ux A/B/C·data-surface-parity·interview-import 8/18·v04 2종·framework 8-28 스펙·트랙 A 스펙/플랜).

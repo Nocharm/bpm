@@ -1,5 +1,6 @@
 // L5 연계 캔버스 스모크 — 트리 L5 행 Linkage 버튼→캔버스 생성·소속 L6 시드(Start 없음)→
-// FrameworkChip(캔버스 소스)→S 단축키 트리 피커→확정(v1.0) 반영.
+// FrameworkChip(캔버스 소스)→S 단축키 트리 피커→확정 게이트 체크리스트(통과/위반)→확정(v1.0) 반영.
+// 확정 요청 워크플로(kind=fw_confirm)는 BE 10케이스가 커버 — 여기는 게이트 체크리스트·버튼 상태 중심(task-9 결정).
 // 시드는 pw-smoke-framework.mjs와 동일(인터뷰 샘플 웹 임포트, 멱등).
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 SHOT_DIR=/tmp/shots node scripts/pw-smoke-framework-canvas.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드만.
@@ -43,6 +44,22 @@ try {
   }, ADMIN);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+
+  // 게이트 스모크 전용 호출자 — X-Dev-User로 브라우저 세션(ADMIN)과 신원을 맞춰, 그래프 PUT의
+  // 체크아웃 점유 검증(graph.py 409)과 확정의 점유 검증(framework_confirm.py 409)을 함께 통과시킨다.
+  // 헤더 없는 raw fetch는 settings.dev_user(local-dev)로 떨어져 브라우저가 쥔 점유자와 어긋난다.
+  const callApi = (path, opts = {}) =>
+    page.evaluate(
+      async ({ path, opts, user }) => {
+        const res = await fetch(`/api${path}`, {
+          ...opts,
+          headers: { "Content-Type": "application/json", "X-Dev-User": user, ...(opts.headers ?? {}) },
+        });
+        const text = await res.text();
+        return { status: res.status, body: text ? JSON.parse(text) : null };
+      },
+      { path, opts, user: ADMIN },
+    );
 
   // ── 0) 시드 — 인터뷰 샘플 웹 임포트(멱등) ─────────────────────────────────
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
@@ -134,28 +151,88 @@ try {
     check("picker lazy tree reveals L6 map rows", false, "picker not visible");
   }
 
+  // ── 4b) 게이트 체크리스트 — Approval 탭에 확정 게이트 6종 고정 렌더 + readiness GET 정합 확인 ──
+  await page.locator('button[aria-label="Approval"]').first().click();
+  await page.waitForSelector('[data-id="framework-gate-checklist"]', { timeout: 8000 });
+  await page.waitForTimeout(600); // 마운트 readiness GET 정착 대기 — readiness===null 순간은 "전행 통과"로 오판됨
+
+  const readinessBaseline = (await callApi(`/maps/${mapId}/confirm-readiness`)).body;
+  const checklistRowCount = await page.locator('[data-id="framework-gate-checklist"] li').count();
+  check("gate checklist renders 6 fixed rows", checklistRowCount === 6, `rows=${checklistRowCount}`);
+
+  const confirmBtnDisabledBaseline = await page.locator('[data-id="framework-confirm-button"]').isDisabled();
+  check("confirm button disabled state matches readiness.ready (seed baseline)",
+    confirmBtnDisabledBaseline === !readinessBaseline.ready,
+    `disabled=${confirmBtnDisabledBaseline} ready=${readinessBaseline.ready} failures=${JSON.stringify(readinessBaseline.failures)}`);
+  await shot(page, readinessBaseline.ready ? "gate-checklist-pass" : "gate-checklist-violation-seed");
+
+  // ── 4c) 위반 주입/해소 — placeholder(linked_map_id 없는 subprocess) 노드를 그래프에 임시 추가 ──
+  // (S 피커 드래그 대신 그래프 PUT 직접 — 시드의 실제 초기 게이트 상태와 무관하게 결정적으로 위반 1건을 만든다)
+  const detailForGraph = (await callApi(`/maps/${mapId}`)).body;
+  const draftVersion = detailForGraph.versions.find((v) => v.status === "draft");
+  check("draft version resolved for gate injection", Boolean(draftVersion), `draft=${draftVersion?.id}`);
+
+  const originalGraph = (await callApi(`/versions/${draftVersion.id}/graph`)).body;
+  const placeholderNode = {
+    id: "smoke-gate-placeholder", title: "Smoke Placeholder", node_type: "subprocess",
+    linked_map_id: null, placeholder_category_id: detailForGraph.linkage_category_id ?? null,
+    pos_x: 900, pos_y: 560, sort_order: 999,
+  };
+  const putInjected = await callApi(`/versions/${draftVersion.id}/graph`, {
+    method: "PUT",
+    body: JSON.stringify({ ...originalGraph, nodes: [...originalGraph.nodes, placeholderNode] }),
+  });
+  check("placeholder node injected into draft graph", putInjected.status === 200, `status=${putInjected.status}`);
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 15000 });
+  await page.locator('button[aria-label="Approval"]').first().click();
+  await page.waitForSelector('[data-id="framework-gate-checklist"]', { timeout: 8000 });
+  await page.waitForTimeout(600);
+
+  const readinessViolation = (await callApi(`/maps/${mapId}/confirm-readiness`)).body;
+  check("placeholder gate violation detected via readiness GET",
+    !readinessViolation.ready && readinessViolation.failures.some((f) => f.code === "placeholder"),
+    JSON.stringify(readinessViolation.failures));
+  const locateBtnVisible = await page.locator('[data-id="framework-gate-locate-placeholder"]')
+    .isVisible().catch(() => false);
+  check("checklist shows placeholder violation row with locate CTA", locateBtnVisible);
+  const confirmBtnDisabledViolation = await page.locator('[data-id="framework-confirm-button"]').isDisabled();
+  check("confirm button disabled while gate is violated", confirmBtnDisabledViolation);
+  await shot(page, "gate-checklist-violation-injected");
+
+  const putRestored = await callApi(`/versions/${draftVersion.id}/graph`, {
+    method: "PUT",
+    body: JSON.stringify(originalGraph),
+  });
+  check("placeholder node removed, original draft graph restored", putRestored.status === 200, `status=${putRestored.status}`);
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector(".react-flow__node", { timeout: 15000 });
+  await page.locator('button[aria-label="Approval"]').first().click();
+  await page.waitForSelector('[data-id="framework-gate-checklist"]', { timeout: 8000 });
+  await page.waitForTimeout(600);
+
+  const readinessResolved = (await callApi(`/maps/${mapId}/confirm-readiness`)).body;
+  check("gate violation resolved after removing placeholder",
+    readinessResolved.ready === readinessBaseline.ready, JSON.stringify(readinessResolved.failures));
+  const confirmBtnDisabledResolved = await page.locator('[data-id="framework-confirm-button"]').isDisabled();
+  check("confirm button state restored to baseline", confirmBtnDisabledResolved === confirmBtnDisabledBaseline);
+
   // ── 5) 확정 — v1.0 스냅샷 생성(앱 프록시 경유 API) 후 재로드로 반영 확인 ────
-  const confirm1 = await page.evaluate(async (id) => {
-    const res = await fetch(`/api/maps/${id}/framework-confirm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ major: false }),
-    });
-    return { status: res.status, body: await res.json() };
-  }, mapId);
+  const confirm1 = await callApi(`/maps/${mapId}/framework-confirm`, {
+    method: "POST",
+    body: JSON.stringify({ major: false }),
+  });
   check("framework-confirm creates v1.0 snapshot",
     confirm1.status === 200 && confirm1.body.version?.label === "v1.0",
     JSON.stringify(confirm1.body).slice(0, 120));
 
   // 무변경 재확정 → 409 게이트 (노드 위치 이동은 변경으로 안 침) (2026-08-28 개선)
-  const confirm2 = await page.evaluate(async (id) => {
-    const res = await fetch(`/api/maps/${id}/framework-confirm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ major: false }),
-    });
-    return res.status;
-  }, mapId);
+  const confirm2 = (await callApi(`/maps/${mapId}/framework-confirm`, {
+    method: "POST",
+    body: JSON.stringify({ major: false }),
+  })).status;
   check("no-change reconfirm is rejected (409)", confirm2 === 409, `status=${confirm2}`);
 
   const detail = await page.evaluate(async (id) => {
