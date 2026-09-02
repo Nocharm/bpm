@@ -417,7 +417,7 @@ def _build_flow_edges(
         branch = CanonicalNode(
             code=f"{src_node.code}r",
             # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
-            name="루프포인트",
+            name="재수행 여부",
             type="decision",
             seq=src_node.seq,
         )

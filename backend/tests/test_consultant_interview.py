@@ -435,7 +435,7 @@ def test_l6_self_edge_becomes_loop_branch() -> None:
     branch = next(n for n in m.nodes if n.code == "a02r")
     assert branch.type == "decision"
     # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
-    assert branch.name == "루프포인트"
+    assert branch.name == "재수행 여부"
     # 분기 노드는 원 노드 바로 뒤에 놓인다
     codes = [n.code for n in m.nodes]
     assert codes.index("a02r") == codes.index("a02") + 1
