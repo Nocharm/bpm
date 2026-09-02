@@ -267,8 +267,14 @@ import {
   type IoImportAction,
   type IoSide,
 } from "@/lib/io-items";
-import { displayToSavedX, type ShiftStep } from "@/lib/inline-shift";
-import { buildHeightSteps, buildYOffsets } from "@/lib/height-shift";
+import { displayToSavedX } from "@/lib/inline-shift";
+import {
+  EMPTY_HEIGHT_FIELD,
+  buildHeightShiftField,
+  getDisplayWidth,
+  invertDisplayY,
+  type HeightShiftField,
+} from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
 import { useClosingKeys } from "@/lib/use-closing-keys";
@@ -1459,11 +1465,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 이벤트 핸들러/타이머에서 최신 상태를 읽기 위한 미러 — setState 클로저 stale 방지
   const nodesRef = useRef<AppNode[]>([]);
   const childNodesRef = useRef<AppNode[]>([]);
-  // height-shift(#1) 스텝 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
-  const yStepsRef = useRef<ShiftStep[]>([]);
-  // 상시(비게이트) 스텝 미러 — 표시 Y는 펼침 중에도 밀리므로(합성 입력에 베이크), 클릭점→저장 변환
-  // (toSavedPoint)과 펼침 드롭 Y 환산(finalizeRootDrag)은 이 상시 스텝으로 역변환한다.
-  const heightStepsRef = useRef<ShiftStep[]>([]);
+  // height-shift(#1) 필드 미러 — dropDraggingPositions(정의가 앞선 useCallback)에서 읽기 위한 ref — TDZ 회피.
+  const yFieldRef = useRef<HeightShiftField>(EMPTY_HEIGHT_FIELD);
+  // 상시(비게이트) 필드 미러 — 표시 Y는 펼침 중에도 밀리므로(합성 입력에 베이크), 클릭점→저장 변환
+  // (toSavedPoint)과 펼침 드롭 Y 환산(finalizeRootDrag)은 이 상시 필드로 역변환한다.
+  const heightFieldRef = useRef<HeightShiftField>(EMPTY_HEIGHT_FIELD);
   // height-shift(#1) 렌더 오프셋(트윈 중간값) 미러 — findGroupAt·handleExportPng(정의가 앞선 useCallback)에서
   // 읽기 위한 ref — TDZ 회피(renderYOffsets state는 뒤에서 선언). 미러링 useEffect는 state 선언부 옆에 유지.
   const renderYOffsetsRef = useRef<ReadonlyMap<string, number>>(new Map());
@@ -1762,8 +1768,10 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 화면 클릭점 → 저장 Y(height-shift 역변환) — 새 노드 생성·붙여넣기 좌표 전용.
   // 상시 스텝 사용 — 펼침 중에도 표시 Y는 밀려 있다(합성 입력 베이크).
   const toSavedPoint = useCallback((point: { x: number; y: number }) => {
-    const steps = heightStepsRef.current;
-    return steps.length === 0 ? point : { x: point.x, y: displayToSavedX(point.y, steps) };
+    const field = heightFieldRef.current;
+    return field.pushers.length === 0
+      ? point
+      : { x: point.x, y: invertDisplayY(field, point.x, point.x, point.y) };
   }, []);
 
   // 펼침 중 루트 드래그: 드래그 중인 노드의 position 변경은 nodes state에 쓰지 않고 버린다(저장 좌표 동결).
@@ -1830,7 +1838,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 드래그 중(dragging=true) 제스처 노드는 시작 시점 오프셋 상수를 빼는 선형 역변환 — 표시(displayNodes)도
       // 같은 상수를 더해 항등 왕복이 되므로, 계단 역변환의 도달불가 갭에서 스톨→점프하지 않고 커서를 1:1 추종.
       // 드롭 확정(dragging=false, RF 마지막 flush)은 기존 계단 역변환 → 저장 좌표 의미(갭=앵커 클램프) 보존.
-      const ySteps2 = yStepsRef.current;
+      const yField2 = yFieldRef.current;
       const gestureOffsets = dragYOffsetsRef.current;
       const suppress = suppressPosIdsRef.current;
       for (const change of changes) {
@@ -1843,13 +1851,21 @@ function MapEditor({ mapId }: { mapId: number }) {
             if (frozen !== 0) {
               change.position = { x: change.position.x, y: change.position.y - frozen };
             }
-          } else if (ySteps2.length > 0) {
+          } else if (yField2.pushers.length > 0) {
+            const moved = nodesRef.current.find((n) => n.id === change.id);
+            const width = moved ? getDisplayWidth(moved) : NODE_WIDTH;
             change.position = {
               x: change.position.x,
-              y: displayToSavedX(change.position.y, ySteps2),
+              y: invertDisplayY(
+                yField2,
+                change.position.x,
+                change.position.x + width,
+                change.position.y,
+                change.id, // 자기 푸셔 제외 — 자기 밴드 그림자 드롭 클램프 방지
+              ),
             };
           } else if (!suppress.has(change.id)) {
-            // 펼침 중 비제스처 이동(방향키 등, dragging=false) — ySteps는 게이트로 비어 있고
+            // 펼침 중 비제스처 이동(방향키 등, dragging=false) — yField는 게이트로 비어 있고
             // 드래그 억제도 없어서 RF 표시좌표가 그대로 저장 state로 들어가 footprint/height-shift만큼
             // 점프하던 버그. 해당 노드의 rootOffsets(표시−저장)를 빼 저장좌표로 역변환한다.
             const offset = inlineCompositionRef.current?.rootOffsets.get(change.id);
@@ -3994,9 +4010,16 @@ function MapEditor({ mapId }: { mapId: number }) {
       const label = makeCopyLabel(ghost.data.label, existingLabels);
       existingLabels.push(label);
       const offset = rootOffsets?.get(ghost.id);
+      const gx = offset ? ghost.position.x - offset.x : ghost.position.x;
       const resetPos = {
-        x: offset ? ghost.position.x - offset.x : ghost.position.x,
-        y: displayToSavedX(ghost.position.y - (offset?.y ?? 0), yStepsRef.current),
+        x: gx,
+        y: invertDisplayY(
+          yFieldRef.current,
+          gx,
+          gx + getDisplayWidth(ghost),
+          ghost.position.y - (offset?.y ?? 0),
+          ghost.id, // 원본 노드 자신의 푸셔 제외
+        ),
       };
       plans.set(ghost.id, { copyId: genId(), label, resetPos });
     }
@@ -5223,9 +5246,14 @@ function MapEditor({ mapId }: { mapId: number }) {
         // x는 드롭 위치 오프셋으로 환산(드래그 시작 오프셋 아님) — 펼침 영역 경계를 가로지르면 두 오프셋이 달라
         // footprint만큼 빗나간다. 도달 불가 갭(앵커 점프 구간)은 앵커 x로 클램프(lib/inline-shift).
         const sx = displayToSavedX(dropDisplay.x, steps);
-        // y도 드롭 위치 기준 상시 스텝 역변환 — 펼침 중에도 height-shift가 베이크돼 있고,
-        // 밴드 경계를 가로지른 드래그는 시작 오프셋(rootOffsets.y) 빼기로는 어긋난다.
-        savedById.set(id, { x: sx, y: displayToSavedX(dropDisplay.y, heightStepsRef.current) });
+        // y도 드롭 위치 기준 상시 필드 역변환(프로브 x는 저장 x = sx) — 펼침 중에도 height-shift가
+        // 베이크돼 있고, 경계를 가로지른 드래그는 시작 오프셋(rootOffsets.y) 빼기로는 어긋난다.
+        const moved = nodesRef.current.find((n) => n.id === id);
+        const width = moved ? getDisplayWidth(moved) : NODE_WIDTH;
+        savedById.set(id, {
+          x: sx,
+          y: invertDisplayY(heightFieldRef.current, sx, sx + width, dropDisplay.y, id),
+        });
         committed = true;
       }
       if (savedById.size > 0) {
@@ -6577,19 +6605,19 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 인라인 펼침 합성(영역 컨테이너 모델, 중첩 재귀) — 펼친 노드 오른쪽에 하위 "캔버스 레인"을 삽입하고
   // 공간상 그보다 오른쪽 노드를 우측으로 민다. 왼쪽/A의 수동 배치는 보존(전체 재배치 아님). 파생 레이어.
-  // height-shift(#1) 상시 스텝/오프셋 — 합성(아래 inlineComposition) 입력에도 베이크하므로 게이트 없이 산출.
+  // height-shift(#1) 상시 필드/오프셋 — 합성(아래 inlineComposition) 입력에도 베이크하므로 게이트 없이 산출.
   // 펼침 중 표시는 합성 좌표가 담당(베이크)하고, 평시 표시는 renderYOffsets 트윈이 담당한다(flowNodes에서 게이트).
-  // 드래그 중엔 시작 시점 스텝으로 동결 — 커진 노드(앵커)를 끌면 자기 밴드가 매 프레임 따라 움직여
+  // 드래그 중엔 시작 시점 필드로 동결 — 커진 노드(푸셔)를 끌면 자기 영향권이 매 프레임 따라 움직여
   // 표시(offset)와 역변환이 서로 쫓으며 마우스·원위치 사이를 튀는 지터가 난다. 드롭 시 해제(트윈 복귀).
-  const [dragFrozenSteps, setDragFrozenSteps] = useState<ShiftStep[] | null>(null);
-  const heightSteps = useMemo(
-    () => dragFrozenSteps ?? buildHeightSteps(nodes),
-    [dragFrozenSteps, nodes],
+  const [dragFrozenField, setDragFrozenField] = useState<HeightShiftField | null>(null);
+  const heightField = useMemo(
+    () => dragFrozenField ?? buildHeightShiftField(nodes),
+    [dragFrozenField, nodes],
   );
   useEffect(() => {
-    heightStepsRef.current = heightSteps;
-  }, [heightSteps]);
-  const yOffsets = useMemo(() => buildYOffsets(nodes, heightSteps), [nodes, heightSteps]);
+    heightFieldRef.current = heightField;
+  }, [heightField]);
+  const yOffsets = heightField.offsets;
 
   // 드래그 제스처 동안 게스처 노드들의 렌더 Y오프셋을 시작 시점 값으로 동결 — 표시(displayNodes)와
   // 역변환(dropDraggingPositions)이 같은 상수를 쓰는 선형(항등) 왕복이 되어, 밴드 경계의 도달불가 갭에서
@@ -7032,16 +7060,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     return out;
   }, [currentParentId, inlineComposition, fullGraph, nodes]);
 
-  // height-shift(#1): 표시 높이로 커진 노드 아래를 렌더 시점에만 밀어냄 — 저장 좌표 불변.
-  // 드롭 역변환용 게이트 스텝 — 펼침 중엔 rootOffsets(y 베이크 포함)가 드롭 환산을 담당하므로
-  // 비활성(이중 차감 방지). 상시 스텝/오프셋은 위(heightSteps/yOffsets)에서 산출.
-  const ySteps = useMemo(
-    () => (inlineComposition ? [] : heightSteps),
-    [inlineComposition, heightSteps],
+  // height-shift(#1): 표시 높이로 커진 노드와 충돌하는 아래 노드만 렌더 시점에 밀어냄 — 저장 좌표 불변.
+  // 드롭 역변환용 게이트 필드 — 펼침 중엔 rootOffsets(y 베이크 포함)가 드롭 환산을 담당하므로
+  // 비활성(이중 차감 방지). 상시 필드/오프셋은 위(heightField/yOffsets)에서 산출.
+  const yField = useMemo(
+    () => (inlineComposition ? EMPTY_HEIGHT_FIELD : heightField),
+    [inlineComposition, heightField],
   );
   useEffect(() => {
-    yStepsRef.current = ySteps;
-  }, [ySteps]);
+    yFieldRef.current = yField;
+  }, [yField]);
 
   // 오프셋 전환 트윈 — CSS transition은 엣지(SVG 재계산)가 안 따라와 분리돼 보임 → 값 자체를 rAF 보간.
   // 즉시 적용 3조건: 첫 산출(로드 정착)·드래그 중·prefers-reduced-motion. (spec §6)
@@ -9436,7 +9464,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
-                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
+                        setDragFrozenField(heightFieldRef.current); // 드래그 중 height-shift 필드 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
                         captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart([node]);
@@ -9475,7 +9503,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 제스처 종료 — 다음 무관한 position 변경(화살표 이동 등)이 축 고정에 새지 않게 해제.
                         dragStartPosRef.current = null;
                         dragStartPositionsRef.current = new Map();
-                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
+                        setDragFrozenField(null); // 동결 해제 — 최종 좌표 기준 필드로 트윈 복귀
                         clearDragYOffsets();
                         clearGeneralDragFreeze(); // 일반 드래그 동결(#R2) 라이브 맵 정리(백스톱)
                       }}
@@ -9486,7 +9514,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         dragStartPositionsRef.current = new Map(
                           nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
                         );
-                        setDragFrozenSteps(heightStepsRef.current); // 드래그 중 height-shift 스텝 동결(지터 방지)
+                        setDragFrozenField(heightFieldRef.current); // 드래그 중 height-shift 필드 동결(지터 방지)
                         captureDragYOffsets(nodes); // 제스처 오프셋 동결 — 드래그 중 선형 왕복(커서 1:1)
                         captureGeneralDragFreeze(nodes); // 일반 드래그 동결(#R2) 게이트 판정
                         captureRootDragStart(nodes);
@@ -9530,7 +9558,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         setCtrlDragGhosts((cur) => (cur.length > 0 ? [] : cur));
                         // 제스처 종료 — 다음 무관한 position 변경이 축 고정에 새지 않게 해제(onNodeDragStop과 동일).
                         dragStartPositionsRef.current = new Map();
-                        setDragFrozenSteps(null); // 동결 해제 — 최종 좌표 기준 스텝으로 트윈 복귀
+                        setDragFrozenField(null); // 동결 해제 — 최종 좌표 기준 필드로 트윈 복귀
                         clearDragYOffsets();
                         clearGeneralDragFreeze(); // 일반 드래그 동결(#R2) 라이브 맵 정리(백스톱)
                       }}

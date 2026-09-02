@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — height-shift 충돌 기반 전환 (feat/height-shift-collision-only)
+- 노드 정보 표시로 커진 노드의 Y축 보정을 전역 계단함수 → **충돌 기반 필드**로 전환(`lib/height-shift.ts` 재작성): 성장분이 저장 여백을 먼저 흡수하고, X 구간이 겹쳐 실제 충돌하는 아래 노드만 `min(저장 간격, 16px)` 유지하며 밀림. 같은 행(저장 Y구간 겹침 체인)은 밀림량 max 동기화(사용자 결정 2건 반영). 자동정렬 후 이중 간격·빈 열 공간 낭비·드롭 즉시 밀림 해소.
+- 역변환은 열 프로브 이분탐색(`invertDisplayY`, 단조 필드·갭 클램프·플래토 최소 y) + 드래그 노드 자기 푸셔 제외. page.tsx 배선은 steps→field 치환(오프셋 소비자 Map 계약 불변 — 트윈·그룹박스·PNG·edge-detour 무수정). BE·임포트 레이아웃 무변경(기준높이 배치 그대로).
+- 게이트: vitest 830(+9)·lint·tsc·build 그린, `pw-smoke-height-shift.mjs` 계약 재작성 14/14(간격 흡수·행 동기화·타 열 부동·드래그 왕복), framework-canvas 스모크 14/14(L5 회귀 무).
+
 ## 2026-09-02 — 문서 정리: main 머지 완료 스펙·플랜 폐기 + PROGRESS 아카이브 (dev)
 - 폐기 정책(`rules/common/documentation.md`)에 따라 main 머지 완료분 삭제: superpowers 스펙 5(approval-comments·collab-staging·topnav·io-linking·node-spacing)+플랜 12(거버넌스 r3~r6·8월 트랙 전부·framework-l5-linkage)+design 1(field-promotion — 구현 완료·QA 문서 존치). 코드 주석 참조는 파일명으로 강등(`git grep` 전수 확인). 유지: 미구현·핸드오프·전제 스펙(consultant-hierarchy·governance-ux A/B/C·data-surface-parity·interview-import 8/18·v04 2종·framework 8-28 스펙·트랙 A 스펙/플랜).
 - PROGRESS 8/18 이전 137줄을 `docs/history/PROGRESS-archive.md`(2026-09-02 이동분)로 아카이브.
