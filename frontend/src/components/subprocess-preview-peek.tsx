@@ -3,7 +3,7 @@
 // 서브프로세스 라이브러리/체계 피커 행의 미리보기 피크 — 행 클릭 즉시·2.5초 호버로 열리는 포털 패널.
 // 게시본 기준 그래프(getResolvedGraph follow_latest → 최신 게시본, 없으면 최신본)를 ScopePreview(경량 SVG)로
 // 렌더하고 SP 등록 정보를 함께 보여준다. viewer 미만은 locked 응답 → 권한 안내 + "추가는 가능" 안내.
-// 레이아웃: 헤더(이름·오너·게시버전·업무체계) + 좌 인스펙터 탭 + 중앙 미리보기 + 우 액션 레일(추가/이동).
+// 레이아웃: 헤더(이름·오너·게시버전·업무체계) + 좌 인스펙터 탭 + 미리보기(우상단에 떠 있는 액션 추가/이동).
 // 목업 노드는 클릭=드롭다운, 드래그=캔버스 드롭 추가(dragPayload) (사용자 요청 2026-09-03).
 
 import {
@@ -935,35 +935,38 @@ export function SubprocessPreviewPeek({
               {t("library.peekPublishedBasis")}
             </span>
           )}
-        </div>
-        {/* 우측 액션 레일 — 헤더 버튼을 큰 세로 버튼으로 내림: 위=맵 추가, 아래=맵으로 가기 (사용자 요청 2026-09-03) */}
-        <div className="flex w-24 shrink-0 flex-col overflow-hidden border-l border-hairline">
-          <button
-            type="button"
-            data-id="library-peek-add"
-            disabled={addDisabledReason !== null}
-            title={addDisabledReason ?? t("library.peekAdd")}
-            onClick={onAdd}
-            className={`flex flex-1 flex-col items-center justify-center gap-1.5 px-2 text-center text-fine font-medium ${
-              addDisabledReason !== null
-                ? "cursor-not-allowed bg-surface text-ink-tertiary"
-                : "bg-accent text-white hover:opacity-90"
-            }`}
-          >
-            <Plus size={18} strokeWidth={1.5} />
-            {t("library.peekAdd")}
-          </button>
-          {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31) */}
-          <button
-            type="button"
-            data-id="library-peek-open-map"
-            title={t("library.peekOpenNamedMap", { name })}
-            onClick={onOpenMap}
-            className="flex flex-1 flex-col items-center justify-center gap-1.5 border-t border-hairline px-2 text-center text-fine font-medium text-ink-secondary hover:bg-surface-alt hover:text-accent"
-          >
-            <ExternalLink size={18} strokeWidth={1.5} />
-            {t("library.peekOpenMap")}
-          </button>
+          {/* 액션 — 미리보기 위에 떠 있는 독립 버튼 둘(위=맵 추가·강조색, 아래=맵으로 가기).
+              높이를 이분할하던 우측 레일이 과하다는 피드백으로 우상단 플로팅 + 분리로 (사용자 요청 2026-09-03).
+              라벨은 한 줄 고정 — 넘치면 말줄임(한/영 라벨 길이 차 흡수).
+              미리보기 컨테이너는 잠금/미등록 상태에서도 렌더되므로 "추가는 가능" 경로가 유지된다 */}
+          <div data-id="library-peek-actions" className="absolute right-2 top-2 flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              data-id="library-peek-add"
+              disabled={addDisabledReason !== null}
+              title={addDisabledReason ?? t("library.peekAdd")}
+              onClick={onAdd}
+              className={`flex max-w-[11rem] items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-medium shadow-md ${
+                addDisabledReason !== null
+                  ? "cursor-not-allowed border-hairline bg-surface/85 text-ink-tertiary"
+                  : "border-accent bg-accent text-on-accent hover:bg-accent-focus"
+              }`}
+            >
+              <Plus size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("library.peekAdd")}</span>
+            </button>
+            {/* 해당 맵으로 이동 — 클릭 시 호출측이 에디터 이탈 확인 게이트를 띄운다 (사용자 요청 2026-08-31) */}
+            <button
+              type="button"
+              data-id="library-peek-open-map"
+              title={t("library.peekOpenNamedMap", { name })}
+              onClick={onOpenMap}
+              className="flex max-w-[11rem] items-center gap-1.5 rounded-sm border border-hairline bg-surface/90 px-2.5 py-1.5 text-fine font-medium text-ink-secondary shadow-md hover:bg-surface-alt hover:text-accent"
+            >
+              <ExternalLink size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("library.peekOpenMap")}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>,
