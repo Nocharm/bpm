@@ -34,6 +34,8 @@ const STATUS_TONES: Record<string, string> = {
   pending: "color-mix(in srgb, var(--color-canvas) 70%, transparent)",
   draft: "color-mix(in srgb, var(--color-canvas) 40%, transparent)",
   rejected: "color-mix(in srgb, var(--color-error) 55%, white)",
+  // framework 확정 스냅샷 — published(violet)와 구분되도록 changed(amber) 계열
+  confirmed: "color-mix(in srgb, var(--color-changed) 65%, white)",
 };
 
 // 하늘 위 KPI 타일 — 유리(반투명 surface) 배경 + 밝은 큰 숫자. StatCard의 하늘 버전(대시보드 전용이라 로컬 정의).

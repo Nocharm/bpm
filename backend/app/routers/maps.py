@@ -1288,13 +1288,13 @@ async def confirm_framework_version(
             pruned_labels.append(label)
 
     snapshot = MapVersion(
-        map_id=map_id, label=f"v{major}.{minor}", status="confirmed",
+        map_id=map_id, label=f"v{major}.{minor}", status=workflow.CONFIRMED,
         fw_major=major, fw_minor=minor, submitted_by=user,
     )
     session.add(snapshot)
     await session.flush()
     await clone_graph(session, draft, snapshot.id)
-    record_version_event(session, snapshot.id, "confirmed", user)
+    record_version_event(session, snapshot.id, workflow.CONFIRMED, user)
     await session.commit()
     await session.refresh(snapshot)
     return FrameworkConfirmOut(

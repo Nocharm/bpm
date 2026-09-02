@@ -1102,7 +1102,12 @@ function ComparePane({
           { label: t("export.infoOwner"), value: mapMeta.ownerName ?? "-" },
           { label: t("export.infoVersion"), value: `${baseLabel} → ${targetLabel}` },
           ...(basePub || targetPub
-            ? [{ label: t("export.infoPublished"), value: `${fmtPub(basePub)} → ${fmtPub(targetPub)}` }]
+            ? [
+                {
+                  label: mapMeta.framework ? t("export.infoConfirmed") : t("export.infoPublished"),
+                  value: `${fmtPub(basePub)} → ${fmtPub(targetPub)}`,
+                },
+              ]
             : []),
           ...(mapMeta.categoryPath
             ? [{ label: t("export.infoFramework"), value: mapMeta.categoryPath }]
