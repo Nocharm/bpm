@@ -35,12 +35,14 @@ import {
   getDirectory,
   importInterview,
   listCategoryNodes,
+  listAllCategoryPermissions,
   listCategoryPermissions,
   listGroups,
   setCategoryPermissions,
   updateCategory,
   type CategoryNode,
   type CategoryPermissionEntry,
+  type CategoryPermissionRow,
   type DirectoryUser,
   type Group,
   type InterviewImportResult,
@@ -122,7 +124,7 @@ type NamePrompt =
   | { kind: "rename"; id: number; currentName: string };
 
 export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   // Manage(트리+임포트) ↔ Status(배치 현황판) 세그먼트 — 홈 뷰 토글(home-view-toggle) 스타일 복제 (Track C Task 7)
   const [panelView, setPanelView] = useState<"manage" | "status">("manage");
   const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(
@@ -136,6 +138,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   // L5 연계 캔버스 권한자 관리 — 모든 레벨에서 부여 가능(하향 상속) (design 2026-08-28 §3)
   const [permsNode, setPermsNode] = useState<CategoryNode | null>(null);
   const [deletingNode, setDeletingNode] = useState<CategoryNode | null>(null);
+  // 트리 행 인라인 권한자 표시 재료 — 권한자 행 일괄 + 표시명 색인(디렉터리/그룹) (2026-09-02 요청)
+  const [permRows, setPermRows] = useState<CategoryPermissionRow[]>([]);
+  const [permDirUsers, setPermDirUsers] = useState<DirectoryUser[]>([]);
+  const [permGroups, setPermGroups] = useState<Group[]>([]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -172,6 +178,32 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       active = false;
     };
   }, [scopeRootIds]);
+
+  // 인라인 권한자 로드 — 실패해도 트리 자체는 정상(표시만 생략).
+  // 마운트 effect 인라인 + 핸들러 중복은 이 파일의 기존 관례(handleRetryRoot) — ref 미러는 react-hooks/refs 위반.
+  function reloadPermRows() {
+    void Promise.all([listAllCategoryPermissions(), getDirectory(), listGroups()])
+      .then(([perms, dir, groupRows]) => {
+        setPermRows(perms.rows);
+        setPermDirUsers(dir.users);
+        setPermGroups(groupRows);
+      })
+      .catch(() => {});
+  }
+  useEffect(() => {
+    let active = true;
+    void Promise.all([listAllCategoryPermissions(), getDirectory(), listGroups()])
+      .then(([perms, dir, groupRows]) => {
+        if (!active) return;
+        setPermRows(perms.rows);
+        setPermDirUsers(dir.users);
+        setPermGroups(groupRows);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function handleRetryRoot() {
     setRootError(false);
@@ -367,6 +399,53 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     }
   }
 
+  // 코드 옆 인라인 권한자 — 그 카테고리에 직접 붙은 행만(하향 상속은 안내 문구가 담당).
+  // 2명까지 이름 노출, 초과분은 +N 배지 호버 툴팁으로 전체 나열 (2026-09-02 요청)
+  const INLINE_ADMIN_MAX = 2;
+  const permNamesByCategory = useMemo(() => {
+    const byId = new Map<number, string[]>();
+    for (const row of permRows) {
+      let name: string;
+      if (row.principal_type === "group") {
+        name = permGroups.find((g) => String(g.id) === row.principal_id)?.name ?? row.principal_id;
+      } else {
+        const found = permDirUsers.find((u) => u.id === row.principal_id);
+        name = found
+          ? lang === "ko" && found.korean_name
+            ? found.korean_name
+            : found.name
+          : row.principal_id;
+      }
+      const list = byId.get(row.category_id);
+      if (list) list.push(name);
+      else byId.set(row.category_id, [name]);
+    }
+    return byId;
+  }, [permRows, permDirUsers, permGroups, lang]);
+
+  const renderInlineAdmins = (categoryId: number): ReactNode => {
+    const names = permNamesByCategory.get(categoryId);
+    if (!names || names.length === 0) return null;
+    const shown = names.slice(0, INLINE_ADMIN_MAX);
+    const rest = names.length - shown.length;
+    return (
+      <span
+        data-id={`framework-admin-inline-${categoryId}`}
+        className="flex min-w-0 shrink items-center gap-1 text-fine text-ink-tertiary"
+      >
+        <ShieldCheck size={11} strokeWidth={1.5} className="shrink-0 text-accent" />
+        <span className="truncate">{shown.join(", ")}</span>
+        {rest > 0 && (
+          <Tooltip label={names.join(", ")}>
+            <span className="shrink-0 rounded-sm border border-hairline bg-surface-alt px-1 text-fine">
+              +{rest}
+            </span>
+          </Tooltip>
+        )}
+      </span>
+    );
+  };
+
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const open = openIds.has(node.id);
     const children = childrenByParent.get(node.id);
@@ -390,6 +469,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             )}
             <span className="truncate text-fine text-ink">{node.name}</span>
             <span className="shrink-0 text-fine text-ink-muted">{node.code}</span>
+            {renderInlineAdmins(node.id)}
             {/* 접힌 행에만 — 펼치면 하위 행이 다 보여 롤업 숫자가 중복(count-tag.tsx 계약) */}
             {!open && <CountTag count={node.map_count} />}
           </button>
@@ -992,6 +1072,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <CategoryPermsModal
           node={permsNode}
           onClose={() => setPermsNode(null)}
+          onSaved={reloadPermRows}
           onToast={onToast}
         />
       )}
@@ -1284,14 +1365,19 @@ function MoveCategoryModal({ node, hideRootOption, onClose, onMoved }: MoveCateg
 function CategoryPermsModal({
   node,
   onClose,
+  onSaved,
   onToast,
 }: {
   node: CategoryNode;
   onClose: () => void;
+  onSaved: () => void;
   onToast: (message: string) => void;
 }) {
   const { t, lang } = useI18n();
   const [entries, setEntries] = useState<CategoryPermissionEntry[] | null>(null);
+  // 확인(Confirm) 전까지는 로컬 버퍼만 편집 — 서버 반영은 확인 버튼 1회 (부서 지정 모달 Confirm 게이트 선례)
+  const [initialEntries, setInitialEntries] = useState<CategoryPermissionEntry[] | null>(null);
+  const [saving, setSaving] = useState(false);
   const [dirUsers, setDirUsers] = useState<DirectoryUser[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -1302,6 +1388,7 @@ function CategoryPermsModal({
       .then(([perms, dir, groupRows]) => {
         if (!active) return;
         setEntries(perms.permissions);
+        setInitialEntries(perms.permissions);
         setDirUsers(dir.users);
         setGroups(groupRows);
       })
@@ -1343,11 +1430,31 @@ function CategoryPermsModal({
     }));
   const pickerDepts: Department[] = [];
 
-  function save(next: CategoryPermissionEntry[]) {
-    setEntries(next); // 낙관 반영 — 실패 시 서버 재조회 대신 에러 안내(재열기로 복구)
-    void setCategoryPermissions(node.id, next)
-      .then((result) => setEntries(result.permissions))
-      .catch(() => onToast(t("framework.permsSaveError")));
+  // 버퍼 편집 — 서버 반영 없음(확인 버튼이 유일한 저장 경로)
+  function stage(next: CategoryPermissionEntry[]) {
+    setEntries(next);
+  }
+
+  const entryKey = (e: CategoryPermissionEntry) => `${e.principal_type}:${e.principal_id}`;
+  const isDirty =
+    entries !== null &&
+    initialEntries !== null &&
+    (entries.length !== initialEntries.length ||
+      new Set(initialEntries.map(entryKey)).size !==
+        new Set([...initialEntries, ...entries].map(entryKey)).size);
+
+  function confirmSave() {
+    if (entries === null || saving) return;
+    setSaving(true);
+    void setCategoryPermissions(node.id, entries)
+      .then(() => {
+        onSaved(); // 트리 인라인 권한자 갱신
+        onClose();
+      })
+      .catch(() => {
+        onToast(t("framework.permsSaveError"));
+        setSaving(false); // 실패 시 버퍼 유지 — 재시도 가능
+      });
   }
 
   const displayName = (entry: CategoryPermissionEntry): string => {
@@ -1362,7 +1469,8 @@ function CategoryPermsModal({
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+      // 피커 z 계약: 호스트 모달 ≤1200 · 피커 드롭다운 1250 — 1300이면 드롭다운이 블러 뒤로 간다
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
       <div
         data-id="framework-perms-modal"
@@ -1417,7 +1525,7 @@ function CategoryPermsModal({
                       aria-label={t("dashboard.accessRemove")}
                       className="rounded-xs p-0.5 text-ink-tertiary hover:bg-divider hover:text-error"
                       onClick={() =>
-                        save(
+                        stage(
                           entries.filter(
                             (e) =>
                               !(e.principal_type === entry.principal_type &&
@@ -1439,12 +1547,32 @@ function CategoryPermsModal({
               excludeIds={new Set(entries.map((e) => e.principal_id))}
               onSelect={(opt: PrincipalOption) => {
                 if (opt.principalType !== "user" && opt.principalType !== "group") return;
-                save([
+                stage([
                   ...entries,
                   { principal_type: opt.principalType, principal_id: opt.principalId },
                 ]);
               }}
             />
+            {/* 버퍼 확정 — 여기서만 서버 저장. 취소/Esc/백드롭은 변경 폐기 */}
+            <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
+              <button
+                type="button"
+                data-id="framework-perms-cancel"
+                className="rounded-sm px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
+                onClick={onClose}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                data-id="framework-perms-confirm"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent disabled:opacity-40"
+                disabled={!isDirty || saving}
+                onClick={confirmSave}
+              >
+                {t("common.confirm")}
+              </button>
+            </div>
           </>
         )}
       </div>

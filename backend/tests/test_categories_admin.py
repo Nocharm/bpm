@@ -407,3 +407,26 @@ def test_nonadmin_still_403_everywhere(client: TestClient, enforce: None) -> Non
         f"/api/categories/{tree['mid']}/permissions",
         json={"permissions": [{"principal_type": "user", "principal_id": "x"}]},
     ).status_code == 403
+
+
+def test_permissions_map_scoped_by_role(client: TestClient, enforce: None) -> None:
+    """전 카테고리 권한자 일괄 조회 — sysadmin=전체, 위임 관리자=자기 스코프 내 행만, 일반 403."""
+    tree = _seed_deleg_tree(client, "PMAP")
+    act_as(STRANGER_SYSADMIN)
+    # 스코프 밖(other)에도 행을 심어 필터링을 구분 가능하게
+    client.put(
+        f"/api/categories/{tree['other']}/permissions",
+        json={"permissions": [{"principal_type": "user", "principal_id": "pmap.outside"}]},
+    )
+    all_rows = client.get("/api/categories/permissions-map").json()["rows"]
+    cat_ids = {r["category_id"] for r in all_rows}
+    assert tree["mid"] in cat_ids and tree["other"] in cat_ids
+
+    act_as(DELEG_ADMIN)
+    scoped = client.get("/api/categories/permissions-map").json()["rows"]
+    scoped_ids = {r["category_id"] for r in scoped}
+    assert tree["mid"] in scoped_ids
+    assert tree["other"] not in scoped_ids  # 위임 서브트리 밖 행은 미노출
+
+    act_as("pmap.nobody")
+    assert client.get("/api/categories/permissions-map").status_code == 403

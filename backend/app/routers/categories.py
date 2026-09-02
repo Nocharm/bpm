@@ -37,6 +37,8 @@ from app.schemas import (
     CategoryNodeOut,
     CategoryPermissionEntry,
     CategoryPermissionsIn,
+    CategoryPermissionsMapOut,
+    CategoryPermissionRowOut,
     CategoryPermissionsOut,
     CategorySubtreeConfirmOut,
     CategorySummaryL5Out,
@@ -325,6 +327,34 @@ async def search_framework(
             for m in visible
             if m.category_id is not None
         ],
+    )
+
+
+@router.get("/permissions-map", response_model=CategoryPermissionsMapOut)
+async def list_all_category_permissions(
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CategoryPermissionsMapOut:
+    """전 카테고리 권한자 행 일괄 — 설정 트리의 코드 옆 인라인 권한자 표시용(1쿼리).
+
+    sysadmin=전체, 카테고리 관리자=자기 위임 스코프(admin_ids) 내 행만, 그 외 403.
+    """
+    query = select(
+        CategoryPermission.category_id,
+        CategoryPermission.principal_type,
+        CategoryPermission.principal_id,
+    )
+    if not logic.is_sysadmin(user):
+        admin_ids, _seeds = await get_admin_scope(session, user)
+        if not admin_ids:
+            raise HTTPException(status_code=403, detail="category admin or sysadmin only")
+        query = query.where(CategoryPermission.category_id.in_(admin_ids))
+    rows = (await session.execute(query)).all()
+    return CategoryPermissionsMapOut(
+        rows=[
+            CategoryPermissionRowOut(category_id=cid, principal_type=pt, principal_id=pid)
+            for cid, pt, pid in rows
+        ]
     )
 
 

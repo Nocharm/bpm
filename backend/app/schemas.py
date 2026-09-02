@@ -810,6 +810,18 @@ class CategoryPermissionEntry(BaseModel):
     principal_id: Annotated[str, StringConstraints(min_length=1, max_length=200)]
 
 
+class CategoryPermissionRowOut(BaseModel):
+    """전 카테고리 권한자 일괄 조회의 1행 — 설정 트리 인라인 표시용."""
+
+    category_id: int
+    principal_type: str
+    principal_id: str
+
+
+class CategoryPermissionsMapOut(BaseModel):
+    rows: list[CategoryPermissionRowOut]
+
+
 class CategoryPermissionsIn(BaseModel):
     permissions: list[CategoryPermissionEntry]
 

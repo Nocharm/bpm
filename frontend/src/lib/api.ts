@@ -2710,6 +2710,15 @@ export function listCategoryPermissions(
   return request<{ permissions: CategoryPermissionEntry[] }>(`/categories/${categoryId}/permissions`);
 }
 
+export interface CategoryPermissionRow extends CategoryPermissionEntry {
+  category_id: number;
+}
+
+// 전 카테고리 권한자 행 일괄 — 설정 트리 인라인 표시용(sysadmin=전체, 위임 관리자=스코프 내)
+export function listAllCategoryPermissions(): Promise<{ rows: CategoryPermissionRow[] }> {
+  return request<{ rows: CategoryPermissionRow[] }>(`/categories/permissions-map`);
+}
+
 // 권한자 전체 교체 — 멱등 PUT(setApprovers 선례), sysadmin 전용(서버 가드)
 export function setCategoryPermissions(
   categoryId: number,

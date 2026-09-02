@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-02 — 권한자 관리 UX 3종: 드롭다운 z·버퍼+확인·트리 인라인 표시 (dev)
+- 권한자 모달 백드롭 z-1300이 피커 z 계약(호스트 ≤1200·드롭다운 1250)을 위반해 드롭다운이 블러 뒤로 가던 것 교정. 편집은 로컬 버퍼로 바꾸고 확인 버튼 1회만 서버 저장(부서 지정 Confirm 게이트 선례 — 취소/Esc/백드롭=폐기).
+- 설정 트리 행의 코드 옆에 그 카테고리에 직접 붙은 권한자를 인라인 표시(2명+초과 +N 호버 툴팁) — 신규 `GET /categories/permissions-map`(1쿼리, sysadmin=전체·위임 관리자=스코프 필터) + 모달 확정 시 즉시 갱신.
+
 ## 2026-09-02 — height-shift 충돌 기반 전환 + 에디터·임포트 개선 (feat/height-shift-collision-only)
 - **height-shift 충돌 기반 전환**: 커진 노드의 Y축 보정을 전역 계단함수 → 충돌 기반 필드로(`lib/height-shift.ts` 재작성) — 성장분은 저장 여백을 먼저 흡수, X 겹침 열만 `min(저장 간격, 16px)` 유지하며 밀리고 같은 행은 max 동기화. 역변환은 열 프로브 이분탐색(`invertDisplayY`)+드래그 자기 푸셔 제외, 저장 좌표 불변·BE/임포트 배치 무변경. `pw-smoke-height-shift.mjs` 계약 재작성 14/14.
 - **에디터/설정 UX 4종**: 펼침 자식 엣지 라벨 알약 복원(`styleEdgeLabelPill` 공용화), 라이브러리 부서 칩 리프 한 줄 표기+호버 조직 모달(닫힘 500ms 유예), 대시보드 브라우저 뒤로가기 → 설정 레일 복귀(popstate), 펼침 자식/게이트웨이 엣지 사용감 통일 — F14 하이라이트 경계 관통·자식 엣지 선택 개방(읽기전용 인스펙터)·게이트웨이 "흐름 안내 엣지" 안내(selected는 styledEdges 직접 세팅 — 자식은 edges state 밖이라 RF 에코 소실).
