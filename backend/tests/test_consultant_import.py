@@ -225,16 +225,10 @@ def test_resolve_owning_department(client) -> None:
     assert none[0] is None and none[1] is not None
 
 
-def test_resolve_owning_department_uses_dept_chain(client) -> None:
-    """departments 체인 보유 오너의 폴백·known은 resolver 경로(트림 반영) — org 컬럼 원본이 아니다.
-
-    조직 기준 전환(2026-08) 후 임포트가 raw org_l 조합을 쓰면 피커·오우닝 검증과 어긋난
-    고아 경로가 박히는 회귀 가드.
-    """
+def _seed_chain_org() -> None:
+    """CIMP 4레벨 부서 체인 + 체인 소속 직원 시드 — 트림(2) 후 canonical은 하위 2레벨 경로."""
     from app.db import SessionLocal
     from app.models import Department, Employee
-    from app.orgchart import load_dept_index, load_valid_org_prefixes
-    from scripts.import_consultant import resolve_owning_department
 
     async def _arrange() -> None:
         async with SessionLocal() as session:
@@ -253,6 +247,19 @@ def test_resolve_owning_department_uses_dept_chain(client) -> None:
                 ))
             await session.commit()
 
+    _run(_arrange())
+
+
+def test_resolve_owning_department_uses_dept_chain(client) -> None:
+    """departments 체인 보유 오너의 폴백·known은 resolver 경로(트림 반영) — org 컬럼 원본이 아니다.
+
+    조직 기준 전환(2026-08) 후 임포트가 raw org_l 조합을 쓰면 피커·오우닝 검증과 어긋난
+    고아 경로가 박히는 회귀 가드.
+    """
+    from app.db import SessionLocal
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import resolve_owning_department
+
     async def _resolve() -> tuple:
         async with SessionLocal() as session:
             known = await load_valid_org_prefixes(session)
@@ -263,13 +270,281 @@ def test_resolve_owning_department_uses_dept_chain(client) -> None:
             )
             return known, fallback, raw_dept
 
-    _run(_arrange())
+    _seed_chain_org()
     known, fallback, raw_dept = _run(_resolve())
     # 상위 2레벨(org_trim_levels) 트림 후 체인 경로만 유효 집합에 존재
     assert "Consult Office/Consult Chain Team" in known
     assert fallback[0] == "Consult Office/Consult Chain Team"
     # raw org 컬럼 조합은 더 이상 known이 아니다 → resolver 경로로 폴백
     assert raw_dept[0] == "Consult Office/Consult Chain Team" and "fallback" in (raw_dept[1] or "")
+
+
+def test_resolve_owning_department_aligns_tree_path(client) -> None:
+    """전달물 부서는 루트부터의 전체 체인일 수 있다 — 트리 정렬로 canonical 경로에 착지.
+
+    canonical known은 상위 트림(org_trim_levels) 경로라 완전일치가 실패한다: 선두 세그먼트
+    드랍 정렬 → 유일 서픽스 매칭 순. 서픽스가 여러 canonical에 걸리면 모호 → 오너 org 폴백.
+    """
+    from app.db import SessionLocal
+    from app.models import Employee
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import resolve_owning_department
+
+    _seed_chain_org()
+
+    async def _arrange_more() -> None:
+        async with SessionLocal() as session:
+            for login, orgs in (
+                # 서픽스 모호 케이스용 — "Consult Chain Team" 리프가 두 canonical에 존재
+                ("cons.ambig", {"org_l1": "Ambig Office", "org_l2": "Consult Chain Team"}),
+                # 유일 서픽스 케이스용 — canonical이 전달물보다 위 컨텍스트를 더 가짐
+                ("cons.deep", {"org_l1": "Deep Div", "org_l2": "Deep Office", "org_l3": "Deep Team"}),
+            ):
+                if await session.get(Employee, login) is None:
+                    session.add(Employee(
+                        login_id=login, name=login, source="local", active=False, **orgs
+                    ))
+            await session.commit()
+
+    _run(_arrange_more())
+    full_chain = "Consult Corp/Consult Biz/Consult Office/Consult Chain Team"
+
+    async def _resolve() -> tuple:
+        async with SessionLocal() as session:
+            known = await load_valid_org_prefixes(session)
+            index = await load_dept_index(session)
+            aligned = await resolve_owning_department(session, known, index, full_chain, "no.such.owner")
+            suffix = await resolve_owning_department(
+                session, known, index, "Deep Office/Deep Team", "no.such.owner"
+            )
+            boundary = await resolve_owning_department(
+                session, known, index, "Office/Deep Team", "no.such.owner"
+            )
+            ambiguous = await resolve_owning_department(
+                session, known, index, "Consult Chain Team", "cons.chain"
+            )
+            return aligned, suffix, boundary, ambiguous
+
+    aligned, suffix, boundary, ambiguous = _run(_resolve())
+    # 선두 드랍 정렬 — 트림 전 전체 체인이 트림된 canonical에 착지
+    assert aligned[0] == "Consult Office/Consult Chain Team"
+    # 유일 서픽스 매칭 — 위 컨텍스트가 더 있는 canonical 경로로 확장 착지
+    assert suffix[0] == "Deep Div/Deep Office/Deep Team"
+    # 세그먼트 경계 — "Office"는 "Deep Office"의 문자열 꼬리일 뿐, Deep 경로로 정렬되면 안 된다.
+    # 어디에도 못 착지 + 오너 org도 없음 → 전달물 그대로 등록(최후 폴백)
+    assert boundary[0] == "Office/Deep Team" and "as delivered" in (boundary[1] or "")
+    # 서픽스가 2개 canonical에 걸림("Consult Office/…"·"Ambig Office/…") → 매칭 포기, 오너 org 폴백
+    assert ambiguous[0] == "Consult Office/Consult Chain Team" and "fallback" in (ambiguous[1] or "")
+
+
+def _seed_qc_tree() -> None:
+    """QCT 5레벨 departments 체인(직원 없음) — 트림(2) 후 canonical은 3~5레벨 경로."""
+    from app.db import SessionLocal
+    from app.models import Department
+
+    async def _arrange() -> None:
+        async with SessionLocal() as session:
+            if await session.get(Department, "QCT-L1") is None:
+                for code, parent, level, name in (
+                    ("QCT-L1", None, 1, "Quality Corp"),
+                    ("QCT-L2", "QCT-L1", 2, "Quality Center"),
+                    ("QCT-L3", "QCT-L2", 3, "QC Department"),
+                    ("QCT-L4", "QCT-L3", 4, "QC Support Team"),
+                    ("QCT-L5", "QCT-L4", 5, "QC Sample Management Group"),
+                ):
+                    session.add(Department(dept_code=code, parent_dept_code=parent, level=level, name=name))
+            await session.commit()
+
+    _run(_arrange())
+
+
+def test_resolve_owning_department_uses_dept_tree_without_employees(client) -> None:
+    """직원이 아직 없는 부서도 departments 미러 체인으로 트림 canonical에 착지한다.
+
+    실서버의 신설 조직/미유입 인원 케이스 — employee 기반 known엔 없어도 HR 미러 트리가
+    있으면 트림 규칙을 맞춰 등록해, 인원이 들어오는 순간 경로가 자동 정합된다.
+    """
+    from app.db import SessionLocal
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import build_dept_chains, resolve_owning_department
+
+    _seed_qc_tree()
+    payload_dept = "Quality Center/QC Department/QC Support Team/QC Sample Management Group"
+
+    async def _resolve() -> tuple:
+        async with SessionLocal() as session:
+            known = await load_valid_org_prefixes(session)
+            index = await load_dept_index(session)
+            chains = build_dept_chains(index)
+            return await resolve_owning_department(
+                session, known, index, payload_dept, "ghost.person", chains=chains
+            )
+
+    path, note = _run(_resolve())
+    # 전체 체인 5레벨 중 상위 2레벨 트림 — 전달물(2~5레벨)이 체인 서픽스로 정렬된다
+    assert path == "QC Department/QC Support Team/QC Sample Management Group"
+    assert "aligned" in (note or "")
+
+
+def test_import_ghost_owner_full_chain_department_sets_owning(client) -> None:
+    """유령 오너(직원 미등재)라도 전달물 부서가 트리 정렬로 해석되면 owning에 등록된다.
+
+    종전엔 완전일치 실패 → 오너 org 폴백(유령이라 없음) → NULL로 증발했다 (2026-09-02).
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    _seed_chain_org()
+    cmap = _canonical_map(
+        code="IV-P8", name="유령 오너 전체 체인", owner="ghost.person", approvers=[],
+        department="Consult Corp/Consult Biz/Consult Office/Consult Chain Team",
+    )
+    report = _run(_import_once(maps=[cmap]))
+    assert report.counts() == {"created": 1}
+    assert any(a == "warning" and "not found in employees" in d for _, a, d in report.rows)
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P8"))
+            ).one()
+
+    m = _run(_load())
+    assert m.owner_id == "ghost.person" and m.consultant_owner_pending is False
+    assert m.owning_department == "Consult Office/Consult Chain Team"
+
+
+def test_import_owner_pending_still_resolves_owning_from_department(client) -> None:
+    """오너 미확정이어도 전달물 부서는 임포터와 무관 — 부서만으로 owning을 등록한다.
+
+    임포터(actor) org 폴백은 계속 금지(홈 부서 뷰 오염 방지) — 부서 해석 실패면 종전대로 NULL.
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    cmap = _canonical_map(
+        code="IV-P9", name="오너 미정 부서 확정", owner=None, approvers=[],
+        department="Consult Div/Consult Team",
+    )
+    report = _run(_import_once(maps=[cmap]))
+    assert report.counts() == {"created": 1}
+    assert any(a == "warning" and "owner missing" in d for _, a, d in report.rows)
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P9"))
+            ).one()
+
+    m = _run(_load())
+    assert m.owner_id == "admin.sys" and m.consultant_owner_pending is True
+    assert m.owning_department == "Consult Div/Consult Team"
+
+
+def test_import_pending_owner_dept_tree_full_scenario(client) -> None:
+    """사용자 시나리오 미러(2026-09-02): 오너 미확정 + 4단계 부서 경로 + 직원 없는 조직.
+
+    departments 미러 체인으로 트림 canonical에 착지해 owning이 등록돼야 한다 —
+    import_delivery가 dept_chains를 실제로 배선하는지의 엔드투엔드 가드.
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    _seed_qc_tree()
+    cmap = _canonical_map(
+        code="IV-P10", name="시료 접수 및 배부", owner=None, approvers=[],
+        department="Quality Center/QC Department/QC Support Team/QC Sample Management Group",
+    )
+    report = _run(_import_once(maps=[cmap]))
+    assert report.counts() == {"created": 1}
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P10"))
+            ).one()
+
+    m = _run(_load())
+    assert m.consultant_owner_pending is True
+    assert m.owning_department == "QC Department/QC Support Team/QC Sample Management Group"
+
+
+def test_redelivery_fills_missing_owning_for_pending_maps(client) -> None:
+    """구 엔진이 owning 없이 만든 pending 맵은 재전달에서 부서만 채워진다 (2026-09-02).
+
+    거버넌스 불변의 기존 예외(pending 재해석)와 동족 — 실오너가 아직 없어도 owning 공백은
+    재전달로 복구 가능해야 기존 임포트 맵(오너 미정 + owning NULL)이 방치되지 않는다.
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    base = dict(code="IV-P12", name="owning 공백 복구", owner=None, approvers=[],
+                department="Consult Div/Consult Team")
+    _run(_import_once(maps=[_canonical_map(**base)]))
+
+    async def _blank_owning() -> None:
+        # 구 엔진 상태 재현 — pending인데 owning이 NULL로 만들어진 기존 맵
+        async with SessionLocal() as session:
+            m = (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P12"))
+            ).one()
+            m.owning_department = None
+            await session.commit()
+
+    _run(_blank_owning())
+    _run(_import_once(maps=[_canonical_map(**base)]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P12"))
+            ).one()
+
+    m = _run(_load())
+    assert m.consultant_owner_pending is True
+    assert m.owning_department == "Consult Div/Consult Team"
+
+
+def test_import_unknown_department_registers_as_delivered(client) -> None:
+    """어디에도 못 착지한 전달물 부서는 NULL 대신 정규화 경로 그대로 등록한다 (2026-09-02).
+
+    조직 트리·직원이 아직 없는 환경(로컬 데모·HR 미유입)에서도 임포트 부서가 증발하지
+    않는다 — 이후 HR 유입으로 트리가 생기면 재전달/수동 정리로 정합.
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    cmap = _canonical_map(
+        code="IV-P11", name="유령 부서 등록", owner=None, approvers=[],
+        department="Ghost Div/Ghost Team",
+    )
+    report = _run(_import_once(maps=[cmap]))
+    assert report.counts() == {"created": 1}
+    assert any(a == "warning" and "as delivered" in d for _, a, d in report.rows)
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (
+                await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P11"))
+            ).one()
+
+    m = _run(_load())
+    assert m.owning_department == "Ghost Div/Ghost Team"
 
 
 def _delivery(maps=None):

@@ -40,7 +40,14 @@ from app.models import (
     ProcessCategory,
     ProcessMap,
 )
-from app.orgchart import DeptIndex, load_dept_index, load_valid_org_prefixes, resolve_org_path
+from app.orgchart import (
+    DeptIndex,
+    load_dept_index,
+    load_valid_org_prefixes,
+    resolve_org_path,
+    sanitize_org_segment,
+)
+from app.settings import settings
 from app.schemas import NUMERIC_RE
 from app.subprocess import (
     DEFAULT_TARGET_HANDLE,
@@ -344,26 +351,119 @@ async def upsert_categories(
     return ids
 
 
-async def resolve_owning_department(
-    session: AsyncSession, known: set[str], index: DeptIndex, dept: str, owner: str
+def build_dept_chains(index: DeptIndex) -> list[list[str]]:
+    """departments 미러 → 각 부서의 루트→자신 새니타이즈 이름 체인 목록.
+
+    orgchart._resolve_chain_names와 같은 배제 규칙(사이클·과깊이·부모 단절·빈 이름) — 직원이
+    아직 없는 부서도 전달물 경로 정렬에 쓸 수 있게 트리 전체를 편다. import_delivery당 1회 계산.
+    """
+    chains: list[list[str]] = []
+    for code in index.by_code:
+        names_leaf_to_root: list[str] = []
+        visited: set[str] = set()
+        cur: str | None = code
+        while cur is not None and cur in index.by_code:
+            if cur in visited or len(visited) >= 15:  # orgchart._MAX_DEPTH와 동치
+                break
+            visited.add(cur)
+            name, parent = index.by_code[cur]
+            if name:
+                names_leaf_to_root.append(sanitize_org_segment(name))
+            cur = parent
+        if cur is None and names_leaf_to_root:
+            chains.append(list(reversed(names_leaf_to_root)))
+    return chains
+
+
+def match_known_department(
+    known: set[str], dept: str, chains: list[list[str]] | None = None
 ) -> tuple[str | None, str | None]:
-    """canonical department → 오너 org 폴백 → (None, 경고) (design §5.3).
+    """전달물 부서 경로를 canonical 유효 경로에 트리 정렬로 매칭 — (경로, note).
+
+    전달물은 루트부터의 전체 체인(트림 전 N단계 부서구조)일 수 있다: ① 완전일치 →
+    ② 선두 세그먼트 드랍(canonical은 org_trim_levels 상위 트림 경로) → ③ 유일 세그먼트-서픽스
+    (canonical이 위 컨텍스트를 더 가진 경우) → ④ departments 미러 체인 정렬(직원 없는 부서
+    — 트림 적용 canonical 산출) 순으로 착지시킨다. 여러 canonical에 걸리면 모호 — 매칭 포기
+    (note만 남김). 2026-09-02 4단계 부서구조 임포트 대응.
+    """
+    dept = dept.strip()
+    if not dept:
+        return None, None
+    if dept in known:
+        return dept, None
+    segments = dept.split("/")
+    for i in range(1, len(segments)):
+        candidate = "/".join(segments[i:])
+        if candidate in known:
+            return candidate, f"department {dept!r} aligned to {candidate!r}"
+    # 문자열 endswith는 세그먼트 경계를 못 지킨다("Office" ⊂ "Deep Office") — 세그먼트 단위 비교
+    suffix_hits = sorted(k for k in known if k.split("/")[-len(segments):] == segments)
+    if len(suffix_hits) == 1:
+        return suffix_hits[0], f"department {dept!r} aligned to {suffix_hits[0]!r}"
+    if len(suffix_hits) > 1:
+        return None, f"department {dept!r} ambiguous — matches {len(suffix_hits)} org paths"
+    # ④ 미러 체인 정렬 — 전달물 선두에 미러 밖 상위(법인 등)가 섞였을 수 있어 드랍하며 시도
+    if chains:
+        trim = settings.org_trim_levels
+        for j in range(len(segments)):
+            tail = segments[j:]
+            # canonical 경로 set — 같은 부서를 가리키는 중복 체인이 하나로 접히게
+            landed = {
+                "/".join(chain[trim:] if len(chain) > trim else chain[-1:])
+                for chain in chains
+                if chain[-len(tail):] == tail
+            }
+            if len(landed) == 1:
+                path = next(iter(landed))
+                return path, f"department {dept!r} aligned to {path!r} (dept tree)"
+            if len(landed) > 1:
+                return None, f"department {dept!r} ambiguous — matches {len(landed)} dept-tree paths"
+    return None, None
+
+
+def match_delivered_department(
+    known: set[str], dept: str, chains: list[list[str]] | None = None
+) -> tuple[str | None, str | None]:
+    """부서 정렬 매칭 + 최후 as-delivered — 오너 org 폴백이 없는 경로(pending 계열)용.
+
+    오너 미확정 맵은 actor 조직 폴백이 금지라 resolve_owning_department를 못 쓴다 — 매칭
+    실패한 비어있지 않은 부서는 정규화 경로 그대로 등록한다(2026-09-02 사용자 결정).
+    """
+    dept = dept.strip()
+    owning, note = match_known_department(known, dept, chains)
+    if owning is None and dept:
+        reason = note or f"department {dept!r} not in org tree"
+        return dept, f"{reason} — registered as delivered"
+    return owning, note
+
+
+async def resolve_owning_department(
+    session: AsyncSession, known: set[str], index: DeptIndex, dept: str, owner: str,
+    chains: list[list[str]] | None = None,
+) -> tuple[str | None, str | None]:
+    """canonical department 트리 정렬 매칭 → 오너 org 폴백 → 전달물 그대로 등록 (design §5.3).
 
     known·폴백 모두 orgchart resolver 소스(체인 해석+새니타이즈+상위 트림) — 피커·
     maps._assert_known_department와 같은 집합이어야 임포트가 박은 owning이 앱 검증·홈
     트리와 어긋나지 않는다(org 컬럼 인라인 조합 금지, 2026-08 조직 기준 전환 정합).
+    어디에도 못 착지한 비어있지 않은 부서는 NULL 대신 정규화 경로 그대로 등록한다
+    (2026-09-02 사용자 결정 — 조직 미유입 환경에서 임포트 부서 증발 방지).
     """
     dept = dept.strip()
-    if dept and dept in known:
-        return dept, None
+    matched, match_note = match_known_department(known, dept, chains)
+    if matched is not None:
+        return matched, match_note
     employee = await session.get(Employee, owner)
     path = resolve_org_path(employee, index) if employee else ""
     if path:
-        note = f"department {dept!r} unknown — fallback to owner org {path!r}" if dept else None
         if not dept:
-            note = f"department empty — fallback to owner org {path!r}"
-        return path, note
-    return None, f"department {dept!r} unknown and owner {owner!r} has no org — left NULL"
+            return path, f"department empty — fallback to owner org {path!r}"
+        reason = match_note or f"department {dept!r} unknown"
+        return path, f"{reason} — fallback to owner org {path!r}"
+    if dept:
+        reason = match_note or f"department {dept!r} not in org tree"
+        return dept, f"{reason} — registered as delivered"
+    return None, f"department empty and owner {owner!r} has no org — left NULL"
 
 
 @dataclass
@@ -561,6 +661,7 @@ async def import_delivery(
     category_ids = await upsert_categories(session, categories)
     known = await load_valid_org_prefixes(session)  # 피커·오우닝 검증과 동일 소스
     dept_index = await load_dept_index(session)
+    dept_chains = build_dept_chains(dept_index)  # 직원 없는 부서 정렬용 — 전달분당 1회
 
     # consultant_code is_not(None)로 이미 필터했지만 컬럼 타입은 str | None이라 아래서 str 키로
     # 쓰려면 명시 가드가 필요(Pyright dict[str, ...] 추론).
@@ -639,7 +740,7 @@ async def import_delivery(
             assigned_owner = cmap.owner
             if found.consultant_owner_pending and assigned_owner is not None:
                 owning, note = await resolve_owning_department(
-                    session, known, dept_index, cmap.department, assigned_owner
+                    session, known, dept_index, cmap.department, assigned_owner, dept_chains
                 )
                 if note:
                     report.add(cmap.code, "warning", note)
@@ -658,21 +759,30 @@ async def import_delivery(
                         report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
                     session.add(MapApprover(map_id=found.id, user_id=approver, assigned_by=actor))
                 report.add(cmap.code, "governance", f"owner {assigned_owner} assigned")
+            elif found.consultant_owner_pending and found.owning_department is None:
+                # 구 엔진이 owning 없이 만든 pending 맵 — 재전달에서 부서만 채운다 (2026-09-02).
+                # 거버넌스 불변의 기존 예외(pending 재해석)와 동족 — 오너·권한행은 건드리지 않는다.
+                owning, note = match_delivered_department(known, cmap.department, dept_chains)
+                if note:
+                    report.add(cmap.code, "warning", note)
+                if owning is not None:
+                    found.owning_department = owning
+                    report.add(cmap.code, "governance", f"owning department {owning} filled (pending)")
             continue
         owner_login = cmap.owner
         pending = owner_login is None
         owning: str | None
         note: str | None
         if owner_login is None:
-            # 오너 미확정 — actor(실행 sysadmin) 폴백. 오우닝은 actor 조직으로 오염시키지 않고
-            # NULL로 남긴다(홈 부서 뷰 오염 방지) — 실오너 배정 시 위 예외 분기가 재해석한다.
+            # 오너 미확정 — actor(실행 sysadmin) 폴백. actor 조직 폴백은 금지(홈 부서 뷰 오염 방지)
+            # 하되, 전달물 부서는 임포터와 무관하므로 부서 정렬 매칭만으로 owning을 등록한다
+            # (2026-09-02) — 실오너 배정 시 위 예외 분기가 재해석한다.
             owner_login = actor
-            owning = None
-            note = None
+            owning, note = match_delivered_department(known, cmap.department, dept_chains)
             report.add(cmap.code, "warning", "owner missing — fallback to importer (pending)")
         else:
             owning, note = await resolve_owning_department(
-                session, known, dept_index, cmap.department, owner_login
+                session, known, dept_index, cmap.department, owner_login, dept_chains
             )
         if note:
             report.add(cmap.code, "warning", note)
