@@ -177,26 +177,39 @@ export default function SettingsPage() {
     .filter((c) => c.tabs.length > 0);
   const allTabs = visibleCategories.flatMap((c) => c.tabs);
 
-  // Groups(모두) 카테고리가 항상 있어 비는 경우는 없지만, 방어적으로 / Defensive guard.
-  if (allTabs.length === 0) {
-    return null;
-  }
-
   // activeTab이 비었거나 더 이상 가시 범위가 아니면 첫 가용 탭으로 폴백 /
   // Fall back to the first visible tab when none selected or selection is no longer visible.
   const current =
-    activeTab && allTabs.some((tab) => tab.id === activeTab) ? activeTab : allTabs[0].id;
+    activeTab && allTabs.some((tab) => tab.id === activeTab) ? activeTab : allTabs[0]?.id;
+  // 대시보드가 유일한 가시 탭인 사용자(권한만 받은 비-sysadmin)에게는 복귀처가 없다 — 뒤로가기 배선 생략.
+  const fallbackTab = allTabs.find((tab) => tab.id !== "dashboard")?.id;
+
+  // Dashboard 진입 시 히스토리 엔트리 push — 브라우저 뒤로가기가 /settings 이탈 대신 설정 레일로
+  // 복귀하게 popstate에서 폴백 탭으로 전환한다(사용자 요청 2026-09-02). 패널의 뒤로가기 버튼도
+  // history.back()으로 같은 경로를 타 엔트리가 남지 않는다. StrictMode 재실행은 state 마커로 중복 push 방지.
+  useEffect(() => {
+    if (current !== "dashboard" || fallbackTab === undefined) return undefined;
+    if (!window.history.state?.bpmSettingsDashboard) {
+      window.history.pushState({ bpmSettingsDashboard: true }, "");
+    }
+    const handlePop = () => setActiveTab(fallbackTab);
+    window.addEventListener("popstate", handlePop);
+    return () => window.removeEventListener("popstate", handlePop);
+  }, [current, fallbackTab]);
+
+  // Groups(모두) 카테고리가 항상 있어 비는 경우는 없지만, 방어적으로 / Defensive guard.
+  if (allTabs.length === 0 || current === undefined) {
+    return null;
+  }
 
   // Dashboard 탭은 설정 탭 레일을 대시보드 전용 풀블리드 레이아웃으로 교체한다 —
   // 좌측 레일까지 지표로 쓰기 위해서(design 2026-07-11). 복귀는 패널의 '설정으로 돌아가기'.
   if (current === "dashboard") {
-    // 대시보드가 유일한 가시 탭인 사용자(권한만 받은 비-sysadmin)에게는 폴백이 없다 — 뒤로가기 버튼을 감춘다.
-    const fallbackTab = allTabs.find((tab) => tab.id !== "dashboard")?.id;
     return (
       <>
         <ToastStack toasts={toasts} onDismiss={dismissToast} />
         <DashboardPanel
-          onBack={fallbackTab ? () => setActiveTab(fallbackTab) : undefined}
+          onBack={fallbackTab ? () => window.history.back() : undefined}
           onToast={(message) => showToast({ id: genId(), message })}
         />
       </>
