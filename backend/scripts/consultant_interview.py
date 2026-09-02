@@ -416,7 +416,8 @@ def _build_flow_edges(
     for src_node, loop_label in self_specs:
         branch = CanonicalNode(
             code=f"{src_node.code}r",
-            name=f"{src_node.name} 결과"[:200],
+            # 원본 이름을 붙이지 않는다 — 일괄 생성 티가 나는 고정 이름 (사용자 결정 2026-09-02)
+            name="루프포인트",
             type="decision",
             seq=src_node.seq,
         )

@@ -1111,9 +1111,13 @@ async def apply_interview_linkage(
             lineage = make_node_id(code, key)
             x, y = placed.get(key, grid[len(missing) + j])
             src_code = branch_of[key]
+            # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 "루프포인트" —
+            # 일괄 생성 티를 낸다(사용자 결정 2026-09-02). 팬아웃 유래는 기존 "{이름} 결과" 유지.
+            is_loop_origin = (key, src_code) in back_pairs
             node = Node(
                 id=uuid.uuid4().hex, version_id=draft.id, source_node_id=lineage,
-                title=f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
+                title="루프포인트" if is_loop_origin
+                else f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
                 node_type="decision",
                 pos_x=x, pos_y=y, sort_order=next_sort + len(missing) + j,
             )

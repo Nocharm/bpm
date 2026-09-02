@@ -408,6 +408,19 @@ def test_self_edge_forces_branch_loop() -> None:
     assert back == {("__branch__A", "A")}
 
 
+def test_self_origin_branch_is_detectable_via_back_pairs() -> None:
+    """(origin, 원본 src) ∈ back ⇔ self 유래 — L5 창작부가 이 시그니처로 '루프포인트' 이름을 고른다."""
+    from scripts.import_consultant import expand_linkage_branches
+
+    _, branch_of, back = expand_linkage_branches(
+        [_lk("A", "A", label="반복"), _lk("B", "A", kind="loop"), _lk("B", "C"), _lk("B", "D")],
+        {"A", "B", "C", "D"},
+    )
+    assert ("__branch__A", branch_of["__branch__A"]) in back  # self 유래
+    assert ("__branch__B", branch_of["__branch__B"]) not in back  # 팬아웃(+타 노드 loop) 유래
+    assert ("__branch__B", "A") in back  # 타 노드로 되돌아가는 loop은 그대로 back
+
+
 def test_solo_self_edge_still_gets_branch_node() -> None:
     """다른 진출이 없어도 분기 노드를 세운다 — kind가 loop가 아니어도 self는 back 쌍으로 등록(랭크 보호)."""
     from scripts.import_consultant import expand_linkage_branches
