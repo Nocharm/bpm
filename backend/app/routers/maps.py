@@ -936,6 +936,12 @@ async def create_fw_confirm_request(
     )
     if pending is not None:
         raise HTTPException(status_code=409, detail="a confirm request is already pending")
+    # 요청 = 편집권 이양 — 요청자가 draft를 쥐고 있으면 직속 L5 관리자의 decide 확정이
+    # 항상 409(타인 점유)로 막히므로 요청 성공 시 자동 해제한다 (2026-09-02 최종 리뷰 결정)
+    draft = await load_confirm_draft(session, map_id)
+    if draft is not None and draft.checked_out_by == user:
+        draft.checked_out_by = None
+        draft.checked_out_at = None
     note = payload.note or ""
     req = ApprovalRequest(
         map_id=map_id,
@@ -957,11 +963,13 @@ async def create_fw_confirm_request(
             ).all()
         )
         category_path = category_paths.get(category_id)
-        recipients = [
-            r
-            for r in await get_category_admin_logins(session, category_id, direct_only=True)
-            if r != user
-        ]
+        recipients = list(
+            await get_category_admin_logins(session, category_id, direct_only=True)
+        )
+    # 수신자 = 직속 L5 관리자 + sysadmin(대체 처리자) — decide 게이트와 동일 (spec §5)
+    recipients = [
+        r for r in dict.fromkeys(recipients + list(logic.list_sysadmin_logins())) if r != user
+    ]
     await workflow.create_notifications(
         session,
         recipients,

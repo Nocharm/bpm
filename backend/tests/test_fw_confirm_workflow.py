@@ -112,7 +112,9 @@ class TestCreateFwConfirmRequest:
         assert body["payload"]["note"] == "please confirm"
 
         notes = _notes_for(map_id)
+        # 수신자 = 직속 L5 관리자 + sysadmin(대체 처리자) (spec §5, 2026-09-02 최종 리뷰 결정)
         assert ("fw_confirm_requested", DIRECT) in notes
+        assert ("fw_confirm_requested", SYSADMIN) in notes
         assert all(rcpt != UPPER for _, rcpt in notes)
 
     def test_second_pending_request_conflicts(self, client: TestClient, enforce: None) -> None:
@@ -216,6 +218,43 @@ class TestDirectConfirmSupersedesPending:
 
         req = _seed(_req)
         assert req.status == "superseded"
+
+
+class TestRequestReleasesRequesterCheckout:
+    """요청=편집권 이양 — 요청자가 draft를 쥔 채 요청하면 자동 해제되어야 직속 L5 관리자의
+    decide approve가 409(타인 점유)로 막히지 않는다 (2026-09-02 최종 리뷰 결정)."""
+
+    def test_requester_checkout_released_then_direct_decide_succeeds(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        l1 = _seed_category(client, "FWCF-REL-L1", "점유해제L1")
+        l5 = _seed_category(client, "FWCF-REL-L5", "점유해제L5", level=5, parent_id=l1)
+        _seed_l6_map(client, l5, "점유해제업무1", "FWCF-RELM1")
+        act_as(SYSADMIN)
+        client.put(f"/api/categories/{l1}/permissions",
+                   json={"permissions": [{"principal_type": "user", "principal_id": UPPER}]})
+        client.put(f"/api/categories/{l5}/permissions",
+                   json={"permissions": [{"principal_type": "user", "principal_id": DIRECT}]})
+        map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+        detail = client.get(f"/api/maps/{map_id}").json()
+        draft = next(v for v in detail["versions"] if v["status"] == "draft")
+
+        # 상위 관리자(UPPER)가 편집을 위해 draft를 점유한 채 확정을 요청
+        act_as(UPPER)
+        _checkout(client, draft["id"])
+        r = client.post(f"/api/maps/{map_id}/fw-confirm-requests", json={})
+        assert r.status_code == 201, r.text
+        rid = r.json()["id"]
+
+        # 요청 성공만으로 점유가 자동 해제됨
+        state = client.get(f"/api/versions/{draft['id']}/workflow").json()
+        assert state["checkout_holder"] is None
+
+        # 직속 L5 관리자(DIRECT)의 decide approve — 점유가 남아있었다면 항상 409였을 경로
+        act_as(DIRECT)
+        decided = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert decided.status_code == 200, decided.text
+        assert decided.json()["status"] == "applied"
 
 
 class TestListApprovalRequestsFrameworkAccess:

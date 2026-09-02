@@ -727,7 +727,7 @@ const EDGE_LINE_STYLE_OPTIONS = [
   { value: "straight", labelKey: "edgeStyle.straight", icon: Slash },
 ] as const;
 
-function toAppEdges(graph: Graph): Edge[] {
+export function toAppEdges(graph: Graph): Edge[] {
   return graph.edges.map((edge) => ({
     ...EDGE_DEFAULTS,
     id: edge.id,
@@ -739,6 +739,8 @@ function toAppEdges(graph: Graph): Edge[] {
     targetHandle: edge.target_handle ?? targetHandleId((edge.target_side as HandleSide) || "left"),
     // 엣지별 저장 선 모양 — ""(레거시)는 기본 꺾은선
     type: normalizeEdgeLineStyle(edge.line_style),
+    // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (§4 게이트 6 plain_fanout 예외 판정 재료)
+    data: { gateway: edge.gateway ?? null },
   }));
 }
 
@@ -806,7 +808,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
 }
 
 
-function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
+export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Graph {
   // 자기완결적 payload 보장 — 백엔드 검증(엣지·group 참조) 422 방지
   const nodeIds = new Set(nodes.map((node) => node.id));
   // 어느 노드든 태그로 가진 그룹만 보존(빈 그룹 제거)
@@ -877,6 +879,8 @@ function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]): Grap
         source_handle: edge.sourceHandle ?? null,
         target_handle: edge.targetHandle ?? null,
         line_style: normalizeEdgeLineStyle(edge.type),
+        // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (§4 게이트 6 plain_fanout 예외 판정 재료)
+        gateway: (edge.data?.gateway as string | null | undefined) ?? null,
       })),
     groups: keptGroups.map((group) => ({
       id: group.id,

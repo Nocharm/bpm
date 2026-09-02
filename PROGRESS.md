@@ -6,6 +6,7 @@
 ## 2026-09-02 — 트랙 B: 확정 게이트 6종 + 점유·직속 L5 확정권 + 확정 요청 워크플로 (feat/fw-track-b-gates)
 - 확정 게이트 6종(missing_l6·placeholder·stale_link·l6_unpublished·noexit_cycle·plain_fanout — 병행 팬아웃은 전부 `Edge.gateway=parallel`이면 예외)을 체크아웃 점유·직속 L5 관리자(`is_direct_l5_admin`) 자기확정권과 함께 `perform_framework_confirm`에 통합, `GET /maps/{id}/confirm-readiness`(+`can_confirm`)를 체크리스트 단일 소스로 노출하고 라이브 draft 삭제를 차단했다.
 - 상위 관리자용 확정 위임 요청 워크플로(`kind='fw_confirm'`, 직속 L5/sysadmin은 409→직접확정 유도)를 승인 표면에 통합, FE엔 Approval 탭 게이트 체크리스트+확정 버튼 disabled 연동·요청 CTA·알림 3종을 붙였다. 스모크(`pw-smoke-framework-canvas.mjs`)는 게이트 체크리스트 중심(플레이스홀더 노드 임시 주입으로 위반→해소 결정적 검증) 24/24, 요청 워크플로는 BE 10케이스로 갈음.
+- **머지 전 최종 리뷰 후속 4건**: 에디터 그래프 왕복(`toAppEdges`/`buildGraph`)에서 빠져있던 `Edge.gateway` 직렬화를 placeholder_category_id 선례대로 보강(안 하면 저장마다 병행 팬아웃 예외가 서버에서 소거됨) — vitest 3건 추가. 확정 요청 생성 시 요청자의 draft 점유를 자동 해제(요청=편집권 이양, sticky 점유가 decide 확정을 상시 409로 막던 교착 해소) — BE 1건 추가. `fw_confirm_requested` 수신자에 sysadmin(대체 처리자) 합류. 스펙 §4에 게이트 6 판정 기준(source 노드 out-degree) 각주 추가.
 
 ## 2026-09-02 — 문서 정리: main 머지 완료 스펙·플랜 폐기 + PROGRESS 아카이브 (dev)
 - 폐기 정책(`rules/common/documentation.md`)에 따라 main 머지 완료분 삭제: superpowers 스펙 5(approval-comments·collab-staging·topnav·io-linking·node-spacing)+플랜 12(거버넌스 r3~r6·8월 트랙 전부·framework-l5-linkage)+design 1(field-promotion — 구현 완료·QA 문서 존치). 코드 주석 참조는 파일명으로 강등(`git grep` 전수 확인). 유지: 미구현·핸드오프·전제 스펙(consultant-hierarchy·governance-ux A/B/C·data-surface-parity·interview-import 8/18·v04 2종·framework 8-28 스펙·트랙 A 스펙/플랜).

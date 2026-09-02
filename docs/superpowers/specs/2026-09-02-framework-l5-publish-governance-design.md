@@ -66,6 +66,8 @@ L5 연계 캔버스의 확정(퍼블리시)에 **완결성 기준**을 세우고
 | 5 | `noexit_cycle` | 탈출구 없는 순환 없음 — 밖으로 나가는 엣지가 0개인 SCC(크기≥2 또는 자기루프) 금지 |
 | 6 | `plain_fanout` | 일반(비-decision) 노드의 out-degree ≥2 금지 — 분기는 decision 노드 경유. decision out-degree 1은 허용. **예외: 나가는 엣지 전부가 `gateway='parallel'`이면 합법**(0.4 임포트의 병행 팬아웃 규칙과 동일 — 사용자 확정 2026-09-02). 판정 재료로 `Edge.gateway` 컬럼 신설(임포터가 기록, 기존 캔버스는 재임포트 시 충전 — 운영 fw 데이터 0회) |
 
+- 게이트 6의 팬아웃 판정은 source 노드 기준(out-degree) — 링크 L6의 서로 다른 출구(source_handle 상이)에서 나가는 엣지도 합산된다(의도: 분기 표현은 decision 노드로 일원화).
+
 - **점유**: 확정 실행자는 라이브 draft 체크아웃 보유 필수. 비어 있으면 자동 획득 후 진행(linkage-map 보강의 "비었거나 본인" 선례), 타인 점유면 409.
 - 기존 **무변경 409 게이트 유지**. major 승급은 무변경 게이트만 우회하고 **6종 게이트는 통과 필수**.
 - 게이트는 확정 시점 검사 — 저장(graph PUT)은 막지 않는다(작업 중 미완 상태 허용).
@@ -79,6 +81,7 @@ L1~L4 관리자는 서브트리 캔버스를 **편집**할 수 있으나 **확�
 - **처리자**: 해당 L5 카테고리의 **직속 L5 관리자** + **sysadmin**(대체자). 처리 = 확정 실행(게이트 6종·점유 규약 동일 적용) 또는 반려(사유 코멘트, `decision_reason`). 직속 판정은 트랙 B에서 최소형 `is_direct_l5_admin`(해당 카테고리에 **직접** 붙은 `category_permissions` 행, 상속 없이)으로 구현하고 §7의 레벨 인지형 판정은 트랙 C에서 통합한다. **`framework-confirm` 자체의 권한 게이트도 이때 함께 좁아진다**(카테고리 관리자 전체 → 직속 L5 관리자·sysadmin — 상위 관리자는 요청 경로만). `MapOut.can_confirm` 트랜지언트 신설(FE 버튼/CTA 분기 소스).
 - **노출**: ① 에디터 승인 탭 framework 박스에 pending 요청 카드(기존 PendingApprovalsPanel 디자인 준용) ② 설정 > 승인큐(ApprovalQueue)에 kind 행 추가 ③ 알림 3종 신설 — `fw_confirm_requested`(L5 관리자+sysadmin), `fw_confirm_done`/`fw_confirm_rejected`(요청자). 신규 알림 타입은 4곳 동시 갱신(payload 구조화·KNOWN_TYPES·i18n·아이콘) — 알림 리치 렌더 규약.
 - 확정이 요청 없이 직접 이뤄지면 pending 요청은 `superseded` 처리.
+- 요청 생성 시 요청자의 draft 점유는 자동 해제된다(요청=편집권 이양 — sticky 점유와 decide 확정의 교착 방지, 2026-09-02 최종 리뷰 결정).
 
 ## 6. 옆문 봉쇄
 
