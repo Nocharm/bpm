@@ -1171,6 +1171,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   }, [mapId, spUsageReload]);
   // 서버 산정 역할 — 뷰어(my_role) 판정 단일 소스 / server-computed role for viewer gating
   const [myRole, setMyRole] = useState<"viewer" | "editor" | "owner" | null>(null);
+  // 연계 캔버스 확정 버튼 노출 — sysadmin/직속 L5 관리자만 true (Track B Task 6)
+  const [canConfirmFw, setCanConfirmFw] = useState(false);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [managingApprovers, setManagingApprovers] = useState(false);
   // 점유권 이전 다이얼로그 / Transfer checkout dialog
@@ -2536,6 +2538,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setLinkageCategoryId(detail.linkage_category_id ?? null);
         setLinkageCategoryPath(detail.linkage_category_path ?? null);
         setMyRole(detail.my_role);
+        setCanConfirmFw(detail.can_confirm ?? false);
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
         setDocName(detail.doc_name ?? "");
@@ -3523,6 +3526,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setMapVisibility(detail.visibility);
         // 동봉 픽커 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
         setMyRole(detail.my_role);
+        setCanConfirmFw(detail.can_confirm ?? false);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -11345,7 +11349,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div data-id="framework-confirm-box" className="rounded-md border border-hairline">
                         <FrameworkConfirmSection
                           mapId={mapId}
-                          canConfirm={myRole === "editor" || myRole === "owner"}
+                          canConfirm={canConfirmFw}
+                          canRequest={myRole === "editor" && !canConfirmFw}
                           versions={versions}
                           liveNodes={nodes}
                           liveEdges={edges}
@@ -11359,9 +11364,13 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 : t("framework.confirmedToast", { label: result.version.label }),
                             );
                             // 스냅샷 목록 갱신 — VersionDetail(events 포함) 형이라 재조회로 동기화
-                            void getMap(mapId).then((detail) => setVersions(detail.versions));
+                            void getMap(mapId).then((detail) => {
+                              setVersions(detail.versions);
+                              setCanConfirmFw(detail.can_confirm ?? false);
+                            });
                           }}
                           onError={(message) => showToast(message, "error")}
+                          onFocusNode={handleOutlineSelect}
                         />
                       </div>
                     )}
