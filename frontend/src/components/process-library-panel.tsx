@@ -8,16 +8,23 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
+import { OrgInfoModal } from "@/components/org-info-modal";
+import { useKoreanDeptByPath } from "@/components/map-ownership-section";
 import {
   PEEK_HOVER_DELAY_MS,
   SubprocessPreviewPeek,
   type PeekAddPayload,
 } from "@/components/subprocess-preview-peek";
 import { filterByQuery } from "@/lib/search";
+import { formatDeptName } from "@/lib/korean-dept";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
+
+// 부서 칩 호버 모달 타이밍(ms) — 열림은 인텐트 지연, 닫힘은 유예(칩→모달 이동·순간 이탈에 안 닫히게).
+const DEPT_HOVER_OPEN_MS = 300;
+const DEPT_HOVER_CLOSE_MS = 500;
 
 export interface ProcessLibraryPanelProps {
   currentMapId: number;
@@ -47,7 +54,8 @@ export function ProcessLibraryPanel({
   onPeekOpenMap,
   onFocusLinkedNode,
 }: ProcessLibraryPanelProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const koreanDeptByPath = useKoreanDeptByPath();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
   // 미등록(미지정) 맵 노출 토글 — 켜면 include_undesignated로 재조회(가시성 필터는 서버)
   const [showUnregistered, setShowUnregistered] = useState(false);
@@ -106,6 +114,54 @@ export function ProcessLibraryPanel({
     }
   }
   useEffect(() => clearHoverTimer, []);
+  // 부서 칩 호버 → 조직 정보 모달 — 인텐트 지연 오픈·유예 닫힘(모달 위 호버는 닫기 취소) (2026-09-02)
+  const [deptModal, setDeptModal] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
+  const deptOpenTimerRef = useRef<number | null>(null);
+  const deptCloseTimerRef = useRef<number | null>(null);
+  function clearDeptTimers() {
+    if (deptOpenTimerRef.current !== null) {
+      window.clearTimeout(deptOpenTimerRef.current);
+      deptOpenTimerRef.current = null;
+    }
+    if (deptCloseTimerRef.current !== null) {
+      window.clearTimeout(deptCloseTimerRef.current);
+      deptCloseTimerRef.current = null;
+    }
+  }
+  useEffect(() => clearDeptTimers, []);
+  function cancelDeptModalClose() {
+    if (deptCloseTimerRef.current !== null) {
+      window.clearTimeout(deptCloseTimerRef.current);
+      deptCloseTimerRef.current = null;
+    }
+  }
+  function scheduleDeptModalClose() {
+    cancelDeptModalClose();
+    deptCloseTimerRef.current = window.setTimeout(() => setDeptModal(null), DEPT_HOVER_CLOSE_MS);
+  }
+  function handleDeptChipEnter(path: string, chipEl: Element) {
+    clearHoverTimer(); // 칩 호버는 부서 정보 인텐트 — 행 피크 자동 오픈 억제
+    cancelDeptModalClose();
+    if (deptModal?.path === path) return; // 같은 부서 모달이 이미 열림 — 유지
+    const rect = chipEl.getBoundingClientRect();
+    if (deptOpenTimerRef.current !== null) window.clearTimeout(deptOpenTimerRef.current);
+    deptOpenTimerRef.current = window.setTimeout(
+      () =>
+        setDeptModal({
+          path,
+          origin: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        }),
+      DEPT_HOVER_OPEN_MS,
+    );
+  }
+  function handleDeptChipLeave() {
+    if (deptOpenTimerRef.current !== null) {
+      window.clearTimeout(deptOpenTimerRef.current);
+      deptOpenTimerRef.current = null;
+    }
+    if (deptModal) scheduleDeptModalClose();
+  }
+
   function openPeek(row: LibraryProcess, blocked: string | null, rowEl: Element) {
     clearHoverTimer();
     // x는 패널 우측 고정(행 들여쓰기와 무관하게 일정), y는 행 기준 — 세로 클램프는 피크가 수행
@@ -121,6 +177,8 @@ export function ProcessLibraryPanel({
   function handleDragStart(e: React.DragEvent<HTMLDivElement>, row: LibraryProcess) {
     clearHoverTimer();
     setPeek(null);
+    clearDeptTimers();
+    setDeptModal(null);
     e.dataTransfer.effectAllowed = "copy";
     e.dataTransfer.setData("application/bpm-process", String(row.map_id));
     // stash name + pinned version to avoid needing a shared-state lookup on drop
@@ -266,12 +324,16 @@ export function ProcessLibraryPanel({
                     </span>
                   ) : (
                     row.department && (
-                      // 지정 부서 칩 — 지정 어트리뷰트의 대표값 (spec 2026-07-06)
+                      // 지정 부서 칩 — 최하위 부서만 한 줄 표시(경로 전체는 호버 시 조직 정보 모달) (2026-09-02)
                       <span
                         data-id="library-department-chip"
-                        className="self-start rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                        className="block max-w-full self-start truncate rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                        onMouseEnter={(e) =>
+                          row.department && handleDeptChipEnter(row.department, e.currentTarget)
+                        }
+                        onMouseLeave={handleDeptChipLeave}
                       >
-                        {row.department}
+                        {formatDeptName(row.department, lang, koreanDeptByPath)}
                       </span>
                     )
                   )}
@@ -304,6 +366,19 @@ export function ProcessLibraryPanel({
             )}
           </button>
         </div>
+      )}
+      {deptModal && (
+        <OrgInfoModal
+          orgPath={deptModal.path}
+          koreanDeptByPath={koreanDeptByPath}
+          origin={deptModal.origin}
+          onClose={() => {
+            clearDeptTimers();
+            setDeptModal(null);
+          }}
+          onHoverStart={cancelDeptModalClose}
+          onHoverEnd={scheduleDeptModalClose}
+        />
       )}
       {peek && (
         <SubprocessPreviewPeek

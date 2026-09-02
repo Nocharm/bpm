@@ -142,9 +142,19 @@ interface OrgInfoModalProps {
   /** 클릭 지점 — 등장 애니메이션 시작 오프셋 계산용. */
   origin: { x: number; y: number };
   onClose: () => void;
+  /** 호버 유지 오픈용(라이브러리 부서 칩) — 카드 진입/이탈로 호출부가 닫기 타이머를 취소/재개. */
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
 }
 
-export function OrgInfoModal({ orgPath, koreanDeptByPath, origin, onClose }: OrgInfoModalProps) {
+export function OrgInfoModal({
+  orgPath,
+  koreanDeptByPath,
+  origin,
+  onClose,
+  onHoverStart,
+  onHoverEnd,
+}: OrgInfoModalProps) {
   const { lang } = useI18n();
   const users = useDirectory();
   const [path, setPath] = useState(orgPath);
@@ -188,6 +198,8 @@ export function OrgInfoModal({ orgPath, koreanDeptByPath, origin, onClose }: Org
         data-id="org-info-modal"
         className="comment-modal-in flex w-full max-w-md flex-col gap-3 rounded-md bg-surface p-5 shadow-lg"
         style={originVars}
+        onMouseEnter={onHoverStart}
+        onMouseLeave={onHoverEnd}
       >
         <div className="flex items-center gap-1.5">
           <Building2 size={16} strokeWidth={1.5} className="shrink-0 text-accent" />

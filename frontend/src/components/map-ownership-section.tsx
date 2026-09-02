@@ -18,7 +18,7 @@ import { buildKoreanDeptByPath, formatDeptName } from "@/lib/korean-dept";
 // 속성 빈상태는 선택 변경마다 리마운트되므로 컴포넌트 내 fetch면 매번 재조회하게 된다.
 let deptNameCache: Map<string, string> | null = null;
 
-function useKoreanDeptByPath(): Map<string, string> {
+export function useKoreanDeptByPath(): Map<string, string> {
   const [map, setMap] = useState<Map<string, string>>(deptNameCache ?? new Map());
   useEffect(() => {
     if (deptNameCache) return;
