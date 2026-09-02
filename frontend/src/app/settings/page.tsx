@@ -49,7 +49,7 @@ type TabId =
   | "aiPrompts"
   | "dashboard"
   | "framework";
-type Access = "everyone" | "admin" | "sysadmin" | "dashboard";
+type Access = "everyone" | "admin" | "sysadmin" | "dashboard" | "frameworkAdmin";
 
 interface Category {
   labelKey: MessageKey;
@@ -82,9 +82,10 @@ const CATEGORIES: Category[] = [
     ],
   },
   {
-    // 컨설턴트 업무 체계 카테고리 관리(Phase 2) — 트리 CRUD + 대량 임포트(임포트 UI는 Task 4)
+    // 컨설턴트 업무 체계 카테고리 관리(Phase 2) — 트리 CRUD + 대량 임포트(임포트 UI는 Task 4).
+    // sysadmin 외에 위임된 카테고리 관리자(category_admin_root_ids)도 자기 서브트리 한정으로 접근 (Track C Task 6)
     labelKey: "admin.catFramework",
-    access: "sysadmin",
+    access: "frameworkAdmin",
     tabs: [{ id: "framework", labelKey: "framework.adminTab" }],
   },
   {
@@ -164,6 +165,10 @@ export default function SettingsPage() {
     if (access === "everyone") return true;
     // 대시보드는 sysadmin 외에 dashboard_permissions로 부여된 인원·부서·그룹도 열람 (design 2026-07-11)
     if (access === "dashboard") return Boolean(user?.canViewDashboard);
+    // Framework는 sysadmin 외에 위임된 카테고리 관리자(seed 1개 이상)도 열람 (Track C Task 6)
+    if (access === "frameworkAdmin") {
+      return Boolean(user?.isSysadmin || (user?.categoryAdminRootIds?.length ?? 0) > 0);
+    }
     // admin 권한은 시스템 관리자(sysadmin)가 흡수 (F6) — admin/sysadmin 모두 sysadmin 게이트.
     return Boolean(user?.isSysadmin);
   };
@@ -274,7 +279,10 @@ export default function SettingsPage() {
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
           )}
           {current === "framework" && (
-            <FrameworkPanel onToast={(message) => showToast({ id: genId(), message })} />
+            <FrameworkPanel
+              onToast={(message) => showToast({ id: genId(), message })}
+              scopeRootIds={user?.isSysadmin ? undefined : user?.categoryAdminRootIds}
+            />
           )}
           {current === "tables" && <TableViewer />}
           {current === "batch" && <BatchRunsPanel />}

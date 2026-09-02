@@ -31,6 +31,7 @@ import {
   createCategory,
   deleteCategory,
   getApiErrorDetail,
+  getCategoryChain,
   getDirectory,
   importInterview,
   listCategoryNodes,
@@ -44,6 +45,7 @@ import {
   type Group,
   type InterviewImportResult,
 } from "@/lib/api";
+import { canManageInScope } from "@/lib/framework-admin-scope";
 import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -93,6 +95,23 @@ interface InterviewFileState {
 
 interface FrameworkPanelProps {
   onToast: (message: string) => void;
+  // 카테고리 관리자 위임 스코프 — seed 카테고리 id들. undefined=sysadmin(전체) (Track C Task 6)
+  scopeRootIds?: number[];
+}
+
+// 스코프 모드 루트 시딩 — /chain 응답의 map_count는 소비처(캐스케이드 셀렉트) 사정으로 0 고정
+// (categories.py get_category_chain 주석)이라 트리 행에 그대로 못 쓴다. chain으로 부모 id만
+// 얻고 그 부모의 /nodes 목록에서 seed id를 찾아 정확한 map_count·child_count를 가져온다.
+async function loadScopedRoots(ids: number[]): Promise<CategoryNode[]> {
+  const nodes = await Promise.all(
+    ids.map(async (id) => {
+      const chain = await getCategoryChain(id);
+      const parentId = chain.length >= 2 ? chain[chain.length - 2].id : undefined;
+      const siblings = await listCategoryNodes(parentId);
+      return siblings.find((n) => n.id === id) ?? null;
+    }),
+  );
+  return nodes.filter((n): n is CategoryNode => n !== null);
 }
 
 // PromptDialog 하나를 3용도(최상위 추가/하위 추가/이름변경)로 재사용 — 구현 단순화(brief §3).
@@ -101,7 +120,7 @@ type NamePrompt =
   | { kind: "add-child"; parentId: number }
   | { kind: "rename"; id: number; currentName: string };
 
-export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
+export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const { t } = useI18n();
   const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(
     new Map(),
@@ -133,7 +152,7 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
 
   useEffect(() => {
     let active = true;
-    void listCategoryNodes()
+    void (scopeRootIds ? loadScopedRoots(scopeRootIds) : listCategoryNodes())
       .then((nodes) => {
         if (active) {
           setChildrenByParent((prev) => new Map(prev).set(null, nodes));
@@ -149,12 +168,12 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [scopeRootIds]);
 
   function handleRetryRoot() {
     setRootError(false);
     setRootLoading(true);
-    void listCategoryNodes()
+    void (scopeRootIds ? loadScopedRoots(scopeRootIds) : listCategoryNodes())
       .then((nodes) => {
         setChildrenByParent((prev) => new Map(prev).set(null, nodes));
         setRootLoading(false);
@@ -171,7 +190,7 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
   async function refreshTree(extraOpenIds: number[] = []): Promise<void> {
     const openList = [...new Set([...openIdsRef.current, ...extraOpenIds])];
     const [rootNodes, ...childLists] = await Promise.all([
-      listCategoryNodes(),
+      scopeRootIds ? loadScopedRoots(scopeRootIds) : listCategoryNodes(),
       ...openList.map((id) => listCategoryNodes(id)),
     ]);
     // prev를 베이스로 병합하지 않는다 — 병합하면 지금은 접혀 있어 재조회 대상에서 빠진(하지만
@@ -394,33 +413,39 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
             >
               <Pencil size={14} strokeWidth={1.5} />
             </button>
-            <button
-              type="button"
-              data-id={`framework-admin-perms-${node.id}`}
-              title={t("framework.adminPerms")}
-              className={ROW_ICON_BTN}
-              onClick={() => setPermsNode(node)}
-            >
-              <ShieldCheck size={14} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              data-id={`framework-admin-move-${node.id}`}
-              title={t("framework.adminMove")}
-              className={ROW_ICON_BTN}
-              onClick={() => setMovingNode(node)}
-            >
-              <MoveIcon size={14} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              data-id={`framework-admin-delete-${node.id}`}
-              title={t("framework.adminDelete")}
-              className={ROW_ICON_BTN}
-              onClick={() => openDelete(node)}
-            >
-              <Trash2 size={14} strokeWidth={1.5} />
-            </button>
+            {canManageInScope(node, "perms", scopeRootIds, minSeedLevel) && (
+              <button
+                type="button"
+                data-id={`framework-admin-perms-${node.id}`}
+                title={t("framework.adminPerms")}
+                className={ROW_ICON_BTN}
+                onClick={() => setPermsNode(node)}
+              >
+                <ShieldCheck size={14} strokeWidth={1.5} />
+              </button>
+            )}
+            {canManageInScope(node, "move", scopeRootIds, minSeedLevel) && (
+              <button
+                type="button"
+                data-id={`framework-admin-move-${node.id}`}
+                title={t("framework.adminMove")}
+                className={ROW_ICON_BTN}
+                onClick={() => setMovingNode(node)}
+              >
+                <MoveIcon size={14} strokeWidth={1.5} />
+              </button>
+            )}
+            {canManageInScope(node, "delete", scopeRootIds, minSeedLevel) && (
+              <button
+                type="button"
+                data-id={`framework-admin-delete-${node.id}`}
+                title={t("framework.adminDelete")}
+                className={ROW_ICON_BTN}
+                onClick={() => openDelete(node)}
+              >
+                <Trash2 size={14} strokeWidth={1.5} />
+              </button>
+            )}
           </div>
         </div>
         {open &&
@@ -611,6 +636,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
   }
 
   const roots = childrenByParent.get(null) ?? [];
+  // 스코프 모드의 roots는 항상 seed 노드 자신 — 임명 버튼 게이팅 기준 최소 레벨 (Track C Task 6)
+  const minSeedLevel = scopeRootIds ? Math.min(...roots.map((r) => r.level)) : undefined;
 
   // 리포트 뷰모델 — 맵 이름·카테고리 경로는 업로드한 JSON에서만 나온다(서버 rows는 코드만 싣는다).
   // 파일 목록이 바뀌면 결과를 지우므로(handleInterviewFiles/RemoveFile) 둘은 항상 같은 전달분이다.
@@ -635,15 +662,18 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
           <h2 className="text-body-strong text-ink">{t("framework.adminTab")}</h2>
           <p className="pt-1 text-caption text-ink-tertiary">{t("framework.adminReimportHint")}</p>
         </div>
-        <button
-          type="button"
-          data-id="framework-admin-add-root"
-          className="flex shrink-0 items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-          onClick={() => setNamePrompt({ kind: "add-root" })}
-        >
-          <Plus size={14} strokeWidth={1.5} />
-          {t("framework.adminAddRoot")}
-        </button>
+        {/* 루트 카테고리 생성은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖에 새 루트를 못 만든다 */}
+        {!scopeRootIds && (
+          <button
+            type="button"
+            data-id="framework-admin-add-root"
+            className="flex shrink-0 items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+            onClick={() => setNamePrompt({ kind: "add-root" })}
+          >
+            <Plus size={14} strokeWidth={1.5} />
+            {t("framework.adminAddRoot")}
+          </button>
+        )}
       </div>
 
       <div data-id="framework-admin-tree" className="rounded-sm border border-hairline p-2">
@@ -668,6 +698,8 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
         )}
       </div>
 
+      {/* 대량 임포트는 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
+      {!scopeRootIds && (
       <div className="flex flex-col gap-3 border-t border-hairline pt-4" data-id="interview-import">
         <div>
           <h3 className="text-body-strong text-ink">{t("framework.interviewImportTitle")}</h3>
@@ -892,6 +924,7 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
           </div>
         )}
       </div>
+      )}
 
       {confirmInterviewApply && interviewResult && (
         <ConfirmDialog
@@ -934,6 +967,7 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
       {movingNode && (
         <MoveCategoryModal
           node={movingNode}
+          hideRootOption={scopeRootIds !== undefined}
           onClose={() => setMovingNode(null)}
           onMoved={() => {
             setMovingNode(null);
@@ -964,6 +998,9 @@ export function FrameworkPanel({ onToast }: FrameworkPanelProps) {
 
 interface MoveCategoryModalProps {
   node: CategoryNode;
+  // 위임 스코프 모드 — "최상위로" 옵션 숨김(seed 서브트리 밖으로는 어차피 서버 403). 실제 최종
+  // 가드는 서버(Track C Task 5) — 여기는 뻔한 실패를 목록에서 미리 걸러주는 정도 (Task 6).
+  hideRootOption?: boolean;
   onClose: () => void;
   onMoved: () => void;
 }
@@ -972,7 +1009,7 @@ interface MoveCategoryModalProps {
 // 자기 서브트리는 트리에서 숨겨 자기/자손 이동을 원천 차단하고, 깊이 5 초과가 확실한 행
 // (레벨 하한 기준)은 비활성. 잔여 초과(깊은 서브트리)는 서버 422 detail을 모달 안 인라인으로
 // 표시한다 — 백드롭 블러에 토스트가 묻혀 안 보이던 문제 교정(2026-08-12).
-function MoveCategoryModal({ node, onClose, onMoved }: MoveCategoryModalProps) {
+function MoveCategoryModal({ node, hideRootOption, onClose, onMoved }: MoveCategoryModalProps) {
   const { t } = useI18n();
   const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(new Map());
   const [openIds, setOpenIds] = useState<Set<number>>(new Set());
@@ -1159,22 +1196,24 @@ function MoveCategoryModal({ node, onClose, onMoved }: MoveCategoryModalProps) {
             <p className="text-caption text-ink-tertiary">{t("common.loading")}</p>
           ) : (
             <ul className="flex flex-col">
-              {/* 최상위로 이동 — 항상 유효한 목적지 */}
-              <li className="flex flex-col">
-                <button
-                  type="button"
-                  data-id="framework-move-pick-root"
-                  aria-pressed={selected === "root"}
-                  className={`flex w-full items-center gap-1.5 rounded-sm py-1 pl-1 pr-1.5 text-left text-caption ${
-                    selected === "root" ? "bg-accent-tint text-accent" : "text-ink hover:bg-divider"
-                  }`}
-                  onClick={() => setSelected("root")}
-                >
-                  <FolderTree size={14} strokeWidth={1.5} className="shrink-0" />
-                  <span className="min-w-0 truncate">{t("framework.adminMoveRootOption")}</span>
-                  {selected === "root" && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
-                </button>
-              </li>
+              {/* 최상위로 이동 — 위임 스코프에서는 서버가 항상 403이라 숨김(seed 서브트리 밖) */}
+              {!hideRootOption && (
+                <li className="flex flex-col">
+                  <button
+                    type="button"
+                    data-id="framework-move-pick-root"
+                    aria-pressed={selected === "root"}
+                    className={`flex w-full items-center gap-1.5 rounded-sm py-1 pl-1 pr-1.5 text-left text-caption ${
+                      selected === "root" ? "bg-accent-tint text-accent" : "text-ink hover:bg-divider"
+                    }`}
+                    onClick={() => setSelected("root")}
+                  >
+                    <FolderTree size={14} strokeWidth={1.5} className="shrink-0" />
+                    <span className="min-w-0 truncate">{t("framework.adminMoveRootOption")}</span>
+                    {selected === "root" && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
+                  </button>
+                </li>
+              )}
               {(childrenByParent.get(null) ?? []).map((row) => renderRow(row, 0))}
             </ul>
           )}
@@ -1306,7 +1345,9 @@ function CategoryPermsModal({
             </div>
             <div className="flex min-w-0 flex-col gap-0.5">
               <h2 className="text-body-strong text-ink">{t("framework.adminPerms")}</h2>
-              <p className="truncate text-fine text-ink-tertiary">{node.name}</p>
+              <p className="truncate text-fine text-ink-tertiary">
+                {node.name} · {t("framework.permsLevelLabel", { level: node.level })}
+              </p>
             </div>
           </div>
           <button
@@ -1319,6 +1360,9 @@ function CategoryPermsModal({
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
+
+        {/* 하향 상속 안내 — 이 카테고리에서 지정한 권한자는 서브트리 전체에도 적용된다 (design 2026-08-28 §3) */}
+        <p className="text-fine text-ink-tertiary">{t("framework.permsInheritHint")}</p>
 
         {error ? (
           <p data-id="framework-perms-error" className="text-caption text-error">{error}</p>

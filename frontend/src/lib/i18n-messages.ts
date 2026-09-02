@@ -1927,6 +1927,8 @@ const en = {
   "framework.adminPerms": "Linkage admins",
   "framework.permsLoadError": "Failed to load admins",
   "framework.permsSaveError": "Failed to save admins",
+  "framework.permsLevelLabel": "L{level} admins",
+  "framework.permsInheritHint": "Admins granted here also manage every category below it.",
   // ── 플레이스홀더 후차 연결 (2026-08-29, design §10.1) ──
   "framework.connectCta": "Connect a map",
   "framework.connectTitle": "Connect placeholder",
@@ -4005,6 +4007,8 @@ const ko: Record<MessageKey, string> = {
   "framework.adminPerms": "연계 권한자",
   "framework.permsLoadError": "권한자 조회 실패",
   "framework.permsSaveError": "권한자 저장 실패",
+  "framework.permsLevelLabel": "L{level} 권한자",
+  "framework.permsInheritHint": "여기서 지정한 권한자는 하위 모든 카테고리도 함께 관리합니다.",
   // ── 플레이스홀더 후차 연결 (2026-08-29, design §10.1) ──
   "framework.connectCta": "맵 연결하기",
   "framework.connectTitle": "플레이스홀더 연결",

@@ -850,6 +850,8 @@ export interface Me {
   manager_ids?: string[];
   // 서버가 산정한 대시보드 열람 가능 여부 — 설정 탭 노출 게이팅
   can_view_dashboard: boolean;
+  // 카테고리 권한자로 직접 지정된 seed 카테고리 id 목록 — Framework 설정 탭 노출·위임 스코프 게이팅
+  category_admin_root_ids?: number[];
 }
 
 export function getMe(): Promise<Me> {
