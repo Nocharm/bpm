@@ -29,6 +29,8 @@ export interface MergedEdge {
   label: string;
   // 저장된 선 모양 — target 우선(없으면 base). 비교 캔버스가 에디터와 같은 경로로 그린다.
   lineStyle: GraphEdge["line_style"];
+  // 임포트 출처 게이트웨이 종별 — line_style과 동일하게 target 우선(없으면 base)
+  gateway: GraphEdge["gateway"];
   status: MergedEdgeStatus;
   // 양 버전에 존재하는 엣지의 라벨이 다를 때만 — status는 changed가 된다.
   labelChange?: { before: string; after: string };
@@ -107,6 +109,7 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
       target: tgt,
       label: edge.label,
       lineStyle: edge.line_style,
+      gateway: edge.gateway,
       status: "removed",
     });
   }
@@ -124,6 +127,7 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
       }
       existing.label = edge.label;
       existing.lineStyle = edge.line_style;
+      existing.gateway = edge.gateway;
     } else {
       merged.set(id, {
         id,
@@ -131,6 +135,7 @@ export function buildMergedGraph(base: VersionGraph, target: VersionGraph): Merg
         target: tgt,
         label: edge.label,
         lineStyle: edge.line_style,
+        gateway: edge.gateway,
         status: "added",
       });
     }

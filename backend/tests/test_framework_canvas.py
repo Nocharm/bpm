@@ -256,7 +256,12 @@ def test_framework_graph_validation(client: TestClient, enforce: None) -> None:
 
 
 def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> None:
-    """플레이스홀더(linked 없음) 허용 + 출처 L5 저장·경로 주입·스냅샷 보존 (design §10.1 그릇)."""
+    """플레이스홀더(linked 없음) 저장 허용 + 확정 게이트 차단 + 해소 후 출처/스냅샷 보존.
+
+    Track B Task 3(게이트 통합) 이전엔 미해소 플레이스홀더도 확정이 통과했으나, 확정
+    게이트 6종(spec §4)이 하드 블록으로 승격되며 셋업을 게이트 통과형으로 보강했다
+    (실제 L6에 연결해 해소한 뒤 확정 — placeholder_category_id는 출처로 계속 보존).
+    """
     l1 = _seed_category(client, "FWC-PH1", "자리L1")
     l5 = _seed_category(client, "FWC-PH5", "자리L5", level=5, parent_id=l1)
     other_l5 = _seed_category(client, "FWC-PHX", "타L5", level=5, parent_id=l1)
@@ -287,6 +292,14 @@ def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> N
     assert saved["placeholder_category_id"] == other_l5
     assert saved["placeholder_category_path"] == "자리L1/타L5"
     assert saved["width"] == 216  # 표시 폭 왕복 (2026-08-30)
+    # 미해소 플레이스홀더는 확정 하드 블록 (spec §4, Track B Task 3 게이트)
+    blocked = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert blocked.status_code == 422
+    assert "placeholder" in blocked.json()["detail"]
+    # 해소 — 실제 L6에 연결(l5 소속이라 missing_l6도 함께 충족, 출처는 계속 보존)
+    resolved_l6 = _seed_l6_map(client, l5, "자리업무2", "FWC-PHM2")
+    resolved = dict(ph, linked_map_id=resolved_l6)
+    _put_graph(client, draft["id"], [node, resolved])
     # 확정 스냅샷 복제 보존 + 게이트 시그니처에 출처 포함(변경으로 판정)
     first = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
     assert first.status_code == 200, first.text
@@ -297,7 +310,7 @@ def test_framework_placeholder_roundtrip(client: TestClient, enforce: None) -> N
     # 무변경 재확정 → 409, 출처만 바꾸면 콘텐츠 변경으로 통과
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 409
     third_l5 = _seed_category(client, "FWC-PHY", "타L5b", level=5, parent_id=l1)
-    _put_graph(client, draft["id"], [node, dict(ph, placeholder_category_id=third_l5)])
+    _put_graph(client, draft["id"], [node, dict(resolved, placeholder_category_id=third_l5)])
     assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 200
 
 
@@ -386,6 +399,30 @@ def test_confirm_snapshot_is_confirmed_without_version_number(client: TestClient
     assert any(e["event_type"] == "confirmed" for e in snap["events"])
 
 
+def test_edge_gateway_roundtrip_and_clone(client: TestClient, enforce: None) -> None:
+    """Edge.gateway가 graph PUT→GET 왕복·확정 clone에 보존된다 (spec §4 게이트 6 예외 재료)."""
+    map_id, draft_id = _make_canvas(client, "FWC-GW5", "게이트웨이왕복")
+    # _make_canvas는 L6 1개만 시드(노드 1개) — 엣지 구성에 노드 2개 필요, 2번째 L6 시드 후
+    # linkage-map 재호출(멱등 보강)로 노드를 append한다. l5 id는 카테고리 코드로 멱등 조회.
+    l5 = _seed_category(client, "FWC-GW5", "게이트웨이왕복")
+    _seed_l6_map(client, l5, "게이트웨이왕복업무2", "FWC-GW5M2")
+    client.post(f"/api/categories/{l5}/linkage-map")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    edges = graph["edges"]
+    if not edges:
+        n = graph["nodes"]
+        edges = [{"id": "gwedge000000000000000000000000001", "source_node_id": n[0]["id"],
+                  "target_node_id": n[1]["id"], "label": "", "gateway": "parallel"}]
+    else:
+        edges = [dict(edges[0], gateway="parallel")] + edges[1:]
+    _put_graph(client, draft_id, graph["nodes"], edges)
+    got = client.get(f"/api/versions/{draft_id}/graph").json()["edges"]
+    assert any(e.get("gateway") == "parallel" for e in got)
+    ver = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()["version"]
+    snap = client.get(f"/api/versions/{ver['id']}/graph").json()["edges"]
+    assert any(e.get("gateway") == "parallel" for e in snap)
+
+
 def test_migrate_framework_confirmed_idempotent(client: TestClient, enforce: None) -> None:
     """구버전 published fw 스냅샷을 startup 훅이 confirmed로 이전, 재실행해도 무해 (spec 2026-09-02 §3)."""
     import asyncio
@@ -438,6 +475,13 @@ def test_confirmed_snapshot_cannot_be_deleted(client: TestClient, enforce: None)
     act_as(SYSADMIN)
     res = client.delete(f"/api/versions/{ver['id']}")
     assert res.status_code == 409
+
+
+def test_framework_live_draft_cannot_be_deleted(client: TestClient, enforce: None) -> None:
+    """캔버스의 라이브 draft 삭제 차단 — 영구 draft 계약 보호 (final review 인계)."""
+    map_id, draft_id = _make_canvas(client, "FWC-DEL5", "드래프트삭제차단")
+    res = client.delete(f"/api/versions/{draft_id}")
+    assert res.status_code == 422 and "confirm workflow" in res.json()["detail"]
 
 
 def test_confirmed_snapshot_shows_in_dashboard(client: TestClient, enforce: None) -> None:
@@ -640,3 +684,280 @@ def test_framework_map_rejects_permission_side_doors(client: TestClient, enforce
         f"/api/maps/{map_id}/sp-designation-requests", json={"from_map_id": draft_id}
     )
     assert res.status_code == 422 and res.json()["detail"] == detail_msg
+
+
+def _confirm_readiness(map_id: int, draft_id: int) -> list:
+    """validate_confirm_readiness 직접 호출 — GET 엔드포인트 부재(Task 3 이전) 단위 테스트 경로.
+
+    draft를 nodes/edges selectinload로 재조회해 검사기 전제(비지연로드)를 맞춘다.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, ProcessMap
+    from app.subprocess import validate_confirm_readiness
+
+    async def _run() -> list:
+        async with SessionLocal() as session:
+            found_map = await session.get(ProcessMap, map_id)
+            draft = await session.scalar(
+                select(MapVersion)
+                .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+                .where(MapVersion.id == draft_id)
+            )
+            return await validate_confirm_readiness(session, found_map, draft)
+
+    return asyncio.run(_run())
+
+
+def test_confirm_readiness_missing_l6(client: TestClient, enforce: None) -> None:
+    """소속 L6가 캔버스에 미배치면 missing_l6 (linkage-map을 다시 열지 않아 보강이 안 걸린다)."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-MISS", "게이트결측")
+    l5 = _seed_category(client, "FWC-GT-MISS", "게이트결측", level=5)
+    _seed_l6_map(client, l5, "게이트결측업무2", "FWC-GT-MISSM2")  # 캔버스엔 반영 안 함
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "missing_l6" in failures and failures["missing_l6"].count == 1
+
+
+def test_confirm_readiness_placeholder(client: TestClient, enforce: None) -> None:
+    """linked_map_id=None subprocess가 있으면 placeholder."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-PH", "게이트자리")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    ph = dict(node, id="fwcgtphnode000000000000000000001", title="자리", linked_map_id=None)
+    _put_graph(client, draft_id, [node, ph])
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "placeholder" in failures and failures["placeholder"].node_ids == [ph["id"]]
+
+
+def test_confirm_readiness_stale_link(client: TestClient, enforce: None) -> None:
+    """링크 대상 L6가 소프트삭제되면 stale_link."""
+    import asyncio
+
+    map_id, draft_id = _make_canvas(client, "FWC-GT-STALE", "게이트끊김")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    linked_id = graph["nodes"][0]["linked_map_id"]
+
+    async def _soften() -> None:
+        from app.clock import now as now_kst
+        from app.db import SessionLocal
+        from app.models import ProcessMap
+
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, linked_id)
+            m.deleted_at = now_kst()
+            await session.commit()
+
+    asyncio.run(_soften())
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "stale_link" in failures and failures["stale_link"].count == 1
+
+
+def test_confirm_readiness_l6_unpublished(client: TestClient, enforce: None) -> None:
+    """링크된 맵에 게시본이 없으면 l6_unpublished."""
+    import asyncio
+
+    map_id, draft_id = _make_canvas(client, "FWC-GT-UNPUB", "게이트미게시")
+
+    async def _seed_unpublished() -> int:
+        from app.db import SessionLocal
+        from app.models import MapVersion, ProcessMap
+
+        async with SessionLocal() as session:
+            m = ProcessMap(name="미게시링크", created_by=SYSADMIN, visibility="public")
+            m.versions.append(MapVersion(label="As-Is", status="draft"))
+            session.add(m)
+            await session.commit()
+            await session.refresh(m)
+            return m.id
+
+    unpub_id = asyncio.run(_seed_unpublished())
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    linked_node = dict(node, id="fwcgtunpubnode00000000000000001", title="미게시링크",
+                        linked_map_id=unpub_id)
+    _put_graph(client, draft_id, [node, linked_node])
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "l6_unpublished" in failures
+    assert failures["l6_unpublished"].node_ids == [linked_node["id"]]
+
+
+def test_confirm_readiness_noexit_cycle(client: TestClient, enforce: None) -> None:
+    """A→B→A 순환 + 밖으로 나가는 엣지가 없으면 noexit_cycle."""
+    l5_code = "FWC-GT-CYC"
+    map_id, draft_id = _make_canvas(client, l5_code, "게이트순환")
+    l5 = _seed_category(client, l5_code, "게이트순환", level=5)
+    _seed_l6_map(client, l5, "게이트순환업무2", f"{l5_code}M2")
+    client.post(f"/api/categories/{l5}/linkage-map")  # 2번째 L6 보강(fwc.confirmer=권한자·체크아웃 보유자)
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    nodes = graph["nodes"]
+    assert len(nodes) == 2
+    a, b = nodes
+    edges = [
+        {"id": "fwcgtcycedge000000000000000001", "source_node_id": a["id"], "target_node_id": b["id"]},
+        {"id": "fwcgtcycedge000000000000000002", "source_node_id": b["id"], "target_node_id": a["id"]},
+    ]
+    _put_graph(client, draft_id, nodes, edges)
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "noexit_cycle" in failures and failures["noexit_cycle"].count == 2
+
+
+def test_confirm_readiness_plain_fanout(client: TestClient, enforce: None) -> None:
+    """subprocess에서 엣지 2개가 직접 나가고 전부 병행(gateway=parallel)이 아니면 plain_fanout."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-FAN", "게이트팬아웃")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    e1 = dict(node, id="fwcgtfanend1000000000000000001", node_type="end",
+              linked_map_id=None, title="팬아웃끝1", is_primary_end=False)
+    e2 = dict(node, id="fwcgtfanend2000000000000000001", node_type="end",
+              linked_map_id=None, title="팬아웃끝2", is_primary_end=False)
+    edges = [
+        {"id": "fwcgtfanedge000000000000000001", "source_node_id": node["id"], "target_node_id": e1["id"]},
+        {"id": "fwcgtfanedge000000000000000002", "source_node_id": node["id"], "target_node_id": e2["id"]},
+    ]
+    _put_graph(client, draft_id, [node, e1, e2], edges)
+    failures = {f.code: f for f in _confirm_readiness(map_id, draft_id)}
+    assert "plain_fanout" in failures and failures["plain_fanout"].node_ids == [node["id"]]
+
+
+def test_confirm_readiness_parallel_fanout_ok(client: TestClient, enforce: None) -> None:
+    """두 엣지 모두 gateway=parallel이면 plain_fanout 예외 — 게이트 전건 통과([])."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-PAR", "게이트병행")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    e1 = dict(node, id="fwcgtparend1000000000000000001", node_type="end",
+              linked_map_id=None, title="병행끝1", is_primary_end=False)
+    e2 = dict(node, id="fwcgtparend2000000000000000001", node_type="end",
+              linked_map_id=None, title="병행끝2", is_primary_end=False)
+    edges = [
+        {"id": "fwcgtparedge000000000000000001", "source_node_id": node["id"],
+         "target_node_id": e1["id"], "gateway": "parallel"},
+        {"id": "fwcgtparedge000000000000000002", "source_node_id": node["id"],
+         "target_node_id": e2["id"], "gateway": "parallel"},
+    ]
+    _put_graph(client, draft_id, [node, e1, e2], edges)
+    assert _confirm_readiness(map_id, draft_id) == []
+
+
+def test_confirm_readiness_clean_passes(client: TestClient, enforce: None) -> None:
+    """정상 캔버스(링크 완전·게시·순환 없음)는 게이트 전건 통과 → []."""
+    map_id, draft_id = _make_canvas(client, "FWC-GT-CLEAN", "게이트클린")
+    assert _confirm_readiness(map_id, draft_id) == []
+
+
+def test_confirm_blocked_by_gates(client: TestClient, enforce: None) -> None:
+    """게이트 위반 캔버스는 422 + 코드 나열 detail (spec §4 하드 블록, Track B Task 3)."""
+    map_id, draft_id = _make_canvas(client, "FWC-T3-GATE", "T3게이트차단")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    ph = dict(node, id="fwct3gateph0000000000000000001", title="자리", linked_map_id=None)
+    _put_graph(client, draft_id, [node, ph])
+    res = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert res.status_code == 422
+    assert "placeholder" in res.json()["detail"]
+
+
+def test_confirm_requires_checkout_free_or_own(client: TestClient, enforce: None) -> None:
+    """타인 점유 중 확정 409, 빈 점유는 확정자가 자동 획득 후 성공 (spec §4 점유)."""
+    l5 = _seed_category(client, "FWC-T3-HOLD", "T3점유확정", level=5)
+    _seed_l6_map(client, l5, "T3점유확정업무1", "FWC-T3-HOLDM1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [
+                   {"principal_type": "user", "principal_id": "fwc.holder"},
+                   {"principal_type": "user", "principal_id": "fwc.other"},
+               ]})
+    act_as("fwc.holder")
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    _checkout(client, draft["id"])
+    # 타인(fwc.other)에게 점유 이전 후 fwc.holder가 확정 시도 → 409
+    xfer = client.post(f"/api/versions/{draft['id']}/checkout/transfer", json={"to": "fwc.other"})
+    assert xfer.status_code == 200, xfer.text
+    res = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert res.status_code == 409
+    assert res.json()["detail"] == "another user holds the draft checkout"
+    # 점유 해제(빈 값) → 확정자가 자동 획득 후 성공
+    act_as("fwc.other")
+    assert client.delete(f"/api/versions/{draft['id']}/checkout").status_code == 204
+    act_as("fwc.holder")
+    ok = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert ok.status_code == 200, ok.text
+    workflow_state = client.get(f"/api/versions/{draft['id']}/workflow").json()
+    assert workflow_state["checkout_holder"] == "fwc.holder"
+
+
+def test_confirm_requires_direct_l5_admin(client: TestClient, enforce: None) -> None:
+    """상위(L1 등) 체인 관리자는 confirm 403, 직속 L5 관리자·sysadmin은 허용 (spec §5)."""
+    l1 = _seed_category(client, "FWC-T3-DIR1", "T3직속L1")
+    l5 = _seed_category(client, "FWC-T3-DIR5", "T3직속L5", level=5, parent_id=l1)
+    _seed_l6_map(client, l5, "T3직속확정업무1", "FWC-T3-DIR5M1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.ancestor"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.direct"}]})
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    detail = client.get(f"/api/maps/{map_id}").json()
+    draft = next(v for v in detail["versions"] if v["status"] == "draft")
+    act_as("fwc.direct")
+    _checkout(client, draft["id"])
+    # 상위 체인 관리자는 캔버스 편집(editor)은 되지만 확정은 직속 전용 — 403
+    act_as("fwc.ancestor")
+    res = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert res.status_code == 403
+    assert res.json()["detail"] == "direct L5 admin or sysadmin only"
+    # 직속 L5 관리자는 허용
+    act_as("fwc.direct")
+    ok = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert ok.status_code == 200, ok.text
+    # sysadmin도 직속 여부와 무관하게 허용 — 403이 아니라 무변경 게이트(409)까지 도달하면
+    # 권한 게이트를 통과했다는 증거로 충분(이미 확정돼 콘텐츠 변경 없음)
+    act_as(SYSADMIN)
+    res2 = client.post(f"/api/maps/{map_id}/framework-confirm", json={})
+    assert res2.status_code == 409
+
+
+def test_confirm_readiness_endpoint(client: TestClient, enforce: None) -> None:
+    """GET confirm-readiness가 실패 목록을 반환하고, 해소 후 ready=true (spec §4)."""
+    map_id, draft_id = _make_canvas(client, "FWC-T3-RDY", "T3레디니스")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    node = graph["nodes"][0]
+    ph = dict(node, id="fwct3rdyph00000000000000000001", title="자리", linked_map_id=None)
+    _put_graph(client, draft_id, [node, ph])
+    res = client.get(f"/api/maps/{map_id}/confirm-readiness")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ready"] is False
+    codes = {f["code"] for f in body["failures"]}
+    assert "placeholder" in codes
+    # 해소 — placeholder 제거
+    _put_graph(client, draft_id, [node])
+    ready = client.get(f"/api/maps/{map_id}/confirm-readiness").json()
+    assert ready["ready"] is True
+    assert ready["failures"] == []
+
+
+def test_map_detail_exposes_can_confirm(client: TestClient, enforce: None) -> None:
+    """직속 L5 관리자·sysadmin만 can_confirm=true, 상위 관리자·비권한자(뷰어)는 false."""
+    l1 = _seed_category(client, "FWC-T3-CC1", "T3확정노출L1")
+    l5 = _seed_category(client, "FWC-T3-CC5", "T3확정노출L5", level=5, parent_id=l1)
+    _seed_l6_map(client, l5, "T3확정노출업무1", "FWC-T3-CC5M1")
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.ccancestor"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fwc.ccdirect"}]})
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+
+    assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is True  # sysadmin
+    act_as("fwc.ccdirect")
+    assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is True
+    act_as("fwc.ccancestor")
+    assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is False
+    act_as("fwc.ccpleb")  # public 캔버스라 viewer로 열람은 되나 can_confirm은 false
+    assert client.get(f"/api/maps/{map_id}").json()["can_confirm"] is False

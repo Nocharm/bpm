@@ -924,7 +924,7 @@ def _linkage_param(value: str) -> str:
 
 def expand_linkage_branches(
     edges: list["InterviewLinkageEdge"], present: set[str]
-) -> tuple[list[tuple[str, str, str]], dict[str, str], set[tuple[str, str]]]:
+) -> tuple[list[tuple[str, str, str, str | None]], dict[str, str], set[tuple[str, str]]]:
     """분기 팬아웃 앞에 분기 노드를 끼운다 — B→{A,C} ⇒ B→◇, ◇→A, ◇→C.
 
     L6 맵은 분기 src를 decision으로 **승격**하지만(엣지가 진실, design 2026-09-01 §2), 연계 캔버스의
@@ -932,9 +932,10 @@ def expand_linkage_branches(
     (사용자 결정 2026-09-01). 조건 라벨은 분기 노드에서 나가는 엣지가 들고 간다.
 
     끼우는 기준: 나가는 엣지 2개 이상 && 전부 `gateway="parallel"`은 아님. 병행 팬아웃은 택일이
-    아니므로 마름모를 세우면 오독된다(L6의 승격 제외 규칙과 같은 판단).
+    아니므로 마름모를 세우면 오독된다(L6의 승격 제외 규칙과 같은 판단). 이 비-fork·전부-parallel
+    그룹은 저장 시 gateway="parallel"을 기록해 확정 게이트 6(plain_fanout 예외)이 소비한다.
 
-    반환: (재작성 엣지 [(src,dst,label)], 분기노드키→원본 src code, 되돌아가는 쌍).
+    반환: (재작성 엣지 [(src,dst,label,gateway)], 분기노드키→원본 src code, 되돌아가는 쌍).
     되돌아가는 쌍은 재작성 좌표계 기준 — 안 넘기면 사이클이 되살아나 랭크가 무너진다.
     """
     scoped = [e for e in edges if e.source in present and e.target in present]
@@ -942,18 +943,20 @@ def expand_linkage_branches(
     for edge in scoped:
         out_by_src.setdefault(edge.source, []).append(edge)
 
-    rewritten: list[tuple[str, str, str]] = []
+    rewritten: list[tuple[str, str, str, str | None]] = []
     branch_of: dict[str, str] = {}
     back: set[tuple[str, str]] = set()
     for src, group in out_by_src.items():
-        forks = len(group) >= 2 and not all(e.gateway == "parallel" for e in group)
+        all_parallel = len(group) >= 2 and all(e.gateway == "parallel" for e in group)
+        forks = len(group) >= 2 and not all_parallel
         origin = src
         if forks:
             origin = f"__branch__{src}"
             branch_of[origin] = src
-            rewritten.append((src, origin, ""))
+            rewritten.append((src, origin, "", None))
+        gateway = "parallel" if all_parallel else None
         for edge in group:
-            rewritten.append((origin, edge.target, edge.label))
+            rewritten.append((origin, edge.target, edge.label, gateway))
             if edge.kind == "loop":
                 back.add((origin, edge.target))
     return rewritten, branch_of, back
@@ -1067,7 +1070,7 @@ async def apply_interview_linkage(
             layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
             layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
             known = {n.id for n in layout_nodes}
-            scoped_flow = [(a, b, text) for a, b, text in flow if a in known and b in known]
+            scoped_flow = [(a, b, text) for a, b, text, _ in flow if a in known and b in known]
             ranks = layout_flow(
                 layout_nodes,
                 [(a, b) for a, b, _ in scoped_flow],
@@ -1143,7 +1146,7 @@ async def apply_interview_linkage(
                 return branch_nodes.get(make_node_id(code, key))
             return node_by_map.get(map_ids.get(key, -1))
 
-        for src_key, dst_key, label in flow:
+        for src_key, dst_key, label, gateway in flow:
             src, dst = _node_of(src_key), _node_of(dst_key)
             if src is None or dst is None:
                 report.add(code, "warning",
@@ -1153,7 +1156,7 @@ async def apply_interview_linkage(
                 continue
             session.add(Edge(
                 id=uuid.uuid4().hex, version_id=draft.id,
-                source_node_id=src.id, target_node_id=dst.id, label=label,
+                source_node_id=src.id, target_node_id=dst.id, label=label, gateway=gateway,
                 # 끝점 타입별 핸들 — SP는 전용(in/__primary__), 분기는 변별(s-/t-).
                 # 안 맞추면 React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다
                 source_side=fan_sides.get((src_key, dst_key), "right"),

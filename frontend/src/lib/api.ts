@@ -88,6 +88,8 @@ export interface MapSummary {
   // framework 캔버스 전용 — 결착 카테고리(상세 응답에서만 채움) (design 2026-08-28 §8)
   linkage_category_id?: number | null;
   linkage_category_path?: string | null;
+  // 확정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true(상세 응답에서만 채움) (Track B Task 3)
+  can_confirm?: boolean;
   sp_input?: string | null;
   sp_output?: string | null;
   sp_input_forms?: string | null;
@@ -192,6 +194,8 @@ export interface GraphEdge {
   target_handle: string | null;
   // ""=레거시 미지정(렌더는 꺾은선) — 백엔드 schemas.LineStyle과 동일 어휘
   line_style: EdgeLineStyle | "";
+  // 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 표시 UI 없음, 데이터 보존만
+  gateway?: string | null;
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)
@@ -2657,6 +2661,35 @@ export function confirmFrameworkVersion(mapId: number, major: boolean): Promise<
     method: "POST",
     body: JSON.stringify({ major }),
   });
+}
+
+// 확정 게이트 위반 1건 — subprocess.GateFailure 미러 (Track B Task 6)
+export interface ConfirmGateFailure {
+  code: string;
+  count: number;
+  node_ids: string[];
+}
+
+export interface ConfirmReadiness {
+  ready: boolean;
+  failures: ConfirmGateFailure[];
+}
+
+// 확정 게이트 사전 점검 — major 토글 전 체크리스트 소스
+export function getConfirmReadiness(mapId: number): Promise<ConfirmReadiness> {
+  return request<ConfirmReadiness>(`/maps/${mapId}/confirm-readiness`);
+}
+
+// 상위 카테고리 관리자용 확정 위임 요청 — 직속 L5 관리자/sysadmin은 스스로 확정 가능해 409
+export function createFwConfirmRequest(mapId: number, note: string): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/maps/${mapId}/fw-confirm-requests`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function getPendingFwConfirmRequest(mapId: number): Promise<ApprovalRequest | null> {
+  return request<ApprovalRequest | null>(`/maps/${mapId}/fw-confirm-requests/pending`);
 }
 
 export interface CategoryPermissionEntry {

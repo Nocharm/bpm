@@ -408,6 +408,8 @@ class Edge(Base):
     # 엣지별 선 모양(React Flow type: default=곡선, smoothstep=꺾은선, straight=직선, ""=레거시 기본).
     # source_side와 동일하게 시각 전용 — diff 비교 제외
     line_style: Mapped[str] = mapped_column(String(20), default="")
+    # 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 그 외 값은 자유 문자열
+    gateway: Mapped[str | None] = mapped_column(String(20), default=None)
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 
@@ -700,9 +702,10 @@ class ApprovalRequest(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
-    # 'permission_downgrade' | 'visibility_change' | 'map_rename'
+    # 'permission_downgrade' | 'visibility_change' | 'map_rename' | 'sp_designation' | 'fw_confirm'
     kind: Mapped[str] = mapped_column(String(30))
-    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility} 또는 {from_name, to_name}
+    # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility} 또는
+    # {from_name, to_name} 또는 fw_confirm={category_id, note} (Track B Task 5)
     payload: Mapped[dict] = mapped_column(JSON)
     requested_by: Mapped[str] = mapped_column(String(100))
     # 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'withdrawn'

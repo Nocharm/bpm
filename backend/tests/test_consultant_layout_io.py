@@ -287,10 +287,10 @@ def test_branch_node_splits_a_fanout() -> None:
     flow, branch_of, back = expand_linkage_branches(edges, {"A", "B", "C"})
     assert branch_of == {"__branch__B": "B"}
     assert flow == [
-        ("A", "B", ""),
-        ("B", "__branch__B", ""),
-        ("__branch__B", "A", "되돌아감"),
-        ("__branch__B", "C", "진행"),
+        ("A", "B", "", None),
+        ("B", "__branch__B", "", None),
+        ("__branch__B", "A", "되돌아감", None),
+        ("__branch__B", "C", "진행", None),
     ]
     # 되돌아가는 쌍은 재작성 좌표계로 옮겨진다 — 안 그러면 사이클이 되살아나 랭크가 무너진다
     assert back == {("__branch__B", "A")}
@@ -301,7 +301,7 @@ def test_single_out_edge_gets_no_branch_node() -> None:
 
     flow, branch_of, _ = expand_linkage_branches([_lk("A", "B"), _lk("B", "C")], {"A", "B", "C"})
     assert branch_of == {}
-    assert flow == [("A", "B", ""), ("B", "C", "")]
+    assert flow == [("A", "B", "", None), ("B", "C", "", None)]
 
 
 def test_parallel_fanout_gets_no_branch_node() -> None:
@@ -312,8 +312,10 @@ def test_parallel_fanout_gets_no_branch_node() -> None:
         _lk("A", "B", kind="branch", gateway="parallel"),
         _lk("A", "C", kind="branch", gateway="parallel"),
     ]
-    _, branch_of, _ = expand_linkage_branches(edges, {"A", "B", "C"})
+    flow, branch_of, _ = expand_linkage_branches(edges, {"A", "B", "C"})
     assert branch_of == {}
+    # 비-fork·전부-parallel 그룹은 gateway="parallel"을 실어 확정 게이트 6 예외 판정 재료가 된다
+    assert flow == [("A", "B", "", "parallel"), ("A", "C", "", "parallel")]
 
 
 def test_mixed_gateway_fanout_still_branches() -> None:
@@ -333,7 +335,7 @@ def test_edges_outside_the_canvas_are_ignored() -> None:
 
     flow, branch_of, _ = expand_linkage_branches(
         [_lk("A", "B"), _lk("A", "GONE")], {"A", "B"})
-    assert flow == [("A", "B", "")]
+    assert flow == [("A", "B", "", None)]
     assert branch_of == {}  # 남은 out-edge가 1개 → 분기 아님
 
 

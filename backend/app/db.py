@@ -95,6 +95,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "consultant_owner_pending", "BOOLEAN DEFAULT FALSE"),
     # 엣지별 선 모양 — ""=레거시(FE가 꺾은선 렌더), DEFAULT로 기존 행 백필 (2026-08-18)
     ("edges", "line_style", "VARCHAR(20) DEFAULT ''"),
+    # 임포트 출처 게이트웨이 종별 — "parallel"만 앱이 해석(§4 게이트 6 예외) (2026-09-02)
+    ("edges", "gateway", "VARCHAR(20)"),
     # 피드백 알림 발송 시각 — 관리자 수동 발송(상태변경은 1회 한정) (2026-08-19)
     ("feedback", "reply_notified_at", "TIMESTAMP"),
     ("feedback", "status_notified_at", "TIMESTAMP"),

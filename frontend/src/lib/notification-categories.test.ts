@@ -25,4 +25,9 @@ describe("getNotificationCategory", () => {
     expect(getNotificationCategory("rename_superseded")).toBe("permission");
     expect(getNotificationCategory("map_renamed")).toBe("permission");
   });
+  it("classifies fw_confirm types as permission", () => {
+    expect(getNotificationCategory("fw_confirm_requested")).toBe("permission");
+    expect(getNotificationCategory("fw_confirm_done")).toBe("permission");
+    expect(getNotificationCategory("fw_confirm_rejected")).toBe("permission");
+  });
 });

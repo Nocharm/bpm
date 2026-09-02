@@ -74,6 +74,14 @@ class RenameRequestIn(BaseModel):
     to_name: str = Field(min_length=1, max_length=200)
 
 
+class FwConfirmRequestIn(BaseModel):
+    # framework 캔버스 확정 요청 — 상위 카테고리 관리자가 직속 L5 관리자/sysadmin에게 위임
+    # (spec 2026-09-02 §5, Track B Task 5)
+    note: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("note")(classmethod(lambda cls, v: _normalize_comment(v)))
+
+
 class SpDesignationRequestIn(BaseModel):
     # SP 등록(지정) 요청 — from_map은 요청자가 작업하던 호스트 맵(Inbox 카드 컨텍스트용) (spec 2026-07-19)
     from_map_id: int
@@ -737,6 +745,8 @@ class MapOut(BaseModel):
     # framework 캔버스 전용 — 결착 카테고리(트랜지언트, get_map이 역조회로 주입) (design 2026-08-28 §8)
     linkage_category_id: int | None = None
     linkage_category_path: str | None = None
+    # 확정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true (트랜지언트, Track B Task 3)
+    can_confirm: bool = False
     # L6 Input/Output — 자유 텍스트(개행 구분 복수)
     sp_input: str | None = None
     sp_output: str | None = None
@@ -827,6 +837,21 @@ class FrameworkConfirmOut(BaseModel):
 
     version: VersionOut
     pruned_labels: list[str] = []
+
+
+class GateFailureOut(BaseModel):
+    """확정 게이트 위반 1건 — subprocess.GateFailure 직렬화 (spec §4, Track B Task 3)."""
+
+    code: str
+    count: int
+    node_ids: list[str]
+
+
+class ConfirmReadinessOut(BaseModel):
+    """GET confirm-readiness 응답 — major 토글 전 체크리스트 소스 (spec §4)."""
+
+    ready: bool
+    failures: list[GateFailureOut] = []
 
 
 class CategoryCreateIn(BaseModel):
@@ -1093,6 +1118,8 @@ class EdgeIn(BaseModel):
     source_handle: str | None = Field(default=None, max_length=200)
     target_handle: str | None = Field(default=None, max_length=200)
     line_style: LineStyle = ""
+    # 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 그 외는 자유 문자열
+    gateway: str | None = Field(default=None, max_length=20)
 
 
 class NodeOut(NodeIn):

@@ -82,6 +82,17 @@ def is_sysadmin(login_id: str) -> bool:
     return settings.resolved_auth_mode() == "ldap" and login_id in _granted_sysadmins
 
 
+def list_sysadmin_logins() -> set[str]:
+    """알림 수신자용 sysadmin 로그인 전체 열거 — is_sysadmin과 동일 소스(BPM_SYSADMINS +
+    ldap 모드의 로컬 부여분), dev 모드의 '전원 True' 바이패스는 열거 불가라 반영하지 않는다
+    (fw_confirm_requested 등 수신자 계산, 2026-09-02).
+    """
+    ids = set(settings.sysadmin_login_ids())
+    if settings.resolved_auth_mode() == "ldap":
+        ids |= _granted_sysadmins
+    return ids
+
+
 async def load_granted_sysadmins(session: "AsyncSession") -> None:
     """기동 시 local_credentials에서 부여분을 읽어 캐시를 채운다."""
     from sqlalchemy import select
@@ -234,6 +245,7 @@ __all__ = [
     "requires_downgrade_approval",
     "belongs_to_department",
     "is_sysadmin",
+    "list_sysadmin_logins",
     "effective_role",
     "is_visible",
     "can_comment",

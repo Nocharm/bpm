@@ -23,6 +23,7 @@ export function getNotificationCategory(type: string): NotificationCategory | nu
   if (type.startsWith("checkout_")) return "checkout";
   if (type.startsWith("permission_")) return "permission";
   if (type.startsWith("rename_") || type === "map_renamed") return "permission";
+  if (type.startsWith("fw_confirm")) return "permission";
   if (type === "subprocess_registered") return "subprocess";
   if (type === "notice") return "notice";
   return null; // 미지 type — All에서만 노출

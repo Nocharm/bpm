@@ -12,9 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
+from app.framework_confirm import perform_framework_confirm
 from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
 from app.permissions import logic
-from app.permissions.access import assert_map_role, get_effective_role
+from app.permissions.access import (
+    assert_map_role,
+    get_effective_role,
+    get_framework_category_id,
+    is_category_admin,
+    is_direct_l5_admin,
+)
 from app.permissions.deps import (
     assert_approver_or_sysadmin,
     is_map_approver,
@@ -61,12 +68,22 @@ async def _assert_not_framework(session: AsyncSession, map_id: int) -> None:
 async def _assert_owner_or_approver(
     session: AsyncSession, user: str, map_id: int
 ) -> None:
-    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C)."""
+    """오너(sysadmin 포함 — effective_role 해석) 또는 지정 승인자만 — 결재 대기 목록 게이트 (C).
+
+    framework 캔버스는 map_permissions가 무시돼(access.get_effective_role) owner=sysadmin뿐이라
+    카테고리 체인 관리자(직속·상위 모두 is_category_admin)를 별도 허용 — fw_confirm 요청자(상위
+    관리자)·처리자(직속 관리자) 둘 다 자기 맵의 결재 대기 탭을 봐야 한다 (Track B Task 5 후속).
+    """
     role = await get_effective_role(session, user, map_id)
     if role == "owner":
         return
     if await is_map_approver(session, user, map_id):
         return
+    mode = await session.scalar(select(ProcessMap.mode).where(ProcessMap.id == map_id))
+    if mode == "framework":
+        category_id = await get_framework_category_id(session, map_id)
+        if category_id is not None and await is_category_admin(session, user, category_id):
+            return
     raise HTTPException(status_code=403, detail="owner, approver, or sysadmin only")
 
 
@@ -581,6 +598,16 @@ async def decide_approval_request(
     if req.kind in ("map_rename", "sp_designation"):
         # rename·SP 등록 결정권자는 오너/sysadmin — 승인자 게이트와 다름 (spec 2026-07-18/19)
         await assert_map_role(session, user, req.map_id, "owner")
+    elif req.kind == "fw_confirm":
+        # 확정 위임 결정권자는 직속 L5 관리자/sysadmin만 — 승인자·오너 게이트와 다름 (spec §5)
+        if not logic.is_sysadmin(user):
+            category_id = req.payload.get("category_id")
+            if category_id is None or not await is_direct_l5_admin(
+                session, user, category_id
+            ):
+                raise HTTPException(
+                    status_code=403, detail="direct L5 admin or sysadmin only"
+                )
     else:
         await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
@@ -693,6 +720,13 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
                 detail="map is not designated yet — save the designation first",
             )
         # 이미 지정됨(요청~승인 사이 직접 지정 경합) → 적용할 것 없음, applied 마킹만
+    elif req.kind == "fw_confirm":
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 확정 없이 applied
+        # 게이트 6종·체크아웃·무변경 위반은 HTTPException으로 그대로 전파 — decide가 커밋
+        # 전이라 req.status는 pending 유지(map_rename의 이름 선점 경합과 동일 패턴)
+        await perform_framework_confirm(session, found_map, req.decided_by, major=False)
 
 
 async def _notify_permission_request(
@@ -744,6 +778,25 @@ async def _notify_permission_decision(
                 f"Your subprocess registration request for '{map_name}' was {outcome}{suffix}"
             ),
             payload={"map_name": map_name, "outcome": outcome, "reason": reason},
+        )
+        return
+    if req.kind == "fw_confirm":
+        found_map = await session.get(ProcessMap, req.map_id)
+        map_name = found_map.name if found_map is not None else f"map {req.map_id}"
+        # 승인=done(스냅샷 확정 완료), 거절=rejected — 고정 알림 타입 2종 (spec §5)
+        notif_type = "fw_confirm_done" if outcome == "approved" else "fw_confirm_rejected"
+        result_word = "confirmed" if outcome == "approved" else "rejected"
+        actor_name = (
+            await workflow.get_display_name(session, req.decided_by) if req.decided_by else ""
+        )
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type=notif_type,
+            map_id=req.map_id,
+            message=f"Your confirm request for '{map_name}' was {result_word}{suffix}",
+            payload={"map_name": map_name, "actor": req.decided_by, "actor_name": actor_name,
+                     "outcome": outcome, "reason": reason},
         )
         return
     found_map = await session.get(ProcessMap, req.map_id)
