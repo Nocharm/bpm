@@ -3,19 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-02 — 트랙 C 머지 전 최종 리뷰 후속 3건 (feat/fw-track-c-delegation)
-- 브랜치 전체 리뷰에서 나온 스펙 편차 1건 + UX 1건 + 문서 각주 2줄을 픽스웨이브로 정리: L5-only(seed 전부 L5) 관리자는 카테고리 PATCH(개명·정렬·이동) 전체 403 — L1~L4가 섞인 seed는 기존대로 허용(§7 표와 일치). 현황판·요약 카드의 실패 필이 확정 체크리스트용 긍정문(`framework.gate.*`)을 error 톤에 그대로 써 의미가 반전되던 것을 부정형 신규 키(`framework.gateFail.*`)로 분리(체크리스트는 긍정문 유지). 스펙에 카운트 클릭 이동 후속 강등·요약 API 전체공개 각주 보강.
-
-## 2026-09-02 — 트랙 C 마감: 실브라우저 검증 + 전체 게이트 (feat/fw-track-c-delegation)
-- Task 1~8(레벨 인지 판정·CRUD 위임 5게이트·확정 요청 철회·현황판·요약 카드·설정 스코프)을 신규 스모크(`pw-smoke-framework-delegation.mjs`, 18/18)로 통합 검증 — 설정 Manage↔Status 전환·홈 L5/L2 요약 카드·맵 선택 배타·위임 관리자 자기 서브트리 렌더+add-root 없음. 위임 스코프 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys` 필요(기본 false는 전원 sysadmin 바이패스라 재현 불가 — memory `local-permission-sim-demo`).
-- 전체 게이트 그린: BE pytest 1309 passed·ruff clean, FE tsc·lint·vitest 833 passed·build 성공.
-
-## 2026-09-02 — 트랙 C Task 3: fw_confirm 요청 철회 + 그룹 수신자 테스트 (feat/fw-track-c-delegation)
-- `DELETE /maps/{id}/fw-confirm-requests/pending`을 rename 철회 템플릿(요청자 게이트+404/403+withdrawn) 그대로 복제. 알림·점유 자동 반환은 없음(스펙 §5 결정, 주석으로 명시). FE는 "Requested by" 캡션 옆 본인 전용 Withdraw 버튼(`framework-request-withdraw`) — 철회 성공 시 pending 재조회로 CTA 복귀, 현재 사용자는 page.tsx `username` state를 신규 prop으로 전달.
-- BE 테스트로 `principal_type='group'` 카테고리 권한자의 그룹 멤버가 `fw_confirm_requested` 알림을 받는 경로(Layer 4 §3a 판정 ↔ Track B 알림 파이프라인 결합)를 실증.
-
-## 2026-09-02 — 트랙 C 착수: 스펙 보강 + 구현 플랜 (feat/fw-track-c-delegation)
-- §5에 요청 철회 경로(DELETE fw-confirm-requests/pending·점유 미반환) 결정 추가. 트랙 C 플랜 9태스크(docs/superpowers/plans/2026-09-02-fw-track-c-delegation.md) — 레벨 인지 판정·CRUD 위임 5게이트·현황판(배치 검사기)·레벨 요약 카드·설정 스코프.
+## 2026-09-02 — 트랙 C: 레벨 위임·현황판·레벨 요약 카드 머지 — 스펙 §1~§8 전 항목 구현 완료 (dev)
+- 레벨 인지 판정(`resolve_category_admin`·`get_admin_scope`·`/me` category_admin_root_ids)과 카테고리 CRUD 위임 5게이트(생성·개명·정렬=서브트리 seed 포함 / 이동·삭제=seed 금지+새 부모 검사 / 임명=하위 레벨만 / **L5-only 관리자는 구조 변경 전체 403** / 루트 생성·임포트=sysadmin). fw_confirm 요청 철회(`DELETE .../fw-confirm-requests/pending`, 점유 미반환)+그룹 수신자 실증.
+- 현황판 `GET /categories/framework-overview`(배치 검사기 — 캔버스 수 무관 고정 쿼리, 단건 동치 테스트 6코드 전수)+설정>Framework Manage↔Status 테이블, 레벨 요약 `GET /categories/{id}/summary`(전체 공개·can_edit_linkage)+홈 트리 행 선택→aside 요약 카드(맵 선택 배타·빈공간 복귀). 위임 관리자는 설정 탭에서 자기 서브트리만(frameworkAdmin 접근). 실패 필 라벨은 부정형(`framework.gateFail.*`)으로 분리.
+- 검증: 신규 스모크 `pw-smoke-framework-delegation.mjs` 18/18(위임 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys` — 기본 false는 전원 sysadmin 바이패스). 게이트 pytest 1311·vitest 833·build 그린.
 
 ## 2026-09-02 — 트랙 B: 확정 게이트 6종 + 점유·직속 L5 확정권 + 확정 요청 워크플로 (feat/fw-track-b-gates)
 - 확정 게이트 6종(missing_l6·placeholder·stale_link·l6_unpublished·noexit_cycle·plain_fanout — 병행 팬아웃은 전부 `Edge.gateway=parallel`이면 예외)을 체크아웃 점유·직속 L5 관리자(`is_direct_l5_admin`) 자기확정권과 함께 `perform_framework_confirm`에 통합, `GET /maps/{id}/confirm-readiness`(+`can_confirm`)를 체크리스트 단일 소스로 노출하고 라이브 draft 삭제를 차단했다.
