@@ -6,6 +6,9 @@
 ## 2026-09-02 — 트랙 B 착수: 스펙 보강 + 구현 플랜 (feat/fw-track-b-gates)
 - 게이트 6 병행 팬아웃 예외(전부 gateway=parallel이면 합법 — 사용자 확정)·Edge.gateway 컬럼 신설 근거·상시 체크리스트는 GET confirm-readiness 일원화(422 dict-detail은 FE 미수신 실측)·직속 L5 최소형 판정(is_direct_l5_admin)+can_confirm 트랜지언트를 스펙에 반영. 트랙 B 플랜 9태스크(docs/superpowers/plans/2026-09-02-fw-track-b-gates-workflow.md).
 
+## 2026-09-02 — 트랙 B Task 5: 확정 요청 워크플로(kind='fw_confirm') BE (feat/fw-track-b-gates)
+- 상위 카테고리 관리자용 확정 위임 요청 — `POST /{map_id}/fw-confirm-requests`(직속 L5/sysadmin은 409로 직접확정 유도)·decide 재사용(직속 L5/sysadmin만 403 게이트, 승인 시 perform_framework_confirm major=False 실행)·직접확정 성공 시 pending superseded(알림 없음 — 스펙 §5 알림 3종 고정). 신설 `get_category_admin_logins`(is_direct_l5_admin의 역방향, 그룹 멤버 로그인 확장). sysadmin 벨 알림은 미포함 결정(선례 없음+승인큐로 이미 가시) — 상세는 task-5-report.md.
+
 ## 2026-09-02 — 문서 정리: main 머지 완료 스펙·플랜 폐기 + PROGRESS 아카이브 (dev)
 - 폐기 정책(`rules/common/documentation.md`)에 따라 main 머지 완료분 삭제: superpowers 스펙 5(approval-comments·collab-staging·topnav·io-linking·node-spacing)+플랜 12(거버넌스 r3~r6·8월 트랙 전부·framework-l5-linkage)+design 1(field-promotion — 구현 완료·QA 문서 존치). 코드 주석 참조는 파일명으로 강등(`git grep` 전수 확인). 유지: 미구현·핸드오프·전제 스펙(consultant-hierarchy·governance-ux A/B/C·data-surface-parity·interview-import 8/18·v04 2종·framework 8-28 스펙·트랙 A 스펙/플랜).
 - PROGRESS 8/18 이전 137줄을 `docs/history/PROGRESS-archive.md`(2026-09-02 이동분)로 아카이브.

@@ -128,6 +128,66 @@ async def is_direct_l5_admin(
     return bool(group_pids & user_group_ids)
 
 
+async def get_category_admin_logins(
+    session: AsyncSession, category_id: int, direct_only: bool = True
+) -> list[str]:
+    """카테고리 관리자 로그인 id 열거 — is_direct_l5_admin/is_category_admin(단건 판정)의
+    역방향(알림 수신자 산출용, Track B Task 5). user 행은 그대로, group 행은 active 그룹
+    멤버십을 전 직원 순회로 실제 로그인으로 확장한다(get_eligible_users 패턴).
+
+    direct_only=False 는 is_category_admin과 같은 조상 체인 전체를 포함.
+    """
+    if direct_only:
+        category_ids = [category_id]
+    else:
+        rows = (
+            await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
+        ).all()
+        parent_by_id = {cid: pid for cid, pid in rows}
+        category_ids = []
+        cursor: int | None = category_id
+        while cursor is not None and cursor in parent_by_id and cursor not in category_ids:
+            category_ids.append(cursor)
+            cursor = parent_by_id[cursor]
+
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission.principal_type, CategoryPermission.principal_id)
+            .where(CategoryPermission.category_id.in_(category_ids))
+        )
+    ).all()
+    logins: set[str] = {pid for ptype, pid in perm_rows if ptype == "user"}
+    group_pids = {pid for ptype, pid in perm_rows if ptype == "group"}
+    if group_pids:
+        employees = list(
+            (await session.scalars(select(Employee).where(Employee.active.is_(True)))).all()
+        )
+        dept_index = await load_dept_index(session)
+        member_rows = (
+            await session.execute(
+                select(
+                    UserGroupMember.group_id,
+                    UserGroupMember.member_type,
+                    UserGroupMember.member_id,
+                )
+                .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+                .where(UserGroup.status == "active")
+            )
+        ).all()
+        for emp in employees:
+            emp_org_path = resolve_org_path(emp, dept_index)
+            for gid, member_type, member_id in member_rows:
+                if str(gid) not in group_pids:
+                    continue
+                if member_type == "user" and member_id == emp.login_id:
+                    logins.add(emp.login_id)
+                elif member_type == "department" and logic.belongs_to_department(
+                    emp_org_path, member_id
+                ):
+                    logins.add(emp.login_id)
+    return sorted(logins)
+
+
 async def get_effective_role(
     session: AsyncSession, login_id: str, map_id: int
 ) -> str | None:

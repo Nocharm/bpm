@@ -19,8 +19,10 @@ from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_p
 from app.permissions import logic
 from app.permissions.access import (
     assert_map_role,
+    get_category_admin_logins,
     get_effective_role,
     get_eligible_users,
+    get_framework_category_id,
     get_user_active_group_ids,
     is_direct_l5_admin,
 )
@@ -35,6 +37,7 @@ from app.schemas import (
     FrameworkConfirmIn,
     FrameworkConfirmOut,
     FrameworkTransferIn,
+    FwConfirmRequestIn,
     GateFailureOut,
     MapCategoryIn,
     MapCopy,
@@ -877,6 +880,123 @@ async def withdraw_rename_request(
     await session.commit()
 
 
+async def _supersede_pending_fw_confirm(
+    session: AsyncSession, map_id: int, *, actor: str
+) -> None:
+    """직접 확정 성공 시 pending 확정요청 무효화 — 상태 전환만(spec §5는 알림 3종만 고정,
+    superseded는 rename 선례(rename_superseded)와 달리 알림을 보내지 않는다)."""
+    req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "fw_confirm",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if req is None:
+        return
+    req.status = "superseded"
+    req.decided_by = actor
+    req.decided_at = _now()
+
+
+@router.post(
+    "/{map_id}/fw-confirm-requests",
+    response_model=ApprovalRequestOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def create_fw_confirm_request(
+    map_id: int,
+    payload: FwConfirmRequestIn,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> ApprovalRequest:
+    """상위 카테고리 관리자용 확정 위임 요청 — 직속 L5 관리자/sysadmin이 decide로 확정 실행
+    (spec 2026-09-02 §5, Track B Task 5).
+
+    require_map_role("editor")가 framework 역할 파생(get_effective_role)으로 이미 카테고리
+    체인 관리자(직속+상위)만 통과시킨다 — 직속/sysadmin은 스스로 확정 가능하니 요청 대신 409.
+    """
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode != "framework":
+        raise HTTPException(status_code=422, detail="not a framework linkage canvas")
+    category_id = await get_framework_category_id(session, map_id)
+    if logic.is_sysadmin(user) or (
+        category_id is not None and await is_direct_l5_admin(session, user, category_id)
+    ):
+        raise HTTPException(status_code=409, detail="you can confirm directly")
+    pending = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "fw_confirm",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending is not None:
+        raise HTTPException(status_code=409, detail="a confirm request is already pending")
+    note = payload.note or ""
+    req = ApprovalRequest(
+        map_id=map_id,
+        kind="fw_confirm",
+        payload={"category_id": category_id, "note": note},
+        requested_by=user,
+        status="pending",
+    )
+    session.add(req)
+    requester_name = await workflow.get_display_name(session, user)
+    category_path = None
+    recipients: list[str] = []
+    if category_id is not None:
+        category_paths = build_category_paths(
+            (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+                )
+            ).all()
+        )
+        category_path = category_paths.get(category_id)
+        recipients = [
+            r
+            for r in await get_category_admin_logins(session, category_id, direct_only=True)
+            if r != user
+        ]
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="fw_confirm_requested",
+        map_id=map_id,
+        message=f"{requester_name} requested to confirm '{found_map.name}'",
+        payload={"map_name": found_map.name, "actor": user, "actor_name": requester_name,
+                 "note": note, "category_path": category_path},
+    )
+    await session.commit()
+    await session.refresh(req)
+    return req
+
+
+@router.get(
+    "/{map_id}/fw-confirm-requests/pending",
+    response_model=ApprovalRequestOut | None,
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def get_pending_fw_confirm_request(
+    map_id: int, session: AsyncSession = Depends(get_session)
+) -> ApprovalRequest | None:
+    """pending 확정 요청 조회 — Settings/캔버스 카드 소스(중복요청 안내용, 없으면 null)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    return await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id,
+            ApprovalRequest.kind == "fw_confirm",
+            ApprovalRequest.status == "pending",
+        )
+    )
+
+
 @router.post(
     "/{map_id}/sp-designation-requests",
     response_model=ApprovalRequestOut,
@@ -1186,6 +1306,9 @@ async def confirm_framework_version(
     snapshot, pruned_labels = await perform_framework_confirm(
         session, found_map, user, payload.major
     )
+    # 직접 확정 성공 — 상위 관리자가 낸 pending 확정요청이 있으면 무효화 (rename 선례 준용)
+    await _supersede_pending_fw_confirm(session, map_id, actor=user)
+    await session.commit()
     return FrameworkConfirmOut(
         version=VersionOut.model_validate(snapshot), pruned_labels=pruned_labels
     )

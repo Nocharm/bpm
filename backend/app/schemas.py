@@ -74,6 +74,14 @@ class RenameRequestIn(BaseModel):
     to_name: str = Field(min_length=1, max_length=200)
 
 
+class FwConfirmRequestIn(BaseModel):
+    # framework 캔버스 확정 요청 — 상위 카테고리 관리자가 직속 L5 관리자/sysadmin에게 위임
+    # (spec 2026-09-02 §5, Track B Task 5)
+    note: str | None = Field(None, max_length=500)
+
+    _normalize = field_validator("note")(classmethod(lambda cls, v: _normalize_comment(v)))
+
+
 class SpDesignationRequestIn(BaseModel):
     # SP 등록(지정) 요청 — from_map은 요청자가 작업하던 호스트 맵(Inbox 카드 컨텍스트용) (spec 2026-07-19)
     from_map_id: int
