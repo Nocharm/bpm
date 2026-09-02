@@ -139,18 +139,16 @@ export function ProcessLibraryPanel({
     cancelDeptModalClose();
     deptCloseTimerRef.current = window.setTimeout(() => setDeptModal(null), DEPT_HOVER_CLOSE_MS);
   }
-  function handleDeptChipEnter(path: string, chipEl: Element) {
+  // 마지막 커서 위치 — 오픈 지연 동안 칩 위에서 움직인 만큼 따라가 카드가 커서 기준으로 뜬다
+  const deptPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  function handleDeptChipEnter(path: string, x: number, y: number) {
     clearHoverTimer(); // 칩 호버는 부서 정보 인텐트 — 행 피크 자동 오픈 억제
     cancelDeptModalClose();
-    if (deptModal?.path === path) return; // 같은 부서 모달이 이미 열림 — 유지
-    const rect = chipEl.getBoundingClientRect();
+    deptPointerRef.current = { x, y };
+    if (deptModal?.path === path) return; // 같은 부서 카드가 이미 열림 — 유지
     if (deptOpenTimerRef.current !== null) window.clearTimeout(deptOpenTimerRef.current);
     deptOpenTimerRef.current = window.setTimeout(
-      () =>
-        setDeptModal({
-          path,
-          origin: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
-        }),
+      () => setDeptModal({ path, origin: { ...deptPointerRef.current } }),
       DEPT_HOVER_OPEN_MS,
     );
   }
@@ -324,13 +322,16 @@ export function ProcessLibraryPanel({
                     </span>
                   ) : (
                     row.department && (
-                      // 지정 부서 칩 — 최하위 부서만 한 줄 표시(경로 전체는 호버 시 조직 정보 모달) (2026-09-02)
+                      // 지정 부서 칩 — 최하위 부서만 한 줄 표시(경로 전체는 호버 시 커서 앵커 조직 카드) (2026-09-02)
                       <span
                         data-id="library-department-chip"
-                        className="block max-w-full self-start truncate rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent"
+                        className="block max-w-full self-start truncate rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-fine text-accent transition-all duration-150 hover:-translate-y-px hover:border-accent hover:shadow-sm"
                         onMouseEnter={(e) =>
-                          row.department && handleDeptChipEnter(row.department, e.currentTarget)
+                          row.department && handleDeptChipEnter(row.department, e.clientX, e.clientY)
                         }
+                        onMouseMove={(e) => {
+                          deptPointerRef.current = { x: e.clientX, y: e.clientY };
+                        }}
                         onMouseLeave={handleDeptChipLeave}
                       >
                         {formatDeptName(row.department, lang, koreanDeptByPath)}
@@ -369,6 +370,7 @@ export function ProcessLibraryPanel({
       )}
       {deptModal && (
         <OrgInfoModal
+          anchored
           orgPath={deptModal.path}
           koreanDeptByPath={koreanDeptByPath}
           origin={deptModal.origin}
