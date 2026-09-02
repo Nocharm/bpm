@@ -321,27 +321,32 @@ def _seq_chain(by_seq: dict[int, CanonicalNode]) -> list[CanonicalEdge]:
 
 def _build_flow_edges(
     relations: object, by_seq: dict[int, CanonicalNode], path: str, issues: list[AdapterIssue]
-) -> tuple[list[CanonicalEdge], list[InterviewNote]]:
-    """rows[].relations.edges → 엣지 + quote 노트 (design 2026-09-01 §2).
+) -> tuple[list[CanonicalEdge], list[InterviewNote], list[tuple[str, CanonicalNode]]]:
+    """rows[].relations.edges → 엣지 + quote 노트 + 합성 분기 노드 (design 2026-09-01 §2).
 
     src/dst는 actions[].seq를 가리킨다. branch 엣지는 src 노드를 decision으로 승격한다 —
     actions[].kind(action/handoff/decision)는 분기 노드를 신뢰할 수 없고 엣지가 진실이다.
+    self edge(A→A)는 분기 판단 노드(a{seq}r)를 합성해 ◇→A 루프백으로 그린다 — 세 번째
+    반환값은 (앵커 코드, 합성 노드)로, 호출부가 앵커 바로 뒤에 끼운다 (사용자 결정 2026-09-02).
     """
     if relations is None:
         issues.append(AdapterIssue("warning", path, "relations missing — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
-        return _seq_chain(by_seq), []
+        return _seq_chain(by_seq), [], []
     if not isinstance(relations, dict):
         issues.append(AdapterIssue(
             "warning", f"{path}.relations", "relations is not an object — seq chain fallback (연결 정보 형식 오류 — 순번 순서로 자동 연결)"))
-        return _seq_chain(by_seq), []
+        return _seq_chain(by_seq), [], []
     _warn_unknown_keys(relations, _RELATIONS_KEYS, f"{path}.relations", issues)
     raw_edges = relations.get("edges")
     if not isinstance(raw_edges, list):
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges",
             "edges missing or not a list — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
-        return _seq_chain(by_seq), []
+        return _seq_chain(by_seq), [], []
 
+    # 승격 전 스냅샷 — self edge로 진출이 ◇로 이설된 노드의 승격을 원상 복구할 때 기준
+    declared_decisions = {node.code for node in by_seq.values() if node.type == "decision"}
+    self_specs: list[tuple[CanonicalNode, str]] = []
     edges: list[CanonicalEdge] = []
     notes: list[InterviewNote] = []
     seen: set[tuple[str, str]] = set()
@@ -358,9 +363,14 @@ def _build_flow_edges(
             issues.append(AdapterIssue(
                 "warning", epath, f"edge references unknown seq {src!r}→{dst!r} — dropped (존재하지 않는 순번을 가리켜 제외됨)"))
             continue
-        if src_node is dst_node:
-            issues.append(AdapterIssue("warning", epath, f"self edge on seq {src!r} — dropped (자기 자신으로 되도는 연결 — L6 단계 안에서는 그릴 수 없어 제외)"))
-            continue
+        is_self = src_node is dst_node
+        if is_self:
+            # 자기 반복 — 드랍하지 않고 분기 판단 노드(◇)를 합성해 ◇→자기 루프백으로 그린다
+            # (아래 post-pass, L5 expand_linkage_branches와 같은 결정 — 사용자 결정 2026-09-02).
+            issues.append(AdapterIssue(
+                "warning", epath,
+                f"self edge on seq {src!r} — kept as loop via branch node "
+                "(자기 반복 — 분기 판단 노드를 세워 되도는 연결로 변환)"))
         pair = (src_node.code, dst_node.code)
         if pair in seen:
             issues.append(AdapterIssue(
@@ -375,18 +385,23 @@ def _build_flow_edges(
         if gateway and gateway not in _KNOWN_GATEWAYS:
             issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only (알 수 없는 게이트웨이 — 라벨로만 기록)"))
         condition = _clean(raw.get("condition"))
-        edges.append(CanonicalEdge.model_validate({
-            "from": src_node.code,
-            "to": dst_node.code,
-            "label": _truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
-            "kind": kind,
-        }))
-        # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
-        # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2)
-        if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
-            src_node.type = "decision"
-            issues.append(AdapterIssue(
-                "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) — 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
+        label = _truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues)
+        if is_self:
+            # 엣지·승격 대신 post-pass 합성 대기 — 라벨은 ◇→A 루프백 엣지가 들고 간다
+            self_specs.append((src_node, label))
+        else:
+            edges.append(CanonicalEdge.model_validate({
+                "from": src_node.code,
+                "to": dst_node.code,
+                "label": label,
+                "kind": kind,
+            }))
+            # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
+            # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2)
+            if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
+                src_node.type = "decision"
+                issues.append(AdapterIssue(
+                    "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) — 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
         quote = _clean(raw.get("quote"))
         if quote:
             notes.append(InterviewNote(
@@ -394,11 +409,32 @@ def _build_flow_edges(
                 title=f"{src_node.name} → {dst_node.name}"[:300],
                 text=_flow_note_text(kind, gateway, condition, quote),
             ))
+    # self edge post-pass — A→◇(a{seq}r), ◇→A(loop, 라벨), A의 기존 진출은 ◇로 이설.
+    # 택일은 분기 노드에서 갈라진다(L5 expand_linkage_branches와 같은 결정). A가 진출 이설로
+    # 승격 근거를 잃으면 process로 되돌린다(원래 decision 액션은 유지).
+    loop_nodes: list[tuple[str, CanonicalNode]] = []
+    for src_node, loop_label in self_specs:
+        branch = CanonicalNode(
+            code=f"{src_node.code}r",
+            name=f"{src_node.name} 결과"[:200],
+            type="decision",
+            seq=src_node.seq,
+        )
+        for edge in edges:
+            if edge.source == src_node.code:
+                edge.source = branch.code
+        edges.append(CanonicalEdge.model_validate(
+            {"from": src_node.code, "to": branch.code, "label": "", "kind": "seq"}))
+        edges.append(CanonicalEdge.model_validate(
+            {"from": branch.code, "to": src_node.code, "label": loop_label, "kind": "loop"}))
+        if src_node.code not in declared_decisions:
+            src_node.type = "process"
+        loop_nodes.append((src_node.code, branch))
     if not edges and by_seq:
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges", "no usable edges — seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))
-        return _seq_chain(by_seq), notes
-    return edges, notes
+        return _seq_chain(by_seq), notes, []
+    return edges, notes, loop_nodes
 
 
 def _build_linkage(
@@ -603,7 +639,11 @@ def convert_interview(raw: object) -> AdapterResult:
         if not actions:
             issues.append(AdapterIssue("warning", path, "no actions — map will only have Start/End (액션이 없어 Start/End만 생성)"))
         nodes, by_seq = _build_nodes(actions, path, issues)
-        edges, flow_notes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
+        edges, flow_notes, loop_nodes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
+        for anchor_code, branch_node in loop_nodes:
+            # 합성 분기 노드는 앵커(자기 반복 노드) 바로 뒤에 — 레이아웃 폴백 순서 보존
+            idx = next((i for i, n in enumerate(nodes) if n.code == anchor_code), len(nodes) - 1)
+            nodes.insert(idx + 1, branch_node)
 
         params: dict[str, str] = {
             "input": _join_multi(fields.get("input_data")),

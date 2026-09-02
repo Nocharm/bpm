@@ -419,3 +419,41 @@ def test_l5_self_edge_kept_as_loop_branch() -> None:
     assert any("self edge" in i.message and "loop" in i.message for i in res.issues)
     # 드랍 시절엔 quote 노트도 함께 증발했다 — 유지 경로에선 flow 노트로 살아남아야 한다
     assert any(n.kind == "flow" and "미흡하면 다시 돌려요." in n.text for n in res.notes)
+
+
+def test_l6_self_edge_becomes_loop_branch() -> None:
+    """L6 self edge도 분기 판단 노드(a02r)를 세워 ◇→자기 루프백으로 — 진출 엣지는 ◇로 이설 (2026-09-02)."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2),
+        _edge(2, 2, condition="측정 불가 시", label="재선정", quote="안 맞으면 다시 골라요."),
+        _edge(2, 4, label="진행"),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    m = res.maps[0]
+    branch = next(n for n in m.nodes if n.code == "a02r")
+    assert branch.type == "decision"
+    assert branch.name == "표준기 선정 결과"
+    # 분기 노드는 원 노드 바로 뒤에 놓인다
+    codes = [n.code for n in m.nodes]
+    assert codes.index("a02r") == codes.index("a02") + 1
+    pairs = [(e.source, e.target, e.kind) for e in m.edges]
+    assert ("a02", "a02r", "seq") in pairs
+    assert ("a02r", "a02", "loop") in pairs
+    assert ("a02r", "a04", "seq") in pairs  # 기존 진출은 ◇로 이설 — 택일은 분기에서 갈라진다
+    assert ("a02", "a04", "seq") not in pairs
+    assert any("kept as loop" in i.message for i in res.issues)
+    assert any(n.kind == "flow" and "안 맞으면 다시 골라요." in n.text for n in res.notes)
+
+
+def test_l6_self_branch_edge_promotes_branch_node_not_source() -> None:
+    """self가 branch여도 원 노드는 process 유지 — 택일은 합성 분기 노드가 대신한다."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2),
+        _edge(2, 2, kind="branch", gateway="exclusive", label="재작업"),
+    ]
+    m = convert_interview(data).maps[0]
+    assert next(n for n in m.nodes if n.code == "a02").type == "process"
+    assert next(n for n in m.nodes if n.code == "a02r").type == "decision"
