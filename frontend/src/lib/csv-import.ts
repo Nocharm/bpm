@@ -711,6 +711,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   const baseLineStyles = new Map(
     (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
   );
+  // gateway도 line_style과 동일하게 (source→target) 쌍으로 이월 — 안 하면 재임포트마다 증발
+  const baseGateways = new Map(
+    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.gateway]),
+  );
   // 대응 쌍 없는 신규 엣지 — 머지(에디터 컨텍스트)는 맵의 새 엣지 기본값(일괄 변경 모달의
   // "새 연결선도 이 모양" 약속), 신규 맵 생성(base 없음)은 ""(다른 맵 기본값 유입 방지)
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
@@ -725,6 +729,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       source_handle: null,
       target_handle: null,
       line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
+      gateway: baseGateways.get(`${source}→${target}`) ?? null,
     });
   };
   const hasIncoming = new Set<string>();
@@ -974,6 +979,10 @@ export function buildGraphFromAiProposal(
   const baseLineStyles = new Map(
     (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
   );
+  // gateway도 line_style과 동일하게 (source→target) 쌍으로 이월 — 안 하면 재임포트마다 증발
+  const baseGateways = new Map(
+    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.gateway]),
+  );
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
   const edges: GraphEdge[] = proposal.edges
     .map((edge): GraphEdge | null => {
@@ -990,6 +999,7 @@ export function buildGraphFromAiProposal(
         source_handle: null,
         target_handle: null,
         line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
+        gateway: baseGateways.get(`${source}→${target}`) ?? null,
       };
     })
     .filter((edge): edge is GraphEdge => edge !== null);

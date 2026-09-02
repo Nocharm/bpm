@@ -1093,6 +1093,8 @@ class EdgeIn(BaseModel):
     source_handle: str | None = Field(default=None, max_length=200)
     target_handle: str | None = Field(default=None, max_length=200)
     line_style: LineStyle = ""
+    # 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 그 외는 자유 문자열
+    gateway: str | None = Field(default=None, max_length=20)
 
 
 class NodeOut(NodeIn):

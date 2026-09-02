@@ -408,6 +408,8 @@ class Edge(Base):
     # 엣지별 선 모양(React Flow type: default=곡선, smoothstep=꺾은선, straight=직선, ""=레거시 기본).
     # source_side와 동일하게 시각 전용 — diff 비교 제외
     line_style: Mapped[str] = mapped_column(String(20), default="")
+    # 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 그 외 값은 자유 문자열
+    gateway: Mapped[str | None] = mapped_column(String(20), default=None)
 
     version: Mapped[MapVersion] = relationship(back_populates="edges")
 

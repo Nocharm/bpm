@@ -192,6 +192,8 @@ export interface GraphEdge {
   target_handle: string | null;
   // ""=레거시 미지정(렌더는 꺾은선) — 백엔드 schemas.LineStyle과 동일 어휘
   line_style: EdgeLineStyle | "";
+  // 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 표시 UI 없음, 데이터 보존만
+  gateway?: string | null;
 }
 
 // 업무 묶음(보이는 그룹 박스) — 부서/담당자별, 노드와 같은 (version, parent) 스코프 (Phase 2)

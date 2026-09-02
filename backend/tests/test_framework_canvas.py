@@ -386,6 +386,30 @@ def test_confirm_snapshot_is_confirmed_without_version_number(client: TestClient
     assert any(e["event_type"] == "confirmed" for e in snap["events"])
 
 
+def test_edge_gateway_roundtrip_and_clone(client: TestClient, enforce: None) -> None:
+    """Edge.gateway가 graph PUT→GET 왕복·확정 clone에 보존된다 (spec §4 게이트 6 예외 재료)."""
+    map_id, draft_id = _make_canvas(client, "FWC-GW5", "게이트웨이왕복")
+    # _make_canvas는 L6 1개만 시드(노드 1개) — 엣지 구성에 노드 2개 필요, 2번째 L6 시드 후
+    # linkage-map 재호출(멱등 보강)로 노드를 append한다. l5 id는 카테고리 코드로 멱등 조회.
+    l5 = _seed_category(client, "FWC-GW5", "게이트웨이왕복")
+    _seed_l6_map(client, l5, "게이트웨이왕복업무2", "FWC-GW5M2")
+    client.post(f"/api/categories/{l5}/linkage-map")
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    edges = graph["edges"]
+    if not edges:
+        n = graph["nodes"]
+        edges = [{"id": "gwedge000000000000000000000000001", "source_node_id": n[0]["id"],
+                  "target_node_id": n[1]["id"], "label": "", "gateway": "parallel"}]
+    else:
+        edges = [dict(edges[0], gateway="parallel")] + edges[1:]
+    _put_graph(client, draft_id, graph["nodes"], edges)
+    got = client.get(f"/api/versions/{draft_id}/graph").json()["edges"]
+    assert any(e.get("gateway") == "parallel" for e in got)
+    ver = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False}).json()["version"]
+    snap = client.get(f"/api/versions/{ver['id']}/graph").json()["edges"]
+    assert any(e.get("gateway") == "parallel" for e in snap)
+
+
 def test_migrate_framework_confirmed_idempotent(client: TestClient, enforce: None) -> None:
     """구버전 published fw 스냅샷을 startup 훅이 confirmed로 이전, 재실행해도 무해 (spec 2026-09-02 §3)."""
     import asyncio

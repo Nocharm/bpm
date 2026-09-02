@@ -167,6 +167,7 @@ async def clone_graph(
                 source_handle=edge.source_handle,
                 target_handle=edge.target_handle,
                 line_style=edge.line_style,
+                gateway=edge.gateway,
             )
         )
 
