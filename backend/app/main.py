@@ -16,7 +16,7 @@ from app.db import SessionLocal, get_session, init_models
 from app.models import Employee, LoginRecord
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
-from app.permissions.access import can_view_dashboard_db
+from app.permissions.access import can_view_dashboard_db, get_admin_scope
 from app.permissions.logic import is_sysadmin
 from app.routers import (
     admin,
@@ -182,6 +182,8 @@ async def get_me(
                 for lid in sorted(leaders_by_code.get(code, [])):
                     if lid != login_id and lid not in manager_ids:
                         manager_ids.append(lid)
+    # 카테고리 관리자 seed 목록 — sysadmin은 전권이라 seed 개념이 없음(빈 배열, access.get_admin_scope)
+    _admin_ids, admin_seeds = await get_admin_scope(session, login_id)
     return MeOut(
         username=login_id,
         ai_enabled=await is_ai_access_enabled(session),  # env AND 관리자 차단 플래그
@@ -195,4 +197,5 @@ async def get_me(
         is_sysadmin=is_sysadmin(login_id),
         can_view_dashboard=await can_view_dashboard_db(session, login_id),
         manager_ids=manager_ids,
+        category_admin_root_ids=sorted(admin_seeds),
     )

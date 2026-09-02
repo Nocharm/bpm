@@ -1467,6 +1467,8 @@ class MeOut(BaseModel):
     can_view_dashboard: bool = False
     # 내 상위 부서장 체인(리프→루트, 본인 제외) — 피커 Manager 라벨·승인자 우선 정렬 (2026-07-09)
     manager_ids: list[str] = []
+    # 카테고리 권한자로 직접 지정된 seed 카테고리 id 목록 — 레벨 위임 UI 게이팅용 (Track C Task 1)
+    category_admin_root_ids: list[int] = []
 
 
 class EmployeeOut(BaseModel):

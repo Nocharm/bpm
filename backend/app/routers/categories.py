@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
-from app.permissions.access import get_user_active_group_ids, is_category_admin
+from app.permissions.access import get_admin_scope, get_user_active_group_ids, is_category_admin
 from app.schemas import (
     CategoryCreateIn,
     CategoryMapsOut,
@@ -237,39 +237,8 @@ async def _apply_card_metrics(session: AsyncSession, maps: list[ProcessMap]) -> 
 
 
 async def _admin_category_ids(session: AsyncSession, user: str) -> set[int]:
-    """호출자가 권한자인 카테고리 id 전체 — 직접 부여 + 그 서브트리(하향 상속). sysadmin은 전체."""
-    rows = (
-        await session.execute(select(ProcessCategory.id, ProcessCategory.parent_id))
-    ).all()
-    if logic.is_sysadmin(user):
-        return {cid for cid, _ in rows}
-    perm_rows = (
-        await session.execute(
-            select(CategoryPermission.category_id, CategoryPermission.principal_type,
-                   CategoryPermission.principal_id)
-        )
-    ).all()
-    if not perm_rows:
-        return set()
-    emp = await session.get(Employee, user)
-    emp_org_path = (
-        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
-    )
-    group_ids = await get_user_active_group_ids(session, user, emp_org_path)
-    seeds = {
-        cid for cid, ptype, pid in perm_rows
-        if (ptype == "user" and pid == user) or (ptype == "group" and pid in group_ids)
-    }
-    if not seeds:
-        return set()
-    children_by_parent: dict[int | None, list[int]] = {}
-    for cid, pid in rows:
-        children_by_parent.setdefault(pid, []).append(cid)
-    admin_ids = set(seeds)
-    frontier = [c for s in seeds for c in children_by_parent.get(s, [])]
-    while frontier:
-        admin_ids.update(frontier)
-        frontier = [c for f in frontier for c in children_by_parent.get(f, []) if c not in admin_ids]
+    """호출자가 권한자인 카테고리 id 전체 — get_admin_scope(access.py)의 얇은 래퍼(id만 필요)."""
+    admin_ids, _seeds = await get_admin_scope(session, user)
     return admin_ids
 
 
