@@ -911,7 +911,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         </div>
 
         {interviewResult && interviewView && (
-          // 드라이런 결과와 적용 바를 한 테두리 안에 — 결과 본문은 안쪽 패딩, 적용 바는 카드 푸터(스크롤 중 하단 고정)
+          // 드라이런 결과와 적용 바를 한 테두리 안에 — 결과 본문은 안쪽 패딩, 적용 바는 카드 푸터(고정 없이 맨 아래)
           // (사용자 요청 2026-09-03)
           <div className="rounded-md border border-hairline" data-id="interview-import-report">
           <div className="relative flex flex-col gap-2 p-3">
@@ -1078,8 +1078,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </div>
             <div
               data-id="interview-import-actions"
-              // z-[3] — 적용 완료 음영(z-2)보다 위: 스크롤 중 본문과 겹쳐도 Cancel은 눌린다
-              className="sticky bottom-0 z-[3] flex items-center gap-2 rounded-b-md border-t border-hairline bg-surface px-3 py-2"
+              // 카드 푸터(고정 아님) — 스크롤 중 본문이 바 뒤로 넘어가지 않게, 끝까지 내려서 누른다 (사용자 피드백 2026-09-03)
+              className="flex items-center gap-2 rounded-b-md border-t border-hairline bg-surface px-3 py-2"
             >
               {interviewResult.applied ? (
                 <span

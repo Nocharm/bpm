@@ -120,14 +120,17 @@ try {
   check("apply bar counts the checked change", checkedBefore >= 0 && checkedAfter === checkedBefore + 1, barText.trim());
   // 드라이런 결과와 적용 바가 한 테두리 카드 안 (사용자 요청 2026-09-03)
   const barInsideCard = await page.locator('[data-id="interview-import-report"] [data-id="interview-import-actions"]').count();
-  check("apply bar sits inside the bordered report card", barInsideCard === 1);
+  const barPosition = await page.locator('[data-id="interview-import-actions"]').evaluate((el) => getComputedStyle(el).position);
+  check("apply bar sits inside the bordered report card, not floating", barInsideCard === 1 && barPosition === "static", barPosition);
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-checked.png") });
   await page.locator('[data-id="interview-import-apply"]').click();
   await page.waitForSelector(`[data-id="import-governance-result-${govCode}-owner"]`, { timeout: 20000 });
   const appliedText = (await page.locator(`[data-id="import-governance-result-${govCode}-owner"]`).textContent()) ?? "";
   check("checked owner decision applied", appliedText.includes("Applied"), appliedText.trim());
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-applied.png") });
-  // 적용 완료 음영 — 본문을 덮고 Apply는 비활성, 푸터(Cancel)는 음영 위라 눌린다 (사용자 요청 2026-09-03)
+  // 적용 완료 음영 — 본문을 덮고 Apply는 비활성, 푸터(Cancel)는 음영 밖이라 눌린다. 푸터는 고정이 아니라
+  // 끝까지 내려야 보인다 (사용자 요청 2026-09-03)
+  await page.locator('[data-id="interview-import-actions"]').scrollIntoViewIfNeeded();
   const appliedState = await page.evaluate(() => {
     const overlay = document.querySelector('[data-id="interview-import-applied-overlay"]');
     const apply = document.querySelector('[data-id="interview-import-apply"]');
