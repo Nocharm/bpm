@@ -313,10 +313,62 @@ button:not(:disabled):active {
 .summary-card-in {
   animation: summary-card-in 260ms var(--ease-spring);
 }
+/* 선후행 독의 장면 이동 — 전환 중 양쪽 독이 진행 방향으로 빠지고(exit), 전환 뒤 새 카드가 반대편에서 들어온다(enter).
+   후행으로 가면 왼쪽으로 빠지고 오른쪽에서 들어온다 (사용자 요청 2026-09-03). */
+@keyframes dock-exit-left {
+  to {
+    translate: -32px 0;
+    opacity: 0;
+  }
+}
+@keyframes dock-exit-right {
+  to {
+    translate: 32px 0;
+    opacity: 0;
+  }
+}
+.dock-exit-left {
+  animation: dock-exit-left 380ms var(--ease-spring) forwards;
+  pointer-events: none;
+}
+.dock-exit-right {
+  animation: dock-exit-right 380ms var(--ease-spring) forwards;
+  pointer-events: none;
+}
+@keyframes dock-enter-from-right {
+  from {
+    translate: 32px 0;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+@keyframes dock-enter-from-left {
+  from {
+    translate: -32px 0;
+    opacity: 0;
+  }
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+.dock-enter-from-right {
+  animation: dock-enter-from-right 380ms var(--ease-spring) both;
+}
+.dock-enter-from-left {
+  animation: dock-enter-from-left 380ms var(--ease-spring) both;
+}
 @media (prefers-reduced-motion: reduce) {
   .summary-swap-out,
   .summary-swap-in,
-  .summary-card-in {
+  .summary-card-in,
+  .dock-exit-left,
+  .dock-exit-right,
+  .dock-enter-from-right,
+  .dock-enter-from-left {
     animation: none;
   }
 }

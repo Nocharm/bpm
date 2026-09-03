@@ -17,11 +17,16 @@ interface DataFormPickerProps {
   dataId: string;
   // 확정 콜백 — 선택/추가는 값, 필 ×는 "" (부모가 행 폼을 갱신·커밋)
   onCommit: (next: string) => void;
+  // 열 모드 — IO 행의 '형식' 열(고정 폭)로 놓일 때: 필은 고정 폭, 미지정도 점선 자리표시 필이 항상 보인다
+  // (사용자 요청 2026-09-03: 인덱스/형식/라벨 열 할당)
+  column?: boolean;
 }
 
 const DROPDOWN_WIDTH = 224;
+// 열 모드 필 폭 — 행마다 같은 자리에 정렬 (MultiValueInput의 정적 FormPill과 동기)
+export const DATA_FORM_COLUMN_WIDTH = "w-[5.5rem]";
 
-export function DataFormPicker({ value, dataId, onCommit }: DataFormPickerProps) {
+export function DataFormPicker({ value, dataId, onCommit, column = false }: DataFormPickerProps) {
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
@@ -165,7 +170,9 @@ export function DataFormPicker({ value, dataId, onCommit }: DataFormPickerProps)
       // 입력 완료 상태 — 필 형식 비활성 표시(카탈로그 항목은 아이콘 동반), 클릭=재편집·×=제거
       <span
         data-id={`${dataId}-pill`}
-        className="inline-flex max-w-[8rem] shrink-0 items-center gap-1 rounded-full border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary"
+        className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary ${
+          column ? DATA_FORM_COLUMN_WIDTH : "max-w-[8rem]"
+        }`}
       >
         <button
           type="button"
@@ -189,6 +196,22 @@ export function DataFormPicker({ value, dataId, onCommit }: DataFormPickerProps)
     );
   }
 
+  if (column) {
+    return (
+      // 미지정(열 모드) — 점선 자리표시 필이 항상 보여 열이 흔들리지 않는다
+      <button
+        type="button"
+        data-id={`${dataId}-open`}
+        aria-label={t("dataForm.set")}
+        title={t("dataForm.set")}
+        className={`inline-flex ${DATA_FORM_COLUMN_WIDTH} shrink-0 items-center justify-center gap-1 rounded-full border border-dashed border-hairline px-1.5 py-0.5 text-fine text-ink-muted transition-colors hover:border-accent hover:text-accent`}
+        onClick={(e) => openEditor(e.currentTarget)}
+      >
+        <FileType size={11} strokeWidth={1.5} className="shrink-0" />
+        <span className="min-w-0 truncate">{t("detail.formPlaceholder")}</span>
+      </button>
+    );
+  }
   return (
     // 미지정 — 행 호버/포커스 시에만 나타나는 지정 아이콘 버튼 (사용자 결정 2026-08-20)
     <button

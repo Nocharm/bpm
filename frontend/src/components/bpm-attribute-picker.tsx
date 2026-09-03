@@ -8,12 +8,14 @@ import { Building2, Users } from "lucide-react";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { AssigneePills } from "@/components/assignee-pills";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeptPill } from "@/components/dept-pill";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { SearchSelect } from "@/components/search-select";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import { sortDepartmentsByOrgProximity, sortUsersByOrgProximity } from "@/lib/org-proximity";
 
@@ -25,10 +27,10 @@ interface BpmAttributePickerProps {
   onChange: (patch: { assignee?: string; department?: string }) => void;
 }
 
-// 행간 구분선 없음 — 어트리뷰트 섹션은 URL 위에만 스페이서 (사용자 결정 2026-08-20)
-const ROW = "flex items-center justify-between gap-2 py-1";
-// 행머리 아이콘+라벨 — 수행 지표·입출력 카드와 같은 문법 (사용자 요청 2026-09-03)
-const LABEL = "inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary";
+// 행간 구분선 없음 — 어트리뷰트 섹션은 URL 위에만 스페이서 (사용자 결정 2026-08-20). 행 높이·라벨 문법은
+// 인스펙터 공통(lib/inspector-row) — 수행 지표·입출력 카드·SP 상속 행과 같다 (사용자 요청 2026-09-03)
+const ROW = INSPECTOR_ROW;
+const LABEL = INSPECTOR_ROW_LABEL;
 
 export function BpmAttributePicker({
   versionId,
@@ -105,9 +107,12 @@ export function BpmAttributePicker({
           {t("field.department")}
         </span>
         {readOnly ? (
-          <span className="min-w-0 flex-1 truncate text-right text-caption text-ink">
-            {department || t("summary.none")}
-          </span>
+          // 읽기 전용 — 말단 부서 필(클릭=조직 정보 모달), 편집 모달 타일·SP 상속 행과 같은 표기
+          department ? (
+            <DeptPill department={department} dataId="inspector-department-pill" />
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-right text-caption text-ink">{t("summary.none")}</span>
+          )
         ) : (
           // 우측 정렬 — 내용폭(fitContent)이라 라벨 옆에 붙지 않고 우측에, 좁으면 줄어듦(삐져나감 방지).
           <SearchSelect
@@ -122,7 +127,7 @@ export function BpmAttributePicker({
       </div>
 
       {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커). 읽기전용은 칩만. */}
-      <div className="flex items-start gap-2 py-1">
+      <div className="flex min-h-8 items-start gap-2 py-1">
         <span className={`${LABEL} mt-1`}>
           <Users size={12} strokeWidth={1.5} className="text-ink-muted" />
           {t("field.assignee")}

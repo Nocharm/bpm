@@ -270,7 +270,10 @@ export function SearchSelect({
           data-id="search-select-trigger"
           className={`flex ${
             fitContent ? "w-auto min-w-0 max-w-[176px]" : "w-full"
-          } items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink hover:bg-surface-alt`}
+          } items-center justify-between gap-1 rounded-sm border border-hairline bg-surface px-2 text-caption text-ink hover:bg-surface-alt ${
+            // 라벨 옆 우측 정렬 트리거(인스펙터 행)는 입력 박스와 같은 24px 높이 (사용자 요청 2026-09-03)
+            fitContent ? "py-0.5" : "py-1"
+          }`}
           onClick={() => {
             if (open) closeMenu();
             else setOpen(true);

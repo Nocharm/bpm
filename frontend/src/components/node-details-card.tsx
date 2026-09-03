@@ -3,11 +3,12 @@
 // SP 노드는 링크 맵 sp_* 값을 read-only 상속 렌더 — 저장 대상이 아니라 Save 버튼 없음.
 "use client";
 
-import { ChevronRight, Link2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { MultiValueInput } from "@/components/multi-value-input";
 import {
   DETAIL_FIELD_ICONS,
   NodeDetailsFields,
@@ -15,6 +16,7 @@ import {
 } from "@/components/node-details-fields";
 import { clampToViewport } from "@/lib/clamp-viewport";
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 import { setIoLine, type IoSide } from "@/lib/io-items";
 import { readDetailsCollapsed, writeDetailsCollapsed } from "@/lib/params";
 
@@ -32,15 +34,6 @@ const UNLINK_POPOVER_HEIGHT = 96;
 const COUNT_FIELDS: readonly DetailField[] = [
   "input", "output", "start_condition", "end_condition",
 ];
-
-// SP 상속 표시용 — IO 원문과 항목별 폼(줄 1:1 정렬)을 행 목록으로 결합
-function splitWithForms(value: string | null | undefined, forms: string | null | undefined) {
-  const formLines = (forms ?? "").split("\n");
-  return (value ?? "")
-    .split("\n")
-    .map((v, i) => ({ text: v.trim(), form: (formLines[i] ?? "").trim() }))
-    .filter((r) => r.text !== "");
-}
 
 // IO 연결 배선 — page.tsx가 그래프 전체를 아는 동작(불러오기·네비게이션·하이라이트)을 주입한다.
 // 해제만은 카드가 자체 처리 — draft 수준이라 Save 전 취소가 가능해야 하기 때문 (io-linking §4-3)
@@ -166,73 +159,37 @@ export function NodeDetailsCard({
         <div className="ml-2 border-l border-divider pl-2">
           {isSubprocess ? (
             <>
-              {/* 링크 맵 라이브 참조 — sp가 소스(지정 어트리뷰트 카드와 동일 규약).
-                  IO는 항목별 데이터 폼을 " · form" 접미로 함께 상속 표시 */}
+              {/* 링크 맵 라이브 참조 — sp가 소스(지정 어트리뷰트 카드와 동일 규약). 일반 노드와 같은 읽기 목록
+                  (인덱스/형식/라벨 열, 미러가 있는 SP 원본 행은 링크 아이콘 + 호버 하이라이트 + 클릭 드롭다운, io-linking §1-7).
+                  행 문법·스페이서는 일반 노드와 동일 (사용자 요청 2026-09-03) */}
               {([
-                ["input", "field.input", splitWithForms(sp?.input, sp?.input_forms), DETAIL_FIELD_ICONS.input,
-                  io?.spLinkedInputIndexes],
-                ["output", "field.output", splitWithForms(sp?.output, sp?.output_forms), DETAIL_FIELD_ICONS.output,
-                  io?.spLinkedOutputIndexes],
-              ] as const).map(([id, labelKey, items, RowIcon, linkedIndexes]) => (
-                <div
+                ["input", "field.input", sp?.input, sp?.input_forms, DETAIL_FIELD_ICONS.input, io?.spLinkedInputIndexes],
+                ["output", "field.output", sp?.output, sp?.output_forms, DETAIL_FIELD_ICONS.output, io?.spLinkedOutputIndexes],
+              ] as const).map(([id, labelKey, value, forms, RowIcon, linkedIndexes]) => (
+                <MultiValueInput
                   key={id}
-                  data-id={`inspector-detail-${id}`}
-                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
-                >
-                  <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-                    <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                    {t(labelKey)}
-                  </span>
-                  <span className="min-w-0 text-right text-caption text-ink">
-                    {items.length === 0
-                      ? "-"
-                      : items.map((r, i) => {
-                          // SP 항목은 영구 원본 — 이 맵에 미러가 있으면 링크 아이콘 + 호버 하이라이트만 (io-linking §1-7)
-                          const linked = linkedIndexes?.has(i) ?? false;
-                          return (
-                            <span
-                              key={i}
-                              // SP 원본 행 클릭 → 소비(미러) 노드 드롭다운(#2)
-                              className={`block ${linked && io?.onPeersMenu ? "cursor-pointer rounded-sm hover:bg-surface-alt" : ""}`}
-                              onMouseEnter={linked ? () => io?.onHoverItem(id, i) : undefined}
-                              onMouseLeave={linked ? () => io?.onHoverItem(id, null) : undefined}
-                              onClick={
-                                linked && io?.onPeersMenu
-                                  ? (e) => io.onPeersMenu?.(id, i, { x: e.clientX, y: e.clientY })
-                                  : undefined
-                              }
-                            >
-                              {linked && (
-                                <Link2 size={12} strokeWidth={1.5} className="mr-0.5 inline text-accent" />
-                              )}
-                              <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
-                              {r.text}
-                              {/* 데이터 양식은 필 형식(#12 — MVI 읽기 행과 통일) */}
-                              {r.form !== "" && (
-                                <span className="ml-1 inline-block rounded-full border border-hairline bg-surface-alt px-1.5 py-0 align-middle text-[10px] leading-4 text-ink-secondary">
-                                  {r.form}
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                  </span>
-                </div>
+                  dataId={`inspector-detail-${id}`}
+                  label={t(labelKey)}
+                  icon={RowIcon}
+                  value={value ?? ""}
+                  formsValue={forms ?? ""}
+                  originGroupIndexes={linkedIndexes}
+                  onHoverLinked={(_, index) => io?.onHoverItem(id, index)}
+                  onPeersMenu={io?.onPeersMenu ? (index, at) => io.onPeersMenu?.(id, index, at) : undefined}
+                  readOnly
+                  onCommit={() => {}}
+                />
               ))}
               {([
                 ["start-condition", "field.startCondition", sp?.start_condition, DETAIL_FIELD_ICONS.start_condition],
                 ["end-condition", "field.endCondition", sp?.end_condition, DETAIL_FIELD_ICONS.end_condition],
               ] as const).map(([id, labelKey, value, RowIcon]) => (
-                <div
-                  key={id}
-                  data-id={`inspector-detail-${id}`}
-                  className="flex items-start justify-between gap-2 border-t border-divider py-1"
-                >
-                  <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                <div key={id} data-id={`inspector-detail-${id}`} className={INSPECTOR_ROW}>
+                  <span className={INSPECTOR_ROW_LABEL}>
                     <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
                     {t(labelKey)}
                   </span>
-                  <span className="min-w-0 whitespace-pre-wrap text-right text-caption text-ink">
+                  <span className="min-w-0 truncate text-right text-caption text-ink" title={value || undefined}>
                     {value || "-"}
                   </span>
                 </div>

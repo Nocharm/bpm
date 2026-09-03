@@ -9,8 +9,46 @@
 import { Link2, Link2Off, Plus, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 
-import { DataFormPicker } from "@/components/data-form-picker";
+import { DATA_FORM_COLUMN_WIDTH, DataFormPicker } from "@/components/data-form-picker";
+import { resolveDataForm } from "@/lib/data-forms";
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
+
+// 정적 형식 필(읽기 전용·미러 행) — 카탈로그 항목은 아이콘 동반, 미지정은 점선 "-" 자리표시. 열 폭은 피커와 동기
+function FormPill({ value }: { value: string }) {
+  if (value === "") {
+    return (
+      <span className={`inline-flex ${DATA_FORM_COLUMN_WIDTH} shrink-0 items-center justify-center rounded-full border border-dashed border-hairline px-1.5 py-0.5 text-fine text-ink-muted`}>
+        -
+      </span>
+    );
+  }
+  const matched = resolveDataForm(value);
+  const Icon = matched?.icon;
+  return (
+    <span
+      title={value}
+      className={`inline-flex ${DATA_FORM_COLUMN_WIDTH} shrink-0 items-center gap-1 rounded-full border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary`}
+    >
+      {Icon && <Icon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />}
+      <span className="min-w-0 truncate">{matched?.value ?? value}</span>
+    </span>
+  );
+}
+
+// 필수/선택 플래그 필 — R/O 이니셜(#15 관례)
+function FlagPill({ optional, title }: { optional: boolean; title: string }) {
+  return (
+    <span
+      title={title}
+      className={`inline-block shrink-0 rounded-full border px-1 py-0 align-middle text-[10px] leading-4 ${
+        optional ? "border-hairline text-ink-tertiary" : "border-transparent bg-accent-tint text-accent"
+      }`}
+    >
+      {optional ? "O" : "R"}
+    </span>
+  );
+}
 
 // 헤드리스 호출부(플라이아웃)가 바깥 버튼으로 행을 추가하는 핸들 (사용자 요청 2026-09-03)
 export interface MultiValueInputHandle {
@@ -222,71 +260,61 @@ export function MultiValueInput({
   }, [menuOpen]);
 
   if (readOnly) {
+    // 읽기 전용 — 편집과 같은 열 배치(인덱스/형식/라벨+플래그, 말줄임). 헤드리스(타일 팝오버)는 헤더 없이 행만
     const items = splitRows(value, formsValue, idsValue, linksValue, flagsValue);
     return (
-      <div className="flex items-start justify-between gap-2 py-1" data-id={dataId}>
-        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-          {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
-          {label}
-        </span>
-        <span className="min-w-0 text-right text-caption text-ink">
-          {items.length === 0
-            ? "-"
-            : items.map((r, i) => {
-                const linked = r.link !== "" || (originGroupIndexes?.has(i) ?? false);
-                return (
-                  <span
-                    key={i}
-                    // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2 — 호버 하이라이트와 병행)
-                    className={`block ${linked && onPeersMenu ? "cursor-pointer rounded-sm hover:bg-surface-alt" : ""}`}
-                    onMouseEnter={linked ? () => onHoverLinked?.("row", i) : undefined}
-                    onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
-                    onClick={
-                      linked && onPeersMenu
-                        ? (e) => onPeersMenu(i, { x: e.clientX, y: e.clientY })
-                        : undefined
-                    }
-                  >
-                    {linked && <Link2 size={12} strokeWidth={1.5} className="mr-0.5 inline text-accent" />}
-                    {warnRowIndexes?.has(i) && (
-                      <span title={t("io.brokenFlow")} className="mr-0.5 inline-flex align-middle text-error">
-                        <TriangleAlert size={12} strokeWidth={1.5} />
-                      </span>
-                    )}
-                    {/* 항목 번호 — 회색톤 (사용자 결정 2026-08-20) */}
-                    <span className="text-fine tabular-nums text-ink-muted">{i + 1}. </span>
-                    {r.text}
-                    {/* 데이터 양식·필수여부는 필 형식(#12) — 플래그는 R/O 이니셜(#15 관례 공유) */}
-                    {r.form !== "" && (
-                      <span className="ml-1 inline-block rounded-full border border-hairline bg-surface-alt px-1.5 py-0 align-middle text-[10px] leading-4 text-ink-secondary">
-                        {r.form}
-                      </span>
-                    )}
-                    {flagsValue !== undefined && (
-                      <span
-                        title={r.flag === "optional" ? t("io.flagOptional") : t("io.flagRequired")}
-                        className={`ml-1 inline-block rounded-full border px-1 py-0 align-middle text-[10px] leading-4 ${
-                          r.flag === "optional"
-                            ? "border-hairline text-ink-tertiary"
-                            : "border-transparent bg-accent-tint text-accent"
-                        }`}
-                      >
-                        {r.flag === "optional" ? "O" : "R"}
-                      </span>
-                    )}
-                  </span>
-                );
-              })}
-        </span>
+      <div className={headless ? "" : "py-0.5"} data-id={dataId}>
+        {!headless && (
+          <div className={INSPECTOR_ROW}>
+            <span className={INSPECTOR_ROW_LABEL}>
+              {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
+              {label}
+            </span>
+            {items.length === 0 && <span className="text-caption text-ink-tertiary">-</span>}
+          </div>
+        )}
+        {items.map((r, i) => {
+          const linked = r.link !== "" || (originGroupIndexes?.has(i) ?? false);
+          return (
+            <div
+              key={i}
+              data-id={`${dataId}-item-${i}`}
+              // 읽기전용 링크 항목 클릭 → 연결 노드 드롭다운(#2 — 호버 하이라이트와 병행)
+              className={`flex min-h-7 items-center gap-1.5 rounded-sm ${
+                linked && onPeersMenu ? "cursor-pointer hover:bg-surface-alt" : ""
+              }`}
+              onMouseEnter={linked ? () => onHoverLinked?.("row", i) : undefined}
+              onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
+              onClick={linked && onPeersMenu ? (e) => onPeersMenu(i, { x: e.clientX, y: e.clientY }) : undefined}
+            >
+              {/* 인덱스 열 — 링크 항목은 번호 대신 링크 아이콘 (회색톤, 사용자 결정 2026-08-20) */}
+              <span className="inline-flex w-5 shrink-0 items-center justify-end text-fine tabular-nums text-ink-muted">
+                {linked ? <Link2 size={12} strokeWidth={1.5} className="text-accent" /> : `${i + 1}.`}
+              </span>
+              {withForms && <FormPill value={r.form} />}
+              <span className="min-w-0 truncate text-caption text-ink" title={r.text}>
+                {r.text}
+              </span>
+              {flagsValue !== undefined && (
+                <FlagPill optional={r.flag === "optional"} title={r.flag === "optional" ? t("io.flagOptional") : t("io.flagRequired")} />
+              )}
+              {warnRowIndexes?.has(i) && (
+                <span title={t("io.brokenFlow")} className="inline-flex shrink-0 items-center text-error">
+                  <TriangleAlert size={12} strokeWidth={1.5} />
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }
 
   return (
-    <div className="group/iosec py-1" data-id={dataId}>
+    <div className="group/iosec py-0.5" data-id={dataId}>
       {!headless && (
-      <div className="flex items-center justify-between gap-2">
-        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+      <div className={INSPECTOR_ROW}>
+        <span className={INSPECTOR_ROW_LABEL}>
           {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
           {label}
         </span>
@@ -352,15 +380,16 @@ export function MultiValueInput({
         return (
           // 항목은 위치 기반 편집 — 값 key는 중복 항목에서 충돌하므로 인덱스 사용(항목 재정렬 없음).
           // group/mvrow — 폼 미지정 행의 지정 아이콘(DataFormPicker)·미러 행의 Unlink 스왑이 행 호버에 반응
+          // 열 배치: 인덱스(w-5) / 형식 필(고정 폭) / 라벨 입력(말줄임) + 인박스 플래그·삭제 (사용자 요청 2026-09-03)
           <div
             key={i}
-            className="group/mvrow mt-0.5 flex items-center gap-1"
+            className="group/mvrow flex min-h-7 items-center gap-1.5"
             onMouseEnter={linked ? () => onHoverLinked?.("row", i) : undefined}
             onMouseLeave={linked ? () => onHoverLinked?.("row", null) : undefined}
           >
             {isMirror && onUnlink === undefined ? (
               // 해제 핸들러가 없는 표면(노드 편집 모달 등) — 죽은 어포던스 대신 정적 Link2만
-              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent">
+              <span className="inline-flex w-5 shrink-0 items-center justify-end text-accent">
                 <Link2 size={12} strokeWidth={1.5} />
               </span>
             ) : isMirror ? (
@@ -370,7 +399,7 @@ export function MultiValueInput({
                 data-id={`${dataId}-link-${i}`}
                 title={t("io.unlinkTooltip")}
                 aria-label={t("io.unlinkTooltip")}
-                className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent hover:text-error"
+                className="relative inline-flex h-4 w-5 shrink-0 items-center justify-end text-accent hover:text-error"
                 onClick={(e) => onUnlink?.(i, { x: e.clientX, y: e.clientY })}
               >
                 <Link2
@@ -386,12 +415,12 @@ export function MultiValueInput({
               </button>
             ) : isOrigin ? (
               // 원본 행(미러 1개 이상 보유) — 번호 배지 대신 비버튼 Link2, 편집은 평소대로 가능
-              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-accent">
+              <span className="inline-flex w-5 shrink-0 items-center justify-end text-accent">
                 <Link2 size={12} strokeWidth={1.5} />
               </span>
             ) : (
               // 항목 번호 — 회색톤 (사용자 결정 2026-08-20)
-              <span className="w-4 shrink-0 text-right text-fine tabular-nums text-ink-muted">{i + 1}.</span>
+              <span className="w-5 shrink-0 text-right text-fine tabular-nums text-ink-muted">{i + 1}.</span>
             )}
             {isMirror && warnRowIndexes?.has(i) && (
               // 끊긴 흐름 경고 — 원본→소비 경로 부재(인풋 미러 한정). 표시 전용, 링크·전파 불변
@@ -399,14 +428,26 @@ export function MultiValueInput({
                 <TriangleAlert size={12} strokeWidth={1.5} />
               </span>
             )}
-            {/* 입력 박스 + 인박스 컨트롤(#15) — 태그·형식·삭제는 행 호버/선택 시에만 우측 오버레이로 */}
+            {/* 형식 열 — 미러는 원본에서만 수정(정적 필), 그 외는 열 모드 피커(미지정도 점선 자리표시) */}
+            {withForms &&
+              (isMirror ? (
+                <FormPill value={row.form} />
+              ) : (
+                <DataFormPicker
+                  column
+                  dataId={`${dataId}-form-${i}`}
+                  value={row.form}
+                  onCommit={(next) => commit(rows.map((v, j) => (j === i ? { ...v, form: next } : v)))}
+                />
+              ))}
+            {/* 라벨 입력 + 인박스 컨트롤(#15) — 플래그·삭제는 행 호버/선택 시에만 우측 오버레이로 */}
             <div className={`relative min-w-0 flex-1 rounded-sm ${activeRow === i ? "ring-1 ring-accent" : ""}`}>
               <input
                 data-id={`${dataId}-row-${i}`}
                 readOnly={isMirror}
-                title={isMirror ? t("io.linkedTooltip") : undefined}
+                title={isMirror ? t("io.linkedTooltip") : row.text || undefined}
                 // 미러 텍스트는 원본으로 이동하는 더블클릭 대상 — 네비 핸들러가 없는 표면에선 포인터 커서도 빼 오해 방지
-                className={`w-full rounded-sm border border-transparent px-1.5 py-0.5 text-caption focus:outline-none ${
+                className={`w-full truncate rounded-sm border border-transparent px-1.5 py-0.5 text-caption focus:outline-none ${
                   isMirror
                     ? `bg-surface-pearl text-ink-secondary ${onNavigateLinked ? "cursor-pointer" : ""}`
                     : "bg-surface-alt text-ink focus:border-accent"
@@ -463,17 +504,6 @@ export function MultiValueInput({
                     </span>
                   </button>
                 )}
-                {withForms &&
-                  (isMirror ? (
-                    // 미러는 폼 편집 불가 — 정적 텍스트로만 표시(원본에서만 수정)
-                    <span className="max-w-20 shrink-0 truncate text-fine text-ink-tertiary">{row.form}</span>
-                  ) : (
-                    <DataFormPicker
-                      dataId={`${dataId}-form-${i}`}
-                      value={row.form}
-                      onCommit={(next) => commit(rows.map((v, j) => (j === i ? { ...v, form: next } : v)))}
-                    />
-                  ))}
                 <button
                   type="button"
                   data-id={`${dataId}-remove-${i}`}
@@ -489,7 +519,7 @@ export function MultiValueInput({
         );
       })}
       {rows.length === 0 && !headless && (
-        <div className="mt-0.5 text-right text-caption text-ink-tertiary">-</div>
+        <div className="text-right text-caption text-ink-tertiary">-</div>
       )}
     </div>
   );

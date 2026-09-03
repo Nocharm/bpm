@@ -11,6 +11,7 @@ import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { Tooltip } from "@/components/tooltip";
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW } from "@/lib/inspector-row";
 import {
   formatParamValue,
   PARAM_FIELDS,
@@ -160,7 +161,7 @@ export function NodeMetricsCard({
             const reference = isSubprocess ? (referenceValues?.[field] ?? "") : "";
             return (
               // 라벨 뒤에 참고치·원문 메모, 입력은 맨 우측 동일 폭 — SP 노드 행도 다른 행과 같은 정렬 (사용자 요청 2026-09-03)
-              <div key={key} className="group flex items-center justify-between gap-2 py-1">
+              <div key={key} className={`${INSPECTOR_ROW} group`}>
                 {/* 라벨이 먼저 줄어든다(truncate) — 입력은 고정 폭이라 행마다 같은 폭으로 우측 정렬 */}
                 <span
                   className="inline-flex min-w-0 items-center gap-1 text-caption text-ink-secondary"

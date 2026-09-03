@@ -8,6 +8,7 @@ import { Link as LinkIcon, X } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 
 const PILL_CLASS =
   "flex min-w-0 max-w-full items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink";
@@ -49,9 +50,9 @@ export function UrlLabelField({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
+      <div className={`${INSPECTOR_ROW} border-t border-divider`}>
         {/* 행머리 아이콘+라벨 — 인스펙터 다른 카드 행과 같은 문법 (사용자 요청 2026-09-03) */}
-        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+        <span className={INSPECTOR_ROW_LABEL}>
           <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
           {t("field.url")}
         </span>

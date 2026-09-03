@@ -159,12 +159,17 @@ function DockCardBody({ node, typeLabelOf }: { node: NavNodeRef; typeLabelOf: (n
 // 호버 시 레이아웃으로 커진다(폭 +12px를 모달 쪽으로, 세로 패딩 +4px) — scale 변환은 래스터가 미세하게
 // 뒤틀려 보여 폐기(사용자 피드백 2026-09-03). 커진 높이만큼 위아래 카드가 자연히 벌어지고, 스크롤 상자
 // 안쪽 여백 덕에 경계에 잘리지 않는다. 클릭=그 노드로 전환(애니메이션).
+// 선후행 전환의 장면 이동 — 후행으로 가면 장면 전체가 왼쪽으로(양쪽 독이 왼쪽으로 빠지고 새 카드는 오른쪽에서
+// 들어옴), 선행으로 가면 반대 (사용자 요청 2026-09-03). exit는 전환 중, enter는 전환 뒤 새로 마운트되는 카드에.
+type DockMotion = "exit-left" | "exit-right" | "enter-from-left" | "enter-from-right" | null;
+
 function NavDock({
   side,
   title,
   nodes,
   typeLabelOf,
   hiddenId,
+  motion,
   onPick,
 }: {
   side: "left" | "right";
@@ -173,17 +178,22 @@ function NavDock({
   typeLabelOf: (nodeType: string) => string;
   // 전환 중 고스트가 대신 그리는 카드 — 원본은 숨긴다
   hiddenId: string | null;
+  motion: DockMotion;
   onPick: (node: NavNodeRef, rect: DOMRect) => void;
 }) {
   if (nodes.length === 0) return null;
   const Chevron = side === "left" ? ChevronLeft : ChevronRight;
+  const exitClass = motion === "exit-left" ? "dock-exit-left" : motion === "exit-right" ? "dock-exit-right" : "";
+  const enterClass =
+    motion === "enter-from-right" ? "dock-enter-from-right" : motion === "enter-from-left" ? "dock-enter-from-left" : "animate-item-in";
   return (
     <div
       data-id={`summary-dock-${side === "left" ? "prev" : "next"}`}
+      data-motion={motion ?? "none"}
       // 폭은 백드롭 반폭 − 모달 반폭(256) − 가장자리 16 − 간격 8 을 넘지 않게 — 좁은 캔버스에서도 모달과 안 겹친다
       className={`absolute top-1/2 flex max-h-[72%] w-[min(12.5rem,calc(50%-17.5rem))] -translate-y-1/2 flex-col gap-1 ${
         side === "left" ? "left-4" : "right-4"
-      }`}
+      } ${exitClass}`}
     >
       <div className={`flex items-center gap-1 px-1 text-fine text-ink-tertiary ${side === "right" ? "justify-end" : ""}`}>
         {side === "left" && <Chevron size={12} strokeWidth={1.5} />}
@@ -203,7 +213,7 @@ function NavDock({
             onClick={(e) => onPick(node, e.currentTarget.getBoundingClientRect())}
             // 호버: 폭 +12px(모달 쪽으로만 — 오른쪽 독은 왼쪽 마진을 당긴다) + 세로 패딩 +4px + 액센트 보더·그림자.
             // 전부 레이아웃 속성 트랜지션(transform 없음)이라 글자·보더가 흐려지지 않는다
-            className={`animate-item-in relative flex w-full shrink-0 items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[width,margin,padding,box-shadow,border-color] duration-350 ease-spring hover:z-10 hover:w-[calc(100%+0.75rem)] hover:py-3 hover:border-accent-tint-border hover:shadow-lg ${
+            className={`${enterClass} relative flex w-full shrink-0 items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[width,margin,padding,box-shadow,border-color] duration-350 ease-spring hover:z-10 hover:w-[calc(100%+0.75rem)] hover:py-3 hover:border-accent-tint-border hover:shadow-lg ${
               side === "left" ? "" : "hover:-ml-3"
             }`}
           >
@@ -581,6 +591,8 @@ export function NodeSummaryModal({
   // IO 플라이아웃 편집기 리마운트 키 — 바깥(불러오기 등)에서 IO가 바뀌면 행 버퍼를 새 값으로 다시 만든다
   const [ioSync, setIoSync] = useState(0);
   const [swap, setSwap] = useState<SwapState | null>(null);
+  // 마지막 전환 방향 — 전환 뒤 새 독 카드가 들어오는 방향(후행=오른쪽에서, 선행=왼쪽에서)
+  const [travel, setTravel] = useState<"next" | "prev" | null>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   if (nodeId !== prevNodeId) {
     // 노드가 바뀌면(선후행 전환 등) 폼을 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님)
@@ -634,6 +646,7 @@ export function NodeSummaryModal({
       onNavigate(node.id);
       return;
     }
+    setTravel(side === "right" ? "next" : "prev");
     const c = card.getBoundingClientRect();
     const b = backdrop.getBoundingClientRect();
     const dockWidth = Math.min(DOCK_MAX_WIDTH, b.width / 2 - DOCK_INSET);
@@ -1548,23 +1561,35 @@ export function NodeSummaryModal({
           )}
         </div>
       </div>
-      {/* 선행/후행 사이드 독 — 모달 카드 밖, 백드롭 좌우(백드롭은 자기 자신을 눌렀을 때만 닫힌다) */}
-      <NavDock
-        side="left"
-        title={t("summary.prev")}
-        nodes={predecessors}
-        typeLabelOf={typeLabelOf}
-        hiddenId={swap?.node.id ?? null}
-        onPick={(node, rect) => startSwap(node, "left", rect)}
-      />
-      <NavDock
-        side="right"
-        title={t("summary.next")}
-        nodes={successors}
-        typeLabelOf={typeLabelOf}
-        hiddenId={swap?.node.id ?? null}
-        onPick={(node, rect) => startSwap(node, "right", rect)}
-      />
+      {/* 선행/후행 사이드 독 — 모달 카드 밖, 백드롭 좌우(백드롭은 자기 자신을 눌렀을 때만 닫힌다).
+          전환 중엔 양쪽 독이 진행 방향으로 빠지고, 전환 뒤 새 카드는 반대편에서 들어온다(장면 이동) */}
+      {(() => {
+        const dockMotion: DockMotion = swap
+          ? travel === "next" ? "exit-left" : "exit-right"
+          : travel === "next" ? "enter-from-right" : travel === "prev" ? "enter-from-left" : null;
+        return (
+          <>
+            <NavDock
+              side="left"
+              title={t("summary.prev")}
+              nodes={predecessors}
+              typeLabelOf={typeLabelOf}
+              hiddenId={swap?.node.id ?? null}
+              motion={dockMotion}
+              onPick={(node, rect) => startSwap(node, "left", rect)}
+            />
+            <NavDock
+              side="right"
+              title={t("summary.next")}
+              nodes={successors}
+              typeLabelOf={typeLabelOf}
+              hiddenId={swap?.node.id ?? null}
+              motion={dockMotion}
+              onPick={(node, rect) => startSwap(node, "right", rect)}
+            />
+          </>
+        );
+      })()}
       {/* 전환 고스트 — 클릭한 독 카드의 자리에서 시작해 가운데로 커지며 사라진다 */}
       {swap && (
         <div

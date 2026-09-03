@@ -8,12 +8,11 @@
 // 곧 취소). 읽기 전용이면 값 있는 정적 타일만.
 
 import { Building2, Users } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { AssigneePills } from "@/components/assignee-pills";
-import { useKoreanDeptByPath } from "@/components/map-ownership-section";
+import { DeptPill } from "@/components/dept-pill";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
-import { OrgInfoModal } from "@/components/org-info-modal";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import type { PopoverActionLabels } from "@/components/popover-action-bar";
@@ -50,44 +49,6 @@ interface ActivePicker {
   assignee: string;
 }
 
-// 말단 부서 필 — 타일 안의 중첩 인터랙션이라 button 대신 role=button span(클릭은 타일로 안 올라간다)
-function DeptLeafPill({
-  dataId, path, koreanName, onOpen,
-}: {
-  dataId: string;
-  path: string;
-  koreanName: string;
-  onOpen: (at: { x: number; y: number }) => void;
-}) {
-  const leaf = deptLeaf(path);
-  const handle = (e: MouseEvent<HTMLSpanElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onOpen({ x: e.clientX, y: e.clientY });
-  };
-  const handleKey = (e: KeyboardEvent<HTMLSpanElement>) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.stopPropagation();
-    e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
-    onOpen({ x: rect.left + rect.width / 2, y: rect.bottom });
-  };
-  return (
-    <span
-      role="button"
-      tabIndex={0}
-      data-id={dataId}
-      title={koreanName ? `${path} (${koreanName})` : path}
-      className="inline-flex max-w-full items-center gap-1 rounded-full border border-accent-tint-border bg-accent-tint px-2 py-0.5 text-fine font-semibold text-accent hover:bg-accent-tint/70"
-      onClick={handle}
-      onKeyDown={handleKey}
-    >
-      <Building2 size={11} strokeWidth={1.5} className="shrink-0" />
-      <span className="min-w-0 truncate">{leaf}</span>
-    </span>
-  );
-}
-
 export function DeptAssigneeTiles({
   versionId, department, assignee, readOnly = false, dataIdPrefix, labels, placeholder, onChange,
 }: DeptAssigneeTilesProps) {
@@ -95,8 +56,6 @@ export function DeptAssigneeTiles({
   const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
   const loadedFor = useRef<number | null>(null);
   const [active, setActive] = useState<ActivePicker | null>(null);
-  // 부서 필 → 조직 정보 모달(경로·인원·하위 조직)
-  const [orgInfo, setOrgInfo] = useState<{ path: string; origin: { x: number; y: number } } | null>(null);
 
   useEffect(() => {
     if (readOnly || versionId == null || loadedFor.current === versionId) return;
@@ -118,7 +77,6 @@ export function DeptAssigneeTiles({
 
   // 내 조직 기준 정렬 — eligible 응답엔 org_path가 없어 디렉터리 스토어로 보강
   const dir = useDirectory();
-  const koreanDeptByPath = useKoreanDeptByPath();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
   const myPath = me?.orgPath ?? "";
   const usersWithPath = data.users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" }));
@@ -137,16 +95,6 @@ export function DeptAssigneeTiles({
   ).map((option) =>
     myDept !== "" && option.value === myDept ? { ...option, tag: t("perm.principalMyDept") } : option,
   );
-  // 부서 값(말단 이름 또는 전달된 슬래시 경로) → 조직 경로 — 디렉터리 전체에서 말단 일치를 찾는다
-  const resolveOrgPath = (dept: string): string => {
-    if (dept.includes("/")) return dept;
-    for (const u of dir.values()) {
-      const path = u.org_path ?? "";
-      if (path !== "" && deptLeaf(path) === dept) return path;
-    }
-    return pathByDept.get(dept) ?? dept;
-  };
-
   const assigneeText = formatAssignees(parseAssignees(assignee));
   const openPicker = (field: Field, at: { x: number; y: number }) =>
     setActive({ field, at, department, assignee });
@@ -158,8 +106,6 @@ export function DeptAssigneeTiles({
     apply();
     setActive(null);
   };
-  const deptPath = department !== "" ? resolveOrgPath(department) : "";
-
   const tiles = (
     <>
       {(!readOnly || department !== "" || placeholder) && (
@@ -170,14 +116,7 @@ export function DeptAssigneeTiles({
           value=""
           placeholder={placeholder}
           valueNode={
-            department !== "" ? (
-              <DeptLeafPill
-                dataId={`${dataIdPrefix}-department-pill`}
-                path={deptPath}
-                koreanName={koreanDeptByPath.get(deptPath) ?? ""}
-                onOpen={(origin) => setOrgInfo({ path: deptPath, origin })}
-              />
-            ) : undefined
+            department !== "" ? <DeptPill department={department} dataId={`${dataIdPrefix}-department-pill`} /> : undefined
           }
           wide
           readOnly={readOnly}
@@ -198,14 +137,6 @@ export function DeptAssigneeTiles({
           readOnly={readOnly}
           active={active?.field === "assignee"}
           onOpen={(at) => openPicker("assignee", at)}
-        />
-      )}
-      {orgInfo && (
-        <OrgInfoModal
-          orgPath={orgInfo.path}
-          koreanDeptByPath={koreanDeptByPath}
-          origin={orgInfo.origin}
-          onClose={() => setOrgInfo(null)}
         />
       )}
     </>

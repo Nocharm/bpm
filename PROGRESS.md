@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-03 — 5라운드: 인스펙터 행 통일·IO 열 배치·SP 부서 말단 필·독 장면 이동 (dev)
+- **인스펙터 행 문법 통일**(사용자 피드백 "SP와 일반 노드 스페이서·폭이 다름"): `lib/inspector-row.ts`(`INSPECTOR_ROW` min-h-8·py-1, `INSPECTOR_ROW_LABEL`)를 속성 피커·시스템/GMP/URL 행·지표 카드·조건 행·SP 상속 행(속성·IO·조건)이 공유 — 읽기/편집 모두 32px 행, 스페이서는 URL 위 구분선 하나(일반 노드 정책). fitContent 피커 트리거는 입력과 같은 24px(py-0.5). SP IO 상속 표시는 자체 렌더 대신 `MultiValueInput readOnly`(링크 아이콘·호버·드롭다운 유지).
+- **SP 속성 부서=말단 필**: `DeptPill`(말단+조직 모달)을 신설해 타일·SP 상속 행·읽기 전용 일반 행이 공유(attribute-tiles의 DeptLeafPill/모달 상태 이관). 담당자도 `AssigneePills`.
+- **IO 목록 열 배치**(인스펙터·타일 팝오버, 읽기/편집): 인덱스(w-5) / 형식 필(고정 폭 5.5rem, 카탈로그 아이콘, 미지정은 점선 자리표시, `DataFormPicker column`) / 라벨 말줄임 + R/O 플래그. 읽기 헤드리스(타일 팝오버)의 중복 헤더 제거.
+- **독 장면 이동**(사용자 요청): 후행으로 가면 양쪽 독이 왼쪽으로 빠지고(`dock-exit-left`) 새 카드는 오른쪽에서 들어옴(`dock-enter-from-right`), 선행은 반대 — `travel` 상태가 방향을 기억.
+- 검증: tsc·eslint·vitest 850·`pw-smoke-node-modal-tiles.mjs` 63/63.
+
 ## 2026-09-03 — 편집 모달 4라운드: 담당자 인물 필·지정 모달 조건 타일·아코디언 잘림·타일 오버플로우 (dev)
 - **담당자 인물 필**(사용자 요청): 저장된 담당자(영문 name)를 디렉터리에서 해석해 필로(중립 톤 surface-alt — 액센트 톤 부서 필과 구분, 사용자 피드백), 호버 0.7초/클릭 시 기존 인물 카드(`PersonHoverCard`, 이름·아이디·말단 부서+조직 경로). 신규 공용 `AssigneePills` — 노드 편집 모달·지정 모달 타일(+피커 초안 칩)·인스펙터 BPM 속성 담당자 행이 공유. 미해석 이름은 정적 필.
 - **지정 모달 시작·종료 조건 타일** 누락 보완 — `SubprocessDesignationIn.start_condition/end_condition`(None=미변경, 승격 필드 PATCH와 같은 `sp_*` 컬럼)·`DesignationForm` 5개 빌더·Subprocess 탭 읽기 타일.

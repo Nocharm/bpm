@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 220개 · 2026-09-03 기준
+총 221개 · 2026-09-03 기준
 
 ## components/
 
@@ -16,7 +16,7 @@
 | `ai-chat-panel.tsx` | `AiChatPanel` | 에디터 AI 채팅 패널 | `app/maps/[mapId]/page.tsx` |
 | `approval-panel.tsx` | `ApprovalPanel` | R5c 승인 탭 | `app/maps/[mapId]/page.tsx` |
 | `approver-manager.tsx` | `ApproverManager` | 맵 소유자가 승인자 목록을 편집 | `app/maps/[mapId]/page.tsx` |
-| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `app/maps/[mapId]/page.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
 | `auth-loading.tsx` | `AuthLoadingScreen` |   | `app/login/page.tsx`, `components/providers.tsx` |
 | `auto-height.tsx` | `AutoHeight` | 내용 높이에 맞춰 늘어나고, 바뀔 때 부드럽게 전환되는 컨테이너. | `app/inbox/page.tsx`, `components/group-bulk-modal.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
 | `bpm-attribute-picker.tsx` | `BpmAttributePicker` | 노드 BPM 속성 담당자·부서 피커 | `app/maps/[mapId]/page.tsx` |
@@ -34,6 +34,7 @@
 | `csv-import-tab.tsx` | `CsvImportTab` | 인스펙터 Import 탭 | `app/maps/[mapId]/page.tsx` |
 | `csv-template-actions.tsx` | `CsvTemplateActions` | CSV 준비 액션 | `components/csv-create-modal.tsx`, `components/csv-import-section.tsx` |
 | `data-form-picker.tsx` | `DataFormPicker` | IO 항목별 데이터 폼 피커 | `components/multi-value-input.tsx` |
+| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `app/maps/[mapId]/page.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
@@ -76,11 +77,11 @@
 | `link-preview-panel.tsx` | `LinkPreviewPanel` | 링크 미리보기 패널 | `app/maps/[mapId]/page.tsx` |
 | `map-inspector-tab.tsx` | `MapInspectorTab` | NEW 인스펙터 맵 탭(좁은 폭) | `app/maps/[mapId]/page.tsx` |
 | `map-name-dropdown.tsx` | `MapNameDropdown` | 상단바 맵 이름 드롭다운 | `app/maps/[mapId]/page.tsx` |
-| `map-ownership-section.tsx` | `MapOwnershipSection` | 속성 빈상태 소유·승인자 섹션 | `app/maps/[mapId]/page.tsx`, `components/permissions/attribute-tiles.tsx`, `components/process-library-panel.tsx` |
+| `map-ownership-section.tsx` | `MapOwnershipSection` | 속성 빈상태 소유·승인자 섹션 | `app/maps/[mapId]/page.tsx`, `components/dept-pill.tsx`, `components/process-library-panel.tsx` |
 | `markdown-view.tsx` | `MarkdownView` | 마크다운 뷰어 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/ai-chat-panel.tsx`, `components/csv-import-tab.tsx`, `components/interview/draw-confirm-dialog.tsx`, `components/interview/interview-panel.tsx`, `components/notices/notices-manage-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/manual-manage-panel.tsx` |
 | `minimap-viewport-fill.tsx` | `MinimapFade`, `MiniMapViewportFill` | React Flow MiniMap + 현재 뷰포트 영역을 반투명 악센트로 '채우는' 오버레이(MiniMapViewportFill). | `app/maps/[mapId]/page.tsx` |
 | `modal-backdrop.tsx` | `ModalBackdrop` | 모달 백드롭 | `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/notification-purge-modal.tsx`, `components/approver-manager.tsx`, `components/confirm-dialog.tsx`, `components/csv-create-modal.tsx`, `components/dev-login-modal.tsx`, `components/edge-action-modal.tsx`, `components/edge-branch-modal.tsx`, `components/edge-decision-modal.tsx`, `components/edge-select-modal.tsx`, `components/excel-export-modal.tsx`, `components/expand-invariant-modal.tsx`, `components/feedback-detail-modal.tsx`, `components/framework-browse-modal.tsx`, `components/framework-connect-dialog.tsx`, `components/group-bulk-modal.tsx`, `components/groups/group-detail.tsx`, `components/groups/groups-panel.tsx`, `components/interview/draw-confirm-dialog.tsx`, `components/interview/interview-panel.tsx`, `components/interview/params-table-dialog.tsx`, `components/io-import-modal.tsx`, `components/io-peers-menu.tsx`, `components/maps/delete-map-dialog.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/map-detail-card.tsx`, `components/node-details-card.tsx`, `components/node-summary-modal.tsx`, `components/notices/notice-edit-modal.tsx`, `components/org-info-modal.tsx`, `components/permissions/create-map-dialog.tsx`, `components/permissions/danger-zone.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/permissions/undo-last-apply-modal.tsx`, `components/prompt-dialog.tsx`, `components/self-publish-popover.tsx`, `components/version/transfer-checkout-dialog.tsx`, `components/word-create-modal.tsx`, `components/word-quick-create-dialog.tsx` |
-| `multi-value-input.tsx` | `MultiValueInput` | 개행 구분 복수 값 편집 | `components/node-details-fields.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
+| `multi-value-input.tsx` | `MultiValueInput` | 개행 구분 복수 값 편집 | `components/node-details-card.tsx`, `components/node-details-fields.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
 | `multiline-edge.tsx` | - | 에디터 엣지 | `app/maps/[mapId]/page.tsx` |
 | `newline-hint.tsx` | `NewlineHint` | 줄바꿈 단축키 안내 캡션 | `app/maps/[mapId]/page.tsx`, `components/node-summary-modal.tsx` |
 | `node-action-bar.tsx` | `NodeActionBar` | 단일 선택 노드 하단 중앙의 통합 액션 바 | `app/maps/[mapId]/page.tsx` |
@@ -92,7 +93,7 @@
 | `node-selection-ring.tsx` | `NodeSelectionRing` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |
 | `node-summary-modal.tsx` | `NodeSummaryModal` | 노드 더블클릭 편집 모달 | `app/maps/[mapId]/page.tsx` |
 | `notification-bell.tsx` | `NotificationBell` | 인앱 알림 벨 | `components/top-nav.tsx` |
-| `org-info-modal.tsx` | `OrgInfoModal` | 조직 정보 모달 | `components/maps/map-detail-card.tsx`, `components/permissions/attribute-tiles.tsx`, `components/process-library-panel.tsx` |
+| `org-info-modal.tsx` | `OrgInfoModal` | 조직 정보 모달 | `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/process-library-panel.tsx` |
 | `pagination.tsx` | `Pagination` | 간단 페이지네이션 | `app/feedback/page.tsx`, `components/notices/notices-manage-panel.tsx` |
 | `param-icons.ts` | - | 수행 지표(Metrics) 아이콘 단일 소스 | `app/maps/[mapId]/compare/page.tsx`, `components/group-bulk-modal.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/process-node.tsx`, `components/subprocess-preview-peek.tsx`, `components/subprocess-usage-tab.tsx` |
 | `param-input.tsx` | `ParamInput` | 숫자 파라미터 공용 입력 | `components/group-bulk-modal.tsx`, `components/interview/params-table-dialog.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/process-fields-card.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
@@ -206,7 +207,7 @@
 | `dashboard-map-row.tsx` | `DashboardMapRow` | 대시보드 컴팩트 맵 행 | `components/maps/recent-opened-list.tsx`, `components/maps/status-donut-card.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/bpm-attribute-picker.tsx`, `components/maps/map-detail-card.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
+| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |
 | `framework-assign-modal.tsx` | `FrameworkAssignModal` | 업무 체계 카테고리 연결/해제 + 슬롯 이양 | `components/maps/map-detail-card.tsx` |
 | `framework-tree.tsx` | `FrameworkTree` | 홈 Framework 뷰 | `app/page.tsx` |

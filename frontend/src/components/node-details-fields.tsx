@@ -7,6 +7,7 @@ import { Flag, LogIn, LogOut, Play, type LucideIcon } from "lucide-react";
 
 import { MultiValueInput } from "@/components/multi-value-input";
 import { useI18n } from "@/lib/i18n";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 import type { IoSide } from "@/lib/io-items";
 
 // I/O & Conditions 행 아이콘(12px) — 인스펙터·편집 모달·SP 상속 표시가 공유 (사용자 결정 2026-08-20)
@@ -144,11 +145,9 @@ export function NodeDetailsFields({
         return (
         <div
           key={key}
-          className={`flex items-center justify-between gap-2 py-1 ${
-            key === "start_condition" ? "border-t border-divider" : ""
-          }`}
+          className={`${INSPECTOR_ROW} ${key === "start_condition" ? "border-t border-divider" : ""}`}
         >
-          <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+          <span className={INSPECTOR_ROW_LABEL}>
             <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
             {t(labelKey)}
           </span>

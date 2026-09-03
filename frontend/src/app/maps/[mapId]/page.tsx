@@ -47,7 +47,10 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
+import { AssigneePills } from "@/components/assignee-pills";
+import { DeptPill } from "@/components/dept-pill";
 import { FallbackHint } from "@/components/fallback-hint";
+import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { GmpPickerPopup, getGmpTargetColor } from "@/components/gmp-picker-popup";
 import { GmpNoticePopover } from "@/components/gmp-notice-popover";
@@ -10755,8 +10758,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                           {/* 시스템 — 행머리 아이콘+라벨(수행 지표·입출력 카드와 같은 문법). 원문 폴백(라이브러리화 전 검토
                               원천, design 2026-08-19 §5.2)은 행 호버 시 행머리 아이콘이 메모 아이콘으로 바뀌는 FallbackHint —
                               보기·수정·적용 (사용자 요청 2026-09-03) */}
-                          <div className="group flex items-center justify-between gap-2 py-1">
-                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                          <div className={`${INSPECTOR_ROW} group`}>
+                            <span className={INSPECTOR_ROW_LABEL}>
                               {readOnly && (selectedNode.data.system_fallback ?? "").trim() === "" ? (
                                 <Monitor size={12} strokeWidth={1.5} className="text-ink-muted" />
                               ) : (
@@ -10799,8 +10802,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                             />
                           </div>
                           {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
-                          <div className="flex items-center justify-between gap-2 py-1">
-                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                          <div className={INSPECTOR_ROW}>
+                            <span className={INSPECTOR_ROW_LABEL}>
                               <ShieldCheck size={12} strokeWidth={1.5} className="text-ink-muted" />
                               {t("field.gmp")}
                             </span>
@@ -10914,33 +10917,44 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
-                          {/* 행머리 아이콘+라벨 — 일반 노드 속성 카드와 같은 문법 (사용자 요청 2026-09-03) */}
-                          {([
-                            ["department", "field.department", Building2],
-                            ["assignee", "field.assignee", Users],
-                            ["system", "field.system", Monitor],
-                          ] as const).map(([key, labelKey, RowIcon]) => {
-                            const value = selectedSpRef[key];
-                            return (
-                              <div
-                                key={key}
-                                className="flex items-center justify-between gap-2 border-t border-divider py-1"
-                              >
-                                <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-                                  <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                                  {t(labelKey)}
-                                </span>
-                                <span
-                                  className="min-w-0 truncate text-right text-caption text-ink"
-                                  title={value || undefined}
-                                >
-                                  {value || "-"}
-                                </span>
-                              </div>
-                            );
-                          })}
-                          <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                          {/* 일반 노드 속성 카드와 같은 행 문법·스페이서(URL 위만 구분선) — 부서는 말단 필(조직 모달),
+                              담당자는 인물 필(인물 카드) (사용자 요청 2026-09-03) */}
+                          <div className={INSPECTOR_ROW}>
+                            <span className={INSPECTOR_ROW_LABEL}>
+                              <Building2 size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              {t("field.department")}
+                            </span>
+                            {(selectedSpRef.department ?? "") !== "" ? (
+                              <DeptPill department={selectedSpRef.department ?? ""} dataId="inspector-sp-department-pill" />
+                            ) : (
+                              <span className="text-caption text-ink">-</span>
+                            )}
+                          </div>
+                          <div className="flex min-h-8 items-start justify-between gap-2 py-1">
+                            <span className={`${INSPECTOR_ROW_LABEL} mt-1`}>
+                              <Users size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              {t("field.assignee")}
+                            </span>
+                            {(selectedSpRef.assignee ?? "") !== "" ? (
+                              <AssigneePills assignee={selectedSpRef.assignee ?? ""} dataIdPrefix="inspector-sp" />
+                            ) : (
+                              <span className="mt-1 text-caption text-ink">-</span>
+                            )}
+                          </div>
+                          <div className={INSPECTOR_ROW}>
+                            <span className={INSPECTOR_ROW_LABEL}>
+                              <Monitor size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              {t("field.system")}
+                            </span>
+                            <span
+                              className="min-w-0 truncate text-right text-caption text-ink"
+                              title={selectedSpRef.system || undefined}
+                            >
+                              {selectedSpRef.system || "-"}
+                            </span>
+                          </div>
+                          <div className={`${INSPECTOR_ROW} border-t border-divider`}>
+                            <span className={INSPECTOR_ROW_LABEL}>
                               <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
                               {t("field.url")}
                             </span>
