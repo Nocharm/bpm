@@ -18,11 +18,13 @@ interface SpFieldPopoverProps {
   // 다중 줄 편집기(IO)는 Enter가 줄 추가라 전역 Enter 확정을 끈다
   enterCommits?: boolean;
   keysHint: string;
+  // 푸터 맨 앞 슬롯 — OK와 같은 줄(예: IO 플라이아웃 '+ Add', 사용자 요청 2026-09-03)
+  footerStart?: ReactNode;
   children: ReactNode;
 }
 
 export function SpFieldPopover({
-  dataId, anchor, title, hint, width = 320, onCommit, onCancel, enterCommits = true, keysHint, children,
+  dataId, anchor, title, hint, width = 320, onCommit, onCancel, enterCommits = true, keysHint, footerStart, children,
 }: SpFieldPopoverProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: anchor.y + 8, left: anchor.x - 16 });
@@ -88,8 +90,9 @@ export function SpFieldPopover({
           </button>
         </div>
         {children}
-        <div className="flex items-center justify-between gap-2 border-t border-divider pt-1.5">
-          <span className="text-fine text-ink-tertiary">{keysHint}</span>
+        <div className="flex items-center gap-2 border-t border-divider pt-1.5">
+          {footerStart}
+          <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{keysHint}</span>
           <button
             type="button"
             data-id={`${dataId}-commit`}

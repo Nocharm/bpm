@@ -13,6 +13,7 @@ import {
   LogIn,
   LogOut,
   Monitor,
+  Plus,
   Sigma,
   Workflow,
 } from "lucide-react";
@@ -24,7 +25,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { AutoHeight } from "@/components/auto-height";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import { MultiValueInput } from "@/components/multi-value-input";
+import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-value-input";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
@@ -162,6 +163,8 @@ export function SubprocessDesignationModal({
   const [error, setError] = useState<string | null>(null);
   const [summing, setSumming] = useState(false);
   const [active, setActive] = useState<ActiveTile | null>(null);
+  // IO 플라이아웃 편집기 핸들 — 푸터 '+ Add'가 행을 추가한다
+  const ioRef = useRef<MultiValueInputHandle | null>(null);
   // 게시본 그래프 — 모달 수명 동안 1회만 fetch(Σ 반복 클릭·미리보기 계산에 재요청 안 함)
   const graphRef = useRef<Graph | null>(null);
   // Σ 미리보기(5종) 원시값 — 팝오버 안내 줄에 표시
@@ -337,6 +340,19 @@ export function SubprocessDesignationModal({
         width={isIo ? 420 : 320}
         enterCommits={!isIo}
         keysHint={isIo ? t("sp.tile.keysMultiline") : t("sp.tile.keys")}
+        footerStart={
+          isIo ? (
+            <button
+              type="button"
+              data-id={`sp-tile-io-${field}-add`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+              onClick={() => ioRef.current?.addRow()}
+            >
+              <Plus size={12} strokeWidth={1.5} />
+              {t("io.addNew")}
+            </button>
+          ) : undefined
+        }
         onCommit={commitTile}
         onCancel={() => setActive(null)}
       >
@@ -405,11 +421,12 @@ export function SubprocessDesignationModal({
         )}
         {isIo && (
           <div className="rounded-sm border border-hairline bg-surface-alt/40 px-2 py-1">
-            {/* 팝오버 제목이 이미 필드명 — 편집기 헤더 대신 목록 아래 '+ Add'(폼 선택·삭제는 그대로) */}
+            {/* 팝오버 제목이 이미 필드명 — 편집기는 헤드리스, '+ Add'는 푸터(OK 줄 맨 앞) (폼 선택·삭제는 그대로) */}
             <MultiValueInput
+              ref={ioRef}
               dataId={`sp-tile-io-${field}`}
               label={tileLabel(field)}
-              addAtBottom
+              headless
               value={active.value}
               formsValue={active.extra}
               readOnly={false}

@@ -7,18 +7,24 @@
 "use client";
 
 import { Link2, Link2Off, Plus, TriangleAlert, X, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 
 import { DataFormPicker } from "@/components/data-form-picker";
 import { useI18n } from "@/lib/i18n";
+
+// 헤드리스 호출부(플라이아웃)가 바깥 버튼으로 행을 추가하는 핸들 (사용자 요청 2026-09-03)
+export interface MultiValueInputHandle {
+  addRow: () => void;
+}
 
 interface MultiValueInputProps {
   label: string;
   // 라벨 앞 소형 아이콘(12px) — 행 스캔 가시성 (사용자 결정 2026-08-20)
   icon?: LucideIcon;
-  // 헤더(라벨+호버 '+') 대신 목록 아래에 항상 보이는 '+ Add' 버튼 — 제목이 이미 있는 플라이아웃용
-  // (Import 메뉴는 헤더 모드에서만, 사용자 요청 2026-09-03)
-  addAtBottom?: boolean;
+  // 헤더(라벨+호버 '+')·빈 목록 '-' 표기 없이 행만 — 제목과 '+ Add'를 호출부가 그리는 플라이아웃용
+  // (Import 메뉴는 헤더 모드에서만, 사용자 요청 2026-09-03). 행 추가는 ref 핸들 addRow로
+  headless?: boolean;
+  ref?: Ref<MultiValueInputHandle>;
   // 저장된 개행 join 원문 — 빈 문자열이면 항목 0개
   value: string;
   // 항목별 데이터 폼(개행 join, value 줄과 1:1 정렬) — undefined면 폼 열 미노출
@@ -95,7 +101,8 @@ function joinColumn(rows: ItemRow[], key: keyof ItemRow): string {
 export function MultiValueInput({
   label,
   icon: Icon,
-  addAtBottom = false,
+  headless = false,
+  ref,
   value,
   formsValue,
   idsValue,
@@ -121,6 +128,10 @@ export function MultiValueInput({
   const withExtras = idsValue !== undefined || linksValue !== undefined || flagsValue !== undefined;
   // 편집 중 행 버퍼 — 저장 원문에서 시작, blur/삭제 시 join 커밋. 노드 전환은 key 리마운트가 리셋.
   const [rows, setRows] = useState<ItemRow[]>(() => splitRows(value, formsValue, idsValue, linksValue, flagsValue));
+  // 바깥 '+ Add'(플라이아웃 푸터) → 빈 행 추가 — 헤더 '+'와 같은 동작
+  useImperativeHandle(ref, () => ({
+    addRow: () => setRows((prev) => [...prev, { text: "", form: "", id: "", link: "", flag: "" }]),
+  }), []);
   // 외부 변경 동기화(편집 모달 저장 → 인스펙터 등) — 렌더 중 상태 조정. 자기 커밋 에코(현재 행과
   // 동일한 join)는 리셋하지 않아 입력 중 빈 행이 날아가지 않는다 (사용자 결정 2026-08-20)
   const [prevProps, setPrevProps] = useState({ value, formsValue, idsValue, linksValue, flagsValue });
@@ -273,7 +284,7 @@ export function MultiValueInput({
 
   return (
     <div className="group/iosec py-1" data-id={dataId}>
-      {!addAtBottom && (
+      {!headless && (
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
           {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
@@ -477,19 +488,8 @@ export function MultiValueInput({
           </div>
         );
       })}
-      {rows.length === 0 && !addAtBottom && (
+      {rows.length === 0 && !headless && (
         <div className="mt-0.5 text-right text-caption text-ink-tertiary">-</div>
-      )}
-      {addAtBottom && !readOnly && (
-        <button
-          type="button"
-          data-id={`${dataId}-add`}
-          className="mt-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt hover:text-ink"
-          onClick={() => setRows((prev) => [...prev, { text: "", form: "", id: "", link: "", flag: "" }])}
-        >
-          <Plus size={12} strokeWidth={1.5} />
-          {t("io.addNew")}
-        </button>
       )}
     </div>
   );
