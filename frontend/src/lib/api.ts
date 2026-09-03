@@ -87,6 +87,8 @@ export interface MapSummary {
   category_id?: number | null;
   category_path?: string | null;
   consultant_code?: string | null;
+  // 오너 없이 임포트된 맵 — "Owner unconfirmed" 배지 (spec 2026-09-03 §5)
+  consultant_owner_pending?: boolean;
   // framework 캔버스 전용 — 결착 카테고리(상세 응답에서만 채움) (design 2026-08-28 §8)
   linkage_category_id?: number | null;
   linkage_category_path?: string | null;
@@ -2870,20 +2872,40 @@ export interface InterviewFileReport {
   issues: InterviewIssue[];
 }
 
+export type GovernanceField = "owner" | "department" | "approvers";
+
+// dry-run 응답의 기존 맵 거버넌스 차이 — 체크한 (code, field)만 apply가 교체 (spec 2026-09-03 §3)
+export interface GovernanceDiff {
+  code: string;
+  name: string;
+  field: GovernanceField;
+  current: string;
+  delivered: string;
+  applied: boolean;
+}
+
+export interface GovernanceDecision {
+  code: string;
+  field: GovernanceField;
+}
+
 export interface InterviewImportResult {
   applied: boolean;
   files: InterviewFileReport[];
   summary: Record<string, number>;
   rows: FrameworkImportRow[];
   truncated: boolean;
+  governance: GovernanceDiff[];
 }
 
 // 인터뷰 결과 JSON 다중 파일 임포트(sysadmin) — apply=false는 dry-run, 파일별 키 검증 리포트 포함
 // (design 2026-08-18). 키/구조 검증은 서버 어댑터가 진실 — content는 파싱된 원문 그대로 보낸다.
+// decisions는 apply 때 체크한 거버넌스 항목 — 전달분 차이에 없으면 서버가 422 (spec 2026-09-03 §3).
 export function importInterview(body: {
   files: { name: string; content: unknown }[];
   apply: boolean;
   label?: string;
+  decisions?: GovernanceDecision[];
 }): Promise<InterviewImportResult> {
   return request<InterviewImportResult>("/categories/import-interview", {
     method: "POST",
