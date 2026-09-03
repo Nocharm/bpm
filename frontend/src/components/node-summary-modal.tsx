@@ -135,23 +135,23 @@ const DOCK_INSET = 280;
 // 선후행 전환 애니메이션 길이(ms) — globals.css .summary-swap-* 와 동기
 const SWAP_MS = 380;
 
-// 독 카드 본문 — 색 점·라벨·타입. 독 카드와 전환 고스트가 공유한다
+// 독 카드 본문 — 1행: 색 점 + 라벨, 2행: 타입 단독 (사용자 결정 2026-09-03). 독 카드와 전환 고스트가 공유한다
 function DockCardBody({ node, typeLabelOf }: { node: NavNodeRef; typeLabelOf: (nodeType: string) => string }) {
   const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
   return (
-    <>
-      <span
-        className="h-3 w-3 shrink-0 rounded-full border border-hairline"
-        style={{ background: node.color || "var(--color-surface-alt)" }}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-caption text-ink">{node.label}</span>
-        <span className="flex items-center gap-1 text-fine text-ink-tertiary">
-          <Icon size={11} strokeWidth={1.5} className="shrink-0" />
-          <span className="truncate">{typeLabelOf(node.nodeType)}</span>
-        </span>
+    <span className="min-w-0 flex-1">
+      <span className="flex items-center gap-1.5">
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full border border-hairline"
+          style={{ background: node.color || "var(--color-surface-alt)" }}
+        />
+        <span className="min-w-0 truncate text-caption text-ink">{node.label}</span>
       </span>
-    </>
+      <span className="flex items-center gap-1 text-fine text-ink-tertiary">
+        <Icon size={11} strokeWidth={1.5} className="shrink-0" />
+        <span className="truncate">{typeLabelOf(node.nodeType)}</span>
+      </span>
+    </span>
   );
 }
 
