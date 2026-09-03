@@ -73,13 +73,13 @@ if (rowCount > 0 && firstMapId) {
       const expanded = await toggle.locator("svg.lucide-chevron-down").count().catch(() => 0);
       check(`org accordion auto-expanded for owning_department "${topPath}"`, expanded > 0);
     } else {
-      console.log(`org-node-toggle not found for path "${topPath}" (unassigned bucket or not rendered under current filters) — skip`);
+      console.log(`org-node-toggle not found for path "${topPath}" (unassigned bucket or not rendered under current filters) - skip`);
     }
   } else {
-    console.log("selected map has no owning_department — skip auto-expand check");
+    console.log("selected map has no owning_department - skip auto-expand check");
   }
 } else {
-  console.log("no seeded row in home-recent — skip hover/click/auto-expand checks");
+  console.log("no seeded row in home-recent - skip hover/click/auto-expand checks");
 }
 
 // 도넛 세그먼트 클릭 → 목록 변경 확인 (StatusDonutCard 내부, my-documents 카드로 재접근)
@@ -95,7 +95,7 @@ if (await segPath.count().catch(() => 0) > 0) {
   check("donut segment click renders a list (rows >= 0)", afterRows >= 0);
   console.log(`donut rows before=${beforeRows} after=${afterRows}`);
 } else {
-  console.log("no donut segments (owned maps empty for this dev user) — skip donut click check");
+  console.log("no donut segments (owned maps empty for this dev user) - skip donut click check");
 }
 
 check("no console/page errors", errors.length === 0);

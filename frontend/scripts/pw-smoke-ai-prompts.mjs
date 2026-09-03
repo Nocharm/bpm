@@ -8,13 +8,13 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const API_BASE = process.env.API_BASE ?? "http://localhost:8000";
 const SHOT_DIR = process.env.SHOT_DIR ?? ".";
-const CUSTOM = "SMOKE custom nudge — **bold-marker**";
+const CUSTOM = "SMOKE custom nudge - **bold-marker**";
 const DEV_USER = "admin.sys";
 
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 실패 경로(중간 throw)에서도 dev.db에 오버라이드가 남지 않게 항상 시도하는 best-effort 정리.

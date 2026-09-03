@@ -61,7 +61,7 @@ const processNodeWithUrl: WordExportNode = {
   x: 200, y: 0, w: 172, h: 48, url: "https://example.com/x", urlLabel: "SOP",
 };
 
-describe("generateCompleteWordDoc — 합성 책갈피 주입", () => {
+describe("generateCompleteWordDoc - 합성 책갈피 주입", () => {
   it("_bpmsec 앵커를 쓰는 제목 문단 머리에 zero-length 책갈피를 주입한다", async () => {
     const src = makeSourceDocx(heading("Alpha"));
     const out = await unzipBlob(await generateCompleteWordDoc(src, [sectionNode("_bpmsec1")], []));
@@ -95,7 +95,7 @@ describe("generateCompleteWordDoc — 합성 책갈피 주입", () => {
   });
 });
 
-describe("generateCompleteWordDoc — 순서도 페이지 추가", () => {
+describe("generateCompleteWordDoc - 순서도 페이지 추가", () => {
   it("페이지 나눔 + 순서도를 원본 내용 뒤·마지막 sectPr 앞에 넣는다", async () => {
     const src = makeSourceDocx(heading("Alpha"));
     const out = await unzipBlob(await generateCompleteWordDoc(src, [sectionNode("_bpmsec1")], []));
@@ -132,7 +132,7 @@ describe("generateCompleteWordDoc — 순서도 페이지 추가", () => {
   });
 });
 
-describe("generateCompleteWordDoc — rels 병합", () => {
+describe("generateCompleteWordDoc - rels 병합", () => {
   it("외부 url 노드의 하이퍼링크를 기존 rels에 External로 추가하고 기존 항목을 보존한다", async () => {
     const src = makeSourceDocx(heading("Alpha"));
     const out = await unzipBlob(

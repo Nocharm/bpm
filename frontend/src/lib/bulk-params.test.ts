@@ -10,7 +10,7 @@ describe("canBulkEditField", () => {
     expect(canBulkEditField("start", "system")).toBe(false);
   });
 
-  it("IO·조건도 process·decision만 — SP는 링크 맵 상속이라 제외", () => {
+  it("IO·조건도 process·decision만 - SP는 링크 맵 상속이라 제외", () => {
     expect(canBulkEditField("process", "input")).toBe(true);
     expect(canBulkEditField("decision", "end_condition")).toBe(true);
     expect(canBulkEditField("subprocess", "input")).toBe(false);
@@ -89,7 +89,7 @@ describe("isBulkParamField", () => {
   });
 });
 
-describe("touch_time — 7번째 파라미터 일괄 편집 (design 2026-08-19 §2)", () => {
+describe("touch_time - 7번째 파라미터 일괄 편집 (design 2026-08-19 §2)", () => {
   it("일반 노드는 편집 가능, SP 노드는 상속 필드라 불가", () => {
     expect(canBulkEditField("process", "touch_time")).toBe(true);
     expect(canBulkEditField("decision", "touch_time")).toBe(true);

@@ -213,7 +213,7 @@ export function NodeMetricsCard({
                 )}
                 {isSubprocess && (referenceValues?.[field] ?? "") !== "" && (
                   <Tooltip
-                    content={`${t("metrics.designatedRef", { v: formatParamValue(field, referenceValues?.[field] ?? "") })} — ${t("metrics.designatedRefHint")}`}
+                    content={`${t("metrics.designatedRef", { v: formatParamValue(field, referenceValues?.[field] ?? "") })} - ${t("metrics.designatedRefHint")}`}
                   >
                     <span data-id={`inspector-ref-${field}`} className="inline-flex shrink-0 text-ink-tertiary">
                       <Info size={14} strokeWidth={1.5} />

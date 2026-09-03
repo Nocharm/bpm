@@ -21,7 +21,7 @@ function makeEdge(id: string, source: string, target: string, label = ""): Graph
   return { id, source_node_id: source, target_node_id: target, label, source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" };
 }
 
-describe("buildCsvFromGraph — round trip", () => {
+describe("buildCsvFromGraph - round trip", () => {
   it("round-trip: export → re-import produces no changes", () => {
     const csv = [
       "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
@@ -48,7 +48,7 @@ describe("buildCsvFromGraph — round trip", () => {
     expect(a.fte).toBe("0.8");
   });
 
-  it("Input_Flags 왕복 — optional 줄(선행 빈 줄 포함)이 export→re-import에서 보존된다 (io-linking)", () => {
+  it("Input_Flags 왕복 - optional 줄(선행 빈 줄 포함)이 export→re-import에서 보존된다 (io-linking)", () => {
     const graph: Graph = {
       nodes: [
         makeNode("s", "Start", "start", 0),
@@ -83,7 +83,7 @@ describe("buildCsvFromGraph — round trip", () => {
     expect(bCells?.[20]).toBe("C:approved;D:rejected"); // Next (21번째 컬럼 — Input_Flags 추가로 +1)
   });
 
-  it("따옴표·쉼표·줄바꿈 셀 이스케이프 — export → re-import에서 원문 보존", () => {
+  it("따옴표·쉼표·줄바꿈 셀 이스케이프 - export → re-import에서 원문 보존", () => {
     const rawDescription = 'Review, "carefully" and\nreport to manager';
     const graph: Graph = {
       nodes: [makeNode("a1", "A", "process", 1, { description: rawDescription })],

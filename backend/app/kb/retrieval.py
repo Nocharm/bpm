@@ -62,7 +62,7 @@ async def _load_cache(session) -> tuple[np.ndarray, list[KbChunk]]:
         # 저장 청크 간 차원 불일치(EMBED_MODEL/DIM 교체 후 미재색인) — numpy 오류를
         # EmbedError로 정규화해 호출측 디그레이드 계약("KB 실패는 턴을 죽이지 않는다") 유지.
         raise embed_client.EmbedError(
-            f"stored embeddings have mixed dimensions — reindex required: {exc}"
+            f"stored embeddings have mixed dimensions - reindex required: {exc}"
         ) from exc
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     matrix = matrix / np.maximum(norms, 1e-12)  # 단위정규화 — 내적 = 코사인
@@ -92,7 +92,7 @@ async def search(
     except ValueError as exc:
         # 쿼리 차원 ≠ 저장 차원(모델 교체 후 미재색인) — EmbedError로 정규화 (위와 동일 계약)
         raise embed_client.EmbedError(
-            f"query embedding dimension mismatch — reindex required: {exc}"
+            f"query embedding dimension mismatch - reindex required: {exc}"
         ) from exc
     allowed = np.array([
         r.source_type != "attachment" or (r.meta or {}).get("session_id") == session_id

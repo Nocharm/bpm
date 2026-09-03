@@ -36,11 +36,11 @@ VIEWER = "admin.kim"  # dev 뷰어 = 승인자/오너
 
 # 버전 승인 데모 (맵 이름, 제출자)
 VERSION_MAPS = [
-    ("승인 데모 — 버전 승인 A", "user.lee"),
-    ("승인 데모 — 버전 승인 B", "user.park"),
+    ("승인 데모 - 버전 승인 A", "user.lee"),
+    ("승인 데모 - 버전 승인 B", "user.park"),
 ]
-CHECKOUT_MAP = "승인 데모 — 점유권 이전"
-APPROVAL_MAP = "승인 데모 — 권한·가시성"
+CHECKOUT_MAP = "승인 데모 - 점유권 이전"
+APPROVAL_MAP = "승인 데모 - 권한·가시성"
 DEMO_NAMES = [name for name, _ in VERSION_MAPS] + [CHECKOUT_MAP, APPROVAL_MAP]
 
 

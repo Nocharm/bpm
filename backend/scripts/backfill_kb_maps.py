@@ -16,7 +16,7 @@ from app.models import MapVersion, ProcessMap
 
 async def main() -> None:
     if not embed_client.is_embed_enabled():
-        print("embedding is disabled — set EMBED_URL and AI_ENABLED=true in .env first")
+        print("embedding is disabled - set EMBED_URL and AI_ENABLED=true in .env first")
         return
     async with SessionLocal() as session:
         rows = (

@@ -20,7 +20,7 @@ const SAMPLE_DIR = path.resolve(
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 요약 칩은 renderImportSummary의 "<라벨> <숫자>" 텍스트 스팬 — 인터뷰 섹션 스코프로 매칭

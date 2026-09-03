@@ -316,12 +316,12 @@ async def acquire_checkout(
         raise HTTPException(status_code=404, detail=f"version {version_id} not found")
     if not workflow.is_editable_status(version.status):
         raise HTTPException(
-            status_code=409, detail=f"version is {version.status} — not editable"
+            status_code=409, detail=f"version is {version.status} - not editable"
         )
     if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
         raise HTTPException(
             status_code=409,
-            detail="your permission change is pending approval — cannot take checkout",
+            detail="your permission change is pending approval - cannot take checkout",
         )
 
     now = now_kst()
@@ -600,13 +600,13 @@ async def submit_version(
     if await _find_own_pending_downgrade(session, version.map_id, user) is not None:
         raise HTTPException(
             status_code=409,
-            detail="your permission change is pending approval — cannot submit",
+            detail="your permission change is pending approval - cannot submit",
         )
 
     approvers = await workflow.load_active_approvers(session, version.map_id)
     if not approvers:
         raise HTTPException(
-            status_code=409, detail="map has no approvers — assign approvers first"
+            status_code=409, detail="map has no approvers - assign approvers first"
         )
 
     # 동봉 가시성 변경 처리
@@ -622,7 +622,7 @@ async def submit_version(
         found_map = await session.get(ProcessMap, version.map_id)
         if found_map is None or bundle_vis == found_map.visibility:
             raise HTTPException(
-                status_code=422, detail="visibility unchanged — nothing to bundle"
+                status_code=422, detail="visibility unchanged - nothing to bundle"
             )
         # Standalone pending 이 있으면 동봉이 대체 — 요청자에게 supersede 알림 (P0 대칭)
         standalone = next(
@@ -650,7 +650,7 @@ async def submit_version(
                 [standalone.requested_by],
                 type="permission_superseded",
                 map_id=version.map_id,
-                message=f"Your visibility change request on '{found_map.name}' was superseded — it is now bundled with a version submission",
+                message=f"Your visibility change request on '{found_map.name}' was superseded - it is now bundled with a version submission",
                 payload={"map_name": found_map.name, "reason": "bundled"},
             )
         session.add(
@@ -751,7 +751,7 @@ async def approve_version(
                 type="approved",
                 map_id=version.map_id,
                 version_id=version_id,
-                message=f"'{version.label}' of '{map_name}' is fully approved — ready to publish",
+                message=f"'{version.label}' of '{map_name}' is fully approved - ready to publish",
                 payload={"map_name": map_name, "version_label": version.label,
                          "version_number": version.version_number,
                          "actor": user,

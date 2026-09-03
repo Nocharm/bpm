@@ -603,7 +603,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       case "no-landing":
         return t("framework.importMsgNoLanding");
       case "linkage-skipped":
-        return `${t("framework.importMsgLinkageSkipped")} — ${subject}`;
+        return `${t("framework.importMsgLinkageSkipped")} - ${subject}`;
       case "canvas":
         return subject === "created"
           ? t("framework.importMsgCanvasCreated")

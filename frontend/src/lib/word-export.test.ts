@@ -23,7 +23,7 @@ const nodeStart: WordExportNode = {
 // Task 1은 연결선 미구현 — 엣지 타입만 소비(Task 2 테스트가 실데이터로 확장)
 const noEdges: WordExportEdge[] = [];
 
-describe("buildDocx — 패키지 골격", () => {
+describe("buildDocx - 패키지 골격", () => {
   it("docx 4파트를 만든다", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl], noEdges));
     expect(Object.keys(parts).sort()).toEqual([
@@ -34,7 +34,7 @@ describe("buildDocx — 패키지 골격", () => {
   });
 });
 
-describe("buildDocx — 노드 도형", () => {
+describe("buildDocx - 노드 도형", () => {
   it("노드 타입을 Word 플로차트 프리셋으로 매핑한다", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision, nodeStart], noEdges));
     const doc = parts["word/document.xml"];
@@ -43,7 +43,7 @@ describe("buildDocx — 노드 도형", () => {
     expect(doc).toContain('prst="flowChartTerminator"');
   });
 
-  it("흑백톤 — 흰 채움·검정 테두리", async () => {
+  it("흑백톤 - 흰 채움·검정 테두리", async () => {
     const parts = await unzipDocx(buildDocx([nodeDecision], noEdges));
     const doc = parts["word/document.xml"];
     expect(doc).toContain('<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>');
@@ -60,7 +60,7 @@ describe("buildDocx — 노드 도형", () => {
     expect(doc).not.toContain("<w:b/>"); // 볼드 제거(사용자 요청) — 도형 텍스트 비볼드
   });
 
-  it("url 있는 노드만 하이퍼링크 — rels TargetMode=External + 파랑 밑줄 라벨", async () => {
+  it("url 있는 노드만 하이퍼링크 - rels TargetMode=External + 파랑 밑줄 라벨", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl, nodeDecision], noEdges));
     const rels = parts["word/_rels/document.xml.rels"];
     const doc = parts["word/document.xml"];
@@ -87,7 +87,7 @@ describe("buildDocx — 노드 도형", () => {
   });
 });
 
-describe("buildDocx — 좌표·축척", () => {
+describe("buildDocx - 좌표·축척", () => {
   it("음수 좌표를 포함해 원점 기준으로 평행이동한다 (모든 off ≥ 0)", async () => {
     const parts = await unzipDocx(buildDocx([nodeStart, nodeDecision], noEdges));
     const doc = parts["word/document.xml"];
@@ -106,13 +106,13 @@ describe("buildDocx — 좌표·축척", () => {
     expect(Number(ext?.[2])).toBeLessThanOrEqual(8_892_540); // 24.7cm
   });
 
-  it("작은 맵은 확대하지 않는다 (scale 상한 1 — 172px = 1638300EMU)", async () => {
+  it("작은 맵은 확대하지 않는다 (scale 상한 1 - 172px = 1638300EMU)", async () => {
     const parts = await unzipDocx(buildDocx([nodeWithUrl], noEdges));
     expect(parts["word/document.xml"]).toContain('cx="1638300"');
   });
 });
 
-describe("buildDocx — 연결선·엣지 라벨", () => {
+describe("buildDocx - 연결선·엣지 라벨", () => {
   const edgeAB: WordExportEdge = {
     sourceId: "a", targetId: "b", label: "적합", sourceSide: "right", targetSide: "left",
   };
@@ -171,7 +171,7 @@ describe("buildDocx — 연결선·엣지 라벨", () => {
   });
 });
 
-describe("buildDocx — 하이퍼링크 URL 정규화", () => {
+describe("buildDocx - 하이퍼링크 URL 정규화", () => {
   it("공백·한글 URL은 percent-encode해 rels Target에 담고 본문에 하이퍼링크를 만든다", async () => {
     const node: WordExportNode = {
       ...nodeWithUrl, url: "http://server/문서 목록.docx", urlLabel: "문서 목록",
@@ -198,7 +198,7 @@ describe("buildDocx — 하이퍼링크 URL 정규화", () => {
   });
 });
 
-describe("buildDocx — 섹션 노드 내부 앵커 링크", () => {
+describe("buildDocx - 섹션 노드 내부 앵커 링크", () => {
   it("첫 토큰만 내부 앵커 링크, 나머지는 plain 텍스트", async () => {
     const section: WordExportNode = {
       id: "n1", title: "1.22스탭 참고", nodeType: "section",
@@ -225,13 +225,13 @@ describe("buildDocx — 섹션 노드 내부 앵커 링크", () => {
   });
 });
 
-describe("buildDocx — 빈 노드 계약", () => {
+describe("buildDocx - 빈 노드 계약", () => {
   it("노드 0개면 명확한 메시지로 throw한다", () => {
     expect(() => buildDocx([], [])).toThrow(/node/i);
   });
 });
 
-describe("buildDocx — 엣지 라벨 bounds 클램프", () => {
+describe("buildDocx - 엣지 라벨 bounds 클램프", () => {
   it("좌상단 노드 사이 긴 라벨이어도 모든 a:off 좌표가 0 이상이다", async () => {
     const nodeTL1: WordExportNode = {
       id: "tl1", title: "N1", nodeType: "process", x: 0, y: 0, w: 60, h: 40,

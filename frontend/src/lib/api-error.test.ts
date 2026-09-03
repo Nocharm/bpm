@@ -23,7 +23,7 @@ describe("ApiError", () => {
 describe("getApiErrorDetail", () => {
   it("JSON 본문의 detail 문자열만 추출한다", () => {
     const body = '{"detail":"a rename request is already pending"}';
-    const err = new ApiError(`API POST /maps/7/rename-requests failed: 409 — ${body}`, 409, body);
+    const err = new ApiError(`API POST /maps/7/rename-requests failed: 409 - ${body}`, 409, body);
     expect(getApiErrorDetail(err)).toBe("a rename request is already pending");
   });
 
@@ -37,14 +37,14 @@ describe("getApiErrorDetail", () => {
   });
 
   it("JSON이 아닌 본문은 전체 메시지로 폴백한다", () => {
-    const err = new ApiError("API GET /maps failed: 502 — Bad Gateway", 502, "Bad Gateway");
-    expect(getApiErrorDetail(err)).toBe("API GET /maps failed: 502 — Bad Gateway");
+    const err = new ApiError("API GET /maps failed: 502 - Bad Gateway", 502, "Bad Gateway");
+    expect(getApiErrorDetail(err)).toBe("API GET /maps failed: 502 - Bad Gateway");
   });
 
   it("detail이 문자열이 아니면(FastAPI 422 배열) 전체 메시지로 폴백한다", () => {
     const body = '{"detail":[{"loc":["body","to_name"],"msg":"field required"}]}';
-    const err = new ApiError(`API POST /x failed: 422 — ${body}`, 422, body);
-    expect(getApiErrorDetail(err)).toBe(`API POST /x failed: 422 — ${body}`);
+    const err = new ApiError(`API POST /x failed: 422 - ${body}`, 422, body);
+    expect(getApiErrorDetail(err)).toBe(`API POST /x failed: 422 - ${body}`);
   });
 
   it("본문 없는 ApiError·일반 Error·비Error 값은 각각 메시지/String으로 폴백한다", () => {

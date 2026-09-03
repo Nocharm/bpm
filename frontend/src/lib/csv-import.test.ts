@@ -61,7 +61,7 @@ describe("decodeCsvBuffer", () => {
   });
 });
 
-describe("buildGraphFromCsv — 그래프 변환", () => {
+describe("buildGraphFromCsv - 그래프 변환", () => {
   it("행 노드 + 자동 Start/End + decision 추론으로 그래프를 만든다", () => {
     const graph = graphOf(
       [
@@ -120,7 +120,7 @@ describe("buildGraphFromCsv — 그래프 변환", () => {
   });
 });
 
-describe("buildGraphFromCsv — 검증 에러", () => {
+describe("buildGraphFromCsv - 검증 에러", () => {
   it("빈 파일 / 데이터 0행", () => {
     expect(buildGraphFromCsv("").errors[0].message).toMatch(/empty/i);
     expect(buildGraphFromCsv(HEADER).errors[0].message).toMatch(/no data/i);
@@ -153,7 +153,7 @@ describe("buildGraphFromCsv — 검증 에러", () => {
     expect(buildGraphFromCsv(big).errors[0].message).toMatch(/max 500/i);
   });
 
-  it("구 14컬럼 헤더(부분집합)도 계속 파싱한다 — 헤더는 이름 매핑", () => {
+  it("구 14컬럼 헤더(부분집합)도 계속 파싱한다 - 헤더는 이름 매핑", () => {
     const csv = [
       "Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next",
       "검토,,,,,1.30,1250000,,2,1200,0.8,,,",
@@ -228,7 +228,7 @@ describe("buildGraphFromCsv — 검증 에러", () => {
   });
 });
 
-describe("외부 AI 왕복 — 프롬프트·펜스 스트립", () => {
+describe("외부 AI 왕복 - 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
@@ -337,7 +337,7 @@ function outcomeOf(csv: string, directory?: CsvDirectory) {
   return buildGraphFromCsv(csv, directory ? { directory } : undefined);
 }
 
-describe("buildGraphFromCsv — Description/Assignee/Department 컬럼", () => {
+describe("buildGraphFromCsv - Description/Assignee/Department 컬럼", () => {
   it("설명 셀을 노드 description으로 싣는다", () => {
     const o = outcomeOf(`${H9}\n요청 검토,담당자가 내용을 확인한다,,,,,,,\n`, DIR);
     expect(o.errors).toEqual([]);
@@ -456,7 +456,7 @@ function mergeOf(csv: string, base = baseGraph()) {
   return buildGraphFromCsv(csv, { base });
 }
 
-describe("buildGraphFromCsv — 머지", () => {
+describe("buildGraphFromCsv - 머지", () => {
   it("제목이 같은 노드는 id를 재사용한다 (계보·코멘트 보존의 근거)", () => {
     const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`);
     expect(o.errors).toEqual([]);
@@ -594,7 +594,7 @@ describe("buildGraphFromCsv — 머지", () => {
 // 편도 pick(next===""?existing:next)을 cost_krw/cost_usd에 그대로 쓰면, 기존 cost_usd="20"에
 // CSV가 Cost_KRW=50000만 채운 행이 반대쪽(cost_usd)을 못 지워 두 통화가 동시에 저장 시도된다
 // (백엔드 _assert_single_currency가 422 — 사용자는 어느 노드/필드인지 못 봄).
-describe("buildGraphFromCsv — 통화 전환은 반대쪽 기존값을 지운다 (finding 1)", () => {
+describe("buildGraphFromCsv - 통화 전환은 반대쪽 기존값을 지운다 (finding 1)", () => {
   const H_COST = "Name,Cost_KRW,Cost_USD";
 
   it("Cost_KRW만 채운 행은 기존 Cost_USD를 지운다", () => {
@@ -839,7 +839,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
 
   // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 에코 케이스가
   // graph 병합 경로에서도 기존 값을 지우지 않는지 확인(두 AI 경로 드리프트 방지).
-  it("normalizes AI duration — invalid echo keeps existing, valid form adopted", () => {
+  it("normalizes AI duration - invalid echo keeps existing, valid form adopted", () => {
     const existing = baseNode("n1", "견적 검토", { duration: "1.30" });
     const invalid = buildGraphFromAiProposal(
       { nodes: [aiNode("a", "견적 검토", "process", { duration: "3일" })], edges: [], groups: [] },
@@ -924,7 +924,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.graph?.nodes.filter((n) => n.node_type === "start")).toHaveLength(1);
   });
 
-  it("duplicate base titles — lowest sort_order wins the id, the rest become removed", () => {
+  it("duplicate base titles - lowest sort_order wins the id, the rest become removed", () => {
     const first = baseNode("n1", "중복", { sort_order: 1 });
     const second = baseNode("n2", "중복", { sort_order: 5 });
     const outcome = buildGraphFromAiProposal(
@@ -936,7 +936,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
   });
 
   // AI 계약 강제(design 2026-07-13 §6) — 프롬프트만 믿지 않고 변환단에서 다시 막는다
-  it("subprocess 노드는 annual_count·fte만 반영 — 나머지 4필드는 드롭 + 경고", () => {
+  it("subprocess 노드는 annual_count·fte만 반영 - 나머지 4필드는 드롭 + 경고", () => {
     const sub = baseNode("s1", "구매 승인", {
       node_type: "subprocess", linked_map_id: 7,
       duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
@@ -1118,7 +1118,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.system_fallback).toBe("EAM(원문)"); // CSV 표면 제외 — 병합이 무조건 보존
   });
 
-  it("IO 링크 필드(io-linking §3) — output 텍스트가 바뀌면 output_ids/output_links를 소거하고, input 셀이 비어 기존 텍스트가 유지되면 input_links/input_flags를 지킨다", () => {
+  it("IO 링크 필드(io-linking §3) - output 텍스트가 바뀌면 output_ids/output_links를 소거하고, input 셀이 비어 기존 텍스트가 유지되면 input_links/input_flags를 지킨다", () => {
     const base = baseGraph();
     base.nodes[1] = {
       ...base.nodes[1],
@@ -1137,7 +1137,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.input_flags).toBe("optional");
   });
 
-  it("IO 링크 필드 대칭 — input 텍스트가 바뀌면 input_links/input_flags를 소거하고, output이 유지되면 output_ids/output_links를 지킨다", () => {
+  it("IO 링크 필드 대칭 - input 텍스트가 바뀌면 input_links/input_flags를 소거하고, output이 유지되면 output_ids/output_links를 지킨다", () => {
     const base = baseGraph();
     base.nodes[1] = {
       ...base.nodes[1],
@@ -1156,7 +1156,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.output_links).toBe("itm_5");
   });
 
-  it("Input_Flags — 신규 노드 착지, 대소문자 정규화, 미지 값은 경고와 함께 required 강등", () => {
+  it("Input_Flags - 신규 노드 착지, 대소문자 정규화, 미지 값은 경고와 함께 required 강등", () => {
     const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2\n자료3","OPTIONAL\nmandatory\noptional"'].join("\n");
     const o = buildGraphFromCsv(csv);
     expect(o.errors).toEqual([]);
@@ -1165,7 +1165,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(true);
   });
 
-  it("Input_Flags — 전 줄 무효 셀도 '제공'으로 취급해 required로 리셋 + 경고 (QA 이슈 #2)", () => {
+  it("Input_Flags - 전 줄 무효 셀도 '제공'으로 취급해 required로 리셋 + 경고 (QA 이슈 #2)", () => {
     const base = baseGraph();
     base.nodes[1] = { ...base.nodes[1], input: "PR", input_flags: "optional" };
     const o = mergeOf(["Name,Input_Flags", '"Review request","mandatory"'].join("\n"), base);
@@ -1174,7 +1174,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(true);
   });
 
-  it("Input_Flags — required 토큰으로 optional을 명시 리셋한다(경고 없음)", () => {
+  it("Input_Flags - required 토큰으로 optional을 명시 리셋한다(경고 없음)", () => {
     const base = baseGraph();
     base.nodes[1] = { ...base.nodes[1], input: "PR", input_flags: "optional" };
     const o = mergeOf(["Name,Input_Flags", '"Review request","required"'].join("\n"), base);
@@ -1183,14 +1183,14 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(o.warnings.some((w) => w.message.includes("Input_Flags"))).toBe(false);
   });
 
-  it("Input_Flags — 선행 빈 줄 보존(1번째 필수·2번째 선택 패턴)", () => {
+  it("Input_Flags - 선행 빈 줄 보존(1번째 필수·2번째 선택 패턴)", () => {
     const csv = ["Name,Input,Input_Flags", '"A","자료1\n자료2","\noptional"'].join("\n");
     const o = buildGraphFromCsv(csv);
     expect(o.errors).toEqual([]);
     expect(o.graph!.nodes.find((n) => n.title === "A")!.input_flags).toBe("\noptional");
   });
 
-  it("Input_Flags — input 셀이 비어도(기존 유지) 제공되면 기존 줄에 정렬 적용, 초과 줄은 잘림", () => {
+  it("Input_Flags - input 셀이 비어도(기존 유지) 제공되면 기존 줄에 정렬 적용, 초과 줄은 잘림", () => {
     const base = baseGraph();
     base.nodes[1] = { ...base.nodes[1], input: "PR\n참고" };
     const o = mergeOf(["Name,Input_Flags", '"Review request","optional\n\noptional"'].join("\n"), base);
@@ -1200,7 +1200,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.input_flags).toBe("optional"); // 2줄로 잘리고 후행 빈 줄 소거
   });
 
-  it("Input_Flags — 서브프로세스 매칭 행은 드롭하고 경고에 포함", () => {
+  it("Input_Flags - 서브프로세스 매칭 행은 드롭하고 경고에 포함", () => {
     const base = baseGraph();
     base.nodes[1] = { ...base.nodes[1], node_type: "subprocess", linked_map_id: 7 };
     const o = mergeOf(["Name,Input_Flags", '"Review request","optional"'].join("\n"), base);

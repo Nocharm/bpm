@@ -26,7 +26,7 @@ const MOVE_MIN = 40; // flow px — 자유축은 이만큼은 움직여야 "실�
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });

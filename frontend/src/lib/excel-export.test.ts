@@ -70,7 +70,7 @@ describe("buildExcelModel", () => {
     ]);
   });
 
-  it("rootMapId 전달 시 루트 상호참조 순환은 재펼침 없이 즉시 circular 1행 — 루트 맵 re-fetch 없음", async () => {
+  it("rootMapId 전달 시 루트 상호참조 순환은 재펼침 없이 즉시 circular 1행 - 루트 맵 re-fetch 없음", async () => {
     // 맵1(루트, rootMapId:1) sub→맵2(id2), 맵2 sub→맵1(id1) — 조상 경로가 루트를 포함해 즉시 차단(design §4)
     const map1: Graph = {
       nodes: [
@@ -690,7 +690,7 @@ describe("buildExcelModel", () => {
     expect(nodeRows.find((r) => r.title === "D")?.next).toBe("A:go;B:go");
   });
 
-  it("규칙4: 라벨 분기 대상 Name에 [디시전No:라벨] 주석 — 역방향(앞 행) 대상도 최종 No 참조", async () => {
+  it("규칙4: 라벨 분기 대상 Name에 [디시전No:라벨] 주석 - 역방향(앞 행) 대상도 최종 No 참조", async () => {
     // start→A→D, D→A "retry"(역방향), D→B "pass" — A(2행)는 D(3행)보다 앞
     const map1: Graph = {
       nodes: [
@@ -743,7 +743,7 @@ describe("buildExcelModel", () => {
     expect(nodeRows.map((r) => r.title)).toEqual(["Start", "D1", "D2 [2:next]", "T [2:a] [3:b]"]);
   });
 
-  it("규칙4: 라벨 전파 — 라벨 디시전→무라벨 디시전 경유 최종 대상에도 주석", async () => {
+  it("규칙4: 라벨 전파 - 라벨 디시전→무라벨 디시전 경유 최종 대상에도 주석", async () => {
     // D ─go→ P(무라벨, 행 삭제) → A,B — A·B에 [2:go]
     const map1: Graph = {
       nodes: [

@@ -29,7 +29,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -114,9 +114,9 @@ try {
   const stamp = Date.now();
   const dir0 = await api("/directory");
   const owningDept = dir0.departments[0]?.id;
-  if (!owningDept) throw new Error("directory has no departments — cannot supply owning_department");
+  if (!owningDept) throw new Error("directory has no departments - cannot supply owning_department");
   const approver = (dir0.users.find((u) => u.id === "admin.sys") ?? dir0.users[0])?.id;
-  if (!approver) throw new Error("directory has no employees — approval quorum impossible");
+  if (!approver) throw new Error("directory has no employees - approval quorum impossible");
   // admin.sys가 아닌 유저 — 지정 행위자로 써서 (오너=admin.sys) != (행위자) 를 만든다 (알림 수신자 실측)
   const actor2 = dir0.users.find((u) => u.id !== "admin.sys")?.id;
   if (!actor2) throw new Error("directory needs a second user distinct from admin.sys");

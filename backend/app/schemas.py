@@ -18,7 +18,7 @@ from app.duration import NUMERIC_RE, normalize_duration
 def _assert_single_currency(krw: str, usd: str) -> None:
     """비용은 원/달러 중 하나만 — 둘 다 채우면 422 (design 2026-07-13 §3.3)."""
     if krw.strip() and usd.strip():
-        raise ValueError("cost_krw and cost_usd are mutually exclusive — fill only one")
+        raise ValueError("cost_krw and cost_usd are mutually exclusive - fill only one")
 
 
 class SectionEntryIn(BaseModel):

@@ -17,7 +17,7 @@ const LIGHT = "rgb(246, 246, 248)"; // --color-canvas #f6f6f8
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 활성 캔버스(.react-flow를 품은 bg-canvas*/bpm-l5-sky 래퍼)의 computed 배경색

@@ -43,7 +43,7 @@ describe("getDisplayHeight", () => {
   });
 });
 
-describe("buildHeightShiftField — 충돌 기반 오프셋", () => {
+describe("buildHeightShiftField - 충돌 기반 오프셋", () => {
   it("성장 없음 → 오프셋·푸셔 없음", () => {
     const field = buildHeightShiftField([makeNode("a", 0, 0), makeNode("b", 0, 200)]);
     expect(field.offsets.size).toBe(0);
@@ -94,7 +94,7 @@ describe("buildHeightShiftField — 충돌 기반 오프셋", () => {
     expect(field.offsets.get("c")).toBeUndefined();
   });
 
-  it("행 동기화 — 같은 행(저장 Y구간 겹침)은 밀림량을 행 max로 공유", () => {
+  it("행 동기화 - 같은 행(저장 Y구간 겹침)은 밀림량을 행 max로 공유", () => {
     const field = buildHeightShiftField([
       makeNode("a", 0, 0, { measuredH: 152 }),
       makeNode("b", 0, 80),
@@ -104,7 +104,7 @@ describe("buildHeightShiftField — 충돌 기반 오프셋", () => {
     expect(field.offsets.get("c")).toBe(88);
   });
 
-  it("연쇄 — 밀린 노드가 아래 행을 다시 민다(간격 16 유지)", () => {
+  it("연쇄 - 밀린 노드가 아래 행을 다시 민다(간격 16 유지)", () => {
     const field = buildHeightShiftField([
       makeNode("a", 0, 0, { measuredH: 152 }),
       makeNode("b", 0, 80),
@@ -136,7 +136,7 @@ describe("buildHeightShiftField — 충돌 기반 오프셋", () => {
   });
 });
 
-describe("invertDisplayY — 열 단위 역변환", () => {
+describe("invertDisplayY - 열 단위 역변환", () => {
   const field = buildHeightShiftField([
     makeNode("a", 0, 0, { measuredH: 152 }), // 푸셔: x [0,170], baseBottom 52, dispBottom 152
   ]);
@@ -157,7 +157,7 @@ describe("invertDisplayY — 열 단위 역변환", () => {
     expect(invertDisplayY(field, 50, 50, 100)).toBeCloseTo(52, 3);
   });
 
-  it("플래토는 최소 저장 y — forward와 왕복 일치", () => {
+  it("플래토는 최소 저장 y - forward와 왕복 일치", () => {
     // 표시 168 = dispBottom(152) + MIN_GAP(16) → 저장 68 (savedGap 16 지점)
     const saved = invertDisplayY(field, 50, 50, 168);
     expect(saved).toBeCloseTo(68, 3);
@@ -169,12 +169,12 @@ describe("invertDisplayY — 열 단위 역변환", () => {
     expect(saved + (round.offsets.get("p") ?? 0)).toBeCloseTo(168, 2);
   });
 
-  it("구간 프로브 — [x0,x1]가 푸셔와 일부라도 겹치면 영향권", () => {
+  it("구간 프로브 - [x0,x1]가 푸셔와 일부라도 겹치면 영향권", () => {
     expect(invertDisplayY(field, 150, 320, 100)).toBeCloseTo(52, 3);
     expect(invertDisplayY(field, 171, 320, 100)).toBeCloseTo(100, 3);
   });
 
-  it("excludeId — 드래그 노드 자신의 푸셔는 역변환에서 제외(자기 밴드 그림자 드롭 항등)", () => {
+  it("excludeId - 드래그 노드 자신의 푸셔는 역변환에서 제외(자기 밴드 그림자 드롭 항등)", () => {
     // a 성장 300 → b(y=60, gap 8) offset 248, b 푸셔 밴드 [112, 360]
     const two = buildHeightShiftField([
       makeNode("a", 0, 0, { measuredH: 300 }),

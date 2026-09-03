@@ -20,7 +20,7 @@ fs.mkdirSync(SHOT_DIR, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const shot = (page, name) => page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
 
@@ -98,7 +98,7 @@ await page.getByText("하위 프로세스 접기").first().click();
 await page.waitForTimeout(1200);
 const afterCollapse = await bandIds();
 check(
-  "[중첩] 접기는 안쪽(C)만 — 바깥(B) 유지",
+  "[중첩] 접기는 안쪽(C)만 - 바깥(B) 유지",
   afterCollapse.includes(HOST_B) && !afterCollapse.includes(HOST_C),
   afterCollapse.join(", ") || "(없음)",
 );

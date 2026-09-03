@@ -31,7 +31,7 @@ if (!/WORD_FEATURES_ENABLED\s*=\s*true/.test(featureSrc)) {
 const dir = await (await fetch(`${API}/directory`)).json();
 const owningDept = dir.departments[0]?.id;
 if (!owningDept) {
-  console.log("SEED FAILED — directory has no departments");
+  console.log("SEED FAILED - directory has no departments");
   process.exit(1);
 }
 

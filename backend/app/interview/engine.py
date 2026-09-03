@@ -30,8 +30,8 @@ STAGES: tuple[StageDef, ...] = (
     ),
     StageDef(
         "activities", "Activities",
-        "주요 활동을 순서대로 나열한다 — 세분도(활동 10개 내외)가 핵심 결정",
-        "List the main activities in order — granularity (around 10 activities) is the key decision",
+        "주요 활동을 순서대로 나열한다 - 세분도(활동 10개 내외)가 핵심 결정",
+        "List the main activities in order - granularity (around 10 activities) is the key decision",
         ("activities",),
         choice_stage=True,
     ),
@@ -44,15 +44,15 @@ STAGES: tuple[StageDef, ...] = (
     ),
     StageDef(
         "roles", "Roles & Systems",
-        "각 활동의 부서(제시된 후보 목록 내)와 사용 시스템을 채운다 — 담당자는 에디터 피커로 지정하므로 묻지 않는다",
-        "Fill in the department (from the provided candidate list) and systems for each activity — "
+        "각 활동의 부서(제시된 후보 목록 내)와 사용 시스템을 채운다 - 담당자는 에디터 피커로 지정하므로 묻지 않는다",
+        "Fill in the department (from the provided candidate list) and systems for each activity - "
         "assignees are set via the editor picker, do not ask for them",
         ("roles",),
     ),
     StageDef(
         "review", "Review",
-        "완성된 맵을 함께 검토하고 승인 여부를 확인한다 — 파라미터 정리는 Params 버튼/요청으로 가능함을 처음에 한 번 안내한다",
-        "Review the finished map together and confirm approval — mention once that parameters can be organized anytime via the Params button or on request",
+        "완성된 맵을 함께 검토하고 승인 여부를 확인한다 - 파라미터 정리는 Params 버튼/요청으로 가능함을 처음에 한 번 안내한다",
+        "Review the finished map together and confirm approval - mention once that parameters can be organized anytime via the Params button or on request",
         ("approved",),
     ),
 )
@@ -92,8 +92,8 @@ def _stage_set(mode: str) -> tuple[tuple[StageDef, ...], dict[str, StageDef]]:
 # 진행 중이던 레거시 세션이 안전히 review로 빠져나가도록 정의만 유지한다.
 _LEGACY_PARAMS_STAGE = StageDef(
     "params", "Parameters",
-    "파라미터 체계를 설명한 뒤 활동별 회당 파라미터를 확인해 확정한다 (레거시 — 다음 단계는 review)",
-    "Confirm per-activity parameters (legacy — the next stage is review)",
+    "파라미터 체계를 설명한 뒤 활동별 회당 파라미터를 확인해 확정한다 (레거시 - 다음 단계는 review)",
+    "Confirm per-activity parameters (legacy - the next stage is review)",
     ("params_done",),
 )
 

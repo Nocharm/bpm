@@ -35,7 +35,7 @@ describe("upsertStagedOp", () => {
     expect(next).toHaveLength(2);
   });
 
-  it("같은 permissionId에 change 후 remove — remove만 남는다(낡은 change가 얹혀가지 않음)", () => {
+  it("같은 permissionId에 change 후 remove - remove만 남는다(낡은 change가 얹혀가지 않음)", () => {
     const ops: StagedOp[] = [];
     const first = upsertStagedOp(ops, { kind: "change", permissionId: 5, toRole: "editor" });
     const second = upsertStagedOp(first, { kind: "remove", permissionId: 5 });
@@ -43,7 +43,7 @@ describe("upsertStagedOp", () => {
     expect(second).toEqual([{ kind: "remove", permissionId: 5 }]);
   });
 
-  it("같은 permissionId에 remove 후 change — change만 남는다", () => {
+  it("같은 permissionId에 remove 후 change - change만 남는다", () => {
     const ops: StagedOp[] = [];
     const first = upsertStagedOp(ops, { kind: "remove", permissionId: 5 });
     const second = upsertStagedOp(first, { kind: "change", permissionId: 5, toRole: "viewer" });
@@ -76,7 +76,7 @@ describe("stageRoleChange", () => {
 });
 
 describe("removeStagedOp", () => {
-  it("행별 개별 취소 — 대상 op만 스택에서 제거", () => {
+  it("행별 개별 취소 - 대상 op만 스택에서 제거", () => {
     const ops: StagedOp[] = [
       { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
       { kind: "remove", permissionId: 9 },
@@ -86,7 +86,7 @@ describe("removeStagedOp", () => {
     expect(next).toEqual([{ kind: "add", principalType: "user", principalId: "u1", role: "viewer" }]);
   });
 
-  it("add 취소 — 아직 서버에 없는 행이라 스택에서 걷어내는 것만으로 취소된다", () => {
+  it("add 취소 - 아직 서버에 없는 행이라 스택에서 걷어내는 것만으로 취소된다", () => {
     const ops: StagedOp[] = [
       { kind: "add", principalType: "user", principalId: "u1", role: "viewer" },
       { kind: "remove", permissionId: 9 },

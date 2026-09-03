@@ -37,7 +37,7 @@ const v2: VersionGraph = {
   edges: [edge("y1", "s2", "a2"), edge("y2", "a2", "b1"), edge("y3", "b1", "e2")],
 };
 
-describe("computeVersionDiff — CSV 머지 임포트 후", () => {
+describe("computeVersionDiff - CSV 머지 임포트 후", () => {
   it("바뀌지 않은 Start→Review 엣지를 added/removed로 잡지 않는다", () => {
     expect(computeVersionDiff(v1, v2).rightEdgeStatus.get("y1")).toBeUndefined();
   });

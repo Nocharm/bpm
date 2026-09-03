@@ -13,7 +13,7 @@ fs.mkdirSync(SHOT_DIR, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const shot = (page, name) => page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
 

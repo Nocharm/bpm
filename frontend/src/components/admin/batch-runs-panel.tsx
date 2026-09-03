@@ -195,7 +195,7 @@ export function BatchRunsPanel() {
                   <div className="flex gap-3">
                     <dt className="w-24 shrink-0 text-ink-tertiary">{t("batch.lastSuccess")}</dt>
                     <dd className="min-w-0 text-ink">
-                      {success ? formatKst(success.ran_at) : "—"}
+                      {success ? formatKst(success.ran_at) : "-"}
                       {success?.detail && (
                         <span className="ml-2 break-all text-ink-muted">{success.detail}</span>
                       )}
@@ -204,7 +204,7 @@ export function BatchRunsPanel() {
                   <div className="flex gap-3">
                     <dt className="w-24 shrink-0 text-ink-tertiary">{t("batch.lastFailure")}</dt>
                     <dd className="min-w-0 text-ink">
-                      {failure ? formatKst(failure.ran_at) : "—"}
+                      {failure ? formatKst(failure.ran_at) : "-"}
                       {failure?.detail && (
                         <span className="ml-2 break-all text-error">{failure.detail}</span>
                       )}

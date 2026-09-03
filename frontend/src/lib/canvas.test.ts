@@ -290,7 +290,7 @@ describe("flow stepper helpers (F14)", () => {
   });
 });
 
-describe("flow path highlight (F14 — growing/shrinking)", () => {
+describe("flow path highlight (F14 - growing/shrinking)", () => {
   // A → B → C → D
   const edges = [
     { id: "e1", source: "A", target: "B" },

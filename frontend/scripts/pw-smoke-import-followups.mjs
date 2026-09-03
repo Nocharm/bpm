@@ -16,7 +16,7 @@ const SAMPLE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const shot = (page, name) => page.screenshot({ path: path.join(SCRATCH, `followups-${name}.png`) });
 

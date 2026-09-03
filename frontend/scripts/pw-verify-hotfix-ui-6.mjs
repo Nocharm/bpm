@@ -12,7 +12,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -137,19 +137,19 @@ for (const [w, expectAside] of [[940, false], [1100, true]]) {
   // 카드 패딩을 클릭 = 선택. 중앙은 이름 Link라 에디터로 이동해 버린다
   await page.locator('[data-id="map-card"]').first().click({ position: { x: 6, y: 6 } });
   await page.waitForTimeout(400);
-  check(`홈 ${w}px — 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("map-detail-aside")) === expectAside);
+  check(`홈 ${w}px - 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("map-detail-aside")) === expectAside);
   await page.screenshot({ path: `${SHOTS}/03-home-${w}.png` });
 
   await page.goto(`${BASE}/notices`, { waitUntil: "networkidle" });
   await page.locator("ul li button").first().click();
   await page.waitForTimeout(400);
-  check(`공지 ${w}px — 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("notice-detail-aside")) === expectAside);
+  check(`공지 ${w}px - 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("notice-detail-aside")) === expectAside);
   await page.screenshot({ path: `${SHOTS}/03-notices-${w}.png` });
 
   await page.goto(`${BASE}/inbox`, { waitUntil: "networkidle" });
   await page.locator("ul li button").first().click();
   await page.waitForTimeout(400);
-  check(`인박스 ${w}px — 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("inbox-detail-aside")) === expectAside);
+  check(`인박스 ${w}px - 우측 상세 ${expectAside ? "표시" : "숨김"}`, (await asideVisible("inbox-detail-aside")) === expectAside);
   await page.screenshot({ path: `${SHOTS}/03-inbox-${w}.png` });
 }
 
@@ -162,7 +162,7 @@ const accordionOpen = await page
   .locator('[data-id="notice-detail-accordion"]')
   .first()
   .evaluate((el) => el.getBoundingClientRect().height > 40);
-check("공지 940px — 카드 아래 아코디언 펼침", accordionOpen);
+check("공지 940px - 카드 아래 아코디언 펼침", accordionOpen);
 await page.screenshot({ path: `${SHOTS}/03b-notices-940-accordion.png`, fullPage: false });
 
 // ── ① 맵 설정 좌측 레일 버튼 ────────────────────────────────────────

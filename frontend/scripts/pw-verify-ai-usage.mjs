@@ -11,7 +11,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3010";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 이벤트 2건 시드 — 성공(토큰)·실패. sqlite raw INSERT는 tz-aware DateTime 문자열 비교 함정이 있어

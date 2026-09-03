@@ -29,7 +29,7 @@ const L5_LEAF = "Calibration 수행 및 결과 보고"; // calibration-l5.json�
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 서버 직접 호출 — X-Dev-User로 신원 지정(devLogin 없이도 dev 모드 인증 통과, admin.sys는
@@ -224,7 +224,7 @@ try {
     await shot(dpage, "delegate-scoped-tree");
     await dctx.close();
   } else {
-    check("delegate scope UI check", false, "skipped — permission seed step failed above");
+    check("delegate scope UI check", false, "skipped - permission seed step failed above");
   }
 
   const errFree = consoleErrors.length === 0;

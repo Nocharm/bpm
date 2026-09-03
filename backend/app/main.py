@@ -70,7 +70,7 @@ async def _run_hr_sync_loop() -> None:
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 -- 주기 실패가 프로세스를 죽이면 안 됨
-            logger.exception("scheduled HR sync failed — retrying next interval")
+            logger.exception("scheduled HR sync failed - retrying next interval")
 
 
 @asynccontextmanager

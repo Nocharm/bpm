@@ -33,7 +33,7 @@ const editable = await page.evaluate(() =>
   document.querySelector('.react-flow__node[data-id="c-start"]').classList.contains("draggable"),
 );
 if (!editable) {
-  console.log("NOT EDITABLE (read-only) — checkout held by another user; cannot exercise drop-zone.");
+  console.log("NOT EDITABLE (read-only) - checkout held by another user; cannot exercise drop-zone.");
   await browser.close();
   process.exit(1);
 }

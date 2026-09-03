@@ -808,7 +808,7 @@ async def update_map(
             if role != "owner":
                 raise HTTPException(
                     status_code=403,
-                    detail="renaming requires owner — submit a rename request instead",
+                    detail="renaming requires owner - submit a rename request instead",
                 )
             await _assert_unique_name(session, new_name, exclude_map_id=map_id)
             old_name = found_map.name
@@ -845,7 +845,7 @@ async def _supersede_pending_rename(
         [req.requested_by],
         type="rename_superseded",
         map_id=map_id,
-        message=f"Your rename request was superseded — the map is now '{new_name}'",
+        message=f"Your rename request was superseded - the map is now '{new_name}'",
         payload={"map_name": new_name, "to_name": new_name},
     )
 
@@ -1404,7 +1404,7 @@ async def transfer_framework_slot(
     if slot_category is None or slot_category.level != 5:
         raise HTTPException(
             status_code=409,
-            detail="framework slot must point to a level-5 category — reassign before transfer",
+            detail="framework slot must point to a level-5 category - reassign before transfer",
         )
     target.category_id = source.category_id
     target.consultant_code = source.consultant_code

@@ -194,12 +194,12 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
     if settings.ldap_enabled:
         positions: list[client.RawHrPosition] = []
         if not settings.position_enabled:
-            logger.info("position pass disabled — N8N_POSITION_URL unset")
+            logger.info("position pass disabled - N8N_POSITION_URL unset")
         if settings.position_enabled:
             try:
                 positions = await client.fetch_positions()
             except Exception:  # noqa: BLE001 -- EDW 실패 시 title만 갱신 (설계 §4-2)
-                logger.exception("EDW positions fetch failed — proceeding with title-only AD pass")
+                logger.exception("EDW positions fetch failed - proceeding with title-only AD pass")
         try:
             from app.ad.service import refresh_titles_and_positions  # 지연 import(LDAP 미설정 무부하)
 
@@ -207,7 +207,7 @@ async def sync_all(session: AsyncSession) -> HrSyncSummary:
                 await refresh_titles_and_positions(session, positions)
             )
         except Exception:  # noqa: BLE001 -- AD 패스 실패가 sync 자체를 깨면 안 됨 (§5-7)
-            logger.exception("AD title/position refresh failed — HR sync itself succeeded")
+            logger.exception("AD title/position refresh failed - HR sync itself succeeded")
 
     return HrSyncSummary(
         scanned=scanned, upserted=len(fields_by_id), deactivated=len(deactivated_now),
@@ -300,7 +300,7 @@ async def sync_one(session: AsyncSession, login_id: str) -> Employee | None:
     try:
         raw = await client.fetch_employee(login_id)
     except Exception:  # noqa: BLE001 -- 웹훅 장애가 로그인을 막으면 안 됨 — 기존 행으로 동작
-        logger.exception("HR single sync failed for %s — keeping existing row", login_id)
+        logger.exception("HR single sync failed for %s - keeping existing row", login_id)
         return None
     _one_sync_done[login_id] = today  # 미존재·성공 모두 오늘 재조회 안 함
     if raw is None:

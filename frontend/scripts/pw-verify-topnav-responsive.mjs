@@ -30,7 +30,7 @@ const LANGS = ["en", "ko"];
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const section = (title) => console.log(`\n=== ${title} ===`);
 
@@ -204,22 +204,22 @@ try {
       if (width === 1440) {
         // S0 앵커: 탭 라벨 3개 모두 노출 + 피드백 라벨 노출 + 언어 버튼 2개 + 유저 이름 텍스트.
         const tabLabels = await countVisibleTabLabels();
-        check(`${lang}@1440px: S0 — 3 tab labels visible`, tabLabels === 3, `tabLabels=${tabLabels}`);
-        check(`${lang}@1440px: S0 — feedback label visible`, await feedbackLabelVisible());
+        check(`${lang}@1440px: S0 - 3 tab labels visible`, tabLabels === 3, `tabLabels=${tabLabels}`);
+        check(`${lang}@1440px: S0 - feedback label visible`, await feedbackLabelVisible());
         const langCount = await langButtonCount();
-        check(`${lang}@1440px: S0 — 2 lang buttons`, langCount === 2, `count=${langCount}`);
-        check(`${lang}@1440px: S0 — user name text (no icon)`, await userShowsNameText());
+        check(`${lang}@1440px: S0 - 2 lang buttons`, langCount === 2, `count=${langCount}`);
+        check(`${lang}@1440px: S0 - user name text (no icon)`, await userShowsNameText());
       }
 
       if (width === 760) {
         // S1 앵커(실측 보정 — 스펙 초안의 "760→S4" 가정은 실 시드 데이터로 재현 안 됨, 위 헤더 각주
         // 참고): 탭만 강등(비활성 아이콘만), 피드백/언어/이름은 아직 S0 그대로.
         const tabLabels = await countVisibleTabLabels();
-        check(`${lang}@760px: S1 — exactly 1 tab label (only active)`, tabLabels === 1, `tabLabels=${tabLabels}`);
-        check(`${lang}@760px: S1 — feedback label still visible (not yet S2)`, await feedbackLabelVisible());
+        check(`${lang}@760px: S1 - exactly 1 tab label (only active)`, tabLabels === 1, `tabLabels=${tabLabels}`);
+        check(`${lang}@760px: S1 - feedback label still visible (not yet S2)`, await feedbackLabelVisible());
         const langCount = await langButtonCount();
-        check(`${lang}@760px: S1 — still 2 lang buttons (not yet S3)`, langCount === 2, `count=${langCount}`);
-        check(`${lang}@760px: S1 — user still shows name text (not yet S4)`, await userShowsNameText());
+        check(`${lang}@760px: S1 - still 2 lang buttons (not yet S3)`, langCount === 2, `count=${langCount}`);
+        check(`${lang}@760px: S1 - user still shows name text (not yet S4)`, await userShowsNameText());
       }
 
       await shot(`${lang}-${width}`);
@@ -227,16 +227,16 @@ try {
 
     // SUPPLEMENTARY: 공식 5폭 스윕에는 없지만, 캐스케이드 최종 단계(S4)가 실제로 렌더되는지
     // end-to-end 확인하는 폭. 실측 임계(avail<~644px, 폭 ~660대 경계) 아래 안전 여유.
-    section(`lang=${lang} — S4 confirmation (supplementary ${S4_CONFIRM_WIDTH}px)`);
+    section(`lang=${lang} - S4 confirmation (supplementary ${S4_CONFIRM_WIDTH}px)`);
     await page.setViewportSize({ width: S4_CONFIRM_WIDTH, height: 900 });
     await page.waitForTimeout(400);
     await measure(`${lang}@${S4_CONFIRM_WIDTH}px(S4-confirm)`);
     const tabLabels = await countVisibleTabLabels();
-    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 — ≤1 tab label visible`, tabLabels <= 1, `tabLabels=${tabLabels}`);
-    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 — no feedback label`, !(await feedbackLabelVisible()));
+    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 - ≤1 tab label visible`, tabLabels <= 1, `tabLabels=${tabLabels}`);
+    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 - no feedback label`, !(await feedbackLabelVisible()));
     const langCount = await langButtonCount();
-    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 — 1 lang button`, langCount === 1, `count=${langCount}`);
-    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 — user renders svg icon not name text`, await userShowsIcon());
+    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 - 1 lang button`, langCount === 1, `count=${langCount}`);
+    check(`${lang}@${S4_CONFIRM_WIDTH}px: S4 - user renders svg icon not name text`, await userShowsIcon());
     await shot(`${lang}-${S4_CONFIRM_WIDTH}-s4confirm`);
   }
 
@@ -251,7 +251,7 @@ try {
   await page.setViewportSize({ width: 760, height: 900 });
   await page.waitForTimeout(400);
   const tabLabelsAt760 = await countVisibleTabLabels();
-  check("S1 interaction sanity: precondition — 760px is S1 (icon-only inactive tabs)", tabLabelsAt760 === 1, `tabLabels=${tabLabelsAt760}`);
+  check("S1 interaction sanity: precondition - 760px is S1 (icon-only inactive tabs)", tabLabelsAt760 === 1, `tabLabels=${tabLabelsAt760}`);
   await page.locator('nav a[href="/notices"]').click();
   await page.waitForURL(/\/notices/, { timeout: 5000 }).catch(() => {});
   check(

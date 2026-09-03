@@ -401,7 +401,7 @@ def match_known_department(
     if len(suffix_hits) == 1:
         return suffix_hits[0], f"department {dept!r} aligned to {suffix_hits[0]!r}"
     if len(suffix_hits) > 1:
-        return None, f"department {dept!r} ambiguous — matches {len(suffix_hits)} org paths"
+        return None, f"department {dept!r} ambiguous - matches {len(suffix_hits)} org paths"
     # ④ 미러 체인 정렬 — 전달물 선두에 미러 밖 상위(법인 등)가 섞였을 수 있어 드랍하며 시도
     if chains:
         trim = settings.org_trim_levels
@@ -417,7 +417,7 @@ def match_known_department(
                 path = next(iter(landed))
                 return path, f"department {dept!r} aligned to {path!r} (dept tree)"
             if len(landed) > 1:
-                return None, f"department {dept!r} ambiguous — matches {len(landed)} dept-tree paths"
+                return None, f"department {dept!r} ambiguous - matches {len(landed)} dept-tree paths"
     return None, None
 
 
@@ -433,7 +433,7 @@ def match_delivered_department(
     owning, note = match_known_department(known, dept, chains)
     if owning is None and dept:
         reason = note or f"department {dept!r} not in org tree"
-        return dept, f"{reason} — registered as delivered"
+        return dept, f"{reason} - registered as delivered"
     return owning, note
 
 
@@ -457,13 +457,13 @@ async def resolve_owning_department(
     path = resolve_org_path(employee, index) if employee else ""
     if path:
         if not dept:
-            return path, f"department empty — fallback to owner org {path!r}"
+            return path, f"department empty - fallback to owner org {path!r}"
         reason = match_note or f"department {dept!r} unknown"
-        return path, f"{reason} — fallback to owner org {path!r}"
+        return path, f"{reason} - fallback to owner org {path!r}"
     if dept:
         reason = match_note or f"department {dept!r} not in org tree"
-        return dept, f"{reason} — registered as delivered"
-    return None, f"department empty and owner {owner!r} has no org — left NULL"
+        return dept, f"{reason} - registered as delivered"
+    return None, f"department empty and owner {owner!r} has no org - left NULL"
 
 
 @dataclass
@@ -515,7 +515,7 @@ def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalPara
         else:
             setattr(p, name, normalized)
     if p.cost_krw.strip() and p.cost_usd.strip():
-        report.add(cmap.code, "warning", "both cost_krw and cost_usd set — cost_usd dropped")
+        report.add(cmap.code, "warning", "both cost_krw and cost_usd set - cost_usd dropped")
         p.cost_usd = ""
     for name in ("cost_krw", "cost_usd", "headcount", "annual_count", "fte"):
         value = getattr(p, name).strip()
@@ -737,7 +737,7 @@ async def import_delivery(
     deduped: list[CanonicalMap] = []
     for cmap in maps:
         if cmap.code in seen_codes:
-            report.add(cmap.code, "error", "duplicate map code in delivery — skipped")
+            report.add(cmap.code, "error", "duplicate map code in delivery - skipped")
             continue
         seen_codes.add(cmap.code)
         deduped.append(cmap)
@@ -766,7 +766,7 @@ async def import_delivery(
         if cmap.code in existing and existing[cmap.code].deleted_at is not None
     }
     for code in trashed_in_delivery:
-        report.add(code, "error", "map is in trash — restore or purge before re-import")
+        report.add(code, "error", "map is in trash - restore or purge before re-import")
 
     # params 정규화는 여기 1회만 — link_targets 시딩과 pass 2 SP 지정이 같은 값을 공유한다.
     # (예전엔 link_targets가 raw params를 써서 대상 맵의 무효값이 정규화 없이 연계 노드에 그대로 박혔다.)
@@ -780,7 +780,7 @@ async def import_delivery(
         p = normalized[cmap.code]
         if (p.annual_count or p.fte) and cmap.code not in landing:
             report.add(cmap.code, "warning",
-                       "annual_count/fte have no landing site — no inbound link or linkage canvas")
+                       "annual_count/fte have no landing site - no inbound link or linkage canvas")
 
     # 맵 이름 중복은 차단·강제개명 대상이 아니다(컨트롤러 결정) — 컨설턴트 식별은 consultant_code,
     # 표시 구분은 카테고리 경로가 맡는다. 경고만 남기고 양쪽 다 정상 진행.
@@ -837,7 +837,7 @@ async def import_delivery(
             # (2026-09-02) — 실오너 배정 시 위 예외 분기가 재해석한다.
             owner_login = actor
             owning, note = match_delivered_department(known, cmap.department, dept_chains)
-            report.add(cmap.code, "warning", "owner missing — fallback to importer (pending)")
+            report.add(cmap.code, "warning", "owner missing - fallback to importer (pending)")
         else:
             owning, note = await resolve_owning_department(
                 session, known, dept_index, cmap.department, owner_login, dept_chains
@@ -1235,10 +1235,10 @@ async def apply_interview_linkage(
             select(ProcessCategory).where(ProcessCategory.code == code)
         )
         if category is None:
-            report.add(code, "warning", "linkage skipped — category not found")
+            report.add(code, "warning", "linkage skipped - category not found")
             continue
         if category.level != 5:
-            report.add(code, "warning", f"linkage skipped — category is level {category.level}")
+            report.add(code, "warning", f"linkage skipped - category is level {category.level}")
             continue
 
         placed = (await session.execute(
@@ -1250,7 +1250,7 @@ async def apply_interview_linkage(
         map_ids = {c: mid for mid, c, _ in placed if c is not None}
         map_names = {mid: name for mid, _, name in placed}
         if not map_ids:
-            report.add(code, "warning", "linkage skipped — no imported maps to place")
+            report.add(code, "warning", "linkage skipped - no imported maps to place")
             continue
 
         canvas = (
@@ -1277,11 +1277,11 @@ async def apply_interview_linkage(
                 .order_by(MapVersion.id.desc())
             )
             if draft is None:
-                report.add(code, "warning", "linkage skipped — canvas has no draft version")
+                report.add(code, "warning", "linkage skipped - canvas has no draft version")
                 continue
             if draft.checked_out_by not in (None, actor):
                 report.add(code, "warning",
-                           f"linkage skipped — canvas checked out by {draft.checked_out_by}")
+                           f"linkage skipped - canvas checked out by {draft.checked_out_by}")
                 continue
 
         existing = list((await session.scalars(
@@ -1402,7 +1402,7 @@ async def apply_interview_linkage(
             src, dst = _node_of(src_key), _node_of(dst_key)
             if src is None or dst is None:
                 report.add(code, "warning",
-                           f"linkage edge {src_key}→{dst_key} dropped — node not on canvas")
+                           f"linkage edge {src_key}→{dst_key} dropped - node not on canvas")
                 continue
             if (src.id, dst.id) in existing_pairs:
                 continue

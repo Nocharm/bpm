@@ -8,7 +8,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 시드 조직 일부를 tree로 — 본부(l1) → 실(l2) → 팀(l3) → 파트(l4). 상위 3레벨은 employees.department가 아니다.

@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current
 logger = logging.getLogger(__name__)
 
 _NOT_EDITABLE_MSG = "이 버전은 편집할 수 없어 그래프를 적용할 수 없습니다. 도움말만 가능합니다."
-_UNKNOWN_NODES_MSG = "참고: 현재 맵에 없는 노드를 참조했습니다 — {ids}"
+_UNKNOWN_NODES_MSG = "참고: 현재 맵에 없는 노드를 참조했습니다 - {ids}"
 
 
 def _missing_node_ids(proposal: AiProposal, valid_ids: set[str]) -> list[str]:

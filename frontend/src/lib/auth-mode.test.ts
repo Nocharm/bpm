@@ -42,7 +42,7 @@ describe("fetchAuthMode", () => {
 });
 
 describe("getCachedAuthMode", () => {
-  it("does not memoize a transient fallback — retries once the endpoint recovers", async () => {
+  it("does not memoize a transient fallback - retries once the endpoint recovers", async () => {
     vi.resetModules();
     const { getCachedAuthMode: freshGetCachedAuthMode } = await import("./auth-mode");
 

@@ -83,7 +83,7 @@ await page.screenshot({ path: "/tmp/bpm-task6b-smoke.png", fullPage: false });
 await browser.close();
 
 console.log("toggle clicked:", clicked);
-console.log("embedded visible — 접수:", hasJeobsu, "검토:", hasGeomto);
+console.log("embedded visible - 접수:", hasJeobsu, "검토:", hasGeomto);
 console.log("selected after click:", JSON.stringify(selectedAfterClick));
 console.log("not draggable:", notDraggable);
 console.log("menu visible after right-click:", menuVisible);

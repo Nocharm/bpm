@@ -39,7 +39,7 @@ async function build(graph: Graph, over: Partial<Parameters<typeof buildWbsModel
 }
 
 describe("buildWbsModel", () => {
-  it("SP는 행 미차지 — 잎 행이 레벨 경로를 달고 제자리 전개되고 maxLevel이 최대 깊이", async () => {
+  it("SP는 행 미차지 - 잎 행이 레벨 경로를 달고 제자리 전개되고 maxLevel이 최대 깊이", async () => {
     // Root: start→A→Sub(맵2)→end / 맵2: start→P→end
     const map1: Graph = {
       nodes: [
@@ -89,7 +89,7 @@ describe("buildWbsModel", () => {
     expect(nodeRows[0]?.next).toBe("출하 종료");
   });
 
-  it("무라벨 디시전 삭제+flow-through·재수렴 중복 제거 — 1안과 동일 규칙", async () => {
+  it("무라벨 디시전 삭제+flow-through·재수렴 중복 제거 - 1안과 동일 규칙", async () => {
     // A→P(무라벨)→B, P→Q(무라벨)→B — A.next "B" (중복 없이)
     const map1: Graph = {
       nodes: [

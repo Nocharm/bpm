@@ -83,7 +83,7 @@ try {
   await page.waitForTimeout(300);
   urlInput = page.locator('[data-id="url-field-input"]');
   if (await urlInput.isDisabled().catch(() => false)) {
-    fail("url input disabled — map 2 draft may be checked out by someone other than admin.sys");
+    fail("url input disabled - map 2 draft may be checked out by someone other than admin.sys");
   } else {
     await urlInput.fill("https://example.com/");
     await page.keyboard.press("Enter");

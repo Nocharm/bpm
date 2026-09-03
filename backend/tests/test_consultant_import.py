@@ -753,7 +753,7 @@ def test_duplicate_map_code_in_delivery_errors_on_second(client) -> None:
     second = _canonical_map(code="L6-DUP-01", name="Second")
     report = _run(_import_once(maps=[first, second]))
     assert report.counts() == {"created": 1, "error": 1}
-    assert ("L6-DUP-01", "error", "duplicate map code in delivery — skipped") in report.rows
+    assert ("L6-DUP-01", "error", "duplicate map code in delivery - skipped") in report.rows
 
     async def _load():
         async with SessionLocal() as session:
@@ -815,7 +815,7 @@ def test_reimport_trashed_map_errors(client) -> None:
     _run(_trash())
 
     report = _run(_import_once(maps=[_canonical_map(code="L6-TRASH-1")], label="Delivery 2"))
-    assert ("L6-TRASH-1", "error", "map is in trash — restore or purge before re-import") in report.rows
+    assert ("L6-TRASH-1", "error", "map is in trash - restore or purge before re-import") in report.rows
 
     async def _load():
         async with SessionLocal() as session:

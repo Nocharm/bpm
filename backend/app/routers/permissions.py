@@ -110,7 +110,7 @@ async def _assert_user_not_in_workflow(
     if blocked:
         raise HTTPException(
             status_code=409,
-            detail="collaborator is in an active version workflow — resolve the checkout or approval first",
+            detail="collaborator is in an active version workflow - resolve the checkout or approval first",
         )
 
 
@@ -181,7 +181,7 @@ async def add_permission(
     if payload.role == "viewer" and found_map.visibility == "public":
         raise HTTPException(
             status_code=409,
-            detail="public maps grant editor only — everyone can already view",
+            detail="public maps grant editor only - everyone can already view",
         )
     # 오우닝 부서는 이미 파생 editor(잠금) — 동일 부서 행은 혼란만 준다 (spec 2026-07-10)
     if (
@@ -190,7 +190,7 @@ async def add_permission(
     ):
         raise HTTPException(
             status_code=409,
-            detail="department already owns this map — editor role is derived",
+            detail="department already owns this map - editor role is derived",
         )
     existing = await session.scalar(
         select(MapPermission).where(
@@ -201,7 +201,7 @@ async def add_permission(
     )
     if existing is not None:
         raise HTTPException(
-            status_code=409, detail="grant already exists — use PATCH to change role"
+            status_code=409, detail="grant already exists - use PATCH to change role"
         )
     grant = MapPermission(
         map_id=map_id,
@@ -248,7 +248,7 @@ async def update_permission(
     if new_role == "viewer" and found_map.visibility == "public":
         raise HTTPException(
             status_code=409,
-            detail="public maps grant editor only — everyone can already view",
+            detail="public maps grant editor only - everyone can already view",
         )
     # 오너(=sysadmin 포함, effective_role 단계에서 owner로 해석)는 다운그레이드 승인 없이 즉시 적용
     actor_role = await get_effective_role(session, user, map_id)
@@ -387,7 +387,7 @@ async def _supersede_pending_downgrades(
         [req.requested_by],
         type="permission_superseded",
         map_id=map_id,
-        message=f"Your permission change request on '{map_name}' was superseded — the owner applied a change directly",
+        message=f"Your permission change request on '{map_name}' was superseded - the owner applied a change directly",
         payload={"map_name": map_name, "reason": "direct"},
     )
 
@@ -465,7 +465,7 @@ async def request_visibility_change(
     # 무변경 요청 거부 (rename 의 'new name equals current name' 대칭)
     if payload.to_visibility == found_map.visibility:
         raise HTTPException(
-            status_code=422, detail="visibility unchanged — nothing to request"
+            status_code=422, detail="visibility unchanged - nothing to request"
         )
     # 중복 요청 거부 — 같은 맵에 pending visibility_change 가 있으면 안 됨
     pending = await session.scalar(
@@ -483,7 +483,7 @@ async def request_visibility_change(
     approvers = await workflow.load_active_approvers(session, map_id)
     if not approvers:
         raise HTTPException(
-            status_code=409, detail="map has no approvers — assign approvers first"
+            status_code=409, detail="map has no approvers - assign approvers first"
         )
     req = ApprovalRequest(
         map_id=map_id,
@@ -617,7 +617,7 @@ async def decide_approval_request(
     if req.kind == "visibility_change" and req.payload.get("version_id") is not None:
         raise HTTPException(
             status_code=409,
-            detail="bundled with a version submission — decided by the version approval",
+            detail="bundled with a version submission - decided by the version approval",
         )
 
     req.decided_by = user
@@ -656,7 +656,7 @@ async def withdraw_approval_request(
     if req.payload.get("version_id") is not None:
         raise HTTPException(
             status_code=409,
-            detail="bundled with a version submission — withdraw the version instead",
+            detail="bundled with a version submission - withdraw the version instead",
         )
     if req.status != "pending":
         raise HTTPException(status_code=409, detail=f"request already {req.status}")
@@ -719,7 +719,7 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
             # 지정 없이 approve 를 직접 호출한 경우 방어. 409 중단 → 커밋 전이라 pending 유지.
             raise HTTPException(
                 status_code=409,
-                detail="map is not designated yet — save the designation first",
+                detail="map is not designated yet - save the designation first",
             )
         # 이미 지정됨(요청~승인 사이 직접 지정 경합) → 적용할 것 없음, applied 마킹만
     elif req.kind == "fw_confirm":

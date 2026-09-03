@@ -12,7 +12,7 @@ const API = "http://localhost:8000/api/versions/6/graph";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const getGraph = async () => (await fetch(API)).json();
@@ -75,7 +75,7 @@ try {
   }
   const editable = await isEditable();
   check("editor editable (draft checkout)", editable);
-  if (!editable) throw new Error("read-only editor — cannot exercise pickers");
+  if (!editable) throw new Error("read-only editor - cannot exercise pickers");
 
   const e1 = edgeByPair(seed, "m1v6-s", "m1v6-t");
   const e2 = edgeByPair(seed, "m1v6-t", "m1v6-e");

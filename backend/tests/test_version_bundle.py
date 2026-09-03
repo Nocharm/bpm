@@ -617,7 +617,7 @@ def test_second_bundle_does_not_supersede_first_versions_bundle(client: TestClie
     assert foreign_still is not None, "Foreign bundled request should not be deleted"
     assert (
         foreign_still.status == "pending"
-    ), "Foreign bundle should still be pending (NOT superseded — version_id filter prevents it)"
+    ), "Foreign bundle should still be pending (NOT superseded - version_id filter prevents it)"
 
     # Standalone은 superseded (version_id None 만 대체 가능함을 증명)
     standalone_after = next((r for r in visibility_reqs if r.payload.get("version_id") is None), None)

@@ -53,7 +53,7 @@ describe("filterByQuery ranking v2 (단어시작 · 타이브레이크 · 공백
     expect(hits.map((h) => h.item.name)).toEqual(["Kim Minsu", "Junho Kim", "Akimoto Ken"]);
   });
 
-  it("whitespace acts as AND — surname-last name still matches per word", () => {
+  it("whitespace acts as AND - surname-last name still matches per word", () => {
     const items = [{ name: "Kimberly June" }, { name: "Junho Kim" }];
     const hits = filterByQuery(items, "kim jun", nameField);
     // Junho Kim: 두 term 모두 접두/단어시작 — 통짜 부분일치가 아니어도 상위

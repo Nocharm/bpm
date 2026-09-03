@@ -20,7 +20,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -380,7 +380,7 @@ try {
   check("editor stays on the host map (no navigation)", await waitForCondition(
     async () => page.url().includes(`/maps/${host.id}`) && (await page.locator('input[placeholder="Map name"]').count()) === 0,
   ));
-  check("auto-link toast for the created map", await toastVisible(`Link node added — ${createdName}`));
+  check("auto-link toast for the created map", await toastVisible(`Link node added - ${createdName}`));
   const createdNode = await waitForCondition(
     async () => (await page.getByText(createdName, { exact: true }).count()) > 0,
   );
@@ -425,6 +425,6 @@ try {
 check("no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));
 
 const failed = results.filter((r) => !r.ok).length;
-console.log(`\n${results.length - failed}/${results.length} PASS${failed ? ` — ${failed} FAIL` : ""}`);
+console.log(`\n${results.length - failed}/${results.length} PASS${failed ? ` - ${failed} FAIL` : ""}`);
 await browser.close();
 process.exit(failed ? 1 : 0);

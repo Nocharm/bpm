@@ -69,7 +69,7 @@ describe("returnTo save/peek/consume", () => {
 });
 
 describe("autoLoginSkip flag", () => {
-  it("consume은 1회만 true — 이후 재방문은 자동 로그인 재개", () => {
+  it("consume은 1회만 true - 이후 재방문은 자동 로그인 재개", () => {
     expect(consumeAutoLoginSkip()).toBe(false);
     setAutoLoginSkip();
     expect(consumeAutoLoginSkip()).toBe(true);

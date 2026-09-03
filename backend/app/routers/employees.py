@@ -46,7 +46,7 @@ async def sync_employees(
         summary = await run_full_sync(session)
     except SyncTooSoon as exc:
         raise HTTPException(
-            status_code=429, detail=f"sync throttled — retry in {exc.remaining_seconds}s"
+            status_code=429, detail=f"sync throttled - retry in {exc.remaining_seconds}s"
         ) from exc
     return SyncSummaryOut(**asdict(summary))
 

@@ -13,7 +13,7 @@ const ADMIN = "admin.sys";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 내 부서(또는 하위)에 "본인이 볼 수 있는" 맵을 가진 사용자를 런타임에 고른다.
@@ -63,7 +63,7 @@ async function expandAll(page) {
     await closed.first().click();
     await page.waitForTimeout(60);
   }
-  throw new Error("expandAll: 60회 내에 전부 펼치지 못했다 — 트리가 예상보다 크거나 토글이 안 먹는다");
+  throw new Error("expandAll: 60회 내에 전부 펼치지 못했다 - 트리가 예상보다 크거나 토글이 안 먹는다");
 }
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -72,7 +72,7 @@ const consoleErrors = [];
 try {
   const deptUser = await findUserWithDeptMaps();
   check("found a user with dept maps", deptUser !== null, `user=${deptUser}`);
-  if (!deptUser) throw new Error("시드에 부서 맵을 가진 사용자가 없다 — 시드를 확인하라");
+  if (!deptUser) throw new Error("시드에 부서 맵을 가진 사용자가 없다 - 시드를 확인하라");
 
   // ── 1) 첫 진입 포커스 — 내 부서 맵이 있으면 조직도는 접힌 채 ──────────────────
   const ctxA = await openContext(browser, deptUser);

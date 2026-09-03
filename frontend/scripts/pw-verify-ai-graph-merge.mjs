@@ -18,7 +18,7 @@ const DEV_USER = "admin.sys";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -43,7 +43,7 @@ check(
   `map=${MAP} versions=${JSON.stringify(mapDetail.versions?.map((v) => [v.id, v.status]))}`,
 );
 if (!draftVersion) {
-  console.error("FATAL no editable (draft) version on the target map — cannot verify Apply");
+  console.error("FATAL no editable (draft) version on the target map - cannot verify Apply");
   await browser.close();
   process.exit(1);
 }
@@ -165,7 +165,7 @@ if (subprocessNode) {
     `type=${keptSub?.node_type} linked_map_id=${keptSub?.linked_map_id}`,
   );
 } else {
-  console.log("SKIP 4 subprocess preservation — seed map has no subprocess node");
+  console.log("SKIP 4 subprocess preservation - seed map has no subprocess node");
 }
 
 check("5 no console errors", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));

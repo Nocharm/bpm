@@ -132,7 +132,7 @@ describe("diffFromCurrentKeys", () => {
   });
 });
 
-describe("deriveOutline (speed redesign — facts 수집 패널)", () => {
+describe("deriveOutline (speed redesign - facts 수집 패널)", () => {
   it("flattens facts in stage order with clamped one-line values", () => {
     const outline = deriveOutline({
       io: { trigger: "요청 접수", inputs: "" },
@@ -213,13 +213,13 @@ describe("getGraphSignature", () => {
     groups: [],
   });
 
-  it("설명·attributes 차이는 같은 서명 — 텍스트 턴마다 카메라를 뺏지 않는다 (T12)", () => {
+  it("설명·attributes 차이는 같은 서명 - 텍스트 턴마다 카메라를 뺏지 않는다 (T12)", () => {
     const changed = base();
     changed.nodes[1] = { ...changed.nodes[1], description: "설명 추가", attributes: { duration: "0.30" } };
     expect(getGraphSignature(changed)).toBe(getGraphSignature(base()));
   });
 
-  it("제목·엣지 변경은 다른 서명 — 구조 변화만 fitView", () => {
+  it("제목·엣지 변경은 다른 서명 - 구조 변화만 fitView", () => {
     const renamed = base();
     renamed.nodes[1] = { ...renamed.nodes[1], title: "Draft request" };
     expect(getGraphSignature(renamed)).not.toBe(getGraphSignature(base()));
@@ -242,7 +242,7 @@ describe("deriveParamsEditorRows", () => {
     groups: [],
   };
 
-  it("작업본의 모든 활동을 나열 — 수집 없는 노드도 빈 값으로 편집 가능 (2026-07-30)", () => {
+  it("작업본의 모든 활동을 나열 - 수집 없는 노드도 빈 값으로 편집 가능 (2026-07-30)", () => {
     const rows = deriveParamsEditorRows(graph, { params: { params_table: { "요청서 작성": { duration: "0.30" } } } });
     expect(rows.map((r) => r.activity)).toEqual(["요청서 작성", "견적 비교"]);
     expect(rows[0].values.duration).toBe("0.30");

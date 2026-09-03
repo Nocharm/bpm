@@ -27,9 +27,9 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
-const skip = (name, reason) => console.log(`SKIP ${name} — ${reason}`);
+const skip = (name, reason) => console.log(`SKIP ${name} - ${reason}`);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
@@ -136,7 +136,7 @@ try {
   const stamp = Date.now();
   const dir0 = await api("/directory");
   const owningDept = dir0.departments[0]?.id;
-  if (!owningDept) throw new Error("directory has no departments — cannot supply owning_department");
+  if (!owningDept) throw new Error("directory has no departments - cannot supply owning_department");
 
   const mapA = await api("/maps", {
     method: "POST",
@@ -245,7 +245,7 @@ try {
   const colIdx = Object.fromEntries(header.map((h, i) => [h, i]));
   const widgetRow = csvLines.slice(1).find((l) => l.startsWith("Widget Step,"))?.split(",");
   check(
-    "CSV row carries the normalized numeric values (raw H.MM — round-trip exception)",
+    "CSV row carries the normalized numeric values (raw H.MM - round-trip exception)",
     widgetRow !== undefined &&
       widgetRow[colIdx.Duration] === "1.15" &&
       widgetRow[colIdx.Cost_KRW] === "300" &&
@@ -369,7 +369,7 @@ try {
     check(
       "decision node param chips stay within the rhombus outline (Task 3 carryover)",
       withinDiamond,
-      `diamond D=${D.toFixed(1)}px, content ${contentBox.width.toFixed(1)}x${contentBox.height.toFixed(1)} (sum=${sum.toFixed(1)}) — screenshot: ${SHOTS}/06-decision-params.png`,
+      `diamond D=${D.toFixed(1)}px, content ${contentBox.width.toFixed(1)}x${contentBox.height.toFixed(1)} (sum=${sum.toFixed(1)}) - screenshot: ${SHOTS}/06-decision-params.png`,
     );
   } else {
     check("decision node param chips stay within the rhombus outline (Task 3 carryover)", false, "could not measure boundingBox");
@@ -380,7 +380,7 @@ try {
   const mapList = await api("/maps");
   const map2 = mapList.find((m) => m.name === "Employee Onboarding");
   if (!map2) {
-    skip("Excel export on subprocess demo map (map 2)", "seed map 'Employee Onboarding' not found — reset_db not run?");
+    skip("Excel export on subprocess demo map (map 2)", "seed map 'Employee Onboarding' not found - reset_db not run?");
   } else {
     const map2Detail = await api(`/maps/${map2.id}`);
     const draftV = map2Detail.versions.find((v) => v.label === "Release 6");

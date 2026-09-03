@@ -11,7 +11,7 @@ const HDR = { "X-Dev-User": "admin.sys", "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, extra = "") => {
   results.push([name, ok, extra]);
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${extra ? ` - ${extra}` : ""}`);
 };
 
 // ── API 준비 — 원본(게시 이력 有)·미게시 맵 ──

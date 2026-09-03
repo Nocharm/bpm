@@ -762,8 +762,8 @@ async def import_interview_delivery(
             if dupes:
                 issues.append(AdapterIssue(
                     "error", "rows",
-                    f"duplicate taskId across files: {', '.join(dupes)} — file skipped"
-                    " (파일 간 taskId 중복 — 이 파일 전체 제외)",
+                    f"duplicate taskId across files: {', '.join(dupes)} - file skipped"
+                    " (파일 간 taskId 중복 - 이 파일 전체 제외)",
                 ))
                 ok = False
         if ok:
@@ -772,8 +772,8 @@ async def import_interview_delivery(
                 if prev is not None and prev.name != cat.name:
                     issues.append(AdapterIssue(
                         "warning", "framework.categories",
-                        f"category {cat.code} name differs across files — later file wins"
-                        " (파일 간 분류 이름 불일치 — 뒤 파일 기준 적용)",
+                        f"category {cat.code} name differs across files - later file wins"
+                        " (파일 간 분류 이름 불일치 - 뒤 파일 기준 적용)",
                     ))
                 merged_cats[cat.code] = cat
             merged_maps.extend(result.maps)
@@ -788,7 +788,7 @@ async def import_interview_delivery(
         if overflow > 0:
             rows_out.append(InterviewIssueOut(
                 severity="warning", path="$",
-                message=f"... {overflow} more issues (이슈 {overflow}건 더 있음 — 표시 생략)",
+                message=f"... {overflow} more issues (이슈 {overflow}건 더 있음 - 표시 생략)",
             ))
         files_out.append(InterviewImportFileOut(
             name=file.name, ok=ok,

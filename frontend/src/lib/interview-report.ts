@@ -173,7 +173,7 @@ const PATTERNS: { kind: DetailKind; re: RegExp }[] = [
   { kind: "unknown-category", re: /^unknown category (.*)$/ },
   { kind: "in-trash", re: /^map is in trash/ },
   { kind: "no-landing", re: /^annual_count\/fte have no landing site/ },
-  { kind: "linkage-skipped", re: /^linkage skipped — (.*)$/ },
+  { kind: "linkage-skipped", re: /^linkage skipped - (.*)$/ },
   // verb는 created|augmented (import_consultant.apply_interview_linkage) — 새 동사가 생겨도 통과시킨다
   { kind: "canvas", re: /^canvas ([a-z]+) \(map (\d+), \+(\d+) nodes\/edges\)$/ },
   { kind: "published", re: /^published v(\d+)$/ },

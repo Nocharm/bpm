@@ -29,7 +29,7 @@ describe("resolveDataForm / matchExactDataForm", () => {
     expect(matchExactDataForm("워드")).toBe("Word");
   });
 
-  it("미지(기타) 값은 null — 자유값은 추가 행 경로", () => {
+  it("미지(기타) 값은 null - 자유값은 추가 행 경로", () => {
     expect(resolveDataForm("계약서 원본")).toBeNull();
     expect(matchExactDataForm("계약서 원본")).toBeNull();
   });

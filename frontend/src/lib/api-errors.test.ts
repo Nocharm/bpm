@@ -8,7 +8,7 @@ const t = (key: string, vars?: Record<string, string | number>) =>
 
 describe("humanizeApiError", () => {
   it("maps known detail prefixes to i18n keys", () => {
-    const err = new ApiError("API POST /x failed: 409", 409, JSON.stringify({ detail: "map has no approvers — assign approvers first" }));
+    const err = new ApiError("API POST /x failed: 409", 409, JSON.stringify({ detail: "map has no approvers - assign approvers first" }));
     expect(humanizeApiError(err, t as never)).toBe("apiError.noApprovers");
   });
 
@@ -18,7 +18,7 @@ describe("humanizeApiError", () => {
   });
 
   it("falls back to generic key when body is not JSON detail", () => {
-    const err = new ApiError("API GET /x failed: 502 — <html>bad gateway</html>", 502, "<html>bad gateway</html>");
+    const err = new ApiError("API GET /x failed: 502 - <html>bad gateway</html>", 502, "<html>bad gateway</html>");
     expect(humanizeApiError(err, t as never)).toBe("apiError.requestFailed:502");
   });
 

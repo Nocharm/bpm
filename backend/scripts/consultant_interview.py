@@ -156,7 +156,7 @@ def format_minutes_hmm(minutes: int) -> str:
 def _warn_unknown_keys(obj: dict, allowed: set[str], path: str, issues: list[AdapterIssue]) -> None:
     for key in obj:
         if key not in allowed:
-            issues.append(AdapterIssue("warning", path, f"unknown key {key!r} (모르는 항목 — 무시됨)"))
+            issues.append(AdapterIssue("warning", path, f"unknown key {key!r} (모르는 항목 - 무시됨)"))
 
 
 def _join_multi(value: object) -> str:
@@ -269,21 +269,21 @@ def _build_nodes(
         if seq is None:
             parsed = _parse_minutes(seq_raw)  # 숫자 문자열 수용(음수 제외) — 별도 파서 불필요
             seq = parsed if parsed is not None else j + 1
-            issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} — fallback {seq} (순번이 잘못돼 자동 번호로 대체)"))
+            issues.append(AdapterIssue("warning", apath, f"seq invalid {seq_raw!r} - fallback {seq} (순번이 잘못돼 자동 번호로 대체)"))
         if seq in by_seq:
             issues.append(AdapterIssue(
                 "error", apath,
-                f"duplicate seq {seq} — seq is the relations reference key in 0.4 (순번 중복 — 연결 참조 키라 유일해야 함)",
+                f"duplicate seq {seq} - seq is the relations reference key in 0.4 (순번 중복 - 연결 참조 키라 유일해야 함)",
             ))
             continue
         label = _clean(action.get("label"))
         if not label:
             label = f"Step {seq}"
-            issues.append(AdapterIssue("warning", apath, f"label missing — fallback {label!r} (이름 누락 — 자동 이름 사용)"))
+            issues.append(AdapterIssue("warning", apath, f"label missing - fallback {label!r} (이름 누락 - 자동 이름 사용)"))
         label = _truncate(label, 200, apath, "label", issues)
         kind = _clean(action.get("kind"))
         if kind and kind not in _KNOWN_KINDS:
-            issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} — treated as action (알 수 없는 유형 — 일반 액션으로 처리)"))
+            issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} - treated as action (알 수 없는 유형 - 일반 액션으로 처리)"))
         # 예외 variant는 흐름 분기 대신 색으로만 분리 — 분기 자체는 relations 엣지가 그린다
         variant = _clean(action.get("variant"))
         node = CanonicalNode(
@@ -333,18 +333,18 @@ def _build_flow_edges(
     반환값은 (앵커 코드, 합성 노드)로, 호출부가 앵커 바로 뒤에 끼운다 (사용자 결정 2026-09-02).
     """
     if relations is None:
-        issues.append(AdapterIssue("warning", path, "relations missing — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
+        issues.append(AdapterIssue("warning", path, "relations missing - seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), [], []
     if not isinstance(relations, dict):
         issues.append(AdapterIssue(
-            "warning", f"{path}.relations", "relations is not an object — seq chain fallback (연결 정보 형식 오류 — 순번 순서로 자동 연결)"))
+            "warning", f"{path}.relations", "relations is not an object - seq chain fallback (연결 정보 형식 오류 - 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), [], []
     _warn_unknown_keys(relations, _RELATIONS_KEYS, f"{path}.relations", issues)
     raw_edges = relations.get("edges")
     if not isinstance(raw_edges, list):
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges",
-            "edges missing or not a list — seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
+            "edges missing or not a list - seq chain fallback (연결 정보가 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), [], []
 
     # 승격 전 스냅샷 — self edge로 진출이 ◇로 이설된 노드의 승격을 원상 복구할 때 기준
@@ -356,7 +356,7 @@ def _build_flow_edges(
     for k, raw in enumerate(raw_edges):
         epath = f"{path}.relations.edges[{k}]"
         if not isinstance(raw, dict):
-            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped (연결 형식이 잘못돼 제외됨)"))
+            issues.append(AdapterIssue("warning", epath, "edge is not an object - skipped (연결 형식이 잘못돼 제외됨)"))
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = raw.get("src"), raw.get("dst")
@@ -364,7 +364,7 @@ def _build_flow_edges(
         dst_node = by_seq.get(dst) if isinstance(dst, int) and not isinstance(dst, bool) else None
         if src_node is None or dst_node is None:
             issues.append(AdapterIssue(
-                "warning", epath, f"edge references unknown seq {src!r}→{dst!r} — dropped (존재하지 않는 순번을 가리켜 제외됨)"))
+                "warning", epath, f"edge references unknown seq {src!r}→{dst!r} - dropped (존재하지 않는 순번을 가리켜 제외됨)"))
             continue
         is_self = src_node is dst_node
         if is_self:
@@ -372,22 +372,22 @@ def _build_flow_edges(
             # (아래 post-pass, L5 expand_linkage_branches와 같은 결정 — 사용자 결정 2026-09-02).
             issues.append(AdapterIssue(
                 "warning", epath,
-                f"self edge on seq {src!r} — kept as loop via auto-generated branch node "
-                f"{src_node.code}r (자기 반복 — 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
+                f"self edge on seq {src!r} - kept as loop via auto-generated branch node "
+                f"{src_node.code}r (자기 반복 - 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
                 "되도는 연결로 변환)"))
         pair = (src_node.code, dst_node.code)
         if pair in seen:
             issues.append(AdapterIssue(
-                "warning", epath, f"duplicate edge {pair[0]}→{pair[1]} — dropped (중복 연결 — 한 번만 반영)"))
+                "warning", epath, f"duplicate edge {pair[0]}→{pair[1]} - dropped (중복 연결 - 한 번만 반영)"))
             continue
         seen.add(pair)
         kind = _clean(raw.get("kind")) or "seq"
         if kind not in _KNOWN_EDGE_KINDS:
-            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq (알 수 없는 연결 유형 — 순차 연결로 처리)"))
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} - treated as seq (알 수 없는 연결 유형 - 순차 연결로 처리)"))
             kind = "seq"
         gateway = _clean(raw.get("gateway"))
         if gateway and gateway not in _KNOWN_GATEWAYS:
-            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only (알 수 없는 게이트웨이 — 라벨로만 기록)"))
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} - text only (알 수 없는 게이트웨이 - 라벨로만 기록)"))
         condition = _clean(raw.get("condition"))
         label = _truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues)
         if is_self:
@@ -405,7 +405,7 @@ def _build_flow_edges(
             if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
                 src_node.type = "decision"
                 issues.append(AdapterIssue(
-                    "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) — 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
+                    "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) - 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
         quote = _clean(raw.get("quote"))
         if quote:
             notes.append(InterviewNote(
@@ -437,7 +437,7 @@ def _build_flow_edges(
         loop_nodes.append((src_node.code, branch))
     if not edges and by_seq:
         issues.append(AdapterIssue(
-            "warning", f"{path}.relations.edges", "no usable edges — seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))
+            "warning", f"{path}.relations.edges", "no usable edges - seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))
         return _seq_chain(by_seq), notes, []
     return edges, notes, loop_nodes
 
@@ -454,16 +454,16 @@ def _build_linkage(
     linkage = InterviewLinkage(category_code=l5_code, map_codes=list(row_names))
     notes: list[InterviewNote] = []
     if relations is None:
-        issues.append(AdapterIssue("warning", "relations", "relations missing — no L6 flow to seed (연결 정보가 없어 L6 흐름 미생성)"))
+        issues.append(AdapterIssue("warning", "relations", "relations missing - no L6 flow to seed (연결 정보가 없어 L6 흐름 미생성)"))
         return linkage, notes
     if not isinstance(relations, dict):
-        issues.append(AdapterIssue("warning", "relations", "relations is not an object — ignored (연결 정보 형식 오류 — 무시됨)"))
+        issues.append(AdapterIssue("warning", "relations", "relations is not an object - ignored (연결 정보 형식 오류 - 무시됨)"))
         return linkage, notes
     _warn_unknown_keys(relations, _RELATIONS_KEYS, "relations", issues)
 
     entry = relations.get("entry")
     if entry is not None and not isinstance(entry, dict):
-        issues.append(AdapterIssue("warning", "relations.entry", "entry is not an object — ignored (진입 정보 형식 오류 — 무시됨)"))
+        issues.append(AdapterIssue("warning", "relations.entry", "entry is not an object - ignored (진입 정보 형식 오류 - 무시됨)"))
         entry = None
     if isinstance(entry, dict):
         _warn_unknown_keys(entry, _ENTRY_KEYS, "relations.entry", issues)
@@ -473,7 +473,7 @@ def _build_linkage(
         entry_code = _clean(entry.get("taskId"))
         if entry_code and entry_code not in row_names:
             issues.append(AdapterIssue(
-                "warning", "relations.entry", f"taskId {entry_code!r} not in rows — ignored (rows에 없는 taskId — 무시됨)"))
+                "warning", "relations.entry", f"taskId {entry_code!r} not in rows - ignored (rows에 없는 taskId - 무시됨)"))
             entry_code = ""
         if entry_code:
             linkage.map_codes = [entry_code] + [c for c in row_names if c != entry_code]
@@ -488,19 +488,19 @@ def _build_linkage(
 
     raw_edges = relations.get("edges")
     if raw_edges is not None and not isinstance(raw_edges, list):
-        issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list — ignored (연결 목록 형식 오류 — 무시됨)"))
+        issues.append(AdapterIssue("warning", "relations.edges", "edges is not a list - ignored (연결 목록 형식 오류 - 무시됨)"))
         raw_edges = None
     seen: set[tuple[str, str]] = set()
     for k, raw in enumerate(raw_edges or []):
         epath = f"relations.edges[{k}]"
         if not isinstance(raw, dict):
-            issues.append(AdapterIssue("warning", epath, "edge is not an object — skipped (연결 형식이 잘못돼 제외됨)"))
+            issues.append(AdapterIssue("warning", epath, "edge is not an object - skipped (연결 형식이 잘못돼 제외됨)"))
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = _clean(raw.get("src")), _clean(raw.get("dst"))
         if src not in row_names or dst not in row_names:
             issues.append(AdapterIssue(
-                "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} — dropped (존재하지 않는 taskId를 가리켜 제외됨)"))
+                "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} - dropped (존재하지 않는 taskId를 가리켜 제외됨)"))
             continue
         is_self = src == dst
         if is_self:
@@ -508,22 +508,22 @@ def _build_linkage(
             # 분기 노드(◇)를 세워 ◇→자기 루프백으로 그린다 (사용자 결정 2026-09-02).
             issues.append(AdapterIssue(
                 "warning", epath,
-                f"self edge on {src!r} — kept as loop via auto-generated branch node "
-                f"(자기 반복 흐름 — 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
+                f"self edge on {src!r} - kept as loop via auto-generated branch node "
+                f"(자기 반복 흐름 - 분기 노드 '{LOOP_BRANCH_NODE_NAME}'를 자동 생성해 "
                 "되도는 연결로 변환)"))
         if (src, dst) in seen:
-            issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} — dropped (중복 연결 — 한 번만 반영)"))
+            issues.append(AdapterIssue("warning", epath, f"duplicate edge {src}→{dst} - dropped (중복 연결 - 한 번만 반영)"))
             continue
         seen.add((src, dst))
         kind = _clean(raw.get("kind")) or "seq"
         if kind not in _KNOWN_EDGE_KINDS:
-            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} — treated as seq (알 수 없는 연결 유형 — 순차 연결로 처리)"))
+            issues.append(AdapterIssue("warning", epath, f"unknown edge kind {kind!r} - treated as seq (알 수 없는 연결 유형 - 순차 연결로 처리)"))
             kind = "seq"
         if is_self:
             kind = "loop"
         gateway = _clean(raw.get("gateway"))
         if gateway and gateway not in _KNOWN_GATEWAYS:
-            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} — text only (알 수 없는 게이트웨이 — 라벨로만 기록)"))
+            issues.append(AdapterIssue("warning", epath, f"unknown gateway {gateway!r} - text only (알 수 없는 게이트웨이 - 라벨로만 기록)"))
         condition = _clean(raw.get("condition"))
         linkage.edges.append(InterviewLinkageEdge(
             source=src,
@@ -558,7 +558,7 @@ def convert_interview(raw: object) -> AdapterResult:
     if not version.startswith("0.4"):
         issues.append(AdapterIssue(
             "error", "schema_version",
-            f"unsupported schema_version {version!r} — re-deliver as 0.4-bpm-interface-draft (지원하지 않는 스키마 버전 — 0.4로 재전달 필요)",
+            f"unsupported schema_version {version!r} - re-deliver as 0.4-bpm-interface-draft (지원하지 않는 스키마 버전 - 0.4로 재전달 필요)",
         ))
         return result
 
@@ -590,7 +590,7 @@ def convert_interview(raw: object) -> AdapterResult:
         issues.append(AdapterIssue("error", "rows", "rows missing or not a list (rows 누락 또는 형식 오류)"))
         return result
     if not rows:
-        issues.append(AdapterIssue("warning", "rows", "rows empty — nothing to import (행이 비어 있어 임포트할 것 없음)"))
+        issues.append(AdapterIssue("warning", "rows", "rows empty - nothing to import (행이 비어 있어 임포트할 것 없음)"))
 
     tasks_raw = raw.get("tasks")
     tasks_by_id: dict[str, dict] = {}
@@ -612,7 +612,7 @@ def convert_interview(raw: object) -> AdapterResult:
         _warn_unknown_keys(row, _ROW_KEYS, path, issues)
         task_id = _clean(row.get("taskId"))
         if not task_id:
-            issues.append(AdapterIssue("error", path, "taskId missing — row skipped (taskId가 없어 이 행 제외)"))
+            issues.append(AdapterIssue("error", path, "taskId missing - row skipped (taskId가 없어 이 행 제외)"))
             continue
         if task_id in seen_task_ids:
             issues.append(AdapterIssue("error", path, f"duplicate taskId {task_id!r} (taskId 중복)"))
@@ -624,7 +624,7 @@ def convert_interview(raw: object) -> AdapterResult:
 
         name = _clean(row.get("l6")) or _clean(tasks_by_id.get(task_id, {}).get("name"))
         if not name:
-            issues.append(AdapterIssue("error", path, "l6 (map name) missing — row skipped (L6 맵 이름이 없어 이 행 제외)"))
+            issues.append(AdapterIssue("error", path, "l6 (map name) missing - row skipped (L6 맵 이름이 없어 이 행 제외)"))
             continue
         name = _truncate(name, 200, path, "l6", issues)
 
@@ -632,7 +632,7 @@ def convert_interview(raw: object) -> AdapterResult:
         if fields is None:
             fields = {}
         elif not isinstance(fields, dict):
-            issues.append(AdapterIssue("warning", path, "fields is not an object — ignored (필드 형식 오류 — 무시됨)"))
+            issues.append(AdapterIssue("warning", path, "fields is not an object - ignored (필드 형식 오류 - 무시됨)"))
             fields = {}
         _warn_unknown_keys(fields, _FIELD_KEYS, f"{path}.fields", issues)
 
@@ -640,10 +640,10 @@ def convert_interview(raw: object) -> AdapterResult:
         if actions is None:
             actions = []
         elif not isinstance(actions, list):
-            issues.append(AdapterIssue("warning", path, "actions is not a list — ignored (액션 목록 형식 오류 — 무시됨)"))
+            issues.append(AdapterIssue("warning", path, "actions is not a list - ignored (액션 목록 형식 오류 - 무시됨)"))
             actions = []
         if not actions:
-            issues.append(AdapterIssue("warning", path, "no actions — map will only have Start/End (액션이 없어 Start/End만 생성)"))
+            issues.append(AdapterIssue("warning", path, "no actions - map will only have Start/End (액션이 없어 Start/End만 생성)"))
         nodes, by_seq = _build_nodes(actions, path, issues)
         edges, flow_notes, loop_nodes = _build_flow_edges(row.get("relations"), by_seq, path, issues)
         for anchor_code, branch_node in loop_nodes:
@@ -719,13 +719,13 @@ def convert_interview(raw: object) -> AdapterResult:
             for k, exc_item in enumerate(exceptions):
                 epath = f"{path}.exceptions[{k}]"
                 if not isinstance(exc_item, dict):
-                    issues.append(AdapterIssue("warning", epath, "exception is not an object — skipped (예외 형식이 잘못돼 제외됨)"))
+                    issues.append(AdapterIssue("warning", epath, "exception is not an object - skipped (예외 형식이 잘못돼 제외됨)"))
                     continue
                 _warn_unknown_keys(exc_item, _EXCEPTION_KEYS, epath, issues)
                 title = _clean(exc_item.get("name")) or None
                 text = _clean(exc_item.get("rule")) or (title or "")
                 if not text:
-                    issues.append(AdapterIssue("warning", epath, "exception has no name/rule — skipped (예외에 이름/규칙이 없어 제외됨)"))
+                    issues.append(AdapterIssue("warning", epath, "exception has no name/rule - skipped (예외에 이름/규칙이 없어 제외됨)"))
                     continue
                 result.notes.append(InterviewNote(
                     kind="exception", text=text, title=title, map_code=task_id,
@@ -747,23 +747,23 @@ def convert_interview(raw: object) -> AdapterResult:
 
     side_notes = raw.get("sideNotes")
     if side_notes is not None and not isinstance(side_notes, list):
-        issues.append(AdapterIssue("warning", "sideNotes", "sideNotes is not a list — ignored (비고 목록 형식 오류 — 무시됨)"))
+        issues.append(AdapterIssue("warning", "sideNotes", "sideNotes is not a list - ignored (비고 목록 형식 오류 - 무시됨)"))
         side_notes = None
     for k, note in enumerate(side_notes or []):
         npath = f"sideNotes[{k}]"
         if not isinstance(note, dict):
-            issues.append(AdapterIssue("warning", npath, "side note is not an object — skipped (비고 형식 오류 — 제외됨)"))
+            issues.append(AdapterIssue("warning", npath, "side note is not an object - skipped (비고 형식 오류 - 제외됨)"))
             continue
         text = _clean(note.get("text"))
         if not text:
-            issues.append(AdapterIssue("warning", npath, "text missing — skipped"))
+            issues.append(AdapterIssue("warning", npath, "text missing - skipped"))
             continue
         kind = (_clean(note.get("kind")) or "note")[:50]
         unit_id = _clean(note.get("unitId"))
         map_code = unit_to_task.get(unit_id) if unit_id else None
         if unit_id and map_code is None:
             issues.append(AdapterIssue("warning", npath,
-                                       f"unitId {unit_id!r} not matched — kept at L5 scope (유닛 미매칭 — L5 범위로 유지)"))
+                                       f"unitId {unit_id!r} not matched - kept at L5 scope (유닛 미매칭 - L5 범위로 유지)"))
         result.notes.append(InterviewNote(
             kind=kind, text=text,
             map_code=map_code, category_code=None if map_code else l5_code,
@@ -772,7 +772,7 @@ def convert_interview(raw: object) -> AdapterResult:
     # openItems — 종전엔 허용만 되고 미처리(조용히 유실)라 L5 스코프 노트로 보존 (design 2026-08-19 §4.1)
     open_items = raw.get("openItems")
     if open_items is not None and not isinstance(open_items, list):
-        issues.append(AdapterIssue("warning", "openItems", "openItems is not a list — ignored (미결 목록 형식 오류 — 무시됨)"))
+        issues.append(AdapterIssue("warning", "openItems", "openItems is not a list - ignored (미결 목록 형식 오류 - 무시됨)"))
         open_items = None
     for k, item in enumerate(open_items or []):
         ipath = f"openItems[{k}]"
@@ -781,10 +781,10 @@ def convert_interview(raw: object) -> AdapterResult:
         elif isinstance(item, dict):
             text = _clean(item.get("text")) or _clean(item.get("name"))
         else:
-            issues.append(AdapterIssue("warning", ipath, "open item is not an object — skipped (미결 항목 형식 오류 — 제외됨)"))
+            issues.append(AdapterIssue("warning", ipath, "open item is not an object - skipped (미결 항목 형식 오류 - 제외됨)"))
             continue
         if not text:
-            issues.append(AdapterIssue("warning", ipath, "text missing — skipped"))
+            issues.append(AdapterIssue("warning", ipath, "text missing - skipped"))
             continue
         result.notes.append(InterviewNote(kind="open_item", text=text, category_code=l5_code))
     return result

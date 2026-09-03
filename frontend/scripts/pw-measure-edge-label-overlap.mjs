@@ -64,5 +64,5 @@ for (const mapId of MAPS) {
   for (const h of result.labelHits) console.log(`   ✗ "${h.a}" ⨯ "${h.b}" ${h.area}px²`);
   total += result.hits.length + result.labelHits.length;
 }
-console.log(total === 0 ? "OK — 간섭 없음" : `총 ${total}건 간섭`);
+console.log(total === 0 ? "OK - 간섭 없음" : `총 ${total}건 간섭`);
 await browser.close();

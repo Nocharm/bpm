@@ -201,7 +201,7 @@ async def main() -> None:
         now = now_kst()
 
         m = ProcessMap(
-            name=MAP_NAME, description="비교 화면 개발용 — 계보 공유 2버전(게시본/초안)",
+            name=MAP_NAME, description="비교 화면 개발용 - 계보 공유 2버전(게시본/초안)",
             created_by=OWNER, owner_id=OWNER, visibility="public",
         )
         session.add(m)
@@ -249,7 +249,7 @@ async def main() -> None:
         ])
         await session.commit()
         print(
-            f"created map {m.id} '{MAP_NAME}' — v1(published)={v1.id}, v2(draft)={v2.id}; "
+            f"created map {m.id} '{MAP_NAME}' - v1(published)={v1.id}, v2(draft)={v2.id}; "
             f"nodes v1/v2, edges v1={len(V1_EDGES)} v2={len(V2_EDGES)}"
         )
 

@@ -44,7 +44,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const section = (title) => console.log(`\n=== ${title} ===`);
 
@@ -119,7 +119,7 @@ let mapAId = null; // 시나리오②~④·⑧에서 만드는 실 맵 — 끝�
 
 try {
   // ── SETUP — 부서장 픽스처: 시드가 DeptInfo를 채우지 않아 런타임에 1건 심는다 ──
-  section("SETUP — seed a department manager via /api/admin/dept-info (DeptInfo not covered by seed_org_demo)");
+  section("SETUP - seed a department manager via /api/admin/dept-info (DeptInfo not covered by seed_org_demo)");
   const me = await api("/me");
   const dirBefore = await api("/directory");
   const fixtureDept = dirBefore.departments.find((d) => d.name.length > 0);
@@ -290,7 +290,7 @@ try {
   await selectViaPicker(0, fixtureManager.id); // 그 리더가 manager인 부서를 오우닝 부서로 선택
   check("owning dept selected", await page.locator('[data-id="owning-dept-selected"]').isVisible());
   check(
-    "dedup — no duplicate approver pill after auto-add would-be leader",
+    "dedup - no duplicate approver pill after auto-add would-be leader",
     (await page.locator(`[data-id="create-approver-pill-${fixtureManager.id}"]`).count()) === 1,
   );
   await page.locator('[data-id="owning-dept-selected"] button').click(); // 오우닝 부서 X로 해제

@@ -107,7 +107,7 @@ console.log("beforeInfo (root nodes):", JSON.stringify(beforeInfo));
 console.log("rootIsDraggable (before expand):", rootIsDraggable);
 console.log("toggle clicked:", clicked);
 console.log("nodeCount before -> after:", nodeCountBefore, "->", nodeCountAfter);
-console.log("embedded visible — 접수:", hasJeobsu, "검토:", hasGeomto);
+console.log("embedded visible - 접수:", hasJeobsu, "검토:", hasGeomto);
 console.log("afterInfo (child classes post-expand):", JSON.stringify(afterInfo));
 console.log("childIsSelectableNotDraggable:", childIsSelectableNotDraggable);
 console.log("consoleErrors (all):", consoleErrors.length, consoleErrors.slice(0, 5));

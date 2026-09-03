@@ -40,7 +40,7 @@ describe("resolvePeriod", () => {
 });
 
 describe("getTodayKeyKst", () => {
-  it("KST 기준 YYYY-MM-DD를 만든다 — 브라우저 tz와 무관", () => {
+  it("KST 기준 YYYY-MM-DD를 만든다 - 브라우저 tz와 무관", () => {
     // UTC 2026-07-11T20:00Z = KST 2026-07-12 05:00 → 날짜키는 07-12
     expect(getTodayKeyKst(new Date("2026-07-11T20:00:00Z"))).toBe("2026-07-12");
     expect(getTodayKeyKst(new Date("2026-07-11T10:00:00Z"))).toBe("2026-07-11");

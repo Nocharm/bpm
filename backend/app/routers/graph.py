@@ -209,7 +209,7 @@ async def replace_graph(
     # 승인 워크플로우 — 편집 가능 상태(draft/rejected)만 저장 허용
     if not workflow.is_editable_status(version.status):
         raise HTTPException(
-            status_code=409, detail=f"version is {version.status} — not editable"
+            status_code=409, detail=f"version is {version.status} - not editable"
         )
 
     # 체크아웃 보유 강제 — 저장하려면 호출자가 활성 체크아웃을 쥐고 있어야 한다.

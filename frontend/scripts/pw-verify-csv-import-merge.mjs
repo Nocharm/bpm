@@ -29,9 +29,9 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
-const skip = (name, reason) => console.log(`SKIP ${name} — ${reason}`);
+const skip = (name, reason) => console.log(`SKIP ${name} - ${reason}`);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -101,7 +101,7 @@ const openEditor = async (mapId, versionId) => {
     .waitForSelector('[data-id="toolbar-import-csv"]', { timeout: 20000 })
     .catch(() => {
       throw new Error(
-        "Import CSV toolbar button never appeared — checkout/eligible not ready, or a stale build is serving :3000 (zombie next dev?)",
+        "Import CSV toolbar button never appeared - checkout/eligible not ready, or a stale build is serving :3000 (zombie next dev?)",
       );
     });
   // 캔버스 노드 6개(start/end 포함)가 다 그려진 뒤에야 모달 base 그래프가 완전하다
@@ -144,7 +144,7 @@ try {
   const dir0 = await api("/directory");
   const owningDept = dir0.departments[0]?.id;
   if (!owningDept) {
-    console.error("FATAL directory has no departments — cannot supply the required owning_department");
+    console.error("FATAL directory has no departments - cannot supply the required owning_department");
     await browser.close();
     process.exit(1);
   }
@@ -195,7 +195,7 @@ try {
   try {
     const dir = await api("/directory");
     const approver = (dir.users.find((u) => u.id === "admin.sys") ?? dir.users[0])?.id;
-    if (!approver) throw new Error("directory has no employees — approval quorum impossible");
+    if (!approver) throw new Error("directory has no employees - approval quorum impossible");
     await api(`/maps/${mapAId}/approvers`, { method: "PUT", body: { user_ids: [approver] } });
     await api(`/versions/${v1}/submit`, { method: "POST" });
     submitted = true;
@@ -246,8 +246,8 @@ try {
 
   // ① 프리뷰 슬롯 점유 중 툴바 Import 버튼 소멸 (previewSource !== null 게이팅)
   check("toolbar Import CSV gone while a CSV preview is staged", (await page.locator('[data-id="toolbar-import-csv"]').count()) === 0);
-  console.log("NOT COVERED: staging an AI proposal preview then checking the Import button — requires driving the AI chat");
-  console.log('NOT COVERED: applying an AI proposal during a CSV preview → "preview.busy" toast — requires driving the AI chat');
+  console.log("NOT COVERED: staging an AI proposal preview then checking the Import button - requires driving the AI chat");
+  console.log('NOT COVERED: applying an AI proposal during a CSV preview → "preview.busy" toast - requires driving the AI chat');
 
   // ⑦ 인스펙터 잠금 — 다른 탭·접기 비활성, Apply/Cancel 존재
   check("other inspector tabs disabled during preview", await page.locator('button[aria-label="Properties"]').first().isDisabled());
@@ -315,7 +315,7 @@ try {
     await page.screenshot({ path: `${SHOTS}/02-compare-clean.png` });
     await openEditor(mapAId, workV);
   } else {
-    skip("compare shows 0 added / 0 removed edges", "v1 was not published — single-version compare would be vacuous");
+    skip("compare shows 0 added / 0 removed edges", "v1 was not published - single-version compare would be vacuous");
   }
 
   // ── ③⑤⑥ CSV B: 빈 셀 보존 + Next 재배선 + 담당자/부서 해석 + 서브프로세스 보존 ──

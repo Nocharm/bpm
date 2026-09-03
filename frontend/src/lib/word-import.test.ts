@@ -101,14 +101,14 @@ describe("parseWordSections", () => {
     expect(out.find((s) => s.anchor === "_Toc3")?.level).toBe(3);
   });
 
-  it("책갈피 없는 제목도 합성 앵커(_bpmsec)로 목록에 낸다 — 주입 대상", async () => {
+  it("책갈피 없는 제목도 합성 앵커(_bpmsec)로 목록에 낸다 - 주입 대상", async () => {
     const xml = doc(heading("H1", [], "No bookmark section"));
     const out = await parseWordSections(makeDocx(xml));
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ anchor: "_bpmsec1", title: "No bookmark section", level: 1 });
   });
 
-  it("빈 제목 문단(블랭크)은 제외한다 — 유령 항목·번호 오염 방지", async () => {
+  it("빈 제목 문단(블랭크)은 제외한다 - 유령 항목·번호 오염 방지", async () => {
     const xml = doc(heading("H1", ["_Toc1"], "Real") + heading("H1", [], ""));
     const out = await parseWordSections(makeDocx(xml));
     expect(out).toHaveLength(1);

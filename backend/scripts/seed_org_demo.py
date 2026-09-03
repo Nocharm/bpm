@@ -225,7 +225,7 @@ async def _seed_groups(session: AsyncSession, people: list[dict]) -> dict:
 
     result: dict = {"user": [], "part": [], "mixed": []}
     for kind, name, members in specs:
-        g = UserGroup(name=name, description=f"Demo — {name}", status="active",
+        g = UserGroup(name=name, description=f"Demo - {name}", status="active",
                       created_by="admin.sys")
         session.add(g)
         await session.flush()
@@ -286,7 +286,7 @@ async def _seed_maps(session: AsyncSession, people: list[dict], groups: dict) ->
     map_ids: list[int] = []
     for idx, (name, vis) in enumerate(MAP_SPECS):
         owner = RNG.choice(users)
-        m = ProcessMap(name=name, description=f"{name} — demo map", created_by=owner["login_id"],
+        m = ProcessMap(name=name, description=f"{name} - demo map", created_by=owner["login_id"],
                        owner_id=owner["login_id"], visibility=vis)
         # 오우닝 부서 — 2/3은 오너 소속 경로로 지정, 1/3(idx%3==0)은 누락으로 남겨
         # 홈 배지·누락 필터·설정 Assign 플로우를 시연 가능하게 한다 (spec 2026-07-10)

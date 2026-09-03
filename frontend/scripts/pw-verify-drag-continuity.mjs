@@ -45,7 +45,7 @@ const preFlowY = await flowYOf("p-b");
 const extra = preFlowY - 560;
 console.log(`[pre] p-b display flow y=${preFlowY} (saved 560, band offset=${extra.toFixed(1)}px)`);
 if (extra < 40) {
-  console.error(`FAIL precondition: band offset too small (${extra}) — anchor not grown?`);
+  console.error(`FAIL precondition: band offset too small (${extra}) - anchor not grown?`);
   process.exit(1);
 }
 
@@ -98,7 +98,7 @@ console.log(`[post] saved pos_y=${saved.pos_y} display flow y=${finalFlowY}`);
 
 let ok = true;
 if (maxStepJump > 45) {
-  console.error(`FAIL (a) step jump ${maxStepJump.toFixed(1)}px > 45px — 스톨→점프 잔존`);
+  console.error(`FAIL (a) step jump ${maxStepJump.toFixed(1)}px > 45px - 스톨→점프 잔존`);
   ok = false;
 }
 if (maxTrackDrift > 8) {
@@ -106,11 +106,11 @@ if (maxTrackDrift > 8) {
   ok = false;
 }
 if (saved.pos_y >= 160 || saved.pos_y <= 0) {
-  console.error(`FAIL (c) saved pos_y=${saved.pos_y} — 밴드 위로 이동 미반영`);
+  console.error(`FAIL (c) saved pos_y=${saved.pos_y} - 밴드 위로 이동 미반영`);
   ok = false;
 }
 if (Math.abs(finalFlowY - saved.pos_y) > 1.5) {
-  console.error(`FAIL (c) display(${finalFlowY}) != saved(${saved.pos_y}) — 밴드 위 오프셋 0이어야 함`);
+  console.error(`FAIL (c) display(${finalFlowY}) != saved(${saved.pos_y}) - 밴드 위 오프셋 0이어야 함`);
   ok = false;
 }
 if (errors.length > 0) {

@@ -24,7 +24,7 @@ const LANGS = ["en", "ko"];
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const section = (title) => console.log(`\n=== ${title} ===`);
 
@@ -143,7 +143,7 @@ try {
     }
 
     // 1130px + 활성 필터(Clear 노출) — Task 8 Step 7 이월 주의사항의 실측 판정 지점.
-    section(`lang=${lang} — 1130px with an active filter (Clear visible)`);
+    section(`lang=${lang} - 1130px with an active filter (Clear visible)`);
     await page.setViewportSize({ width: 1130, height: 900 });
     await page.waitForTimeout(300);
     await activateOneFilter();
@@ -156,7 +156,7 @@ try {
     await page.waitForTimeout(300);
 
     if (withFilter.overflowPx > 0.5 || Math.max(...withFilter.midYs) - Math.min(...withFilter.midYs) > 2) {
-      console.log(`  ⚠ ${lang}@1130px+filter overflowed/wrapped — needs the Clear-width-subtraction fix`);
+      console.log(`  ⚠ ${lang}@1130px+filter overflowed/wrapped - needs the Clear-width-subtraction fix`);
     }
   }
 } catch (err) {

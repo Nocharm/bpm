@@ -42,7 +42,7 @@ const DEV_USER = "admin.sys"; // addInitScript의 bpm.devUser와 반드시 동�
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -111,7 +111,7 @@ try {
   let urlSeedSkipReason = null;
 
   if (!draftVersion) {
-    urlSeedSkipReason = `맵 ${MAP_ID}에 draft 버전이 없음(전부 published/expired) — ④ 하이퍼링크 검증 SKIP`;
+    urlSeedSkipReason = `맵 ${MAP_ID}에 draft 버전이 없음(전부 published/expired) - ④ 하이퍼링크 검증 SKIP`;
   } else if (draftVersion.id !== versionId) {
     const wf = (await authedFetch(`/api/versions/${draftVersion.id}/workflow`)).body;
     const lockedByOther = Boolean(wf.checkout_holder) && wf.checkout_holder !== DEV_USER;
@@ -184,7 +184,7 @@ try {
     `connectors=${connectorCount} edges=${graph.edges.length}`,
   );
   if (urlSeedSkipReason) {
-    console.log(`\n⚠️  SKIP ④ 하이퍼링크 검증 — ${urlSeedSkipReason}\n`);
+    console.log(`\n⚠️  SKIP ④ 하이퍼링크 검증 - ${urlSeedSkipReason}\n`);
   } else {
     const relHlCount = (rels.match(/TargetMode="External"/g) ?? []).length;
     check("④ 하이퍼링크 수 = URL 노드 수", relHlCount === urlNodeCount, `rels=${relHlCount} urls=${urlNodeCount}`);
@@ -203,10 +203,10 @@ try {
     try {
       const status = await putGraph(original);
       console.log(
-        `원복 PUT status=${status}${status === 200 ? "" : " ⚠️⚠️ 원복 실패 — dev.db에 시드 URL 노드 잔존, python -m scripts.reset_db로 재시드 필요"}`,
+        `원복 PUT status=${status}${status === 200 ? "" : " ⚠️⚠️ 원복 실패 - dev.db에 시드 URL 노드 잔존, python -m scripts.reset_db로 재시드 필요"}`,
       );
     } catch (err) {
-      console.log(`⚠️⚠️ 그래프 원복 실패 — dev.db에 시드 URL 노드 잔존 가능(scripts.reset_db로 재시드 필요): ${err}`);
+      console.log(`⚠️⚠️ 그래프 원복 실패 - dev.db에 시드 URL 노드 잔존 가능(scripts.reset_db로 재시드 필요): ${err}`);
     }
   }
   if (checkoutRestore) {
@@ -217,17 +217,17 @@ try {
           body: JSON.stringify({ to: checkoutRestore.previousHolder }),
         });
         console.log(
-          `체크아웃 원복(이전) status=${status} → ${checkoutRestore.previousHolder}${status === 200 ? "" : " ⚠️⚠️ 이전 실패 — draft가 admin.sys 점유로 남음"}`,
+          `체크아웃 원복(이전) status=${status} → ${checkoutRestore.previousHolder}${status === 200 ? "" : " ⚠️⚠️ 이전 실패 - draft가 admin.sys 점유로 남음"}`,
         );
       } else {
         // DELETE /checkout 성공 응답은 204 No Content
         const { status } = await authedFetch(`/api/versions/${checkoutRestore.versionId}/checkout`, {
           method: "DELETE",
         });
-        console.log(`체크아웃 해제 status=${status} (기대 204)${status === 204 ? "" : " ⚠️⚠️ 해제 실패 — draft가 admin.sys 점유로 남음"}`);
+        console.log(`체크아웃 해제 status=${status} (기대 204)${status === 204 ? "" : " ⚠️⚠️ 해제 실패 - draft가 admin.sys 점유로 남음"}`);
       }
     } catch (err) {
-      console.log(`⚠️⚠️ 체크아웃 원복 실패 — draft가 admin.sys 점유로 남음: ${err}`);
+      console.log(`⚠️⚠️ 체크아웃 원복 실패 - draft가 admin.sys 점유로 남음: ${err}`);
     }
   }
   try {

@@ -6,7 +6,7 @@ import { rankOrgProximity, sortUsersByOrgProximity } from "@/lib/org-proximity";
 const MY = "Center/Office/Team/Part";
 
 describe("rankOrgProximity", () => {
-  it("다리 수 — 같은 말단 0, 같은 팀 1, 같은 오피스 2, 같은 센터 3", () => {
+  it("다리 수 - 같은 말단 0, 같은 팀 1, 같은 오피스 2, 같은 센터 3", () => {
     expect(rankOrgProximity(MY, "Center/Office/Team/Part")).toBe(0);
     expect(rankOrgProximity(MY, "Center/Office/Team/Part2")).toBe(1);
     expect(rankOrgProximity(MY, "Center/Office/Team2/PartX")).toBe(2);
@@ -18,12 +18,12 @@ describe("rankOrgProximity", () => {
     expect(rankOrgProximity(MY, "")).toBe(5);
   });
 
-  it("내 org 미상 — org 있는 사람 4, 빈 사람 5 (빈 사람 최후순위 유지)", () => {
+  it("내 org 미상 - org 있는 사람 4, 빈 사람 5 (빈 사람 최후순위 유지)", () => {
     expect(rankOrgProximity("", "Center/Office")).toBe(4);
     expect(rankOrgProximity("", "")).toBe(5);
   });
 
-  it("경로 접두 오탐 방지 — 'Part'와 'Part2'는 다른 조직", () => {
+  it("경로 접두 오탐 방지 - 'Part'와 'Part2'는 다른 조직", () => {
     expect(rankOrgProximity("Center/Office/Team/Part", "Center/Office/Team/Part2")).not.toBe(0);
   });
 });

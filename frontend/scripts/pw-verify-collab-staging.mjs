@@ -31,7 +31,7 @@ const SHOT_DIR =
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const section = (title) => console.log(`\n=== ${title} ===`);
 
@@ -146,7 +146,7 @@ try {
   // ── SETUP — 시드에서 "editor(오너 아님)가 다른 editor를 제거 → 승인 필요" 조건을 만족하는
   // 맵을 찾는다. seed_org_demo는 맵마다 오너 1 + editor 2 + viewer 3(+dept/group)를 항상 심으므로
   // 첫 맵부터 성립할 가능성이 높지만, 하드코딩 대신 admin.sys로 런타임 discovery한다. ──
-  section("SETUP — discover a map with 2 distinct non-owner editors + a free directory user");
+  section("SETUP - discover a map with 2 distinct non-owner editors + a free directory user");
   const dir = await api("/directory");
   const mapsList = await api("/maps");
   for (const m of mapsList) {
@@ -363,7 +363,7 @@ try {
   );
 
   // ── 최종 정합성 — target 권한이 시작 상태(editor, pending 없음)로 순수 복귀했는지 ──
-  section("cleanup verification — target permission net-zero");
+  section("cleanup verification - target permission net-zero");
   const finalPerms = await api(`/maps/${mapA.id}/permissions`);
   const finalTarget = finalPerms.find((p) => p.id === targetPerm.id);
   check(

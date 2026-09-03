@@ -91,7 +91,7 @@ def serialize_map_text(map_name: str, description: str, nodes: list, edges: list
     if description.strip():
         lines.append(description.strip())
     node_lines = [
-        f"- {n.node_type}: {n.title}" + (f" — {n.description.strip()}" if n.description.strip() else "")
+        f"- {n.node_type}: {n.title}" + (f" - {n.description.strip()}" if n.description.strip() else "")
         for n in nodes
         if n.node_type != "note" and n.title
     ]

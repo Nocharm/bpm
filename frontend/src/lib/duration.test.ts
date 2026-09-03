@@ -64,14 +64,14 @@ describe("formatThousands", () => {
 });
 
 describe("stripThousands", () => {
-  it("콤마를 제거한다 — CSV의 '1,250,000' 같은 입력 허용", () => {
+  it("콤마를 제거한다 - CSV의 '1,250,000' 같은 입력 허용", () => {
     expect(stripThousands("1,250,000")).toBe("1250000");
     expect(stripThousands("1200.50")).toBe("1200.50");
   });
 
   it("콤마 없는 값은 그대로", () => expect(stripThousands("999")).toBe("999"));
 
-  it("왕복 — strip 후 재포맷하면 원래 표시형으로 복원", () => {
+  it("왕복 - strip 후 재포맷하면 원래 표시형으로 복원", () => {
     expect(formatThousands(stripThousands("1,250,000"))).toBe("1,250,000");
   });
 });

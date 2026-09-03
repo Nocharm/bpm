@@ -36,7 +36,7 @@ describe("sumParamField", () => {
     );
     expect(sumParamField(g, "duration")).toBe("1.30");
   });
-  it("십진수는 스케일 정수 합산 — 부동소수 오차 없음", () => {
+  it("십진수는 스케일 정수 합산 - 부동소수 오차 없음", () => {
     const g = makeGraph([node("a", { cost_krw: "0.1" }), node("b", { cost_krw: "0.2" })]);
     expect(sumParamField(g, "cost_krw")).toBe("0.3");
   });
@@ -66,7 +66,7 @@ describe("sumParamField", () => {
     expect(sumParamField(g, "cost_usd")).toBe("1200.5");
   });
 
-  it("인원은 값이 있는 노드의 평균 — 소수점 2자리", () => {
+  it("인원은 값이 있는 노드의 평균 - 소수점 2자리", () => {
     const g = makeGraph([
       { id: "a", headcount: "2" },
       { id: "b", headcount: "1" },
@@ -120,7 +120,7 @@ describe("sumParamField", () => {
     expect(sumParamField(g, "cost_krw")).toBe("");  // 일반 노드 없음 + SP 지정 해제로 기여 0개
   });
 
-  it("기여값이 없으면 빈 문자열 — 0과 구분", () => {
+  it("기여값이 없으면 빈 문자열 - 0과 구분", () => {
     const g = makeGraph([{ id: "a", headcount: "" }]);
     expect(sumParamField(g, "headcount")).toBe("");
     expect(sumParamField(g, "cost_usd")).toBe("");
@@ -143,7 +143,7 @@ describe("formatSumPreview", () => {
   });
 });
 
-describe("sumVersionParam (버전 합계 — 7필드)", () => {
+describe("sumVersionParam (버전 합계 - 7필드)", () => {
   it("SP 5종 필드는 sumParamField에 위임한다", () => {
     const g = makeGraph([node("a", { duration: "0.45" }), node("b", { duration: "0.30" })]);
     expect(sumVersionParam(g, "duration")).toBe("1.15");

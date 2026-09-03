@@ -27,7 +27,7 @@ describe("io line helpers", () => {
     expect(setIoLine("a\nb\nc", 2, "")).toBe("a\nb");
     expect(setIoLine("a", 0, "z")).toBe("z");
   });
-  it("setIoLine은 중간 빈 줄을 보존한다 — 정렬 계약 §3", () => {
+  it("setIoLine은 중간 빈 줄을 보존한다 - 정렬 계약 §3", () => {
     expect(setIoLine("a\n\nc", 2, "z")).toBe("a\n\nz");
     expect(setIoLine("a\n\nc", 0, "x")).toBe("x\n\nc");
   });
@@ -51,7 +51,7 @@ describe("state & index", () => {
     const both = node("C", { output: "x", output_ids: "itm_9", output_links: "itm_1" });
     expect(getIoItemState(both, "output", 0)).toBe("origin");
   });
-  it("인덱스 — 중복 itemId는 먼저 만난 쪽만, 빈 텍스트 줄 id는 무시", () => {
+  it("인덱스 - 중복 itemId는 먼저 만난 쪽만, 빈 텍스트 줄 id는 무시", () => {
     const dup = node("D", { output: "복제", output_ids: "itm_1" });
     const idx = buildIoIndex([origin, dup, mirror], NO_SP);
     expect(idx.get("itm_1")).toMatchObject({ nodeId: "A", kind: "out", index: 0, text: "회의록" });
@@ -98,7 +98,7 @@ describe("assignSpIoIds", () => {
   it("빈 텍스트면 빈 결과", () => {
     expect(assignSpIoIds("", "구항목", "sp_1")).toBe("");
   });
-  it("빈 텍스트 줄엔 id 미부여 — 고아 id 방지", () => {
+  it("빈 텍스트 줄엔 id 미부여 - 고아 id 방지", () => {
     const out = assignSpIoIds("a\n\nb", "", "");
     const lines = out.split("\n");
     expect(lines).toHaveLength(3);
@@ -206,7 +206,7 @@ describe("collectIoImportCandidates", () => {
     expect(candsUndesignated).toEqual([]);
   });
 
-  it("지정 SP라도 id 줄이 빈 항목은 후보에서 제외(레거시 지정 — 클릭해도 무피드백)", () => {
+  it("지정 SP라도 id 줄이 빈 항목은 후보에서 제외(레거시 지정 - 클릭해도 무피드백)", () => {
     // 운영 선례: sp_*_ids 도입 전에 지정된 SP는 텍스트만 있고 id 줄이 비어 있다.
     // 그대로 후보로 내보내면 groupId=null → applyIoImport가 null을 반환해 아무 일도 안 일어난다.
     const spNode = node("S", { nodeType: "subprocess", linkedMapId: 7 });
@@ -260,7 +260,7 @@ describe("collectIoImportCandidates", () => {
 });
 
 describe("applyIoImport", () => {
-  it("mirror: 인풋이 일반 아웃풋 불러오기 — 원본에 id 부여, 미러 생성(flag 줄은 추가 안 함)", () => {
+  it("mirror: 인풋이 일반 아웃풋 불러오기 - 원본에 id 부여, 미러 생성(flag 줄은 추가 안 함)", () => {
     const nodes: IoNode[] = [node("A", { output: "출력1" }), node("B", { input: "" })];
     const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
     const candidate = collectIoImportCandidates({ nodes, edges, spRefs: NO_SP, nodeId: "B", side: "input" })[0];
@@ -290,7 +290,7 @@ describe("applyIoImport", () => {
     expect(getIoLine(b.data.input_flags, 1)).toBe(""); // 스테일 "optional" 미상속 — 기본 required
   });
 
-  it("mirror(기존 그룹): 인풋이 이미 원본인 아웃풋 불러오기 — id 재부여 없이 재사용", () => {
+  it("mirror(기존 그룹): 인풋이 이미 원본인 아웃풋 불러오기 - id 재부여 없이 재사용", () => {
     const nodes: IoNode[] = [node("A", { output: "출력1", output_ids: "itm_1" }), node("B", { input: "" })];
     const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
     const candidate = collectIoImportCandidates({ nodes, edges, spRefs: NO_SP, nodeId: "B", side: "input" })[0];
@@ -333,7 +333,7 @@ describe("applyIoImport", () => {
     expect(b.data.input_links).toBe(`\n${itemId}`); // idx0 링크 없음, idx1만 링크
   });
 
-  it("takeover: 아웃풋이 일반 인풋 불러오기 — 요청측 원본화, 대상 인풋은 텍스트 불변인 채 미러 전환", () => {
+  it("takeover: 아웃풋이 일반 인풋 불러오기 - 요청측 원본화, 대상 인풋은 텍스트 불변인 채 미러 전환", () => {
     const nodes: IoNode[] = [node("A", { output: "" }), node("B", { input: "입력1" })];
     const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
     const candidate = collectIoImportCandidates({ nodes, edges, spRefs: NO_SP, nodeId: "A", side: "output" })[0];
@@ -465,7 +465,7 @@ describe("applyIoImport", () => {
     expect(a.data.output_ids ?? "").toBe("");
   });
 
-  it("origin 소실 방어 — 인풋측에서 groupId 있으나 인덱스 미등재(SP 후보 불가 경로)는 null 반환", () => {
+  it("origin 소실 방어 - 인풋측에서 groupId 있으나 인덱스 미등재(SP 후보 불가 경로)는 null 반환", () => {
     const nodes: IoNode[] = [node("B", { input: "" })];
     const candidate: IoImportCandidate = {
       nodeId: "S", nodeLabel: "S", list: "spout", index: 0, text: "x", form: "",
@@ -475,7 +475,7 @@ describe("applyIoImport", () => {
     expect(result).toBeNull();
   });
 
-  it("origin 소실 방어 — 아웃풋측 SP 인풋 후보(spin)는 null 반환", () => {
+  it("origin 소실 방어 - 아웃풋측 SP 인풋 후보(spin)는 null 반환", () => {
     const nodes: IoNode[] = [node("A", { output: "" })];
     const candidate: IoImportCandidate = {
       nodeId: "S", nodeLabel: "S", list: "spin", index: 0, text: "x", form: "",
@@ -487,7 +487,7 @@ describe("applyIoImport", () => {
 });
 
 describe("propagateIoLinks", () => {
-  it("① 원본 텍스트 변경 후 propagate — 모든 미러(인풋·아웃풋, 복수 노드) 동기화", () => {
+  it("① 원본 텍스트 변경 후 propagate - 모든 미러(인풋·아웃풋, 복수 노드) 동기화", () => {
     const nodes: IoNode[] = [
       node("A", { output: "새 산출물", output_ids: "itm_1", output_forms: "PDF" }),
       node("B", { input: "구 산출물", input_links: "itm_1", input_forms: "Excel" }),
@@ -503,7 +503,7 @@ describe("propagateIoLinks", () => {
     expect(c.data.output_forms).toBe("PDF");
   });
 
-  it("② 원본 항목 삭제(텍스트 줄 제거로 id가 빈 텍스트 위에 잔존) — 미러 링크 소거+텍스트 보존", () => {
+  it("② 원본 항목 삭제(텍스트 줄 제거로 id가 빈 텍스트 위에 잔존) - 미러 링크 소거+텍스트 보존", () => {
     const nodes: IoNode[] = [
       node("A", { output: "", output_ids: "itm_1" }), // 텍스트 줄만 삭제된 상태 — id가 빈 줄 위에 남음
       node("B", { input: "산출물사본", input_links: "itm_1" }),
@@ -517,7 +517,7 @@ describe("propagateIoLinks", () => {
     expect(b.data.input_links ?? "").toBe("");
   });
 
-  it("③ 원본 노드 자체가 부재 — 미러 링크 소거+텍스트 보존", () => {
+  it("③ 원본 노드 자체가 부재 - 미러 링크 소거+텍스트 보존", () => {
     const nodes: IoNode[] = [node("B", { input: "산출물사본", input_links: "itm_ghost" })];
     const result = propagateIoLinks(nodes, NO_SP);
     expect(result.changed).toBe(true);
@@ -526,7 +526,7 @@ describe("propagateIoLinks", () => {
     expect(b.data.input_links ?? "").toBe("");
   });
 
-  it("④ 중복 itemId 두 노드 — 뒤쪽(나중에 순회되는) 노드의 id만 소거", () => {
+  it("④ 중복 itemId 두 노드 - 뒤쪽(나중에 순회되는) 노드의 id만 소거", () => {
     const nodes: IoNode[] = [
       node("A", { output: "원본출력", output_ids: "itm_1" }),
       node("D", { output: "복제출력", output_ids: "itm_1" }),
@@ -540,7 +540,7 @@ describe("propagateIoLinks", () => {
     expect(d.data.output).toBe("복제출력"); // 텍스트는 보존
   });
 
-  it("⑤ 같은 줄에 output_ids+output_links 공존 — link 소거(id 우선)", () => {
+  it("⑤ 같은 줄에 output_ids+output_links 공존 - link 소거(id 우선)", () => {
     const nodes: IoNode[] = [
       node("A", { output: "산출물", output_ids: "itm_1" }),
       node("C", { output: "산출물", output_ids: "itm_2", output_links: "itm_1" }), // 무효 공존
@@ -552,7 +552,7 @@ describe("propagateIoLinks", () => {
     expect(c.data.output_links ?? "").toBe(""); // link 소거
   });
 
-  it("⑥ 변경 없음 — changed=false, 반환 배열이 입력과 동일 참조(렌더 루프 방지)", () => {
+  it("⑥ 변경 없음 - changed=false, 반환 배열이 입력과 동일 참조(렌더 루프 방지)", () => {
     const nodes: IoNode[] = [
       node("A", { output: "산출물", output_ids: "itm_1" }),
       node("B", { input: "산출물", input_links: "itm_1" }),
@@ -562,7 +562,7 @@ describe("propagateIoLinks", () => {
     expect(result.nodes).toBe(nodes); // 참조 동일성 — deep-equal 아님
   });
 
-  it("⑦ SP 원본 드리프트(ref 텍스트만 바뀐 상황) — 미러 치유", () => {
+  it("⑦ SP 원본 드리프트(ref 텍스트만 바뀐 상황) - 미러 치유", () => {
     const spRefs: SpRefMap = new Map([[7, {
       designated: true, output: "갱신된 산출물", output_ids: "sp_out1", output_forms: "Excel",
       input: "", input_ids: "", input_forms: "",
@@ -589,7 +589,7 @@ describe("propagateIoLinks", () => {
     expect(s.data.output_ids).toBe("leftover_id");
   });
 
-  it("자기 참조 링크(자기 자신이 원본인 id를 자기 미러 링크로도 지정) — 무효로 소거", () => {
+  it("자기 참조 링크(자기 자신이 원본인 id를 자기 미러 링크로도 지정) - 무효로 소거", () => {
     const nodes: IoNode[] = [
       node("A", { output: "산출물", output_ids: "itm_1", input: "산출물사본", input_links: "itm_1" }),
     ];
@@ -602,7 +602,7 @@ describe("propagateIoLinks", () => {
 });
 
 describe("getIoLinkPeers", () => {
-  it("원본 항목 — groupId=자신의 itemId, mirrors=모든 미러(인풋·아웃풋)", () => {
+  it("원본 항목 - groupId=자신의 itemId, mirrors=모든 미러(인풋·아웃풋)", () => {
     const nodes: IoNode[] = [
       node("A", { output: "산출물", output_ids: "itm_1" }),
       node("B", { input: "산출물", input_links: "itm_1" }),
@@ -618,7 +618,7 @@ describe("getIoLinkPeers", () => {
     ]));
   });
 
-  it("미러 항목(인풋) — origin은 원본 노드, mirrors는 그룹의 미러 목록", () => {
+  it("미러 항목(인풋) - origin은 원본 노드, mirrors는 그룹의 미러 목록", () => {
     const nodes: IoNode[] = [
       node("A", { output: "산출물", output_ids: "itm_1" }),
       node("B", { input: "산출물", input_links: "itm_1" }),
@@ -629,17 +629,17 @@ describe("getIoLinkPeers", () => {
     expect(peers.mirrors).toEqual([{ nodeId: "B", side: "input", index: 0 }]);
   });
 
-  it("plain 항목 — groupId/origin null, mirrors 빈 배열(인풋·아웃풋 양쪽)", () => {
+  it("plain 항목 - groupId/origin null, mirrors 빈 배열(인풋·아웃풋 양쪽)", () => {
     const nodes: IoNode[] = [node("P", { input: "평문", output: "평문출력" })];
     expect(getIoLinkPeers(nodes, NO_SP, "P", "input", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
     expect(getIoLinkPeers(nodes, NO_SP, "P", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
   });
 
-  it("존재하지 않는 노드 — groupId/origin null, mirrors 빈 배열", () => {
+  it("존재하지 않는 노드 - groupId/origin null, mirrors 빈 배열", () => {
     expect(getIoLinkPeers([], NO_SP, "ghost", "input", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
   });
 
-  it("SP 항목 — 지정 ref의 spout에서 groupId 해석, origin.kind='spout'", () => {
+  it("SP 항목 - 지정 ref의 spout에서 groupId 해석, origin.kind='spout'", () => {
     const spRefs: SpRefMap = new Map([[7, {
       designated: true, output: "SP산출물", output_ids: "sp_out1", output_forms: "",
       input: "", input_ids: "", input_forms: "",
@@ -654,7 +654,7 @@ describe("getIoLinkPeers", () => {
     expect(peers.mirrors).toEqual([{ nodeId: "D", side: "input", index: 0 }]);
   });
 
-  it("SP 노드지만 링크맵 미지정/ref 없음 — groupId null", () => {
+  it("SP 노드지만 링크맵 미지정/ref 없음 - groupId null", () => {
     const nodes: IoNode[] = [node("S", { nodeType: "subprocess" })];
     expect(getIoLinkPeers(nodes, NO_SP, "S", "output", 0)).toEqual({ groupId: null, origin: null, mirrors: [] });
   });
@@ -668,14 +668,14 @@ describe("computeIoLinkHighlight", () => {
   ];
   const edges: Edge[] = [{ id: "e1", source: "A", target: "B" } as Edge];
 
-  it("원본 행 — 미러 전부 점등, 경로는 존재하는 엣지만(경로 없는 미러도 노드는 점등)", () => {
+  it("원본 행 - 미러 전부 점등, 경로는 존재하는 엣지만(경로 없는 미러도 노드는 점등)", () => {
     const hl = computeIoLinkHighlight(nodes, edges, NO_SP, "A", "output", 0);
     expect(hl).not.toBeNull();
     expect([...hl!.nodeIds].sort()).toEqual(["B", "C"]);
     expect(hl!.edgeIds).toEqual(["e1"]);
   });
 
-  it("미러 행 — 원본만 점등(형제 미러 제외), 역방향 경로도 취득", () => {
+  it("미러 행 - 원본만 점등(형제 미러 제외), 역방향 경로도 취득", () => {
     const hl = computeIoLinkHighlight(nodes, edges, NO_SP, "B", "input", 0);
     expect(hl).toEqual({ nodeIds: ["A"], edgeIds: ["e1"] });
   });

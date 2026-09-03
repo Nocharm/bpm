@@ -35,7 +35,7 @@ describe("getEditableParamFields", () => {
     expect([...getEditableParamFields("decision")]).toEqual([...PARAM_FIELDS]);
   });
 
-  it("서브프로세스 노드는 연간 건수·FTE만 편집 가능 — 나머지는 링크 맵 지정값", () => {
+  it("서브프로세스 노드는 연간 건수·FTE만 편집 가능 - 나머지는 링크 맵 지정값", () => {
     expect([...getEditableParamFields("subprocess")]).toEqual(["annual_count", "fte"]);
   });
 
@@ -66,7 +66,7 @@ describe("isCostFieldDisabled", () => {
 
   // finding 1 — 편도 pick 버그가 두 통화를 동시에 채운 상태를 만들면, 종전 로직은 양쪽 다
   // disabled(true)라 사용자가 어느 쪽도 지울 수 없는 막다른 상태였다. 탈출구로 both-filled는 활성.
-  it("양쪽 다 값이 있으면(레거시/병합 잔존) 잠그지 않는다 — 지울 수 있는 탈출구", () => {
+  it("양쪽 다 값이 있으면(레거시/병합 잔존) 잠그지 않는다 - 지울 수 있는 탈출구", () => {
     expect(isCostFieldDisabled("cost_krw", "10", "20")).toBe(false);
     expect(isCostFieldDisabled("cost_usd", "10", "20")).toBe(false);
   });
@@ -89,7 +89,7 @@ describe("formatParamValue", () => {
     expect(formatParamValue("fte", "0.5")).toBe("0.5");
   });
 
-  it("빈값·무효값·null은 빈 문자열 — 통화기호만 남지 않음", () => {
+  it("빈값·무효값·null은 빈 문자열 - 통화기호만 남지 않음", () => {
     expect(formatParamValue("cost_krw", "")).toBe("");
     expect(formatParamValue("cost_krw", "약 100만원")).toBe("");
     expect(formatParamValue("duration", "half a day")).toBe("");
@@ -112,7 +112,7 @@ describe("getInheritedParams", () => {
     ).toEqual({ duration: "1.30", touch_time: "", cost_krw: "1000", cost_usd: "", headcount: "2" });
   });
 
-  it("미지정·참조 없음은 전부 빈 값 — 표시는 호출부가 —로", () => {
+  it("미지정·참조 없음은 전부 빈 값 - 표시는 호출부가 -로", () => {
     const empty = { duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "" };
     expect(
       getInheritedParams({
@@ -163,14 +163,14 @@ describe("dropUneditableParams", () => {
 });
 
 describe("dropConflictingCurrency", () => {
-  it("둘 다 값이 있으면 위반 — 둘 다 키 자체를 뺀다(''가 아님, 기존 값 보존을 위해)", () => {
+  it("둘 다 값이 있으면 위반 - 둘 다 키 자체를 뺀다(''가 아님, 기존 값 보존을 위해)", () => {
     const { values, conflict } = dropConflictingCurrency({ cost_krw: "1000", cost_usd: "10" });
     expect(conflict).toBe(true);
     expect("cost_krw" in values).toBe(false);
     expect("cost_usd" in values).toBe(false);
   });
 
-  it("한쪽만 값이 있으면 위반 아님 — 그대로 통과", () => {
+  it("한쪽만 값이 있으면 위반 아님 - 그대로 통과", () => {
     const { values, conflict } = dropConflictingCurrency({ cost_krw: "1000", cost_usd: "" });
     expect(conflict).toBe(false);
     expect(values.cost_krw).toBe("1000");
@@ -199,7 +199,7 @@ describe("resolveAiParamPatch", () => {
     expect(patch).toEqual({ headcount: "3" });
   });
 
-  it("일반 노드는 유효 필드는 정규화 반영, 무효 에코(숫자아님)는 키 자체를 뺀다 — 기존 값 보존", () => {
+  it("일반 노드는 유효 필드는 정규화 반영, 무효 에코(숫자아님)는 키 자체를 뺀다 - 기존 값 보존", () => {
     const patch = resolveAiParamPatch("process", {
       duration: "1.30", cost_krw: "1,000", headcount: "숫자아님", annual_count: "50", fte: "0.5",
     });
@@ -210,7 +210,7 @@ describe("resolveAiParamPatch", () => {
     expect("headcount" in patch).toBe(false);
   });
 
-  it("서브프로세스는 annual_count·fte만 통과 — 나머지는 값이 있어도 드롭", () => {
+  it("서브프로세스는 annual_count·fte만 통과 - 나머지는 값이 있어도 드롭", () => {
     const patch = resolveAiParamPatch("subprocess", {
       duration: "9", cost_krw: "999", headcount: "9", annual_count: "1200", fte: "0.8",
     });
@@ -235,7 +235,7 @@ describe("resolveAiParamPatch", () => {
   });
 
   // finding: 통화 배타 위반 시 과거엔 둘 다 ""가 patch에 들어가 기존 값을 지웠다.
-  it("통화를 둘 다 채우면 위반 — 둘 다 키를 생략한다(기존 값을 지우지 않음)", () => {
+  it("통화를 둘 다 채우면 위반 - 둘 다 키를 생략한다(기존 값을 지우지 않음)", () => {
     const patch = resolveAiParamPatch("process", { cost_krw: "1000", cost_usd: "10" });
     expect("cost_krw" in patch).toBe(false);
     expect("cost_usd" in patch).toBe(false);
@@ -263,7 +263,7 @@ describe("resolveAiParamPatch", () => {
 // 그대로 남는다(예: 기존 cost_usd="20"에 cost_krw="50000"을 patch로 얹으면 두 통화가 동시에 채워진
 // 채 node.data에 스프레드된다). resolveAiParamPatch는 patch 자체(반대쪽 "기존값"은 모른다)가 통화
 // 전환을 완결하도록 반대쪽에 명시적 ""를 채워 넣는지 검증한다.
-describe("resolveAiParamPatch — 통화 전환 시 반대쪽을 명시적으로 지운다 (finding 1)", () => {
+describe("resolveAiParamPatch - 통화 전환 시 반대쪽을 명시적으로 지운다 (finding 1)", () => {
   it("cost_krw만 값으로 설정하면 patch에 cost_usd: ''가 함께 담긴다", () => {
     const patch = resolveAiParamPatch("process", { cost_krw: "50000" });
     expect(patch).toEqual({ cost_krw: "50000", cost_usd: "" });
@@ -274,7 +274,7 @@ describe("resolveAiParamPatch — 통화 전환 시 반대쪽을 명시적으로
     expect(patch).toEqual({ cost_usd: "20", cost_krw: "" });
   });
 
-  it("둘 다 건드리지 않으면(부재) 반대쪽 소거도 없다 — 무효 에코 보존 규칙과 충돌하지 않는다", () => {
+  it("둘 다 건드리지 않으면(부재) 반대쪽 소거도 없다 - 무효 에코 보존 규칙과 충돌하지 않는다", () => {
     const patch = resolveAiParamPatch("process", { headcount: "3" });
     expect("cost_krw" in patch).toBe(false);
     expect("cost_usd" in patch).toBe(false);
@@ -288,7 +288,7 @@ describe("resolveAiParamPatch — 통화 전환 시 반대쪽을 명시적으로
 
 // finding 1 — dropUneditableParams 게이트가 반대쪽 소거 이후에도 SP 노드에서 cost 필드를 전부
 // 걸러내는지(=clearCounterpartCurrency가 SP 게이트를 우회하는 값을 만들지 않는지) 확인.
-describe("resolveAiParamPatch — 서브프로세스는 반대쪽 소거가 있어도 cost 필드가 patch에 남지 않는다", () => {
+describe("resolveAiParamPatch - 서브프로세스는 반대쪽 소거가 있어도 cost 필드가 patch에 남지 않는다", () => {
   it("cost_krw만 온 서브프로세스는 annual_count/fte만 patch에 남는다", () => {
     const patch = resolveAiParamPatch("subprocess", { cost_krw: "999", fte: "0.5" });
     expect(patch).toEqual({ fte: "0.5" });
@@ -327,8 +327,8 @@ describe("coerceAiNewNodeType", () => {
   });
 });
 
-describe("resolveAiParamPatch — touch_time (design 2026-08-19 §2)", () => {
-  it("duration과 동일 정규화 — 75분 이월", () => {
+describe("resolveAiParamPatch - touch_time (design 2026-08-19 §2)", () => {
+  it("duration과 동일 정규화 - 75분 이월", () => {
     expect(resolveAiParamPatch("process", { touch_time: "1.75" })).toEqual({ touch_time: "2.15" });
   });
 
@@ -375,7 +375,7 @@ describe("resolveAiTextPatch", () => {
     });
   });
 
-  it("빈 문자열은 '지움' — 값과 정렬 부속을 함께 비운다", () => {
+  it("빈 문자열은 '지움' - 값과 정렬 부속을 함께 비운다", () => {
     const patch = resolveAiTextPatch("process", { input: "" }, { input: "발주서" });
     expect(patch).toEqual({ input: "", input_forms: "", input_links: "", input_flags: "" });
   });
@@ -389,7 +389,7 @@ describe("resolveAiTextPatch", () => {
     expect(patch).toEqual({ start_condition: "예산 확정", end_condition: "결재 완료" });
   });
 
-  it("서브프로세스는 링크 맵 상속(read-only) — 전부 드롭", () => {
+  it("서브프로세스는 링크 맵 상속(read-only) - 전부 드롭", () => {
     expect(
       resolveAiTextPatch("subprocess", { input: "x", output: "y", data_form: "z" }, {}),
     ).toEqual({});

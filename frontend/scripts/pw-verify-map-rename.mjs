@@ -20,7 +20,7 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -110,7 +110,7 @@ try {
   const stamp = Date.now();
   const dir = await api("/directory");
   const owningDept = dir.departments[0]?.id;
-  if (!owningDept) throw new Error("directory has no departments — cannot supply owning_department");
+  if (!owningDept) throw new Error("directory has no departments - cannot supply owning_department");
   const realUsers = dir.users.filter((u) => u.role !== "admin");
   if (realUsers.length < 2) throw new Error("directory needs at least 2 non-admin employees");
   ownerLogin = realUsers[0].id;
@@ -211,8 +211,8 @@ try {
   await page.waitForSelector('[data-id="confirm-dialog"]', { timeout: 5000 });
   await page.locator('[data-id="confirm-dialog-confirm"]').click();
   check(
-    'approve shows toast "Rename approved — new name applied"',
-    await toastVisible("Rename approved — new name applied"),
+    'approve shows toast "Rename approved - new name applied"',
+    await toastVisible("Rename approved - new name applied"),
   );
   const applied = await waitForCondition(
     async () => (await api(`/maps/${mapId}`, { user: ownerLogin })).name === requestedName2,

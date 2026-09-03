@@ -45,9 +45,9 @@ mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
-const skip = (name, reason) => console.log(`SKIP ${name} — ${reason}`);
+const skip = (name, reason) => console.log(`SKIP ${name} - ${reason}`);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -133,14 +133,14 @@ try {
   const usable = dir.users.filter((u) => u.department === "" || deptNames.has(u.department));
   const realUser = usable.find((u) => u.name && u.name !== u.id) ?? usable[0] ?? null;
   if (realUser === null) {
-    skip("assignee resolution seed", "directory has no usable employee rows — resolution checks will be skipped");
+    skip("assignee resolution seed", "directory has no usable employee rows - resolution checks will be skipped");
   }
 
   // ── ② 분할 버튼 — 쉐브론 메뉴 → CSV 모달, 왼쪽 절반이 메뉴를 닫는다 ──
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-id="home-create-menu-toggle"]', { timeout: 15000 }).catch(() => {
     throw new Error(
-      "split-button chevron missing on home — a stale build is serving this port (zombie next dev on :3000?)",
+      "split-button chevron missing on home - a stale build is serving this port (zombie next dev on :3000?)",
     );
   });
   await page.locator('[data-id="home-create-menu-toggle"]').click();
@@ -179,7 +179,7 @@ try {
   } else {
     skip(
       "manual button absent while csv_manual_url is empty",
-      `csv_manual_url is set on this server (${me.csv_manual_url}) — asserting presence instead is meaningless for the default`,
+      `csv_manual_url is set on this server (${me.csv_manual_url}) - asserting presence instead is meaningless for the default`,
     );
   }
 
@@ -190,7 +190,7 @@ try {
   if (secureContext) {
     skip(
       "clipboard fallback (execCommand) works without navigator.clipboard",
-      `SECURE CONTEXT ${origin.protocol}//${origin.hostname} — navigator.clipboard exists here, so the old bug` +
+      `SECURE CONTEXT ${origin.protocol}//${origin.hostname} - navigator.clipboard exists here, so the old bug` +
         " cannot reproduce and a pass proves nothing. Rerun with BASE_URL=http://<server-ip>:9900",
     );
   } else {
@@ -236,7 +236,7 @@ try {
   } else {
     await feedCsv("bad-flow.csv", badCsv); // 선택기가 안 열려도 에러 차단 검증은 계속한다
   }
-  console.log("NOT COVERED: real drag-and-drop onto the dropzone — synthetic DataTransfer drops are unreliable; the file-input path above covers parsing");
+  console.log("NOT COVERED: real drag-and-drop onto the dropzone - synthetic DataTransfer drops are unreliable; the file-input path above covers parsing");
   await page.waitForSelector('[data-id="csv-create-errors"]');
   const errText = await page.locator('[data-id="csv-create-errors"]').innerText();
   check(
@@ -308,7 +308,7 @@ try {
       "unresolvable token imported verbatim",
       "assignee login_id resolved to the display name",
     ]) {
-      skip(nm, "directory has no departments — required owning_department cannot be set");
+      skip(nm, "directory has no departments - required owning_department cannot be set");
     }
   } else {
     const owningInput = page.locator('input[placeholder^="Search by name"]').first();
@@ -365,7 +365,7 @@ try {
   }
 
   console.log(
-    "NOT COVERED: createdRef retry (Create re-click after a failed graph save must not duplicate the map) — cannot force a deterministic save failure from the browser",
+    "NOT COVERED: createdRef retry (Create re-click after a failed graph save must not duplicate the map) - cannot force a deterministic save failure from the browser",
   );
 } catch (err) {
   results.push({ name: "fatal", ok: false });

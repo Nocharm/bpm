@@ -78,7 +78,7 @@ const editable = await page.evaluate(() =>
   document.querySelector('.react-flow__node[data-id="c-start"]').classList.contains("draggable"),
 );
 if (!editable) {
-  console.log("NOT EDITABLE (read-only) — checkout held by another user; cannot exercise drag.");
+  console.log("NOT EDITABLE (read-only) - checkout held by another user; cannot exercise drag.");
   await browser.close();
   process.exit(1);
 }
@@ -90,7 +90,7 @@ console.log("c-done saved baseline (pre-expand):", JSON.stringify({ fx: savedBas
 await expandAndZoom();
 const lane = await rdLaneScreen();
 if (!lane) {
-  console.log("NO LANE FOUND — expansion did not render embed region.");
+  console.log("NO LANE FOUND - expansion did not render embed region.");
   await browser.close();
   process.exit(1);
 }

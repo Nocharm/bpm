@@ -77,20 +77,20 @@ describe("buildExportIds", () => {
     emp("m4", "TeamB", ""),
   ];
 
-  it("missing — only empty korean_name", () => {
+  it("missing - only empty korean_name", () => {
     expect(buildExportIds(rows, "missing")).toEqual(["m1", "m3", "m4"]);
   });
 
-  it("all — every id", () => {
+  it("all - every id", () => {
     expect(buildExportIds(rows, "all")).toEqual(["m1", "m2", "m3", "m4"]);
   });
 
-  it("deptSample — one per department, deterministic with rng", () => {
+  it("deptSample - one per department, deterministic with rng", () => {
     expect(buildExportIds(rows, "deptSample", () => 0)).toEqual(["m1", "m3"]);
     expect(buildExportIds(rows, "deptSample", () => 0.99)).toEqual(["m2", "m4"]);
   });
 
-  it("random50 — min(50, n) without replacement", () => {
+  it("random50 - min(50, n) without replacement", () => {
     const picked = buildExportIds(rows, "random50", () => 0);
     expect(picked).toHaveLength(4);
     expect(new Set(picked).size).toBe(4);
@@ -149,7 +149,7 @@ describe("sortManagersFirst", () => {
     expect(out.map((i) => i.id)).toEqual(["mgr.leaf", "mgr.root", "a", "D1", "b"]);
   });
 
-  it("no managers — returns original order", () => {
+  it("no managers - returns original order", () => {
     expect(sortManagersFirst(items, getUserId, [])).toEqual(items);
   });
 
@@ -243,7 +243,7 @@ describe("formatDeptName", () => {
     expect(formatDeptName("Growth Center/Brand Team", "en", korean)).toBe("Brand Team");
   });
 
-  it("keys by full org path, not by leaf name — same leaf under different parents", () => {
+  it("keys by full org path, not by leaf name - same leaf under different parents", () => {
     const byPath = new Map([
       ["A/Sales Team", "가영업팀"],
       ["B/Sales Team", "나영업팀"],

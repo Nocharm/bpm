@@ -12,7 +12,7 @@ const USER = "admin.sys"; // sysadmin — 관리자 퍼지(시나리오 6) 접�
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const consoleErrors = []; // validateDOMNesting 등 런타임 콘솔 에러 수집 (T9 픽스 회귀 확인)

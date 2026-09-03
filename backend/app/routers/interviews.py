@@ -109,7 +109,7 @@ _EXISTING_GREETING = {
         "이 내용을 출발점으로 부족한 부분을 채워가겠습니다. 기존 맵을 보완할까요, 처음부터 다시 정리할까요? 참고할 문서가 있다면 지금 첨부하셔도 좋습니다."
     ),
     "en": (
-        "Hello, I'm your process consultant. The map '{map_name}' already has content — here's what I found.\n"
+        "Hello, I'm your process consultant. The map '{map_name}' already has content - here's what I found.\n"
         "{summary}\n\n"
         "I'll use this as our starting point and fill in what's missing. Should we refine the current map, or start over from scratch? Feel free to attach reference documents."
     ),
@@ -124,8 +124,8 @@ _EXISTING_GREETING_OPTIONS = {
 _FAST_TRACK_OPTION = {"ko": "문서로 바로 그리기", "en": "Draw from a document"}
 
 _EXISTING_NOTE_WORD = {
-    "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 — 문서 기준으로 이어서 다듬을 수 있어요.",
-    "en": "\n\nI've also reviewed the {n} existing nodes — we can refine them against the document.",
+    "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 - 문서 기준으로 이어서 다듬을 수 있어요.",
+    "en": "\n\nI've also reviewed the {n} existing nodes - we can refine them against the document.",
 }
 
 # 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키
@@ -279,8 +279,8 @@ async def _dept_catalog(session: AsyncSession, interview: InterviewSession) -> s
 _KB_CONTEXT_BUDGET = 4000  # 참조 블록 문자 예산 — 첨부 예산과 별도(작게)
 
 _KB_DEGRADE_NOTICE = {
-    "ko": "지식기반 참조를 지금 사용할 수 없어 참조 없이 진행합니다 — 인터뷰는 계속됩니다.",
-    "en": "The knowledge base is unavailable right now — continuing without references.",
+    "ko": "지식기반 참조를 지금 사용할 수 없어 참조 없이 진행합니다 - 인터뷰는 계속됩니다.",
+    "en": "The knowledge base is unavailable right now - continuing without references.",
 }
 
 
@@ -296,7 +296,7 @@ async def _kb_reference_block(
     try:
         hits = await retrieval.search(session, query, session_id=interview.id)
     except embed_client.EmbedError as exc:
-        logger.warning("kb search failed — turn continues without references: %s", exc)
+        logger.warning("kb search failed - turn continues without references: %s", exc)
         return "", True
     # map 출처는 세션 사용자의 viewer 가시성 재검증 — 전 게시 맵이 인덱싱되므로 필터 없이는
     # 비공개 맵 내용이 타 사용자 프롬프트로 유출된다(RBAC 우회, hardening T1). top-k라 검사 소수.
@@ -326,7 +326,7 @@ async def _kb_reference_block(
         total += len(line)
     if not lines:
         return "", False
-    header = "\n\n[지식기반 참조 — 근거로만 활용하고, 아래 출처에 없는 사실을 지어내지 마세요]\n"
+    header = "\n\n[지식기반 참조 - 근거로만 활용하고, 아래 출처에 없는 사실을 지어내지 마세요]\n"
     return header + "\n".join(lines), False
 
 
@@ -337,8 +337,8 @@ def _has_kb_degrade_notice(interview: InterviewSession) -> bool:
 
 # 유사 SP 제안 (design §7 P2) — 수락(choice) 턴 직후, 맵당 1회
 _SP_SUGGEST_TEXT = {
-    "ko": "'{map_name}' 게시 맵과 유사한 구간(활동 {n}개)을 발견했습니다 — 캔버스의 제안 카드에서 서브프로세스 링크로 대체할 수 있어요.",
-    "en": "Found a segment ({n} steps) similar to the published map '{map_name}' — you can replace it with a subprocess link from the card on the canvas.",
+    "ko": "'{map_name}' 게시 맵과 유사한 구간(활동 {n}개)을 발견했습니다 - 캔버스의 제안 카드에서 서브프로세스 링크로 대체할 수 있어요.",
+    "en": "Found a segment ({n} steps) similar to the published map '{map_name}' - you can replace it with a subprocess link from the card on the canvas.",
 }
 
 _SP_ACCEPT_NOTICE = {
@@ -601,7 +601,7 @@ async def post_turn(
             interview.messages.append(notice)
         await session.commit()
     except Exception:  # noqa: BLE001 -- 부가 로직 실패는 로그만 — AI 비용·답변 소실 방지
-        logger.exception("post-turn extras failed — turn already committed")
+        logger.exception("post-turn extras failed - turn already committed")
         await session.rollback()
     loaded = await _get_owned_interview(session, interview_id, user)
     state = await _state_out(session, loaded)
@@ -611,12 +611,12 @@ async def post_turn(
 
 # draw 이벤트 안내 문구 — 인터뷰어 호출 없이 고정 (speed redesign §4)
 _DRAW_CHOICES_TEXT = {
-    "ko": "안을 준비했습니다 — 캔버스에서 골라주세요.",
-    "en": "Proposals are ready — pick one on the canvas.",
+    "ko": "안을 준비했습니다 - 캔버스에서 골라주세요.",
+    "en": "Proposals are ready - pick one on the canvas.",
 }
 _DRAW_EMPTY_TEXT = {
-    "ko": "현재 맵과 사실상 같은 안뿐이라 새로 제시할 게 없습니다 — 대화를 더 진행한 뒤 다시 그려보세요.",
-    "en": "All drafts matched the current map — continue the interview and draw again later.",
+    "ko": "현재 맵과 사실상 같은 안뿐이라 새로 제시할 게 없습니다 - 대화를 더 진행한 뒤 다시 그려보세요.",
+    "en": "All drafts matched the current map - continue the interview and draw again later.",
 }
 
 
@@ -807,8 +807,8 @@ async def apply_interview_params(
 
 _FAST_FORWARD_USER_TEXT = {"ko": "이대로 그려주세요.", "en": "Draw it as proposed."}
 _FAST_FORWARD_NOTICE = {
-    "ko": "문서 기준으로 바로 그립니다 — 남은 단계는 '미정'으로 채우고 검토로 건너뜁니다.",
-    "en": "Drawing straight from the document — remaining stages are marked TBD, jumping to review.",
+    "ko": "문서 기준으로 바로 그립니다 - 남은 단계는 '미정'으로 채우고 검토로 건너뜁니다.",
+    "en": "Drawing straight from the document - remaining stages are marked TBD, jumping to review.",
 }
 
 

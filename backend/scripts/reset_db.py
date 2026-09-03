@@ -65,7 +65,7 @@ async def main() -> None:
     async with SessionLocal() as session:
         summary = await seed_org_demo(session)
     print(
-        f"seed    org demo — employees={summary['employees']} (incl. sysadmin admin.sys), "
+        f"seed    org demo - employees={summary['employees']} (incl. sysadmin admin.sys), "
         f"groups={summary['groups']}, maps={summary['maps']}"
     )
 

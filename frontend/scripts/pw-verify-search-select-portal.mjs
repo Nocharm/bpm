@@ -12,7 +12,7 @@ const HEIGHTS = [800, 620, 540, 480];
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 메뉴가 실제로 온전히 보이는가 — 네 귀퉁이 안쪽 점에서 elementFromPoint가 메뉴 내부를 가리켜야 한다.
@@ -71,7 +71,7 @@ for (const height of HEIGHTS) {
     }
   }
   if (bpmNode < 0) {
-    check(`${height}px — BPM 속성 피커 노출`, false, "편집 가능한 process 노드 없음");
+    check(`${height}px - BPM 속성 피커 노출`, false, "편집 가능한 process 노드 없음");
     await ctx.close();
     continue;
   }
@@ -81,7 +81,7 @@ for (const height of HEIGHTS) {
   await page.waitForTimeout(350);
   const insp = await probeMenu(page);
   check(
-    `인스펙터 ${height}px — 드롭다운 안 잘림`,
+    `인스펙터 ${height}px - 드롭다운 안 잘림`,
     insp.found && insp.hidden.length === 0 && insp.inViewport && insp.portaled,
     JSON.stringify(insp),
   );
@@ -108,15 +108,15 @@ for (const height of HEIGHTS) {
       navReachable: nr.top >= cr.top - 1 && nr.bottom <= cr.bottom + 1,
     };
   });
-  check(`모달 ${height}px — 본문 스크롤 살아있음`, body.canScroll, JSON.stringify(body));
-  check(`모달 ${height}px — 스크롤바 숨김`, body.scrollbarHidden);
-  check(`모달 ${height}px — 끝까지 내리면 선행/후행 내비가 카드 안`, body.navReachable);
+  check(`모달 ${height}px - 본문 스크롤 살아있음`, body.canScroll, JSON.stringify(body));
+  check(`모달 ${height}px - 스크롤바 숨김`, body.scrollbarHidden);
+  check(`모달 ${height}px - 끝까지 내리면 선행/후행 내비가 카드 안`, body.navReachable);
 
   await modal.locator('[data-id="search-select-trigger"]').first().click();
   await page.waitForTimeout(350);
   const mod = await probeMenu(page);
   check(
-    `모달 ${height}px — 드롭다운 안 잘림`,
+    `모달 ${height}px - 드롭다운 안 잘림`,
     mod.found && mod.hidden.length === 0 && mod.inViewport && mod.portaled,
     JSON.stringify(mod),
   );

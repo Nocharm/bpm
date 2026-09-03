@@ -64,7 +64,7 @@ describe("classifyDetail", () => {
       severity: "warning",
       subject: "cheolsu.kim",
     });
-    expect(classifyDetail("warning", "owner missing — fallback to importer (pending)").kind).toBe(
+    expect(classifyDetail("warning", "owner missing - fallback to importer (pending)").kind).toBe(
       "owner-fallback",
     );
     expect(classifyDetail("created", "published v3")).toMatchObject({ kind: "published", numbers: [3] });
@@ -85,8 +85,8 @@ describe("classifyDetail", () => {
 
 describe("buildImportReportView", () => {
   const rows: ImportRow[] = [
-    { code: "task-0001", action: "warning", detail: "owner missing — fallback to importer (pending)" },
-    { code: "task-0002", action: "warning", detail: "owner missing — fallback to importer (pending)" },
+    { code: "task-0001", action: "warning", detail: "owner missing - fallback to importer (pending)" },
+    { code: "task-0002", action: "warning", detail: "owner missing - fallback to importer (pending)" },
     { code: "task-0002", action: "warning", detail: "approver 'cheolsu.kim' not found in employees" },
     { code: "task-0001", action: "created", detail: "published v1" },
     { code: "task-0002", action: "created", detail: "published v1" },
@@ -123,7 +123,7 @@ describe("buildImportReportView", () => {
   it("puts errors first in the digest and keeps their reason attached to the map", () => {
     const errorRows: ImportRow[] = [
       ...rows,
-      { code: "task-0002", action: "error", detail: "map is in trash — restore or purge before re-import" },
+      { code: "task-0002", action: "error", detail: "map is in trash - restore or purge before re-import" },
     ];
     const view = buildImportReportView(errorRows, buildInterviewIndex([FILE_A]));
 

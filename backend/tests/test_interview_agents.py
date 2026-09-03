@@ -145,7 +145,7 @@ def test_interviewer_messages_include_dept_catalog() -> None:
         stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
         history=[], user_input="다음은요?", dept_catalog="- System Team\n- Quality Team",
     )
-    assert "[부서 후보 목록 — department" in msgs[0]["content"]
+    assert "[부서 후보 목록 - department" in msgs[0]["content"]
     assert "- System Team" in msgs[0]["content"]
 
 
@@ -155,7 +155,7 @@ def test_interviewer_messages_omit_dept_block_when_empty() -> None:
         history=[], user_input="다음은요?",
     )
     # 계약 룰 13이 "[부서 후보 목록]"을 언급하므로 블록 헤더 전체로 판정한다
-    assert "[부서 후보 목록 — department" not in msgs[0]["content"]
+    assert "[부서 후보 목록 - department" not in msgs[0]["content"]
 
 
 def test_interviewer_contract_bans_assignee_collection() -> None:

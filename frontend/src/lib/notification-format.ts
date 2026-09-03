@@ -109,7 +109,7 @@ function buildBody(
     const reasonText = REASON_CODES.has(p.reason)
       ? t(`notifReason.${p.reason}` as MessageKey)
       : p.reason;
-    body = `${body} — ${reasonText}`;
+    body = `${body} - ${reasonText}`;
   }
   return body;
 }

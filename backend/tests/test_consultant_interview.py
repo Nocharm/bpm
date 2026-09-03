@@ -379,11 +379,11 @@ def test_multi_value_io_joined_with_newline() -> None:
 
 def test_open_items_and_task_note_preserved() -> None:
     data = _interview()
-    data["openItems"] = [{"text": "성적서 전자화 범위 — IT 협의", "unitId": None}, "문자열 항목"]
+    data["openItems"] = [{"text": "성적서 전자화 범위 - IT 협의", "unitId": None}, "문자열 항목"]
     data["tasks"][0]["note"] = "표준기 관리대장은 아직 엑셀"
     res = convert_interview(data)
     triples = {(n.kind, n.text, n.map_code, n.category_code) for n in res.notes}
-    assert ("open_item", "성적서 전자화 범위 — IT 협의", None, "19-01-06-01-02") in triples
+    assert ("open_item", "성적서 전자화 범위 - IT 협의", None, "19-01-06-01-02") in triples
     assert ("open_item", "문자열 항목", None, "19-01-06-01-02") in triples
     assert ("task_note", "표준기 관리대장은 아직 엑셀", "task-prep-0001", None) in triples
 

@@ -33,20 +33,20 @@ def lint_graph(graph: dict, lang: str = "ko") -> list[str]:
         more = len(bad_titles) - 3
         if lang == "en":
             warnings.append(
-                f"{len(bad_titles)} title tone issue(s) — {shown}"
+                f"{len(bad_titles)} title tone issue(s) - {shown}"
                 + (f" and {more} more" if more > 0 else "")
                 + " (noun+verb standard)"
             )
         else:
             warnings.append(
-                f"제목 톤 이탈 {len(bad_titles)}건 — {shown}"
+                f"제목 톤 이탈 {len(bad_titles)}건 - {shown}"
                 + (f" 외 {more}건" if more > 0 else "")
                 + " ('명사+동사' 명사구 표준)"
             )
     count = len(flow_nodes)
     if count and not (ACTIVITY_MIN <= count <= ACTIVITY_MAX):
         warnings.append(
-            f"{count} activities — outside the 10±3 standard" if lang == "en"
-            else f"활동 수 {count}개 — 표준 세분도 10±3 범위 밖"
+            f"{count} activities - outside the 10±3 standard" if lang == "en"
+            else f"활동 수 {count}개 - 표준 세분도 10±3 범위 밖"
         )
     return warnings

@@ -17,7 +17,7 @@ mkdirSync(OUT, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -86,7 +86,7 @@ try {
   const owningDept = dir0.departments[0]?.id;
   if (!owningDept) throw new Error("directory has no departments");
   const approver = (dir0.users.find((u) => u.id === "admin.sys") ?? dir0.users[0])?.id;
-  if (!approver) throw new Error("directory has no employees — approval quorum impossible");
+  if (!approver) throw new Error("directory has no employees - approval quorum impossible");
 
   // ═══ 자식 맵 B — Start→Pick items→Pack items→End(기본), 게시 + SP 지정 ═══
   const mapB = await api("/maps", {

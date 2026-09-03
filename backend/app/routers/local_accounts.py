@@ -105,7 +105,7 @@ async def update_local_account(
         # (app/hr/service.py) — 그 상태에서 디렉터리 행을 덮어쓰지 않는다. DELETE가 정답 경로.
         raise HTTPException(
             status_code=409,
-            detail=f"login id {login_id} belongs to a directory user — delete the local credential instead",
+            detail=f"login id {login_id} belongs to a directory user - delete the local credential instead",
         )
 
     if body.name is not None:

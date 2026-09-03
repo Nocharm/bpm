@@ -21,7 +21,7 @@ const BACKEND_DIR = path.resolve(__dirname, "../../backend");
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 const api = async (pathname, { method = "GET", body } = {}) => {
@@ -58,7 +58,7 @@ try {
   // ── Step 1: 테스트 맵 생성 — Start→A(output 회의록)→B→End, PUT 전 체크아웃 필수(graph.py 423/409 가드) ──
   const dir = await api("/directory");
   const owningDept = dir.departments[0]?.id;
-  if (!owningDept) throw new Error("directory has no departments — run reset_db first");
+  if (!owningDept) throw new Error("directory has no departments - run reset_db first");
 
   const stamp = Date.now();
   const created = await api("/maps", {
@@ -330,9 +330,9 @@ try {
         const before = baseline.get(name) ?? 0;
         if (count !== before) diffs.push(`${name}: ${before}→${count}`);
       }
-      check("zero residue — table row counts match baseline", diffs.length === 0, diffs.join(", "));
+      check("zero residue - table row counts match baseline", diffs.length === 0, diffs.join(", "));
     } else {
-      check("zero residue — table row counts match baseline", false, "post-teardown snapshot failed");
+      check("zero residue - table row counts match baseline", false, "post-teardown snapshot failed");
     }
   }
 }

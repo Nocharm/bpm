@@ -386,9 +386,9 @@ export function InterviewPreview({
 .iv-preview-flow .react-flow__handle{opacity:0;pointer-events:none}
 .iv-preview-flow .react-flow__node{z-index:2 !important;cursor:pointer}
 .iv-choice-flow .react-flow__node{cursor:pointer}
-/* 노드 호버 강조 — 에디터의 bpm-node-emph 글로우와 동일 룰(ProcessNode 공유) */
+/* 노드 호버 강조 - 에디터의 bpm-node-emph 글로우와 동일 룰(ProcessNode 공유) */
 .iv-preview-flow .react-flow__node:hover .bpm-node-emph,.iv-choice-flow .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}
-/* 선택 링 — 래퍼 outline은 추정 높이 박스라 도형과 어긋남 → 실제 도형(bpm-node-emph)의
+/* 선택 링 - 래퍼 outline은 추정 높이 박스라 도형과 어긋남 → 실제 도형(bpm-node-emph)의
    box-shadow 이중 링(마름모는 회전까지 따라감). 이웃 가림 방지 z 상승. 호버 룰보다 뒤=우선 */
 .iv-preview-flow .react-flow__node.selected,.iv-choice-flow .react-flow__node.selected{z-index:3 !important}
 .iv-preview-flow .react-flow__node.selected .bpm-node-emph,.iv-choice-flow .react-flow__node.selected .bpm-node-emph{box-shadow:0 0 0 2px var(--color-surface),0 0 0 4px var(--color-accent)}

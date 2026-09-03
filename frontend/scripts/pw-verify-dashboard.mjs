@@ -12,7 +12,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 뷰어 권한 시드 — 앱 모델 경유(sqlite raw INSERT는 tz-aware DateTime 비교 함정).
@@ -79,7 +79,7 @@ const cardCount = await cards.count();
 const railText = await page.locator('[data-id="dashboard"] aside').first().innerText();
 check(
   "2 summary stats rendered (not placeholder)",
-  cardCount >= 4 && !railText.includes("—"),
+  cardCount >= 4 && !railText.includes("-"),
   `${cardCount} cards`,
 );
 const statsBefore = railText;

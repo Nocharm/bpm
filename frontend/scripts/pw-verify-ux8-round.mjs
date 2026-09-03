@@ -12,7 +12,7 @@ fs.mkdirSync(SHOT_DIR, { recursive: true });
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const shot = (page, name) => page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
 
@@ -33,7 +33,7 @@ const canvasId = await page.evaluate(async () => {
   return list.find((m) => m.mode === "framework")?.id ?? null;
 });
 if (canvasId === null) {
-  console.log("FAIL 연계 캔버스 맵을 못 찾음 — pw-smoke-framework-canvas.mjs 선행 필요");
+  console.log("FAIL 연계 캔버스 맵을 못 찾음 - pw-smoke-framework-canvas.mjs 선행 필요");
   process.exit(1);
 }
 
@@ -50,7 +50,7 @@ const mapRowVisible = await page
   .waitFor({ state: "visible", timeout: 12000 })
   .then(() => true)
   .catch(() => false);
-check("[14] 열자마자 내 위치(L5)까지 드릴인 — L6 목록 노출", mapRowVisible);
+check("[14] 열자마자 내 위치(L5)까지 드릴인 - L6 목록 노출", mapRowVisible);
 await shot(page, "14-picker-drilled-on-open");
 
 // [7] 단일 후보 자동 드릴인 — 자동 펼침 체인 밖 가지("유틸리티 운전")는 자식이 하나뿐이라
@@ -69,7 +69,7 @@ const leafL5 = page
   .filter({ hasText: "정제수 일상 점검" })
   .first();
 check(
-  "[7] 단일 후보 자동 드릴인 — 1클릭에 L5까지 내려가 L6가 늘어남",
+  "[7] 단일 후보 자동 드릴인 - 1클릭에 L5까지 내려가 L6가 늘어남",
   afterMaps > beforeMaps && (await leafL5.count()) > 0,
   `maps ${beforeMaps} → ${afterMaps}`,
 );

@@ -16,7 +16,7 @@ const PASSWORD = "Smoke!2026Test";
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 // 로컬 계정 시드 — 앱 모델(app.passwords.hash_password) 경유. sqlite raw INSERT는 해시 규격이

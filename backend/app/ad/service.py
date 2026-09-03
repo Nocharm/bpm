@@ -117,7 +117,7 @@ async def refresh_titles_and_positions(
     unmatched_sample: list[str] = []
     if positions and not empno_to_sam:
         logger.warning(
-            "AD employeeNumber feed empty — skipping position match/erasure (%d unmatched)",
+            "AD employeeNumber feed empty - skipping position match/erasure (%d unmatched)",
             len(positions),
         )
         unmatched = len(positions)

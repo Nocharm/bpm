@@ -69,7 +69,7 @@ const editable = await page.evaluate(() =>
   document.querySelector('.react-flow__node[data-id="c-start"]').classList.contains("draggable"),
 );
 if (!editable) {
-  console.log("NOT EDITABLE (read-only) — checkout held by another user; cannot exercise drag.");
+  console.log("NOT EDITABLE (read-only) - checkout held by another user; cannot exercise drag.");
   await browser.close();
   process.exit(1);
 }
@@ -77,7 +77,7 @@ if (!editable) {
 await expandAndZoom();
 const lane = await rdLaneScreen();
 if (!lane) {
-  console.log("NO LANE FOUND — expansion did not render embed region.");
+  console.log("NO LANE FOUND - expansion did not render embed region.");
   await browser.close();
   process.exit(1);
 }
@@ -104,7 +104,7 @@ const landedCy = landedBox.y + landedBox.height / 2;
 const screenMiss = Math.hypot(landedCx - dropX, landedCy - dropY);
 const followOk = screenMiss <= 30; // 줌≈0.2 → 한 노드폭≈18px. footprint(~900flow)면 ~180px 빗나감.
 console.log(
-  "cross-boundary drop: landed screen center vs cursor — miss(px)=",
+  "cross-boundary drop: landed screen center vs cursor - miss(px)=",
   Math.round(screenMiss),
   "followOk=",
   followOk,

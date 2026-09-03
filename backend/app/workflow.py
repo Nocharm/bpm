@@ -166,7 +166,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
             version.checked_out_at = now_kst() if submitter_alive else None
             record_version_event(
                 session, version.id, "withdrawn", "system",
-                note="approval cancelled — approver(s) departed",
+                note="approval cancelled - approver(s) departed",
             )
             recipients = [
                 r
@@ -180,7 +180,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                 type="approval_cancelled",
                 map_id=version.map_id,
                 version_id=version.id,
-                message=f"approval for '{version.label}' of '{map_name}' was cancelled — its approver(s) left the company",
+                message=f"approval for '{version.label}' of '{map_name}' was cancelled - its approver(s) left the company",
                 payload={"map_name": map_name, "version_label": version.label,
                          "version_number": version.version_number},
             )
@@ -195,7 +195,7 @@ async def reconcile_departures(session: AsyncSession, departed: set[str]) -> Non
                     type="approved",
                     map_id=version.map_id,
                     version_id=version.id,
-                    message=f"'{version.label}' of '{map_name}' is fully approved — ready to publish",
+                    message=f"'{version.label}' of '{map_name}' is fully approved - ready to publish",
                     payload={"map_name": map_name, "version_label": version.label,
                              "version_number": version.version_number},
                 )

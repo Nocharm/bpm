@@ -24,7 +24,7 @@ const MOVE_MIN = 40; // flow px — 드롭 위치는 원위치에서 이만큼�
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 const note = (msg) => console.log(`NOTE ${msg}`);
 
@@ -248,7 +248,7 @@ try {
       !!(afterPosS && (Math.abs(afterPosS.x - beforePosS.x) >= MOVE_MIN || Math.abs(afterPosS.y - beforePosS.y) >= MOVE_MIN));
     // 참고: 에디터에 별개로 로그된 "연속 plain-drag 시 Start 프리즈" 버그가 있어, 신선한 리로드 후에도
     // 특정 상황에서 이 이동 확인이 흔들릴 수 있음(이 기능과 무관). freeze로 실패하면 아래 NOTE로 구분.
-    if (!startMoved) note("(b) start didn't move — likely the pre-existing plain-drag freeze bug (unrelated to ctrl-drag feature)");
+    if (!startMoved) note("(b) start didn't move - likely the pre-existing plain-drag freeze bug (unrelated to ctrl-drag feature)");
     check("(b) start node still moves normally (not frozen)", startMoved, `before=${JSON.stringify(beforePosS)} after=${JSON.stringify(afterPosS)}`);
 
     const blockedToastB = await page.getByText("can't be copied", { exact: false }).first().isVisible().catch(() => false);
@@ -393,14 +393,14 @@ try {
     const afterCountE = await page.locator(".react-flow__node").count();
     // 핵심 회귀 가드: +2 여야 함. 버그면 +4(2×N).
     check(
-      "(e) CRITICAL — 2 copyable multi-selected → exactly +2 nodes (not +4)",
+      "(e) CRITICAL - 2 copyable multi-selected → exactly +2 nodes (not +4)",
       afterCountE === beforeCountE + 2,
       `before=${beforeCountE} after=${afterCountE} (bug would be +4)`,
     );
     const m1dup = await page.locator(".react-flow__node", { hasText: "M One (2)" }).count();
     const m2dup = await page.locator(".react-flow__node", { hasText: "M Two (2)" }).count();
-    check("(e) each base duplicated exactly once — M One (2) ×1", m1dup === 1, `count=${m1dup}`);
-    check("(e) each base duplicated exactly once — M Two (2) ×1", m2dup === 1, `count=${m2dup}`);
+    check("(e) each base duplicated exactly once - M One (2) ×1", m1dup === 1, `count=${m1dup}`);
+    check("(e) each base duplicated exactly once - M Two (2) ×1", m2dup === 1, `count=${m2dup}`);
     // 중복 라벨((2) 두 개 등)이 없는지 — 이중 append면 "M One (2)"가 2개 생긴다.
     const m1dup3 = await page.locator(".react-flow__node", { hasText: "M One (3)" }).count();
     check("(e) no double-append artifact (no 'M One (3)')", m1dup3 === 0, `count=${m1dup3}`);
@@ -409,7 +409,7 @@ try {
     await page.waitForTimeout(2500);
     const titlesE = await savedTitles();
     check(
-      "(e) CRITICAL — backend persists exactly 5 nodes after reload (not 7)",
+      "(e) CRITICAL - backend persists exactly 5 nodes after reload (not 7)",
       titlesE.length === 5,
       `titles=${JSON.stringify(titlesE)}`,
     );

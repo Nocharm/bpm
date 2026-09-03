@@ -69,7 +69,7 @@ console.log("hasOrder:", hasOrder);
 console.log("handlesBefore (subEnds proof):", JSON.stringify(handlesBefore));
 console.log("toggle clicked:", clicked);
 console.log("nodeCount before -> after:", nodeCountBefore, "->", nodeCountAfter);
-console.log("embedded visible — 접수:", hasJeobsu, "검토:", hasGeomto);
+console.log("embedded visible - 접수:", hasJeobsu, "검토:", hasGeomto);
 console.log("consoleErrors:", errors.length, errors.slice(0, 5));
 
 const subEndsOk = handlesBefore && handlesBefore.sources >= 2 && handlesBefore.targets >= 1;

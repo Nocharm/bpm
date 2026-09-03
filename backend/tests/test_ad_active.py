@@ -194,5 +194,5 @@ def test_directory_response_excludes_sensitive_fields(client: TestClient) -> Non
     for user in users:
         extra = set(user.keys()) - allowed_keys
         assert not extra, (
-            f"/api/directory user has unexpected fields {extra} — must stay minimal (no email/active)"
+            f"/api/directory user has unexpected fields {extra} - must stay minimal (no email/active)"
         )

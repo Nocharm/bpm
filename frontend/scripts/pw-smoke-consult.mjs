@@ -38,7 +38,7 @@ const afterDraw = {
   ...afterAnswer,
   draw_due: null,
   messages: [...afterAnswer.messages,
-    { id: 4, seq: 4, role: "consultant", kind: "choices", content: "안을 준비했습니다 — 캔버스에서 골라주세요.", stage: "activities",
+    { id: 4, seq: 4, role: "consultant", kind: "choices", content: "안을 준비했습니다 - 캔버스에서 골라주세요.", stage: "activities",
       payload: { options: [
         { id: "opt-1", title: "Standard", summary: "6 steps", graph: graph(["s", "a", "e"]) },
         { id: "opt-2", title: "Detailed", summary: "9 steps", graph: graph(["s", "a", "b", "e"]) },

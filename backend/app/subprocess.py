@@ -325,7 +325,7 @@ async def assert_no_cycle(
     while stack:
         m = stack.pop()
         if m == self_map_id:
-            raise ValueError("순환 참조입니다 — 자기 자신을 직접/간접 하위로 가져올 수 없습니다.")
+            raise ValueError("순환 참조입니다 - 자기 자신을 직접/간접 하위로 가져올 수 없습니다.")
         if m in seen:
             continue
         seen.add(m)

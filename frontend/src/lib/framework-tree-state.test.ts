@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("fetchRootChildren", () => {
-  it("루트 로드 — parentId 없이 listCategoryNodes 호출, children_loaded로 리듀스", async () => {
+  it("루트 로드 - parentId 없이 listCategoryNodes 호출, children_loaded로 리듀스", async () => {
     const rootNodes: CategoryNode[] = [
       { id: 1, code: "A", name: "Root A", level: 1, sort_order: 0, child_count: 2, map_count: 5, linkage_map_id: null, can_edit_linkage: false },
     ];
@@ -51,7 +51,7 @@ describe("fetchRootChildren", () => {
 });
 
 describe("펼침 캐시", () => {
-  it("펼침 시 자식+맵을 1회만 fetch — 접었다 재펼침해도 캐시라 재요청 없음", async () => {
+  it("펼침 시 자식+맵을 1회만 fetch - 접었다 재펼침해도 캐시라 재요청 없음", async () => {
     const children: CategoryNode[] = [
       { id: 11, code: "A1", name: "Sub A1", level: 2, sort_order: 0, child_count: 0, map_count: 2, linkage_map_id: null, can_edit_linkage: false },
     ];
@@ -86,7 +86,7 @@ describe("펼침 캐시", () => {
     expect(state.childrenByParent.get(5)).toEqual(children);
   });
 
-  it("펼침 중(fetch 미완료) 접었다 재펼침해도 fetch는 1회만 발생한다 — loadingIds 가드 회귀", async () => {
+  it("펼침 중(fetch 미완료) 접었다 재펼침해도 fetch는 1회만 발생한다 - loadingIds 가드 회귀", async () => {
     const children: CategoryNode[] = [
       { id: 21, code: "B1", name: "Sub B1", level: 2, sort_order: 0, child_count: 0, map_count: 1, linkage_map_id: null, can_edit_linkage: false },
     ];
@@ -179,7 +179,7 @@ describe("loadMoreMaps", () => {
     expect(state2.mapsByCategory.get(1)?.maps.map((m) => m.id)).toEqual([1, 2]);
   });
 
-  it("더 보기 연타(응답 전 중복 클릭)해도 fetch는 1회, 중복 id 없이 append된다 — loadingIds 가드 회귀", async () => {
+  it("더 보기 연타(응답 전 중복 클릭)해도 fetch는 1회, 중복 id 없이 append된다 - loadingIds 가드 회귀", async () => {
     const initialMaps: CategoryMaps = { total: 3, hidden: 0, maps: [{ id: 1 } as CategoryMaps["maps"][number]] };
     const page2: CategoryMaps = { total: 3, hidden: 0, maps: [{ id: 2 } as CategoryMaps["maps"][number]] };
 
@@ -233,7 +233,7 @@ describe("펼침 실패 복구", () => {
 });
 
 describe("hasMoreMaps", () => {
-  it("total이 (가시 maps 수 + hidden)보다 클 때만 true — hidden도 합산에 포함해야 한다", () => {
+  it("total이 (가시 maps 수 + hidden)보다 클 때만 true - hidden도 합산에 포함해야 한다", () => {
     const loaded = reduceFrameworkTree(createInitialState(), {
       type: "maps_loaded",
       categoryId: 1,
@@ -266,7 +266,7 @@ describe("collectCascadeTargets", () => {
     id, code: `C${id}`, name: `Cat ${id}`, level: 2, sort_order: id, child_count: 0, map_count: mapCount, linkage_map_id: null, can_edit_linkage: false,
   });
 
-  it("맵 있는(서브트리 rollup>0) 자식만 예산 내에서 — 빈 가지는 제외, 초과분은 잘린다", () => {
+  it("맵 있는(서브트리 rollup>0) 자식만 예산 내에서 - 빈 가지는 제외, 초과분은 잘린다", () => {
     const nodes = [makeNode(1, 3), makeNode(2, 0), makeNode(3, 1), makeNode(4, 2)];
     expect(collectCascadeTargets(nodes, 10)).toEqual([1, 3, 4]);
     expect(collectCascadeTargets(nodes, 2)).toEqual([1, 3]);
@@ -277,7 +277,7 @@ describe("collectCascadeTargets", () => {
 });
 
 describe("펼침 상태 영속", () => {
-  it("write→read 라운드트립 — openIds·expandedLists 둘 다 배열로 저장·복원된다", () => {
+  it("write→read 라운드트립 - openIds·expandedLists 둘 다 배열로 저장·복원된다", () => {
     writePersistedTreeState(new Set([3, 7]), new Set([7]));
     expect(readPersistedTreeState()).toEqual({ openIds: [3, 7], expandedLists: [7] });
   });

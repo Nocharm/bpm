@@ -24,7 +24,7 @@ const MAP_NAME = "교정 준비"; // sp_input=교정 작업지시(EAM)·sp_outpu
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
 async function openContext(browser) {

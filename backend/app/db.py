@@ -310,7 +310,7 @@ async def init_models() -> None:
             async with engine.begin() as conn:
                 await conn.run_sync(step)
         except Exception:  # noqa: BLE001 -- 실패는 크게 로깅하고 기동은 계속
-            logger.exception("bootstrap step %s failed — continuing startup", step.__name__)
+            logger.exception("bootstrap step %s failed - continuing startup", step.__name__)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
