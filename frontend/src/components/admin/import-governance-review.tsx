@@ -72,14 +72,14 @@ export function ImportGovernanceReview({ diffs, checked, onToggle, onToggleAll, 
                       {applied ? (
                         <span
                           data-id={`import-governance-result-${d.code}-${d.field}`}
-                          className={`w-20 shrink-0 rounded-sm border px-1 text-center ${
+                          className={`w-24 shrink-0 rounded-sm border px-1 text-center ${
                             d.applied ? "border-changed/40 text-changed" : "border-hairline text-ink-tertiary"
                           }`}
                         >
                           {d.applied ? t("framework.governance.applied") : t("framework.governance.kept")}
                         </span>
                       ) : (
-                        <label className="flex w-20 shrink-0 items-center gap-1">
+                        <label className="flex w-24 shrink-0 items-center gap-1">
                           <input
                             type="checkbox"
                             data-id={`import-governance-check-${d.code}-${d.field}`}

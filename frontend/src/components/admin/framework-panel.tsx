@@ -1069,7 +1069,11 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             >
               <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
                 {t("framework.importApplyBar", {
-                  maps: (interviewResult.summary.created ?? 0) + (interviewResult.summary.updated ?? 0),
+                  // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
+                  maps:
+                    (interviewResult.summary.created ?? 0) +
+                    (interviewResult.summary.updated ?? 0) +
+                    (interviewResult.summary.unchanged ?? 0),
                   changes: governanceChecked.size,
                 })}
               </span>
