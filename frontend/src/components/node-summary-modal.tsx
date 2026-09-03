@@ -1165,7 +1165,7 @@ export function NodeSummaryModal({
 
           {/* 링크맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용 아코디언(기본 접힘, 영속 없음).
               노트가 없는 맵이 대다수라 그 경우 섹션 자체가 렌더되지 않는다 (사용자 요청 2026-08-31) */}
-          {linkedMapId != null && <MapNotesSection mapId={linkedMapId} />}
+          {linkedMapId != null && <MapNotesSection scope={{ mapId: linkedMapId }} />}
 
           {hasChildren && (
             <div>

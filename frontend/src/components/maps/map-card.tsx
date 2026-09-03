@@ -125,6 +125,16 @@ export function MapCard({
               {t("perm.badgeDeparted")}
             </span>
           )}
+          {/* 오너 없이 임포트된 맵 — 임포터가 임시 보유 중 (spec 2026-09-03 §5) */}
+          {map.consultant_owner_pending && (
+            <span
+              data-id="map-owner-pending"
+              title={t("map.ownerPendingHint")}
+              className="shrink-0 rounded-sm border border-changed/40 bg-changed/10 px-1 text-fine text-changed"
+            >
+              {t("map.ownerPending")}
+            </span>
+          )}
         </span>
       )}
       <span
@@ -336,6 +346,15 @@ export function MapCard({
                   {!map.owner_name && (map.owner_id ?? map.created_by) && (
                     <span className="ml-1.5 rounded-sm border border-hairline px-1 text-fine text-error">
                       {t("perm.badgeDeparted")}
+                    </span>
+                  )}
+                  {map.consultant_owner_pending && (
+                    <span
+                      data-id="map-owner-pending"
+                      title={t("map.ownerPendingHint")}
+                      className="ml-1.5 rounded-sm border border-changed/40 bg-changed/10 px-1 text-fine text-changed"
+                    >
+                      {t("map.ownerPending")}
                     </span>
                   )}
                 </span>

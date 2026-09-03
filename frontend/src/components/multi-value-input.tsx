@@ -16,6 +16,9 @@ interface MultiValueInputProps {
   label: string;
   // 라벨 앞 소형 아이콘(12px) — 행 스캔 가시성 (사용자 결정 2026-08-20)
   icon?: LucideIcon;
+  // 헤더(라벨+호버 '+') 대신 목록 아래에 항상 보이는 '+ Add' 버튼 — 제목이 이미 있는 플라이아웃용
+  // (Import 메뉴는 헤더 모드에서만, 사용자 요청 2026-09-03)
+  addAtBottom?: boolean;
   // 저장된 개행 join 원문 — 빈 문자열이면 항목 0개
   value: string;
   // 항목별 데이터 폼(개행 join, value 줄과 1:1 정렬) — undefined면 폼 열 미노출
@@ -92,6 +95,7 @@ function joinColumn(rows: ItemRow[], key: keyof ItemRow): string {
 export function MultiValueInput({
   label,
   icon: Icon,
+  addAtBottom = false,
   value,
   formsValue,
   idsValue,
@@ -269,6 +273,7 @@ export function MultiValueInput({
 
   return (
     <div className="group/iosec py-1" data-id={dataId}>
+      {!addAtBottom && (
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
           {Icon && <Icon size={12} strokeWidth={1.5} className="text-ink-muted" />}
@@ -325,6 +330,7 @@ export function MultiValueInput({
           )}
         </div>
       </div>
+      )}
       {rows.map((row, i) => {
         const isMirror = row.link !== "";
         const isOrigin = !isMirror && row.id !== "" && (originGroupIndexes?.has(i) ?? false);
@@ -471,7 +477,20 @@ export function MultiValueInput({
           </div>
         );
       })}
-      {rows.length === 0 && <div className="mt-0.5 text-right text-caption text-ink-tertiary">-</div>}
+      {rows.length === 0 && !addAtBottom && (
+        <div className="mt-0.5 text-right text-caption text-ink-tertiary">-</div>
+      )}
+      {addAtBottom && !readOnly && (
+        <button
+          type="button"
+          data-id={`${dataId}-add`}
+          className="mt-1 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt hover:text-ink"
+          onClick={() => setRows((prev) => [...prev, { text: "", form: "", id: "", link: "", flag: "" }])}
+        >
+          <Plus size={12} strokeWidth={1.5} />
+          {t("io.addNew")}
+        </button>
+      )}
     </div>
   );
 }

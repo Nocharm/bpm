@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-03 — 컨설턴트 임포트 후속 1~6: 거버넌스 확인·원문 메모·노트·참고치·지정 모달 (dev)
+- **배경**: 임포트 폴백 6종·노트·값 대체 전수조사(아티팩트 "임포트 폴백 지도") — 폴백은 오너 전용 표면뿐, L5 스코프 노트는 조회 경로 없음, 오너 대기 플래그는 수동 이전으로 안 꺼져 재전달이 수동 배정을 덮던 구멍 4종. 설계 `docs/superpowers/specs/2026-09-03-import-governance-review-design.md`·`…-import-fallback-followups-design.md`.
+- **재임포트 결정 UI**: 오너·오우닝 부서·승인자·임포트 노트 교체는 dry-run "Governance changes"에서 체크한 것만 적용(`decisions`, 미매칭 422; 노트는 사람이 고친 임포트 노트가 없을 때만 기본 체크, 사용자 노트 불변). 오너 대기 예외 폐지·수동 이전이 플래그 해제·카드 "Owner unconfirmed" 필. 확인 다이얼로그 → 리포트 하단 고정 [Cancel][Apply] 바.
+- **표면 확장**: 인터뷰 원문 메모 5종 `PATCH /maps/{id}/fallback-notes`(editor) + `MapFallbackNotes`(에디터 맵 탭=점유권자 편집·홈 카드·비교 요약 기본 접힘; 행머리 아이콘 호버 스왑, 팝오버 360). 노트 CRUD(맵=오너, L5=체인 관리자/sysadmin, `edited_at`) + `MapNotesSection` 프리셋 칩·'[' 자동완성·비권한자 안내, 에디터 맵 탭 순서 SP 카드→원문 메모→노트(L5 캔버스는 카테고리 스코프). SP 지정 참고치 `sp_annual_count/sp_fte`(임포트는 맵 지정값+L5 캔버스 노드 둘 다, 노드 인스펙터 Info 호버). SP 지정 모달 타일 재디자인(`max-w-lg`, 2열 타일 라벨 톤다운+값 우측, 클릭 위치 팝오버·Σ·원문 메모, IO 플라이아웃 하단 '+ Add'). SP 카드 액션 행 wrap.
+- 검증: pytest 1347·vitest 848·스모크 `pw-smoke-interview-import.mjs` 23/23·`pw-smoke-import-followups.mjs` 23/23. 랜드마인: 개발 서버를 `| head`로 띄우면 EPIPE로 죽는다(파일 로그), 지정 모달은 게시본에서만 활성, 에디터 goto는 domcontentloaded.
+
 ## 2026-09-03 — SP 피크 재배치·목업 드래그·우클릭 맵 이동·프레임워크 탐색 좌상단 통일 (dev)
 - **SP 미리보기 피크 재배치**: 헤더를 정보 표면(좌: 맵 이름·오너·게시 버전 / 우: 업무체계 경로·미지정 안내)으로 바꾸고 인스펙터 탭을 좌측, 추가/이동 버튼은 미리보기 우상단에 떠 있는 독립 버튼 2개로(추가=강조색, 한 줄 고정+말줄임) — 패널 높이를 이분할하던 세로 레일은 과하다는 피드백으로 폐기. 목업 노드는 클릭(드롭다운) 유지 + 드래그→캔버스 드롭 추가(`dragPayload`, 행 드래그와 동일 dataTransfer 계약) — 드래그 중 피크는 언마운트 대신 visibility 숨김(언마운트=Chrome 드래그 취소), dragend에서 닫음.
 - **피크 미리보기 휠 줌**: SVG 프리뷰 위 휠이 줌 스텝(100~300%, 커서 지점 앵커 고정 — 버튼 줌은 중앙 앵커로 통일). 휠은 프리뷰가 preventDefault+stopPropagation로 전부 소비해 뒤 캔버스·패널과 동시 입력되지 않는다 (React `onWheel`은 루트 passive라 preventDefault 무시 → 네이티브 리스너로 부착).

@@ -158,6 +158,9 @@ class ProcessMap(Base):
     sp_cost_krw: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_cost_usd: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_headcount: Mapped[str | None] = mapped_column(String(50), default=None)
+    # 담당자 기준 참고치 — 연결 맵의 SP 노드는 각자 annual_count/fte를 가지며 이 값은 호버 참고로만 (design 2026-09-03 §4)
+    sp_annual_count: Mapped[str | None] = mapped_column(String(50), default=None)
+    sp_fte: Mapped[str | None] = mapped_column(String(50), default=None)
     sp_url: Mapped[str | None] = mapped_column(String(500), default=None)
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
     # 지정 설명은 별도 컬럼(sp_description)을 두지 않고 맵 description을 그대로 쓴다 —
@@ -240,6 +243,9 @@ class MapNote(Base):
     source: Mapped[str] = mapped_column(String(100), default="consultant-import")
     delivery_label: Mapped[str | None] = mapped_column(String(100), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # 사람이 고친 시각 — 임포트 노트는 source를 유지한 채 edited_at만 찍혀 재임포트 교체 행의
+    # 기본값(수정 있으면 해제)을 정한다. 사용자 노트(source=user)는 재임포트가 절대 안 건드림 (design 2026-09-03 followups §3)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class MapVersion(Base):

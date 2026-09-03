@@ -102,8 +102,16 @@ class SubprocessDesignationIn(BaseModel):
     cost_krw: str = Field(default="", max_length=50)
     cost_usd: str = Field(default="", max_length=50)
     headcount: str = Field(default="", max_length=50)
+    # 담당자 기준 참고치 — 연결 맵 SP 노드의 annual_count/fte와 별개(호버 참고) (design 2026-09-03 §4)
+    annual_count: str = Field(default="", max_length=50)
+    fte: str = Field(default="", max_length=50)
     # 7번째 회당 파라미터 — 노드 touch_time 대칭, SP 노드가 read-only 상속 (design 2026-08-19 §2)
     touch_time: str = Field(default="", max_length=50)
+    # 인터뷰 원문 메모 — None=미변경(구 클라이언트 호환), ""=지움 (design 2026-09-03 §2)
+    total_time_fallback: str | None = Field(default=None, max_length=200)
+    touch_time_fallback: str | None = Field(default=None, max_length=200)
+    system_fallback: str | None = Field(default=None, max_length=200)
+    frequency_fallback: str | None = Field(default=None, max_length=200)
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
@@ -138,7 +146,7 @@ class SubprocessDesignationIn(BaseModel):
         normalized = normalize_duration(value)
         return "" if normalized is None else normalized
 
-    @field_validator("cost_krw", "cost_usd", "headcount", mode="after")
+    @field_validator("cost_krw", "cost_usd", "headcount", "annual_count", "fte", mode="after")
     @classmethod
     def _normalize_numeric_params(cls, value: str) -> str:
         text = value.strip()
@@ -725,6 +733,9 @@ class MapOut(BaseModel):
     sp_cost_krw: str | None = None
     sp_cost_usd: str | None = None
     sp_headcount: str | None = None
+    # 담당자 기준 참고치 (design 2026-09-03 §4)
+    sp_annual_count: str | None = None
+    sp_fte: str | None = None
     sp_url: str | None = None
     sp_url_label: str | None = None
     # sp_description 폐기(2026-08-31) — 지정 설명은 위 description 필드가 그대로 담는다
@@ -744,6 +755,8 @@ class MapOut(BaseModel):
     # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
     category_path: str | None = None
     consultant_code: str | None = None
+    # 오너 없이 임포트된 맵 — 배지 표시용. 재전달 owner 결정 적용 또는 수동 이전이 내린다 (spec 2026-09-03 §5)
+    consultant_owner_pending: bool = False
     # framework 캔버스 전용 — 결착 카테고리(트랜지언트, get_map이 역조회로 주입) (design 2026-08-28 §8)
     linkage_category_id: int | None = None
     linkage_category_path: str | None = None
@@ -1025,8 +1038,44 @@ class FrameworkImportRow(BaseModel):
     detail: str = ""
 
 
+GovernanceField = Literal["owner", "department", "approvers", "notes"]
+
+
+class GovernanceDecisionIn(BaseModel):
+    """apply 때 체크한 거버넌스 항목 — dry-run 응답 governance[]의 (code, field)와 1:1 (spec 2026-09-03 §3)."""
+
+    code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    field: GovernanceField
+
+
+class FallbackNotesIn(BaseModel):
+    """맵 단위 인터뷰 원문 메모 5종 — 에디터(점유권자)가 인스펙터에서 편집. 보낸 필드만 갱신, ""=지움
+    (design 2026-09-03 followups §2). GMP·시간 대표값은 여기 없다(오너 전용 process-fields)."""
+
+    gmp_fallback: str | None = None
+    frequency_fallback: str | None = Field(default=None, max_length=200)
+    total_time_fallback: str | None = Field(default=None, max_length=200)
+    touch_time_fallback: str | None = Field(default=None, max_length=200)
+    system_fallback: str | None = Field(default=None, max_length=200)
+
+
+class GovernanceDiffOut(BaseModel):
+    """기존 맵 거버넌스 필드 차이 1건 — 체크한 것만 apply가 교체한다 (spec 2026-09-03 §3)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    name: str
+    field: GovernanceField
+    current: str
+    delivered: str
+    applied: bool
+    # 화면 기본 체크 — notes만 True일 수 있다(사람이 고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
+    default_checked: bool = False
+
+
 class MapNoteOut(BaseModel):
-    """맵 노트 1건 — 인터뷰 예외 규칙·VOC 읽기전용 표시 (design 2026-08-18 §5)."""
+    """맵/L5 노트 1건 — 인터뷰 예외 규칙·VOC + 사용자 노트 (design 2026-08-18 §5, 2026-09-03 followups §3)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1036,7 +1085,32 @@ class MapNoteOut(BaseModel):
     text: str
     node_id: str | None
     source: str
+    delivery_label: str | None = None
     created_at: datetime
+    edited_at: datetime | None = None
+
+
+class MapNoteIn(BaseModel):
+    """노트 작성 — kind는 프리셋(note/exception/voc/rule_basis/open_item) 또는 자유 태그(≤50)."""
+
+    kind: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)] = "note"
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None = None
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class MapNoteUpdateIn(BaseModel):
+    """노트 수정 — 보낸 필드만 갱신. 임포트 노트를 고치면 edited_at이 찍힌다."""
+
+    kind: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)] | None = None
+    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None = None
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+
+
+class CategoryNotesOut(BaseModel):
+    """L5 스코프 노트 목록 + 편집 가능 여부(sysadmin 또는 체인 권한자)."""
+
+    can_edit: bool
+    notes: list[MapNoteOut]
 
 
 class InterviewImportFileIn(BaseModel):
@@ -1054,6 +1128,8 @@ class InterviewImportIn(BaseModel):
     label: (
         Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
     ) = None
+    # apply 때만 의미 — dry-run은 무시. 전달분 차이에 없는 항목은 422 (spec 2026-09-03 §3)
+    decisions: list[GovernanceDecisionIn] = []
 
 
 class InterviewIssueOut(BaseModel):
@@ -1082,6 +1158,7 @@ class InterviewImportOut(BaseModel):
     summary: dict[str, int]
     rows: list[FrameworkImportRow]
     truncated: bool
+    governance: list[GovernanceDiffOut] = []
 
 
 class NodeIn(BaseModel):
@@ -1263,6 +1340,9 @@ class SubprocessRefOut(BaseModel):
     cost_krw: str | None = None
     cost_usd: str | None = None
     headcount: str | None = None
+    # 담당자 기준 참고치 — SP 노드 annual_count/fte 행의 호버 힌트(노드 값과 별개) (design 2026-09-03 §4)
+    annual_count: str | None = None
+    fte: str | None = None
     # 7번째 파라미터 + 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
     touch_time: str | None = None
     input: str | None = None

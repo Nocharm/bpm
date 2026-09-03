@@ -134,6 +134,11 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("nodes", "input_flags", "TEXT DEFAULT ''"),
     ("process_maps", "sp_input_ids", "TEXT"),
     ("process_maps", "sp_output_ids", "TEXT"),
+    # SP 지정 참고치 연간횟수/FTE (design 2026-09-03 §4)
+    ("process_maps", "sp_annual_count", "VARCHAR(50)"),
+    ("process_maps", "sp_fte", "VARCHAR(50)"),
+    # 노트 사람 수정 시각 — 재임포트 교체 행 기본값 판정 (design 2026-09-03 followups §3)
+    ("map_notes", "edited_at", "TIMESTAMP"),
     # 알림 구조화 컨텍스트 — FE 언어 토글 렌더용, 레거시 행은 NULL→message 폴백 (2026-08-26)
     ("notifications", "payload", "JSON"),
     # Framework L5 연계 캔버스 (design 2026-08-28) — 카테고리↔캔버스 1:1 · 확정 스냅샷 번호

@@ -65,8 +65,11 @@ export interface MapSummary {
   sp_assignee?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
-  // 회당 파라미터 — sp 지정값 4종. 연간 건수·FTE는 부모 노드 맥락이라 SP에 없음 (design 2026-07-13)
+  // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
   sp_headcount?: string | null;
+  // 담당자 기준 참고치 — 연결 맵 SP 노드의 annual_count/fte와 별개(호버 참고) (design 2026-09-03 §4)
+  sp_annual_count?: string | null;
+  sp_fte?: string | null;
   sp_cost_krw?: string | null;
   sp_cost_usd?: string | null;
   sp_url?: string | null;
@@ -87,6 +90,8 @@ export interface MapSummary {
   category_id?: number | null;
   category_path?: string | null;
   consultant_code?: string | null;
+  // 오너 없이 임포트된 맵 — "Owner unconfirmed" 배지 (spec 2026-09-03 §5)
+  consultant_owner_pending?: boolean;
   // framework 캔버스 전용 — 결착 카테고리(상세 응답에서만 채움) (design 2026-08-28 §8)
   linkage_category_id?: number | null;
   linkage_category_path?: string | null;
@@ -226,6 +231,9 @@ export interface SubprocessRef {
   cost_krw: string | null;
   cost_usd: string | null;
   headcount: string | null;
+  // 담당자 기준 참고치 — SP 노드 annual_count/fte 행 호버 힌트(노드 값과 별개) (design 2026-09-03 §4)
+  annual_count?: string | null;
+  fte?: string | null;
   // 7번째 파라미터 + 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
   touch_time: string | null;
   input: string | null;
@@ -513,7 +521,15 @@ export interface SubprocessDesignationBody {
   cost_krw?: string;
   cost_usd?: string;
   headcount?: string;
+  // 담당자 기준 참고치 (design 2026-09-03 §4)
+  annual_count?: string;
+  fte?: string;
   touch_time?: string;
+  // 인터뷰 원문 메모 — 생략=미변경, ""=지움 (design 2026-09-03 §2)
+  total_time_fallback?: string;
+  touch_time_fallback?: string;
+  system_fallback?: string;
+  frequency_fallback?: string;
   url?: string;
   url_label?: string;
   input?: string;
@@ -567,6 +583,23 @@ export interface ProcessFieldsBody {
   total_time_fallback?: string;
   touch_time_fallback?: string;
   system_fallback?: string;
+}
+
+// 맵 단위 인터뷰 원문 메모 5종 — 에디터 이상(인스펙터 점유권자) 편집. 생략=미변경, ""=지움
+// (design 2026-09-03 followups §2). 대표값(GMP·시간)은 오너 전용 patchProcessFields로.
+export interface FallbackNotesBody {
+  gmp_fallback?: string;
+  frequency_fallback?: string;
+  total_time_fallback?: string;
+  touch_time_fallback?: string;
+  system_fallback?: string;
+}
+
+export function patchFallbackNotes(mapId: number, body: FallbackNotesBody): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/fallback-notes`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export function patchProcessFields(mapId: number, body: ProcessFieldsBody): Promise<MapSummary> {
@@ -2870,20 +2903,42 @@ export interface InterviewFileReport {
   issues: InterviewIssue[];
 }
 
+export type GovernanceField = "owner" | "department" | "approvers" | "notes";
+
+// dry-run 응답의 기존 맵 거버넌스 차이 — 체크한 (code, field)만 apply가 교체 (spec 2026-09-03 §3)
+export interface GovernanceDiff {
+  code: string;
+  name: string;
+  field: GovernanceField;
+  current: string;
+  delivered: string;
+  applied: boolean;
+  // 화면 기본 체크 — notes만 True일 수 있다(고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
+  default_checked?: boolean;
+}
+
+export interface GovernanceDecision {
+  code: string;
+  field: GovernanceField;
+}
+
 export interface InterviewImportResult {
   applied: boolean;
   files: InterviewFileReport[];
   summary: Record<string, number>;
   rows: FrameworkImportRow[];
   truncated: boolean;
+  governance: GovernanceDiff[];
 }
 
 // 인터뷰 결과 JSON 다중 파일 임포트(sysadmin) — apply=false는 dry-run, 파일별 키 검증 리포트 포함
 // (design 2026-08-18). 키/구조 검증은 서버 어댑터가 진실 — content는 파싱된 원문 그대로 보낸다.
+// decisions는 apply 때 체크한 거버넌스 항목 — 전달분 차이에 없으면 서버가 422 (spec 2026-09-03 §3).
 export function importInterview(body: {
   files: { name: string; content: unknown }[];
   apply: boolean;
   label?: string;
+  decisions?: GovernanceDecision[];
 }): Promise<InterviewImportResult> {
   return request<InterviewImportResult>("/categories/import-interview", {
     method: "POST",
@@ -2897,11 +2952,61 @@ export interface MapNote {
   title: string | null;
   text: string;
   node_id: string | null;
-  source: string;
+  source: string; // consultant-import | user
+  delivery_label?: string | null;
   created_at: string;
+  // 사람이 고친 시각 — 임포트 노트는 source 유지 + edited_at (design 2026-09-03 followups §3)
+  edited_at?: string | null;
 }
 
-// 맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용, 맵 viewer 권한 준수 (design 2026-08-18 §5).
+export interface MapNoteBody {
+  kind: string;
+  title?: string | null;
+  text: string;
+}
+
+export interface CategoryNotes {
+  can_edit: boolean;
+  notes: MapNote[];
+}
+
+// 맵 노트 — 열람은 viewer 이상, 쓰기는 오너 (design 2026-08-18 §5, 2026-09-03 followups §3).
 export function getMapNotes(mapId: number): Promise<MapNote[]> {
   return request<MapNote[]>(`/maps/${mapId}/notes`);
+}
+
+export function createMapNote(mapId: number, body: MapNoteBody): Promise<MapNote> {
+  return request<MapNote>(`/maps/${mapId}/notes`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateMapNote(mapId: number, noteId: number, body: Partial<MapNoteBody>): Promise<MapNote> {
+  return request<MapNote>(`/maps/${mapId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteMapNote(mapId: number, noteId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/notes/${noteId}`, { method: "DELETE" });
+}
+
+// L5 스코프 노트 — 열람 전원, 쓰기는 체인 권한자/sysadmin(can_edit) (design 2026-09-03 followups §3).
+export function getCategoryNotes(categoryId: number): Promise<CategoryNotes> {
+  return request<CategoryNotes>(`/categories/${categoryId}/notes`);
+}
+
+export function createCategoryNote(categoryId: number, body: MapNoteBody): Promise<MapNote> {
+  return request<MapNote>(`/categories/${categoryId}/notes`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateCategoryNote(
+  categoryId: number,
+  noteId: number,
+  body: Partial<MapNoteBody>,
+): Promise<MapNote> {
+  return request<MapNote>(`/categories/${categoryId}/notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteCategoryNote(categoryId: number, noteId: number): Promise<void> {
+  return request<void>(`/categories/${categoryId}/notes/${noteId}`, { method: "DELETE" });
 }

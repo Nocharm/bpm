@@ -16,7 +16,6 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
-import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { useI18n } from "@/lib/i18n";
 
@@ -181,8 +180,7 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
         />
       </section>
 
-      {/* 인터뷰 노트(예외 규칙·VOC) — 노트 없으면 자체 숨김 */}
-      <MapNotesSection mapId={mapId} />
+      {/* 노트·인터뷰 원문 섹션은 서브프로세스 카드 아래로 이동(page.tsx Map 탭, 사용자 결정 2026-09-03) */}
 
       {modalTarget && (
         <ConfirmDialog

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { GovernanceDiff } from "./api";
 import {
   buildImportReportView,
   buildInterviewIndex,
   classifyDetail,
+  governanceKey,
+  groupGovernanceDiffs,
+  parseGovernanceKey,
   type ImportRow,
 } from "./interview-report";
 
@@ -135,5 +139,27 @@ describe("buildImportReportView", () => {
 
     expect(view.groups[1]).toMatchObject({ file: "" });
     expect(view.groups[1].maps[0]).toMatchObject({ code: "ghost-0001", name: "ghost-0001" });
+  });
+});
+
+describe("groupGovernanceDiffs", () => {
+  const diff = (code: string, field: GovernanceDiff["field"], name = `map ${code}`): GovernanceDiff => ({
+    code, name, field, current: "x", delivered: "y", applied: false,
+  });
+
+  it("groups by map in first-seen order and orders fields owner→department→approvers", () => {
+    const groups = groupGovernanceDiffs([
+      diff("t2", "approvers"), diff("t1", "department"), diff("t2", "owner"), diff("t1", "owner"),
+    ]);
+    expect(groups.map((g) => g.code)).toEqual(["t2", "t1"]);
+    expect(groups[0].name).toBe("map t2");
+    expect(groups[0].diffs.map((d) => d.field)).toEqual(["owner", "approvers"]);
+    expect(groups[1].diffs.map((d) => d.field)).toEqual(["owner", "department"]);
+  });
+
+  it("round-trips keys even when the code contains a colon", () => {
+    const key = governanceKey({ code: "a:b", field: "owner" });
+    expect(key).toBe("a:b:owner");
+    expect(parseGovernanceKey(key)).toEqual({ code: "a:b", field: "owner" });
   });
 });

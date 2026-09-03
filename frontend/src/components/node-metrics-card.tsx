@@ -3,12 +3,13 @@
 // 노드 전환 리셋은 부모의 key 리마운트가 담당. SP 노드 상속 5필드는 read-only 표시 유지.
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import { useState } from "react";
 
 import { FallbackHint } from "@/components/fallback-hint";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
+import { Tooltip } from "@/components/tooltip";
 import { useI18n } from "@/lib/i18n";
 import {
   formatParamValue,
@@ -30,12 +31,14 @@ interface NodeMetricsCardProps {
   inheritedDisplay: (field: ParamField) => string;
   // SP 노드 annual_count 힌트 — 링크 맵 인터뷰 빈도 원문
   frequencyFallback?: string | null;
+  // SP 노드 annual_count/fte 참고치 — 링크 맵 지정값(호버로만, 노드 값과 별개) (design 2026-09-03 §4)
+  referenceValues?: Partial<Record<ParamField, string | null | undefined>>;
   readOnly: boolean;
   onSave: (patch: Partial<Record<ParamField, string>>) => void;
 }
 
 export function NodeMetricsCard({
-  nodeType, values, editableParams, inheritedDisplay, frequencyFallback, readOnly, onSave,
+  nodeType, values, editableParams, inheritedDisplay, frequencyFallback, referenceValues, readOnly, onSave,
 }: NodeMetricsCardProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState(readParamsCollapsed);
@@ -207,6 +210,15 @@ export function NodeMetricsCard({
                 )}
                 {key === "annual_count" && isSubprocess && (
                   <FallbackHint dataId="inspector-annual-count-hint" fallback={frequencyFallback} />
+                )}
+                {isSubprocess && (referenceValues?.[field] ?? "") !== "" && (
+                  <Tooltip
+                    content={`${t("metrics.designatedRef", { v: formatParamValue(field, referenceValues?.[field] ?? "") })} — ${t("metrics.designatedRefHint")}`}
+                  >
+                    <span data-id={`inspector-ref-${field}`} className="inline-flex shrink-0 text-ink-tertiary">
+                      <Info size={14} strokeWidth={1.5} />
+                    </span>
+                  </Tooltip>
                 )}
               </div>
             );

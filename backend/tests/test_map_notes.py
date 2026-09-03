@@ -67,9 +67,11 @@ def test_apply_interview_notes_inserts_and_scopes(client: TestClient) -> None:
     from scripts.consultant_interview import InterviewNote
 
     map_id = _seed_consultant_map("NOTE-T1", "노트 스코프 대상")
+    # L5 코드는 이 테스트 전용 — 다른 테스트가 같은 코드에 임포트 노트를 남겨 두면 재적재가
+    # "교체 결정" 대상이 돼 미체크로 보류된다(design 2026-09-03 followups §3)
     notes = [
         InterviewNote(kind="exception", text="급할 때 수기로 적는다", title="현장 수기", map_code="NOTE-T1"),
-        InterviewNote(kind="voc", text="이중 소통 채널 부담", category_code="19-01-06-01-02"),
+        InterviewNote(kind="voc", text="이중 소통 채널 부담", category_code="NOTE-T1-L5"),
         InterviewNote(kind="rule_basis", text="유실 대상", map_code="GHOST-NO-MAP"),
     ]
     assert _apply(notes, "IV scope") == 2  # 미존재 맵 코드는 스킵
@@ -77,7 +79,7 @@ def test_apply_interview_notes_inserts_and_scopes(client: TestClient) -> None:
     rows = _fetch_notes("IV scope")
     assert [(r.kind, r.map_id, r.category_code) for r in rows] == [
         ("exception", map_id, None),
-        ("voc", None, "19-01-06-01-02"),
+        ("voc", None, "NOTE-T1-L5"),
     ]
     assert rows[0].title == "현장 수기" and rows[0].source == "consultant-import"
 

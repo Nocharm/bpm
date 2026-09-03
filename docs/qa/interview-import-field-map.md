@@ -31,10 +31,10 @@
 | `taskId` | 맵 `consultant_code`(재전달 식별키) |
 | `unitId` | sideNotes/openItems의 맵 매칭 키로만 사용 — 컬럼 저장 없음 |
 | `l6` | 맵 이름 (200자 초과 절단+경고) |
-| `owner` | 맵 오너. null이면 **실행자 폴백 + `consultant_owner_pending=True`** 마킹 |
+| `owner` | 신규 맵: 맵 오너(null이면 **실행자 폴백 + `consultant_owner_pending=True`**, 카드에 "Owner unconfirmed" 필). 기존 맵: 현재값과 다르면 dry-run `governance[]` 차이 행 — **체크한 것만 교체**(체크 시 대기 플래그 해제, 수동 오너 이전도 해제) |
 | `ownerRole` | 맵 설명 `[Interview]` 섹션 `Owner role:` 줄 |
-| `approvers[]` | `map_approvers` — **오너 미확정 맵에 실오너가 처음 올 때만** 갱신(거버넌스 예외) |
-| `department` | 맵 `owning_department` + `sp_department` |
+| `approvers[]` | 신규 맵: `map_approvers`. 기존 맵: 비어 있지 않고 집합이 다르면 governance 차이 행 — 체크 시 전부 교체 |
+| `department` | `sp_department`(항상) + 신규 맵 `owning_department`. 기존 맵: 해석 결과가 현재 owning과 다르면 governance 차이 행 — 체크 시 교체 |
 | `actions[]` | 노드 (아래) |
 | `relations.edges[]` | 맵 엣지 (아래 §2) |
 
@@ -51,7 +51,7 @@
 | `total_time` / `touch_time` | `sp_total_time_fallback` / `sp_touch_time_fallback` (원문 프리텍스트) |
 | `frequency` | `sp_frequency_fallback` |
 | `gmp` | `sp_gmp_fallback` — **`sp_gmp`(검토 선정값)는 임포트가 안 건드린다** |
-| `annual_count` / `fte` | **L5 연계 캔버스 SP 노드**의 `annual_count`/`fte` (여기 말고 착지면 없음) |
+| `annual_count` / `fte` | 맵 지정 참고치 `sp_annual_count`/`sp_fte`(2026-09-03, 재전달 시 다른 SP 필드처럼 덮어씀) + **L5 연계 캔버스 SP 노드**의 `annual_count`/`fte`(빈 값만 채움) |
 | `headcount` | `sp_headcount` |
 | `artifact_role` | 맵 설명 `[Interview]` 섹션 `Artifact role:` 줄 |
 
@@ -139,7 +139,7 @@ dry-run 경고를 반드시 읽어야 하는 지점.
 | **맵 이름이 기존 맵과 중복** | 차단하지 않는다 — 양쪽 다 살아남는다 | `duplicate map name ...` |
 | **휴지통에 있는 맵과 같은 taskId** | 파일 error — 되살리지 않는다 | `map is in trash` |
 | `owner`/`approvers`가 employees에 없음 | 저장은 되지만 승인 정족수에서 제외된다 | `owner ... not found in employees` |
-| **이미 오너가 확정된 맵에 새 owner/approvers** | **무시된다**(거버넌스 불변 — `consultant_owner_pending`인 맵만 갱신) | 없음 |
+| **기존 맵에 새 owner/department/approvers** | **자동 적용되지 않는다** — 리포트 "Governance changes" 섹션에서 체크한 것만 교체, 나머지는 현재값 유지(오너 대기 맵도 동일, 2026-09-03) | governance 차이 행 + 체크 시 `governance` 리포트 행 |
 | **`sp_gmp`(검토 선정값)** | 재전달이 절대 못 덮는다 — `gmp`는 fallback 컬럼에만 | 없음(설계 의도) |
 | **내용이 같은 재임포트** | `unchanged`로 끝나 **좌표·엣지 변이 갱신되지 않는다**(레이아웃은 시그니처 밖) | 없음 — 재정렬하려면 내용이 바뀌거나 에디터 "자동 정렬" |
 | **동명 IO 항목이 여러 상류에 있음** | 최근접 상류 **하나만** 연결된다(한 항목=링크 1개) | 없음 |

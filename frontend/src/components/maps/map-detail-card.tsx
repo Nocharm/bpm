@@ -53,6 +53,7 @@ import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
+import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { VersionTimeline } from "@/components/maps/version-timeline";
@@ -980,7 +981,9 @@ export function MapDetailCard({
         </div>
       )}
 
-      <MapNotesSection mapId={detail.id} />
+      {/* 인터뷰 원문 메모(읽기) → 노트 — 에디터 맵 탭과 같은 순서 (design 2026-09-03 followups §2) */}
+      <MapFallbackNotes mapId={detail.id} />
+      <MapNotesSection scope={{ mapId: detail.id }} canEdit={isOwner} />
 
       {owningPickerOpen &&
         createPortal(

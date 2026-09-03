@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         InterviewNote,
     )
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -467,12 +467,27 @@ async def resolve_owning_department(
 
 
 @dataclass
+class GovernanceDiff:
+    """기존 맵 거버넌스 3필드(owner/department/approvers) 차이 1건 — 응답 GovernanceDiffOut과 동형."""
+
+    code: str
+    name: str
+    field: str
+    current: str
+    delivered: str
+    applied: bool = False
+    default_checked: bool = False
+
+
+@dataclass
 class ImportReport:
     """전달분 1건의 임포트 결과 — 맵별 행(action∈created/updated/unchanged/error/warning)."""
 
     rows: list[tuple[str, str, str]] = field(default_factory=list)
     # 게시본 위에 자동 생성한 편집용 draft 수 — 맵 단위 결과(created/updated/…)가 아니라 부가 카운트
     drafts: int = 0
+    # 기존 맵 거버넌스 차이 — dry-run·apply 동일 산출, applied는 체크돼 교체된 것만 True (spec 2026-09-03 §4)
+    governance: list[GovernanceDiff] = field(default_factory=list)
 
     def add(self, map_code: str, action: str, detail: str = "") -> None:
         self.rows.append((map_code, action, detail))
@@ -632,6 +647,75 @@ async def _ensure_trailing_draft(
     return True
 
 
+async def _review_governance(
+    session: AsyncSession,
+    found: ProcessMap,
+    cmap: "CanonicalMap",
+    report: ImportReport,
+    *,
+    known: set[str],
+    dept_index: DeptIndex,
+    dept_chains: list[list[str]],
+    known_logins: set[str],
+    actor: str,
+    decisions: set[tuple[str, str]],
+) -> None:
+    """기존 맵 거버넌스 3필드 차이 산출 — 체크된 (code, field)만 교체한다 (spec 2026-09-03 §4).
+
+    dry-run과 apply가 같은 차이를 내야 화면 체크박스가 서버 결정과 1:1이다. 전달값이 비어 있으면
+    (owner None·department ""·approvers []) 차이가 아니다 — 임포트로 "지우기"는 없다.
+    종전의 "오너 대기 맵은 무조건 교체" 예외는 이 규칙으로 대체됐다(대기 맵도 체크 필요).
+    """
+    delivered_owner = cmap.owner
+    if delivered_owner is not None and delivered_owner != found.owner_id:
+        checked = (cmap.code, "owner") in decisions
+        report.governance.append(GovernanceDiff(
+            cmap.code, found.name, "owner", found.owner_id or "", delivered_owner, checked))
+        if delivered_owner not in known_logins:
+            report.add(cmap.code, "warning", f"owner {delivered_owner!r} not found in employees")
+        if checked:
+            found.owner_id = delivered_owner
+            found.consultant_owner_pending = False
+            for perm in await session.scalars(select(MapPermission).where(
+                    MapPermission.map_id == found.id, MapPermission.role == "owner")):
+                perm.principal_id = delivered_owner
+                perm.granted_by = actor
+            report.add(cmap.code, "governance", f"owner {delivered_owner} assigned")
+
+    if cmap.department.strip():
+        owner_for_dept = delivered_owner or found.owner_id or actor
+        delivered_dept, note = await resolve_owning_department(
+            session, known, dept_index, cmap.department, owner_for_dept, dept_chains)
+        if delivered_dept is not None and delivered_dept != (found.owning_department or None):
+            checked = (cmap.code, "department") in decisions
+            report.governance.append(GovernanceDiff(
+                cmap.code, found.name, "department", found.owning_department or "",
+                delivered_dept, checked))
+            if note:
+                report.add(cmap.code, "warning", note)
+            if checked:
+                found.owning_department = delivered_dept
+                report.add(cmap.code, "governance", f"owning department {delivered_dept} assigned")
+
+    delivered_approvers = list(dict.fromkeys(cmap.approvers))
+    if delivered_approvers:
+        current = sorted((await session.scalars(
+            select(MapApprover.user_id).where(MapApprover.map_id == found.id))).all())
+        if sorted(delivered_approvers) != current:
+            checked = (cmap.code, "approvers") in decisions
+            report.governance.append(GovernanceDiff(
+                cmap.code, found.name, "approvers", ", ".join(current),
+                ", ".join(delivered_approvers), checked))
+            for approver in delivered_approvers:
+                if approver not in known_logins:
+                    report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
+            if checked:
+                await session.execute(delete(MapApprover).where(MapApprover.map_id == found.id))
+                for approver in delivered_approvers:
+                    session.add(MapApprover(map_id=found.id, user_id=approver, assigned_by=actor))
+                report.add(cmap.code, "governance", "approvers replaced")
+
+
 async def import_delivery(
     session: AsyncSession,
     *,
@@ -641,9 +725,11 @@ async def import_delivery(
     label: str,
     commit_every: int | None = None,
     linkage_placed: set[str] | None = None,
+    governance_decisions: set[tuple[str, str]] | None = None,
 ) -> ImportReport:
     """전달분 1건 임포트(2-pass) — commit은 호출자 책임(dry-run=rollback, apply=commit)."""
     report = ImportReport()
+    decisions = governance_decisions or set()
 
     # 전달분 내 중복 code는 첫 항목만 처리 — 이후 중복은 에러 행만 남기고 제외(뒤 항목이 앞을
     # 조용히 덮어써 일관성 없는 리포트가 나오는 걸 방지).
@@ -734,40 +820,12 @@ async def import_delivery(
             category_errored.add(cmap.code)
             continue
         if cmap.code in existing:
-            # 거버넌스 불변 원칙의 명시적 예외 — 오너 미확정(pending)으로 만들어진 맵만, 재전달에
-            # 실오너가 오면 오너·권한행·승인자·오우닝을 갱신하고 플래그를 내린다 (design 2026-08-18 §4).
-            found = existing[cmap.code]
-            assigned_owner = cmap.owner
-            if found.consultant_owner_pending and assigned_owner is not None:
-                owning, note = await resolve_owning_department(
-                    session, known, dept_index, cmap.department, assigned_owner, dept_chains
-                )
-                if note:
-                    report.add(cmap.code, "warning", note)
-                if assigned_owner not in known_logins:
-                    report.add(cmap.code, "warning", f"owner {assigned_owner!r} not found in employees")
-                found.owner_id = assigned_owner
-                found.owning_department = owning
-                found.consultant_owner_pending = False
-                for perm in await session.scalars(select(MapPermission).where(
-                        MapPermission.map_id == found.id, MapPermission.role == "owner")):
-                    perm.principal_id = assigned_owner
-                    perm.granted_by = actor
-                await session.execute(delete(MapApprover).where(MapApprover.map_id == found.id))
-                for approver in dict.fromkeys(cmap.approvers):
-                    if approver not in known_logins:
-                        report.add(cmap.code, "warning", f"approver {approver!r} not found in employees")
-                    session.add(MapApprover(map_id=found.id, user_id=approver, assigned_by=actor))
-                report.add(cmap.code, "governance", f"owner {assigned_owner} assigned")
-            elif found.consultant_owner_pending and found.owning_department is None:
-                # 구 엔진이 owning 없이 만든 pending 맵 — 재전달에서 부서만 채운다 (2026-09-02).
-                # 거버넌스 불변의 기존 예외(pending 재해석)와 동족 — 오너·권한행은 건드리지 않는다.
-                owning, note = match_delivered_department(known, cmap.department, dept_chains)
-                if note:
-                    report.add(cmap.code, "warning", note)
-                if owning is not None:
-                    found.owning_department = owning
-                    report.add(cmap.code, "governance", f"owning department {owning} filled (pending)")
+            # 거버넌스 3필드는 체크한 것만 교체 — 오너 대기 예외 분기는 폐지 (spec 2026-09-03 §4)
+            await _review_governance(
+                session, existing[cmap.code], cmap, report,
+                known=known, dept_index=dept_index, dept_chains=dept_chains,
+                known_logins=known_logins, actor=actor, decisions=decisions,
+            )
             continue
         owner_login = cmap.owner
         pending = owner_login is None
@@ -902,6 +960,9 @@ async def import_delivery(
             or (found_map.sp_cost_krw or "") != params.cost_krw
             or (found_map.sp_cost_usd or "") != params.cost_usd
             or (found_map.sp_headcount or "") != params.headcount
+            # 담당자 참고치 — 맵 지정값에도 착지(연계 캔버스 SP 노드 채움과 별개) (design 2026-09-03 §4)
+            or (found_map.sp_annual_count or "") != params.annual_count
+            or (found_map.sp_fte or "") != params.fte
             # 승격 필드 — sp_gmp(검토 선정값)는 전달분에 없어 비교·갱신 모두 제외 (design 2026-08-19 §4.1)
             or (found_map.sp_touch_time or "") != params.touch_time
             or (found_map.sp_system or "") != cmap.system
@@ -929,6 +990,8 @@ async def import_delivery(
             found_map.sp_cost_krw = params.cost_krw
             found_map.sp_cost_usd = params.cost_usd
             found_map.sp_headcount = params.headcount
+            found_map.sp_annual_count = params.annual_count
+            found_map.sp_fte = params.fte
             found_map.sp_input = params.input
             found_map.sp_output = params.output
             found_map.sp_touch_time = params.touch_time
@@ -987,42 +1050,110 @@ async def apply_interview_notes(
     notes: list["InterviewNote"],
     *,
     label: str,
+    report: ImportReport | None = None,
+    decisions: set[tuple[str, str]] | None = None,
 ) -> int:
-    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입(멱등).
+    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입.
 
     import_delivery와 같은 세션에서 호출한다 — dry-run rollback이 노트까지 함께 원복된다.
     map_code가 DB에 없는 노트는 스킵(맵 생성 자체가 스킵된 경우 — 엔진 리포트가 사유를 이미
     남겼다). 반환값은 삽입 행 수 (design 2026-08-18 §5).
+
+    이미 임포트 노트가 있는 스코프(맵/L5)는 **거버넌스 차이 행(field=notes)** 으로 올리고
+    체크된 것만 교체한다 — 사람이 고친 임포트 노트(edited_at)가 없으면 기본 체크(현행 유지),
+    있으면 기본 해제(보호). 사용자 노트(source=user)는 어떤 경우에도 안 건드린다
+    (design 2026-09-03 followups §3).
     """
+    checked = decisions or set()
     map_codes = {n.map_code for n in notes if n.map_code}
     cat_codes = {n.category_code for n in notes if n.map_code is None and n.category_code}
     code_to_id: dict[str, int] = {}
+    map_names: dict[str, str] = {}
     if map_codes:
         rows = (await session.scalars(
             select(ProcessMap).where(ProcessMap.consultant_code.in_(map_codes))
         )).all()
         code_to_id = {m.consultant_code: m.id for m in rows if m.consultant_code is not None}
-    if code_to_id:
-        await session.execute(delete(MapNote).where(
-            MapNote.source == "consultant-import", MapNote.map_id.in_(set(code_to_id.values()))
-        ))
+        map_names = {m.consultant_code: m.name for m in rows if m.consultant_code is not None}
+    cat_names: dict[str, str] = {}
     if cat_codes:
+        cat_rows = (await session.execute(
+            select(ProcessCategory.code, ProcessCategory.name).where(ProcessCategory.code.in_(cat_codes))
+        )).all()
+        cat_names = {code: name for code, name in cat_rows}
+
+    # 스코프별 기존 임포트 노트 수·수정 수 — 차이 행 산출 소스
+    scope_conds = []
+    if code_to_id:
+        scope_conds.append(MapNote.map_id.in_(set(code_to_id.values())))
+    if cat_codes:
+        scope_conds.append(MapNote.map_id.is_(None) & MapNote.category_code.in_(cat_codes))
+    existing_rows = []
+    if scope_conds:
+        existing_rows = (await session.execute(
+            select(MapNote.map_id, MapNote.category_code, MapNote.edited_at).where(
+                MapNote.source == "consultant-import", or_(*scope_conds),
+            )
+        )).all()
+    id_to_code = {mid: code for code, mid in code_to_id.items()}
+    existing: dict[str, tuple[int, int]] = {}
+    for mid, ccode, edited_at in existing_rows:
+        scope_code = id_to_code.get(mid) if mid is not None else ccode
+        if scope_code is None:
+            continue
+        total, edited = existing.get(scope_code, (0, 0))
+        existing[scope_code] = (total + 1, edited + (1 if edited_at is not None else 0))
+
+    delivered_counts: dict[str, int] = {}
+    for n in notes:
+        scope_code = n.map_code or n.category_code
+        if scope_code:
+            delivered_counts[scope_code] = delivered_counts.get(scope_code, 0) + 1
+
+    # 교체 대상 스코프 — 기존 임포트 노트가 없으면 그냥 삽입, 있으면 체크된 것만 지우고 재삽입
+    replace_scopes: set[str] = set()
+    skip_scopes: set[str] = set()
+    for scope_code, (total, edited) in sorted(existing.items()):
+        is_checked = (scope_code, "notes") in checked
+        if report is not None:
+            report.governance.append(GovernanceDiff(
+                scope_code, map_names.get(scope_code) or cat_names.get(scope_code) or scope_code, "notes",
+                f"{total} notes" + (f" · {edited} edited" if edited else ""),
+                f"{delivered_counts.get(scope_code, 0)} notes",
+                is_checked, default_checked=edited == 0,
+            ))
+        if is_checked:
+            replace_scopes.add(scope_code)
+        else:
+            skip_scopes.add(scope_code)
+
+    replace_map_ids = {code_to_id[c] for c in replace_scopes if c in code_to_id}
+    replace_cat_codes = {c for c in replace_scopes if c in cat_codes}
+    if replace_map_ids:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.in_(replace_map_ids)
+        ))
+    if replace_cat_codes:
         await session.execute(delete(MapNote).where(
             MapNote.source == "consultant-import", MapNote.map_id.is_(None),
-            MapNote.category_code.in_(cat_codes),
+            MapNote.category_code.in_(replace_cat_codes),
         ))
-    inserted = 0
+    # 반환은 "착지면이 있는 전달 노트 수"(삽입 + 미체크로 보류) — 리포트 Notes 칩이 결정 여부와 무관하게
+    # 전달량을 보여주도록. 보류 스코프의 실제 처리는 governance notes 행이 알린다.
+    landed = 0
     for n in notes:
         map_id = code_to_id.get(n.map_code) if n.map_code else None
         if n.map_code and map_id is None:
+            continue
+        landed += 1
+        if (n.map_code or n.category_code) in skip_scopes:
             continue
         session.add(MapNote(
             map_id=map_id, category_code=None if map_id else n.category_code,
             kind=n.kind[:50], title=(n.title[:300] if n.title else None), text=n.text,
             source="consultant-import", delivery_label=label,
         ))
-        inserted += 1
-    return inserted
+    return landed
 
 
 

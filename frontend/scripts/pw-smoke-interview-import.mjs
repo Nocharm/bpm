@@ -3,12 +3,15 @@
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드만(임포트는 이 스크립트가 UI로 수행).
 // docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
 import { chromium } from "playwright-core";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const ADMIN = "admin.sys";
+// 재전달 파일·스크린샷 저장 위치 (SCRATCH_DIR 미지정 시 /tmp)
+const SCRATCH = process.env.SCRATCH_DIR ?? "/tmp";
 const SAMPLE_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../docs/samples/consultant-interview-sample",
@@ -65,33 +68,75 @@ try {
   const dryCreated = await chip(page, "Created", 4).waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
   check("dry-run summary shows Created 4", dryCreated);
-  // 승격(2026-08-19) 후 openItems·tasks[].note도 노트로 보존 — 8건(예외2+사이드3+open1+task1+유틸1)
-  const dryNotes = await chip(page, "Notes", 8).isVisible().catch(() => false);
-  check("dry-run summary shows Notes 8", dryNotes);
-  await page.locator('[data-id="interview-file-toggle-0"]').click();
-  const noIssues = await page.locator('[data-id="interview-import-file-reports"]')
-    .getByText("No issues").first().waitFor({ state: "visible", timeout: 5000 })
+  // 0.4 샘플 기준 17건 — 승격 노트(예외·사이드·open·task) + relations entry/flow 인용 (2026-09-01 이후)
+  const dryNotes = await chip(page, "Notes", 17).isVisible().catch(() => false);
+  check("dry-run summary shows Notes 17", dryNotes);
+  // dry-run 직후 전 파일이 자동 펼침 — 아코디언은 이슈 표 대신 맵 행(교정 준비 …)을 보여준다
+  const mapRows = await page.locator('[data-id="interview-import-file-reports"] > li').first()
+    .getByText("교정 준비").first().waitFor({ state: "visible", timeout: 5000 })
     .then(() => true).catch(() => false);
-  check("clean file accordion shows No issues", noIssues);
+  check("clean file accordion lists its maps", mapRows);
 
-  // ── 4) Apply → 재-dry-run 멱등(Unchanged 4) ────────────────────────────
+  // ── 4) Apply(하단 고정 바, 확인 다이얼로그 없음) → 재-dry-run 멱등(Unchanged 4) ──
+  const noGov = await page.locator('[data-id="import-governance-none"]').isVisible().catch(() => false);
+  check("first delivery has no governance diffs (all maps new)", noGov);
   await page.locator('[data-id="interview-import-apply"]').click();
-  await page.locator('[data-id="confirm-dialog-confirm"]').click();
-  await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 20000 });
+  await page.waitForSelector('[data-id="interview-import-apply"]:disabled', { timeout: 20000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
   const idempotent = await chip(page, "Unchanged", 4).waitFor({ state: "visible", timeout: 15000 })
     .then(() => true).catch(() => false);
   check("re-dry-run reports Unchanged 4 (idempotent)", idempotent);
 
+  // ── 4b) 거버넌스 확인 — 오너가 실린 재전달은 체크한 것만 교체 (spec 2026-09-03) ──
+  // 재전달 오너 = 디렉터리에서 임포터(admin.sys)가 아닌 첫 로그인(시드 로그인은 랜덤 생성이라 런타임 조회)
+  const govOwner = await page.evaluate(async (admin) => {
+    const res = await fetch("/api/directory", { headers: { "X-Dev-User": admin } });
+    const dir = await res.json();
+    return (dir.users ?? []).map((u) => u.id).find((id) => id !== admin) ?? null;
+  }, ADMIN);
+  check("directory yields a non-importer login for re-delivery", govOwner !== null, String(govOwner));
+  const raw = JSON.parse(await fs.readFile(path.join(SAMPLE_DIR, "calibration-l5.json"), "utf8"));
+  raw.rows[0].owner = govOwner;
+  const govCode = raw.rows[0].taskId;
+  const govFile = path.join(SCRATCH, "calibration-gov.json");
+  await fs.writeFile(govFile, JSON.stringify(raw));
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Categories & import" }).first().click();
+  await page.locator('[data-id="interview-import-files"]').setInputFiles([govFile]);
+  await page.locator('[data-id="interview-import-dryrun"]').click();
+  await page.waitForSelector('[data-id="import-governance-review"]', { timeout: 15000 });
+  const ownerRow = page.locator(`[data-id="import-governance-row-${govCode}-owner"]`);
+  check("governance owner diff listed", await ownerRow.isVisible());
+  check("owner diff shows delivered login", ((await ownerRow.textContent()) ?? "").includes(String(govOwner)));
+  await page.locator('[data-id="interview-import-actions"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(SCRATCH, "import-governance-unchecked.png") });
+  await page.locator(`[data-id="import-governance-check-${govCode}-owner"]`).check();
+  const barText = (await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "";
+  check("apply bar counts the checked change", barText.includes("1 governance"), barText.trim());
+  await page.screenshot({ path: path.join(SCRATCH, "import-governance-checked.png") });
+  await page.locator('[data-id="interview-import-apply"]').click();
+  await page.waitForSelector(`[data-id="import-governance-result-${govCode}-owner"]`, { timeout: 20000 });
+  const appliedText = (await page.locator(`[data-id="import-governance-result-${govCode}-owner"]`).textContent()) ?? "";
+  check("checked owner decision applied", appliedText.includes("Applied"), appliedText.trim());
+  await page.screenshot({ path: path.join(SCRATCH, "import-governance-applied.png") });
+  await page.locator('[data-id="interview-import-dryrun"]').click();
+  // 새 dry-run 결과(applied=false)가 오면 Apply가 다시 활성 — 직전 apply 결과 화면과 구분하는 신호
+  await page.waitForSelector('[data-id="interview-import-apply"]:not([disabled])', { timeout: 15000 });
+  const ownerRowGone = await page.locator(`[data-id="import-governance-row-${govCode}-owner"]`).count();
+  check("owner diff gone after apply (now equal)", ownerRowGone === 0, `rows=${ownerRowGone}`);
+
   // ── 5) 홈 Framework 뷰 — 카테고리 체인·맵 노출(첫 펼침 캐스케이드) ───────
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
   await page.waitForSelector('[data-id="framework-tree"]', { timeout: 10000 });
-  await page.locator('[data-id="framework-node"] > button').filter({ hasText: "EPCV" }).first().click();
+  await page.locator('[data-id="framework-node"] button').filter({ hasText: "EPCV" }).first().click();
   const mapVisible = await page
     .locator('[data-id="framework-tree"] [data-id="map-card-name"]', { hasText: "교정 준비" })
     .first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
   check("imported map visible under framework tree", mapVisible);
+  // 오너 없이 임포트된 맵(유틸리티 샘플)은 "Owner unconfirmed" 필 — 교정 준비는 위에서 오너가 배정됐다
+  const pendingPills = await page.locator('[data-id="framework-tree"] [data-id="map-owner-pending"]').count();
+  check("owner-unconfirmed pill shown on pending maps", pendingPills > 0, `pills=${pendingPills}`);
 
   // ── 6) 맵 상세 — [Interview] 설명 + Notes 섹션(예외·VOC) ────────────────
   await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" })
@@ -104,9 +149,13 @@ try {
   const notesVisible = await page.locator('[data-id="map-notes-section"]:visible').first()
     .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
   check("map notes section visible", notesVisible);
+  // 노트 아코디언은 기본 접힘(사용자 결정 2026-08-20) — 펼친 뒤 행을 센다
+  await page.locator('[data-id="map-notes-section"]:visible [data-id="map-notes-toggle"]').first().click();
+  await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').first()
+    .waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
-  // 승격(2026-08-19) 후 tasks[].note도 맵 노트로 — 예외2+매칭 사이드1+task_note1
-  check("notes rows include exceptions + side notes + task note", noteRows === 4, `rows=${noteRows}`);
+  // 승격(2026-08-19) 예외2+매칭 사이드1+task_note1 + 0.4 relations 흐름 인용(kind=flow) 2 = 6
+  check("notes rows include exceptions + side notes + task note + flow quotes", noteRows === 6, `rows=${noteRows}`);
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
   check("exception title rendered", notesText.includes("현장 수기 기록"));
   check("exception kind badge rendered", notesText.includes("exception"));

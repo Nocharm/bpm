@@ -53,6 +53,8 @@ import { useI18n } from "@/lib/i18n";
 import {
   buildImportReportView,
   buildInterviewIndex,
+  governanceKey,
+  parseGovernanceKey,
   type DigestGroup,
   type ReportMapEntry,
   type ReportMessage,
@@ -61,6 +63,7 @@ import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permiss
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
+import { ImportGovernanceReview } from "@/components/admin/import-governance-review";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -161,7 +164,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const [interviewFiles, setInterviewFiles] = useState<InterviewFileState[]>([]);
   const [interviewResult, setInterviewResult] = useState<InterviewImportResult | null>(null);
   const [interviewBusy, setInterviewBusy] = useState(false);
-  const [confirmInterviewApply, setConfirmInterviewApply] = useState(false);
+  // 거버넌스 체크 키(`code:field`) — dry-run 결과마다 비우고, 파일 변경 시 리포트와 함께 무효화 (spec 2026-09-03 §6)
+  const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
   const [openReportFiles, setOpenReportFiles] = useState<Set<number>>(new Set());
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
@@ -259,11 +263,13 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     }
     setInterviewFiles((prev) => [...prev, ...next]);
     setInterviewResult(null);
+    setGovernanceChecked(new Set());
   }
 
   function handleRemoveInterviewFile(index: number) {
     setInterviewFiles((prev) => prev.filter((_, i) => i !== index));
     setInterviewResult(null);
+    setGovernanceChecked(new Set());
   }
 
   function getInterviewPayloadFiles() {
@@ -277,6 +283,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     try {
       const result = await importInterview({ files: getInterviewPayloadFiles(), apply: false });
       setInterviewResult(result);
+      // 기본 체크는 서버가 정한다 — 임포트 노트 교체는 사람이 고친 게 없으면 체크(현행), 거버넌스 3종은 해제
+      setGovernanceChecked(new Set(result.governance.filter((d) => d.default_checked).map(governanceKey)));
       // 전 파일 자동 펼침 — 결과 본문(맵·연계 캔버스)이 파일 카드 안에 있어 접힌 채로는 읽을 게 없다.
       setOpenReportFiles(new Set(result.files.map((_, i) => i)));
     } catch (err) {
@@ -287,11 +295,16 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   }
 
   async function handleInterviewApply() {
-    setConfirmInterviewApply(false);
+    if (!interviewResult) return;
     setInterviewBusy(true);
     try {
-      const result = await importInterview({ files: getInterviewPayloadFiles(), apply: true });
+      const result = await importInterview({
+        files: getInterviewPayloadFiles(),
+        apply: true,
+        decisions: [...governanceChecked].map(parseGovernanceKey),
+      });
       setInterviewResult(result);
+      setGovernanceChecked(new Set());
       await refreshTree();
       onToast(t("framework.importApplySuccess"));
     } catch (err) {
@@ -299,6 +312,21 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     } finally {
       setInterviewBusy(false);
     }
+  }
+
+  function toggleGovernance(key: string) {
+    setGovernanceChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAllGovernance(next: boolean) {
+    setGovernanceChecked(
+      next && interviewResult ? new Set(interviewResult.governance.map(governanceKey)) : new Set(),
+    );
   }
 
   // 요약 칩 5종 — 전부 summary에서 읽는다(0이면 키 자체가 없음). warning은 backend
@@ -879,15 +907,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           >
             {t("framework.importDryRun")}
           </button>
-          <button
-            type="button"
-            data-id="interview-import-apply"
-            disabled={interviewBusy || !interviewResult}
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            onClick={() => setConfirmInterviewApply(true)}
-          >
-            {t("framework.importApply")}
-          </button>
         </div>
 
         {interviewResult && interviewView && (
@@ -1037,24 +1056,55 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {interviewResult.truncated && (
               <p className="text-fine text-ink-tertiary">{t("framework.importTruncated")}</p>
             )}
+            {/* 거버넌스 확인 + 하단 고정 바 — 체크한 것만 교체, 명시적 Apply가 확인 역할 (spec 2026-09-03 §6) */}
+            <ImportGovernanceReview
+              diffs={interviewResult.governance}
+              checked={governanceChecked}
+              onToggle={toggleGovernance}
+              onToggleAll={toggleAllGovernance}
+              applied={interviewResult.applied}
+            />
+            <div
+              data-id="interview-import-actions"
+              className="sticky bottom-0 z-[1] flex items-center gap-2 border-t border-hairline bg-surface py-2"
+            >
+              <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
+                {t("framework.importApplyBar", {
+                  // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
+                  maps:
+                    (interviewResult.summary.created ?? 0) +
+                    (interviewResult.summary.updated ?? 0) +
+                    (interviewResult.summary.unchanged ?? 0),
+                  changes: governanceChecked.size,
+                })}
+              </span>
+              <button
+                type="button"
+                data-id="interview-import-cancel"
+                disabled={interviewBusy}
+                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => {
+                  setInterviewResult(null);
+                  setGovernanceChecked(new Set());
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                data-id="interview-import-apply"
+                disabled={interviewBusy || interviewResult.applied}
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                onClick={() => void handleInterviewApply()}
+              >
+                {t("framework.importApply")}
+              </button>
+            </div>
           </div>
         )}
       </div>
       )}
         </>
-      )}
-
-      {confirmInterviewApply && interviewResult && (
-        <ConfirmDialog
-          title={t("framework.importApplyTitle")}
-          message={t("framework.importApplyMessage")}
-          banner={renderImportSummary(interviewResult)}
-          confirmLabel={t("common.confirm")}
-          cancelLabel={t("common.cancel")}
-          confirmDisabled={interviewBusy}
-          onConfirm={() => void handleInterviewApply()}
-          onClose={() => setConfirmInterviewApply(false)}
-        />
       )}
 
       {namePrompt && (

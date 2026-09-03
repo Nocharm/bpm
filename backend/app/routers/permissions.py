@@ -436,6 +436,8 @@ async def transfer_owner(
     await _supersede_pending_downgrades(session, map_id, new_owner_grant.id, actor=user)
     new_owner_grant.role = "owner"
     found_map.owner_id = new_owner
+    # 사람이 오너를 정했다 — 임포트 대기 표식 해제(안 내리면 재전달 체크 목록에 유령 차이가 남는다) (spec 2026-09-03 §5)
+    found_map.consultant_owner_pending = False
     await session.commit()
     return {
         "owner_id": new_owner,

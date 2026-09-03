@@ -5,6 +5,8 @@
 // 코드↔이름 대응 계약: 맵 코드=rows[].taskId, 맵 이름=rows[].l6, 카테고리=l5.nodeCode
 // (backend/scripts/consultant_interview.py convert_interview).
 
+import type { GovernanceDecision, GovernanceDiff, GovernanceField } from "./api";
+
 export interface ImportRow {
   code: string;
   action: string;
@@ -286,4 +288,39 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
   );
 
   return { groups, digest };
+}
+
+// ── 거버넌스 확인 섹션 — dry-run governance[]를 맵 단위로 묶고 체크 키를 왕복한다 (spec 2026-09-03 §6)
+
+export interface GovernanceMapGroup {
+  code: string;
+  name: string;
+  diffs: GovernanceDiff[];
+}
+
+const GOVERNANCE_FIELD_ORDER: GovernanceField[] = ["owner", "department", "approvers", "notes"];
+
+// 체크 상태 키 — 코드에 ':'가 있어도 필드는 콜론이 없으니 마지막 ':'에서 자르면 복원된다
+export function governanceKey(d: GovernanceDecision): string {
+  return `${d.code}:${d.field}`;
+}
+
+export function parseGovernanceKey(key: string): GovernanceDecision {
+  const at = key.lastIndexOf(":");
+  return { code: key.slice(0, at), field: key.slice(at + 1) as GovernanceField };
+}
+
+export function groupGovernanceDiffs(diffs: GovernanceDiff[]): GovernanceMapGroup[] {
+  const groups = new Map<string, GovernanceMapGroup>();
+  for (const d of diffs) {
+    const group = groups.get(d.code) ?? { code: d.code, name: d.name, diffs: [] };
+    group.diffs.push(d);
+    groups.set(d.code, group);
+  }
+  for (const group of groups.values()) {
+    group.diffs.sort(
+      (a, b) => GOVERNANCE_FIELD_ORDER.indexOf(a.field) - GOVERNANCE_FIELD_ORDER.indexOf(b.field),
+    );
+  }
+  return [...groups.values()];
 }
