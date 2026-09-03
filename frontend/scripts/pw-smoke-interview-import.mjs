@@ -170,14 +170,16 @@ try {
   check("map notes section visible", notesVisible);
   // 노트 아코디언은 기본 접힘(사용자 결정 2026-08-20) — 펼친 뒤 행을 센다
   await page.locator('[data-id="map-notes-section"]:visible [data-id="map-notes-toggle"]').first().click();
-  await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').first()
+  // 행은 li만 센다 — 노트 CRUD(9f8bcfea) 이후 행마다 map-note-edit-/map-note-delete- 버튼이 붙어 접두 매칭이 3배로 부풀었다
+  await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').first()
     .waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
-  const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
+  const noteRows = await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').count();
   // 승격(2026-08-19) 예외2+매칭 사이드1+task_note1 + 0.4 relations 흐름 인용(kind=flow) 2 = 6
   check("notes rows include exceptions + side notes + task note + flow quotes", noteRows === 6, `rows=${noteRows}`);
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
   check("exception title rendered", notesText.includes("현장 수기 기록"));
-  check("exception kind badge rendered", notesText.includes("exception"));
+  // 종류 배지는 i18n 라벨("Exception") — 대소문자 무시
+  check("exception kind badge rendered", /exception/i.test(notesText));
 
   const errFree = consoleErrors.length === 0;
   check("no page errors", errFree, errFree ? "" : consoleErrors.join(" | "));
