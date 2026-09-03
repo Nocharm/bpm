@@ -4,7 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-09-03 — 인터뷰 임포트 거버넌스 확인 적용 (feat/consultant-import-fallbacks)
-- 컨설턴트 임포트 폴백 6종·노트·값 대체 전수조사(아티팩트 "임포트 폴백 지도") → 후속 6건 중 1번 착수: 재임포트가 오너·오우닝 부서·승인자를 바꾸려면 dry-run 리포트에서 체크한 것만 적용. 설계 `docs/superpowers/specs/2026-09-03-import-governance-review-design.md`, 플랜 `docs/superpowers/plans/2026-09-03-import-governance-review.md`.
+- 컨설턴트 임포트 폴백 6종·노트·값 대체 전수조사(아티팩트 "임포트 폴백 지도") → 후속 6건 중 1번 완료: 재임포트가 오너·오우닝 부서·승인자를 바꾸려면 dry-run 리포트 "Governance changes"에서 체크한 항목만 교체(`decisions` 동봉, 전달분 차이에 없으면 422). "오너 대기 맵은 무조건 교체" 예외 폐지(대기 맵도 체크 필요), 수동 오너 이전이 대기 플래그를 내리고 카드에 "Owner unconfirmed" 필. 확인 다이얼로그 → 리포트 하단 고정 [Cancel][Apply] 바(파일 변경 시 리포트·체크 무효화). 설계 `docs/superpowers/specs/2026-09-03-import-governance-review-design.md`, 플랜 `docs/superpowers/plans/…`. 스모크 `pw-smoke-interview-import.mjs`에 재전달 체크→적용 시나리오 추가(기존 단언 3건은 0.4 노트 수·아코디언 기본 접힘 드리프트 교정). 잔여: 2~6번(폴백 노출·노트 CRUD·SP 연간횟수/FTE·지정 모달 재디자인·인스펙터 줄바꿈).
 
 ## 2026-09-03 — SP 피크 재배치·목업 드래그·우클릭 맵 이동·프레임워크 탐색 좌상단 통일 (dev)
 - **SP 미리보기 피크 재배치**: 헤더를 정보 표면(좌: 맵 이름·오너·게시 버전 / 우: 업무체계 경로·미지정 안내)으로 바꾸고 인스펙터 탭을 좌측, 추가/이동 버튼은 미리보기 우상단에 떠 있는 독립 버튼 2개로(추가=강조색, 한 줄 고정+말줄임) — 패널 높이를 이분할하던 세로 레일은 과하다는 피드백으로 폐기. 목업 노드는 클릭(드롭다운) 유지 + 드래그→캔버스 드롭 추가(`dragPayload`, 행 드래그와 동일 dataTransfer 계약) — 드래그 중 피크는 언마운트 대신 visibility 숨김(언마운트=Chrome 드래그 취소), dragend에서 닫음.
