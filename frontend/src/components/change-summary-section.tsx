@@ -57,7 +57,6 @@ function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<string, stri
     output_forms: node.data.output_forms ?? "",
     start_condition: node.data.start_condition ?? "",
     end_condition: node.data.end_condition ?? "",
-    data_form: node.data.data_form ?? "",
     gmp: node.data.gmp ?? "",
     url: node.data.url ?? "",
     url_label: node.data.urlLabel ?? "",

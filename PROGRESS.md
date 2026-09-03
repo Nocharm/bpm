@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-03 — 노드 레벨 data_form 폐기 + 메모 아이콘 호버 효과 3라운드 (dev)
+- **`nodes.data_form` 폐기**(사용자 결정 — 운영 미사용 컬럼): 자료 형식은 IO 항목별 `output_forms`/`input_forms`만. 인터뷰 임포트의 `dataForm`은 산출물이 항상 하나라 **유일한 산출물의 폼(`output_forms`)으로 착지**(`CanonicalNode.output_forms`, 배열로 바뀌면 줄 정렬로 확장). 모델·NodeIn·AI 속성 스키마·graph upsert·clone·확정 시그니처·AI 프롬프트·인터뷰 에이전트 프롬프트·FE 타입/에디터/편집 모달 타일/인스펙터 폴백 행/diff/비교/CSV(21열→20열, 예전 파일의 Data_Form 열은 무시)/템플릿/i18n에서 제거. 물리 컬럼은 `db._drop_legacy_node_data_form`(기동 비치명 스텝)으로 드랍 — 롤백은 이 커밋 이후 버전 사이에서만 안전.
+- **메모 아이콘 호버**(사용자 피드백): 흰 칩 폐기 → 타일 자체가 호버 시 흰 배경+보더 강조(`SpFieldTile` 편집 타일·메모 있는 읽기 타일), 아이콘은 같은 자리에서 크로스페이드 + 액센트로 한 번 튀었다 가라앉는 일회 애니메이션(`.note-swap-*`, reduced-motion 제외), 메모 점은 호버 전 60%→호버 100%.
+- 검증: pytest 1347·vitest 850·`pw-smoke-node-modal-tiles.mjs` 55/55·`pw-smoke-field-promotion.mjs`(output_forms 착지 단언으로 갱신).
+
 ## 2026-09-03 — 컴포넌트 카탈로그 + 편집 모달 피드백 2라운드 (dev)
 - **컴포넌트 카탈로그**(사용자 지시): `frontend/COMPONENTS.md`를 `scripts/build-component-catalog.mjs`가 생성(파일·컴포넌트·역할=머리 주석 첫 문장·사용처=임포터, `--check`) — 일괄 UI 수정 전 사용처 확인, 컴포넌트 추가·이동·사용처 변경 시 같은 커밋에서 재생성. 룰 `rules/frontend/components.md`(CLAUDE.md import)·`frontend/AGENTS.md` gotcha.
 - **독 호버 = 레이아웃 확대**: scale 변환의 래스터 뒤틀림 피드백 → 폭 +12px(모달 쪽)·세로 패딩 +4px·액센트 보더 트랜지션으로 교체(위아래 카드는 높이만큼 자연히 벌어짐). **원문 메모 표시**: 메모 있는 아이콘 모서리 점(호버 전), 호버 시 아이콘 뒤 흰 칩(틴트 타일 위에서도 교체가 보임). **내 부서 필**은 PrincipalPicker 치수로 통일(테두리 제거·py-0.5).

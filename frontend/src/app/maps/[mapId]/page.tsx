@@ -717,7 +717,6 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       input_flags: node.input_flags ?? "",
       start_condition: node.start_condition ?? "",
       end_condition: node.end_condition ?? "",
-      data_form: node.data_form ?? "",
       system_fallback: node.system_fallback ?? "",
       gmp: node.gmp ?? "",
       url: node.url ?? "",
@@ -819,7 +818,6 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     input_flags: "",
     start_condition: attr?.start_condition ?? "",
     end_condition: attr?.end_condition ?? "",
-    data_form: attr?.data_form ?? "",
     system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
     gmp: "",  // 검토값 — AI 표면 제외 (design 2026-08-20)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
@@ -878,7 +876,6 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
       input_flags: node.data.input_flags ?? "",
       start_condition: node.data.start_condition ?? "",
       end_condition: node.data.end_condition ?? "",
-      data_form: node.data.data_form ?? "",
       system_fallback: node.data.system_fallback ?? "",
       gmp: node.data.gmp ?? "",
       url: node.data.url ?? "",
@@ -10326,7 +10323,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                 input_links={node.data.input_links ?? ""}
                 output_links={node.data.output_links ?? ""}
                 input_flags={node.data.input_flags ?? ""}
-                data_form={node.data.data_form ?? ""}
                 start_condition={node.data.start_condition ?? ""}
                 end_condition={node.data.end_condition ?? ""}
                 cost_krw={node.data.cost_krw ?? ""}
@@ -11001,7 +10997,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                             input_links: selectedNode.data.input_links ?? "",
                             output_links: selectedNode.data.output_links ?? "",
                             input_flags: selectedNode.data.input_flags ?? "",
-                            data_form: selectedNode.data.data_form ?? "",
                             start_condition: selectedNode.data.start_condition ?? "",
                             end_condition: selectedNode.data.end_condition ?? "",
                           }}

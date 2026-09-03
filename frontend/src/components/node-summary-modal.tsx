@@ -19,7 +19,6 @@ import {
   CircleDot,
   CornerDownRight,
   Diamond,
-  FileType,
   Flag,
   Import,
   Link as LinkIcon,
@@ -98,7 +97,6 @@ export type NodeEditPatch = Partial<{
   input_links: string;
   output_links: string;
   input_flags: string;
-  data_form: string;
   start_condition: string;
   end_condition: string;
   cost_krw: string;
@@ -240,7 +238,6 @@ type TileField =
   | "fte"
   | "input"
   | "output"
-  | "data_form"
   | "start_condition"
   | "end_condition";
 type ParamTile = "duration" | "touch_time" | "cost" | "headcount" | "annual_count" | "fte";
@@ -251,7 +248,6 @@ const TILE_ICON: Record<Exclude<TileField, ParamTile>, LucideIcon> = {
   url: LinkIcon,
   input: LogIn,
   output: LogOut,
-  data_form: FileType,
   start_condition: Play,
   end_condition: Flag,
 };
@@ -267,7 +263,6 @@ const HINT_KEY: Record<TileField, MessageKey> = {
   fte: "sp.tile.hint.fte",
   input: "sp.tile.hint.input",
   output: "sp.tile.hint.output",
-  data_form: "sp.tile.hint.data_form",
   start_condition: "sp.tile.hint.start_condition",
   end_condition: "sp.tile.hint.end_condition",
 };
@@ -298,7 +293,6 @@ interface Form {
   input_links: string;
   output_links: string;
   input_flags: string;
-  data_form: string;
   start_condition: string;
   end_condition: string;
 }
@@ -306,7 +300,7 @@ const FORM_KEYS = [
   "label", "description", "color", "assignee", "department", "system", "system_fallback", "duration",
   "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "urlLabel",
   "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links", "input_flags",
-  "data_form", "start_condition", "end_condition",
+  "start_condition", "end_condition",
 ] as const satisfies readonly (keyof Form)[];
 // 타일이 읽는 폼 키 — 인스펙터에서 바뀐 값이 열린 팝오버 초안까지 닿아야 하는지 판정
 const TILE_KEYS: Record<TileField, readonly (keyof Form)[]> = {
@@ -321,7 +315,6 @@ const TILE_KEYS: Record<TileField, readonly (keyof Form)[]> = {
   fte: ["fte"],
   input: ["input", "input_forms", "input_links", "input_flags"],
   output: ["output", "output_forms", "output_links", "output_ids"],
-  data_form: ["data_form"],
   start_condition: ["start_condition"],
   end_condition: ["end_condition"],
 };
@@ -432,7 +425,6 @@ interface NodeSummaryModalProps {
   input_links: string;
   output_links: string;
   input_flags: string;
-  data_form: string;
   start_condition: string;
   end_condition: string;
   cost_krw: string;
@@ -514,7 +506,6 @@ export function NodeSummaryModal({
   input_links,
   output_links,
   input_flags,
-  data_form,
   start_condition,
   end_condition,
   cost_krw,
@@ -581,7 +572,7 @@ export function NodeSummaryModal({
     label: title, description, color, assignee, department, system, system_fallback: systemFallback, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
-    data_form, start_condition, end_condition,
+    start_condition, end_condition,
   };
   const [form, setForm] = useState<Form>(propsForm);
   // 마지막으로 본 props — 인스펙터 등 바깥에서 바뀐 키를 가려내는 기준
@@ -742,7 +733,6 @@ export function NodeSummaryModal({
       case "annual_count":
       case "fte":
       case "system":
-      case "data_form":
       case "start_condition":
       case "end_condition":
         return form[field];
@@ -763,7 +753,6 @@ export function NodeSummaryModal({
       case "cost": return t("field.costRun");
       case "input": return t("field.input");
       case "output": return t("field.output");
-      case "data_form": return t("field.dataForm");
       case "start_condition": return t("field.startCondition");
       case "end_condition": return t("field.endCondition");
       default: return t(PARAM_LABEL_KEY[field]);
@@ -851,9 +840,7 @@ export function NodeSummaryModal({
   const filledParamCount = PARAM_TILES.filter((f) => tileValue(f) !== "").length;
   const filledDetailCount = isSp
     ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter((v) => (v ?? "") !== "").length
-    : [form.input, form.output, form.data_form, form.start_condition, form.end_condition].filter((v) => v !== "").length;
-  // 노드 레벨 data_form 폴백 타일 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본)
-  const showLegacyDataForm = !isSp && form.input_forms === "" && form.output_forms === "" && !(readOnly && form.data_form === "");
+    : [form.input, form.output, form.start_condition, form.end_condition].filter((v) => v !== "").length;
 
   // ── 타일 렌더 ─────────────────────────────────────────────────────────────
   // 정적(읽기) 타일은 값 있는 것만 — 입출력은 목록을 열어야 보이므로 클릭 가능(읽기 팝오버)
@@ -984,7 +971,6 @@ export function NodeSummaryModal({
     <>
       {renderTile("input")}
       {renderTile("output")}
-      {showLegacyDataForm && renderTile("data_form")}
       {renderTile("start_condition")}
       {renderTile("end_condition")}
     </>
@@ -1116,12 +1102,11 @@ export function NodeSummaryModal({
             <p className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1 text-caption text-ink">{spFrequencyNote}</p>
           </div>
         )}
-        {(field === "system" || field === "data_form" || field === "start_condition" || field === "end_condition") && (
+        {(field === "system" || field === "start_condition" || field === "end_condition") && (
           <input
             data-id={`summary-tile-input-${field}`}
             className={INPUT_CLASS}
-            maxLength={field === "data_form" ? 50 : field === "system" ? 100 : undefined}
-            placeholder={field === "data_form" ? "structured / document / tacit" : undefined}
+            maxLength={field === "system" ? 100 : undefined}
             value={active.value}
             onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
           />
@@ -1402,7 +1387,7 @@ export function NodeSummaryModal({
                     </AutoHeight>
                   </div>
                 )}
-                {/* 인터뷰 승격 상세 — IO(항목 수 타일 → 플라이아웃 편집기)+종속 Data form·조건. 기본 접힘.
+                {/* 인터뷰 승격 상세 — IO(항목 수 타일 → 플라이아웃 편집기, 자료 형식은 항목별)+조건. 기본 접힘.
                     SP는 링크 맵 상속 읽기 타일 — 인스펙터 카드와 동기화(#11) */}
                 {(showAttributes || isSp) && (
                   <div className="py-1.5" data-id="summary-details">

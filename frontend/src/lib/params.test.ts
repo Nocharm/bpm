@@ -344,8 +344,8 @@ describe("resolveAiParamPatch - touch_time (design 2026-08-19 §2)", () => {
 
 describe("resolveAiTextPatch", () => {
   it("건드리지 않은 필드는 결과에 없다 (부분 갱신)", () => {
-    expect(resolveAiTextPatch("process", { data_form: "structured" }, {})).toEqual({
-      data_form: "structured",
+    expect(resolveAiTextPatch("process", { start_condition: "예산 확정" }, {})).toEqual({
+      start_condition: "예산 확정",
     });
   });
 
@@ -391,7 +391,7 @@ describe("resolveAiTextPatch", () => {
 
   it("서브프로세스는 링크 맵 상속(read-only) - 전부 드롭", () => {
     expect(
-      resolveAiTextPatch("subprocess", { input: "x", output: "y", data_form: "z" }, {}),
+      resolveAiTextPatch("subprocess", { input: "x", output: "y", start_condition: "z" }, {}),
     ).toEqual({});
   });
 });

@@ -23,14 +23,14 @@ type DetailField = keyof NodeDetailsPatch;
 const DETAIL_FIELDS: readonly DetailField[] = [
   "input", "output", "input_forms", "output_forms",
   "output_ids", "input_links", "output_links", "input_flags",
-  "data_form", "start_condition", "end_condition",
+  "start_condition", "end_condition",
 ];
 // 해제 확인 팝오버 크기(px) — 뷰포트 클램프 계산용 근사치
 const UNLINK_POPOVER_WIDTH = 256;
 const UNLINK_POPOVER_HEIGHT = 96;
-// 헤더 채움 카운트는 주 필드 5종만 — 항목별 폼은 IO의 부속값이라 세지 않는다
+// 헤더 채움 카운트는 주 필드 4종만 — 항목별 폼은 IO의 부속값이라 세지 않는다
 const COUNT_FIELDS: readonly DetailField[] = [
-  "input", "output", "data_form", "start_condition", "end_condition",
+  "input", "output", "start_condition", "end_condition",
 ];
 
 // SP 상속 표시용 — IO 원문과 항목별 폼(줄 1:1 정렬)을 행 목록으로 결합
@@ -265,7 +265,6 @@ export function NodeDetailsCard({
                     onPeersMenu: io.onPeersMenu,
                   }
                 }
-                dataForm={shown("data_form")}
                 startCondition={shown("start_condition")}
                 endCondition={shown("end_condition")}
                 readOnly={readOnly}

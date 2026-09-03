@@ -114,8 +114,7 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
  "nodes": [{"key": <임시키>, "title": <제목>, "node_type": "start|process|decision|end",
             "description": <설명>, "attributes": {"assignee": …, "department": …, "system": …,
             "duration": …, "touch_time": …, "cost_krw": …, "headcount": …, "annual_count": …, "fte": …,
-            "input": <개행 구분 복수>, "output": <개행 구분 복수>, "start_condition": …, "end_condition": …,
-            "data_form": …} 또는 생략,
+            "input": <개행 구분 복수>, "output": <개행 구분 복수>, "start_condition": …, "end_condition": …} 또는 생략,
             "group_key": <그룹키 또는 생략>}],
  "edges": [{"source": <키>, "target": <키>, "label": <분기 라벨 또는 "">}],
  "groups": [{"key": <키>, "label": <레인/묶음 이름>}]}

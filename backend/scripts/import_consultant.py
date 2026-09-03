@@ -261,7 +261,7 @@ def build_graph_rows(
             id=code_to_id[cn.code], source_node_id=make_node_id(cmap.code, cn.code),
             title=cn.name, node_type=cn.type, description=cn.description, color=cn.color,
             department=cn.department, assignee=cn.assignee, system=cn.system,
-            input=cn.input, output=cn.output, data_form=cn.data_form,
+            input=cn.input, output=cn.output, output_forms=cn.output_forms,
             system_fallback=cn.system_fallback,
             pos_x=x, pos_y=y, sort_order=i,
         ))
@@ -542,7 +542,7 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
              # 기존 description과 동일 계약) (design 2026-08-19 §4.1)
              n.touch_time or "", n.input or "", n.output or "",
              n.start_condition or "", n.end_condition or "",
-             n.data_form or "", n.system_fallback or "")
+             n.output_forms or "", n.system_fallback or "")
             for n in nodes
         ),
         sorted(

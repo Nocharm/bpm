@@ -321,6 +321,47 @@ button:not(:disabled):active {
   }
 }
 
+/* 원문 메모 행머리 아이콘 스왑 — 호버(또는 팝오버 열림)에 기본 아이콘은 페이드아웃, 메모 아이콘은 페이드인하며
+   액센트로 한 번 튀었다 가라앉는다(반복 없음). 두 아이콘은 같은 자리에 겹친다 (사용자 피드백 2026-09-03).
+   부모 .group(타일·인스펙터 행)의 호버 또는 래퍼 data-open이 트리거. */
+.note-swap-rest {
+  transition: opacity 180ms var(--ease-smooth);
+}
+.note-swap-note {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 180ms var(--ease-smooth);
+}
+.group:hover .note-swap-rest,
+[data-open="true"] > .note-swap-rest {
+  opacity: 0;
+}
+.group:hover .note-swap-note,
+[data-open="true"] > .note-swap-note {
+  opacity: 1;
+  animation: note-swap-in 450ms var(--ease-spring);
+}
+@keyframes note-swap-in {
+  0% {
+    scale: 0.7;
+    color: var(--color-accent-focus);
+  }
+  55% {
+    scale: 1.15;
+    color: var(--color-accent-focus);
+  }
+  100% {
+    scale: 1;
+    color: var(--color-accent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-swap-note {
+    animation: none;
+  }
+}
+
 /* Excel 내보내기 미리보기 행 — 위에서부터 쌓이며 등장. 딜레이는 행별 --row-delay로 주입,
    fill both라 자기 차례 전엔 숨김 상태를 유지한다(스태거 핵심). */
 .preview-row-in {

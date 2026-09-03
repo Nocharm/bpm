@@ -85,11 +85,12 @@ export function FallbackHint({
         data-id={dataId}
         data-note={isEmpty ? "empty" : "present"}
         aria-label={isEmpty ? "Add interview note" : "Show original interview note"}
-        // 행머리 스왑 모드: 호버 시 아이콘 뒤에 흰 칩(surface+그림자)을 깔아 틴트 배경 위에서도 아이콘 교체가
-        // 눈에 띄고, 메모가 있으면 호버 전에도 우상단 작은 점으로 알린다 (사용자 피드백 2026-09-03)
+        // 행머리 스왑 모드: 두 아이콘을 같은 자리에 겹쳐 호버 시 크로스페이드 + 메모 아이콘이 액센트로 한 번
+        // 튀었다 가라앉는다(globals.css .note-swap-*). 배경 강조는 타일(SpFieldTile 호버 흰 배경·보더)이 맡고,
+        // 메모가 있으면 호버 전에도 우상단 작은 점(호버 시 진해짐)으로 알린다 (사용자 피드백 2026-09-03)
         className={`relative shrink-0 rounded-sm ${padded ? "p-0.5" : ""} ${
           RestIcon
-            ? `${restClassName} transition-[background-color,box-shadow,color] duration-150 group-hover:bg-surface group-hover:text-accent group-hover:shadow-sm group-hover:ring-1 group-hover:ring-accent-tint-border`
+            ? `${restClassName} transition-colors duration-150 group-hover:text-accent`
             : isEmpty
               ? "text-ink-muted hover:bg-surface-alt hover:text-accent"
               : "text-accent hover:bg-accent-tint"
@@ -101,27 +102,29 @@ export function FallbackHint({
           else openPopover();
         }}
       >
-        {RestIcon && (
-          <RestIcon size={iconSize} strokeWidth={1.5} className={open ? "hidden" : "group-hover:hidden"} />
+        {RestIcon ? (
+          <span
+            className="relative block"
+            style={{ width: iconSize, height: iconSize }}
+            data-open={open ? "true" : "false"}
+          >
+            <RestIcon size={iconSize} strokeWidth={1.5} className="note-swap-rest block" />
+            {isEmpty ? (
+              <MessageSquarePlus size={iconSize} strokeWidth={1.5} className="note-swap-note" />
+            ) : (
+              <MessageSquareText size={iconSize} strokeWidth={1.5} className="note-swap-note" />
+            )}
+          </span>
+        ) : isEmpty ? (
+          <MessageSquarePlus size={iconSize} strokeWidth={1.5} />
+        ) : (
+          <MessageSquareText size={iconSize} strokeWidth={1.5} />
         )}
         {RestIcon && !isEmpty && (
           <span
             data-id={`${dataId}-dot`}
             aria-hidden
-            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent ring-1 ring-surface"
-          />
-        )}
-        {isEmpty ? (
-          <MessageSquarePlus
-            size={iconSize}
-            strokeWidth={1.5}
-            className={RestIcon ? (open ? "" : "hidden group-hover:block") : undefined}
-          />
-        ) : (
-          <MessageSquareText
-            size={iconSize}
-            strokeWidth={1.5}
-            className={RestIcon ? (open ? "" : "hidden group-hover:block") : undefined}
+            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent opacity-60 ring-1 ring-surface transition-opacity duration-150 group-hover:opacity-100"
           />
         )}
       </button>

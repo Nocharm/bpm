@@ -25,7 +25,6 @@ export type ChangedField =
   | "output"
   | "input_forms"
   | "output_forms"
-  | "data_form"
   | "gmp"
   | "start_condition"
   | "end_condition"
@@ -75,7 +74,6 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["output", "output"],
   ["input_forms", "input_forms"],
   ["output_forms", "output_forms"],
-  ["data_form", "data_form"],
   ["gmp", "gmp"],
   ["start_condition", "start_condition"],
   ["end_condition", "end_condition"],
@@ -101,7 +99,6 @@ export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   output: "field.output",
   input_forms: "field.inputForms",
   output_forms: "field.outputForms",
-  data_form: "field.dataForm",
   gmp: "field.gmp",
   start_condition: "field.startCondition",
   end_condition: "field.endCondition",

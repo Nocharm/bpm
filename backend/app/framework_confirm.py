@@ -43,7 +43,7 @@ def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
             n.source_node_id or n.id, n.title, n.description, n.node_type, n.color,
             n.assignee, n.department, n.system, n.duration, n.touch_time,
             n.cost_krw, n.cost_usd, n.headcount, n.annual_count, n.fte,
-            n.input, n.output, n.input_forms, n.output_forms, n.data_form, n.gmp,
+            n.input, n.output, n.input_forms, n.output_forms, n.gmp,
             n.start_condition, n.end_condition,
             n.linked_map_id, n.follow_latest, n.is_primary_end,
             n.placeholder_category_id,  # 플레이스홀더 출처도 링크 정체성 (design §10.1)

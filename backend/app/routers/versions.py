@@ -101,7 +101,6 @@ async def clone_graph(
             input_flags=node.input_flags,
             start_condition=node.start_condition,
             end_condition=node.end_condition,
-            data_form=node.data_form,
             system_fallback=node.system_fallback,
             gmp=node.gmp,
             url=node.url,

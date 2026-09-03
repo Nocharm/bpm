@@ -237,5 +237,5 @@ def test_drafter_contract_lists_promoted_fields() -> None:
         context_text="", variant_hint="표준",
     )
     content = messages[0]["content"]
-    for field in ("touch_time", "input", "output", "start_condition", "end_condition", "data_form"):
+    for field in ("touch_time", "input", "output", "start_condition", "end_condition"):
         assert field in content

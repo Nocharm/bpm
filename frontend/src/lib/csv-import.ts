@@ -71,7 +71,7 @@ export interface CsvImportContext {
 const HEADER_COLUMNS = [
   "name", "description", "assignee", "department", "system", "duration", "touch_time",
   "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
-  "input", "input_flags", "output", "data_form", "start_condition", "end_condition",
+  "input", "input_flags", "output", "start_condition", "end_condition",
   "url", "url_label", "section_anchor", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
@@ -94,7 +94,6 @@ const MAX_LEN: Record<
   headcount: 50,
   annual_count: 50,
   fte: 50,
-  data_form: 50,
   url: 500,
   url_label: 100,
   section_anchor: 200, // backend models.py Node.section_anchor String(200) 미러
@@ -114,7 +113,7 @@ const PARAM_FIELD_LABEL: Record<ParamField, string> = {
 };
 
 // SP 노드에서 링크 맵이 원천인 텍스트 필드 — CSV/AI 후보를 드롭하고 기존값 유지 (design 2026-08-19 §3)
-const SP_INHERITED_TEXT_FIELDS = ["input", "output", "data_form", "start_condition", "end_condition"] as const;
+const SP_INHERITED_TEXT_FIELDS = ["input", "output", "start_condition", "end_condition"] as const;
 type SpInheritedTextField = (typeof SP_INHERITED_TEXT_FIELDS)[number];
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
@@ -200,7 +199,6 @@ const NODE_DEFAULTS = {
   input_links: "",
   output_links: "",
   input_flags: "",
-  data_form: "",
   start_condition: "",
   end_condition: "",
   system_fallback: "",
@@ -500,7 +498,6 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     input: cellOf(r, "input"),
     input_flags: rawCellOf(r, "input_flags"),
     output: cellOf(r, "output"),
-    data_form: cellOf(r, "data_form"),
     start_condition: cellOf(r, "start_condition"),
     end_condition: cellOf(r, "end_condition"),
     url: cellOf(r, "url"),
@@ -522,7 +519,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "data_form", "url", "url_label", "section_anchor"] as const) {
+    for (const col of ["name", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -662,7 +659,6 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         input: row.input,
         input_flags: normalizedFlags,
         output: row.output,
-        data_form: row.data_form,
         start_condition: row.start_condition,
         end_condition: row.end_condition,
         url: row.url,
@@ -929,7 +925,6 @@ export function buildGraphFromAiProposal(
       // → 매칭 노드는 mergeNode의 ...existing이 기존 폴백 유지) (design 2026-08-19 §3)
       input: attr?.input ?? "",
       output: attr?.output ?? "",
-      data_form: attr?.data_form ?? "",
       start_condition: attr?.start_condition ?? "",
       end_condition: attr?.end_condition ?? "",
       url: attr?.url ?? "",
@@ -1073,22 +1068,23 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
 /** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
  *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
-  // 셀 배열로 조립 — 20컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지)
+  // 셀 배열로 조립 — 20컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지).
+  // 자료 형식은 IO 항목별 값이라 CSV 표면에 없다(Data_Form 열 폐기, 2026-09-03)
   const rows: string[][] = [
     ["Name", "Description", "Assignee", "Department", "System", "Duration", "Touch_Time",
      "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE",
-     "Input", "Input_Flags", "Output", "Data_Form", "Start_Condition", "End_Condition",
+     "Input", "Input_Flags", "Output", "Start_Condition", "End_Condition",
      "URL", "URL_Label", "Next"],
     ["Review request", "Check the request against the purchasing policy", "hong.gd", "Quality Part 1",
      "SAP ERP", "16", "8", "50000", "", "1", "", "",
-     "Purchase request", "", "Review result", "document", "PR submitted", "Review recorded",
+     "Purchase request", "", "Review result", "PR submitted", "Review recorded",
      "", "", "Approval decision"],
     ["Approval decision", "", '"hong.gd, kim.cs"', "Quality Part 1", "", "0.30", "",
-     "", "20", "2", "", "", "", "", "", "", "", "", "", "",
+     "", "20", "2", "", "", "", "", "", "", "", "", "",
      "Sign contract:approved;Notify rejection:rejected"],
     ["Sign contract", "", "lee.yh", "Finance Part", "", "24", "", "", "", "1", "", "",
-     "", "", "", "", "", "", "https://example.com/contract", "Contract", ""],
-    ["Notify rejection", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+     "", "", "", "", "", "https://example.com/contract", "Contract", ""],
+    ["Notify rejection", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
   ];
   return rows.map((cells) => cells.join(",")).join("\r\n");
 }
@@ -1127,7 +1123,6 @@ export function buildAiPromptText(): string {
     "- FTE: 선택, 전일환산 투입 인원(숫자만). 모르면 비워두세요.",
     "- Input / Output: 선택, 단계의 입력물/산출물. 여러 개면 셀 안에서 줄바꿈으로 나열하고 셀 전체를 큰따옴표로 감싸세요.",
     "- Input_Flags: 선택, Input 항목별 필수/선택 표시. Input과 같은 순서로 줄바꿈 나열하고 각 줄에 optional 또는 required(비움=required). 전부 필수면 셀을 비워두세요.",
-    `- Data_Form: 선택, 입출력 형식 참고값(structured/document/tacit 등, ${MAX_LEN.data_form}자 이하). 모르면 비워두세요.`,
     "- Start_Condition / End_Condition: 선택, 단계의 시작/종료 조건 한 문장. 모르면 비워두세요.",
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
     `- URL_Label: 선택, 링크 표시 이름(${MAX_LEN.url_label}자 이하). URL이 있는 행에서만 의미(URL 없으면 무시됩니다).`,

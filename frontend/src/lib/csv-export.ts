@@ -2,7 +2,7 @@
 // 설계: 2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
-const HEADER = "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Data_Form,Start_Condition,End_Condition,URL,URL_Label,Next";
+const HEADER = "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next";
 
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -92,7 +92,7 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
       node.annual_count ?? "", node.fte ?? "",
       // 승격 필드 — 폴백(system_fallback)은 왕복 표면 제외 (design 2026-08-19 §3)
       // Input_Flags — Input 줄과 1:1 정렬(optional/빈 줄), 왕복 표면 (io-linking §3)
-      node.input ?? "", node.input_flags ?? "", node.output ?? "", node.data_form ?? "",
+      node.input ?? "", node.input_flags ?? "", node.output ?? "",
       node.start_condition ?? "", node.end_condition ?? "",
       node.url ?? "", node.url_label ?? "", parts.join(";"),
     ].map(escapeCell).join(",");

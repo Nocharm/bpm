@@ -356,8 +356,8 @@ class Node(Base):
     input_flags: Mapped[str] = mapped_column(Text, default="")
     start_condition: Mapped[str] = mapped_column(Text, default="")
     end_condition: Mapped[str] = mapped_column(Text, default="")
-    # 입출력 형식 참고 배지 — structured/document/tacit 등 자유값
-    data_form: Mapped[str] = mapped_column(String(50), default="")
+    # (폐기 2026-09-03) 노드 레벨 data_form — 자료 형식은 IO 항목별 output_forms/input_forms가 정본.
+    # 인터뷰 임포트도 산출물의 폼으로 착지한다. 물리 컬럼은 db._drop_legacy_node_data_form이 정리.
     # 시스템 원문 폴백 — 라이브러리화 전 검토 원천, CSV/AI 표면 제외 (design 2026-08-19 §3)
     system_fallback: Mapped[str] = mapped_column(String(200), default="")
     # 활동별 GMP 분류 — 맵 sp_gmp와 동일 3값 계약. 검토값이라 재임포트가 못 덮는다

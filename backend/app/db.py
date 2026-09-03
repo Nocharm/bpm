@@ -114,7 +114,6 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_output_forms", "TEXT"),
     ("nodes", "start_condition", "TEXT DEFAULT ''"),
     ("nodes", "end_condition", "TEXT DEFAULT ''"),
-    ("nodes", "data_form", "VARCHAR(50) DEFAULT ''"),
     ("nodes", "system_fallback", "VARCHAR(200) DEFAULT ''"),
     ("process_maps", "sp_start_condition", "TEXT"),
     ("process_maps", "sp_end_condition", "TEXT"),
@@ -268,6 +267,19 @@ def _drop_legacy_sp_description(conn: Connection) -> None:
         conn.execute(text("ALTER TABLE process_maps DROP COLUMN sp_description"))
 
 
+def _drop_legacy_node_data_form(conn: Connection) -> None:
+    """폐기된 nodes.data_form 물리 삭제 — 자료 형식은 IO 항목별 폼(output_forms)으로 일원화 (사용자 결정 2026-09-03).
+
+    운영에서 쓰인 적 없는 컬럼이라 값 이전 없이 드랍한다. 비치명 스텝(실패해도 기동 계속).
+    ⚠️ 드랍 후 구버전 코드로 롤백하면 이 컬럼에 쓰다 죽으므로 롤백은 이 커밋 이후 버전 사이에서만 안전.
+    """
+    inspector = inspect(conn)
+    if "nodes" not in inspector.get_table_names():
+        return
+    if "data_form" in {col["name"] for col in inspector.get_columns("nodes")}:
+        conn.execute(text("ALTER TABLE nodes DROP COLUMN data_form"))
+
+
 def _migrate_framework_confirmed(conn: Connection) -> None:
     """fw 확정 스냅샷의 status published→confirmed 일회 이전 — 매 기동 멱등 (spec 2026-09-02 §3).
 
@@ -304,6 +316,7 @@ async def init_models() -> None:
         _widen_interview_message_kind,
         _relax_employees_email_not_null,
         _drop_legacy_sp_description,
+        _drop_legacy_node_data_form,
         _migrate_framework_confirmed,
     ):
         try:

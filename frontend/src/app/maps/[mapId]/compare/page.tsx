@@ -2128,7 +2128,6 @@ function ComparePane({
                     "output",
                     "input_forms",
                     "output_forms",
-                    "data_form",
                     "start_condition",
                     "end_condition",
                   ] as const;

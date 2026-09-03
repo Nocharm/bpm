@@ -1039,12 +1039,12 @@ def test_build_graph_rows_carries_promoted_fields_and_signature_detects_them() -
     promoted = _canonical_map()
     promoted.nodes[0].input = "작업지시"
     promoted.nodes[0].output = "측정 범위"
-    promoted.nodes[0].data_form = "structured"
+    promoted.nodes[0].output_forms = "structured"
     promoted.nodes[0].system_fallback = "EAM"
     nodes_a, edges_a, _ = build_graph_rows(plain, link_targets={})
     nodes_b, edges_b, _ = build_graph_rows(promoted, link_targets={})
     row = next(n for n in nodes_b if n.title == "요청")
-    assert (row.input, row.output, row.data_form, row.system_fallback) == (
+    assert (row.input, row.output, row.output_forms, row.system_fallback) == (
         "작업지시", "측정 범위", "structured", "EAM")
     # 승격 필드도 콘텐츠 — 재전달에서 값이 바뀌면 새 버전으로 감지 (design 2026-08-19 §4.1)
     assert _graph_signature(nodes_a, edges_a) != _graph_signature(nodes_b, edges_b)

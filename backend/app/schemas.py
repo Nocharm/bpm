@@ -1196,7 +1196,6 @@ class NodeIn(BaseModel):
     input_flags: str = ""
     start_condition: str = ""
     end_condition: str = ""
-    data_form: str = Field(default="", max_length=50)
     # 시스템 원문 폴백 — 편집 경로는 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
     system_fallback: str = Field(default="", max_length=200)
     # 활동별 GMP — 맵 sp_gmp와 동일 3값. 무효값은 "" 소거(from_attributes 응답 겸용이라 422 대신)
@@ -1943,7 +1942,6 @@ class AiNodeAttributes(BaseModel):
     output: str | None = None
     start_condition: str | None = None
     end_condition: str | None = None
-    data_form: str | None = Field(default=None, max_length=50)
     color: str | None = Field(default=None, pattern=r"^$|^#[0-9a-fA-F]{6}$")
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)

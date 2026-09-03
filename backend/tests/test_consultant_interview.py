@@ -125,7 +125,8 @@ def test_convert_basic_map_and_nodes() -> None:
     assert "Quote: EAM에서 그 주 작업지시를 열어 확인해요." in n1.description
     # 승격 필드 — 설명 KV에서 빠지고 고유 필드로 (design 2026-08-19 §4.1)
     assert n1.input == "그 주 작업지시" and n1.output == "대상 계측기와 측정 범위"
-    assert n1.data_form == "structured"
+    # dataForm은 유일한 산출물의 자료 형식으로 착지(노드 레벨 data_form 폐기, 2026-09-03)
+    assert n1.output_forms == "structured"
     assert n1.system == "EAM" and n1.system_fallback == "EAM"
     for gone in ("Input:", "Output:", "System:", "Data form:"):
         assert gone not in n1.description

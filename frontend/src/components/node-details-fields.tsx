@@ -1,9 +1,9 @@
 // 노드 상세(승격) 필드 편집 — 인스펙터 Details 카드와 노드 편집 모달이 공유.
-// 데이터 폼은 IO 항목별 값(input_forms/output_forms, 줄 1:1 정렬)이 정본 — 노드 레벨 data_form은
-// 임포트 착지 폴백이라 항목별 값이 하나도 없을 때만 참고 행으로 표시 (사용자 결정 2026-08-20).
+// 데이터 폼은 IO 항목별 값(input_forms/output_forms, 줄 1:1 정렬)만 있다 — 노드 레벨 data_form은
+// 폐기(임포트도 산출물 폼으로 착지, 사용자 결정 2026-09-03).
 "use client";
 
-import { FileType, Flag, LogIn, LogOut, Play, type LucideIcon } from "lucide-react";
+import { Flag, LogIn, LogOut, Play, type LucideIcon } from "lucide-react";
 
 import { MultiValueInput } from "@/components/multi-value-input";
 import { useI18n } from "@/lib/i18n";
@@ -13,7 +13,6 @@ import type { IoSide } from "@/lib/io-items";
 export const DETAIL_FIELD_ICONS = {
   input: LogIn,
   output: LogOut,
-  data_form: FileType,
   start_condition: Play,
   end_condition: Flag,
 } satisfies Record<string, LucideIcon>;
@@ -28,7 +27,6 @@ export interface NodeDetailsPatch {
   input_links?: string;
   output_links?: string;
   input_flags?: string;
-  data_form?: string;
   start_condition?: string;
   end_condition?: string;
 }
@@ -62,7 +60,6 @@ interface NodeDetailsFieldsProps {
   outputLinks?: string;
   inputFlags?: string;
   io?: NodeDetailsIoWiring;
-  dataForm: string;
   startCondition: string;
   endCondition: string;
   readOnly: boolean;
@@ -77,16 +74,13 @@ interface NodeDetailsFieldsProps {
 
 export function NodeDetailsFields({
   input, output, inputForms, outputForms, outputIds, inputLinks, outputLinks, inputFlags, io,
-  dataForm, startCondition, endCondition,
+  startCondition, endCondition,
   readOnly, idPrefix, nodeKey, inputWidth = "w-32", onPatch,
 }: NodeDetailsFieldsProps) {
   const { t } = useI18n();
   // 편집 가능 입력 — 영역 상시 노출·통일 폭·포커스 보더 (사용자 결정 2026-08-20)
   // 폭은 상한 — 인스펙터가 좁아지면 함께 줄어 경계 안 유지 (사용자 결정 2026-08-20)
   const editableInput = `${inputWidth} min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right focus:border-accent focus:outline-none`;
-  // 노드 레벨 data_form 폴백 행 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본).
-  // 읽기전용+값 없음이면 "-" 노이즈라 통째로 생략 (#13)
-  const showLegacyDataForm = inputForms === "" && outputForms === "" && !(readOnly && dataForm === "");
   return (
     <>
       {/* IO 그룹 — 항목별 데이터 폼 열 포함(placeholder "form") */}
@@ -140,29 +134,6 @@ export function NodeDetailsFields({
           })
         }
       />
-      {showLegacyDataForm && (
-        <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
-          <span className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary">
-            <FileType size={12} strokeWidth={1.5} className="text-ink-muted" />
-            {t("field.dataForm")}
-          </span>
-          {readOnly ? (
-            <span data-id={`${idPrefix}-data-form`} className="min-w-0 truncate text-right text-fine text-ink-secondary">
-              {dataForm || "-"}
-            </span>
-          ) : (
-            <input
-              data-id={`${idPrefix}-data-form`}
-              className={`${editableInput} text-fine text-ink-secondary`}
-              maxLength={50}
-              value={dataForm}
-              placeholder="structured / document / tacit"
-              title={dataForm || undefined}
-              onChange={(event) => onPatch({ data_form: event.target.value })}
-            />
-          )}
-        </div>
-      )}
       {/* 조건 — IO와 동등한 형제 필드. 긴 문장은 말줄임 유지(사용자 결정 2026-08-20) */}
       {([
         ["start_condition", "field.startCondition", startCondition],

@@ -62,7 +62,6 @@ export type NodeData = {
   input_flags?: string;
   start_condition?: string;
   end_condition?: string;
-  data_form?: string;
   // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정 (design 2026-08-19 §3)
   system_fallback?: string;
   // 활동별 GMP — 캔버스 필 태그(토글 노출, null=미분류는 아이콘만) (design 2026-08-20)

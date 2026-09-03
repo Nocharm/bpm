@@ -955,7 +955,6 @@ def test_ai_prompt_states_subprocess_param_limit() -> None:
         "output",
         "start_condition",
         "end_condition",
-        "data_form",
     ):
         assert field in _INSTRUCTIONS  # graph 스키마 예시 + 규칙 텍스트 모두 갱신됐는지 확인
 
@@ -998,7 +997,6 @@ def test_serialize_node_exposes_promoted_fields() -> None:
         output="승인서",
         start_condition="예산 확정",
         end_condition="결재 완료",
-        data_form="structured",
         gmp="direct",
     )
     text = _serialize_node(node)
@@ -1007,7 +1005,6 @@ def test_serialize_node_exposes_promoted_fields() -> None:
     assert "출력=승인서" in text
     assert "시작조건=예산 확정" in text
     assert "종료조건=결재 완료" in text
-    assert "양식=structured" in text
     assert "GMP=direct" in text
 
 

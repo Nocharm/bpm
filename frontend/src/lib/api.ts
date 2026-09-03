@@ -151,7 +151,6 @@ export interface GraphNode {
   input_flags?: string;
   start_condition?: string;
   end_condition?: string;
-  data_form?: string;
   // 시스템 원문 폴백 — 편집은 폴백 툴팁 한정, CSV/AI 표면 제외 (design 2026-08-19 §3)
   system_fallback?: string;
   // 활동별 GMP — 캔버스 필 태그, 재임포트가 못 덮는 검토값 (design 2026-08-20)
@@ -2210,7 +2209,6 @@ export interface AiNodeAttributes {
   output?: string | null;
   start_condition?: string | null;
   end_condition?: string | null;
-  data_form?: string | null;
   color?: string | null;
   url?: string | null;
   url_label?: string | null;

@@ -286,18 +286,22 @@ def _build_nodes(
             issues.append(AdapterIssue("warning", apath, f"unknown kind {kind!r} - treated as action (알 수 없는 유형 - 일반 액션으로 처리)"))
         # 예외 variant는 흐름 분기 대신 색으로만 분리 — 분기 자체는 relations 엣지가 그린다
         variant = _clean(action.get("variant"))
+        output = _join_multi(action.get("output"))
+        # dataForm은 산출물의 자료 형식 — 전달물은 산출물이 항상 하나라 첫 줄의 폼으로 착지
+        # (노드 레벨 data_form 폐기, 사용자 결정 2026-09-03). 산출물이 없으면 폼도 버린다
+        data_form = _truncate(_clean(action.get("dataForm")), 50, apath, "dataForm", issues)
         node = CanonicalNode(
             code=f"a{seq:02d}",
             name=label,
             type="decision" if kind == "decision" else "process",
             system=_truncate(_clean(action.get("system")), 100, apath, "system", issues),
             seq=seq,
-            # input/output/dataForm은 고유 필드로 승격, system 원문은 폴백에 이중 기록
+            # input/output은 고유 필드로 승격, system 원문은 폴백에 이중 기록
             # (라이브러리화 전 표시 무회귀 — design 2026-08-19 §4.1). str 외에 list가 오면
             # 개행 join — IO 복수 시맨틱과 일치.
             input=_join_multi(action.get("input")),
-            output=_join_multi(action.get("output")),
-            data_form=_truncate(_clean(action.get("dataForm")), 50, apath, "dataForm", issues),
+            output=output,
+            output_forms=data_form if output else "",
             # 폴백은 100자 컷 전 원문 기준 — 대표(system)와 상한이 달라 별도 절단
             system_fallback=_truncate(
                 _clean(action.get("system")), 200, apath, "system_fallback", issues

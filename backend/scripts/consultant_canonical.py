@@ -52,7 +52,9 @@ class CanonicalNode(BaseModel):
     # 인터뷰 승격 필드 — IO는 개행 구분 복수, 폭 상한은 Node 컬럼과 동기 (design 2026-08-19 §1.1)
     input: str = ""
     output: str = ""
-    data_form: str = Field(default="", max_length=50)
+    # 산출물 항목별 자료 형식(output 줄과 1:1, 개행 join) — 전달물 dataForm은 유일한 산출물의 폼으로 착지
+    # (노드 레벨 data_form 폐기, 사용자 결정 2026-09-03). 배열로 바뀌면 같은 줄 정렬로 확장한다
+    output_forms: str = ""
     system_fallback: str = Field(default="", max_length=200)
     # 인터뷰 어댑터가 KV 직렬화를 싣는다 — Node.description은 Text, 캡 금지 (design 2026-08-18 §3)
     description: str = ""

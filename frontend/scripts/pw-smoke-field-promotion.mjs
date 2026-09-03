@@ -87,9 +87,10 @@ try {
     .reduce((max, v) => (max === null || v.id > max ? v.id : max), null);
   const calGraph = await api(`/versions/${publishedId}/graph`);
   const a01 = calGraph.nodes.find((n) => n.title === "작업지시 확인");
-  check("[3] node landing: input/output/data_form/system_fallback",
+  // dataForm은 유일한 산출물의 자료 형식(output_forms)으로 착지 — 노드 레벨 data_form 폐기 (2026-09-03)
+  check("[3] node landing: input/output/output_forms/system_fallback",
     a01?.input === "그 주 작업지시" && a01?.output === "대상 계측기와 측정 범위"
-      && a01?.data_form === "structured" && a01?.system === "EAM" && a01?.system_fallback === "EAM");
+      && a01?.output_forms === "structured" && a01?.data_form === undefined && a01?.system === "EAM" && a01?.system_fallback === "EAM");
   const descOk = a01?.description.includes("Quote:")
     && !/Input:|Output:|System:|Data form:/.test(a01?.description ?? "");
   check("[4] node description KV shrunk (Quote only)", descOk, (a01?.description ?? "").slice(0, 60));
@@ -154,10 +155,9 @@ try {
   const details = page.locator('[data-id="inspector-details"]');
   await details.waitFor({ state: "visible", timeout: 10000 });
   const detailsText = (await details.textContent()) ?? "";
-  // data_form은 IO 종속 행(배지 아님) — c0c532a에서 배지 제거, readOnly 행 텍스트로 단언
-  const dataFormText = (await page.locator('[data-id="inspector-detail-data-form"]').textContent().catch(() => "")) ?? "";
-  check("[8] inspector Details shows imported IO + data form row",
-    detailsText.includes("그 주 작업지시") && dataFormText.trim() === "structured");
+  // 산출물 항목의 자료 형식은 IO 행의 폼 필로 보인다(노드 레벨 data_form 행 폐기, 2026-09-03)
+  check("[8] inspector Details shows imported IO + output form pill",
+    detailsText.includes("그 주 작업지시") && detailsText.includes("structured"));
   await page.locator('[data-id="inspector-system-hint"]').click();
   const hintText = (await page.locator('[data-id="inspector-system-hint-popover"]').textContent().catch(() => "")) ?? "";
   check("[9] system fallback popover shows raw text", hintText.includes("EAM"));
@@ -177,7 +177,7 @@ try {
     id: "fp-node-1", title: "작업 단계", description: "", node_type: "process", color: "",
     assignee: "", department: "", system: "", duration: "", cost_krw: "", cost_usd: "",
     headcount: "", annual_count: "", fte: "", touch_time: "", input: "", output: "",
-    start_condition: "", end_condition: "", data_form: "", system_fallback: "EAM(스모크 원문)",
+    start_condition: "", end_condition: "", system_fallback: "EAM(스모크 원문)",
     url: "", url_label: "", section_anchor: "", pos_x: 380, pos_y: 220, sort_order: 1,
     group_ids: [], linked_map_id: null, follow_latest: true, linked_version_id: null,
     is_primary_end: false,
@@ -226,7 +226,7 @@ try {
   node = g.nodes.find((n) => n.id === "fp-node-1");
   check("[12] IO remove → server reflects, first item form survives",
     node?.input === "작업지시" && node?.input_forms === "document", JSON.stringify(node?.input));
-  // [13] 조건 입력 + 항목별 폼 존재 시 노드 레벨 data_form 행 숨김(폴백 규칙, 2026-08-20)
+  // [13] 조건 입력 저장 (노드 레벨 data_form 행은 폐기 — 자료 형식은 IO 항목별 폼만, 2026-09-03)
   const legacyDataFormHidden =
     (await page.locator('[data-id="inspector-detail-data-form"]').count()) === 0;
   await page.locator('[data-id="inspector-detail-start-condition"]').fill("주기 도래");
@@ -235,7 +235,7 @@ try {
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
-  check("[13] conditions saved + legacy data_form row hidden with item forms",
+  check("[13] conditions saved + no node-level data_form row",
     legacyDataFormHidden && node?.start_condition === "주기 도래" && node?.end_condition === "목록 확정");
   // [14] touch_time 정규화
   await page.locator('input[data-id="inspector-param-touch_time"]').fill("1.75");

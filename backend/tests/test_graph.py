@@ -775,7 +775,6 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
                 "output": "측정 범위",
                 "start_condition": "주기 도래",
                 "end_condition": "목록 확정",
-                "data_form": "structured",
                 "system_fallback": "EAM(구모델)",
                 "touch_time": "1.75",  # 75분 이월 → 2.15
             },
@@ -790,7 +789,7 @@ def test_node_promoted_fields_roundtrip_and_touch_time_normalized(client: TestCl
     assert n1["input"] == "그 주 작업지시\n표준기 목록"
     assert n1["output"] == "측정 범위"
     assert n1["start_condition"] == "주기 도래" and n1["end_condition"] == "목록 확정"
-    assert n1["data_form"] == "structured"
+    assert "data_form" not in n1  # 노드 레벨 자료 형식 컬럼 폐기 (2026-09-03)
     assert n1["system_fallback"] == "EAM(구모델)"
     assert n1["touch_time"] == "2.15"
     # 무효 자유텍스트는 duration과 동일하게 경계에서 "" 소거(422 아님)

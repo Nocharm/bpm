@@ -64,17 +64,20 @@ export function SpFieldTile({
     return () => observer.disconnect();
   }, [filled, value, wide]);
 
+  // 호버 = 흰 배경 + 보더 강조(틴트를 걷어 행머리 메모 아이콘 스왑이 드러난다, 사용자 피드백 2026-09-03).
+  // 읽기 타일은 메모 아이콘(iconSlot)이 있을 때만 호버 반응
+  const interactive = !readOnly || iconSlot != null;
   const tone = isFallback
-    ? `border-dashed border-accent-tint-border bg-surface ${readOnly ? "" : active ? "border-accent" : "hover:bg-surface-alt"}`
+    ? `border-dashed border-accent-tint-border bg-surface ${interactive ? (active ? "border-accent" : "hover:border-accent") : ""}`
     : readOnly
       ? filled
-        ? "border-accent-tint-border bg-accent-tint/40"
+        ? `border-accent-tint-border bg-accent-tint/40 ${interactive ? "hover:border-accent hover:bg-surface" : ""}`
         : "border-hairline bg-surface"
       : active
         ? "border-accent bg-accent-tint"
         : filled
-          ? "border-accent-tint-border bg-accent-tint/40 hover:bg-accent-tint"
-          : "border-hairline bg-surface hover:bg-surface-alt";
+          ? "border-accent-tint-border bg-accent-tint/40 hover:border-accent hover:bg-surface"
+          : "border-hairline bg-surface hover:border-border-strong";
   // 값은 잘리지 않는다 — 좁으면 라벨이 먼저 줄고, 그래도 모자라면 라벨을 생략(hideLabel)한 뒤에야 값이 잘린다.
   // wide 타일은 라벨을 자연폭으로 고정하고 값이 줄바꿈으로 내려간다(부서 경로처럼 긴 값)
   const body = filled ? (

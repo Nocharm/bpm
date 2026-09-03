@@ -16,7 +16,7 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
  "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","data_form":"","url":"","url_label":"","color":""},
+           "attributes":{"assignee":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":""},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
@@ -37,10 +37,10 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 - 파라미터 의미 - duration=회당 소요시간(H.MM 시간, 소수부 2자리는 분: 0.30=30분, "2일" 같은 텍스트 금지),
   touch_time=회당 실작업시간(duration과 동일 H.MM 표기), cost_krw/cost_usd=회당 추가비용(인건비 제외), headcount=회당 투입 인원, annual_count=연간 처리 건수, fte=FTE. 모르면 비워두세요.
 - 비용은 cost_krw·cost_usd 중 하나만 채웁니다 - 둘 다 채우면 제안 전체가 거절됩니다.
-- input/output은 개행(\\n)으로 항목을 구분한 복수 값, start_condition/end_condition은 시작·종료 조건 자유 텍스트,
-  data_form은 입출력 양식 표기입니다. 사용자가 말했거나 [현재 그래프]에 있는 내용에 근거해서만 채우세요(지어내지 말 것).
+- input/output은 개행(\\n)으로 항목을 구분한 복수 값, start_condition/end_condition은 시작·종료 조건 자유 텍스트입니다.
+  사용자가 말했거나 [현재 그래프]에 있는 내용에 근거해서만 채우세요(지어내지 말 것).
 - subprocess 노드는 annual_count·fte만 수정할 수 있습니다. duration·touch_time·cost_krw·cost_usd·headcount와
-  input/output·start_condition/end_condition·data_form은 하위 맵의 지정값이라 수정할 수 없습니다(무시됩니다).
+  input/output·start_condition/end_condition은 하위 맵의 지정값이라 수정할 수 없습니다(무시됩니다).
 예) "견적 검토 뒤에 '승인' 추가해" → add(승인) + connect(견적검토 id → 승인 새키).
 예) "A와 B 사이에 '검수' 넣어줘" → add(검수) + disconnect(A→B) + connect(A→검수새키) + connect(검수새키→B).
 
@@ -101,8 +101,6 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"입력={_clip(node.input)}")
     if node.output:
         meta.append(f"출력={_clip(node.output)}")
-    if node.data_form:
-        meta.append(f"양식={node.data_form}")
     if node.start_condition:
         meta.append(f"시작조건={_clip(node.start_condition)}")
     if node.end_condition:

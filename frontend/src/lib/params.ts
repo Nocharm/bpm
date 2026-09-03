@@ -211,7 +211,6 @@ export interface AiTextPatchInput {
   output?: string | null;
   start_condition?: string | null;
   end_condition?: string | null;
-  data_form?: string | null;
 }
 
 type AiTextPatchKey =
@@ -256,7 +255,6 @@ export function resolveAiTextPatch(
   }
   if (attr.start_condition != null) patch.start_condition = attr.start_condition;
   if (attr.end_condition != null) patch.end_condition = attr.end_condition;
-  if (attr.data_form != null) patch.data_form = attr.data_form;
   return patch;
 }
 

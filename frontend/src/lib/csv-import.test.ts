@@ -232,7 +232,7 @@ describe("외부 AI 왕복 - 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Data_Form,Start_Condition,End_Condition,URL,URL_Label,Next",
+      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next",
     ); // 헤더 명시
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
@@ -1077,12 +1077,12 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
 });
 
 describe("승격 필드 컬럼 (design 2026-08-19)", () => {
-  const H = "Name,Duration,Touch_Time,Input,Output,Data_Form,Start_Condition,End_Condition";
+  const H = "Name,Duration,Touch_Time,Input,Output,Start_Condition,End_Condition";
 
   it("신규 컬럼이 노드 필드로 착지하고 touch_time은 H.MM 정규화된다", () => {
     const csv = [
       H,
-      '단계,1.30,1.75,"작업지시\n표준기 목록",측정 범위,structured,주기 도래,목록 확정',
+      '단계,1.30,1.75,"작업지시\n표준기 목록",측정 범위,주기 도래,목록 확정',
     ].join("\n");
     const o = buildGraphFromCsv(csv);
     expect(o.errors).toEqual([]);
@@ -1090,7 +1090,6 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.touch_time).toBe("2.15"); // 75분 이월
     expect(node.input).toBe("작업지시\n표준기 목록"); // 셀 내 개행 = 복수 항목
     expect(node.output).toBe("측정 범위");
-    expect(node.data_form).toBe("structured");
     expect(node.start_condition).toBe("주기 도래");
     expect(node.end_condition).toBe("목록 확정");
   });
@@ -1104,7 +1103,7 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     const base = baseGraph();
     base.nodes[1] = {
       ...base.nodes[1],
-      touch_time: "0.30", input: "기존 입력", output: "기존 산출", data_form: "document",
+      touch_time: "0.30", input: "기존 입력", output: "기존 산출",
       start_condition: "기존 시작", end_condition: "기존 종료", system_fallback: "EAM(원문)",
     };
     const o = mergeOf(`${H9}\nReview request,,,,,,,,\n`, base);
@@ -1112,7 +1111,6 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.touch_time).toBe("0.30");
     expect(node.input).toBe("기존 입력");
     expect(node.output).toBe("기존 산출");
-    expect(node.data_form).toBe("document");
     expect(node.start_condition).toBe("기존 시작");
     expect(node.end_condition).toBe("기존 종료");
     expect(node.system_fallback).toBe("EAM(원문)"); // CSV 표면 제외 — 병합이 무조건 보존
