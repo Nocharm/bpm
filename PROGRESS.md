@@ -3,6 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-03 — 인터뷰 임포트 거버넌스 확인 적용 (feat/consultant-import-fallbacks)
+- 컨설턴트 임포트 폴백 6종·노트·값 대체 전수조사(아티팩트 "임포트 폴백 지도") → 후속 6건 중 1번 착수: 재임포트가 오너·오우닝 부서·승인자를 바꾸려면 dry-run 리포트에서 체크한 것만 적용. 설계 `docs/superpowers/specs/2026-09-03-import-governance-review-design.md`, 플랜 `docs/superpowers/plans/2026-09-03-import-governance-review.md`.
+
 ## 2026-09-03 — SP 피크 재배치·목업 드래그·우클릭 맵 이동·프레임워크 탐색 좌상단 통일 (dev)
 - **SP 미리보기 피크 재배치**: 헤더를 정보 표면(좌: 맵 이름·오너·게시 버전 / 우: 업무체계 경로·미지정 안내)으로 바꾸고 인스펙터 탭을 좌측, 추가/이동 버튼은 미리보기 우상단에 떠 있는 독립 버튼 2개로(추가=강조색, 한 줄 고정+말줄임) — 패널 높이를 이분할하던 세로 레일은 과하다는 피드백으로 폐기. 목업 노드는 클릭(드롭다운) 유지 + 드래그→캔버스 드롭 추가(`dragPayload`, 행 드래그와 동일 dataTransfer 계약) — 드래그 중 피크는 언마운트 대신 visibility 숨김(언마운트=Chrome 드래그 취소), dragend에서 닫음.
 - **SP 노드 우클릭 "링크된 맵 열기"**: 링크 부재/삭제·권한 없음(locked)이면 비활성, 클릭 시 이탈 확인 게이트(openMapPrompt). autosave 반영 전 신규 노드는 캔버스 state 폴백으로 해석.
