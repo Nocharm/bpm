@@ -504,7 +504,6 @@ def test_redelivery_fills_missing_owning_for_pending_maps(client) -> None:
             await session.commit()
 
     _run(_blank_owning())
-    _run(_import_once(maps=[_canonical_map(**base)]))
 
     async def _load():
         async with SessionLocal() as session:
@@ -512,6 +511,13 @@ def test_redelivery_fills_missing_owning_for_pending_maps(client) -> None:
                 await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == "IV-P12"))
             ).one()
 
+    # 미체크 재전달 — 차이만 산출하고 NULL 유지 (spec 2026-09-03 §4: 대기 맵도 체크 필요)
+    report = _run(_import_once(maps=[_canonical_map(**base)]))
+    dept = next(g for g in report.governance if g.field == "department")
+    assert (dept.current, dept.delivered, dept.applied) == ("", "Consult Div/Consult Team", False)
+    assert _run(_load()).owning_department is None
+
+    _run(_import_once(maps=[_canonical_map(**base)], governance_decisions={("IV-P12", "department")}))
     m = _run(_load())
     assert m.consultant_owner_pending is True
     assert m.owning_department == "Consult Div/Consult Team"
@@ -557,13 +563,16 @@ def _delivery(maps=None):
     return cats, maps if maps is not None else [_canonical_map()]
 
 
-async def _import_once(maps=None, label="Consultant import"):
+async def _import_once(maps=None, label="Consultant import", governance_decisions=None):
     from app.db import SessionLocal
     from scripts.import_consultant import import_delivery
 
     cats, cmaps = _delivery(maps)
     async with SessionLocal() as session:
-        report = await import_delivery(session, categories=cats, maps=cmaps, actor="admin.sys", label=label)
+        report = await import_delivery(
+            session, categories=cats, maps=cmaps, actor="admin.sys", label=label,
+            governance_decisions=governance_decisions,
+        )
         await session.commit()
     return report
 
@@ -927,6 +936,7 @@ def test_owner_none_falls_back_to_actor_and_marks_pending(client) -> None:
 
 
 def test_pending_map_governance_updated_on_redelivery_with_owner(client) -> None:
+    """대기 맵도 예외가 아니다 — 재전달 거버넌스는 체크한 (code, field)만 교체 (spec 2026-09-03 §4)."""
     from sqlalchemy import select
 
     from app.db import SessionLocal
@@ -935,10 +945,18 @@ def test_pending_map_governance_updated_on_redelivery_with_owner(client) -> None
     _seed_import_employees()
     base = dict(code="IV-P2", name="교정 수행")
     _run(_import_once(maps=[_canonical_map(**base, owner=None, approvers=[], department="")]))
-    report = _run(_import_once(maps=[_canonical_map(
+    redelivery = _canonical_map(
         **base, owner="cons.owner", approvers=["cons.appr"], department="Consult Div/Consult Team",
-    )]))
+    )
+    kept = _run(_import_once(maps=[redelivery]))
+    assert {g.field for g in kept.governance} == {"owner", "department", "approvers"}
+    assert not any(a == "governance" for _, a, _ in kept.rows)  # 미체크 = 아무것도 안 바뀜
+    report = _run(_import_once(
+        maps=[redelivery],
+        governance_decisions={("IV-P2", "owner"), ("IV-P2", "department"), ("IV-P2", "approvers")},
+    ))
     assert any(a == "governance" for _, a, _ in report.rows)
+    assert all(g.applied for g in report.governance)
 
     async def _load():
         async with SessionLocal() as session:

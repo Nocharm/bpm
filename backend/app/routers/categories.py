@@ -45,6 +45,7 @@ from app.schemas import (
     CategorySummaryOut,
     CategoryUpdateIn,
     FrameworkImportRow,
+    GovernanceDiffOut,
     FrameworkOverviewOut,
     FrameworkOverviewRow,
     FrameworkSearchCategory,
@@ -791,17 +792,27 @@ async def import_interview_delivery(
         ))
 
     label = payload.label or f"Interview {now_kst():%Y-%m-%d}"
+    # 체크 목록은 apply 때만 — dry-run은 차이만 산출 (spec 2026-09-03 §3)
+    decisions = {(d.code, d.field) for d in payload.decisions} if payload.apply else set()
     report = await import_delivery(
         session, categories=list(merged_cats.values()), maps=merged_maps,
         actor=login_id, label=label, commit_every=None,
         # 연계 캔버스에 놓일 맵은 annual_count/fte 착지면이 있다 — "갈 곳 없음" 경고 대상 아님
         linkage_placed={code for lk in merged_linkages for code in lk.map_codes},
+        governance_decisions=decisions,
     )
     inserted_notes = await apply_interview_notes(session, merged_notes, label=label)
     # L6 흐름 → L5 연계 캔버스. 맵이 다 만들어진 뒤에만 노드를 걸 수 있어 순서가 고정된다.
     linked_count = await apply_interview_linkage(
         session, merged_linkages, actor=login_id, report=report
     )
+
+    # 체크 목록이 이번 전달분 차이와 안 맞으면 stale 리포트 — commit 전에 통째로 거부 (spec §3)
+    unknown = decisions - {(g.code, g.field) for g in report.governance}
+    if unknown:
+        await session.rollback()
+        code, fld = sorted(unknown)[0]
+        raise HTTPException(status_code=422, detail=f"unknown governance decision {code}/{fld}")
 
     if payload.apply:
         await session.commit()
@@ -823,6 +834,7 @@ async def import_interview_delivery(
         summary=summary,
         rows=[FrameworkImportRow(code=c, action=a, detail=d) for c, a, d in ordered[:500]],
         truncated=len(ordered) > 500,
+        governance=[GovernanceDiffOut.model_validate(g) for g in report.governance],
     )
 
 

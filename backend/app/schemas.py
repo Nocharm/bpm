@@ -1025,6 +1025,29 @@ class FrameworkImportRow(BaseModel):
     detail: str = ""
 
 
+GovernanceField = Literal["owner", "department", "approvers"]
+
+
+class GovernanceDecisionIn(BaseModel):
+    """apply 때 체크한 거버넌스 항목 — dry-run 응답 governance[]의 (code, field)와 1:1 (spec 2026-09-03 §3)."""
+
+    code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    field: GovernanceField
+
+
+class GovernanceDiffOut(BaseModel):
+    """기존 맵 거버넌스 필드 차이 1건 — 체크한 것만 apply가 교체한다 (spec 2026-09-03 §3)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    code: str
+    name: str
+    field: GovernanceField
+    current: str
+    delivered: str
+    applied: bool
+
+
 class MapNoteOut(BaseModel):
     """맵 노트 1건 — 인터뷰 예외 규칙·VOC 읽기전용 표시 (design 2026-08-18 §5)."""
 
@@ -1054,6 +1077,8 @@ class InterviewImportIn(BaseModel):
     label: (
         Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
     ) = None
+    # apply 때만 의미 — dry-run은 무시. 전달분 차이에 없는 항목은 422 (spec 2026-09-03 §3)
+    decisions: list[GovernanceDecisionIn] = []
 
 
 class InterviewIssueOut(BaseModel):
@@ -1082,6 +1107,7 @@ class InterviewImportOut(BaseModel):
     summary: dict[str, int]
     rows: list[FrameworkImportRow]
     truncated: bool
+    governance: list[GovernanceDiffOut] = []
 
 
 class NodeIn(BaseModel):
