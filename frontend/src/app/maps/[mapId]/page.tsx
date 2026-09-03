@@ -10262,7 +10262,12 @@ function MapEditor({ mapId }: { mapId: number }) {
               isCurrentScopeNode
                 ? nodes.find((n) => n.id === id)?.data.nodeType ?? "process"
                 : fullGraph?.nodes.find((n) => n.id === id)?.node_type ?? "process";
-            const toRef = (id: string) => ({ id, label: labelById(id), nodeType: typeById(id) });
+            // 선후행 독 카드 — 라벨·타입·색(저장 hex, 비면 타입 기본색은 카드가 처리)
+            const colorById = (id: string): string =>
+              isCurrentScopeNode
+                ? nodes.find((n) => n.id === id)?.data.color ?? ""
+                : fullGraph?.nodes.find((n) => n.id === id)?.color ?? "";
+            const toRef = (id: string) => ({ id, label: labelById(id), nodeType: typeById(id), color: colorById(id) });
             const predecessors = (isCurrentScopeNode
               ? edges.filter((edge) => edge.target === summaryNodeId).map((edge) => edge.source)
               : (fullGraph?.edges ?? [])

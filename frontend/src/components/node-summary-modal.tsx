@@ -51,7 +51,7 @@ import { ScopePreview } from "@/components/scope-preview";
 import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatAssignees, parseAssignees } from "@/lib/assignee";
-import { type ProcessNodeType } from "@/lib/canvas";
+import { NODE_TYPE_OPTIONS, type ProcessNodeType } from "@/lib/canvas";
 import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
@@ -118,25 +118,76 @@ const NAV_TYPE_ICONS: Record<string, LucideIcon> = {
   subprocess: Boxes,
 };
 
-// 선행/후행 노드 칩 — 타입 아이콘 + 라벨, 클릭 시 그 노드 편집으로 이동.
-function NavChip({
-  node,
-  onClick,
+// 선후행 노드 참조 — 라벨·타입·색만 싣는 간소 카드용
+interface NavNodeRef {
+  id: string;
+  label: string;
+  nodeType: string;
+  color?: string;
+}
+
+// 선행/후행 사이드 독 — 모달 밖 캔버스 좌우에 세로 정렬로 떠 있는 간소 카드(색 점·라벨·타입).
+// 호버 시 살짝 커지며 모달 쪽으로 들어온다(사용자 요청 2026-09-03). 클릭=그 노드 편집(변경 있으면 확인).
+function NavDock({
+  side,
+  title,
+  nodes,
+  typeLabelOf,
+  onPick,
 }: {
-  node: { id: string; label: string; nodeType: string };
-  onClick: () => void;
+  side: "left" | "right";
+  title: string;
+  nodes: NavNodeRef[];
+  typeLabelOf: (nodeType: string) => string;
+  onPick: (id: string) => void;
 }) {
-  const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
+  if (nodes.length === 0) return null;
+  const Chevron = side === "left" ? ChevronLeft : ChevronRight;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={node.label}
-      className="flex min-w-0 items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
+    <div
+      data-id={`summary-dock-${side === "left" ? "prev" : "next"}`}
+      // 폭은 백드롭 반폭 − 모달 반폭(256) − 가장자리 16 − 간격 8 을 넘지 않게 — 좁은 캔버스에서도 모달과 안 겹친다
+      className={`absolute top-1/2 flex max-h-[72%] w-[min(11rem,calc(50%-17.5rem))] -translate-y-1/2 flex-col gap-1.5 ${
+        side === "left" ? "left-4" : "right-4"
+      }`}
     >
-      <Icon size={11} strokeWidth={1.5} className="shrink-0" />
-      <span className="min-w-0 truncate">{node.label}</span>
-    </button>
+      <div className={`flex items-center gap-1 px-1 text-fine text-ink-tertiary ${side === "right" ? "justify-end" : ""}`}>
+        {side === "left" && <Chevron size={12} strokeWidth={1.5} />}
+        {title}
+        <span className="text-ink-muted">({nodes.length})</span>
+        {side === "right" && <Chevron size={12} strokeWidth={1.5} />}
+      </div>
+      <div className="scrollbar-hidden flex min-h-0 flex-col gap-1.5 overflow-y-auto px-1 py-1">
+        {nodes.map((node) => {
+          const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
+          return (
+            <button
+              key={node.id}
+              type="button"
+              data-id={`summary-dock-card-${node.id}`}
+              title={node.label}
+              onClick={() => onPick(node.id)}
+              // 호버: 5% 확대 + 모달 쪽으로 8px — translate/scale 속성 트랜지션(transform 미사용, Tailwind v4)
+              className={`animate-item-in flex w-full items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[translate,scale,box-shadow,border-color] duration-350 ease-spring hover:scale-105 hover:border-accent-tint-border hover:shadow-lg ${
+                side === "left" ? "hover:translate-x-2" : "hover:-translate-x-2"
+              }`}
+            >
+              <span
+                className="h-3 w-3 shrink-0 rounded-full border border-hairline"
+                style={{ background: node.color || "var(--color-surface-alt)" }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-caption text-ink">{node.label}</span>
+                <span className="flex items-center gap-1 text-fine text-ink-tertiary">
+                  <Icon size={11} strokeWidth={1.5} className="shrink-0" />
+                  <span className="truncate">{typeLabelOf(node.nodeType)}</span>
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -213,8 +264,8 @@ interface NodeSummaryModalProps {
   // 원시 노드 타입 — subprocess 색 UI 숨김 게이트 (typeLabel은 번역 문자열이라 판별 불가)
   nodeType: ProcessNodeType;
   groupLabel: string | null;
-  predecessors: { id: string; label: string; nodeType: string }[];
-  successors: { id: string; label: string; nodeType: string }[];
+  predecessors: NavNodeRef[];
+  successors: NavNodeRef[];
   hasChildren: boolean;
   fullGraph: VersionGraph | null;
   readOnly: boolean;
@@ -341,6 +392,11 @@ export function NodeSummaryModal({
   const { t } = useI18n();
   const isSp = nodeType === "subprocess";
   const labels = buildPopoverActionLabels(t);
+  // 독 카드의 타입 표기 — 캔버스 노드 타입 옵션과 같은 번역 키
+  const typeLabelOf = (type: string): string => {
+    const key = NODE_TYPE_OPTIONS.find((option) => option.value === type)?.labelKey;
+    return key ? t(key) : type;
+  };
   const [comments, setComments] = useState<CommentItem[]>([]);
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   // initialFocus="description" — 열림/노드 전환 시 설명 textarea로 포커스(커서는 끝)
@@ -1307,54 +1363,6 @@ export function NodeSummaryModal({
           </div>
         </div>
 
-        {/* 선행/후행(이전/이후) — 스크롤 바디 밖 고정 밴드. 바디 안에 두면 flex-shrink가
-            내부 스크롤 칩 영역의 min-height를 0까지 뭉개 (모달이 높든 낮든) 통째로 사라진다.
-            shrink-0 밴드로 분리해 항상 보이게. 칩 영역은 자체 max-h+내부 스크롤. 클릭=그 노드 편집(변경 있으면 확인) */}
-        <div className="shrink-0 border-t border-hairline px-4 py-3">
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-hairline">
-            {/* 선행(좌) — 좌측 가장자리 쉐브론(위)+라벨(아래) */}
-            <div className="group/prev flex min-w-0 items-stretch border-r border-hairline">
-              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
-                <ChevronLeft size={14} strokeWidth={1.5} />
-                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/prev:opacity-100">
-                  {t("summary.prev")}
-                </span>
-              </div>
-              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pr-1.5">
-                {predecessors.length ? (
-                  predecessors.map((n) => (
-                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
-                  ))
-                ) : (
-                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
-                    {t("summary.none")}
-                  </span>
-                )}
-              </div>
-            </div>
-            {/* 후행(우) — 우측 가장자리 쉐브론(위)+라벨(아래) */}
-            <div className="group/next flex min-w-0 items-stretch">
-              <div className="scrollbar-hidden flex max-h-[104px] min-h-[26px] min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-1.5 pl-1.5">
-                {successors.length ? (
-                  successors.map((n) => (
-                    <NavChip key={n.id} node={n} onClick={() => requestNavigate(n.id)} />
-                  ))
-                ) : (
-                  <span className="border border-transparent px-1.5 py-0.5 text-fine text-ink-tertiary">
-                    {t("summary.none")}
-                  </span>
-                )}
-              </div>
-              <div className="flex w-12 shrink-0 flex-col items-center justify-between py-1.5 text-ink-tertiary">
-                <ChevronRight size={14} strokeWidth={1.5} />
-                <span className="whitespace-nowrap text-[9px] leading-none opacity-0 transition-opacity group-hover/next:opacity-100">
-                  {t("summary.next")}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* 푸터 — 버퍼 편집: Esc=취소 / ⌘S=저장 힌트 + 취소·저장 버튼. readOnly면 닫기만. */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
           {readOnly ? (
@@ -1457,6 +1465,9 @@ export function NodeSummaryModal({
           </div>
         )}
       </div>
+      {/* 선행/후행 사이드 독 — 모달 카드 밖, 백드롭 좌우(백드롭은 자기 자신을 눌렀을 때만 닫힌다) */}
+      <NavDock side="left" title={t("summary.prev")} nodes={predecessors} typeLabelOf={typeLabelOf} onPick={requestNavigate} />
+      <NavDock side="right" title={t("summary.next")} nodes={successors} typeLabelOf={typeLabelOf} onPick={requestNavigate} />
       {renderPopover()}
     </ModalBackdrop>
   );

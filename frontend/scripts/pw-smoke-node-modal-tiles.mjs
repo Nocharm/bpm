@@ -187,6 +187,31 @@ try {
   const pubGraph = await api(`/versions/${published.id}/graph`);
   const pubNode = pubGraph.nodes.find((n) => n.node_type === "process" && (n.input ?? "") !== "") ?? pubGraph.nodes.find((n) => n.node_type === "process");
   await openNodeModal(page, pubNode.title);
+  // 선후행 사이드 독 — 모달 카드 밖 좌우, 카드 클릭이면 그 노드로 전환
+  const prevCards = await page.locator('[data-id="summary-dock-prev"] [data-id^="summary-dock-card-"]').count();
+  const nextCards = await page.locator('[data-id="summary-dock-next"] [data-id^="summary-dock-card-"]').count();
+  const dockOutside = await page.evaluate(() => {
+    const body = document.querySelector('[data-id="node-summary-body"]');
+    const dock = document.querySelector('[data-id="summary-dock-next"]') ?? document.querySelector('[data-id="summary-dock-prev"]');
+    if (!body || !dock) return false;
+    const b = body.getBoundingClientRect();
+    const d = dock.getBoundingClientRect();
+    return d.right <= b.left + 1 || d.left >= b.right - 1;
+  });
+  check("prev/next docks float outside the modal card", prevCards + nextCards > 0 && dockOutside, `prev=${prevCards} next=${nextCards}`);
+  await page.locator('[data-id^="summary-dock-card-"]').first().hover();
+  await page.waitForTimeout(450);
+  const hoverScale = await page.locator('[data-id^="summary-dock-card-"]').first().evaluate((el) => getComputedStyle(el).scale);
+  check("dock card grows on hover", hoverScale !== "none" && hoverScale !== "1", hoverScale);
+  await shot(page, "readonly-docks");
+  const dockTarget = page.locator('[data-id^="summary-dock-card-"]').first();
+  const dockLabel = (await dockTarget.getAttribute("title")) ?? "";
+  await dockTarget.click();
+  await page.waitForTimeout(400);
+  const headerAfter = await page.locator('[data-id="node-summary-body"]').locator("xpath=..").locator("span.text-body-strong").first().textContent();
+  check("clicking a dock card navigates the modal to that node", (headerAfter ?? "").includes(dockLabel), `${headerAfter} vs ${dockLabel}`);
+  await page.keyboard.press("Escape");
+  await openNodeModal(page, pubNode.title);
   const readTiles = await page.locator('[data-id^="summary-tile-"]:not([data-id*="popover"])').count();
   const staticTag = await page.locator('[data-id="summary-tile-type"]').evaluate((el) => el.tagName);
   check("read-only modal renders static tiles", readTiles >= 2 && staticTag === "DIV", `tiles=${readTiles} type=${staticTag}`);
