@@ -43,9 +43,9 @@ All admin surfaces live under **Settings**. The left rail shows extra categories
 | **Employees** | Settings → Directory | Org directory table — HR-webhook full sync, sysadmin tags, CSV export |
 | **Departments** | Settings → Directory | Org-basis department table, department remap, CSV export |
 | **Local Accounts** | Settings → Directory | ldap auth mode only — local login accounts for external consultants (see section 7) |
-| **Framework** | Settings → Framework | Work-framework category management and JSON import — pilot stage (see section 13) |
+| **Framework** | Settings → Framework | Work-framework category management (Manage / Status views), admin appointment, interview JSON import — pilot stage (see section 13). Delegated category admins get the same screen scoped to their subtree |
 | **Tables** | Settings → Database | Read-only DB browser (incl. login records), server-side CSV export |
-| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync |
+| **Batch jobs** | Settings → Database | Latest run status (success/failure) of DB backups and HR sync, **Backup now** and backup-file download |
 | **Approval Queue** | Settings → Approvals | Cross-map pending requests |
 | **Dashboard** | Settings → Analytics | Operational metrics from the live database — access can be delegated to others (see section 8) |
 | **Groups** | Settings → Groups | Approve group requests, see all groups |
@@ -116,7 +116,7 @@ Group creation is request-based: any user can file a group request, but it only 
 
 Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view.
 
-> Separately, **map renames** and **subprocess registration requests** are decided by the **map owner** — since sysadmins hold owner rights on every map, you can handle those cards for any map from the Inbox (Approvals). For subprocess registration, **saving the designation form is the approval**, and a map with no published version cannot be designated yet.
+> Separately, **map renames** and **subprocess registration requests** are decided by the **map owner** — since sysadmins hold owner rights on every map, you can handle those cards for any map from the Inbox (Approvals). For subprocess registration, **saving the designation form is the approval**, and a map with no published version cannot be designated yet. Framework **confirm requests** (an admin of a higher category asking for an L5 linkage canvas to be confirmed) also reach sysadmins as fallback deciders — approving performs the confirmation on the spot, so a canvas that fails a gate cannot be approved (section 13).
 
 ---
 
@@ -175,6 +175,9 @@ Selecting `notifications` in **Tables** adds a from–to date range and a **Dele
 ### Batch Job Status (Settings → Database → Batch jobs)
 
 Shows the latest attempts of the **DB backup** and the **HR (people) sync**, per job — the last **success** and the last **failure** each keep their time and summary, so you can tell at a glance in the morning whether the overnight batches ran clean. A failure row newer than the last success is your signal to act.
+
+- **Backup now (on demand)** — the **Backup now** button on the DB backup card makes a backup outside the daily schedule. In production (postgres) the backend drops a request file that the sidecar picks up within seconds to run `pg_dump`, so after the "Backup requested" notice, re-check the list a moment later; local sqlite copies immediately.
+- **Backup files and download** — the same card lists the backup files in `${BACKUP_DIR}`, and each can be **downloaded** for an off-server copy (sysadmin only).
 
 ### Daily Automatic DB Backup (production server)
 
@@ -275,12 +278,43 @@ A library of **organization documents the AI consultant can cite during intervie
 
 > The work framework is still at a **pilot stage** — its screens and data may change.
 
-**Settings → Framework → Categories & import** (sysadmin only) manages the work-framework category tree.
+**Settings → Framework** manages the work-framework category tree. The toggle at the top switches between the **Manage** view (tree, admins, import) and the **Status** view (linkage-canvas confirmation board). A sysadmin sees the whole tree; a **user delegated as a category admin** gets the same screen in Settings, scoped to **their own subtree**.
 
-- **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted. **Maps can be assigned only to leaf categories (L5).**
-- **Linkage admins** — the admins button on a category row appoints the **linkage-canvas editors** (users/groups). The grant **inherits downward** — appointing at a higher level (L1–L4) covers every L5 canvas underneath. Only a sysadmin can appoint admins, and category CRUD/import stays sysadmin-only.
-- **Linkage-canvas governance** — an L5's linkage canvas exists as a real map (`mode=framework`) but never appears in the regular map list or the subprocess library. Renaming a category renames its canvas map along with it, and **a category (subtree) that has a canvas cannot be deleted until the canvas is cleaned up** (409). A category admin's major confirmation permanently prunes the previous major's minor snapshots — the confirm dialog previews what goes.
-- **Interview import** — upload the consultant-delivered L5 interview result JSON files (multiple files at once), check the per-file validation report (errors / warnings / unknown-key paths) and the impact (created / updated / unchanged / notes) with **Dry run**, then **Apply**. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe. Per-task exception rules and VOC land in each map's **Notes** section (map detail card and editor inspector). Interview fields land as real fields — an activity's input/output/data form/system go to node fields, and start/end conditions, total time (min), touch time (min), and systems go to map fields, while the free-text originals (GMP, frequency, time wording) are kept as **fallbacks** shown behind the speech-bubble icon next to each field. Classify GMP (GMP Direct / Indirect / Non-GMP) and settle conditions/times in **Map Settings → Details → Conditions & GMP**; the GMP you select survives redeliveries. Open items and per-task notes are also preserved as notes.
+### Category management and level delegation
+
+- **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted. **Maps can be assigned only to leaf categories (L5).** Renaming a category renames its linkage-canvas map along with it, and **a category (subtree) that has a canvas cannot be deleted until the canvas is cleaned up** (409).
+- **Delegation scope** — a category admin can add children, rename, and reorder inside their own category (including categories created by the import). **Move and delete** are refused on import-created categories and the new parent must stay inside their scope. **Appointing admins** is allowed only on levels below their own. **Admins appointed on an L5 only** can edit and confirm the canvas but every structural change is refused. **Creating top-level categories and running the interview import stay sysadmin-only.**
+
+### Linkage admins
+
+- The admins button on a category row appoints the **linkage-canvas editors** (users/groups). In the dialog, additions and removals are **buffered and saved with one Confirm click**; Cancel, `Esc`, or clicking outside discards them.
+- The grant **inherits downward** — appointing at a higher level (L1–L4) covers every L5 canvas underneath ("Admins granted here also manage every category below it").
+- Tree rows show the admins **directly appointed** on that category inline next to the code (up to two, the rest behind a **+N** hover tooltip). Names use the language-based "primary (secondary)" dual display.
+
+### Confirmation governance
+
+- A linkage canvas exists as a real map (`mode=framework`) but never appears in the regular map list or the subprocess library. Confirmed snapshots carry the **confirmed** status, separate from publishing, and cannot be deleted; neither can the live draft. Regular map workflows — submit, publish, approvers, collaborators, rename requests, subprocess registration — are **blocked on the server** for canvases.
+- **Six confirm gates** — all linked L6 placed · no placeholders · no stale links · all linked L6 published · no exit-less loops · branches use decision nodes (exempt when every outgoing edge is a parallel fan-out). The **Confirm readiness** checklist on the editor's Approval tab is the single source, and the confirm button stays disabled while any gate fails.
+- **Who confirms** — only the draft's checkout holder confirms directly, and only when they are a **direct admin of that L5** or a sysadmin. Admins of a higher category send a **confirm request** (their checkout is released automatically on send); recipients are the direct L5 admins plus sysadmins (fallback deciders). A direct admin or sysadmin who tries to request is told to confirm directly (409). The requester can withdraw until it is decided (the checkout does not come back), and the outcome goes out as a confirm approved/rejected notification.
+- **Draft visibility** — the live draft before confirmation is visible only to admins of that category or a parent and to sysadmins. Everyone else lands on the latest confirmed snapshot, with an empty-state notice when none exists.
+- A category admin's **major confirmation** permanently prunes the previous major's minor snapshots — the confirm dialog previews what goes.
+
+### Status board
+
+The **Status** view lists every L5 in scope in one table — **Path / Latest confirmed / Status** (Ready · Blocked · No canvas) with an **Open** button. Blocked canvases carry their failing gates as negative pills (Missing L6 · Placeholders · Stale links · Unpublished L6 · Exit-less loop · Direct fan-out). The **category summary card** in the home Framework view shows the same verdicts under "Subtree confirmation".
+
+### Interview import
+
+Upload the consultant-delivered L5 interview result JSON files (multiple files at once), validate with **Dry run**, then **Apply** (sysadmin only).
+
+- **Format** — only interview JSON **0.4** (with the `relations` flow graph) is accepted. 0.3 files are rejected because their flow would collapse into a straight line. Files with errors are skipped as a whole while the rest proceed, and the import is idempotent — re-running the same files is safe.
+- **Dry-run report** — folded as **file → L5 linkage canvas → map**, with the first column showing names people know (L6 labels, category paths). Repeated warnings collapse into a **Needs attention** digest at the top (one line per kind with affected maps and counts), and messages are bilingual (English + Korean). Raw keys such as taskId and unitId show only behind the # icon tooltip.
+- **Governance changes (re-import)** — when an existing map's **owner · owning department · approvers · imported notes** differ from the delivery, they are listed as rows in the "Governance changes" section. **Only checked rows are replaced on apply**; the rest keep their current value. Owner, department, and approvers are checked by default; imported notes are checked by default only on maps where no imported note has been hand-edited (notes people wrote themselves are never touched). Apply from the sticky bar at the bottom of the report ("N maps · M governance changes checked").
+- **Owner assignment** — when the delivery's owner is empty or not in the directory, the importing sysadmin holds the owner seat temporarily and the card shows an **Owner unconfirmed** pill. Hand it over with Map Settings → Danger Zone → **Transfer Ownership**; the pill clears, and later deliveries only propose the owner as a governance row instead of overwriting it.
+- **Department path resolution** — the delivery's `department` (a slash path from the root) is matched to the org department tree in four steps: exact match → match with leading levels dropped → unique suffix match → department mirror chain alignment. When none matches, the **delivered path is registered as is** as the owning department and appears under that name in the home department tree — remap it on Settings → Directory → Departments.
+- **Landing rules** — activities (L7) become nodes (input/output/data form/system/link) and flow edges (seq/branch/loop/bypass) become connectors. A branch promotes its source node to a decision, and a loop back to the same node synthesizes a branch node titled **"반복 여부(자동 생성됨)"** (fixed Korean title: "repeat? - auto-generated"). Start/end conditions, total time, touch time, and system land as map fields, with their originals kept as **Interview notes** (editor Map tab, home detail card). **Annual volume and FTE** land both as the map's subprocess designation reference values and as the L5 canvas node values. Outputs and inputs that match exactly are auto-linked as IO links, nodes are auto-laid-out horizontally, and an editable draft is created right after publishing (an untouched draft is reused by the next delivery).
+- **L5 linkage canvas** — created or augmented from the flow between top-level L6s (decision nodes inserted for branches, loops laid out as return edges). Re-deliveries **only add** nodes and never move them, and skip the canvas while someone else holds its checkout.
+- **Notes and GMP** — per-task exception rules, VOC, rule basis, and open issues land as map notes; the L5's entry, flow, open-issue, and task notes land as category notes (linkage-canvas Map tab). Classify GMP (GMP Direct / Indirect / Non-GMP) and settle conditions/times in **Map Settings → Details → Conditions & GMP**; the GMP you select survives redeliveries.
 
 ---
 
@@ -313,4 +347,4 @@ A library of **organization documents the AI consultant can cite during intervie
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-08-30*
+*Business Process Map — Administrator Manual · updated 2026-09-03*
