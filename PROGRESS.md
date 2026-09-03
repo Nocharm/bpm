@@ -8,7 +8,8 @@
 - **지정 모달 시작·종료 조건 타일** 누락 보완 — `SubprocessDesignationIn.start_condition/end_condition`(None=미변경, 승격 필드 PATCH와 같은 `sp_*` 컬럼)·`DesignationForm` 5개 빌더·Subprocess 탭 읽기 타일.
 - **펼친 채 열면 섹션이 잘리던 문제**: 원인은 `AutoHeight`가 `getBoundingClientRect`로 재는데 모달 팝인(scale 0.92→1) 중이라 줄어든 값이 고정된 것 — RO `borderBoxSize`/`offsetHeight`(레이아웃 높이)로 교체. **타일 오버플로우**: 읽기 타일에 ref가 없어 라벨 생략 판정이 안 돌던 것 교정 + 루트 `overflow-hidden`, 조건 타일 값은 `valueSize="fine"`. **메모 점**은 호버 시 25%로 흐려짐(아이콘 교체 가시성).
 - **독 카드 레이아웃**(사용자 결정): 1행 색 점+라벨, 2행 타입 단독(점이 두 줄을 걸치던 좌측 열 폐기). **섹션 헤더 높이 통일**: 세 섹션 헤더 행을 `h-5`로 고정하고 '모두 펼치기' 버튼의 호버 패딩은 음수 마진(-my-1)으로 흡수 — 전부 접었을 때 첫 헤더만 살짝 높던 것 교정(노드 모달·지정 모달, 실측 20/20/20px).
-- 검증: pytest 1347·vitest 850·`pw-smoke-node-modal-tiles.mjs` 63/63(담당자 필→인물 카드, 조건 타일 저장, 잘림 회귀, 점 페이드).
+- **인터뷰 임포트 드라이런 카드**(사용자 요청): 결과 본문(요약·다이제스트·파일 리포트·거버넌스 확인)과 하단 [Cancel][Apply] 바를 한 테두리(`rounded-md border`) 안에 — 바는 카드 푸터로 스크롤 중 하단 고정 유지. **적용 완료 후** 본문에 반투명 음영(`interview-import-applied-overlay`)을 덮고 푸터 문구를 "적용 완료"로 바꿔 두 번 누르지 못하게(Apply 비활성은 기존, Cancel로 닫기).
+- 검증: pytest 1347·vitest 850·`pw-smoke-node-modal-tiles.mjs` 63/63(담당자 필→인물 카드, 조건 타일 저장, 잘림 회귀, 점 페이드)·`pw-smoke-interview-import.mjs` 23/25(카드·음영·Cancel 도달 검사 추가, 거버넌스 체크 수는 전후 +1로 교정; 남은 2건은 노트 행 수 6 기대 vs 실제 18 — 노트 CRUD 이후 stale 기대값, 이번 변경과 무관·후속).
 
 ## 2026-09-03 — 노드 레벨 data_form 폐기 + 메모 아이콘 호버 효과 3라운드 (dev)
 - **`nodes.data_form` 폐기**(사용자 결정 — 운영 미사용 컬럼): 자료 형식은 IO 항목별 `output_forms`/`input_forms`만. 인터뷰 임포트의 `dataForm`은 산출물이 항상 하나라 **유일한 산출물의 폼(`output_forms`)으로 착지**(`CanonicalNode.output_forms`, 배열로 바뀌면 줄 정렬로 확장). 모델·NodeIn·AI 속성 스키마·graph upsert·clone·확정 시그니처·AI 프롬프트·인터뷰 에이전트 프롬프트·FE 타입/에디터/편집 모달 타일/인스펙터 폴백 행/diff/비교/CSV(21열→20열, 예전 파일의 Data_Form 열은 무시)/템플릿/i18n에서 제거. 물리 컬럼은 `db._drop_legacy_node_data_form`(기동 비치명 스텝)으로 드랍 — 롤백은 이 커밋 이후 버전 사이에서만 안전.

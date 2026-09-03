@@ -110,15 +110,34 @@ try {
   check("owner diff shows delivered login", ((await ownerRow.textContent()) ?? "").includes(String(govOwner)));
   await page.locator('[data-id="interview-import-actions"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-unchecked.png") });
+  // 노트 교체는 기본 체크(사람이 고친 노트가 없을 때, 9f8bcfea) — 절대값 대신 체크 전후 +1로 판정
+  const countChecked = async () =>
+    Number((((await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "").match(/(\d+) governance/) ?? [])[1] ?? -1);
+  const checkedBefore = await countChecked();
   await page.locator(`[data-id="import-governance-check-${govCode}-owner"]`).check();
+  const checkedAfter = await countChecked();
   const barText = (await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "";
-  check("apply bar counts the checked change", barText.includes("1 governance"), barText.trim());
+  check("apply bar counts the checked change", checkedBefore >= 0 && checkedAfter === checkedBefore + 1, barText.trim());
+  // 드라이런 결과와 적용 바가 한 테두리 카드 안 (사용자 요청 2026-09-03)
+  const barInsideCard = await page.locator('[data-id="interview-import-report"] [data-id="interview-import-actions"]').count();
+  check("apply bar sits inside the bordered report card", barInsideCard === 1);
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-checked.png") });
   await page.locator('[data-id="interview-import-apply"]').click();
   await page.waitForSelector(`[data-id="import-governance-result-${govCode}-owner"]`, { timeout: 20000 });
   const appliedText = (await page.locator(`[data-id="import-governance-result-${govCode}-owner"]`).textContent()) ?? "";
   check("checked owner decision applied", appliedText.includes("Applied"), appliedText.trim());
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-applied.png") });
+  // 적용 완료 음영 — 본문을 덮고 Apply는 비활성, 푸터(Cancel)는 음영 위라 눌린다 (사용자 요청 2026-09-03)
+  const appliedState = await page.evaluate(() => {
+    const overlay = document.querySelector('[data-id="interview-import-applied-overlay"]');
+    const apply = document.querySelector('[data-id="interview-import-apply"]');
+    const cancel = document.querySelector('[data-id="interview-import-cancel"]');
+    if (!overlay || !apply || !cancel) return { overlay: !!overlay, applyDisabled: false, cancelHit: false };
+    const r = cancel.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { overlay: true, applyDisabled: apply.disabled, cancelHit: hit === cancel || cancel.contains(hit) };
+  });
+  check("applied report is shaded, Apply disabled, Cancel still reachable", appliedState.overlay && appliedState.applyDisabled && appliedState.cancelHit, JSON.stringify(appliedState));
   await page.locator('[data-id="interview-import-dryrun"]').click();
   // 새 dry-run 결과(applied=false)가 오면 Apply가 다시 활성 — 직전 apply 결과 화면과 구분하는 신호
   await page.waitForSelector('[data-id="interview-import-apply"]:not([disabled])', { timeout: 15000 });

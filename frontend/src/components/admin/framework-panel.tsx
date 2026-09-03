@@ -13,6 +13,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleCheck,
   FolderPlus,
   FolderTree,
   Hash,
@@ -910,7 +911,17 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         </div>
 
         {interviewResult && interviewView && (
-          <div className="flex flex-col gap-2" data-id="interview-import-report">
+          // 드라이런 결과와 적용 바를 한 테두리 안에 — 결과 본문은 안쪽 패딩, 적용 바는 카드 푸터(스크롤 중 하단 고정)
+          // (사용자 요청 2026-09-03)
+          <div className="rounded-md border border-hairline" data-id="interview-import-report">
+          <div className="relative flex flex-col gap-2 p-3">
+            {/* 적용 완료 음영 — 본문을 덮어 두 번 누르지 않게(푸터의 Cancel로 닫기, 사용자 요청 2026-09-03) */}
+            {interviewResult.applied && (
+              <div
+                data-id="interview-import-applied-overlay"
+                className="absolute inset-0 z-[2] rounded-t-md bg-surface/70 backdrop-blur-[1px]"
+              />
+            )}
             {renderImportSummary(interviewResult)}
             {renderDigest(interviewView.digest)}
             <ul className="flex flex-col gap-1" data-id="interview-import-file-reports">
@@ -1064,20 +1075,32 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               onToggleAll={toggleAllGovernance}
               applied={interviewResult.applied}
             />
+          </div>
             <div
               data-id="interview-import-actions"
-              className="sticky bottom-0 z-[1] flex items-center gap-2 border-t border-hairline bg-surface py-2"
+              // z-[3] — 적용 완료 음영(z-2)보다 위: 스크롤 중 본문과 겹쳐도 Cancel은 눌린다
+              className="sticky bottom-0 z-[3] flex items-center gap-2 rounded-b-md border-t border-hairline bg-surface px-3 py-2"
             >
-              <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
-                {t("framework.importApplyBar", {
-                  // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
-                  maps:
-                    (interviewResult.summary.created ?? 0) +
-                    (interviewResult.summary.updated ?? 0) +
-                    (interviewResult.summary.unchanged ?? 0),
-                  changes: governanceChecked.size,
-                })}
-              </span>
+              {interviewResult.applied ? (
+                <span
+                  data-id="interview-import-applied"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-fine text-accent"
+                >
+                  <CircleCheck size={14} strokeWidth={1.5} className="shrink-0" />
+                  <span className="min-w-0 truncate">{t("framework.importAppliedOverlay")}</span>
+                </span>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
+                  {t("framework.importApplyBar", {
+                    // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
+                    maps:
+                      (interviewResult.summary.created ?? 0) +
+                      (interviewResult.summary.updated ?? 0) +
+                      (interviewResult.summary.unchanged ?? 0),
+                    changes: governanceChecked.size,
+                  })}
+                </span>
+              )}
               <button
                 type="button"
                 data-id="interview-import-cancel"
