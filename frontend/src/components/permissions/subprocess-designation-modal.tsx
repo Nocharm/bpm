@@ -1,9 +1,10 @@
 "use client";
 
-// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용) + 필드 타일(2열) → 클릭 위치 입력 팝오버.
+// 서브프로세스 지정/수정 모달 — 부서(필수)·담당자는 행 타일, 나머지는 필드 타일(2열) → 클릭 위치 입력 팝오버.
 // 폭은 max-w-lg(512px) — 더 넓히면 시선 이동이 좌우로 길어진다(사용자 피드백 2026-09-03, 672px 폐기).
-// 타일: 시스템·URL, 파라미터 7종(회당 5 + 참고치 2), Input/Output(항목 수). 팝오버 안에 안내·Σ·인터뷰 원문 메모.
-// 설정 화면 패널과 에디터 인스펙터 카드·받은함이 공용으로 사용한다 (design 2026-09-03 followups §5).
+// 타일: 시스템·URL, 파라미터(회당 4 — 비용은 단위 탭이 있는 한 타일 — + 참고치 2), Input/Output(항목 수).
+// 팝오버 안에 안내·Σ·인터뷰 원문 메모. 설정 화면 패널과 에디터 인스펙터 카드·받은함이 공용으로 사용한다
+// (design 2026-09-03 followups §5, 비용 단일 타일·부서/담당자 행 타일은 사용자 결정 2026-09-03).
 
 import {
   ChevronRight,
@@ -23,19 +24,20 @@ import { createPortal } from "react-dom";
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { AutoHeight } from "@/components/auto-height";
-import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-value-input";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
+import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
+import { buildPopoverActionLabels } from "@/components/popover-action-bar";
+import { CostUnitTabs, CurrencyPill, type CostUnit } from "@/components/cost-unit";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { assignSpIoIds } from "@/lib/io-items";
 import {
-  isCostFieldDisabled,
   PARAM_LABEL_KEY,
   readAttrsCollapsed,
   readDetailsCollapsed,
@@ -92,8 +94,12 @@ interface SubprocessDesignationModalProps {
   onClose: () => void;
 }
 
-type ParamTile = SpParamField | SpContextField;
+// 비용은 ₩/$ 두 필드를 한 타일로 접는다 — 팝오버 앞 단위 탭으로 고르고 다른 통화는 저장 시 비운다
+type ParamTile = Exclude<SpParamField, CostUnit> | "cost" | SpContextField;
 type TileField = ParamTile | "system" | "url" | "input" | "output";
+
+// 타일 순서 — 회당 4(비용 단일) + 참고치 2
+const PARAM_TILES: readonly ParamTile[] = ["duration", "touch_time", "cost", "headcount", ...SP_CONTEXT_FIELDS];
 
 // 파라미터 타일의 원문 메모 키 — 없는 필드는 메모 칸을 그리지 않는다
 const NOTE_KEY: Partial<Record<TileField, "total_time_fallback" | "touch_time_fallback" | "system_fallback" | "frequency_fallback">> = {
@@ -106,8 +112,7 @@ const NOTE_KEY: Partial<Record<TileField, "total_time_fallback" | "touch_time_fa
 const HINT_KEY: Record<TileField, MessageKey> = {
   duration: "sp.tile.hint.duration",
   touch_time: "sp.tile.hint.touch_time",
-  cost_krw: "sp.tile.hint.cost_krw",
-  cost_usd: "sp.tile.hint.cost_usd",
+  cost: "sp.tile.hint.cost",
   headcount: "sp.tile.hint.headcount",
   annual_count: "sp.tile.hint.annual_count",
   fte: "sp.tile.hint.fte",
@@ -124,12 +129,17 @@ interface ActiveTile {
   value: string;
   note: string;
   extra: string; // url 라벨 / IO 폼 join
+  unit: CostUnit; // 비용 타일의 통화 탭
 }
 
 const INPUT_CLASS =
   "w-full rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
 
 const countLines = (joined: string): number => joined.split("\n").filter((line) => line.trim() !== "").length;
+
+// 저장된 비용의 통화 — 둘 다 비면 ₩ 기본
+const costUnitOf = (form: { cost_krw: string; cost_usd: string }): CostUnit =>
+  form.cost_usd !== "" ? "cost_usd" : "cost_krw";
 
 export function SubprocessDesignationModal({
   mapId,
@@ -169,6 +179,7 @@ export function SubprocessDesignationModal({
   const graphRef = useRef<Graph | null>(null);
   // Σ 미리보기(5종) 원시값 — 팝오버 안내 줄에 표시
   const [previews, setPreviews] = useState<Partial<Record<SpParamField, string>>>({});
+  const labels = buildPopoverActionLabels(t);
 
   useEffect(() => {
     if (publishedVersionId === null) return;
@@ -190,24 +201,21 @@ export function SubprocessDesignationModal({
   }, [publishedVersionId, t]);
 
   const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
-  const isSumField = (field: TileField): field is SpParamField => (SP_PARAM_FIELDS as readonly string[]).includes(field);
-  const isParamTile = (field: TileField): field is ParamTile =>
-    isSumField(field) || (SP_CONTEXT_FIELDS as readonly string[]).includes(field);
+  const isParamTile = (field: TileField): field is ParamTile => (PARAM_TILES as readonly string[]).includes(field);
+  // Σ 대상 — 회당 지표(참고치 2종 제외). 비용은 현재 단위 필드로 합산
+  const sumFieldOf = (tile: ActiveTile): SpParamField | null => {
+    if (tile.field === "cost") return tile.unit;
+    return (SP_PARAM_FIELDS as readonly string[]).includes(tile.field) ? (tile.field as SpParamField) : null;
+  };
 
   // ── 타일 표시값 ────────────────────────────────────────────────────────────
-  const costText = (raw: string, symbol: string): string => {
-    const n = formatThousands(raw);
-    return n ? `${symbol}${n}` : "";
-  };
   const tileValue = (field: TileField): string => {
     switch (field) {
       case "duration":
       case "touch_time":
         return formatDurationHm(form[field]);
-      case "cost_krw":
-        return costText(form.cost_krw, "₩");
-      case "cost_usd":
-        return costText(form.cost_usd, "$");
+      case "cost":
+        return formatThousands(form[costUnitOf(form)]);
       case "headcount":
       case "annual_count":
       case "fte":
@@ -223,12 +231,14 @@ export function SubprocessDesignationModal({
     }
   };
   const tileLabel = (field: TileField): string => {
+    if (field === "cost") return t("field.costRun");
     if (isParamTile(field)) return t(PARAM_LABEL_KEY[field]);
     if (field === "system") return t("field.system");
     if (field === "url") return t("field.url");
     return field === "input" ? t("sp.input") : t("sp.output");
   };
   const tileIcon = (field: TileField) => {
+    if (field === "cost") return PARAM_ICON[costUnitOf(form)];
     if (isParamTile(field)) return PARAM_ICON[field];
     if (field === "system") return Monitor;
     if (field === "url") return LinkIcon;
@@ -237,12 +247,14 @@ export function SubprocessDesignationModal({
 
   // ── 팝오버 열기/확정/취소 ──────────────────────────────────────────────────
   // 폼의 현재 확정값을 팝오버 초안 형태로 — 열 때 초기값, 열린 뒤엔 dirty 판정 기준
-  function readTileDraft(field: TileField): Pick<ActiveTile, "value" | "note" | "extra"> {
+  function readTileDraft(field: TileField): Pick<ActiveTile, "value" | "note" | "extra" | "unit"> {
     const noteKey = NOTE_KEY[field];
+    const unit = costUnitOf(form);
     return {
-      value: field === "url" ? form.url : form[field],
+      value: field === "url" ? form.url : field === "cost" ? form[unit] : form[field],
       note: noteKey ? form[noteKey] : "",
       extra: field === "url" ? form.urlLabel : field === "input" ? form.input_forms : field === "output" ? form.output_forms : "",
+      unit,
     };
   }
 
@@ -253,13 +265,18 @@ export function SubprocessDesignationModal({
   const tileDirty = (() => {
     if (!active) return false;
     const base = readTileDraft(active.field);
-    return active.value !== base.value || active.note.trim() !== base.note.trim() || active.extra !== base.extra;
+    return (
+      active.value !== base.value ||
+      active.note.trim() !== base.note.trim() ||
+      active.extra !== base.extra ||
+      (active.field === "cost" && active.unit !== base.unit)
+    );
   })();
 
   // 초안 → 폼 반영(팝오버는 열어둠) — 메뉴 "Save"
   function applyTile() {
     if (!active) return;
-    const { field, value, note, extra } = active;
+    const { field, value, note, extra, unit } = active;
     const noteKey = NOTE_KEY[field];
     setForm((prev) => {
       const next: DesignationForm = { ...prev };
@@ -272,6 +289,10 @@ export function SubprocessDesignationModal({
       } else if (field === "output") {
         next.output = value;
         next.output_forms = extra;
+      } else if (field === "cost") {
+        // 통화 배타 — 고른 단위에만 값, 다른 통화는 비운다
+        next.cost_krw = unit === "cost_krw" ? value : "";
+        next.cost_usd = unit === "cost_usd" ? value : "";
       } else {
         next[field] = value;
       }
@@ -293,7 +314,7 @@ export function SubprocessDesignationModal({
     try {
       if (graphRef.current === null) graphRef.current = await getGraph(publishedVersionId);
       const total = sumParamField(graphRef.current, field);
-      setActive((prev) => (prev && prev.field === field ? { ...prev, value: total } : prev));
+      setActive((prev) => (prev ? { ...prev, value: total } : prev));
     } catch (err) {
       setError(humanizeApiError(err, t));
     } finally {
@@ -344,26 +365,21 @@ export function SubprocessDesignationModal({
     const { field } = active;
     const noteKey = NOTE_KEY[field];
     const isIo = field === "input" || field === "output";
-    const preview = isSumField(field) ? formatSumPreview(field, previews[field] ?? "") : undefined;
-    const costLocked = isParamTile(field) && isCostFieldDisabled(field, form.cost_krw, form.cost_usd);
+    const sumField = sumFieldOf(active);
+    const preview = sumField ? formatSumPreview(sumField, previews[sumField] ?? "") : undefined;
+    // 입력 필드 — 비용은 고른 단위 필드로 포맷·정규화
+    const inputField = field === "cost" ? active.unit : isParamTile(field) ? field : null;
     return (
       <SpFieldPopover
         dataId={`sp-tile-popover-${field}`}
         anchor={active.at}
         title={tileLabel(field)}
-        hint={costLocked ? t("sp.tile.costExclusive") : t(HINT_KEY[field])}
+        hint={field === "cost" ? t("sp.tile.costUnitHint") : t(HINT_KEY[field])}
         width={isIo ? 420 : 320}
         enterCommits={!isIo}
         dirty={tileDirty}
         onApply={applyTile}
-        labels={{
-          apply: t("sp.tile.apply"),
-          cancel: t("common.cancel"),
-          save: t("sp.tile.save"),
-          saveClose: t("sp.tile.saveClose"),
-          closeNoSave: t("sp.tile.closeNoSave"),
-          saved: t("sp.tile.saved"),
-        }}
+        labels={labels}
         footerStart={
           isIo ? (
             <button
@@ -380,34 +396,41 @@ export function SubprocessDesignationModal({
         onCommit={commitTile}
         onCancel={() => setActive(null)}
       >
-        {isParamTile(field) && (
+        {inputField && (
           <div className="flex items-center gap-1.5">
+            {field === "cost" && (
+              <CostUnitTabs
+                dataId="sp-tile-cost-unit"
+                value={active.unit}
+                onChange={(unit) => setActive((prev) => (prev ? { ...prev, unit } : prev))}
+              />
+            )}
             <ParamInput
-              field={field}
+              key={inputField}
+              field={inputField}
               dataId={`sp-tile-input-${field}`}
-              className={`${INPUT_CLASS} text-right disabled:opacity-40`}
+              className={`${INPUT_CLASS} text-right`}
               value={active.value}
-              disabled={costLocked}
               ariaLabel={tileLabel(field)}
               placeholder={preview}
               onCommit={(next) => setActive((prev) => (prev ? { ...prev, value: next } : prev))}
             />
-            {isSumField(field) && (
+            {sumField && (
               <button
                 type="button"
                 data-id={`sp-tile-sum-${field}`}
                 title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
                 aria-label={t("sp.sumAllNodes")}
-                disabled={publishedVersionId === null || summing || costLocked}
+                disabled={publishedVersionId === null || summing}
                 className="shrink-0 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => void handleSum(field)}
+                onClick={() => void handleSum(sumField)}
               >
                 <Sigma size={14} strokeWidth={1.5} />
               </button>
             )}
           </div>
         )}
-        {isSumField(field) && preview && (
+        {sumField && preview && (
           <p className="text-fine text-ink-tertiary">{t("sp.tile.sumPreview", { v: preview })}</p>
         )}
         {field === "system" && (
@@ -477,22 +500,19 @@ export function SubprocessDesignationModal({
     );
   };
 
-  const renderTile = (field: TileField) => {
-    const costLocked = isParamTile(field) && isCostFieldDisabled(field, form.cost_krw, form.cost_usd);
-    return (
-      <SpFieldTile
-        key={field}
-        dataId={`sp-tile-${field}`}
-        icon={tileIcon(field)}
-        label={tileLabel(field)}
-        value={tileValue(field)}
-        disabled={costLocked}
-        disabledHint={t("sp.tile.costExclusive")}
-        active={active?.field === field}
-        onOpen={(at) => openTile(field, at)}
-      />
-    );
-  };
+  const renderTile = (field: TileField) => (
+    <SpFieldTile
+      key={field}
+      dataId={`sp-tile-${field}`}
+      icon={tileIcon(field)}
+      label={tileLabel(field)}
+      value={tileValue(field)}
+      // 비용 타일 — 선택한 단위를 필로(값 있을 때만)
+      valueNode={field === "cost" && tileValue("cost") !== "" ? <CurrencyPill unit={costUnitOf(form)} /> : undefined}
+      active={active?.field === field}
+      onOpen={(at) => openTile(field, at)}
+    />
+  );
 
   const sectionButton = (
     dataId: string,
@@ -546,7 +566,7 @@ export function SubprocessDesignationModal({
         <p className="shrink-0 text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
         {/* 본문 스크롤 — 작은 창에서 위아래 넘침 방지(다른 모달과 동일, 사용자 결정 2026-08-20) */}
         <div className="scroll-soft -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
-          {/* BPM attributes — 부서·담당자 피커 행 + 시스템·URL 타일 */}
+          {/* BPM attributes — 부서·담당자 행 타일 + 시스템·URL 타일 */}
           <div className="py-1" data-id="sp-designation-attrs">
             <div className="flex items-center gap-1">
               {sectionButton(
@@ -577,14 +597,15 @@ export function SubprocessDesignationModal({
             <AutoHeight className="overflow-hidden">
               {!attrsCollapsed && (
                 <div className="ml-2 flex flex-col gap-2 border-l border-divider pl-2">
-                  <BpmAttributePicker
-                    versionId={publishedVersionId}
-                    assignee={form.assignee}
-                    department={form.department}
-                    readOnly={false}
-                    onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                  />
-                  <div className="grid grid-cols-2 gap-1.5" data-id="sp-designation-attr-tiles">
+                  <div className="grid grid-cols-2 gap-1.5 py-1" data-id="sp-designation-attr-tiles">
+                    <DeptAssigneeTiles
+                      versionId={publishedVersionId}
+                      department={form.department}
+                      assignee={form.assignee}
+                      dataIdPrefix="sp-tile"
+                      labels={labels}
+                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    />
                     {(["system", "url"] as const).map(renderTile)}
                   </div>
                   {urlInvalid && <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>}
@@ -592,7 +613,7 @@ export function SubprocessDesignationModal({
               )}
             </AutoHeight>
           </div>
-          {/* Metrics — 회당 5종(Σ) + 참고치 2종 타일 */}
+          {/* Metrics — 회당 4종(Σ, 비용은 단위 탭 한 타일) + 참고치 2종 타일 */}
           <div className="py-1" data-id="sp-designation-params">
             {sectionButton(
               "sp-designation-params-toggle",
@@ -609,7 +630,7 @@ export function SubprocessDesignationModal({
               {!paramsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
                   <div className="grid grid-cols-2 gap-1.5 py-1" data-id="sp-designation-param-tiles">
-                    {[...SP_PARAM_FIELDS, ...SP_CONTEXT_FIELDS].map(renderTile)}
+                    {PARAM_TILES.map(renderTile)}
                   </div>
                 </div>
               )}

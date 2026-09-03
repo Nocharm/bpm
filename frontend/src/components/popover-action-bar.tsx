@@ -2,7 +2,8 @@
 
 // 소형 입력 팝오버 공용 푸터 — kbd 키 안내 + 상태형 주 버튼(변경 없음 Cancel / 변경 있음 Save /
 // 메뉴 "Save"로 열어둔 채 적용 뒤 Saved) + 셰브론 메뉴(Save · Save and close · Close without saving).
-// SP 타일 팝오버·인터뷰 원문 메모 팝오버·노트 폼이 공유한다 (사용자 결정 2026-09-03: 소형 입력 팝오버만).
+// 셰브론은 변경이 있을 때만 붙고(취소 상태는 버튼 하나), 상태 전환은 폭·색 트랜지션 + 라벨 페이드로
+// 잇는다 (사용자 결정 2026-09-03). SP 타일 팝오버·인터뷰 원문 메모 팝오버·노트 폼이 공유한다.
 
 import { ChevronDown } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
@@ -32,7 +33,7 @@ interface PopoverActionBarProps {
 
 // 앱 공통 키 칩 표기(node-summary-modal·editor-left-sidebar와 동일 클래스)
 const KBD = "rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary";
-const MENU_ITEM = "block w-full whitespace-nowrap rounded-sm px-2 py-1 text-left text-caption text-ink hover:bg-surface-alt";
+const MENU_ITEM = "block w-full whitespace-nowrap rounded-sm px-2 py-1 text-left text-fine text-ink hover:bg-surface-alt";
 
 export function PopoverActionBar({
   dataId, dirty, onApply, onCommit, onCancel, enterKind = "enter", labels, footerStart,
@@ -42,6 +43,8 @@ export function PopoverActionBar({
   // "Save"(열어둔 채 적용) 직후 확인 표시 — 다시 고치면 dirty가 돼 자연히 풀린다
   const [savedFlash, setSavedFlash] = useState(false);
   if (dirty && savedFlash) setSavedFlash(false);
+  // 변경이 사라지면(적용·되돌림) 메뉴도 함께 접는다 — 셰브론이 없는 상태에 메뉴만 남지 않게
+  if (!dirty && menuOpen) setMenuOpen(false);
 
   const primaryLabel = dirty ? labels.save : savedFlash ? labels.saved : labels.cancel;
 
@@ -73,34 +76,39 @@ export function PopoverActionBar({
           {labels.cancel}
         </span>
       </span>
-      {/* 주 버튼(상태형) + 셰브론 메뉴 — 한 덩어리 스플릿 버튼 */}
+      {/* 주 버튼(상태형) + 셰브론 — 변경이 있을 때만 셰브론이 폭 트랜지션으로 열리는 스플릿 버튼 */}
       <div ref={menuRef} className="relative flex shrink-0 items-stretch">
         <button
           type="button"
           data-id={`${dataId}-commit`}
           data-state={dirty ? "dirty" : savedFlash ? "saved" : "clean"}
-          className={`rounded-l-sm px-2.5 py-1 text-caption ${
-            dirty ? "bg-accent text-on-accent hover:bg-accent-focus" : "border border-hairline text-ink hover:bg-surface-alt"
+          className={`rounded-sm border px-2 py-0.5 text-fine transition-[background-color,border-color,color,border-radius] duration-150 ease-smooth ${
+            dirty
+              ? "rounded-r-none border-accent bg-accent text-on-accent hover:bg-accent-focus"
+              : "border-hairline text-ink hover:bg-surface-alt"
           }`}
           onClick={() => (dirty ? onCommit() : onCancel())}
         >
-          {primaryLabel}
+          {/* 라벨 교체 시 페이드 — key로 리마운트해 진입 애니메이션 재생 */}
+          <span key={primaryLabel} className="inline-block animate-item-in">
+            {primaryLabel}
+          </span>
         </button>
         <button
           type="button"
           data-id={`${dataId}-menu-toggle`}
           aria-label="More actions"
           aria-expanded={menuOpen}
-          className={`rounded-r-sm px-1 py-1 ${
-            dirty
-              ? "border-l border-on-accent/30 bg-accent text-on-accent hover:bg-accent-focus"
-              : "border border-l-0 border-hairline text-ink-secondary hover:bg-surface-alt"
+          aria-hidden={!dirty}
+          tabIndex={dirty ? 0 : -1}
+          className={`flex items-center justify-center overflow-hidden rounded-r-sm border border-l-0 border-accent bg-accent text-on-accent transition-[width,opacity] duration-150 ease-smooth hover:bg-accent-focus ${
+            dirty ? "w-5 opacity-100" : "pointer-events-none w-0 border-0 opacity-0"
           }`}
           onClick={() => setMenuOpen((v) => !v)}
         >
-          <ChevronDown size={14} strokeWidth={1.5} />
+          <ChevronDown size={13} strokeWidth={1.5} className="shrink-0" />
         </button>
-        {menuOpen && (
+        {menuOpen && dirty && (
           <div
             data-id={`${dataId}-menu`}
             className="absolute bottom-full right-0 z-[1] mb-1 w-max rounded-md border border-hairline bg-surface p-1 shadow-md"

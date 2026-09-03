@@ -1,7 +1,11 @@
 "use client";
 
-// 노드 더블클릭 요약 모달 — 전/후 단계, 하위 프로세스 프리뷰, 코멘트(읽기+추가), 메타.
-// 바깥 클릭/Esc로 닫힘. readOnly면 코멘트 추가 숨김.
+// 노드 더블클릭 편집 모달 — 제목·설명 + 필드 타일(2열, 클릭 위치 팝오버) + 전/후 단계·하위 프로세스
+// 프리뷰·코멘트. 타일 디자인은 SP 지정 모달과 같다(사용자 결정 2026-09-03): 부서·담당자는 두 열을
+// 가로지르는 행 타일, 색·시스템·링크·지표 7(비용은 단위 탭 한 타일)·입출력/조건은 2열 타일. 팝오버 초안은
+// Enter/저장으로 폼 버퍼에 반영되고, 폼 버퍼는 하단 저장(⌘S)으로 노드에 반영된다.
+// readOnly면 값 있는 타일만 정적으로 — 목록을 열어야 보이는 입출력만 클릭해 읽기 전용 팝오버로 본다.
+// subprocess는 링크 맵 상속값(속성·회당 4지표·입출력/조건)을 읽기 타일로, 연간 건수·FTE만 편집한다.
 
 import {
   AlertTriangle,
@@ -14,40 +18,44 @@ import {
   CircleDot,
   CornerDownRight,
   Diamond,
+  FileType,
+  Flag,
+  Link as LinkIcon,
+  LogIn,
+  LogOut,
+  Monitor,
+  Palette,
+  Play,
+  Plus,
+  ShieldCheck,
   Square,
   SquarePen,
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { AutoHeight } from "@/components/auto-height";
+import { CostUnitTabs, CurrencyPill, type CostUnit } from "@/components/cost-unit";
+import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ModalBackdrop } from "@/components/modal-backdrop";
-import { NodeDetailsFields } from "@/components/node-details-fields";
+import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-value-input";
 import { NewlineHint } from "@/components/newline-hint";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
+import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
+import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
+import { SpFieldTile } from "@/components/permissions/sp-field-tile";
+import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { ScopePreview } from "@/components/scope-preview";
-import { SearchSelect } from "@/components/search-select";
-import { UrlLabelField } from "@/components/url-label-field";
-import {
-  createComment,
-  getEligibleAssignees,
-  listComments,
-  type CommentItem,
-  type EligibleAssignees,
-  type VersionGraph,
-} from "@/lib/api";
+import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
-import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
+import { formatAssignees, parseAssignees } from "@/lib/assignee";
 import { type ProcessNodeType } from "@/lib/canvas";
+import { formatThousands } from "@/lib/duration";
+import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
-import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
-import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
-import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
-import { useDirectory } from "@/lib/directory";
-import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 import {
   formatParamValue,
   getEditableParamFields,
@@ -63,8 +71,8 @@ import {
   type ParamField,
   type SpParamField,
 } from "@/lib/params";
-import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
+import { isHttpUrl } from "@/lib/url";
 
 // 정보 수정 모달이 편집하는 필드 — 부분 패치
 export type NodeEditPatch = Partial<{
@@ -101,11 +109,7 @@ export type NodeEditPatch = Partial<{
   linkedVersionId: number | null;
 }>;
 
-const ATTR_FIELDS: { key: "system"; labelKey: "field.system" }[] = [
-  { key: "system", labelKey: "field.system" },
-];
-
-// 선후행 칩의 노드 타입별 아이콘 (캔버스 노드타입 아이콘과 동일 매핑)
+// 선후행 칩·유형 타일의 노드 타입별 아이콘 (캔버스 노드타입 아이콘과 동일 매핑)
 const NAV_TYPE_ICONS: Record<string, LucideIcon> = {
   process: Square,
   decision: Diamond,
@@ -135,6 +139,71 @@ function NavChip({
     </button>
   );
 }
+
+// 타일 필드 — 부서·담당자는 DeptAssigneeTiles가, 유형·GMP는 정적 타일이 담당
+type TileField =
+  | "color"
+  | "system"
+  | "url"
+  | "duration"
+  | "touch_time"
+  | "cost"
+  | "headcount"
+  | "annual_count"
+  | "fte"
+  | "input"
+  | "output"
+  | "data_form"
+  | "start_condition"
+  | "end_condition";
+type ParamTile = "duration" | "touch_time" | "cost" | "headcount" | "annual_count" | "fte";
+const PARAM_TILES: readonly ParamTile[] = ["duration", "touch_time", "cost", "headcount", "annual_count", "fte"];
+const TILE_ICON: Record<Exclude<TileField, ParamTile>, LucideIcon> = {
+  color: Palette,
+  system: Monitor,
+  url: LinkIcon,
+  input: LogIn,
+  output: LogOut,
+  data_form: FileType,
+  start_condition: Play,
+  end_condition: Flag,
+};
+const HINT_KEY: Record<TileField, MessageKey> = {
+  color: "sp.tile.hint.color",
+  system: "sp.tile.hint.system",
+  url: "sp.tile.hint.url",
+  duration: "sp.tile.hint.duration",
+  touch_time: "sp.tile.hint.touch_time",
+  cost: "sp.tile.hint.cost",
+  headcount: "sp.tile.hint.headcount",
+  annual_count: "sp.tile.hint.annual_count",
+  fte: "sp.tile.hint.fte",
+  input: "sp.tile.hint.input",
+  output: "sp.tile.hint.output",
+  data_form: "sp.tile.hint.data_form",
+  start_condition: "sp.tile.hint.start_condition",
+  end_condition: "sp.tile.hint.end_condition",
+};
+
+interface ActiveTile {
+  field: TileField;
+  at: { x: number; y: number };
+  // 팝오버 로컬 초안 — 확정 시에만 폼 버퍼에 반영, Esc면 폐기
+  value: string;
+  extra: string; // url 라벨 / IO 폼 join
+  links: string; // IO 미러 링크 열
+  flags: string; // 인풋 필수/선택 열
+  ids: string; // 아웃풋 원본 id 열
+  unit: CostUnit; // 비용 타일의 통화 탭
+  readOnly: boolean; // 열람 전용(입출력 목록 보기)
+}
+
+const INPUT_CLASS =
+  "w-full rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
+
+const countLines = (joined: string): number => joined.split("\n").filter((line) => line.trim() !== "").length;
+const costUnitOf = (form: { cost_krw: string; cost_usd: string }): CostUnit =>
+  form.cost_usd !== "" ? "cost_usd" : "cost_krw";
 
 interface NodeSummaryModalProps {
   versionId: number;
@@ -179,8 +248,15 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
-  // subprocess 상속 상세(링크 맵 sp_* IO/조건) — 읽기전용 표시(#11). 그 외 타입은 null
+  // subprocess 상속 상세(링크 맵 sp_* 속성·IO/조건·참고치) — 읽기전용 표시(#11). 그 외 타입은 null
   sp?: {
+    department?: string | null;
+    assignee?: string | null;
+    system?: string | null;
+    url?: string | null;
+    url_label?: string | null;
+    annual_count?: string | null;
+    fte?: string | null;
     input?: string | null;
     output?: string | null;
     input_forms?: string | null;
@@ -262,7 +338,9 @@ export function NodeSummaryModal({
   onClose,
   onOpenChild,
 }: NodeSummaryModalProps) {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
+  const isSp = nodeType === "subprocess";
+  const labels = buildPopoverActionLabels(t);
   const [comments, setComments] = useState<CommentItem[]>([]);
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
   // initialFocus="description" — 열림/노드 전환 시 설명 textarea로 포커스(커서는 끝)
@@ -277,15 +355,10 @@ export function NodeSummaryModal({
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [colorMoreOpen, setColorMoreOpen] = useState(false);
-  // Parameters 그룹 접기 — 기본 접힘, 인스펙터와 공유 키(bpm.paramsCollapsed)로 localStorage 퍼시스트
+  // 섹션 접기 — 인스펙터·SP 지정 모달과 공유 키(localStorage 퍼시스트)
   const [paramsCollapsed, setParamsCollapsed] = useState(readParamsCollapsed);
-  // I/O & Conditions 접힘 — 기본 접힘, 인스펙터와 키 공유 (사용자 결정 2026-08-20)
   const [detailsCollapsed, setDetailsCollapsed] = useState(readDetailsCollapsed);
-  // BPM attributes 접힘 — 인스펙터 카드와 키 공유(bpm.attrsCollapsed) (사용자 결정 2026-08-20)
   const [attrsCollapsed, setAttrsCollapsed] = useState(readAttrsCollapsed);
-  // 모달 섹션 일괄 접기/펼치기 — 인스펙터 탭 바 버튼과 동일 판정(하나라도 펼침→모두 접기).
-  // 모달 3섹션은 로컬 state라 DOM 스윕 대신 직접 제어(영속 키 공유는 write*로 유지) (사용자 결정 2026-08-20)
   const anySectionOpen = !attrsCollapsed || !paramsCollapsed || !detailsCollapsed;
   const toggleAllSections = () => {
     const next = anySectionOpen; // true=모두 접기
@@ -296,116 +369,66 @@ export function NodeSummaryModal({
     setDetailsCollapsed(next);
     writeDetailsCollapsed(next);
   };
-  // 담당자/부서 후보 — 맵 조회권한 보유 직원만 (F5). 편집 모드에서만 조회.
-  const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
   // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
-  const [form, setForm] = useState({
+  const initialForm = {
     label: title, description, color, assignee, department, system, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
     data_form, start_condition, end_condition,
-  });
-  // 비용 통화 토글 — 배타 계약이라 한 번에 한 통화만. 전환 시 기존 값은 버퍼에서 소거+안내 (사용자 결정 2026-08-20)
-  const [activeCurrency, setActiveCurrency] = useState<"cost_krw" | "cost_usd">(
-    cost_usd !== "" ? "cost_usd" : "cost_krw",
-  );
-  const [costNotice, setCostNotice] = useState<{ field: "cost_krw" | "cost_usd"; value: string } | null>(null);
+  };
+  type Form = typeof initialForm;
+  const [form, setForm] = useState<Form>(initialForm);
+  const [active, setActive] = useState<ActiveTile | null>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
   // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
     setPrevNodeId(nodeId);
-    setForm({
-      label: title, description, color, assignee, department, system, duration,
-      touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-      input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
-      data_form, start_condition, end_condition,
-    });
-    setActiveCurrency(cost_usd !== "" ? "cost_usd" : "cost_krw");
-    setCostNotice(null);
+    setForm(initialForm);
+    setActive(null);
   }
-  const switchCurrency = (target: "cost_krw" | "cost_usd") => {
-    if (target === activeCurrency) return;
-    const current = activeCurrency;
-    const currentValue = form[current];
-    if (currentValue !== "") {
-      setForm((f) => ({ ...f, [current]: "" }));
-      setCostNotice({ field: current, value: currentValue });
-    }
-    setActiveCurrency(target);
-  };
-  const undoCurrencySwitch = () => {
-    if (costNotice === null) return;
-    const other = costNotice.field === "cost_krw" ? "cost_usd" : "cost_krw";
-    // 전환 취소 — 소거된 원래 통화 값을 복원하고, 전환 후 입력했을 수 있는 새 통화 값은 폐기
-    setForm((f) => ({ ...f, [costNotice.field]: costNotice.value, [other]: "" }));
-    setActiveCurrency(costNotice.field);
-    setCostNotice(null);
-  };
+  // IO 플라이아웃 편집기 핸들 — 푸터 '+ Add'가 행을 추가한다
+  const ioRef = useRef<MultiValueInputHandle | null>(null);
+
+  const buildPatch = (f: Form): NodeEditPatch => ({
+    description: f.description,
+    color: f.color,
+    assignee: f.assignee,
+    department: f.department,
+    system: f.system,
+    duration: f.duration,
+    touch_time: f.touch_time,
+    input: f.input,
+    output: f.output,
+    input_forms: f.input_forms,
+    output_forms: f.output_forms,
+    output_ids: f.output_ids,
+    input_links: f.input_links,
+    output_links: f.output_links,
+    input_flags: f.input_flags,
+    data_form: f.data_form,
+    start_condition: f.start_condition,
+    end_condition: f.end_condition,
+    cost_krw: f.cost_krw,
+    cost_usd: f.cost_usd,
+    headcount: f.headcount,
+    annual_count: f.annual_count,
+    fte: f.fte,
+    url: f.url,
+    urlLabel: f.urlLabel,
+  });
   // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
-  const handleSave = useCallback(() => {
-    onPatch({
-      description: form.description,
-      color: form.color,
-      assignee: form.assignee,
-      department: form.department,
-      system: form.system,
-      duration: form.duration,
-      touch_time: form.touch_time,
-      input: form.input,
-      output: form.output,
-      input_forms: form.input_forms,
-      output_forms: form.output_forms,
-      output_ids: form.output_ids,
-      input_links: form.input_links,
-      output_links: form.output_links,
-      input_flags: form.input_flags,
-      data_form: form.data_form,
-      start_condition: form.start_condition,
-      end_condition: form.end_condition,
-      cost_krw: form.cost_krw,
-      cost_usd: form.cost_usd,
-      headcount: form.headcount,
-      annual_count: form.annual_count,
-      fte: form.fte,
-      url: form.url,
-      urlLabel: form.urlLabel,
-    });
+  const handleSave = () => {
+    onPatch(buildPatch(form));
     onCommitLabel?.(form.label);
     onClose();
-  }, [form, onPatch, onCommitLabel, onClose]);
+  };
 
   // 선후행 내비 — 버퍼에 변경이 있으면 확인(저장/저장안함/취소), 없으면 바로 이동.
   const [pendingNav, setPendingNav] = useState<string | null>(null);
-  // 부서 변경 시 담당자가 있으면 확인 오버레이 표시 — 확인 후 담당자 초기화.
-  const [pendingDept, setPendingDept] = useState<string | null>(null);
-  const users = eligible?.users ?? [];
-  // 담당자 기본 노출 — 내 조직 근접도 우선(3다리 내, org 빈 사람 최후순위). eligible 응답엔
-  // org_path가 없어 디렉터리 스토어로 보강. 검색 랭킹(SearchSelect filterByQuery)은 그대로.
-  const dir = useDirectory();
-  const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
-  const proximityUsers = sortUsersByOrgProximity(
-    users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" })),
-    me?.orgPath ?? "",
-  );
-  const assignees = parseAssignees(form.assignee);
-  const drifted = driftedAssignees(form.department, assignees, users);
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
   const editableParams = getEditableParamFields(nodeType);
-  // Parameters 접힘 헤더의 채워진 개수 — 렌더 시 파생
-  const filledParamCount = editableParams.filter((f) => form[f]).length;
-  // BPM attributes 접힘 헤더의 채워진 개수 — 버퍼(form) 기준
-  const filledAttrCount = [form.department, form.assignee, form.system, form.url]
-    .filter((v) => v !== "").length;
-  // 버퍼 변경 노출 — 초기값 대비 달라진 필드(섹션 점 + 푸터 목록) (사용자 결정 2026-08-20)
-  const initialForm: Record<string, string> = {
-    label: title, description, color, assignee, department, system, duration,
-    touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
-    input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
-    data_form, start_condition, end_condition,
-  };
-  const changedKeys = Object.keys(initialForm).filter(
-    (k) => (form as Record<string, string>)[k] !== initialForm[k],
-  );
+  const isEditableParam = (field: ParamField) => (editableParams as readonly string[]).includes(field);
+  const changedKeys = (Object.keys(initialForm) as (keyof Form)[]).filter((k) => form[k] !== initialForm[k]);
   const hasChangedIn = (keys: readonly string[]) => changedKeys.some((k) => keys.includes(k));
   const ATTRS_KEYS = ["assignee", "department", "system", "url", "urlLabel"] as const;
   const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "output_ids", "input_links",
@@ -426,63 +449,7 @@ export function NodeSummaryModal({
         ? t(PARAM_LABEL_KEY[k as ParamField])
         : t(CHANGED_LABEL_KEY[k]),
   ))].join(", ");
-  // I/O & Conditions 접힘 헤더의 채워진 개수 — 버퍼(form) 기준. SP는 링크 맵 상속값 기준(#11)
-  const filledDetailCount =
-    nodeType === "subprocess"
-      ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter(
-          (v) => (v ?? "") !== "",
-        ).length
-      : [form.input, form.output, form.data_form, form.start_condition, form.end_condition]
-          .filter((v) => v !== "").length;
-  // 상속 파라미터 표시값 — subprocess의 읽기전용 4행(링크 맵 지정값). 값 없으면 ""(행은 "—")
-  const inheritedDisplay = (field: ParamField): string =>
-    spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
-  // 읽기전용 뷰(#13) — 값 있는 것만 나열. SP 파라미터는 상속값 우선(연간/FTE는 자기 값)
-  const gmpValue = gmp ?? "";
-  const readAttrRows = [
-    { key: "assignee", labelKey: "field.assignee" as MessageKey, value: assignee },
-    { key: "department", labelKey: "field.department" as MessageKey, value: department },
-    { key: "system", labelKey: "field.system" as MessageKey, value: system },
-    { key: "url", labelKey: "field.url" as MessageKey, value: url ? urlLabel || url : "" },
-  ].filter((row) => row.value !== "");
-  const readParamRows = PARAM_FIELDS.map((field) => ({
-    field,
-    value:
-      nodeType === "subprocess"
-        ? inheritedDisplay(field) || formatParamValue(field, form[field] ?? "")
-        : formatParamValue(field, form[field] ?? ""),
-  })).filter((row) => row.value !== "");
-
-  const changeDept = (dept: string) => {
-    if (dept === form.department) return; // 같은 부서 재선택 — SearchSelect는 onChange를 항상 발화하므로 no-op(담당자 무단 초기화 방지)
-    if (assignees.length > 0) {
-      setPendingDept(dept);
-    } else {
-      setForm((f) => ({ ...f, department: dept, assignee: "" }));
-    }
-  };
-
-  const isDirty =
-    form.label !== title ||
-    form.description !== description ||
-    form.color !== color ||
-    form.assignee !== assignee ||
-    form.department !== department ||
-    form.system !== system ||
-    form.duration !== duration ||
-    form.touch_time !== touch_time ||
-    form.input !== input ||
-    form.output !== output ||
-    form.data_form !== data_form ||
-    form.start_condition !== start_condition ||
-    form.end_condition !== end_condition ||
-    form.cost_krw !== cost_krw ||
-    form.cost_usd !== cost_usd ||
-    form.headcount !== headcount ||
-    form.annual_count !== annual_count ||
-    form.fte !== fte ||
-    form.url !== url ||
-    form.urlLabel !== urlLabel;
+  const isDirty = changedKeys.length > 0;
   const requestNavigate = (id: string) => {
     if (isDirty) {
       setPendingNav(id);
@@ -491,33 +458,7 @@ export function NodeSummaryModal({
     }
   };
   const navSaveAndGo = () => {
-    onPatch({
-      description: form.description,
-      color: form.color,
-      assignee: form.assignee,
-      department: form.department,
-      system: form.system,
-      duration: form.duration,
-      touch_time: form.touch_time,
-      input: form.input,
-      output: form.output,
-      input_forms: form.input_forms,
-      output_forms: form.output_forms,
-      output_ids: form.output_ids,
-      input_links: form.input_links,
-      output_links: form.output_links,
-      input_flags: form.input_flags,
-      data_form: form.data_form,
-      start_condition: form.start_condition,
-      end_condition: form.end_condition,
-      cost_krw: form.cost_krw,
-      cost_usd: form.cost_usd,
-      headcount: form.headcount,
-      annual_count: form.annual_count,
-      fte: form.fte,
-      url: form.url,
-      urlLabel: form.urlLabel,
-    });
+    onPatch(buildPatch(form));
     onCommitLabel?.(form.label);
     const id = pendingNav;
     setPendingNav(null);
@@ -528,23 +469,6 @@ export function NodeSummaryModal({
     setPendingNav(null);
     if (id) onNavigate(id);
   };
-
-  useEffect(() => {
-    if (readOnly) {
-      return;
-    }
-    let active = true;
-    void getEligibleAssignees(versionId)
-      .then((e) => {
-        if (active) setEligible(e);
-      })
-      .catch(() => {
-        /* 실패 시 현재 값만 유지 노출 */
-      });
-    return () => {
-      active = false;
-    };
-  }, [versionId, readOnly]);
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
   useEffect(() => {
@@ -561,22 +485,28 @@ export function NodeSummaryModal({
     };
   }, [versionId, nodeId]);
 
-  // Esc=취소(버퍼 폐기)·⌘S=저장. ⌘S는 브라우저 저장 대화상자를 막는다.
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        // 확인 오버레이가 떠 있으면 그것부터 닫는다(모달 유지).
-        if (pendingDept) setPendingDept(null);
-        else if (pendingNav) setPendingNav(null);
-        else onClose();
-      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        if (!pendingNav && !pendingDept) handleSave();
+  // Esc=취소(버퍼 폐기)·⌘S=저장. ⌘S는 브라우저 저장 대화상자를 막는다. 타일 팝오버가 열려 있으면
+  // 팝오버가 Esc를 먼저 소비하고(전파 차단), ⌘S는 팝오버 초안만 반영한다.
+  // 최신 상태는 effect event로 읽는다 — 리스너 재구독 없이 (react-ts-patterns §7)
+  const handleWindowKey = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      if (pendingNav) setPendingNav(null);
+      else onClose();
+    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      if (pendingNav) return;
+      if (active) {
+        commitTile();
+        return;
       }
-    };
+      handleSave();
+    }
+  });
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => handleWindowKey(event);
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [handleSave, onClose, pendingDept, pendingNav]);
+  }, []);
 
   const submitComment = async () => {
     const body = draft.trim();
@@ -597,6 +527,469 @@ export function NodeSummaryModal({
     }
   };
 
+  // ── 타일 표시값 ────────────────────────────────────────────────────────────
+  // 상속 파라미터 표시값 — subprocess의 읽기전용(링크 맵 지정값). 값 없으면 ""
+  const inheritedDisplay = (field: ParamField): string =>
+    spParams && isSpParamField(field) ? formatParamValue(field, spParams[field]) : "";
+  const inheritedCostUnit: CostUnit = spParams?.cost_usd ? "cost_usd" : "cost_krw";
+  const tileValue = (field: TileField): string => {
+    switch (field) {
+      case "color":
+        return form.color;
+      case "duration":
+      case "touch_time":
+      case "headcount":
+        return isSp ? inheritedDisplay(field) : formatParamValue(field, form[field]);
+      case "cost":
+        return isSp
+          ? formatThousands(spParams?.[inheritedCostUnit] ?? "")
+          : formatThousands(form[costUnitOf(form)]);
+      case "annual_count":
+      case "fte":
+      case "system":
+      case "data_form":
+      case "start_condition":
+      case "end_condition":
+        return form[field];
+      case "url":
+        return form.url.trim() ? form.urlLabel.trim() || form.url.trim() : "";
+      case "input":
+      case "output": {
+        const n = countLines(form[field]);
+        return n > 0 ? t("sp.tile.items", { n }) : "";
+      }
+    }
+  };
+  const tileLabel = (field: TileField): string => {
+    switch (field) {
+      case "color": return t("field.color");
+      case "system": return t("field.system");
+      case "url": return t("field.url");
+      case "cost": return t("field.costRun");
+      case "input": return t("field.input");
+      case "output": return t("field.output");
+      case "data_form": return t("field.dataForm");
+      case "start_condition": return t("field.startCondition");
+      case "end_condition": return t("field.endCondition");
+      default: return t(PARAM_LABEL_KEY[field]);
+    }
+  };
+  const tileIcon = (field: TileField): LucideIcon => {
+    if (field === "cost") return PARAM_ICON[isSp ? inheritedCostUnit : costUnitOf(form)];
+    if ((PARAM_TILES as readonly string[]).includes(field)) return PARAM_ICON[field as ParamField];
+    return TILE_ICON[field as Exclude<TileField, ParamTile>];
+  };
+  const colorSwatch = (value: string) => (
+    <span
+      data-id="summary-color-swatch"
+      className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border border-hairline"
+      style={{ background: value || "var(--color-surface-alt)" }}
+    />
+  );
+
+  // ── 팝오버 열기/확정/취소 ──────────────────────────────────────────────────
+  // SP 상속 IO — 읽기 전용 팝오버 소스(링크 맵 sp_* 값)
+  const spIo = (field: "input" | "output") => ({
+    value: (field === "input" ? sp?.input : sp?.output) ?? "",
+    extra: (field === "input" ? sp?.input_forms : sp?.output_forms) ?? "",
+  });
+  function readTileDraft(field: TileField): Pick<ActiveTile, "value" | "extra" | "links" | "flags" | "ids" | "unit"> {
+    const unit = costUnitOf(form);
+    const base = { links: "", flags: "", ids: "", unit };
+    switch (field) {
+      case "url":
+        return { ...base, value: form.url, extra: form.urlLabel };
+      case "cost":
+        return { ...base, value: form[unit], extra: "" };
+      case "input":
+        return { ...base, value: form.input, extra: form.input_forms, links: form.input_links, flags: form.input_flags };
+      case "output":
+        return { ...base, value: form.output, extra: form.output_forms, links: form.output_links, ids: form.output_ids };
+      default:
+        return { ...base, value: form[field], extra: "" };
+    }
+  }
+  function openTile(field: TileField, at: { x: number; y: number }, viewOnly = false) {
+    if (viewOnly && isSp && (field === "input" || field === "output")) {
+      setActive({ field, at, ...readTileDraft(field), ...spIo(field), readOnly: true });
+      return;
+    }
+    setActive({ field, at, ...readTileDraft(field), readOnly: viewOnly });
+  }
+  const tileDirty = (() => {
+    if (!active || active.readOnly) return false;
+    const base = readTileDraft(active.field);
+    return (
+      active.value !== base.value ||
+      active.extra !== base.extra ||
+      active.links !== base.links ||
+      active.flags !== base.flags ||
+      active.ids !== base.ids ||
+      (active.field === "cost" && active.unit !== base.unit)
+    );
+  })();
+  // 초안 → 폼 버퍼(팝오버는 열어둠) — 메뉴 "Save"
+  function applyTile() {
+    if (!active || active.readOnly) return;
+    const { field, value, extra, links, flags, ids, unit } = active;
+    setForm((prev) => {
+      const next: Form = { ...prev };
+      switch (field) {
+        case "url":
+          next.url = value.trim();
+          next.urlLabel = extra.trim();
+          break;
+        case "cost":
+          // 통화 배타 — 고른 단위에만 값, 다른 통화는 비운다
+          next.cost_krw = unit === "cost_krw" ? value : "";
+          next.cost_usd = unit === "cost_usd" ? value : "";
+          break;
+        case "input":
+          next.input = value;
+          next.input_forms = extra;
+          next.input_links = links;
+          next.input_flags = flags;
+          break;
+        case "output":
+          next.output = value;
+          next.output_forms = extra;
+          next.output_links = links;
+          next.output_ids = ids;
+          break;
+        default:
+          next[field] = value;
+      }
+      return next;
+    });
+  }
+  function commitTile() {
+    applyTile();
+    setActive(null);
+  }
+
+  const spDept = sp?.department ?? "";
+  const spAssignee = formatAssignees(parseAssignees(sp?.assignee ?? ""));
+  const spSystem = sp?.system ?? "";
+  const spUrl = (sp?.url ?? "").trim() ? (sp?.url_label ?? "").trim() || (sp?.url ?? "").trim() : "";
+  const gmpValue = gmp ?? "";
+  // 접힘 헤더의 채워진 개수 — 버퍼(form) 기준(SP는 상속값)
+  const filledAttrCount = isSp
+    ? [spDept, spAssignee, spSystem, spUrl].filter((v) => v !== "").length
+    : [form.department, form.assignee, form.system, form.url].filter((v) => v !== "").length;
+  const filledParamCount = PARAM_TILES.filter((f) => tileValue(f) !== "").length;
+  const filledDetailCount = isSp
+    ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter((v) => (v ?? "") !== "").length
+    : [form.input, form.output, form.data_form, form.start_condition, form.end_condition].filter((v) => v !== "").length;
+  // 노드 레벨 data_form 폴백 타일 — 항목별 폼이 하나라도 생기면 숨김(항목별 값이 정본)
+  const showLegacyDataForm = !isSp && form.input_forms === "" && form.output_forms === "" && !(readOnly && form.data_form === "");
+
+  // ── 타일 렌더 ─────────────────────────────────────────────────────────────
+  // 정적(읽기) 타일은 값 있는 것만 — 입출력은 목록을 열어야 보이므로 클릭 가능(읽기 팝오버)
+  const renderTile = (field: TileField, opts: { readOnly?: boolean; hideEmpty?: boolean } = {}) => {
+    const value = tileValue(field);
+    const isIo = field === "input" || field === "output";
+    const staticTile = opts.readOnly ?? readOnly;
+    if ((opts.hideEmpty ?? staticTile) && value === "" && !(field === "color" && form.color !== "")) return null;
+    const valueNode =
+      field === "color" && form.color !== ""
+        ? colorSwatch(form.color)
+        : field === "cost" && value !== ""
+          ? <CurrencyPill unit={isSp ? inheritedCostUnit : costUnitOf(form)} />
+          : undefined;
+    const clickable = !staticTile || (isIo && value !== "");
+    return (
+      <SpFieldTile
+        key={field}
+        dataId={`summary-tile-${field}`}
+        icon={tileIcon(field)}
+        label={tileLabel(field)}
+        value={value}
+        valueNode={valueNode}
+        readOnly={!clickable}
+        active={active?.field === field}
+        onOpen={(at) => openTile(field, at, staticTile)}
+      />
+    );
+  };
+  const typeTile = (
+    <SpFieldTile
+      dataId="summary-tile-type"
+      icon={NAV_TYPE_ICONS[nodeType] ?? Square}
+      label={t("field.type")}
+      value={typeLabel}
+      readOnly
+    />
+  );
+  const gmpTile = gmpValue !== "" && (
+    <SpFieldTile
+      dataId="summary-tile-gmp"
+      icon={ShieldCheck}
+      label={t("field.gmp")}
+      value={formatGmp(gmpValue)}
+      valueNode={
+        <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={getGmpBadgeStyle(gmpValue)} />
+      }
+      readOnly
+    />
+  );
+  const sectionButton = (
+    dataId: string,
+    collapsed: boolean,
+    onToggle: () => void,
+    label: string,
+    count: number,
+    changed: boolean,
+  ) => (
+    <button
+      type="button"
+      data-id={dataId}
+      aria-expanded={!collapsed}
+      className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
+      onClick={onToggle}
+    >
+      <ChevronRight size={12} strokeWidth={1.5} className={`transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`} />
+      {label}
+      {count > 0 && <span className="font-normal">({count})</span>}
+      {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
+      {changed && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
+    </button>
+  );
+  const toggleAllButton = (
+    <button
+      type="button"
+      data-id="summary-toggle-all-sections"
+      className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+      onClick={toggleAllSections}
+    >
+      {anySectionOpen ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
+      {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
+    </button>
+  );
+  // 속성 섹션 — process·decision은 편집 타일, subprocess는 링크 맵 상속 읽기 타일
+  const showAttrSection = showAttributes || isSp;
+  const attrTiles = isSp ? (
+    <>
+      <DeptAssigneeTiles versionId={null} department={spDept} assignee={spAssignee} readOnly dataIdPrefix="summary-tile" labels={labels} onChange={() => {}} />
+      {spSystem !== "" && (
+        <SpFieldTile dataId="summary-tile-system" icon={Monitor} label={t("field.system")} value={spSystem} readOnly />
+      )}
+      {spUrl !== "" && (
+        <SpFieldTile dataId="summary-tile-url" icon={LinkIcon} label={t("field.url")} value={spUrl} readOnly />
+      )}
+      {gmpTile}
+    </>
+  ) : (
+    <>
+      <DeptAssigneeTiles
+        versionId={readOnly ? null : versionId}
+        department={form.department}
+        assignee={form.assignee}
+        readOnly={readOnly}
+        dataIdPrefix="summary-tile"
+        labels={labels}
+        onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+      />
+      {renderTile("system")}
+      {renderTile("url")}
+      {gmpTile}
+    </>
+  );
+  const paramTiles = PARAM_TILES.map((field) => {
+    // 비용 타일은 두 통화 필드를 접은 것 — 편집 가능 여부는 cost_krw 기준(둘은 항상 같은 규칙)
+    const editable = isEditableParam(field === "cost" ? "cost_krw" : field);
+    return renderTile(field, isSp && !editable ? { readOnly: true } : {});
+  });
+  const detailTiles = isSp ? (
+    <>
+      {renderTile("input", { readOnly: true })}
+      {renderTile("output", { readOnly: true })}
+      {(sp?.start_condition ?? "") !== "" && (
+        <SpFieldTile dataId="summary-tile-start_condition" icon={Play} label={t("field.startCondition")} value={sp?.start_condition ?? ""} readOnly />
+      )}
+      {(sp?.end_condition ?? "") !== "" && (
+        <SpFieldTile dataId="summary-tile-end_condition" icon={Flag} label={t("field.endCondition")} value={sp?.end_condition ?? ""} readOnly />
+      )}
+    </>
+  ) : (
+    <>
+      {renderTile("input")}
+      {renderTile("output")}
+      {showLegacyDataForm && renderTile("data_form")}
+      {renderTile("start_condition")}
+      {renderTile("end_condition")}
+    </>
+  );
+  const GRID = "grid grid-cols-2 gap-1.5 py-1";
+  const inheritedHint = isSp && <p className="text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>;
+
+  // ── 팝오버 본문 ────────────────────────────────────────────────────────────
+  const renderPopover = () => {
+    if (!active) return null;
+    const { field } = active;
+    const isIo = field === "input" || field === "output";
+    const isParam = (PARAM_TILES as readonly string[]).includes(field);
+    const inputField: ParamField | null = field === "cost" ? active.unit : isParam ? (field as ParamField) : null;
+    // SP 참고치 — 연간 건수·FTE 팝오버 안내(링크 맵 지정값, 노드 값과 별개)
+    const reference = isSp && (field === "annual_count" || field === "fte") ? (sp?.[field] ?? "") : "";
+    return (
+      <SpFieldPopover
+        dataId={`summary-tile-popover-${field}`}
+        anchor={active.at}
+        title={tileLabel(field)}
+        hint={active.readOnly ? t("sp.tile.readOnlyHint") : field === "cost" ? t("sp.tile.costUnitHint") : t(HINT_KEY[field])}
+        width={isIo ? 420 : field === "color" ? 300 : 320}
+        enterCommits={!isIo}
+        dirty={tileDirty}
+        readOnly={active.readOnly}
+        closeLabel={t("summary.close")}
+        onApply={applyTile}
+        onCommit={commitTile}
+        onCancel={() => setActive(null)}
+        labels={labels}
+        footerStart={
+          isIo && !active.readOnly ? (
+            <button
+              type="button"
+              data-id={`summary-tile-io-${field}-add`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+              onClick={() => ioRef.current?.addRow()}
+            >
+              <Plus size={12} strokeWidth={1.5} />
+              {t("io.addNew")}
+            </button>
+          ) : undefined
+        }
+      >
+        {field === "color" && (
+          <div className="flex flex-col gap-2">
+            {/* 프리셋 견본 + 커스텀 hex — 클릭 즉시 초안, Enter/저장으로 확정 */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {colorPresets.map((preset) => (
+                <button
+                  key={preset || "default"}
+                  type="button"
+                  title={preset || "default"}
+                  aria-label={preset || "default"}
+                  aria-pressed={active.value === preset}
+                  onClick={() => setActive((prev) => (prev ? { ...prev, value: preset } : prev))}
+                  className={`h-6 w-6 rounded-full border ${
+                    active.value === preset
+                      ? "border-transparent ring-2 ring-accent"
+                      : "border-hairline hover:ring-2 hover:ring-accent-tint-border"
+                  }`}
+                  style={{ background: preset || "var(--color-surface-alt)" }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {colorSwatch(active.value)}
+              <input
+                data-id="summary-tile-input-color"
+                className={INPUT_CLASS}
+                value={active.value}
+                placeholder="#RRGGBB"
+                maxLength={7}
+                spellCheck={false}
+                aria-label={t("field.color")}
+                onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+              />
+            </div>
+          </div>
+        )}
+        {inputField && (
+          <div className="flex items-center gap-1.5">
+            {field === "cost" && (
+              <CostUnitTabs
+                dataId="summary-tile-cost-unit"
+                value={active.unit}
+                onChange={(unit) => setActive((prev) => (prev ? { ...prev, unit } : prev))}
+              />
+            )}
+            <ParamInput
+              key={inputField}
+              field={inputField}
+              dataId={`summary-param-${field}`}
+              className={`${INPUT_CLASS} text-right`}
+              value={active.value}
+              ariaLabel={tileLabel(field)}
+              onCommit={(next) => setActive((prev) => (prev ? { ...prev, value: next } : prev))}
+            />
+          </div>
+        )}
+        {reference !== "" && (
+          <p data-id="summary-tile-reference" className="text-fine text-ink-tertiary">
+            {t("metrics.designatedRef", { v: reference })} - {t("metrics.designatedRefHint")}
+          </p>
+        )}
+        {(field === "system" || field === "data_form" || field === "start_condition" || field === "end_condition") && (
+          <input
+            data-id={`summary-tile-input-${field}`}
+            className={INPUT_CLASS}
+            maxLength={field === "data_form" ? 50 : undefined}
+            placeholder={field === "data_form" ? "structured / document / tacit" : undefined}
+            value={active.value}
+            onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+          />
+        )}
+        {field === "url" && (
+          <div className="flex flex-col gap-1.5">
+            <input
+              data-id="summary-tile-input-url"
+              className={INPUT_CLASS}
+              maxLength={500}
+              placeholder="https://"
+              value={active.value}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+            />
+            {active.value.trim() !== "" && !isHttpUrl(active.value) && (
+              <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>
+            )}
+            <input
+              data-id="summary-tile-input-url-label"
+              className={`${INPUT_CLASS} disabled:opacity-40`}
+              maxLength={100}
+              placeholder={t("field.urlLabel")}
+              value={active.extra}
+              disabled={active.value.trim() === ""}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, extra: e.target.value } : prev))}
+            />
+          </div>
+        )}
+        {isIo && (
+          <div className="rounded-sm border border-hairline bg-surface-alt/40 px-2 py-1">
+            {/* 팝오버 제목이 이미 필드명 — 편집기는 헤드리스, '+ Add'는 푸터. 링크·플래그·id 열은 텍스트와
+                함께 정렬을 유지해 왕복시킨다(io-linking §3). 읽기 전용은 항목 목록만 */}
+            <MultiValueInput
+              key={`${nodeId}-${field}-${active.readOnly ? "read" : "edit"}`}
+              ref={ioRef}
+              dataId={`summary-tile-io-${field}`}
+              label={tileLabel(field)}
+              headless
+              value={active.value}
+              formsValue={active.extra}
+              linksValue={active.readOnly ? undefined : active.links}
+              flagsValue={active.readOnly || field !== "input" ? undefined : active.flags}
+              idsValue={active.readOnly || field !== "output" ? undefined : active.ids}
+              readOnly={active.readOnly}
+              onCommit={(joined, formsJoined, extras) =>
+                setActive((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        value: joined,
+                        extra: formsJoined ?? "",
+                        ...(extras ? { links: extras.links, flags: extras.flags, ids: extras.ids } : {}),
+                      }
+                    : prev,
+                )
+              }
+            />
+          </div>
+        )}
+      </SpFieldPopover>
+    );
+  };
+
   return (
     <ModalBackdrop
       className="absolute inset-0 z-[1200] flex items-start justify-center pt-[7vh] backdrop-blur-sm"
@@ -604,7 +997,7 @@ export function NodeSummaryModal({
       onClose={onClose}
     >
       <div
-        className="relative flex max-h-[80%] w-[420px] flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
+        className="relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
@@ -632,18 +1025,11 @@ export function NodeSummaryModal({
         >
           {readOnly ? (
             <div className="flex flex-col gap-2">
-              <div className="flex gap-4">
-                <span><span className="text-fine text-ink-tertiary">{t("summary.type")}:</span> {typeLabel}</span>
-                {groupLabel && (
-                  <span><span className="text-fine text-ink-tertiary">{t("summary.group")}:</span> {groupLabel}</span>
-                )}
-              </div>
               {/* 설명 — 읽기전용에서도 표시(있을 때만). subprocess는 링크맵 베이스+추가분 합성(인스펙터와 동일). */}
               {(() => {
-                const mergedDesc =
-                  nodeType === "subprocess"
-                    ? mergeSubprocessDescription(inheritedDescription, description)
-                    : description.trim();
+                const mergedDesc = isSp
+                  ? mergeSubprocessDescription(inheritedDescription, description)
+                  : description.trim();
                 return mergedDesc !== "" ? (
                   <div
                     data-id="summary-desc-readonly"
@@ -653,70 +1039,32 @@ export function NodeSummaryModal({
                   </div>
                 ) : null;
               })()}
-              {/* Attributes 읽기(#13) — 값 있는 행만, GMP는 배지 */}
-              {(readAttrRows.length > 0 || gmpValue !== "") && (
+              {/* 유형·색·그룹 — 정적 타일 */}
+              <div className={GRID} data-id="summary-read-basics">
+                {typeTile}
+                {!isSp && renderTile("color")}
+                {groupLabel && (
+                  <SpFieldTile dataId="summary-tile-group" icon={Boxes} label={t("summary.group")} value={groupLabel} readOnly />
+                )}
+              </div>
+              {showAttrSection && filledAttrCount + (gmpValue !== "" ? 1 : 0) > 0 && (
                 <div data-id="summary-read-attrs">
                   <p className="text-fine font-semibold text-ink-tertiary">{t("editor.bpmAttrs")}</p>
-                  <div className="ml-2 border-l border-divider pl-2">
-                    {readAttrRows.map((row) => (
-                      <div key={row.key} className="flex items-center justify-between gap-2 py-0.5 text-caption">
-                        <span className="shrink-0 text-ink-secondary">{t(row.labelKey)}</span>
-                        <span className="min-w-0 truncate text-right text-ink" title={row.value}>
-                          {row.value}
-                        </span>
-                      </div>
-                    ))}
-                    {gmpValue !== "" && (
-                      <div className="flex items-center justify-between gap-2 py-0.5 text-caption">
-                        <span className="shrink-0 text-ink-secondary">{t("field.gmp")}</span>
-                        <span className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(gmpValue)}>
-                          {formatGmp(gmpValue)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  <div className={GRID}>{attrTiles}</div>
+                  {inheritedHint}
                 </div>
               )}
-              {/* Parameters 읽기 — 포맷 표시값(1h30m 등), SP는 링크 맵 상속값 우선 */}
-              {readParamRows.length > 0 && (
+              {(showAttributes || isSp) && filledParamCount > 0 && (
                 <div data-id="summary-read-params">
                   <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.parameters")}</p>
-                  <div className="ml-2 border-l border-divider pl-2">
-                    {readParamRows.map(({ field, value }) => (
-                      <div key={field} className="flex items-center justify-between gap-2 py-0.5 text-caption">
-                        <span className="shrink-0 text-ink-secondary">{t(PARAM_LABEL_KEY[field])}</span>
-                        <span className="text-right text-ink">{value}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <div className={GRID}>{paramTiles}</div>
                 </div>
               )}
-              {/* I/O & Conditions 읽기 — 필 표시(#12)와 통일, SP는 링크 맵 상속(#11) */}
-              {(showAttributes || nodeType === "subprocess") && filledDetailCount > 0 && (
+              {(showAttributes || isSp) && filledDetailCount > 0 && (
                 <div data-id="summary-read-details">
                   <p className="text-fine font-semibold text-ink-tertiary">{t("inspector.details")}</p>
-                  <div className="ml-2 border-l border-divider pl-2">
-                    <NodeDetailsFields
-                      idPrefix="modal-read-detail"
-                      nodeKey={nodeId}
-                      input={nodeType === "subprocess" ? sp?.input ?? "" : input}
-                      output={nodeType === "subprocess" ? sp?.output ?? "" : output}
-                      inputForms={nodeType === "subprocess" ? sp?.input_forms ?? "" : input_forms}
-                      outputForms={nodeType === "subprocess" ? sp?.output_forms ?? "" : output_forms}
-                      outputIds={nodeType === "subprocess" ? undefined : output_ids}
-                      inputLinks={nodeType === "subprocess" ? undefined : input_links}
-                      outputLinks={nodeType === "subprocess" ? undefined : output_links}
-                      inputFlags={nodeType === "subprocess" ? undefined : input_flags}
-                      dataForm={nodeType === "subprocess" ? "" : data_form}
-                      startCondition={nodeType === "subprocess" ? sp?.start_condition ?? "" : start_condition}
-                      endCondition={nodeType === "subprocess" ? sp?.end_condition ?? "" : end_condition}
-                      readOnly
-                      onPatch={() => {}}
-                    />
-                    {nodeType === "subprocess" && (
-                      <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                    )}
-                  </div>
+                  <div className={GRID}>{detailTiles}</div>
+                  {inheritedHint}
                 </div>
               )}
             </div>
@@ -730,7 +1078,7 @@ export function NodeSummaryModal({
                   value={form.label}
                   rows={Math.min(5, form.label.split("\n").length)}
                   aria-label={t("field.title")}
-                  disabled={nodeType === "subprocess"}
+                  disabled={isSp}
                   onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
                   onKeyDown={(event) => {
                     // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 캔버스/인스펙터 이름 편집과 동일 규칙
@@ -749,7 +1097,7 @@ export function NodeSummaryModal({
                 />
                 <NewlineHint />
               </div>
-              {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 sp_description을 읽기전용
+              {/* 설명 — 노드 부연(NodeData.description). subprocess는 링크맵 설명을 읽기전용
                   베이스로 위에 표시하고, textarea는 이 맵의 추가분만 편집(표시는 베이스+줄바꿈+추가분 합성). */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.description")}</label>
@@ -774,380 +1122,93 @@ export function NodeSummaryModal({
                   onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
                 />
               </div>
-              {/* 속성 — 라벨 좌·필드 우측정렬·세로중앙·행 구분선. start/end/subprocess는 유형/색만(BPM 숨김) */}
+              {/* 유형(고정)·색 타일 — subprocess는 단일색 고정이라 색 타일 없음 (spec 2026-07-06 §9) */}
+              <div className={GRID} data-id="summary-basics">
+                {typeTile}
+                {!isSp && renderTile("color", { hideEmpty: false })}
+              </div>
               <div className="flex flex-col divide-y divide-divider">
-                {/* 유형 — 생성 시 고정, 변경 불가(읽기 전용 표시) */}
-                <div className="flex min-h-[34px] items-center gap-3 py-1.5">
-                  <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.type")}</span>
-                  <span className="min-w-0 flex-1 truncate text-right text-caption text-ink-secondary">{typeLabel}</span>
-                </div>
-                {/* 색 — 팔레트 우측 노출, "더 보기" 시 헥사 입력 인라인. subprocess는 단일색 고정이라 숨김 (spec 2026-07-06 §9) */}
-                {nodeType !== "subprocess" && (
-                <div className="flex items-center gap-3 py-1.5">
-                  <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.color")}</span>
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-1">
-                    {colorPresets.map((preset) => (
-                      <button
-                        key={preset || "default"}
-                        type="button"
-                        title={preset || "default"}
-                        aria-label={preset || "default"}
-                        onClick={() => setForm((f) => ({ ...f, color: preset }))}
-                        className={`h-5 w-5 rounded-full border ${
-                          form.color === preset
-                            ? "border-transparent ring-2 ring-accent"
-                            : "border-hairline hover:ring-2 hover:ring-accent-tint-border"
-                        }`}
-                        style={{ background: preset || "var(--color-surface-alt)" }}
-                      />
-                    ))}
-                    <button
-                      type="button"
-                      aria-expanded={colorMoreOpen}
-                      className={`ml-0.5 shrink-0 rounded-xs px-1.5 py-0.5 text-fine ${
-                        colorMoreOpen
-                          ? "bg-accent-tint text-accent"
-                          : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                      }`}
-                      onClick={() => setColorMoreOpen((v) => !v)}
-                    >
-                      {t("editor.moreColors")}
-                    </button>
-                    {colorMoreOpen && (
-                      <input
-                        type="text"
-                        value={form.color}
-                        onChange={(event) => setForm((f) => ({ ...f, color: event.target.value }))}
-                        placeholder="#RRGGBB"
-                        maxLength={7}
-                        spellCheck={false}
-                        aria-label={t("field.color")}
-                        className="w-24 rounded-sm border border-hairline px-2 py-0.5 text-right text-fine text-ink"
-                      />
-                    )}
-                  </div>
-                </div>
-                )}
-                {/* BPM 속성 — process·decision만 표시. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
-                {showAttributes && (
+                {/* BPM 속성 — process·decision은 편집 타일, subprocess는 상속 읽기 타일. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
+                {showAttrSection && (
                   <div className="py-1.5" data-id="summary-attrs">
                     <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      data-id="summary-attrs-toggle"
-                      aria-expanded={!attrsCollapsed}
-                      className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
-                      onClick={() => {
-                        const next = !attrsCollapsed;
-                        setAttrsCollapsed(next);
-                        writeAttrsCollapsed(next);
-                      }}
-                    >
-                      <ChevronRight
-                        size={12}
-                        strokeWidth={1.5}
-                        className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
-                      />
-                      {t("editor.bpmAttrs")}
-                      {filledAttrCount > 0 && (
-                        <span className="font-normal">({filledAttrCount})</span>
+                      {sectionButton(
+                        "summary-attrs-toggle",
+                        attrsCollapsed,
+                        () => {
+                          const next = !attrsCollapsed;
+                          setAttrsCollapsed(next);
+                          writeAttrsCollapsed(next);
+                        },
+                        t("editor.bpmAttrs"),
+                        filledAttrCount,
+                        hasChangedIn(ATTRS_KEYS),
                       )}
-                      {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
-                      {hasChangedIn(ATTRS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
-                    </button>
-                    {/* 섹션 일괄 접기/펼치기 — 모달은 공간이 있어 아이콘+라벨 병기, 인스펙터 탭 바
-                        버튼과 동일 판정 로직 (사용자 결정 2026-08-20) */}
-                    <button
-                      type="button"
-                      data-id="summary-toggle-all-sections"
-                      className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                      onClick={toggleAllSections}
-                    >
-                      {anySectionOpen ? (
-                        <ChevronsDownUp size={13} strokeWidth={1.5} />
-                      ) : (
-                        <ChevronsUpDown size={13} strokeWidth={1.5} />
-                      )}
-                      {t(anySectionOpen ? "inspector.collapseAll" : "inspector.expandAll")}
-                    </button>
+                      {toggleAllButton}
                     </div>
                     {/* 아코디언 높이 전환 — 접힘/펼침을 AutoHeight가 부드럽게 잇는다 (사용자 결정 2026-08-20) */}
                     <AutoHeight className="overflow-hidden">
-                    {!attrsCollapsed && (
-                    <div className="ml-2 border-l border-divider pl-2">
-                    {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 오버레이 */}
-                    <div className="flex min-h-[34px] items-center gap-3 py-1.5">
-                      <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t("field.department")}</span>
-                      <div className="flex min-w-0 flex-1 justify-end">
-                        <SearchSelect
-                          fitContent
-                          value={form.department}
-                          options={buildDepartmentOptions(
-                            eligible?.departments ?? [],
-                            users,
-                            lang,
-                            eligible?.dept_infos,
-                          )}
-                          emptyLabel={t("summary.none")}
-                          placeholder={t("field.searchPlaceholder")}
-                          onChange={changeDept}
-                        />
-                      </div>
-                    </div>
-                    {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커) */}
-                    <div className="flex items-start gap-3 py-1.5">
-                      <span className="mt-1 w-16 shrink-0 text-fine text-ink-tertiary">{t("field.assignee")}</span>
-                      <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
-                        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-                          {assignees.map((name) => {
-                            const isDrift = drifted.includes(name);
-                            return (
-                              <span
-                                key={name}
-                                className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                                  isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
-                                }`}
-                              >
-                                {name}
-                                <button
-                                  type="button"
-                                  aria-label={t("summary.close")}
-                                  onClick={() =>
-                                    setForm((f) => ({ ...f, assignee: formatAssignees(parseAssignees(f.assignee).filter((n) => n !== name)) }))
-                                  }
-                                >
-                                  <X size={11} strokeWidth={1.5} />
-                                </button>
-                              </span>
-                            );
-                          })}
+                      {!attrsCollapsed && (
+                        <div className="ml-2 border-l border-divider pl-2">
+                          <div className={GRID} data-id="summary-attr-tiles">{attrTiles}</div>
+                          {inheritedHint}
                         </div>
-                        <SearchSelect
-                          addMode
-                          value=""
-                          options={buildAssigneeOptions(
-                            proximityUsers
-                              .filter((u) => form.department === "" || u.department === form.department)
-                              .filter((u) => !assignees.includes(u.name)),
-                            lang,
-                          )}
-                          emptyLabel={t("summary.none")}
-                          placeholder={t("field.searchPlaceholder")}
-                          onChange={(name) => {
-                            if (!name) return;
-                            const next = addAssignee(form.department, parseAssignees(form.assignee), name, users);
-                            setForm((f) => ({ ...f, department: next.department, assignee: formatAssignees(next.assignees) }));
-                          }}
-                        />
-                      </div>
-                    </div>
-                    {/* 시스템 — 우측 정렬 입력 */}
-                    {ATTR_FIELDS.map(({ key, labelKey }) => (
-                      <div key={key} className="flex min-h-[34px] items-center gap-3 py-1.5">
-                        <span className="w-16 shrink-0 text-fine text-ink-tertiary">{t(labelKey)}</span>
-                        <div className="flex min-w-0 flex-1 justify-end">
-                          <input
-                            className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none"
-                            value={form[key]}
-                            aria-label={t(labelKey)}
-                            onChange={(event) => setForm((f) => ({ ...f, [key]: event.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    <UrlLabelField
-                      key={nodeId}
-                      url={form.url}
-                      urlLabel={form.urlLabel}
-                      readOnly={readOnly}
-                      inputWidth="w-44"
-                      onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                    />
-                    </div>
-                    )}
-                    </AutoHeight>
-                  </div>
-                )}
-                {/* 회당 파라미터 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
-                    subprocess는 회당 4필드가 링크 맵 지정값이라 읽기전용 텍스트, 연간 건수·FTE만 입력 (design §3.1) */}
-                {editableParams.length > 0 && (
-                  <div className="py-1.5">
-                    <button
-                      type="button"
-                      data-id="summary-params-toggle"
-                      aria-expanded={!paramsCollapsed}
-                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
-                      onClick={() => {
-                        const next = !paramsCollapsed;
-                        setParamsCollapsed(next);
-                        writeParamsCollapsed(next);
-                      }}
-                    >
-                      <ChevronRight
-                        size={12}
-                        strokeWidth={1.5}
-                        className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-                      />
-                      {t("inspector.parameters")}
-                      {filledParamCount > 0 && (
-                        <span className="font-normal text-ink-tertiary">({filledParamCount})</span>
                       )}
-                      {hasChangedIn(PARAM_FIELDS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
-                    </button>
-                    <AutoHeight className="overflow-hidden">
-                    {!paramsCollapsed && (
-                      <div className="ml-2 border-l border-divider pl-2">
-                        {/* 비용 2필드는 통화 토글 한 행으로 접음(cost_usd 자리는 스킵) — 배타 계약 (사용자 결정 2026-08-20) */}
-                        {PARAM_FIELDS.filter((f) => f !== "cost_usd").map((key) => {
-                          const isCostRow = key === "cost_krw";
-                          const field = isCostRow ? activeCurrency : key;
-                          const RowIcon = PARAM_ICON[field];
-                          return (
-                          <div key={key} className="flex min-h-[34px] items-center gap-3 py-1">
-                            <span className="inline-flex w-20 shrink-0 items-center gap-1 text-fine text-ink-tertiary">
-                              <RowIcon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                              {isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}
-                            </span>
-                            {isCostRow && editableParams.includes(field) && (
-                              <span className="inline-flex shrink-0 overflow-hidden rounded-sm border border-hairline">
-                                {(["cost_krw", "cost_usd"] as const).map((currency) => (
-                                  <button
-                                    key={currency}
-                                    type="button"
-                                    data-id={`summary-cost-currency-${currency === "cost_krw" ? "krw" : "usd"}`}
-                                    aria-pressed={activeCurrency === currency}
-                                    className={`px-1.5 py-0.5 text-fine ${
-                                      activeCurrency === currency
-                                        ? "bg-accent-tint text-accent"
-                                        : "text-ink-tertiary hover:bg-surface-alt"
-                                    }`}
-                                    onClick={() => switchCurrency(currency)}
-                                  >
-                                    {currency === "cost_krw" ? "₩" : "$"}
-                                  </button>
-                                ))}
-                              </span>
-                            )}
-                            <div className="flex min-w-0 flex-1 justify-end">
-                              {editableParams.includes(field) ? (
-                                <ParamInput
-                                  key={field}
-                                  field={field}
-                                  dataId={`summary-param-${field}`}
-                                  className="w-44 rounded-sm border border-hairline px-2 py-1 text-right text-caption focus:border-accent focus:outline-none disabled:bg-surface-alt disabled:text-ink-tertiary"
-                                  value={form[field]}
-                                  ariaLabel={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[field])}
-                                  onCommit={(next) => setForm((f) => ({ ...f, [field]: next }))}
-                                />
-                              ) : (
-                                <span
-                                  data-id={`summary-param-${field}`}
-                                  className="min-w-0 truncate text-right text-caption text-ink"
-                                >
-                                  {(isCostRow
-                                    ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
-                                    : inheritedDisplay(field)) || "-"}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          );
-                        })}
-                        {costNotice !== null && (
-                          <div
-                            data-id="summary-cost-clear-notice"
-                            className="flex items-center justify-between gap-2 py-0.5 text-fine text-error"
-                          >
-                            <span className="min-w-0">
-                              {t("metrics.clearOnSave", { v: formatParamValue(costNotice.field, costNotice.value) })}
-                            </span>
-                            <button
-                              type="button"
-                              data-id="summary-cost-clear-undo"
-                              className="shrink-0 rounded-sm px-1.5 py-0.5 text-fine text-accent hover:bg-accent-tint"
-                              onClick={undoCurrencySwitch}
-                            >
-                              {t("metrics.undoSwitch")}
-                            </button>
-                          </div>
-                        )}
-                        {nodeType === "subprocess" && (
-                          <p className="py-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                        )}
-                      </div>
-                    )}
                     </AutoHeight>
                   </div>
                 )}
-                {/* 인터뷰 승격 상세 — IO(개행 복수)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘.
-                    SP는 링크 맵 상속 읽기전용 렌더 — 인스펙터 카드와 동기화(#11) */}
-                {(showAttributes || nodeType === "subprocess") && (
+                {/* 회당 지표 — 접기 그룹(기본 접힘, 인스펙터와 공유 키). start/end 외 모든 타입에 표시.
+                    subprocess는 회당 4지표가 링크 맵 지정값이라 읽기 타일, 연간 건수·FTE만 입력 (design §3.1) */}
+                {editableParams.length > 0 && (
+                  <div className="py-1.5" data-id="summary-params">
+                    <div className="flex items-center gap-1">
+                      {sectionButton(
+                        "summary-params-toggle",
+                        paramsCollapsed,
+                        () => {
+                          const next = !paramsCollapsed;
+                          setParamsCollapsed(next);
+                          writeParamsCollapsed(next);
+                        },
+                        t("inspector.parameters"),
+                        filledParamCount,
+                        hasChangedIn(PARAM_FIELDS),
+                      )}
+                      {!showAttrSection && toggleAllButton}
+                    </div>
+                    <AutoHeight className="overflow-hidden">
+                      {!paramsCollapsed && (
+                        <div className="ml-2 border-l border-divider pl-2">
+                          <div className={GRID} data-id="summary-param-tiles">{paramTiles}</div>
+                          {inheritedHint}
+                        </div>
+                      )}
+                    </AutoHeight>
+                  </div>
+                )}
+                {/* 인터뷰 승격 상세 — IO(항목 수 타일 → 플라이아웃 편집기)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘.
+                    SP는 링크 맵 상속 읽기 타일 — 인스펙터 카드와 동기화(#11) */}
+                {(showAttributes || isSp) && (
                   <div className="py-1.5" data-id="summary-details">
-                    <button
-                      type="button"
-                      data-id="summary-details-toggle"
-                      aria-expanded={!detailsCollapsed}
-                      className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
-                      onClick={() => {
+                    {sectionButton(
+                      "summary-details-toggle",
+                      detailsCollapsed,
+                      () => {
                         const next = !detailsCollapsed;
                         setDetailsCollapsed(next);
                         writeDetailsCollapsed(next);
-                      }}
-                    >
-                      <ChevronRight
-                        size={12}
-                        strokeWidth={1.5}
-                        className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
-                      />
-                      {t("inspector.details")}
-                      {filledDetailCount > 0 && (
-                        <span className="font-normal text-ink-tertiary">({filledDetailCount})</span>
-                      )}
-                      {hasChangedIn(DETAILS_KEYS) && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
-                    </button>
-                    <AutoHeight className="overflow-hidden">
-                    {!detailsCollapsed && (
-                    <div className="ml-2 border-l border-divider pl-2">
-                      {nodeType === "subprocess" ? (
-                        <>
-                          {/* 링크 맵 상속 상세(읽기전용) — 인스펙터 카드와 동기화(#11) */}
-                          <NodeDetailsFields
-                            idPrefix="modal-detail"
-                            nodeKey={nodeId}
-                            input={sp?.input ?? ""}
-                            output={sp?.output ?? ""}
-                            inputForms={sp?.input_forms ?? ""}
-                            outputForms={sp?.output_forms ?? ""}
-                            dataForm=""
-                            startCondition={sp?.start_condition ?? ""}
-                            endCondition={sp?.end_condition ?? ""}
-                            readOnly
-                            onPatch={() => {}}
-                          />
-                          <p className="mt-1 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
-                        </>
-                      ) : (
-                        <NodeDetailsFields
-                          idPrefix="modal-detail"
-                          nodeKey={nodeId}
-                          inputWidth="w-44"
-                          input={form.input}
-                          output={form.output}
-                          inputForms={form.input_forms}
-                          outputForms={form.output_forms}
-                          outputIds={form.output_ids}
-                          inputLinks={form.input_links}
-                          outputLinks={form.output_links}
-                          inputFlags={form.input_flags}
-                          dataForm={form.data_form}
-                          startCondition={form.start_condition}
-                          endCondition={form.end_condition}
-                          readOnly={readOnly}
-                          onPatch={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                        />
-                      )}
-                    </div>
+                      },
+                      t("inspector.details"),
+                      filledDetailCount,
+                      hasChangedIn(DETAILS_KEYS),
                     )}
+                    <AutoHeight className="overflow-hidden">
+                      {!detailsCollapsed && (
+                        <div className="ml-2 border-l border-divider pl-2">
+                          <div className={GRID} data-id="summary-detail-tiles">{detailTiles}</div>
+                          {inheritedHint}
+                        </div>
+                      )}
                     </AutoHeight>
                   </div>
                 )}
@@ -1342,6 +1403,7 @@ export function NodeSummaryModal({
                 </button>
                 <button
                   type="button"
+                  data-id="summary-save"
                   className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
                   onClick={handleSave}
                 >
@@ -1394,46 +1456,8 @@ export function NodeSummaryModal({
             </div>
           </div>
         )}
-
-        {/* 부서 변경 확인 — 담당자 있을 때 부서 변경 시 (확인/취소) */}
-        {pendingDept !== null && (
-          <div
-            className="absolute inset-0 z-10 flex items-center justify-center p-4"
-            style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-            onClick={() => setPendingDept(null)}
-          >
-            <div
-              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4 shadow-lg"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center gap-2 text-body-strong text-ink">
-                <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-error" />
-                {t("assignee.deptChangeTitle")}
-              </div>
-              <p className="mt-1.5 text-caption text-ink-secondary">{t("assignee.deptChangeBody")}</p>
-              <div className="mt-3 flex justify-end gap-1.5">
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                  onClick={() => setPendingDept(null)}
-                >
-                  {t("summary.cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-                  onClick={() => {
-                    setForm((f) => ({ ...f, department: pendingDept, assignee: "" }));
-                    setPendingDept(null);
-                  }}
-                >
-                  {t("editor.save")}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+      {renderPopover()}
     </ModalBackdrop>
   );
 }

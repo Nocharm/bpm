@@ -24,3 +24,34 @@ export function sortUsersByOrgProximity<T extends { name: string; org_path?: str
     return a.name.localeCompare(b.name);
   });
 }
+
+/** 부서 피커 기본(무검색) 순서 — 내 부서 체인(말단→루트)을 맨 위에 고정하고, 나머지는 근접도 버킷
+ *  오름차순·버킷 내 원래 순서. 새 맵 오우닝 부서 피커(principal-picker pinned)와 같은 규칙
+ *  (사용자 요청 2026-09-03). pathByDept는 부서명→org_path(소속 직원에서 파생), 없으면 최후순위. */
+export function sortDepartmentsByOrgProximity(
+  departments: readonly string[],
+  pathByDept: ReadonlyMap<string, string>,
+  myPath: string,
+): string[] {
+  const mine = myPath.split("/").filter(Boolean);
+  // 내 경로 자체(0) 또는 그 조상(1=상위 …)이면 체인 순위, 아니면 -1
+  const chainRank = (path: string): number => {
+    if (!path || mine.length === 0) return -1;
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length > mine.length) return -1;
+    for (let i = 0; i < parts.length; i++) if (parts[i] !== mine[i]) return -1;
+    return mine.length - parts.length;
+  };
+  return departments
+    .map((dept, index) => {
+      const path = pathByDept.get(dept) ?? "";
+      const chain = chainRank(path);
+      return { dept, index, chain, rank: chain >= 0 ? -1 : rankOrgProximity(myPath, path) };
+    })
+    .sort((a, b) => {
+      if (a.chain >= 0 && b.chain >= 0) return a.chain - b.chain;
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.dept);
+}

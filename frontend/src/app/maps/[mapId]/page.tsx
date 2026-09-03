@@ -11285,8 +11285,15 @@ function MapEditor({ mapId }: { mapId: number }) {
                   />
                 }
                 subprocessTabSlot={
-                  // 지정된 맵에서만 탭 노출 — 지정 메타(버전·시점·행위자) + 역참조 목록
-                  spUsage?.designated ? <SubprocessUsageTab usage={spUsage} /> : undefined
+                  // 지정된 맵에서만 탭 노출 — 지정 메타(버전·시점·행위자) + 역참조 목록 + 지정 파라미터 타일
+                  spUsage?.designated ? (
+                    <SubprocessUsageTab
+                      usage={spUsage}
+                      mapId={mapId}
+                      canManage={spCanManage}
+                      onDesignationChange={() => setSpUsageReload((n) => n + 1)}
+                    />
+                  ) : undefined
                 }
                 mapTabSlot={
                   // R5b/R6 W1 맵 탭 — 버전 선택(승인 탭에서 이동) + 가시성·소유자·협업자·설명(narrow)

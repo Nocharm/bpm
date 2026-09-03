@@ -1,7 +1,7 @@
 // 협업자 피커 조직 근접도 정렬 계약 (2026-08-26)
 import { describe, expect, it } from "vitest";
 
-import { rankOrgProximity, sortUsersByOrgProximity } from "@/lib/org-proximity";
+import { rankOrgProximity, sortDepartmentsByOrgProximity, sortUsersByOrgProximity } from "@/lib/org-proximity";
 
 const MY = "Center/Office/Team/Part";
 
@@ -40,5 +40,28 @@ describe("sortUsersByOrgProximity", () => {
     expect(sortUsersByOrgProximity(users, MY).map((u) => u.name)).toEqual([
       "Ab SamePart", "Dd SamePart", "Cc SameTeam", "Bb Far", "Aa NoOrg",
     ]);
+  });
+});
+
+describe("sortDepartmentsByOrgProximity", () => {
+  it("내 부서 체인(말단→루트) 고정 상단, 이어 근접도 버킷, 경로 미상은 맨 뒤", () => {
+    const paths = new Map([
+      ["Far", "OtherCenter/X"],
+      ["Team", "Center/Office/Team"],
+      ["Part", "Center/Office/Team/Part"],
+      ["Office", "Center/Office"],
+      ["Center", "Center"],
+      ["Sibling", "Center/Office/Team/Part2"],
+      ["Cousin", "Center/Office2/TeamY"],
+    ]);
+    const departments = ["Unknown", "Far", "Team", "Cousin", "Part", "Office", "Sibling", "Center"];
+    expect(sortDepartmentsByOrgProximity(departments, paths, MY)).toEqual([
+      "Part", "Team", "Office", "Center", "Sibling", "Cousin", "Far", "Unknown",
+    ]);
+  });
+
+  it("내 org 미상이면 체인 없이 원래 순서(경로 있는 부서 먼저)", () => {
+    const paths = new Map([["B", "X/Y"]]);
+    expect(sortDepartmentsByOrgProximity(["A", "B"], paths, "")).toEqual(["B", "A"]);
   });
 });

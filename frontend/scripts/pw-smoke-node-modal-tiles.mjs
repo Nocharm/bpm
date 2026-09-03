@@ -1,0 +1,291 @@
+// 노드 편집 모달 타일화 스모크 — 편집(타일→팝오버→Enter→저장), 비용 단위 탭, 부서 행 타일 피커,
+// 액션 바 셰브론(변경 있을 때만), 읽기 전용(정적 타일·IO 읽기 팝오버), SP 노드 모달(상속 읽기 타일·참고치),
+// Subprocess 탭 지정 파라미터 섹션 + 수정 → 지정 모달(부서/담당자 행 타일·비용 단일 타일).
+// 실행(frontend/ 에서): SCRATCH_DIR=<dir> BASE_URL=http://localhost:3000 node scripts/pw-smoke-node-modal-tiles.mjs
+// 전제: backend(8000)+frontend(3000) 네이티브 기동, reset_db 시드. 샘플 임포트는 이 스크립트가 API로 수행.
+import { chromium } from "playwright-core";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const ADMIN = "admin.sys";
+const SCRATCH = process.env.SCRATCH_DIR ?? "/tmp";
+const SAMPLE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../docs/samples/consultant-interview-sample");
+
+const results = [];
+const check = (name, ok, detail = "") => {
+  results.push({ name, ok });
+  console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
+};
+const shot = (page, name) => page.screenshot({ path: path.join(SCRATCH, `tiles-${name}.png`) });
+// 노드 편집 모달 열기 — 우클릭 메뉴 "Edit info"(더블클릭은 축소 캔버스에서 제목 히트 시 이름 편집으로 빠진다)
+const openNodeModal = async (page, text) => {
+  const node = page.locator(".react-flow__node").filter({ hasText: text }).first();
+  await node.click({ button: "right" });
+  await page.locator('[data-id="context-menu"]').getByText("Edit info").click();
+  await page.waitForSelector('[data-id="node-summary-body"]', { timeout: 8000 });
+};
+// ParamInput은 포커스 시 표시값(1,200·1h30m)→raw로 바뀐다 — fill의 전체선택이 그 리렌더에 풀려
+// 이어붙기(1200→12001238)가 되므로 먼저 포커스해 스왑을 끝낸 뒤 채운다
+const fillParam = async (page, selector, value) => {
+  const input = page.locator(selector);
+  await input.click();
+  await page.waitForTimeout(120);
+  await input.fill(value);
+};
+const expandSections = async (page, ids) => {
+  for (const id of ids) {
+    const toggle = page.locator(`[data-id="${id}"]`);
+    if ((await toggle.count()) > 0 && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  }
+};
+
+const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+const pageErrors = [];
+try {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript((user) => {
+    window.localStorage.setItem("bpm.devUser", user);
+    window.localStorage.setItem("bpm.lang", "en");
+    window.localStorage.setItem("bpm.inspectorWidth", "320");
+  }, ADMIN);
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => pageErrors.push(`pageerror: ${e.message}`));
+  const api = (p, { method = "GET", body } = {}) =>
+    page.evaluate(
+      async ({ p, method, body, user }) => {
+        const res = await fetch(`/api${p}`, {
+          method,
+          headers: { "Content-Type": "application/json", "X-Dev-User": user },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const text = await res.text();
+        if (!res.ok) throw new Error(`${method} ${p} → ${res.status} ${text.slice(0, 200)}`);
+        return text ? JSON.parse(text) : null;
+      },
+      { p, method, body, user: ADMIN },
+    );
+
+  // ── 0) 샘플 임포트(API) → 노드가 있는 맵·draft·게시본·L5 캔버스 확보 ───────────
+  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  const files = [];
+  for (const name of ["calibration-l5.json", "utility-l5.json"]) {
+    files.push({ name, content: JSON.parse(await fs.readFile(path.join(SAMPLE_DIR, name), "utf8")) });
+  }
+  const imported = await api("/categories/import-interview", { method: "POST", body: { files, apply: true, label: "tiles" } });
+  check("samples imported via API", imported.applied === true);
+  const maps = await api("/maps");
+  const target = maps.find((m) => m.consultant_code === "smp-cal-task-0001");
+  const detail = await api(`/maps/${target.id}`);
+  const draft = detail.versions.find((v) => v.status === "draft") ?? detail.versions[0];
+  const published = detail.versions.find((v) => v.status === "published");
+  await api(`/versions/${draft.id}/checkout`, { method: "POST", body: { force: true } });
+  const graph = await api(`/versions/${draft.id}/graph`);
+  const processNode = graph.nodes.find((n) => n.node_type === "process");
+  check("draft has a process node to edit", !!processNode, processNode?.title ?? "");
+  // 실행마다 다른 값 — 같은 DB에 재실행해도 "변경 있음" 판정이 살아 있게
+  const stamp = Date.now() % 1000;
+  const durH = 1 + (stamp % 8);
+  const durInput = `${durH}.30`;
+  const costVal = 1000 + stamp;
+  const costText = costVal.toLocaleString("en-US");
+  const spCostVal = 100000 + stamp * 100;
+  const spCostText = spCostVal.toLocaleString("en-US");
+
+  // ── 1) 편집 모달 — 타일 그리드 + 팝오버 Enter 확정 + 비용 단위 탭 ──────────────
+  await page.goto(`${BASE}/maps/${target.id}?version=${draft.id}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+  await page.waitForTimeout(500);
+  await openNodeModal(page, processNode.title);
+  await expandSections(page, ["summary-attrs-toggle", "summary-params-toggle", "summary-details-toggle"]);
+  await page.waitForSelector('[data-id="summary-tile-duration"]', { timeout: 5000 });
+  const editTiles = await page.locator('[data-id^="summary-tile-"]:not([data-id*="popover"])').count();
+  check("edit modal renders field tiles", editTiles >= 12, `tiles=${editTiles}`);
+  const modalWidth = (await page.locator('[data-id="node-summary-body"]').boundingBox())?.width ?? 0;
+  // 바디는 카드 안쪽(보더 1px×2 제외) — 512 카드면 510
+  check("modal width matches the 512px designation modal", Math.abs(modalWidth - 510) <= 2, `w=${modalWidth}`);
+  const deptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => `${el.tagName}:${getComputedStyle(el).gridColumn}`);
+  check("department is a clickable wide tile", deptTag.startsWith("BUTTON") && /span 2/.test(deptTag), deptTag);
+  await shot(page, "edit-modal-tiles");
+
+  await page.locator('[data-id="summary-tile-duration"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-duration"]', { timeout: 5000 });
+  // 액션 바 — 변경 없을 땐 셰브론 숨김, 입력하면 나타남
+  const chevronBefore = await page.locator('[data-id="summary-tile-popover-duration-menu-toggle"]').getAttribute("aria-hidden");
+  await fillParam(page, '[data-id="summary-param-duration"]', durInput);
+  await page.waitForTimeout(200);
+  const chevronAfter = await page.locator('[data-id="summary-tile-popover-duration-menu-toggle"]').getAttribute("aria-hidden");
+  check("action bar chevron appears only when dirty", chevronBefore === "true" && chevronAfter === "false", `${chevronBefore}→${chevronAfter}`);
+  await shot(page, "popover-duration");
+  await page.locator('[data-id="summary-param-duration"]').press("Enter");
+  const durTile = await page.locator('[data-id="summary-tile-duration"]').textContent();
+  check("Enter commits duration tile (Nh30m)", (durTile ?? "").includes(`${durH}h30m`), durTile ?? "");
+
+  await page.locator('[data-id="summary-tile-cost"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-cost"]', { timeout: 5000 });
+  await page.locator('[data-id="summary-tile-cost-unit-usd"]').click();
+  await fillParam(page, '[data-id="summary-param-cost"]', String(costVal));
+  await shot(page, "popover-cost");
+  await page.locator('[data-id="summary-param-cost"]').press("Enter");
+  const costTile = await page.locator('[data-id="summary-tile-cost"]').textContent();
+  check("cost tile shows value with USD pill", (costTile ?? "").includes(costText) && (costTile ?? "").includes("USD"), costTile ?? "");
+
+  // 부서 행 타일 → 피커 팝오버(내 부서 체인 우선)
+  await page.locator('[data-id="summary-tile-department"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-department"]', { timeout: 5000 });
+  await page.locator('[data-id="summary-tile-popover-department"] [data-id="search-select-trigger"]').click();
+  await page.waitForSelector('[data-id="search-select-menu"]', { timeout: 5000 });
+  const me = await api("/me");
+  const firstOption = await page.locator('[data-id="search-select-menu"] button').nth(1).textContent();
+  check("department list starts with my department", (firstOption ?? "").includes(me.department), `${firstOption} vs ${me.department}`);
+  await shot(page, "popover-department");
+  await page.locator('[data-id="search-select-menu"] button').nth(1).click();
+  await page.locator('[data-id="summary-tile-popover-department-commit"]').click();
+  const deptTile = await page.locator('[data-id="summary-tile-department"]').textContent();
+  check("department tile shows the picked department as a leaf pill", (deptTile ?? "").includes(me.department) && (await page.locator('[data-id="summary-tile-department-pill"]').count()) === 1, deptTile ?? "");
+  // 부서 필 클릭 → 조직 정보 모달(피커 팝오버는 열리지 않는다)
+  await page.locator('[data-id="summary-tile-department-pill"]').click();
+  const orgModal = await page.locator('[data-id="org-info-modal"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  const pickerOpened = await page.locator('[data-id="summary-tile-popover-department"]').count();
+  check("department pill opens the org info modal instead of the picker", orgModal && pickerOpened === 0);
+  await page.waitForTimeout(450); // 등장 애니메이션(comment-modal-in) 종료 후 캡처
+  await shot(page, "dept-pill-org-modal");
+  await page.mouse.click(30, 450); // 백드롭 클릭으로 조직 모달만 닫기
+  await page.waitForSelector('[data-id="org-info-modal"]', { state: "detached", timeout: 5000 });
+  check("closing the org modal keeps the node modal open", (await page.locator('[data-id="node-summary-body"]').count()) === 1);
+
+  // 입출력 타일 → 플라이아웃 편집기('+ Add' 푸터)
+  await page.locator('[data-id="summary-tile-input"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-input"]', { timeout: 5000 });
+  await page.locator('[data-id="summary-tile-io-input-add"]').click();
+  const rows = page.locator('[data-id^="summary-tile-io-input-row-"]');
+  const lastRow = rows.nth((await rows.count()) - 1);
+  await lastRow.fill("타일 스모크 인풋");
+  await lastRow.press("Enter");
+  await shot(page, "popover-input");
+  await page.locator('[data-id="summary-tile-popover-input-commit"]').click();
+  const inputTile = await page.locator('[data-id="summary-tile-input"]').textContent();
+  check("input tile shows item count after add", /\d+ items/.test(inputTile ?? ""), inputTile ?? "");
+
+  await page.locator('[data-id="summary-save"]').click();
+  await page.waitForSelector('[data-id="node-summary-body"]', { state: "detached", timeout: 8000 });
+  await page.waitForTimeout(2500); // autosave
+  const saved = await api(`/versions/${draft.id}/graph`);
+  const savedNode = saved.nodes.find((n) => n.id === processNode.id);
+  check(
+    "modal save persisted duration/cost_usd/department/input",
+    savedNode?.duration === durInput && savedNode?.cost_usd === String(costVal) && savedNode?.cost_krw === "" && savedNode?.department === me.department && (savedNode?.input ?? "").includes("타일 스모크 인풋"),
+    `${savedNode?.duration}/${savedNode?.cost_usd}/${savedNode?.department}`,
+  );
+
+  // ── 2) 읽기 전용(게시본) — 정적 타일, 입출력만 읽기 팝오버 ──────────────────────
+  await page.goto(`${BASE}/maps/${target.id}?version=${published.id}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+  await page.waitForTimeout(500);
+  const pubGraph = await api(`/versions/${published.id}/graph`);
+  const pubNode = pubGraph.nodes.find((n) => n.node_type === "process" && (n.input ?? "") !== "") ?? pubGraph.nodes.find((n) => n.node_type === "process");
+  await openNodeModal(page, pubNode.title);
+  const readTiles = await page.locator('[data-id^="summary-tile-"]:not([data-id*="popover"])').count();
+  const staticTag = await page.locator('[data-id="summary-tile-type"]').evaluate((el) => el.tagName);
+  check("read-only modal renders static tiles", readTiles >= 2 && staticTag === "DIV", `tiles=${readTiles} type=${staticTag}`);
+  const editable = await page.locator('[data-id="summary-tile-popover-duration"]').count();
+  check("read-only modal has no edit popover", editable === 0);
+  if ((pubNode.input ?? "") !== "") {
+    const ioTag = await page.locator('[data-id="summary-tile-input"]').evaluate((el) => el.tagName);
+    await page.locator('[data-id="summary-tile-input"]').click();
+    const ro = await page.locator('[data-id="summary-tile-popover-input"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+    const roCommit = await page.locator('[data-id="summary-tile-popover-input-commit"]').count();
+    check("read-only input tile opens a view-only popover", ioTag === "BUTTON" && ro && roCommit === 0);
+    await shot(page, "readonly-io-popover");
+    await page.locator('[data-id="summary-tile-popover-input-close"]').click();
+  }
+  await shot(page, "readonly-modal");
+  await page.keyboard.press("Escape");
+
+  // ── 3) Subprocess 탭 — 지정 파라미터 타일 + 수정 → 지정 모달(행 타일·비용 단일 타일) ──
+  await page.locator('button[aria-label="Subprocess"]').first().click();
+  await page.waitForSelector('[data-id="sp-usage-params"]', { timeout: 10000 });
+  const usageTiles = await page.locator('[data-id^="sp-usage-tile-"]:not([data-id$="-pill"])').count();
+  check("Subprocess tab lists designation value tiles", usageTiles >= 3, `tiles=${usageTiles}`);
+  const usageLayout = await page.locator('[data-id="sp-usage-param-tiles"]').evaluate((el) => getComputedStyle(el).flexDirection);
+  check("Subprocess tab tiles stack in one column", usageLayout === "column", usageLayout);
+  const beforeSp = await api(`/maps/${target.id}`);
+  if ((beforeSp.sp_total_time_fallback ?? "") !== "" || (beforeSp.sp_frequency_fallback ?? "") !== "") {
+    const noteField = (beforeSp.sp_total_time_fallback ?? "") !== "" ? "duration" : "annual_count";
+    await page.locator(`[data-id="sp-usage-tile-${noteField}"]`).hover();
+    await page.locator(`[data-id="sp-usage-note-${noteField}"]`).click();
+    const notePop = await page.locator(`[data-id="sp-usage-note-${noteField}-popover"]`).waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+    check("hovering a tile with an interview note swaps the icon and opens the note", notePop, noteField);
+    await shot(page, "sp-usage-note");
+    // 원문 팝오버는 포커스를 잡지 않는다 — 바깥(오버레이) 클릭으로 닫는다
+    await page.mouse.click(400, 500);
+    await page.waitForSelector(`[data-id="sp-usage-note-${noteField}-popover"]`, { state: "detached", timeout: 5000 });
+  } else {
+    check("interview note icons (no fallback text in this delivery - skipped)", true);
+  }
+  const usageOrder = await page.evaluate(() => {
+    const linked = document.querySelector('[data-id="sp-usage-row"]')?.getBoundingClientRect().top ?? 0;
+    const params = document.querySelector('[data-id="sp-usage-params"]')?.getBoundingClientRect().top ?? 0;
+    return { linked, params };
+  });
+  check("designation section sits below the linked-from list", usageOrder.params > usageOrder.linked, JSON.stringify(usageOrder));
+  await shot(page, "sp-usage-tab");
+  await page.locator('[data-id="sp-usage-edit"]').click();
+  await page.waitForSelector('[data-id="subprocess-designation-modal"]', { timeout: 8000 });
+  await expandSections(page, ["sp-designation-attrs-toggle", "sp-designation-params-toggle", "sp-designation-details-toggle"]);
+  const spDeptWide = await page.locator('[data-id="sp-tile-department"]').evaluate((el) => getComputedStyle(el).gridColumn);
+  check("designation modal has wide department tile", /span 2/.test(spDeptWide), spDeptWide);
+  const oldCostTiles = await page.locator('[data-id="sp-tile-cost_krw"], [data-id="sp-tile-cost_usd"]').count();
+  check("designation modal folds cost into one tile", oldCostTiles === 0 && (await page.locator('[data-id="sp-tile-cost"]').count()) === 1);
+  await page.locator('[data-id="sp-tile-cost"]').click();
+  await page.waitForSelector('[data-id="sp-tile-popover-cost"]', { timeout: 5000 });
+  const unitHint = await page.locator('[data-id="sp-tile-popover-cost"]').textContent();
+  check("cost popover explains the one-currency rule", (unitHint ?? "").toLowerCase().includes("one currency"), (unitHint ?? "").slice(0, 80));
+  await page.locator('[data-id="sp-tile-cost-unit-krw"]').click();
+  await fillParam(page, '[data-id="sp-tile-input-cost"]', String(spCostVal));
+  await page.locator('[data-id="sp-tile-input-cost"]').press("Enter");
+  const spCost = await page.locator('[data-id="sp-tile-cost"]').textContent();
+  check("designation cost tile shows KRW pill and value", (spCost ?? "").includes(spCostText) && (spCost ?? "").includes("KRW"), spCost ?? "");
+  await shot(page, "sp-modal-cost");
+  await page.locator('[data-id="subprocess-designation-save"]').click();
+  await page.waitForSelector('[data-id="subprocess-designation-modal"]', { state: "detached", timeout: 10000 });
+  const afterSp = await api(`/maps/${target.id}`);
+  check("designation cost persisted as KRW only", afterSp.sp_cost_krw === String(spCostVal) && (afterSp.sp_cost_usd ?? "") === "", `${afterSp.sp_cost_krw}/${afterSp.sp_cost_usd}`);
+  await page.waitForTimeout(800); // usage 재조회 → 상세 재조회
+  const usageCost = await page.locator('[data-id="sp-usage-tile-cost"]').textContent().catch(() => "");
+  check("Subprocess tab cost tile refreshes after save", (usageCost ?? "").includes(spCostText), usageCost ?? "");
+
+  // ── 4) SP 노드 모달(L5 연계 캔버스) — 상속 읽기 타일 + 연간 건수 참고치 ─────────
+  const linkage = await api(`/categories/${detail.category_id}/linkage-map`, { method: "POST" }).catch(() => null);
+  const canvasId = linkage?.map_id ?? linkage?.map?.id ?? linkage?.id ?? null;
+  if (canvasId) {
+    const cdetail = await api(`/maps/${canvasId}`);
+    const cver = cdetail.versions.find((v) => v.status === "draft") ?? cdetail.versions[0];
+    await api(`/versions/${cver.id}/checkout`, { method: "POST", body: { force: true } }).catch(() => null);
+    await page.goto(`${BASE}/maps/${canvasId}?version=${cver.id}`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".react-flow__node", { timeout: 30000 });
+    await page.waitForTimeout(500);
+    await openNodeModal(page, "교정 준비");
+    await expandSections(page, ["summary-attrs-toggle", "summary-params-toggle", "summary-details-toggle"]);
+    const spDeptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => el.tagName).catch(() => "none");
+    const annualTag = await page.locator('[data-id="summary-tile-annual_count"]').evaluate((el) => el.tagName).catch(() => "none");
+    check("SP modal: inherited department is static, annual count editable", spDeptTag === "DIV" && annualTag === "BUTTON", `${spDeptTag}/${annualTag}`);
+    await page.locator('[data-id="summary-tile-annual_count"]').click();
+    const refVisible = await page.locator('[data-id="summary-tile-reference"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+    check("SP annual count popover shows designated reference", refVisible);
+    await shot(page, "sp-node-modal");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+  } else {
+    check("L5 linkage canvas found", false, "no framework map");
+  }
+
+  check("no page errors", pageErrors.length === 0, pageErrors.join(" | "));
+} finally {
+  await browser.close();
+}
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} passed`);
+if (failed.length > 0) process.exit(1);

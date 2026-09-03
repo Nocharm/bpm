@@ -1,28 +1,113 @@
 "use client";
 
-// 인스펙터 Subprocess 탭 — 지정 메타(버전·시점·행위자) + 이 맵을 링크한 부모 맵 목록(역참조).
-// 탭 자체는 지정된 맵에서만 노출 — page.tsx가 designated일 때만 슬롯을 주입한다.
+// 인스펙터 Subprocess 탭 — 지정 메타(버전·시점·행위자) + 이 맵을 링크한 부모 맵 목록(역참조)
+// + 지정 파라미터(읽기 타일 그리드 — 지정 모달과 같은 타일, 오너·관리자는 헤더 '수정'으로 모달 열기,
+// 사용자 결정 2026-09-03). 탭 자체는 지정된 맵에서만 노출 — page.tsx가 designated일 때만 슬롯을 주입한다.
 
-import { ArrowUpRight, Info, Workflow } from "lucide-react";
+import { ArrowUpRight, Info, Link as LinkIcon, LogIn, LogOut, Monitor, Pencil, Workflow, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { CurrencyPill, type CostUnit } from "@/components/cost-unit";
+import { FallbackHint } from "@/components/fallback-hint";
+import { MultiValueInput } from "@/components/multi-value-input";
+import { PARAM_ICON } from "@/components/param-icons";
+import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
+import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
+import { SpFieldTile } from "@/components/permissions/sp-field-tile";
+import { SubprocessDesignationModal, type DesignationForm } from "@/components/permissions/subprocess-designation-modal";
+import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { Tooltip } from "@/components/tooltip";
 import { UserPill } from "@/components/user-pill";
-import { type SubprocessUsage } from "@/lib/api";
+import { getMap, type MapDetail, type MapSummary, type SubprocessUsage } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
+import { formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
+import { formatParamValue, PARAM_LABEL_KEY } from "@/lib/params";
 
 interface SubprocessUsageTabProps {
   usage: SubprocessUsage;
+  mapId: number;
+  // 지정 수정 게이트 — 게시본 열림 && (오너 || sysadmin). 없으면 읽기만
+  canManage?: boolean;
+  onDesignationChange?: () => void;
 }
 
-export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
+const countLines = (joined: string): number => joined.split("\n").filter((line) => line.trim() !== "").length;
+
+// 맵 상세 → 지정 모달 초기 폼 (SP 카드 openModal과 동일 매핑)
+function toDesignationForm(detail: MapSummary): DesignationForm {
+  return {
+    department: detail.sp_department ?? "",
+    assignee: detail.sp_assignee ?? "",
+    system: detail.sp_system ?? "",
+    duration: detail.sp_duration ?? "",
+    touch_time: detail.sp_touch_time ?? "",
+    cost_krw: detail.sp_cost_krw ?? "",
+    cost_usd: detail.sp_cost_usd ?? "",
+    headcount: detail.sp_headcount ?? "",
+    annual_count: detail.sp_annual_count ?? "",
+    fte: detail.sp_fte ?? "",
+    total_time_fallback: detail.sp_total_time_fallback ?? "",
+    touch_time_fallback: detail.sp_touch_time_fallback ?? "",
+    system_fallback: detail.sp_system_fallback ?? "",
+    frequency_fallback: detail.sp_frequency_fallback ?? "",
+    url: detail.sp_url ?? "",
+    urlLabel: detail.sp_url_label ?? "",
+    input: detail.sp_input ?? "",
+    input_forms: detail.sp_input_forms ?? "",
+    input_ids: detail.sp_input_ids ?? "",
+    output: detail.sp_output ?? "",
+    output_forms: detail.sp_output_forms ?? "",
+    output_ids: detail.sp_output_ids ?? "",
+    description: detail.description ?? "",
+  };
+}
+
+export function SubprocessUsageTab({ usage, mapId, canManage = false, onDesignationChange }: SubprocessUsageTabProps) {
   const { t } = useI18n();
+  const labels = buildPopoverActionLabels(t);
+  const [detail, setDetail] = useState<MapDetail | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  // 입출력 열람 팝오버 — 목록을 열어야만 보이는 항목이라 읽기 타일도 클릭 가능
+  const [viewIo, setViewIo] = useState<{ field: "input" | "output"; at: { x: number; y: number } } | null>(null);
+
+  // 지정 값은 맵 상세에 있다 — usage(지정 변경 시 재조회되는 객체)가 바뀔 때마다 함께 갱신
+  useEffect(() => {
+    let alive = true;
+    void getMap(mapId)
+      .then((result) => {
+        if (alive) setDetail(result);
+      })
+      .catch(() => {
+        // 조회 실패 시 지정 파라미터 섹션만 비표시
+      });
+    return () => {
+      alive = false;
+    };
+  }, [mapId, usage]);
+
   const versionText =
     usage.designated_version_number != null
       ? `v${usage.designated_version_number}${usage.designated_version_label ? ` · ${usage.designated_version_label}` : ""}`
       : (usage.designated_version_label ?? "-");
+
+  const form = detail ? toDesignationForm(detail) : null;
+  const publishedVersionId =
+    detail?.versions
+      .filter((version) => version.status === "published")
+      .reduce<number | null>((max, version) => (max === null || version.id > max ? version.id : max), null) ?? null;
+  const costUnit: CostUnit = form?.cost_usd ? "cost_usd" : "cost_krw";
+  const costValue = form ? formatThousands(form[costUnit]) : "";
+  const ioCount = (field: "input" | "output") => (form ? countLines(form[field]) : 0);
+  // 원문 메모가 있는 파라미터 — 행 호버 시 아이콘이 메모 아이콘으로 바뀌는 FallbackHint(읽기), 없으면 기본 아이콘
+  const noteIcon = (field: string, icon: LucideIcon, note: string) =>
+    note.trim() !== "" ? <FallbackHint fallback={note} dataId={`sp-usage-note-${field}`} restIcon={icon} /> : undefined;
+  const filledCount = form
+    ? [form.department, form.assignee, form.system, form.url, form.duration, form.touch_time, costValue,
+       form.headcount, form.annual_count, form.fte, form.input, form.output].filter((v) => v.trim() !== "").length
+    : 0;
+
   return (
     <div data-id="sp-usage-tab" className="flex flex-col gap-4">
       {/* 지정 메타 — 버전·시점·행위자 (SP 카드와 동일 박스 스타일) */}
@@ -119,6 +204,154 @@ export function SubprocessUsageTab({ usage }: SubprocessUsageTabProps) {
           </p>
         )}
       </section>
+
+      {/* 지정 파라미터 — 지정 모달과 같은 타일(값 있는 것만, 정적). 입출력은 클릭해 목록 열람 */}
+      {form && (
+        <section data-id="sp-usage-params">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="text-fine font-semibold text-ink">{t("inspector.spUsageParamsTitle")}</span>
+            {canManage && publishedVersionId !== null && (
+              <button
+                type="button"
+                data-id="sp-usage-edit"
+                className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt hover:text-ink"
+                onClick={() => setShowModal(true)}
+              >
+                <Pencil size={12} strokeWidth={1.5} />
+                {t("inspector.spUsageEdit")}
+              </button>
+            )}
+          </div>
+          {filledCount === 0 ? (
+            <p className="rounded-sm border border-hairline bg-surface-alt/50 px-2.5 py-2 text-fine text-ink-tertiary">
+              {t("inspector.spUsageParamsEmpty")}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5" data-id="sp-usage-param-tiles">
+              {/* 좁은 인스펙터 — 1열 행 타일. 원문 메모가 있는 파라미터는 행 호버 시 아이콘이 메모 아이콘으로
+                  바뀌고 클릭하면 원문 팝오버(읽기) (사용자 결정 2026-09-03) */}
+              <DeptAssigneeTiles
+                versionId={null}
+                department={form.department}
+                assignee={form.assignee}
+                readOnly
+                dataIdPrefix="sp-usage-tile"
+                labels={labels}
+                onChange={() => {}}
+              />
+              {form.system.trim() !== "" && (
+                <SpFieldTile
+                  dataId="sp-usage-tile-system"
+                  icon={Monitor}
+                  iconSlot={noteIcon("system", Monitor, form.system_fallback)}
+                  label={t("field.system")}
+                  value={form.system}
+                  wide
+                  readOnly
+                />
+              )}
+              {form.url.trim() !== "" && (
+                <SpFieldTile dataId="sp-usage-tile-url" icon={LinkIcon} label={t("field.url")} value={form.urlLabel.trim() || form.url.trim()} wide readOnly />
+              )}
+              {(["duration", "touch_time"] as const).map((field) =>
+                form[field] !== "" ? (
+                  <SpFieldTile
+                    key={field}
+                    dataId={`sp-usage-tile-${field}`}
+                    icon={PARAM_ICON[field]}
+                    iconSlot={noteIcon(field, PARAM_ICON[field], field === "duration" ? form.total_time_fallback : form.touch_time_fallback)}
+                    label={t(PARAM_LABEL_KEY[field])}
+                    value={formatParamValue(field, form[field])}
+                    wide
+                    readOnly
+                  />
+                ) : null,
+              )}
+              {costValue !== "" && (
+                <SpFieldTile
+                  dataId="sp-usage-tile-cost"
+                  icon={PARAM_ICON[costUnit]}
+                  label={t("field.costRun")}
+                  value={costValue}
+                  valueNode={<CurrencyPill unit={costUnit} />}
+                  wide
+                  readOnly
+                />
+              )}
+              {(["headcount", "annual_count", "fte"] as const).map((field) =>
+                form[field] !== "" ? (
+                  <SpFieldTile
+                    key={field}
+                    dataId={`sp-usage-tile-${field}`}
+                    icon={PARAM_ICON[field]}
+                    iconSlot={field === "annual_count" ? noteIcon(field, PARAM_ICON[field], form.frequency_fallback) : undefined}
+                    label={t(PARAM_LABEL_KEY[field])}
+                    value={form[field]}
+                    wide
+                    readOnly
+                  />
+                ) : null,
+              )}
+              {(["input", "output"] as const).map((field) =>
+                ioCount(field) > 0 ? (
+                  <SpFieldTile
+                    key={field}
+                    dataId={`sp-usage-tile-${field}`}
+                    icon={field === "input" ? LogIn : LogOut}
+                    label={field === "input" ? t("sp.input") : t("sp.output")}
+                    value={t("sp.tile.items", { n: ioCount(field) })}
+                    wide
+                    active={viewIo?.field === field}
+                    onOpen={(at) => setViewIo({ field, at })}
+                  />
+                ) : null,
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {viewIo && form && (
+        <SpFieldPopover
+          dataId={`sp-usage-popover-${viewIo.field}`}
+          anchor={viewIo.at}
+          title={viewIo.field === "input" ? t("sp.input") : t("sp.output")}
+          hint={t("sp.tile.readOnlyHint")}
+          width={420}
+          dirty={false}
+          readOnly
+          closeLabel={t("summary.close")}
+          onApply={() => {}}
+          onCommit={() => setViewIo(null)}
+          onCancel={() => setViewIo(null)}
+          labels={labels}
+        >
+          <MultiValueInput
+            dataId={`sp-usage-io-${viewIo.field}`}
+            label={viewIo.field === "input" ? t("sp.input") : t("sp.output")}
+            headless
+            value={form[viewIo.field]}
+            formsValue={viewIo.field === "input" ? form.input_forms : form.output_forms}
+            readOnly
+            onCommit={() => {}}
+          />
+        </SpFieldPopover>
+      )}
+
+      {showModal && form && detail && (
+        <SubprocessDesignationModal
+          mapId={mapId}
+          publishedVersionId={publishedVersionId}
+          designated
+          initial={form}
+          onSaved={() => {
+            // 저장본은 usage 재조회 → 상세 재조회 경로로 돌아온다(응답은 versions 없는 요약이라 직접 못 넣음)
+            setShowModal(false);
+            onDesignationChange?.();
+          }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
     </div>
   );
 }
