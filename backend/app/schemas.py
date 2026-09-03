@@ -112,6 +112,9 @@ class SubprocessDesignationIn(BaseModel):
     touch_time_fallback: str | None = Field(default=None, max_length=200)
     system_fallback: str | None = Field(default=None, max_length=200)
     frequency_fallback: str | None = Field(default=None, max_length=200)
+    # 시작·종료 조건 — 지정 모달 타일이 함께 저장. None=미변경(구 클라이언트 호환), ""=지움 (2026-09-03)
+    start_condition: str | None = None
+    end_condition: str | None = None
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)

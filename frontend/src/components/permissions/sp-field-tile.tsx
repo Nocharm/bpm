@@ -23,6 +23,8 @@ interface SpFieldTileProps {
   placeholder?: string;
   // fallback: 대표값 대신 인터뷰 원문 메모를 값으로 보여줄 때 — 기울임·점선 보더·틴트 없음으로 임시값임을 드러낸다
   valueTone?: "default" | "fallback";
+  // 값 글자 크기 — 문장이 들어오는 필드(시작·종료 조건)는 한 단계 작게 (사용자 피드백 2026-09-03)
+  valueSize?: "caption" | "fine";
   disabled?: boolean;
   disabledHint?: string;
   active?: boolean;
@@ -36,8 +38,8 @@ const FIXED_WIDTH = 16 + 16 + 20;
 const MIN_LABEL_WIDTH = 44;
 
 export function SpFieldTile({
-  dataId, icon: Icon, label, value, valueNode, iconSlot, placeholder, valueTone = "default", disabled, disabledHint,
-  active, wide, readOnly, onOpen,
+  dataId, icon: Icon, label, value, valueNode, iconSlot, placeholder, valueTone = "default", valueSize = "caption",
+  disabled, disabledHint, active, wide, readOnly, onOpen,
 }: SpFieldTileProps) {
   const filled = value.trim() !== "" || valueNode != null;
   const isFallback = filled && valueTone === "fallback";
@@ -87,7 +89,7 @@ export function SpFieldTile({
       )}
       <span
         ref={valueRef}
-        className={`ml-auto inline-flex items-center gap-1.5 text-caption ${
+        className={`ml-auto inline-flex items-center gap-1.5 ${valueSize === "fine" ? "text-fine" : "text-caption"} ${
           isFallback ? "font-normal italic text-ink-secondary" : "font-semibold text-ink"
         } ${wide ? "min-w-0 justify-end text-right break-keep" : hideLabel ? "min-w-0 truncate" : "shrink-0"}`}
       >
@@ -104,7 +106,8 @@ export function SpFieldTile({
     <span className="min-w-0 truncate text-caption text-ink-secondary">{label}</span>
   );
 
-  const layout = `group flex min-w-0 items-center gap-2 rounded-sm border px-2.5 text-left transition-[background-color,border-color,scale] duration-150 ${
+  // overflow-hidden — 라벨 생략 판정이 끝나기 전 프레임이나 긴 라벨이 타일 밖으로 삐져나오지 않게
+  const layout = `group flex min-w-0 items-center gap-2 overflow-hidden rounded-sm border px-2.5 text-left transition-[background-color,border-color,scale] duration-150 ${
     wide ? "col-span-2 py-1.5" : "py-2"
   } ${tone}`;
   const title = filled ? `${label}: ${value}`.trim().replace(/:$/, "") : label;
@@ -114,8 +117,9 @@ export function SpFieldTile({
   const filledAttr = isFallback ? "fallback" : filled ? "true" : "false";
 
   if (readOnly) {
+    // ref — 읽기 타일도 라벨 생략 판정(긴 값이 타일을 넘지 않게)을 같이 받는다
     return (
-      <div data-id={dataId} data-filled={filledAttr} title={title} className={layout}>
+      <div ref={buttonRef} data-id={dataId} data-filled={filledAttr} title={title} className={layout}>
         {icon}
         {body}
       </div>

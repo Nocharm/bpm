@@ -33,12 +33,16 @@ export function AutoHeight({
   useEffect(() => {
     const el = innerRef.current;
     if (!el) return;
-    const sync = () => {
+    const sync = (entries?: ResizeObserverEntry[]) => {
       // 올림 + 테두리/패딩 보정 — height는 border-box라 테두리(위아래 1px씩)까지 포함해야 하고,
-      // 소수점을 내리면 1~2px이 모자라 불필요한 스크롤바가 생긴다(실측 2026-08-19)
+      // 소수점을 내리면 1~2px이 모자라 불필요한 스크롤바가 생긴다(실측 2026-08-19).
+      // 레이아웃 높이로 잰다 — getBoundingClientRect는 조상 transform(노드 편집 모달 팝인 scale 0.92→1)
+      // 중엔 줄어든 값을 줘 섹션이 잘렸다(사용자 피드백 2026-09-03). ResizeObserver borderBoxSize(분수 포함)
+      // 우선, 초기 호출은 offsetHeight
       const outer = el.parentElement;
       const chrome = outer ? outer.offsetHeight - outer.clientHeight : 0;
-      setHeight(Math.ceil(el.getBoundingClientRect().height) + chrome);
+      const box = entries?.[0]?.borderBoxSize?.[0]?.blockSize;
+      setHeight(Math.ceil(box ?? el.offsetHeight) + chrome);
       if (!measuredRef.current) {
         measuredRef.current = true;
         // 다음 프레임부터 트랜지션 — 초기 높이는 즉시 적용
@@ -46,7 +50,7 @@ export function AutoHeight({
       }
     };
     sync();
-    const observer = new ResizeObserver(sync);
+    const observer = new ResizeObserver((entries) => sync(entries));
     observer.observe(el);
     return () => observer.disconnect();
   }, []);

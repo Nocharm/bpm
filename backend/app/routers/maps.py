@@ -1521,6 +1521,11 @@ async def designate_subprocess(
         found_map.sp_system_fallback = payload.system_fallback.strip() or None
     if payload.frequency_fallback is not None:
         found_map.sp_frequency_fallback = payload.frequency_fallback.strip() or None
+    # 시작·종료 조건 — 지정 모달 타일(보낸 필드만 갱신, 승격 필드 카드 PATCH와 같은 컬럼) (2026-09-03)
+    if payload.start_condition is not None:
+        found_map.sp_start_condition = payload.start_condition.strip() or None
+    if payload.end_condition is not None:
+        found_map.sp_end_condition = payload.end_condition.strip() or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31)

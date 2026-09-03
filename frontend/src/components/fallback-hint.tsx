@@ -124,7 +124,8 @@ export function FallbackHint({
           <span
             data-id={`${dataId}-dot`}
             aria-hidden
-            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent opacity-60 ring-1 ring-surface transition-opacity duration-150 group-hover:opacity-100"
+            // 호버 중엔 점을 흐리게 — 바뀐 아이콘이 잘 보이게 (사용자 피드백 2026-09-03)
+            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent opacity-90 ring-1 ring-surface transition-opacity duration-150 group-hover:opacity-25"
           />
         )}
       </button>

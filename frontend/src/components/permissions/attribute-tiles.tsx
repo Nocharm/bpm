@@ -7,9 +7,10 @@
 // 조직 근접도순. 부서를 바꾸면 담당자는 초안에서 해제되고 안내가 뜬다(확인 모달 대신 — 팝오버 Esc가
 // 곧 취소). 읽기 전용이면 값 있는 정적 타일만.
 
-import { Building2, Users, X } from "lucide-react";
+import { Building2, Users } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from "react";
 
+import { AssigneePills } from "@/components/assignee-pills";
 import { useKoreanDeptByPath } from "@/components/map-ownership-section";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { OrgInfoModal } from "@/components/org-info-modal";
@@ -189,7 +190,9 @@ export function DeptAssigneeTiles({
           dataId={`${dataIdPrefix}-assignee`}
           icon={Users}
           label={t("field.assignee")}
-          value={assigneeText}
+          value=""
+          // 담당자는 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함) (사용자 요청 2026-09-03)
+          valueNode={assigneeText !== "" ? <AssigneePills assignee={assignee} dataIdPrefix={dataIdPrefix} /> : undefined}
           placeholder={placeholder}
           wide
           readOnly={readOnly}
@@ -254,34 +257,17 @@ export function DeptAssigneeTiles({
         ) : (
           <div className="flex flex-col gap-1.5">
             {draftAssignees.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1">
-                {draftAssignees.map((name) => {
-                  const isDrift = drifted.includes(name);
-                  return (
-                    <span
-                      key={name}
-                      className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                        isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink"
-                      }`}
-                    >
-                      {name}
-                      <button
-                        type="button"
-                        aria-label={t("summary.close")}
-                        onClick={() =>
-                          setActive((prev) =>
-                            prev
-                              ? { ...prev, assignee: formatAssignees(draftAssignees.filter((n) => n !== name)) }
-                              : prev,
-                          )
-                        }
-                      >
-                        <X size={11} strokeWidth={1.5} />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
+              <AssigneePills
+                assignee={active.assignee}
+                dataIdPrefix={`${dataIdPrefix}-draft`}
+                drifted={drifted}
+                align="start"
+                onRemove={(name) =>
+                  setActive((prev) =>
+                    prev ? { ...prev, assignee: formatAssignees(draftAssignees.filter((n) => n !== name)) } : prev,
+                  )
+                }
+              />
             )}
             <SearchSelect
               addMode

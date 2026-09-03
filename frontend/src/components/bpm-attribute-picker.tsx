@@ -3,9 +3,10 @@
 // 노드 BPM 속성 담당자·부서 피커 — 복수 담당자 칩+SearchSelect, 부서 변경 시 담당자 초기화 확인.
 // 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Building2, Users, X } from "lucide-react";
+import { Building2, Users } from "lucide-react";
 
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
+import { AssigneePills } from "@/components/assignee-pills";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { SearchSelect } from "@/components/search-select";
@@ -131,34 +132,17 @@ export function BpmAttributePicker({
             {assignees.length === 0 && readOnly ? (
               <span className="text-caption text-ink">{t("summary.none")}</span>
             ) : (
-              assignees.map((name) => {
-                const isDrift = drifted.includes(name);
-                return (
-                  <span
-                    key={name}
-                    className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                      isDrift
-                        ? "border-error/40 bg-error/10 text-error"
-                        : "border-hairline bg-surface-alt text-ink"
-                    }`}
-                  >
-                    {name}
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        aria-label={t("summary.close")}
-                        onClick={() =>
-                          onChange({
-                            assignee: formatAssignees(assignees.filter((n) => n !== name)),
-                          })
-                        }
-                      >
-                        <X size={11} strokeWidth={1.5} />
-                      </button>
-                    )}
-                  </span>
-                );
-              })
+              // 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함), 편집 모달 담당자 타일과 같은 문법 (2026-09-03)
+              <AssigneePills
+                assignee={assignee}
+                dataIdPrefix="inspector"
+                drifted={drifted}
+                onRemove={
+                  readOnly
+                    ? undefined
+                    : (name) => onChange({ assignee: formatAssignees(assignees.filter((n) => n !== name)) })
+                }
+              />
             )}
           </div>
           {!readOnly && (

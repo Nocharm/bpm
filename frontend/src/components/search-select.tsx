@@ -290,6 +290,7 @@ export function SearchSelect({
             <>
               <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
+                data-id="search-select-flyout"
                 className="fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
                 style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
               >

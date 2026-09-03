@@ -7,7 +7,8 @@
 // 탭 자체는 지정된 맵에서만 노출 — page.tsx가 designated일 때만 슬롯을 주입한다.
 
 import {
-  ArrowUpRight, BadgeCheck, Info, Link as LinkIcon, LogIn, LogOut, Monitor, Pencil, Workflow, type LucideIcon,
+  ArrowUpRight, BadgeCheck, Flag, Info, Link as LinkIcon, LogIn, LogOut, Monitor, Pencil, Play, Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
@@ -59,6 +60,8 @@ function toDesignationForm(detail: MapSummary): DesignationForm {
     touch_time_fallback: detail.sp_touch_time_fallback ?? "",
     system_fallback: detail.sp_system_fallback ?? "",
     frequency_fallback: detail.sp_frequency_fallback ?? "",
+    start_condition: detail.sp_start_condition ?? "",
+    end_condition: detail.sp_end_condition ?? "",
     url: detail.sp_url ?? "",
     urlLabel: detail.sp_url_label ?? "",
     input: detail.sp_input ?? "",
@@ -394,6 +397,20 @@ export function SubprocessUsageTab({
                   />
                 ),
               )}
+              {/* 시작·종료 조건 — 지정 모달 타일과 대칭(문장이라 값 글자 한 단계 작게) */}
+              {(["start_condition", "end_condition"] as const).map((field) => (
+                <SpFieldTile
+                  key={field}
+                  dataId={`sp-usage-tile-${field}`}
+                  icon={field === "start_condition" ? Play : Flag}
+                  label={field === "start_condition" ? t("field.startCondition") : t("field.endCondition")}
+                  value={form[field]}
+                  valueSize="fine"
+                  placeholder={notSet}
+                  wide
+                  readOnly
+                />
+              ))}
             </div>
           </div>
         </section>

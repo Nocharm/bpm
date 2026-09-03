@@ -373,6 +373,8 @@ export default function InboxPage() {
         touch_time_fallback: spModal.detail.sp_touch_time_fallback ?? "",
         system_fallback: spModal.detail.sp_system_fallback ?? "",
         frequency_fallback: spModal.detail.sp_frequency_fallback ?? "",
+        start_condition: spModal.detail.sp_start_condition ?? "",
+        end_condition: spModal.detail.sp_end_condition ?? "",
         url: spModal.detail.sp_url ?? "",
         urlLabel: spModal.detail.sp_url_label ?? "",
         input: spModal.detail.sp_input ?? "",

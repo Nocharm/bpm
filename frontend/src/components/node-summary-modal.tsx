@@ -864,6 +864,8 @@ export function NodeSummaryModal({
         label={tileLabel(field)}
         value={value}
         valueNode={valueNode}
+        // 조건은 문장 — 값 글자를 한 단계 작게 (사용자 피드백 2026-09-03)
+        valueSize={field === "start_condition" || field === "end_condition" ? "fine" : undefined}
         iconSlot={noteIcon(field, value !== "" || valueNode != null)}
         readOnly={!clickable}
         active={active?.field === field}
@@ -961,10 +963,10 @@ export function NodeSummaryModal({
       {renderTile("input", { readOnly: true })}
       {renderTile("output", { readOnly: true })}
       {(sp?.start_condition ?? "") !== "" && (
-        <SpFieldTile dataId="summary-tile-start_condition" icon={Play} label={t("field.startCondition")} value={sp?.start_condition ?? ""} readOnly />
+        <SpFieldTile dataId="summary-tile-start_condition" icon={Play} label={t("field.startCondition")} value={sp?.start_condition ?? ""} valueSize="fine" readOnly />
       )}
       {(sp?.end_condition ?? "") !== "" && (
-        <SpFieldTile dataId="summary-tile-end_condition" icon={Flag} label={t("field.endCondition")} value={sp?.end_condition ?? ""} readOnly />
+        <SpFieldTile dataId="summary-tile-end_condition" icon={Flag} label={t("field.endCondition")} value={sp?.end_condition ?? ""} valueSize="fine" readOnly />
       )}
     </>
   ) : (

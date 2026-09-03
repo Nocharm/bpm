@@ -529,6 +529,9 @@ export interface SubprocessDesignationBody {
   touch_time_fallback?: string;
   system_fallback?: string;
   frequency_fallback?: string;
+  // 시작·종료 조건 — 생략=미변경, ""=지움 (지정 모달 타일, 2026-09-03)
+  start_condition?: string;
+  end_condition?: string;
   url?: string;
   url_label?: string;
   input?: string;

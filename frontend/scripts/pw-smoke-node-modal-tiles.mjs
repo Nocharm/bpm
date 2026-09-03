@@ -151,6 +151,12 @@ try {
   check("saving the note keeps the node modal open (no tile popover opened)", (await page.locator('[data-id="summary-tile-popover-system"]').count()) === 0);
   await page.mouse.move(10, 10); // 호버 해제 — 점은 호버 전에도 보여야 한다
   check("a tile with a note shows a small dot before hover", (await page.locator('[data-id="summary-tile-note-icon-system-dot"]').count()) === 1);
+  await page.locator('[data-id="summary-tile-system"]').hover();
+  await page.waitForTimeout(250);
+  const dotOpacity = await page.locator('[data-id="summary-tile-note-icon-system-dot"]').evaluate((el) => getComputedStyle(el).opacity);
+  const hoveredTileBg = await page.locator('[data-id="summary-tile-system"]').evaluate((el) => getComputedStyle(el).backgroundColor);
+  check("note dot fades and the tile turns white while hovered", Number(dotOpacity) < 0.5 && /255,\s*255,\s*255/.test(hoveredTileBg), `${dotOpacity} ${hoveredTileBg}`);
+  await page.mouse.move(10, 10);
   // 시스템 팝오버 안에도 메모 칸
   await page.locator('[data-id="summary-tile-system"]').click();
   await page.waitForSelector('[data-id="summary-tile-popover-system"]', { timeout: 5000 });
@@ -193,6 +199,23 @@ try {
   await page.mouse.click(30, 450); // 백드롭 클릭으로 조직 모달만 닫기
   await page.waitForSelector('[data-id="org-info-modal"]', { state: "detached", timeout: 5000 });
   check("closing the org modal keeps the node modal open", (await page.locator('[data-id="node-summary-body"]').count()) === 1);
+  // 담당자 타일 → 피커(＋) → 첫 후보 선택 → 저장 → 인물 필 + 호버 인물 카드(부서 트리) + 인스펙터 동일 필
+  await page.locator('[data-id="summary-tile-assignee"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-assignee"]', { timeout: 5000 });
+  await page.locator('[data-id="summary-tile-popover-assignee"] button').filter({ has: page.locator("svg.lucide-plus") }).first().click();
+  await page.waitForSelector('[data-id="search-select-flyout"]', { timeout: 5000 });
+  const firstUser = (await page.locator('[data-id="search-select-flyout"] button').nth(1).textContent()) ?? "";
+  await page.locator('[data-id="search-select-flyout"] button').nth(1).click();
+  await page.locator('[data-id="summary-tile-popover-assignee-commit"]').click();
+  const assigneePill = page.locator('[data-id="summary-tile-assignee-pill"]').first();
+  check("assignee shows as a person pill", (await assigneePill.count()) >= 1 && (await assigneePill.getAttribute("data-resolved")) === "true", firstUser);
+  await assigneePill.hover();
+  const personCard = await page.locator('[data-id="person-hover-card"]').waitFor({ state: "visible", timeout: 3000 }).then(() => true).catch(() => false);
+  check("hovering the assignee pill opens the person card", personCard);
+  await shot(page, "assignee-pill-card");
+  await page.mouse.move(10, 10);
+  await page.waitForTimeout(300);
+  check("inspector assignee row shows the same person pill", (await page.locator('[data-id="inspector-assignee-pill"]').count()) >= 1);
 
   // 입출력 타일 → 플라이아웃 편집기('+ Add' · '다른 노드에서 불러오기' 푸터)
   await page.locator('[data-id="summary-tile-input"]').click();
@@ -223,9 +246,9 @@ try {
   const saved = await api(`/versions/${draft.id}/graph`);
   const savedNode = saved.nodes.find((n) => n.id === processNode.id);
   check(
-    "live edits persisted duration/cost_usd/department/input/system/note",
-    savedNode?.duration === durInput && savedNode?.cost_usd === String(costVal) && savedNode?.cost_krw === "" && savedNode?.department === me.department && (savedNode?.input ?? "").includes("타일 스모크 인풋") && savedNode?.system === sysText && savedNode?.system_fallback === `note-${stamp}`,
-    `${savedNode?.duration}/${savedNode?.cost_usd}/${savedNode?.department}/${savedNode?.system}/${savedNode?.system_fallback}`,
+    "live edits persisted duration/cost_usd/department/assignee/input/system/note",
+    savedNode?.duration === durInput && savedNode?.cost_usd === String(costVal) && savedNode?.cost_krw === "" && savedNode?.department === me.department && (savedNode?.assignee ?? "") !== "" && (savedNode?.input ?? "").includes("타일 스모크 인풋") && savedNode?.system === sysText && savedNode?.system_fallback === `note-${stamp}`,
+    `${savedNode?.duration}/${savedNode?.cost_usd}/${savedNode?.department}/${savedNode?.assignee}/${savedNode?.system}/${savedNode?.system_fallback}`,
   );
   // 인스펙터 BPM 속성 행 — 아이콘+라벨 문법, 시스템 행머리는 원문 메모 트리거
   const attrIcons = await page.locator('[data-id="inspector-attrs-toggle"]').locator("xpath=..").locator("svg").count();
@@ -362,6 +385,12 @@ try {
   // 원문 메모 필드 타일(시간·실작업·시스템·연간)엔 호버 메모 아이콘 — 값이 없어도 편집 모드라 추가 아이콘이 있다
   const spNoteIcons = await page.locator('[data-id^="sp-tile-note-icon-"]:not([data-id$="-dot"])').count();
   check("designation tiles with interview notes expose the hover note icon", spNoteIcons === 4, `icons=${spNoteIcons}`);
+  const condTiles = await page.locator('[data-id="sp-tile-start_condition"], [data-id="sp-tile-end_condition"]').count();
+  check("designation modal has start/end condition tiles", condTiles === 2, `tiles=${condTiles}`);
+  await page.locator('[data-id="sp-tile-start_condition"]').click();
+  await page.waitForSelector('[data-id="sp-tile-popover-start_condition"]', { timeout: 5000 });
+  await page.locator('[data-id="sp-tile-input-start_condition"]').fill(`start-${stamp}`);
+  await page.locator('[data-id="sp-tile-input-start_condition"]').press("Enter");
   const oldCostTiles = await page.locator('[data-id="sp-tile-cost_krw"], [data-id="sp-tile-cost_usd"]').count();
   check("designation modal folds cost into one tile", oldCostTiles === 0 && (await page.locator('[data-id="sp-tile-cost"]').count()) === 1);
   await page.locator('[data-id="sp-tile-cost"]').click();
@@ -378,9 +407,12 @@ try {
   await page.waitForSelector('[data-id="subprocess-designation-modal"]', { state: "detached", timeout: 10000 });
   const afterSp = await api(`/maps/${target.id}`);
   check("designation cost persisted as KRW only", afterSp.sp_cost_krw === String(spCostVal) && (afterSp.sp_cost_usd ?? "") === "", `${afterSp.sp_cost_krw}/${afterSp.sp_cost_usd}`);
+  check("designation start condition persisted from the modal tile", afterSp.sp_start_condition === `start-${stamp}`, afterSp.sp_start_condition ?? "");
   await page.waitForTimeout(800); // usage 재조회 → 상세 재조회
   const usageCost = await page.locator('[data-id="sp-usage-tile-cost"]').textContent().catch(() => "");
   check("Subprocess tab cost tile refreshes after save", (usageCost ?? "").includes(spCostText), usageCost ?? "");
+  const usageStart = await page.locator('[data-id="sp-usage-tile-start_condition"]').textContent().catch(() => "");
+  check("Subprocess tab shows the start condition tile", (usageStart ?? "").includes(`start-${stamp}`), usageStart ?? "");
 
   // ── 4) SP 노드 모달(L5 연계 캔버스) — 상속 읽기 타일 + 연간 건수 참고치 ─────────
   const linkage = await api(`/categories/${detail.category_id}/linkage-map`, { method: "POST" }).catch(() => null);
@@ -393,6 +425,20 @@ try {
     await page.waitForSelector(".react-flow__node", { timeout: 30000 });
     await page.waitForTimeout(500);
     await openNodeModal(page, "교정 준비");
+    // 섹션이 펼쳐진 채 열린 직후(팝인 애니메이션 뒤) 아코디언 높이가 내용을 다 담는다 — 잘림 회귀 방지
+    await page.waitForTimeout(500);
+    const clipState = await page.evaluate(() => {
+      const ids = ["summary-attr-tiles", "summary-param-tiles", "summary-detail-tiles"];
+      return ids.map((id) => {
+        const grid = document.querySelector(`[data-id="${id}"]`);
+        const box = grid?.closest(".scroll-quiet");
+        if (!grid || !box) return { id, ok: false, missing: true };
+        const g = grid.getBoundingClientRect();
+        const b = box.getBoundingClientRect();
+        return { id, ok: g.bottom <= b.bottom + 1, g: Math.round(g.bottom), b: Math.round(b.bottom) };
+      });
+    });
+    check("expanded sections are not clipped right after the modal opens", clipState.every((s) => s.ok || s.missing) && clipState.some((s) => !s.missing), JSON.stringify(clipState));
     await expandSections(page, ["summary-attrs-toggle", "summary-params-toggle", "summary-details-toggle"]);
     const spDeptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}`).catch(() => "none");
     const annualTag = await page.locator('[data-id="summary-tile-annual_count"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}`).catch(() => "none");
