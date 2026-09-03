@@ -744,6 +744,8 @@ class MapOut(BaseModel):
     # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
     category_path: str | None = None
     consultant_code: str | None = None
+    # 오너 없이 임포트된 맵 — 배지 표시용. 재전달 owner 결정 적용 또는 수동 이전이 내린다 (spec 2026-09-03 §5)
+    consultant_owner_pending: bool = False
     # framework 캔버스 전용 — 결착 카테고리(트랜지언트, get_map이 역조회로 주입) (design 2026-08-28 §8)
     linkage_category_id: int | None = None
     linkage_category_path: str | None = None

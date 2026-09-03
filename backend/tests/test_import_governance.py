@@ -147,3 +147,12 @@ def test_empty_delivered_values_are_not_diffs(client: TestClient) -> None:
     body = _post(client, _delivery(code, owner=None, approvers=[], department=None),
                  apply=False).json()
     assert body["governance"] == []
+
+
+def test_map_detail_exposes_owner_pending_flag(client: TestClient) -> None:
+    code = "task-gov-0007"
+    assert _post(client, _delivery(code, owner=None, approvers=[], department=None),
+                 apply=True).status_code == 200
+    m = _map_row(code)
+    body = client.get(f"/api/maps/{m.id}").json()
+    assert body["consultant_owner_pending"] is True

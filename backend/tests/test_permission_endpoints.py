@@ -572,6 +572,26 @@ def test_owner_transfer_invariant(client: TestClient, enforce: None) -> None:
     assert owner_grant_count(map_id) == 1  # 정확히 1개 owner grant
 
 
+def test_owner_transfer_clears_consultant_owner_pending(client: TestClient, enforce: None) -> None:
+    """임포트 오너 대기 플래그는 수동 이전으로도 내려간다 — 안 그러면 재전달 체크 목록에 유령 차이가 남는다."""
+    map_id = seed_map(
+        grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")],
+        owner_id="owner.u",
+    )
+
+    async def _mark(session) -> None:
+        (await session.get(ProcessMap, map_id)).consultant_owner_pending = True
+
+    _seed(_mark)
+    act_as("owner.u")
+    assert client.post(f"/api/maps/{map_id}/transfer-owner", json={"new_owner": "ed"}).status_code == 200
+
+    async def _flag(session) -> bool:
+        return (await session.get(ProcessMap, map_id)).consultant_owner_pending
+
+    assert _seed(_flag) is False
+
+
 def test_owner_transfer_non_owner_403(client: TestClient, enforce: None) -> None:
     map_id = seed_map(grants=[("user", "owner.u", "owner"), ("user", "ed", "editor")])
     act_as("ed")
