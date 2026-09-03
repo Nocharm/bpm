@@ -4,7 +4,7 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-09-03 — 편집 모달 4라운드: 담당자 인물 필·지정 모달 조건 타일·아코디언 잘림·타일 오버플로우 (dev)
-- **담당자 인물 필**(사용자 요청): 저장된 담당자(영문 name)를 디렉터리에서 해석해 필로, 호버 0.7초/클릭 시 기존 인물 카드(`PersonHoverCard`, 이름·아이디·말단 부서+조직 경로). 신규 공용 `AssigneePills` — 노드 편집 모달·지정 모달 타일(+피커 초안 칩)·인스펙터 BPM 속성 담당자 행이 공유. 미해석 이름은 정적 필.
+- **담당자 인물 필**(사용자 요청): 저장된 담당자(영문 name)를 디렉터리에서 해석해 필로(중립 톤 surface-alt — 액센트 톤 부서 필과 구분, 사용자 피드백), 호버 0.7초/클릭 시 기존 인물 카드(`PersonHoverCard`, 이름·아이디·말단 부서+조직 경로). 신규 공용 `AssigneePills` — 노드 편집 모달·지정 모달 타일(+피커 초안 칩)·인스펙터 BPM 속성 담당자 행이 공유. 미해석 이름은 정적 필.
 - **지정 모달 시작·종료 조건 타일** 누락 보완 — `SubprocessDesignationIn.start_condition/end_condition`(None=미변경, 승격 필드 PATCH와 같은 `sp_*` 컬럼)·`DesignationForm` 5개 빌더·Subprocess 탭 읽기 타일.
 - **펼친 채 열면 섹션이 잘리던 문제**: 원인은 `AutoHeight`가 `getBoundingClientRect`로 재는데 모달 팝인(scale 0.92→1) 중이라 줄어든 값이 고정된 것 — RO `borderBoxSize`/`offsetHeight`(레이아웃 높이)로 교체. **타일 오버플로우**: 읽기 타일에 ref가 없어 라벨 생략 판정이 안 돌던 것 교정 + 루트 `overflow-hidden`, 조건 타일 값은 `valueSize="fine"`. **메모 점**은 호버 시 25%로 흐려짐(아이콘 교체 가시성).
 - 검증: pytest 1347·vitest 850·`pw-smoke-node-modal-tiles.mjs` 63/63(담당자 필→인물 카드, 조건 타일 저장, 잘림 회귀, 점 페이드).

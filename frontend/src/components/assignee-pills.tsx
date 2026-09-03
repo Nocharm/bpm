@@ -53,8 +53,10 @@ export function AssigneePills({ assignee, dataIdPrefix, onRemove, drifted = [], 
             data-id={`${dataIdPrefix}-assignee-pill`}
             data-resolved={user ? "true" : "false"}
             title={user ? `${user.name}${user.korean_name ? ` (${user.korean_name})` : ""} · ${user.department}` : name}
+            // 인물 필은 중립 톤(surface-alt) — 액센트 톤인 부서 필과 한눈에 구분 (사용자 피드백 2026-09-03).
+            // 호버 시 이름만 액센트로(PersonHoverCard 트리거)
             className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-fine font-semibold ${
-              isDrift ? "border-error/40 bg-error/10 text-error" : "border-accent-tint-border bg-accent-tint text-accent"
+              isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink-secondary"
             }`}
           >
             {user ? (
