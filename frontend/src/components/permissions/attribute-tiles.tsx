@@ -34,6 +34,8 @@ interface DeptAssigneeTilesProps {
   // data-id 접두 — `${prefix}-department` / `${prefix}-assignee` / `${prefix}-popover-*`
   dataIdPrefix: string;
   labels: PopoverActionLabels;
+  // 읽기 전용에서 빈 값도 타일로 남길 때의 안내 문구("미입력") — 없으면 빈 타일은 숨긴다
+  placeholder?: string;
   onChange: (patch: { department: string; assignee: string }) => void;
 }
 
@@ -86,7 +88,7 @@ function DeptLeafPill({
 }
 
 export function DeptAssigneeTiles({
-  versionId, department, assignee, readOnly = false, dataIdPrefix, labels, onChange,
+  versionId, department, assignee, readOnly = false, dataIdPrefix, labels, placeholder, onChange,
 }: DeptAssigneeTilesProps) {
   const { t, lang } = useI18n();
   const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
@@ -159,12 +161,13 @@ export function DeptAssigneeTiles({
 
   const tiles = (
     <>
-      {(!readOnly || department !== "") && (
+      {(!readOnly || department !== "" || placeholder) && (
         <SpFieldTile
           dataId={`${dataIdPrefix}-department`}
           icon={Building2}
           label={t("field.department")}
           value=""
+          placeholder={placeholder}
           valueNode={
             department !== "" ? (
               <DeptLeafPill
@@ -181,12 +184,13 @@ export function DeptAssigneeTiles({
           onOpen={(at) => openPicker("department", at)}
         />
       )}
-      {(!readOnly || assigneeText !== "") && (
+      {(!readOnly || assigneeText !== "" || placeholder) && (
         <SpFieldTile
           dataId={`${dataIdPrefix}-assignee`}
           icon={Users}
           label={t("field.assignee")}
           value={assigneeText}
+          placeholder={placeholder}
           wide
           readOnly={readOnly}
           active={active?.field === "assignee"}

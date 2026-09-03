@@ -19,6 +19,10 @@ interface SpFieldTileProps {
   valueNode?: ReactNode;
   // 아이콘 자리 교체(예: 호버 시 원문 메모 아이콘으로 바뀌는 FallbackHint) — 타일 루트는 `group`
   iconSlot?: ReactNode;
+  // 값이 없을 때 우측에 흐리게 보이는 안내("미입력") — 읽기 목록에서 누락 항목을 감추지 않기 위해
+  placeholder?: string;
+  // fallback: 대표값 대신 인터뷰 원문 메모를 값으로 보여줄 때 — 기울임·점선 보더·틴트 없음으로 임시값임을 드러낸다
+  valueTone?: "default" | "fallback";
   disabled?: boolean;
   disabledHint?: string;
   active?: boolean;
@@ -32,9 +36,11 @@ const FIXED_WIDTH = 16 + 16 + 20;
 const MIN_LABEL_WIDTH = 44;
 
 export function SpFieldTile({
-  dataId, icon: Icon, label, value, valueNode, iconSlot, disabled, disabledHint, active, wide, readOnly, onOpen,
+  dataId, icon: Icon, label, value, valueNode, iconSlot, placeholder, valueTone = "default", disabled, disabledHint,
+  active, wide, readOnly, onOpen,
 }: SpFieldTileProps) {
   const filled = value.trim() !== "" || valueNode != null;
+  const isFallback = filled && valueTone === "fallback";
   const buttonRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef<HTMLSpanElement | null>(null);
   const [hideLabel, setHideLabel] = useState(false);
@@ -58,15 +64,17 @@ export function SpFieldTile({
     return () => observer.disconnect();
   }, [filled, value, wide]);
 
-  const tone = readOnly
-    ? filled
-      ? "border-accent-tint-border bg-accent-tint/40"
-      : "border-hairline bg-surface"
-    : active
-      ? "border-accent bg-accent-tint"
-      : filled
-        ? "border-accent-tint-border bg-accent-tint/40 hover:bg-accent-tint"
-        : "border-hairline bg-surface hover:bg-surface-alt";
+  const tone = isFallback
+    ? `border-dashed border-accent-tint-border bg-surface ${readOnly ? "" : active ? "border-accent" : "hover:bg-surface-alt"}`
+    : readOnly
+      ? filled
+        ? "border-accent-tint-border bg-accent-tint/40"
+        : "border-hairline bg-surface"
+      : active
+        ? "border-accent bg-accent-tint"
+        : filled
+          ? "border-accent-tint-border bg-accent-tint/40 hover:bg-accent-tint"
+          : "border-hairline bg-surface hover:bg-surface-alt";
   // 값은 잘리지 않는다 — 좁으면 라벨이 먼저 줄고, 그래도 모자라면 라벨을 생략(hideLabel)한 뒤에야 값이 잘린다.
   // wide 타일은 라벨을 자연폭으로 고정하고 값이 줄바꿈으로 내려간다(부서 경로처럼 긴 값)
   const body = filled ? (
@@ -76,13 +84,18 @@ export function SpFieldTile({
       )}
       <span
         ref={valueRef}
-        className={`ml-auto inline-flex items-center gap-1.5 text-caption font-semibold text-ink ${
-          wide ? "min-w-0 justify-end text-right break-keep" : hideLabel ? "min-w-0 truncate" : "shrink-0"
-        }`}
+        className={`ml-auto inline-flex items-center gap-1.5 text-caption ${
+          isFallback ? "font-normal italic text-ink-secondary" : "font-semibold text-ink"
+        } ${wide ? "min-w-0 justify-end text-right break-keep" : hideLabel ? "min-w-0 truncate" : "shrink-0"}`}
       >
         {valueNode}
         {value.trim() !== "" && <span className={wide || hideLabel ? "min-w-0 truncate" : ""}>{value}</span>}
       </span>
+    </>
+  ) : placeholder ? (
+    <>
+      <span className={`text-fine text-ink-tertiary ${wide ? "shrink-0" : "min-w-0 truncate"}`}>{label}</span>
+      <span className="ml-auto shrink-0 text-caption text-ink-muted">{placeholder}</span>
     </>
   ) : (
     <span className="min-w-0 truncate text-caption text-ink-secondary">{label}</span>
@@ -93,12 +106,13 @@ export function SpFieldTile({
   } ${tone}`;
   const title = filled ? `${label}: ${value}`.trim().replace(/:$/, "") : label;
   const icon = iconSlot ?? (
-    <Icon size={16} strokeWidth={1.5} className={`shrink-0 ${filled ? "text-accent" : "text-ink-tertiary"}`} />
+    <Icon size={16} strokeWidth={1.5} className={`shrink-0 ${filled && !isFallback ? "text-accent" : "text-ink-tertiary"}`} />
   );
+  const filledAttr = isFallback ? "fallback" : filled ? "true" : "false";
 
   if (readOnly) {
     return (
-      <div data-id={dataId} data-filled={filled ? "true" : "false"} title={title} className={layout}>
+      <div data-id={dataId} data-filled={filledAttr} title={title} className={layout}>
         {icon}
         {body}
       </div>
@@ -112,7 +126,7 @@ export function SpFieldTile({
       role="button"
       tabIndex={disabled ? -1 : 0}
       data-id={dataId}
-      data-filled={filled ? "true" : "false"}
+      data-filled={filledAttr}
       aria-disabled={disabled || undefined}
       title={disabled && disabledHint ? disabledHint : title}
       aria-label={label}

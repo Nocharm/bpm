@@ -83,10 +83,13 @@ export function FallbackHint({
         ref={buttonRef}
         type="button"
         data-id={dataId}
+        data-note={isEmpty ? "empty" : "present"}
         aria-label={isEmpty ? "Add interview note" : "Show original interview note"}
-        className={`shrink-0 rounded-sm ${padded ? "p-0.5" : ""} ${
+        // 행머리 스왑 모드: 호버 시 아이콘 뒤에 흰 칩(surface+그림자)을 깔아 틴트 배경 위에서도 아이콘 교체가
+        // 눈에 띄고, 메모가 있으면 호버 전에도 우상단 작은 점으로 알린다 (사용자 피드백 2026-09-03)
+        className={`relative shrink-0 rounded-sm ${padded ? "p-0.5" : ""} ${
           RestIcon
-            ? `${restClassName} group-hover:text-accent`
+            ? `${restClassName} transition-[background-color,box-shadow,color] duration-150 group-hover:bg-surface group-hover:text-accent group-hover:shadow-sm group-hover:ring-1 group-hover:ring-accent-tint-border`
             : isEmpty
               ? "text-ink-muted hover:bg-surface-alt hover:text-accent"
               : "text-accent hover:bg-accent-tint"
@@ -100,6 +103,13 @@ export function FallbackHint({
       >
         {RestIcon && (
           <RestIcon size={iconSize} strokeWidth={1.5} className={open ? "hidden" : "group-hover:hidden"} />
+        )}
+        {RestIcon && !isEmpty && (
+          <span
+            data-id={`${dataId}-dot`}
+            aria-hidden
+            className="pointer-events-none absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-accent ring-1 ring-surface"
+          />
         )}
         {isEmpty ? (
           <MessageSquarePlus

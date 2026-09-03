@@ -11312,6 +11312,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                       usage={spUsage}
                       mapId={mapId}
                       canManage={spCanManage}
+                      // 게시본이 아닌 버전이면 지정값 위 워터마크 + 게시본으로 이동(현재 스코프 저장 후 전환)
+                      currentVersionId={versionId}
+                      onGoPublished={(id) => void switchVersion(id)}
                       onDesignationChange={() => setSpUsageReload((n) => n + 1)}
                     />
                   ) : undefined

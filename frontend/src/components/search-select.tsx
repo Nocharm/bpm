@@ -223,9 +223,10 @@ export function SearchSelect({
                   {item.sub && <span className="ml-1 text-fine text-ink-tertiary">· {item.sub}</span>}
                 </span>
                 {item.tag && (
+                  /* 약한 하이라이트 필 — 새 맵 오우닝 부서 피커(PrincipalPicker)의 My Dept 필과 같은 치수 */
                   <span
                     data-id="search-select-tag"
-                    className="shrink-0 rounded-full border border-accent-tint-border bg-accent-tint px-1.5 py-0 text-fine text-accent"
+                    className="ml-auto shrink-0 rounded-full bg-accent-tint px-2 py-0.5 text-fine leading-4 text-accent"
                   >
                     {item.tag}
                   </span>

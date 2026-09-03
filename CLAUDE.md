@@ -149,3 +149,4 @@ docker-compose.yml
 @rules/languages/typescript.md
 @rules/frontend/design.md
 @rules/frontend/identifiers.md
+@rules/frontend/components.md

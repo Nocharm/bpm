@@ -158,8 +158,9 @@ function DockCardBody({ node, typeLabelOf }: { node: NavNodeRef; typeLabelOf: (n
 }
 
 // 선행/후행 사이드 독 — 모달 밖 캔버스 좌우에 세로 정렬로 떠 있는 간소 카드(색 점·라벨·타입).
-// 호버 시 10% 커지며 모달 쪽으로 들어오고 위아래 카드가 간격을 벌린다(margin 트랜지션) — 스크롤 상자에
-// 안쪽 여백을 둬 커진 카드가 경계에 잘리지 않는다(사용자 피드백 2026-09-03). 클릭=그 노드로 전환(애니메이션).
+// 호버 시 레이아웃으로 커진다(폭 +12px를 모달 쪽으로, 세로 패딩 +4px) — scale 변환은 래스터가 미세하게
+// 뒤틀려 보여 폐기(사용자 피드백 2026-09-03). 커진 높이만큼 위아래 카드가 자연히 벌어지고, 스크롤 상자
+// 안쪽 여백 덕에 경계에 잘리지 않는다. 클릭=그 노드로 전환(애니메이션).
 function NavDock({
   side,
   title,
@@ -192,7 +193,7 @@ function NavDock({
         <span className="text-ink-muted">({nodes.length})</span>
         {side === "right" && <Chevron size={12} strokeWidth={1.5} />}
       </div>
-      {/* 안쪽 여백 px-3.5/py-2 — scale 1.1 + 6px 이동분이 overflow(스크롤) 경계 안에 남는다 */}
+      {/* 안쪽 여백 px-3.5/py-2 — 호버로 12px 넓어진 카드가 overflow(스크롤) 경계 안에 남는다 */}
       <div className="scrollbar-hidden flex min-h-0 flex-col gap-1.5 overflow-y-auto px-3.5 py-2">
         {nodes.map((node) => (
           <button
@@ -202,9 +203,10 @@ function NavDock({
             title={node.label}
             style={hiddenId === node.id ? { visibility: "hidden" } : undefined}
             onClick={(e) => onPick(node, e.currentTarget.getBoundingClientRect())}
-            // 호버: 10% 확대 + 모달 쪽 6px + 위아래 6px 여백 — translate/scale/margin 속성 트랜지션(transform 미사용, Tailwind v4)
-            className={`animate-item-in relative flex w-full items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[translate,scale,margin,box-shadow,border-color] duration-350 ease-spring hover:z-10 hover:my-1.5 hover:scale-110 hover:border-accent-tint-border hover:shadow-lg ${
-              side === "left" ? "hover:translate-x-1.5" : "hover:-translate-x-1.5"
+            // 호버: 폭 +12px(모달 쪽으로만 — 오른쪽 독은 왼쪽 마진을 당긴다) + 세로 패딩 +4px + 액센트 보더·그림자.
+            // 전부 레이아웃 속성 트랜지션(transform 없음)이라 글자·보더가 흐려지지 않는다
+            className={`animate-item-in relative flex w-full shrink-0 items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[width,margin,padding,box-shadow,border-color] duration-350 ease-spring hover:z-10 hover:w-[calc(100%+0.75rem)] hover:py-3 hover:border-accent-tint-border hover:shadow-lg ${
+              side === "left" ? "" : "hover:-ml-3"
             }`}
           >
             <DockCardBody node={node} typeLabelOf={typeLabelOf} />

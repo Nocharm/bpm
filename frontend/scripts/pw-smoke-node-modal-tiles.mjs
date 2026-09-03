@@ -149,6 +149,8 @@ try {
   await page.locator('[data-id="summary-tile-note-icon-system-commit"]').click();
   await page.waitForSelector('[data-id="summary-tile-note-icon-system-popover"]', { state: "detached", timeout: 5000 });
   check("saving the note keeps the node modal open (no tile popover opened)", (await page.locator('[data-id="summary-tile-popover-system"]').count()) === 0);
+  await page.mouse.move(10, 10); // 호버 해제 — 점은 호버 전에도 보여야 한다
+  check("a tile with a note shows a small dot before hover", (await page.locator('[data-id="summary-tile-note-icon-system-dot"]').count()) === 1);
   // 시스템 팝오버 안에도 메모 칸
   await page.locator('[data-id="summary-tile-system"]').click();
   await page.waitForSelector('[data-id="summary-tile-popover-system"]', { timeout: 5000 });
@@ -229,6 +231,17 @@ try {
   const attrIcons = await page.locator('[data-id="inspector-attrs-toggle"]').locator("xpath=..").locator("svg").count();
   check("inspector attribute rows carry row-head icons", attrIcons >= 5 && (await page.locator('[data-id="inspector-system-hint"]').count()) === 1, `icons=${attrIcons}`);
 
+  // ── 1b) Subprocess 탭(draft 열림) — 게시본이 아니라는 워터마크 + 게시본으로 이동(수정 자리) ────
+  await page.locator('button[aria-label="Subprocess"]').first().click();
+  await page.waitForSelector('[data-id="sp-usage-params"]', { timeout: 10000 });
+  const draftWatermark = (await page.locator('[data-id="sp-usage-not-published"]').count()) === 1;
+  const goPublished = page.locator('[data-id="sp-usage-go-published"]');
+  check("draft: Subprocess tab shows the not-published watermark and a go-to-published button instead of Edit", draftWatermark && (await goPublished.count()) === 1 && (await page.locator('[data-id="sp-usage-edit"]').count()) === 0);
+  await shot(page, "sp-usage-draft-watermark");
+  await goPublished.click();
+  const editAfterGo = await page.locator('[data-id="sp-usage-edit"]').waitFor({ state: "visible", timeout: 15000 }).then(() => true).catch(() => false);
+  check("go-to-published switches to the published version (Edit button appears, watermark gone)", editAfterGo && (await page.locator('[data-id="sp-usage-not-published"]').count()) === 0);
+
   // ── 2) 읽기 전용(게시본) — 정적 타일, 입출력만 읽기 팝오버 ──────────────────────
   await page.goto(`${BASE}/maps/${target.id}?version=${published.id}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".react-flow__node", { timeout: 30000 });
@@ -248,6 +261,7 @@ try {
     return d.right <= b.left + 1 || d.left >= b.right - 1;
   });
   check("prev/next docks float outside the modal card", prevCards + nextCards > 0 && dockOutside, `prev=${prevCards} next=${nextCards}`);
+  const restBox = await page.locator('[data-id^="summary-dock-card-"]').first().boundingBox();
   await page.locator('[data-id^="summary-dock-card-"]').first().hover();
   await page.waitForTimeout(500);
   const hoverState = await page.locator('[data-id^="summary-dock-card-"]').first().evaluate((el) => {
@@ -258,9 +272,14 @@ try {
     const inside = r.left >= s.left - 0.5 && r.right <= s.right + 0.5;
     const innerX = el.closest('[data-id="summary-dock-next"]') ? r.left + 1 : r.right - 1;
     const hit = document.elementFromPoint(innerX, r.top + r.height / 2);
-    return { scale: getComputedStyle(el).scale, margin: getComputedStyle(el).marginTop, inside, hitOk: hit === el || el.contains(hit) };
+    return { width: r.width, height: r.height, transform: getComputedStyle(el).scale, inside, hitOk: hit === el || el.contains(hit) };
   });
-  check("dock card grows on hover (scale 1.1) and spreads neighbours", hoverState.scale === "1.1" && hoverState.margin !== "0px", JSON.stringify(hoverState));
+  // 레이아웃 성장(폭 +12·높이 +8) — scale 변환 없음(래스터 뒤틀림 방지)
+  check(
+    "dock card grows on hover by layout (no scale transform)",
+    Math.abs(hoverState.width - ((restBox?.width ?? 0) + 12)) < 1.5 && hoverState.height > (restBox?.height ?? 0) + 6 && hoverState.transform === "none",
+    JSON.stringify({ rest: restBox?.width, ...hoverState }),
+  );
   check("hovered dock card is not clipped at the inner edge", hoverState.inside && hoverState.hitOk, JSON.stringify(hoverState));
   await shot(page, "readonly-docks");
   const dockTarget = page.locator('[data-id^="summary-dock-card-"]').first();
@@ -302,8 +321,21 @@ try {
   const usageLayout = await page.locator('[data-id="sp-usage-param-tiles"]').evaluate((el) => getComputedStyle(el).flexDirection);
   check("Subprocess tab tiles stack in one column", usageLayout === "column", usageLayout);
   const beforeSp = await api(`/maps/${target.id}`);
+  // 빈 값도 "미입력" 타일로 남고, 대표값 없이 원문만 있는 필드는 원문을 임시값 스타일로 보여준다
+  const emptyTiles = await page.locator('[data-id^="sp-usage-tile-"][data-filled="false"]').count();
+  const emptyText = await page.locator('[data-id^="sp-usage-tile-"][data-filled="false"]').first().textContent().catch(() => "");
+  const expectedFallback = [
+    [beforeSp.sp_duration, beforeSp.sp_total_time_fallback],
+    [beforeSp.sp_touch_time, beforeSp.sp_touch_time_fallback],
+    [beforeSp.sp_system, beforeSp.sp_system_fallback],
+    [beforeSp.sp_annual_count, beforeSp.sp_frequency_fallback],
+  ].filter(([v, n]) => !(v ?? "").trim() && (n ?? "").trim()).length;
+  const fallbackTiles = await page.locator('[data-id^="sp-usage-tile-"][data-filled="fallback"]').count();
+  check("Subprocess tab keeps unset values as grey 'Not set' tiles", emptyTiles >= 1 && /not set/i.test(emptyText ?? ""), `empty=${emptyTiles} "${emptyText}"`);
+  check("note-only fields show the interview note as a provisional value", fallbackTiles === expectedFallback, `fallback=${fallbackTiles} expected=${expectedFallback}`);
   if ((beforeSp.sp_total_time_fallback ?? "") !== "" || (beforeSp.sp_frequency_fallback ?? "") !== "") {
     const noteField = (beforeSp.sp_total_time_fallback ?? "") !== "" ? "duration" : "annual_count";
+    check("note tile shows the note dot before hover", (await page.locator(`[data-id="sp-usage-note-${noteField}-dot"]`).count()) === 1);
     await page.locator(`[data-id="sp-usage-tile-${noteField}"]`).hover();
     await page.locator(`[data-id="sp-usage-note-${noteField}"]`).click();
     const notePop = await page.locator(`[data-id="sp-usage-note-${noteField}-popover"]`).waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
@@ -328,7 +360,7 @@ try {
   const spDeptWide = await page.locator('[data-id="sp-tile-department"]').evaluate((el) => getComputedStyle(el).gridColumn);
   check("designation modal has wide department tile", /span 2/.test(spDeptWide), spDeptWide);
   // 원문 메모 필드 타일(시간·실작업·시스템·연간)엔 호버 메모 아이콘 — 값이 없어도 편집 모드라 추가 아이콘이 있다
-  const spNoteIcons = await page.locator('[data-id^="sp-tile-note-icon-"]').count();
+  const spNoteIcons = await page.locator('[data-id^="sp-tile-note-icon-"]:not([data-id$="-dot"])').count();
   check("designation tiles with interview notes expose the hover note icon", spNoteIcons === 4, `icons=${spNoteIcons}`);
   const oldCostTiles = await page.locator('[data-id="sp-tile-cost_krw"], [data-id="sp-tile-cost_usd"]').count();
   check("designation modal folds cost into one tile", oldCostTiles === 0 && (await page.locator('[data-id="sp-tile-cost"]').count()) === 1);
