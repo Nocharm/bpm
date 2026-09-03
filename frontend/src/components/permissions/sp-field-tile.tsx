@@ -1,9 +1,11 @@
 "use client";
 
-// SP 지정 모달 필드 타일 — 2열 그리드의 단추. 빈 값=아이콘+라벨, 값 있음=아이콘+강조 값(라벨은 호버 title).
+// SP 지정 모달 필드 타일 — 2열 그리드의 단추. 아이콘 + 라벨(작고 톤다운) + 값(우측 강조).
+// 값을 표시할 자리가 모자랄 때만 라벨을 생략한다(실측, 사용자 피드백 2026-09-03).
 // 클릭한 마우스 좌표를 넘겨 입력 팝오버가 그 자리에 뜬다 (design 2026-09-03 followups §5).
 
 import type { LucideIcon } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 interface SpFieldTileProps {
   dataId: string;
@@ -17,10 +19,37 @@ interface SpFieldTileProps {
   onOpen: (at: { x: number; y: number }) => void;
 }
 
+// 아이콘 16 + 간격 8×2 + 좌우 패딩 10×2 — 라벨은 최소 이만큼은 보여야 의미가 있다
+const FIXED_WIDTH = 16 + 16 + 20;
+const MIN_LABEL_WIDTH = 44;
+
 export function SpFieldTile({ dataId, icon: Icon, label, value, disabled, disabledHint, active, onOpen }: SpFieldTileProps) {
   const filled = value.trim() !== "";
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const valueRef = useRef<HTMLSpanElement | null>(null);
+  const [hideLabel, setHideLabel] = useState(false);
+
+  // 값의 실제 폭(scrollWidth)이 라벨 최소 폭까지 잡아먹으면 라벨 생략 — 리사이즈에도 재판정
+  useLayoutEffect(() => {
+    const button = buttonRef.current;
+    const valueEl = valueRef.current;
+    if (!button || !valueEl || !filled) {
+      setHideLabel(false);
+      return;
+    }
+    const measure = () => {
+      const available = button.clientWidth - FIXED_WIDTH;
+      setHideLabel(valueEl.scrollWidth + MIN_LABEL_WIDTH > available);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [filled, value]);
+
   return (
     <button
+      ref={buttonRef}
       type="button"
       data-id={dataId}
       data-filled={filled ? "true" : "false"}
@@ -38,7 +67,14 @@ export function SpFieldTile({ dataId, icon: Icon, label, value, disabled, disabl
     >
       <Icon size={16} strokeWidth={1.5} className={`shrink-0 ${filled ? "text-accent" : "text-ink-tertiary"}`} />
       {filled ? (
-        <span className="min-w-0 truncate text-caption font-semibold text-ink">{value}</span>
+        <>
+          {!hideLabel && (
+            <span className="min-w-0 truncate text-fine text-ink-tertiary">{label}</span>
+          )}
+          <span ref={valueRef} className="ml-auto min-w-0 truncate text-caption font-semibold text-ink">
+            {value}
+          </span>
+        </>
       ) : (
         <span className="min-w-0 truncate text-caption text-ink-secondary">{label}</span>
       )}

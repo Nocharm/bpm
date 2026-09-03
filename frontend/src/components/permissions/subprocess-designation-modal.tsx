@@ -405,9 +405,10 @@ export function SubprocessDesignationModal({
         )}
         {isIo && (
           <div className="rounded-sm border border-hairline bg-surface-alt/40 px-2 py-1">
+            {/* 팝오버 제목이 이미 필드명 — 편집기 안쪽 라벨은 중복이라 비운다(폼 선택·추가·삭제는 그대로) */}
             <MultiValueInput
               dataId={`sp-tile-io-${field}`}
-              label={tileLabel(field)}
+              label=""
               value={active.value}
               formsValue={active.extra}
               readOnly={false}

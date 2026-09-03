@@ -64,8 +64,10 @@
 - **타일화 대상**: BPM attributes의 시스템·URL(라벨 포함), Parameters 7종(4번 포함). 부서·담당자 피커
   행과 Input/Output 편집기·설명은 편집기 성격이라 유지하되 Input | Output을 2열로 나란히.
 - **타일**(`data-id="sp-tile-<field>"`): 2열 grid. 빈 값 = 아이콘 + 라벨(한 줄 말줄임). 값 있음 =
-  아이콘 + **강조 값**(라벨 숨김, `title`로 호버 노출). 아이콘은 `param-icons.ts` 재사용 + System=`Monitor`,
-  URL=`Link`, annual_count/fte는 기존 매핑.
+  아이콘 + 라벨(작게·톤다운) + **값은 우측 강조**. 값 자리가 모자랄 때만 라벨 생략(실측, 사용자 피드백
+  2026-09-03). 아이콘은 `param-icons.ts` 재사용 + System=`Monitor`, URL=`Link`, annual_count/fte는 기존 매핑.
+- **원문 메모 행(MapFallbackNotes)**: 행머리 아이콘(필드 아이콘 → 행 호버 시 노트 아이콘 스왑, 클릭=열람/추가/
+  수정), 라벨·값은 `text-fine` 톤다운. 빈 행은 문구 없이 비활성 톤. 팝오버 폭 360 (사용자 피드백 2026-09-03).
 - **입력 팝오버**(`data-id="sp-tile-popover"`): 클릭한 마우스 좌표에 고정 배치(뷰포트 클램프, body 포털,
   z 1350). 내용 = 라벨 · 필드별 안내 문구 · 입력(ParamInput / text / URL+라벨 2칸) · Σ(합산 5종만) ·
   **Interview note** textarea(폴백 보유 4필드). Enter=확정+닫기, Esc=취소, 바깥 클릭=확정+닫기.
