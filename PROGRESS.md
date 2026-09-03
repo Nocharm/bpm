@@ -5,7 +5,7 @@
 
 ## 2026-09-03 — 5라운드: 인스펙터 행 통일·IO 열 배치·SP 부서 말단 필·독 장면 이동 (dev)
 - **인스펙터 행 문법 통일**(사용자 피드백 "SP와 일반 노드 스페이서·폭이 다름"): `lib/inspector-row.ts`(`INSPECTOR_ROW` min-h-8·py-1, `INSPECTOR_ROW_LABEL`)를 속성 피커·시스템/GMP/URL 행·지표 카드·조건 행·SP 상속 행(속성·IO·조건)이 공유 — 읽기/편집 모두 32px 행, 스페이서는 URL 위 구분선 하나(일반 노드 정책). fitContent 피커 트리거는 입력과 같은 24px(py-0.5). SP IO 상속 표시는 자체 렌더 대신 `MultiValueInput readOnly`(링크 아이콘·호버·드롭다운 유지).
-- **SP 속성 부서=말단 필**: `DeptPill`(말단+조직 모달)을 신설해 타일·SP 상속 행·읽기 전용 일반 행이 공유(attribute-tiles의 DeptLeafPill/모달 상태 이관). 담당자도 `AssigneePills`.
+- **SP 속성 부서=말단 필**: `DeptPill`(말단+조직 모달)을 신설해 타일·SP 상속 행·읽기 전용 일반 행이 공유(attribute-tiles의 DeptLeafPill/모달 상태 이관). 담당자도 `AssigneePills`. 후속(사용자 피드백): 필 `min-w-0`으로 카드 밖 오버플로우 차단 + 호버(보더 액센트·틴트·그림자), **읽기 전용 속성 행 공용화** `AttributeReadRows`(부서 필·인물 필·시스템+메모 힌트·GMP 배지·링크 필) — 일반 노드 읽기 전용과 SP 상속 표시가 같은 컴포넌트, `BpmAttributePicker`는 편집 전용으로.
 - **IO 목록 열 배치**(인스펙터·타일 팝오버, 읽기/편집): 인덱스(w-5) / 형식 필(고정 폭 5.5rem, 카탈로그 아이콘, 미지정은 점선 자리표시, `DataFormPicker column`) / 라벨 말줄임 + R/O 플래그. 읽기 헤드리스(타일 팝오버)의 중복 헤더 제거.
 - **독 장면 이동**(사용자 요청): 후행으로 가면 양쪽 독이 왼쪽으로 빠지고(`dock-exit-left`) 새 카드는 오른쪽에서 들어옴(`dock-enter-from-right`), 선행은 반대 — `travel` 상태가 방향을 기억.
 - 검증: tsc·eslint·vitest 850·`pw-smoke-node-modal-tiles.mjs` 63/63.

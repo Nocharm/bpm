@@ -52,7 +52,8 @@ export function DeptPill({ department, dataId }: DeptPillProps) {
         tabIndex={0}
         data-id={dataId}
         title={koreanName ? `${path} (${koreanName})` : path}
-        className="inline-flex max-w-full items-center gap-1 rounded-full border border-accent-tint-border bg-accent-tint px-2 py-0.5 text-fine font-semibold text-accent hover:bg-accent-tint/70"
+        // min-w-0 — 좁은 행(인스펙터)에서 말단 이름이 말줄임되며 카드 밖으로 안 나간다. 호버=보더 액센트+틴트 진해짐+그림자
+        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border border-accent-tint-border bg-accent-tint/60 px-2 py-0.5 text-fine font-semibold text-accent transition-[background-color,border-color,box-shadow] duration-150 hover:border-accent hover:bg-accent-tint hover:shadow-sm"
         onClick={handleClick}
         onKeyDown={handleKey}
       >

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link as LinkIcon, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Users, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -47,8 +47,7 @@ import { CanvasZoomScale } from "@/components/canvas-zoom-scale";
 import { MinimapFade } from "@/components/minimap-viewport-fill";
 import { NodeActionBar } from "@/components/node-action-bar";
 import { UrlLabelField } from "@/components/url-label-field";
-import { AssigneePills } from "@/components/assignee-pills";
-import { DeptPill } from "@/components/dept-pill";
+import { AttributeReadRows } from "@/components/attribute-read-rows";
 import { FallbackHint } from "@/components/fallback-hint";
 import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
@@ -10747,12 +10746,25 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
+                          {readOnly ? (
+                            // 읽기 전용 — SP 상속 행과 같은 컴포넌트(부서 말단 필·인물 필·링크 필) (사용자 요청 2026-09-03)
+                            <AttributeReadRows
+                              department={selectedNode.data.department}
+                              assignee={selectedNode.data.assignee}
+                              system={selectedNode.data.system ?? ""}
+                              systemNote={selectedNode.data.system_fallback}
+                              gmp={selectedNode.data.gmp ?? ""}
+                              url={selectedNode.data.url ?? ""}
+                              urlLabel={selectedNode.data.urlLabel ?? ""}
+                              dataIdPrefix="inspector"
+                            />
+                          ) : (
+                          <>
                           {/* 담당자·부서는 자격 직원/부서에서 선택(피커). 시스템·소요시간은 자유 입력 */}
                           <BpmAttributePicker
                             versionId={versionId}
                             assignee={selectedNode.data.assignee}
                             department={selectedNode.data.department}
-                            readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
                           {/* 시스템 — 행머리 아이콘+라벨(수행 지표·입출력 카드와 같은 문법). 원문 폴백(라이브러리화 전 검토
@@ -10760,94 +10772,66 @@ function MapEditor({ mapId }: { mapId: number }) {
                               보기·수정·적용 (사용자 요청 2026-09-03) */}
                           <div className={`${INSPECTOR_ROW} group`}>
                             <span className={INSPECTOR_ROW_LABEL}>
-                              {readOnly && (selectedNode.data.system_fallback ?? "").trim() === "" ? (
-                                <Monitor size={12} strokeWidth={1.5} className="text-ink-muted" />
-                              ) : (
-                                <FallbackHint
-                                  dataId="inspector-system-hint"
-                                  fallback={selectedNode.data.system_fallback}
-                                  restIcon={Monitor}
-                                  iconSize={12}
-                                  padded={false}
-                                  restClassName="text-ink-muted"
-                                  onSaveFallback={
-                                    readOnly
-                                      ? undefined
-                                      : (text) => updateSelectedData({ system_fallback: text }, true)
-                                  }
-                                  onApply={
-                                    readOnly
-                                      ? undefined
-                                      : () =>
-                                          updateSelectedData(
-                                            { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
-                                            true,
-                                          )
-                                  }
-                                />
-                              )}
+                              <FallbackHint
+                                dataId="inspector-system-hint"
+                                fallback={selectedNode.data.system_fallback}
+                                restIcon={Monitor}
+                                iconSize={12}
+                                padded={false}
+                                restClassName="text-ink-muted"
+                                onSaveFallback={(text) => updateSelectedData({ system_fallback: text }, true)}
+                                onApply={() =>
+                                  updateSelectedData(
+                                    { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
+                                    true,
+                                  )
+                                }
+                              />
                               {t("field.system")}
                             </span>
                             <input
                               data-id="inspector-field-system"
-                              className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
-                                readOnly
-                                  ? "min-w-0 flex-1 bg-transparent"
-                                  : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
-                              }`}
+                              className="w-32 min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none"
                               value={selectedNode.data.system ?? ""}
-                              disabled={readOnly}
                               title={selectedNode.data.system || undefined}
                               onChange={(event) => updateSelectedData({ system: event.target.value }, true)}
                             />
                           </div>
-                          {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
+                          {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용(읽기 전용 배지는 AttributeReadRows) (사용자 요청 2026-08-21 #5) */}
                           <div className={INSPECTOR_ROW}>
                             <span className={INSPECTOR_ROW_LABEL}>
                               <ShieldCheck size={12} strokeWidth={1.5} className="text-ink-muted" />
                               {t("field.gmp")}
                             </span>
-                            {readOnly ? (
-                              (selectedNode.data.gmp ?? "") !== "" ? (
+                            <button
+                              type="button"
+                              data-id="inspector-field-gmp"
+                              className="rounded-sm px-1 py-0.5 hover:bg-surface-alt"
+                              onClick={(event) => openGmpPicker(selectedNode.id, event.clientX, event.clientY)}
+                            >
+                              {(selectedNode.data.gmp ?? "") !== "" ? (
                                 <span
-                                  data-id="inspector-field-gmp"
                                   className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
                                   style={getGmpBadgeStyle(selectedNode.data.gmp)}
                                 >
                                   {formatGmp(selectedNode.data.gmp)}
                                 </span>
                               ) : (
-                                <span data-id="inspector-field-gmp" className="text-caption text-ink-tertiary">-</span>
-                              )
-                            ) : (
-                              <button
-                                type="button"
-                                data-id="inspector-field-gmp"
-                                className="rounded-sm px-1 py-0.5 hover:bg-surface-alt"
-                                onClick={(event) => openGmpPicker(selectedNode.id, event.clientX, event.clientY)}
-                              >
-                                {(selectedNode.data.gmp ?? "") !== "" ? (
-                                  <span
-                                    className="whitespace-nowrap rounded-full px-1.5 py-0.5 text-fine"
-                                    style={getGmpBadgeStyle(selectedNode.data.gmp)}
-                                  >
-                                    {formatGmp(selectedNode.data.gmp)}
-                                  </span>
-                                ) : (
-                                  <span className="text-caption text-ink-tertiary">
-                                    {t("perm.processFields.gmpUnset")}
-                                  </span>
-                                )}
-                              </button>
-                            )}
+                                <span className="text-caption text-ink-tertiary">
+                                  {t("perm.processFields.gmpUnset")}
+                                </span>
+                              )}
+                            </button>
                           </div>
                           <UrlLabelField
                             key={selectedNode.id}
                             url={selectedNode.data.url ?? ""}
                             urlLabel={selectedNode.data.urlLabel ?? ""}
-                            readOnly={readOnly}
+                            readOnly={false}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
+                          </>
+                          )}
                           </div>
                           )}
                         </div>
@@ -10917,55 +10901,17 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
-                          {/* 일반 노드 속성 카드와 같은 행 문법·스페이서(URL 위만 구분선) — 부서는 말단 필(조직 모달),
-                              담당자는 인물 필(인물 카드) (사용자 요청 2026-09-03) */}
-                          <div className={INSPECTOR_ROW}>
-                            <span className={INSPECTOR_ROW_LABEL}>
-                              <Building2 size={12} strokeWidth={1.5} className="text-ink-muted" />
-                              {t("field.department")}
-                            </span>
-                            {(selectedSpRef.department ?? "") !== "" ? (
-                              <DeptPill department={selectedSpRef.department ?? ""} dataId="inspector-sp-department-pill" />
-                            ) : (
-                              <span className="text-caption text-ink">-</span>
-                            )}
-                          </div>
-                          <div className="flex min-h-8 items-start justify-between gap-2 py-1">
-                            <span className={`${INSPECTOR_ROW_LABEL} mt-1`}>
-                              <Users size={12} strokeWidth={1.5} className="text-ink-muted" />
-                              {t("field.assignee")}
-                            </span>
-                            {(selectedSpRef.assignee ?? "") !== "" ? (
-                              <AssigneePills assignee={selectedSpRef.assignee ?? ""} dataIdPrefix="inspector-sp" />
-                            ) : (
-                              <span className="mt-1 text-caption text-ink">-</span>
-                            )}
-                          </div>
-                          <div className={INSPECTOR_ROW}>
-                            <span className={INSPECTOR_ROW_LABEL}>
-                              <Monitor size={12} strokeWidth={1.5} className="text-ink-muted" />
-                              {t("field.system")}
-                            </span>
-                            <span
-                              className="min-w-0 truncate text-right text-caption text-ink"
-                              title={selectedSpRef.system || undefined}
-                            >
-                              {selectedSpRef.system || "-"}
-                            </span>
-                          </div>
-                          <div className={`${INSPECTOR_ROW} border-t border-divider`}>
-                            <span className={INSPECTOR_ROW_LABEL}>
-                              <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                              {t("field.url")}
-                            </span>
-                            <span
-                              className="min-w-0 truncate text-right text-caption text-ink"
-                              title={selectedSpRef.url || undefined}
-                            >
-                              {selectedSpRef.url_label || selectedSpRef.url || "-"}
-                            </span>
-                          </div>
-                          <p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>
+                          {/* 일반 노드 읽기 전용과 같은 컴포넌트 — 부서 말단 필(조직 모달)·인물 필·링크 필,
+                              행 높이·스페이서 동일 (사용자 요청 2026-09-03) */}
+                          <AttributeReadRows
+                            department={selectedSpRef.department ?? ""}
+                            assignee={selectedSpRef.assignee ?? ""}
+                            system={selectedSpRef.system ?? ""}
+                            url={selectedSpRef.url ?? ""}
+                            urlLabel={selectedSpRef.url_label ?? ""}
+                            dataIdPrefix="inspector-sp"
+                            footnote={<p className="mt-1.5 text-fine text-ink-tertiary">{t("subprocess.attrsFromOwner")}</p>}
+                          />
                           </div>
                           )}
                         </div>

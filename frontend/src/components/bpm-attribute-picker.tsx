@@ -1,6 +1,7 @@
 "use client";
 
-// 노드 BPM 속성 담당자·부서 피커 — 복수 담당자 칩+SearchSelect, 부서 변경 시 담당자 초기화 확인.
+// 노드 BPM 속성 담당자·부서 피커(편집 전용) — 복수 담당자 칩+SearchSelect, 부서 변경 시 담당자 초기화 확인.
+// 읽기 전용 표시는 AttributeReadRows가 맡는다(일반 노드 읽기·SP 상속 공용, 2026-09-03).
 // 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Building2, Users } from "lucide-react";
@@ -8,7 +9,6 @@ import { Building2, Users } from "lucide-react";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { AssigneePills } from "@/components/assignee-pills";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { DeptPill } from "@/components/dept-pill";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { SearchSelect } from "@/components/search-select";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
@@ -23,7 +23,6 @@ interface BpmAttributePickerProps {
   versionId: number | null;
   assignee: string;
   department: string;
-  readOnly: boolean;
   onChange: (patch: { assignee?: string; department?: string }) => void;
 }
 
@@ -36,7 +35,6 @@ export function BpmAttributePicker({
   versionId,
   assignee,
   department,
-  readOnly,
   onChange,
 }: BpmAttributePickerProps) {
   const { t, lang } = useI18n();
@@ -106,24 +104,15 @@ export function BpmAttributePicker({
           <Building2 size={12} strokeWidth={1.5} className="text-ink-muted" />
           {t("field.department")}
         </span>
-        {readOnly ? (
-          // 읽기 전용 — 말단 부서 필(클릭=조직 정보 모달), 편집 모달 타일·SP 상속 행과 같은 표기
-          department ? (
-            <DeptPill department={department} dataId="inspector-department-pill" />
-          ) : (
-            <span className="min-w-0 flex-1 truncate text-right text-caption text-ink">{t("summary.none")}</span>
-          )
-        ) : (
-          // 우측 정렬 — 내용폭(fitContent)이라 라벨 옆에 붙지 않고 우측에, 좁으면 줄어듦(삐져나감 방지).
-          <SearchSelect
-            fitContent
-            value={department}
-            options={deptOptions}
-            emptyLabel={t("summary.none")}
-            placeholder={t("field.searchPlaceholder")}
-            onChange={handleDeptChange}
-          />
-        )}
+        {/* 우측 정렬 — 내용폭(fitContent)이라 라벨 옆에 붙지 않고 우측에, 좁으면 줄어듦(삐져나감 방지). */}
+        <SearchSelect
+          fitContent
+          value={department}
+          options={deptOptions}
+          emptyLabel={t("summary.none")}
+          placeholder={t("field.searchPlaceholder")}
+          onChange={handleDeptChange}
+        />
       </div>
 
       {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커). 읽기전용은 칩만. */}
@@ -134,41 +123,31 @@ export function BpmAttributePicker({
         </span>
         <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-            {assignees.length === 0 && readOnly ? (
-              <span className="text-caption text-ink">{t("summary.none")}</span>
-            ) : (
-              // 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함), 편집 모달 담당자 타일과 같은 문법 (2026-09-03)
-              <AssigneePills
-                assignee={assignee}
-                dataIdPrefix="inspector"
-                drifted={drifted}
-                onRemove={
-                  readOnly
-                    ? undefined
-                    : (name) => onChange({ assignee: formatAssignees(assignees.filter((n) => n !== name)) })
-                }
-              />
-            )}
-          </div>
-          {!readOnly && (
-            <SearchSelect
-              addMode
-              value=""
-              options={buildAssigneeOptions(
-                proximityUsers
-                  .filter((u) => department === "" || u.department === department)
-                  .filter((u) => !assignees.includes(u.name)),
-                lang,
-              )}
-              emptyLabel={t("summary.none")}
-              placeholder={t("field.searchPlaceholder")}
-              onChange={(name) => {
-                if (!name) return;
-                const next = addAssignee(department, assignees, name, data.users);
-                onChange({ department: next.department, assignee: formatAssignees(next.assignees) });
-              }}
+            {/* 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함), 편집 모달 담당자 타일과 같은 문법 (2026-09-03) */}
+            <AssigneePills
+              assignee={assignee}
+              dataIdPrefix="inspector"
+              drifted={drifted}
+              onRemove={(name) => onChange({ assignee: formatAssignees(assignees.filter((n) => n !== name)) })}
             />
-          )}
+          </div>
+          <SearchSelect
+            addMode
+            value=""
+            options={buildAssigneeOptions(
+              proximityUsers
+                .filter((u) => department === "" || u.department === department)
+                .filter((u) => !assignees.includes(u.name)),
+              lang,
+            )}
+            emptyLabel={t("summary.none")}
+            placeholder={t("field.searchPlaceholder")}
+            onChange={(name) => {
+              if (!name) return;
+              const next = addAssignee(department, assignees, name, data.users);
+              onChange({ department: next.department, assignee: formatAssignees(next.assignees) });
+            }}
+          />
         </div>
       </div>
 

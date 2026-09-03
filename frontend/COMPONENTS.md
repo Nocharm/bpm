@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 221개 · 2026-09-03 기준
+총 222개 · 2026-09-03 기준
 
 ## components/
 
@@ -16,10 +16,11 @@
 | `ai-chat-panel.tsx` | `AiChatPanel` | 에디터 AI 채팅 패널 | `app/maps/[mapId]/page.tsx` |
 | `approval-panel.tsx` | `ApprovalPanel` | R5c 승인 탭 | `app/maps/[mapId]/page.tsx` |
 | `approver-manager.tsx` | `ApproverManager` | 맵 소유자가 승인자 목록을 편집 | `app/maps/[mapId]/page.tsx` |
-| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `app/maps/[mapId]/page.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `components/attribute-read-rows.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `attribute-read-rows.tsx` | `AttributeReadRows` | 읽기 전용 BPM 속성 행 | `app/maps/[mapId]/page.tsx` |
 | `auth-loading.tsx` | `AuthLoadingScreen` |   | `app/login/page.tsx`, `components/providers.tsx` |
 | `auto-height.tsx` | `AutoHeight` | 내용 높이에 맞춰 늘어나고, 바뀔 때 부드럽게 전환되는 컨테이너. | `app/inbox/page.tsx`, `components/group-bulk-modal.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
-| `bpm-attribute-picker.tsx` | `BpmAttributePicker` | 노드 BPM 속성 담당자·부서 피커 | `app/maps/[mapId]/page.tsx` |
+| `bpm-attribute-picker.tsx` | `BpmAttributePicker` | 노드 BPM 속성 담당자·부서 피커(편집 전용) | `app/maps/[mapId]/page.tsx` |
 | `branch-icon.tsx` | `BranchGlyph` | 분기(Yes/No/Other) 아이콘 | `app/maps/[mapId]/page.tsx`, `components/edge-branch-modal.tsx`, `components/edge-select-modal.tsx` |
 | `canvas-zoom-scale.tsx` | `CanvasZoomScale` | 캔버스 줌 컨트롤 pill | `app/maps/[mapId]/page.tsx` |
 | `change-summary-section.tsx` | `ChangeSummaryDisclosure`, `ChangeSummarySection` | 기준 버전 대비 변경 요약 | `app/maps/[mapId]/page.tsx`, `components/framework-confirm-section.tsx` |
@@ -34,7 +35,7 @@
 | `csv-import-tab.tsx` | `CsvImportTab` | 인스펙터 Import 탭 | `app/maps/[mapId]/page.tsx` |
 | `csv-template-actions.tsx` | `CsvTemplateActions` | CSV 준비 액션 | `components/csv-create-modal.tsx`, `components/csv-import-section.tsx` |
 | `data-form-picker.tsx` | `DataFormPicker` | IO 항목별 데이터 폼 피커 | `components/multi-value-input.tsx` |
-| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `app/maps/[mapId]/page.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/attribute-read-rows.tsx`, `components/permissions/attribute-tiles.tsx` |
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
@@ -45,7 +46,7 @@
 | `editor-toolbar.tsx` | `EditorToolbar` | 편집 툴바 | `app/maps/[mapId]/page.tsx` |
 | `excel-export-modal.tsx` | `ExcelExportModal` | Excel 내보내기 형식 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `expand-invariant-modal.tsx` | `ExpandInvariantModal` | 하위 프로세스 불변식 확인 모달 | (미사용) |
-| `fallback-hint.tsx` | `FallbackHint` | 폴백 원문 힌트 | `app/maps/[mapId]/page.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/process-fields-card.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
+| `fallback-hint.tsx` | `FallbackHint` | 폴백 원문 힌트 | `app/maps/[mapId]/page.tsx`, `components/attribute-read-rows.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/process-fields-card.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
 | `feedback-detail-modal.tsx` | `FeedbackDetailModal` | 피드백 상세/관리 모달 | `app/feedback/page.tsx` |
 | `feedback-notes-flyout.tsx` | `FeedbackNotesFlyout` | 피드백 노트 플라이아웃 | `app/feedback/page.tsx` |
 | `feedback-side-panel.tsx` | `FeedbackSidePanel` | 피드백 사이드 패널 | `components/top-nav.tsx` |

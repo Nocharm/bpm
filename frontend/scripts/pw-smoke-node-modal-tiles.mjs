@@ -199,14 +199,18 @@ try {
   await page.mouse.click(30, 450); // 백드롭 클릭으로 조직 모달만 닫기
   await page.waitForSelector('[data-id="org-info-modal"]', { state: "detached", timeout: 5000 });
   check("closing the org modal keeps the node modal open", (await page.locator('[data-id="node-summary-body"]').count()) === 1);
-  // 담당자 타일 → 피커(＋) → 첫 후보 선택 → 저장 → 인물 필 + 호버 인물 카드(부서 트리) + 인스펙터 동일 필
-  await page.locator('[data-id="summary-tile-assignee"]').click();
-  await page.waitForSelector('[data-id="summary-tile-popover-assignee"]', { timeout: 5000 });
-  await page.locator('[data-id="summary-tile-popover-assignee"] button').filter({ has: page.locator("svg.lucide-plus") }).first().click();
-  await page.waitForSelector('[data-id="search-select-flyout"]', { timeout: 5000 });
-  const firstUser = (await page.locator('[data-id="search-select-flyout"] button').nth(1).textContent()) ?? "";
-  await page.locator('[data-id="search-select-flyout"] button').nth(1).click();
-  await page.locator('[data-id="summary-tile-popover-assignee-commit"]').click();
+  // 담당자 타일 → 피커(＋) → 첫 후보 선택 → 저장 → 인물 필 + 호버 인물 카드(부서 트리) + 인스펙터 동일 필.
+  // 같은 DB 재실행이면 이미 담당자가 있어(후보 목록이 빌 수 있음) 선택 단계는 건너뛴다
+  let firstUser = "";
+  if ((await page.locator('[data-id="summary-tile-assignee-pill"]').count()) === 0) {
+    await page.locator('[data-id="summary-tile-assignee"]').click();
+    await page.waitForSelector('[data-id="summary-tile-popover-assignee"]', { timeout: 5000 });
+    await page.locator('[data-id="summary-tile-popover-assignee"] button').filter({ has: page.locator("svg.lucide-plus") }).first().click();
+    await page.waitForSelector('[data-id="search-select-flyout"]', { timeout: 5000 });
+    firstUser = (await page.locator('[data-id="search-select-flyout"] button').nth(1).textContent()) ?? "";
+    await page.locator('[data-id="search-select-flyout"] button').nth(1).click();
+    await page.locator('[data-id="summary-tile-popover-assignee-commit"]').click();
+  }
   const assigneePill = page.locator('[data-id="summary-tile-assignee-pill"]').first();
   check("assignee shows as a person pill", (await assigneePill.count()) >= 1 && (await assigneePill.getAttribute("data-resolved")) === "true", firstUser);
   await assigneePill.hover();
