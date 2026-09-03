@@ -118,8 +118,8 @@ def test_sp_designation_rejects_both_currencies(client: TestClient, published_ma
     assert resp.status_code == 422
 
 
-def test_sp_designation_has_no_annual_or_fte(client: TestClient, published_map_id: int) -> None:
-    """연간 건수·FTE는 부모 맥락 값이라 SP 지정에 존재하지 않는다 — 보내도 무시된다."""
+def test_sp_designation_stores_annual_and_fte_as_reference(client: TestClient, published_map_id: int) -> None:
+    """연간 건수·FTE는 지정 참고치로 저장된다(design 2026-09-03 §4) — 연결 맵 SP 노드의 값과는 별개."""
     resp = client.put(
         f"/api/maps/{published_map_id}/subprocess-designation",
         json={
@@ -132,8 +132,8 @@ def test_sp_designation_has_no_annual_or_fte(client: TestClient, published_map_i
     assert resp.status_code == 200
     detail = client.get(f"/api/maps/{published_map_id}").json()
     assert detail["sp_duration"] == "1.30"
-    assert "sp_annual_count" not in detail
-    assert "sp_fte" not in detail
+    assert detail["sp_annual_count"] == "999"
+    assert detail["sp_fte"] == "9"
 
 
 def test_legacy_free_text_sp_duration_cleared_in_responses(
