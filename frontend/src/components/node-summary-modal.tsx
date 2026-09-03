@@ -917,7 +917,8 @@ export function NodeSummaryModal({
     <button
       type="button"
       data-id="summary-toggle-all-sections"
-      className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+      // -my-1 — 호버 배경용 세로 패딩이 헤더 행 높이를 키우지 않게(다른 섹션 헤더와 같은 높이, 사용자 피드백 2026-09-03)
+      className="-my-1 flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
       onClick={toggleAllSections}
     >
       {anySectionOpen ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
@@ -1336,7 +1337,8 @@ export function NodeSummaryModal({
                 {/* BPM 속성 — process·decision은 편집 타일, subprocess는 상속 읽기 타일. 아코디언(기본 접힘, 인스펙터와 키 공유) */}
                 {showAttrSection && (
                   <div className="py-1.5" data-id="summary-attrs">
-                    <div className="flex items-center gap-1">
+                    {/* 헤더 행 h-5 고정 — 세 섹션이 접혔을 때 같은 높이('모두 펼치기' 버튼 유무와 무관, 사용자 피드백 2026-09-03) */}
+                    <div className="flex h-5 items-center gap-1">
                       {sectionButton(
                         "summary-attrs-toggle",
                         attrsCollapsed,
@@ -1365,7 +1367,7 @@ export function NodeSummaryModal({
                     subprocess는 회당 4지표가 링크 맵 지정값이라 읽기 타일, 연간 건수·FTE만 입력 (design §3.1) */}
                 {editableParams.length > 0 && (
                   <div className="py-1.5" data-id="summary-params">
-                    <div className="flex items-center gap-1">
+                    <div className="flex h-5 items-center gap-1">
                       {sectionButton(
                         "summary-params-toggle",
                         paramsCollapsed,
@@ -1393,17 +1395,19 @@ export function NodeSummaryModal({
                     SP는 링크 맵 상속 읽기 타일 — 인스펙터 카드와 동기화(#11) */}
                 {(showAttributes || isSp) && (
                   <div className="py-1.5" data-id="summary-details">
-                    {sectionButton(
-                      "summary-details-toggle",
-                      detailsCollapsed,
-                      () => {
-                        const next = !detailsCollapsed;
-                        setDetailsCollapsed(next);
-                        writeDetailsCollapsed(next);
-                      },
-                      t("inspector.details"),
-                      filledDetailCount,
-                    )}
+                    <div className="flex h-5 items-center gap-1">
+                      {sectionButton(
+                        "summary-details-toggle",
+                        detailsCollapsed,
+                        () => {
+                          const next = !detailsCollapsed;
+                          setDetailsCollapsed(next);
+                          writeDetailsCollapsed(next);
+                        },
+                        t("inspector.details"),
+                        filledDetailCount,
+                      )}
+                    </div>
                     <AutoHeight className="overflow-hidden">
                       {!detailsCollapsed && (
                         <div className="ml-2 border-l border-divider pl-2">

@@ -605,7 +605,8 @@ export function SubprocessDesignationModal({
         <div className="scroll-soft -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
           {/* BPM attributes — 부서·담당자 행 타일 + 시스템·URL 타일 */}
           <div className="py-1" data-id="sp-designation-attrs">
-            <div className="flex items-center gap-1">
+            {/* 헤더 행 h-5 고정 — 세 섹션이 접혔을 때 같은 높이('모두 펼치기' 버튼 유무와 무관) */}
+            <div className="flex h-5 items-center gap-1">
               {sectionButton(
                 "sp-designation-attrs-toggle",
                 attrsCollapsed,
@@ -620,7 +621,8 @@ export function SubprocessDesignationModal({
               <button
                 type="button"
                 data-id="sp-designation-toggle-all-sections"
-                className="flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                // -my-1 — 호버 배경용 세로 패딩이 헤더 행 높이를 키우지 않게(다른 섹션 헤더와 같은 높이)
+                className="-my-1 flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-ink"
                 onClick={toggleAllSections}
               >
                 {anySectionOpen ? (
@@ -652,17 +654,19 @@ export function SubprocessDesignationModal({
           </div>
           {/* Metrics — 회당 4종(Σ, 비용은 단위 탭 한 타일) + 참고치 2종 타일 */}
           <div className="py-1" data-id="sp-designation-params">
-            {sectionButton(
-              "sp-designation-params-toggle",
-              paramsCollapsed,
-              () => {
-                const next = !paramsCollapsed;
-                setParamsCollapsed(next);
-                writeParamsCollapsed(next);
-              },
-              t("inspector.parameters"),
-              filledParamCount,
-            )}
+            <div className="flex h-5 items-center gap-1">
+              {sectionButton(
+                "sp-designation-params-toggle",
+                paramsCollapsed,
+                () => {
+                  const next = !paramsCollapsed;
+                  setParamsCollapsed(next);
+                  writeParamsCollapsed(next);
+                },
+                t("inspector.parameters"),
+                filledParamCount,
+              )}
+            </div>
             <AutoHeight className="overflow-hidden">
               {!paramsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
@@ -675,17 +679,19 @@ export function SubprocessDesignationModal({
           </div>
           {/* Details — Input/Output 타일(항목 수) + 시작·종료 조건 + 설명 */}
           <div className="py-1" data-id="sp-designation-details">
-            {sectionButton(
-              "sp-designation-details-toggle",
-              detailsCollapsed,
-              () => {
-                const next = !detailsCollapsed;
-                setDetailsCollapsed(next);
-                writeDetailsCollapsed(next);
-              },
-              t("inspector.details"),
-              filledDetailCount,
-            )}
+            <div className="flex h-5 items-center gap-1">
+              {sectionButton(
+                "sp-designation-details-toggle",
+                detailsCollapsed,
+                () => {
+                  const next = !detailsCollapsed;
+                  setDetailsCollapsed(next);
+                  writeDetailsCollapsed(next);
+                },
+                t("inspector.details"),
+                filledDetailCount,
+              )}
+            </div>
             <AutoHeight className="overflow-hidden">
               {!detailsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
