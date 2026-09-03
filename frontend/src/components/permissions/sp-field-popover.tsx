@@ -56,6 +56,9 @@ export function SpFieldPopover({
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
+            // 모달 백드롭의 window keydown(Esc=최상위 모달 닫기)까지 가지 않게 — 팝오버만 닫는다
+            e.stopPropagation();
+            e.nativeEvent.stopPropagation();
             onCancel();
             return;
           }

@@ -1,6 +1,7 @@
 "use client";
 
 // 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용) + 필드 타일(2열) → 클릭 위치 입력 팝오버.
+// 폭은 max-w-lg(512px) — 더 넓히면 시선 이동이 좌우로 길어진다(사용자 피드백 2026-09-03, 672px 폐기).
 // 타일: 시스템·URL, 파라미터 7종(회당 5 + 참고치 2), Input/Output(항목 수). 팝오버 안에 안내·Σ·인터뷰 원문 메모.
 // 설정 화면 패널과 에디터 인스펙터 카드·받은함이 공용으로 사용한다 (design 2026-09-03 followups §5).
 
@@ -333,7 +334,7 @@ export function SubprocessDesignationModal({
         anchor={active.at}
         title={tileLabel(field)}
         hint={costLocked ? t("sp.tile.costExclusive") : t(HINT_KEY[field])}
-        width={isIo ? 460 : 320}
+        width={isIo ? 420 : 320}
         enterCommits={!isIo}
         keysHint={isIo ? t("sp.tile.keysMultiline") : t("sp.tile.keys")}
         onCommit={commitTile}
@@ -477,7 +478,7 @@ export function SubprocessDesignationModal({
     >
       <div
         data-id="subprocess-designation-modal"
-        className="flex max-h-[84vh] w-full max-w-2xl flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
+        className="flex max-h-[84vh] w-full max-w-lg flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
       >
         <h2 className="flex shrink-0 items-center gap-2 text-body-strong text-ink">
           <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />

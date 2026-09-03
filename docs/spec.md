@@ -35,6 +35,7 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 ```
 
 - 노드는 평면(버전 스코프) — 계층은 subprocess 노드의 `linked_map_id` 참조로 표현(§1).
+- `map_notes`(맵 또는 L5 카테고리 스코프, `kind` 태그·`source` consultant-import|user·`edited_at`) — 인터뷰 임포트 노트 + 사용자 노트. API: `GET/POST/PATCH/DELETE /maps/{id}/notes[/{note_id}]`(열람 viewer, 쓰기 owner) · `/categories/{id}/notes[/{note_id}]`(열람 전원, 쓰기 체인 관리자/sysadmin). 맵 단위 인터뷰 원문 메모 5종(`sp_*_fallback`)은 `PATCH /maps/{id}/fallback-notes`(editor)로 편집 (2026-09-03).
 - 버전 생성: 기존 버전(예: As-Is)의 노드/엣지 전체를 깊은 복사해 새 라벨(To-Be)로 생성. 권한·버전 워크플로 데이터 모델은 권한 설계 문서 참조(git history `2026-06-20-permission-management-design.md`).
 
 ## 3. 화면 / UX

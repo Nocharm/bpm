@@ -51,7 +51,7 @@
 | `total_time` / `touch_time` | `sp_total_time_fallback` / `sp_touch_time_fallback` (원문 프리텍스트) |
 | `frequency` | `sp_frequency_fallback` |
 | `gmp` | `sp_gmp_fallback` — **`sp_gmp`(검토 선정값)는 임포트가 안 건드린다** |
-| `annual_count` / `fte` | **L5 연계 캔버스 SP 노드**의 `annual_count`/`fte` (여기 말고 착지면 없음) |
+| `annual_count` / `fte` | 맵 지정 참고치 `sp_annual_count`/`sp_fte`(2026-09-03, 재전달 시 다른 SP 필드처럼 덮어씀) + **L5 연계 캔버스 SP 노드**의 `annual_count`/`fte`(빈 값만 채움) |
 | `headcount` | `sp_headcount` |
 | `artifact_role` | 맵 설명 `[Interview]` 섹션 `Artifact role:` 줄 |
 
