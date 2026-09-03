@@ -1,11 +1,16 @@
 // 폴백 원문 힌트 — 대표 필드 옆 아이콘 → 클릭 팝오버(원문 표시·수정·적용).
 // 인터뷰 임포트가 남긴 프리텍스트를 보며 대표값을 선정하는 검토 작업 지원 (design 2026-08-19 §5.2).
 // body portal + fixed — 카드 overflow 클리핑 회피(SearchSelect 포털 컨벤션).
+// 편집 모드 푸터는 공용 PopoverActionBar(상태형 주 버튼 + 메뉴 3종 + kbd 안내) — SP 타일 팝오버와 같은 경험
+// (사용자 결정 2026-09-03). 바깥 클릭: 편집 중 변경이 있으면 저장하고 닫기, 아니면 그냥 닫기.
 "use client";
 
 import { MessageSquarePlus, MessageSquareText, type LucideIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+import { buildPopoverActionLabels, PopoverActionBar } from "@/components/popover-action-bar";
+import { useI18n } from "@/lib/i18n";
 
 // 팝오버 폭 — 원문 문장이 두세 줄에 읽히게 (사용자 피드백 2026-09-03: 280은 좁다)
 const POPOVER_WIDTH = 360;
@@ -26,6 +31,7 @@ interface FallbackHintProps {
 }
 
 export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyLabel, restIcon: RestIcon }: FallbackHintProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [editing, setEditing] = useState(false);
@@ -35,6 +41,8 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
   const text = (fallback ?? "").trim();
   const isEmpty = text === "";
   if (isEmpty && !editing && !onSaveFallback) return null;
+  const dirty = editing && draft.trim() !== text;
+  const labels = buildPopoverActionLabels(t);
 
   const openPopover = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -47,6 +55,19 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
     setEditing(isEmpty);
     setOpen(true);
   };
+
+  const close = () => {
+    setEditing(false);
+    setOpen(false);
+  };
+  // 적용만 — 저장하고 편집 모드에 머문다(주 버튼은 Saved로)
+  const apply = () => onSaveFallback?.(draft.trim());
+  const commit = () => {
+    if (dirty) apply();
+    close();
+  };
+  // 바깥 클릭 — 편집 중 변경이 있으면 저장하고 닫기, 아니면 그냥 닫기
+  const handleOutside = () => (dirty ? commit() : close());
 
   return (
     <>
@@ -62,7 +83,7 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
               ? "text-ink-muted hover:bg-surface-alt hover:text-accent"
               : "text-accent hover:bg-accent-tint"
         }`}
-        onClick={() => (open ? setOpen(false) : openPopover())}
+        onClick={() => (open ? handleOutside() : openPopover())}
       >
         {RestIcon && (
           <RestIcon size={14} strokeWidth={1.5} className={open ? "hidden" : "group-hover:hidden"} />
@@ -85,48 +106,51 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
         createPortal(
           <>
             {/* 바깥 클릭 닫힘 — 팝오버 뒤 투명 오버레이 */}
-            <div className="fixed inset-0 z-[1340]" onClick={() => setOpen(false)} />
+            <div className="fixed inset-0 z-[1340]" onMouseDown={handleOutside} />
             <div
               data-id={`${dataId}-popover`}
-              className="fixed z-[1350] rounded-md border border-hairline bg-surface p-3 shadow-lg"
+              className="fixed z-[1350] flex flex-col gap-2 rounded-md border border-hairline bg-surface p-3 shadow-lg"
               style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.nativeEvent.stopPropagation();
+                  close();
+                  return;
+                }
+                // 텍스트영역은 ⌘/Ctrl+Enter로 저장하고 닫기(줄바꿈 보존)
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && editing) {
+                  e.preventDefault();
+                  commit();
+                }
+              }}
             >
-              <div className="mb-1 text-fine font-semibold text-ink-secondary">Interview note</div>
+              <div className="text-fine font-semibold text-ink-secondary">{t("sp.tile.note")}</div>
               {editing ? (
                 <>
                   <textarea
                     data-id={`${dataId}-edit`}
                     className="w-full resize-y rounded-sm border border-hairline bg-surface-alt px-1.5 py-1 text-caption text-ink focus:outline-none"
                     rows={3}
+                    autoFocus
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                   />
-                  <div className="mt-1.5 flex justify-end gap-1.5">
-                    <button
-                      type="button"
-                      className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                      onClick={() => setEditing(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      data-id={`${dataId}-save`}
-                      className="rounded-sm bg-accent px-2 py-0.5 text-caption text-on-accent hover:bg-accent-focus"
-                      onClick={() => {
-                        onSaveFallback?.(draft.trim());
-                        setEditing(false);
-                        setOpen(false);
-                      }}
-                    >
-                      Save
-                    </button>
-                  </div>
+                  <PopoverActionBar
+                    dataId={dataId}
+                    dirty={dirty}
+                    onApply={apply}
+                    onCommit={commit}
+                    onCancel={close}
+                    enterKind="cmd-enter"
+                    labels={labels}
+                  />
                 </>
               ) : (
                 <>
                   <p className="whitespace-pre-wrap text-caption text-ink">{text}</p>
-                  <div className="mt-1.5 flex justify-end gap-1.5">
+                  <div className="flex justify-end gap-1.5">
                     {onSaveFallback && (
                       <button
                         type="button"
@@ -137,7 +161,7 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
                           setEditing(true);
                         }}
                       >
-                        Edit
+                        {t("notes.edit")}
                       </button>
                     )}
                     {onApply && (
@@ -147,10 +171,10 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
                         className="rounded-sm bg-accent px-2 py-0.5 text-caption text-on-accent hover:bg-accent-focus"
                         onClick={() => {
                           onApply();
-                          setOpen(false);
+                          close();
                         }}
                       >
-                        {applyLabel ?? "Apply"}
+                        {applyLabel ?? t("sp.tile.apply")}
                       </button>
                     )}
                   </div>

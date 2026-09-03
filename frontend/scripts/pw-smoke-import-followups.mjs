@@ -79,7 +79,7 @@ try {
   await page.waitForSelector('[data-id="map-fallback-system_fallback-hint-popover"]', { timeout: 5000 });
   await page.locator('[data-id="map-fallback-system_fallback-hint-edit-btn"]').click();
   await page.locator('[data-id="map-fallback-system_fallback-hint-edit"]').fill("EAM, 수기 대장");
-  await page.locator('[data-id="map-fallback-system_fallback-hint-save"]').click();
+  await page.locator('[data-id="map-fallback-system_fallback-hint-commit"]').click();
   const savedOk = await page.locator('[data-id="map-fallback-system_fallback"]').getByText("EAM, 수기 대장")
     .waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
   check("editor saves interview note via PATCH fallback-notes", savedOk);
@@ -96,7 +96,7 @@ try {
   await page.locator('[data-id="map-note-title-input"]').fill("현업 요청");
   await page.locator('[data-id="map-note-text-input"]').fill("교정 결과를 당일 공유해 달라는 요청");
   await shot(page, "notes-add-form");
-  await page.locator('[data-id="map-note-save"]').click();
+  await page.locator('[data-id="map-note-commit"]').click();
   const created = await page.locator('[data-id="map-notes-section"]').getByText("현업 요청").first().waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
   check("note created with VOC kind", created);
   const noteRow = page.locator('[data-id^="map-note-"]').filter({ hasText: "현업 요청" }).first();
@@ -104,7 +104,7 @@ try {
   await noteRow.hover();
   await page.locator(`[data-id="map-note-edit-${noteId}"]`).click();
   await page.locator('[data-id="map-note-text-input"]').fill("당일 공유 요청 (수정)");
-  await page.locator('[data-id="map-note-save"]').click();
+  await page.locator('[data-id="map-note-commit"]').click();
   const edited = await page.locator('[data-id="map-notes-section"]').getByText("당일 공유 요청 (수정)").first().waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
   check("note edited", edited);
   await noteRow.hover();

@@ -7,6 +7,8 @@
 - **배경**: 임포트 폴백 6종·노트·값 대체 전수조사(아티팩트 "임포트 폴백 지도") — 폴백은 오너 전용 표면뿐, L5 스코프 노트는 조회 경로 없음, 오너 대기 플래그는 수동 이전으로 안 꺼져 재전달이 수동 배정을 덮던 구멍 4종. 설계 `docs/superpowers/specs/2026-09-03-import-governance-review-design.md`·`…-import-fallback-followups-design.md`.
 - **재임포트 결정 UI**: 오너·오우닝 부서·승인자·임포트 노트 교체는 dry-run "Governance changes"에서 체크한 것만 적용(`decisions`, 미매칭 422; 노트는 사람이 고친 임포트 노트가 없을 때만 기본 체크, 사용자 노트 불변). 오너 대기 예외 폐지·수동 이전이 플래그 해제·카드 "Owner unconfirmed" 필. 확인 다이얼로그 → 리포트 하단 고정 [Cancel][Apply] 바.
 - **표면 확장**: 인터뷰 원문 메모 5종 `PATCH /maps/{id}/fallback-notes`(editor) + `MapFallbackNotes`(에디터 맵 탭=점유권자 편집·홈 카드·비교 요약 기본 접힘; 행머리 아이콘 호버 스왑, 팝오버 360). 노트 CRUD(맵=오너, L5=체인 관리자/sysadmin, `edited_at`) + `MapNotesSection` 프리셋 칩·'[' 자동완성·비권한자 안내, 에디터 맵 탭 순서 SP 카드→원문 메모→노트(L5 캔버스는 카테고리 스코프). SP 지정 참고치 `sp_annual_count/sp_fte`(임포트는 맵 지정값+L5 캔버스 노드 둘 다, 노드 인스펙터 Info 호버). SP 지정 모달 타일 재디자인(`max-w-lg`, 2열 타일 라벨 톤다운+값 우측, 클릭 위치 팝오버·Σ·원문 메모, IO 플라이아웃은 헤드리스 편집기 + 푸터 OK 줄 맨 앞 '+ Add'). SP 카드 액션 행 wrap.
+- **소형 입력 팝오버 공통 경험**(`PopoverActionBar`, 사용자 결정): kbd 키 안내(Enter/⌘·Ctrl+Enter/Esc, "바깥 클릭" 문구 제거) + 상태형 주 버튼(변경 없음 Cancel / 있음 Save=저장하고 닫기 / 메뉴 Save 후 Saved) + 셰브론 메뉴 3종(Save·Save and close·Close without saving). 적용: SP 타일 팝오버·인터뷰 원문 메모 팝오버·노트 폼. 바깥 클릭은 변경 있을 때만 저장. 큰 편집 모달은 대상 밖.
+- **사용자 노출 문구 긴 대시 → 짧은 대시** 일괄 전환(i18n·JSX·문자열 리터럴·백엔드 API/리포트 메시지·테스트 단언, 150파일 605줄; 코드 주석·docs 유지). FE 파서 `linkage skipped -` 동기.
 - 검증: pytest 1347·vitest 848·스모크 `pw-smoke-interview-import.mjs` 23/23·`pw-smoke-import-followups.mjs` 23/23. 랜드마인: 개발 서버를 `| head`로 띄우면 EPIPE로 죽는다(파일 로그), 지정 모달은 게시본에서만 활성, 에디터 goto는 domcontentloaded.
 
 ## 2026-09-03 — SP 피크 재배치·목업 드래그·우클릭 맵 이동·프레임워크 탐색 좌상단 통일 (dev)

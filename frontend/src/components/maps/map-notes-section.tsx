@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { buildPopoverActionLabels, PopoverActionBar } from "@/components/popover-action-bar";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
@@ -51,6 +52,8 @@ interface Draft {
   kind: string;
   title: string;
   text: string;
+  // 열 때의 값 — dirty 판정(변경 없음=Cancel / 있음=Save) 기준. 새 노트는 빈 값
+  original: { kind: string; title: string; text: string };
 }
 
 const scopeKey = (scope: NotesScope): string => ("mapId" in scope ? `map:${scope.mapId}` : `cat:${scope.categoryId}`);
@@ -104,15 +107,27 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
   function openNew() {
     setCollapsed(false);
     setError(null);
-    setDraft({ id: null, kind: "note", title: "", text: "" });
+    setDraft({ id: null, kind: "note", title: "", text: "", original: { kind: "note", title: "", text: "" } });
   }
 
   function openEdit(note: MapNote) {
     setError(null);
-    setDraft({ id: note.id, kind: note.kind, title: note.title ?? "", text: note.text });
+    const original = { kind: note.kind, title: note.title ?? "", text: note.text };
+    setDraft({ id: note.id, ...original, original });
   }
 
-  async function save() {
+  // 변경 여부 — 새 노트는 본문이 생겼을 때, 기존 노트는 kind/제목/본문 중 하나라도 달라졌을 때
+  const noteDirty = draft !== null && (
+    draft.id === null
+      ? draft.text.trim() !== ""
+      : stripBrackets(draft.kind) !== draft.original.kind
+        || draft.title.trim() !== draft.original.title.trim()
+        || draft.text.trim() !== draft.original.text.trim()
+  );
+  const actionLabels = buildPopoverActionLabels(t);
+
+  // closeAfter=false(메뉴 "Save")면 저장 뒤 같은 노트를 계속 편집 — 새 노트는 생성된 id로 갈아탄다
+  async function save(closeAfter: boolean) {
     if (!draft) return;
     const body: MapNoteBody = {
       kind: stripBrackets(draft.kind) || "note",
@@ -143,7 +158,12 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
             }
           : prev,
       );
-      setDraft(null);
+      if (closeAfter) {
+        setDraft(null);
+      } else {
+        const original = { kind: saved.kind, title: saved.title ?? "", text: saved.text };
+        setDraft({ id: saved.id, ...original, original });
+      }
       onToast?.(t("notes.saved"));
     } catch (err) {
       setError(humanizeApiError(err, t));
@@ -172,7 +192,23 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
 
   const renderForm = () =>
     draft && (
-      <li data-id="map-note-form" className="flex flex-col gap-1.5 rounded-sm border border-accent-tint-border bg-accent-tint/30 p-2">
+      <li
+        data-id="map-note-form"
+        className="flex flex-col gap-1.5 rounded-sm border border-accent-tint-border bg-accent-tint/30 p-2"
+        onKeyDown={(e) => {
+          // Esc=저장 없이 닫기, ⌘/Ctrl+Enter=저장하고 닫기 — 타일 팝오버와 같은 키 규칙
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            setDraft(null);
+            return;
+          }
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void save(true);
+          }
+        }}
+      >
         {/* kind — 프리셋 칩 + 자유 입력('[' 자동완성) */}
         <div className="flex flex-wrap items-center gap-1">
           {PRESET_KINDS.map((k) => (
@@ -263,25 +299,16 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
           onChange={(e) => setDraft({ ...draft, text: e.target.value })}
         />
         {error && <p className="text-fine text-error">{error}</p>}
-        <div className="flex justify-end gap-1.5">
-          <button
-            type="button"
-            data-id="map-note-cancel"
-            className="rounded-sm px-2 py-0.5 text-caption text-ink-secondary hover:bg-surface-alt"
-            onClick={() => setDraft(null)}
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            type="button"
-            data-id="map-note-save"
-            disabled={busy || draft.text.trim() === ""}
-            className="rounded-sm bg-accent px-2 py-0.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-            onClick={() => void save()}
-          >
-            {t("notes.save")}
-          </button>
-        </div>
+        {/* 공용 푸터 — 변경 없음 Cancel / 있음 Save(저장하고 닫기) / 메뉴 Save(계속 편집)·Save and close·Close without saving */}
+        <PopoverActionBar
+          dataId="map-note"
+          dirty={noteDirty && !busy}
+          enterKind="cmd-enter"
+          labels={actionLabels}
+          onApply={() => void save(false)}
+          onCommit={() => void save(true)}
+          onCancel={() => setDraft(null)}
+        />
       </li>
     );
 
