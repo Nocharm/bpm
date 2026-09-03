@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -9107,31 +9107,53 @@ function MapEditor({ mapId }: { mapId: number }) {
                 {showOnboard ? (
                   // z-[1100]: RF 선택 노드(1000)·연결선(1001)이 z-40을 덮는다 — 플로팅 크롬 층으로
                   <div
-                    className="absolute right-0 top-full z-[1100] mt-2 w-64 rounded-md border border-hairline bg-surface p-3 shadow-lg"
+                    className="absolute right-0 top-full z-[1100] mt-2 w-72 rounded-md border border-hairline bg-surface p-3 shadow-lg"
                     data-id="consult-onboard"
                   >
-                    <div className="text-caption-strong text-ink">Try the AI consultant</div>
-                    <p className="mt-1 text-fine text-ink-secondary">
-                      Answer a few questions and this empty map draws itself - attach a document
-                      to go even faster.
-                    </p>
-                    <div className="mt-2 flex justify-end gap-1.5">
+                    <div className="flex items-start gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
+                        <Headset size={16} strokeWidth={1.5} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-caption-strong text-ink">{t("consultOnboard.title")}</div>
+                        {/* break-keep — 한국어가 어절 중간에서 끊기지 않게 */}
+                        <p className="mt-0.5 break-keep text-fine text-ink-secondary">{t("consultOnboard.body")}</p>
+                      </div>
+                    </div>
+                    {/* 무엇을 해주는지 한눈에 — 아이콘 태그 필 (사용자 요청 2026-09-03) */}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {[
+                        { Icon: MessageSquare, label: t("consultOnboard.tagInterview") },
+                        { Icon: Paperclip, label: t("consultOnboard.tagAttach") },
+                        { Icon: Sparkles, label: t("consultOnboard.tagDraft") },
+                      ].map(({ Icon, label }) => (
+                        <span
+                          key={label}
+                          className="inline-flex items-center gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-px text-fine text-accent"
+                        >
+                          <Icon size={11} strokeWidth={1.5} className="shrink-0" />
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-2.5 flex justify-end gap-1.5">
                       <button
                         className="rounded-sm px-2 py-1 text-fine text-ink-muted hover:bg-surface-alt"
                         onClick={dismissConsultOnboard}
                         data-id="consult-onboard-dismiss"
                       >
-                        Dismiss
+                        {t("consultOnboard.dismiss")}
                       </button>
                       <button
-                        className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent"
+                        className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine font-medium text-on-accent hover:bg-accent-focus"
                         onClick={() => {
                           dismissConsultOnboard();
                           router.push(`/maps/${mapId}/consult?version=${versionId}`);
                         }}
                         data-id="consult-onboard-start"
                       >
-                        Start
+                        {t("consultOnboard.start")}
+                        <ArrowRight size={12} strokeWidth={1.5} />
                       </button>
                     </div>
                   </div>
