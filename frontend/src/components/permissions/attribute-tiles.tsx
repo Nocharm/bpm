@@ -124,11 +124,15 @@ export function DeptAssigneeTiles({
   for (const u of usersWithPath) {
     if (u.org_path && !pathByDept.has(u.department)) pathByDept.set(u.department, u.org_path);
   }
+  // 내 부서(체인 맨 위)는 행 우측 "내 부서" 태그로 표시 (사용자 요청 2026-09-03)
+  const myDept = deptLeaf(myPath);
   const deptOptions = buildDepartmentOptions(
     sortDepartmentsByOrgProximity(data.departments, pathByDept, myPath),
     data.users,
     lang,
     data.dept_infos,
+  ).map((option) =>
+    myDept !== "" && option.value === myDept ? { ...option, tag: t("perm.principalMyDept") } : option,
   );
   // 부서 값(말단 이름 또는 전달된 슬래시 경로) → 조직 경로 — 디렉터리 전체에서 말단 일치를 찾는다
   const resolveOrgPath = (dept: string): string => {

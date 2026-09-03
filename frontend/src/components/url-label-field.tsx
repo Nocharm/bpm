@@ -4,7 +4,7 @@
 // URL 행 X = URL·라벨 동시 삭제, 라벨 행은 URL 있을 때만 노출되고 X = 라벨만 삭제.
 // 입력은 드래프트 → blur/Enter 커밋(수정은 삭제 후 재입력 — 칩 관용).
 
-import { X } from "lucide-react";
+import { Link as LinkIcon, X } from "lucide-react";
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n";
@@ -50,7 +50,11 @@ export function UrlLabelField({
   return (
     <>
       <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-        <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
+        {/* 행머리 아이콘+라벨 — 인스펙터 다른 카드 행과 같은 문법 (사용자 요청 2026-09-03) */}
+        <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+          <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
+          {t("field.url")}
+        </span>
         {url ? (
           <span data-id="url-field-pill" className={PILL_CLASS} title={url}>
             <span className="truncate">{url}</span>

@@ -155,11 +155,39 @@ export function NodeMetricsCard({
             const field: ParamField = isCostRow ? activeCurrency : key;
             const RowIcon = PARAM_ICON[field];
             const editable = editableParams.includes(field);
+            // SP 노드 연간 건수 — 링크 맵 빈도 원문이 있으면 행머리 아이콘이 호버 시 메모 아이콘으로(읽기)
+            const noteHead = key === "annual_count" && isSubprocess && (frequencyFallback ?? "").trim() !== "";
+            const reference = isSubprocess ? (referenceValues?.[field] ?? "") : "";
             return (
-              <div key={key} className="flex items-center justify-between gap-2 py-1">
-                <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
-                  <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
-                  {isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}
+              // 라벨 뒤에 참고치·원문 메모, 입력은 맨 우측 동일 폭 — SP 노드 행도 다른 행과 같은 정렬 (사용자 요청 2026-09-03)
+              <div key={key} className="group flex items-center justify-between gap-2 py-1">
+                {/* 라벨이 먼저 줄어든다(truncate) — 입력은 고정 폭이라 행마다 같은 폭으로 우측 정렬 */}
+                <span
+                  className="inline-flex min-w-0 items-center gap-1 text-caption text-ink-secondary"
+                  title={isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}
+                >
+                  {noteHead ? (
+                    <FallbackHint
+                      dataId="inspector-annual-count-hint"
+                      fallback={frequencyFallback}
+                      restIcon={RowIcon}
+                      iconSize={12}
+                      padded={false}
+                    />
+                  ) : (
+                    <RowIcon size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
+                  )}
+                  <span className="min-w-0 truncate">{isCostRow ? t("field.costRun") : t(PARAM_LABEL_KEY[key])}</span>
+                  {reference !== "" && (
+                    <Tooltip
+                      wide
+                      content={`${t("metrics.designatedRef", { v: formatParamValue(field, reference) })} - ${t("metrics.designatedRefHint")}`}
+                    >
+                      <span data-id={`inspector-ref-${field}`} className="inline-flex shrink-0 text-ink-tertiary">
+                        <Info size={13} strokeWidth={1.5} />
+                      </span>
+                    </Tooltip>
+                  )}
                 </span>
                 {/* 통화 세그먼트 — 배타 계약이라 한 번에 한 통화만 (전환 시 반대 값 소거 안내) */}
                 {isCostRow && canEditCost && !readOnly && (
@@ -187,11 +215,11 @@ export function NodeMetricsCard({
                     key={field} // 통화 전환 시 focused 상태 리셋
                     field={field}
                     dataId={`inspector-param-${field}`}
-                    // 편집 가능이면 입력 영역 상시 노출 + 통일 폭(w-32) + 포커스 보더 (사용자 결정 2026-08-20)
+                    // 편집 가능이면 입력 영역 상시 노출 + 통일 폭(w-32, 안 줄어듦) + 포커스 보더 (사용자 결정 2026-08-20)
                     className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
                       readOnly
                         ? "min-w-0 flex-1 bg-transparent"
-                        : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
+                        : "w-32 shrink-0 border border-hairline bg-surface-alt focus:border-accent"
                     }`}
                     value={shown(field)}
                     disabled={readOnly}
@@ -207,18 +235,6 @@ export function NodeMetricsCard({
                       ? inheritedDisplay("cost_krw") || inheritedDisplay("cost_usd")
                       : inheritedDisplay(field)) || "-"}
                   </span>
-                )}
-                {key === "annual_count" && isSubprocess && (
-                  <FallbackHint dataId="inspector-annual-count-hint" fallback={frequencyFallback} />
-                )}
-                {isSubprocess && (referenceValues?.[field] ?? "") !== "" && (
-                  <Tooltip
-                    content={`${t("metrics.designatedRef", { v: formatParamValue(field, referenceValues?.[field] ?? "") })} - ${t("metrics.designatedRefHint")}`}
-                  >
-                    <span data-id={`inspector-ref-${field}`} className="inline-flex shrink-0 text-ink-tertiary">
-                      <Info size={14} strokeWidth={1.5} />
-                    </span>
-                  </Tooltip>
                 )}
               </div>
             );

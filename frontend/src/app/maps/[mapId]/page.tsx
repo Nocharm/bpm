@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Building2, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link as LinkIcon, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Users, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -10315,6 +10315,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 assignee={node.data.assignee}
                 department={node.data.department}
                 system={node.data.system}
+                systemFallback={node.data.system_fallback ?? ""}
                 duration={node.data.duration}
                 touch_time={node.data.touch_time ?? ""}
                 input={node.data.input ?? ""}
@@ -10369,6 +10370,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                 initialFocus={summaryFocus ?? undefined}
                 onPatch={handleSummaryPatch}
                 onCommitLabel={handleSummaryLabelCommit}
+                // IO 팝오버 '다른 노드에서 불러오기' — 인스펙터 카드와 같은 불러오기 모달(선택 즉시 그래프 커밋)
+                onIoImport={readOnly ? undefined : (side, at) => setIoImport({ side, nodeId: summaryNodeId, at })}
                 onNavigate={(id) => setSummaryNodeId(id)}
                 onClose={() => {
                   setSummaryNodeId(null);
@@ -10753,31 +10756,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                             readOnly={readOnly}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
-                          {([
-                            ["system", "field.system"],
-                          ] as const).map(([key, labelKey]) => (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-2 py-1"
-                            >
-                              <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
-                              <input
-                                data-id={`inspector-field-${key}`}
-                                className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
-                                  readOnly
-                                    ? "min-w-0 flex-1 bg-transparent"
-                                    : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
-                                }`}
-                                value={selectedNode.data[key] ?? ""}
-                                disabled={readOnly}
-                                title={selectedNode.data[key] || undefined}
-                                onChange={(event) => updateSelectedData({ [key]: event.target.value }, true)}
-                              />
-                              {/* 시스템 원문 폴백 힌트 — 라이브러리화 전 검토 원천 (design 2026-08-19 §5.2) */}
-                              {key === "system" && (
+                          {/* 시스템 — 행머리 아이콘+라벨(수행 지표·입출력 카드와 같은 문법). 원문 폴백(라이브러리화 전 검토
+                              원천, design 2026-08-19 §5.2)은 행 호버 시 행머리 아이콘이 메모 아이콘으로 바뀌는 FallbackHint —
+                              보기·수정·적용 (사용자 요청 2026-09-03) */}
+                          <div className="group flex items-center justify-between gap-2 py-1">
+                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                              {readOnly && (selectedNode.data.system_fallback ?? "").trim() === "" ? (
+                                <Monitor size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              ) : (
                                 <FallbackHint
                                   dataId="inspector-system-hint"
                                   fallback={selectedNode.data.system_fallback}
+                                  restIcon={Monitor}
+                                  iconSize={12}
+                                  padded={false}
+                                  restClassName="text-ink-muted"
                                   onSaveFallback={
                                     readOnly
                                       ? undefined
@@ -10794,11 +10787,27 @@ function MapEditor({ mapId }: { mapId: number }) {
                                   }
                                 />
                               )}
-                            </div>
-                          ))}
+                              {t("field.system")}
+                            </span>
+                            <input
+                              data-id="inspector-field-system"
+                              className={`truncate rounded-sm px-1.5 py-0.5 text-right text-caption text-ink focus:outline-none ${
+                                readOnly
+                                  ? "min-w-0 flex-1 bg-transparent"
+                                  : "w-32 min-w-0 border border-hairline bg-surface-alt focus:border-accent"
+                              }`}
+                              value={selectedNode.data.system ?? ""}
+                              disabled={readOnly}
+                              title={selectedNode.data.system || undefined}
+                              onChange={(event) => updateSelectedData({ system: event.target.value }, true)}
+                            />
+                          </div>
                           {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용, 읽기전용은 배지만 (사용자 요청 2026-08-21 #5) */}
                           <div className="flex items-center justify-between gap-2 py-1">
-                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.gmp")}</span>
+                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                              <ShieldCheck size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              {t("field.gmp")}
+                            </span>
                             {readOnly ? (
                               (selectedNode.data.gmp ?? "") !== "" ? (
                                 <span
@@ -10909,18 +10918,22 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </button>
                           {!attrsCollapsed && (
                           <div className="ml-2 border-l border-divider pl-2">
+                          {/* 행머리 아이콘+라벨 — 일반 노드 속성 카드와 같은 문법 (사용자 요청 2026-09-03) */}
                           {([
-                            ["department", "field.department"],
-                            ["assignee", "field.assignee"],
-                            ["system", "field.system"],
-                          ] as const).map(([key, labelKey]) => {
+                            ["department", "field.department", Building2],
+                            ["assignee", "field.assignee", Users],
+                            ["system", "field.system", Monitor],
+                          ] as const).map(([key, labelKey, RowIcon]) => {
                             const value = selectedSpRef[key];
                             return (
                               <div
                                 key={key}
                                 className="flex items-center justify-between gap-2 border-t border-divider py-1"
                               >
-                                <span className="shrink-0 text-caption text-ink-secondary">{t(labelKey)}</span>
+                                <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                                  <RowIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
+                                  {t(labelKey)}
+                                </span>
                                 <span
                                   className="min-w-0 truncate text-right text-caption text-ink"
                                   title={value || undefined}
@@ -10931,7 +10944,10 @@ function MapEditor({ mapId }: { mapId: number }) {
                             );
                           })}
                           <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                            <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
+                            <span className="inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary">
+                              <LinkIcon size={12} strokeWidth={1.5} className="text-ink-muted" />
+                              {t("field.url")}
+                            </span>
                             <span
                               className="min-w-0 truncate text-right text-caption text-ink"
                               title={selectedSpRef.url || undefined}

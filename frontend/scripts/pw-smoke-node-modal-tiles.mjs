@@ -106,10 +106,13 @@ try {
   const modalWidth = (await page.locator('[data-id="node-summary-body"]').boundingBox())?.width ?? 0;
   // 바디는 카드 안쪽(보더 1px×2 제외) — 512 카드면 510
   check("modal width matches the 512px designation modal", Math.abs(modalWidth - 510) <= 2, `w=${modalWidth}`);
-  const deptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => `${el.tagName}:${getComputedStyle(el).gridColumn}`);
-  check("department is a clickable wide tile", deptTag.startsWith("BUTTON") && /span 2/.test(deptTag), deptTag);
+  // 편집 타일은 role=button div — 안에 부서 필·원문 메모 버튼이 중첩된다
+  const deptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}:${getComputedStyle(el).gridColumn}`);
+  check("department is a clickable wide tile", deptTag.startsWith("DIV:button") && /span 2/.test(deptTag), deptTag);
   await shot(page, "edit-modal-tiles");
 
+  // 인스펙터(같은 노드 선택) 지표 카드도 펼쳐 둔다 — 양방향 동기 검증용
+  await expandSections(page, ["inspector-attrs-toggle", "inspector-params-toggle"]);
   await page.locator('[data-id="summary-tile-duration"]').click();
   await page.waitForSelector('[data-id="summary-tile-popover-duration"]', { timeout: 5000 });
   // 액션 바 — 변경 없을 땐 셰브론 숨김, 입력하면 나타남
@@ -122,6 +125,37 @@ try {
   await page.locator('[data-id="summary-param-duration"]').press("Enter");
   const durTile = await page.locator('[data-id="summary-tile-duration"]').textContent();
   check("Enter commits duration tile (Nh30m)", (durTile ?? "").includes(`${durH}h30m`), durTile ?? "");
+  // 라이브 동기 — 팝오버 확정이 곧 노드 반영이라 인스펙터 지표 카드가 같은 값을 보인다
+  await page.waitForTimeout(150);
+  const inspectorDur = await page.locator('[data-id="inspector-param-duration"]').inputValue().catch(() => "");
+  check("modal commit shows up in the inspector right away", inspectorDur.includes(`${durH}h30m`) || inspectorDur === durInput, inspectorDur);
+  // 반대 방향 — 인스펙터 시스템 입력이 모달 시스템 타일에 바로 보인다
+  const sysText = `sys-${stamp}`;
+  await page.locator('[data-id="inspector-field-system"]').fill(sysText);
+  await page.waitForTimeout(150);
+  const sysTile = await page.locator('[data-id="summary-tile-system"]').textContent();
+  check("inspector edit shows up in the modal tile right away", (sysTile ?? "").includes(sysText), sysTile ?? "");
+  // 시스템 타일 호버 → 원문 메모 아이콘 → 메모 입력(노드 system_fallback)
+  await page.locator('[data-id="summary-tile-system"]').hover();
+  await page.locator('[data-id="summary-tile-note-icon-system"]').click();
+  const notePopover = await page.locator('[data-id="summary-tile-note-icon-system-popover"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  // 임포트된 노드는 원문이 이미 있어 보기 모드로 열린다 — 그땐 '노트 수정'으로 편집 모드 진입
+  const noteEditBtn = page.locator('[data-id="summary-tile-note-icon-system-edit-btn"]');
+  if ((await noteEditBtn.count()) > 0) await noteEditBtn.click();
+  const noteEdit = page.locator('[data-id="summary-tile-note-icon-system-edit"]');
+  const noteOpened = await noteEdit.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  check("hovering the system tile swaps to a note icon that opens the note editor", notePopover && noteOpened);
+  await noteEdit.fill(`note-${stamp}`);
+  await page.locator('[data-id="summary-tile-note-icon-system-commit"]').click();
+  await page.waitForSelector('[data-id="summary-tile-note-icon-system-popover"]', { state: "detached", timeout: 5000 });
+  check("saving the note keeps the node modal open (no tile popover opened)", (await page.locator('[data-id="summary-tile-popover-system"]').count()) === 0);
+  // 시스템 팝오버 안에도 메모 칸
+  await page.locator('[data-id="summary-tile-system"]').click();
+  await page.waitForSelector('[data-id="summary-tile-popover-system"]', { timeout: 5000 });
+  const noteInPopover = await page.locator('[data-id="summary-tile-note-system"]').inputValue().catch(() => null);
+  check("system popover carries the interview note field", noteInPopover === `note-${stamp}`, noteInPopover ?? "none");
+  await shot(page, "popover-system-note");
+  await page.locator('[data-id="summary-tile-popover-system-cancel"]').click();
 
   await page.locator('[data-id="summary-tile-cost"]').click();
   await page.waitForSelector('[data-id="summary-tile-popover-cost"]', { timeout: 5000 });
@@ -140,6 +174,8 @@ try {
   const me = await api("/me");
   const firstOption = await page.locator('[data-id="search-select-menu"] button').nth(1).textContent();
   check("department list starts with my department", (firstOption ?? "").includes(me.department), `${firstOption} vs ${me.department}`);
+  const myDeptTag = await page.locator('[data-id="search-select-menu"] button').nth(1).locator('[data-id="search-select-tag"]').textContent().catch(() => "");
+  check("my department row carries a 'My Dept' tag", /my dept/i.test(myDeptTag ?? ""), myDeptTag ?? "");
   await shot(page, "popover-department");
   await page.locator('[data-id="search-select-menu"] button').nth(1).click();
   await page.locator('[data-id="summary-tile-popover-department-commit"]').click();
@@ -156,9 +192,18 @@ try {
   await page.waitForSelector('[data-id="org-info-modal"]', { state: "detached", timeout: 5000 });
   check("closing the org modal keeps the node modal open", (await page.locator('[data-id="node-summary-body"]').count()) === 1);
 
-  // 입출력 타일 → 플라이아웃 편집기('+ Add' 푸터)
+  // 입출력 타일 → 플라이아웃 편집기('+ Add' · '다른 노드에서 불러오기' 푸터)
   await page.locator('[data-id="summary-tile-input"]').click();
   await page.waitForSelector('[data-id="summary-tile-popover-input"]', { timeout: 5000 });
+  const importBtn = page.locator('[data-id="summary-tile-io-input-import"]');
+  check("IO popover offers 'Import from node' next to Add", (await importBtn.count()) === 1 && (await importBtn.isEnabled()));
+  await importBtn.click();
+  const importOpened = await page.locator('[data-id="io-import-modal"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  check("import button opens the IO import modal above the popover", importOpened);
+  await shot(page, "popover-input-import");
+  await page.keyboard.press("Escape"); // 최상위(불러오기 모달)만 닫힌다
+  await page.waitForSelector('[data-id="io-import-modal"]', { state: "detached", timeout: 5000 });
+  check("Esc closes only the import modal - popover and node modal stay", (await page.locator('[data-id="summary-tile-popover-input"]').count()) === 1 && (await page.locator('[data-id="node-summary-body"]').count()) === 1);
   await page.locator('[data-id="summary-tile-io-input-add"]').click();
   const rows = page.locator('[data-id^="summary-tile-io-input-row-"]');
   const lastRow = rows.nth((await rows.count()) - 1);
@@ -169,16 +214,20 @@ try {
   const inputTile = await page.locator('[data-id="summary-tile-input"]').textContent();
   check("input tile shows item count after add", /\d+ items/.test(inputTile ?? ""), inputTile ?? "");
 
-  await page.locator('[data-id="summary-save"]').click();
+  check("footer explains live editing and offers Done", (await page.locator('[data-id="summary-live-hint"]').count()) === 1 && (await page.locator('[data-id="summary-save"]').count()) === 0);
+  await page.locator('[data-id="summary-close"]').click();
   await page.waitForSelector('[data-id="node-summary-body"]', { state: "detached", timeout: 8000 });
   await page.waitForTimeout(2500); // autosave
   const saved = await api(`/versions/${draft.id}/graph`);
   const savedNode = saved.nodes.find((n) => n.id === processNode.id);
   check(
-    "modal save persisted duration/cost_usd/department/input",
-    savedNode?.duration === durInput && savedNode?.cost_usd === String(costVal) && savedNode?.cost_krw === "" && savedNode?.department === me.department && (savedNode?.input ?? "").includes("타일 스모크 인풋"),
-    `${savedNode?.duration}/${savedNode?.cost_usd}/${savedNode?.department}`,
+    "live edits persisted duration/cost_usd/department/input/system/note",
+    savedNode?.duration === durInput && savedNode?.cost_usd === String(costVal) && savedNode?.cost_krw === "" && savedNode?.department === me.department && (savedNode?.input ?? "").includes("타일 스모크 인풋") && savedNode?.system === sysText && savedNode?.system_fallback === `note-${stamp}`,
+    `${savedNode?.duration}/${savedNode?.cost_usd}/${savedNode?.department}/${savedNode?.system}/${savedNode?.system_fallback}`,
   );
+  // 인스펙터 BPM 속성 행 — 아이콘+라벨 문법, 시스템 행머리는 원문 메모 트리거
+  const attrIcons = await page.locator('[data-id="inspector-attrs-toggle"]').locator("xpath=..").locator("svg").count();
+  check("inspector attribute rows carry row-head icons", attrIcons >= 5 && (await page.locator('[data-id="inspector-system-hint"]').count()) === 1, `icons=${attrIcons}`);
 
   // ── 2) 읽기 전용(게시본) — 정적 타일, 입출력만 읽기 팝오버 ──────────────────────
   await page.goto(`${BASE}/maps/${target.id}?version=${published.id}`, { waitUntil: "domcontentloaded" });
@@ -200,16 +249,32 @@ try {
   });
   check("prev/next docks float outside the modal card", prevCards + nextCards > 0 && dockOutside, `prev=${prevCards} next=${nextCards}`);
   await page.locator('[data-id^="summary-dock-card-"]').first().hover();
-  await page.waitForTimeout(450);
-  const hoverScale = await page.locator('[data-id^="summary-dock-card-"]').first().evaluate((el) => getComputedStyle(el).scale);
-  check("dock card grows on hover", hoverScale !== "none" && hoverScale !== "1", hoverScale);
+  await page.waitForTimeout(500);
+  const hoverState = await page.locator('[data-id^="summary-dock-card-"]').first().evaluate((el) => {
+    const scroll = el.parentElement;
+    const r = el.getBoundingClientRect();
+    const s = scroll.getBoundingClientRect();
+    // 커진 카드가 스크롤 상자(overflow) 경계 안에 있어야 잘리지 않는다 + 안쪽 모서리 히트가 카드 자신
+    const inside = r.left >= s.left - 0.5 && r.right <= s.right + 0.5;
+    const innerX = el.closest('[data-id="summary-dock-next"]') ? r.left + 1 : r.right - 1;
+    const hit = document.elementFromPoint(innerX, r.top + r.height / 2);
+    return { scale: getComputedStyle(el).scale, margin: getComputedStyle(el).marginTop, inside, hitOk: hit === el || el.contains(hit) };
+  });
+  check("dock card grows on hover (scale 1.1) and spreads neighbours", hoverState.scale === "1.1" && hoverState.margin !== "0px", JSON.stringify(hoverState));
+  check("hovered dock card is not clipped at the inner edge", hoverState.inside && hoverState.hitOk, JSON.stringify(hoverState));
   await shot(page, "readonly-docks");
   const dockTarget = page.locator('[data-id^="summary-dock-card-"]').first();
   const dockLabel = (await dockTarget.getAttribute("title")) ?? "";
   await dockTarget.click();
-  await page.waitForTimeout(400);
+  // 전환 애니메이션 — 클릭한 카드의 고스트가 가운데로, 가운데 카드는 반대편으로 줄어든다
+  const ghostShown = (await page.locator('[data-id="summary-swap-ghost"]').count()) === 1;
+  const cardSwapping = await page.locator('[data-id="node-summary-card"]').evaluate((el) => el.classList.contains("summary-swap-out"));
+  check("clicking a dock card plays the swap animation (ghost + shrinking card)", ghostShown && cardSwapping);
+  await page.waitForTimeout(200);
+  await shot(page, "dock-swap-mid");
+  await page.waitForTimeout(700);
   const headerAfter = await page.locator('[data-id="node-summary-body"]').locator("xpath=..").locator("span.text-body-strong").first().textContent();
-  check("clicking a dock card navigates the modal to that node", (headerAfter ?? "").includes(dockLabel), `${headerAfter} vs ${dockLabel}`);
+  check("clicking a dock card navigates the modal to that node", (headerAfter ?? "").includes(dockLabel) && (await page.locator('[data-id="summary-swap-ghost"]').count()) === 0, `${headerAfter} vs ${dockLabel}`);
   await page.keyboard.press("Escape");
   await openNodeModal(page, pubNode.title);
   const readTiles = await page.locator('[data-id^="summary-tile-"]:not([data-id*="popover"])').count();
@@ -218,11 +283,11 @@ try {
   const editable = await page.locator('[data-id="summary-tile-popover-duration"]').count();
   check("read-only modal has no edit popover", editable === 0);
   if ((pubNode.input ?? "") !== "") {
-    const ioTag = await page.locator('[data-id="summary-tile-input"]').evaluate((el) => el.tagName);
+    const ioTag = await page.locator('[data-id="summary-tile-input"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}`);
     await page.locator('[data-id="summary-tile-input"]').click();
     const ro = await page.locator('[data-id="summary-tile-popover-input"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
     const roCommit = await page.locator('[data-id="summary-tile-popover-input-commit"]').count();
-    check("read-only input tile opens a view-only popover", ioTag === "BUTTON" && ro && roCommit === 0);
+    check("read-only input tile opens a view-only popover", ioTag === "DIV:button" && ro && roCommit === 0, ioTag);
     await shot(page, "readonly-io-popover");
     await page.locator('[data-id="summary-tile-popover-input-close"]').click();
   }
@@ -262,6 +327,9 @@ try {
   await expandSections(page, ["sp-designation-attrs-toggle", "sp-designation-params-toggle", "sp-designation-details-toggle"]);
   const spDeptWide = await page.locator('[data-id="sp-tile-department"]').evaluate((el) => getComputedStyle(el).gridColumn);
   check("designation modal has wide department tile", /span 2/.test(spDeptWide), spDeptWide);
+  // 원문 메모 필드 타일(시간·실작업·시스템·연간)엔 호버 메모 아이콘 — 값이 없어도 편집 모드라 추가 아이콘이 있다
+  const spNoteIcons = await page.locator('[data-id^="sp-tile-note-icon-"]').count();
+  check("designation tiles with interview notes expose the hover note icon", spNoteIcons === 4, `icons=${spNoteIcons}`);
   const oldCostTiles = await page.locator('[data-id="sp-tile-cost_krw"], [data-id="sp-tile-cost_usd"]').count();
   check("designation modal folds cost into one tile", oldCostTiles === 0 && (await page.locator('[data-id="sp-tile-cost"]').count()) === 1);
   await page.locator('[data-id="sp-tile-cost"]').click();
@@ -294,15 +362,31 @@ try {
     await page.waitForTimeout(500);
     await openNodeModal(page, "교정 준비");
     await expandSections(page, ["summary-attrs-toggle", "summary-params-toggle", "summary-details-toggle"]);
-    const spDeptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => el.tagName).catch(() => "none");
-    const annualTag = await page.locator('[data-id="summary-tile-annual_count"]').evaluate((el) => el.tagName).catch(() => "none");
-    check("SP modal: inherited department is static, annual count editable", spDeptTag === "DIV" && annualTag === "BUTTON", `${spDeptTag}/${annualTag}`);
+    const spDeptTag = await page.locator('[data-id="summary-tile-department"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}`).catch(() => "none");
+    const annualTag = await page.locator('[data-id="summary-tile-annual_count"]').evaluate((el) => `${el.tagName}:${el.getAttribute("role")}`).catch(() => "none");
+    check("SP modal: inherited department is static, annual count editable", spDeptTag === "DIV:null" && annualTag === "DIV:button", `${spDeptTag}/${annualTag}`);
     await page.locator('[data-id="summary-tile-annual_count"]').click();
     const refVisible = await page.locator('[data-id="summary-tile-reference"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
     check("SP annual count popover shows designated reference", refVisible);
     await shot(page, "sp-node-modal");
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
+    // 인스펙터 SP 지표 행 — 참고치 아이콘은 라벨 뒤, 입력은 맨 우측(같은 폭)
+    await page.waitForSelector('[data-id="node-summary-body"]', { state: "detached", timeout: 5000 });
+    await expandSections(page, ["inspector-params-toggle"]);
+    const spRow = await page.evaluate(() => {
+      const ref = document.querySelector('[data-id="inspector-ref-annual_count"]')?.getBoundingClientRect();
+      const annual = document.querySelector('[data-id="inspector-param-annual_count"]')?.getBoundingClientRect();
+      const fte = document.querySelector('[data-id="inspector-param-fte"]')?.getBoundingClientRect();
+      if (!ref || !annual || !fte) return null;
+      return { refLeftOfInput: ref.right <= annual.left, sameWidth: Math.abs(annual.width - fte.width) < 1, sameRight: Math.abs(annual.right - fte.right) < 1 };
+    });
+    check("inspector SP metrics: info icon after label, inputs flush right with equal width", spRow !== null && spRow.refLeftOfInput && spRow.sameWidth && spRow.sameRight, JSON.stringify(spRow));
+    await page.locator('[data-id="inspector-ref-annual_count"]').hover();
+    await page.waitForTimeout(200);
+    const tipWidth = await page.locator('[role="tooltip"]').first().evaluate((el) => el.getBoundingClientRect().width).catch(() => 0);
+    check("designated reference tooltip is wide enough (>= 300px)", tipWidth >= 300, `w=${tipWidth}`);
+    await shot(page, "sp-inspector-metrics");
   } else {
     check("L5 linkage canvas found", false, "no framework map");
   }

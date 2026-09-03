@@ -3,17 +3,18 @@
 // 노드 BPM 속성 담당자·부서 피커 — 복수 담당자 칩+SearchSelect, 부서 변경 시 담당자 초기화 확인.
 // 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { X } from "lucide-react";
+import { Building2, Users, X } from "lucide-react";
 
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { SearchSelect } from "@/components/search-select";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
-import { sortUsersByOrgProximity } from "@/lib/org-proximity";
+import { sortDepartmentsByOrgProximity, sortUsersByOrgProximity } from "@/lib/org-proximity";
 
 interface BpmAttributePickerProps {
   versionId: number | null;
@@ -25,6 +26,8 @@ interface BpmAttributePickerProps {
 
 // 행간 구분선 없음 — 어트리뷰트 섹션은 URL 위에만 스페이서 (사용자 결정 2026-08-20)
 const ROW = "flex items-center justify-between gap-2 py-1";
+// 행머리 아이콘+라벨 — 수행 지표·입출력 카드와 같은 문법 (사용자 요청 2026-09-03)
+const LABEL = "inline-flex shrink-0 items-center gap-1 text-caption text-ink-secondary";
 
 export function BpmAttributePicker({
   versionId,
@@ -64,9 +67,22 @@ export function BpmAttributePicker({
   // org_path가 없어 디렉터리 스토어로 보강. 검색 랭킹(SearchSelect filterByQuery)은 그대로.
   const dir = useDirectory();
   const me = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
-  const proximityUsers = sortUsersByOrgProximity(
-    data.users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" })),
-    me?.orgPath ?? "",
+  const myPath = me?.orgPath ?? "";
+  const usersWithPath = data.users.map((u) => ({ ...u, org_path: dir.get(u.id)?.org_path ?? "" }));
+  const proximityUsers = sortUsersByOrgProximity(usersWithPath, myPath);
+  // 부서 목록도 내 부서 체인 우선 + 내 부서 태그 — 노드 편집 모달의 부서 타일 피커와 같은 규칙
+  const pathByDept = new Map<string, string>();
+  for (const u of usersWithPath) {
+    if (u.org_path && !pathByDept.has(u.department)) pathByDept.set(u.department, u.org_path);
+  }
+  const myDept = deptLeaf(myPath);
+  const deptOptions = buildDepartmentOptions(
+    sortDepartmentsByOrgProximity(data.departments, pathByDept, myPath),
+    data.users,
+    lang,
+    data.dept_infos,
+  ).map((option) =>
+    myDept !== "" && option.value === myDept ? { ...option, tag: t("perm.principalMyDept") } : option,
   );
 
   // 부서 변경 — 담당자 있으면 확인 후 초기화, 없으면 즉시 적용
@@ -83,7 +99,10 @@ export function BpmAttributePicker({
     <>
       {/* 부서 단일 픽커 — 변경 시 담당자 있으면 확인 */}
       <div className={ROW}>
-        <span className="shrink-0 text-caption text-ink-secondary">{t("field.department")}</span>
+        <span className={LABEL}>
+          <Building2 size={12} strokeWidth={1.5} className="text-ink-muted" />
+          {t("field.department")}
+        </span>
         {readOnly ? (
           <span className="min-w-0 flex-1 truncate text-right text-caption text-ink">
             {department || t("summary.none")}
@@ -93,7 +112,7 @@ export function BpmAttributePicker({
           <SearchSelect
             fitContent
             value={department}
-            options={buildDepartmentOptions(data.departments, data.users, lang, data.dept_infos)}
+            options={deptOptions}
             emptyLabel={t("summary.none")}
             placeholder={t("field.searchPlaceholder")}
             onChange={handleDeptChange}
@@ -103,7 +122,10 @@ export function BpmAttributePicker({
 
       {/* 담당자 — 필 우측 정렬 + 맨끝 ＋버튼(플라이아웃 피커). 읽기전용은 칩만. */}
       <div className="flex items-start gap-2 py-1">
-        <span className="mt-1 shrink-0 text-caption text-ink-secondary">{t("field.assignee")}</span>
+        <span className={`${LABEL} mt-1`}>
+          <Users size={12} strokeWidth={1.5} className="text-ink-muted" />
+          {t("field.assignee")}
+        </span>
         <div className="flex min-w-0 flex-1 items-start justify-end gap-1.5">
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
             {assignees.length === 0 && readOnly ? (

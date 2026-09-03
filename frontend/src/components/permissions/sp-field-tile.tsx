@@ -35,7 +35,7 @@ export function SpFieldTile({
   dataId, icon: Icon, label, value, valueNode, iconSlot, disabled, disabledHint, active, wide, readOnly, onOpen,
 }: SpFieldTileProps) {
   const filled = value.trim() !== "" || valueNode != null;
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const buttonRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef<HTMLSpanElement | null>(null);
   const [hideLabel, setHideLabel] = useState(false);
 
@@ -88,7 +88,7 @@ export function SpFieldTile({
     <span className="min-w-0 truncate text-caption text-ink-secondary">{label}</span>
   );
 
-  const layout = `group flex min-w-0 items-center gap-2 rounded-sm border px-2.5 text-left transition-colors duration-150 ${
+  const layout = `group flex min-w-0 items-center gap-2 rounded-sm border px-2.5 text-left transition-[background-color,border-color,scale] duration-150 ${
     wide ? "col-span-2 py-1.5" : "py-2"
   } ${tone}`;
   const title = filled ? `${label}: ${value}`.trim().replace(/:$/, "") : label;
@@ -104,20 +104,36 @@ export function SpFieldTile({
       </div>
     );
   }
+  // 편집 타일은 button이 아니라 role=button div — 안에 부서 필·원문 메모 아이콘 같은 중첩 버튼이 들어간다
+  // (button 안의 button은 무효 HTML). 커서·눌림 피드백은 전역 button base와 같게 직접 준다.
   return (
-    <button
+    <div
       ref={buttonRef}
-      type="button"
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       data-id={dataId}
       data-filled={filled ? "true" : "false"}
-      disabled={disabled}
+      aria-disabled={disabled || undefined}
       title={disabled && disabledHint ? disabledHint : title}
       aria-label={label}
-      onClick={(e) => onOpen?.({ x: e.clientX, y: e.clientY })}
-      className={`${layout} disabled:cursor-not-allowed disabled:opacity-40`}
+      onClick={(e) => {
+        if (disabled) return;
+        // 중첩 요소가 띄운 포털(원문 메모 팝오버·조직 정보 모달) 안의 클릭은 React 트리로 여기까지 버블된다 —
+        // DOM 포함 여부로 걸러 타일 팝오버가 덩달아 열리지 않게
+        if (!e.currentTarget.contains(e.target as Node)) return;
+        onOpen?.({ x: e.clientX, y: e.clientY });
+      }}
+      onKeyDown={(e) => {
+        if (disabled || (e.key !== "Enter" && e.key !== " ")) return;
+        if (e.target !== e.currentTarget) return; // 중첩 버튼(필·메모)의 키 입력은 그쪽이 처리
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        onOpen?.({ x: rect.left + rect.width / 2, y: rect.bottom });
+      }}
+      className={`${layout} ${disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer active:scale-[0.97]"}`}
     >
       {icon}
       {body}
-    </button>
+    </div>
   );
 }

@@ -13,11 +13,14 @@ export function Tooltip({
   label,
   content,
   className,
+  wide = false,
   children,
 }: {
   label?: string;
   content?: ReactNode;
   className?: string;
+  // 리치 카드 폭 확대(max-w-96) — 한 문장이 두 줄 안에 읽히게(인스펙터 SP 참고치, 사용자 피드백 2026-09-03)
+  wide?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -77,8 +80,10 @@ export function Tooltip({
             role="tooltip"
             // content(리치 카드)는 라벨보다 크게 — 본문 caption·넓은 폭·여유 패딩으로 가독 확보 (사용자 결정 2026-08-20)
             className={`pointer-events-none fixed z-[1400] rounded-sm border border-hairline bg-surface shadow-lg ${
+              // w-max — fixed 박스는 앵커 오른쪽 남은 폭에 맞춰 쪼그라든다(인스펙터 우측 앵커에서 150px까지).
+              // 내용 폭으로 잡고 max-w로만 접은 뒤 클램프가 화면 안으로 민다 (사용자 피드백 2026-09-03)
               content
-                ? "max-w-72 px-2.5 py-2 text-caption leading-snug text-ink"
+                ? `w-max ${wide ? "max-w-96" : "max-w-72"} px-2.5 py-2 text-caption leading-snug text-ink`
                 : "whitespace-nowrap px-2 py-1 text-fine text-ink"
             }`}
             // 위치는 위 레이아웃 이펙트가 확정 — 측정 전 한 프레임 어긋난 자리에 보이지 않게 숨겨서 붙인다

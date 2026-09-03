@@ -80,7 +80,9 @@ export function IoImportModal({ side, position, candidates, onPick, onHoverCandi
   const title = side === "input" ? t("io.importTitleInput") : t("io.importTitleOutput");
 
   return createPortal(
-    <ModalBackdrop className="fixed inset-0 z-[1200]" style={{ background: "transparent" }} onClose={closeAndClear}>
+    // z 1360 — 노드 편집 모달(1200)·타일 입력 팝오버(1350) 위. 팝오버의 '다른 노드에서 불러오기'가
+    // 팝오버를 열어둔 채 이 모달을 띄우므로 그 위에 와야 행을 고를 수 있다 (2026-09-03)
+    <ModalBackdrop className="fixed inset-0 z-[1360]" style={{ background: "transparent" }} onClose={closeAndClear}>
       <div
         data-id="io-import-modal"
         className="fixed w-72 rounded-md border border-hairline bg-surface p-2 shadow-lg"
@@ -102,6 +104,8 @@ export function IoImportModal({ side, position, candidates, onPick, onHoverCandi
         <input
           data-id="io-import-filter"
           type="text"
+          // 열리면 바로 필터 타이핑 — 포커스가 이 모달 안에 있어야 Esc가 아래 타일 팝오버까지 닫지 않는다
+          autoFocus
           className="mb-1.5 w-full rounded-sm border border-hairline bg-surface px-1.5 py-1 text-caption text-ink placeholder:text-ink-tertiary focus:border-accent focus:outline-none"
           placeholder={t("io.filterPlaceholder")}
           value={filter}

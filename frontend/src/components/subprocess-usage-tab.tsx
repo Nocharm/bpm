@@ -102,7 +102,9 @@ export function SubprocessUsageTab({ usage, mapId, canManage = false, onDesignat
   const ioCount = (field: "input" | "output") => (form ? countLines(form[field]) : 0);
   // 원문 메모가 있는 파라미터 — 행 호버 시 아이콘이 메모 아이콘으로 바뀌는 FallbackHint(읽기), 없으면 기본 아이콘
   const noteIcon = (field: string, icon: LucideIcon, note: string) =>
-    note.trim() !== "" ? <FallbackHint fallback={note} dataId={`sp-usage-note-${field}`} restIcon={icon} /> : undefined;
+    note.trim() !== "" ? (
+      <FallbackHint fallback={note} dataId={`sp-usage-note-${field}`} restIcon={icon} iconSize={16} padded={false} restClassName="text-accent" />
+    ) : undefined;
   const filledCount = form
     ? [form.department, form.assignee, form.system, form.url, form.duration, form.touch_time, costValue,
        form.headcount, form.annual_count, form.fte, form.input, form.output].filter((v) => v.trim() !== "").length

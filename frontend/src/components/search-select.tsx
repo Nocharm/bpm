@@ -21,6 +21,7 @@ export interface SelectOption {
   label: string;
   sub?: string; // 보조 표기(표시 전용, 예: 아이디 · 부서) — 검색 대상 아님
   keywords?: string; // 추가 검색어(표시 안 함, 예: 아이디). label과 함께 검색
+  tag?: string; // 행 우측 태그 필(표시 전용, 예: "내 부서") — 검색 대상 아님
 }
 
 const FLYOUT_W = 224; // w-56
@@ -221,6 +222,14 @@ export function SearchSelect({
                   <Highlight text={item.label} ranges={labelRanges} />
                   {item.sub && <span className="ml-1 text-fine text-ink-tertiary">· {item.sub}</span>}
                 </span>
+                {item.tag && (
+                  <span
+                    data-id="search-select-tag"
+                    className="shrink-0 rounded-full border border-accent-tint-border bg-accent-tint px-1.5 py-0 text-fine text-accent"
+                  >
+                    {item.tag}
+                  </span>
+                )}
                 {item.value === value && (
                   <Check size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
                 )}

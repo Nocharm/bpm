@@ -28,9 +28,17 @@ interface FallbackHintProps {
   // 행머리 스왑 — 주면 평소엔 이 아이콘, 부모 `group` 행 호버 시에만 노트 아이콘으로 바뀐다
   // (인스펙터 원문 메모 행: 우측 버튼 대신 행머리 아이콘이 노트 아이콘으로, 사용자 피드백 2026-09-03)
   restIcon?: LucideIcon;
+  // 아이콘 크기·패딩 — 인스펙터 행머리(12px, 패딩 없음)처럼 이웃 행의 정적 아이콘과 정렬을 맞출 때
+  iconSize?: number;
+  padded?: boolean;
+  // 평소(호버 전) 아이콘 색 클래스 — 타일 안에서는 값 있는 타일의 아이콘 색(accent)과 맞춘다
+  restClassName?: string;
 }
 
-export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyLabel, restIcon: RestIcon }: FallbackHintProps) {
+export function FallbackHint({
+  fallback, dataId, onSaveFallback, onApply, applyLabel, restIcon: RestIcon, iconSize = 14, padded = true,
+  restClassName = "text-ink-tertiary",
+}: FallbackHintProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -76,27 +84,32 @@ export function FallbackHint({ fallback, dataId, onSaveFallback, onApply, applyL
         type="button"
         data-id={dataId}
         aria-label={isEmpty ? "Add interview note" : "Show original interview note"}
-        className={`shrink-0 rounded-sm p-0.5 ${
+        className={`shrink-0 rounded-sm ${padded ? "p-0.5" : ""} ${
           RestIcon
-            ? "text-ink-tertiary group-hover:text-accent"
+            ? `${restClassName} group-hover:text-accent`
             : isEmpty
               ? "text-ink-muted hover:bg-surface-alt hover:text-accent"
               : "text-accent hover:bg-accent-tint"
         }`}
-        onClick={() => (open ? handleOutside() : openPopover())}
+        onClick={(e) => {
+          // 타일(role=button) 안에 놓일 때 타일 팝오버까지 같이 열리지 않게
+          e.stopPropagation();
+          if (open) handleOutside();
+          else openPopover();
+        }}
       >
         {RestIcon && (
-          <RestIcon size={14} strokeWidth={1.5} className={open ? "hidden" : "group-hover:hidden"} />
+          <RestIcon size={iconSize} strokeWidth={1.5} className={open ? "hidden" : "group-hover:hidden"} />
         )}
         {isEmpty ? (
           <MessageSquarePlus
-            size={14}
+            size={iconSize}
             strokeWidth={1.5}
             className={RestIcon ? (open ? "" : "hidden group-hover:block") : undefined}
           />
         ) : (
           <MessageSquareText
-            size={14}
+            size={iconSize}
             strokeWidth={1.5}
             className={RestIcon ? (open ? "" : "hidden group-hover:block") : undefined}
           />

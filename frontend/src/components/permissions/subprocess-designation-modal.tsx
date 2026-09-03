@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import { getGraph, putSubprocessDesignation, type Graph, type MapSummary } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { AutoHeight } from "@/components/auto-height";
+import { FallbackHint } from "@/components/fallback-hint";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-value-input";
 import { PARAM_ICON } from "@/components/param-icons";
@@ -500,19 +501,37 @@ export function SubprocessDesignationModal({
     );
   };
 
-  const renderTile = (field: TileField) => (
-    <SpFieldTile
-      key={field}
-      dataId={`sp-tile-${field}`}
-      icon={tileIcon(field)}
-      label={tileLabel(field)}
-      value={tileValue(field)}
-      // 비용 타일 — 선택한 단위를 필로(값 있을 때만)
-      valueNode={field === "cost" && tileValue("cost") !== "" ? <CurrencyPill unit={costUnitOf(form)} /> : undefined}
-      active={active?.field === field}
-      onOpen={(at) => openTile(field, at)}
-    />
-  );
+  const renderTile = (field: TileField) => {
+    const noteKey = NOTE_KEY[field];
+    return (
+      <SpFieldTile
+        key={field}
+        dataId={`sp-tile-${field}`}
+        icon={tileIcon(field)}
+        label={tileLabel(field)}
+        value={tileValue(field)}
+        // 비용 타일 — 선택한 단위를 필로(값 있을 때만)
+        valueNode={field === "cost" && tileValue("cost") !== "" ? <CurrencyPill unit={costUnitOf(form)} /> : undefined}
+        // 원문 메모 필드 — 타일 호버 시 아이콘이 메모 아이콘으로 바뀌고, 눌러 바로 보고 고친다(폼 버퍼에 반영).
+        // 팝오버 안 메모 칸과 같은 값 (사용자 피드백 2026-09-03)
+        iconSlot={
+          noteKey ? (
+            <FallbackHint
+              dataId={`sp-tile-note-icon-${field}`}
+              fallback={form[noteKey]}
+              restIcon={tileIcon(field)}
+              iconSize={16}
+              padded={false}
+              restClassName={tileValue(field) !== "" ? "text-accent" : "text-ink-tertiary"}
+              onSaveFallback={(text) => setForm((prev) => ({ ...prev, [noteKey]: text }))}
+            />
+          ) : undefined
+        }
+        active={active?.field === field}
+        onOpen={(at) => openTile(field, at)}
+      />
+    );
+  };
 
   const sectionButton = (
     dataId: string,

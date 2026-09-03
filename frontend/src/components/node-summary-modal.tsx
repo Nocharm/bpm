@@ -2,13 +2,14 @@
 
 // 노드 더블클릭 편집 모달 — 제목·설명 + 필드 타일(2열, 클릭 위치 팝오버) + 전/후 단계·하위 프로세스
 // 프리뷰·코멘트. 타일 디자인은 SP 지정 모달과 같다(사용자 결정 2026-09-03): 부서·담당자는 두 열을
-// 가로지르는 행 타일, 색·시스템·링크·지표 7(비용은 단위 탭 한 타일)·입출력/조건은 2열 타일. 팝오버 초안은
-// Enter/저장으로 폼 버퍼에 반영되고, 폼 버퍼는 하단 저장(⌘S)으로 노드에 반영된다.
+// 가로지르는 행 타일, 색·시스템·링크·지표 7(비용은 단위 탭 한 타일)·입출력/조건은 2열 타일.
+// 편집은 라이브다(사용자 요청 2026-09-03 "인스펙터와 양방향 동기"): 팝오버 초안은 Enter/저장으로 노드에
+// 바로 반영되고, 제목·설명 타이핑도 인스펙터와 같이 즉시 반영된다. 반대로 인스펙터에서 고친 값은 props로
+// 들어와 열려 있는 타일·팝오버(변경 없는 초안)에 곧장 반영된다. 되돌리기는 에디터 Ctrl+Z.
 // readOnly면 값 있는 타일만 정적으로 — 목록을 열어야 보이는 입출력만 클릭해 읽기 전용 팝오버로 본다.
 // subprocess는 링크 맵 상속값(속성·회당 4지표·입출력/조건)을 읽기 타일로, 연간 건수·FTE만 편집한다.
 
 import {
-  AlertTriangle,
   Boxes,
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,7 @@ import {
   Diamond,
   FileType,
   Flag,
+  Import,
   Link as LinkIcon,
   LogIn,
   LogOut,
@@ -33,10 +35,11 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { AutoHeight } from "@/components/auto-height";
 import { CostUnitTabs, CurrencyPill, type CostUnit } from "@/components/cost-unit";
+import { FallbackHint } from "@/components/fallback-hint";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-value-input";
@@ -60,7 +63,6 @@ import {
   formatParamValue,
   getEditableParamFields,
   isSpParamField,
-  PARAM_FIELDS,
   PARAM_LABEL_KEY,
   readAttrsCollapsed,
   readDetailsCollapsed,
@@ -83,6 +85,8 @@ export type NodeEditPatch = Partial<{
   assignee: string;
   department: string;
   system: string;
+  // 시스템 원문 메모 — 타일 호버 메모 아이콘·시스템 팝오버 메모 칸이 고친다
+  system_fallback: string;
   duration: string;
   touch_time: string;
   input: string;
@@ -126,20 +130,51 @@ interface NavNodeRef {
   color?: string;
 }
 
+// 독 폭 상한(px)·독이 모달과 안 겹치기 위해 백드롭 반폭에서 빼는 값(모달 반폭 256 + 가장자리 16 + 간격 8).
+// NavDock의 w-[min(12.5rem,calc(50%-17.5rem))]와 같은 수치 — 전환 애니메이션이 반대편 독 자리를 계산할 때 쓴다
+const DOCK_MAX_WIDTH = 200;
+const DOCK_INSET = 280;
+// 선후행 전환 애니메이션 길이(ms) — globals.css .summary-swap-* 와 동기
+const SWAP_MS = 380;
+
+// 독 카드 본문 — 색 점·라벨·타입. 독 카드와 전환 고스트가 공유한다
+function DockCardBody({ node, typeLabelOf }: { node: NavNodeRef; typeLabelOf: (nodeType: string) => string }) {
+  const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
+  return (
+    <>
+      <span
+        className="h-3 w-3 shrink-0 rounded-full border border-hairline"
+        style={{ background: node.color || "var(--color-surface-alt)" }}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-caption text-ink">{node.label}</span>
+        <span className="flex items-center gap-1 text-fine text-ink-tertiary">
+          <Icon size={11} strokeWidth={1.5} className="shrink-0" />
+          <span className="truncate">{typeLabelOf(node.nodeType)}</span>
+        </span>
+      </span>
+    </>
+  );
+}
+
 // 선행/후행 사이드 독 — 모달 밖 캔버스 좌우에 세로 정렬로 떠 있는 간소 카드(색 점·라벨·타입).
-// 호버 시 살짝 커지며 모달 쪽으로 들어온다(사용자 요청 2026-09-03). 클릭=그 노드 편집(변경 있으면 확인).
+// 호버 시 10% 커지며 모달 쪽으로 들어오고 위아래 카드가 간격을 벌린다(margin 트랜지션) — 스크롤 상자에
+// 안쪽 여백을 둬 커진 카드가 경계에 잘리지 않는다(사용자 피드백 2026-09-03). 클릭=그 노드로 전환(애니메이션).
 function NavDock({
   side,
   title,
   nodes,
   typeLabelOf,
+  hiddenId,
   onPick,
 }: {
   side: "left" | "right";
   title: string;
   nodes: NavNodeRef[];
   typeLabelOf: (nodeType: string) => string;
-  onPick: (id: string) => void;
+  // 전환 중 고스트가 대신 그리는 카드 — 원본은 숨긴다
+  hiddenId: string | null;
+  onPick: (node: NavNodeRef, rect: DOMRect) => void;
 }) {
   if (nodes.length === 0) return null;
   const Chevron = side === "left" ? ChevronLeft : ChevronRight;
@@ -147,7 +182,7 @@ function NavDock({
     <div
       data-id={`summary-dock-${side === "left" ? "prev" : "next"}`}
       // 폭은 백드롭 반폭 − 모달 반폭(256) − 가장자리 16 − 간격 8 을 넘지 않게 — 좁은 캔버스에서도 모달과 안 겹친다
-      className={`absolute top-1/2 flex max-h-[72%] w-[min(11rem,calc(50%-17.5rem))] -translate-y-1/2 flex-col gap-1.5 ${
+      className={`absolute top-1/2 flex max-h-[72%] w-[min(12.5rem,calc(50%-17.5rem))] -translate-y-1/2 flex-col gap-1 ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -157,38 +192,37 @@ function NavDock({
         <span className="text-ink-muted">({nodes.length})</span>
         {side === "right" && <Chevron size={12} strokeWidth={1.5} />}
       </div>
-      <div className="scrollbar-hidden flex min-h-0 flex-col gap-1.5 overflow-y-auto px-1 py-1">
-        {nodes.map((node) => {
-          const Icon = NAV_TYPE_ICONS[node.nodeType] ?? Square;
-          return (
-            <button
-              key={node.id}
-              type="button"
-              data-id={`summary-dock-card-${node.id}`}
-              title={node.label}
-              onClick={() => onPick(node.id)}
-              // 호버: 5% 확대 + 모달 쪽으로 8px — translate/scale 속성 트랜지션(transform 미사용, Tailwind v4)
-              className={`animate-item-in flex w-full items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[translate,scale,box-shadow,border-color] duration-350 ease-spring hover:scale-105 hover:border-accent-tint-border hover:shadow-lg ${
-                side === "left" ? "hover:translate-x-2" : "hover:-translate-x-2"
-              }`}
-            >
-              <span
-                className="h-3 w-3 shrink-0 rounded-full border border-hairline"
-                style={{ background: node.color || "var(--color-surface-alt)" }}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-caption text-ink">{node.label}</span>
-                <span className="flex items-center gap-1 text-fine text-ink-tertiary">
-                  <Icon size={11} strokeWidth={1.5} className="shrink-0" />
-                  <span className="truncate">{typeLabelOf(node.nodeType)}</span>
-                </span>
-              </span>
-            </button>
-          );
-        })}
+      {/* 안쪽 여백 px-3.5/py-2 — scale 1.1 + 6px 이동분이 overflow(스크롤) 경계 안에 남는다 */}
+      <div className="scrollbar-hidden flex min-h-0 flex-col gap-1.5 overflow-y-auto px-3.5 py-2">
+        {nodes.map((node) => (
+          <button
+            key={node.id}
+            type="button"
+            data-id={`summary-dock-card-${node.id}`}
+            title={node.label}
+            style={hiddenId === node.id ? { visibility: "hidden" } : undefined}
+            onClick={(e) => onPick(node, e.currentTarget.getBoundingClientRect())}
+            // 호버: 10% 확대 + 모달 쪽 6px + 위아래 6px 여백 — translate/scale/margin 속성 트랜지션(transform 미사용, Tailwind v4)
+            className={`animate-item-in relative flex w-full items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-2 text-left shadow-md transition-[translate,scale,margin,box-shadow,border-color] duration-350 ease-spring hover:z-10 hover:my-1.5 hover:scale-110 hover:border-accent-tint-border hover:shadow-lg ${
+              side === "left" ? "hover:translate-x-1.5" : "hover:-translate-x-1.5"
+            }`}
+          >
+            <DockCardBody node={node} typeLabelOf={typeLabelOf} />
+          </button>
+        ))}
       </div>
     </div>
   );
+}
+
+// 선후행 전환 — 클릭한 독 카드가 커지며 가운데로(고스트), 가운데 카드는 줄어들며 반대편 독으로. 실측한
+// 이동량·배율을 CSS 변수로 넘기고, 애니메이션이 끝나는 시점에 노드를 바꾼다(사용자 요청 2026-09-03)
+interface SwapState {
+  node: NavNodeRef;
+  // 고스트 시작 자리 — 백드롭 기준 좌표(fixed는 transform 조상에 걸릴 수 있어 absolute)
+  box: { left: number; top: number; width: number; height: number };
+  ghostVars: CSSProperties;
+  cardVars: CSSProperties;
 }
 
 // 타일 필드 — 부서·담당자는 DeptAssigneeTiles가, 유형·GMP는 정적 타일이 담당
@@ -236,11 +270,66 @@ const HINT_KEY: Record<TileField, MessageKey> = {
   end_condition: "sp.tile.hint.end_condition",
 };
 
+// 편집 폼 — 노드 값의 로컬 미러. 라이브 편집이라 props와 거의 항상 같고, 제목 타이핑 등 순간에만 앞선다
+interface Form {
+  label: string;
+  description: string;
+  color: string;
+  assignee: string;
+  department: string;
+  system: string;
+  system_fallback: string;
+  duration: string;
+  touch_time: string;
+  cost_krw: string;
+  cost_usd: string;
+  headcount: string;
+  annual_count: string;
+  fte: string;
+  url: string;
+  urlLabel: string;
+  input: string;
+  output: string;
+  input_forms: string;
+  output_forms: string;
+  output_ids: string;
+  input_links: string;
+  output_links: string;
+  input_flags: string;
+  data_form: string;
+  start_condition: string;
+  end_condition: string;
+}
+const FORM_KEYS = [
+  "label", "description", "color", "assignee", "department", "system", "system_fallback", "duration",
+  "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "urlLabel",
+  "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links", "input_flags",
+  "data_form", "start_condition", "end_condition",
+] as const satisfies readonly (keyof Form)[];
+// 타일이 읽는 폼 키 — 인스펙터에서 바뀐 값이 열린 팝오버 초안까지 닿아야 하는지 판정
+const TILE_KEYS: Record<TileField, readonly (keyof Form)[]> = {
+  color: ["color"],
+  system: ["system", "system_fallback"],
+  url: ["url", "urlLabel"],
+  duration: ["duration"],
+  touch_time: ["touch_time"],
+  cost: ["cost_krw", "cost_usd"],
+  headcount: ["headcount"],
+  annual_count: ["annual_count"],
+  fte: ["fte"],
+  input: ["input", "input_forms", "input_links", "input_flags"],
+  output: ["output", "output_forms", "output_links", "output_ids"],
+  data_form: ["data_form"],
+  start_condition: ["start_condition"],
+  end_condition: ["end_condition"],
+};
+
 interface ActiveTile {
   field: TileField;
   at: { x: number; y: number };
-  // 팝오버 로컬 초안 — 확정 시에만 폼 버퍼에 반영, Esc면 폐기
+  // 팝오버 로컬 초안 — 확정 시에만 노드에 반영, Esc면 폐기
   value: string;
+  note: string; // 시스템 원문 메모
   extra: string; // url 라벨 / IO 폼 join
   links: string; // IO 미러 링크 열
   flags: string; // 인풋 필수/선택 열
@@ -248,6 +337,7 @@ interface ActiveTile {
   unit: CostUnit; // 비용 타일의 통화 탭
   readOnly: boolean; // 열람 전용(입출력 목록 보기)
 }
+type TileDraft = Pick<ActiveTile, "value" | "note" | "extra" | "links" | "flags" | "ids" | "unit">;
 
 const INPUT_CLASS =
   "w-full rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
@@ -255,6 +345,58 @@ const INPUT_CLASS =
 const countLines = (joined: string): number => joined.split("\n").filter((line) => line.trim() !== "").length;
 const costUnitOf = (form: { cost_krw: string; cost_usd: string }): CostUnit =>
   form.cost_usd !== "" ? "cost_usd" : "cost_krw";
+
+// 폼의 현재 확정값을 팝오버 초안 형태로 — 열 때 초기값, 열린 뒤엔 dirty 판정 기준
+function readTileDraftFrom(form: Form, field: TileField): TileDraft {
+  const unit = costUnitOf(form);
+  const base = { note: "", links: "", flags: "", ids: "", unit };
+  switch (field) {
+    case "url":
+      return { ...base, value: form.url, extra: form.urlLabel };
+    case "cost":
+      return { ...base, value: form[unit], extra: "" };
+    case "system":
+      return { ...base, value: form.system, note: form.system_fallback, extra: "" };
+    case "input":
+      return { ...base, value: form.input, extra: form.input_forms, links: form.input_links, flags: form.input_flags };
+    case "output":
+      return { ...base, value: form.output, extra: form.output_forms, links: form.output_links, ids: form.output_ids };
+    default:
+      return { ...base, value: form[field], extra: "" };
+  }
+}
+function isTileDirty(tile: ActiveTile, form: Form): boolean {
+  if (tile.readOnly) return false;
+  const base = readTileDraftFrom(form, tile.field);
+  return (
+    tile.value !== base.value ||
+    tile.note.trim() !== base.note.trim() ||
+    tile.extra !== base.extra ||
+    tile.links !== base.links ||
+    tile.flags !== base.flags ||
+    tile.ids !== base.ids ||
+    (tile.field === "cost" && tile.unit !== base.unit)
+  );
+}
+// 초안 → 노드 패치. 팝오버 확정이 노드에 바로 쓰는 값
+function buildTilePatch(tile: ActiveTile): NodeEditPatch {
+  const { field, value, note, extra, links, flags, ids, unit } = tile;
+  switch (field) {
+    case "url":
+      return { url: value.trim(), urlLabel: extra.trim() };
+    case "cost":
+      // 통화 배타 — 고른 단위에만 값, 다른 통화는 비운다
+      return { cost_krw: unit === "cost_krw" ? value : "", cost_usd: unit === "cost_usd" ? value : "" };
+    case "system":
+      return { system: value, system_fallback: note.trim() };
+    case "input":
+      return { input: value, input_forms: extra, input_links: links, input_flags: flags };
+    case "output":
+      return { output: value, output_forms: extra, output_links: links, output_ids: ids };
+    default:
+      return { [field]: value };
+  }
+}
 
 interface NodeSummaryModalProps {
   versionId: number;
@@ -275,6 +417,8 @@ interface NodeSummaryModalProps {
   assignee: string;
   department: string;
   system: string;
+  // 시스템 원문 메모(노드 컬럼) — 시스템 타일 호버 메모 아이콘·팝오버 메모 칸
+  systemFallback: string;
   duration: string;
   touch_time: string;
   input: string;
@@ -299,7 +443,7 @@ interface NodeSummaryModalProps {
   colorPresets: string[];
   // subprocess 노드가 링크 맵에서 상속하는 회당 4필드(읽기전용 표시) — 그 외 타입은 null
   spParams: Record<SpParamField, string> | null;
-  // subprocess 상속 상세(링크 맵 sp_* 속성·IO/조건·참고치) — 읽기전용 표시(#11). 그 외 타입은 null
+  // subprocess 상속 상세(링크 맵 sp_* 속성·IO/조건·참고치·빈도 원문) — 읽기전용 표시(#11). 그 외 타입은 null
   sp?: {
     department?: string | null;
     assignee?: string | null;
@@ -308,6 +452,7 @@ interface NodeSummaryModalProps {
     url_label?: string | null;
     annual_count?: string | null;
     fte?: string | null;
+    frequency_fallback?: string | null;
     input?: string | null;
     output?: string | null;
     input_forms?: string | null;
@@ -330,6 +475,8 @@ interface NodeSummaryModalProps {
   initialFocus?: "description";
   // 제목 입력 확정(blur) 시 호출 — 이름 중복 고유화 적용
   onCommitLabel?: (label: string) => void;
+  // IO 팝오버 '다른 노드에서 불러오기' — 그래프 전체를 아는 page가 불러오기 모달을 연다(인스펙터와 동일 경로)
+  onIoImport?: (side: "input" | "output", at: { x: number; y: number }) => void;
   // 선행/후행 노드 클릭 시 그 노드 편집으로 전환
   onNavigate: (nodeId: string) => void;
   onClose: () => void;
@@ -354,6 +501,7 @@ export function NodeSummaryModal({
   assignee,
   department,
   system,
+  systemFallback,
   duration,
   touch_time,
   input,
@@ -385,6 +533,7 @@ export function NodeSummaryModal({
   onPatch,
   initialFocus,
   onCommitLabel,
+  onIoImport,
   onNavigate,
   onClose,
   onOpenChild,
@@ -425,105 +574,102 @@ export function NodeSummaryModal({
     setDetailsCollapsed(next);
     writeDetailsCollapsed(next);
   };
-  // 편집 버퍼 — 저장 눌러야 노드에 반영, 취소/Esc/바깥클릭은 폐기(버퍼 편집). 노드 초기값에서 시작.
-  const initialForm = {
-    label: title, description, color, assignee, department, system, duration,
+  // 노드 값(props) 스냅샷 — 폼은 이 미러에서 시작해 편집 즉시 노드로 되돌려 쓴다
+  const propsForm: Form = {
+    label: title, description, color, assignee, department, system, system_fallback: systemFallback, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
     data_form, start_condition, end_condition,
   };
-  type Form = typeof initialForm;
-  const [form, setForm] = useState<Form>(initialForm);
+  const [form, setForm] = useState<Form>(propsForm);
+  // 마지막으로 본 props — 인스펙터 등 바깥에서 바뀐 키를 가려내는 기준
+  const [base, setBase] = useState<Form>(propsForm);
   const [active, setActive] = useState<ActiveTile | null>(null);
+  // IO 플라이아웃 편집기 리마운트 키 — 바깥(불러오기 등)에서 IO가 바뀌면 행 버퍼를 새 값으로 다시 만든다
+  const [ioSync, setIoSync] = useState(0);
+  const [swap, setSwap] = useState<SwapState | null>(null);
   const [prevNodeId, setPrevNodeId] = useState(nodeId);
-  // 노드가 바뀌면(선후행 내비 등) 버퍼를 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님).
   if (nodeId !== prevNodeId) {
+    // 노드가 바뀌면(선후행 전환 등) 폼을 새 노드 값으로 리셋 — 렌더 중 상태조정(effect 아님)
     setPrevNodeId(nodeId);
-    setForm(initialForm);
+    setForm(propsForm);
+    setBase(propsForm);
     setActive(null);
+    setSwap(null);
+  } else {
+    // 같은 노드의 값이 바깥(인스펙터·불러오기·Undo)에서 바뀜 — 바뀐 키만 폼에 반영하고, 그 키를 읽는
+    // 팝오버가 변경 없는 초안으로 열려 있으면 초안도 새 값으로(사용자 요청 2026-09-03 양방향 동기)
+    const changed = FORM_KEYS.filter((key) => propsForm[key] !== base[key]);
+    if (changed.length > 0) {
+      const next: Form = { ...form };
+      for (const key of changed) next[key] = propsForm[key];
+      setBase(propsForm);
+      setForm(next);
+      if (active && !isTileDirty(active, form) && TILE_KEYS[active.field].some((key) => changed.includes(key))) {
+        setActive({ ...active, ...readTileDraftFrom(next, active.field) });
+        if (active.field === "input" || active.field === "output") setIoSync((n) => n + 1);
+      }
+    }
   }
   // IO 플라이아웃 편집기 핸들 — 푸터 '+ Add'가 행을 추가한다
   const ioRef = useRef<MultiValueInputHandle | null>(null);
-
-  const buildPatch = (f: Form): NodeEditPatch => ({
-    description: f.description,
-    color: f.color,
-    assignee: f.assignee,
-    department: f.department,
-    system: f.system,
-    duration: f.duration,
-    touch_time: f.touch_time,
-    input: f.input,
-    output: f.output,
-    input_forms: f.input_forms,
-    output_forms: f.output_forms,
-    output_ids: f.output_ids,
-    input_links: f.input_links,
-    output_links: f.output_links,
-    input_flags: f.input_flags,
-    data_form: f.data_form,
-    start_condition: f.start_condition,
-    end_condition: f.end_condition,
-    cost_krw: f.cost_krw,
-    cost_usd: f.cost_usd,
-    headcount: f.headcount,
-    annual_count: f.annual_count,
-    fte: f.fte,
-    url: f.url,
-    urlLabel: f.urlLabel,
-  });
-  // 저장 — 버퍼를 노드에 반영(라벨은 onCommitLabel로 중복 고유화) 후 닫기.
-  const handleSave = () => {
-    onPatch(buildPatch(form));
-    onCommitLabel?.(form.label);
-    onClose();
+  // 폼과 노드를 함께 고친다 — 모든 편집의 단일 경로
+  const patchLive = (patch: NodeEditPatch) => {
+    setForm((prev) => ({ ...prev, ...patch }) as Form);
+    onPatch(patch);
   };
 
-  // 선후행 내비 — 버퍼에 변경이 있으면 확인(저장/저장안함/취소), 없으면 바로 이동.
-  const [pendingNav, setPendingNav] = useState<string | null>(null);
   // 노드 타입별 편집 가능 파라미터 — subprocess는 회당 4필드가 링크 맵 지정값이라 제외 (design §3.1)
   const editableParams = getEditableParamFields(nodeType);
   const isEditableParam = (field: ParamField) => (editableParams as readonly string[]).includes(field);
-  const changedKeys = (Object.keys(initialForm) as (keyof Form)[]).filter((k) => form[k] !== initialForm[k]);
-  const hasChangedIn = (keys: readonly string[]) => changedKeys.some((k) => keys.includes(k));
-  const ATTRS_KEYS = ["assignee", "department", "system", "url", "urlLabel"] as const;
-  const DETAILS_KEYS = ["input", "output", "input_forms", "output_forms", "output_ids", "input_links",
-    "output_links", "input_flags", "data_form", "start_condition", "end_condition"] as const;
-  // 폼(항목별)은 소속 IO 라벨로 접고, URL 라벨은 URL로 접어 중복 제거
-  const CHANGED_LABEL_KEY: Record<string, MessageKey> = {
-    label: "field.title", description: "field.description", color: "field.color",
-    assignee: "field.assignee", department: "field.department", system: "field.system",
-    url: "field.url", urlLabel: "field.url",
-    input: "field.input", input_forms: "field.input", input_links: "field.input", input_flags: "field.input",
-    output: "field.output", output_forms: "field.output", output_ids: "field.output", output_links: "field.output",
-    data_form: "field.dataForm", start_condition: "field.startCondition", end_condition: "field.endCondition",
-  };
-  const changedLabels = [...new Set(changedKeys.map((k) =>
-    k === "cost_krw" || k === "cost_usd"
-      ? t("field.costRun") // 통화 토글 한 행 계약 — 전환 시 두 필드가 함께 바뀌므로 하나로 접음
-      : (PARAM_FIELDS as readonly string[]).includes(k)
-        ? t(PARAM_LABEL_KEY[k as ParamField])
-        : t(CHANGED_LABEL_KEY[k]),
-  ))].join(", ");
-  const isDirty = changedKeys.length > 0;
-  const requestNavigate = (id: string) => {
-    if (isDirty) {
-      setPendingNav(id);
-    } else {
-      onNavigate(id);
+
+  // ── 선후행 전환 ────────────────────────────────────────────────────────────
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const swapTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      // 전환 중 닫히면 예약된 노드 전환을 취소 — 닫힌 모달이 다시 열리지 않게
+      if (swapTimer.current !== null) window.clearTimeout(swapTimer.current);
+    },
+    [],
+  );
+  const startSwap = (node: NavNodeRef, side: "left" | "right", rect: DOMRect) => {
+    const card = cardRef.current;
+    const backdrop = card?.parentElement;
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (!card || !backdrop || reduced || swap) {
+      onNavigate(node.id);
+      return;
     }
-  };
-  const navSaveAndGo = () => {
-    onPatch(buildPatch(form));
-    onCommitLabel?.(form.label);
-    const id = pendingNav;
-    setPendingNav(null);
-    if (id) onNavigate(id);
-  };
-  const navDiscardAndGo = () => {
-    const id = pendingNav;
-    setPendingNav(null);
-    if (id) onNavigate(id);
+    const c = card.getBoundingClientRect();
+    const b = backdrop.getBoundingClientRect();
+    const dockWidth = Math.min(DOCK_MAX_WIDTH, b.width / 2 - DOCK_INSET);
+    // 가운데 카드가 가는 곳 — 클릭한 독의 반대편 독 자리(후행을 고르면 현재 노드는 선행이 된다)
+    const toLeft = side === "right";
+    const dockX = toLeft ? b.left + 16 + dockWidth / 2 : b.right - 16 - dockWidth / 2;
+    const dockY = b.top + b.height / 2;
+    const cardCx = c.left + c.width / 2;
+    const cardCy = c.top + c.height / 2;
+    const ghostCx = rect.left + rect.width / 2;
+    const ghostCy = rect.top + rect.height / 2;
+    setSwap({
+      node,
+      box: { left: rect.left - b.left, top: rect.top - b.top, width: rect.width, height: rect.height },
+      ghostVars: {
+        "--swap-dx": `${cardCx - ghostCx}px`,
+        "--swap-dy": `${cardCy - ghostCy}px`,
+        "--swap-scale": `${c.width / rect.width}`,
+      } as CSSProperties,
+      cardVars: {
+        "--swap-dx": `${dockX - cardCx}px`,
+        "--swap-dy": `${dockY - cardCy}px`,
+        "--swap-scale": `${dockWidth / c.width}`,
+      } as CSSProperties,
+    });
+    swapTimer.current = window.setTimeout(() => {
+      swapTimer.current = null;
+      onNavigate(node.id);
+    }, SWAP_MS);
   };
 
   // 해당 노드 코멘트 로드(진입 1회) — 실패해도 모달은 동작(빈 목록)
@@ -541,21 +687,12 @@ export function NodeSummaryModal({
     };
   }, [versionId, nodeId]);
 
-  // Esc=취소(버퍼 폐기)·⌘S=저장. ⌘S는 브라우저 저장 대화상자를 막는다. 타일 팝오버가 열려 있으면
-  // 팝오버가 Esc를 먼저 소비하고(전파 차단), ⌘S는 팝오버 초안만 반영한다.
-  // 최신 상태는 effect event로 읽는다 — 리스너 재구독 없이 (react-ts-patterns §7)
+  // ⌘S=열린 팝오버 초안 확정(브라우저 저장 대화상자 차단). Esc는 ModalBackdrop 스택(최상위만)이 닫는다 —
+  // 타일 팝오버·원문 메모 팝오버는 Esc 전파를 끊어 자기만 닫힌다. 최신 상태는 effect event로 읽는다 (react-ts-patterns §7)
   const handleWindowKey = useEffectEvent((event: KeyboardEvent) => {
-    if (event.key === "Escape") {
-      if (pendingNav) setPendingNav(null);
-      else onClose();
-    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      if (pendingNav) return;
-      if (active) {
-        commitTile();
-        return;
-      }
-      handleSave();
+      if (active) commitTile();
     }
   });
   useEffect(() => {
@@ -642,6 +779,39 @@ export function NodeSummaryModal({
       style={{ background: value || "var(--color-surface-alt)" }}
     />
   );
+  // 원문 메모 아이콘 — 타일 호버 시 아이콘이 메모 아이콘으로 바뀌고 눌러서 보고 고친다(FallbackHint).
+  // 시스템은 노드 컬럼(system_fallback), SP 연간 건수는 링크 맵 빈도 원문(읽기)
+  const spFrequencyNote = (sp?.frequency_fallback ?? "").trim();
+  const noteIcon = (field: TileField, filled: boolean): ReactNode => {
+    const rest = filled ? "text-accent" : "text-ink-tertiary";
+    if (field === "system" && !isSp && (form.system_fallback.trim() !== "" || !readOnly)) {
+      return (
+        <FallbackHint
+          dataId="summary-tile-note-icon-system"
+          fallback={form.system_fallback}
+          restIcon={Monitor}
+          iconSize={16}
+          padded={false}
+          restClassName={rest}
+          onSaveFallback={readOnly ? undefined : (text) => patchLive({ system_fallback: text })}
+          onApply={readOnly ? undefined : () => patchLive({ system: form.system_fallback.slice(0, 100) })}
+        />
+      );
+    }
+    if (field === "annual_count" && isSp && spFrequencyNote !== "") {
+      return (
+        <FallbackHint
+          dataId="summary-tile-note-icon-annual_count"
+          fallback={spFrequencyNote}
+          restIcon={PARAM_ICON.annual_count}
+          iconSize={16}
+          padded={false}
+          restClassName={rest}
+        />
+      );
+    }
+    return undefined;
+  };
 
   // ── 팝오버 열기/확정/취소 ──────────────────────────────────────────────────
   // SP 상속 IO — 읽기 전용 팝오버 소스(링크 맵 sp_* 값)
@@ -649,74 +819,18 @@ export function NodeSummaryModal({
     value: (field === "input" ? sp?.input : sp?.output) ?? "",
     extra: (field === "input" ? sp?.input_forms : sp?.output_forms) ?? "",
   });
-  function readTileDraft(field: TileField): Pick<ActiveTile, "value" | "extra" | "links" | "flags" | "ids" | "unit"> {
-    const unit = costUnitOf(form);
-    const base = { links: "", flags: "", ids: "", unit };
-    switch (field) {
-      case "url":
-        return { ...base, value: form.url, extra: form.urlLabel };
-      case "cost":
-        return { ...base, value: form[unit], extra: "" };
-      case "input":
-        return { ...base, value: form.input, extra: form.input_forms, links: form.input_links, flags: form.input_flags };
-      case "output":
-        return { ...base, value: form.output, extra: form.output_forms, links: form.output_links, ids: form.output_ids };
-      default:
-        return { ...base, value: form[field], extra: "" };
-    }
-  }
   function openTile(field: TileField, at: { x: number; y: number }, viewOnly = false) {
     if (viewOnly && isSp && (field === "input" || field === "output")) {
-      setActive({ field, at, ...readTileDraft(field), ...spIo(field), readOnly: true });
+      setActive({ field, at, ...readTileDraftFrom(form, field), ...spIo(field), readOnly: true });
       return;
     }
-    setActive({ field, at, ...readTileDraft(field), readOnly: viewOnly });
+    setActive({ field, at, ...readTileDraftFrom(form, field), readOnly: viewOnly });
   }
-  const tileDirty = (() => {
-    if (!active || active.readOnly) return false;
-    const base = readTileDraft(active.field);
-    return (
-      active.value !== base.value ||
-      active.extra !== base.extra ||
-      active.links !== base.links ||
-      active.flags !== base.flags ||
-      active.ids !== base.ids ||
-      (active.field === "cost" && active.unit !== base.unit)
-    );
-  })();
-  // 초안 → 폼 버퍼(팝오버는 열어둠) — 메뉴 "Save"
+  const tileDirty = active !== null && isTileDirty(active, form);
+  // 초안 → 노드(팝오버는 열어둠) — 메뉴 "Save"
   function applyTile() {
     if (!active || active.readOnly) return;
-    const { field, value, extra, links, flags, ids, unit } = active;
-    setForm((prev) => {
-      const next: Form = { ...prev };
-      switch (field) {
-        case "url":
-          next.url = value.trim();
-          next.urlLabel = extra.trim();
-          break;
-        case "cost":
-          // 통화 배타 — 고른 단위에만 값, 다른 통화는 비운다
-          next.cost_krw = unit === "cost_krw" ? value : "";
-          next.cost_usd = unit === "cost_usd" ? value : "";
-          break;
-        case "input":
-          next.input = value;
-          next.input_forms = extra;
-          next.input_links = links;
-          next.input_flags = flags;
-          break;
-        case "output":
-          next.output = value;
-          next.output_forms = extra;
-          next.output_links = links;
-          next.output_ids = ids;
-          break;
-        default:
-          next[field] = value;
-      }
-      return next;
-    });
+    patchLive(buildTilePatch(active));
   }
   function commitTile() {
     applyTile();
@@ -728,7 +842,7 @@ export function NodeSummaryModal({
   const spSystem = sp?.system ?? "";
   const spUrl = (sp?.url ?? "").trim() ? (sp?.url_label ?? "").trim() || (sp?.url ?? "").trim() : "";
   const gmpValue = gmp ?? "";
-  // 접힘 헤더의 채워진 개수 — 버퍼(form) 기준(SP는 상속값)
+  // 접힘 헤더의 채워진 개수 — 폼 기준(SP는 상속값)
   const filledAttrCount = isSp
     ? [spDept, spAssignee, spSystem, spUrl].filter((v) => v !== "").length
     : [form.department, form.assignee, form.system, form.url].filter((v) => v !== "").length;
@@ -761,6 +875,7 @@ export function NodeSummaryModal({
         label={tileLabel(field)}
         value={value}
         valueNode={valueNode}
+        iconSlot={noteIcon(field, value !== "" || valueNode != null)}
         readOnly={!clickable}
         active={active?.field === field}
         onOpen={(at) => openTile(field, at, staticTile)}
@@ -794,7 +909,6 @@ export function NodeSummaryModal({
     onToggle: () => void,
     label: string,
     count: number,
-    changed: boolean,
   ) => (
     <button
       type="button"
@@ -806,8 +920,6 @@ export function NodeSummaryModal({
       <ChevronRight size={12} strokeWidth={1.5} className={`transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`} />
       {label}
       {count > 0 && <span className="font-normal">({count})</span>}
-      {/* 버퍼 변경 점 — 접혀 있어도 저장 전 수정이 있음을 표시 */}
-      {changed && <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />}
     </button>
   );
   const toggleAllButton = (
@@ -843,7 +955,7 @@ export function NodeSummaryModal({
         readOnly={readOnly}
         dataIdPrefix="summary-tile"
         labels={labels}
-        onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+        onChange={(patch) => patchLive(patch)}
       />
       {renderTile("system")}
       {renderTile("url")}
@@ -887,13 +999,43 @@ export function NodeSummaryModal({
     const inputField: ParamField | null = field === "cost" ? active.unit : isParam ? (field as ParamField) : null;
     // SP 참고치 — 연간 건수·FTE 팝오버 안내(링크 맵 지정값, 노드 값과 별개)
     const reference = isSp && (field === "annual_count" || field === "fte") ? (sp?.[field] ?? "") : "";
+    const ioFooter =
+      isIo && !active.readOnly ? (
+        <span className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            data-id={`summary-tile-io-${field}-add`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt"
+            onClick={() => ioRef.current?.addRow()}
+          >
+            <Plus size={12} strokeWidth={1.5} />
+            {t("io.addNew")}
+          </button>
+          {/* 다른 노드에서 불러오기 — 인스펙터 IO 카드의 메뉴 항목과 같은 동작(page가 불러오기 모달을 연다).
+              불러오기는 그래프에 즉시 커밋되므로 반영 안 된 초안이 있으면 잠근다 (사용자 요청 2026-09-03) */}
+          {onIoImport && (
+            <span title={tileDirty ? t("io.importSaveFirst") : undefined} className="inline-flex">
+              <button
+                type="button"
+                data-id={`summary-tile-io-${field}-import`}
+                disabled={tileDirty}
+                className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={(e) => onIoImport(field, { x: e.clientX, y: e.clientY })}
+              >
+                <Import size={12} strokeWidth={1.5} />
+                {t("io.importFromNode")}
+              </button>
+            </span>
+          )}
+        </span>
+      ) : undefined;
     return (
       <SpFieldPopover
         dataId={`summary-tile-popover-${field}`}
         anchor={active.at}
         title={tileLabel(field)}
         hint={active.readOnly ? t("sp.tile.readOnlyHint") : field === "cost" ? t("sp.tile.costUnitHint") : t(HINT_KEY[field])}
-        width={isIo ? 420 : field === "color" ? 300 : 320}
+        width={isIo ? 440 : field === "color" ? 300 : 320}
         enterCommits={!isIo}
         dirty={tileDirty}
         readOnly={active.readOnly}
@@ -902,19 +1044,7 @@ export function NodeSummaryModal({
         onCommit={commitTile}
         onCancel={() => setActive(null)}
         labels={labels}
-        footerStart={
-          isIo && !active.readOnly ? (
-            <button
-              type="button"
-              data-id={`summary-tile-io-${field}-add`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-caption text-ink hover:bg-surface-alt"
-              onClick={() => ioRef.current?.addRow()}
-            >
-              <Plus size={12} strokeWidth={1.5} />
-              {t("io.addNew")}
-            </button>
-          ) : undefined
-        }
+        footerStart={ioFooter}
       >
         {field === "color" && (
           <div className="flex flex-col gap-2">
@@ -977,15 +1107,36 @@ export function NodeSummaryModal({
             {t("metrics.designatedRef", { v: reference })} - {t("metrics.designatedRefHint")}
           </p>
         )}
+        {/* SP 연간 건수 — 링크 맵 인터뷰 빈도 원문(읽기, 수정은 링크 맵 지정에서) */}
+        {field === "annual_count" && isSp && spFrequencyNote !== "" && (
+          <div data-id="summary-tile-note-annual_count" className="flex flex-col gap-0.5">
+            <span className="text-fine text-ink-secondary">{t("sp.tile.note")}</span>
+            <p className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1 text-caption text-ink">{spFrequencyNote}</p>
+          </div>
+        )}
         {(field === "system" || field === "data_form" || field === "start_condition" || field === "end_condition") && (
           <input
             data-id={`summary-tile-input-${field}`}
             className={INPUT_CLASS}
-            maxLength={field === "data_form" ? 50 : undefined}
+            maxLength={field === "data_form" ? 50 : field === "system" ? 100 : undefined}
             placeholder={field === "data_form" ? "structured / document / tacit" : undefined}
             value={active.value}
             onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
           />
+        )}
+        {/* 시스템 원문 메모 — 인스펙터 시스템 행의 원문 메모와 같은 컬럼, 팝오버 안에서 함께 고친다 */}
+        {field === "system" && !active.readOnly && (
+          <label className="flex flex-col gap-1">
+            <span className="text-fine text-ink-secondary">{t("sp.tile.note")}</span>
+            <textarea
+              data-id="summary-tile-note-system"
+              className="min-h-[3rem] resize-y rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent"
+              maxLength={200}
+              placeholder={t("sp.tile.notePlaceholder")}
+              value={active.note}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
+            />
+          </label>
         )}
         {field === "url" && (
           <div className="flex flex-col gap-1.5">
@@ -1013,10 +1164,10 @@ export function NodeSummaryModal({
         )}
         {isIo && (
           <div className="rounded-sm border border-hairline bg-surface-alt/40 px-2 py-1">
-            {/* 팝오버 제목이 이미 필드명 — 편집기는 헤드리스, '+ Add'는 푸터. 링크·플래그·id 열은 텍스트와
-                함께 정렬을 유지해 왕복시킨다(io-linking §3). 읽기 전용은 항목 목록만 */}
+            {/* 팝오버 제목이 이미 필드명 — 편집기는 헤드리스, '+ Add'·불러오기는 푸터. 링크·플래그·id 열은 텍스트와
+                함께 정렬을 유지해 왕복시킨다(io-linking §3). 읽기 전용은 항목 목록만. ioSync는 바깥 변경 리마운트 */}
             <MultiValueInput
-              key={`${nodeId}-${field}-${active.readOnly ? "read" : "edit"}`}
+              key={`${nodeId}-${field}-${active.readOnly ? "read" : "edit"}-${ioSync}`}
               ref={ioRef}
               dataId={`summary-tile-io-${field}`}
               label={tileLabel(field)}
@@ -1052,8 +1203,15 @@ export function NodeSummaryModal({
       style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
       onClose={onClose}
     >
+      {/* key=nodeId — 노드 전환 시 카드가 다시 팝인한다. 전환 중엔 반대편 독으로 줄어드는 애니메이션 */}
       <div
-        className="relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg"
+        key={nodeId}
+        ref={cardRef}
+        data-id="node-summary-card"
+        className={`relative flex max-h-[80%] w-full max-w-lg flex-col overflow-hidden rounded-sm border border-hairline bg-surface shadow-lg ${
+          swap ? "summary-swap-out" : "summary-card-in"
+        }`}
+        style={swap ? swap.cardVars : undefined}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center gap-2 border-b border-hairline px-4 py-2">
@@ -1074,7 +1232,7 @@ export function NodeSummaryModal({
         </div>
 
         {/* min-h-0 — flex 자식의 min-height:auto(=min-content)가 축소를 막아 overflow-y-auto가 죽는 것 방지.
-            죽으면 카드의 overflow-hidden이 아래를 잘라 선행/후행 내비까지 닿을 수 없다. 스크롤바는 숨기고 스크롤만 남긴다. */}
+            죽으면 카드의 overflow-hidden이 아래를 잘라 하단까지 닿을 수 없다. 스크롤바는 숨기고 스크롤만 남긴다. */}
         <div
           data-id="node-summary-body"
           className="scrollbar-hidden flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3 text-caption text-ink-secondary"
@@ -1126,7 +1284,8 @@ export function NodeSummaryModal({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {/* 제목 — subprocess는 링크된 맵 이름 고정이라 편집 차단 (F5) */}
+              {/* 제목 — subprocess는 링크된 맵 이름 고정이라 편집 차단 (F5). 타이핑은 인스펙터처럼 즉시 반영,
+                  blur에서 이름 중복 고유화 */}
               <div>
                 <label className="mb-1 block text-fine text-ink-tertiary">{t("field.title")}</label>
                 <textarea
@@ -1135,7 +1294,8 @@ export function NodeSummaryModal({
                   rows={Math.min(5, form.label.split("\n").length)}
                   aria-label={t("field.title")}
                   disabled={isSp}
-                  onChange={(event) => setForm((f) => ({ ...f, label: event.target.value }))}
+                  onChange={(event) => patchLive({ label: event.target.value })}
+                  onBlur={() => onCommitLabel?.(form.label)}
                   onKeyDown={(event) => {
                     // Enter=포커스 해제, Alt/Shift+Enter=줄바꿈 — 캔버스/인스펙터 이름 편집과 동일 규칙
                     if (event.key !== "Enter") return;
@@ -1147,7 +1307,7 @@ export function NodeSummaryModal({
                     const el = event.currentTarget;
                     const caret = el.selectionStart + 1;
                     const next = `${el.value.slice(0, el.selectionStart)}\n${el.value.slice(el.selectionEnd)}`;
-                    setForm((f) => ({ ...f, label: next }));
+                    patchLive({ label: next });
                     requestAnimationFrame(() => el.setSelectionRange(caret, caret));
                   }}
                 />
@@ -1175,7 +1335,7 @@ export function NodeSummaryModal({
                   placeholder={
                     (inheritedDescription ?? "").trim() !== "" ? t("subprocess.descAppend") : undefined
                   }
-                  onChange={(event) => setForm((f) => ({ ...f, description: event.target.value }))}
+                  onChange={(event) => patchLive({ description: event.target.value })}
                 />
               </div>
               {/* 유형(고정)·색 타일 — subprocess는 단일색 고정이라 색 타일 없음 (spec 2026-07-06 §9) */}
@@ -1198,7 +1358,6 @@ export function NodeSummaryModal({
                         },
                         t("editor.bpmAttrs"),
                         filledAttrCount,
-                        hasChangedIn(ATTRS_KEYS),
                       )}
                       {toggleAllButton}
                     </div>
@@ -1228,7 +1387,6 @@ export function NodeSummaryModal({
                         },
                         t("inspector.parameters"),
                         filledParamCount,
-                        hasChangedIn(PARAM_FIELDS),
                       )}
                       {!showAttrSection && toggleAllButton}
                     </div>
@@ -1242,7 +1400,7 @@ export function NodeSummaryModal({
                     </AutoHeight>
                   </div>
                 )}
-                {/* 인터뷰 승격 상세 — IO(항목 수 타일 → 플라이아웃 편집기)+종속 Data form·조건. 버퍼 편집(저장 시 반영), 기본 접힘.
+                {/* 인터뷰 승격 상세 — IO(항목 수 타일 → 플라이아웃 편집기)+종속 Data form·조건. 기본 접힘.
                     SP는 링크 맵 상속 읽기 타일 — 인스펙터 카드와 동기화(#11) */}
                 {(showAttributes || isSp) && (
                   <div className="py-1.5" data-id="summary-details">
@@ -1256,7 +1414,6 @@ export function NodeSummaryModal({
                       },
                       t("inspector.details"),
                       filledDetailCount,
-                      hasChangedIn(DETAILS_KEYS),
                     )}
                     <AutoHeight className="overflow-hidden">
                       {!detailsCollapsed && (
@@ -1363,13 +1520,14 @@ export function NodeSummaryModal({
           </div>
         </div>
 
-        {/* 푸터 — 버퍼 편집: Esc=취소 / ⌘S=저장 힌트 + 취소·저장 버튼. readOnly면 닫기만. */}
+        {/* 푸터 — 라이브 편집 안내 + Esc 힌트 + 완료. readOnly면 닫기만. */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline px-4 py-2">
           {readOnly ? (
             <>
               <span />
               <button
                 type="button"
+                data-id="summary-close"
                 className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
                 onClick={onClose}
               >
@@ -1378,96 +1536,53 @@ export function NodeSummaryModal({
             </>
           ) : (
             <>
-              <span className="flex min-w-0 flex-col gap-0.5 text-fine text-ink-tertiary">
-                {/* 저장 전 변경 필드 목록 — 버퍼 내용 노출 (사용자 결정 2026-08-20) */}
-                {changedKeys.length > 0 && (
-                  <span
-                    data-id="summary-dirty-fields"
-                    className="flex min-w-0 items-center gap-1 text-accent"
-                    title={changedLabels}
-                  >
-                    <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />
-                    <span className="min-w-0 truncate">{t("summary.unsavedFields", { fields: changedLabels })}</span>
-                  </span>
-                )}
-                <span className="flex items-center gap-2">
-                  <span className="flex items-center gap-1">
-                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
-                    {t("summary.cancel")}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">⌘S</kbd>
-                    {t("editor.save")}
-                  </span>
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-fine text-ink-tertiary">
+                <span data-id="summary-live-hint" className="min-w-0">{t("summary.liveHint")}</span>
+                <span className="flex items-center gap-1">
+                  <kbd className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5">Esc</kbd>
+                  {t("summary.close")}
                 </span>
               </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                  onClick={onClose}
-                >
-                  {t("summary.cancel")}
-                </button>
-                <button
-                  type="button"
-                  data-id="summary-save"
-                  className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-                  onClick={handleSave}
-                >
-                  {t("editor.save")}
-                </button>
-              </div>
+              <button
+                type="button"
+                data-id="summary-close"
+                className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
+                onClick={onClose}
+              >
+                {t("summary.done")}
+              </button>
             </>
           )}
         </div>
-
-        {/* 저장하지 않은 변경 확인 — 선후행 이동 시 버퍼에 변경이 있으면 (저장/저장안함/취소) */}
-        {pendingNav && (
-          <div
-            className="absolute inset-0 z-10 flex items-center justify-center p-4"
-            style={{ background: "color-mix(in srgb, var(--color-ink) 20%, transparent)" }}
-            onClick={() => setPendingNav(null)}
-          >
-            <div
-              className="w-full max-w-[300px] rounded-sm border border-hairline bg-surface p-4 shadow-lg"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center gap-2 text-body-strong text-ink">
-                <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-error" />
-                {t("summary.unsavedTitle")}
-              </div>
-              <p className="mt-1.5 text-caption text-ink-secondary">{t("summary.unsavedBody")}</p>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                  onClick={() => setPendingNav(null)}
-                >
-                  {t("summary.cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt"
-                  onClick={navDiscardAndGo}
-                >
-                  {t("summary.discardAndGo")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-sm bg-accent px-2.5 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
-                  onClick={navSaveAndGo}
-                >
-                  {t("summary.saveAndGo")}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       {/* 선행/후행 사이드 독 — 모달 카드 밖, 백드롭 좌우(백드롭은 자기 자신을 눌렀을 때만 닫힌다) */}
-      <NavDock side="left" title={t("summary.prev")} nodes={predecessors} typeLabelOf={typeLabelOf} onPick={requestNavigate} />
-      <NavDock side="right" title={t("summary.next")} nodes={successors} typeLabelOf={typeLabelOf} onPick={requestNavigate} />
+      <NavDock
+        side="left"
+        title={t("summary.prev")}
+        nodes={predecessors}
+        typeLabelOf={typeLabelOf}
+        hiddenId={swap?.node.id ?? null}
+        onPick={(node, rect) => startSwap(node, "left", rect)}
+      />
+      <NavDock
+        side="right"
+        title={t("summary.next")}
+        nodes={successors}
+        typeLabelOf={typeLabelOf}
+        hiddenId={swap?.node.id ?? null}
+        onPick={(node, rect) => startSwap(node, "right", rect)}
+      />
+      {/* 전환 고스트 — 클릭한 독 카드의 자리에서 시작해 가운데로 커지며 사라진다 */}
+      {swap && (
+        <div
+          data-id="summary-swap-ghost"
+          aria-hidden
+          className="summary-swap-in absolute z-10 flex items-center gap-2 rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
+          style={{ ...swap.box, ...swap.ghostVars }}
+        >
+          <DockCardBody node={swap.node} typeLabelOf={typeLabelOf} />
+        </div>
+      )}
       {renderPopover()}
     </ModalBackdrop>
   );

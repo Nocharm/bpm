@@ -270,6 +270,57 @@ button:not(:disabled):active {
   }
 }
 
+/* 노드 편집 모달 선후행 전환 — 가운데 카드는 줄어들며 반대편 독으로, 클릭한 독 카드(고스트)는 커지며
+   가운데로, 새 내용은 팝인 (사용자 요청 2026-09-03). 이동량·배율은 호출부가 실측해 CSS 변수로 주입한다.
+   translate/scale 개별 속성이라 transform-origin(center) 기준으로 중심이 정확히 이동한다. */
+@keyframes summary-swap-out {
+  to {
+    translate: var(--swap-dx) var(--swap-dy);
+    scale: var(--swap-scale);
+    opacity: 0;
+  }
+}
+.summary-swap-out {
+  animation: summary-swap-out 380ms var(--ease-spring) forwards;
+  pointer-events: none;
+}
+@keyframes summary-swap-in {
+  from {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
+  to {
+    translate: var(--swap-dx) var(--swap-dy);
+    scale: var(--swap-scale);
+    opacity: 0;
+  }
+}
+.summary-swap-in {
+  animation: summary-swap-in 380ms var(--ease-spring) forwards;
+  pointer-events: none;
+}
+@keyframes summary-card-in {
+  from {
+    scale: 0.92;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+.summary-card-in {
+  animation: summary-card-in 260ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .summary-swap-out,
+  .summary-swap-in,
+  .summary-card-in {
+    animation: none;
+  }
+}
+
 /* Excel 내보내기 미리보기 행 — 위에서부터 쌓이며 등장. 딜레이는 행별 --row-delay로 주입,
    fill both라 자기 차례 전엔 숨김 상태를 유지한다(스태거 핵심). */
 .preview-row-in {
