@@ -236,18 +236,28 @@ export function SubprocessDesignationModal({
   };
 
   // ── 팝오버 열기/확정/취소 ──────────────────────────────────────────────────
-  function openTile(field: TileField, at: { x: number; y: number }) {
+  // 폼의 현재 확정값을 팝오버 초안 형태로 — 열 때 초기값, 열린 뒤엔 dirty 판정 기준
+  function readTileDraft(field: TileField): Pick<ActiveTile, "value" | "note" | "extra"> {
     const noteKey = NOTE_KEY[field];
-    setActive({
-      field,
-      at,
+    return {
       value: field === "url" ? form.url : form[field],
       note: noteKey ? form[noteKey] : "",
       extra: field === "url" ? form.urlLabel : field === "input" ? form.input_forms : field === "output" ? form.output_forms : "",
-    });
+    };
   }
 
-  function commitTile() {
+  function openTile(field: TileField, at: { x: number; y: number }) {
+    setActive({ field, at, ...readTileDraft(field) });
+  }
+
+  const tileDirty = (() => {
+    if (!active) return false;
+    const base = readTileDraft(active.field);
+    return active.value !== base.value || active.note.trim() !== base.note.trim() || active.extra !== base.extra;
+  })();
+
+  // 초안 → 폼 반영(팝오버는 열어둠) — 메뉴 "Save"
+  function applyTile() {
     if (!active) return;
     const { field, value, note, extra } = active;
     const noteKey = NOTE_KEY[field];
@@ -268,6 +278,11 @@ export function SubprocessDesignationModal({
       if (noteKey) next[noteKey] = note.trim();
       return next;
     });
+  }
+
+  // 반영 + 닫기 — Enter·주 버튼(변경 있을 때)·바깥 클릭(변경 있을 때)·메뉴 "Save and close"
+  function commitTile() {
+    applyTile();
     setActive(null);
   }
 
@@ -339,7 +354,16 @@ export function SubprocessDesignationModal({
         hint={costLocked ? t("sp.tile.costExclusive") : t(HINT_KEY[field])}
         width={isIo ? 420 : 320}
         enterCommits={!isIo}
-        keysHint={isIo ? t("sp.tile.keysMultiline") : t("sp.tile.keys")}
+        dirty={tileDirty}
+        onApply={applyTile}
+        labels={{
+          apply: t("sp.tile.apply"),
+          cancel: t("common.cancel"),
+          save: t("sp.tile.save"),
+          saveClose: t("sp.tile.saveClose"),
+          closeNoSave: t("sp.tile.closeNoSave"),
+          saved: t("sp.tile.saved"),
+        }}
         footerStart={
           isIo ? (
             <button
