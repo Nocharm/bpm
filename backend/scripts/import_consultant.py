@@ -959,6 +959,9 @@ async def import_delivery(
             or (found_map.sp_cost_krw or "") != params.cost_krw
             or (found_map.sp_cost_usd or "") != params.cost_usd
             or (found_map.sp_headcount or "") != params.headcount
+            # 담당자 참고치 — 맵 지정값에도 착지(연계 캔버스 SP 노드 채움과 별개) (design 2026-09-03 §4)
+            or (found_map.sp_annual_count or "") != params.annual_count
+            or (found_map.sp_fte or "") != params.fte
             # 승격 필드 — sp_gmp(검토 선정값)는 전달분에 없어 비교·갱신 모두 제외 (design 2026-08-19 §4.1)
             or (found_map.sp_touch_time or "") != params.touch_time
             or (found_map.sp_system or "") != cmap.system
@@ -986,6 +989,8 @@ async def import_delivery(
             found_map.sp_cost_krw = params.cost_krw
             found_map.sp_cost_usd = params.cost_usd
             found_map.sp_headcount = params.headcount
+            found_map.sp_annual_count = params.annual_count
+            found_map.sp_fte = params.fte
             found_map.sp_input = params.input
             found_map.sp_output = params.output
             found_map.sp_touch_time = params.touch_time

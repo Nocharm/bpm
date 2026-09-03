@@ -104,6 +104,9 @@ async def list_processes(
                 ProcessMap.sp_cost_krw,
                 ProcessMap.sp_cost_usd,
                 ProcessMap.sp_headcount,
+                # 담당자 참고치 2종 — 피커 미리보기용 (design 2026-09-03 §4)
+                ProcessMap.sp_annual_count,
+                ProcessMap.sp_fte,
             )
             .outerjoin(MapVersion, MapVersion.map_id == ProcessMap.id)
             .where(*where_clauses)
@@ -121,6 +124,8 @@ async def list_processes(
                 ProcessMap.sp_cost_krw,
                 ProcessMap.sp_cost_usd,
                 ProcessMap.sp_headcount,
+                ProcessMap.sp_annual_count,
+                ProcessMap.sp_fte,
             )
             .order_by(ProcessMap.name)
         )
@@ -181,8 +186,10 @@ async def list_processes(
             "cost_krw": cost_krw if designated_at is not None else None,
             "cost_usd": cost_usd if designated_at is not None else None,
             "headcount": headcount if designated_at is not None else None,
+            "annual_count": annual_count if designated_at is not None else None,
+            "fte": fte if designated_at is not None else None,
         }
-        for mid, name, latest, department, assignee, system, duration, designated_at, _, _, touch_time, cost_krw, cost_usd, headcount in latest_rows
+        for mid, name, latest, department, assignee, system, duration, designated_at, _, _, touch_time, cost_krw, cost_usd, headcount, annual_count, fte in latest_rows
     ]
 
 

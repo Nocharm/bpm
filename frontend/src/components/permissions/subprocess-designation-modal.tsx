@@ -22,6 +22,7 @@ import {
   readAttrsCollapsed,
   readDetailsCollapsed,
   readParamsCollapsed,
+  SP_CONTEXT_FIELDS,
   SP_PARAM_FIELDS,
   writeAttrsCollapsed,
   writeDetailsCollapsed,
@@ -40,6 +41,9 @@ export interface DesignationForm {
   cost_krw: string;
   cost_usd: string;
   headcount: string;
+  // 담당자 기준 참고치 — 연결 맵 SP 노드 값과 별개(호버 참고) (design 2026-09-03 §4)
+  annual_count: string;
+  fte: string;
   url: string;
   urlLabel: string;
   input: string;
@@ -159,6 +163,8 @@ export function SubprocessDesignationModal({
         cost_krw: form.cost_krw,
         cost_usd: form.cost_usd,
         headcount: form.headcount,
+        annual_count: form.annual_count,
+        fte: form.fte,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
         input: form.input.trim(),
@@ -346,6 +352,20 @@ export function SubprocessDesignationModal({
                   <Sigma size={14} strokeWidth={1.5} />
                 </button>
               </div>
+            </div>
+          ))}
+          {/* 참고치 2종 — 담당자 기준값, Σ 없음(노드 합산이 무의미) (design 2026-09-03 §4) */}
+          {SP_CONTEXT_FIELDS.map((key) => (
+            <div key={key} className="flex items-center justify-between gap-2 py-1">
+              <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
+              <ParamInput
+                field={key}
+                dataId={`subprocess-designation-${key}`}
+                className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
+                value={form[key]}
+                ariaLabel={t(PARAM_LABEL_KEY[key])}
+                onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
+              />
             </div>
           ))}
                 </div>

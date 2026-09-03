@@ -18,6 +18,10 @@ export type ParamField = (typeof PARAM_FIELDS)[number];
 export const SP_PARAM_FIELDS = ["duration", "touch_time", "cost_krw", "cost_usd", "headcount"] as const;
 export type SpParamField = (typeof SP_PARAM_FIELDS)[number];
 
+/** SP 지정 참고치 2종 — 담당자 기준값. 연결 맵의 SP 노드는 각자 값을 갖고 이건 호버 참고로만 (design 2026-09-03 §4). Σ 없음 */
+export const SP_CONTEXT_FIELDS = ["annual_count", "fte"] as const;
+export type SpContextField = (typeof SP_CONTEXT_FIELDS)[number];
+
 /** 서브프로세스 노드에서 사람이 직접 입력하는 필드 — 나머지 4개는 링크 맵 지정값(읽기전용) */
 export const SUBPROCESS_OWN_FIELDS = ["annual_count", "fte"] as const;
 

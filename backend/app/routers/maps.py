@@ -44,7 +44,10 @@ from app.schemas import (
     MapCopy,
     MapCreate,
     MapDetailOut,
+    FallbackNotesIn,
+    MapNoteIn,
     MapNoteOut,
+    MapNoteUpdateIn,
     MapOut,
     MapUpdate,
     OwningDepartmentIn,
@@ -640,10 +643,74 @@ async def list_map_notes(
     map_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> list[MapNote]:
-    """맵 노트(인터뷰 예외 규칙·VOC) 읽기전용 목록 (design 2026-08-18 §5·§6)."""
+    """맵 노트(인터뷰 예외 규칙·VOC + 사용자 노트) 목록 — viewer 이상 (design 2026-08-18 §5·§6)."""
     return list((await session.scalars(
         select(MapNote).where(MapNote.map_id == map_id).order_by(MapNote.id)
     )).all())
+
+
+@router.post(
+    "/{map_id}/notes",
+    response_model=MapNoteOut,
+    status_code=201,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def create_map_note(
+    map_id: int,
+    payload: MapNoteIn,
+    session: AsyncSession = Depends(get_session),
+) -> MapNote:
+    """사용자 노트 작성 — 오너 전용. source=user는 재임포트가 절대 안 건드린다 (design 2026-09-03 followups §3)."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    note = MapNote(map_id=map_id, kind=payload.kind, title=payload.title or None, text=payload.text, source="user")
+    session.add(note)
+    await session.commit()
+    await session.refresh(note)
+    return note
+
+
+@router.patch(
+    "/{map_id}/notes/{note_id}",
+    response_model=MapNoteOut,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def update_map_note(
+    map_id: int,
+    note_id: int,
+    payload: MapNoteUpdateIn,
+    session: AsyncSession = Depends(get_session),
+) -> MapNote:
+    """노트 수정 — 오너 전용. 임포트 노트는 source를 유지한 채 edited_at을 찍어 재임포트 교체 행의
+    기본값(수정 있으면 해제)에 반영된다 (design 2026-09-03 followups §3)."""
+    note = await session.get(MapNote, note_id)
+    if note is None or note.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(note, field, value or None if field == "title" else value)
+    note.edited_at = _now()
+    await session.commit()
+    await session.refresh(note)
+    return note
+
+
+@router.delete(
+    "/{map_id}/notes/{note_id}",
+    status_code=204,
+    dependencies=[Depends(require_map_role("owner"))],
+)
+async def delete_map_note(
+    map_id: int,
+    note_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """노트 삭제 — 오너 전용, 멱등 아님(없으면 404)."""
+    note = await session.get(MapNote, note_id)
+    if note is None or note.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    await session.delete(note)
+    await session.commit()
 
 
 @router.get(
@@ -1442,7 +1509,18 @@ async def designate_subprocess(
     found_map.sp_cost_krw = payload.cost_krw
     found_map.sp_cost_usd = payload.cost_usd
     found_map.sp_headcount = payload.headcount
+    found_map.sp_annual_count = payload.annual_count
+    found_map.sp_fte = payload.fte
     found_map.sp_touch_time = payload.touch_time or None
+    # 인터뷰 원문 메모 — 보낸 필드만 갱신(None=미변경) (design 2026-09-03 §2)
+    if payload.total_time_fallback is not None:
+        found_map.sp_total_time_fallback = payload.total_time_fallback.strip() or None
+    if payload.touch_time_fallback is not None:
+        found_map.sp_touch_time_fallback = payload.touch_time_fallback.strip() or None
+    if payload.system_fallback is not None:
+        found_map.sp_system_fallback = payload.system_fallback.strip() or None
+    if payload.frequency_fallback is not None:
+        found_map.sp_frequency_fallback = payload.frequency_fallback.strip() or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
     # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31)
@@ -1525,6 +1603,28 @@ async def update_process_fields(
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(found_map, f"sp_{field}", value or None)
+    await session.commit()
+    await session.refresh(found_map)
+    return found_map
+
+
+@router.patch(
+    "/{map_id}/fallback-notes",
+    response_model=MapOut,
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def update_fallback_notes(
+    map_id: int,
+    payload: FallbackNotesIn,
+    session: AsyncSession = Depends(get_session),
+) -> ProcessMap:
+    """인터뷰 원문 메모 5종 부분 갱신 — 에디터 이상(인스펙터 점유권자 편집 경로). 대표값은 안 건드린다
+    (design 2026-09-03 followups §2). 보낸 필드만 갱신, 공백은 NULL 소거."""
+    found_map = await session.get(ProcessMap, map_id)
+    if found_map is None or found_map.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(found_map, f"sp_{field}", (value or "").strip() or None)
     await session.commit()
     await session.refresh(found_map)
     return found_map

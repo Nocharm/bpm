@@ -65,8 +65,11 @@ export interface MapSummary {
   sp_assignee?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
-  // 회당 파라미터 — sp 지정값 4종. 연간 건수·FTE는 부모 노드 맥락이라 SP에 없음 (design 2026-07-13)
+  // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
   sp_headcount?: string | null;
+  // 담당자 기준 참고치 — 연결 맵 SP 노드의 annual_count/fte와 별개(호버 참고) (design 2026-09-03 §4)
+  sp_annual_count?: string | null;
+  sp_fte?: string | null;
   sp_cost_krw?: string | null;
   sp_cost_usd?: string | null;
   sp_url?: string | null;
@@ -228,6 +231,9 @@ export interface SubprocessRef {
   cost_krw: string | null;
   cost_usd: string | null;
   headcount: string | null;
+  // 담당자 기준 참고치 — SP 노드 annual_count/fte 행 호버 힌트(노드 값과 별개) (design 2026-09-03 §4)
+  annual_count?: string | null;
+  fte?: string | null;
   // 7번째 파라미터 + 승격 필드 상속 소스 — SP 노드가 read-only 렌더 (design 2026-08-19 §3)
   touch_time: string | null;
   input: string | null;
@@ -515,7 +521,15 @@ export interface SubprocessDesignationBody {
   cost_krw?: string;
   cost_usd?: string;
   headcount?: string;
+  // 담당자 기준 참고치 (design 2026-09-03 §4)
+  annual_count?: string;
+  fte?: string;
   touch_time?: string;
+  // 인터뷰 원문 메모 — 생략=미변경, ""=지움 (design 2026-09-03 §2)
+  total_time_fallback?: string;
+  touch_time_fallback?: string;
+  system_fallback?: string;
+  frequency_fallback?: string;
   url?: string;
   url_label?: string;
   input?: string;
@@ -569,6 +583,23 @@ export interface ProcessFieldsBody {
   total_time_fallback?: string;
   touch_time_fallback?: string;
   system_fallback?: string;
+}
+
+// 맵 단위 인터뷰 원문 메모 5종 — 에디터 이상(인스펙터 점유권자) 편집. 생략=미변경, ""=지움
+// (design 2026-09-03 followups §2). 대표값(GMP·시간)은 오너 전용 patchProcessFields로.
+export interface FallbackNotesBody {
+  gmp_fallback?: string;
+  frequency_fallback?: string;
+  total_time_fallback?: string;
+  touch_time_fallback?: string;
+  system_fallback?: string;
+}
+
+export function patchFallbackNotes(mapId: number, body: FallbackNotesBody): Promise<MapSummary> {
+  return request<MapSummary>(`/maps/${mapId}/fallback-notes`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
 export function patchProcessFields(mapId: number, body: ProcessFieldsBody): Promise<MapSummary> {

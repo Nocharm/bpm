@@ -69,6 +69,8 @@ export function SubprocessInspectorCard({
     cost_krw: "",
     cost_usd: "",
     headcount: "",
+    annual_count: "",
+    fte: "",
     url: "",
     urlLabel: "",
     input: "",
@@ -174,6 +176,8 @@ export function SubprocessInspectorCard({
       cost_krw: detail.sp_cost_krw ?? "",
       cost_usd: detail.sp_cost_usd ?? "",
       headcount: detail.sp_headcount ?? "",
+      annual_count: detail.sp_annual_count ?? "",
+      fte: detail.sp_fte ?? "",
       url: detail.sp_url ?? "",
       urlLabel: detail.sp_url_label ?? "",
       input: detail.sp_input ?? "",
@@ -216,6 +220,8 @@ export function SubprocessInspectorCard({
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
     { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },
     { label: t("field.headcount"), value: detail.sp_headcount },
+    { label: t("field.annualCount"), value: detail.sp_annual_count },
+    { label: t("field.fte"), value: detail.sp_fte },
     ...(detail.sp_input ? [{ label: t("sp.input"), value: detail.sp_input }] : []),
     ...(detail.sp_output ? [{ label: t("sp.output"), value: detail.sp_output }] : []),
     ...(detail.description ? [{ label: t("field.description"), value: detail.description }] : []),
@@ -294,14 +300,15 @@ export function SubprocessInspectorCard({
             </div>
           )}
 
-          {/* 액션 행 — 좌측 지정/수정+해제, 우측(ml-auto) 사유별 액션(R10에서 이동, R6 W4). 버튼이 항상 있어 행 자체가 앵커. */}
-          <div className="mt-2 flex items-center gap-1.5">
+          {/* 액션 행 — 좌측 지정/수정+해제, 우측(ml-auto) 사유별 액션(R10에서 이동, R6 W4). 버튼이 항상 있어 행 자체가 앵커.
+              라벨은 한 줄 고정(nowrap) — 폭이 모자라면 마지막 버튼이 다음 줄로 내려간다(flex-wrap, 사용자 요청 2026-09-03). */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {designated ? (
               <>
                 <button
                   type="button"
                   data-id="sp-inspector-edit"
-                  className="rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                  className="whitespace-nowrap rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
                   onClick={openModal}
                   disabled={!canManage || saving}
                 >
@@ -310,7 +317,7 @@ export function SubprocessInspectorCard({
                 <button
                   type="button"
                   data-id="sp-inspector-remove"
-                  className="rounded-sm border border-error/40 px-2.5 py-1 text-fine text-error hover:bg-error/10 disabled:opacity-40"
+                  className="whitespace-nowrap rounded-sm border border-error/40 px-2.5 py-1 text-fine text-error hover:bg-error/10 disabled:opacity-40"
                   onClick={() => setShowUndesignate(true)}
                   disabled={!canManage || saving}
                 >
@@ -321,7 +328,7 @@ export function SubprocessInspectorCard({
               <button
                 type="button"
                 data-id="sp-inspector-designate"
-                className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 onClick={openModal}
                 disabled={!canManage || saving}
               >
@@ -336,7 +343,7 @@ export function SubprocessInspectorCard({
                   <button
                     type="button"
                     data-id="sp-go-published"
-                    className="ml-auto inline-flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
+                    className="ml-auto inline-flex items-center gap-1 whitespace-nowrap rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt"
                     onClick={() => onGoToPublished(publishedVersionId)}
                   >
                     <ArrowRight size={14} strokeWidth={1.5} />

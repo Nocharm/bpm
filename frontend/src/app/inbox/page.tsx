@@ -367,6 +367,8 @@ export default function InboxPage() {
         cost_krw: spModal.detail.sp_cost_krw ?? "",
         cost_usd: spModal.detail.sp_cost_usd ?? "",
         headcount: spModal.detail.sp_headcount ?? "",
+        annual_count: spModal.detail.sp_annual_count ?? "",
+        fte: spModal.detail.sp_fte ?? "",
         url: spModal.detail.sp_url ?? "",
         urlLabel: spModal.detail.sp_url_label ?? "",
         input: spModal.detail.sp_input ?? "",

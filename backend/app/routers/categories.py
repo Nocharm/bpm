@@ -15,11 +15,13 @@ from app.models import (
     CategoryPermission,
     Employee,
     MapApprover,
+    MapNote,
     MapPermission,
     MapVersion,
     Node,
     ProcessCategory,
     ProcessMap,
+    _now,
 )
 from app.framework_confirm import load_confirm_draft
 from app.orgchart import load_dept_index, resolve_org_path
@@ -35,6 +37,7 @@ from app.schemas import (
     CategoryCreateIn,
     CategoryMapsOut,
     CategoryNodeOut,
+    CategoryNotesOut,
     CategoryPermissionEntry,
     CategoryPermissionsIn,
     CategoryPermissionsMapOut,
@@ -57,6 +60,9 @@ from app.schemas import (
     InterviewImportOut,
     InterviewIssueOut,
     LinkageMapOut,
+    MapNoteIn,
+    MapNoteOut,
+    MapNoteUpdateIn,
     MapOut,
 )
 from app.subprocess import (
@@ -836,6 +842,93 @@ async def import_interview_delivery(
         truncated=len(ordered) > 500,
         governance=[GovernanceDiffOut.model_validate(g) for g in report.governance],
     )
+
+
+async def _load_category_for_notes(session: AsyncSession, category_id: int) -> ProcessCategory:
+    category = await session.get(ProcessCategory, category_id)
+    if category is None:
+        raise HTTPException(status_code=404, detail=f"category {category_id} not found")
+    return category
+
+
+async def _require_category_note_editor(session: AsyncSession, user: str, category_id: int) -> None:
+    """L5 노트 쓰기 = sysadmin 또는 체인 권한자 (design 2026-09-03 followups §3)."""
+    if logic.is_sysadmin(user) or await is_category_admin(session, user, category_id):
+        return
+    raise HTTPException(status_code=403, detail="category admin or sysadmin only")
+
+
+@router.get("/{category_id}/notes", response_model=CategoryNotesOut)
+async def list_category_notes(
+    category_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> CategoryNotesOut:
+    """L5 스코프 노트(진입·L6 흐름 인용·오픈 이슈·사용자 노트) — 로그인 전원 열람, can_edit 동봉."""
+    category = await _load_category_for_notes(session, category_id)
+    notes = list((await session.scalars(
+        select(MapNote)
+        .where(MapNote.map_id.is_(None), MapNote.category_code == category.code)
+        .order_by(MapNote.id)
+    )).all())
+    can_edit = logic.is_sysadmin(user) or await is_category_admin(session, user, category_id)
+    return CategoryNotesOut(can_edit=can_edit, notes=[MapNoteOut.model_validate(n) for n in notes])
+
+
+@router.post("/{category_id}/notes", response_model=MapNoteOut, status_code=201)
+async def create_category_note(
+    category_id: int,
+    payload: MapNoteIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> MapNote:
+    category = await _load_category_for_notes(session, category_id)
+    await _require_category_note_editor(session, user, category_id)
+    note = MapNote(
+        map_id=None, category_code=category.code, kind=payload.kind,
+        title=payload.title or None, text=payload.text, source="user",
+    )
+    session.add(note)
+    await session.commit()
+    await session.refresh(note)
+    return note
+
+
+@router.patch("/{category_id}/notes/{note_id}", response_model=MapNoteOut)
+async def update_category_note(
+    category_id: int,
+    note_id: int,
+    payload: MapNoteUpdateIn,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> MapNote:
+    category = await _load_category_for_notes(session, category_id)
+    await _require_category_note_editor(session, user, category_id)
+    note = await session.get(MapNote, note_id)
+    if note is None or note.map_id is not None or note.category_code != category.code:
+        raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(note, field, value or None if field == "title" else value)
+    note.edited_at = _now()
+    await session.commit()
+    await session.refresh(note)
+    return note
+
+
+@router.delete("/{category_id}/notes/{note_id}", status_code=204)
+async def delete_category_note(
+    category_id: int,
+    note_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> None:
+    category = await _load_category_for_notes(session, category_id)
+    await _require_category_note_editor(session, user, category_id)
+    note = await session.get(MapNote, note_id)
+    if note is None or note.map_id is not None or note.category_code != category.code:
+        raise HTTPException(status_code=404, detail=f"note {note_id} not found")
+    await session.delete(note)
+    await session.commit()
 
 
 @router.get("/{category_id}/chain", response_model=list[CategoryNodeOut])

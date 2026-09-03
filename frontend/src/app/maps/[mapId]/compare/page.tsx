@@ -55,6 +55,7 @@ import { useParams, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
@@ -1990,6 +1991,8 @@ function ComparePane({
                     </ul>
                   </SummaryCard>
                 )}
+                {/* 인터뷰 원문 메모 — 버전과 무관한 맵 값(양쪽 동일), 기본 접힘 (design 2026-09-03 followups §2) */}
+                <MapFallbackNotes mapId={mapId} defaultCollapsed />
               </div>
             ) : !selectedNode && selectedEdge ? (
               // 엣지 포커스 — 빈 안내 대신 배선 정보(출발→도착·상태·라벨·선 모양) (B7)

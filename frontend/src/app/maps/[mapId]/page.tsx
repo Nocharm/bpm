@@ -38,6 +38,8 @@ import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { canQuickConnect, getQuickTargetHandleId, QuickConnectLine } from "@/components/quick-connect-line";
 import { IconTip } from "@/components/icon-tip";
 import { SubprocessInspectorCard } from "@/components/subprocess-inspector-card";
+import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
+import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { SubprocessUsageTab } from "@/components/subprocess-usage-tab";
 import { MapOwnershipSection } from "@/components/map-ownership-section";
 import { ApproverManager } from "@/components/approver-manager";
@@ -10931,6 +10933,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           editableParams={editableParams}
                           inheritedDisplay={inheritedParamDisplay}
                           frequencyFallback={selectedSpRef?.frequency_fallback}
+                          referenceValues={{ annual_count: selectedSpRef?.annual_count, fte: selectedSpRef?.fte }}
                           readOnly={readOnly}
                           onSave={(patch) => updateSelectedData(patch, true)}
                         />
@@ -11471,6 +11474,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                         usage={spUsage}
                       />
                     )}
+                    {/* 인터뷰 원문 메모(점유권자 편집) → 노트 — 서브프로세스 카드 아래 (사용자 결정 2026-09-03) */}
+                    <MapFallbackNotes mapId={mapId} canEdit={!readOnly} onToast={showToast} />
+                    <MapNotesSection mapId={mapId} />
                     <div className="flex gap-1.5">
                       <button
                         type="button"
