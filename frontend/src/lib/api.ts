@@ -2903,7 +2903,7 @@ export interface InterviewFileReport {
   issues: InterviewIssue[];
 }
 
-export type GovernanceField = "owner" | "department" | "approvers";
+export type GovernanceField = "owner" | "department" | "approvers" | "notes";
 
 // dry-run 응답의 기존 맵 거버넌스 차이 — 체크한 (code, field)만 apply가 교체 (spec 2026-09-03 §3)
 export interface GovernanceDiff {
@@ -2913,6 +2913,8 @@ export interface GovernanceDiff {
   current: string;
   delivered: string;
   applied: boolean;
+  // 화면 기본 체크 — notes만 True일 수 있다(고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
+  default_checked?: boolean;
 }
 
 export interface GovernanceDecision {
@@ -2950,11 +2952,61 @@ export interface MapNote {
   title: string | null;
   text: string;
   node_id: string | null;
-  source: string;
+  source: string; // consultant-import | user
+  delivery_label?: string | null;
   created_at: string;
+  // 사람이 고친 시각 — 임포트 노트는 source 유지 + edited_at (design 2026-09-03 followups §3)
+  edited_at?: string | null;
 }
 
-// 맵 노트(인터뷰 예외 규칙·VOC) — 읽기전용, 맵 viewer 권한 준수 (design 2026-08-18 §5).
+export interface MapNoteBody {
+  kind: string;
+  title?: string | null;
+  text: string;
+}
+
+export interface CategoryNotes {
+  can_edit: boolean;
+  notes: MapNote[];
+}
+
+// 맵 노트 — 열람은 viewer 이상, 쓰기는 오너 (design 2026-08-18 §5, 2026-09-03 followups §3).
 export function getMapNotes(mapId: number): Promise<MapNote[]> {
   return request<MapNote[]>(`/maps/${mapId}/notes`);
+}
+
+export function createMapNote(mapId: number, body: MapNoteBody): Promise<MapNote> {
+  return request<MapNote>(`/maps/${mapId}/notes`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateMapNote(mapId: number, noteId: number, body: Partial<MapNoteBody>): Promise<MapNote> {
+  return request<MapNote>(`/maps/${mapId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteMapNote(mapId: number, noteId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/notes/${noteId}`, { method: "DELETE" });
+}
+
+// L5 스코프 노트 — 열람 전원, 쓰기는 체인 권한자/sysadmin(can_edit) (design 2026-09-03 followups §3).
+export function getCategoryNotes(categoryId: number): Promise<CategoryNotes> {
+  return request<CategoryNotes>(`/categories/${categoryId}/notes`);
+}
+
+export function createCategoryNote(categoryId: number, body: MapNoteBody): Promise<MapNote> {
+  return request<MapNote>(`/categories/${categoryId}/notes`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateCategoryNote(
+  categoryId: number,
+  noteId: number,
+  body: Partial<MapNoteBody>,
+): Promise<MapNote> {
+  return request<MapNote>(`/categories/${categoryId}/notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteCategoryNote(categoryId: number, noteId: number): Promise<void> {
+  return request<void>(`/categories/${categoryId}/notes/${noteId}`, { method: "DELETE" });
 }

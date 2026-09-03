@@ -298,7 +298,7 @@ export interface GovernanceMapGroup {
   diffs: GovernanceDiff[];
 }
 
-const GOVERNANCE_FIELD_ORDER: GovernanceField[] = ["owner", "department", "approvers"];
+const GOVERNANCE_FIELD_ORDER: GovernanceField[] = ["owner", "department", "approvers", "notes"];
 
 // 체크 상태 키 — 코드에 ':'가 있어도 필드는 콜론이 없으니 마지막 ':'에서 자르면 복원된다
 export function governanceKey(d: GovernanceDecision): string {

@@ -22,6 +22,7 @@ const FIELD_LABEL: Record<GovernanceField, MessageKey> = {
   owner: "framework.governance.field.owner",
   department: "framework.governance.field.department",
   approvers: "framework.governance.field.approvers",
+  notes: "framework.governance.field.notes",
 };
 
 export function ImportGovernanceReview({ diffs, checked, onToggle, onToggleAll, applied }: ImportGovernanceReviewProps) {

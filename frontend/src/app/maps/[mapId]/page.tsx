@@ -11476,7 +11476,12 @@ function MapEditor({ mapId }: { mapId: number }) {
                     )}
                     {/* 인터뷰 원문 메모(점유권자 편집) → 노트 — 서브프로세스 카드 아래 (사용자 결정 2026-09-03) */}
                     <MapFallbackNotes mapId={mapId} canEdit={!readOnly} onToast={showToast} />
-                    <MapNotesSection mapId={mapId} />
+                    {/* L5 연계 캔버스는 카테고리 스코프 노트(진입·L6 흐름 인용·오픈 이슈), 일반 맵은 맵 노트(오너 편집) */}
+                    {isFrameworkMap && linkageCategoryId != null ? (
+                      <MapNotesSection scope={{ categoryId: linkageCategoryId }} onToast={showToast} />
+                    ) : (
+                      <MapNotesSection scope={{ mapId }} canEdit={myRole === "owner"} onToast={showToast} />
+                    )}
                     <div className="flex gap-1.5">
                       <button
                         type="button"

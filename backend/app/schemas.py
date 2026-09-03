@@ -1038,7 +1038,7 @@ class FrameworkImportRow(BaseModel):
     detail: str = ""
 
 
-GovernanceField = Literal["owner", "department", "approvers"]
+GovernanceField = Literal["owner", "department", "approvers", "notes"]
 
 
 class GovernanceDecisionIn(BaseModel):
@@ -1070,6 +1070,8 @@ class GovernanceDiffOut(BaseModel):
     current: str
     delivered: str
     applied: bool
+    # 화면 기본 체크 — notes만 True일 수 있다(사람이 고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
+    default_checked: bool = False
 
 
 class MapNoteOut(BaseModel):

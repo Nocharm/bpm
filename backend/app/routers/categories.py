@@ -807,7 +807,9 @@ async def import_interview_delivery(
         linkage_placed={code for lk in merged_linkages for code in lk.map_codes},
         governance_decisions=decisions,
     )
-    inserted_notes = await apply_interview_notes(session, merged_notes, label=label)
+    inserted_notes = await apply_interview_notes(
+        session, merged_notes, label=label, report=report, decisions=decisions,
+    )
     # L6 흐름 → L5 연계 캔버스. 맵이 다 만들어진 뒤에만 노드를 걸 수 있어 순서가 고정된다.
     linked_count = await apply_interview_linkage(
         session, merged_linkages, actor=login_id, report=report

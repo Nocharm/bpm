@@ -283,7 +283,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     try {
       const result = await importInterview({ files: getInterviewPayloadFiles(), apply: false });
       setInterviewResult(result);
-      setGovernanceChecked(new Set());
+      // 기본 체크는 서버가 정한다 — 임포트 노트 교체는 사람이 고친 게 없으면 체크(현행), 거버넌스 3종은 해제
+      setGovernanceChecked(new Set(result.governance.filter((d) => d.default_checked).map(governanceKey)));
       // 전 파일 자동 펼침 — 결과 본문(맵·연계 캔버스)이 파일 카드 안에 있어 접힌 채로는 읽을 게 없다.
       setOpenReportFiles(new Set(result.files.map((_, i) => i)));
     } catch (err) {

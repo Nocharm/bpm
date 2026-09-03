@@ -22,7 +22,7 @@ if TYPE_CHECKING:
         InterviewNote,
     )
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -476,6 +476,7 @@ class GovernanceDiff:
     current: str
     delivered: str
     applied: bool = False
+    default_checked: bool = False
 
 
 @dataclass
@@ -1049,42 +1050,110 @@ async def apply_interview_notes(
     notes: list["InterviewNote"],
     *,
     label: str,
+    report: ImportReport | None = None,
+    decisions: set[tuple[str, str]] | None = None,
 ) -> int:
-    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입(멱등).
+    """인터뷰 노트 적재 — 관련 맵/L5 스코프의 consultant-import 행을 지우고 재삽입.
 
     import_delivery와 같은 세션에서 호출한다 — dry-run rollback이 노트까지 함께 원복된다.
     map_code가 DB에 없는 노트는 스킵(맵 생성 자체가 스킵된 경우 — 엔진 리포트가 사유를 이미
     남겼다). 반환값은 삽입 행 수 (design 2026-08-18 §5).
+
+    이미 임포트 노트가 있는 스코프(맵/L5)는 **거버넌스 차이 행(field=notes)** 으로 올리고
+    체크된 것만 교체한다 — 사람이 고친 임포트 노트(edited_at)가 없으면 기본 체크(현행 유지),
+    있으면 기본 해제(보호). 사용자 노트(source=user)는 어떤 경우에도 안 건드린다
+    (design 2026-09-03 followups §3).
     """
+    checked = decisions or set()
     map_codes = {n.map_code for n in notes if n.map_code}
     cat_codes = {n.category_code for n in notes if n.map_code is None and n.category_code}
     code_to_id: dict[str, int] = {}
+    map_names: dict[str, str] = {}
     if map_codes:
         rows = (await session.scalars(
             select(ProcessMap).where(ProcessMap.consultant_code.in_(map_codes))
         )).all()
         code_to_id = {m.consultant_code: m.id for m in rows if m.consultant_code is not None}
-    if code_to_id:
-        await session.execute(delete(MapNote).where(
-            MapNote.source == "consultant-import", MapNote.map_id.in_(set(code_to_id.values()))
-        ))
+        map_names = {m.consultant_code: m.name for m in rows if m.consultant_code is not None}
+    cat_names: dict[str, str] = {}
     if cat_codes:
+        cat_rows = (await session.execute(
+            select(ProcessCategory.code, ProcessCategory.name).where(ProcessCategory.code.in_(cat_codes))
+        )).all()
+        cat_names = {code: name for code, name in cat_rows}
+
+    # 스코프별 기존 임포트 노트 수·수정 수 — 차이 행 산출 소스
+    scope_conds = []
+    if code_to_id:
+        scope_conds.append(MapNote.map_id.in_(set(code_to_id.values())))
+    if cat_codes:
+        scope_conds.append(MapNote.map_id.is_(None) & MapNote.category_code.in_(cat_codes))
+    existing_rows = []
+    if scope_conds:
+        existing_rows = (await session.execute(
+            select(MapNote.map_id, MapNote.category_code, MapNote.edited_at).where(
+                MapNote.source == "consultant-import", or_(*scope_conds),
+            )
+        )).all()
+    id_to_code = {mid: code for code, mid in code_to_id.items()}
+    existing: dict[str, tuple[int, int]] = {}
+    for mid, ccode, edited_at in existing_rows:
+        scope_code = id_to_code.get(mid) if mid is not None else ccode
+        if scope_code is None:
+            continue
+        total, edited = existing.get(scope_code, (0, 0))
+        existing[scope_code] = (total + 1, edited + (1 if edited_at is not None else 0))
+
+    delivered_counts: dict[str, int] = {}
+    for n in notes:
+        scope_code = n.map_code or n.category_code
+        if scope_code:
+            delivered_counts[scope_code] = delivered_counts.get(scope_code, 0) + 1
+
+    # 교체 대상 스코프 — 기존 임포트 노트가 없으면 그냥 삽입, 있으면 체크된 것만 지우고 재삽입
+    replace_scopes: set[str] = set()
+    skip_scopes: set[str] = set()
+    for scope_code, (total, edited) in sorted(existing.items()):
+        is_checked = (scope_code, "notes") in checked
+        if report is not None:
+            report.governance.append(GovernanceDiff(
+                scope_code, map_names.get(scope_code) or cat_names.get(scope_code) or scope_code, "notes",
+                f"{total} notes" + (f" · {edited} edited" if edited else ""),
+                f"{delivered_counts.get(scope_code, 0)} notes",
+                is_checked, default_checked=edited == 0,
+            ))
+        if is_checked:
+            replace_scopes.add(scope_code)
+        else:
+            skip_scopes.add(scope_code)
+
+    replace_map_ids = {code_to_id[c] for c in replace_scopes if c in code_to_id}
+    replace_cat_codes = {c for c in replace_scopes if c in cat_codes}
+    if replace_map_ids:
+        await session.execute(delete(MapNote).where(
+            MapNote.source == "consultant-import", MapNote.map_id.in_(replace_map_ids)
+        ))
+    if replace_cat_codes:
         await session.execute(delete(MapNote).where(
             MapNote.source == "consultant-import", MapNote.map_id.is_(None),
-            MapNote.category_code.in_(cat_codes),
+            MapNote.category_code.in_(replace_cat_codes),
         ))
-    inserted = 0
+    # 반환은 "착지면이 있는 전달 노트 수"(삽입 + 미체크로 보류) — 리포트 Notes 칩이 결정 여부와 무관하게
+    # 전달량을 보여주도록. 보류 스코프의 실제 처리는 governance notes 행이 알린다.
+    landed = 0
     for n in notes:
         map_id = code_to_id.get(n.map_code) if n.map_code else None
         if n.map_code and map_id is None:
+            continue
+        landed += 1
+        if (n.map_code or n.category_code) in skip_scopes:
             continue
         session.add(MapNote(
             map_id=map_id, category_code=None if map_id else n.category_code,
             kind=n.kind[:50], title=(n.title[:300] if n.title else None), text=n.text,
             source="consultant-import", delivery_label=label,
         ))
-        inserted += 1
-    return inserted
+    return landed
 
 
 

@@ -1,9 +1,20 @@
 "use client";
 
-// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용), 시스템 자유 입력 + SP 파라미터 4종(Σ 합산 지원).
-// 설정 화면 패널과 에디터 인스펙터 카드가 공용으로 사용한다.
+// 서브프로세스 지정/수정 모달 — 부서 필수(BPM 피커 재사용) + 필드 타일(2열) → 클릭 위치 입력 팝오버.
+// 타일: 시스템·URL, 파라미터 7종(회당 5 + 참고치 2), Input/Output(항목 수). 팝오버 안에 안내·Σ·인터뷰 원문 메모.
+// 설정 화면 패널과 에디터 인스펙터 카드·받은함이 공용으로 사용한다 (design 2026-09-03 followups §5).
 
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Sigma, Workflow } from "lucide-react";
+import {
+  ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Link as LinkIcon,
+  LogIn,
+  LogOut,
+  Monitor,
+  Sigma,
+  Workflow,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -13,8 +24,13 @@ import { AutoHeight } from "@/components/auto-height";
 import { BpmAttributePicker } from "@/components/bpm-attribute-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { MultiValueInput } from "@/components/multi-value-input";
+import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
+import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
+import { SpFieldTile } from "@/components/permissions/sp-field-tile";
+import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import { assignSpIoIds } from "@/lib/io-items";
 import {
   isCostFieldDisabled,
@@ -27,6 +43,7 @@ import {
   writeAttrsCollapsed,
   writeDetailsCollapsed,
   writeParamsCollapsed,
+  type SpContextField,
   type SpParamField,
 } from "@/lib/params";
 import { formatSumPreview, sumParamField } from "@/lib/param-sum";
@@ -44,6 +61,11 @@ export interface DesignationForm {
   // 담당자 기준 참고치 — 연결 맵 SP 노드 값과 별개(호버 참고) (design 2026-09-03 §4)
   annual_count: string;
   fte: string;
+  // 인터뷰 원문 메모 — 타일 팝오버의 메모 칸. ""=지움 (design 2026-09-03 followups §2)
+  total_time_fallback: string;
+  touch_time_fallback: string;
+  system_fallback: string;
+  frequency_fallback: string;
   url: string;
   urlLabel: string;
   input: string;
@@ -68,8 +90,44 @@ interface SubprocessDesignationModalProps {
   onClose: () => void;
 }
 
+type ParamTile = SpParamField | SpContextField;
+type TileField = ParamTile | "system" | "url" | "input" | "output";
+
+// 파라미터 타일의 원문 메모 키 — 없는 필드는 메모 칸을 그리지 않는다
+const NOTE_KEY: Partial<Record<TileField, "total_time_fallback" | "touch_time_fallback" | "system_fallback" | "frequency_fallback">> = {
+  duration: "total_time_fallback",
+  touch_time: "touch_time_fallback",
+  system: "system_fallback",
+  annual_count: "frequency_fallback",
+};
+
+const HINT_KEY: Record<TileField, MessageKey> = {
+  duration: "sp.tile.hint.duration",
+  touch_time: "sp.tile.hint.touch_time",
+  cost_krw: "sp.tile.hint.cost_krw",
+  cost_usd: "sp.tile.hint.cost_usd",
+  headcount: "sp.tile.hint.headcount",
+  annual_count: "sp.tile.hint.annual_count",
+  fte: "sp.tile.hint.fte",
+  system: "sp.tile.hint.system",
+  url: "sp.tile.hint.url",
+  input: "sp.tile.hint.input",
+  output: "sp.tile.hint.output",
+};
+
+interface ActiveTile {
+  field: TileField;
+  at: { x: number; y: number };
+  // 팝오버 로컬 초안 — 확정 시에만 form에 반영, Esc면 폐기
+  value: string;
+  note: string;
+  extra: string; // url 라벨 / IO 폼 join
+}
+
 const INPUT_CLASS =
-  "rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
+  "w-full rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
+
+const countLines = (joined: string): number => joined.split("\n").filter((line) => line.trim() !== "").length;
 
 export function SubprocessDesignationModal({
   mapId,
@@ -97,43 +155,117 @@ export function SubprocessDesignationModal({
   };
   const filledAttrCount = [form.department, form.assignee, form.system, form.url]
     .filter((v) => v.trim() !== "").length;
-  const filledParamCount = SP_PARAM_FIELDS.filter((f) => form[f] !== "").length;
+  const filledParamCount = [...SP_PARAM_FIELDS, ...SP_CONTEXT_FIELDS].filter((f) => form[f] !== "").length;
   const filledDetailCount = [form.input, form.output].filter((v) => v.trim() !== "").length;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summing, setSumming] = useState(false);
+  const [active, setActive] = useState<ActiveTile | null>(null);
   // 게시본 그래프 — 모달 수명 동안 1회만 fetch(Σ 반복 클릭·미리보기 계산에 재요청 안 함)
   const graphRef = useRef<Graph | null>(null);
-  // Σ 미리보기(4종) 원시값 — placeholder 표시형은 렌더 중 formatSumPreview로 파생
+  // Σ 미리보기(5종) 원시값 — 팝오버 안내 줄에 표시
   const [previews, setPreviews] = useState<Partial<Record<SpParamField, string>>>({});
 
-  // 모달 오픈 시 게시본이 있으면 그래프를 1회 로드해 4개 Σ 미리보기를 계산(design §4.1)
   useEffect(() => {
     if (publishedVersionId === null) return;
-    let active = true;
+    let activeLoad = true;
     void getGraph(publishedVersionId)
       .then((graph) => {
         graphRef.current = graph;
-        if (!active) return;
+        if (!activeLoad) return;
         const next: Partial<Record<SpParamField, string>> = {};
         for (const field of SP_PARAM_FIELDS) next[field] = sumParamField(graph, field);
         setPreviews(next);
       })
       .catch((err) => {
-        if (active) setError(humanizeApiError(err, t));
+        if (activeLoad) setError(humanizeApiError(err, t));
       });
     return () => {
-      active = false;
+      activeLoad = false;
     };
   }, [publishedVersionId, t]);
 
-  // placeholder는 표시 전용(저장 안 됨) — 값이 이미 있으면 HTML 기본 동작으로 자동 숨김
-  function getPreviewText(field: SpParamField): string | undefined {
-    return formatSumPreview(field, previews[field] ?? "");
+  const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
+  const isSumField = (field: TileField): field is SpParamField => (SP_PARAM_FIELDS as readonly string[]).includes(field);
+  const isParamTile = (field: TileField): field is ParamTile =>
+    isSumField(field) || (SP_CONTEXT_FIELDS as readonly string[]).includes(field);
+
+  // ── 타일 표시값 ────────────────────────────────────────────────────────────
+  const costText = (raw: string, symbol: string): string => {
+    const n = formatThousands(raw);
+    return n ? `${symbol}${n}` : "";
+  };
+  const tileValue = (field: TileField): string => {
+    switch (field) {
+      case "duration":
+      case "touch_time":
+        return formatDurationHm(form[field]);
+      case "cost_krw":
+        return costText(form.cost_krw, "₩");
+      case "cost_usd":
+        return costText(form.cost_usd, "$");
+      case "headcount":
+      case "annual_count":
+      case "fte":
+      case "system":
+        return form[field];
+      case "url":
+        return form.url.trim() ? form.urlLabel.trim() || form.url.trim() : "";
+      case "input":
+      case "output": {
+        const n = countLines(form[field]);
+        return n > 0 ? t("sp.tile.items", { n }) : "";
+      }
+    }
+  };
+  const tileLabel = (field: TileField): string => {
+    if (isParamTile(field)) return t(PARAM_LABEL_KEY[field]);
+    if (field === "system") return t("field.system");
+    if (field === "url") return t("field.url");
+    return field === "input" ? t("sp.input") : t("sp.output");
+  };
+  const tileIcon = (field: TileField) => {
+    if (isParamTile(field)) return PARAM_ICON[field];
+    if (field === "system") return Monitor;
+    if (field === "url") return LinkIcon;
+    return field === "input" ? LogIn : LogOut;
+  };
+
+  // ── 팝오버 열기/확정/취소 ──────────────────────────────────────────────────
+  function openTile(field: TileField, at: { x: number; y: number }) {
+    const noteKey = NOTE_KEY[field];
+    setActive({
+      field,
+      at,
+      value: field === "url" ? form.url : form[field],
+      note: noteKey ? form[noteKey] : "",
+      extra: field === "url" ? form.urlLabel : field === "input" ? form.input_forms : field === "output" ? form.output_forms : "",
+    });
   }
 
-  // 지정 URL 클라이언트 검증 — 비어있지 않으면 http(s) 강제(액션 바 노출 게이트와 동일 규칙)
-  const urlInvalid = form.url.trim() !== "" && !isHttpUrl(form.url);
+  function commitTile() {
+    if (!active) return;
+    const { field, value, note, extra } = active;
+    const noteKey = NOTE_KEY[field];
+    setForm((prev) => {
+      const next: DesignationForm = { ...prev };
+      if (field === "url") {
+        next.url = value.trim();
+        next.urlLabel = extra.trim();
+      } else if (field === "input") {
+        next.input = value;
+        next.input_forms = extra;
+      } else if (field === "output") {
+        next.output = value;
+        next.output_forms = extra;
+      } else {
+        next[field] = value;
+      }
+      if (noteKey) next[noteKey] = note.trim();
+      return next;
+    });
+    setActive(null);
+  }
 
   async function handleSum(field: SpParamField) {
     if (publishedVersionId === null) return;
@@ -142,7 +274,7 @@ export function SubprocessDesignationModal({
     try {
       if (graphRef.current === null) graphRef.current = await getGraph(publishedVersionId);
       const total = sumParamField(graphRef.current, field);
-      setForm((prev) => ({ ...prev, [field]: total }));
+      setActive((prev) => (prev && prev.field === field ? { ...prev, value: total } : prev));
     } catch (err) {
       setError(humanizeApiError(err, t));
     } finally {
@@ -165,6 +297,10 @@ export function SubprocessDesignationModal({
         headcount: form.headcount,
         annual_count: form.annual_count,
         fte: form.fte,
+        total_time_fallback: form.total_time_fallback,
+        touch_time_fallback: form.touch_time_fallback,
+        system_fallback: form.system_fallback,
+        frequency_fallback: form.frequency_fallback,
         url: form.url.trim(),
         url_label: form.urlLabel.trim(),
         input: form.input.trim(),
@@ -183,14 +319,165 @@ export function SubprocessDesignationModal({
     }
   }
 
+  // ── 팝오버 본문 ────────────────────────────────────────────────────────────
+  const renderPopover = () => {
+    if (!active) return null;
+    const { field } = active;
+    const noteKey = NOTE_KEY[field];
+    const isIo = field === "input" || field === "output";
+    const preview = isSumField(field) ? formatSumPreview(field, previews[field] ?? "") : undefined;
+    const costLocked = isParamTile(field) && isCostFieldDisabled(field, form.cost_krw, form.cost_usd);
+    return (
+      <SpFieldPopover
+        dataId={`sp-tile-popover-${field}`}
+        anchor={active.at}
+        title={tileLabel(field)}
+        hint={costLocked ? t("sp.tile.costExclusive") : t(HINT_KEY[field])}
+        width={isIo ? 460 : 320}
+        enterCommits={!isIo}
+        keysHint={isIo ? t("sp.tile.keysMultiline") : t("sp.tile.keys")}
+        onCommit={commitTile}
+        onCancel={() => setActive(null)}
+      >
+        {isParamTile(field) && (
+          <div className="flex items-center gap-1.5">
+            <ParamInput
+              field={field}
+              dataId={`sp-tile-input-${field}`}
+              className={`${INPUT_CLASS} text-right disabled:opacity-40`}
+              value={active.value}
+              disabled={costLocked}
+              ariaLabel={tileLabel(field)}
+              placeholder={preview}
+              onCommit={(next) => setActive((prev) => (prev ? { ...prev, value: next } : prev))}
+            />
+            {isSumField(field) && (
+              <button
+                type="button"
+                data-id={`sp-tile-sum-${field}`}
+                title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
+                aria-label={t("sp.sumAllNodes")}
+                disabled={publishedVersionId === null || summing || costLocked}
+                className="shrink-0 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
+                onClick={() => void handleSum(field)}
+              >
+                <Sigma size={14} strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
+        )}
+        {isSumField(field) && preview && (
+          <p className="text-fine text-ink-tertiary">{t("sp.tile.sumPreview", { v: preview })}</p>
+        )}
+        {field === "system" && (
+          <input
+            data-id="sp-tile-input-system"
+            className={INPUT_CLASS}
+            maxLength={100}
+            value={active.value}
+            onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+          />
+        )}
+        {field === "url" && (
+          <div className="flex flex-col gap-1.5">
+            <input
+              data-id="sp-tile-input-url"
+              className={INPUT_CLASS}
+              maxLength={500}
+              placeholder="https://"
+              value={active.value}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+            />
+            {active.value.trim() !== "" && !isHttpUrl(active.value) && (
+              <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>
+            )}
+            <input
+              data-id="sp-tile-input-url-label"
+              className={`${INPUT_CLASS} disabled:opacity-40`}
+              maxLength={100}
+              placeholder={t("field.urlLabel")}
+              value={active.extra}
+              disabled={active.value.trim() === ""}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, extra: e.target.value } : prev))}
+            />
+          </div>
+        )}
+        {isIo && (
+          <div className="rounded-sm border border-hairline bg-surface-alt/40 px-2 py-1">
+            <MultiValueInput
+              dataId={`sp-tile-io-${field}`}
+              label={tileLabel(field)}
+              value={active.value}
+              formsValue={active.extra}
+              readOnly={false}
+              onCommit={(joined, formsJoined) =>
+                setActive((prev) => (prev ? { ...prev, value: joined, extra: formsJoined ?? "" } : prev))
+              }
+            />
+          </div>
+        )}
+        {noteKey && (
+          <label className="flex flex-col gap-1">
+            <span className="text-fine text-ink-secondary">{t("sp.tile.note")}</span>
+            <textarea
+              data-id={`sp-tile-note-${field}`}
+              className="min-h-[3rem] resize-y rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent"
+              maxLength={200}
+              placeholder={t("sp.tile.notePlaceholder")}
+              value={active.note}
+              onChange={(e) => setActive((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
+            />
+          </label>
+        )}
+      </SpFieldPopover>
+    );
+  };
+
+  const renderTile = (field: TileField) => {
+    const costLocked = isParamTile(field) && isCostFieldDisabled(field, form.cost_krw, form.cost_usd);
+    return (
+      <SpFieldTile
+        key={field}
+        dataId={`sp-tile-${field}`}
+        icon={tileIcon(field)}
+        label={tileLabel(field)}
+        value={tileValue(field)}
+        disabled={costLocked}
+        disabledHint={t("sp.tile.costExclusive")}
+        active={active?.field === field}
+        onOpen={(at) => openTile(field, at)}
+      />
+    );
+  };
+
+  const sectionButton = (
+    dataId: string,
+    collapsed: boolean,
+    onToggle: () => void,
+    label: string,
+    count: number,
+  ) => (
+    <button
+      type="button"
+      data-id={dataId}
+      aria-expanded={!collapsed}
+      className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
+      onClick={onToggle}
+    >
+      <ChevronRight size={12} strokeWidth={1.5} className={`transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`} />
+      {label}
+      {count > 0 && <span className="font-normal">({count})</span>}
+    </button>
+  );
+
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1300] flex items-start justify-center bg-ink/20 px-4 pt-[9vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[1300] flex items-start justify-center bg-ink/20 px-4 pt-[7vh] backdrop-blur-sm"
     >
       <div
         data-id="subprocess-designation-modal"
-        className="flex max-h-[82vh] w-full max-w-sm flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
+        className="flex max-h-[84vh] w-full max-w-2xl flex-col gap-3 rounded-md bg-surface p-6 shadow-lg"
       >
         <h2 className="flex shrink-0 items-center gap-2 text-body-strong text-ink">
           <Workflow size={16} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -215,28 +502,20 @@ export function SubprocessDesignationModal({
         <p className="shrink-0 text-caption text-ink-tertiary">{t("perm.sp.modalHint")}</p>
         {/* 본문 스크롤 — 작은 창에서 위아래 넘침 방지(다른 모달과 동일, 사용자 결정 2026-08-20) */}
         <div className="scroll-soft -mx-1 min-h-0 flex-1 overflow-y-auto px-1">
-          {/* BPM attributes — 노드 편집 모달과 동일 섹션 구성 + 우측 모두 접기/펼치기 */}
+          {/* BPM attributes — 부서·담당자 피커 행 + 시스템·URL 타일 */}
           <div className="py-1" data-id="sp-designation-attrs">
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                data-id="sp-designation-attrs-toggle"
-                aria-expanded={!attrsCollapsed}
-                className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink-tertiary"
-                onClick={() => {
+              {sectionButton(
+                "sp-designation-attrs-toggle",
+                attrsCollapsed,
+                () => {
                   const next = !attrsCollapsed;
                   setAttrsCollapsed(next);
                   writeAttrsCollapsed(next);
-                }}
-              >
-                <ChevronRight
-                  size={12}
-                  strokeWidth={1.5}
-                  className={`transition-transform duration-150 ${attrsCollapsed ? "" : "rotate-90"}`}
-                />
-                {t("editor.bpmAttrs")}
-                {filledAttrCount > 0 && <span className="font-normal">({filledAttrCount})</span>}
-              </button>
+                },
+                t("editor.bpmAttrs"),
+                filledAttrCount,
+              )}
               <button
                 type="button"
                 data-id="sp-designation-toggle-all-sections"
@@ -253,7 +532,7 @@ export function SubprocessDesignationModal({
             </div>
             <AutoHeight className="overflow-hidden">
               {!attrsCollapsed && (
-                <div className="ml-2 border-l border-divider pl-2">
+                <div className="ml-2 flex flex-col gap-2 border-l border-divider pl-2">
                   <BpmAttributePicker
                     versionId={publishedVersionId}
                     assignee={form.assignee}
@@ -261,161 +540,56 @@ export function SubprocessDesignationModal({
                     readOnly={false}
                     onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
                   />
-                  <div className="flex items-center justify-between gap-2 py-1">
-                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.system")}</span>
-                    <input
-                      data-id="subprocess-designation-system"
-                      className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
-                      maxLength={100}
-                      value={form.system}
-                      onChange={(e) => setForm((prev) => ({ ...prev, system: e.target.value }))}
-                    />
+                  <div className="grid grid-cols-2 gap-1.5" data-id="sp-designation-attr-tiles">
+                    {(["system", "url"] as const).map(renderTile)}
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-divider py-1">
-                    <span className="shrink-0 text-caption text-ink-secondary">{t("field.url")}</span>
-                    <input
-                      data-id="subprocess-designation-url"
-                      className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
-                      maxLength={500}
-                      value={form.url}
-                      onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
-                    />
-                  </div>
-                  {urlInvalid && (
-                    <p className="py-0.5 text-right text-fine text-error">{t("subprocess.urlInvalid")}</p>
-                  )}
-                  {/* 링크 라벨 — URL의 하위 항목: 한 단 더 들여쓰기 + 축소 글자 */}
-                  <div className="ml-2 flex items-center justify-between gap-2 border-l border-divider py-0.5 pl-2">
-                    <span className="shrink-0 text-fine text-ink-tertiary">{t("field.urlLabel")}</span>
-                    <input
-                      data-id="subprocess-designation-url-label"
-                      className={`${INPUT_CLASS} w-44 min-w-0 text-right !text-fine disabled:opacity-40`}
-                      maxLength={100}
-                      value={form.urlLabel}
-                      disabled={form.url.trim() === ""}
-                      onChange={(e) => setForm((prev) => ({ ...prev, urlLabel: e.target.value }))}
-                    />
-                  </div>
+                  {urlInvalid && <p className="text-fine text-error">{t("subprocess.urlInvalid")}</p>}
                 </div>
               )}
             </AutoHeight>
           </div>
-          {/* Metrics — SP 파라미터 5종 + Σ */}
+          {/* Metrics — 회당 5종(Σ) + 참고치 2종 타일 */}
           <div className="py-1" data-id="sp-designation-params">
-            <button
-              type="button"
-              data-id="sp-designation-params-toggle"
-              aria-expanded={!paramsCollapsed}
-              className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
-              onClick={() => {
+            {sectionButton(
+              "sp-designation-params-toggle",
+              paramsCollapsed,
+              () => {
                 const next = !paramsCollapsed;
                 setParamsCollapsed(next);
                 writeParamsCollapsed(next);
-              }}
-            >
-              <ChevronRight
-                size={12}
-                strokeWidth={1.5}
-                className={`transition-transform duration-150 ${paramsCollapsed ? "" : "rotate-90"}`}
-              />
-              {t("inspector.parameters")}
-              {filledParamCount > 0 && <span className="font-normal">({filledParamCount})</span>}
-            </button>
+              },
+              t("inspector.parameters"),
+              filledParamCount,
+            )}
             <AutoHeight className="overflow-hidden">
               {!paramsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
-          {SP_PARAM_FIELDS.map((key) => (
-            <div key={key} className="flex items-center justify-between gap-2 py-1">
-              <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
-              <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
-                <ParamInput
-                  field={key}
-                  dataId={`subprocess-designation-${key}`}
-                  className={`${INPUT_CLASS} w-44 min-w-0 text-right disabled:opacity-40`}
-                  value={form[key]}
-                  disabled={isCostFieldDisabled(key, form.cost_krw, form.cost_usd)}
-                  ariaLabel={t(PARAM_LABEL_KEY[key])}
-                  placeholder={getPreviewText(key)}
-                  onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
-                />
-                <button
-                  type="button"
-                  data-id={`subprocess-designation-sum-${key}`}
-                  title={publishedVersionId === null ? t("sp.sumNeedsPublished") : t("sp.sumAllNodes")}
-                  aria-label={t("sp.sumAllNodes")}
-                  disabled={
-                    publishedVersionId === null || summing || isCostFieldDisabled(key, form.cost_krw, form.cost_usd)
-                  }
-                  className="shrink-0 rounded-sm border border-hairline px-1.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
-                  onClick={() => void handleSum(key)}
-                >
-                  <Sigma size={14} strokeWidth={1.5} />
-                </button>
-              </div>
-            </div>
-          ))}
-          {/* 참고치 2종 — 담당자 기준값, Σ 없음(노드 합산이 무의미) (design 2026-09-03 §4) */}
-          {SP_CONTEXT_FIELDS.map((key) => (
-            <div key={key} className="flex items-center justify-between gap-2 py-1">
-              <span className="shrink-0 text-caption text-ink-secondary">{t(PARAM_LABEL_KEY[key])}</span>
-              <ParamInput
-                field={key}
-                dataId={`subprocess-designation-${key}`}
-                className={`${INPUT_CLASS} w-44 min-w-0 text-right`}
-                value={form[key]}
-                ariaLabel={t(PARAM_LABEL_KEY[key])}
-                onCommit={(next) => setForm((prev) => ({ ...prev, [key]: next }))}
-              />
-            </div>
-          ))}
+                  <div className="grid grid-cols-2 gap-1.5 py-1" data-id="sp-designation-param-tiles">
+                    {[...SP_PARAM_FIELDS, ...SP_CONTEXT_FIELDS].map(renderTile)}
+                  </div>
                 </div>
               )}
             </AutoHeight>
           </div>
-          {/* I/O & Conditions — 개행 복수 + 항목별 데이터 폼(노드 인스펙터와 동일 편집기) */}
+          {/* Details — Input/Output 타일(항목 수) + 설명 */}
           <div className="py-1" data-id="sp-designation-details">
-            <button
-              type="button"
-              data-id="sp-designation-details-toggle"
-              aria-expanded={!detailsCollapsed}
-              className="flex w-full items-center gap-1 text-fine font-semibold text-ink-tertiary"
-              onClick={() => {
+            {sectionButton(
+              "sp-designation-details-toggle",
+              detailsCollapsed,
+              () => {
                 const next = !detailsCollapsed;
                 setDetailsCollapsed(next);
                 writeDetailsCollapsed(next);
-              }}
-            >
-              <ChevronRight
-                size={12}
-                strokeWidth={1.5}
-                className={`transition-transform duration-150 ${detailsCollapsed ? "" : "rotate-90"}`}
-              />
-              {t("inspector.details")}
-              {filledDetailCount > 0 && <span className="font-normal">({filledDetailCount})</span>}
-            </button>
+              },
+              t("inspector.details"),
+              filledDetailCount,
+            )}
             <AutoHeight className="overflow-hidden">
               {!detailsCollapsed && (
                 <div className="ml-2 border-l border-divider pl-2">
-                  <MultiValueInput
-                    dataId="subprocess-designation-input"
-                    label={t("sp.input")}
-                    value={form.input}
-                    formsValue={form.input_forms}
-                    readOnly={false}
-                    onCommit={(joined, formsJoined) =>
-                      setForm((prev) => ({ ...prev, input: joined, input_forms: formsJoined ?? "" }))
-                    }
-                  />
-                  <MultiValueInput
-                      dataId="subprocess-designation-output"
-                      label={t("sp.output")}
-                      value={form.output}
-                      formsValue={form.output_forms}
-                      readOnly={false}
-                      onCommit={(joined, formsJoined) =>
-                        setForm((prev) => ({ ...prev, output: joined, output_forms: formsJoined ?? "" }))
-                      }
-                    />
+                  <div className="grid grid-cols-2 gap-1.5 py-1" data-id="sp-designation-detail-tiles">
+                    {(["input", "output"] as const).map(renderTile)}
+                  </div>
                 </div>
               )}
             </AutoHeight>
@@ -450,6 +624,7 @@ export function SubprocessDesignationModal({
           </button>
         </div>
       </div>
+      {renderPopover()}
     </ModalBackdrop>,
     document.body,
   );

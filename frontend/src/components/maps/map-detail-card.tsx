@@ -983,7 +983,7 @@ export function MapDetailCard({
 
       {/* 인터뷰 원문 메모(읽기) → 노트 — 에디터 맵 탭과 같은 순서 (design 2026-09-03 followups §2) */}
       <MapFallbackNotes mapId={detail.id} />
-      <MapNotesSection mapId={detail.id} />
+      <MapNotesSection scope={{ mapId: detail.id }} canEdit={isOwner} />
 
       {owningPickerOpen &&
         createPortal(
