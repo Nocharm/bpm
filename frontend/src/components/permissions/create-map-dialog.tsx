@@ -32,7 +32,7 @@ import {
   type SubprocessUsage,
   type VersionSummary,
 } from "@/lib/api";
-import { humanizeApiError } from "@/lib/api-errors";
+import { humanizeApiError, isSlotChangePendingError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { sortUsersByOrgProximity } from "@/lib/org-proximity";
 import { stripCsvExtension, type CsvImportOutcome } from "@/lib/csv-import";
@@ -462,14 +462,22 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       const created = createdRef.current;
 
       // 슬롯 있는 원본 은퇴 — 새 맵이 생긴 뒤 slot-changes delete로 원본을 정리(해제/이양은 retireMode).
-      // dry_run 프리뷰는 버리고 결과만 토스트 — 관리자 여부에 따른 즉시/요청 분기는 서버가 결정한다.
+      // dry_run은 미리보기용이라 결과를 쓰지 않는다 — 관리자 여부에 따른 즉시/요청 분기는 서버가 결정.
       if (copy && retire && copy.categoryId != null && !slotHandledRef.current) {
         const body = { action: "delete" as const, to_map_id: retireMode === "replace" ? created.mapId : null };
-        const preview = await postSlotChange(copy.mapId, { ...body, dry_run: true });
-        const result = await postSlotChange(copy.mapId, body);
-        slotHandledRef.current = true;
-        onToast?.(result.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
-        void preview;
+        await postSlotChange(copy.mapId, { ...body, dry_run: true });
+        try {
+          const result = await postSlotChange(copy.mapId, body);
+          slotHandledRef.current = true;
+          onToast?.(result.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
+        } catch (err) {
+          // 응답 유실 후 재시도 데드엔드 — 직전 시도가 서버엔 이미 반영됐다면 이 맵엔 fw_slot 요청이
+          // 이미 대기 중이라 재요청은 409. 그건 실패가 아니라 완료로 취급(재시도 루프에서 벗어난다).
+          // 그 외 에러는 그대로 던져 바깥 catch의 기존 "partial failure" 처리로 넘긴다.
+          if (!isSlotChangePendingError(err)) throw err;
+          slotHandledRef.current = true;
+          onToast?.(t("slot.requestedToast"));
+        }
       }
 
       // 협업자 권한 — 매 시도마다 돌되, 이미 부여된 principal은 건너뛴다(중복 POST는 409)

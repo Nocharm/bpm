@@ -16,6 +16,15 @@ export function isCanvasRepointedError(err: unknown): boolean {
   return err instanceof ApiError && err.status === 422 && getApiErrorDetail(err).startsWith(CANVAS_REPOINTED_DETAIL_PREFIX);
 }
 
+// 슬롯 변경 재시도 데드엔드 감지용 — 이 맵에 fw_slot 요청이 이미 대기 중이면 이 detail로 409
+// (backend app/routers/slot_changes.py:73, self_apply 여부와 무관). 복사+은퇴(create-map-dialog.tsx)가
+// 실제 응답을 못 받고 재시도할 때, 직전 시도가 서버엔 이미 반영됐을 가능성을 "이미 처리됨"으로 구분한다.
+export const SLOT_CHANGE_PENDING_DETAIL_PREFIX = "a slot change is already pending";
+
+export function isSlotChangePendingError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 409 && getApiErrorDetail(err).startsWith(SLOT_CHANGE_PENDING_DETAIL_PREFIX);
+}
+
 // 서버 detail 원문(영어, 고정 프리픽스) → i18n 시맨틱 키. 전방일치이므로 접미사가 붙는 detail도 커버.
 // ⚠️ 401/403을 낼 수 있는 detail을 여기 추가하면 settings 페이지의 토스트 억제 필터(maps/[mapId]/settings/page.tsx showToast)와 어긋난다 — 매핑 히트는 '(HTTP 40x)' 꼬리표가 없어 필터를 우회한다. 추가 시 그 필터를 함께 점검할 것.
 const DETAIL_PREFIX_MAP: [string, MessageKey][] = [

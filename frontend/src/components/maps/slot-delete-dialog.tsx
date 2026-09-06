@@ -49,11 +49,19 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
     }
   }
 
+  // 단일 닫기 경로 — X·백드롭 mousedown·Esc(ModalBackdrop 내부) 전부 여기로 모은다.
+  // busy 중 닫으면 늦게 도착하는 성공이 언마운트 후 setPending을, 실패가 언마운트 후 setError를 부른다
+  // (SlotChangeDialog handleClose와 동일 근거, 리뷰 라운드1 #2).
+  function handleClose() {
+    if (busy) return;
+    onClose();
+  }
+
   if (pending !== null) {
     return <SlotChangeDialog mapId={mapId} body={pending.body} preview={pending.preview} onDone={onDone} onClose={() => setPending(null)} />;
   }
   return createPortal(
-    <ModalBackdrop onClose={onClose} className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm">
+    <ModalBackdrop onClose={handleClose} className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm">
       <div data-id="slot-delete-dialog" className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-3">
@@ -65,7 +73,7 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
               <p className="truncate text-fine text-ink-tertiary">{mapName}</p>
             </div>
           </div>
-          <button type="button" aria-label={t("summary.close")} className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt" onClick={onClose}>
+          <button type="button" aria-label={t("summary.close")} className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt" onClick={handleClose}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -74,7 +82,7 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
           <SearchSelect value={successor} options={options} emptyLabel={t("slot.successorNone")} placeholder={t("field.searchPlaceholder")} onChange={setSuccessor} />
         </label>
         <div className="flex justify-end gap-2">
-          <button type="button" className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt" onClick={onClose}>{t("summary.cancel")}</button>
+          <button type="button" className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt" onClick={handleClose}>{t("summary.cancel")}</button>
           <button type="button" data-id="slot-delete-next" disabled={busy} className="rounded-sm bg-error px-3 py-1.5 text-caption text-on-accent hover:opacity-90 disabled:opacity-40" onClick={() => void next()}>
             {t("summary.next")}
           </button>

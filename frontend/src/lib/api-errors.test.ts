@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "./api";
-import { humanizeApiError, isCanvasRepointedError } from "./api-errors";
+import { humanizeApiError, isCanvasRepointedError, isSlotChangePendingError } from "./api-errors";
 
 const t = (key: string, vars?: Record<string, string | number>) =>
   `${key}${vars?.status != null ? `:${vars.status}` : ""}`;
@@ -50,5 +50,29 @@ describe("isCanvasRepointedError", () => {
     const err = new ApiError("API PUT /x failed: 422", 422, JSON.stringify({ detail: "some other validation error" }));
     expect(isCanvasRepointedError(err)).toBe(false);
     expect(isCanvasRepointedError(new Error("boom"))).toBe(false);
+  });
+});
+
+describe("isSlotChangePendingError", () => {
+  it("detects the retry dead end (409 + exact detail prefix)", () => {
+    const err = new ApiError(
+      "API POST /maps/1/slot-changes failed: 409",
+      409,
+      JSON.stringify({ detail: "a slot change is already pending" }),
+    );
+    expect(isSlotChangePendingError(err)).toBe(true);
+  });
+
+  it("rejects a non-matching detail on the same status", () => {
+    const err = new ApiError(
+      "API POST /maps/1/slot-changes failed: 409",
+      409,
+      JSON.stringify({ detail: "map has no approvers - assign approvers first" }),
+    );
+    expect(isSlotChangePendingError(err)).toBe(false);
+  });
+
+  it("rejects non-API errors", () => {
+    expect(isSlotChangePendingError(new Error("boom"))).toBe(false);
   });
 });
