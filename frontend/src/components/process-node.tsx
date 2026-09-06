@@ -1089,7 +1089,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <CircleArrowUp size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.updateBanner")}</span>
           </div>
-        ) : data.spSlotState === "unassigned" || data.spSlotState === "superseded" ? (
+        ) : data.spSlotState === "unassigned" ||
+          data.spSlotState === "superseded" ||
+          data.spSlotState === "deleted" ? (
           <button
             type="button"
             data-id="sp-banner-slot-missing"
@@ -1106,7 +1108,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
                 ? data.spSuccessorName
                   ? t("framework.slotState.superseded", { name: data.spSuccessorName })
                   : t("framework.slotState.supersededNoName")
-                : t("framework.slotState.unassigned")}
+                : data.spSlotState === "deleted"
+                  ? t("framework.slotState.deleted")
+                  : t("framework.slotState.unassigned")}
             </span>
           </button>
         ) : data.undesignated ? (
