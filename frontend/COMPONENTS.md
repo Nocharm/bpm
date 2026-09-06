@@ -74,7 +74,7 @@
 | `inspector-panel.tsx` | `InspectorPanel` | 우측 인스펙터 (R5) | `app/maps/[mapId]/page.tsx` |
 | `io-import-modal.tsx` | `IoImportModal` | IO 항목 불러오기 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `io-peers-menu.tsx` | `IoPeersMenu` | 링크 항목의 연결 노드 드롭다운 | `app/maps/[mapId]/page.tsx` |
-| `l5-node-info-panel.tsx` | `L5NodeInfoPanel` | L5 캔버스 좌하단 "기타 정보" 플로팅 | `app/maps/[mapId]/page.tsx` |
+| `l5-node-info-panel.tsx` | `L5NodeInfoPanel` | L5 캔버스 우상단 "기타 정보" 플로팅(framework-l5-tag 자리 대체) | `app/maps/[mapId]/page.tsx` |
 | `ldap-login-form.tsx` | `LdapLoginForm` |   | `app/login/page.tsx` |
 | `link-preview-panel.tsx` | `LinkPreviewPanel` | 링크 미리보기 패널 | `app/maps/[mapId]/page.tsx` |
 | `map-inspector-tab.tsx` | `MapInspectorTab` | NEW 인스펙터 맵 탭(좁은 폭) | `app/maps/[mapId]/page.tsx` |

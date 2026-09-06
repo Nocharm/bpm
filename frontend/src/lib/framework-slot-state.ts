@@ -47,3 +47,12 @@ export const SLOT_ACTION_KEY: Record<SlotChangeAction, MessageKey> = {
 export function isSlotAction(value: unknown): value is SlotChangeAction {
   return typeof value === "string" && value in SLOT_ACTION_KEY;
 }
+
+// 우상단 호버 패널 표시 여부 — "정보가 있을 때"만 뜨게: 이양(succeededAt) 또는 변경(changedAt) 이력이
+// 있을 때만 true. "Map updated"만 있는 경우는 정보로 치지 않는다(사용자 요청 2026-09-06).
+// 파라미터는 L5NodeInfo의 구조적 부분집합만 받아 components/ ↔ lib/ 순환 임포트를 피한다.
+export function hasSlotHistory(
+  info: { succeededAt: string | null; changedAt: string | null } | null,
+): boolean {
+  return info !== null && (Boolean(info.succeededAt) || Boolean(info.changedAt));
+}

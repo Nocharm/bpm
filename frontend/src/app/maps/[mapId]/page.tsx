@@ -98,7 +98,7 @@ import { ChangeSummarySection } from "@/components/change-summary-section";
 import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
 import { makeOptimisticRef } from "@/lib/framework-connect";
 import { deriveSlotState, isRecentHandover } from "@/lib/framework-slot-state";
-import { L5NodeInfoPanel, type L5NodeInfo } from "@/components/l5-node-info-panel";
+import { hasSlotHistory, L5NodeInfoPanel, type L5NodeInfo } from "@/components/l5-node-info-panel";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
@@ -9468,25 +9468,29 @@ function MapEditor({ mapId }: { mapId: number }) {
                   index === 0 && isFrameworkMap ? (
                     <>
                       {/* 클릭 = 캔버스 배경 토글(차콜↔라이트) — "L5" 신호와 스위치를 한자리에.
-                          표시 전용 설정이라 readOnly에도 허용, 선택은 사용자 전역 localStorage */}
-                      <button
-                        type="button"
-                        data-id="framework-l5-tag"
-                        title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
-                        onClick={toggleL5CanvasBg}
-                        className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
-                          // 프레임 상시 유지라 위치 고정(20px) — 라이트/차콜 전환에도 버튼이 안 움직임
-                          l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
-                        }`}
-                      >
-                        <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        {t("framework.l5MapTag")}
-                        {l5Charcoal ? (
-                          <Moon size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        ) : (
-                          <Sun size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        )}
-                      </button>
+                          표시 전용 설정이라 readOnly에도 허용, 선택은 사용자 전역 localStorage.
+                          호버 정보 패널(L5NodeInfoPanel)이 같은 자리를 대체하는 동안만 숨긴다
+                          (이력 있는 노드 호버 시에만 — 사용자 요청 2026-09-06). */}
+                      {!hasSlotHistory(hoverNodeInfo) && (
+                        <button
+                          type="button"
+                          data-id="framework-l5-tag"
+                          title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
+                          onClick={toggleL5CanvasBg}
+                          className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                            // 프레임 상시 유지라 위치 고정(20px) — 라이트/차콜 전환에도 버튼이 안 움직임
+                            l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
+                          }`}
+                        >
+                          <Workflow size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          {t("framework.l5MapTag")}
+                          {l5Charcoal ? (
+                            <Moon size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          ) : (
+                            <Sun size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                          )}
+                        </button>
+                      )}
                       {/* 뷰어 안내 — 권한자가 아니라 자동 보강이 스킵된 미반영 소속 L6 수 (design 2026-08-28 §5) */}
                       {reconcileMissing > 0 && (
                         <span

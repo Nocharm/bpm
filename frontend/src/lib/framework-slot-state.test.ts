@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import type { SubprocessRef } from "./api";
-import { deriveSlotState, isRecentHandover, isSlotAction, RECENT_HANDOVER_DAYS, SLOT_ACTION_KEY } from "./framework-slot-state";
+import {
+  deriveSlotState,
+  hasSlotHistory,
+  isRecentHandover,
+  isSlotAction,
+  RECENT_HANDOVER_DAYS,
+  SLOT_ACTION_KEY,
+} from "./framework-slot-state";
 
 const base = (over: Partial<SubprocessRef>): SubprocessRef =>
   ({
@@ -52,5 +59,18 @@ describe("isRecentHandover", () => {
     expect(isRecentHandover(`2026-08-${String(23 - 1).padStart(2, "0")}T00:00:00+09:00`, now)).toBe(false);
     expect(isRecentHandover(null, now)).toBe(false);
     expect(RECENT_HANDOVER_DAYS).toBe(14);
+  });
+});
+
+describe("hasSlotHistory", () => {
+  it("false when there is no info at all", () => {
+    expect(hasSlotHistory(null)).toBe(false);
+  });
+  it("false when neither succeededAt nor changedAt is set (e.g. only updatedAt)", () => {
+    expect(hasSlotHistory({ succeededAt: null, changedAt: null })).toBe(false);
+  });
+  it("true when succeededAt or changedAt is set", () => {
+    expect(hasSlotHistory({ succeededAt: "2026-09-01T10:00:00+09:00", changedAt: null })).toBe(true);
+    expect(hasSlotHistory({ succeededAt: null, changedAt: "2026-09-01T10:00:00+09:00" })).toBe(true);
   });
 });
