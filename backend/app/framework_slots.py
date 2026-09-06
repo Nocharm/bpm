@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
 from app.clock import now as now_kst
+from app.lineage import external_lineage_key
 from app.models import (
     ApprovalRequest,
     Edge,
@@ -162,7 +163,12 @@ async def _home_draft(session: AsyncSession, category_id: int | None) -> tuple[P
 
 
 async def _append_contained_node(session: AsyncSession, draft: MapVersion, found: ProcessMap) -> bool:
-    """소속 L6 노드가 없으면 격자 하단에 append — open_linkage_map 보강과 같은 산식. 추가했으면 True."""
+    """소속 L6 노드가 없으면 격자 하단에 append — open_linkage_map 보강과 같은 산식. 추가했으면 True.
+
+    임포트가 남긴 외부 플레이스홀더(source_node_id=external_lineage_key(consultant_code),
+    linked_map_id=None)가 이미 있으면 새 노드 대신 그 자리를 채운다 — 뒤늦게 슬롯을 받은 맵도
+    캔버스 위치·엣지가 보존된다 (spec 2026-09-06 §8 연장).
+    """
     exists = await session.scalar(
         select(Node.id).where(
             Node.version_id == draft.id, Node.node_type == "subprocess", Node.linked_map_id == found.id
@@ -170,6 +176,19 @@ async def _append_contained_node(session: AsyncSession, draft: MapVersion, found
     )
     if exists is not None:
         return False
+    if found.consultant_code:
+        placeholder = await session.scalar(
+            select(Node).where(
+                Node.version_id == draft.id, Node.node_type == "subprocess",
+                Node.linked_map_id.is_(None),
+                Node.source_node_id == external_lineage_key(found.consultant_code),
+            )
+        )
+        if placeholder is not None:
+            placeholder.linked_map_id = found.id
+            placeholder.title = found.name
+            placeholder.placeholder_category_id = None
+            return True
     max_y, max_sort, node_count = (
         await session.execute(
             select(func.max(Node.pos_y), func.max(Node.sort_order), func.count())

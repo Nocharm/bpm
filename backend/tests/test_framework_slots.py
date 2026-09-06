@@ -224,6 +224,48 @@ def test_core_assign_unassign_move(client: TestClient) -> None:
     assert _events(mid) == [("assign", None, l5a, None), ("move", l5a, l5b, None), ("unassign", l5b, None, None)]
 
 
+def test_assign_fills_import_placeholder_instead_of_appending(client: TestClient) -> None:
+    """임포트가 남긴 외부 플레이스홀더(source_node_id=external_lineage_key)가 있으면, 같은
+    consultant_code의 맵이 나중에 assign될 때 새 노드 대신 그 자리를 채운다
+    (carried ruling — 슬롯 이양 임포트 §8 연장, spec 2026-09-06)."""
+    from uuid import uuid4
+
+    from app.lineage import external_lineage_key
+    from app.models import Node
+
+    l5 = _seed_category("FWS-PH5", "플레이스홀더", level=5)
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    code = "FWS-PH-EXT-0001"
+
+    async def _seed_placeholder(session):
+        draft = await session.scalar(
+            select(MapVersion).where(MapVersion.map_id == canvas, MapVersion.status == "draft"))
+        node = Node(
+            id=uuid4().hex, version_id=draft.id, source_node_id=external_lineage_key(code),
+            title=code, node_type="subprocess", linked_map_id=None, placeholder_category_id=None,
+            follow_latest=True, pos_x=123.0, pos_y=456.0, sort_order=7,
+        )
+        session.add(node)
+        await session.flush()
+        return node.id
+
+    placeholder_id = _run(_seed_placeholder)
+    mid = _seed_l6_map(None, "fws placeholder map", code)
+
+    _apply({"action": "assign", "map_id": mid, "to_category_id": l5})
+
+    assert _map_row(mid)["category_id"] == l5
+    graph = client.get(f"/api/versions/{_draft_id(client, canvas)}/graph").json()
+    sp_nodes = [n for n in graph["nodes"] if n["node_type"] == "subprocess"]
+    assert len(sp_nodes) == 1  # 새 노드가 추가되지 않았다 — 플레이스홀더를 채운 것
+    filled = sp_nodes[0]
+    assert filled["id"] == placeholder_id
+    assert filled["linked_map_id"] == mid
+    assert filled["title"] == "fws placeholder map"
+    assert filled["placeholder_category_id"] is None
+    assert (filled["pos_x"], filled["pos_y"], filled["sort_order"]) == (123.0, 456.0, 7)
+
+
 def test_core_validation_errors(client: TestClient) -> None:
     from fastapi import HTTPException
 
