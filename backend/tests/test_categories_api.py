@@ -270,6 +270,8 @@ def test_category_assign_and_unassign(client: TestClient) -> None:
     assert client.get(f"/api/maps/{mid}").json()["category_path"] == "구매/직접구매/슬롯말단"
     assert client.put(f"/api/maps/{mid}/category", json={"category_id": None}).status_code == 200
     assert client.get(f"/api/maps/{mid}").json()["category_id"] is None
+    # 이미 미배정인 맵을 다시 해제해도 no-op으로 200 (최종 리뷰 #5) — 코어의 409("슬롯 없음")를 어댑터가 삼킨다
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": None}).status_code == 200
     assert client.put(f"/api/maps/{mid}/category", json={"category_id": 999999}).status_code == 404
 
 

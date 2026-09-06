@@ -216,10 +216,13 @@ async def _notify_applied(
     recipients: list[str] = []
     for cid in plan.sides:
         recipients += await get_category_admin_logins(session, cid, direct_only=False)
-    if plan.source.owner_id:
-        recipients.append(plan.source.owner_id)
-    if plan.target is not None and plan.target.owner_id:
-        recipients.append(plan.target.owner_id)
+    for m in (plan.source, plan.target):
+        if m is None:
+            continue
+        # "owner" = map_permissions role=owner 협업자 ∪ owner_id/created_by(임포트 맵은 후자만 채워짐, 2026-09-02 표기 규약)
+        recipients += await workflow.load_map_user_collaborators(session, m.id, role="owner")
+        if m.owner_id or m.created_by:
+            recipients.append(m.owner_id or m.created_by)
     recipients += [d.checked_out_by for d in drafts if d.checked_out_by]
     recipients = [r for r in dict.fromkeys(recipients) if r != actor]
     if not recipients:
@@ -247,12 +250,13 @@ async def apply_slot_change(
     session: AsyncSession, plan: SlotPlan, actor: str, request_id: int | None = None
 ) -> None:
     """검증된 계획을 한 세션 트랜잭션에서 적용 — 데이터·캔버스·계보·이벤트·알림. commit은 호출자 책임."""
-    # target은 이 태스크에서 미사용(replace/delete는 스텁) — Task 4가 _apply_handover에서 plan.target으로 사용.
+    # target은 여기서 안 쓴다 — handover(replace/delete)는 _apply_handover가 target을 읽는다.
     change, source = plan.change, plan.source
     touched_drafts: list[MapVersion] = []
 
     if change.action == "assign":
         source.category_id = change.to_category_id
+        source.retired_to_map_id = None  # 슬롯을 되찾으면 옛 계보를 지운다 — superseded/stale 해제 (최종 리뷰 #1)
         _, draft = await _home_draft(session, change.to_category_id)
         if draft is not None and await _append_contained_node(session, draft, source):
             record_version_event(session, draft.id, "slot_changed", actor, note=f"assign {source.name}")
@@ -299,6 +303,7 @@ async def _apply_handover(
         await session.flush()
         target.category_id = from_category_id
         target.consultant_code = slot_code
+        target.retired_to_map_id = None  # target도 슬롯을 되찾은 맵일 수 있다 — 옛 계보를 지운다 (최종 리뷰 #1)
         source.retired_to_map_id = target.id
         _, draft = await _home_draft(session, from_category_id)
         if draft is not None:

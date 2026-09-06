@@ -1341,7 +1341,7 @@ async def set_map_category(
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
     if payload.category_id is None:
-        change = SlotChange(action="unassign", map_id=map_id)
+        change = None if found_map.category_id is None else SlotChange(action="unassign", map_id=map_id)
     elif found_map.category_id is None:
         change = SlotChange(action="assign", map_id=map_id, to_category_id=payload.category_id)
     elif found_map.category_id == payload.category_id:

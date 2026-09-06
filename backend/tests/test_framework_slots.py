@@ -283,7 +283,8 @@ def test_core_clearing_a_stray_slot_on_a_canvas_map_is_allowed(client: TestClien
         return _run(_go)
 
     assert _plan({"action": "unassign", "map_id": canvas}).sides == [l5]
-    assert _plan({"action": "delete", "map_id": canvas}).sides == [l5]  # apply는 Task 4의 501 스텁 — validate만
+    # delete apply는 별도 테스트(test_core_delete_with_and_without_successor)가 다룬다 — validate만
+    assert _plan({"action": "delete", "map_id": canvas}).sides == [l5]
 
     _apply({"action": "unassign", "map_id": canvas})
     assert _map_row(canvas)["category_id"] is None
@@ -331,11 +332,18 @@ def test_core_replace_repoints_home_canvas_and_keeps_edges(client: TestClient) -
     _put_edge(client, draft, a, b)
     c = _seed_l6_map(None, "fws replace C", None)  # 슬롯 없는 일반 맵(게시본 있음)
 
+    async def _stale_lineage(session):
+        m = await session.get(ProcessMap, c)
+        m.retired_to_map_id = b  # 예전에 슬롯을 넘긴 적 있는 척 — target도 슬롯을 받으면 지워져야 한다(최종 리뷰 #1)
+
+    _run(_stale_lineage)
+
     _apply({"action": "replace", "map_id": a, "to_map_id": c})
 
     assert _map_row(a) == {"category_id": None, "consultant_code": None, "deleted": False,
                            "retired_to": c, "mode": "normal"}
     assert _map_row(c)["category_id"] == l5 and _map_row(c)["consultant_code"] == "FWS-R-A"
+    assert _map_row(c)["retired_to"] is None  # target도 슬롯을 받으면 옛 계보가 지워진다 (최종 리뷰 #1)
     assert _linked_ids(client, canvas) == sorted([b, c])
     graph = client.get(f"/api/versions/{draft}/graph").json()
     nc = next(n for n in graph["nodes"] if n["linked_map_id"] == c)
@@ -384,7 +392,7 @@ def test_core_replace_merges_when_target_already_on_canvas(client: TestClient) -
 
 def test_core_delete_with_and_without_successor(client: TestClient) -> None:
     """결함 ④ 회귀: 후계자 있는 delete는 슬롯 승계+재지정, 없는 delete는 노드를 남긴다(stale)."""
-    l5 = _seed_category("FWS-D5", "삭제", level=5)
+    l5 = _seed_category("FWS-D5S", "삭제S", level=5)
     a = _seed_l6_map(l5, "fws delete A", "FWS-D-A")
     d = _seed_l6_map(l5, "fws delete D", "FWS-D-D")
     canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
@@ -402,6 +410,23 @@ def test_core_delete_with_and_without_successor(client: TestClient) -> None:
     assert row["deleted"] is True and row["category_id"] == l5 and row["retired_to"] is None
     assert d in _linked_ids(client, canvas)  # 링크는 끊지 않음 — 복구 시 자동 회복, 표시는 stale
     assert "stale_link" in _readiness_codes(client, canvas)
+
+
+def test_map_that_regains_a_slot_is_no_longer_superseded(client: TestClient) -> None:
+    """replace로 슬롯을 넘긴 A가 다른 L5에 다시 배정되면 계보가 지워져 superseded/stale이 풀린다 (최종 리뷰 #1)."""
+    l5a = _seed_category("FWS-RG5A", "재배정A", level=5)
+    l5b = _seed_category("FWS-RG5B", "재배정B", level=5)
+    a = _seed_l6_map(l5a, "fws regain A", "FWS-RG-A")
+    client.post(f"/api/categories/{l5a}/linkage-map")
+    canvas_b = client.post(f"/api/categories/{l5b}/linkage-map").json()["map_id"]
+    c = _seed_l6_map(None, "fws regain C", None)
+    _apply({"action": "replace", "map_id": a, "to_map_id": c})
+    assert _map_row(a)["retired_to"] == c
+    _apply({"action": "assign", "map_id": a, "to_category_id": l5b})
+    assert _map_row(a)["retired_to"] is None and _map_row(a)["category_id"] == l5b
+    refs = client.get(f"/api/versions/{_draft_id(client, canvas_b)}/graph").json()["subprocess_refs"]
+    assert refs[str(a)]["superseded"] is False
+    assert "stale_link" not in _readiness_codes(client, canvas_b)
 
 
 # ── refs 확장 · stale_link 확장 ──────────────────────────────────────────────────
@@ -507,6 +532,20 @@ def test_legacy_adapters_follow_slot_policy(client: TestClient, enforce: None) -
     assert client.get(f"/api/maps/{mid}").json()["category_id"] == l5
 
 
+def test_legacy_transfer_non_admin_owner_409(client: TestClient, enforce: None) -> None:
+    """framework-transfer도 slot-changes와 같은 정책 — owner라도 L5 직속 관리자가 아니면 409."""
+    l5 = _seed_category("FWS-LT5", "레거시이양", level=5)
+    act_as("fws.lt.owner")
+    src = _create_map(client, "fws legacy transfer src")
+    act_as(SYSADMIN)
+    assert client.post(f"/api/maps/{src}/slot-changes",
+                       json={"action": "assign", "to_category_id": l5}).status_code == 200
+    act_as("fws.lt.owner")
+    to_map = _create_map(client, "fws legacy transfer target")
+    r = client.post(f"/api/maps/{src}/framework-transfer", json={"to_map_id": to_map})
+    assert r.status_code == 409 and "approval" in r.json()["detail"]
+
+
 def test_slotted_map_delete_and_copy_retire_are_blocked(client: TestClient) -> None:
     l5 = _seed_category("FWS-X5", "차단", level=5)
     slotted = _seed_l6_map(l5, "fws blocked slotted", "FWS-X-M1")
@@ -517,3 +556,35 @@ def test_slotted_map_delete_and_copy_retire_are_blocked(client: TestClient) -> N
     assert r2.status_code == 409 and "slot-changes" in r2.json()["detail"]
     assert client.post(f"/api/maps/{slotted}/copy", json={"name": "fws plain copy"}).status_code == 201
     assert client.delete(f"/api/maps/{free}").status_code == 204
+
+
+# ── 알림: fw_slot_applied 수신자 ───────────────────────────────────────────────────
+
+
+def test_applied_notification_recipients(client: TestClient, enforce: None) -> None:
+    """fw_slot_applied 수신자 = side 직속·조상 관리자 ∪ source owner ∪ 후계자 owner ∪ 캔버스 체크아웃 보유자 − 행위자 (spec §7.4)."""
+    from app.models import Notification
+
+    l1 = _seed_category("FWS-NT1", "알림L1")
+    l5 = _seed_category("FWS-NT5", "알림L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l1}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fws.nt.upper"}]})
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fws.nt.direct"}]})
+    a = _seed_l6_map(l5, "fws notify A", "FWS-NT-A", owner="fws.nt.owner")
+    c = _seed_l6_map(None, "fws notify C", None, owner="fws.nt.succ")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    draft = _draft_id(client, canvas)
+    act_as("fws.nt.direct")
+    assert client.post(f"/api/versions/{draft}/checkout", json={}).status_code in (200, 201)
+    act_as(SYSADMIN)
+    _apply({"action": "replace", "map_id": a, "to_map_id": c}, actor=SYSADMIN)
+
+    async def _recipients(session):
+        rows = (await session.scalars(
+            select(Notification).where(Notification.type == "fw_slot_applied", Notification.map_id == a)
+        )).all()
+        return sorted({r.recipient for r in rows})
+
+    assert _run(_recipients) == sorted({"fws.nt.upper", "fws.nt.direct", "fws.nt.owner", "fws.nt.succ"})
