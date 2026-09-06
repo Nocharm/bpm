@@ -2639,7 +2639,9 @@ function MapEditor({ mapId }: { mapId: number }) {
         setLinkageCategoryPath(detail.linkage_category_path ?? null);
         setMyRole(detail.my_role);
         setCanConfirmFw(detail.can_confirm ?? false);
-        setCanDecideSlot(detail.can_decide_slot ?? false);
+        // sysadmin은 항상 true — isApprover={isApprover || isSysadmin}과 같은 방어적 OR
+        // (백엔드도 sysadmin을 우선 처리하지만, 프론트가 단일 필드에만 의존하지 않게) (fix round 1 #1)
+        setCanDecideSlot(me.is_sysadmin || (detail.can_decide_slot ?? false));
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
         setDocName(detail.doc_name ?? "");
@@ -3644,7 +3646,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 동봉 픽커 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
         setMyRole(detail.my_role);
         setCanConfirmFw(detail.can_confirm ?? false);
-        setCanDecideSlot(detail.can_decide_slot ?? false);
+        // sysadmin은 항상 true (fix round 1 #1) — 이 스코프엔 me가 없어 기존 isSysadmin state를 사용
+        setCanDecideSlot(isSysadmin || (detail.can_decide_slot ?? false));
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -3652,7 +3655,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setStatus(humanizeApiError(err, t));
       }
     },
-    [versionId, mapId, refreshWorkflow, t],
+    [versionId, mapId, refreshWorkflow, t, isSysadmin],
   );
 
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────

@@ -32,14 +32,16 @@ describe("deriveSlotState", () => {
   });
 });
 
+const SLOT_ACTIONS = ["assign", "unassign", "move", "replace", "delete"] as const;
+
 describe("isSlotAction", () => {
-  it("accepts the 5 known actions and rejects everything else", () => {
-    expect(isSlotAction("assign")).toBe(true);
+  it("accepts all 5 known actions and rejects everything else", () => {
+    for (const action of SLOT_ACTIONS) expect(isSlotAction(action)).toBe(true);
     expect(isSlotAction("bogus")).toBe(false);
     expect(isSlotAction(undefined)).toBe(false);
   });
   it("SLOT_ACTION_KEY maps every action to its i18n key", () => {
-    expect(SLOT_ACTION_KEY.move).toBe("slot.action.move");
+    for (const action of SLOT_ACTIONS) expect(SLOT_ACTION_KEY[action]).toBe(`slot.action.${action}`);
   });
 });
 

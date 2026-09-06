@@ -14,7 +14,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.framework_confirm import load_confirm_draft, perform_framework_confirm
-from app.framework_slots import SlotChange, apply_slot_change, validate_slot_change
+from app.framework_slots import SlotChange, apply_slot_change, remaining_sides, validate_slot_change
 from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
@@ -752,9 +752,31 @@ async def get_map(
             ).all()
         )
         found_map.category_path = category_paths.get(found_map.category_id)
-        found_map.can_decide_slot = logic.is_sysadmin(user) or await is_direct_l5_admin(
-            session, user, found_map.category_id
+    # fw_slot 결정 버튼 노출 — sysadmin 전원, 그 외엔 대기 요청의 "잔여 side" 직속 관리자만(이미 결정한
+    # side의 관리자는 재결정권 없음). category_id 유무와 무관하게 계산 — assign 요청은 아직 미슬롯 상태의
+    # 맵(category_id NULL)에 대해서도 대기하므로, 슬롯 유무로 게이팅하면 sysadmin조차 false가 된다.
+    # 대기 요청이 없으면 현재 소속 카테고리 관리자로 폴백(요청 생성 전 즉시 표시) (fix round 1 #2a).
+    if logic.is_sysadmin(user):
+        found_map.can_decide_slot = True
+    else:
+        pending_slot_req = await session.scalar(
+            select(ApprovalRequest).where(
+                ApprovalRequest.map_id == map_id,
+                ApprovalRequest.kind == "fw_slot",
+                ApprovalRequest.status == "pending",
+            )
         )
+        if pending_slot_req is not None:
+            remaining = await remaining_sides(session, pending_slot_req)
+            found_map.can_decide_slot = False
+            for cid in remaining:
+                if await is_direct_l5_admin(session, user, cid):
+                    found_map.can_decide_slot = True
+                    break
+        else:
+            found_map.can_decide_slot = found_map.category_id is not None and await is_direct_l5_admin(
+                session, user, found_map.category_id
+            )
     if found_map.mode == "framework":
         # 캔버스 → 결착 카테고리 역조회 — FrameworkChip·자동 보강 호출 소스 (design 2026-08-28 §8)
         linkage_cat_id = await session.scalar(

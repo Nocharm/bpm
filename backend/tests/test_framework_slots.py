@@ -787,3 +787,37 @@ def test_partial_approval_then_reject_ends_request(client: TestClient, enforce: 
         return row.payload.get("approvals") or {}
 
     assert str(l5a) in _run(_approvals)
+
+
+def test_can_decide_slot_true_for_admin_pending_assign_unslotted(client: TestClient, enforce: None) -> None:
+    """assign 대상은 미슬롯 맵(category_id NULL)이라, category_id 유무로 게이팅하던 종전 로직은 대상 L5
+    관리자에게도 false를 돌려줬다 — 대기 요청 유무·잔여 side 기준으로 판정해야 한다 (fix round 1 #2a)."""
+    l5 = _seed_l5_with_admin(client, "FWS-CD5", "결정권")
+    act_as(OWNER)
+    mid = _create_map(client, "fws can_decide_slot unslotted map")
+    client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert _map_row(mid)["category_id"] is None  # 아직 미슬롯 — 요청만 대기
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is False  # 요청자(오너)는 결정권 없음
+    act_as(L5ADMIN)
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is True  # 대상 L5 직속 관리자
+
+
+def test_can_decide_slot_tracks_remaining_side_on_partial_move_approval(client: TestClient, enforce: None) -> None:
+    """2-side move에서 side A 승인 후 — A 관리자는 결정 완료라 false, 잔여 side B 관리자만 true."""
+    l5a = _seed_l5_with_admin(client, "FWS-CD5A", "결정권A", admin=L5ADMIN)
+    l5b = _seed_l5_with_admin(client, "FWS-CD5B", "결정권B", admin=L5ADMIN_B)
+    act_as(OWNER)
+    mid = _create_map(client, "fws can_decide_slot move map")
+    act_as(SYSADMIN)
+    assert client.post(
+        f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5a}
+    ).json()["mode"] == "applied"
+    act_as(OWNER)
+    req_id = client.post(
+        f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5b}
+    ).json()["request_id"]
+    act_as(L5ADMIN)
+    assert _decide(client, req_id, "approve").json()["status"] == "pending"  # side B 잔여
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is False  # 이미 결정한 A 관리자
+    act_as(L5ADMIN_B)
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is True  # 잔여 side B 관리자

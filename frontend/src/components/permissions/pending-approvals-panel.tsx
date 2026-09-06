@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   decideApprovalRequest,
+  getPendingSlotChange,
   listApprovalRequests,
   type ApprovalRequest,
 } from "@/lib/api";
@@ -70,6 +71,9 @@ export function PendingApprovalsPanel({
   const [requests, setRequests] = useState<ApprovalRequest[]>([]);
   // 결정 진행 중인 요청 id — 더블클릭/중복 결정 방지 / Ids being decided, to disable buttons.
   const [decidingIds, setDecidingIds] = useState<Set<number>>(new Set());
+  // fw_slot 행의 잔여 side 기준 결정권 — null=미조회/조회실패(canDecideSlot prop로 폴백), 조회되면
+  // 그 값을 그대로 신뢰(false도 유효한 답) — 부분 승인 후 이미 결정한 관리자의 버튼을 숨긴다 (fix round 1 #2b).
+  const [slotCanDecide, setSlotCanDecide] = useState<boolean | null>(null);
 
   // 목록 열람 권한 — 서버 게이트(오너/승인자/sysadmin)와 동일 + fw_confirm/fw_slot 결정권(직속 L5 admin).
   // 없으면 조회 자체를 건너뛴다: 403 → 토스트 → 부모 상태 변경 → 이펙트 deps(콜백 아이덴티티)
@@ -82,6 +86,19 @@ export function PendingApprovalsPanel({
       const rows = await listApprovalRequests(mapIdNum);
       setRequests(rows);
       onCountChange?.(countPending(rows));
+      // MapDetail.can_decide_slot는 페이지 로드 시점 스냅샷이라 결정 후 갱신되지 않는다(onDecided는
+      // workflow만 재조회) — fw_slot이 여전히 pending이면 여기서 직접 최신 can_decide를 받아온다.
+      const hasPendingSlot = rows.some((r) => r.kind === "fw_slot" && r.status === "pending");
+      if (!hasPendingSlot) {
+        setSlotCanDecide(null);
+      } else {
+        try {
+          const pending = await getPendingSlotChange(mapIdNum);
+          setSlotCanDecide(pending?.can_decide ?? null);
+        } catch {
+          setSlotCanDecide(null);
+        }
+      }
     } catch (err) {
       onToast({ id: genId(), message: humanizeApiError(err, t) });
     }
@@ -145,7 +162,8 @@ export function PendingApprovalsPanel({
 
   function canDecideKind(kind: string): boolean {
     if (kind === "fw_confirm") return canConfirm;
-    if (kind === "fw_slot") return canDecideSlot;
+    // slotCanDecide(신선한 잔여 side 조회)가 있으면 우선 — 없으면(미조회/실패) prop으로 폴백.
+    if (kind === "fw_slot") return slotCanDecide ?? canDecideSlot;
     return kind === "map_rename" || kind === "sp_designation" ? isOwner : isApprover;
   }
 
