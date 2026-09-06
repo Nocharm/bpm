@@ -18,6 +18,7 @@ import {
   ApiError,
   copyMap,
   createMap,
+  getApiErrorDetail,
   getDirectory,
   getSubprocessUsage,
   listApprovers,
@@ -483,7 +484,13 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
           if (isSlotChangePendingError(err)) {
             slotHandledRef.current = true;
             onToast?.(t("slot.requestedToast"));
-          } else if (err instanceof ApiError && err.status === 404) {
+          } else if (
+            err instanceof ApiError &&
+            err.status === 404 &&
+            // 소스 맵 자체가 사라졌을 때만 완료로 간주 — 다른 404(예: 대상 맵 not found)까지
+            // 삼키면 실제 실패를 완료로 오판한다
+            getApiErrorDetail(err) === `map ${copy.mapId} not found`
+          ) {
             slotHandledRef.current = true;
             onToast?.(t("slot.appliedToast"));
           } else {
