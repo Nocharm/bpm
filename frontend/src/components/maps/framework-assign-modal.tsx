@@ -185,6 +185,8 @@ export function FrameworkAssignModal({
       onChanged();
       onClose();
     } catch (err) {
+      // 실패 시에도 안내 모달을 닫아야 아래 error 줄이 보인다 — 안 닫으면 모달이 떠 있는 채로 조용히 멈춘 것처럼 보인다
+      setPending(null);
       setError(getApiErrorDetail(err));
     } finally {
       setSubmitting(false);
@@ -384,7 +386,7 @@ export function FrameworkAssignModal({
 
         {pending !== null && (
           <ConfirmDialog
-            icon={<ShieldCheck size={18} strokeWidth={1.5} />}
+            icon={<ShieldCheck size={28} strokeWidth={1.5} />}
             title={t("home.frameworkSelfApplyTitle")}
             message={`${t("home.frameworkSelfApplyDesc")} · ${t("home.frameworkImpactSummary", {
               home: String(pending.preview.impact.home_canvas_nodes),
@@ -394,6 +396,7 @@ export function FrameworkAssignModal({
             confirmLabel={t("home.frameworkApplyNow")}
             cancelLabel={t("summary.cancel")}
             danger={pending.body.action === "unassign" || pending.body.action === "delete"}
+            confirmDisabled={submitting}
             onConfirm={() => void applyPending()}
             onClose={() => setPending(null)}
           />
