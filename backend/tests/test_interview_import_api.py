@@ -228,3 +228,92 @@ def test_linkage_keeps_user_edited_sp_params(client: TestClient) -> None:
     nodes2, _ = _linkage_graph("19-01-06-01-10")
     assert nodes2[0].annual_count == "999"
     assert any("annual_count '999' kept" in r["detail"] for r in body["rows"])
+
+
+def _files(doc: dict, name: str = "delivery.json") -> list[dict]:
+    """_post의 files 파라미터 포맷으로 문서 1건을 감싼다."""
+    return [{"name": name, "content": doc}]
+
+
+def _ext_delivery(l5_code: str, task_ids: list[str] | None = None) -> dict:
+    """PHX 계열 L5용 최소 인터뷰 문서 — 외부 taskId 플레이스홀더 테스트 전용(기본 row 2개, 엣지 없음)."""
+    ids = task_ids or [f"{l5_code.lower()}-task-0001", f"{l5_code.lower()}-task-0002"]
+    data = _interview()
+    data["l5"] = {"label": l5_code, "nodeCode": l5_code}
+    data["framework"]["categories"].append(
+        {"code": l5_code, "name": l5_code, "level": 5, "parent": "19-01-06-01"})
+    data["rows"] = [
+        {
+            "taskId": tid, "unitId": f"unit-{tid}", "l6": f"{tid} 활동",
+            "owner": None, "ownerRole": None, "approvers": [], "department": None,
+            "fields": {}, "actions": [{"seq": 1, "label": "단일 활동"}],
+            "relations": {"edges": []},
+        }
+        for tid in ids
+    ]
+    data["relations"] = {"edges": []}
+    return data
+
+
+def _canvas_map_id(client: TestClient, category_code: str) -> int:
+    """L5 코드로 연계 캔버스 맵 id 조회 — 이미 시드돼 있다고 전제."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+
+    async def _load():
+        async with SessionLocal() as session:
+            cat = await session.scalar(
+                select(ProcessCategory).where(ProcessCategory.code == category_code))
+            return cat.linkage_map_id if cat else None
+
+    map_id = _run(_load())
+    assert map_id is not None, f"no linkage canvas for {category_code!r}"
+    return map_id
+
+
+def _draft_id(client: TestClient, map_id: int) -> int:
+    """맵 id로 draft 버전 id 조회."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion
+
+    async def _load():
+        async with SessionLocal() as session:
+            draft = await session.scalar(
+                select(MapVersion).where(MapVersion.map_id == map_id, MapVersion.status == "draft")
+                .order_by(MapVersion.id.desc()))
+            return draft.id if draft else None
+
+    draft_id = _run(_load())
+    assert draft_id is not None, f"no draft version for map {map_id}"
+    return draft_id
+
+
+def test_external_edge_becomes_placeholder_and_resolves_on_later_delivery(client: TestClient) -> None:
+    """L5-A 전달분의 엣지가 아직 없는 taskId를 가리키면 플레이스홀더 노드+엣지로 남고,
+    그 taskId를 담은 L5-B 전달분이 오면 A 캔버스의 플레이스홀더가 자동 연결된다 (spec 2026-09-06 §8)."""
+    doc_a = _ext_delivery("PHX-A")            # rows: 이 L5의 task 2개, relations.edges 포함
+    ext_code = "phx-b-task-0001"
+    doc_a["relations"]["edges"].append({"src": doc_a["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    res_a = _post(client, _files(doc_a), apply=True)
+    assert res_a.status_code == 200, res_a.text
+    canvas_a = _canvas_map_id(client, "PHX-A")
+    graph_a = client.get(f"/api/versions/{_draft_id(client, canvas_a)}/graph").json()
+    ph = [n for n in graph_a["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None]
+    assert len(ph) == 1 and ph[0]["title"] == ext_code and ph[0]["placeholder_category_id"] is None
+    assert any(e["target_node_id"] == ph[0]["id"] for e in graph_a["edges"])
+
+    doc_b = _ext_delivery("PHX-B", task_ids=[ext_code, "phx-b-task-0002"])
+    res_b = _post(client, _files(doc_b), apply=True)
+    assert res_b.status_code == 200, res_b.text
+    graph_a2 = client.get(f"/api/versions/{_draft_id(client, canvas_a)}/graph").json()
+    resolved = next(n for n in graph_a2["nodes"] if n["id"] == ph[0]["id"])
+    assert resolved["linked_map_id"] is not None
+    assert graph_a2["subprocess_refs"][str(resolved["linked_map_id"])]["category_path"].endswith("PHX-B")
+    # 재임포트 멱등 — 플레이스홀더가 다시 생기지 않는다
+    _post(client, _files(doc_a), apply=True)
+    graph_a3 = client.get(f"/api/versions/{_draft_id(client, canvas_a)}/graph").json()
+    assert not [n for n in graph_a3["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None]

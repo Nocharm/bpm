@@ -28,6 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.clock import now as now_kst
 from app.duration import normalize_duration
+from app.lineage import EXTERNAL_LINEAGE_SCOPE, external_lineage_key, make_node_id  # noqa: F401 - scope re-export
 from app.models import (
     Edge,
     Employee,
@@ -75,14 +76,6 @@ from scripts.consultant_layout import (
     plan_branch_fanout,
     resolve_handles,
 )
-
-
-def make_node_id(map_code: str, node_code: str) -> str:
-    # 컨설턴트 코드에서 파생한 결정적 값 — Node.id(테이블 전역 PK)로는 못 쓴다(재게시마다 충돌).
-    # source_node_id 계보 루트로만 쓴다 — clone_graph와 같은 계보 규약(diff.ts getLineageKey)이라
-    # 재임포트해도 버전 비교 diff가 노드를 매칭한다. 실제 Node.id는 빌드마다 uuid4로 새로 발급.
-    return "c" + hashlib.sha1(f"{map_code}|{node_code}".encode()).hexdigest()[:24]
-
 
 
 def make_item_id(map_code: str, node_code: str, index: int) -> str:
@@ -716,6 +709,34 @@ async def _review_governance(
                 report.add(cmap.code, "governance", "approvers replaced")
 
 
+async def resolve_external_placeholders(
+    session: AsyncSession, code_to_map: dict[str, int], report: ImportReport
+) -> int:
+    """linked_map_id 없는 플레이스홀더 중 source_node_id가 external_lineage_key(code)인 노드를 연결한다.
+    라이브 draft만 — confirmed 스냅샷은 이력이라 불변."""
+    if not code_to_map:
+        return 0
+    key_to_map = {external_lineage_key(c): mid for c, mid in code_to_map.items()}
+    names = {
+        mid: name for mid, name in (await session.execute(
+            select(ProcessMap.id, ProcessMap.name).where(ProcessMap.id.in_(list(code_to_map.values())))
+        )).all()
+    }
+    rows = (await session.execute(
+        select(Node).join(MapVersion, MapVersion.id == Node.version_id).where(
+            Node.node_type == "subprocess", Node.linked_map_id.is_(None),
+            Node.source_node_id.in_(list(key_to_map.keys())), MapVersion.status == "draft",
+        )
+    )).scalars().all()
+    for node in rows:
+        node.linked_map_id = key_to_map[node.source_node_id]
+        node.title = names.get(node.linked_map_id, node.title)
+        node.follow_latest = True
+    if rows:
+        report.add("linkage", "linkage", f"resolved {len(rows)} external placeholder node(s)")
+    return len(rows)
+
+
 async def import_delivery(
     session: AsyncSession,
     *,
@@ -871,6 +892,11 @@ async def import_delivery(
         if commit_every is not None and created_count % commit_every == 0:
             await session.commit()
             print(f"pass1 committed {created_count} created")
+
+    # 외부 플레이스홀더 해소 — 이번 전달로 생긴/결착된 코드와 같은 계보 키를 가진 플레이스홀더를 전 캔버스 draft에서 연결 (spec 2026-09-06 §8)
+    await resolve_external_placeholders(
+        session, {cmap.code: existing[cmap.code].id for cmap in maps if cmap.code in existing}, report
+    )
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
     # 전달분에 없음)은 canonical params가 없어 annual/fte가 빈 값으로 폴백한다 — 아래 pass 2가
@@ -1241,9 +1267,12 @@ async def apply_interview_linkage(
             report.add(code, "warning", f"linkage skipped - category is level {category.level}")
             continue
 
+        # 조회 대상을 엣지 끝점까지 넓힌다 — 외부 L6가 이미 DB에 있으면(다른 L5가 먼저 전달) 플레이스홀더
+        # 대신 실 노드로 붙인다 (spec 2026-09-06 §8)
+        lookup_codes = set(linkage.map_codes) | {e.source for e in linkage.edges} | {e.target for e in linkage.edges}
         placed = (await session.execute(
             select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.name).where(
-                ProcessMap.consultant_code.in_(linkage.map_codes),
+                ProcessMap.consultant_code.in_(sorted(lookup_codes)),
                 ProcessMap.deleted_at.is_(None),
             )
         )).all()
@@ -1296,16 +1325,27 @@ async def apply_interview_linkage(
             n.source_node_id: n for n in existing
             if n.node_type == "decision" and n.source_node_id
         }
+        # 외부 플레이스홀더도 계보 키로 재사용 — linked_map_id가 아직 없는 subprocess (spec 2026-09-06 §8)
+        placeholder_nodes: dict[str, Node] = {
+            n.source_node_id: n for n in existing
+            if n.node_type == "subprocess" and n.linked_map_id is None and n.source_node_id
+        }
         max_y = max((n.pos_y for n in existing), default=None)
         base_y = (max_y + LINKAGE_Y_STEP) if max_y is not None else LINKAGE_Y0
         next_sort = max((n.sort_order for n in existing), default=-1) + 1
 
         # 분기 팬아웃 앞에 분기 노드를 끼운 흐름 — 배치·엣지 모두 이 재작성본을 쓴다
         placed_codes = {c for c in linkage.map_codes if c in map_ids}
-        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, placed_codes)
+        # 외부 L6 — DB에 있으면 실 노드(외부 L6 색·배지), 없으면 플레이스홀더 (spec 2026-09-06 §8)
+        external_present = {c for c in linkage.external_codes if c in map_ids}
+        external_missing = [c for c in linkage.external_codes if c not in map_ids]
+        present_codes = placed_codes | external_present | set(external_missing)
+        flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes)
 
         # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
         missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
+        missing_external = [c for c in external_present if map_ids[c] not in node_by_map]
+        missing_placeholders = [c for c in external_missing if external_lineage_key(c) not in placeholder_nodes]
         missing_branches = [
             key for key in branch_of
             if make_node_id(code, key) not in branch_nodes
@@ -1335,7 +1375,9 @@ async def apply_interview_linkage(
                 node.y += rows.get(node.id, 0) * LINKAGE_ROW_STEP
             placed = {n.id: (n.x, n.y) for n in layout_nodes}
         added = 0
-        grid = grid_positions(0, len(missing) + len(missing_branches), base_y)
+        grid = grid_positions(
+            0, len(missing) + len(missing_external) + len(missing_placeholders) + len(missing_branches), base_y
+        )
         for i, (c, (px, py)) in enumerate(zip(missing, grid)):
             annual, fte = linkage.params.get(c, ("", ""))
             x, y = placed.get(c, (px, py))
@@ -1349,9 +1391,33 @@ async def apply_interview_linkage(
             session.add(node)
             node_by_map[map_ids[c]] = node
             added += 1
+        offset = len(missing)
+        for i, c in enumerate(missing_external):
+            px, py = grid[offset + i]
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id, title=map_names.get(map_ids[c], c),
+                node_type="subprocess", linked_map_id=map_ids[c], follow_latest=True,
+                pos_x=px, pos_y=py, sort_order=next_sort + offset + i,
+            )
+            session.add(node)
+            node_by_map[map_ids[c]] = node
+            added += 1
+        offset += len(missing_external)
+        for i, c in enumerate(missing_placeholders):
+            px, py = grid[offset + i]
+            node = Node(
+                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=external_lineage_key(c),
+                title=c, node_type="subprocess", linked_map_id=None, placeholder_category_id=None,
+                follow_latest=True, pos_x=px, pos_y=py, sort_order=next_sort + offset + i,
+            )
+            session.add(node)
+            placeholder_nodes[external_lineage_key(c)] = node
+            added += 1
+            report.add(code, "linkage", f"placeholder for external task {c} (map not delivered yet)")
+        offset += len(missing_placeholders)
         for j, key in enumerate(missing_branches):
             lineage = make_node_id(code, key)
-            x, y = placed.get(key, grid[len(missing) + j])
+            x, y = placed.get(key, grid[offset + j])
             src_code = branch_of[key]
             # self 루프 유래((origin, src) ∈ back_pairs)는 원본 이름 없이 LOOP_BRANCH_NODE_NAME —
             # 일괄 생성 티를 낸다(사용자 결정 2026-09-02). 팬아웃 유래는 기존 "{이름} 결과" 유지.
@@ -1361,7 +1427,7 @@ async def apply_interview_linkage(
                 title=LOOP_BRANCH_NODE_NAME if is_loop_origin
                 else f"{map_names.get(map_ids.get(src_code, -1), src_code)} 결과",
                 node_type="decision",
-                pos_x=x, pos_y=y, sort_order=next_sort + len(missing) + j,
+                pos_x=x, pos_y=y, sort_order=next_sort + offset + j,
             )
             session.add(node)
             branch_nodes[lineage] = node
@@ -1396,7 +1462,9 @@ async def apply_interview_linkage(
         def _node_of(key: str) -> Node | None:
             if key in branch_of:
                 return branch_nodes.get(make_node_id(code, key))
-            return node_by_map.get(map_ids.get(key, -1))
+            if key in map_ids:
+                return node_by_map.get(map_ids[key])
+            return placeholder_nodes.get(external_lineage_key(key))
 
         for src_key, dst_key, label, gateway in flow:
             src, dst = _node_of(src_key), _node_of(dst_key)
