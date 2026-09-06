@@ -44,8 +44,9 @@ export function L5NodeInfoPanel({ info }: { info: L5NodeInfo | null }) {
   return (
     <div
       data-id="l5-node-info-panel"
-      // bottom-16 — 좌하단은 이미 미니맵(MinimapFade, position="bottom-left")이 점유해 그 위로 띄운다.
-      className="pointer-events-none absolute bottom-16 left-4 z-20 flex w-64 flex-col gap-1 rounded-md border border-hairline bg-surface/95 p-3 shadow-md"
+      // bottom-36(144px) — 미니맵(MinimapFade, position="bottom-left")이 15-120px(RF 패널 margin 15px +
+      // 187×105 미니맵)을 점유해 그 위로 띄운다.
+      className="pointer-events-none absolute bottom-36 left-4 z-20 flex w-64 flex-col gap-1 rounded-md border border-hairline bg-surface/95 p-3 shadow-md"
     >
       <div className="flex items-center gap-1.5 text-caption-strong text-ink">
         <Info size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />
@@ -58,7 +59,7 @@ export function L5NodeInfoPanel({ info }: { info: L5NodeInfo | null }) {
           {rows.map((r) => (
             <div key={r.key} className="contents">
               <dt className="text-ink-tertiary">{t(r.key)}</dt>
-              <dd className="text-ink tabular-nums">{formatKstShort(r.value as string)}</dd>
+              <dd className="text-ink tabular-nums">{formatKstShort(r.value)}</dd>
             </div>
           ))}
         </dl>

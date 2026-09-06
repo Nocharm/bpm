@@ -9591,7 +9591,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                       connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}
                       onNodeMouseEnter={(_, node) => {
-                        if (!isFrameworkMap || node.data.nodeType !== "subprocess" || !node.data.spSlotInfo) return;
+                        // 루트 L5 캔버스 한정 — 형제 titleSlot/topRightSlot과 동일 가드(index === 0 && isFrameworkMap)
+                        if (
+                          index !== 0 ||
+                          !isFrameworkMap ||
+                          node.data.nodeType !== "subprocess" ||
+                          !node.data.spSlotInfo
+                        )
+                          return;
                         setHoverNodeInfo({ name: node.data.label, ...node.data.spSlotInfo });
                       }}
                       onNodeMouseLeave={() => setHoverNodeInfo(null)}
@@ -10033,7 +10040,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       </div>
                     )}
                     {/* 좌하단 "기타 정보" 호버 패널 — subprocess 노드 호버 시 slot 이력(spec 2026-09-06 §7.1) */}
-                    {isFrameworkMap && <L5NodeInfoPanel info={hoverNodeInfo} />}
+                    {index === 0 && isFrameworkMap && <L5NodeInfoPanel info={hoverNodeInfo} />}
                   </div>
                 ) : (
                   <ScopePreview
