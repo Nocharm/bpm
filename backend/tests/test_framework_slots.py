@@ -849,3 +849,32 @@ def test_can_decide_slot_tracks_remaining_side_on_partial_move_approval(client: 
     assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is False  # 이미 결정한 A 관리자
     act_as(L5ADMIN_B)
     assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is True  # 잔여 side B 관리자
+
+
+def test_list_approval_requests_allows_remaining_side_l5_admin_slot_only(
+    client: TestClient, enforce: None
+) -> None:
+    """결함: can_decide_slot=True인 잔여 side 직속 L5 관리자도 오너/승인자/sysadmin이 아니란 이유로
+    맵의 결재 대기 목록에서 403을 받아 에디터 Pending Approvals 패널이 비어 보였다. 통과는 시키되
+    그 맵의 다른 요청 종류까지 볼 권한은 없으므로 fw_slot 행만 돌려준다."""
+    l5 = _seed_l5_with_admin(client, "FWS-AR5", "승인목록", admin=L5ADMIN)
+    act_as(OWNER)
+    mid = _create_map(client, "fws approval list map")
+    act_as(SYSADMIN)
+    assert client.post(
+        f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5}
+    ).json()["mode"] == "applied"
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "unassign"}).json()["request_id"]
+
+    act_as(L5ADMIN)
+    r = client.get(f"/api/maps/{mid}/approval-requests")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 1 and rows[0]["id"] == req_id and rows[0]["kind"] == "fw_slot"
+
+    act_as("fws.nobody")
+    assert client.get(f"/api/maps/{mid}/approval-requests").status_code == 403
+
+    act_as(OWNER)
+    assert client.get(f"/api/maps/{mid}/approval-requests").status_code == 200

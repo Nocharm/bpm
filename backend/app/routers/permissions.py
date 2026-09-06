@@ -15,6 +15,7 @@ from app.db import get_session
 from app.framework_confirm import perform_framework_confirm
 from app.framework_slots import (
     apply_slot_change,
+    can_decide_slot_for_map,
     change_from_payload,
     record_slot_approvals,
     remaining_sides,
@@ -550,14 +551,24 @@ async def list_approval_requests(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ApprovalRequest]:
-    """맵의 승인 요청 목록 — 결재 대기 탭(4종 통합). 오너도 rename/sp 결정권자라 열람 허용 (C)."""
-    await _get_map_or_404(session, map_id)
-    await _assert_owner_or_approver(session, user, map_id)
-    rows = await session.scalars(
-        select(ApprovalRequest)
-        .where(ApprovalRequest.map_id == map_id)
-        .order_by(ApprovalRequest.created_at.desc())
-    )
+    """맵의 승인 요청 목록 — 결재 대기 탭(4종 통합). 오너도 rename/sp 결정권자라 열람 허용 (C).
+
+    오너/승인자/sysadmin이 아니어도 fw_slot 잔여 side의 직속 L5 관리자(get_map의
+    can_decide_slot과 같은 규칙, can_decide_slot_for_map)는 통과시킨다 — 단, 그 맵의 다른
+    요청 종류까지 볼 권한은 없으므로 fw_slot 행만 추려 반환한다 (버그 fix 2026-09-06).
+    """
+    found_map = await _get_map_or_404(session, map_id)
+    slot_only = False
+    try:
+        await _assert_owner_or_approver(session, user, map_id)
+    except HTTPException:
+        if not await can_decide_slot_for_map(session, user, found_map):
+            raise
+        slot_only = True
+    query = select(ApprovalRequest).where(ApprovalRequest.map_id == map_id)
+    if slot_only:
+        query = query.where(ApprovalRequest.kind == "fw_slot")
+    rows = await session.scalars(query.order_by(ApprovalRequest.created_at.desc()))
     return list(rows.all())
 
 

@@ -444,6 +444,35 @@ async def remaining_sides(session: AsyncSession, req: ApprovalRequest) -> list[i
     return [int(c) for c in req.payload.get("sides", []) if str(c) not in approvals]
 
 
+async def can_decide_slot_for_map(
+    session: AsyncSession, user: str, found_map: ProcessMap
+) -> bool:
+    """이 맵의 fw_slot 요청 결정권자인지 — get_map(MapDetail.can_decide_slot)과 승인 목록
+    게이트(permissions.list_approval_requests)가 공유하는 단일 판정 규칙.
+
+    sysadmin 전원 → 대기 중인 fw_slot 요청의 잔여 side 직속 L5 관리자(이미 결정한 side의
+    관리자는 재결정권 없음) → 대기 요청이 없으면 현재 소속 카테고리 직속 관리자로 폴백
+    (spec 2026-09-06 §4.2).
+    """
+    if logic.is_sysadmin(user):
+        return True
+    pending_slot_req = await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == found_map.id,
+            ApprovalRequest.kind == "fw_slot",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending_slot_req is not None:
+        for cid in await remaining_sides(session, pending_slot_req):
+            if await is_direct_l5_admin(session, user, cid):
+                return True
+        return False
+    return found_map.category_id is not None and await is_direct_l5_admin(
+        session, user, found_map.category_id
+    )
+
+
 async def record_slot_approvals(session: AsyncSession, req: ApprovalRequest, user: str) -> list[int]:
     """호출자가 관리자인 side 전부를 approvals에 기록 — JSON 컬럼은 재할당해야 변경이 감지된다. 남은 side 반환."""
     sides = [int(c) for c in req.payload.get("sides", [])]
