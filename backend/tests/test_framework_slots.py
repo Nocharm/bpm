@@ -581,6 +581,34 @@ def test_owner_who_becomes_direct_admin_self_applies(client: TestClient, enforce
     assert _map_row(mid)["category_id"] == l5
 
 
+def test_self_apply_admin_blocked_by_others_pending_request(client: TestClient, enforce: None) -> None:
+    """리뷰 라운드1 #2a: self-apply 자격자도 남의 대기 요청 위에 덮어쓸 수 없다 — dry_run 미리보기는 그대로 통과.
+
+    self-apply 시도자는 sysadmin(항상 self_apply=True이자 owner 게이트도 통과, 기존 스위트 전례 — 예:
+    test_legacy_adapters_follow_slot_policy) — 이 엔드포인트가 `require_map_role("owner")`라 OWNER가 아닌
+    일반 L5 직속 관리자는애초에 이 맵을 호출할 수 없어 sysadmin으로 그 충돌을 재현한다.
+    """
+    l5 = _seed_category("FWS-Q9", "셀프적용충돌", level=5)
+    act_as(OWNER)
+    mid = _create_map(client, "fws pending race map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r.status_code == 200 and r.json()["mode"] == "requested"
+    act_as(SYSADMIN)
+    # self-apply 자격(sysadmin)이 있어도 대기 요청이 있으면 non-dry_run은 409 — 예전엔 self_apply
+    # 분기 안에서만 가드해서 여기가 그대로 통과·적용되어 OWNER의 요청이 조용히 stale이 됐다.
+    blocked = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert blocked.status_code == 409 and "pending" in blocked.json()["detail"]
+    assert _map_row(mid)["category_id"] is None  # 적용되지 않음 — 요청은 그대로 살아있다
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json() is not None
+    # dry_run 미리보기는 대기 요청과 무관하게 계속 동작한다 — 모달이 이 값으로 배너를 채운다
+    preview = client.post(
+        f"/api/maps/{mid}/slot-changes",
+        json={"action": "assign", "to_category_id": l5, "dry_run": True},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["mode"] == "preview" and preview.json()["self_apply"] is True
+
+
 def test_legacy_adapters_follow_slot_policy(client: TestClient, enforce: None) -> None:
     """PUT /category·POST /framework-transfer는 어댑터 — 관리자/sysadmin만 즉시, 그 외 409."""
     l5 = _seed_category("FWS-L5", "레거시", level=5)

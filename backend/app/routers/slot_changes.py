@@ -61,15 +61,17 @@ async def create_slot_change(
     preview = await build_preview(session, plan, user)
     if payload.dry_run:
         return SlotChangeOut(mode="preview", request_id=None, **preview)
-    if not plan.self_apply:
-        pending_id = await session.scalar(
-            select(ApprovalRequest.id).where(
-                ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
-                ApprovalRequest.status == "pending",
-            )
+    # 대기 요청 가드는 self_apply 여부와 무관하게 먼저 걸린다 — 안 그러면 self-apply 자격자가
+    # 다른 사람의 대기 요청 위에 바로 적용해버려 그 요청이 조용히 stale이 된다 (리뷰 라운드1 #2a).
+    pending_id = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
+            ApprovalRequest.status == "pending",
         )
-        if pending_id is not None:
-            raise HTTPException(status_code=409, detail="a slot change is already pending")
+    )
+    if pending_id is not None:
+        raise HTTPException(status_code=409, detail="a slot change is already pending")
+    if not plan.self_apply:
         req = ApprovalRequest(
             map_id=map_id, kind="fw_slot", payload=build_request_payload(plan, change.note),
             requested_by=user, status="pending",
