@@ -857,13 +857,15 @@ def test_confirm_readiness_l6_unpublished(client: TestClient, enforce: None) -> 
     import asyncio
 
     map_id, draft_id = _make_canvas(client, "FWC-GT-UNPUB", "게이트미게시")
+    l5 = _seed_category(client, "FWC-GT-UNPUB", "게이트미게시", level=5)
 
     async def _seed_unpublished() -> int:
         from app.db import SessionLocal
         from app.models import MapVersion, ProcessMap
 
         async with SessionLocal() as session:
-            m = ProcessMap(name="미게시링크", created_by=SYSADMIN, visibility="public")
+            # category_id 필요 — 없으면 stale_link(해제 링크, 2026-09-06 확장)로도 잡혀 l6_unpublished 격리가 깨진다.
+            m = ProcessMap(name="미게시링크", created_by=SYSADMIN, visibility="public", category_id=l5)
             m.versions.append(MapVersion(label="As-Is", status="draft"))
             session.add(m)
             await session.commit()

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
-from app.models import Edge, MapVersion, Node, ProcessCategory, ProcessMap
+from app.models import Edge, FrameworkSlotEvent, MapVersion, Node, ProcessCategory, ProcessMap
 from app.permissions.access import get_framework_category_id
 from app.schemas import NodeIn, SubprocessRefOut
 
@@ -173,6 +173,7 @@ async def get_subprocess_refs(
                 ProcessMap.description,
                 ProcessMap.category_id,
                 ProcessMap.retired_to_map_id,
+                ProcessMap.updated_at,
             ).where(ProcessMap.id.in_(targets))
         )
     ).all()
@@ -210,12 +211,15 @@ async def get_subprocess_refs(
         map_description,
         category_id,
         retired_to_map_id,
+        map_updated_at,
     ) in rows:
-        if deleted_at is not None and retired_to_map_id is not None:
+        if retired_to_map_id is not None:  # 살아 있는 superseded 맵도 후계자를 동봉 (spec §6.2)
             retire_heads[mid] = retired_to_map_id
         refs[mid] = SubprocessRefOut(
             designated=designated_at is not None and deleted_at is None,
             deleted=deleted_at is not None,
+            superseded=deleted_at is None and retired_to_map_id is not None,
+            map_updated_at=map_updated_at,
             name=name,
             department=department,
             assignee=assignee,
@@ -285,6 +289,27 @@ async def get_subprocess_refs(
                 refs[mid].successor_name = row.name
                 break
             cursor = row.retired_to_map_id
+    # 슬롯 이력 시각 — 맵별 최신 변경 1건 + 후계자로 받은 최신 1건 (spec §6.2)
+    if refs:
+        ids = list(refs.keys())
+        rows = (
+            await session.execute(
+                select(FrameworkSlotEvent.map_id, FrameworkSlotEvent.action, FrameworkSlotEvent.created_at)
+                .where(FrameworkSlotEvent.map_id.in_(ids))
+                .order_by(FrameworkSlotEvent.created_at.desc(), FrameworkSlotEvent.id.desc())
+            )
+        ).all()
+        seen_change: set[int] = set()
+        seen_succeed: set[int] = set()
+        for mid, action, at in rows:
+            if action == "succeed":
+                if mid not in seen_succeed:
+                    seen_succeed.add(mid)
+                    refs[mid].succeeded_at = at
+            elif mid not in seen_change:
+                seen_change.add(mid)
+                refs[mid].slot_changed_at = at
+                refs[mid].slot_changed_action = action
     return refs
 
 
@@ -477,15 +502,16 @@ async def validate_confirm_readiness(
     if linked:
         rows = (
             await session.execute(
-                select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id)
+                select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id, ProcessMap.category_id)
                 .where(ProcessMap.id.in_(linked.keys()))
             )
         ).all()
         by_id = {r[0]: r for r in rows}
-        # 3) stale_link — 삭제/이양/영구삭제(맵 실종)된 링크
+        # 3) stale_link — 삭제/이양/영구삭제(맵 실종)/해제(category_id NULL)된 링크 (spec 2026-09-06 §6.3)
         stale = [
             nid for mid, nid in linked.items()
             if mid not in by_id or by_id[mid][1] is not None or by_id[mid][2] is not None
+            or by_id[mid][3] is None
         ]
         if stale:
             failures.append(GateFailure("stale_link", len(stale), stale))
@@ -589,11 +615,13 @@ async def validate_confirm_readiness_batch(
     pub_ids: set[int] = set()
     if all_linked_ids:
         link_status = {
-            mid: (deleted_at, retired_to)
-            for mid, deleted_at, retired_to in (
+            mid: (deleted_at, retired_to, category_id)
+            for mid, deleted_at, retired_to, category_id in (
                 await session.execute(
-                    select(ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id)
-                    .where(ProcessMap.id.in_(all_linked_ids))
+                    select(
+                        ProcessMap.id, ProcessMap.deleted_at, ProcessMap.retired_to_map_id,
+                        ProcessMap.category_id,
+                    ).where(ProcessMap.id.in_(all_linked_ids))
                 )
             ).all()
         }
@@ -633,6 +661,7 @@ async def validate_confirm_readiness_batch(
             stale = [
                 nid for mid, nid in linked.items()
                 if mid not in link_status or link_status[mid][0] is not None or link_status[mid][1] is not None
+                or link_status[mid][2] is None
             ]
             if stale:
                 failures.append(GateFailure("stale_link", len(stale), stale))

@@ -1366,6 +1366,14 @@ class SubprocessRefOut(BaseModel):
     # 이양 후계자 — 은퇴 체인을 살아있는 맵까지 추적한 결과(없으면 None). 교체 다이얼로그 추천 소스
     successor_map_id: int | None = None
     successor_name: str | None = None
+    # 살아 있지만 슬롯을 넘긴 맵(retired_to_map_id 존재) — 캔버스 stale 룩 + Replace CTA (spec 2026-09-06 §6.2)
+    superseded: bool = False
+    # 이 맵의 최신 슬롯 변경(assign/unassign/move/replace/delete) — 호버 패널 "해제된 날" 등
+    slot_changed_at: datetime | None = None
+    slot_changed_action: str | None = None
+    # 이 맵이 후계자로 슬롯을 받은 시각 — "이양된 날" + 최근 이양 배지
+    succeeded_at: datetime | None = None
+    map_updated_at: datetime | None = None
     department: str | None = None
     assignee: str | None = None
     system: str | None = None

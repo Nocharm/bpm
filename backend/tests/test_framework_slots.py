@@ -404,6 +404,47 @@ def test_core_delete_with_and_without_successor(client: TestClient) -> None:
     assert "stale_link" in _readiness_codes(client, canvas)
 
 
+# ── refs 확장 · stale_link 확장 ──────────────────────────────────────────────────
+
+
+def test_refs_expose_slot_state_and_timestamps(client: TestClient) -> None:
+    l5 = _seed_category("FWS-F5", "refs", level=5)
+    a = _seed_l6_map(l5, "fws refs A", "FWS-F-A")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    other_l5 = _seed_category("FWS-F5X", "refsX", level=5)
+    other_canvas = client.post(f"/api/categories/{other_l5}/linkage-map").json()["map_id"]
+    other_draft = _draft_id(client, other_canvas)
+    assert client.post(f"/api/versions/{other_draft}/checkout", json={}).status_code in (200, 201)
+    graph = client.get(f"/api/versions/{other_draft}/graph").json()
+    ext = {"id": uuid4().hex, "title": "fws refs A", "node_type": "subprocess", "linked_map_id": a,
+           "follow_latest": True, "pos_x": 120, "pos_y": 120, "sort_order": 0}
+    assert client.put(f"/api/versions/{other_draft}/graph",
+                      json={"nodes": graph["nodes"] + [ext], "edges": [], "groups": []}).status_code == 200
+    c = _seed_l6_map(None, "fws refs C", None)
+    _apply({"action": "replace", "map_id": a, "to_map_id": c})
+
+    other_refs = client.get(f"/api/versions/{other_draft}/graph").json()["subprocess_refs"]
+    ref_a = other_refs[str(a)]
+    assert ref_a["deleted"] is False and ref_a["superseded"] is True
+    assert ref_a["successor_map_id"] == c and ref_a["slot_changed_action"] == "replace"
+    assert ref_a["slot_changed_at"] is not None and ref_a["map_updated_at"] is not None
+    home_refs = client.get(f"/api/versions/{_draft_id(client, canvas)}/graph").json()["subprocess_refs"]
+    assert home_refs[str(c)]["succeeded_at"] is not None and home_refs[str(c)]["superseded"] is False
+    # 타 캔버스의 옛 노드는 stale_link 위반
+    assert "stale_link" in _readiness_codes(client, other_canvas)
+
+
+def test_unassigned_link_counts_as_stale(client: TestClient) -> None:
+    l5 = _seed_category("FWS-U5", "해제stale", level=5)
+    a = _seed_l6_map(l5, "fws stale A", "FWS-U-A")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    assert "stale_link" not in _readiness_codes(client, canvas)
+    _apply({"action": "unassign", "map_id": a})
+    assert _readiness_codes(client, canvas) == ["stale_link"]  # missing_l6는 아님(소속이 아니니)
+    refs = client.get(f"/api/versions/{_draft_id(client, canvas)}/graph").json()["subprocess_refs"]
+    assert refs[str(a)]["category_id"] is None and refs[str(a)]["slot_changed_action"] == "unassign"
+
+
 # ── 라우터: slot-changes / 어댑터 / 삭제·복사 차단 ───────────────────────────────
 
 

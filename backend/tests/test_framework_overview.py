@@ -185,6 +185,7 @@ def test_validate_confirm_readiness_batch_matches_single(
     # node1(_make_canvas의 기본 링크)의 L6를 소프트삭제해 stale_link, node2는 미게시 L6에
     # 링크해 l6_unpublished, 둘을 서로 가리키는 2노드 순환으로 엮어 noexit_cycle까지 겹친다.
     combo_map_id, combo_draft_id = _make_canvas(client, "OVR-EQ-COMBO", "동치복합")
+    combo_l5 = _seed_category(client, "OVR-EQ-COMBO", "동치복합", level=5)
     combo_graph = client.get(f"/api/versions/{combo_draft_id}/graph").json()
     node1 = combo_graph["nodes"][0]
     stale_l6_id = node1["linked_map_id"]
@@ -202,7 +203,8 @@ def test_validate_confirm_readiness_batch_matches_single(
 
     async def _seed_unpublished_l6() -> int:
         async with SessionLocal() as session:
-            m = ProcessMap(name="동치미게시링크", created_by=SYSADMIN, visibility="public")
+            # category_id 필요 — 없으면 stale_link(해제 링크, 2026-09-06 확장)로도 잡혀 l6_unpublished 격리가 깨진다.
+            m = ProcessMap(name="동치미게시링크", created_by=SYSADMIN, visibility="public", category_id=combo_l5)
             m.versions.append(MapVersion(label="As-Is", status="draft"))
             session.add(m)
             await session.commit()
