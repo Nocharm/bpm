@@ -376,7 +376,12 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     setRetire(next);
     setSpConfirm(false);
     if (next) {
-      setName(copy.sourceName);
+      // 이름 고정은 레거시 경로만 — 슬롯(L5) 있는 원본은 slot-changes가 은퇴를 처리해 원본이
+      // 승인 전까지 이름을 그대로 유지하므로, 복사본까지 원본 이름으로 고정하면 POST /copy가
+      // 409(map name already exists)로 실패한다. 슬롯 경로는 기존 "(Copy)" 기본값을 편집 가능하게 둔다.
+      if (copy.categoryId == null) {
+        setName(copy.sourceName);
+      }
       if (spUsage === null) {
         getSubprocessUsage(copy.mapId)
           .then(setSpUsage)
@@ -654,12 +659,18 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             onKeyDown={(e) => {
               if (e.key === "Enter") void handleCreate();
             }}
-            disabled={submitting || retire}
+            // 잠금은 레거시 은퇴 경로(원본을 즉시 개명)에서만 — 슬롯 경로는 원본 이름이 그대로라 편집 가능해야 한다.
+            disabled={submitting || (retire && copy?.categoryId == null)}
             autoFocus
           />
-          {retire && (
+          {retire && copy?.categoryId == null && (
             <p data-id="copy-name-locked-note" className="text-fine text-ink-tertiary">
               {t("copyDialog.nameLockedNote")}
+            </p>
+          )}
+          {retire && copy?.categoryId != null && (
+            <p data-id="copy-retire-slot-name-hint" className="text-fine text-ink-tertiary">
+              {t("perm.createDialog.copyRetireSlotNameHint")}
             </p>
           )}
         </div>
