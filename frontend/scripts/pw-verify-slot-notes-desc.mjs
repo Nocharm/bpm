@@ -1,5 +1,5 @@
 // 2026-08-31 후속 3종 확인 — [9] 지정 설명=맵 설명 일원화 · [10] SP 상세 모달 노트 섹션 ·
-// [11] 슬롯 해제/변경 파급효과 게이트.
+// [11] 슬롯 해제/변경 파급효과 안내(slot-changes dry-run → ConfirmDialog, 구 게이트 대체 2026-09-06).
 // 전제: backend(8100)+frontend(3100) + pw-smoke-framework-canvas.mjs 시드 완료.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3100 SHOT_DIR=/tmp/shots node scripts/pw-verify-slot-notes-desc.mjs
 import { chromium } from "playwright-core";
@@ -106,8 +106,8 @@ for (let i = 0; i < total && !opened; i++) {
 if (!opened) check("[10] SP 상세 모달 노트 섹션", false, "노트 있는 링크맵 노드를 못 찾음");
 await closeModal();
 
-// ── [11] 슬롯 해제·변경 게이트 ──────────────────────────────────────────────
-// 검증 대상은 게이트다 — 대상 맵은 "홈 목록에 실제로 보이는 카드"에서 고른 뒤 API로 L5를 붙인다.
+// ── [11] 슬롯 해제·변경 안내 모달 ────────────────────────────────────────────
+// 검증 대상은 안내 모달이다 — 대상 맵은 "홈 목록에 실제로 보이는 카드"에서 고른 뒤 API로 L5를 붙인다.
 // (슬롯 보유 맵을 UI만으로 찾아가면 시드/필터에 따라 흔들린다)
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForTimeout(1800);
@@ -181,24 +181,24 @@ if (prepared) {
     const unassign = page.locator('[data-id="framework-unassign-btn"]');
     if (await unassign.count()) {
       await unassign.click();
-      const gate = page.locator('[data-id="framework-slot-gate"]');
-      const gateUp = await gate.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
-      check("[11] 해제 클릭이 즉시 실행되지 않고 게이트로 막힌다", gateUp);
-      await page.waitForTimeout(700); // 참조 수 조회 대기
-      await shot(page, "11-slot-unassign-gate");
-      // 참조 줄은 "이 맵을 SP로 링크한 맵이 있을 때만" 뜬다 — 실제 참조 수와 렌더 여부가 일치해야 한다
-      const refCount = await page.evaluate(async (id) => {
-        const u = await (await fetch(`/api/maps/${id}/subprocess-usage`)).json();
-        return (u.used_by?.length ?? 0) + (u.hidden_count ?? 0);
-      }, prepared.mapId);
-      const refsRow = await page.locator('[data-id="framework-gate-refs"]').count();
+      // 해제=slot-changes dry-run → self_apply면 안내 모달(ConfirmDialog)로 막힌다(구 framework-slot-gate 대체)
+      const confirmDialog = page.locator('[data-id="confirm-dialog"]');
+      const dialogUp = await confirmDialog
+        .waitFor({ state: "visible", timeout: 5000 })
+        .then(() => true)
+        .catch(() => false);
+      check("[11] 해제 클릭이 즉시 실행되지 않고 안내 모달로 막힌다", dialogUp);
+      await page.waitForTimeout(700); // dry-run 프리뷰 조회 대기
+      await shot(page, "11-slot-unassign-confirm");
+      // 영향 요약(홈/다른 캔버스/참조 맵 개수)이 안내 모달 본문에 렌더된다
+      const dialogText = await confirmDialog.innerText().catch(() => "");
       check(
-        "[11] 참조 맵 수 안내가 실제 참조 유무와 일치",
-        (refCount > 0 ? 1 : 0) === (refsRow > 0 ? 1 : 0),
-        `refs=${refCount} row=${refsRow}`,
+        "[11] 안내 모달에 참조 맵 영향 요약이 표시된다",
+        /참조 맵 \d+개/.test(dialogText),
+        dialogText.slice(0, 120),
       );
       // 취소하면 원래 버튼으로 복귀 — 실제 해제는 하지 않는다(시드 보존)
-      await page.locator('[data-id="framework-gate-cancel"]').click();
+      await page.locator('[data-id="confirm-dialog-cancel"]').click();
       await page.waitForTimeout(300);
       const backToButtons = await page.locator('[data-id="framework-unassign-btn"]').isVisible();
       check("[11] 취소 시 원상복귀(해제 미실행)", backToButtons);

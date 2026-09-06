@@ -2773,25 +2773,6 @@ export function setCategoryPermissions(
   });
 }
 
-// 카테고리 연결/해제 — null이면 해제. owner/sysadmin 전용(서버 가드), 모든 레벨 연결 허용.
-export function putMapCategory(mapId: number, categoryId: number | null): Promise<MapDetail> {
-  return request<MapDetail>(`/maps/${mapId}/category`, {
-    method: "PUT",
-    body: JSON.stringify({ category_id: categoryId }),
-  });
-}
-
-// 체계 슬롯(category_id+consultant_code) 이양 — source→target, source는 해제. 양쪽 owner 필요(서버 가드).
-export function postFrameworkTransfer(
-  mapId: number,
-  toMapId: number,
-): Promise<{ from_map_id: number; to_map_id: number }> {
-  return request(`/maps/${mapId}/framework-transfer`, {
-    method: "POST",
-    body: JSON.stringify({ to_map_id: toMapId }),
-  });
-}
-
 // ── L6 슬롯 변경 — 5액션 공용, dry_run이면 승인자·영향 미리보기 (spec 2026-09-06 §4.1) ──
 export type SlotChangeAction = "assign" | "unassign" | "move" | "replace" | "delete";
 export interface SlotChangeIn {

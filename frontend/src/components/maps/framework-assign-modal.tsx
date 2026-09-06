@@ -7,20 +7,20 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Network, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Network, ShieldCheck, TriangleAlert, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
   getCategoryChain,
-  getSubprocessUsage,
   listCategoryNodes,
   listMaps,
-  postFrameworkTransfer,
-  putMapCategory,
+  postSlotChange,
   type CategoryNode,
   type MapSummary,
-  type SubprocessUsage,
+  type SlotChangeIn,
+  type SlotChangeOut,
 } from "@/lib/api";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
 import { useI18n } from "@/lib/i18n";
@@ -29,7 +29,6 @@ interface FrameworkAssignModalProps {
   mapId: number;
   currentCategoryId: number | null | undefined;
   currentPath: string | null | undefined;
-  hasConsultantCode: boolean;
   onClose: () => void;
   onChanged: () => void;
 }
@@ -38,7 +37,6 @@ export function FrameworkAssignModal({
   mapId,
   currentCategoryId,
   currentPath,
-  hasConsultantCode,
   onClose,
   onChanged,
 }: FrameworkAssignModalProps) {
@@ -57,28 +55,9 @@ export function FrameworkAssignModal({
   const [transferTargetId, setTransferTargetId] = useState("");
   // 현 슬롯 카테고리 레벨 — 레거시 비-L5 슬롯은 이양 차단(서버 409 미러, 2026-08-30 확정)
   const [currentLevel, setCurrentLevel] = useState<number | null>(null);
-  // 파급효과 게이트 — 이미 슬롯이 있는 맵의 "해제"·"다른 L5로 변경"은 되돌리기 어려운 영향이 있어
-  // 즉시 실행하지 않고 영향 요약을 먼저 보여준다. 최초 연결(슬롯 없음)은 게이트 없음 (사용자 요청 2026-08-31)
-  const [gate, setGate] = useState<{ kind: "unassign" } | { kind: "reassign"; categoryId: number } | null>(
-    null,
-  );
-  // 이 맵을 서브프로세스로 참조하는 상위 맵 — 게이트 열 때 1회 조회(실패해도 게이트는 뜬다)
-  const [usage, setUsage] = useState<SubprocessUsage | null>(null);
-
-  useEffect(() => {
-    if (gate === null) return;
-    let active = true;
-    void getSubprocessUsage(mapId)
-      .then((result) => {
-        if (active) setUsage(result);
-      })
-      .catch(() => {
-        // 참조 수는 부가 정보 — 조회 실패해도 안내와 확인 버튼은 그대로 제공한다
-      });
-    return () => {
-      active = false;
-    };
-  }, [gate, mapId]);
+  // dry-run 프리뷰 결과 대기 중인 액션 — self_apply면 안내 모달로 승인 없이 바로 적용,
+  // 아니면 error에 승인 필요 안내를 띄운다(승인 요청 생성은 트랙 C, spec 2026-09-06 §4.1)
+  const [pending, setPending] = useState<{ body: SlotChangeIn; preview: SlotChangeOut } | null>(null);
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -172,58 +151,51 @@ export function FrameworkAssignModal({
     }
   }
 
-  // 연결 버튼 — 슬롯이 이미 있고 다른 L5를 고른 경우(=변경)면 게이트를 먼저 띄운다
+  // 공용 실행기 — dry-run으로 승인자·영향을 미리 보고, self_apply면 안내 모달(pending)로 넘긴다.
+  // self_apply가 아니면 승인 필요 안내를 바로 보여준다(요청 생성 UI는 트랙 C).
+  async function planChange(body: SlotChangeIn) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const preview = await postSlotChange(mapId, { ...body, dry_run: true });
+      if (!preview.self_apply) {
+        const names = preview.sides.flatMap((s) => s.approvers);
+        setError(
+          names.length > 0
+            ? t("home.frameworkSlotNeedsApproval", { names: names.join(", ") })
+            : t("home.frameworkSlotNoApprovers"),
+        );
+        return;
+      }
+      setPending({ body, preview });
+    } catch (err) {
+      setError(getApiErrorDetail(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function applyPending() {
+    if (pending === null) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await postSlotChange(mapId, pending.body);
+      setPending(null);
+      onChanged();
+      onClose();
+    } catch (err) {
+      setError(getApiErrorDetail(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // 연결 버튼 — 슬롯 없음=assign, 다른 L5로 변경=move. 같은 L5 재선택은 무동작.
   function requestAssign() {
     if (selectedId === null) return;
-    if (currentCategoryId != null && selectedId !== currentCategoryId) {
-      setGate({ kind: "reassign", categoryId: selectedId });
-      return;
-    }
-    void handleAssign();
-  }
-
-  async function handleAssign() {
-    if (selectedId === null) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await putMapCategory(mapId, selectedId);
-      onChanged();
-      onClose();
-    } catch (err) {
-      setError(getApiErrorDetail(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleUnassign() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      await putMapCategory(mapId, null);
-      onChanged();
-      onClose();
-    } catch (err) {
-      setError(getApiErrorDetail(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleTransfer() {
-    if (!transferTargetId) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await postFrameworkTransfer(mapId, Number(transferTargetId));
-      onChanged();
-      onClose();
-    } catch (err) {
-      setError(getApiErrorDetail(err));
-    } finally {
-      setSubmitting(false);
-    }
+    if (currentCategoryId == null) void planChange({ action: "assign", to_category_id: selectedId });
+    else if (selectedId !== currentCategoryId) void planChange({ action: "move", to_category_id: selectedId });
   }
 
   // 트리 행 — 상위는 쉐브론 토글, L5만 선택 가능(맵 슬롯 L5 전용, 2026-08-30). 선택 행은 accent 틴트+체크.
@@ -276,9 +248,15 @@ export function FrameworkAssignModal({
     );
   };
 
-  // 이미 슬롯(카테고리 또는 컨설턴트 코드)을 가진 맵은 이양 대상에서 제외 — 자기 자신도 제외 (fix round 1 #3).
+  // 이양 대상은 슬롯 없는 일반 맵만 — 이미 슬롯(카테고리/컨설턴트 코드) 가진 맵·framework/word 맵·자기 자신 제외.
   const mapOptions = (transferMaps ?? [])
-    .filter((m) => m.id !== mapId && m.category_id == null && m.consultant_code == null)
+    .filter(
+      (m) =>
+        m.id !== mapId &&
+        (m.mode ?? "normal") === "normal" &&
+        m.category_id == null &&
+        m.consultant_code == null,
+    )
     .map((m) => ({ value: String(m.id), label: m.name }));
 
   return createPortal(
@@ -329,111 +307,30 @@ export function FrameworkAssignModal({
           )}
         </div>
 
-        {gate !== null ? (
-          // 파급효과 게이트 — 해제/변경만. 되돌리려면 같은 화면에서 다시 지정해야 하므로 영향을 먼저 보여준다.
-          <div
-            data-id="framework-slot-gate"
-            className={`flex flex-col gap-2.5 rounded-sm border px-3 py-2.5 ${
-              gate.kind === "unassign"
-                ? "border-error/40 bg-error/10"
-                : "border-changed/40 bg-changed/10"
-            }`}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-id="framework-assign-btn"
+            disabled={selectedId === null || submitting}
+            className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={requestAssign}
           >
-            <div className="flex items-start gap-2">
-              <TriangleAlert
-                size={16}
-                strokeWidth={1.5}
-                className={`mt-0.5 shrink-0 ${gate.kind === "unassign" ? "text-error" : "text-changed"}`}
-              />
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span
-                  className={`text-caption font-semibold ${
-                    gate.kind === "unassign" ? "text-error" : "text-changed"
-                  }`}
-                >
-                  {gate.kind === "unassign"
-                    ? t("home.frameworkGateUnassignTitle")
-                    : t("home.frameworkGateReassignTitle")}
-                </span>
-                <span className="text-fine text-ink-secondary">
-                  {gate.kind === "unassign"
-                    ? t("home.frameworkGateUnassignDesc", { path: currentPath ?? "" })
-                    : t("home.frameworkGateReassignDesc", { path: currentPath ?? "" })}
-                </span>
-              </div>
-            </div>
-            {/* 영향 목록 — 체계 트리에서의 이동/제거는 항상, 참조 맵 수는 조회되면 */}
-            <ul className="flex flex-col gap-1 pl-6 text-fine text-ink-secondary">
-              <li className="list-disc">
-                {gate.kind === "unassign"
-                  ? t("home.frameworkGateImpactTreeRemove")
-                  : t("home.frameworkGateImpactTreeMove")}
-              </li>
-              {usage !== null && usage.used_by.length + usage.hidden_count > 0 && (
-                <li data-id="framework-gate-refs" className="list-disc">
-                  {t("home.frameworkGateImpactRefs", {
-                    count: String(usage.used_by.length + usage.hidden_count),
-                  })}
-                </li>
-              )}
-              <li className="list-disc">{t("home.frameworkGateImpactCanvas")}</li>
-            </ul>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                data-id="framework-gate-cancel"
-                disabled={submitting}
-                className="rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => setGate(null)}
-              >
-                {t("summary.cancel")}
-              </button>
-              <button
-                type="button"
-                data-id="framework-gate-confirm"
-                disabled={submitting}
-                className={`rounded-sm px-3 py-1.5 text-caption text-on-accent disabled:opacity-40 ${
-                  gate.kind === "unassign" ? "bg-error hover:opacity-90" : "bg-accent hover:bg-accent-focus"
-                }`}
-                onClick={() => {
-                  const pending = gate;
-                  setGate(null);
-                  if (pending.kind === "unassign") void handleUnassign();
-                  else void handleAssign();
-                }}
-              >
-                {gate.kind === "unassign"
-                  ? t("home.frameworkUnassign")
-                  : t("home.frameworkAssign")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
+            {t("home.frameworkAssign")}
+          </button>
+          {currentCategoryId != null && (
             <button
               type="button"
-              data-id="framework-assign-btn"
-              disabled={selectedId === null || submitting}
-              className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              onClick={requestAssign}
+              data-id="framework-unassign-btn"
+              disabled={submitting}
+              className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+              onClick={() => void planChange({ action: "unassign" })}
             >
-              {t("home.frameworkAssign")}
+              {t("home.frameworkUnassign")}
             </button>
-            {currentCategoryId != null && (
-              <button
-                type="button"
-                data-id="framework-unassign-btn"
-                disabled={submitting}
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => setGate({ kind: "unassign" })}
-              >
-                {t("home.frameworkUnassign")}
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
-        {hasConsultantCode && (
+        {currentCategoryId != null && (
           <div className="flex flex-col gap-2 border-t border-hairline pt-3">
             {currentLevel !== null && currentLevel !== 5 ? (
               // 레거시 비-L5 슬롯 — 이양 대신 L5 재배정 유도. 아이콘+틴트 배너로 시인성 확보 (서버 409 미러)
@@ -461,6 +358,7 @@ export function FrameworkAssignModal({
             ) : (
               <>
                 <p className="text-fine text-ink-tertiary">{t("home.frameworkTransferPick")}</p>
+                <p className="text-fine text-ink-tertiary">{t("home.frameworkTransferPickMode")}</p>
                 <SearchSelect
                   value={transferTargetId}
                   options={mapOptions}
@@ -473,7 +371,7 @@ export function FrameworkAssignModal({
                   data-id="framework-transfer-btn"
                   disabled={!transferTargetId || submitting}
                   className="self-end rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                  onClick={() => void handleTransfer()}
+                  onClick={() => void planChange({ action: "replace", to_map_id: Number(transferTargetId) })}
                 >
                   {t("home.frameworkTransfer")}
                 </button>
@@ -483,6 +381,23 @@ export function FrameworkAssignModal({
         )}
 
         {error && <p className="text-caption text-error">{error}</p>}
+
+        {pending !== null && (
+          <ConfirmDialog
+            icon={<ShieldCheck size={18} strokeWidth={1.5} />}
+            title={t("home.frameworkSelfApplyTitle")}
+            message={`${t("home.frameworkSelfApplyDesc")} · ${t("home.frameworkImpactSummary", {
+              home: String(pending.preview.impact.home_canvas_nodes),
+              other: String(pending.preview.impact.other_canvas_nodes),
+              refs: String(pending.preview.impact.referencing_maps),
+            })}`}
+            confirmLabel={t("home.frameworkApplyNow")}
+            cancelLabel={t("summary.cancel")}
+            danger={pending.body.action === "unassign" || pending.body.action === "delete"}
+            onConfirm={() => void applyPending()}
+            onClose={() => setPending(null)}
+          />
+        )}
       </div>
     </ModalBackdrop>,
     document.body,
