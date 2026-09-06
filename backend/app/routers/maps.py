@@ -1339,9 +1339,6 @@ async def set_map_category(
     )
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    if found_map.mode != "normal":
-        # 슬롯 보유 자격은 일반 맵만 — 연계 캔버스·Word 맵은 서랍에 들어가지 않는다 (spec 2026-09-06 §9)
-        raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
     if payload.category_id is not None:
         category = await session.get(ProcessCategory, payload.category_id)
         if category is None:
@@ -1354,6 +1351,9 @@ async def set_map_category(
                 status_code=422,
                 detail="maps can only be attached to a level-5 category",
             )
+        if found_map.mode != "normal":
+            # 슬롯 보유 자격은 일반 맵만 — 연계 캔버스·Word 맵은 서랍에 들어가지 않는다 (spec 2026-09-06 §9)
+            raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
     found_map.category_id = payload.category_id
     await session.commit()
     await session.refresh(found_map, attribute_names=["versions"])

@@ -124,3 +124,19 @@ def test_slot_endpoints_reject_non_normal_maps(client: TestClient) -> None:
     r2 = client.post(f"/api/maps/{src}/framework-transfer", json={"to_map_id": canvas})
     assert r2.status_code == 422 and "normal maps" in r2.json()["detail"]
     assert _map_row(canvas)["category_id"] is None
+
+
+def test_clearing_a_stray_slot_on_a_canvas_map_is_allowed(client: TestClient) -> None:
+    """mode 가드는 슬롯을 '붙일' 때만 — 결함 ② 이전에 생긴 잔존 슬롯은 해제(category_id=null)로 치울 수 있어야 한다."""
+    l5 = _seed_category("FWS-B5C", "핫픽스B정리", level=5)
+    other_l5 = _seed_category("FWS-B5CX", "핫픽스B정리X", level=5)
+    canvas = client.post(f"/api/categories/{other_l5}/linkage-map").json()["map_id"]
+
+    async def _stray(session):
+        m = await session.get(ProcessMap, canvas)
+        m.category_id = l5
+
+    _run(_stray)
+    assert _map_row(canvas)["category_id"] == l5
+    assert client.put(f"/api/maps/{canvas}/category", json={"category_id": None}).status_code == 200
+    assert _map_row(canvas)["category_id"] is None
