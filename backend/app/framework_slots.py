@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.clock import now as now_kst
 from app.models import (
     Edge,
     FrameworkSlotEvent,
@@ -285,8 +286,85 @@ async def apply_slot_change(
 async def _apply_handover(
     session: AsyncSession, plan: SlotPlan, actor: str, request_id: int | None
 ) -> list[MapVersion]:
-    """replace / delete — Task 4에서 구현."""
-    raise HTTPException(status_code=501, detail="handover not implemented yet")
+    """replace / delete — 슬롯 승계(flush 순서 안전)·계보·홈 캔버스 재지정. 후계자 없는 delete는 소프트삭제만."""
+    change, source, target = plan.change, plan.source, plan.target
+    from_category_id = plan.from_category_id
+    slot_code = source.consultant_code
+    touched: list[MapVersion] = []
+
+    if target is not None:
+        # 결함 ①: source를 먼저 비우고 flush — UPDATE는 PK 순이라 target이 먼저 코드를 받으면 unique 충돌
+        source.category_id = None
+        source.consultant_code = None
+        await session.flush()
+        target.category_id = from_category_id
+        target.consultant_code = slot_code
+        source.retired_to_map_id = target.id
+        _, draft = await _home_draft(session, from_category_id)
+        if draft is not None:
+            await _repoint_home_canvas(session, draft, source, target)
+            record_version_event(
+                session, draft.id, "slot_changed", actor, note=f"{source.name} -> {target.name}"
+            )
+            touched.append(draft)
+        _record_event(session, map_id=target.id, action="succeed", actor=actor,
+                      to_category_id=from_category_id, to_map_id=source.id, request_id=request_id)
+
+    if change.action == "delete":
+        # delete_map(maps.py)와 동일 — 소프트삭제 + KB 청크 제거. 슬롯은 후계자가 없으면 그대로(휴지통 복구 시 회복)
+        from app.routers.maps import _delete_map_kb_chunks  # 지역 import — 라우터 순환 회피
+
+        source.deleted_at = now_kst()
+        await _delete_map_kb_chunks(session, [source.id])
+
+    _record_event(session, map_id=source.id, action=change.action, actor=actor,
+                  from_category_id=from_category_id, to_map_id=target.id if target else None,
+                  request_id=request_id)
+    return touched
+
+
+async def _repoint_home_canvas(
+    session: AsyncSession, draft: MapVersion, source: ProcessMap, target: ProcessMap
+) -> None:
+    """홈 캔버스 draft에서 source를 가리키는 노드를 target으로 — 엣지·좌표·폭 유지.
+    target 노드가 이미 있으면 source 노드의 엣지를 target 노드로 옮기고(중복 쌍 제거) source 노드를 지운다."""
+    source_nodes = list(
+        (await session.scalars(
+            select(Node).where(
+                Node.version_id == draft.id, Node.node_type == "subprocess", Node.linked_map_id == source.id
+            )
+        )).all()
+    )
+    if not source_nodes:
+        return
+    existing_target = await session.scalar(
+        select(Node).where(
+            Node.version_id == draft.id, Node.node_type == "subprocess", Node.linked_map_id == target.id
+        )
+    )
+    if existing_target is None:
+        for node in source_nodes:
+            node.linked_map_id = target.id
+            node.title = target.name
+            node.linked_version_id = None  # 고정 버전은 옛 맵의 것 — 후계자는 최신 추종으로 시작
+            node.follow_latest = True
+        return
+    source_ids = {n.id for n in source_nodes}
+    edges = list((await session.scalars(select(Edge).where(Edge.version_id == draft.id))).all())
+    pairs = {(e.source_node_id, e.target_node_id) for e in edges if e.source_node_id not in source_ids
+             and e.target_node_id not in source_ids}
+    for edge in edges:
+        new_src = existing_target.id if edge.source_node_id in source_ids else edge.source_node_id
+        new_tgt = existing_target.id if edge.target_node_id in source_ids else edge.target_node_id
+        if (new_src, new_tgt) == (edge.source_node_id, edge.target_node_id):
+            continue
+        if new_src == new_tgt or (new_src, new_tgt) in pairs:
+            await session.delete(edge)  # 자기루프·중복 쌍은 버린다
+            continue
+        edge.source_node_id, edge.target_node_id = new_src, new_tgt
+        pairs.add((new_src, new_tgt))
+    for node in source_nodes:
+        await session.delete(node)
 
 
 async def build_preview(session: AsyncSession, plan: SlotPlan, actor: str) -> dict:

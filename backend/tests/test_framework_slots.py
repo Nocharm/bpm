@@ -5,6 +5,7 @@ client 픽스처가 세션 스코프 공유 DB라 카테고리 코드는 이 파
 
 import asyncio
 from collections.abc import Iterator
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -299,3 +300,105 @@ def test_core_clearing_a_stray_slot_on_a_canvas_map_is_allowed(client: TestClien
         return _run(_go)
 
     assert _status({"action": "assign", "map_id": canvas, "to_category_id": l5}) == 422  # 슬롯을 "붙일" 땐 mode 가드 그대로
+
+
+# ── 코어: replace / delete ─────────────────────────────────────────────────────
+
+
+def _readiness_codes(client: TestClient, canvas_map_id: int) -> list[str]:
+    body = client.get(f"/api/maps/{canvas_map_id}/confirm-readiness").json()
+    return sorted(f["code"] for f in body["failures"])
+
+
+def _put_edge(client: TestClient, draft_id: int, source_map: int, target_map: int) -> None:
+    graph = client.get(f"/api/versions/{draft_id}/graph").json()
+    na = next(n for n in graph["nodes"] if n["linked_map_id"] == source_map)
+    nb = next(n for n in graph["nodes"] if n["linked_map_id"] == target_map)
+    edge = {"id": uuid4().hex, "source_node_id": na["id"], "target_node_id": nb["id"]}
+    r = client.put(f"/api/versions/{draft_id}/graph",
+                   json={"nodes": graph["nodes"], "edges": graph["edges"] + [edge], "groups": []})
+    assert r.status_code == 200, r.text
+
+
+def test_core_replace_repoints_home_canvas_and_keeps_edges(client: TestClient) -> None:
+    """결함 ③ 회귀: 이양 후 옛 노드가 남지 않고 C 노드가 A 자리에 엣지를 물려받는다. missing_l6 없음."""
+    l5 = _seed_category("FWS-R5", "대체", level=5)
+    a = _seed_l6_map(l5, "fws replace A", "FWS-R-A")
+    b = _seed_l6_map(l5, "fws replace B", "FWS-R-B")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    draft = _draft_id(client, canvas)
+    assert client.post(f"/api/versions/{draft}/checkout", json={}).status_code in (200, 201)
+    _put_edge(client, draft, a, b)
+    c = _seed_l6_map(None, "fws replace C", None)  # 슬롯 없는 일반 맵(게시본 있음)
+
+    _apply({"action": "replace", "map_id": a, "to_map_id": c})
+
+    assert _map_row(a) == {"category_id": None, "consultant_code": None, "deleted": False,
+                           "retired_to": c, "mode": "normal"}
+    assert _map_row(c)["category_id"] == l5 and _map_row(c)["consultant_code"] == "FWS-R-A"
+    assert _linked_ids(client, canvas) == sorted([b, c])
+    graph = client.get(f"/api/versions/{draft}/graph").json()
+    nc = next(n for n in graph["nodes"] if n["linked_map_id"] == c)
+    assert nc["title"] == "fws replace C"
+    assert len(graph["edges"]) == 1 and graph["edges"][0]["source_node_id"] == nc["id"]
+    assert "missing_l6" not in _readiness_codes(client, canvas)
+    assert _events(a) == [("replace", l5, None, c)]
+    assert _events(c) == [("succeed", None, l5, a)]
+
+
+def test_core_replace_merges_when_target_already_on_canvas(client: TestClient) -> None:
+    """C가 이미 캔버스에(외부 노드로) 있으면 A 노드의 엣지를 C 노드로 옮기고 A 노드를 지운다(중복 쌍 제거)."""
+    l5 = _seed_category("FWS-M5", "합치기", level=5)
+    other = _seed_category("FWS-M5X", "합치기X", level=5)
+    a = _seed_l6_map(l5, "fws merge A", "FWS-M-A")
+    b = _seed_l6_map(l5, "fws merge B", "FWS-M-B")
+    c = _seed_l6_map(other, "fws merge C", "FWS-M-C")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    draft = _draft_id(client, canvas)
+    assert client.post(f"/api/versions/{draft}/checkout", json={}).status_code in (200, 201)
+    graph = client.get(f"/api/versions/{draft}/graph").json()
+    na = next(n for n in graph["nodes"] if n["linked_map_id"] == a)
+    nc = dict(na, id=uuid4().hex, linked_map_id=c, title="fws merge C", pos_y=na["pos_y"] + 240)
+    r = client.put(f"/api/versions/{draft}/graph", json={"nodes": graph["nodes"] + [nc], "edges": [], "groups": []})
+    assert r.status_code == 200, r.text
+    _put_edge(client, draft, a, b)
+    _put_edge(client, draft, c, b)  # 합칠 때 (c→b) 중복이 되는 쌍
+
+    # C의 타 L5 슬롯을 먼저 비워 replace 전제를 맞춘다(테스트 셋업 — 실제론 슬롯 없는 맵이 target)
+    _apply({"action": "unassign", "map_id": c})
+
+    async def _clear_code(session):
+        m = await session.get(ProcessMap, c)
+        m.consultant_code = None
+
+    _run(_clear_code)
+    _apply({"action": "replace", "map_id": a, "to_map_id": c})
+
+    graph2 = client.get(f"/api/versions/{draft}/graph").json()
+    assert sorted(n["linked_map_id"] for n in graph2["nodes"]) == sorted([b, c])
+    pairs = {(e["source_node_id"], e["target_node_id"]) for e in graph2["edges"]}
+    nc_id = next(n["id"] for n in graph2["nodes"] if n["linked_map_id"] == c)
+    nb_id = next(n["id"] for n in graph2["nodes"] if n["linked_map_id"] == b)
+    assert pairs == {(nc_id, nb_id)}
+
+
+def test_core_delete_with_and_without_successor(client: TestClient) -> None:
+    """결함 ④ 회귀: 후계자 있는 delete는 슬롯 승계+재지정, 없는 delete는 노드를 남긴다(stale)."""
+    l5 = _seed_category("FWS-D5", "삭제", level=5)
+    a = _seed_l6_map(l5, "fws delete A", "FWS-D-A")
+    d = _seed_l6_map(l5, "fws delete D", "FWS-D-D")
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    c = _seed_l6_map(None, "fws delete C", None)
+
+    _apply({"action": "delete", "map_id": a, "to_map_id": c})
+    assert _map_row(a) == {"category_id": None, "consultant_code": None, "deleted": True,
+                           "retired_to": c, "mode": "normal"}
+    assert _map_row(c)["category_id"] == l5 and _map_row(c)["consultant_code"] == "FWS-D-A"
+    assert _linked_ids(client, canvas) == sorted([c, d])
+    assert _events(a) == [("delete", l5, None, c)]
+
+    _apply({"action": "delete", "map_id": d})
+    row = _map_row(d)
+    assert row["deleted"] is True and row["category_id"] == l5 and row["retired_to"] is None
+    assert d in _linked_ids(client, canvas)  # 링크는 끊지 않음 — 복구 시 자동 회복, 표시는 stale
+    assert "stale_link" in _readiness_codes(client, canvas)
