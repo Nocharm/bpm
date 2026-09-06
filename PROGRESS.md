@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-06 — Framework 슬롯 거버넌스 설계 스펙 (feat/fw-slot-handover)
+- **배경**: 2026-09-03 조사에서 슬롯 이양(`framework-transfer`)이 `category_id`·`consultant_code`만 옮기고 홈 L5 캔버스 노드·계보·알림을 안 따라가는 결함 4종(UPDATE 순서 unique 500·캔버스 맵에 슬롯 허용·이양 후 캔버스 표류·복사+은퇴 시 슬롯 휴지통 잔존)을 실행으로 확인. dev 9ddd2f3e 재조사에서도 동일 재현.
+- **결정**(브레인스토밍): 슬롯 변경 5액션(assign·unassign·move·replace·delete)을 승인 종류 하나 `fw_slot`으로 통일, L5 직속 관리자 승인(이동은 양측 각 1명, 관리자 본인은 안내 모달 후 즉시 적용), 적용 시 홈 캔버스 노드 자동 재지정·이력 테이블·알림. 스펙 `docs/superpowers/specs/2026-09-06-fw-slot-governance-design.md`, 코드 변경은 아직 없음.
+
 ## 2026-09-03 — 5라운드: 인스펙터 행 통일·IO 열 배치·SP 부서 말단 필·독 장면 이동 (dev)
 - **인스펙터 행 문법 통일**(사용자 피드백 "SP와 일반 노드 스페이서·폭이 다름"): `lib/inspector-row.ts`(`INSPECTOR_ROW` min-h-8·py-1, `INSPECTOR_ROW_LABEL`)를 속성 피커·시스템/GMP/URL 행·지표 카드·조건 행·SP 상속 행(속성·IO·조건)이 공유 — 읽기/편집 모두 32px 행, 스페이서는 URL 위 구분선 하나(일반 노드 정책). fitContent 피커 트리거는 입력과 같은 24px(py-0.5). SP IO 상속 표시는 자체 렌더 대신 `MultiValueInput readOnly`(링크 아이콘·호버·드롭다운 유지).
 - **SP 속성 부서=말단 필**: `DeptPill`(말단+조직 모달)을 신설해 타일·SP 상속 행·읽기 전용 일반 행이 공유(attribute-tiles의 DeptLeafPill/모달 상태 이관). 담당자도 `AssigneePills`. 후속(사용자 피드백): 필 `min-w-0`으로 카드 밖 오버플로우 차단 + 호버(보더 액센트·틴트·그림자), **읽기 전용 속성 행 공용화** `AttributeReadRows`(부서 필·인물 필·시스템+메모 힌트·GMP 배지·링크 필) — 일반 노드 읽기 전용과 SP 상속 표시가 같은 컴포넌트, `BpmAttributePicker`는 편집 전용으로.
