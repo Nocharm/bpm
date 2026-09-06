@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Server,
   ShieldCheck,
+  TriangleAlert,
   User,
   Workflow,
   Zap,
@@ -935,13 +936,19 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   const spPlaceholder = data.nodeType === "subprocess" && data.linkedMapId === null;
   // 지정해제·삭제된 링크도 같은 F/U 룩 — 에러 배너+삼각 배지 혼합을 플레이스홀더 언어로 통일 (2026-08-30)
   const spUndesignated = data.nodeType === "subprocess" && !!data.undesignated;
+  // 슬롯 미싱 3상태 — 해제·이양·삭제 모두 플레이스홀더와 같은 점선 에러 룩 (spec 2026-09-06 §7.1)
+  const spMissing =
+    spUndesignated ||
+    data.spSlotState === "unassigned" ||
+    data.spSlotState === "superseded" ||
+    data.spSlotState === "deleted";
   const spExternal = data.nodeType === "subprocess" && !!data.spOriginPath && !spPlaceholder;
   // 출처 배지 경로 — 외부 L6는 라이브 파생(spOriginPath), 플레이스홀더는 저장된 출처 L5 (design §10.1)
   const originPath =
     data.spOriginPath ?? (spPlaceholder ? (data.placeholderCategoryPath ?? null) : null);
   const style = diff
     ? diffNodeStyle(diff)
-    : spPlaceholder || spUndesignated
+    : spPlaceholder || spMissing
       ? placeholderNodeStyle()
       : spExternal
         ? externalSpNodeStyle(color)
@@ -1025,6 +1032,14 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             />
           )}
         </div>
+        {data.spRecentHandover && (
+          <span
+            data-id="node-recent-handover"
+            className="mt-0.5 self-start rounded-xs border border-accent/40 bg-accent-tint px-1 py-px text-xs text-accent"
+          >
+            {t("framework.recentHandover")}
+          </span>
+        )}
         {/* 외부 L5 출신 배지 — 연계 캔버스에서 링크맵의 현 소속이 이 캔버스 L5와 다를 때(라이브 파생).
             마지막 2세그먼트만 표시, 전체 경로는 툴팁 (design 2026-08-28 §8) */}
         {originPath &&
@@ -1074,6 +1089,24 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <CircleArrowUp size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">{t("subprocess.updateBanner")}</span>
           </div>
+        ) : data.spSlotState === "unassigned" || data.spSlotState === "superseded" ? (
+          <button
+            type="button"
+            data-id="sp-banner-slot-missing"
+            title={t("framework.replaceCta")}
+            className="mt-1 flex w-full items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-left text-xs text-error"
+            onClick={(event) => {
+              event.stopPropagation();
+              onConnectPlaceholder?.(id);
+            }}
+          >
+            <TriangleAlert size={12} strokeWidth={1.5} className="shrink-0" />
+            <span className="truncate">
+              {data.spSlotState === "superseded"
+                ? t("framework.slotState.superseded", { name: data.spSuccessorName ?? "" })
+                : t("framework.slotState.unassigned")}
+            </span>
+          </button>
         ) : data.undesignated ? (
           data.spLinkDeleted && onConnectPlaceholder ? (
             // 스테일 링크(삭제·이양된 맵) 교체 CTA — 연결 다이얼로그 재사용, 후계자 추천 동반 (2026-08-30)

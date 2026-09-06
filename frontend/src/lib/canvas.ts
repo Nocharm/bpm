@@ -97,6 +97,16 @@ export type NodeData = {
   placeholderCategoryPath?: string | null;
   // 링크맵 삭제(휴지통/영구)됨 — 스테일 링크 교체 CTA 게이트 (2026-08-30, 렌더 시 refs에서 주입)
   spLinkDeleted?: boolean;
+  // 연계 캔버스 전용 — refs+캔버스 L5로 파생한 슬롯 상태·최근 이양·후계자·이력 시각 (spec 2026-09-06 §7.1)
+  spSlotState?: import("./framework-slot-state").SlotState;
+  spRecentHandover?: boolean;
+  spSuccessorName?: string | null;
+  spSlotInfo?: {
+    succeededAt: string | null;
+    updatedAt: string | null;
+    changedAt: string | null;
+    changedAction: string | null;
+  } | null;
   // 일반 맵 한정 — 링크맵의 프레임워크 소속(카테고리)·경로. 이름 옆 업무체계 필+3초 호버 피크 소스 (2026-08-30)
   spFrameworkCategoryId?: number | null;
   spFrameworkPath?: string | null;

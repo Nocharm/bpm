@@ -97,6 +97,7 @@ import type { PeekAddPayload } from "@/components/subprocess-preview-peek";
 import { ChangeSummarySection } from "@/components/change-summary-section";
 import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
 import { makeOptimisticRef } from "@/lib/framework-connect";
+import { deriveSlotState, isRecentHandover } from "@/lib/framework-slot-state";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
@@ -1678,6 +1679,24 @@ function MapEditor({ mapId }: { mapId: number }) {
       // 링크맵 현재 이름을 라이브로 표시 — subprocess 라벨은 링크맵 이름 고정(F5)이라 개명이 즉시 반영돼야 한다.
       // display 전용 주입(저장 스냅샷 data.label·게시본 노드는 불변). 삭제 맵(name null)은 저장 라벨로 폴백.
       const liveLabel = ref?.name ? { label: ref.name } : {};
+      // 슬롯 상태 — 연계 캔버스에서만 파생. contained/external은 기존 spOriginPath 로직과 같은 결론이지만
+      // unassigned/superseded/deleted를 한 축으로 묶어 process-node가 미싱 룩·배너를 고른다 (spec §7.1)
+      const slotState = isFrameworkMap ? deriveSlotState(ref, node.data.linkedMapId, linkageCategoryId) : undefined;
+      const slotExtras = isFrameworkMap
+        ? {
+            spSlotState: slotState,
+            spRecentHandover: slotState === "contained" && isRecentHandover(ref?.succeeded_at),
+            spSuccessorName: ref?.successor_name ?? null,
+            spSlotInfo: ref
+              ? {
+                  succeededAt: ref.succeeded_at ?? null,
+                  updatedAt: ref.map_updated_at ?? null,
+                  changedAt: ref.slot_changed_at ?? null,
+                  changedAction: ref.slot_changed_action ?? null,
+                }
+              : null,
+          }
+        : {};
       // 지정 어트리뷰트 라이브 주입 — 지정된 링크맵만. 노드에 저장하지 않고 렌더 시 파생.
       const spAttrs = ref?.designated
         ? {
@@ -1750,11 +1769,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           : { spFrameworkCategoryId: null, spFrameworkPath: null };
       // 잠긴 링크맵은 봉인 박스 — subEnds 없이 locked만 주입(state로 읽어 뱃지 재렌더). 모든 렌더 경로가 이 transform을 통과.
       if (k != null && lockedKeys.has(k)) {
-        return { ...node, data: { ...node.data, locked: true, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, locked: true, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, ...slotExtras, updateAvailable } };
       }
       const resolved = k ? resolvedCache.get(k) : undefined;
       if (!resolved) {
-        return { ...node, data: { ...node.data, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, updateAvailable } };
+        return { ...node, data: { ...node.data, undesignated, spLinkDeleted: ref?.deleted === true, ...frameworkPill(ref), ...spAttrs, ...liveLabel, ...slotExtras, updateAvailable } };
       }
       return {
         ...node,
@@ -1766,6 +1785,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           ...frameworkPill(ref),
           ...spAttrs,
           ...liveLabel,
+          ...slotExtras,
           updateAvailable,
         },
       };
@@ -5555,9 +5575,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         });
         return;
       }
-      // 스테일 링크(삭제·이양된 맵) 교체 — 출처는 옛 맵의 카테고리, 추천은 이양 후계자 (2026-08-30)
+      // 스테일 링크(삭제·이양·해제된 맵) 교체 — 출처는 옛 맵의 카테고리, 추천은 이양 후계자 (spec 2026-09-06 §7.1)
       const ref = subprocessRefs.get(linked);
-      if (ref?.deleted !== true) {
+      const stale = ref?.deleted === true || ref?.superseded === true || (isFrameworkMap && ref != null && ref.category_id == null);
+      if (!stale) {
         return;
       }
       setConnectTarget({
@@ -5571,7 +5592,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             : null,
       });
     },
-    [reactFlow, subprocessRefs],
+    [reactFlow, subprocessRefs, isFrameworkMap],
   );
   const applyConnectPlaceholder = useCallback(
     (
