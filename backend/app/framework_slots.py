@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.clock import now as now_kst
 from app.models import (
+    ApprovalRequest,
     Edge,
     FrameworkSlotEvent,
     MapVersion,
@@ -198,7 +199,7 @@ def _record_event(
     )
 
 
-async def _category_path(session: AsyncSession, category_id: int | None) -> str | None:
+async def category_path(session: AsyncSession, category_id: int | None) -> str | None:
     if category_id is None:
         return None
     from app.routers.categories import build_category_paths  # 지역 import — 순환 회피(subprocess.py 관례)
@@ -238,8 +239,8 @@ async def _notify_applied(
         payload={
             "map_name": plan.source.name, "actor": actor, "actor_name": actor_name,
             "action": change.action,
-            "from_path": await _category_path(session, plan.from_category_id),
-            "to_path": await _category_path(session, change.to_category_id),
+            "from_path": await category_path(session, plan.from_category_id),
+            "to_path": await category_path(session, change.to_category_id),
             "to_map_id": plan.target.id if plan.target is not None else None,
             "to_map_name": plan.target.name if plan.target is not None else None,
         },
@@ -378,7 +379,7 @@ async def build_preview(session: AsyncSession, plan: SlotPlan, actor: str) -> di
     for cid in plan.sides:
         approvers = await get_category_admin_logins(session, cid, direct_only=True)
         satisfied = logic.is_sysadmin(actor) or await is_direct_l5_admin(session, actor, cid)
-        sides.append({"category_id": cid, "path": await _category_path(session, cid),
+        sides.append({"category_id": cid, "path": await category_path(session, cid),
                       "approvers": approvers, "satisfied_by_caller": satisfied})
     canvas, draft = await _home_draft(session, plan.from_category_id)
     home_nodes = edges_kept = 0
@@ -412,3 +413,59 @@ async def build_preview(session: AsyncSession, plan: SlotPlan, actor: str) -> di
         "impact": {"home_canvas_nodes": home_nodes, "other_canvas_nodes": other_canvas,
                    "referencing_maps": referencing, "edges_kept": edges_kept},
     }
+
+
+def build_request_payload(plan: SlotPlan, note: str) -> dict:
+    """ApprovalRequest.payload — 승인 시 재검증에 필요한 최소 좌표 + 표시용 이름 (spec §4.1)."""
+    change = plan.change
+    return {
+        "action": change.action,
+        "map_name": plan.source.name,
+        "from_category_id": plan.from_category_id,
+        "to_category_id": change.to_category_id,
+        "to_map_id": change.to_map_id,
+        "to_map_name": plan.target.name if plan.target is not None else None,
+        "note": note,
+        "sides": list(plan.sides),
+        "approvals": {},
+    }
+
+
+def change_from_payload(map_id: int, payload: dict) -> SlotChange:
+    return SlotChange(
+        action=str(payload.get("action")), map_id=map_id,
+        to_category_id=payload.get("to_category_id"), to_map_id=payload.get("to_map_id"),
+        note=str(payload.get("note") or ""),
+    )
+
+
+async def remaining_sides(session: AsyncSession, req: ApprovalRequest) -> list[int]:
+    approvals = req.payload.get("approvals") or {}
+    return [int(c) for c in req.payload.get("sides", []) if str(c) not in approvals]
+
+
+async def notify_slot_requested(
+    session: AsyncSession, plan: SlotPlan, req: ApprovalRequest, actor: str
+) -> None:
+    """side 직속 관리자 + sysadmin(대체 처리자)에게 fw_slot_requested — fw_confirm 요청 알림과 같은 수신 규칙."""
+    recipients: list[str] = []
+    for cid in plan.sides:
+        recipients += await get_category_admin_logins(session, cid, direct_only=True)
+    recipients += list(logic.list_sysadmin_logins())
+    recipients = [r for r in dict.fromkeys(recipients) if r != actor]
+    actor_name = await workflow.get_display_name(session, actor)
+    await workflow.create_notifications(
+        session,
+        recipients,
+        type="fw_slot_requested",
+        map_id=plan.source.id,
+        message=f"{actor_name} requested slot change '{plan.change.action}' on '{plan.source.name}'",
+        payload={
+            "map_name": plan.source.name, "actor": actor, "actor_name": actor_name,
+            "action": plan.change.action, "note": plan.change.note,
+            "from_path": await category_path(session, plan.from_category_id),
+            "to_path": await category_path(session, plan.change.to_category_id),
+            "to_map_name": plan.target.name if plan.target is not None else None,
+            "request_id": req.id,
+        },
+    )

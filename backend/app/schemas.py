@@ -1064,6 +1064,14 @@ class SlotChangeOut(BaseModel):
     impact: SlotChangeImpactOut
 
 
+class PendingSlotChangeOut(BaseModel):
+    # 대기 중 슬롯 변경 요청 + side별 승인자 + 호출자 결정권 (spec 2026-09-06 §4.2)
+    request: ApprovalRequestOut
+    sides: list[SlotChangeSideOut]
+    remaining: list[int]
+    can_decide: bool
+
+
 class FrameworkImportRow(BaseModel):
     """임포트 리포트 1행 — action∈created/updated/unchanged/governance/error/warning
     (ImportReport.rows 미러, 인터뷰 임포트 응답 rows가 사용)."""

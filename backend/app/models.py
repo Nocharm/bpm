@@ -733,10 +733,12 @@ class ApprovalRequest(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"))
-    # 'permission_downgrade' | 'visibility_change' | 'map_rename' | 'sp_designation' | 'fw_confirm'
+    # 'permission_downgrade' | 'visibility_change' | 'map_rename' | 'sp_designation' | 'fw_confirm' | 'fw_slot'
     kind: Mapped[str] = mapped_column(String(30))
     # 요청 상세 — {principal_type, principal_id, from_role, to_role} 또는 {to_visibility} 또는
-    # {from_name, to_name} 또는 fw_confirm={category_id, note} (Track B Task 5)
+    # {from_name, to_name} 또는 fw_confirm={category_id, note} (Track B Task 5) 또는
+    # fw_slot={action, map_name, from_category_id, to_category_id, to_map_id, to_map_name, note,
+    # sides, approvals} (Track C Task 1)
     payload: Mapped[dict] = mapped_column(JSON)
     requested_by: Mapped[str] = mapped_column(String(100))
     # 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'withdrawn'

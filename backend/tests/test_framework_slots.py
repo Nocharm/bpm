@@ -499,26 +499,57 @@ def test_slot_changes_preview_and_apply(client: TestClient) -> None:
     assert client.post(f"/api/maps/{a}/slot-changes", json={"action": "unassign"}).status_code == 409
 
 
-def test_slot_changes_non_admin_owner_gets_409_until_track_c(client: TestClient, enforce: None) -> None:
-    """owner지만 L5 직속 관리자가 아니면 즉시 적용 불가 — 이 트랙에선 409(요청 생성은 트랙 C)."""
-    l5 = _seed_category("FWS-N5", "비관리자", level=5)
-    act_as("fws.owner")
-    mid = _create_map(client, "fws non-admin owner map")
-    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
-    assert r.status_code == 409 and "approval" in r.json()["detail"]
-    preview = client.post(f"/api/maps/{mid}/slot-changes",
-                          json={"action": "assign", "to_category_id": l5, "dry_run": True}).json()
-    assert preview["self_apply"] is False and preview["sides"][0]["satisfied_by_caller"] is False
-    # 직속 관리자로 임명되면 즉시 적용
+# ── 트랙 C: 요청 생성 · 대기 · 철회 ────────────────────────────────────────────
+
+L5ADMIN = "fws.l5admin"
+OWNER = "fws.owner2"
+
+
+def _notif_types(user: str) -> list[str]:
+    from app.models import Notification
+
+    async def _go(session):
+        rows = (await session.scalars(
+            select(Notification).where(Notification.recipient == user).order_by(Notification.id)
+        )).all()
+        return [r.type for r in rows]
+
+    return _run(_go)
+
+
+def _seed_l5_with_admin(client: TestClient, code: str, name: str, admin: str = L5ADMIN) -> int:
+    l5 = _seed_category(code, name, level=5)
     act_as(SYSADMIN)
     client.put(f"/api/categories/{l5}/permissions",
-               json={"permissions": [{"principal_type": "user", "principal_id": "fws.owner"}]})
-    act_as("fws.owner")
-    r2 = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
-    assert r2.status_code == 200 and r2.json()["mode"] == "applied"
-    # 비-owner(viewer)는 경로 의존성에서 403
-    act_as("fws.stranger")
-    assert client.post(f"/api/maps/{mid}/slot-changes", json={"action": "unassign"}).status_code == 403
+               json={"permissions": [{"principal_type": "user", "principal_id": admin}]})
+    return l5
+
+
+def test_non_admin_owner_creates_request_and_can_withdraw(client: TestClient, enforce: None) -> None:
+    l5 = _seed_l5_with_admin(client, "FWS-Q5", "요청")
+    act_as(OWNER)
+    mid = _create_map(client, "fws request map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5, "note": "please"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "requested" and body["request_id"] is not None and body["self_apply"] is False
+    assert _map_row(mid)["category_id"] is None  # 요청만, 적용 아님
+    # 중복 요청 409
+    dup = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert dup.status_code == 409 and "pending" in dup.json()["detail"]
+    # 대기 조회 — 요청자는 can_decide False, 직속 관리자는 True
+    pending = client.get(f"/api/maps/{mid}/slot-changes/pending").json()
+    assert pending["request"]["kind"] == "fw_slot" and pending["request"]["payload"]["note"] == "please"
+    assert pending["remaining"] == [l5] and pending["can_decide"] is False
+    act_as(L5ADMIN)
+    # L5 관리자는 이 맵의 viewer도 아닐 수 있다 — pending 조회는 체인 관리자에게 열려야 한다
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["can_decide"] is True
+    assert "fw_slot_requested" in _notif_types(L5ADMIN)
+    # 철회는 요청자만
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 403
+    act_as(OWNER)
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 204
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json() is None
 
 
 def test_legacy_adapters_follow_slot_policy(client: TestClient, enforce: None) -> None:

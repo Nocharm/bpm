@@ -4,14 +4,32 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.framework_slots import SlotChange, apply_slot_change, build_preview, validate_slot_change
-from app.permissions.access import assert_map_role
+from app.framework_slots import (
+    SlotChange,
+    apply_slot_change,
+    build_preview,
+    build_request_payload,
+    category_path,
+    notify_slot_requested,
+    remaining_sides,
+    validate_slot_change,
+)
+from app.models import ApprovalRequest, ProcessMap
+from app.permissions import logic
+from app.permissions.access import (
+    assert_map_role,
+    get_category_admin_logins,
+    get_effective_role,
+    is_category_admin,
+    is_direct_l5_admin,
+)
 from app.permissions.deps import require_map_role
-from app.schemas import SlotChangeIn, SlotChangeOut
+from app.schemas import ApprovalRequestOut, PendingSlotChangeOut, SlotChangeIn, SlotChangeOut
 
 router = APIRouter(
     prefix="/api/maps", tags=["slot-changes"], dependencies=[Depends(get_current_user)]
@@ -30,7 +48,7 @@ async def create_slot_change(
     user: str = Depends(get_current_user),
 ) -> SlotChangeOut:
     """슬롯 변경 — dry_run이면 미리보기, 호출자가 side 전부의 직속 L5 관리자(또는 sysadmin)면 즉시 적용.
-    그 외는 승인 요청(트랙 C) — 이 트랙에선 409.
+    그 외는 fw_slot 승인 요청 생성(트랙 C).
     """
     change = SlotChange(
         action=payload.action, map_id=map_id, to_category_id=payload.to_category_id,
@@ -44,7 +62,88 @@ async def create_slot_change(
     if payload.dry_run:
         return SlotChangeOut(mode="preview", request_id=None, **preview)
     if not plan.self_apply:
-        raise HTTPException(status_code=409, detail="slot changes require L5 admin approval")
+        pending_id = await session.scalar(
+            select(ApprovalRequest.id).where(
+                ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
+                ApprovalRequest.status == "pending",
+            )
+        )
+        if pending_id is not None:
+            raise HTTPException(status_code=409, detail="a slot change is already pending")
+        req = ApprovalRequest(
+            map_id=map_id, kind="fw_slot", payload=build_request_payload(plan, change.note),
+            requested_by=user, status="pending",
+        )
+        session.add(req)
+        await session.flush()
+        await notify_slot_requested(session, plan, req, user)
+        await session.commit()
+        return SlotChangeOut(mode="requested", request_id=req.id, **preview)
     await apply_slot_change(session, plan, user)
     await session.commit()
     return SlotChangeOut(mode="applied", request_id=None, **preview)
+
+
+async def _load_pending(session: AsyncSession, map_id: int) -> ApprovalRequest | None:
+    return await session.scalar(
+        select(ApprovalRequest).where(
+            ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
+            ApprovalRequest.status == "pending",
+        )
+    )
+
+
+@router.get("/{map_id}/slot-changes/pending", response_model=PendingSlotChangeOut | None)
+async def get_pending_slot_change(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> PendingSlotChangeOut | None:
+    """대기 요청 — owner·지정 승인자·side 체인 관리자·sysadmin. 배정 모달 배너·승인 탭 소스."""
+    found = await session.get(ProcessMap, map_id)
+    if found is None or found.deleted_at is not None:
+        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    req = await _load_pending(session, map_id)
+    if req is None:
+        return None
+    sides = [int(c) for c in req.payload.get("sides", [])]
+    role = await get_effective_role(session, user, map_id)
+    is_side_admin = False
+    for cid in sides:
+        if await is_category_admin(session, user, cid):
+            is_side_admin = True
+            break
+    if role is None and not is_side_admin and not logic.is_sysadmin(user):
+        raise HTTPException(status_code=403, detail="viewer, side admin or sysadmin only")
+    remaining = await remaining_sides(session, req)
+    can_decide = logic.is_sysadmin(user)
+    side_out = []
+    for cid in sides:
+        direct = await is_direct_l5_admin(session, user, cid)
+        if cid in remaining and direct:
+            can_decide = True
+        side_out.append({
+            "category_id": cid, "path": await category_path(session, cid),
+            "approvers": await get_category_admin_logins(session, cid, direct_only=True),
+            "satisfied_by_caller": direct or logic.is_sysadmin(user),
+        })
+    return PendingSlotChangeOut(
+        request=ApprovalRequestOut.model_validate(req), sides=side_out, remaining=remaining,
+        can_decide=can_decide,
+    )
+
+
+@router.delete("/{map_id}/slot-changes/pending", status_code=204)
+async def withdraw_slot_change(
+    map_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: str = Depends(get_current_user),
+) -> None:
+    """본인 pending 요청 철회 → withdrawn(행 보존). 알림 없음 (fw_confirm 철회와 동일)."""
+    req = await _load_pending(session, map_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail="no pending slot change")
+    if req.requested_by != user:
+        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    req.status = "withdrawn"
+    await session.commit()
