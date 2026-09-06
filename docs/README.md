@@ -20,6 +20,7 @@
 - [`qa/governance-ux-checklist.md`](qa/governance-ux-checklist.md) — 거버넌스 UX 4페이즈(P0 라이프사이클·C 승인 탭·B 카드 멤버·A 게시 동봉) 사용자 실검증 체크리스트.
 - [`qa/dev-vs-main-checklist.md`](qa/dev-vs-main-checklist.md) — dev↔main 미반영 3묶음(컨설턴트 체계·HR 웹훅·조직 기준 전환)의 배포 순서·서버 확인 항목·백로그 12건.
 - [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.
+- [`qa/2026-09-fw-slot-governance-qa.md`](qa/2026-09-fw-slot-governance-qa.md) — 슬롯 거버넌스 기능·시나리오 QA (기능 26·시나리오 10·스모크 `pw-smoke-framework-slot.mjs`).
 
 ## 매뉴얼 ([`manual/`](manual/))
 - 사용자 매뉴얼 — 일반([EN](manual/user-manual-general-en.md)·[KO](manual/user-manual-general-ko.md)) / 편집([EN](manual/user-manual-editing-en.md)·[KO](manual/user-manual-editing-ko.md))
