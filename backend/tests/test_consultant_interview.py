@@ -278,6 +278,24 @@ def test_top_level_relations_become_linkage() -> None:
     assert "다시 준비부터 해야죠." in l6_quote.text
 
 
+def test_edge_with_missing_endpoint_is_dropped_not_treated_as_external() -> None:
+    """src/dst 중 하나가 비면(null/공백) external 오판으로 빈 코드 플레이스홀더가 생기기 전에
+    먼저 드랍한다 — 안 그러면 그 빈 문자열이 "외부 taskId"로 오인돼 제목 없는 플레이스홀더
+    노드가 배치된다 (M5)."""
+    data = _interview()
+    data["relations"]["edges"] = [
+        _edge("task-prep-0001", None),
+        _edge("", "task-prep-0001"),
+    ]
+    res = convert_interview(data)
+    assert not res.has_error()
+    lk = res.linkage
+    assert lk is not None
+    assert lk.edges == []
+    assert lk.external_codes == []
+    assert sum("edge missing src/dst" in i.message for i in res.issues) == 2
+
+
 def test_decision_and_handoff_kinds() -> None:
     data = _interview()
     data["rows"][0]["actions"].append(_action(5, "결과 인계", kind="handoff"))

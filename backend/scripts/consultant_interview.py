@@ -505,6 +505,12 @@ def _build_linkage(
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = _clean(raw.get("src")), _clean(raw.get("dst"))
+        if not src or not dst:
+            # 끝점 하나가 비면 아래 external 분기가 그 빈 문자열을 "외부 taskId"로 오인해
+            # 제목 없는 플레이스홀더를 만든다 — external 판정 전에 먼저 걸러낸다 (M5)
+            issues.append(AdapterIssue(
+                "warning", epath, "edge missing src/dst - dropped (연결 시작/끝 taskId 없음 - 제외됨)"))
+            continue
         src_known, dst_known = src in row_names, dst in row_names
         if not src_known and not dst_known:
             issues.append(AdapterIssue(

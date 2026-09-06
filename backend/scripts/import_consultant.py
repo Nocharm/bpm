@@ -28,7 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.clock import now as now_kst
 from app.duration import normalize_duration
-from app.lineage import EXTERNAL_LINEAGE_SCOPE, external_lineage_key, make_node_id  # noqa: F401 - scope re-export
+from app.lineage import external_lineage_key, make_node_id
 from app.models import (
     Edge,
     Employee,
