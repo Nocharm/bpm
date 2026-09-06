@@ -76,6 +76,9 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
  approvals: {"<category_id>": {"by": login, "at": iso}}}
 ```
 
+> **amendment (2026-09-06)**: `impact`(`home_canvas_nodes`/`other_canvas_nodes`/`referencing_maps`)는 **라이브 draft 캔버스만** 세는 미리보기 집계다 — 확정/게시 스냅샷 기준이 아니므로 실제로 사용자가 보게 될(확정·게시된) 화면보다 **과대 계산될 수 있다**(draft에만 있는 노드·참조가 잡힘). FE 배정 모달(§7.2)의 영향 요약은 이 값을 그대로 노출한다.
+> **amendment (2026-09-06)**: `build_request_payload`가 요청 생성 시 `payload.approvals`를 호출자가 **이미 직속 관리자인 side**로 미리 채운다(dry-run 프리뷰의 `satisfied_by_caller`가 참인 side). 그래서 대기 배너의 n/m은 생성 시점부터 실제 진행률을 보여주고, 그 side에 대해 요청자 자신도 결정권을 잃지 않는다. 요청자가 **모든** side를 겸하면 애초에 `self_apply`라 요청 자체가 생기지 않는다 — 이 프리셋은 `move`처럼 side가 혼합된 경우를 위한 것.
+
 ### 4.2 결정·철회
 
 - `POST /api/approval-requests/{id}/decide` 기존 엔드포인트에 `fw_slot` 분기. 결정권: sysadmin 또는 `sides` 중 하나 이상의 **직속 관리자**(`is_direct_l5_admin`). 승인 시 호출자가 관리자인 side 전부를 `approvals`에 기록하고, 모든 side가 채워지면 `_apply_request` → `apply_slot_change` → `applied`. 아직 남은 side가 있으면 `pending` 유지(`decided_by`는 마지막 결정자). 거절은 한 side만으로 종결(`rejected`).
@@ -83,6 +86,8 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 - 대기 조회 `GET /api/maps/{map_id}/slot-changes/pending` — owner/L5 체인 관리자/sysadmin. 배정 모달·상세 카드가 "대기 중" 배너와 철회 버튼을 그린다.
 - 적용 시 `_apply_request`가 던지는 HTTPException(전제 재검증 실패, 예: 승인 사이 target이 슬롯을 얻음)은 그대로 전파 — decide가 커밋 전이라 pending 유지(map_rename 이름 선점 경합과 같은 패턴).
 - 레거시 엔드포인트 `PUT /maps/{id}/category`·`POST /maps/{id}/framework-transfer`는 **어댑터**로 남긴다: 호출자가 self_apply 가능하면 종전처럼 즉시 적용, 아니면 409("slot changes require approval - use slot-changes"). FE는 전부 `slot-changes`로 옮긴다.
+
+> **amendment (2026-09-06, 409 문구 확정)**: 대기 요청 충돌은 `create_slot_change`·레거시 어댑터 두 곳(`PUT /maps/{id}/category`, `POST /maps/{id}/framework-transfer`) **모두** 동일하게 `assert_no_pending_slot_change` → `"a slot change is already pending"`을 던진다 — 어댑터도 이 가드를 공유하도록 갱신됐다(self-apply 자격자가 남의 대기 요청 위에 바로 적용해 그 요청을 stale로 만드는 경합 방지). 어댑터 호출자가 self_apply가 아니면 정확히 `"slot changes require L5 admin approval - use slot-changes"`(위 문구의 "require approval"을 "require L5 admin approval"로 정정). 승인 적용 시점 전제 재검증 실패는 정확히 `"request preconditions changed - withdraw and re-request"`(요청은 pending 유지).
 
 ## 5. 액션별 전제와 적용 — `apply_slot_change(session, change, actor)`
 
@@ -102,6 +107,9 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 - 캔버스 재지정은 홈 캔버스 **라이브 draft만**. confirmed 스냅샷은 이력이라 불변. draft가 타인 체크아웃 중이어도 적용한다 — 승인된 변경이 미뤄지면 이 스펙이 없애려는 표류가 다시 생긴다. 대신 draft에 `VersionEvent("slot_changed", actor)`를 남기고 체크아웃 보유자에게 알림을 보낸다.
 - `move`·`assign`의 append는 `open_linkage_map`과 같은 규칙(draft 존재 시)으로 즉시 수행한다. 캔버스가 아직 없는 L5면 아무것도 하지 않는다(생성 시 시드가 채움).
 - 모든 액션이 `framework_slot_events` 1행(후계자 있는 `replace`/`delete`는 target 관점 1행 추가: action `succeed`)을 기록한다.
+- **(amendment 2026-09-06)** 맵이 슬롯을 **받는** 쪽이 되면(`assign`의 대상, `replace`/`delete`의 target) `retired_to_map_id`가 **NULL로 정리**된다 — 옛 superseded/stale 계보를 지워, 되찾은 슬롯이 여전히 "이양됨"으로 잘못 표시되지 않게 한다(§6.2 `superseded` 파생과 연동).
+- **(amendment 2026-09-06, 문구 정정)** `replace` 행의 "`follow_latest` 유지"는 오기다 — 실제로는 재지정된 노드의 `linked_version_id`를 지우고 `follow_latest`를 **true로 재설정**한다("pin reset to follow-latest"): 옛 타깃에 걸린 버전 고정은 새 타깃에 무의미하므로 latest 추종으로 되돌린다.
+- **(amendment 2026-09-06)** `delete`의 전제는 후계자 유무와 무관하게 `replace`와 **같은 L5 검사**(source 슬롯 카테고리의 `level == 5`, 아니면 409 "framework slot must point to a level-5 category - reassign before transfer")를 공유한다 — 표의 "후계자 있으면 replace 전제도 충족"은 이 L5 검사에도 적용된다. 후계자 없는 delete는 노드를 `deleted` 상태(배너 "Deleted - replace")로 남기고 맵은 소프트삭제(`deleted_at`)되며, 복구(`restore_map`)하면 링크가 그대로 회복된다.
 
 ## 6. 데이터
 
@@ -164,13 +172,17 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 - `approval-queue.tsx` `QueueRequestKind`와 `pending-approvals-panel.tsx` 종류 목록에 `fw_slot` 추가. 행 문구는 액션별(`perm.fwSlot.action.*`): "○○를 체계에서 해제" · "○○ → L5 경로 이동" · "○○의 슬롯을 △△로 대체" · "○○ 삭제(후계자 △△)". side가 둘이면 "승인 2/2 필요 · 1/2 완료" 진행 표시. 승인 버튼은 호출자가 관리자인 side가 남아 있을 때만 활성.
 - 알림 유형 3종 `fw_slot_requested`(승인자에게) · `fw_slot_applied`(L5 직속·조상 관리자 + 대상 맵 owner + 후계자 owner + 캔버스 체크아웃 보유자, 행위자 제외) · `fw_slot_rejected`(요청자). `notification-format.ts` `KNOWN_TYPES`·i18n·아이콘·payload 구조화 4지점 동시 갱신(리치 렌더 규약).
 
+> **amendment (2026-09-06)**: 결정권 판정(`can_decide_slot_for_map`, `app/framework_slots.py`)은 **sysadmin** → 대기 중인 `fw_slot` 요청이 있으면 그 요청의 **잔여 side의 직속 L5 관리자**(이미 결정한 side의 관리자는 재결정권 없음) → 대기 요청이 없으면 **맵의 현재 소속 카테고리 직속 관리자**로 폴백, 순서로 결정된다. 같은 규칙이 `GET /maps/{id}`의 `MapDetailOut.can_decide_slot` 필드(승인 버튼 노출)와 그 맵의 `fw_slot` 승인 요청 **목록 열람**(`permissions.list_approval_requests`) 게이트를 함께 정한다 — 결정권 없는 관리자에게는 그 맵의 fw_slot 요청 자체가 목록에 보이지 않는다.
+
 ## 8. 임포트 플레이스홀더 (항목 8)
 
 현재 `import_consultant.py` 연계 임포트는 `placed_codes`(이번 전달에 실제 맵이 있는 코드)만 배치하고 미배치 코드로 향하는 엣지를 **버린다**. 인터뷰 단계에서 타 L5의 L6가 확정되지 않는 현상은 이미 플레이스홀더 개념(`nodes.placeholder_category_id`, 점선 에러 룩, 후차 연결 다이얼로그)으로 FE에 구현돼 있으므로 임포터가 그 노드를 만들면 된다.
 
 - 엣지 끝점 코드가 `map_ids`에 없으면 `Node(node_type='subprocess', linked_map_id=NULL, title=<코드의 이름 또는 코드>, placeholder_category_id=<그 코드의 L5 id, 알 수 있으면>, source_node_id=make_node_id(l5code, 코드))`를 생성하고 엣지를 유지한다.
 - 재전달에서 그 코드의 맵이 생기면 `source_node_id`로 플레이스홀더를 찾아 `linked_map_id`를 채운다(`placeholder_category_id`는 출처로 보존).
-- **전제 확인(구현 전)**: 인터뷰 산출물(`consultant_interview.py` `rows[].taskId` 기반 linkage)에 미배치 코드의 **이름과 L5 코드**가 실려 오는지. 없으면 제목은 코드, `placeholder_category_id`는 NULL로 시작하고 산출물 계약 확장을 인터뷰 트랙에 요청한다.
+- **확인 결과(2026-09-06)**: 산출물에 외부 task 이름·L5 없음 → 제목=코드, `placeholder_category_id` NULL. 계약 확장은 인터뷰 트랙 백로그.
+
+> **amendment (2026-09-06, 구현 확정)**: 플레이스홀더 계보 키는 스케치대로의 `make_node_id(l5code, 코드)`가 아니라 **`make_node_id("__ext__", 코드)`**(= `external_lineage_key`, 신설 `app/lineage.py`)로 확정됐다 — 캔버스 L5와 무관하게 코드만으로 정해져야 재전달 해소가 그 코드를 참조하는 **모든** 캔버스를 한 번에 찾는다. `resolve_external_placeholders`(`scripts/import_consultant.py`)는 **pass 1 직후**(pass 2 전) 실행되고 **라이브 draft 캔버스만** 대상이며(confirmed 스냅샷 불변), `deleted_at IS NULL`인 행만 후보로 삼아 **휴지통 맵으로는 연결하지 않는다**(같은 코드로 라이브 행이 여럿이면 슬롯을 쥔 행을 우선). 맵이 슬롯 변경(`assign`/`move`)으로 그 L5에 들어올 때도(§5 `_append_contained_node`) 새 노드를 얹기 전에 같은 계보 키의 플레이스홀더가 있으면 **그 자리를 채운다**(엣지·좌표 보존, 중복 노드 방지). 아직 어느 쪽 맵도 없는 "반쯤 알려진" 엣지(코드는 알지만 이번 전달에 실 맵이 없는 target)는 버리지 않고 `external` 플레이스홀더로 유지된다.
 
 ## 9. 옆문·가드
 
@@ -193,6 +205,8 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 - **FE(vitest)**: 노드 상태 파생(`contained/external/unassigned/superseded/deleted/placeholder`), 최근 이양 판정(14일 경계), 모달 분기(self_apply vs 요청), 피커 mode 필터.
 - **스모크(Playwright, `frontend/scripts/pw-smoke-framework-slot.mjs`)**: 오너(비관리자)가 대체 요청 → 승인 탭에서 L5 관리자 승인 → 캔버스에서 C 노드가 A 자리에 엣지 유지 + 최근 이양 배지 → 호버 패널 시각 노출 → 해제 요청 승인 후 미싱 룩. 위임 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`.
 - **QA 문서(`docs/qa/2026-09-fw-slot-governance-qa.md`)**: ① 기능 체크리스트(액션 5종 × 자기결재/요청 × 결과 상태·게이트·알림) ② 사용자 시나리오(유지보수 10항목을 순서대로 재현하는 대본 — 사전 데이터·계정·기대 화면·확인 포인트). 항목마다 자동 검증(테스트 이름) 또는 수동 검증 표기.
+
+> **amendment (2026-09-06, 결과)**: 위 QA 문서 기준 **기능 체크리스트 26/26**·**사용자 시나리오 S1–S10 전부 검증 완료**(2026-09-06). 회귀 스모크 `pw-smoke-framework{,-canvas}.mjs`·`pw-smoke-copy-purge.mjs`는 dev에서 이미 낡아(2026-09-03 임포트 패널 리팩터로 시드 단계 확인 다이얼로그가 바뀜 등, 이 브랜치 변경과 무관) 별도 정비가 필요 — 해당 표면은 이번 라운드의 수동 verify 스크립트와 `pw-smoke-framework-slot.mjs`로 대체 검증했다(후속 과제로 남김).
 - **브라우저 검증은 구현자가 직접 수행**한다(Playwright + 시스템 Chrome 하네스, 필요 시 Claude in Chrome 확장). 스크린샷을 세션에 공유하고 QA 문서의 수동 항목에 결과를 기록한다.
 
 ## 12. 구현 앵커 (2026-09-04 dev 9ddd2f3e 실측)

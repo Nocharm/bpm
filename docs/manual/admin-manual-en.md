@@ -113,8 +113,9 @@ Group creation is request-based: any user can file a group request, but it only 
 - **Permission downgrade** requests (removing or demoting an editor).
 - **Visibility change** requests (Public ↔ Private).
 - **Checkout transfer** requests (taking over another user's active editing lock).
+- **Slot change** (`fw_slot`) requests — shows the map name, the action, the target, and how many sides have approved (n/m).
 
-Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view.
+Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view. **Slot changes are the exception** — the decider is a direct admin of the relevant L5 (or a sysadmin), not the map's approvers; a sysadmin decides here as the fallback (section 13, "Slot changes").
 
 > Separately, **map renames** and **subprocess registration requests** are decided by the **map owner** — since sysadmins hold owner rights on every map, you can handle those cards for any map from the Inbox (Approvals). For subprocess registration, **saving the designation form is the approval**, and a map with no published version cannot be designated yet. Framework **confirm requests** (an admin of a higher category asking for an L5 linkage canvas to be confirmed) also reach sysadmins as fallback deciders — approving performs the confirmation on the spot, so a canvas that fails a gate cannot be approved (section 13).
 
@@ -299,6 +300,11 @@ A library of **organization documents the AI consultant can cite during intervie
 - **Draft visibility** — the live draft before confirmation is visible only to admins of that category or a parent and to sysadmins. Everyone else lands on the latest confirmed snapshot, with an empty-state notice when none exists.
 - A category admin's **major confirmation** permanently prunes the previous major's minor snapshots — the confirm dialog previews what goes.
 
+### Slot changes
+
+- Which L5 category a map belongs to is managed as a **slot** (assign, unassign, move, hand off, delete — from the Framework pill on the home card), and the decider is the **direct admin of that L5** (sysadmins too) — admins of a higher category (L1–L4) can edit the canvas but cannot decide a slot change directly, only request one. A move between two L5s needs approval from **both L5s' direct admins** (one admin covering both counts as a single approval).
+- When the requester is themselves a direct admin of the affected L5 (or a sysadmin), the change **applies immediately** with a notice dialog; otherwise a request (`fw_slot`) is created and appears in the L5 admins' Inbox, the map's Approval tab, and **Settings → Approvals → Approval Queue** (section 6).
+
 ### Status board
 
 The **Status** view lists every L5 in scope in one table — **Path / Latest confirmed / Status** (Ready · Blocked · No canvas) with an **Open** button. Blocked canvases carry their failing gates as negative pills (Missing L6 · Placeholders · Stale links · Unpublished L6 · Exit-less loop · Direct fan-out). The **category summary card** in the home Framework view shows the same verdicts under "Subtree confirmation".
@@ -314,6 +320,7 @@ Upload the consultant-delivered L5 interview result JSON files (multiple files a
 - **Department path resolution** — the delivery's `department` (a slash path from the root) is matched to the org department tree in four steps: exact match → match with leading levels dropped → unique suffix match → department mirror chain alignment. When none matches, the **delivered path is registered as is** as the owning department and appears under that name in the home department tree — remap it on Settings → Directory → Departments.
 - **Landing rules** — activities (L7) become nodes (input/output/data form/system/link) and flow edges (seq/branch/loop/bypass) become connectors. A branch promotes its source node to a decision, and a loop back to the same node synthesizes a branch node titled **"반복 여부(자동 생성됨)"** (fixed Korean title: "repeat? - auto-generated"). Start/end conditions, total time, touch time, and system land as map fields, with their originals kept as **Interview notes** (editor Map tab, home detail card). **Annual volume and FTE** land both as the map's subprocess designation reference values and as the L5 canvas node values. Outputs and inputs that match exactly are auto-linked as IO links, nodes are auto-laid-out horizontally, and an editable draft is created right after publishing (an untouched draft is reused by the next delivery).
 - **L5 linkage canvas** — created or augmented from the flow between top-level L6s (decision nodes inserted for branches, loops laid out as return edges). Re-deliveries **only add** nodes and never move them, and skip the canvas while someone else holds its checkout.
+- **External taskId placeholders** — when a flow edge points at a taskId absent from this delivery, it lands as a **placeholder node titled with that code** (uncategorized). A later delivery that includes the taskId resolves it automatically (edges are kept) — the confirm checklist's **No placeholders** gate catches it until then.
 - **Notes and GMP** — per-task exception rules, VOC, rule basis, and open issues land as map notes; the L5's entry, flow, open-issue, and task notes land as category notes (linkage-canvas Map tab). Classify GMP (GMP Direct / Indirect / Non-GMP) and settle conditions/times in **Map Settings → Details → Conditions & GMP**; the GMP you select survives redeliveries.
 
 ---

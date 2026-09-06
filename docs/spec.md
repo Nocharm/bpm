@@ -127,3 +127,10 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 | **실시간 코멘트** | 노드 단위 코멘트 핀 + 스레드 패널(작성/해결). 5초 폴링으로 갱신 — WebSocket 미도입(추후 SSE 전환 가능). 작성자는 인증 사용자(`author`) |
 
 **구현 순서 근거:** A는 프론트 중심(즉시 체감), B는 데이터 모델 확장(스키마 변경 동반), C는 신규 테이블·API(가장 큼). 각 Phase 종료 시 pytest/ruff/tsc/eslint/build 통과 후 커밋.
+
+### 7.x 업무 체계 슬롯 수명주기 (2026-09-06)
+
+- **슬롯** = `process_maps.category_id`(L5 소속, L5 전용) + `consultant_code`(재전달 결착 키). 변경 5액션 `assign·unassign·move·replace·delete`는 `POST /api/maps/{id}/slot-changes`(dry_run 미리보기) 한 곳으로 들어온다.
+- **승인**: 요청자가 L5 직속 관리자/sysadmin이면 즉시 적용(화면은 안내 모달), 아니면 `ApprovalRequest(kind="fw_slot")`. 이동은 보내는·받는 L5 각 1명(동일인 1회). 결정은 `POST /api/approval-requests/{id}/decide`, 철회 `DELETE /maps/{id}/slot-changes/pending`.
+- **적용**(`app/framework_slots.py apply_slot_change`): 데이터 변경 + 홈 L5 캔버스 draft 노드 재지정(대체·후계자 삭제, 엣지 유지) + `retired_to_map_id` 계보 + `framework_slot_events` 이력 + `fw_slot_applied` 알림. 해제·삭제 노드는 링크를 끊지 않고 미싱 룩으로 표시, 확정 게이트 `stale_link`가 잡는다.
+- **가드**: `mode='normal'`만 슬롯 보유. 슬롯 맵의 `DELETE /maps/{id}`·`copy retire_source`는 409 → slot-changes. 임포트는 승인 없이 그대로(부트스트랩), 미배치 taskId 엣지는 플레이스홀더 노드로.
