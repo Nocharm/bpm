@@ -159,3 +159,90 @@ def test_slot_event_table_roundtrip(client: TestClient) -> None:
         return (row.action, row.to_category_id, row.request_id, row.created_at is not None)
 
     assert _run(_go) == ("assign", l5, None, True)
+
+
+# ── 코어: validate / apply ─────────────────────────────────────────────────────
+
+
+def _apply(change_kwargs: dict, actor: str = SYSADMIN) -> None:
+    from app.framework_slots import SlotChange, apply_slot_change, validate_slot_change
+
+    async def _go(session):
+        plan = await validate_slot_change(session, SlotChange(**change_kwargs), actor)
+        await apply_slot_change(session, plan, actor)
+
+    _run(_go)
+
+
+def _events(map_id: int) -> list[tuple[str, int | None, int | None, int | None]]:
+    from app.models import FrameworkSlotEvent
+
+    async def _go(session):
+        rows = (await session.scalars(
+            select(FrameworkSlotEvent).where(FrameworkSlotEvent.map_id == map_id)
+            .order_by(FrameworkSlotEvent.id)
+        )).all()
+        return [(r.action, r.from_category_id, r.to_category_id, r.to_map_id) for r in rows]
+
+    return _run(_go)
+
+
+def _linked_ids(client: TestClient, canvas_map_id: int) -> list[int]:
+    graph = client.get(f"/api/versions/{_draft_id(client, canvas_map_id)}/graph").json()
+    return sorted(n["linked_map_id"] for n in graph["nodes"] if n["node_type"] == "subprocess")
+
+
+def test_core_assign_unassign_move(client: TestClient) -> None:
+    """assign은 홈 캔버스에 노드 append, unassign은 노드 유지, move는 새 캔버스 append — 이벤트 각 1행."""
+    l5a = _seed_category("FWS-C5A", "코어A", level=5)
+    l5b = _seed_category("FWS-C5B", "코어B", level=5)
+    canvas_a = client.post(f"/api/categories/{l5a}/linkage-map").json()["map_id"]
+    canvas_b = client.post(f"/api/categories/{l5b}/linkage-map").json()["map_id"]
+    mid = _create_map(client, "fws core map")
+
+    _apply({"action": "assign", "map_id": mid, "to_category_id": l5a})
+    assert _map_row(mid)["category_id"] == l5a
+    assert mid in _linked_ids(client, canvas_a)
+
+    _apply({"action": "move", "map_id": mid, "to_category_id": l5b})
+    assert _map_row(mid)["category_id"] == l5b
+    assert mid in _linked_ids(client, canvas_a)  # 옛 캔버스 노드 유지(외부 L6로 표시)
+    assert mid in _linked_ids(client, canvas_b)
+
+    _apply({"action": "unassign", "map_id": mid})
+    assert _map_row(mid)["category_id"] is None
+    assert mid in _linked_ids(client, canvas_b)  # 노드 유지 → unassigned 상태로 파생 표시
+
+    assert _events(mid) == [("assign", None, l5a, None), ("move", l5a, l5b, None), ("unassign", l5b, None, None)]
+
+
+def test_core_validation_errors(client: TestClient) -> None:
+    from fastapi import HTTPException
+
+    from app.framework_slots import SlotChange, validate_slot_change
+
+    l1 = _seed_category("FWS-V1", "검증L1")
+    l5 = _seed_category("FWS-V5", "검증L5", level=5, parent_id=l1)
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    slotted = _seed_l6_map(l5, "fws validate slotted", "FWS-V-M1")
+    free = _create_map(client, "fws validate free")
+
+    def _status(kwargs: dict) -> int:
+        async def _go(session):
+            try:
+                await validate_slot_change(session, SlotChange(**kwargs), SYSADMIN)
+            except HTTPException as exc:
+                return exc.status_code
+            return 200
+
+        return _run(_go)
+
+    assert _status({"action": "assign", "map_id": free, "to_category_id": l1}) == 422       # L5 아님
+    assert _status({"action": "assign", "map_id": slotted, "to_category_id": l5}) == 409    # 이미 슬롯
+    assert _status({"action": "assign", "map_id": canvas, "to_category_id": l5}) == 422     # mode
+    assert _status({"action": "unassign", "map_id": free}) == 409                           # 슬롯 없음
+    assert _status({"action": "move", "map_id": slotted, "to_category_id": l5}) == 409      # 같은 L5
+    assert _status({"action": "replace", "map_id": slotted, "to_map_id": canvas}) == 422    # target mode
+    assert _status({"action": "replace", "map_id": slotted, "to_map_id": slotted}) == 409   # 자기 자신
+    assert _status({"action": "delete", "map_id": free}) == 409                             # 슬롯 없음
+    assert _status({"action": "bogus", "map_id": free}) == 422
