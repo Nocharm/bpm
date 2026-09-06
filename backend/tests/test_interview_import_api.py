@@ -312,8 +312,47 @@ def test_external_edge_becomes_placeholder_and_resolves_on_later_delivery(client
     graph_a2 = client.get(f"/api/versions/{_draft_id(client, canvas_a)}/graph").json()
     resolved = next(n for n in graph_a2["nodes"] if n["id"] == ph[0]["id"])
     assert resolved["linked_map_id"] is not None
+    assert any(e["target_node_id"] == ph[0]["id"] for e in graph_a2["edges"])  # 해소 후에도 엣지 유지
     assert graph_a2["subprocess_refs"][str(resolved["linked_map_id"])]["category_path"].endswith("PHX-B")
     # 재임포트 멱등 — 플레이스홀더가 다시 생기지 않는다
     _post(client, _files(doc_a), apply=True)
     graph_a3 = client.get(f"/api/versions/{_draft_id(client, canvas_a)}/graph").json()
     assert not [n for n in graph_a3["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None]
+
+
+def test_placeholder_stays_unresolved_when_target_map_is_trashed(client: TestClient) -> None:
+    """휴지통(소프트삭제)에 들어간 맵은 재전달돼도 플레이스홀더에 연결되지 않는다 — 콜사이트가
+    deleted_at IS NULL 가드로 아예 후보에서 뺀다 (controller ruling round 1, spec 2026-09-06 §8)."""
+    from sqlalchemy import select
+
+    from app.clock import now as now_kst
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    ext_code = "phx-d-task-0001"
+    doc_d = _ext_delivery("PHX-D", task_ids=[ext_code])
+    assert _post(client, _files(doc_d), apply=True).status_code == 200
+
+    async def _trash():
+        async with SessionLocal() as session:
+            m = await session.scalar(select(ProcessMap).where(ProcessMap.consultant_code == ext_code))
+            m.deleted_at = now_kst()
+            await session.commit()
+
+    _run(_trash())
+
+    # ext_code가 휴지통이라 apply_interview_linkage의 라이브 조회에서 빠져 플레이스홀더로 배치된다
+    doc_c = _ext_delivery("PHX-C")
+    doc_c["relations"]["edges"].append({"src": doc_c["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    assert _post(client, _files(doc_c), apply=True).status_code == 200
+    canvas_c = _canvas_map_id(client, "PHX-C")
+    graph_c = client.get(f"/api/versions/{_draft_id(client, canvas_c)}/graph").json()
+    ph = next(n for n in graph_c["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None)
+    assert ph["title"] == ext_code
+
+    # 재전달 — pass1은 trashed로 에러 행만 남기고 스킵, 해소 콜사이트도 code_to_map에서 제외
+    body = _post(client, _files(doc_d), apply=True).json()
+    assert not any("external placeholder node" in r["detail"] for r in body["rows"])
+    graph_c2 = client.get(f"/api/versions/{_draft_id(client, canvas_c)}/graph").json()
+    resolved = next(n for n in graph_c2["nodes"] if n["id"] == ph["id"])
+    assert resolved["linked_map_id"] is None

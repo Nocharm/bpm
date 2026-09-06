@@ -713,13 +713,31 @@ async def resolve_external_placeholders(
     session: AsyncSession, code_to_map: dict[str, int], report: ImportReport
 ) -> int:
     """linked_map_id 없는 플레이스홀더 중 source_node_id가 external_lineage_key(code)인 노드를 연결한다.
-    라이브 draft만 — confirmed 스냅샷은 이력이라 불변."""
+    라이브 draft만 — confirmed 스냅샷은 이력이라 불변.
+
+    code_to_map의 값(id)은 힌트일 뿐 그대로 신뢰하지 않는다 — 여기서 코드별로 DB를 다시 조회해
+    deleted_at IS NULL인 행만 후보로 삼는다(호출부도 거르지만 이중 방어, 휴지통 맵으로는 연결
+    금지). 같은 code로 라이브 행이 여럿이면(이례적) 슬롯을 쥔 쪽(category_id IS NOT NULL)을
+    우선한다 — controller ruling round 1.
+    """
     if not code_to_map:
         return 0
-    key_to_map = {external_lineage_key(c): mid for c, mid in code_to_map.items()}
+    live_rows = (await session.execute(
+        select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.category_id).where(
+            ProcessMap.consultant_code.in_(list(code_to_map.keys())),
+            ProcessMap.deleted_at.is_(None),
+        )
+    )).all()
+    live_by_code: dict[str, int] = {}
+    for mid, ccode, category_id in live_rows:
+        if ccode not in live_by_code or category_id is not None:
+            live_by_code[ccode] = mid
+    if not live_by_code:
+        return 0
+    key_to_map = {external_lineage_key(c): mid for c, mid in live_by_code.items()}
     names = {
         mid: name for mid, name in (await session.execute(
-            select(ProcessMap.id, ProcessMap.name).where(ProcessMap.id.in_(list(code_to_map.values())))
+            select(ProcessMap.id, ProcessMap.name).where(ProcessMap.id.in_(list(key_to_map.values())))
         )).all()
     }
     rows = (await session.execute(
@@ -729,10 +747,13 @@ async def resolve_external_placeholders(
         )
     )).scalars().all()
     for node in rows:
+        if node.source_node_id is None:  # 위 IN 필터가 이미 비-None만 반환하지만 컬럼 타입은 str | None
+            continue
         node.linked_map_id = key_to_map[node.source_node_id]
         node.title = names.get(node.linked_map_id, node.title)
         node.follow_latest = True
     if rows:
+        # map_code 없이 "linkage" 고정 코드 — 이번 해소는 여러 캔버스에 걸쳐 일괄 적용돼 단일 맵 하나로 못 묶는다
         report.add("linkage", "linkage", f"resolved {len(rows)} external placeholder node(s)")
     return len(rows)
 
@@ -894,8 +915,16 @@ async def import_delivery(
             print(f"pass1 committed {created_count} created")
 
     # 외부 플레이스홀더 해소 — 이번 전달로 생긴/결착된 코드와 같은 계보 키를 가진 플레이스홀더를 전 캔버스 draft에서 연결 (spec 2026-09-06 §8)
+    # deleted_at is None 가드 — 휴지통 맵의 코드는 넘기지 않는다(trashed_in_delivery는 pass1만 건너뛸 뿐
+    # existing엔 남아있어 이 가드가 없으면 플레이스홀더가 휴지통 맵으로 연결된다, controller ruling round 1)
     await resolve_external_placeholders(
-        session, {cmap.code: existing[cmap.code].id for cmap in maps if cmap.code in existing}, report
+        session,
+        {
+            cmap.code: existing[cmap.code].id
+            for cmap in maps
+            if cmap.code in existing and existing[cmap.code].deleted_at is None
+        },
+        report,
     )
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
