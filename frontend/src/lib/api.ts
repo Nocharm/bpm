@@ -222,6 +222,13 @@ export interface SubprocessRef {
   deleted?: boolean;
   successor_map_id?: number | null;
   successor_name?: string | null;
+  // 살아 있지만 슬롯을 넘긴 맵 — 캔버스 stale 룩 + Replace CTA (spec 2026-09-06 §6.2)
+  superseded?: boolean;
+  // 슬롯 이력 시각 — 최신 변경(해제/삭제/이동…)·후계자로 받은 시각·맵 갱신 시각 (호버 패널·최근 이양 배지)
+  slot_changed_at?: string | null;
+  slot_changed_action?: string | null;
+  succeeded_at?: string | null;
+  map_updated_at?: string | null;
   department: string | null;
   assignee: string | null;
   system: string | null;
@@ -2782,6 +2789,35 @@ export function postFrameworkTransfer(
   return request(`/maps/${mapId}/framework-transfer`, {
     method: "POST",
     body: JSON.stringify({ to_map_id: toMapId }),
+  });
+}
+
+// ── L6 슬롯 변경 — 5액션 공용, dry_run이면 승인자·영향 미리보기 (spec 2026-09-06 §4.1) ──
+export type SlotChangeAction = "assign" | "unassign" | "move" | "replace" | "delete";
+export interface SlotChangeIn {
+  action: SlotChangeAction;
+  to_category_id?: number | null;
+  to_map_id?: number | null;
+  note?: string;
+  dry_run?: boolean;
+}
+export interface SlotChangeSide {
+  category_id: number;
+  path: string | null;
+  approvers: string[];
+  satisfied_by_caller: boolean;
+}
+export interface SlotChangeOut {
+  mode: "preview" | "applied" | "requested";
+  request_id: number | null;
+  self_apply: boolean;
+  sides: SlotChangeSide[];
+  impact: { home_canvas_nodes: number; other_canvas_nodes: number; referencing_maps: number; edges_kept: number };
+}
+export function postSlotChange(mapId: number, body: SlotChangeIn): Promise<SlotChangeOut> {
+  return request<SlotChangeOut>(`/maps/${mapId}/slot-changes`, {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

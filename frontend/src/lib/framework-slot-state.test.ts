@@ -1,0 +1,43 @@
+import { describe, expect, it } from "vitest";
+
+import type { SubprocessRef } from "./api";
+import { deriveSlotState, isRecentHandover, RECENT_HANDOVER_DAYS } from "./framework-slot-state";
+
+const base = (over: Partial<SubprocessRef>): SubprocessRef =>
+  ({
+    designated: true, name: "m", department: null, assignee: null, system: null, duration: null,
+    cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null,
+    input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null,
+    end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
+    ...over,
+  }) as SubprocessRef;
+
+describe("deriveSlotState", () => {
+  it("placeholder when no linked map", () => {
+    expect(deriveSlotState(undefined, null, 5)).toBe("placeholder");
+  });
+  it("unknown while refs are not loaded", () => {
+    expect(deriveSlotState(undefined, 7, 5)).toBe("unknown");
+  });
+  it("deleted beats superseded, superseded beats category", () => {
+    expect(deriveSlotState(base({ deleted: true, superseded: true, category_id: 5 }), 7, 5)).toBe("deleted");
+    expect(deriveSlotState(base({ superseded: true, category_id: null }), 7, 5)).toBe("superseded");
+  });
+  it("unassigned when the linked map has no category", () => {
+    expect(deriveSlotState(base({ category_id: null }), 7, 5)).toBe("unassigned");
+  });
+  it("contained vs external by canvas category", () => {
+    expect(deriveSlotState(base({ category_id: 5 }), 7, 5)).toBe("contained");
+    expect(deriveSlotState(base({ category_id: 9 }), 7, 5)).toBe("external");
+  });
+});
+
+describe("isRecentHandover", () => {
+  const now = Date.parse("2026-09-06T00:00:00+09:00");
+  it("true within the window, false after or without a date", () => {
+    expect(isRecentHandover("2026-09-01T10:00:00+09:00", now)).toBe(true);
+    expect(isRecentHandover(`2026-08-${String(23 - 1).padStart(2, "0")}T00:00:00+09:00`, now)).toBe(false);
+    expect(isRecentHandover(null, now)).toBe(false);
+    expect(RECENT_HANDOVER_DAYS).toBe(14);
+  });
+});
