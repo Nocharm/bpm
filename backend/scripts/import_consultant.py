@@ -710,10 +710,12 @@ async def _review_governance(
 
 
 async def resolve_external_placeholders(
-    session: AsyncSession, code_to_map: dict[str, int], report: ImportReport
+    session: AsyncSession, code_to_map: dict[str, int], report: ImportReport, *, actor: str
 ) -> int:
     """linked_map_id 없는 플레이스홀더 중 source_node_id가 external_lineage_key(code)인 노드를 연결한다.
-    라이브 draft만 — confirmed 스냅샷은 이력이라 불변.
+    라이브 draft만 — confirmed 스냅샷은 이력이라 불변. draft가 actor 외의 누군가에 체크아웃
+    중이면 건드리지 않고 경고만 남긴다 — apply_interview_linkage·open_linkage_map과 같은
+    체크아웃 규약(controller ruling F3), 없으면 남의 편집본을 임포트가 조용히 덮어쓴다.
 
     code_to_map의 값(id)은 힌트일 뿐 그대로 신뢰하지 않는다 — 여기서 코드별로 DB를 다시 조회해
     deleted_at IS NULL인 행만 후보로 삼는다(호출부도 거르지만 이중 방어, 휴지통 맵으로는 연결
@@ -741,21 +743,34 @@ async def resolve_external_placeholders(
         )).all()
     }
     rows = (await session.execute(
-        select(Node).join(MapVersion, MapVersion.id == Node.version_id).where(
+        select(Node, MapVersion.checked_out_by, MapVersion.map_id)
+        .join(MapVersion, MapVersion.id == Node.version_id).where(
             Node.node_type == "subprocess", Node.linked_map_id.is_(None),
             Node.source_node_id.in_(list(key_to_map.keys())), MapVersion.status == "draft",
         )
-    )).scalars().all()
-    for node in rows:
+    )).all()
+    resolved = 0
+    skipped_canvases: set[int] = set()
+    for node, checked_out_by, canvas_map_id in rows:
         if node.source_node_id is None:  # 위 IN 필터가 이미 비-None만 반환하지만 컬럼 타입은 str | None
+            continue
+        if checked_out_by not in (None, actor):
+            skipped_canvases.add(canvas_map_id)
             continue
         node.linked_map_id = key_to_map[node.source_node_id]
         node.title = names.get(node.linked_map_id, node.title)
         node.follow_latest = True
-    if rows:
+        resolved += 1
+    if resolved:
         # map_code 없이 "linkage" 고정 코드 — 이번 해소는 여러 캔버스에 걸쳐 일괄 적용돼 단일 맵 하나로 못 묶는다
-        report.add("linkage", "linkage", f"resolved {len(rows)} external placeholder node(s)")
-    return len(rows)
+        report.add("linkage", "linkage", f"resolved {resolved} external placeholder node(s)")
+    for canvas_map_id in sorted(skipped_canvases):
+        report.add(
+            "linkage", "warning",
+            f"linkage canvas {canvas_map_id} checked out - placeholder(s) not resolved "
+            "(연계 캔버스가 체크아웃 중이라 플레이스홀더를 연결하지 못함)",
+        )
+    return resolved
 
 
 async def import_delivery(
@@ -925,6 +940,7 @@ async def import_delivery(
             if cmap.code in existing and existing[cmap.code].deleted_at is None
         },
         report,
+        actor=actor,
     )
 
     # 연계 대상 = 이번 전달분 + 이전 전달분에만 있는 기존 맵(증분 전달 케이스). DB-only 대상(이번
@@ -1354,10 +1370,12 @@ async def apply_interview_linkage(
             n.source_node_id: n for n in existing
             if n.node_type == "decision" and n.source_node_id
         }
-        # 외부 플레이스홀더도 계보 키로 재사용 — linked_map_id가 아직 없는 subprocess (spec 2026-09-06 §8)
-        placeholder_nodes: dict[str, Node] = {
+        # 외부(타 L5) 노드는 linked_map_id 상태와 무관하게 계보 키로 찾는다 — 연결됐다가 캔버스
+        # 휴지통 왕복·체크아웃 충돌·수동 재연결로 linked_map_id가 바뀌거나 비어도 같은 노드를
+        # 계속 찾아야 재임포트가 계보 노드 옆에 중복 노드를 만들지 않는다 (controller ruling F1).
+        lineage_nodes: dict[str, Node] = {
             n.source_node_id: n for n in existing
-            if n.node_type == "subprocess" and n.linked_map_id is None and n.source_node_id
+            if n.node_type == "subprocess" and n.source_node_id
         }
         max_y = max((n.pos_y for n in existing), default=None)
         base_y = (max_y + LINKAGE_Y_STEP) if max_y is not None else LINKAGE_Y0
@@ -1371,20 +1389,33 @@ async def apply_interview_linkage(
         present_codes = placed_codes | external_present | set(external_missing)
         flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes)
 
+        # 계보 키로 이미 잡히는 외부 노드는 linked_map_id가 방금 확보됐을 때만 채운다 — 이미
+        # 연결돼 있으면(정상이든 수동 재연결이든) 손대지 않는다(F1: append는 계보 노드가 없을 때만)
+        for c in external_present:
+            lineage_node = lineage_nodes.get(external_lineage_key(c))
+            if lineage_node is not None and lineage_node.linked_map_id is None:
+                lineage_node.linked_map_id = map_ids[c]
+                lineage_node.title = map_names.get(map_ids[c], lineage_node.title)
+                lineage_node.follow_latest = True
+                node_by_map[map_ids[c]] = lineage_node
+
         # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
         missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
-        missing_external = [c for c in external_present if map_ids[c] not in node_by_map]
-        missing_placeholders = [c for c in external_missing if external_lineage_key(c) not in placeholder_nodes]
+        missing_external = [c for c in external_present if external_lineage_key(c) not in lineage_nodes]
+        missing_placeholders = [c for c in external_missing if external_lineage_key(c) not in lineage_nodes]
         missing_branches = [
             key for key in branch_of
             if make_node_id(code, key) not in branch_nodes
         ]
         # 캔버스를 **처음 만들 때만** 흐름대로 가로 자동정렬한다. 보강은 기존 노드를 못 옮기므로
-        # (추가만·이동 없음 규약) 격자로 아래에 붙인다.
+        # (추가만·이동 없음 규약) 격자로 아래에 붙인다. 외부/플레이스홀더 신규 노드도 known에
+        # 끼운다 — 빠지면 격자 폴백으로 밀려나 자동정렬된 1랭크와 y가 겹친다(controller ruling F2).
         placed: dict[str, tuple[float, float]] = {}
         fan_sides: dict[tuple[str, str], str] = {}
         if is_new_canvas and missing:
             layout_nodes = [LayoutNode(id=c, node_type="subprocess") for c in missing]
+            layout_nodes += [LayoutNode(id=c, node_type="subprocess") for c in missing_external]
+            layout_nodes += [LayoutNode(id=c, node_type="subprocess") for c in missing_placeholders]
             layout_nodes += [LayoutNode(id=k, node_type="decision") for k in missing_branches]
             known = {n.id for n in layout_nodes}
             scoped_flow = [(a, b, text) for a, b, text, _ in flow if a in known and b in known]
@@ -1423,24 +1454,30 @@ async def apply_interview_linkage(
         offset = len(missing)
         for i, c in enumerate(missing_external):
             px, py = grid[offset + i]
+            x, y = placed.get(c, (px, py))
             node = Node(
                 id=uuid.uuid4().hex, version_id=draft.id, title=map_names.get(map_ids[c], c),
                 node_type="subprocess", linked_map_id=map_ids[c], follow_latest=True,
-                pos_x=px, pos_y=py, sort_order=next_sort + offset + i,
+                # 계보 키를 남긴다 — 안 남기면 이 노드가 다음 재임포트에서 linked_map_id로만
+                # 찾아지고, 그 값이 어긋나는 순간(F1 시나리오) 다시 찾을 방법이 없어진다.
+                source_node_id=external_lineage_key(c),
+                pos_x=x, pos_y=y, sort_order=next_sort + offset + i,
             )
             session.add(node)
             node_by_map[map_ids[c]] = node
+            lineage_nodes[external_lineage_key(c)] = node
             added += 1
         offset += len(missing_external)
         for i, c in enumerate(missing_placeholders):
             px, py = grid[offset + i]
+            x, y = placed.get(c, (px, py))
             node = Node(
                 id=uuid.uuid4().hex, version_id=draft.id, source_node_id=external_lineage_key(c),
                 title=c, node_type="subprocess", linked_map_id=None, placeholder_category_id=None,
-                follow_latest=True, pos_x=px, pos_y=py, sort_order=next_sort + offset + i,
+                follow_latest=True, pos_x=x, pos_y=y, sort_order=next_sort + offset + i,
             )
             session.add(node)
-            placeholder_nodes[external_lineage_key(c)] = node
+            lineage_nodes[external_lineage_key(c)] = node
             added += 1
             report.add(code, "linkage", f"placeholder for external task {c} (map not delivered yet)")
         offset += len(missing_placeholders)
@@ -1491,9 +1528,11 @@ async def apply_interview_linkage(
         def _node_of(key: str) -> Node | None:
             if key in branch_of:
                 return branch_nodes.get(make_node_id(code, key))
-            if key in map_ids:
-                return node_by_map.get(map_ids[key])
-            return placeholder_nodes.get(external_lineage_key(key))
+            if key not in linkage.map_codes:
+                # 이 L5 소유가 아닌 코드는 linked_map_id 상태와 무관하게 계보 키로 우선 찾는다 —
+                # 그래야 수동 재연결로 다른 맵에 물린 노드에도 엣지가 계속 붙는다(controller ruling F1)
+                return lineage_nodes.get(external_lineage_key(key))
+            return node_by_map.get(map_ids.get(key))
 
         for src_key, dst_key, label, gateway in flow:
             src, dst = _node_of(src_key), _node_of(dst_key)

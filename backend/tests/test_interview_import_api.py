@@ -356,3 +356,131 @@ def test_placeholder_stays_unresolved_when_target_map_is_trashed(client: TestCli
     graph_c2 = client.get(f"/api/versions/{_draft_id(client, canvas_c)}/graph").json()
     resolved = next(n for n in graph_c2["nodes"] if n["id"] == ph["id"])
     assert resolved["linked_map_id"] is None
+
+
+def test_reimport_while_target_trashed_does_not_duplicate_lineage_node(client: TestClient) -> None:
+    """해소된 플레이스홀더의 대상 맵이 잠시 휴지통에 들어간 사이 파일 A가 재임포트되면, 대상이
+    (일시적으로) map_ids에서 빠져 이 코드가 다시 "미배치"로 보인다. linked_map_id가 아니라
+    계보 키(source_node_id)로 기존 노드를 먼저 찾아야 그 옆에 노드가 하나 더 생기지 않는다.
+    복구 후에도 재임포트가 노드/엣지 수를 그대로 유지해야 한다 (controller ruling F1)."""
+    from sqlalchemy import select
+
+    from app.clock import now as now_kst
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    ext_code = "phx-f1-task-0001"
+    doc_a = _ext_delivery("PHX-F1A")
+    doc_a["relations"]["edges"].append({"src": doc_a["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    canvas_a = _canvas_map_id(client, "PHX-F1A")
+    draft_a = _draft_id(client, canvas_a)
+
+    doc_b = _ext_delivery("PHX-F1B", task_ids=[ext_code, "phx-f1b-task-0002"])
+    assert _post(client, _files(doc_b), apply=True).status_code == 200
+    graph_1 = client.get(f"/api/versions/{draft_a}/graph").json()
+    sp_1 = [n for n in graph_1["nodes"] if n["node_type"] == "subprocess"]
+    assert len(sp_1) == 3 and len(graph_1["edges"]) == 1  # 이 L5의 업무 2개 + 해소된 외부 1개
+    assert all(n["linked_map_id"] is not None for n in sp_1)  # 플레이스홀더가 이미 해소됨
+
+    async def _set_trashed(trashed: bool) -> None:
+        async with SessionLocal() as session:
+            m = await session.scalar(select(ProcessMap).where(ProcessMap.consultant_code == ext_code))
+            m.deleted_at = now_kst() if trashed else None
+            await session.commit()
+
+    _run(_set_trashed(True))
+    # 대상이 휴지통이라 apply_interview_linkage의 라이브 조회에서 빠진다 — 계보 키가 없다면
+    # (구 코드) 이 시점에 새 플레이스홀더가 하나 더 생겨 같은 코드가 노드 2개로 나뉜다
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    graph_2 = client.get(f"/api/versions/{draft_a}/graph").json()
+    sp_2 = [n for n in graph_2["nodes"] if n["node_type"] == "subprocess"]
+    assert len(sp_2) == 3 and len(graph_2["edges"]) == 1  # 여전히 3개 — 계보 노드 옆에 중복 없음
+
+    _run(_set_trashed(False))
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    graph_3 = client.get(f"/api/versions/{draft_a}/graph").json()
+    sp_3 = [n for n in graph_3["nodes"] if n["node_type"] == "subprocess"]
+    assert len(sp_3) == 3 and len(graph_3["edges"]) == 1
+    assert all(n["linked_map_id"] is not None for n in sp_3)  # 복구 후에도 계속 연결 상태 유지
+
+
+def test_new_canvas_layout_places_placeholder_without_overlapping_ranked_nodes(client: TestClient) -> None:
+    """5개 업무가 순차 흐름(체인)으로 이어진 신규 캔버스에서, 외부 플레이스홀더도 같은 자동정렬
+    계산에 껴야 한다 — 빠지면 격자 폴백 좌표가 이미 자동정렬된 노드의 바운딩박스와 겹친다
+    (controller ruling F2)."""
+    task_ids = [f"phx-f2-task-{i:04d}" for i in range(5)]
+    doc = _ext_delivery("PHX-F2", task_ids=task_ids)
+    ext_code = "phx-f2-ext-0001"
+    doc["relations"]["edges"] = [
+        {"src": task_ids[i], "dst": task_ids[i + 1], "kind": "seq"} for i in range(4)
+    ] + [{"src": task_ids[4], "dst": ext_code, "kind": "seq"}]
+    assert _post(client, _files(doc), apply=True).status_code == 200
+
+    nodes, edges = _linkage_graph("PHX-F2")
+    assert len(nodes) == 6 and len(edges) == 5  # 자기 업무 5개 + 외부 플레이스홀더 1개
+
+    # subprocess 노드 실측 크기(180x64) — scripts/consultant_layout.py _NODE_SIZE와 수동 동기
+    w, h = 180, 64
+    boxes = [(n.pos_x, n.pos_y) for n in nodes]
+    for i in range(len(boxes)):
+        for j in range(i + 1, len(boxes)):
+            x1, y1 = boxes[i]
+            x2, y2 = boxes[j]
+            overlapping = x1 < x2 + w and x2 < x1 + w and y1 < y2 + h and y2 < y1 + h
+            assert not overlapping, f"node position overlap: {boxes[i]} vs {boxes[j]}"
+    assert len(boxes) == len(set(boxes))  # 최소 기준 — 좌표 완전 동일도 없어야 한다
+
+
+def test_external_placeholder_resolution_skips_canvas_checked_out_by_another_user(
+    client: TestClient,
+) -> None:
+    """플레이스홀더가 있는 캔버스가 남에게 체크아웃 중이면 resolve_external_placeholders가
+    건드리지 않고 경고만 남긴다 — apply_interview_linkage·open_linkage_map과 같은 체크아웃
+    규약 (controller ruling F3). 체크아웃이 풀리면 다음 전달이 정상 해소한다."""
+    from app.db import SessionLocal
+    from app.models import MapVersion
+
+    ext_code = "phx-f3-task-0001"
+    doc_a = _ext_delivery("PHX-F3A")
+    doc_a["relations"]["edges"].append({"src": doc_a["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    canvas_a = _canvas_map_id(client, "PHX-F3A")
+    draft_a = _draft_id(client, canvas_a)
+
+    async def _check_out(login: str | None) -> None:
+        async with SessionLocal() as session:
+            draft = await session.get(MapVersion, draft_a)
+            draft.checked_out_by = login
+            await session.commit()
+
+    _run(_check_out("someone.else"))
+
+    doc_b = _ext_delivery("PHX-F3B", task_ids=[ext_code, "phx-f3b-task-0002"])
+    body = _post(client, _files(doc_b), apply=True).json()
+    graph_a = client.get(f"/api/versions/{draft_a}/graph").json()
+    ph = next(n for n in graph_a["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None)
+    assert ph["title"] == ext_code  # 체크아웃 중이라 미해소
+    assert any("checked out" in r["detail"] for r in body["rows"])
+
+    _run(_check_out(None))
+    assert _post(client, _files(doc_b), apply=True).status_code == 200  # 다음 전달 — 체크아웃 풀림
+    graph_a2 = client.get(f"/api/versions/{draft_a}/graph").json()
+    resolved = next(n for n in graph_a2["nodes"] if n["id"] == ph["id"])
+    assert resolved["linked_map_id"] is not None
+
+
+def test_external_source_endpoint_places_placeholder_as_edge_source(client: TestClient) -> None:
+    """외부 taskId가 엣지의 target이 아니라 source여도(다른 L5의 업무 → 이 L5의 업무) 플레이스홀더로
+    배치되고 엣지 방향이 보존된다 (M10)."""
+    ext_code = "phx-m10-ext-0001"
+    doc = _ext_delivery("PHX-M10")
+    doc["relations"]["edges"].append({"src": ext_code, "dst": doc["rows"][0]["taskId"], "kind": "seq"})
+    assert _post(client, _files(doc), apply=True).status_code == 200
+
+    nodes, edges = _linkage_graph("PHX-M10")
+    ph = next(n for n in nodes if n.node_type == "subprocess" and n.linked_map_id is None)
+    assert ph.title == ext_code
+    own_map = _map_row(doc["rows"][0]["taskId"])
+    own_node = next(n for n in nodes if n.linked_map_id == own_map.id)
+    assert any(e.source_node_id == ph.id and e.target_node_id == own_node.id for e in edges)
