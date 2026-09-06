@@ -27,6 +27,7 @@ export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Prop
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selfApply = preview.self_apply;
+  const danger = body.action === "unassign" || body.action === "delete";
 
   async function submit() {
     setBusy(true);
@@ -40,9 +41,16 @@ export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Prop
     }
   }
 
+  // 단일 닫기 경로 — X·백드롭 mousedown·Esc(ModalBackdrop 내부) 전부 여기로 모은다.
+  // busy 중 닫으면 늦게 도착하는 성공이 stale onDone(부모 모달까지 닫힘)을, 실패가 언마운트 후 setError를 부른다(리뷰 라운드1 #1).
+  function handleClose() {
+    if (busy) return;
+    onClose();
+  }
+
   return createPortal(
     <ModalBackdrop
-      onClose={onClose}
+      onClose={handleClose}
       className="fixed inset-0 z-[1400] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
       <div
@@ -60,7 +68,13 @@ export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Prop
               <p className="text-fine text-ink-tertiary">{selfApply ? t("slot.selfApplyDesc") : t("slot.requestDesc")}</p>
             </div>
           </div>
-          <button type="button" aria-label={t("summary.close")} className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt" onClick={onClose}>
+          <button
+            type="button"
+            data-id="slot-change-close"
+            aria-label={t("summary.close")}
+            className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt"
+            onClick={handleClose}
+          >
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
@@ -91,19 +105,22 @@ export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Prop
             onChange={(event) => setNote(event.target.value)}
             placeholder={t("slot.notePlaceholder")}
             rows={2}
-            className="w-full resize-none rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
+            disabled={busy}
+            className="w-full resize-none rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink disabled:opacity-40"
           />
         )}
 
         <div className="flex justify-end gap-2">
-          <button type="button" data-id="slot-change-cancel" disabled={busy} className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40" onClick={onClose}>
+          <button type="button" data-id="slot-change-cancel" disabled={busy} className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40" onClick={handleClose}>
             {t("summary.cancel")}
           </button>
           <button
             type="button"
             data-id="slot-change-submit"
             disabled={busy}
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            className={`rounded-sm px-3 py-1.5 text-caption text-on-accent disabled:opacity-40 ${
+              danger ? "bg-error hover:opacity-90" : "bg-accent hover:bg-accent-focus"
+            }`}
             onClick={() => void submit()}
           >
             {selfApply ? t("slot.applyNow") : t("slot.request")}

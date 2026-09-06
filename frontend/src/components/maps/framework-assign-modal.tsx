@@ -69,6 +69,13 @@ export function FrameworkAssignModal({
   const [pending, setPending] = useState<{ body: SlotChangeIn; preview: SlotChangeOut } | null>(null);
   // 이 맵에 걸린 미결 슬롯 변경 요청 — undefined=조회 전, null=없음. 있으면 배너 노출 + 연결/해제/이양 버튼 잠금.
   const [pendingReq, setPendingReq] = useState<PendingSlotChange | null | undefined>(undefined);
+  // 미결 조회 실패 — "없음"으로 오인하면 이미 대기 중인 변경 위에 덮어쓸 수 있어 fail-closed로 버튼을 계속 잠근다
+  // (리뷰 라운드1 #2b). 재조회는 모달을 닫았다 다시 여는 remount로 이뤄진다.
+  const [pendingReqFailed, setPendingReqFailed] = useState(false);
+  // 대기 요청 유무와 무관하게 연결/해제/이양을 잠가야 하면 true.
+  const pendingLocked = Boolean(pendingReq) || pendingReqFailed;
+  // 철회 진행 중 — 더블클릭으로 withdrawSlotChange가 두 번 나가지 않도록.
+  const [withdrawing, setWithdrawing] = useState(false);
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -118,15 +125,18 @@ export function FrameworkAssignModal({
   }, [onClose]);
 
   // 미결 슬롯 변경 조회 — 있으면 배너로 진행 상황을 보여주고 연결/해제/이양을 잠근다.
-  // 조회 실패는 "없음"으로 취급 — 실제로 있었다면 액션 버튼 클릭 시 서버 409로 드러난다.
+  // 조회 실패는 "없음"으로 취급하지 않는다 — 실제로 대기 중인데 놓치면 그 위에 덮어쓸 수 있으므로
+  // fail-closed: 에러를 보여주고 버튼은 계속 잠근 채로 둔다(리뷰 라운드1 #2b).
   useEffect(() => {
     let active = true;
     getPendingSlotChange(mapId)
       .then((result) => {
         if (active) setPendingReq(result);
       })
-      .catch(() => {
-        if (active) setPendingReq(null);
+      .catch((err: unknown) => {
+        if (!active) return;
+        setPendingReqFailed(true);
+        setError(getApiErrorDetail(err));
       });
     return () => {
       active = false;
@@ -314,12 +324,16 @@ export function FrameworkAssignModal({
                 <button
                   type="button"
                   data-id="slot-withdraw-btn"
-                  className="self-start text-caption text-accent hover:underline"
-                  onClick={() =>
+                  disabled={withdrawing}
+                  className="self-start text-caption text-accent hover:underline disabled:opacity-40"
+                  onClick={() => {
+                    if (withdrawing) return;
+                    setWithdrawing(true);
                     void withdrawSlotChange(mapId)
                       .then(() => setPendingReq(null))
                       .catch((err: unknown) => setError(getApiErrorDetail(err)))
-                  }
+                      .finally(() => setWithdrawing(false));
+                  }}
                 >
                   {t("slot.withdraw")}
                 </button>
@@ -345,7 +359,7 @@ export function FrameworkAssignModal({
           <button
             type="button"
             data-id="framework-assign-btn"
-            disabled={selectedId === null || submitting || Boolean(pendingReq)}
+            disabled={selectedId === null || submitting || pendingLocked}
             className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={requestAssign}
           >
@@ -355,7 +369,7 @@ export function FrameworkAssignModal({
             <button
               type="button"
               data-id="framework-unassign-btn"
-              disabled={submitting || Boolean(pendingReq)}
+              disabled={submitting || pendingLocked}
               className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
               onClick={() => void planChange({ action: "unassign" })}
             >
@@ -403,7 +417,7 @@ export function FrameworkAssignModal({
                 <button
                   type="button"
                   data-id="framework-transfer-btn"
-                  disabled={!transferTargetId || submitting || Boolean(pendingReq)}
+                  disabled={!transferTargetId || submitting || pendingLocked}
                   className="self-end rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
                   onClick={() => void planChange({ action: "replace", to_map_id: Number(transferTargetId) })}
                 >
