@@ -12,6 +12,7 @@ from app.db import get_session
 from app.framework_slots import (
     SlotChange,
     apply_slot_change,
+    assert_no_pending_slot_change,
     build_preview,
     build_request_payload,
     category_path,
@@ -63,17 +64,10 @@ async def create_slot_change(
         return SlotChangeOut(mode="preview", request_id=None, **preview)
     # 대기 요청 가드는 self_apply 여부와 무관하게 먼저 걸린다 — 안 그러면 self-apply 자격자가
     # 다른 사람의 대기 요청 위에 바로 적용해버려 그 요청이 조용히 stale이 된다 (리뷰 라운드1 #2a).
-    pending_id = await session.scalar(
-        select(ApprovalRequest.id).where(
-            ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
-            ApprovalRequest.status == "pending",
-        )
-    )
-    if pending_id is not None:
-        raise HTTPException(status_code=409, detail="a slot change is already pending")
+    await assert_no_pending_slot_change(session, map_id)
     if not plan.self_apply:
         req = ApprovalRequest(
-            map_id=map_id, kind="fw_slot", payload=build_request_payload(plan, change.note),
+            map_id=map_id, kind="fw_slot", payload=build_request_payload(plan, change.note, preview, user),
             requested_by=user, status="pending",
         )
         session.add(req)

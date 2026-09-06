@@ -14,7 +14,13 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.framework_confirm import load_confirm_draft, perform_framework_confirm
-from app.framework_slots import SlotChange, apply_slot_change, can_decide_slot_for_map, validate_slot_change
+from app.framework_slots import (
+    SlotChange,
+    apply_slot_change,
+    assert_no_pending_slot_change,
+    can_decide_slot_for_map,
+    validate_slot_change,
+)
 from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
@@ -1356,6 +1362,9 @@ async def set_map_category(
         change = SlotChange(action="move", map_id=map_id, to_category_id=payload.category_id)
     if change is not None:
         plan = await validate_slot_change(session, change, user)
+        # 대기 중인 fw_slot 요청이 있으면 self-apply 자격자라도 그 위에 바로 적용할 수 없다
+        # (create_slot_change와 동일 가드 — 안 그러면 남의 대기 요청이 조용히 stale이 된다, F1).
+        await assert_no_pending_slot_change(session, map_id)
         if not plan.self_apply:
             raise HTTPException(status_code=409, detail="slot changes require L5 admin approval - use slot-changes")
         await apply_slot_change(session, plan, user)
@@ -1395,6 +1404,8 @@ async def transfer_framework_slot(
     )
     # source의 owner 여부는 경로 의존성(require_map_role)이 이미 검증 — target은 별도 검증
     await assert_map_role(session, user, payload.to_map_id, "owner")
+    # 대기 중인 fw_slot 요청이 있으면 self-apply 자격자라도 그 위에 바로 적용할 수 없다 (F1)
+    await assert_no_pending_slot_change(session, map_id)
     if not plan.self_apply:
         raise HTTPException(status_code=409, detail="slot changes require L5 admin approval - use slot-changes")
     await apply_slot_change(session, plan, user)

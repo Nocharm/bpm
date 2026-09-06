@@ -776,6 +776,22 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
         plan = await validate_slot_change(
             session, change_from_payload(req.map_id, req.payload), req.requested_by
         )
+        # side 자체가 요청 당시와 달라졌으면(예: 결정 대기 중 맵이 다른 카테고리로 드리프트) 이미
+        # 받은 승인들이 엉뚱한 side에 대한 것이 된다 — 순서는 보장되지 않으니 정렬해 비교한다.
+        requested_sides = sorted(int(c) for c in req.payload.get("sides", []))
+        if sorted(plan.sides) != requested_sides:
+            raise HTTPException(
+                status_code=409, detail="request preconditions changed - withdraw and re-request"
+            )
+        if plan.target is not None:
+            # 요청자가 요청~적용 사이 target 맵의 owner가 아니게 됐으면(이전 등) 생성 시 전제가
+            # 깨진 것 — create_slot_change의 생성 시 target owner 검증과 대칭 (F5).
+            try:
+                await assert_map_role(session, req.requested_by, plan.target.id, "owner")
+            except HTTPException as exc:
+                raise HTTPException(
+                    status_code=409, detail="request preconditions changed - withdraw and re-request"
+                ) from exc
         await apply_slot_change(session, plan, req.decided_by or req.requested_by, request_id=req.id)
 
 

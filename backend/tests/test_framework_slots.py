@@ -920,3 +920,142 @@ def test_list_approval_requests_allows_remaining_side_l5_admin_slot_only(
 
     act_as(OWNER)
     assert client.get(f"/api/maps/{mid}/approval-requests").status_code == 200
+
+
+# ── 최종 수정 라운드: pending 가드 승격·approvals 크레딧·적용 시 재검증 (F1·F3·F5) ──────────────
+
+
+def test_legacy_adapters_are_blocked_by_a_pending_slot_change(client: TestClient, enforce: None) -> None:
+    """F1: 대기 중인 fw_slot 요청이 있으면 self-apply 자격자(sysadmin 포함)라도 레거시 어댑터
+    (PUT /category, POST /framework-transfer)로 그 위에 바로 적용할 수 없다 — create_slot_change와
+    동일 가드(assert_no_pending_slot_change). 안 그러면 self-apply 자격자가 남의 대기 요청을
+    조용히 stale로 만든다."""
+    l5 = _seed_l5_with_admin(client, "FWS-PG5", "펜딩가드", admin=L5ADMIN)
+    other_l5 = _seed_category("FWS-PG5X", "펜딩가드X", level=5)
+    act_as(OWNER)
+    mid = _create_map(client, "fws pending guard map")
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5}).json()["request_id"]
+    assert req_id is not None
+    act_as(SYSADMIN)
+    r = client.put(f"/api/maps/{mid}/category", json={"category_id": other_l5})
+    assert r.status_code == 409 and "pending" in r.json()["detail"]
+    assert _map_row(mid)["category_id"] is None  # 미적용
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["request"]["status"] == "pending"
+
+    # 이양 어댑터도 동일 — 별도 맵으로 검증
+    l5t = _seed_l5_with_admin(client, "FWS-PG5T", "펜딩가드이양", admin=L5ADMIN)
+    act_as(OWNER)
+    src = _create_map(client, "fws pending guard transfer src")
+    tgt = _create_map(client, "fws pending guard transfer tgt")
+    act_as(SYSADMIN)
+    assert client.post(
+        f"/api/maps/{src}/slot-changes", json={"action": "assign", "to_category_id": l5t}
+    ).json()["mode"] == "applied"
+    act_as(OWNER)
+    req2_id = client.post(f"/api/maps/{src}/slot-changes", json={"action": "replace", "to_map_id": tgt}).json()["request_id"]
+    assert req2_id is not None
+    act_as(SYSADMIN)
+    r2 = client.post(f"/api/maps/{src}/framework-transfer", json={"to_map_id": tgt})
+    assert r2.status_code == 409 and "pending" in r2.json()["detail"]
+    assert _map_row(src)["category_id"] == l5t  # 미적용 — 이양 안 됨
+    assert client.get(f"/api/maps/{src}/slot-changes/pending").json()["request"]["status"] == "pending"
+
+
+def test_apply_rechecks_sides_after_drift(client: TestClient, enforce: None) -> None:
+    """F1: 승인이 다 났어도 적용 직전 실제 side가 요청 당시와 달라졌으면(드리프트) 막는다 —
+    승인된 side와 재검증된 side가 더 이상 일치하지 않으면 엉뚱한 쪽에 승인이 내려간 셈이라
+    decide는 커밋 전에 409로 중단하고 요청은 pending을 유지한다."""
+    l5a = _seed_l5_with_admin(client, "FWS-DR5A", "드리프트A", admin=L5ADMIN)
+    l5b = _seed_l5_with_admin(client, "FWS-DR5B", "드리프트B", admin=L5ADMIN_B)
+    drift_l5 = _seed_category("FWS-DR5X", "드리프트X", level=5)
+    act_as(OWNER)
+    mid = _create_map(client, "fws drift map")
+    act_as(SYSADMIN)
+    assert client.post(
+        f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5a}
+    ).json()["mode"] == "applied"
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5b}).json()["request_id"]
+    act_as(L5ADMIN)
+    assert _decide(client, req_id, "approve").json()["status"] == "pending"  # A측 승인, B측 남음
+
+    # 드리프트 시뮬레이션 — 결정 대기 중 맵이 다른 L5로 직접 옮겨졌다(다른 경로의 레이스를 흉내)
+    async def _drift(session):
+        m = await session.get(ProcessMap, mid)
+        m.category_id = drift_l5
+
+    _run(_drift)
+
+    act_as(L5ADMIN_B)
+    r = _decide(client, req_id, "approve")
+    assert r.status_code == 409 and "preconditions changed" in r.json()["detail"]
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["request"]["status"] == "pending"
+    assert _map_row(mid)["category_id"] == drift_l5  # 드리프트 상태 그대로 — 적용 안 됨
+
+
+def test_apply_rechecks_target_ownership_after_drift(client: TestClient, enforce: None) -> None:
+    """F5: 승인 완료 직전 target 맵의 owner 등급이 내려가면(다운그레이드 등) 적용을 막는다 —
+    create_slot_change의 생성 시 target owner 검증과 대칭되는 적용 시 재검증."""
+    from app.models import MapPermission
+
+    l5 = _seed_l5_with_admin(client, "FWS-TO5", "타겟소유권", admin=L5ADMIN)
+    act_as(OWNER)
+    src = _create_map(client, "fws target ownership src")
+    tgt = _create_map(client, "fws target ownership tgt")
+    act_as(SYSADMIN)
+    assert client.post(
+        f"/api/maps/{src}/slot-changes", json={"action": "assign", "to_category_id": l5}
+    ).json()["mode"] == "applied"
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{src}/slot-changes", json={"action": "replace", "to_map_id": tgt}).json()["request_id"]
+    assert req_id is not None
+
+    # 요청~승인 사이 target의 owner 등급이 내려간다 — 요청자는 더 이상 target owner가 아니다
+    async def _downgrade(session):
+        grant = await session.scalar(
+            select(MapPermission).where(
+                MapPermission.map_id == tgt, MapPermission.principal_id == OWNER, MapPermission.role == "owner"
+            )
+        )
+        grant.role = "editor"
+
+    _run(_downgrade)
+
+    act_as(L5ADMIN)
+    r = _decide(client, req_id, "approve")
+    assert r.status_code == 409 and "preconditions changed" in r.json()["detail"]
+    assert client.get(f"/api/maps/{src}/slot-changes/pending").json()["request"]["status"] == "pending"
+    assert _map_row(src)["category_id"] == l5  # 승계 안 됨 — target 재검증 실패로 미적용
+
+
+def test_requester_credited_for_own_side_at_request_creation(client: TestClient, enforce: None) -> None:
+    """F3: 요청자가 이동 한쪽 side의 직속 관리자면 생성 시점에 그 side가 바로 approvals에 채워진다
+    — remaining_sides가 반대편만 남기고, 요청자 자신은 이미 결정한 side라 재결정권이 없다(403)."""
+    from app.models import ApprovalRequest
+
+    owner_admin_a = "fws.owner.admin.a"
+    l5a = _seed_l5_with_admin(client, "FWS-CR5A", "요청자크레딧A", admin=owner_admin_a)
+    l5b = _seed_l5_with_admin(client, "FWS-CR5B", "요청자크레딧B", admin=L5ADMIN_B)
+    act_as(owner_admin_a)
+    mid = _create_map(client, "fws requester credit map")
+    # 오너 본인이 A측 직속 관리자라 최초 assign은 self-apply
+    assert client.post(
+        f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5a}
+    ).json()["mode"] == "applied"
+    # B측 관리자가 아니라 move는 요청으로 가지만, A측은 요청자 본인이라 생성 시 바로 크레딧된다
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5b}).json()["request_id"]
+
+    async def _approvals(session):
+        row = await session.get(ApprovalRequest, req_id)
+        return row.payload.get("approvals") or {}
+
+    assert str(l5a) in _run(_approvals)
+    pending = client.get(f"/api/maps/{mid}/slot-changes/pending").json()
+    assert pending["remaining"] == [l5b]
+    # 요청자 자신은 A측이 이미 끝나 결정권이 없다 — 남은 side(B) 관리자가 아니므로 403
+    r = _decide(client, req_id, "approve")
+    assert r.status_code == 403
+    act_as(L5ADMIN_B)
+    r2 = _decide(client, req_id, "approve")
+    assert r2.status_code == 200 and r2.json()["status"] == "applied"
+    assert _map_row(mid)["category_id"] == l5b

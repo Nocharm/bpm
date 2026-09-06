@@ -84,6 +84,22 @@ async def can_self_apply(session: AsyncSession, actor: str, sides: list[int]) ->
     return bool(sides)
 
 
+async def assert_no_pending_slot_change(session: AsyncSession, map_id: int) -> None:
+    """맵에 대기 중인 fw_slot 요청이 있으면 409 — self-apply 어댑터·라우터 공용 가드.
+
+    적용 직전 항상 먼저 걸어야 한다 — 안 그러면 self-apply 자격자가 남의 대기 요청 위에 바로
+    적용해버려 그 요청이 조용히 stale이 된다 (create_slot_change의 기존 가드를 승격, F1).
+    """
+    pending_id = await session.scalar(
+        select(ApprovalRequest.id).where(
+            ApprovalRequest.map_id == map_id, ApprovalRequest.kind == "fw_slot",
+            ApprovalRequest.status == "pending",
+        )
+    )
+    if pending_id is not None:
+        raise HTTPException(status_code=409, detail="a slot change is already pending")
+
+
 async def validate_slot_change(session: AsyncSession, change: SlotChange, actor: str) -> SlotPlan:
     """액션별 전제(spec §5 표) — 통과하면 적용 계획을 돌려준다. 호출자 자격(owner)은 라우터가 검증.
 
@@ -434,9 +450,21 @@ async def build_preview(session: AsyncSession, plan: SlotPlan, actor: str) -> di
     }
 
 
-def build_request_payload(plan: SlotPlan, note: str) -> dict:
-    """ApprovalRequest.payload — 승인 시 재검증에 필요한 최소 좌표 + 표시용 이름 (spec §4.1)."""
+def build_request_payload(plan: SlotPlan, note: str, preview: dict, actor: str) -> dict:
+    """ApprovalRequest.payload — 승인 시 재검증에 필요한 최소 좌표 + 표시용 이름 (spec §4.1).
+
+    요청자가 이미 side 일부의 직속 관리자(또는 sysadmin)라면 dry-run 프리뷰가 그 side를
+    satisfied_by_caller=True로 표시한다 — 그 side는 생성 시점에 바로 approvals를 채운다.
+    안 그러면 remaining_sides가 그 side를 계속 남겨 배너 진행률이 실제보다 낮게 보이고,
+    요청자 자신은 이미 만족한 side에 대해서도 결정권이 없다고 나온다(F3). 값 모양은
+    record_slot_approvals가 approve 시 쓰는 것과 동일: {"by": <login>, "at": <iso kst>}.
+    """
     change = plan.change
+    approvals = {
+        str(side["category_id"]): {"by": actor, "at": now_kst().isoformat()}
+        for side in preview["sides"]
+        if side["satisfied_by_caller"]
+    }
     return {
         "action": change.action,
         "map_name": plan.source.name,
@@ -446,7 +474,7 @@ def build_request_payload(plan: SlotPlan, note: str) -> dict:
         "to_map_name": plan.target.name if plan.target is not None else None,
         "note": note,
         "sides": list(plan.sides),
-        "approvals": {},
+        "approvals": approvals,
     }
 
 
