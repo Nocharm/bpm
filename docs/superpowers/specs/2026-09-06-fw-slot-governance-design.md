@@ -76,7 +76,7 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
  approvals: {"<category_id>": {"by": login, "at": iso}}}
 ```
 
-> **amendment (2026-09-06)**: `impact`(`home_canvas_nodes`/`other_canvas_nodes`/`referencing_maps`)는 **라이브 draft 캔버스만** 세는 미리보기 집계다 — 확정/게시 스냅샷 기준이 아니므로 실제로 사용자가 보게 될(확정·게시된) 화면보다 **과대 계산될 수 있다**(draft에만 있는 노드·참조가 잡힘). FE 배정 모달(§7.2)의 영향 요약은 이 값을 그대로 노출한다.
+> **amendment (2026-09-06)**: `impact`의 세 집계는 스코프가 다르다(`build_preview`, `app/framework_slots.py`) — `home_canvas_nodes`만 **홈 캔버스의 라이브 draft**에 한정된 노드 수다(그래서 확정/게시 스냅샷 기준 화면보다 과대 계산될 수 있다, draft에만 있는 노드가 잡힘). `other_canvas_nodes`·`referencing_maps`는 draft로 국한하지 않고 **버전 상태 무관하게(오래된 스냅샷 포함) source를 가리키는 노드가 있는 맵의 distinct count**다 — `mode`로 갈라 전자는 다른 연계 캔버스, 후자는 일반 맵을 센다. FE 배정 모달(§7.2)의 영향 요약은 이 값을 그대로 노출한다.
 > **amendment (2026-09-06)**: `build_request_payload`가 요청 생성 시 `payload.approvals`를 호출자가 **이미 직속 관리자인 side**로 미리 채운다(dry-run 프리뷰의 `satisfied_by_caller`가 참인 side). 그래서 대기 배너의 n/m은 생성 시점부터 실제 진행률을 보여주고, 그 side에 대해 요청자 자신도 결정권을 잃지 않는다. 요청자가 **모든** side를 겸하면 애초에 `self_apply`라 요청 자체가 생기지 않는다 — 이 프리셋은 `move`처럼 side가 혼합된 경우를 위한 것.
 
 ### 4.2 결정·철회
