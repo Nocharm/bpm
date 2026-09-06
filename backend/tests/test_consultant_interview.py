@@ -467,3 +467,38 @@ def test_l6_self_branch_edge_promotes_branch_node_not_source() -> None:
     m = convert_interview(data).maps[0]
     assert next(n for n in m.nodes if n.code == "a02").type == "process"
     assert next(n for n in m.nodes if n.code == "a02r").type == "decision"
+
+
+def test_adapter_keeps_edge_to_external_task_as_placeholder_source() -> None:
+    """한쪽 끝점이 rows에 없는 엣지는 드랍하지 않고 external로 보존 — 양쪽 다 없으면 드랍 (spec 2026-09-06 §8)."""
+    data = _interview()
+    # task-prep-0001은 기본에 있고, task-run-0002를 추가
+    data["rows"].append({
+        "taskId": "task-run-0002", "unitId": "unit-run-0002", "l6": "현장 교정 수행",
+        "owner": None, "ownerRole": "교정 담당자", "approvers": [], "department": None,
+        "fields": {"annual_count": 100, "fte": 0.5},
+        "actions": [_action(1, "현장 측정")],
+        "relations": {"edges": []},
+    })
+    data["relations"]["edges"] = [
+        _edge("task-prep-0001", "task-run-0002", kind="seq"),
+        _edge("task-run-0002", "other-l5-task-9", kind="seq"),
+        _edge("ghost-a", "ghost-b", kind="seq"),
+    ]
+    result = convert_interview(data)
+    assert not result.has_error()
+    lk = result.linkage
+    assert lk is not None
+    edges = {(e.source, e.target): e for e in lk.edges}
+    # 양쪽 모두 rows에 있는 엣지는 external=False
+    assert ("task-prep-0001", "task-run-0002") in edges
+    assert edges[("task-prep-0001", "task-run-0002")].external is False
+    # 한쪽만 rows에 있는 엣지는 external=True로 보존
+    assert ("task-run-0002", "other-l5-task-9") in edges
+    assert edges[("task-run-0002", "other-l5-task-9")].external is True
+    # 양쪽 모두 rows에 없는 엣지는 드랍
+    assert ("ghost-a", "ghost-b") not in edges
+    # external_codes는 외부 taskId 목록
+    assert lk.external_codes == ["other-l5-task-9"]
+    # placeholder 메시지 포함
+    assert any("placeholder" in i.message for i in result.issues)

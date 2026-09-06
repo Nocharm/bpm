@@ -102,6 +102,8 @@ class InterviewLinkageEdge:
     label: str = ""
     kind: str = "seq"
     gateway: str = ""
+    # 끝점 중 하나가 이 전달분 rows 밖(타 L5의 L6) — 임포터가 플레이스홀더 노드로 배치 (spec 2026-09-06 §8)
+    external: bool = False
 
 
 @dataclass
@@ -116,6 +118,7 @@ class InterviewLinkage:
     map_codes: list[str] = field(default_factory=list)
     edges: list[InterviewLinkageEdge] = field(default_factory=list)
     params: dict[str, tuple[str, str]] = field(default_factory=dict)
+    external_codes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -502,10 +505,19 @@ def _build_linkage(
             continue
         _warn_unknown_keys(raw, _EDGE_KEYS, epath, issues)
         src, dst = _clean(raw.get("src")), _clean(raw.get("dst"))
-        if src not in row_names or dst not in row_names:
+        src_known, dst_known = src in row_names, dst in row_names
+        if not src_known and not dst_known:
             issues.append(AdapterIssue(
                 "warning", epath, f"edge references unknown taskId {src!r}→{dst!r} - dropped (존재하지 않는 taskId를 가리켜 제외됨)"))
             continue
+        external = not (src_known and dst_known)
+        if external:
+            ext = dst if src_known else src
+            if ext not in linkage.external_codes:
+                linkage.external_codes.append(ext)
+            issues.append(AdapterIssue(
+                "warning", epath,
+                f"edge to external taskId {ext!r} kept as placeholder (다른 L5의 업무 - 플레이스홀더 노드로 배치됨)"))
         is_self = src == dst
         if is_self:
             # 자기 반복 — 드랍하지 않고 loop로 강제 유지. 임포트 엔진(expand_linkage_branches)이
@@ -535,6 +547,7 @@ def _build_linkage(
             label=_truncate(_edge_label(raw.get("label"), condition), 200, epath, "label", issues),
             kind=kind,
             gateway=gateway,
+            external=external,
         ))
         quote = _clean(raw.get("quote"))
         if quote:
@@ -544,6 +557,7 @@ def _build_linkage(
                 text=_flow_note_text(kind, gateway, condition, quote),
                 category_code=l5_code,
             ))
+    linkage.external_codes.sort()
     return linkage, notes
 
 
