@@ -84,9 +84,9 @@ async def can_self_apply(session: AsyncSession, actor: str, sides: list[int]) ->
 async def validate_slot_change(session: AsyncSession, change: SlotChange, actor: str) -> SlotPlan:
     """액션별 전제(spec §5 표) — 통과하면 적용 계획을 돌려준다. 호출자 자격(owner)은 라우터가 검증.
 
-    비정상 모드(mode != "normal") 소스 거부는 슬롯을 "설정"하는 액션(assign/move/replace)에만
-    건다 — unassign/delete는 잔존 슬롯 정리를 위해 비정상 소스도 허용한다(과거 캔버스 맵에 실수로
-    붙은 stray category_id를 해제할 수 있어야 함, 회귀: test_clearing_a_stray_slot_on_a_canvas_map_is_allowed).
+    mode 가드(_assert_normal)는 슬롯을 "붙일" 때만 건다(assign/move/replace) — 해제·삭제(unassign/delete)는
+    잔존 슬롯 정리 경로라 비정상 소스도 허용한다(예: 캔버스 맵에 실수로 붙은 stray category_id 해제).
+    커버: test_core_clearing_a_stray_slot_on_a_canvas_map_is_allowed.
     """
     if change.action not in SLOT_ACTIONS:
         raise HTTPException(status_code=422, detail=f"unknown slot action {change.action!r}")

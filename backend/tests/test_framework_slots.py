@@ -209,8 +209,15 @@ def test_core_assign_unassign_move(client: TestClient) -> None:
     assert mid in _linked_ids(client, canvas_a)  # 옛 캔버스 노드 유지(외부 L6로 표시)
     assert mid in _linked_ids(client, canvas_b)
 
+    async def _set_code(session):
+        m = await session.get(ProcessMap, mid)
+        m.consultant_code = "FWS-C-KEEP"
+
+    _run(_set_code)
+
     _apply({"action": "unassign", "map_id": mid})
     assert _map_row(mid)["category_id"] is None
+    assert _map_row(mid)["consultant_code"] == "FWS-C-KEEP"  # unassign은 consultant_code 보존(재전달 결착 키)
     assert mid in _linked_ids(client, canvas_b)  # 노드 유지 → unassigned 상태로 파생 표시
 
     assert _events(mid) == [("assign", None, l5a, None), ("move", l5a, l5b, None), ("unassign", l5b, None, None)]
@@ -246,3 +253,49 @@ def test_core_validation_errors(client: TestClient) -> None:
     assert _status({"action": "replace", "map_id": slotted, "to_map_id": slotted}) == 409   # 자기 자신
     assert _status({"action": "delete", "map_id": free}) == 409                             # 슬롯 없음
     assert _status({"action": "bogus", "map_id": free}) == 422
+
+
+def test_core_clearing_a_stray_slot_on_a_canvas_map_is_allowed(client: TestClient) -> None:
+    """mode 가드는 슬롯을 "붙일" 때만 — unassign/delete는 캔버스의 stray category_id도 코어에서 직접 정리한다.
+
+    레거시 test_clearing_a_stray_slot_on_a_canvas_map_is_allowed는 /maps/{id}/category(maps.py) 경유라
+    이 코어(validate_slot_change/apply_slot_change)의 mode 가드 예외는 실측하지 않는다 — 여기서 직접 검증.
+    """
+    from fastapi import HTTPException
+
+    from app.framework_slots import SlotChange, validate_slot_change
+
+    l5 = _seed_category("FWS-D5", "잔존슬롯", level=5)
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+
+    async def _stray(session):
+        m = await session.get(ProcessMap, canvas)
+        m.category_id = l5
+
+    _run(_stray)
+    assert _map_row(canvas)["category_id"] == l5
+
+    def _plan(kwargs: dict):
+        async def _go(session):
+            return await validate_slot_change(session, SlotChange(**kwargs), SYSADMIN)
+
+        return _run(_go)
+
+    assert _plan({"action": "unassign", "map_id": canvas}).sides == [l5]
+    assert _plan({"action": "delete", "map_id": canvas}).sides == [l5]  # apply는 Task 4의 501 스텁 — validate만
+
+    _apply({"action": "unassign", "map_id": canvas})
+    assert _map_row(canvas)["category_id"] is None
+    assert _events(canvas) == [("unassign", l5, None, None)]
+
+    def _status(kwargs: dict) -> int:
+        async def _go(session):
+            try:
+                await validate_slot_change(session, SlotChange(**kwargs), SYSADMIN)
+            except HTTPException as exc:
+                return exc.status_code
+            return 200
+
+        return _run(_go)
+
+    assert _status({"action": "assign", "map_id": canvas, "to_category_id": l5}) == 422  # 슬롯을 "붙일" 땐 mode 가드 그대로
