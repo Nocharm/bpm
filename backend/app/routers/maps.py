@@ -1339,6 +1339,9 @@ async def set_map_category(
     )
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode != "normal":
+        # 슬롯 보유 자격은 일반 맵만 — 연계 캔버스·Word 맵은 서랍에 들어가지 않는다 (spec 2026-09-06 §9)
+        raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
     if payload.category_id is not None:
         category = await session.get(ProcessCategory, payload.category_id)
         if category is None:
@@ -1391,6 +1394,8 @@ async def transfer_framework_slot(
         raise HTTPException(
             status_code=404, detail=f"map {payload.to_map_id} not found"
         )
+    if target.mode != "normal":
+        raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
     # source의 owner 여부는 경로 의존성(require_map_role)이 이미 검증 — target은 별도 검증
     await assert_map_role(session, user, payload.to_map_id, "owner")
     if source.category_id is None:
@@ -1406,10 +1411,15 @@ async def transfer_framework_slot(
             status_code=409,
             detail="framework slot must point to a level-5 category - reassign before transfer",
         )
-    target.category_id = source.category_id
-    target.consultant_code = source.consultant_code
+    # 결함 ①: SQLAlchemy는 UPDATE를 PK 오름차순으로 내보내 target.id < source.id 이면 target에 코드가
+    # 먼저 박혀 unique(consultant_code)에 걸린다 — source를 먼저 비우고 flush한 뒤 target에 붙인다.
+    slot_category_id = source.category_id
+    slot_code = source.consultant_code
     source.category_id = None
     source.consultant_code = None
+    await session.flush()
+    target.category_id = slot_category_id
+    target.consultant_code = slot_code
     await session.commit()
     return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
 
