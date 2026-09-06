@@ -192,6 +192,8 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 - **BE(pytest)**: 액션 5종 × {자기결재 즉시 적용, 요청 생성→승인→적용, 거절, 철회}; `move` 양측 승인(한 명이 양쪽 관리자면 1회 승인으로 적용, 한쪽만 승인 시 pending); 결함 4종 회귀(2026-09-03 프로브를 정식 테스트로 승격 — target.id < source.id 이양 200, 캔버스 맵 422, 이양 직후 `missing_l6` 0·엣지 유지·옛 노드 없음, 복사+은퇴 후 슬롯 승계/해제); `stale_link` 해제 링크 검출; `refs` 신규 필드; 슬롯 있는 맵 `DELETE` 409·`copy retire_source` 409; 레거시 어댑터 409; 이벤트 기록·알림 수신자.
 - **FE(vitest)**: 노드 상태 파생(`contained/external/unassigned/superseded/deleted/placeholder`), 최근 이양 판정(14일 경계), 모달 분기(self_apply vs 요청), 피커 mode 필터.
 - **스모크(Playwright, `frontend/scripts/pw-smoke-framework-slot.mjs`)**: 오너(비관리자)가 대체 요청 → 승인 탭에서 L5 관리자 승인 → 캔버스에서 C 노드가 A 자리에 엣지 유지 + 최근 이양 배지 → 호버 패널 시각 노출 → 해제 요청 승인 후 미싱 룩. 위임 재현은 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`.
+- **QA 문서(`docs/qa/2026-09-fw-slot-governance-qa.md`)**: ① 기능 체크리스트(액션 5종 × 자기결재/요청 × 결과 상태·게이트·알림) ② 사용자 시나리오(유지보수 10항목을 순서대로 재현하는 대본 — 사전 데이터·계정·기대 화면·확인 포인트). 항목마다 자동 검증(테스트 이름) 또는 수동 검증 표기.
+- **브라우저 검증은 구현자가 직접 수행**한다(Playwright + 시스템 Chrome 하네스, 필요 시 Claude in Chrome 확장). 스크린샷을 세션에 공유하고 QA 문서의 수동 항목에 결과를 기록한다.
 
 ## 12. 구현 앵커 (2026-09-04 dev 9ddd2f3e 실측)
 
