@@ -136,8 +136,14 @@ try {
   const l5admin = await newSession(L5ADMIN);
   await l5admin.page.goto(`${BASE}/inbox`, { waitUntil: "networkidle" });
   await l5admin.page.getByRole("button", { name: "Approvals" }).click();
-  const row = l5admin.page.getByRole("button").filter({ hasText: a.name }).first();
-  const rowVisible = await row.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  // 맵 이름만으로 스코프하면 같은 맵에 걸린 다른 대기 승인(예: rename)도 매치될 수 있다 — 종류 타이틀
+  // ("Framework slot change", i18n inbox.reqKind.fw_slot·approvalTitle()의 fw_slot 분기)까지 같이 건다.
+  const row = l5admin.page.getByRole("button").filter({ hasText: a.name }).filter({ hasText: "Framework slot change" });
+  // count()는 auto-wait이 없다 — 리스트가 아직 안 그려졌을 때 0으로 오판하지 않도록 먼저 렌더를 기다린다(비보고).
+  await row.first().waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+  const rowCount = await row.count();
+  check("exactly one slot-change approval row for A", rowCount === 1, `count=${rowCount}`);
+  const rowVisible = await row.first().waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("L5 admin sees the slot request in inbox", rowVisible);
   await shot(l5admin.page, "l5admin-inbox");
   const decided = await l5admin.api(`/approval-requests/${pending.body.request.id}/decide`, {
@@ -154,8 +160,17 @@ try {
   check("old A node is gone", (await l5admin.page.locator(".react-flow__node", { hasText: a.name }).count()) === 0);
   check("recent handover badge on C", (await cNode.locator('[data-id="node-recent-handover"]').count()) === 1);
   await cNode.hover();
-  const panel = await l5admin.page.locator('[data-id="l5-node-info-panel"]').waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
+  const panelLocator = l5admin.page.locator('[data-id="l5-node-info-panel"]');
+  const panel = await panelLocator.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
   check("hover shows bottom-left slot history panel", panel);
+  // 컨테이너는 timestamp가 전부 null이어도(framework.nodeInfo.empty) 보인다 — 실제 이양 시각이 찍혔는지
+  // 텍스트로 확인한다. "Handed over"=framework.nodeInfo.succeededAt 라벨, KST는 formatKstShort("MM-DD HH:mm").
+  const panelText = panel ? await panelLocator.innerText() : "";
+  check(
+    "panel shows a real handed-over KST timestamp (not the empty state)",
+    /Handed over/.test(panelText) && /\d{2}-\d{2} \d{2}:\d{2}/.test(panelText),
+    JSON.stringify(panelText),
+  );
   await shot(l5admin.page, "canvas-after-replace-hover");
 
   // ── 4) 해제 요청 → 승인 → 미싱 룩 ────────────────────────────────────────────────────
@@ -172,7 +187,7 @@ try {
   await l5admin.page.reload({ waitUntil: "networkidle" });
   await l5admin.page.waitForSelector(".react-flow__node", { timeout: 15000 });
   const missing = await l5admin.page.locator('[data-id="sp-banner-slot-missing"]').count();
-  check("unassigned node renders missing banner", missing >= 1, `banners=${missing}`);
+  check("unassigned node renders missing banner", missing === 1, `banners=${missing}`);
   const ready = await l5admin.api(`/maps/${canvas.map_id}/confirm-readiness`);
   check("stale_link gate flags the unassigned link", ready.body?.failures?.some((f) => f.code === "stale_link"));
   await shot(l5admin.page, "canvas-unassigned-missing");
