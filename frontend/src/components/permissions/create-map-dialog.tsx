@@ -10,7 +10,7 @@
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, User as UserIcon, Users } from "lucide-react";
+import { X, ArrowRightLeft, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, LockKeyhole, Tag, Trash2, TriangleAlert, Unlink, User as UserIcon, Users } from "lucide-react";
 
 import {
   acquireCheckout,
@@ -875,11 +875,12 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
             </label>
             {/* 슬롯(L5) 있는 원본 — 승계 방식 선택. 일반 맵은 슬롯이 없어 노출 안 함 (Track C Task 5). */}
             {retire && copy?.categoryId != null && (
-              <div
-                data-id="copy-retire-mode"
-                className="flex flex-col gap-1.5 rounded-sm border border-hairline bg-surface-alt p-2.5"
-              >
-                <label className="flex cursor-pointer items-start gap-2 text-caption text-ink">
+              <div data-id="copy-retire-mode" className="flex flex-col gap-1.5">
+                <label
+                  className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-2.5 transition-colors duration-150 ${
+                    retireMode === "replace" ? "border-accent bg-accent-tint" : "border-hairline hover:bg-surface-alt"
+                  }`}
+                >
                   <input
                     type="radio"
                     name="copy-retire-mode"
@@ -889,9 +890,21 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                     onChange={() => setRetireMode("replace")}
                     disabled={submitting}
                   />
-                  {t("slot.retireMode.replace")}
+                  <ArrowRightLeft
+                    size={16}
+                    strokeWidth={1.5}
+                    className={`mt-0.5 shrink-0 ${retireMode === "replace" ? "text-accent" : "text-ink-tertiary"}`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-caption-strong text-ink">{t("slot.retireMode.replace")}</span>
+                    <span className="block text-fine text-ink-secondary">{t("slot.retireMode.replaceDesc")}</span>
+                  </span>
                 </label>
-                <label className="flex cursor-pointer items-start gap-2 text-caption text-ink">
+                <label
+                  className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-2.5 transition-colors duration-150 ${
+                    retireMode === "unassign" ? "border-accent bg-accent-tint" : "border-hairline hover:bg-surface-alt"
+                  }`}
+                >
                   <input
                     type="radio"
                     name="copy-retire-mode"
@@ -901,7 +914,15 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                     onChange={() => setRetireMode("unassign")}
                     disabled={submitting}
                   />
-                  {t("slot.retireMode.unassign")}
+                  <Unlink
+                    size={16}
+                    strokeWidth={1.5}
+                    className={`mt-0.5 shrink-0 ${retireMode === "unassign" ? "text-accent" : "text-ink-tertiary"}`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-caption-strong text-ink">{t("slot.retireMode.unassign")}</span>
+                    <span className="block text-fine text-ink-secondary">{t("slot.retireMode.unassignDesc")}</span>
+                  </span>
                 </label>
               </div>
             )}

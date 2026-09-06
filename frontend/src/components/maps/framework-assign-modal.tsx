@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Clock, Network, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Clock, Network, TriangleAlert, Undo2, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
@@ -26,6 +26,7 @@ import {
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
 import { SlotChangeDialog } from "@/components/maps/slot-change-dialog";
+import { UserPill } from "@/components/user-pill";
 import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
 
@@ -304,25 +305,36 @@ export function FrameworkAssignModal({
         </div>
 
         {pendingReq && (
-          <div data-id="slot-pending-banner" className="flex items-start gap-2 rounded-sm border border-changed/40 bg-changed/10 px-3 py-2 text-fine">
-            <Clock size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-changed" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="font-semibold text-changed">
-                {t("slot.pendingBanner", {
-                  action: isSlotAction(pendingReq.request.payload.action)
-                    ? t(SLOT_ACTION_KEY[pendingReq.request.payload.action])
-                    : "",
-                  done: String(pendingReq.sides.length - pendingReq.remaining.length),
-                  total: String(pendingReq.sides.length),
-                  who: pendingReq.request.requested_by,
-                })}
-              </span>
+          <div data-id="slot-pending-banner" className="flex items-start gap-2.5 rounded-sm border border-changed/40 bg-changed/10 px-3 py-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-changed/20 text-changed">
+              <Clock size={14} strokeWidth={1.5} />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-fine font-semibold text-changed">
+                  {t("slot.pendingBannerLead", {
+                    action: isSlotAction(pendingReq.request.payload.action)
+                      ? t(SLOT_ACTION_KEY[pendingReq.request.payload.action])
+                      : "",
+                  })}
+                </span>
+                <span className="rounded-full bg-changed/20 px-1.5 py-0.5 text-fine font-semibold text-changed">
+                  {t("slot.pendingBannerProgress", {
+                    done: String(pendingReq.sides.length - pendingReq.remaining.length),
+                    total: String(pendingReq.sides.length),
+                  })}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1 text-fine text-ink-tertiary">
+                <span>{t("slot.pendingBannerBy")}</span>
+                <UserPill loginId={pendingReq.request.requested_by} />
+              </div>
               {pendingReq.request.requested_by === currentUser && (
                 <button
                   type="button"
                   data-id="slot-withdraw-btn"
                   disabled={withdrawing}
-                  className="self-start text-caption text-accent hover:underline disabled:opacity-40"
+                  className="inline-flex w-fit items-center gap-1 text-caption text-accent hover:underline disabled:opacity-40"
                   onClick={() => {
                     if (withdrawing) return;
                     setWithdrawing(true);
@@ -332,6 +344,7 @@ export function FrameworkAssignModal({
                       .finally(() => setWithdrawing(false));
                   }}
                 >
+                  <Undo2 size={12} strokeWidth={1.5} />
                   {t("slot.withdraw")}
                 </button>
               )}

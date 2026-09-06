@@ -126,7 +126,7 @@
 | `top-nav.tsx` | `TopNav` | 전역 네비게이션 바 | `app/layout.tsx` |
 | `url-label-field.tsx` | `UrlLabelField` | URL+라벨 공용 편집 필드 | `app/maps/[mapId]/page.tsx` |
 | `user-hover-card.tsx` | `UserHoverCard` | 유저 호버 카드 | `components/map-ownership-section.tsx`, `components/user-pill.tsx` |
-| `user-pill.tsx` | `UserPill` | 사용자 필 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx`, `components/maps/slot-change-dialog.tsx`, `components/subprocess-usage-tab.tsx` |
+| `user-pill.tsx` | `UserPill` | 사용자 필 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-change-dialog.tsx`, `components/subprocess-usage-tab.tsx` |
 | `version-pill.tsx` | `VersionPill` | 상단바 버전 pill | `app/maps/[mapId]/page.tsx` |
 | `visibility-bundle-picker.tsx` | `VisibilityBundlePicker` | 승인요청/셀프게시에 동봉할 가시성 변경 선택 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `window-dock.tsx` | `WindowDock` | 최소화된 스코프 창들의 좌하단 dock | `app/maps/[mapId]/page.tsx` |

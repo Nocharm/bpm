@@ -63,7 +63,11 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
   }
   return createPortal(
     <ModalBackdrop onClose={handleClose} className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm">
-      <div data-id="slot-delete-dialog" className="flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg" onClick={(event) => event.stopPropagation()}>
+      <div
+        data-id="slot-delete-dialog"
+        className="motion-safe:animate-[summary-card-in_260ms_var(--ease-spring)] flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-error/10 text-error">
@@ -72,15 +76,17 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
             <div className="flex min-w-0 flex-col gap-0.5">
               <h2 className="text-body-strong text-ink">{t("slot.action.delete")}</h2>
               <p className="truncate text-fine text-ink-tertiary">{mapName}</p>
+              <p className="text-fine text-ink-tertiary">{t("slot.deleteExplain")}</p>
             </div>
           </div>
           <button type="button" aria-label={t("summary.close")} className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt" onClick={handleClose}>
             <X size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <label className="flex flex-col gap-1 text-caption text-ink">
+        <label className="flex flex-col gap-1.5 text-caption text-ink">
           {t("slot.successor")}
           <SearchSelect value={successor} options={options} emptyLabel={t("slot.successorNone")} placeholder={t("field.searchPlaceholder")} onChange={setSuccessor} />
+          <span className="text-fine text-ink-tertiary">{t("slot.successorHelper")}</span>
         </label>
         <div className="flex justify-end gap-2">
           <button type="button" className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt" onClick={handleClose}>{t("summary.cancel")}</button>
