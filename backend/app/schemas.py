@@ -1072,6 +1072,8 @@ class PendingSlotChangeOut(BaseModel):
     sides: list[SlotChangeSideOut]
     remaining: list[int]
     can_decide: bool
+    # 철회권 — 요청자·현재 오너·sysadmin (오너가 바뀌어도 새 오너가 정리할 수 있게, 사용자 결정 2026-09-07)
+    can_withdraw: bool = False
 
 
 class FrameworkImportRow(BaseModel):

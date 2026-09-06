@@ -1059,3 +1059,38 @@ def test_requester_credited_for_own_side_at_request_creation(client: TestClient,
     r2 = _decide(client, req_id, "approve")
     assert r2.status_code == 200 and r2.json()["status"] == "applied"
     assert _map_row(mid)["category_id"] == l5b
+
+
+def test_current_owner_and_sysadmin_can_withdraw_after_ownership_transfer(client: TestClient, enforce: None) -> None:
+    """요청 뒤 오너가 바뀌면 새 오너가 철회할 수 있어야 한다 — 요청자만 허용하면 새 오너는 철회도
+    새 요청(대기 409)도 못 하는 데드엔드 (사용자 결정 2026-09-07). sysadmin도 철회 가능."""
+    l5 = _seed_l5_with_admin(client, "FWS-W1", "철회")
+    act_as(OWNER)
+    mid = _create_map(client, "fws withdraw handover map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5, "note": "handover"})
+    assert r.status_code == 200 and r.json()["mode"] == "requested", r.text
+    new_owner = "fws.new.owner"
+    grant = client.post(
+        f"/api/maps/{mid}/permissions", json={"principal_type": "user", "principal_id": new_owner, "role": "editor"}
+    )
+    assert grant.status_code in (200, 201), grant.text
+    xfer = client.post(f"/api/maps/{mid}/transfer-owner", json={"new_owner": new_owner})
+    assert xfer.status_code == 200, xfer.text
+    # 새 오너 — 요청자 표시는 옛 오너 그대로, 철회권은 true
+    act_as(new_owner)
+    pending = client.get(f"/api/maps/{mid}/slot-changes/pending").json()
+    assert pending["request"]["requested_by"] == OWNER and pending["can_withdraw"] is True
+    # side 관리자는 결정권은 있어도 철회권은 없다
+    act_as(L5ADMIN)
+    admin_pending = client.get(f"/api/maps/{mid}/slot-changes/pending").json()
+    assert admin_pending["can_decide"] is True and admin_pending["can_withdraw"] is False
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 403
+    act_as(new_owner)
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 204
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json() is None
+    # sysadmin도 철회 가능 — 새 오너가 다시 요청한 뒤
+    r2 = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r2.status_code == 200 and r2.json()["mode"] == "requested", r2.text
+    act_as(SYSADMIN)
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["can_withdraw"] is True
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 204

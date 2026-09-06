@@ -132,8 +132,14 @@ async def get_pending_slot_change(
         })
     return PendingSlotChangeOut(
         request=ApprovalRequestOut.model_validate(req), sides=side_out, remaining=remaining,
-        can_decide=can_decide,
+        can_decide=can_decide, can_withdraw=_can_withdraw(req, user, role, sysadmin),
     )
+
+
+def _can_withdraw(req: ApprovalRequest, user: str, role: str | None, sysadmin: bool) -> bool:
+    """철회권 = 요청자 · 현재 맵 오너 · sysadmin — 요청 뒤 오너가 바뀌어도 새 오너가 정리할 수 있다
+    (요청자만 허용하면 새 오너는 철회도 새 요청(409)도 못 하는 데드엔드, 사용자 결정 2026-09-07)."""
+    return sysadmin or req.requested_by == user or role == "owner"
 
 
 @router.delete("/{map_id}/slot-changes/pending", status_code=204)
@@ -142,11 +148,12 @@ async def withdraw_slot_change(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> None:
-    """본인 pending 요청 철회 → withdrawn(행 보존). 알림 없음 (fw_confirm 철회와 동일)."""
+    """pending 요청 철회 → withdrawn(행 보존). 요청자·현재 오너·sysadmin. 알림 없음 (fw_confirm 철회와 동일)."""
     req = await _load_pending(session, map_id)
     if req is None:
         raise HTTPException(status_code=404, detail="no pending slot change")
-    if req.requested_by != user:
-        raise HTTPException(status_code=403, detail="only the requester can withdraw")
+    role = await get_effective_role(session, user, map_id)
+    if not _can_withdraw(req, user, role, logic.is_sysadmin(user)):
+        raise HTTPException(status_code=403, detail="requester, current owner or sysadmin only")
     req.status = "withdrawn"
     await session.commit()

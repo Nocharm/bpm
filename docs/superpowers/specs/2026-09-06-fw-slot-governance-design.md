@@ -83,6 +83,7 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 
 - `POST /api/approval-requests/{id}/decide` 기존 엔드포인트에 `fw_slot` 분기. 결정권: sysadmin 또는 `sides` 중 하나 이상의 **직속 관리자**(`is_direct_l5_admin`). 승인 시 호출자가 관리자인 side 전부를 `approvals`에 기록하고, 모든 side가 채워지면 `_apply_request` → `apply_slot_change` → `applied`. 아직 남은 side가 있으면 `pending` 유지(`decided_by`는 마지막 결정자). 거절은 한 side만으로 종결(`rejected`).
 - 철회 `DELETE /api/maps/{map_id}/slot-changes/pending` — 요청자만, pending만(fw_confirm 철회와 동일 패턴).
+  > **amendment (2026-09-07, 사용자 결정)**: 철회권 = 요청자 **또는 현재 맵 오너 또는 sysadmin**. 요청 뒤 오너가 바뀌면 새 오너가 철회도 새 요청(대기 409)도 못 하는 데드엔드가 생겨 넓혔다. 대기 조회 응답 `can_withdraw`가 버튼을 결정하고, 요청자가 현재 사용자가 아니면 배너에 "submitted by another user" 필을 붙인다.
 - 대기 조회 `GET /api/maps/{map_id}/slot-changes/pending` — owner/L5 체인 관리자/sysadmin. 배정 모달·상세 카드가 "대기 중" 배너와 철회 버튼을 그린다.
 - 적용 시 `_apply_request`가 던지는 HTTPException(전제 재검증 실패, 예: 승인 사이 target이 슬롯을 얻음)은 그대로 전파 — decide가 커밋 전이라 pending 유지(map_rename 이름 선점 경합과 같은 패턴).
 - 레거시 엔드포인트 `PUT /maps/{id}/category`·`POST /maps/{id}/framework-transfer`는 **어댑터**로 남긴다: 호출자가 self_apply 가능하면 종전처럼 즉시 적용, 아니면 409("slot changes require approval - use slot-changes"). FE는 전부 `slot-changes`로 옮긴다.

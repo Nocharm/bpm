@@ -2808,6 +2808,8 @@ export interface PendingSlotChange {
   sides: SlotChangeSide[];
   remaining: number[];
   can_decide: boolean;
+  // 요청자·현재 오너·sysadmin — 오너 이전 뒤에도 새 오너가 철회 가능
+  can_withdraw: boolean;
 }
 export function getPendingSlotChange(mapId: number): Promise<PendingSlotChange | null> {
   return request<PendingSlotChange | null>(`/maps/${mapId}/slot-changes/pending`);

@@ -328,8 +328,17 @@ export function FrameworkAssignModal({
               <div className="flex flex-wrap items-center gap-1 text-fine text-ink-tertiary">
                 <span>{t("slot.pendingBannerBy")}</span>
                 <UserPill loginId={pendingReq.request.requested_by} />
+                {/* 오너가 바뀐 뒤 열면 "내 요청이 아님"을 드러낸다 — 철회권은 서버 can_withdraw가 정한다 */}
+                {currentUser !== null && pendingReq.request.requested_by !== currentUser && (
+                  <span
+                    data-id="slot-pending-other"
+                    className="rounded-full border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary"
+                  >
+                    {t("slot.pendingBannerOther")}
+                  </span>
+                )}
               </div>
-              {pendingReq.request.requested_by === currentUser && (
+              {pendingReq.can_withdraw && (
                 <button
                   type="button"
                   data-id="slot-withdraw-btn"
