@@ -2,9 +2,10 @@
 
 // 플레이스홀더 후차 연결 다이얼로그 (design 2026-08-28 §10.1) — 트리로 후보 맵을 고르고 미리보기
 // 피크(서브프로세스 피커와 동일 컴포넌트)로 확인한 뒤 연결한다 (사용자 요구 2026-09-06).
-// 안내된 출처 L5(origin)는 이양 후계자 추천·안내 밖 L5 확인 게이트·피크의 "외부 L6" 배지 기준(원본
-// FrameworkTreePicker는 linkageCategoryId만 봐서 게이트와 배지 기준이 어긋났다 — 리뷰 라운드1 #1)에
-// 쓰이고, 트리 자체(펼침·"내 위치" 강조)는 캔버스의 결착 L5(linkageCategoryId) 기준을 그대로 쓴다.
+// 안내된 출처 L5(origin)는 이양 후계자 추천·안내 밖 L5 확인 게이트·트리 마운트 시 자동 펼침 대상·
+// 피크의 "외부 L6" 배지 기준에 쓰인다(원본 FrameworkTreePicker는 linkageCategoryId만 봐서 이 넷이
+// 어긋났다 — 리뷰 라운드1 #1, 라운드2 F1). "내 위치" 강조만 캔버스의 결착 L5(linkageCategoryId)를
+// 그대로 쓰며, 펼침 대상과 달라질 수 있는 만큼 안내 단서 pill(hint 아래)로 그 차이를 알려준다.
 // 다이얼로그는 좌상단에 도킹(items-start justify-start)되고 트리는 max-w-lg 안에서 flex-1로 남는
 // 높이를 채운다 — 가운데 넓은 다이얼로그는 피크 플라이아웃이 열릴 오른쪽 공간을 먹어 겹쳤다(리뷰 라운드1 #2).
 import { CornerUpRight, Link2, TriangleAlert, X } from "lucide-react";
@@ -116,16 +117,32 @@ export function FrameworkConnectDialog({
               type="button"
               data-id="framework-connect-close"
               onClick={onClose}
+              aria-label={t("summary.close")}
+              title={t("summary.close")}
               className="rounded-xs p-1 text-ink-tertiary hover:bg-surface-alt"
             >
               <X size={16} strokeWidth={1.5} />
             </button>
           </div>
 
-          {/* 안내 문구 — 트리는 결착 L5 기준으로 펼쳐진다(안내된 출처는 추천·확인 게이트에서만 별도 표시) */}
+          {/* 안내 문구 — 트리는 origin(있으면) 기준, 없으면 결착 L5 기준으로 펼쳐진다 (F1) */}
           <div className="border-b border-hairline px-4 py-2 text-fine text-ink-tertiary">
             {t("framework.connectTreeHint")}
           </div>
+
+          {/* 안내된 출처 L5 단서 — origin이 캔버스 L5와 달라 트리가 "내 위치"와 다른 곳으로 펼쳐질 때
+              왜 그런지 알려준다. 확인 게이트 배너와 같은 라벨·배지 스타일 재사용 (F1) */}
+          {origin !== null && (
+            <div className="flex items-center gap-1.5 border-b border-hairline px-4 py-1.5 text-fine text-ink-tertiary">
+              <span>{t("framework.connectConfirmGuided")}</span>
+              <span
+                title={origin.path}
+                className="truncate rounded-full border border-accent-tint-border bg-accent-tint px-2 py-0.5 text-fine text-accent"
+              >
+                {lastSeg(origin.path)}
+              </span>
+            </div>
+          )}
 
           {/* 이양 후계자 추천 — 시스템이 아는 대체 맵을 고정 노출(직결·게이트 없음) */}
           {successor !== null && (

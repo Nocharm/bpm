@@ -36,9 +36,9 @@ export interface FrameworkTreePickerProps {
   nodeDisplayFields: NodeDisplayToggle[];
   // 캔버스의 결착 L5 — 타 L5 출신 판정(피크 목업을 캔버스 규칙=L5 색+출처 배지로) (design 2026-08-28 §8)
   linkageCategoryId: number | null;
-  // 안내된 출처 L5 — 있으면 배지 판정 기준으로 linkageCategoryId보다 우선한다. 연결 다이얼로그의
-  // 확인 게이트가 이 값을 기준으로 안내/이탈을 가르므로, 배지도 같은 기준이어야 어긋나지 않는다
-  // (리뷰 라운드1 #1). 미지정 시 기존처럼 linkageCategoryId만 본다(다른 마운트는 그대로).
+  // 안내된 출처 L5 — 있으면 배지 판정과 마운트 시 자동 펼침 대상 둘 다 linkageCategoryId보다 우선한다.
+  // 연결 다이얼로그의 확인 게이트가 이 값을 기준으로 안내/이탈을 가르므로, 배지·펼침도 같은 기준이어야
+  // 어긋나지 않는다(리뷰 라운드1 #1, 라운드2 F1). 미지정 시 기존처럼 linkageCategoryId만 본다(다른 마운트는 그대로).
   originCategoryId?: number | null;
   // 루트 패널 스타일 오버라이드 — 기본은 캔버스 옆 레일(w-56). 다이얼로그 임베드(플레이스홀더 연결)는
   // 더 넓은 트리 컬럼이 필요해 넘긴다 (2026-09-06)
@@ -130,8 +130,10 @@ export function FrameworkTreePicker({
     return () => document.removeEventListener("keydown", handleEscape, { capture: true });
   }, [peek]);
 
-  // 마운트 시 루트 + "내 위치"(캔버스 결착 L5) 체인을 미리 펼친다 — 매번 L1부터 파고들지 않게
-  // (사용자 요청 2026-08-31). L5 자신은 열어서 소속 L6 목록까지 바로 보이게 한다.
+  // 마운트 시 루트 + 자동 펼침 대상(안내된 origin이 있으면 그쪽, 없으면 캔버스 결착 L5) 체인을 미리
+  // 펼친다 — 매번 L1부터 파고들지 않게(사용자 요청 2026-08-31). 대상 L5 자신은 열어서 소속 L6 목록까지
+  // 바로 보이게 한다. "내 위치" 강조(isCurrentL5)는 이 대상과 별개로 항상 linkageCategoryId 기준이라,
+  // origin이 다르면 펼침 위치와 강조 위치가 갈릴 수 있다 — 그 차이는 호스트의 안내 pill이 알려준다(F1).
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -145,9 +147,10 @@ export function FrameworkTreePicker({
         if (active) setRootError(true);
         return;
       }
-      if (linkageCategoryId === null) return;
+      const autoExpandId = originCategoryId ?? linkageCategoryId;
+      if (autoExpandId === null) return;
       try {
-        const chain = await getCategoryChain(linkageCategoryId);
+        const chain = await getCategoryChain(autoExpandId);
         if (!active) return;
         // 체인 전 단계의 자식+맵을 병렬로 받아 한 번에 펼침 — 순차 클릭 시뮬레이션보다 빠르다
         const loaded = await Promise.all(chain.map((cat) => fetchCategoryChildren(cat.id)));
@@ -167,7 +170,7 @@ export function FrameworkTreePicker({
     return () => {
       active = false;
     };
-  }, [linkageCategoryId]);
+  }, [linkageCategoryId, originCategoryId]);
 
   // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(대량 전달 방어)
   const AUTO_DRILL_MAX = 6;
@@ -255,23 +258,33 @@ export function FrameworkTreePicker({
       : blocked
         ? t("library.alreadyLinked")
         : null;
+    // 클릭·Enter/Space 공용 활성화 — 이미 링크된 행은 포커스 이동, 그 외(차단 포함)는 피크 토글
+    function activateRow(rowEl: Element) {
+      // 이미 이 캔버스에 있는 행은 추가가 불가능하다 — 미리보기 대신 그 노드로 보낸다
+      if (alreadyLinked) {
+        clearHoverTimer();
+        setPeek(null);
+        onFocusLinkedNode(row.id);
+        return;
+      }
+      // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 그 외 차단 행도 미리보기는 제공
+      if (peek && peek.row.id === row.id) setPeek(null);
+      else openPeek(row, categoryId, categoryPath, peekBlocked, rowEl);
+    }
     return (
       <div
         key={row.id}
         data-id={`framework-picker-map-${row.id}`}
+        role="button"
+        tabIndex={0}
+        aria-disabled={blocked}
         draggable={!blocked}
         onDragStart={blocked ? undefined : (e) => handleDragStart(e, row, categoryId, categoryPath)}
-        onClick={(e) => {
-          // 이미 이 캔버스에 있는 행은 추가가 불가능하다 — 미리보기 대신 그 노드로 보낸다
-          if (alreadyLinked) {
-            clearHoverTimer();
-            setPeek(null);
-            onFocusLinkedNode(row.id);
-            return;
-          }
-          // 클릭 = 피크 토글(같은 행 재클릭이면 닫기) — 그 외 차단 행도 미리보기는 제공
-          if (peek && peek.row.id === row.id) setPeek(null);
-          else openPeek(row, categoryId, categoryPath, peekBlocked, e.currentTarget);
+        onClick={(e) => activateRow(e.currentTarget)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          activateRow(e.currentTarget);
         }}
         onMouseEnter={(e) => {
           if (alreadyLinked) return; // 호버 자동 오픈 억제 — 클릭은 포커스 이동이다
@@ -360,7 +373,7 @@ export function FrameworkTreePicker({
       ref={panelRef}
       data-id="framework-tree-picker"
       className={className ?? "flex w-56 flex-col border-r border-hairline bg-surface"}
-      style={{ boxShadow: "var(--shadow-md)" }}
+      style={className ? undefined : { boxShadow: "var(--shadow-md)" }}
     >
       {!hideHeader && (
         <div className="flex items-center justify-between border-b border-hairline px-3 py-2">

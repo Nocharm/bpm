@@ -55,7 +55,7 @@ export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Prop
     >
       <div
         data-id="slot-change-dialog"
-        className="motion-safe:animate-[summary-card-in_260ms_var(--ease-spring)] flex w-full max-w-md flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="summary-card-in flex w-full max-w-md flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">

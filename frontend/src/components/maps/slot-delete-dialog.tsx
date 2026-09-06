@@ -65,7 +65,7 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
     <ModalBackdrop onClose={handleClose} className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm">
       <div
         data-id="slot-delete-dialog"
-        className="motion-safe:animate-[summary-card-in_260ms_var(--ease-spring)] flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        className="summary-card-in flex w-full max-w-sm flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">
