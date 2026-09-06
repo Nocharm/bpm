@@ -162,8 +162,8 @@ try {
   await cNode.hover();
   const panelLocator = l5admin.page.locator('[data-id="l5-node-info-panel"]');
   const panel = await panelLocator.waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
-  check("hover shows bottom-left slot history panel", panel);
-  // 컨테이너는 timestamp가 전부 null이어도(framework.nodeInfo.empty) 보인다 — 실제 이양 시각이 찍혔는지
+  check("hover shows slot history panel (top-right, replaces the L5 tag)", panel);
+  // 컨테이너는 slot 이력(succeededAt/changedAt)이 있을 때만 렌더된다 — 실제 이양 시각이 찍혔는지
   // 텍스트로 확인한다. "Handed over"=framework.nodeInfo.succeededAt 라벨, KST는 formatKstShort("MM-DD HH:mm").
   const panelText = panel ? await panelLocator.innerText() : "";
   check(

@@ -1191,7 +1191,7 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [linkageCategoryId, setLinkageCategoryId] = useState<number | null>(null);
   const [linkageCategoryPath, setLinkageCategoryPath] = useState<string | null>(null);
   const [reconcileMissing, setReconcileMissing] = useState(0);
-  // 좌하단 "기타 정보" 호버 패널 — subprocess 노드 호버 시 slot 이력 표시 (spec 2026-09-06 §7.1)
+  // 우상단 "기타 정보" 호버 패널(framework-l5-tag 자리 대체) — subprocess 호버 시 slot 이력 있을 때만 표시
   const [hoverNodeInfo, setHoverNodeInfo] = useState<L5NodeInfo | null>(null);
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
@@ -10060,7 +10060,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </span>
                       </div>
                     )}
-                    {/* 좌하단 "기타 정보" 호버 패널 — subprocess 노드 호버 시 slot 이력(spec 2026-09-06 §7.1) */}
+                    {/* 우상단 "기타 정보" 호버 패널 — framework-l5-tag 자리를 대체, slot 이력 있을 때만 표시 */}
                     {index === 0 && isFrameworkMap && <L5NodeInfoPanel info={hoverNodeInfo} />}
                   </div>
                 ) : (
