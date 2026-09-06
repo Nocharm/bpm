@@ -7,22 +7,26 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Network, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Clock, Network, TriangleAlert, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
   getCategoryChain,
+  getPendingSlotChange,
   listCategoryNodes,
   listMaps,
   postSlotChange,
+  withdrawSlotChange,
   type CategoryNode,
   type MapSummary,
+  type PendingSlotChange,
   type SlotChangeIn,
   type SlotChangeOut,
 } from "@/lib/api";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SearchSelect } from "@/components/search-select";
+import { SlotChangeDialog } from "@/components/maps/slot-change-dialog";
+import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
 
 interface FrameworkAssignModalProps {
@@ -31,6 +35,10 @@ interface FrameworkAssignModalProps {
   currentPath: string | null | undefined;
   onClose: () => void;
   onChanged: () => void;
+  // 슬롯 변경 적용/요청 성공 토스트 — 호출부에 토스트 표시 수단이 없으면 생략(무시).
+  onToast?: (message: string) => void;
+  // 대기 배너의 철회 버튼 노출 판정(로그인 사용자==요청자). 없으면(null) 철회 버튼 숨김.
+  currentUser: string | null;
 }
 
 export function FrameworkAssignModal({
@@ -39,6 +47,8 @@ export function FrameworkAssignModal({
   currentPath,
   onClose,
   onChanged,
+  onToast,
+  currentUser,
 }: FrameworkAssignModalProps) {
   const { t } = useI18n();
   // 조직도식 lazy 트리 — 자식 캐시(null 키=루트)·펼침·선택(리프만)·인플라이트.
@@ -55,9 +65,10 @@ export function FrameworkAssignModal({
   const [transferTargetId, setTransferTargetId] = useState("");
   // 현 슬롯 카테고리 레벨 — 레거시 비-L5 슬롯은 이양 차단(서버 409 미러, 2026-08-30 확정)
   const [currentLevel, setCurrentLevel] = useState<number | null>(null);
-  // dry-run 프리뷰 결과 대기 중인 액션 — self_apply면 안내 모달로 승인 없이 바로 적용,
-  // 아니면 error에 승인 필요 안내를 띄운다(승인 요청 생성은 트랙 C, spec 2026-09-06 §4.1)
+  // dry-run 프리뷰 결과 대기 중인 액션 — SlotChangeDialog로 넘겨 self_apply 즉시 적용/그 외 승인 요청을 안내한다.
   const [pending, setPending] = useState<{ body: SlotChangeIn; preview: SlotChangeOut } | null>(null);
+  // 이 맵에 걸린 미결 슬롯 변경 요청 — undefined=조회 전, null=없음. 있으면 배너 노출 + 연결/해제/이양 버튼 잠금.
+  const [pendingReq, setPendingReq] = useState<PendingSlotChange | null | undefined>(undefined);
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -106,6 +117,22 @@ export function FrameworkAssignModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 미결 슬롯 변경 조회 — 있으면 배너로 진행 상황을 보여주고 연결/해제/이양을 잠근다.
+  // 조회 실패는 "없음"으로 취급 — 실제로 있었다면 액션 버튼 클릭 시 서버 409로 드러난다.
+  useEffect(() => {
+    let active = true;
+    getPendingSlotChange(mapId)
+      .then((result) => {
+        if (active) setPendingReq(result);
+      })
+      .catch(() => {
+        if (active) setPendingReq(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [mapId]);
+
   // 행 클릭 — 리프(child_count 0)는 선택, 상위 카테고리는 펼침/접힘 전용(선택 불가).
   function handleNodeClick(node: CategoryNode) {
     // 맵 슬롯은 L5 전용(2026-08-30 확정) — 리프여도 L5가 아니면 선택 불가(서버 422 미러)
@@ -151,42 +178,15 @@ export function FrameworkAssignModal({
     }
   }
 
-  // 공용 실행기 — dry-run으로 승인자·영향을 미리 보고, self_apply면 안내 모달(pending)로 넘긴다.
-  // self_apply가 아니면 승인 필요 안내를 바로 보여준다(요청 생성 UI는 트랙 C).
+  // 공용 실행기 — dry-run으로 승인자·영향을 미리 보고 SlotChangeDialog(pending)로 넘긴다.
+  // self_apply 여부는 다이얼로그가 판단해 즉시 적용/승인 요청 문구를 가른다 (Track C Task 4).
   async function planChange(body: SlotChangeIn) {
     setSubmitting(true);
     setError(null);
     try {
       const preview = await postSlotChange(mapId, { ...body, dry_run: true });
-      if (!preview.self_apply) {
-        const names = preview.sides.flatMap((s) => s.approvers);
-        setError(
-          names.length > 0
-            ? t("home.frameworkSlotNeedsApproval", { names: names.join(", ") })
-            : t("home.frameworkSlotNoApprovers"),
-        );
-        return;
-      }
       setPending({ body, preview });
     } catch (err) {
-      setError(getApiErrorDetail(err));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function applyPending() {
-    if (pending === null) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await postSlotChange(mapId, pending.body);
-      setPending(null);
-      onChanged();
-      onClose();
-    } catch (err) {
-      // 실패 시에도 안내 모달을 닫아야 아래 error 줄이 보인다 — 안 닫으면 모달이 떠 있는 채로 조용히 멈춘 것처럼 보인다
-      setPending(null);
       setError(getApiErrorDetail(err));
     } finally {
       setSubmitting(false);
@@ -296,6 +296,38 @@ export function FrameworkAssignModal({
           </button>
         </div>
 
+        {pendingReq && (
+          <div data-id="slot-pending-banner" className="flex items-start gap-2 rounded-sm border border-changed/40 bg-changed/10 px-3 py-2 text-fine">
+            <Clock size={14} strokeWidth={1.5} className="mt-0.5 shrink-0 text-changed" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="font-semibold text-changed">
+                {t("slot.pendingBanner", {
+                  action: isSlotAction(pendingReq.request.payload.action)
+                    ? t(SLOT_ACTION_KEY[pendingReq.request.payload.action])
+                    : "",
+                  done: String(pendingReq.sides.length - pendingReq.remaining.length),
+                  total: String(pendingReq.sides.length),
+                  who: pendingReq.request.requested_by,
+                })}
+              </span>
+              {pendingReq.request.requested_by === currentUser && (
+                <button
+                  type="button"
+                  data-id="slot-withdraw-btn"
+                  className="self-start text-caption text-accent hover:underline"
+                  onClick={() =>
+                    void withdrawSlotChange(mapId)
+                      .then(() => setPendingReq(null))
+                      .catch((err: unknown) => setError(getApiErrorDetail(err)))
+                  }
+                >
+                  {t("slot.withdraw")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div data-id="framework-pick-tree" className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-sm bg-surface-alt p-2">
           <p className="text-fine text-ink-tertiary">{t("home.frameworkPickLeafHint")}</p>
           {loadingRoot ? (
@@ -313,7 +345,7 @@ export function FrameworkAssignModal({
           <button
             type="button"
             data-id="framework-assign-btn"
-            disabled={selectedId === null || submitting}
+            disabled={selectedId === null || submitting || Boolean(pendingReq)}
             className="flex-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={requestAssign}
           >
@@ -323,7 +355,7 @@ export function FrameworkAssignModal({
             <button
               type="button"
               data-id="framework-unassign-btn"
-              disabled={submitting}
+              disabled={submitting || Boolean(pendingReq)}
               className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
               onClick={() => void planChange({ action: "unassign" })}
             >
@@ -371,7 +403,7 @@ export function FrameworkAssignModal({
                 <button
                   type="button"
                   data-id="framework-transfer-btn"
-                  disabled={!transferTargetId || submitting}
+                  disabled={!transferTargetId || submitting || Boolean(pendingReq)}
                   className="self-end rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
                   onClick={() => void planChange({ action: "replace", to_map_id: Number(transferTargetId) })}
                 >
@@ -385,19 +417,16 @@ export function FrameworkAssignModal({
         {error && <p className="text-caption text-error">{error}</p>}
 
         {pending !== null && (
-          <ConfirmDialog
-            icon={<ShieldCheck size={28} strokeWidth={1.5} />}
-            title={t("home.frameworkSelfApplyTitle")}
-            message={`${t("home.frameworkSelfApplyDesc")} · ${t("home.frameworkImpactSummary", {
-              home: String(pending.preview.impact.home_canvas_nodes),
-              other: String(pending.preview.impact.other_canvas_nodes),
-              refs: String(pending.preview.impact.referencing_maps),
-            })}`}
-            confirmLabel={t("home.frameworkApplyNow")}
-            cancelLabel={t("summary.cancel")}
-            danger={pending.body.action === "unassign" || pending.body.action === "delete"}
-            confirmDisabled={submitting}
-            onConfirm={() => void applyPending()}
+          <SlotChangeDialog
+            mapId={mapId}
+            body={pending.body}
+            preview={pending.preview}
+            onDone={(out) => {
+              setPending(null);
+              onChanged();
+              onClose();
+              onToast?.(out.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
+            }}
             onClose={() => setPending(null)}
           />
         )}

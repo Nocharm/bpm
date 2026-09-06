@@ -1,0 +1,117 @@
+"use client";
+
+// 슬롯 변경 확인 다이얼로그 — dry_run 결과로 두 모드(관리자 즉시 적용 / L5 승인 요청)를 보여주는 공용 컴포넌트.
+// framework-assign-modal이 쓰고, 삭제·복사의 슬롯 이관 흐름도 재사용한다 (spec 2026-09-06 §4.1·§7.2).
+import { useState } from "react";
+import { createPortal } from "react-dom";
+import { ArrowLeftRight, ShieldCheck, X } from "lucide-react";
+
+import { postSlotChange, type SlotChangeIn, type SlotChangeOut } from "@/lib/api";
+import { humanizeApiError } from "@/lib/api-errors";
+import { SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
+import { ModalBackdrop } from "@/components/modal-backdrop";
+import { UserPill } from "@/components/user-pill";
+import { useI18n } from "@/lib/i18n";
+
+interface Props {
+  mapId: number;
+  body: SlotChangeIn;
+  preview: SlotChangeOut;
+  onDone: (result: SlotChangeOut) => void;
+  onClose: () => void;
+}
+
+export function SlotChangeDialog({ mapId, body, preview, onDone, onClose }: Props) {
+  const { t } = useI18n();
+  const [note, setNote] = useState(body.note ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const selfApply = preview.self_apply;
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      onDone(await postSlotChange(mapId, { ...body, note, dry_run: false }));
+    } catch (err) {
+      setError(humanizeApiError(err, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return createPortal(
+    <ModalBackdrop
+      onClose={onClose}
+      className="fixed inset-0 z-[1400] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+    >
+      <div
+        data-id="slot-change-dialog"
+        className="flex w-full max-w-md flex-col gap-4 rounded-md bg-surface p-6 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-tint text-accent">
+              {selfApply ? <ShieldCheck size={18} strokeWidth={1.5} /> : <ArrowLeftRight size={18} strokeWidth={1.5} />}
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <h2 className="text-body-strong text-ink">{t(SLOT_ACTION_KEY[body.action])}</h2>
+              <p className="text-fine text-ink-tertiary">{selfApply ? t("slot.selfApplyDesc") : t("slot.requestDesc")}</p>
+            </div>
+          </div>
+          <button type="button" aria-label={t("summary.close")} className="shrink-0 rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-alt" onClick={onClose}>
+            <X size={14} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <ul className="flex flex-col gap-1 rounded-sm bg-surface-alt px-3 py-2 text-fine text-ink-secondary">
+          <li>{t("home.frameworkImpactSummary", {
+            home: String(preview.impact.home_canvas_nodes),
+            other: String(preview.impact.other_canvas_nodes),
+            refs: String(preview.impact.referencing_maps),
+          })}</li>
+          {preview.sides.map((side) => (
+            <li key={side.category_id} className="flex flex-wrap items-center gap-1">
+              <span className="truncate">{side.path ?? side.category_id}</span>
+              <span className="text-ink-tertiary">· {t("slot.sideApprovers")}:</span>
+              {side.approvers.length === 0 ? (
+                <span className="text-ink-tertiary">{t("slot.noApprovers")}</span>
+              ) : (
+                side.approvers.map((login) => <UserPill key={login} loginId={login} />)
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {!selfApply && (
+          <textarea
+            data-id="slot-change-note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={t("slot.notePlaceholder")}
+            rows={2}
+            className="w-full resize-none rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
+          />
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button type="button" data-id="slot-change-cancel" disabled={busy} className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-40" onClick={onClose}>
+            {t("summary.cancel")}
+          </button>
+          <button
+            type="button"
+            data-id="slot-change-submit"
+            disabled={busy}
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            onClick={() => void submit()}
+          >
+            {selfApply ? t("slot.applyNow") : t("slot.request")}
+          </button>
+        </div>
+        {error && <p className="text-caption text-error">{error}</p>}
+      </div>
+    </ModalBackdrop>,
+    document.body,
+  );
+}

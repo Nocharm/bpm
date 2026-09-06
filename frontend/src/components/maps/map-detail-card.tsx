@@ -1089,6 +1089,7 @@ export function MapDetailCard({
           mapId={detail.id}
           currentCategoryId={detail.category_id}
           currentPath={detail.category_path}
+          currentUser={loginId}
           onClose={() => setFrameworkModalOpen(false)}
           onChanged={() => {
             setLocalReloadKey((n) => n + 1);

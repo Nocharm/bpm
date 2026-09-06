@@ -1936,11 +1936,6 @@ const en = {
   "home.frameworkUnassign": "Unassign",
   "home.frameworkTransfer": "Transfer slot",
   "home.frameworkTransferPick": "Pick a target map",
-  "home.frameworkSelfApplyTitle": "Applies immediately",
-  "home.frameworkSelfApplyDesc": "You administer this level-5 category, so the change skips approval and lands now.",
-  "home.frameworkApplyNow": "Apply now",
-  "home.frameworkSlotNeedsApproval": "This change needs approval from the level-5 admins: {names}",
-  "home.frameworkSlotNoApprovers": "This level-5 category has no admin yet - ask a sysadmin.",
   "home.frameworkImpactSummary": "{home} node(s) on the home canvas · {other} on other canvases · {refs} referencing map(s)",
   "home.frameworkTransferPickMode": "Only plain maps without a slot can take it over.",
   // ── L6 슬롯 변경 5액션 공용 UI (Track C Task 3, spec 2026-09-06 §4.1) ──
@@ -4193,11 +4188,6 @@ const ko: Record<MessageKey, string> = {
   "home.frameworkUnassign": "연결 해제",
   "home.frameworkTransfer": "슬롯 이양",
   "home.frameworkTransferPick": "대상 맵 선택",
-  "home.frameworkSelfApplyTitle": "바로 적용됩니다",
-  "home.frameworkSelfApplyDesc": "이 L5 카테고리의 관리자라 승인 없이 지금 반영됩니다.",
-  "home.frameworkApplyNow": "바로 적용",
-  "home.frameworkSlotNeedsApproval": "L5 관리자 승인이 필요합니다: {names}",
-  "home.frameworkSlotNoApprovers": "이 L5 카테고리에 관리자가 없습니다 - sysadmin에게 요청하세요.",
   "home.frameworkImpactSummary": "홈 캔버스 노드 {home}개 · 다른 캔버스 {other}개 · 참조 맵 {refs}개",
   "home.frameworkTransferPickMode": "슬롯 없는 일반 맵만 넘겨받을 수 있습니다.",
   // ── L6 슬롯 변경 5액션 공용 UI (Track C Task 3, spec 2026-09-06 §4.1) ──
