@@ -249,7 +249,7 @@ import {
   type VersionSummary,
   type WorkflowState,
 } from "@/lib/api";
-import { humanizeApiError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
+import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
 import { exportCanvasWord } from "@/lib/word-export";
 import { getStaleSectionNodeIds } from "@/lib/word-map-home";
@@ -2100,11 +2100,17 @@ function MapEditor({ mapId }: { mapId: number }) {
       refreshFullGraph();
     } catch (err) {
       setSaveState("error");
-      // 실패 상세는 상단 배너로 노출 — 다음 저장 성공까지 유지
-      setSaveErrorDetail(humanizeApiError(err, t));
+      if (isCanvasRepointedError(err)) {
+        // 체크아웃 보유자 데드엔드 — 슬롯 변경으로 서버가 이 캔버스를 재결착한 뒤에도 옛 체크아웃을 들고
+        // 저장하면 422로 막힌다. 되돌릴 수 없는 상태이니 일반 저장 실패 배너 대신 새로고침 토스트로 안내.
+        showToast(t("framework.canvasChangedReload"), "error");
+      } else {
+        // 실패 상세는 상단 배너로 노출 — 다음 저장 성공까지 유지
+        setSaveErrorDetail(humanizeApiError(err, t));
+      }
       throw err;
     }
-  }, [versionId, readOnly, refreshFullGraph, t]);
+  }, [versionId, readOnly, refreshFullGraph, showToast, t]);
 
   const scheduleAutoSave = useCallback(() => {
     // 미리보기 중에는 자동 저장 생략 — Apply 전 자동 영속화 방지

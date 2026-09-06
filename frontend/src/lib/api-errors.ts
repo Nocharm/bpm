@@ -8,6 +8,14 @@ type TFunc = (key: MessageKey, vars?: Record<string, string | number>) => string
 // 체크아웃 폴 effect(page.tsx)가 이 특정 409를 감지해 폴링을 중지하는 데도 재사용 — 문자열은 이 한 곳뿐.
 export const PERMISSION_PENDING_DETAIL_PREFIX = "your permission change is pending approval";
 
+// 슬롯 변경이 서버에서 이 캔버스를 재결착한 뒤, 옛 체크아웃을 들고 있던 편집자의 다음 PUT /graph가 막히는
+// 데드엔드 감지용 (backend app/routers/graph.py:314-317). page.tsx 저장 에러 경로에서 배너 대신 새로고침 토스트로 분기.
+export const CANVAS_REPOINTED_DETAIL_PREFIX = "contained L6 nodes cannot be removed from the canvas";
+
+export function isCanvasRepointedError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 422 && getApiErrorDetail(err).startsWith(CANVAS_REPOINTED_DETAIL_PREFIX);
+}
+
 // 서버 detail 원문(영어, 고정 프리픽스) → i18n 시맨틱 키. 전방일치이므로 접미사가 붙는 detail도 커버.
 // ⚠️ 401/403을 낼 수 있는 detail을 여기 추가하면 settings 페이지의 토스트 억제 필터(maps/[mapId]/settings/page.tsx showToast)와 어긋난다 — 매핑 히트는 '(HTTP 40x)' 꼬리표가 없어 필터를 우회한다. 추가 시 그 필터를 함께 점검할 것.
 const DETAIL_PREFIX_MAP: [string, MessageKey][] = [

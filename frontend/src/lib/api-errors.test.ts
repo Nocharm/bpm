@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "./api";
-import { humanizeApiError } from "./api-errors";
+import { humanizeApiError, isCanvasRepointedError } from "./api-errors";
 
 const t = (key: string, vars?: Record<string, string | number>) =>
   `${key}${vars?.status != null ? `:${vars.status}` : ""}`;
@@ -24,5 +24,31 @@ describe("humanizeApiError", () => {
 
   it("passes through non-ApiError messages unchanged", () => {
     expect(humanizeApiError(new Error("boom"), t as never)).toBe("boom");
+  });
+});
+
+describe("isCanvasRepointedError", () => {
+  it("detects the checkout-holder dead end (422 + exact detail prefix)", () => {
+    const err = new ApiError(
+      "API PUT /versions/1/graph failed: 422",
+      422,
+      JSON.stringify({ detail: "contained L6 nodes cannot be removed from the canvas: [3]" }),
+    );
+    expect(isCanvasRepointedError(err)).toBe(true);
+  });
+
+  it("rejects the same detail on a different status", () => {
+    const err = new ApiError(
+      "API PUT /versions/1/graph failed: 409",
+      409,
+      JSON.stringify({ detail: "contained L6 nodes cannot be removed from the canvas: [3]" }),
+    );
+    expect(isCanvasRepointedError(err)).toBe(false);
+  });
+
+  it("rejects unrelated 422s and non-ApiError values", () => {
+    const err = new ApiError("API PUT /x failed: 422", 422, JSON.stringify({ detail: "some other validation error" }));
+    expect(isCanvasRepointedError(err)).toBe(false);
+    expect(isCanvasRepointedError(new Error("boom"))).toBe(false);
   });
 });

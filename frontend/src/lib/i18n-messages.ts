@@ -2034,6 +2034,8 @@ const en = {
   "framework.explorerHere": "You are here",
   "framework.explorerCreating": "Creating...",
   "framework.containedLocked": "Contained L6 nodes cannot be deleted from this canvas",
+  // 슬롯 변경으로 서버가 캔버스를 재결착한 뒤 옛 체크아웃을 들고 저장하면 422 데드엔드 — 새로고침 유도 (carried ruling, Track C Task 4)
+  "framework.canvasChangedReload": "Canvas changed on the server - reload the page",
   "framework.majorDescFirst": "This first confirmation is recorded as {label}.",
   "framework.majorModalTitle": "Promote to {label}?",
   "framework.majorModalKeep": "Kept",
@@ -4286,6 +4288,8 @@ const ko: Record<MessageKey, string> = {
   "framework.explorerHere": "현재 위치",
   "framework.explorerCreating": "생성 중...",
   "framework.containedLocked": "이 캔버스 소속 L6 노드는 삭제할 수 없습니다",
+  // 슬롯 변경으로 서버가 캔버스를 재결착한 뒤 옛 체크아웃을 들고 저장하면 422 데드엔드 — 새로고침 유도 (carried ruling, Track C Task 4)
+  "framework.canvasChangedReload": "서버에서 캔버스가 변경되었습니다 - 페이지를 새로고침하세요",
   "framework.majorDescFirst": "첫 확정이 {label}로 기록됩니다.",
   "framework.majorModalTitle": "{label}로 승급할까요?",
   "framework.majorModalKeep": "유지",
