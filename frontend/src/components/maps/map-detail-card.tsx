@@ -56,6 +56,7 @@ import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { SlotDeleteDialog } from "@/components/maps/slot-delete-dialog";
 import { VersionTimeline } from "@/components/maps/version-timeline";
 import { ContextMenu } from "@/components/context-menu";
 import { Tooltip } from "@/components/tooltip";
@@ -177,6 +178,10 @@ interface MapDetailCardProps {
   currentVersionId?: number | null;
   // 카테고리 연결/해제/이양 성공 알림 — 홈 FrameworkTree 캐시 무효화용(page.tsx만 전달, fix round 1 #1).
   onFrameworkChanged?: () => void;
+  // 슬롯 있는 맵 삭제(SlotDeleteDialog)가 즉시 적용됐을 때 — 원본이 소프트삭제되므로 목록도 갱신(page.tsx만 전달).
+  onSlotChangeApplied?: () => void;
+  // 슬롯 변경 요청/적용 토스트 — 카드엔 토스트 UI가 없어 상위(page.tsx)로 위임. 없으면 무시.
+  onToast?: (message: string) => void;
 }
 
 export function MapDetailCard({
@@ -189,6 +194,8 @@ export function MapDetailCard({
   reloadKey,
   onGoToVersion,
   onFrameworkChanged,
+  onSlotChangeApplied,
+  onToast,
   currentVersionId,
 }: MapDetailCardProps) {
   const { t, lang } = useI18n();
@@ -1095,6 +1102,7 @@ export function MapDetailCard({
             setLocalReloadKey((n) => n + 1);
             onFrameworkChanged?.();
           }}
+          onToast={onToast}
         />
       )}
         </>
@@ -1530,14 +1538,21 @@ export function MapDetailCard({
         )}
       </div>
       {confirmDelete && onDelete && (
-        <DeleteMapDialog
-          mapName={detail.name}
-          onConfirm={() => {
-            setConfirmDelete(false);
-            onDelete(detail.id);
-          }}
-          onClose={() => setConfirmDelete(false)}
-        />
+        detail.category_id != null ? (
+          <SlotDeleteDialog
+            mapId={detail.id}
+            mapName={detail.name}
+            onDone={(result) => {
+              setConfirmDelete(false);
+              onToast?.(result.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
+              if (result.mode === "applied") onSlotChangeApplied?.();
+              else setLocalReloadKey((n) => n + 1);
+            }}
+            onClose={() => setConfirmDelete(false)}
+          />
+        ) : (
+          <DeleteMapDialog mapName={detail.name} onConfirm={() => { setConfirmDelete(false); onDelete(detail.id); }} onClose={() => setConfirmDelete(false)} />
+        )
       )}
       {overlays}
     </div>

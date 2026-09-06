@@ -131,7 +131,10 @@ export function FrameworkAssignModal({
     let active = true;
     getPendingSlotChange(mapId)
       .then((result) => {
-        if (active) setPendingReq(result);
+        if (active) {
+          setPendingReq(result);
+          setPendingReqFailed(false);
+        }
       })
       .catch((err: unknown) => {
         if (!active) return;

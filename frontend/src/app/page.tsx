@@ -577,6 +577,8 @@ export default function MapListPage() {
                 onPromote={(id, name) => setPromoteTarget({ id, name })}
                 onGoToVersion={(vid) => router.push(`/maps/${processMap.id}?version=${vid}`)}
                 onFrameworkChanged={handleFrameworkChanged}
+                onSlotChangeApplied={() => void refresh()}
+                onToast={(m) => showToast(m)}
               />
             </div>
           )}
@@ -1002,6 +1004,8 @@ export default function MapListPage() {
                   onPromote={(id, name) => setPromoteTarget({ id, name })}
                   onGoToVersion={(vid) => router.push(`/maps/${effectiveSelected}?version=${vid}`)}
                   onFrameworkChanged={handleFrameworkChanged}
+                  onSlotChangeApplied={() => void refresh()}
+                  onToast={(m) => showToast(m)}
                 />
               ) : selectedCategoryId !== null ? (
                 <CategorySummaryCard
@@ -1113,9 +1117,11 @@ export default function MapListPage() {
             versions: copyTarget.versions,
             myRole: copyTarget.my_role,
             owningDepartment: copyTarget.owning_department ?? null,
+            categoryId: copyTarget.category_id ?? null,
           }}
           onClose={() => setCopyTarget(null)}
           onCreated={() => void refresh()}
+          onToast={(m) => showToast(m)}
         />
       )}
 

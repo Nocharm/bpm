@@ -22,6 +22,7 @@ import {
   listApprovers,
   listGroups,
   listMapPermissions,
+  postSlotChange,
   saveGraph,
   setApprovers as setMapApprovers,
   type DirectoryUser,
@@ -99,7 +100,11 @@ interface Props {
     versions: VersionSummary[];
     myRole: "viewer" | "editor" | "owner" | null;
     owningDepartment: string | null;
+    // 슬롯(L5) 카테고리 id — 있으면 은퇴가 slot-changes delete를 태워 승계 방식(해제/이양)을 고른다 (Track C Task 5).
+    categoryId?: number | null;
   };
+  // 슬롯 변경 요청/적용 토스트 — 복사+은퇴가 원본 슬롯을 처리한 결과를 알린다. 없으면 무시.
+  onToast?: (message: string) => void;
 }
 
 // 복사 버전 드롭다운 표기 — 게시 번호(v3)·라벨·상태(상태 문자열은 영어 고정 규칙)
@@ -108,7 +113,7 @@ function formatVersionOption(v: VersionSummary): string {
   return `${number}${v.label} · ${v.status}`;
 }
 
-export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote, copy }: Props) {
+export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, onCreatedMap, promote, copy, onToast }: Props) {
   const { t, lang } = useI18n();
   const currentUser = useCurrentMockUser();
 
@@ -189,6 +194,10 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
     return (sorted.find((v) => v.status === "published") ?? sorted[0])?.id;
   });
   const [retire, setRetire] = useState(false);
+  // 슬롯 있는 원본 은퇴 시 승계 방식 — 해제(원본 슬롯 소거) vs 이양(복사본이 승계). 기본=이양(가장 흔한 의도).
+  const [retireMode, setRetireMode] = useState<"unassign" | "replace">("replace");
+  // 복사 성공 후 슬롯 처리 1회성 가드 — 부분 실패 재시도(Create 재클릭)에서 slot-changes 중복 POST 방지.
+  const slotHandledRef = useRef(false);
   // SP 사용처 — retire 첫 체크 시 lazy fetch. null=미로드(로드 전 제출 차단)
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spOpen, setSpOpen] = useState(true); // 확인 체크가 아코디언 최하단이라 기본 펼침
@@ -437,7 +446,9 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                 versionId: copyVersionId,
                 owningDepartment: owningDept.id,
                 visibility,
-                retireSource: retire,
+                // 슬롯 있는 원본은 slot-changes delete가 은퇴를 처리한다 — copy 엔드포인트로 같이 보내면 409
+                // ("slotted maps are retired through slot-changes", Track C Task 5 인터페이스).
+                retireSource: retire && copy.categoryId == null,
               })
             : await createMap(
                 trimmed,
@@ -449,6 +460,17 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
         createdRef.current = { mapId: detail.id, versionId: detail.versions[0].id };
       }
       const created = createdRef.current;
+
+      // 슬롯 있는 원본 은퇴 — 새 맵이 생긴 뒤 slot-changes delete로 원본을 정리(해제/이양은 retireMode).
+      // dry_run 프리뷰는 버리고 결과만 토스트 — 관리자 여부에 따른 즉시/요청 분기는 서버가 결정한다.
+      if (copy && retire && copy.categoryId != null && !slotHandledRef.current) {
+        const body = { action: "delete" as const, to_map_id: retireMode === "replace" ? created.mapId : null };
+        const preview = await postSlotChange(copy.mapId, { ...body, dry_run: true });
+        const result = await postSlotChange(copy.mapId, body);
+        slotHandledRef.current = true;
+        onToast?.(result.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
+        void preview;
+      }
 
       // 협업자 권한 — 매 시도마다 돌되, 이미 부여된 principal은 건너뛴다(중복 POST는 409)
       for (const c of collaborators) {
@@ -501,7 +523,7 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       }
       setSubmitting(false);
     }
-  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, copy, copyVersionId, retire, onCreated, onClose, onCreatedMap, router, t]);
+  }, [currentUser, name, description, visibility, owningDept, collaborators, approvers, csv, word, promote, copy, copyVersionId, retire, retireMode, onToast, onCreated, onClose, onCreatedMap, router, t]);
 
   // 복사+은퇴 시 SP 게이트 — 사용처 로드 전엔 차단, SP 지정 맵은 확인 체크 필수 (B4)
   const retireBlocked =
@@ -825,6 +847,38 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                 )}
               </span>
             </label>
+            {/* 슬롯(L5) 있는 원본 — 승계 방식 선택. 일반 맵은 슬롯이 없어 노출 안 함 (Track C Task 5). */}
+            {retire && copy?.categoryId != null && (
+              <div
+                data-id="copy-retire-mode"
+                className="flex flex-col gap-1.5 rounded-sm border border-hairline bg-surface-alt p-2.5"
+              >
+                <label className="flex cursor-pointer items-start gap-2 text-caption text-ink">
+                  <input
+                    type="radio"
+                    name="copy-retire-mode"
+                    data-id="copy-retire-mode-replace"
+                    className="mt-0.5 accent-[var(--color-accent)]"
+                    checked={retireMode === "replace"}
+                    onChange={() => setRetireMode("replace")}
+                    disabled={submitting}
+                  />
+                  {t("slot.retireMode.replace")}
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 text-caption text-ink">
+                  <input
+                    type="radio"
+                    name="copy-retire-mode"
+                    data-id="copy-retire-mode-unassign"
+                    className="mt-0.5 accent-[var(--color-accent)]"
+                    checked={retireMode === "unassign"}
+                    onChange={() => setRetireMode("unassign")}
+                    disabled={submitting}
+                  />
+                  {t("slot.retireMode.unassign")}
+                </label>
+              </div>
+            )}
             {/* 체크 시 — 무엇이 일어나는지 아이콘 라인으로 요약 (ConfirmDialog lines 어법) */}
             {retire && (
               <ul

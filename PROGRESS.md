@@ -9,6 +9,7 @@
 - **구현 플랜 3종**(`docs/superpowers/plans/2026-09-06-fw-slot-track-{ab-core,c-approval,de-import-docs}.md`): A+B 핫픽스·`framework_slots.py` 코어·이력 테이블·refs/게이트 확장·캔버스 표시(11태스크) → C `fw_slot` 요청·다측 승인·FE 표면·스모크·QA 문서(7태스크, 브라우저 검증 직접 수행) → D+E 임포트 플레이스홀더(어댑터 external 보존·재전달 해소)·문서(3태스크). 임포트 산출물엔 외부 task 이름·L5가 없음을 확인(제목=코드, placeholder_category_id NULL).
 - **트랙 A+B 구현**: 결함 ①②를 회귀 테스트로 고정(flush 순서·mode 가드) → `framework_slot_events` + `app/framework_slots.py` 코어(validate/plan/apply, 대체·삭제 시 홈 캔버스 재지정·합치기·계보) → `POST /maps/{id}/slot-changes`(dry_run·관리자 즉시 적용, 비관리자 409) + 레거시 어댑터 + 슬롯 맵 DELETE/copy 409 → refs `superseded`·시각 3종·stale_link 해제 포함 → FE 배정 모달 slot-changes 전환(안내 모달)·미싱 룩·최근 이양 배지·좌하단 호버 패널.
 - 검증: pytest 신규 test_framework_slots.py(결함 ③④ 회귀 포함)·vitest framework-slot-state·tsc/lint 그린. 승인 요청·알림 표면은 트랙 C.
+- **트랙 C Task 5(FE 삭제·복사은퇴)**: 슬롯 있는 L6 삭제는 신규 `SlotDeleteDialog`(후계자 선택 → dry_run → 공용 `SlotChangeDialog`)로 대체, 복사+은퇴는 슬롯 있는 원본이면 `copyMap.retire_source`(409) 대신 복사 성공 뒤 `slot-changes{delete}`를 태워 해제/이양(`retireMode`)을 고르게 했다. tsc/lint/vitest(861) 그린.
 
 ## 2026-09-03 — 5라운드: 인스펙터 행 통일·IO 열 배치·SP 부서 말단 필·독 장면 이동 (dev)
 - **인스펙터 행 문법 통일**(사용자 피드백 "SP와 일반 노드 스페이서·폭이 다름"): `lib/inspector-row.ts`(`INSPECTOR_ROW` min-h-8·py-1, `INSPECTOR_ROW_LABEL`)를 속성 피커·시스템/GMP/URL 행·지표 카드·조건 행·SP 상속 행(속성·IO·조건)이 공유 — 읽기/편집 모두 32px 행, 스페이서는 URL 위 구분선 하나(일반 노드 정책). fitContent 피커 트리거는 입력과 같은 24px(py-0.5). SP IO 상속 표시는 자체 렌더 대신 `MultiValueInput readOnly`(링크 아이콘·호버·드롭다운 유지).
