@@ -36,9 +36,16 @@ export interface FrameworkTreePickerProps {
   nodeDisplayFields: NodeDisplayToggle[];
   // 캔버스의 결착 L5 — 타 L5 출신 판정(피크 목업을 캔버스 규칙=L5 색+출처 배지로) (design 2026-08-28 §8)
   linkageCategoryId: number | null;
+  // 안내된 출처 L5 — 있으면 배지 판정 기준으로 linkageCategoryId보다 우선한다. 연결 다이얼로그의
+  // 확인 게이트가 이 값을 기준으로 안내/이탈을 가르므로, 배지도 같은 기준이어야 어긋나지 않는다
+  // (리뷰 라운드1 #1). 미지정 시 기존처럼 linkageCategoryId만 본다(다른 마운트는 그대로).
+  originCategoryId?: number | null;
   // 루트 패널 스타일 오버라이드 — 기본은 캔버스 옆 레일(w-56). 다이얼로그 임베드(플레이스홀더 연결)는
   // 더 넓은 트리 컬럼이 필요해 넘긴다 (2026-09-06)
   className?: string;
+  // true면 내부 "Framework L6" 타이틀 바+닫기 버튼을 렌더하지 않는다 — 호스트가 이미 자체 헤더/닫기를
+  // 가진 임베드(연결 다이얼로그)에서 중복 헤더·중복 닫기 버튼을 없앤다 (리뷰 라운드1 #3)
+  hideHeader?: boolean;
   // 피크 주 액션 라벨 오버라이드 — SubprocessPreviewPeek로 그대로 전달 (2026-09-06)
   ctaLabelKey?: MessageKey;
   onClose: () => void;
@@ -56,7 +63,9 @@ export function FrameworkTreePicker({
   readOnly,
   nodeDisplayFields,
   linkageCategoryId,
+  originCategoryId,
   className,
+  hideHeader = false,
   ctaLabelKey,
   onClose,
   onPeekAdd,
@@ -104,6 +113,22 @@ export function FrameworkTreePicker({
       anchorEl: rowEl,
     });
   }
+
+  // 피크가 열려 있는 동안 Esc는 피크만 닫는다 — document에 capture 단계로 걸고 stopPropagation해
+  // ModalBackdrop의 window bubble 리스너(호스트 다이얼로그 전체 닫기, modal-backdrop.tsx 확인함)보다
+  // 먼저 소비한다. capture는 항상 bubble보다 먼저 실행되고, 그 안에서 stopPropagation하면 이벤트가
+  // target에도, 이후 bubble 단계(= window)에도 도달하지 않으므로 리스너의 phase와 무관하게 확실히
+  // 막힌다 (리뷰 라운드1 #4)
+  useEffect(() => {
+    if (peek === null) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setPeek(null);
+    };
+    document.addEventListener("keydown", handleEscape, { capture: true });
+    return () => document.removeEventListener("keydown", handleEscape, { capture: true });
+  }, [peek]);
 
   // 마운트 시 루트 + "내 위치"(캔버스 결착 L5) 체인을 미리 펼친다 — 매번 L1부터 파고들지 않게
   // (사용자 요청 2026-08-31). L5 자신은 열어서 소속 L6 목록까지 바로 보이게 한다.
@@ -328,6 +353,8 @@ export function FrameworkTreePicker({
   };
 
   const roots = state.childrenByParent.get(ROOT) ?? [];
+  // 배지("외부 L6") 판정 기준 — 안내된 출처가 있으면 그걸 우선, 없으면 캔버스 결착 L5 (리뷰 라운드1 #1)
+  const externalOriginReferenceId = originCategoryId ?? linkageCategoryId;
   return (
     <div
       ref={panelRef}
@@ -335,20 +362,22 @@ export function FrameworkTreePicker({
       className={className ?? "flex w-56 flex-col border-r border-hairline bg-surface"}
       style={{ boxShadow: "var(--shadow-md)" }}
     >
-      <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-        <div className="flex items-center gap-1.5 text-caption font-semibold text-ink">
-          <Network size={14} strokeWidth={1.5} />
-          {t("framework.pickerTitle")}
+      {!hideHeader && (
+        <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
+          <div className="flex items-center gap-1.5 text-caption font-semibold text-ink">
+            <Network size={14} strokeWidth={1.5} />
+            {t("framework.pickerTitle")}
+          </div>
+          <button
+            type="button"
+            className="rounded-sm p-0.5 text-ink/50 hover:bg-surface-alt hover:text-ink"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={14} strokeWidth={1.5} />
+          </button>
         </div>
-        <button
-          type="button"
-          className="rounded-sm p-0.5 text-ink/50 hover:bg-surface-alt hover:text-ink"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X size={14} strokeWidth={1.5} />
-        </button>
-      </div>
+      )}
       <div
         className="min-h-0 flex-1 overflow-y-auto p-1"
         onScroll={() => {
@@ -387,7 +416,7 @@ export function FrameworkTreePicker({
           displayFields={nodeDisplayFields}
           ctaLabelKey={ctaLabelKey}
           externalOrigin={
-            linkageCategoryId !== null && peek.categoryId !== linkageCategoryId
+            externalOriginReferenceId !== null && peek.categoryId !== externalOriginReferenceId
               ? { categoryId: peek.categoryId, categoryPath: peek.categoryPath }
               : null
           }

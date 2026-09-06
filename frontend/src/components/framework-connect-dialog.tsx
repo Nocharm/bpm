@@ -2,8 +2,11 @@
 
 // 플레이스홀더 후차 연결 다이얼로그 (design 2026-08-28 §10.1) — 트리로 후보 맵을 고르고 미리보기
 // 피크(서브프로세스 피커와 동일 컴포넌트)로 확인한 뒤 연결한다 (사용자 요구 2026-09-06).
-// 안내된 출처 L5(origin)는 이양 후계자 추천과 안내 밖 L5 확인 게이트에만 쓰이고, 트리 자체는
-// 캔버스의 결착 L5(linkageCategoryId) 기준으로 펼쳐진다 — 다른 체계 피커와 동일한 "내 위치" 기준.
+// 안내된 출처 L5(origin)는 이양 후계자 추천·안내 밖 L5 확인 게이트·피크의 "외부 L6" 배지 기준(원본
+// FrameworkTreePicker는 linkageCategoryId만 봐서 게이트와 배지 기준이 어긋났다 — 리뷰 라운드1 #1)에
+// 쓰이고, 트리 자체(펼침·"내 위치" 강조)는 캔버스의 결착 L5(linkageCategoryId) 기준을 그대로 쓴다.
+// 다이얼로그는 좌상단에 도킹(items-start justify-start)되고 트리는 max-w-lg 안에서 flex-1로 남는
+// 높이를 채운다 — 가운데 넓은 다이얼로그는 피크 플라이아웃이 열릴 오른쪽 공간을 먹어 겹쳤다(리뷰 라운드1 #2).
 import { CornerUpRight, Link2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 
@@ -94,11 +97,11 @@ export function FrameworkConnectDialog({
     <>
       <ModalBackdrop
         onClose={onClose}
-        className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+        className="fixed inset-0 z-[1200] flex items-start justify-start bg-ink/20 p-6 backdrop-blur-sm"
       >
         <div
           data-id="framework-connect-dialog"
-          className="flex w-full max-w-3xl flex-col rounded-md border border-hairline bg-surface shadow-lg"
+          className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-md border border-hairline bg-surface shadow-lg"
         >
           {/* 헤더 */}
           <div className="flex items-center gap-2.5 border-b border-hairline px-4 py-3">
@@ -147,15 +150,20 @@ export function FrameworkConnectDialog({
             </div>
           )}
 
-          {/* 트리 + 미리보기 피크 — 서브프로세스 피커와 동일 컴포넌트 재사용 (사용자 요구 2026-09-06) */}
+          {/* 트리 + 미리보기 피크 — 서브프로세스 피커와 동일 컴포넌트 재사용 (사용자 요구 2026-09-06).
+              hideHeader로 내부 "Framework L6" 타이틀바·닫기 버튼을 죽여 다이얼로그 자체 헤더와
+              중복되지 않게 한다(리뷰 라운드1 #3). 트리 영역은 flex-1+min-h-0로 다이얼로그의
+              max-h-[85vh] 안에서 남는 높이만큼만 차지하고 내부에서 스크롤한다(리뷰 라운드1 #2) */}
           <FrameworkTreePicker
             currentMapId={currentMapId}
             linkedMapIds={linkedMapIds}
             readOnly={false}
             nodeDisplayFields={nodeDisplayFields}
             linkageCategoryId={linkageCategoryId}
+            originCategoryId={originCategoryId}
+            hideHeader
             ctaLabelKey="framework.connectCta"
-            className="flex max-h-[70vh] min-w-[20rem] flex-col border-r border-hairline bg-surface"
+            className="flex min-h-0 min-w-[20rem] flex-1 flex-col bg-surface"
             onClose={onClose}
             onPeekAdd={pick}
             onPeekOpenMap={onOpenMap}

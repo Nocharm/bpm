@@ -258,14 +258,24 @@ export function SubprocessPreviewPeek({
   // 열림 시점 창 기준(리스너 없음) — 피크는 스크롤·바깥클릭으로 닫히는 일시 표면이라 리사이즈 추적은 과함.
   // 2026-08-31: 글자가 안 읽힌다는 피드백으로 폭·높이 전부 1.5배(40vw→60vw, 32vh→48vh).
   // 창보다 커지지 않게 뷰포트에서 여백을 뺀 값으로 한 번 더 상한을 건다.
-  const panelW = Math.round(
+  const candidatePanelW = Math.round(
     Math.min(Math.max(window.innerWidth * 0.6, 960), 1200, window.innerWidth - 32),
   );
   const previewH = Math.round(
     Math.min(Math.max(window.innerHeight * 0.48, 330), 690, window.innerHeight - 160),
   );
+  // 앵커(트리거 행 우측)가 뷰포트 좌측 60% 안이면 왼쪽에 도킹된 호스트(연결 다이얼로그 등)가 있다고
+  // 보고 앵커에 그대로 붙인다 — 원래처럼 폭 클램프가 left를 앵커보다 왼쪽으로 당기면 호스트와
+  // 겹친다(리뷰 라운드1 #2). 대신 남는 공간에 맞춰 폭을 줄인다. 60% 밖(앵커가 이미 화면 오른쪽 깊숙이
+  // 있는 통상 경로)은 기존 클램프 그대로.
+  const anchorHasRoomRight = anchor.x < window.innerWidth * 0.6;
+  const left = anchorHasRoomRight
+    ? Math.min(anchor.x, window.innerWidth - 8)
+    : Math.max(8, Math.min(anchor.x, window.innerWidth - candidatePanelW - 8));
+  const panelW = anchorHasRoomRight
+    ? Math.max(320, Math.min(candidatePanelW, window.innerWidth - left - 8))
+    : candidatePanelW;
   // 화면 밖 잘림 방지 클램프 — 헤더(~40px)+미리보기 행 기준
-  const left = Math.max(8, Math.min(anchor.x, window.innerWidth - panelW - 8));
   const top = Math.max(8, Math.min(anchor.y, window.innerHeight - (previewH + 40) - 8));
 
   // SP 파라미터 값 조회 — SP 지정 5종(연간 건수·FTE는 부모 노드 맥락이라 제외, lib/params SP_PARAM_FIELDS)
