@@ -1035,7 +1035,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {data.spRecentHandover && (
           <span
             data-id="node-recent-handover"
-            className="mt-0.5 self-start rounded-xs border border-accent/40 bg-accent-tint px-1 py-px text-xs text-accent"
+            className="mt-0.5 self-start rounded-xs border border-accent-tint-border bg-accent-tint px-1 py-px text-xs text-accent"
           >
             {t("framework.recentHandover")}
           </span>
@@ -1094,7 +1094,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             type="button"
             data-id="sp-banner-slot-missing"
             title={t("framework.replaceCta")}
-            className="mt-1 flex w-full items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-left text-xs text-error"
+            className="nodrag nopan mt-1 flex w-full items-center gap-1 rounded-xs border border-error/40 bg-error/10 px-1.5 py-0.5 text-left text-xs text-error transition-colors duration-150 hover:border-error"
             onClick={(event) => {
               event.stopPropagation();
               onConnectPlaceholder?.(id);
@@ -1103,7 +1103,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             <TriangleAlert size={12} strokeWidth={1.5} className="shrink-0" />
             <span className="truncate">
               {data.spSlotState === "superseded"
-                ? t("framework.slotState.superseded", { name: data.spSuccessorName ?? "" })
+                ? data.spSuccessorName
+                  ? t("framework.slotState.superseded", { name: data.spSuccessorName })
+                  : t("framework.slotState.supersededNoName")
                 : t("framework.slotState.unassigned")}
             </span>
           </button>

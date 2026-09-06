@@ -9779,7 +9779,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                               return true;
                             }
                             const ref = subprocessRefs.get(node.data.linkedMapId);
-                            return !(ref?.category_id != null && ref.category_id === linkageCategoryId);
+                            return deriveSlotState(ref, node.data.linkedMapId, linkageCategoryId) !== "contained";
                           });
                           if (allowedNodes.length < deletingNodes.length) {
                             showToast(t("framework.containedLocked"));
