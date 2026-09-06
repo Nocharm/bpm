@@ -60,8 +60,11 @@ try {
     .waitFor({ state: "visible", timeout: 5000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });
-  await page.locator('[data-id="interview-import-apply"]').click();
-  await page.locator('[data-id="confirm-dialog-confirm"]').click();
+  // 실측(2026-09-03 임포트 패널 리팩터 이후): apply는 확인 다이얼로그 없이 바로 적용된다 — 응답을 기다린다.
+  await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/categories/import-interview") && r.request().method() === "POST", { timeout: 20000 }),
+    page.locator('[data-id="interview-import-apply"]').click(),
+  ]);
   const seeded = await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 20000 })
     .then(() => true).catch(() => false);
   check("seeded via interview web import", seeded);
