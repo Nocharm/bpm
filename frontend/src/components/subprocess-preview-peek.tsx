@@ -41,6 +41,7 @@ import { getExternalL5Color } from "@/lib/canvas";
 import { formatKstShort } from "@/lib/datetime";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 import { formatParamValue, PARAM_LABEL_KEY, SP_PARAM_FIELDS, type SpParamField } from "@/lib/params";
 
@@ -97,6 +98,7 @@ export function SubprocessPreviewPeek({
   externalOrigin = null,
   displayFields,
   dragPayload = null,
+  ctaLabelKey,
   onAdd,
   onOpenMap,
   onClose,
@@ -117,12 +119,16 @@ export function SubprocessPreviewPeek({
   displayFields: NodeDisplayToggle[];
   // 목업 드래그→캔버스 드롭 페이로드 — 행 드래그와 같은 dataTransfer 계약. null이면 드래그 비활성
   dragPayload?: PeekAddPayload | null;
+  // 주 액션 버튼 라벨 오버라이드 — 기본 "Add to map", 플레이스홀더 연결 다이얼로그는 "Connect"로 (2026-09-06)
+  ctaLabelKey?: MessageKey;
   onAdd: () => void;
   // 목업 드롭다운 "해당 맵으로 이동" — 에디터 이탈 확인 게이트(openMapPrompt)는 호출측이 담당
   onOpenMap: () => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  // 주 액션 라벨 — 기본 "Add to map", 호출측이 ctaLabelKey로 재정의(연결 다이얼로그는 "Connect")
+  const ctaLabel = t(ctaLabelKey ?? "library.peekAdd");
   const panelRef = useRef<HTMLDivElement>(null);
   // 목업 드롭다운(body 포털) — 바깥클릭 판정 2곳(피크 닫기·메뉴 닫기)이 공유하므로 최상단 선언
   const mockMenuRef = useRef<HTMLDivElement>(null);
@@ -724,7 +730,7 @@ export function SubprocessPreviewPeek({
                       type="button"
                       data-id="library-peek-mock-add"
                       disabled={addDisabledReason !== null}
-                      title={addDisabledReason ?? t("library.peekAdd")}
+                      title={addDisabledReason ?? ctaLabel}
                       onClick={() => {
                         setMockMenu(false);
                         onAdd();
@@ -732,7 +738,7 @@ export function SubprocessPreviewPeek({
                       className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-fine text-ink hover:bg-surface-alt disabled:cursor-not-allowed disabled:text-ink-tertiary disabled:hover:bg-surface"
                     >
                       <Plus size={12} strokeWidth={1.5} className="shrink-0" />
-                      {t("library.peekAdd")}
+                      {ctaLabel}
                     </button>
                     <button
                       type="button"
@@ -972,7 +978,7 @@ export function SubprocessPreviewPeek({
               type="button"
               data-id="library-peek-add"
               disabled={addDisabledReason !== null}
-              title={addDisabledReason ?? t("library.peekAdd")}
+              title={addDisabledReason ?? ctaLabel}
               onClick={onAdd}
               className={`flex w-full items-center justify-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-medium shadow-md ${
                 addDisabledReason !== null
@@ -981,7 +987,7 @@ export function SubprocessPreviewPeek({
               }`}
             >
               <Plus size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">{t("library.peekAdd")}</span>
+              <span className="truncate">{ctaLabel}</span>
             </button>
           </div>
           {/* 우하단 — 게시본 기준 표기(그래프 위 워터마크, 헤더에서 이동 2026-08-30) 위,

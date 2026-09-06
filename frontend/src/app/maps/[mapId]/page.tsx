@@ -9373,7 +9373,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             successor={connectTarget.successor}
             linkedMapIds={linkedMapIds}
             currentMapId={mapId}
+            nodeDisplayFields={displayFields}
+            linkageCategoryId={linkageCategoryId}
             onConnect={applyConnectPlaceholder}
+            onFocusLinkedNode={focusLinkedNode}
+            onOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
             onClose={() => setConnectTarget(null)}
           />
         )}

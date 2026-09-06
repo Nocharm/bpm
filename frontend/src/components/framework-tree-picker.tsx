@@ -25,6 +25,7 @@ import {
   type FrameworkTreeState,
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
 
 export interface FrameworkTreePickerProps {
@@ -35,6 +36,11 @@ export interface FrameworkTreePickerProps {
   nodeDisplayFields: NodeDisplayToggle[];
   // 캔버스의 결착 L5 — 타 L5 출신 판정(피크 목업을 캔버스 규칙=L5 색+출처 배지로) (design 2026-08-28 §8)
   linkageCategoryId: number | null;
+  // 루트 패널 스타일 오버라이드 — 기본은 캔버스 옆 레일(w-56). 다이얼로그 임베드(플레이스홀더 연결)는
+  // 더 넓은 트리 컬럼이 필요해 넘긴다 (2026-09-06)
+  className?: string;
+  // 피크 주 액션 라벨 오버라이드 — SubprocessPreviewPeek로 그대로 전달 (2026-09-06)
+  ctaLabelKey?: MessageKey;
   onClose: () => void;
   // 미리보기 피크의 "Add to map" — 드롭과 동일 생성 체인(뷰포트 중앙, 출처 배지 낙관 참조 포함) (2026-08-30)
   onPeekAdd: (payload: PeekAddPayload) => void;
@@ -50,6 +56,8 @@ export function FrameworkTreePicker({
   readOnly,
   nodeDisplayFields,
   linkageCategoryId,
+  className,
+  ctaLabelKey,
   onClose,
   onPeekAdd,
   onPeekOpenMap,
@@ -324,7 +332,7 @@ export function FrameworkTreePicker({
     <div
       ref={panelRef}
       data-id="framework-tree-picker"
-      className="flex w-56 flex-col border-r border-hairline bg-surface"
+      className={className ?? "flex w-56 flex-col border-r border-hairline bg-surface"}
       style={{ boxShadow: "var(--shadow-md)" }}
     >
       <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
@@ -377,6 +385,7 @@ export function FrameworkTreePicker({
           anchorEl={peek.anchorEl}
           addDisabledReason={peek.blocked}
           displayFields={nodeDisplayFields}
+          ctaLabelKey={ctaLabelKey}
           externalOrigin={
             linkageCategoryId !== null && peek.categoryId !== linkageCategoryId
               ? { categoryId: peek.categoryId, categoryPath: peek.categoryPath }

@@ -58,7 +58,7 @@
 | `framework-connect-dialog.tsx` | `FrameworkConnectDialog` | 플레이스홀더 후차 연결 다이얼로그 (design 2026-08-28 §10.1) | `app/maps/[mapId]/page.tsx` |
 | `framework-l5-explorer.tsx` | `FrameworkL5Explorer` | 연계 캔버스 좌상단 L5 탐색기 | `app/maps/[mapId]/page.tsx` |
 | `framework-peek-pill.tsx` | `FrameworkPeekTrigger`, `FrameworkPeekPill` | 업무체계 드릴인 피크 | `app/maps/[mapId]/page.tsx`, `components/process-node.tsx`, `components/subprocess-preview-peek.tsx` |
-| `framework-tree-picker.tsx` | `FrameworkTreePicker` | 연계 캔버스용 framework 트리 피커 | `app/maps/[mapId]/page.tsx` |
+| `framework-tree-picker.tsx` | `FrameworkTreePicker` | 연계 캔버스용 framework 트리 피커 | `app/maps/[mapId]/page.tsx`, `components/framework-connect-dialog.tsx` |
 | `gmp-notice-popover.tsx` | `GmpNoticePopover` | GMP 분류 확정 안내 팝오버 | `app/maps/[mapId]/page.tsx` |
 | `gmp-picker-popup.tsx` | `GmpColorSwatch`, `GmpPickerPopup` | GMP 분류 픽커 팝업 | `app/maps/[mapId]/page.tsx`, `components/gmp-notice-popover.tsx` |
 | `group-box.tsx` | `GroupBox` | 업무 묶음 박스 | `app/maps/[mapId]/page.tsx` |
@@ -116,7 +116,7 @@
 | `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/home-skeleton.tsx`, `components/user-pill.tsx` |
 | `status-badge.tsx` | `StatusBadge` | 버전 라이프사이클 상태 pill | `app/maps/[mapId]/page.tsx`, `components/approval-panel.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `subprocess-inspector-card.tsx` | `SubprocessInspectorCard` | 인스펙터 서브프로세스 카드 | `app/maps/[mapId]/page.tsx` |
-| `subprocess-preview-peek.tsx` | `SubprocessPreviewPeek` | 서브프로세스 라이브러리/체계 피커 행의 미리보기 피크 | `app/maps/[mapId]/page.tsx`, `components/framework-tree-picker.tsx`, `components/process-library-panel.tsx` |
+| `subprocess-preview-peek.tsx` | `SubprocessPreviewPeek` | 서브프로세스 라이브러리/체계 피커 행의 미리보기 피크 | `app/maps/[mapId]/page.tsx`, `components/framework-connect-dialog.tsx`, `components/framework-tree-picker.tsx`, `components/process-library-panel.tsx` |
 | `subprocess-registration-cta.tsx` | `SubprocessRegistrationCta` | 미지정 링크 등록 요청 CTA | `app/maps/[mapId]/page.tsx` |
 | `subprocess-usage-tab.tsx` | `SubprocessUsageTab` | 인스펙터 Subprocess 탭 | `app/maps/[mapId]/page.tsx` |
 | `subprocess-version-picker.tsx` | `SubprocessVersionPicker` | 하위프로세스 노드 버전 선택 | `app/maps/[mapId]/page.tsx` |
