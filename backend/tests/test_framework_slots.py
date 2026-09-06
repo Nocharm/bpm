@@ -741,10 +741,17 @@ def test_inbox_and_detail_expose_slot_decision_rights(client: TestClient, enforc
     inbox = client.get("/api/inbox/approvals").json()
     mine = [it for it in inbox if it["kind"] == "approval_request" and it["id"] == req_id]
     assert len(mine) == 1 and mine[0]["title"] == "fw_slot" and mine[0]["after"] is not None
+    # _attach_deciders는 fw_slot 행을 건드리지 않는다 — block 6이 채운 side 체인 관리자 목록이 그대로 남아야 한다
+    assert mine[0]["deciders"] == [L5ADMIN] and mine[0]["pending_on"] == [L5ADMIN]
     act_as("fws.nobody")
     assert not [it for it in client.get("/api/inbox/approvals").json() if it.get("id") == req_id]
     act_as(SYSADMIN)
     assert any(r["id"] == req_id for r in client.get("/api/approval-requests").json())
+    sys_mine = [
+        it for it in client.get("/api/inbox/approvals").json()
+        if it["kind"] == "approval_request" and it["id"] == req_id
+    ]
+    assert len(sys_mine) == 1 and sys_mine[0]["deciders"] == [L5ADMIN]
     _decide(client, req_id, "approve")
     detail = client.get(f"/api/maps/{mid}").json()
     assert detail["can_decide_slot"] is True  # sysadmin
@@ -752,3 +759,31 @@ def test_inbox_and_detail_expose_slot_decision_rights(client: TestClient, enforc
     assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is True
     act_as(OWNER)
     assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is False
+
+
+def test_partial_approval_then_reject_ends_request(client: TestClient, enforce: None) -> None:
+    """부분 승인(side A) 후 side B가 거절 — 요청 종료·상태 불변, side A 승인 이력은 payload에 남는다(히스토리)."""
+    from app.models import ApprovalRequest
+
+    l5a = _seed_l5_with_admin(client, "FWS-PR5A", "부분승인A", admin=L5ADMIN)
+    l5b = _seed_l5_with_admin(client, "FWS-PR5B", "부분승인B", admin=L5ADMIN_B)
+    act_as(OWNER)
+    mid = _create_map(client, "fws partial reject map")
+    act_as(SYSADMIN)
+    assert client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5a}).json()["mode"] == "applied"
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5b}).json()["request_id"]
+    act_as(L5ADMIN)
+    r = _decide(client, req_id, "approve")
+    assert r.status_code == 200 and r.json()["status"] == "pending"
+    act_as(L5ADMIN_B)
+    r2 = _decide(client, req_id, "reject", reason="changed mind")
+    assert r2.status_code == 200 and r2.json()["status"] == "rejected"
+    assert _map_row(mid)["category_id"] == l5a  # 이동 미적용 — 원래 슬롯 유지
+    assert "fw_slot_rejected" in _notif_types(OWNER)
+
+    async def _approvals(session):
+        row = await session.get(ApprovalRequest, req_id)
+        return row.payload.get("approvals") or {}
+
+    assert str(l5a) in _run(_approvals)

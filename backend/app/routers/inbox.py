@@ -284,6 +284,8 @@ async def list_inbox_approvals(
                 "deciders": deciders,
                 "pending_on": deciders,
                 "approved_by": [a["by"] for a in (payload.get("approvals") or {}).values()],
+                # _attach_deciders는 fw_slot 행을 건드리지 않으므로(위 continue) 여기서 직접 채운다
+                "via_sysadmin": sysadmin and user not in deciders,
             }
         )
 
@@ -337,6 +339,9 @@ async def _attach_deciders(
             approved.setdefault(version_id, []).append(approver)
 
     for item in items:
+        if item["kind"] == "approval_request" and item["title"] == "fw_slot":
+            # side 체인 결재자는 block 6이 이미 채웠다 — MapApprover 기반 일반 로직으로 덮어쓰면 안 된다
+            continue
         map_id = item["map_id"]
         if item["kind"] == "version_approval":
             deciders = approvers.get(map_id, [])
