@@ -402,3 +402,77 @@ def test_core_delete_with_and_without_successor(client: TestClient) -> None:
     assert row["deleted"] is True and row["category_id"] == l5 and row["retired_to"] is None
     assert d in _linked_ids(client, canvas)  # 링크는 끊지 않음 — 복구 시 자동 회복, 표시는 stale
     assert "stale_link" in _readiness_codes(client, canvas)
+
+
+# ── 라우터: slot-changes / 어댑터 / 삭제·복사 차단 ───────────────────────────────
+
+
+def test_slot_changes_preview_and_apply(client: TestClient) -> None:
+    l5 = _seed_category("FWS-P5", "프리뷰", level=5)
+    a = _seed_l6_map(l5, "fws preview A", "FWS-P-A")
+    b = _seed_l6_map(l5, "fws preview B", "FWS-P-B")
+    # linkage-map 생성은 a/b 시드 뒤 — open_linkage_map은 호출 시점의 contained_rows만 시드 노드로 심는다
+    canvas = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    draft = _draft_id(client, canvas)
+    assert client.post(f"/api/versions/{draft}/checkout", json={}).status_code in (200, 201)
+    _put_edge(client, draft, a, b)
+    c = _create_map(client, "fws preview C")
+    preview = client.post(f"/api/maps/{a}/slot-changes",
+                          json={"action": "replace", "to_map_id": c, "dry_run": True})
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["mode"] == "preview" and body["self_apply"] is True  # auth OFF → 전원 sysadmin
+    assert [s["category_id"] for s in body["sides"]] == [l5]
+    assert body["impact"] == {"home_canvas_nodes": 1, "other_canvas_nodes": 0,
+                              "referencing_maps": 0, "edges_kept": 1}
+    assert _map_row(a)["category_id"] == l5  # dry_run은 아무것도 바꾸지 않는다
+
+    applied = client.post(f"/api/maps/{a}/slot-changes", json={"action": "replace", "to_map_id": c})
+    assert applied.status_code == 200 and applied.json()["mode"] == "applied"
+    assert _map_row(c)["category_id"] == l5 and _map_row(a)["retired_to"] == c
+    assert client.post(f"/api/maps/{a}/slot-changes", json={"action": "unassign"}).status_code == 409
+
+
+def test_slot_changes_non_admin_owner_gets_409_until_track_c(client: TestClient, enforce: None) -> None:
+    """owner지만 L5 직속 관리자가 아니면 즉시 적용 불가 — 이 트랙에선 409(요청 생성은 트랙 C)."""
+    l5 = _seed_category("FWS-N5", "비관리자", level=5)
+    act_as("fws.owner")
+    mid = _create_map(client, "fws non-admin owner map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r.status_code == 409 and "approval" in r.json()["detail"]
+    preview = client.post(f"/api/maps/{mid}/slot-changes",
+                          json={"action": "assign", "to_category_id": l5, "dry_run": True}).json()
+    assert preview["self_apply"] is False and preview["sides"][0]["satisfied_by_caller"] is False
+    # 직속 관리자로 임명되면 즉시 적용
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": "fws.owner"}]})
+    act_as("fws.owner")
+    r2 = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r2.status_code == 200 and r2.json()["mode"] == "applied"
+    # 비-owner(viewer)는 경로 의존성에서 403
+    act_as("fws.stranger")
+    assert client.post(f"/api/maps/{mid}/slot-changes", json={"action": "unassign"}).status_code == 403
+
+
+def test_legacy_adapters_follow_slot_policy(client: TestClient, enforce: None) -> None:
+    """PUT /category·POST /framework-transfer는 어댑터 — 관리자/sysadmin만 즉시, 그 외 409."""
+    l5 = _seed_category("FWS-L5", "레거시", level=5)
+    act_as("fws.legacy.owner")
+    mid = _create_map(client, "fws legacy owner map")
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": l5}).status_code == 409
+    act_as(SYSADMIN)
+    assert client.put(f"/api/maps/{mid}/category", json={"category_id": l5}).status_code == 200
+    assert client.get(f"/api/maps/{mid}").json()["category_id"] == l5
+
+
+def test_slotted_map_delete_and_copy_retire_are_blocked(client: TestClient) -> None:
+    l5 = _seed_category("FWS-X5", "차단", level=5)
+    slotted = _seed_l6_map(l5, "fws blocked slotted", "FWS-X-M1")
+    free = _seed_l6_map(None, "fws blocked free", None)
+    r = client.delete(f"/api/maps/{slotted}")
+    assert r.status_code == 409 and "slot-changes" in r.json()["detail"]
+    r2 = client.post(f"/api/maps/{slotted}/copy", json={"name": "fws blocked copy", "retire_source": True})
+    assert r2.status_code == 409 and "slot-changes" in r2.json()["detail"]
+    assert client.post(f"/api/maps/{slotted}/copy", json={"name": "fws plain copy"}).status_code == 201
+    assert client.delete(f"/api/maps/{free}").status_code == 204

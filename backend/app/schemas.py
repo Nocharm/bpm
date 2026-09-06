@@ -1032,6 +1032,38 @@ class FrameworkTransferIn(BaseModel):
     to_map_id: int
 
 
+class SlotChangeIn(BaseModel):
+    # L6 슬롯 변경 요청 — 5액션 공용 (spec 2026-09-06 §4.1)
+    action: Literal["assign", "unassign", "move", "replace", "delete"]
+    to_category_id: int | None = None
+    to_map_id: int | None = None
+    note: str | None = Field(None, max_length=500)
+    dry_run: bool = False
+
+
+class SlotChangeSideOut(BaseModel):
+    category_id: int
+    path: str | None = None
+    approvers: list[str]
+    satisfied_by_caller: bool
+
+
+class SlotChangeImpactOut(BaseModel):
+    home_canvas_nodes: int
+    other_canvas_nodes: int
+    referencing_maps: int
+    edges_kept: int
+
+
+class SlotChangeOut(BaseModel):
+    # preview=dry_run, applied=관리자 즉시 적용, requested=승인 요청 생성(트랙 C)
+    mode: Literal["preview", "applied", "requested"]
+    request_id: int | None = None
+    self_apply: bool
+    sides: list[SlotChangeSideOut]
+    impact: SlotChangeImpactOut
+
+
 class FrameworkImportRow(BaseModel):
     """임포트 리포트 1행 — action∈created/updated/unchanged/governance/error/warning
     (ImportReport.rows 미러, 인터뷰 임포트 응답 rows가 사용)."""

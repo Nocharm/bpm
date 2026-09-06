@@ -314,7 +314,10 @@ def test_framework_transfer_target_not_owned_403(client: TestClient, enforce: No
         "owning_department": "Owning Anchor Division",
     }).json()
     sid = source["id"]
-    assert client.put(f"/api/maps/{sid}/category", json={"category_id": _seed_l5_slot(client, ids)}).status_code == 200
+    l5 = _seed_l5_slot(client, ids)
+    # 슬롯 배정은 이제 관리자/sysadmin 전용(slot-changes 정책, 2026-09-06) — 설정은 sysadmin으로, 대상 오너 검증은 그대로 cat.src_owner로
+    act_as(STRANGER_SYSADMIN)
+    assert client.put(f"/api/maps/{sid}/category", json={"category_id": l5}).status_code == 200
 
     act_as("cat.tgt_owner")
     target = client.post("/api/maps", json={

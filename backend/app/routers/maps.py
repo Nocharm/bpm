@@ -14,6 +14,7 @@ from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
 from app.framework_confirm import load_confirm_draft, perform_framework_confirm
+from app.framework_slots import SlotChange, apply_slot_change, validate_slot_change
 from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
@@ -425,6 +426,8 @@ async def copy_map(
         await _assert_known_department(session, payload.owning_department)
     actor_name = await workflow.get_display_name(session, user)
     if payload.retire_source:
+        if source_map.category_id is not None:
+            raise HTTPException(status_code=409, detail="slotted maps are retired through slot-changes")
         # 원본 은퇴는 오너 전용 — viewer 복사 권한과 별개로 상향 검증 (B4)
         await assert_map_role(session, user, map_id, "owner")
         retire_recipients = [
@@ -1331,30 +1334,25 @@ async def set_map_category(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> ProcessMap:
-    """체계 카테고리 연결/해제 — 맵 슬롯은 L5 전용(2026-08-30 확정), null=해제. owner/sysadmin 전용."""
+    """체계 카테고리 연결/해제 어댑터 — 슬롯 정책(spec 2026-09-06)에 위임. 관리자/sysadmin만 즉시 적용, 그 외 409."""
     found_map = await session.get(
-        ProcessMap,
-        map_id,
-        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
+        ProcessMap, map_id, options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)]
     )
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    if payload.category_id is not None:
-        category = await session.get(ProcessCategory, payload.category_id)
-        if category is None:
-            raise HTTPException(
-                status_code=404, detail=f"category {payload.category_id} not found"
-            )
-        # 맵 슬롯은 L5 전용 — 상위 레벨엔 업무 맵이 들어가지 않는다 (사용자 확정 2026-08-30)
-        if category.level != 5:
-            raise HTTPException(
-                status_code=422,
-                detail="maps can only be attached to a level-5 category",
-            )
-        if found_map.mode != "normal":
-            # 슬롯 보유 자격은 일반 맵만 — 연계 캔버스·Word 맵은 서랍에 들어가지 않는다 (spec 2026-09-06 §9)
-            raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
-    found_map.category_id = payload.category_id
+    if payload.category_id is None:
+        change = SlotChange(action="unassign", map_id=map_id)
+    elif found_map.category_id is None:
+        change = SlotChange(action="assign", map_id=map_id, to_category_id=payload.category_id)
+    elif found_map.category_id == payload.category_id:
+        change = None  # 무변경
+    else:
+        change = SlotChange(action="move", map_id=map_id, to_category_id=payload.category_id)
+    if change is not None:
+        plan = await validate_slot_change(session, change, user)
+        if not plan.self_apply:
+            raise HTTPException(status_code=409, detail="slot changes require L5 admin approval - use slot-changes")
+        await apply_slot_change(session, plan, user)
     await session.commit()
     await session.refresh(found_map, attribute_names=["versions"])
     for version in found_map.versions:
@@ -1382,44 +1380,18 @@ async def transfer_framework_slot(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> dict[str, int]:
-    """체계 슬롯(category_id+consultant_code)을 source→target으로 이전, source는 해제한다.
+    """체계 슬롯(category_id+consultant_code) 이양 어댑터 — 슬롯 정책(spec 2026-09-06)에 위임.
 
-    가드: sysadmin이거나 두 맵 모두의 owner (design 2026-08-08). 알림 없음 — 최소 스코프.
+    가드: sysadmin이거나 직속 L5 관리자면 즉시, 그 외 409. target owner 검증은 그대로 유지(design 2026-08-08).
     """
-    source = await session.get(ProcessMap, map_id)
-    if source is None or source.deleted_at is not None:
-        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    target = await session.get(ProcessMap, payload.to_map_id)
-    if target is None or target.deleted_at is not None:
-        raise HTTPException(
-            status_code=404, detail=f"map {payload.to_map_id} not found"
-        )
-    if target.mode != "normal":
-        raise HTTPException(status_code=422, detail="only normal maps can hold a framework slot")
+    plan = await validate_slot_change(
+        session, SlotChange(action="replace", map_id=map_id, to_map_id=payload.to_map_id), user
+    )
     # source의 owner 여부는 경로 의존성(require_map_role)이 이미 검증 — target은 별도 검증
     await assert_map_role(session, user, payload.to_map_id, "owner")
-    if source.category_id is None:
-        raise HTTPException(status_code=409, detail="source map has no framework slot")
-    if target.category_id is not None or target.consultant_code is not None:
-        raise HTTPException(
-            status_code=409, detail="target map already has a framework slot"
-        )
-    # 슬롯 이양 보완 — L5 전용 확정에 따라 비-L5(레거시) 슬롯은 이양 대신 정리 대상 (2026-08-30)
-    slot_category = await session.get(ProcessCategory, source.category_id)
-    if slot_category is None or slot_category.level != 5:
-        raise HTTPException(
-            status_code=409,
-            detail="framework slot must point to a level-5 category - reassign before transfer",
-        )
-    # 결함 ①: SQLAlchemy는 UPDATE를 PK 오름차순으로 내보내 target.id < source.id 이면 target에 코드가
-    # 먼저 박혀 unique(consultant_code)에 걸린다 — source를 먼저 비우고 flush한 뒤 target에 붙인다.
-    slot_category_id = source.category_id
-    slot_code = source.consultant_code
-    source.category_id = None
-    source.consultant_code = None
-    await session.flush()
-    target.category_id = slot_category_id
-    target.consultant_code = slot_code
+    if not plan.self_apply:
+        raise HTTPException(status_code=409, detail="slot changes require L5 admin approval - use slot-changes")
+    await apply_slot_change(session, plan, user)
     await session.commit()
     return {"from_map_id": map_id, "to_map_id": payload.to_map_id}
 
@@ -1795,6 +1767,10 @@ async def delete_map(map_id: int, session: AsyncSession = Depends(get_session)) 
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    if found_map.mode == "normal" and found_map.category_id is not None:
+        # 슬롯 있는 L6는 L5 승인·캔버스 반영이 필요 — slot-changes{action: delete}로만 (spec §7.3)
+        # mode != normal(캔버스/Word)의 stray category_id는 예외 — 정리 삭제가 막히면 안 된다
+        raise HTTPException(status_code=409, detail="slotted maps are deleted through slot-changes")
     found_map.deleted_at = now_kst()
     # KB 청크 즉시 제거 — get_effective_role이 삭제 맵을 구분하지 않아 검색 필터만으론
     # 계속 주입된다. 복구 시 재게시 훅이 재인덱싱 (hardening T16)

@@ -46,6 +46,7 @@ from app.routers import (
     notices,
     notifications,
     permissions,
+    slot_changes,
     versions,
 )
 from app.schemas import MeOut
@@ -106,6 +107,7 @@ app.include_router(auth_router.router)
 app.include_router(categories.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
+app.include_router(slot_changes.router)
 app.include_router(versions.router)
 app.include_router(checkout.router)
 app.include_router(graph.router)
