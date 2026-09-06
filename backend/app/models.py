@@ -307,7 +307,7 @@ class VersionEvent(Base):
     version_id: Mapped[int] = mapped_column(
         ForeignKey("map_versions.id", ondelete="CASCADE"), index=True
     )
-    # created|submitted|approved|rejected|published
+    # created|submitted|approved|rejected|published|confirmed|slot_changed
     event_type: Mapped[str] = mapped_column(String(20))
     actor: Mapped[str] = mapped_column(String(100))
     # 거절 사유 등 부가 텍스트

@@ -179,7 +179,7 @@ async def get_subprocess_refs(
     ).all()
     refs: dict[int, SubprocessRefOut] = {}
     category_id_by_map: dict[int, int | None] = {}
-    # 은퇴 체인 출발점 — 삭제된 링크맵의 retired_to (후계자 추적용, 2026-08-30)
+    # 은퇴 체인 출발점 — retired_to를 가진 링크맵(삭제 여부 무관, 살아있는 superseded 포함) (후계자 추적용, 2026-08-30 → 2026-09-06 완화)
     retire_heads: dict[int, int] = {}
     for (
         mid,
