@@ -701,6 +701,31 @@ class CategoryPermission(Base):
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class FrameworkSlotEvent(Base):
+    """L6 슬롯 변경 이력 — 유지보수 단계의 assign/unassign/move/replace/delete(+후계자 관점 succeed).
+
+    임포트(부트스트랩)는 기록하지 않는다. 캔버스 호버 패널의 시각 3종·최근 이양 배지 소스 (spec 2026-09-06 §6.1).
+    """
+
+    __tablename__ = "framework_slot_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(
+        ForeignKey("process_maps.id", ondelete="CASCADE"), index=True
+    )
+    # 'assign' | 'unassign' | 'move' | 'replace' | 'delete' | 'succeed'(후계자 관점)
+    action: Mapped[str] = mapped_column(String(20))
+    from_category_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    to_category_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    # replace/delete의 후계자, succeed의 원본
+    to_map_id: Mapped[int | None] = mapped_column(Integer, default=None)
+    actor: Mapped[str] = mapped_column(String(100))
+    request_id: Mapped[int | None] = mapped_column(
+        ForeignKey("approval_requests.id", ondelete="SET NULL"), default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class ApprovalRequest(Base):
     """권한 다운그레이드·가시성 변경·맵 이름변경 승인 요청 — 버전 게시 승인은 version_approvals 사용 (§2.1)."""
 

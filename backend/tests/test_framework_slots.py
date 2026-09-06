@@ -140,3 +140,22 @@ def test_clearing_a_stray_slot_on_a_canvas_map_is_allowed(client: TestClient) ->
     assert _map_row(canvas)["category_id"] == l5
     assert client.put(f"/api/maps/{canvas}/category", json={"category_id": None}).status_code == 200
     assert _map_row(canvas)["category_id"] is None
+
+
+# ── 코어: 이력 테이블 (Task 2) ──────────────────────────────────────────
+
+
+def test_slot_event_table_roundtrip(client: TestClient) -> None:
+    """신설 테이블이 create_all로 존재하고 ORM 왕복이 된다 (spec §6.1)."""
+    from app.models import FrameworkSlotEvent
+
+    l5 = _seed_category("FWS-E5", "이벤트", level=5)
+    mid = _seed_l6_map(l5, "fws event map", "FWS-E-M1")
+
+    async def _go(session):
+        session.add(FrameworkSlotEvent(map_id=mid, action="assign", to_category_id=l5, actor=SYSADMIN))
+        await session.flush()
+        row = await session.scalar(select(FrameworkSlotEvent).where(FrameworkSlotEvent.map_id == mid))
+        return (row.action, row.to_category_id, row.request_id, row.created_at is not None)
+
+    assert _run(_go) == ("assign", l5, None, True)
