@@ -1390,14 +1390,26 @@ async def apply_interview_linkage(
         flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes)
 
         # 계보 키로 이미 잡히는 외부 노드는 linked_map_id가 방금 확보됐을 때만 채운다 — 이미
-        # 연결돼 있으면(정상이든 수동 재연결이든) 손대지 않는다(F1: append는 계보 노드가 없을 때만)
+        # 연결돼 있으면(정상이든 수동 재연결이든) 손대지 않는다(F1: append는 계보 노드가 없을 때만).
+        # 계보 키가 없는 기존 연결 노드(이 픽스 이전 임포트가 만들었거나 에디터가 직접 만든 노드)는
+        # linked_map_id 폴백(node_by_map, 소유 코드까지 전부 색인)으로 찾아 계보 키만 지금
+        # 찍어 준다 — linked_map_id는 이미 맞으니 재지정하지 않는다. 안 그러면 lineage_nodes에는
+        # 안 보여 재임포트가 옆에 중복을 만들고 엣지를 그 중복으로 옮겨 원본을 고아로 만든다
+        # (controller ruling F1-2, 레거시 노드로 재현됨).
         for c in external_present:
-            lineage_node = lineage_nodes.get(external_lineage_key(c))
-            if lineage_node is not None and lineage_node.linked_map_id is None:
-                lineage_node.linked_map_id = map_ids[c]
-                lineage_node.title = map_names.get(map_ids[c], lineage_node.title)
-                lineage_node.follow_latest = True
-                node_by_map[map_ids[c]] = lineage_node
+            key = external_lineage_key(c)
+            lineage_node = lineage_nodes.get(key)
+            if lineage_node is not None:
+                if lineage_node.linked_map_id is None:
+                    lineage_node.linked_map_id = map_ids[c]
+                    lineage_node.title = map_names.get(map_ids[c], lineage_node.title)
+                    lineage_node.follow_latest = True
+                    node_by_map[map_ids[c]] = lineage_node
+                continue
+            legacy_node = node_by_map.get(map_ids[c])
+            if legacy_node is not None and legacy_node.source_node_id is None:
+                legacy_node.source_node_id = key
+                lineage_nodes[key] = legacy_node
 
         # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
         missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
@@ -1529,9 +1541,11 @@ async def apply_interview_linkage(
             if key in branch_of:
                 return branch_nodes.get(make_node_id(code, key))
             if key not in linkage.map_codes:
-                # 이 L5 소유가 아닌 코드는 linked_map_id 상태와 무관하게 계보 키로 우선 찾는다 —
-                # 그래야 수동 재연결로 다른 맵에 물린 노드에도 엣지가 계속 붙는다(controller ruling F1)
-                return lineage_nodes.get(external_lineage_key(key))
+                # 이 L5 소유가 아닌 코드는 계보 키로 우선 찾고(linked_map_id 상태 무관 — 수동
+                # 재연결로 다른 맵에 물려도 엣지가 계속 붙는다), 계보 키가 아직 없는 노드는
+                # linked_map_id 폴백으로 찾는다(위 백필 루프가 이미 대부분 채우지만 대칭을 위해
+                # 여기도 같은 2단 조회를 쓴다 — controller ruling F1-2).
+                return lineage_nodes.get(external_lineage_key(key)) or node_by_map.get(map_ids.get(key))
             return node_by_map.get(map_ids.get(key))
 
         for src_key, dst_key, label, gateway in flow:

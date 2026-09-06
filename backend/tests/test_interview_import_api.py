@@ -405,6 +405,63 @@ def test_reimport_while_target_trashed_does_not_duplicate_lineage_node(client: T
     assert all(n["linked_map_id"] is not None for n in sp_3)  # 복구 후에도 계속 연결 상태 유지
 
 
+def test_reimport_finds_linked_node_without_lineage_key_via_map_id_fallback(client: TestClient) -> None:
+    """linked_map_id는 있지만 source_node_id가 없는 노드(이 픽스 이전 임포트가 만들었거나
+    에디터가 직접 만든 노드)도 재임포트가 찾아야 한다 — lineage_nodes만 보면 안 보여서 옆에
+    중복 노드가 생기고, _node_of가 엣지를 그 중복으로 옮겨 원본을 고아로 만든다
+    (controller ruling F1-2, 재검토에서 레거시 노드로 재현됨)."""
+    import uuid
+
+    from app.db import SessionLocal
+    from app.lineage import external_lineage_key
+    from app.models import Node
+
+    ext_code = "phx-f1b-ext-0001"
+    # 외부 코드의 맵을 먼저 존재시킨다 — 다른 L5가 이미 전달한 것처럼
+    doc_ext = _ext_delivery("PHX-F1B-EXT", task_ids=[ext_code])
+    assert _post(client, _files(doc_ext), apply=True).status_code == 200
+    ext_map_id = _map_row(ext_code).id
+
+    doc_a = _ext_delivery("PHX-F1B-A", task_ids=["phx-f1b-a-task-0001"])
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    canvas_a = _canvas_map_id(client, "PHX-F1B-A")
+    draft_a = _draft_id(client, canvas_a)
+
+    # 레거시 상태를 직접 심는다 — linked_map_id만 있고 source_node_id는 없는 subprocess 노드
+    # (이 픽스 이전의 missing_external 루프가 만든 노드, 또는 에디터가 만든 노드와 동형)
+    legacy_id = uuid.uuid4().hex
+
+    async def _seed_legacy_node() -> None:
+        async with SessionLocal() as session:
+            session.add(Node(
+                id=legacy_id, version_id=draft_a, title="legacy external node",
+                node_type="subprocess", linked_map_id=ext_map_id, follow_latest=True,
+                pos_x=900, pos_y=900, sort_order=99,
+            ))
+            await session.commit()
+
+    _run(_seed_legacy_node())
+
+    doc_a2 = _ext_delivery("PHX-F1B-A", task_ids=["phx-f1b-a-task-0001"])
+    doc_a2["relations"]["edges"].append(
+        {"src": doc_a2["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    assert _post(client, _files(doc_a2), apply=True).status_code == 200
+
+    nodes, edges = _linkage_graph("PHX-F1B-A")
+    sp_nodes = [n for n in nodes if n.node_type == "subprocess"]
+    assert len(sp_nodes) == 2  # own + legacy — 옆에 중복이 생기지 않는다
+    legacy = next(n for n in nodes if n.id == legacy_id)
+    assert legacy.source_node_id == external_lineage_key(ext_code)  # 백필됨
+    assert legacy.linked_map_id == ext_map_id  # 재지정되지 않음
+    assert any(e.target_node_id == legacy.id for e in edges)  # 엣지가 레거시 노드에 붙는다
+
+    # 재임포트 — 이제 계보 키가 찍혔으니 그대로 멱등
+    assert _post(client, _files(doc_a2), apply=True).status_code == 200
+    nodes2, edges2 = _linkage_graph("PHX-F1B-A")
+    assert len([n for n in nodes2 if n.node_type == "subprocess"]) == 2
+    assert len(edges2) == len(edges)
+
+
 def test_new_canvas_layout_places_placeholder_without_overlapping_ranked_nodes(client: TestClient) -> None:
     """5개 업무가 순차 흐름(체인)으로 이어진 신규 캔버스에서, 외부 플레이스홀더도 같은 자동정렬
     계산에 껴야 한다 — 빠지면 격자 폴백 좌표가 이미 자동정렬된 노드의 바운딩박스와 겹친다
@@ -468,6 +525,39 @@ def test_external_placeholder_resolution_skips_canvas_checked_out_by_another_use
     graph_a2 = client.get(f"/api/versions/{draft_a}/graph").json()
     resolved = next(n for n in graph_a2["nodes"] if n["id"] == ph["id"])
     assert resolved["linked_map_id"] is not None
+
+
+def test_resolve_external_placeholders_does_not_skip_when_importer_holds_the_checkout(
+    client: TestClient,
+) -> None:
+    """캔버스를 임포트 실행자 본인이 체크아웃 중이면 건너뛰지 않는다 — 스킵 조건은 "actor가
+    아닌 남"이지 "누구든 체크아웃 중"이 아니다 (F3 보강 — 자기 자신 케이스 커버리지)."""
+    from app.db import SessionLocal
+    from app.models import MapVersion
+    from app.settings import settings
+
+    ext_code = "phx-f3c-ext-0001"  # PHX-F3C 자기 행 id(-task-000N)와 겹치지 않게 — 안 그러면 self edge가 돼 external 판정이 안 된다
+    doc_a = _ext_delivery("PHX-F3C")
+    doc_a["relations"]["edges"].append({"src": doc_a["rows"][0]["taskId"], "dst": ext_code, "kind": "seq"})
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    canvas_a = _canvas_map_id(client, "PHX-F3C")
+    draft_a = _draft_id(client, canvas_a)
+    graph_before = client.get(f"/api/versions/{draft_a}/graph").json()
+    ph = next(n for n in graph_before["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None)
+
+    async def _check_out_self() -> None:
+        async with SessionLocal() as session:
+            draft = await session.get(MapVersion, draft_a)
+            draft.checked_out_by = settings.dev_user  # 이번 임포트를 실행하는 actor 본인
+            await session.commit()
+
+    _run(_check_out_self())
+
+    doc_b = _ext_delivery("PHX-F3D", task_ids=[ext_code, "phx-f3d-task-0002"])
+    assert _post(client, _files(doc_b), apply=True).status_code == 200
+    graph_after = client.get(f"/api/versions/{draft_a}/graph").json()
+    resolved = next(n for n in graph_after["nodes"] if n["id"] == ph["id"])
+    assert resolved["linked_map_id"] is not None  # 본인 체크아웃은 건너뛰지 않는다
 
 
 def test_external_source_endpoint_places_placeholder_as_edge_source(client: TestClient) -> None:
