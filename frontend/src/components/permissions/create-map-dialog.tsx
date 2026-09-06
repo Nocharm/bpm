@@ -15,6 +15,7 @@ import { X, Globe, Lock, Bell, ChevronDown, ChevronRight, FileUp, Hourglass, Loc
 import {
   acquireCheckout,
   addMapPermission,
+  ApiError,
   copyMap,
   createMap,
   getDirectory,
@@ -467,21 +468,27 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
       const created = createdRef.current;
 
       // 슬롯 있는 원본 은퇴 — 새 맵이 생긴 뒤 slot-changes delete로 원본을 정리(해제/이양은 retireMode).
-      // dry_run은 미리보기용이라 결과를 쓰지 않는다 — 관리자 여부에 따른 즉시/요청 분기는 서버가 결정.
       if (copy && retire && copy.categoryId != null && !slotHandledRef.current) {
         const body = { action: "delete" as const, to_map_id: retireMode === "replace" ? created.mapId : null };
-        await postSlotChange(copy.mapId, { ...body, dry_run: true });
         try {
           const result = await postSlotChange(copy.mapId, body);
           slotHandledRef.current = true;
           onToast?.(result.mode === "requested" ? t("slot.requestedToast") : t("slot.appliedToast"));
         } catch (err) {
-          // 응답 유실 후 재시도 데드엔드 — 직전 시도가 서버엔 이미 반영됐다면 이 맵엔 fw_slot 요청이
-          // 이미 대기 중이라 재요청은 409. 그건 실패가 아니라 완료로 취급(재시도 루프에서 벗어난다).
-          // 그 외 에러는 그대로 던져 바깥 catch의 기존 "partial failure" 처리로 넘긴다.
-          if (!isSlotChangePendingError(err)) throw err;
-          slotHandledRef.current = true;
-          onToast?.(t("slot.requestedToast"));
+          // 응답 유실 후 재시도 데드엔드 — 직전 시도가 서버엔 이미 반영됐다면 (a) 다른 side가 남아
+          // 이 맵엔 fw_slot 요청이 이미 대기 중이라 재요청은 409, 또는 (b) self-apply로 이미 적용돼
+          // source가 소프트삭제됐다면 재요청은 404(map not found). 둘 다 실패가 아니라 완료로
+          // 취급(재시도 루프에서 벗어난다). 그 외 에러는 그대로 던져 바깥 catch의 기존
+          // "partial failure" 처리로 넘긴다.
+          if (isSlotChangePendingError(err)) {
+            slotHandledRef.current = true;
+            onToast?.(t("slot.requestedToast"));
+          } else if (err instanceof ApiError && err.status === 404) {
+            slotHandledRef.current = true;
+            onToast?.(t("slot.appliedToast"));
+          } else {
+            throw err;
+          }
         }
       }
 

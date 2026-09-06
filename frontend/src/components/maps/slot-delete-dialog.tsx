@@ -32,8 +32,9 @@ export function SlotDeleteDialog({ mapId, mapName, onDone, onClose }: Props) {
     return () => { active = false; };
   }, []);
 
+  // 후계자는 호출자가 owner인 맵만 — 이양 대상은 owner도 겸해야 한다(서버 assert_map_role 미러, F6).
   const options = (maps ?? [])
-    .filter((m) => m.id !== mapId && (m.mode ?? "normal") === "normal" && m.category_id == null && m.consultant_code == null)
+    .filter((m) => m.id !== mapId && m.my_role === "owner" && (m.mode ?? "normal") === "normal" && m.category_id == null && m.consultant_code == null)
     .map((m) => ({ value: String(m.id), label: m.name }));
 
   async function next() {

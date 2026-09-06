@@ -116,14 +116,6 @@ export function FrameworkAssignModal({
     };
   }, [currentCategoryId]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   // 미결 슬롯 변경 조회 — 있으면 배너로 진행 상황을 보여주고 연결/해제/이양을 잠근다.
   // 조회 실패는 "없음"으로 취급하지 않는다 — 실제로 대기 중인데 놓치면 그 위에 덮어쓸 수 있으므로
   // fail-closed: 에러를 보여주고 버튼은 계속 잠근 채로 둔다(리뷰 라운드1 #2b).
@@ -264,10 +256,12 @@ export function FrameworkAssignModal({
   };
 
   // 이양 대상은 슬롯 없는 일반 맵만 — 이미 슬롯(카테고리/컨설턴트 코드) 가진 맵·framework/word 맵·자기 자신 제외.
+  // owner가 아닌 맵은 제외 — 이양 대상은 호출자가 owner도 겸해야 한다(서버 assert_map_role 미러, F6).
   const mapOptions = (transferMaps ?? [])
     .filter(
       (m) =>
         m.id !== mapId &&
+        m.my_role === "owner" &&
         (m.mode ?? "normal") === "normal" &&
         m.category_id == null &&
         m.consultant_code == null,
