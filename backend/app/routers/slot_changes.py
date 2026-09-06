@@ -99,24 +99,31 @@ async def get_pending_slot_change(
     session: AsyncSession = Depends(get_session),
     user: str = Depends(get_current_user),
 ) -> PendingSlotChangeOut | None:
-    """대기 요청 — owner·지정 승인자·side 체인 관리자·sysadmin. 배정 모달 배너·승인 탭 소스."""
+    """대기 요청 — owner·지정 승인자·side 체인 관리자·sysadmin. 배정 모달 배너·승인 탭 소스.
+
+    접근 게이트는 요청 유무와 무관하게 먼저 평가한다 — req가 없다고 전원에게 200 null을
+    돌려주면 비공개 맵의 존재/무요청 상태가 무권한자에게 새어나간다 (fix round 1 #1).
+    """
     found = await session.get(ProcessMap, map_id)
     if found is None or found.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    role = await get_effective_role(session, user, map_id)
+    sysadmin = logic.is_sysadmin(user)
     req = await _load_pending(session, map_id)
     if req is None:
+        if role is None and not sysadmin:
+            raise HTTPException(status_code=403, detail="viewer, side admin or sysadmin only")
         return None
     sides = [int(c) for c in req.payload.get("sides", [])]
-    role = await get_effective_role(session, user, map_id)
     is_side_admin = False
     for cid in sides:
         if await is_category_admin(session, user, cid):
             is_side_admin = True
             break
-    if role is None and not is_side_admin and not logic.is_sysadmin(user):
+    if role is None and not is_side_admin and not sysadmin:
         raise HTTPException(status_code=403, detail="viewer, side admin or sysadmin only")
     remaining = await remaining_sides(session, req)
-    can_decide = logic.is_sysadmin(user)
+    can_decide = sysadmin
     side_out = []
     for cid in sides:
         direct = await is_direct_l5_admin(session, user, cid)
@@ -125,7 +132,7 @@ async def get_pending_slot_change(
         side_out.append({
             "category_id": cid, "path": await category_path(session, cid),
             "approvers": await get_category_admin_logins(session, cid, direct_only=True),
-            "satisfied_by_caller": direct or logic.is_sysadmin(user),
+            "satisfied_by_caller": direct or sysadmin,
         })
     return PendingSlotChangeOut(
         request=ApprovalRequestOut.model_validate(req), sides=side_out, remaining=remaining,

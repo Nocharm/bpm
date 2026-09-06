@@ -610,6 +610,11 @@ async def decide_approval_request(
                 raise HTTPException(
                     status_code=403, detail="direct L5 admin or sysadmin only"
                 )
+    elif req.kind == "fw_slot":
+        # 임시 가드 — Task 2가 L5 관리자 전용 decide 플로우로 교체할 때까지 이 경로 차단
+        raise HTTPException(
+            status_code=409, detail="slot change requests are decided by the L5 admin flow"
+        )
     else:
         await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
@@ -729,6 +734,11 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
         # 게이트 6종·체크아웃·무변경 위반은 HTTPException으로 그대로 전파 — decide가 커밋
         # 전이라 req.status는 pending 유지(map_rename의 이름 선점 경합과 동일 패턴)
         await perform_framework_confirm(session, found_map, req.decided_by, major=False)
+    elif req.kind == "fw_slot":
+        # decide_approval_request가 이미 409로 막지만, 방어적으로 여기서도 차단(임시 — Task 2가 교체)
+        raise HTTPException(
+            status_code=409, detail="slot change requests are decided by the L5 admin flow"
+        )
 
 
 async def _notify_permission_request(

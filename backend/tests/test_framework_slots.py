@@ -545,11 +545,62 @@ def test_non_admin_owner_creates_request_and_can_withdraw(client: TestClient, en
     # L5 관리자는 이 맵의 viewer도 아닐 수 있다 — pending 조회는 체인 관리자에게 열려야 한다
     assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["can_decide"] is True
     assert "fw_slot_requested" in _notif_types(L5ADMIN)
+    # pending 중에도 맵이 public이면 일반 viewer는 200 (게이트는 role/side-admin/sysadmin 기준)
+    act_as("fws.stranger.np")
+    stranger_pending = client.get(f"/api/maps/{mid}/slot-changes/pending")
+    assert stranger_pending.status_code == 200 and stranger_pending.json() is not None
     # 철회는 요청자만
+    act_as(L5ADMIN)
     assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 403
     act_as(OWNER)
     assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 204
     assert client.get(f"/api/maps/{mid}/slot-changes/pending").json() is None
+    # pending이 없을 때도 게이트는 먼저 — 비공개 맵 + 무권한자는 403 (fix round 1 #1)
+    priv = client.post(
+        "/api/maps",
+        json={"name": "fws private pending gate", "visibility": "private", "owning_department": DEPT},
+    ).json()["id"]
+    act_as("fws.stranger.np")
+    assert client.get(f"/api/maps/{priv}/slot-changes/pending").status_code == 403
+
+
+def test_decide_endpoint_guards_fw_slot_until_task_2(client: TestClient, enforce: None) -> None:
+    """일반 승인 decide 엔드포인트는 fw_slot을 다루지 않는다 — Task 2의 L5 관리자 전용 플로우가 대신할 때까지 409(임시 가드)."""
+    from app.models import ApprovalRequest
+
+    l5 = _seed_category("FWS-Q7", "가드", level=5)
+    act_as(OWNER)
+    mid = _create_map(client, "fws decide guard map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r.status_code == 200 and r.json()["mode"] == "requested"
+    request_id = r.json()["request_id"]
+    act_as(SYSADMIN)
+    decide = client.post(f"/api/approval-requests/{request_id}/decide", json={"decision": "approve"})
+    assert decide.status_code == 409
+
+    async def _status(session):
+        row = await session.get(ApprovalRequest, request_id)
+        return row.status
+
+    assert _run(_status) == "pending"
+    assert _map_row(mid)["category_id"] is None
+
+
+def test_owner_who_becomes_direct_admin_self_applies(client: TestClient, enforce: None) -> None:
+    """구 409 테스트(트랙 C에서 삭제) 커버리지 복원 — 비관리자는 요청, 직속 관리자로 임명되면 철회 후 즉시 적용."""
+    l5 = _seed_category("FWS-Q8", "자기결재", level=5)
+    act_as(OWNER)
+    mid = _create_map(client, "fws self-apply map")
+    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r.status_code == 200 and r.json()["mode"] == "requested"
+    act_as(SYSADMIN)
+    client.put(f"/api/categories/{l5}/permissions",
+               json={"permissions": [{"principal_type": "user", "principal_id": OWNER}]})
+    act_as(OWNER)
+    assert client.delete(f"/api/maps/{mid}/slot-changes/pending").status_code == 204
+    r2 = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    assert r2.status_code == 200 and r2.json()["mode"] == "applied"
+    assert _map_row(mid)["category_id"] == l5
 
 
 def test_legacy_adapters_follow_slot_policy(client: TestClient, enforce: None) -> None:
