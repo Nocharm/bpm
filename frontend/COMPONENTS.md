@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 222개 · 2026-09-06 기준
+총 223개 · 2026-09-06 기준
 
 ## components/
 
@@ -74,6 +74,7 @@
 | `inspector-panel.tsx` | `InspectorPanel` | 우측 인스펙터 (R5) | `app/maps/[mapId]/page.tsx` |
 | `io-import-modal.tsx` | `IoImportModal` | IO 항목 불러오기 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `io-peers-menu.tsx` | `IoPeersMenu` | 링크 항목의 연결 노드 드롭다운 | `app/maps/[mapId]/page.tsx` |
+| `l5-node-info-panel.tsx` | `L5NodeInfoPanel` | L5 캔버스 좌하단 "기타 정보" 플로팅 | `app/maps/[mapId]/page.tsx` |
 | `ldap-login-form.tsx` | `LdapLoginForm` |   | `app/login/page.tsx` |
 | `link-preview-panel.tsx` | `LinkPreviewPanel` | 링크 미리보기 패널 | `app/maps/[mapId]/page.tsx` |
 | `map-inspector-tab.tsx` | `MapInspectorTab` | NEW 인스펙터 맵 탭(좁은 폭) | `app/maps/[mapId]/page.tsx` |

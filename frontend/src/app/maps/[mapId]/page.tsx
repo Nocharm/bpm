@@ -98,6 +98,7 @@ import { ChangeSummarySection } from "@/components/change-summary-section";
 import { FrameworkConnectDialog } from "@/components/framework-connect-dialog";
 import { makeOptimisticRef } from "@/lib/framework-connect";
 import { deriveSlotState, isRecentHandover } from "@/lib/framework-slot-state";
+import { L5NodeInfoPanel, type L5NodeInfo } from "@/components/l5-node-info-panel";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
 import { SectionPanel } from "@/components/section-panel";
 import { WordCreateModal } from "@/components/word-create-modal";
@@ -1190,6 +1191,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [linkageCategoryId, setLinkageCategoryId] = useState<number | null>(null);
   const [linkageCategoryPath, setLinkageCategoryPath] = useState<string | null>(null);
   const [reconcileMissing, setReconcileMissing] = useState(0);
+  // 좌하단 "기타 정보" 호버 패널 — subprocess 노드 호버 시 slot 이력 표시 (spec 2026-09-06 §7.1)
+  const [hoverNodeInfo, setHoverNodeInfo] = useState<L5NodeInfo | null>(null);
   // SP 역참조(지정 메타+이 맵을 링크한 맵 목록) — designated일 때만 Subprocess 탭이 나타난다
   const [spUsage, setSpUsage] = useState<SubprocessUsage | null>(null);
   const [spUsageReload, setSpUsageReload] = useState(0);
@@ -9587,6 +9590,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                       onConnectEnd={handleConnectEnd}
                       connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}
+                      onNodeMouseEnter={(_, node) => {
+                        if (!isFrameworkMap || node.data.nodeType !== "subprocess" || !node.data.spSlotInfo) return;
+                        setHoverNodeInfo({ name: node.data.label, ...node.data.spSlotInfo });
+                      }}
+                      onNodeMouseLeave={() => setHoverNodeInfo(null)}
                       onNodeClick={(_, node) => {
                         // 인라인 자식(읽기전용) — 선택 효과(테두리·불투명)는 RF가 처리하고, selectedId도
                         // 동기화해 아웃라인 행 하이라이트와 일치시킨다(깊이 무관 통일). 탐색 없음.
@@ -10024,6 +10032,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </span>
                       </div>
                     )}
+                    {/* 좌하단 "기타 정보" 호버 패널 — subprocess 노드 호버 시 slot 이력(spec 2026-09-06 §7.1) */}
+                    {isFrameworkMap && <L5NodeInfoPanel info={hoverNodeInfo} />}
                   </div>
                 ) : (
                   <ScopePreview
