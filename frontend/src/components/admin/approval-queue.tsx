@@ -38,6 +38,7 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatKst } from "@/lib/datetime";
+import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { genId } from "@/lib/id";
@@ -50,11 +51,12 @@ interface Props {
 }
 
 // 큐가 렌더할 수 있는 ApprovalRequest.kind — 그 외(map_rename/sp_designation 등)는 items 합성 시 제외 (아래 isQueueRequestKind)
-type QueueRequestKind = "permission_downgrade" | "visibility_change" | "fw_confirm";
+type QueueRequestKind = "permission_downgrade" | "visibility_change" | "fw_confirm" | "fw_slot";
 const QUEUE_REQUEST_KINDS: ReadonlySet<string> = new Set<QueueRequestKind>([
   "permission_downgrade",
   "visibility_change",
   "fw_confirm",
+  "fw_slot",
 ]);
 
 type QueueItem =
@@ -246,6 +248,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <ArrowLeftRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-secondary" />;
     if (item.kind === "fw_confirm")
       return <BadgeCheck size={14} strokeWidth={1.5} className="shrink-0 text-accent" />;
+    if (item.kind === "fw_slot")
+      return <ArrowLeftRight size={14} strokeWidth={1.5} className="shrink-0 text-accent" />;
     const toPublic = String(item.req.payload.to_visibility ?? "") === "public";
     return toPublic ? (
       <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
@@ -266,6 +270,8 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
       return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindCheckout")}</Pill>;
     if (item.kind === "fw_confirm")
       return <Pill className="border-accent text-accent">{t("perm.sysadmin.kindFwConfirm")}</Pill>;
+    if (item.kind === "fw_slot")
+      return <Pill className="border-accent text-accent">{t("perm.sysadmin.kindFwSlot")}</Pill>;
     return <Pill className="border-hairline text-ink-secondary">{t("perm.sysadmin.kindVisibility")}</Pill>;
   }
   function brief(item: QueueItem): ReactNode {
@@ -290,6 +296,27 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
             {t("perm.sysadmin.mapLabel")} {item.req.map_id}
           </Pill>
           {note && <span className="truncate text-caption text-ink-secondary">{note}</span>}
+        </>
+      );
+    }
+    if (item.kind === "fw_slot") {
+      const p = item.req.payload;
+      const action = isSlotAction(p.action) ? t(SLOT_ACTION_KEY[p.action]) : String(p.action ?? "");
+      const sides = Array.isArray(p.sides) ? p.sides.length : 0;
+      const done = p.approvals && typeof p.approvals === "object" ? Object.keys(p.approvals).length : 0;
+      const target = typeof p.to_map_name === "string" ? p.to_map_name : "";
+      return (
+        <>
+          <Pill>
+            <MapIcon size={11} strokeWidth={1.5} />
+            {String(p.map_name ?? item.req.map_id)}
+          </Pill>
+          <span className="truncate text-caption text-ink-secondary">
+            {action}{target ? ` → ${target}` : ""}
+          </span>
+          {sides > 1 && (
+            <Pill className="border-hairline text-ink-tertiary">{t("slot.progress", { done: String(done), total: String(sides) })}</Pill>
+          )}
         </>
       );
     }
@@ -396,7 +423,7 @@ export function ApprovalQueue({ onToast, onCountChange }: Props) {
                         : String(item.req.payload.to_role)}
                     </Pill>
                   </DetailRow>
-                ) : item.kind === "fw_confirm" ? (
+                ) : item.kind === "fw_confirm" || item.kind === "fw_slot" ? (
                   typeof item.req.payload.note === "string" && item.req.payload.note.trim() ? (
                     <DetailRow label={t("perm.sysadmin.detailLabel")}>
                       <span className="text-caption text-ink">{item.req.payload.note}</span>

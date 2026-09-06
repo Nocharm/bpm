@@ -1,5 +1,6 @@
 // L5 캔버스 subprocess 노드의 슬롯 상태 파생 — refs(라이브)와 캔버스 L5 id로만 결정 (spec 2026-09-06 §6.2·§7.1)
-import type { SubprocessRef } from "./api";
+import type { SubprocessRef, SlotChangeAction } from "./api";
+import type { MessageKey } from "./i18n-messages";
 
 export type SlotState =
   | "placeholder" // linkedMapId 없음(미등록)
@@ -32,4 +33,17 @@ export function isRecentHandover(succeededAt: string | null | undefined, now: nu
   const at = Date.parse(succeededAt);
   if (!Number.isFinite(at) || at > now) return false;
   return now - at <= RECENT_HANDOVER_DAYS * 86_400_000;
+}
+
+// 슬롯 변경 액션 → i18n 라벨 키 — 승인 큐/대기 패널/인박스 3표면 공용 (Track C Task 3)
+export const SLOT_ACTION_KEY: Record<SlotChangeAction, MessageKey> = {
+  assign: "slot.action.assign",
+  unassign: "slot.action.unassign",
+  move: "slot.action.move",
+  replace: "slot.action.replace",
+  delete: "slot.action.delete",
+};
+
+export function isSlotAction(value: unknown): value is SlotChangeAction {
+  return typeof value === "string" && value in SLOT_ACTION_KEY;
 }

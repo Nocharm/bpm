@@ -55,6 +55,7 @@ import {
 } from "@/components/permissions/subprocess-designation-modal";
 import { clampToViewport } from "@/lib/clamp-viewport";
 import { useDirectory } from "@/lib/directory";
+import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { genId } from "@/lib/id";
@@ -89,6 +90,7 @@ function approvalTitle(a: InboxApproval, t: Translate): string {
     if (a.title === "permission_downgrade") return t("inbox.reqKind.permission_downgrade");
     if (a.title === "map_rename") return t("inbox.reqKind.map_rename");
     if (a.title === "sp_designation") return t("inbox.reqKind.sp_designation");
+    if (a.title === "fw_slot") return t("inbox.reqKind.fw_slot");
   }
   return a.title;
 }
@@ -114,6 +116,11 @@ function approvalSummary(a: InboxApproval, t: Translate): string {
     return from
       ? t("inbox.summary.sp_designation", { map: a.map_name, from })
       : t("inbox.summary.sp_designation_nofrom", { map: a.map_name });
+  }
+  if (a.kind === "approval_request" && a.title === "fw_slot") {
+    const raw = a.detail?.action;
+    const action = isSlotAction(raw) ? t(SLOT_ACTION_KEY[raw]) : String(raw ?? "");
+    return t("inbox.summary.fw_slot", { action, before: a.before ?? "-", after: a.after ?? "-" });
   }
   return t("inbox.summary.visibility_change", { before: a.before ?? "?", after: a.after ?? "?" });
 }

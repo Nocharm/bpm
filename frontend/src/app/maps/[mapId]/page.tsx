@@ -1213,6 +1213,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [myRole, setMyRole] = useState<"viewer" | "editor" | "owner" | null>(null);
   // 연계 캔버스 확정 버튼 노출 — sysadmin/직속 L5 관리자만 true (Track B Task 6)
   const [canConfirmFw, setCanConfirmFw] = useState(false);
+  // fw_slot 결정 버튼 노출 — sysadmin/직속 L5 관리자만 true (Track C Task 3)
+  const [canDecideSlot, setCanDecideSlot] = useState(false);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [managingApprovers, setManagingApprovers] = useState(false);
   // 점유권 이전 다이얼로그 / Transfer checkout dialog
@@ -2637,6 +2639,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         setLinkageCategoryPath(detail.linkage_category_path ?? null);
         setMyRole(detail.my_role);
         setCanConfirmFw(detail.can_confirm ?? false);
+        setCanDecideSlot(detail.can_decide_slot ?? false);
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
         setDocName(detail.doc_name ?? "");
@@ -3641,6 +3644,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         // 동봉 픽커 게이트(오너 전용)도 같은 스냅샷으로 — 권한이 바뀌었으면 즉시 반영.
         setMyRole(detail.my_role);
         setCanConfirmFw(detail.can_confirm ?? false);
+        setCanDecideSlot(detail.can_decide_slot ?? false);
         // 하단 버전 기록(MapDetailCard) 실시간 갱신 — 단계 이벤트 추가/상태 변경 반영.
         setVersionsReloadKey((k) => k + 1);
         await refreshWorkflow();
@@ -11638,6 +11642,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             isOwner={myRole === "owner"}
                             isApprover={isApprover || isSysadmin}
                             canConfirm={canConfirmFw}
+                            canDecideSlot={canDecideSlot}
                             onCountChange={setEditorApprovalsCount}
                             onDecided={() => void refreshWorkflow()}
                             onToast={(item) => showToast(item.message, item.tone)}

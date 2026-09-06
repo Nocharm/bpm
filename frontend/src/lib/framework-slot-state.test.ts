@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SubprocessRef } from "./api";
-import { deriveSlotState, isRecentHandover, RECENT_HANDOVER_DAYS } from "./framework-slot-state";
+import { deriveSlotState, isRecentHandover, isSlotAction, RECENT_HANDOVER_DAYS, SLOT_ACTION_KEY } from "./framework-slot-state";
 
 const base = (over: Partial<SubprocessRef>): SubprocessRef =>
   ({
@@ -29,6 +29,17 @@ describe("deriveSlotState", () => {
   it("contained vs external by canvas category", () => {
     expect(deriveSlotState(base({ category_id: 5 }), 7, 5)).toBe("contained");
     expect(deriveSlotState(base({ category_id: 9 }), 7, 5)).toBe("external");
+  });
+});
+
+describe("isSlotAction", () => {
+  it("accepts the 5 known actions and rejects everything else", () => {
+    expect(isSlotAction("assign")).toBe(true);
+    expect(isSlotAction("bogus")).toBe(false);
+    expect(isSlotAction(undefined)).toBe(false);
+  });
+  it("SLOT_ACTION_KEY maps every action to its i18n key", () => {
+    expect(SLOT_ACTION_KEY.move).toBe("slot.action.move");
   });
 });
 

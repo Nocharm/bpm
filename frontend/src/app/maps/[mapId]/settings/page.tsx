@@ -468,6 +468,7 @@ export default function SettingsPage() {
                       isOwner={isOwner}
                       isApprover={canDecide}
                       canConfirm={false}
+                      canDecideSlot={false}
                       onCountChange={setApprovalsCount}
                       onDecided={() => void refreshMap()}
                       onToast={(item) => showToast(item.message, item.tone)}

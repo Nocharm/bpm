@@ -118,6 +118,8 @@ export interface MapSummary {
 
 export interface MapDetail extends MapSummary {
   versions: VersionDetail[];
+  // fw_slot 결정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true(상세 응답에서만 채움) (Track C Task 3)
+  can_decide_slot?: boolean;
 }
 
 export interface GraphNode {
@@ -2800,6 +2802,18 @@ export function postSlotChange(mapId: number, body: SlotChangeIn): Promise<SlotC
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+export interface PendingSlotChange {
+  request: ApprovalRequest;
+  sides: SlotChangeSide[];
+  remaining: number[];
+  can_decide: boolean;
+}
+export function getPendingSlotChange(mapId: number): Promise<PendingSlotChange | null> {
+  return request<PendingSlotChange | null>(`/maps/${mapId}/slot-changes/pending`);
+}
+export function withdrawSlotChange(mapId: number): Promise<void> {
+  return request<void>(`/maps/${mapId}/slot-changes/pending`, { method: "DELETE" });
 }
 
 // 카테고리 생성(sysadmin) — parent_id 미지정 시 루트(L1). code 미지정 시 서버가 `ui-{uuid8}` 자동 채번.
