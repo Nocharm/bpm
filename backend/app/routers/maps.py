@@ -752,6 +752,9 @@ async def get_map(
             ).all()
         )
         found_map.category_path = category_paths.get(found_map.category_id)
+        found_map.can_decide_slot = logic.is_sysadmin(user) or await is_direct_l5_admin(
+            session, user, found_map.category_id
+        )
     if found_map.mode == "framework":
         # 캔버스 → 결착 카테고리 역조회 — FrameworkChip·자동 보강 호출 소스 (design 2026-08-28 §8)
         linkage_cat_id = await session.scalar(

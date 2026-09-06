@@ -13,6 +13,13 @@ from app import workflow
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.framework_confirm import perform_framework_confirm
+from app.framework_slots import (
+    apply_slot_change,
+    change_from_payload,
+    record_slot_approvals,
+    remaining_sides,
+    validate_slot_change,
+)
 from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
 from app.permissions import logic
 from app.permissions.access import (
@@ -611,10 +618,18 @@ async def decide_approval_request(
                     status_code=403, detail="direct L5 admin or sysadmin only"
                 )
     elif req.kind == "fw_slot":
-        # 임시 가드 — Task 2가 L5 관리자 전용 decide 플로우로 교체할 때까지 이 경로 차단
-        raise HTTPException(
-            status_code=409, detail="slot change requests are decided by the L5 admin flow"
-        )
+        # 슬롯 변경 결정권 = 남은 side 중 하나의 직속 L5 관리자 또는 sysadmin (spec 2026-09-06 §4.2)
+        if not logic.is_sysadmin(user):
+            remaining = await remaining_sides(session, req)
+            allowed = False
+            for cid in remaining:
+                if await is_direct_l5_admin(session, user, cid):
+                    allowed = True
+                    break
+            if not allowed:
+                raise HTTPException(
+                    status_code=403, detail="direct L5 admin of a side or sysadmin only"
+                )
     else:
         await assert_approver_or_sysadmin(session, user, req.map_id)
     if req.status != "pending":
@@ -636,6 +651,14 @@ async def decide_approval_request(
         await session.commit()
         await session.refresh(req)
         return req
+
+    if req.kind == "fw_slot":
+        left = await record_slot_approvals(session, req, user)
+        if left:
+            # 아직 다른 side의 승인이 남았다 — pending 유지, decided_by는 마지막 결정자 기록
+            await session.commit()
+            await session.refresh(req)
+            return req
 
     # approve → payload 적용
     await _apply_request(session, req)
@@ -735,10 +758,14 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
         # 전이라 req.status는 pending 유지(map_rename의 이름 선점 경합과 동일 패턴)
         await perform_framework_confirm(session, found_map, req.decided_by, major=False)
     elif req.kind == "fw_slot":
-        # decide_approval_request가 이미 409로 막지만, 방어적으로 여기서도 차단(임시 — Task 2가 교체)
-        raise HTTPException(
-            status_code=409, detail="slot change requests are decided by the L5 admin flow"
+        found_map = await session.get(ProcessMap, req.map_id)
+        if found_map is None or found_map.deleted_at is not None:
+            return  # 멱등 — 삭제된 맵이면 적용 없이 applied
+        # 승인~적용 사이 전제가 깨졌으면(target이 슬롯을 얻음 등) 409 전파 → decide 커밋 전이라 pending 유지
+        plan = await validate_slot_change(
+            session, change_from_payload(req.map_id, req.payload), req.requested_by
         )
+        await apply_slot_change(session, plan, req.decided_by or req.requested_by, request_id=req.id)
 
 
 async def _notify_permission_request(
@@ -790,6 +817,23 @@ async def _notify_permission_decision(
                 f"Your subprocess registration request for '{map_name}' was {outcome}{suffix}"
             ),
             payload={"map_name": map_name, "outcome": outcome, "reason": reason},
+        )
+        return
+    if req.kind == "fw_slot":
+        if outcome == "approved":
+            return  # 적용 알림(fw_slot_applied)은 apply_slot_change가 owner·관리자에게 이미 보냈다
+        map_name = req.payload.get("map_name", "")
+        actor_name = (
+            await workflow.get_display_name(session, req.decided_by) if req.decided_by else ""
+        )
+        await workflow.create_notifications(
+            session,
+            [req.requested_by],
+            type="fw_slot_rejected",
+            map_id=req.map_id,
+            message=f"Your slot change request on '{map_name}' was rejected{suffix}",
+            payload={"map_name": map_name, "actor": req.decided_by, "actor_name": actor_name,
+                     "action": req.payload.get("action"), "outcome": outcome, "reason": reason},
         )
         return
     if req.kind == "fw_confirm":

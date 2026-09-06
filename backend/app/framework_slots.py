@@ -444,6 +444,19 @@ async def remaining_sides(session: AsyncSession, req: ApprovalRequest) -> list[i
     return [int(c) for c in req.payload.get("sides", []) if str(c) not in approvals]
 
 
+async def record_slot_approvals(session: AsyncSession, req: ApprovalRequest, user: str) -> list[int]:
+    """호출자가 관리자인 side 전부를 approvals에 기록 — JSON 컬럼은 재할당해야 변경이 감지된다. 남은 side 반환."""
+    sides = [int(c) for c in req.payload.get("sides", [])]
+    approvals = dict(req.payload.get("approvals") or {})
+    for cid in sides:
+        if str(cid) in approvals:
+            continue
+        if logic.is_sysadmin(user) or await is_direct_l5_admin(session, user, cid):
+            approvals[str(cid)] = {"by": user, "at": now_kst().isoformat()}
+    req.payload = {**req.payload, "approvals": approvals}
+    return [c for c in sides if str(c) not in approvals]
+
+
 async def notify_slot_requested(
     session: AsyncSession, plan: SlotPlan, req: ApprovalRequest, actor: str
 ) -> None:

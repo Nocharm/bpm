@@ -765,6 +765,8 @@ class MapOut(BaseModel):
     linkage_category_path: str | None = None
     # 확정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true (트랜지언트, Track B Task 3)
     can_confirm: bool = False
+    # 슬롯 변경 요청 결정권(직속 L5 관리자/sysadmin) — 승인 탭 fw_slot 행 게이트
+    can_decide_slot: bool = False
     # framework 라이브 draft 열람권 — sysadmin·자기/조상 카테고리 권한자만 (룰 재정립 2026-09-02).
     # false면 상세 versions에서 draft가 제외돼 내려간다. 일반 맵은 항상 true(무의미).
     can_view_draft: bool = True

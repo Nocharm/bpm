@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import workflow
 from app.auth import get_current_user
 from app.db import get_session
+from app.framework_slots import category_path, remaining_sides
 from app.models import (
     ApprovalRequest,
     CheckoutRequest,
@@ -20,6 +21,7 @@ from app.models import (
     ProcessMap,
     VersionApproval,
 )
+from app.permissions.access import get_category_admin_logins, is_direct_l5_admin
 from app.permissions.logic import is_sysadmin
 from app.schemas import InboxApprovalOut
 
@@ -113,8 +115,8 @@ async def list_inbox_approvals(
         .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
         .where(
             ApprovalRequest.status == "pending",
-            # map_rename·sp_designation은 오너 게이트 — 4·5번 블록에서 처리
-            ApprovalRequest.kind.not_in(["map_rename", "sp_designation"]),
+            # map_rename·sp_designation은 오너 게이트, fw_slot은 side 체인 게이트 — 4·5·6번 블록에서 처리
+            ApprovalRequest.kind.not_in(["map_rename", "sp_designation", "fw_slot"]),
             ProcessMap.deleted_at.is_(None),
         )
     )
@@ -231,6 +233,57 @@ async def list_inbox_approvals(
                 "before": None,
                 "after": None,
                 "principal": None,
+            }
+        )
+
+    # 6) 슬롯 변경 요청 — 남은 side의 직속 L5 관리자, 또는 sysadmin (spec 2026-09-06 §4.2)
+    fs_q = (
+        select(ApprovalRequest, ProcessMap)
+        .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+        .where(
+            ApprovalRequest.status == "pending",
+            ApprovalRequest.kind == "fw_slot",
+            ProcessMap.deleted_at.is_(None),
+        )
+    )
+    for req, pm in (await session.execute(fs_q)).all():
+        remaining = await remaining_sides(session, req)
+        if not sysadmin:
+            allowed = False
+            for cid in remaining:
+                if await is_direct_l5_admin(session, user, cid):
+                    allowed = True
+                    break
+            if not allowed:
+                continue
+        deciders: list[str] = []
+        for cid in remaining:
+            deciders += await get_category_admin_logins(session, cid, direct_only=True)
+        deciders = list(dict.fromkeys(deciders))
+        payload = req.payload
+        after = payload.get("to_map_name") or await category_path(session, payload.get("to_category_id"))
+        items.append(
+            {
+                "kind": "approval_request",
+                "id": req.id,
+                "title": req.kind,
+                "map_id": pm.id,
+                "map_name": pm.name,
+                "requester": req.requested_by,
+                "status": req.status,
+                "created_at": req.created_at,
+                "version_id": None,
+                "detail": payload,
+                "updated_at": pm.updated_at,
+                "version_label": None,
+                "version_number": None,
+                "holder": None,
+                "before": await category_path(session, payload.get("from_category_id")),
+                "after": after,
+                "principal": None,
+                "deciders": deciders,
+                "pending_on": deciders,
+                "approved_by": [a["by"] for a in (payload.get("approvals") or {}).values()],
             }
         )
 

@@ -564,28 +564,6 @@ def test_non_admin_owner_creates_request_and_can_withdraw(client: TestClient, en
     assert client.get(f"/api/maps/{priv}/slot-changes/pending").status_code == 403
 
 
-def test_decide_endpoint_guards_fw_slot_until_task_2(client: TestClient, enforce: None) -> None:
-    """일반 승인 decide 엔드포인트는 fw_slot을 다루지 않는다 — Task 2의 L5 관리자 전용 플로우가 대신할 때까지 409(임시 가드)."""
-    from app.models import ApprovalRequest
-
-    l5 = _seed_category("FWS-Q7", "가드", level=5)
-    act_as(OWNER)
-    mid = _create_map(client, "fws decide guard map")
-    r = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5})
-    assert r.status_code == 200 and r.json()["mode"] == "requested"
-    request_id = r.json()["request_id"]
-    act_as(SYSADMIN)
-    decide = client.post(f"/api/approval-requests/{request_id}/decide", json={"decision": "approve"})
-    assert decide.status_code == 409
-
-    async def _status(session):
-        row = await session.get(ApprovalRequest, request_id)
-        return row.status
-
-    assert _run(_status) == "pending"
-    assert _map_row(mid)["category_id"] is None
-
-
 def test_owner_who_becomes_direct_admin_self_applies(client: TestClient, enforce: None) -> None:
     """구 409 테스트(트랙 C에서 삭제) 커버리지 복원 — 비관리자는 요청, 직속 관리자로 임명되면 철회 후 즉시 적용."""
     l5 = _seed_category("FWS-Q8", "자기결재", level=5)
@@ -670,3 +648,107 @@ def test_applied_notification_recipients(client: TestClient, enforce: None) -> N
         return sorted({r.recipient for r in rows})
 
     assert _run(_recipients) == sorted({"fws.nt.upper", "fws.nt.direct", "fws.nt.owner", "fws.nt.succ"})
+
+
+# ── 트랙 C: 결정(다측)·적용·인박스 ────────────────────────────────────────────
+
+L5ADMIN_B = "fws.l5admin.b"
+BOTH_ADMIN = "fws.both.admin"
+
+
+def _decide(client: TestClient, request_id: int, decision: str, reason: str | None = None):
+    body = {"decision": decision}
+    if reason:
+        body["reason"] = reason
+    return client.post(f"/api/approval-requests/{request_id}/decide", json=body)
+
+
+def test_move_needs_both_sides_and_same_person_satisfies_both(client: TestClient, enforce: None) -> None:
+    l5a = _seed_l5_with_admin(client, "FWS-M5A", "이동A", admin=L5ADMIN)
+    l5b = _seed_l5_with_admin(client, "FWS-M5B", "이동B", admin=L5ADMIN_B)
+    act_as(SYSADMIN)
+    for cid in (l5a, l5b):
+        client.put(f"/api/categories/{cid}/permissions", json={"permissions": [
+            {"principal_type": "user", "principal_id": L5ADMIN if cid == l5a else L5ADMIN_B},
+            {"principal_type": "user", "principal_id": BOTH_ADMIN},
+        ]})
+    act_as(OWNER)
+    mid = _create_map(client, "fws move map")
+    # 셋업: sysadmin이 슬롯을 먼저 준다(즉시 적용)
+    act_as(SYSADMIN)
+    assert client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5a}).json()["mode"] == "applied"
+    # 비관리자 owner의 이동 요청 → 양측 side
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5b}).json()["request_id"]
+    # 무관한 사용자 403, A측 관리자 승인 → 아직 pending(B 남음)
+    act_as("fws.nobody")
+    assert _decide(client, req_id, "approve").status_code == 403
+    act_as(L5ADMIN)
+    r = _decide(client, req_id, "approve")
+    assert r.status_code == 200 and r.json()["status"] == "pending"
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json()["remaining"] == [l5b]
+    assert _map_row(mid)["category_id"] == l5a
+    # B측 승인 → applied + 이동 반영
+    act_as(L5ADMIN_B)
+    r2 = _decide(client, req_id, "approve")
+    assert r2.status_code == 200 and r2.json()["status"] == "applied"
+    assert _map_row(mid)["category_id"] == l5b
+    assert client.get(f"/api/maps/{mid}/slot-changes/pending").json() is None
+    # 양쪽 관리자 한 사람이면 한 번에 적용
+    act_as(OWNER)
+    req2 = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "move", "to_category_id": l5a}).json()["request_id"]
+    act_as(BOTH_ADMIN)
+    assert _decide(client, req2, "approve").json()["status"] == "applied"
+    assert _map_row(mid)["category_id"] == l5a
+    # 양쪽 관리자라도 맵 owner가 아니면 변경을 시작할 수는 없다(승인만) — 경로 의존성 403
+    act_as(BOTH_ADMIN)
+    assert client.post(f"/api/maps/{mid}/slot-changes", json={"action": "unassign"}).status_code == 403
+
+
+def test_reject_and_stale_apply_keep_state(client: TestClient, enforce: None) -> None:
+    l5 = _seed_l5_with_admin(client, "FWS-J5", "거절", admin=L5ADMIN)
+    act_as(OWNER)
+    src = _create_map(client, "fws reject src")
+    tgt = _create_map(client, "fws reject tgt")
+    act_as(SYSADMIN)
+    client.post(f"/api/maps/{src}/slot-changes", json={"action": "assign", "to_category_id": l5})
+    act_as(OWNER)
+    req_id = client.post(f"/api/maps/{src}/slot-changes", json={"action": "replace", "to_map_id": tgt}).json()["request_id"]
+    act_as(L5ADMIN)
+    r = _decide(client, req_id, "reject", reason="not now")
+    assert r.status_code == 200 and r.json()["status"] == "rejected"
+    assert _map_row(src)["category_id"] == l5 and _map_row(tgt)["category_id"] is None
+    assert "fw_slot_rejected" in _notif_types(OWNER)
+    # 재요청 후 승인 사이에 target이 다른 슬롯을 얻으면 적용은 409로 멈추고 pending 유지
+    act_as(OWNER)
+    req2 = client.post(f"/api/maps/{src}/slot-changes", json={"action": "replace", "to_map_id": tgt}).json()["request_id"]
+    other = _seed_l5_with_admin(client, "FWS-J5X", "거절X", admin=L5ADMIN)
+    act_as(SYSADMIN)
+    client.post(f"/api/maps/{tgt}/slot-changes", json={"action": "assign", "to_category_id": other})
+    act_as(L5ADMIN)
+    r3 = _decide(client, req2, "approve")
+    assert r3.status_code == 409
+    assert client.get(f"/api/maps/{src}/slot-changes/pending").json()["request"]["status"] == "pending"
+
+
+def test_inbox_and_detail_expose_slot_decision_rights(client: TestClient, enforce: None) -> None:
+    l5 = _seed_l5_with_admin(client, "FWS-I5", "인박스", admin=L5ADMIN)
+    act_as(OWNER)
+    mid = _create_map(client, "fws inbox map")
+    req_id = client.post(f"/api/maps/{mid}/slot-changes", json={"action": "assign", "to_category_id": l5}).json()["request_id"]
+    act_as(L5ADMIN)
+    # 실측: /api/inbox/approvals가 목록을 직접 반환한다(래핑 키 없음, routers/inbox.py response_model=list[InboxApprovalOut])
+    inbox = client.get("/api/inbox/approvals").json()
+    mine = [it for it in inbox if it["kind"] == "approval_request" and it["id"] == req_id]
+    assert len(mine) == 1 and mine[0]["title"] == "fw_slot" and mine[0]["after"] is not None
+    act_as("fws.nobody")
+    assert not [it for it in client.get("/api/inbox/approvals").json() if it.get("id") == req_id]
+    act_as(SYSADMIN)
+    assert any(r["id"] == req_id for r in client.get("/api/approval-requests").json())
+    _decide(client, req_id, "approve")
+    detail = client.get(f"/api/maps/{mid}").json()
+    assert detail["can_decide_slot"] is True  # sysadmin
+    act_as(L5ADMIN)
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is True
+    act_as(OWNER)
+    assert client.get(f"/api/maps/{mid}").json()["can_decide_slot"] is False
