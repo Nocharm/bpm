@@ -35,6 +35,7 @@ import { buildDeptPathTree } from "@/lib/dept-path-tree";
 import { useDirectoryDepartments } from "@/lib/directory";
 import {
   buildDeptPathIndex,
+  resolveDepartmentPaths,
   buildLibraryDeptOptions,
   buildMyDeptChain,
 } from "@/lib/library-dept-options";
@@ -169,10 +170,23 @@ export function ProcessLibraryPanel({
     [rows],
   );
 
+  // 행의 부서(sp_department)는 리프명만 담기는 일이 많다 — 조직도에서 유일하게 풀리면 경로로 정규화해
+  // 트리 위치·필터·한글명·조직 카드가 같은 값을 본다. 중복 리프(두 상위 아래 같은 이름)는 그대로 두고
+  // 필터만 후보 전부로 매칭한다(applyLibraryFilters의 deptIndex).
+  const deptIndex = useMemo(() => buildDeptPathIndex(directoryDepts), [directoryDepts]);
   // 현재 맵 제외(자기 자신 링크 불가) — refsByMap은 순환 판별용이라 전체 rows 유지.
   const linkableRows = useMemo(
-    () => rows.filter((r) => r.map_id !== currentMapId),
-    [rows, currentMapId],
+    () =>
+      rows
+        .filter((r) => r.map_id !== currentMapId)
+        .map((r) => {
+          if (!r.department) return r;
+          const candidates = resolveDepartmentPaths(r.department, deptIndex);
+          return candidates.length === 1 && candidates[0] !== r.department
+            ? { ...r, department: candidates[0] }
+            : r;
+        }),
+    [rows, currentMapId, deptIndex],
   );
   // 부서 트리 소스 — 조직도 부서(약 500) ∪ 행에만 있는 부서(컨설턴트 임포트 등).
   // filters 자체가 아니라 linkableRows에서 파생해, 필터를 걸수록 다른 옵션이 사라지지 않는다.
@@ -180,8 +194,6 @@ export function ProcessLibraryPanel({
     () => buildLibraryDeptOptions(directoryDepts, linkableRows.map((r) => r.department)),
     [directoryDepts, linkableRows],
   );
-  // 행의 부서(sp_department)는 리프명만 담기는 일이 많다 — 필터가 조직도 경로로 해석해 매칭한다.
-  const deptIndex = useMemo(() => buildDeptPathIndex(directoryDepts), [directoryDepts]);
   const chainPaths = useMemo(() => buildMyDeptChain(myOrgPath), [myOrgPath]);
   // 팝오버는 "내 위쪽"만 — 루트→내 부서 체인(부서 미지정이면 트리 루트)에, 체인 밖에서 이미
   // 선택된 부서를 덧붙인다(활성 필을 팝오버에서도 해제할 수 있어야 한다). 전체 탐색은 플라이아웃.
@@ -432,6 +444,15 @@ export function ProcessLibraryPanel({
                         style={{ paddingLeft: `${(dept.split("/").length - 1) * 8 + 4}px` }}
                         className="group flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
                       >
+                        {/* 체크는 이름 앞 자리를 지키되 호버·포커스·선택 상태에서만 보인다 */}
+                        <CheckInput
+                          data-id={`library-filter-dept-${index}`}
+                          checked={checked}
+                          onChange={() => toggleDepartment(dept)}
+                          className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                            checked ? "" : "opacity-0"
+                          }`}
+                        />
                         <span className="min-w-0 flex-1 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
                         {dept === myOrgPath && (
                           <span
@@ -441,15 +462,6 @@ export function ProcessLibraryPanel({
                             {t("library.filterDeptMine")}
                           </span>
                         )}
-                        {/* 체크는 이름 뒤, 호버·포커스·선택 상태에서만 보인다 */}
-                        <CheckInput
-                          data-id={`library-filter-dept-${index}`}
-                          checked={checked}
-                          onChange={() => toggleDepartment(dept)}
-                          className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
-                            checked ? "" : "opacity-0"
-                          }`}
-                        />
                       </label>
                     );
                   })}

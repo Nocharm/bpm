@@ -171,10 +171,22 @@ export function LibraryDeptFlyout({
               else rowRefs.current.delete(node.path);
             }}
             title={node.path}
-            className={`group flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink transition-colors duration-350 hover:bg-surface-alt ${
+            // 행 클릭 = 체크 토글(label 기본), 더블클릭 = 펼침/접힘(쉐브론과 동일) — 두 번의 클릭이 체크를 왕복시켜 상태는 그대로 남는다
+            onDoubleClick={() => {
+              if (node.children.length > 0) toggleNode(node);
+            }}
+            className={`group flex min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink transition-colors duration-350 hover:bg-surface-alt ${
               flashPath === node.path ? "bg-accent-tint" : ""
             }`}
           >
+            {/* 체크는 이름 앞 자리를 지키되 호버·포커스·선택 상태에서만 보인다 (사용자 지시 2026-09-07) */}
+            <CheckInput
+              checked={selected.includes(node.path)}
+              onChange={() => onToggle(node.path)}
+              className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                selected.includes(node.path) ? "" : "opacity-0"
+              }`}
+            />
             <span className="min-w-0 flex-1 truncate">{formatDeptName(node.path, lang, koreanDeptByPath)}</span>
             {node.path === myOrgPath && (
               <span
@@ -184,14 +196,6 @@ export function LibraryDeptFlyout({
                 {t("library.filterDeptMine")}
               </span>
             )}
-            {/* 체크는 이름 뒤, 호버·포커스·선택 상태에서만 보인다 (사용자 지시 2026-09-07) */}
-            <CheckInput
-              checked={selected.includes(node.path)}
-              onChange={() => onToggle(node.path)}
-              className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
-                selected.includes(node.path) ? "" : "opacity-0"
-              }`}
-            />
           </label>
         </div>
         {showChildren && (
