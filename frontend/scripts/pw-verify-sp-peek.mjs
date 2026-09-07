@@ -134,7 +134,7 @@ async function newPage(devUser) {
 
   // [3] 미등록 행 — 안내 + Add=확인 체인 (토글은 필터 팝오버 안으로 이동 — 2026-09-07 필터 필)
   await page.click('[data-id="library-filter-open"]');
-  await page.click('[data-id="library-unregistered-toggle"] input');
+  await page.click('[data-id="library-unregistered-toggle"]');
   await page.waitForTimeout(700);
   const unregRow = page.locator('[data-id="process-library-panel"] [data-id="library-unregistered-badge"]').first();
   await unregRow.click();

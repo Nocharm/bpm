@@ -8,6 +8,7 @@ import { Filter, Network, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
+import { CheckInput } from "@/components/check-input";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { OrgInfoModal } from "@/components/org-info-modal";
 import { useKoreanDeptByPath } from "@/components/map-ownership-section";
@@ -340,12 +341,11 @@ export function ProcessLibraryPanel({
                   {distinctDepartments.map((dept, index) => (
                     <label
                       key={dept}
-                      data-id={`library-filter-dept-${index}`}
                       title={dept}
                       className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
                     >
-                      <input
-                        type="checkbox"
+                      <CheckInput
+                        data-id={`library-filter-dept-${index}`}
                         checked={filters.departments.includes(dept)}
                         onChange={() => toggleDepartment(dept)}
                       />
@@ -358,11 +358,10 @@ export function ProcessLibraryPanel({
                   {(["owner", "editor", "viewer"] as const).map((role) => (
                     <label
                       key={role}
-                      data-id={`library-filter-role-${role}`}
                       className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
                     >
-                      <input
-                        type="checkbox"
+                      <CheckInput
+                        data-id={`library-filter-role-${role}`}
                         checked={filters.roles.includes(role)}
                         onChange={() => toggleRole(role)}
                       />
@@ -370,12 +369,9 @@ export function ProcessLibraryPanel({
                     </label>
                   ))}
                 </div>
-                <label
-                  data-id="library-unregistered-toggle"
-                  className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary"
-                >
-                  <input
-                    type="checkbox"
+                <label className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary">
+                  <CheckInput
+                    data-id="library-unregistered-toggle"
                     checked={filters.showUnregistered}
                     onChange={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
                   />

@@ -146,7 +146,7 @@ try {
 
   // 토글 ON — 미등록 행 + 배지 등장 (토글은 필터 팝오버 안으로 이동 — 2026-09-07 필터 필)
   await panel.locator('[data-id="library-filter-open"]').click();
-  await panel.locator('[data-id="library-unregistered-toggle"] input').click();
+  await panel.locator('[data-id="library-unregistered-toggle"]').click();
   const badgeShown = await waitForCondition(
     async () => (await panel.locator('[data-id="library-unregistered-badge"]').count()) > 0,
   );
