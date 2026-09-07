@@ -5,9 +5,9 @@
 // 선택 행은 accent 강조, 미선택이면 연결 버튼 비활성(2026-08-12 캐스케이드 셀렉트에서 개편).
 // 이양 대상 맵 목록은 v1: 클라 listMaps() 지연 로드(서버 검색은 스케일 하드닝 트랙, 브리프 폴백).
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Clock, Network, TriangleAlert, Undo2, X } from "lucide-react";
+import { Check, ChevronRight, Clock, Network, TriangleAlert, Undo2, X } from "lucide-react";
 
 import {
   getApiErrorDetail,
@@ -29,6 +29,7 @@ import { SlotChangeDialog } from "@/components/maps/slot-change-dialog";
 import { UserPill } from "@/components/user-pill";
 import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
+import { pickSectionClass, useClosingKeys } from "@/lib/use-closing-keys";
 
 interface FrameworkAssignModalProps {
   mapId: number;
@@ -77,6 +78,55 @@ export function FrameworkAssignModal({
   const pendingLocked = Boolean(pendingReq) || pendingReqFailed;
   // 철회 진행 중 — 더블클릭으로 withdrawSlotChange가 두 번 나가지 않도록.
   const [withdrawing, setWithdrawing] = useState(false);
+
+  // 아코디언 펼침 모션 — 접힘은 고스트 렌더 후 언마운트(framework-tree.tsx와 동일 훅 재사용).
+  // 훅의 interacted는 전역 플래그 1개뿐이라(한 번이라도 조작하면 이후 전부 open 처리) "자동
+  // 드릴인은 static, 사용자가 직접 편 노드만 open"을 구분 못 한다 — getSectionClass 대신
+  // pickSectionClass를 우리가 노드별로 추적하는 userOpenedIds로 직접 호출한다.
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
+  const [userOpenedIds, setUserOpenedIds] = useState<Set<number>>(new Set());
+  function sectionClass(categoryId: number): string {
+    return pickSectionClass(closingKeys.has(categoryId), userOpenedIds.has(categoryId));
+  }
+
+  // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(tree-picker AUTO_DRILL_MAX와 동일 값).
+  const AUTO_DRILL_MAX = 6;
+  // 비동기 재귀 중 최신 캐시를 읽기 위한 ref 미러 (framework-tree-picker.tsx stateRef와 동일 패턴 —
+  // setChildrenByParent 직후에도 클로저는 갱신 전 값을 들고 있는 문제를 피한다).
+  const childrenByParentRef = useRef(childrenByParent);
+  useEffect(() => {
+    childrenByParentRef.current = childrenByParent;
+  }, [childrenByParent]);
+
+  // 방금 로드된 kids가 정확히 하나고 막다른 리프가 아니면(자식 있음 또는 L5) 그 자식도 열고 계속 판다.
+  // L5(선택 가능한 종착점)에 닿으면 열기만 하고 자동 선택은 하지 않은 채 멈춘다(사용자 요청 2026-09-07).
+  async function continueAutoDrill(kids: CategoryNode[], hop: number): Promise<void> {
+    if (hop >= AUTO_DRILL_MAX || kids.length !== 1) return;
+    const only = kids[0];
+    const isInertLeaf = only.child_count === 0 && only.level !== 5;
+    if (isInertLeaf) return; // 더 펼칠 것도 고를 것도 없는 막다른 길 — 열지 않는다
+    setOpenIds((prev) => new Set(prev).add(only.id)); // userOpenedIds에는 넣지 않는다 — static으로 렌더
+    if (only.level === 5) return; // 선택 가능한 종착점 — 자동 선택 없이 멈춘다
+    const cached = childrenByParentRef.current.get(only.id);
+    if (cached !== undefined) {
+      await continueAutoDrill(cached, hop + 1);
+      return;
+    }
+    setLoadingIds((prev) => new Set(prev).add(only.id));
+    try {
+      const nextKids = await listCategoryNodes(only.id);
+      setChildrenByParent((prev) => new Map(prev).set(only.id, nextKids));
+      await continueAutoDrill(nextKids, hop + 1);
+    } catch (err) {
+      setError(getApiErrorDetail(err));
+    } finally {
+      setLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(only.id);
+        return next;
+      });
+    }
+  }
 
   // 초기 로드 — currentCategoryId가 있으면 조상 체인(getCategoryChain)을 받아 그 경로를 미리 펼치고,
   // 현재 지정이 리프면 선택 상태로 시딩(재지정 시 루트부터 다시 탐색하지 않도록). 없으면 루트만 로드.
@@ -150,6 +200,12 @@ export function FrameworkAssignModal({
       return; // 비-L5 말단 — 선택도 펼침도 없음
     }
     if (openIds.has(node.id)) {
+      beginClose(node.id); // 고스트 렌더로 accordion-close 재생 후 언마운트
+      setUserOpenedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(node.id);
+        return next;
+      });
       setOpenIds((prev) => {
         const next = new Set(prev);
         next.delete(node.id);
@@ -157,22 +213,29 @@ export function FrameworkAssignModal({
       });
       return;
     }
+    cancelClose(node.id);
+    setUserOpenedIds((prev) => new Set(prev).add(node.id)); // 사용자가 직접 편 노드만 accordion-open 재생
     setOpenIds((prev) => new Set(prev).add(node.id));
-    if (!childrenByParent.has(node.id) && !loadingIds.has(node.id)) {
-      setLoadingIds((prev) => new Set(prev).add(node.id));
-      void listCategoryNodes(node.id)
-        .then((nodes) => {
-          setChildrenByParent((prev) => new Map(prev).set(node.id, nodes));
-        })
-        .catch((err: unknown) => setError(getApiErrorDetail(err)))
-        .finally(() => {
-          setLoadingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(node.id);
-            return next;
-          });
-        });
+    const cachedKids = childrenByParent.get(node.id);
+    if (cachedKids !== undefined) {
+      void continueAutoDrill(cachedKids, 0); // 캐시 경로도 동일 규칙(단일 후보 자동 드릴인)
+      return;
     }
+    if (loadingIds.has(node.id)) return; // 이미 인플라이트 — 응답 도착 시 채워질 뿐
+    setLoadingIds((prev) => new Set(prev).add(node.id));
+    void listCategoryNodes(node.id)
+      .then((nodes) => {
+        setChildrenByParent((prev) => new Map(prev).set(node.id, nodes));
+        void continueAutoDrill(nodes, 0);
+      })
+      .catch((err: unknown) => setError(getApiErrorDetail(err)))
+      .finally(() => {
+        setLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(node.id);
+          return next;
+        });
+      });
   }
 
   function openTransfer() {
@@ -211,6 +274,9 @@ export function FrameworkAssignModal({
     const isLeaf = node.child_count === 0;
     const selectable = node.level === 5;
     const open = openIds.has(node.id);
+    // 접힘 애니메이션 중(고스트) — open은 이미 false, 콘텐츠만 accordion-close 재생 동안 남긴다.
+    const isClosing = closingKeys.has(node.id);
+    const showContent = open || isClosing;
     const children = childrenByParent.get(node.id) ?? [];
     const selected = selectedId === node.id;
     return (
@@ -234,24 +300,29 @@ export function FrameworkAssignModal({
         >
           {isLeaf ? (
             <span className="inline-block w-3.5 shrink-0" /> // 쉐브론 폭만큼 자리 맞춤 — 리프 정렬 유지
-          ) : open ? (
-            <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
           ) : (
-            <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
+            <ChevronRight
+              size={14}
+              strokeWidth={1.5}
+              className={`shrink-0 transition-transform duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
+            />
           )}
           <span className="min-w-0 truncate">{node.name}</span>
           {selected && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
         </button>
-        {open &&
-          (loadingIds.has(node.id) ? (
-            <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
-              {t("common.loading")}
-            </p>
-          ) : (
-            children.length > 0 && (
-              <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
-            )
-          ))}
+        {showContent && (
+          <div className={sectionClass(node.id)}>
+            {loadingIds.has(node.id) ? (
+              <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
+                {t("common.loading")}
+              </p>
+            ) : (
+              children.length > 0 && (
+                <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
+              )
+            )}
+          </div>
+        )}
       </li>
     );
   };

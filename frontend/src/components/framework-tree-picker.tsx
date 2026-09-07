@@ -4,7 +4,7 @@
 // (L5≈3,000·L6≈20,000 스케일, design 2026-08-28 §8). 맵 카드를 기존 bpm-process 드래그
 // 규약으로 캔버스에 드롭한다(handleLibraryDrop 무변경 재사용). 상태는 lib/framework-tree-state.ts
 // 리듀서 재사용 — 캐스케이드·영속은 없음(패널은 임시 탐색).
-import { ChevronDown, ChevronRight, Network, X } from "lucide-react";
+import { ChevronRight, Network, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import { getCategoryChain, type CategoryNode, type MapSummary } from "@/lib/api";
@@ -27,6 +27,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
+import { pickSectionClass, useClosingKeys } from "@/lib/use-closing-keys";
 
 export interface FrameworkTreePickerProps {
   currentMapId: number;
@@ -75,6 +76,15 @@ export function FrameworkTreePicker({
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   const [rootError, setRootError] = useState(false);
+  // 아코디언 펼침 모션 — 접힘 고스트 렌더는 홈 트리와 동일 훅. 훅의 interacted는 전역 플래그
+  // 1개뿐이라(한 번이라도 조작하면 이후 전부 open 처리) "자동 드릴인은 static, 사용자가 편
+  // 노드만 open"을 구분 못 한다 — getSectionClass 대신 pickSectionClass를 우리가 노드별로
+  // 추적하는 userOpenedIds로 직접 호출한다.
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
+  const [userOpenedIds, setUserOpenedIds] = useState<Set<number>>(new Set());
+  function sectionClass(categoryId: number): string {
+    return pickSectionClass(closingKeys.has(categoryId), userOpenedIds.has(categoryId));
+  }
 
   // 행 미리보기 피크 — 클릭 즉시·2.5초 호버로 오픈(패널당 1개). 스크롤·드래그 시작 시 닫는다 (2026-08-30)
   const panelRef = useRef<HTMLDivElement>(null);
@@ -204,9 +214,17 @@ export function FrameworkTreePicker({
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
+      beginClose(categoryId); // 고스트 렌더로 accordion-close 재생 후 언마운트
+      setUserOpenedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(categoryId);
+        return next;
+      });
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
+    cancelClose(categoryId);
+    setUserOpenedIds((prev) => new Set(prev).add(categoryId)); // 사용자가 직접 편 노드만 accordion-open 재생
     setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     if (shouldFetchChildren(state, categoryId)) {
       setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
@@ -313,6 +331,9 @@ export function FrameworkTreePicker({
 
   const renderNode = (node: CategoryNode, depth: number, trailNames: string[]) => {
     const open = state.openIds.has(node.id);
+    // 접힘 애니메이션 중(고스트) — open은 이미 false, 콘텐츠만 accordion-close 재생 동안 남긴다.
+    const isClosing = closingKeys.has(node.id);
+    const showContent = open || isClosing;
     const children = state.childrenByParent.get(node.id) ?? [];
     const mapsData = state.mapsByCategory.get(node.id);
     // 루트→현재 노드 이름 경로 — 드래그 페이로드의 출처 배지 소스 (#4)
@@ -332,9 +353,11 @@ export function FrameworkTreePicker({
             isCurrentL5 ? "bg-accent-tint" : "hover:bg-surface-alt"
           }`}
         >
-          {open
-            ? <ChevronDown size={12} strokeWidth={1.5} className={`shrink-0 ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"}`} />
-            : <ChevronRight size={12} strokeWidth={1.5} className={`shrink-0 ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"}`} />}
+          <ChevronRight
+            size={12}
+            strokeWidth={1.5}
+            className={`shrink-0 transition-transform duration-150 ease-smooth ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"} ${open ? "rotate-90" : ""}`}
+          />
           <span
             className={`min-w-0 truncate text-fine ${
               isCurrentL5 ? "font-semibold text-accent" : "text-ink-secondary"
@@ -348,8 +371,8 @@ export function FrameworkTreePicker({
             </span>
           )}
         </button>
-        {open && (
-          <>
+        {showContent && (
+          <div className={sectionClass(node.id)}>
             {/* 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 하위 카테고리 아코디언만 */}
             {node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0 && (
               <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">
@@ -359,7 +382,7 @@ export function FrameworkTreePicker({
             {children.length > 0 && (
               <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1, [...trailNames, node.name]))}</ul>
             )}
-          </>
+          </div>
         )}
       </li>
     );
