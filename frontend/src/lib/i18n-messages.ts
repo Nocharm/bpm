@@ -1480,6 +1480,13 @@ const en = {
   "library.open": "Open subprocess library",
   // ── 미등록 맵 플레이스홀더 / Unregistered-map placeholder (spec 2026-07-19) ──
   "library.showUnregistered": "Show unregistered maps",
+  // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
+  "library.filter": "Filter",
+  "library.filterDepartment": "Department",
+  "library.filterRole": "Role",
+  "library.filterUnregistered": "Unregistered maps",
+  "library.filterClear": "Clear filters",
+  "library.filterCount": "{shown} of {total}",
   "library.notRegistered": "Not registered",
   "library.linkUnregNotice": "This map is not registered as a subprocess - the link stays locked until its owner designates it.",
   "library.requestTitle": "Request subprocess registration?",
@@ -3739,6 +3746,13 @@ const ko: Record<MessageKey, string> = {
   "library.open": "서브프로세스 목록 열기",
   // ── 미등록 맵 플레이스홀더 (spec 2026-07-19) ──
   "library.showUnregistered": "미등록 맵 표시",
+  // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
+  "library.filter": "필터",
+  "library.filterDepartment": "부서",
+  "library.filterRole": "권한",
+  "library.filterUnregistered": "미등록 맵",
+  "library.filterClear": "필터 전체삭제",
+  "library.filterCount": "전체 {total}개 중 {shown}개",
   "library.notRegistered": "미등록",
   "library.linkUnregNotice": "서브프로세스로 등록되지 않은 맵입니다 - 오너가 지정하기 전까지 링크는 잠금 상태로 표시됩니다.",
   "library.requestTitle": "서브프로세스 등록을 요청할까요?",

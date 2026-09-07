@@ -1,9 +1,10 @@
 // 프로세스 라이브러리 패널 — 등록된 맵 목록을 검색하고 캔버스로 드래그해 하위프로세스 노드를 생성.
 // 미등록(미지정) 맵은 토글로 노출 — 같은 드래그로 놓으면 캔버스 쪽에서 경고 확인+등록 요청이 이어진다.
+// 부서/권한/미등록 필터는 필(pill)로 표시되며 localStorage에 영속(2026-09-07, lib/library-filters.ts).
 // 하단 New map은 검색어가 있을 때만 — 그 이름으로 생성 즉시 링크 (spec 2026-07-19).
 "use client";
 
-import { Network, Plus, Search, X } from "lucide-react";
+import { Filter, Network, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
@@ -17,6 +18,15 @@ import {
 } from "@/components/subprocess-preview-peek";
 import { filterByQuery } from "@/lib/search";
 import { formatDeptName } from "@/lib/korean-dept";
+import {
+  applyLibraryFilters,
+  countActiveFilters,
+  EMPTY_LIBRARY_FILTERS,
+  type LibraryFilters,
+  type LibraryRole,
+  readLibraryFilters,
+  writeLibraryFilters,
+} from "@/lib/library-filters";
 import { closesCycle } from "@/lib/subprocess-embed";
 import { useI18n } from "@/lib/i18n";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
@@ -58,21 +68,49 @@ export function ProcessLibraryPanel({
   const { t, lang } = useI18n();
   const koreanDeptByPath = useKoreanDeptByPath();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
-  // 미등록(미지정) 맵 노출 토글 — 켜면 include_undesignated로 재조회(가시성 필터는 서버)
-  const [showUnregistered, setShowUnregistered] = useState(false);
+  // 부서/역할/미등록 필터 — localStorage 영속(bpm.library.filters). 초기값은 빈 필터로 두고
+  // 마운트 후 복원해 SSR 렌더와 일치시킨다(i18n.tsx LangProvider와 동일 관례).
+  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_LIBRARY_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters(readLibraryFilters()); // intentional: one-time hydration restore from localStorage (i18n.tsx와 동일 관례)
+  }, []);
+
+  // 필터 변경 시 그 자리에서 저장 — 복원 effect와 분리해 초기 마운트에 빈 필터로 덮어쓰지 않는다
+  // (framework-tree.tsx의 hydratedRef 게이트 대신, 변경 지점에서 직접 쓰는 i18n.tsx setLang 관례).
+  function updateFilters(next: LibraryFilters) {
+    setFilters(next);
+    writeLibraryFilters(next);
+  }
+
+  // 미등록(미지정) 맵 노출은 fetch 플래그 — 켜면 include_undesignated로 재조회(가시성 필터는 서버)
+  useEffect(() => {
     let cancelled = false;
-    void listLibraryProcesses(showUnregistered).then((data) => {
+    void listLibraryProcesses(filters.showUnregistered).then((data) => {
       if (!cancelled) setRows(data);
     });
     return () => {
       cancelled = true;
     };
-  }, [showUnregistered]);
+  }, [filters.showUnregistered]);
+
+  // 바깥 클릭 시 필터 팝오버 닫기 — notification-bell.tsx와 동일 캡처 패턴.
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.target instanceof Element && !filterRef.current?.contains(event.target)) {
+        setFilterOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleMouseDown, true);
+    return () => window.removeEventListener("mousedown", handleMouseDown, true);
+  }, [filterOpen]);
 
   // 패널은 열릴 때마다 새로 마운트되므로 모든 오픈 경로에서 검색창에 포커스된다.
   useEffect(() => {
@@ -85,19 +123,64 @@ export function ProcessLibraryPanel({
     [rows],
   );
 
-  // 부분일치+초성+로마자+시퀀스 매칭(filterByQuery) — 이름·부서 대상, 랭크순 정렬.
-  // 현재 맵은 목록에서 제외(자기 자신 링크 불가) — refsByMap은 순환 판별용이라 전체 rows 유지.
+  // 현재 맵 제외(자기 자신 링크 불가) — refsByMap은 순환 판별용이라 전체 rows 유지.
+  const linkableRows = useMemo(
+    () => rows.filter((r) => r.map_id !== currentMapId),
+    [rows, currentMapId],
+  );
+  // 필터 팝오버의 부서 옵션 — linkableRows 기준 distinct department(전체경로), 라벨순 정렬.
+  // filters 자체가 아니라 linkableRows에서 파생해, 필터를 걸수록 다른 옵션이 사라지지 않는다.
+  const distinctDepartments = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of linkableRows) if (r.department) set.add(r.department);
+    return [...set].sort((a, b) =>
+      formatDeptName(a, lang, koreanDeptByPath).localeCompare(formatDeptName(b, lang, koreanDeptByPath)),
+    );
+  }, [linkableRows, lang, koreanDeptByPath]);
+  // 부서/역할 필터 → 부분일치+초성+로마자+시퀀스 매칭(filterByQuery, 이름·부서 대상, 랭크순) 순.
+  const listRows = useMemo(() => applyLibraryFilters(linkableRows, filters), [linkableRows, filters]);
   const filtered = useMemo(() => {
-    const listRows = rows.filter((r) => r.map_id !== currentMapId);
     const q = query.trim();
     if (!q) return listRows;
     return filterByQuery(listRows, q, (r) => [
       { field: "name", text: r.name },
       { field: "department", text: r.department ?? "" },
     ]).map((h) => h.item);
-  }, [rows, query, currentMapId]);
+  }, [listRows, query]);
   // 25개씩 증분 렌더 — 라이브러리 맵이 수백 개여도 패널 오픈 부하 없음
   const { visible, hasMore, sentinelRef } = useInfiniteSlice(filtered, query);
+  const activeFilterCount = countActiveFilters(filters);
+  const roleLabels: Record<LibraryRole, string> = {
+    owner: t("perm.roleOwner"),
+    editor: t("perm.roleEditor"),
+    viewer: t("perm.roleViewer"),
+  };
+
+  function toggleDepartment(dept: string) {
+    const departments = filters.departments.includes(dept)
+      ? filters.departments.filter((d) => d !== dept)
+      : [...filters.departments, dept];
+    updateFilters({ ...filters, departments });
+  }
+
+  function toggleRole(role: LibraryRole) {
+    const roles = filters.roles.includes(role)
+      ? filters.roles.filter((r) => r !== role)
+      : [...filters.roles, role];
+    updateFilters({ ...filters, roles });
+  }
+
+  function removeDepartment(dept: string) {
+    updateFilters({ ...filters, departments: filters.departments.filter((d) => d !== dept) });
+  }
+
+  function removeRole(role: LibraryRole) {
+    updateFilters({ ...filters, roles: filters.roles.filter((r) => r !== role) });
+  }
+
+  function clearFilters() {
+    updateFilters(EMPTY_LIBRARY_FILTERS);
+  }
 
   // 행 미리보기 피크 — 클릭 즉시·2.5초 호버로 오픈(패널당 1개). 스크롤·드래그 시작 시 닫는다 (2026-08-30)
   const panelRef = useRef<HTMLDivElement>(null);
@@ -233,17 +316,146 @@ export function ProcessLibraryPanel({
             className="min-w-0 flex-1 bg-transparent text-fine text-ink outline-none placeholder:text-ink/40"
           />
         </div>
-        <label
-          data-id="library-unregistered-toggle"
-          className="mt-1.5 flex cursor-pointer items-center gap-1.5 px-0.5 text-fine text-ink-tertiary"
-        >
-          <input
-            type="checkbox"
-            checked={showUnregistered}
-            onChange={() => setShowUnregistered((v) => !v)}
-          />
-          {t("library.showUnregistered")}
-        </label>
+        {/* filter row — Filter 버튼(팝오버) + 활성 필터 필 + 전체삭제 */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <div className="relative" ref={filterRef}>
+            <button
+              type="button"
+              data-id="library-filter-open"
+              onClick={() => setFilterOpen((v) => !v)}
+              className="flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
+            >
+              <Filter size={12} strokeWidth={1.5} />
+              {t("library.filter")}
+              {activeFilterCount > 0 && (
+                <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 text-[10px] leading-none text-on-accent">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filterOpen && (
+              <div
+                data-id="library-filter-popover"
+                className="absolute left-0 top-6 z-[1300] w-60 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+              >
+                <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">
+                  {t("library.filterDepartment")}
+                </p>
+                <div className="mb-2 max-h-36 overflow-y-auto">
+                  {distinctDepartments.map((dept, index) => (
+                    <label
+                      key={dept}
+                      data-id={`library-filter-dept-${index}`}
+                      title={dept}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filters.departments.includes(dept)}
+                        onChange={() => toggleDepartment(dept)}
+                      />
+                      <span className="min-w-0 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">{t("library.filterRole")}</p>
+                <div className="mb-2 flex flex-col">
+                  {(["owner", "editor", "viewer"] as const).map((role) => (
+                    <label
+                      key={role}
+                      data-id={`library-filter-role-${role}`}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filters.roles.includes(role)}
+                        onChange={() => toggleRole(role)}
+                      />
+                      {roleLabels[role]}
+                    </label>
+                  ))}
+                </div>
+                <label
+                  data-id="library-unregistered-toggle"
+                  className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary"
+                >
+                  <input
+                    type="checkbox"
+                    checked={filters.showUnregistered}
+                    onChange={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
+                  />
+                  {t("library.filterUnregistered")}
+                </label>
+              </div>
+            )}
+          </div>
+          {filters.departments.map((dept, index) => (
+            <span
+              key={`dept-${dept}`}
+              data-id={`library-filter-pill-dept-${index}`}
+              title={dept}
+              className="flex items-center gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              <span className="max-w-20 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
+              <button
+                type="button"
+                aria-label="Remove filter"
+                onClick={() => removeDepartment(dept)}
+                className="shrink-0 rounded-full hover:bg-accent/20"
+              >
+                <X size={10} strokeWidth={1.5} />
+              </button>
+            </span>
+          ))}
+          {filters.roles.map((role) => (
+            <span
+              key={`role-${role}`}
+              data-id={`library-filter-pill-role-${role}`}
+              className="flex items-center gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              {roleLabels[role]}
+              <button
+                type="button"
+                aria-label="Remove filter"
+                onClick={() => removeRole(role)}
+                className="shrink-0 rounded-full hover:bg-accent/20"
+              >
+                <X size={10} strokeWidth={1.5} />
+              </button>
+            </span>
+          ))}
+          {filters.showUnregistered && (
+            <span
+              data-id="library-filter-pill-unregistered"
+              className="flex items-center gap-1 rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-fine text-accent"
+            >
+              {t("library.filterUnregistered")}
+              <button
+                type="button"
+                aria-label="Remove filter"
+                onClick={() => updateFilters({ ...filters, showUnregistered: false })}
+                className="shrink-0 rounded-full hover:bg-accent/20"
+              >
+                <X size={10} strokeWidth={1.5} />
+              </button>
+            </span>
+          )}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              data-id="library-filter-clear"
+              onClick={clearFilters}
+              className="rounded-xs px-1.5 py-0.5 text-fine text-ink-tertiary hover:text-error hover:underline"
+            >
+              {t("library.filterClear")}
+            </button>
+          )}
+        </div>
+        {activeFilterCount > 0 && (
+          <p data-id="library-filter-count" className="mt-1 px-0.5 text-fine text-ink-tertiary">
+            {t("library.filterCount", { shown: filtered.length, total: linkableRows.length })}
+          </p>
+        )}
       </div>
 
       {/* list */}
