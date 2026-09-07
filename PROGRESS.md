@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-07 — 슬롯 거버넌스 UX 2라운드: 트리 모션·L5 플레이스홀더 생성·라이브러리 필터 (feat/fw-slot-handover → dev)
+- **트리(사용자 요청)**: 슬롯 배정 모달·플레이스홀더 연결 다이얼로그·"Framework L6" 목록(같은 `FrameworkTreePicker`) 모두 하위 후보가 하나뿐이면 끝까지 자동 펼침(L5·갈래에서 멈춤, 6홉 상한)하고, 펼침/접힘은 홈 트리의 `accordion-open/close/static`(`useClosingKeys`)으로 시선이 따라가게 — 사용자가 클릭한 노드만 `open`, 자동 펼침은 `static`, 접힘은 고스트 `close` 뒤 언마운트, 쉐브론 회전.
+- **L5 플레이스홀더 생성**: "Framework L6" 라이브러리 하단 입력+버튼(`framework-placeholder-name/create`)으로 미연결 subprocess 노드를 만든다(`linked_map_id`·`placeholder_category_id` null, 가운데 빈자리 배치·플래시·토스트). 임포트 플레이스홀더와 같은 룩("Connect" CTA → 연결 다이얼로그), 확정 게이트 `placeholder`가 막는다. 연결 다이얼로그에는 이 footer가 뜨지 않는다.
+- **라이브러리 필터(일반 맵)**: `/library/processes` 행에 `my_role`(배치 해석, sysadmin=owner) 동봉 → `lib/library-filters.ts`(부서 전체경로/말단 매칭·권한 any-of·미등록은 재조회 플래그, `bpm.library.filters` 영속) + 패널 Filter 팝오버(부서 다중선택·Owner/Editor/Viewer·미등록 토글)와 × 달린 필·일괄 삭제·"N of M". `library-unregistered-toggle`은 팝오버 안으로(수동 검증 스크립트 2종에 팝오버 열기 추가).
+- 검증: pytest 1392·ruff·tsc·lint·vitest 879·build 그린, `pw-smoke-framework-slot` 20/20·framework-admin 7/7·delegation 18/18(리셋 DB), 컨트롤러 브라우저 검증(트리 자동 펼침/클래스, 필터 6/6, 플레이스홀더 8/8).
+
 ## 2026-09-06 — Framework 슬롯 거버넌스: 승인 워크플로·캔버스 재지정·임포트 플레이스홀더·UX 개선 (feat/fw-slot-handover → dev)
 - **배경·결정**: 슬롯 이양이 `category_id`·`consultant_code`만 옮기고 홈 L5 캔버스·계보·알림을 안 따라가던 결함 4종(UPDATE 순서 unique 500·캔버스 맵에 슬롯 허용·이양 후 캔버스 표류·복사+은퇴 시 슬롯 휴지통 잔존)을 실행으로 확인 → 슬롯 변경 5액션(assign·unassign·move·replace·delete)을 승인 종류 하나 `fw_slot`으로 통일. 스펙 `docs/superpowers/specs/2026-09-06-fw-slot-governance-design.md`(개정 각주 포함), 플랜 4종 `docs/superpowers/plans/2026-09-06-fw-slot-track-*.md`, 명세 `docs/spec.md` §7 슬롯 수명주기 절.
 - **코어(트랙 A+B)**: `app/framework_slots.py` validate→plan→apply 단일 루틴 + `framework_slot_events` 이력, `POST /maps/{id}/slot-changes`(dry_run 미리보기·L5 직속 관리자 즉시 적용), 대체·삭제 시 홈 캔버스 노드 자동 재지정(엣지 유지·중복 쌍 합치기·계보 `retired_to_map_id`, 슬롯을 되찾으면 리셋), refs에 superseded·시각 3종·후계자, 해제 링크는 `stale_link` 게이트. 캔버스는 미싱 룩+배너("Removed/Handed over/Deleted - replace")·최근 이양 배지(14일)·호버 슬롯 이력 패널.
