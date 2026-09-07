@@ -4,7 +4,9 @@
 // (L5≈3,000·L6≈20,000 스케일, design 2026-08-28 §8). 맵 카드를 기존 bpm-process 드래그
 // 규약으로 캔버스에 드롭한다(handleLibraryDrop 무변경 재사용). 상태는 lib/framework-tree-state.ts
 // 리듀서 재사용 — 캐스케이드·영속은 없음(패널은 임시 탐색).
-import { ChevronRight, Network, X } from "lucide-react";
+// onCreatePlaceholder가 주어지면(+ !readOnly) 트리 바디 아래에 플레이스홀더 생성 풋터를 렌더한다 —
+// L5 라이브러리 전용 마운트에서만 전달되고, 연결 다이얼로그 임베드는 넘기지 않아 숨는다 (2026-09-07).
+import { ChevronRight, Network, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import { getCategoryChain, type CategoryNode, type MapSummary } from "@/lib/api";
@@ -56,6 +58,9 @@ export interface FrameworkTreePickerProps {
   onPeekOpenMap: (mapId: number, name: string) => void;
   // 이미 이 캔버스에 들어와 있는 행 클릭 — 미리보기 대신 그 노드로 포커스 (사용자 요청 2026-08-31)
   onFocusLinkedNode: (linkedMapId: number) => void;
+  // 주어지면(+ !readOnly) 하단 풋터에서 이름만으로 링크 없는 플레이스홀더 생성 — 기존 서브프로세스
+  // 플레이스홀더 워크플로(임포트 미배치 L6와 동일 모양)를 L5 라이브러리에서도 쓸 수 있게 (2026-09-07)
+  onCreatePlaceholder?: (title: string) => void;
 }
 
 export function FrameworkTreePicker({
@@ -72,6 +77,7 @@ export function FrameworkTreePicker({
   onPeekAdd,
   onPeekOpenMap,
   onFocusLinkedNode,
+  onCreatePlaceholder,
 }: FrameworkTreePickerProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
@@ -84,6 +90,15 @@ export function FrameworkTreePicker({
   const [userOpenedIds, setUserOpenedIds] = useState<Set<number>>(new Set());
   function sectionClass(categoryId: number): string {
     return pickSectionClass(closingKeys.has(categoryId), userOpenedIds.has(categoryId));
+  }
+
+  // 하단 플레이스홀더 생성 폼 입력 — submitPlaceholder가 트리밍·클리어까지 담당
+  const [placeholderName, setPlaceholderName] = useState("");
+  function submitPlaceholder() {
+    const name = placeholderName.trim();
+    if (!name || !onCreatePlaceholder) return;
+    onCreatePlaceholder(name);
+    setPlaceholderName("");
   }
 
   // 행 미리보기 피크 — 클릭 즉시·2.5초 호버로 오픈(패널당 1개). 스크롤·드래그 시작 시 닫는다 (2026-08-30)
@@ -430,6 +445,36 @@ export function FrameworkTreePicker({
           <ul className="flex flex-col">{roots.map((r) => renderNode(r, 0, []))}</ul>
         )}
       </div>
+      {/* 플레이스홀더 생성 풋터 — L5 라이브러리 전용(onCreatePlaceholder 미전달인 연결 다이얼로그는 숨김).
+          기존 서브프로세스 라이브러리 "New map" 풋터(process-library-panel.tsx)와 같은 하단 스트립 자리 */}
+      {onCreatePlaceholder && !readOnly && (
+        <div className="border-t border-hairline p-1">
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              data-id="framework-placeholder-name"
+              value={placeholderName}
+              onChange={(e) => setPlaceholderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitPlaceholder();
+              }}
+              placeholder={t("framework.placeholderNamePlaceholder")}
+              className="min-w-0 flex-1 rounded-sm border border-hairline bg-surface-alt px-1.5 py-1 text-fine text-ink outline-none placeholder:text-ink/40"
+            />
+            <button
+              type="button"
+              data-id="framework-placeholder-create"
+              title={t("framework.createPlaceholder")}
+              aria-label={t("framework.createPlaceholder")}
+              disabled={placeholderName.trim() === ""}
+              onClick={submitPlaceholder}
+              className="shrink-0 rounded-sm p-1.5 text-accent hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus size={14} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+      )}
       {peek && (
         <SubprocessPreviewPeek
           key={peek.row.id}

@@ -5052,6 +5052,58 @@ function MapEditor({ mapId }: { mapId: number }) {
     ],
   );
 
+  // L5 라이브러리 하단 풋터 — 링크 없는 subprocess 플레이스홀더를 뷰포트 중앙에 생성한다. addLinkNodeFromMap과
+  // 같은 노드 모양이되 linkedMapId/placeholderCategoryId 모두 null(임포트 미배치 L6 플레이스홀더와 동일 계약,
+  // backend/scripts/import_consultant.py). 확정 게이트가 linked_map_id null인 subprocess를 그대로 걸러낸다.
+  const addPlaceholderNode = useCallback(
+    (title: string) => {
+      if (readOnly) return;
+      const name = title.trim();
+      if (!name) return;
+      const center = toSavedPoint(
+        reactFlow.screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        }),
+      );
+      const id = genId();
+      const position = findFreeSpot(center.x - NODE_WIDTH / 2, center.y - NODE_HEIGHT / 2);
+      const node: AppNode = {
+        id,
+        type: "process",
+        position,
+        className: "bpm-node-flash",
+        data: {
+          label: name,
+          description: "",
+          nodeType: "subprocess",
+          color: "",
+          assignee: "",
+          department: "",
+          system: "",
+          duration: "",
+          cost_krw: "",
+          cost_usd: "",
+          headcount: "",
+          annual_count: "",
+          fte: "",
+          groupIds: [],
+          hasChildren: false,
+          linkedMapId: null,
+          linkedVersionId: null,
+          followLatest: true,
+          placeholderCategoryId: null,
+          subEnds: [],
+        },
+      };
+      setNodes((cur) => [...cur, node]);
+      scheduleAutoSave();
+      flashNode(id);
+      showToast(t("editor.placeholderAdded"));
+    },
+    [readOnly, reactFlow, setNodes, scheduleAutoSave, flashNode, showToast, t, findFreeSpot, toSavedPoint],
+  );
+
   // 라이브러리/체계 피커 피크의 "Add to map" — 드롭(handleLibraryDrop)과 동일 생성 체인을 뷰포트 중앙에
   // 적용(미등록=확인+등록요청 체인, 체계 출처 낙관 참조 포함). 좌표만 드롭점 대신 중앙+빈자리 탐색 (2026-08-30).
   const addLinkNodeFromPeek = useCallback(
@@ -9355,6 +9407,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             onPeekAdd={addLinkNodeFromPeek}
             onPeekOpenMap={(peekMapId, name) => setOpenMapPrompt({ mapId: peekMapId, name })}
             onFocusLinkedNode={focusLinkedNode}
+            onCreatePlaceholder={addPlaceholderNode}
           />
         )}
         {/* 업무체계 탐색 모달 — 좌상단 L5 탐색기/프레임워크 칩의 "다른 체계 검색"(내부에 자체 이동 확인 게이트) */}
