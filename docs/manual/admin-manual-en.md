@@ -17,7 +17,7 @@ BPM_SYSADMINS=admin.sys,jane.doe
 
 - With authentication **off** (development default), every user is effectively sysadmin.
 - With `DEV_ENFORCE_PERMISSIONS=true` or real Keycloak auth, only IDs listed in `BPM_SYSADMINS` are sysadmin.
-- The Permissions console shows a **Sysadmin** tag on such users, noted as *env-managed* — you cannot toggle it from the UI.
+- The **Settings → Directory → Employees** table shows a **Sysadmin** tag on such users, with an *env-managed* tooltip — you cannot toggle it from the UI.
 - When the server runs in **ldap auth mode**, sysadmin can also be granted per account with the **Sysadmin toggle** on the Local Accounts screen (section 7) — that grant only takes effect in ldap mode. Users listed in the env show as "Set by environment" and cannot be turned off from the UI.
 
 ### What sysadmin unlocks
@@ -115,7 +115,7 @@ Group creation is request-based: any user can file a group request, but it only 
 - **Checkout transfer** requests (taking over another user's active editing lock).
 - **Slot change** (`fw_slot`) requests - shows the map name, the action, the target, and how many sides have approved (n/m).
 
-Each entry shows the requester and context; decide with Approve / Reject (rejection takes a reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view. **Slot changes are the exception** - the decider is a direct admin of the relevant L5 (or a sysadmin), not the map's approvers; a sysadmin decides here as the fallback (section 13, "Slot changes").
+Each entry shows the requester and context; decide with Approve / Reject (this queue does not take a rejection reason). Map-scoped requests can also be decided by that map's approvers — the queue is your catch-all view. **Slot changes are the exception** - the decider is a direct admin of the relevant L5 (or a sysadmin), not the map's approvers; a sysadmin decides here as the fallback (section 13, "Slot changes").
 
 > Separately, **map renames** and **subprocess registration requests** are decided by the **map owner** — since sysadmins hold owner rights on every map, you can handle those cards for any map from the Inbox (Approvals). For subprocess registration, **saving the designation form is the approval**, and a map with no published version cannot be designated yet. Framework **confirm requests** (an admin of a higher category asking for an L5 linkage canvas to be confirmed) also reach sysadmins as fallback deciders — approving performs the confirmation on the spot, so a canvas that fails a gate cannot be approved (section 13).
 
@@ -151,7 +151,7 @@ The **Settings → Directory → Local Accounts** tab appears **only while the s
 - **Create account** — login ID, name, department code (optional), and password.
 - **Login order** — a sign-in checks local accounts first, then falls back to AD (company account) authentication. Attempts are throttled to **5 per 5 minutes**.
 - **Management** — per account: **Reset password**, **Deactivate / Reactivate**, and **Delete** (permanent — no undo). When a consultant's engagement ends, deactivate the account first before deleting.
-- **Sysadmin toggle** — grants sysadmin to local/AD accounts (see section 1 — effective in ldap mode only).
+- **Sysadmin toggle** — grants sysadmin to local accounts only (AD/HR directory accounts are designated via `BPM_SYSADMINS` alone — see section 1; effective in ldap mode only).
 - Token lifetime, secret rotation (invalidates every session), and other operational contracts live in `docs/deploy/deploy.md` §2.1.
 
 ---
@@ -193,7 +193,7 @@ The server compose stack includes a **`db-backup` sidecar**:
 
 Live operational metrics from the database, at a glance:
 
-- **Operations** — counts of all maps, published, in-progress, and trash; open comments; unread notifications; and checkout transfer requests.
+- **Operations** — counts of all maps, published, in-progress, and trash; open comments; unread notifications (yours); and checkout transfer requests.
 - **Version status** — the distribution of versions across draft, in-review, approved, published, and expired.
 - **Adoption by department** — the share of departments that own a map. The denominator (which departments count) is picked by the admin in the **Coverage** sidebar.
 - **Login & activity** and **Cumulative growth** (map/version creation over time) — a period filter (**7 days** / **1 month** / **3 months** / **Custom**) adjusts the time series. Snapshot metrics ignore the period filter.
@@ -218,7 +218,7 @@ Deleting a map or group is a **soft delete** — it moves to the trash and is pe
 
 Everything in the user manual's workflow section applies, plus:
 
-- **Force checkout** — take an active editing lock when the holder is unavailable. Use it sparingly; the previous holder loses unsaved work context. Idle locks already auto-release after 30 minutes.
+- **Force checkout** — take an active editing lock when the holder is unavailable. Use it sparingly; the previous holder loses unsaved work context. Checkouts never expire on their own (they change only by transfer, an approved request, or force checkout), so this is how you reclaim an absent holder's lock.
 - **Decide anywhere** — as effective owner you can submit and publish on any map, and decide checkout requests and transfers. **Withdraw** is the exception: Pending and Approved versions can be withdrawn only by the **submitter**; only a Rejected version can be withdrawn by the map owner or a sysadmin.
 - **Approver reassignment** — when a map has no active approver (e.g. the only approver left the company), use the forced-reassign flow in Map Settings → Approvers to appoint new ones.
 - Remember the publish rule: publishing a version marks the previously published one #Expired — a terminal state that cannot re-enter approval. Use **Republish** to start a new cycle from it.
@@ -236,8 +236,7 @@ Everything in the user manual's workflow section applies, plus:
 
 - The list title is **auto-extracted from the first heading** on save.
 - Upload KO/EN documents as pairs in the same order — switching languages in the viewer opens the document at the same position.
-
-- The header shows the source: **Published** (with author and time) or **Bundled with build**.
+- With no documents registered, the viewer shows the default manual shipped with the build.
 - **Bundled fallback** — if nothing was ever published, the app serves `backend/app/manual.md` shipped with the build, and the viewer shows a **Bundled with build** badge instead of an update time.
 - The same publish is available as a sysadmin API call:
 
@@ -264,10 +263,11 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 | `ai_chat_retention_days` | 180 | 7–3650 |
 
 - **Chat loading tips**: manage the feature tips shown while earlier messages load in chat. One tip per line (200 chars each, up to 50). **Save an empty list to restore the 20 defaults.**
+- **AI access switch**: the toggle at the top of the panel suspends every AI feature (chat, interviews, …) without a redeploy — AI is effectively available only when `AI_ENABLED` is on and this switch is on.
 
 ### Knowledge Base (Settings → Content → Knowledge base)
 
-A library of **organization documents the AI consultant can cite during interviews** — upload SOPs and guides to ground its answers. Supported formats are pdf, docx, xlsx, txt, and md (max 20 MB per file); add files with **Upload** and reload the list with **Refresh**.
+A library of **organization documents the AI consultant can cite during interviews** — upload SOPs and guides to ground its answers. Supported formats are pdf, docx, xlsx, txt, and md (max 20 MB per file); add files with **Upload** and reload the list with **Refresh**. The knowledge base works only when both `AI_ENABLED` and the embedding server `EMBED_URL` (section 14) are set.
 
 ### AI Prompts (Settings → Content → AI prompts)
 
@@ -284,7 +284,7 @@ A library of **organization documents the AI consultant can cite during intervie
 ### Category management and level delegation
 
 - **Category management** — add top-level/child categories, rename, move within the tree, delete (max 5 levels; a category cannot move under its own subtree). Deletion is refused when the subtree has linked maps; otherwise the whole subtree is deleted. **Maps can be assigned only to leaf categories (L5).** Renaming a category renames its linkage-canvas map along with it, and **a category (subtree) that has a canvas cannot be deleted until the canvas is cleaned up** (409).
-- **Delegation scope** — a category admin can add children, rename, and reorder inside their own category (including categories created by the import). **Move and delete** are refused on import-created categories and the new parent must stay inside their scope. **Appointing admins** is allowed only on levels below their own. **Admins appointed on an L5 only** can edit and confirm the canvas but every structural change is refused. **Creating top-level categories and running the interview import stay sysadmin-only.**
+- **Delegation scope** — a category admin can add children, rename, and reorder inside their own category (including the delegated category itself). **Move and delete** are refused on the delegated category itself and allowed only on categories below it, and a move's new parent must stay inside their scope. **Appointing admins** is allowed only on levels below their own. **Admins appointed on an L5 only** can edit and confirm the canvas but every structural change is refused. **Creating top-level categories and running the interview import stay sysadmin-only.**
 
 ### Linkage admins
 
@@ -298,7 +298,7 @@ A library of **organization documents the AI consultant can cite during intervie
 - **Six confirm gates** — all linked L6 placed · no placeholders · no stale links · all linked L6 published · no exit-less loops · branches use decision nodes (exempt when every outgoing edge is a parallel fan-out). The **Confirm readiness** checklist on the editor's Approval tab is the single source, and the confirm button stays disabled while any gate fails.
 - **Who confirms** — only the draft's checkout holder confirms directly, and only when they are a **direct admin of that L5** or a sysadmin. Admins of a higher category send a **confirm request** (their checkout is released automatically on send); recipients are the direct L5 admins plus sysadmins (fallback deciders). A direct admin or sysadmin who tries to request is told to confirm directly (409). The requester can withdraw until it is decided (the checkout does not come back), and the outcome goes out as a confirm approved/rejected notification.
 - **Draft visibility** — the live draft before confirmation is visible only to admins of that category or a parent and to sysadmins. Everyone else lands on the latest confirmed snapshot, with an empty-state notice when none exists.
-- A category admin's **major confirmation** permanently prunes the previous major's minor snapshots — the confirm dialog previews what goes.
+- A category admin's **major confirmation** permanently prunes the previous major's intermediate minor snapshots (X.0 and the last minor are kept) — the confirm dialog previews what goes.
 
 ### Slot changes
 
@@ -344,7 +344,8 @@ Upload the consultant-delivered L5 interview result JSON files (multiple files a
 | `AI_BASE_URL` | backend `.env` | AI server URL (OpenAI-compatible). The in-house GPU is `https://gpu02.sbiologics.com/v1` |
 | `AI_MODEL` | backend `.env` | Default model id — after the SGLang move this is **just `glm-5.2`** (the old `-think` / `-high` / `-nothink` aliases are gone) |
 | `AI_MAX_TOKENS` | backend `.env` | Response token cap, thinking tokens included. Default 8000 — **too low and replies come back empty** |
-| `AI_TIMEOUT_SECONDS` | backend `.env` | Per-call timeout in seconds. Max-thinking calls are slow; 120–180 is recommended |
+| `AI_TIMEOUT_SECONDS` | backend `.env` | Per-call timeout in seconds. Default 60 — max-thinking calls are slow; 120–180 is recommended |
+| `EMBED_URL` | backend `.env` | bge-m3 embedding server for the knowledge base (OpenAI-compatible `/embeddings`) — empty disables the knowledge base entirely |
 | `BACKUP_DIR` | `.env` (compose) | Host path for db-backup sidecar dumps. Default `./backups` — point it at a NAS mount to get off-server copies |
 | `BACKUP_RETENTION_DAYS` | `.env` (compose) | Backup retention in days. Default 14 |
 
@@ -354,4 +355,4 @@ Upload the consultant-delivered L5 interview result JSON files (multiple files a
 
 ---
 
-*Business Process Map — Administrator Manual · updated 2026-09-03*
+*Business Process Map — Administrator Manual · updated 2026-09-07*
