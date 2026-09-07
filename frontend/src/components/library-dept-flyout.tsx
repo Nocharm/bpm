@@ -1,11 +1,12 @@
-// 라이브러리 부서 필터 플라이아웃 — 조직도 트리(아코디언 모션)+검색+내 부서 찾기. 필터 팝오버 우측 도킹 포털.
+// 라이브러리 부서 필터 플라이아웃 — 조직도 트리(아코디언 모션)+검색+내 부서 찾기+행 우클릭 메뉴. 필터 팝오버 우측 도킹 포털.
 "use client";
 
-import { ChevronRight, LocateFixed, Search, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, LocateFixed, Search, Square, SquareCheck, X } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CheckInput } from "@/components/check-input";
+import { ContextMenu } from "@/components/context-menu";
 import {
   buildDeptPathTree,
   collectDeptMatches,
@@ -17,8 +18,10 @@ import type { Lang } from "@/lib/i18n-messages";
 import { buildOrgPathChain, formatDeptName } from "@/lib/korean-dept";
 import { useSectionMotion } from "@/lib/use-closing-keys";
 
-// w-72(288px) — 오른쪽 공간이 모자라면 왼쪽으로 뒤집는 판정에 쓰므로 클래스와 함께 유지한다.
-const FLYOUT_WIDTH = 288;
+// 폭은 내용(가장 긴 부서명)에 맞춰 min-w-72(288px)에서 상한(416px)까지 늘고, 그 이상은 말줄임.
+// 오른쪽 공간이 최소 폭에도 못 미치면 팝오버 왼쪽으로 뒤집는다(right 기준 정렬이라 실제 폭과 무관).
+const FLYOUT_MIN_WIDTH = 288;
+const FLYOUT_MAX_WIDTH = 416;
 // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(framework-tree-picker와 같은 규칙)
 const AUTO_DRILL_MAX = 6;
 // 내 부서 찾기 — 조상을 한 단계씩 여는 간격(ms). 시선이 펼침을 따라갈 만큼만 늦춘다.
@@ -34,6 +37,7 @@ export interface LibraryDeptFlyoutProps {
   anchorRect: DOMRect; // 필터 팝오버의 rect — 열 때 측정해 넘어온다
   containerRef: React.RefObject<HTMLDivElement | null>; // 소유자의 바깥 클릭 판정용
   onClose: () => void;
+  onShowDeptInfo: (path: string, x: number, y: number) => void; // 우클릭 "부서 정보" — 소유자가 조직 카드를 띄운다
   lang: Lang;
   koreanDeptByPath: Map<string, string>;
 }
@@ -46,6 +50,7 @@ export function LibraryDeptFlyout({
   anchorRect,
   containerRef,
   onClose,
+  onShowDeptInfo,
   lang,
   koreanDeptByPath,
 }: LibraryDeptFlyoutProps) {
@@ -53,6 +58,7 @@ export function LibraryDeptFlyout({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [flashPath, setFlashPath] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ node: DeptTreeNode; x: number; y: number } | null>(null);
   const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<string>();
   // 스크롤 대상 조회 — document.querySelector 대신 행 ref 맵(포털이 여러 개여도 내 것만 잡는다)
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -81,7 +87,10 @@ export function LibraryDeptFlyout({
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, []);
 
-  const roots = buildDeptPathTree(options);
+  // 검색은 영문 리프명과 한글명 양쪽에 걸린다 — 한글명은 표시와 같은 소스(koreanDeptByPath: 조직도+직원 신고 폴백)
+  const roots = buildDeptPathTree(
+    options.map((o) => (o.korean_name ? o : { ...o, korean_name: koreanDeptByPath.get(o.id) ?? "" })),
+  );
   const matches = collectDeptMatches(roots, query);
 
   function revealPath(path: string, byUser: boolean) {
@@ -175,6 +184,11 @@ export function LibraryDeptFlyout({
             onDoubleClick={() => {
               if (node.children.length > 0) toggleNode(node);
             }}
+            // 우클릭 = 선택/펼침·접힘/부서 정보 메뉴
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ node, x: e.clientX, y: e.clientY });
+            }}
             className={`group flex min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink transition-colors duration-350 hover:bg-surface-alt ${
               flashPath === node.path ? "bg-accent-tint" : ""
             }`}
@@ -212,18 +226,47 @@ export function LibraryDeptFlyout({
   const maxHeight = Math.min(Math.round(window.innerHeight * 0.6), window.innerHeight - 16);
   const top = Math.max(8, Math.min(anchorRect.top, window.innerHeight - maxHeight - 8));
   const rightDocked = anchorRect.right + 6;
-  // 오른쪽에 안 들어가면 팝오버 왼쪽으로 뒤집는다(패널이 화면 우측에 붙는 레이아웃 대비)
-  const left =
-    rightDocked + FLYOUT_WIDTH > window.innerWidth - 8
-      ? anchorRect.left - 6 - FLYOUT_WIDTH
-      : rightDocked;
+  const roomRight = window.innerWidth - 8 - rightDocked;
+  // 오른쪽에 최소 폭도 안 들어가면 팝오버 왼쪽으로 뒤집는다(패널이 화면 우측에 붙는 레이아웃 대비)
+  const dockLeft = roomRight < FLYOUT_MIN_WIDTH;
+  const maxWidth = Math.max(
+    FLYOUT_MIN_WIDTH,
+    Math.min(FLYOUT_MAX_WIDTH, dockLeft ? anchorRect.left - 14 : roomRight),
+  );
+  const placement = dockLeft
+    ? { right: window.innerWidth - anchorRect.left + 6 }
+    : { left: rightDocked };
+  const menuItems = menu
+    ? [
+        {
+          label: t(selected.includes(menu.node.path) ? "library.deptMenuDeselect" : "library.deptMenuSelect"),
+          icon: selected.includes(menu.node.path) ? Square : SquareCheck,
+          onSelect: () => onToggle(menu.node.path),
+        },
+        ...(menu.node.children.length > 0
+          ? [
+              {
+                label: t(expanded.has(menu.node.path) ? "library.deptMenuCollapse" : "library.deptMenuExpand"),
+                icon: expanded.has(menu.node.path) ? ChevronDown : ChevronRight,
+                onSelect: () => toggleNode(menu.node),
+              },
+            ]
+          : []),
+        { divider: true as const },
+        {
+          label: t("library.deptMenuInfo"),
+          icon: Building2,
+          onSelect: () => onShowDeptInfo(menu.node.path, menu.x, menu.y),
+        },
+      ]
+    : [];
 
   return createPortal(
     <div
       ref={containerRef}
       data-id="library-dept-flyout"
-      className="fixed z-[1350] flex w-72 flex-col rounded-md border border-hairline bg-surface p-2 shadow-lg"
-      style={{ left, top, maxHeight }}
+      className="fixed z-[1350] flex w-max min-w-72 flex-col rounded-md border border-hairline bg-surface p-2 shadow-lg"
+      style={{ ...placement, top, maxHeight, maxWidth }}
     >
       <div className="flex items-center gap-1">
         <div className="flex min-w-0 flex-1 items-center gap-1 rounded-sm border border-hairline bg-surface-alt px-2 py-0.5">
@@ -268,6 +311,8 @@ export function LibraryDeptFlyout({
           roots.map(renderNode)
         )}
       </div>
+      {/* 컨텍스트 메뉴는 플라이아웃 DOM 안에 둔다 — 소유자의 바깥 클릭 판정(containerRef.contains)을 통과해야 한다 */}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
     </div>,
     document.body,
   );

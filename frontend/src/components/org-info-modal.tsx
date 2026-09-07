@@ -155,6 +155,8 @@ interface OrgInfoModalProps {
   anchored?: boolean;
   /** anchored 전용 — true면 페이드아웃 재생(언마운트는 호출측이 애니메이션 길이만큼 늦춘다). */
   closing?: boolean;
+  /** anchored 전용 — z-1350 플라이아웃(부서 트리) 위에서 열릴 때 카드를 그 위로 올린다. */
+  elevated?: boolean;
 }
 
 export function OrgInfoModal({
@@ -166,6 +168,7 @@ export function OrgInfoModal({
   onHoverEnd,
   anchored = false,
   closing = false,
+  elevated = false,
 }: OrgInfoModalProps) {
   const { lang } = useI18n();
   const users = useDirectory();
@@ -259,7 +262,7 @@ export function OrgInfoModal({
       <div
         data-id="org-info-hover-card"
         ref={cardRef}
-        className={`${closing ? "animate-item-out" : "animate-item-in"} fixed z-[1300] flex w-96 flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg`}
+        className={`${closing ? "animate-item-out" : "animate-item-in"} fixed ${elevated ? "z-[1400]" : "z-[1300]"} flex w-96 flex-col gap-3 rounded-md border border-hairline bg-surface p-4 shadow-lg`}
         style={{ left: anchorPos.left, top: anchorPos.top }}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}

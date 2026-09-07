@@ -25,4 +25,14 @@ describe("collectDeptMatches", () => {
     const hit = collectDeptMatches(roots, "b");
     expect(hit && [...hit].sort()).toEqual(["A", "A/B", "A/B/C"]);
   });
+
+  it("한글명으로도 걸린다 — 영문 리프명과 한글명 어느 쪽이든 부분일치", () => {
+    const roots = buildDeptPathTree([
+      { id: "Growth Center/Brand Team", name: "Brand Team", korean_name: "브랜드팀" },
+      { id: "Growth Center/Growth Team", name: "Growth Team", korean_name: "그로스팀" },
+    ]);
+    const hit = collectDeptMatches(roots, "브랜드");
+    expect(hit && [...hit].sort()).toEqual(["Growth Center", "Growth Center/Brand Team"]);
+    expect(collectDeptMatches(roots, "growth t")?.has("Growth Center/Growth Team")).toBe(true);
+  });
 });

@@ -268,7 +268,7 @@ export function ProcessLibraryPanel({
   useEffect(() => clearHoverTimer, []);
   // 부서 칩 호버 → 조직 정보 모달 — 인텐트 지연 오픈·유예 닫힘(모달 위 호버는 닫기 취소) (2026-09-02)
   const [deptModal, setDeptModal] = useState<
-    { path: string; origin: { x: number; y: number }; closing: boolean } | null
+    { path: string; origin: { x: number; y: number }; closing: boolean; elevated?: boolean } | null
   >(null);
   const deptOpenTimerRef = useRef<number | null>(null);
   const deptCloseTimerRef = useRef<number | null>(null);
@@ -309,6 +309,11 @@ export function ProcessLibraryPanel({
       () => setDeptModal({ path, origin: { ...deptPointerRef.current }, closing: false }),
       DEPT_HOVER_OPEN_MS,
     );
+  }
+  // 플라이아웃 트리 행 우클릭 → "부서 정보": 지연 없이 바로, 플라이아웃(z-1350) 위로 띄운다
+  function handleDeptInfoRequest(path: string, x: number, y: number) {
+    clearDeptTimers();
+    setDeptModal({ path, origin: { x, y }, closing: false, elevated: true });
   }
   function handleDeptChipLeave() {
     if (deptOpenTimerRef.current !== null) {
@@ -516,6 +521,7 @@ export function ProcessLibraryPanel({
                 anchorRect={deptFlyoutAnchor}
                 containerRef={deptFlyoutRef}
                 onClose={() => setDeptFlyoutAnchor(null)}
+                onShowDeptInfo={handleDeptInfoRequest}
                 lang={lang}
                 koreanDeptByPath={koreanDeptByPath}
               />
@@ -723,6 +729,7 @@ export function ProcessLibraryPanel({
         <OrgInfoModal
           anchored
           closing={deptModal.closing}
+          elevated={deptModal.elevated}
           orgPath={deptModal.path}
           koreanDeptByPath={koreanDeptByPath}
           origin={deptModal.origin}
