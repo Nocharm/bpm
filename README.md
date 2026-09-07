@@ -64,16 +64,20 @@ npm install
 npm run dev
 ```
 
-테스트/린트 (`backend/`에서 · frontend는 `npm run lint`):
+테스트/린트 (`backend/`에서 · frontend는 `frontend/`에서 `npm run lint` + 타입/단위 테스트):
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
 .venv/bin/ruff check app/ tests/
+# frontend/
+npx tsc --noEmit -p tsconfig.json && npx vitest run
 ```
 
 ```powershell
 .venv\Scripts\python -m pytest tests/ -q
 .venv\Scripts\ruff check app/ tests/
+# frontend\
+npx tsc --noEmit -p tsconfig.json; npx vitest run
 ```
 
 ## 데이터 초기화 / 데모 시드

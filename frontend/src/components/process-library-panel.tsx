@@ -4,11 +4,25 @@
 // 하단 New map은 검색어가 있을 때만 — 그 이름으로 생성 즉시 링크 (spec 2026-07-19).
 "use client";
 
-import { Filter, Network, Plus, Search, X } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Crown,
+  Eye,
+  Filter,
+  FolderTree,
+  type LucideIcon,
+  Network,
+  PenLine,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
 import { CheckInput } from "@/components/check-input";
+import { LibraryDeptFlyout } from "@/components/library-dept-flyout";
 import { CreateMapDialog } from "@/components/permissions/create-map-dialog";
 import { OrgInfoModal } from "@/components/org-info-modal";
 import { useKoreanDeptByPath } from "@/components/map-ownership-section";
@@ -17,6 +31,15 @@ import {
   SubprocessPreviewPeek,
   type PeekAddPayload,
 } from "@/components/subprocess-preview-peek";
+import { buildDeptPathTree } from "@/lib/dept-path-tree";
+import { useDirectoryDepartments } from "@/lib/directory";
+import {
+  buildDeptPathIndex,
+  resolveDepartmentPaths,
+  buildLibraryDeptOptions,
+  buildMyDeptChain,
+} from "@/lib/library-dept-options";
+import { useMe } from "@/lib/me";
 import { filterByQuery } from "@/lib/search";
 import { formatDeptName } from "@/lib/korean-dept";
 import {
@@ -55,6 +78,9 @@ export interface ProcessLibraryPanelProps {
   onFocusLinkedNode: (linkedMapId: number) => void;
 }
 
+// 역할 필 앞 아이콘 — 선택되면 Check로 바뀐다(사용자 지시 2026-09-07)
+const ROLE_ICONS: Record<LibraryRole, LucideIcon> = { owner: Crown, editor: PenLine, viewer: Eye };
+
 export function ProcessLibraryPanel({
   currentMapId,
   linkedMapIds,
@@ -75,14 +101,36 @@ export function ProcessLibraryPanel({
   const [filters, setFilters] = useState<LibraryFilters>(() => readLibraryFilters());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  // 부서 트리 플라이아웃 — 열 때 측정한 팝오버 rect가 곧 열림 상태(null=닫힘)
+  const [deptFlyoutAnchor, setDeptFlyoutAnchor] = useState<DOMRect | null>(null);
+  const deptFlyoutRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const me = useMe();
+  const myOrgPath = me?.org_path || null;
+  const directoryDepts = useDirectoryDepartments();
 
   // 필터 변경 시 그 자리에서 저장 — i18n.tsx setLang과 동일 관례.
   function updateFilters(next: LibraryFilters) {
     setFilters(next);
     writeLibraryFilters(next);
+  }
+
+  // 팝오버를 닫으면 플라이아웃도 같이 — 앵커 rect가 팝오버 기준이라 남겨두면 허공에 뜬다.
+  function closeFilterPopover() {
+    setFilterOpen(false);
+    setDeptFlyoutAnchor(null);
+  }
+
+  function toggleDeptFlyout() {
+    if (deptFlyoutAnchor) {
+      setDeptFlyoutAnchor(null);
+      return;
+    }
+    const rect = popoverRef.current?.getBoundingClientRect();
+    if (rect) setDeptFlyoutAnchor(rect);
   }
 
   // 미등록(미지정) 맵 노출은 fetch 플래그 — 켜면 include_undesignated로 재조회(가시성 필터는 서버)
@@ -97,12 +145,15 @@ export function ProcessLibraryPanel({
   }, [filters.showUnregistered]);
 
   // 바깥 클릭 시 필터 팝오버 닫기 — notification-bell.tsx와 동일 캡처 패턴.
+  // 부서 플라이아웃은 포털이라 filterRef 밖의 DOM이다 — 그 안쪽 클릭도 "안"으로 쳐야 팝오버가 안 닫힌다.
   useEffect(() => {
     if (!filterOpen) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (event.target instanceof Element && !filterRef.current?.contains(event.target)) {
-        setFilterOpen(false);
-      }
+      if (!(event.target instanceof Element)) return;
+      if (filterRef.current?.contains(event.target)) return;
+      if (deptFlyoutRef.current?.contains(event.target)) return;
+      setFilterOpen(false);
+      setDeptFlyoutAnchor(null);
     };
     window.addEventListener("mousedown", handleMouseDown, true);
     return () => window.removeEventListener("mousedown", handleMouseDown, true);
@@ -119,22 +170,43 @@ export function ProcessLibraryPanel({
     [rows],
   );
 
+  // 행의 부서(sp_department)는 리프명만 담기는 일이 많다 — 조직도에서 유일하게 풀리면 경로로 정규화해
+  // 트리 위치·필터·한글명·조직 카드가 같은 값을 본다. 중복 리프(두 상위 아래 같은 이름)는 그대로 두고
+  // 필터만 후보 전부로 매칭한다(applyLibraryFilters의 deptIndex).
+  const deptIndex = useMemo(() => buildDeptPathIndex(directoryDepts), [directoryDepts]);
   // 현재 맵 제외(자기 자신 링크 불가) — refsByMap은 순환 판별용이라 전체 rows 유지.
   const linkableRows = useMemo(
-    () => rows.filter((r) => r.map_id !== currentMapId),
-    [rows, currentMapId],
+    () =>
+      rows
+        .filter((r) => r.map_id !== currentMapId)
+        .map((r) => {
+          if (!r.department) return r;
+          const candidates = resolveDepartmentPaths(r.department, deptIndex);
+          return candidates.length === 1 && candidates[0] !== r.department
+            ? { ...r, department: candidates[0] }
+            : r;
+        }),
+    [rows, currentMapId, deptIndex],
   );
-  // 필터 팝오버의 부서 옵션 — linkableRows 기준 distinct department(전체경로), 라벨순 정렬.
+  // 부서 트리 소스 — 조직도 부서(약 500) ∪ 행에만 있는 부서(컨설턴트 임포트 등).
   // filters 자체가 아니라 linkableRows에서 파생해, 필터를 걸수록 다른 옵션이 사라지지 않는다.
-  const distinctDepartments = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of linkableRows) if (r.department) set.add(r.department);
-    return [...set].sort((a, b) =>
-      formatDeptName(a, lang, koreanDeptByPath).localeCompare(formatDeptName(b, lang, koreanDeptByPath)),
-    );
-  }, [linkableRows, lang, koreanDeptByPath]);
+  const deptOptions = useMemo(
+    () => buildLibraryDeptOptions(directoryDepts, linkableRows.map((r) => r.department), deptIndex),
+    [directoryDepts, linkableRows, deptIndex],
+  );
+  const chainPaths = useMemo(() => buildMyDeptChain(myOrgPath), [myOrgPath]);
+  // 팝오버는 "내 위쪽"만 — 루트→내 부서 체인(부서 미지정이면 트리 루트)에, 체인 밖에서 이미
+  // 선택된 부서를 덧붙인다(활성 필을 팝오버에서도 해제할 수 있어야 한다). 전체 탐색은 플라이아웃.
+  const quickPaths = useMemo(() => {
+    const base =
+      chainPaths.length > 0 ? chainPaths : buildDeptPathTree(deptOptions).map((r) => r.path);
+    return [...base, ...filters.departments.filter((d) => !base.includes(d))];
+  }, [chainPaths, deptOptions, filters.departments]);
   // 부서/역할 필터 → 부분일치+초성+로마자+시퀀스 매칭(filterByQuery, 이름·부서 대상, 랭크순) 순.
-  const listRows = useMemo(() => applyLibraryFilters(linkableRows, filters), [linkableRows, filters]);
+  const listRows = useMemo(
+    () => applyLibraryFilters(linkableRows, filters, deptIndex),
+    [linkableRows, filters, deptIndex],
+  );
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return listRows;
@@ -196,7 +268,7 @@ export function ProcessLibraryPanel({
   useEffect(() => clearHoverTimer, []);
   // 부서 칩 호버 → 조직 정보 모달 — 인텐트 지연 오픈·유예 닫힘(모달 위 호버는 닫기 취소) (2026-09-02)
   const [deptModal, setDeptModal] = useState<
-    { path: string; origin: { x: number; y: number }; closing: boolean } | null
+    { path: string; origin: { x: number; y: number }; closing: boolean; elevated?: boolean } | null
   >(null);
   const deptOpenTimerRef = useRef<number | null>(null);
   const deptCloseTimerRef = useRef<number | null>(null);
@@ -237,6 +309,11 @@ export function ProcessLibraryPanel({
       () => setDeptModal({ path, origin: { ...deptPointerRef.current }, closing: false }),
       DEPT_HOVER_OPEN_MS,
     );
+  }
+  // 플라이아웃 트리 행 우클릭 → "부서 정보": 지연 없이 바로, 플라이아웃(z-1350) 위로 띄운다
+  function handleDeptInfoRequest(path: string, x: number, y: number) {
+    clearDeptTimers();
+    setDeptModal({ path, origin: { x, y }, closing: false, elevated: true });
   }
   function handleDeptChipLeave() {
     if (deptOpenTimerRef.current !== null) {
@@ -318,7 +395,7 @@ export function ProcessLibraryPanel({
             <button
               type="button"
               data-id="library-filter-open"
-              onClick={() => setFilterOpen((v) => !v)}
+              onClick={() => (filterOpen ? closeFilterPopover() : setFilterOpen(true))}
               className="flex items-center gap-1 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt"
             >
               <Filter size={12} strokeWidth={1.5} />
@@ -331,53 +408,123 @@ export function ProcessLibraryPanel({
             </button>
             {filterOpen && (
               <div
+                ref={popoverRef}
                 data-id="library-filter-popover"
                 className="absolute left-0 top-6 z-[1300] w-52 rounded-md border border-hairline bg-surface p-2 shadow-lg"
               >
-                <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">
+                {/* 미등록 맵 — 행 전체가 스위치(행 클릭도 토글). 부서보다 위 (사용자 지시 2026-09-07) */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={filters.showUnregistered}
+                  data-id="library-unregistered-toggle"
+                  onClick={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
+                  className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                >
+                  <span className="min-w-0 truncate">{t("library.filterUnregistered")}</span>
+                  <span
+                    aria-hidden="true"
+                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150 ${
+                      filters.showUnregistered ? "bg-accent" : "bg-border-strong"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all duration-150 ${
+                        filters.showUnregistered ? "left-3.5" : "left-0.5"
+                      }`}
+                    />
+                  </span>
+                </button>
+                <p className="border-t border-hairline px-1 pb-1 pt-1.5 text-fine font-semibold text-ink-tertiary">
                   {t("library.filterDepartment")}
                 </p>
-                <div className="mb-2 max-h-36 overflow-y-auto">
-                  {distinctDepartments.map((dept, index) => (
-                    <label
-                      key={dept}
-                      title={dept}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
-                    >
-                      <CheckInput
-                        data-id={`library-filter-dept-${index}`}
-                        checked={filters.departments.includes(dept)}
-                        onChange={() => toggleDepartment(dept)}
-                      />
-                      <span className="min-w-0 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
-                    </label>
-                  ))}
+                <div className="max-h-36 overflow-y-auto">
+                  {quickPaths.map((dept, index) => {
+                    const checked = filters.departments.includes(dept);
+                    return (
+                      <label
+                        key={dept}
+                        title={dept}
+                        // 체인 들여쓰기 — 루트(depth 0)는 기존 px-1(4px)과 같은 자리에 선다
+                        style={{ paddingLeft: `${(dept.split("/").length - 1) * 8 + 4}px` }}
+                        className="group flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                      >
+                        {/* 체크는 이름 앞 자리를 지키되 호버·포커스·선택 상태에서만 보인다 */}
+                        <CheckInput
+                          data-id={`library-filter-dept-${index}`}
+                          checked={checked}
+                          onChange={() => toggleDepartment(dept)}
+                          className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                            checked ? "" : "opacity-0"
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
+                        {dept === myOrgPath && (
+                          <span
+                            data-id="library-dept-mine"
+                            className="shrink-0 rounded-full bg-accent-tint px-1.5 text-[10px] leading-4 text-accent"
+                          >
+                            {t("library.filterDeptMine")}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
                 </div>
+                <button
+                  type="button"
+                  data-id="library-filter-dept-browse"
+                  onClick={toggleDeptFlyout}
+                  className="mb-2 flex w-full items-center gap-1 rounded-xs px-1 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+                >
+                  <FolderTree size={12} strokeWidth={1.5} />
+                  {t("library.filterDeptBrowse")}
+                  <ChevronRight size={12} strokeWidth={1.5} className="ml-auto" />
+                </button>
                 <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">{t("library.filterRole")}</p>
-                <div className="mb-2 flex flex-col">
-                  {(["owner", "editor", "viewer"] as const).map((role) => (
-                    <label
-                      key={role}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
-                    >
-                      <CheckInput
+                {/* 역할은 한 줄 필 토글 — 아무것도 안 고르면 전체와 같다(빈 roles = 필터 없음) */}
+                <div className="mb-2 flex gap-1 px-0.5">
+                  {(["owner", "editor", "viewer"] as const).map((role) => {
+                    const active = filters.roles.includes(role);
+                    const RoleIcon = ROLE_ICONS[role];
+                    return (
+                      <button
+                        key={role}
+                        type="button"
                         data-id={`library-filter-role-${role}`}
-                        checked={filters.roles.includes(role)}
-                        onChange={() => toggleRole(role)}
-                      />
-                      {roleLabels[role]}
-                    </label>
-                  ))}
+                        aria-pressed={active}
+                        onClick={() => toggleRole(role)}
+                        className={`flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1 py-0.5 text-fine transition-colors duration-150 ${
+                          active
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                        }`}
+                      >
+                        {active ? (
+                          <Check size={12} strokeWidth={2} />
+                        ) : (
+                          <RoleIcon size={12} strokeWidth={1.5} />
+                        )}
+                        {roleLabels[role]}
+                      </button>
+                    );
+                  })}
                 </div>
-                <label className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary">
-                  <CheckInput
-                    data-id="library-unregistered-toggle"
-                    checked={filters.showUnregistered}
-                    onChange={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
-                  />
-                  {t("library.filterUnregistered")}
-                </label>
               </div>
+            )}
+            {deptFlyoutAnchor && (
+              <LibraryDeptFlyout
+                options={deptOptions}
+                selected={filters.departments}
+                onToggle={toggleDepartment}
+                myOrgPath={myOrgPath}
+                anchorRect={deptFlyoutAnchor}
+                containerRef={deptFlyoutRef}
+                onClose={() => setDeptFlyoutAnchor(null)}
+                onShowDeptInfo={handleDeptInfoRequest}
+                lang={lang}
+                koreanDeptByPath={koreanDeptByPath}
+              />
             )}
           </div>
           {filters.departments.map((dept, index) => (
@@ -582,6 +729,7 @@ export function ProcessLibraryPanel({
         <OrgInfoModal
           anchored
           closing={deptModal.closing}
+          elevated={deptModal.elevated}
           orgPath={deptModal.path}
           koreanDeptByPath={koreanDeptByPath}
           origin={deptModal.origin}

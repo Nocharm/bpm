@@ -17,11 +17,12 @@ import {
   postDeptRemap,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
+import { buildDeptPathTree } from "@/lib/dept-path-tree";
 import { useI18n } from "@/lib/i18n";
 import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
-import { buildDeptPathTree, DeptTreePicker } from "./dept-tree-picker";
+import { DeptTreePicker } from "./dept-tree-picker";
 import { ExportCsvButton } from "./export-csv-button";
 
 const PILL =

@@ -152,6 +152,9 @@ try {
   );
   check("toggle ON: 'Not registered' badge appears in the panel", badgeShown);
   await page.screenshot({ path: `${SHOTS}/01-library-toggle.png` });
+  // 팝오버가 목록 위를 덮는다 — 바깥(검색창) 클릭으로 닫아야 행을 잡을 수 있다
+  await panel.locator("input").first().click();
+  await waitForCondition(async () => (await panel.locator('[data-id="library-filter-popover"]').count()) === 0);
 
   // 미등록 맵도 다른 맵과 같은 드래그로 캔버스에 놓아야 확인 체인이 열린다
   await page.dragAndDrop(`[data-map-id="${targetA.id}"]`, ".react-flow");
@@ -257,6 +260,7 @@ try {
   await page.screenshot({ path: `${SHOTS}/07-designation-modal.png` });
 
   // 부서(필수) — 모달 내 첫 SearchSelect에서 실제 부서 옵션 선택("None"/클리어 항목 제외)
+  // TODO(2026-09-07): 지정 모달이 타일 UI로 바뀌어(sp-tile-department → 팝오버 안 SearchSelect) 이 단계부터 낡음
   const modal = page.locator('[data-id="subprocess-designation-modal"]');
   await modal.locator('[data-id="search-select-trigger"]').first().click();
   await page.waitForSelector('[data-id="search-select-menu"]', { timeout: 6000 });
