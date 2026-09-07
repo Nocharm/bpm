@@ -653,6 +653,8 @@ export interface LibraryProcess {
   refs: number[];
   // 미지정 맵 옵트인(include_undesignated) 도입으로 행별 지정 여부 동봉 (spec 2026-07-19)
   designated: boolean;
+  // 호출자의 유효 역할 — 라이브러리 권한 필터(pill)의 서버측 단일 소스, sysadmin은 "owner" (2026-09-07)
+  my_role: "owner" | "editor" | "viewer" | null;
   // 지정 어트리뷰트 — 미지정 행은 항상 null(잔존값 마스킹) (spec 2026-07-06/19)
   department: string | null;
   assignee: string | null;

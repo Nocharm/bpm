@@ -21,17 +21,18 @@ router = APIRouter(
 )
 
 
-async def _filter_visible_map_ids(
+async def _resolve_roles(
     session: AsyncSession, user: str, candidates: list[tuple[int, str, str | None]]
-) -> set[int]:
-    """(map_id, visibility, owning_department) 후보 중 user 가시(role≥viewer) 맵 id.
+) -> dict[int, str | None]:
+    """(map_id, visibility, owning_department) 후보별 호출자의 유효 역할.
 
     maps.list_maps 의 배치 패턴 미러 — 권한/승인자/그룹을 한 번씩만 로드해 N+1 회피.
+    가시성(role≥viewer)은 role is not None 으로 파생 — 별도 판정 없이 단일 소스(my_role 겸용).
     """
     if not candidates:
-        return set()
+        return {}
     if logic.is_sysadmin(user):
-        return {mid for mid, _, _ in candidates}
+        return {mid: "owner" for mid, _, _ in candidates}
     emp = await session.get(Employee, user)
     emp_org_path = (
         resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
@@ -57,9 +58,8 @@ async def _filter_visible_map_ids(
         ).all()
     )
     user_group_ids = await get_user_active_group_ids(session, user, emp_org_path)
-    visible: set[int] = set()
-    for mid, visibility, owning_department in candidates:
-        role = logic.effective_role(
+    return {
+        mid: logic.effective_role(
             user,
             False,  # sysadmin은 위에서 조기 반환
             emp_org_path,
@@ -69,9 +69,8 @@ async def _filter_visible_map_ids(
             user_group_ids,
             owning_department=owning_department,
         )
-        if role is not None:
-            visible.add(mid)
-    return visible
+        for mid, visibility, owning_department in candidates
+    }
 
 
 @router.get("/processes")
@@ -130,17 +129,15 @@ async def list_processes(
             .order_by(ProcessMap.name)
         )
     ).all()
-    # 미지정 맵은 비공개 이름 유출 방지를 위해 가시성 판정 후 남긴다 (지정 맵은 기존대로 전체 공개 라이브러리)
-    undesignated_candidates = [
-        (row[0], row[8], row[9])
-        for row in latest_rows
-        if row[7] is None  # sp_designated_at
-    ]
-    visible_undesignated = await _filter_visible_map_ids(session, user, undesignated_candidates)
+    # 미지정 맵은 비공개 이름 유출 방지를 위해 가시성 판정 후 남긴다 (지정 맵은 기존대로 전체 공개 라이브러리).
+    # 역할은 전 행에 대해 산정 — my_role 노출(피커 권한 필터)과 미지정 가시성 판정을 한 번에 처리.
+    roles = await _resolve_roles(
+        session, user, [(row[0], row[8], row[9]) for row in latest_rows]
+    )
     latest_rows = [
         row
         for row in latest_rows
-        if row[7] is not None or row[0] in visible_undesignated
+        if row[7] is not None or roles.get(row[0]) is not None  # sp_designated_at
     ]
     pub_rows = (
         await session.execute(
@@ -170,6 +167,8 @@ async def list_processes(
             "latest_published_version_id": published.get(mid),
             "refs": sorted(refs.get(mid, [])),
             "designated": designated_at is not None,
+            # 호출자의 유효 역할 — 라이브러리 필터(권한 필) 단일 소스, sysadmin은 "owner" (2026-09-07)
+            "my_role": roles.get(mid),
             # 미지정 행은 직전 지정 잔존값 유출 방지 — sp 어트리뷰트 마스킹 (spec 2026-07-19)
             "department": department if designated_at is not None else None,
             "assignee": assignee if designated_at is not None else None,

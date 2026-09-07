@@ -210,6 +210,37 @@ class TestLibraryUndesignated:
         assert private_id in rows
 
 
+class TestLibraryMyRole:
+    """행별 my_role — 라이브러리 권한 필터(부서/역할 필)의 서버측 단일 소스 (2026-09-07)."""
+
+    def test_my_role_reflects_permission_grant(self, client, enforce):
+        # private로 시드 — public이면 visibility 베이스라인(viewer)이 끼어들어 stranger=None 케이스가 오염된다.
+        map_id = seed_sp_map("Lib Role Map", designated=True, visibility="private")
+
+        act_as(OWNER)
+        rows = _rows_by_id(client.get("/api/library/processes").json())
+        assert rows[map_id]["my_role"] == "owner"
+
+        act_as(EDITOR)
+        rows = _rows_by_id(client.get("/api/library/processes").json())
+        assert rows[map_id]["my_role"] == "editor"
+
+        act_as(VIEWER)
+        rows = _rows_by_id(client.get("/api/library/processes").json())
+        assert rows[map_id]["my_role"] == "viewer"
+
+        # 권한 없는 stranger — 지정 맵이라 행 자체는 보이지만(공개 라이브러리) 역할은 null
+        act_as(STRANGER)
+        rows = _rows_by_id(client.get("/api/library/processes").json())
+        assert map_id in rows
+        assert rows[map_id]["my_role"] is None
+
+        # sysadmin은 권한 행과 무관하게 owner
+        act_as(SYSADMIN)
+        rows = _rows_by_id(client.get("/api/library/processes").json())
+        assert rows[map_id]["my_role"] == "owner"
+
+
 class TestCreateSpRequest:
     def test_viewer_creates_pending_request_and_notifies_owner(self, client, enforce):
         host_id = seed_sp_map("SP Host Alpha")
