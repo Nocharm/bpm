@@ -68,22 +68,17 @@ export function ProcessLibraryPanel({
   const { t, lang } = useI18n();
   const koreanDeptByPath = useKoreanDeptByPath();
   const [rows, setRows] = useState<LibraryProcess[]>([]);
-  // 부서/역할/미등록 필터 — localStorage 영속(bpm.library.filters). 초기값은 빈 필터로 두고
-  // 마운트 후 복원해 SSR 렌더와 일치시킨다(i18n.tsx LangProvider와 동일 관례).
-  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_LIBRARY_FILTERS);
+  // 부서/역할/미등록 필터 — localStorage 영속(bpm.library.filters). 패널은 클릭 시에만 마운트되어
+  // SSR 불일치가 없으므로 지연 초기화로 즉시 복원한다(마운트 이펙트 없이 useState(() => ...), F9) —
+  // 이전의 마운트 후 복원 effect는 showUnregistered가 true로 영속된 경우 fetch가 두 번 나가는 부작용이 있었다.
+  const [filters, setFilters] = useState<LibraryFilters>(() => readLibraryFilters());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFilters(readLibraryFilters()); // intentional: one-time hydration restore from localStorage (i18n.tsx와 동일 관례)
-  }, []);
-
-  // 필터 변경 시 그 자리에서 저장 — 복원 effect와 분리해 초기 마운트에 빈 필터로 덮어쓰지 않는다
-  // (framework-tree.tsx의 hydratedRef 게이트 대신, 변경 지점에서 직접 쓰는 i18n.tsx setLang 관례).
+  // 필터 변경 시 그 자리에서 저장 — i18n.tsx setLang과 동일 관례.
   function updateFilters(next: LibraryFilters) {
     setFilters(next);
     writeLibraryFilters(next);
@@ -336,7 +331,7 @@ export function ProcessLibraryPanel({
             {filterOpen && (
               <div
                 data-id="library-filter-popover"
-                className="absolute left-0 top-6 z-[1300] w-60 rounded-md border border-hairline bg-surface p-2 shadow-lg"
+                className="absolute left-0 top-6 z-[1300] w-52 rounded-md border border-hairline bg-surface p-2 shadow-lg"
               >
                 <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">
                   {t("library.filterDepartment")}

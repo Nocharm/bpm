@@ -154,7 +154,7 @@ A **Subprocess** node embeds another process as a single step — a reference, n
 
 You can link a map that is **not yet designated** as a placeholder first, and sort out registration later.
 
-- In the **process library panel** (library button in the top bar), turn on **"Show unregistered maps"** below the search box — unregistered maps then appear with a **"Not registered"** badge.
+- In the **process library panel** (library button in the top bar), the **Filter** button opens a popover with **Department**, **Role**, and **"Unregistered maps"** checkboxes — turning on "Unregistered maps" makes unregistered maps appear with a **"Not registered"** badge. Active filters show as removable pills next to the Filter button, **"Clear filters"** resets them all, and the choice **persists per browser**.
 - Unregistered maps are **dragged onto the canvas just like any other map** — a lock warning confirms on drop, then it asks whether to **send a registration request**: **Send request** links and asks the owner; **Link only** just links.
 - The request lands in the target map **owner's Inbox (Approvals)**. Once the owner completes the designation, the link's warning clears and the requester is notified (see the Getting Around manual for the owner-side flow).
 - To request later or check status — select the unregistered link node: the inspector shows a **Request registration** button (after requesting, a **Registration requested** badge with a **Withdraw** button for your own request).

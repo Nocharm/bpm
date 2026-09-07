@@ -1479,8 +1479,6 @@ const en = {
   "library.emptyDesignated": "No designated subprocesses yet - a map owner can designate one in map settings.",
   "library.toggle": "Process library",
   "library.open": "Open subprocess library",
-  // ── 미등록 맵 플레이스홀더 / Unregistered-map placeholder (spec 2026-07-19) ──
-  "library.showUnregistered": "Show unregistered maps",
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "Filter",
   "library.filterDepartment": "Department",
@@ -3748,8 +3746,6 @@ const ko: Record<MessageKey, string> = {
   "library.emptyDesignated": "지정된 서브프로세스가 없습니다 - 맵 오너가 맵 설정에서 지정할 수 있습니다.",
   "library.toggle": "프로세스 라이브러리",
   "library.open": "서브프로세스 목록 열기",
-  // ── 미등록 맵 플레이스홀더 (spec 2026-07-19) ──
-  "library.showUnregistered": "미등록 맵 표시",
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "필터",
   "library.filterDepartment": "부서",
