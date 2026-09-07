@@ -1277,3 +1277,35 @@ def test_edited_draft_survives_redelivery(client) -> None:
 
     status, titles = _run(_load())
     assert status == "draft" and "현업이 고친 제목" in titles
+
+
+def test_upsert_categories_external_is_create_only(client) -> None:
+    """외부 계보(external=True)는 없을 때만 생성하고, 있으면 이름·부모·순서를 건드리지 않는다 (spec 2026-09-07 §6.1)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+    from scripts.consultant_canonical import CanonicalCategory
+    from scripts.import_consultant import upsert_categories
+
+    home = [CanonicalCategory(code="X", name="원본 루트", level=1, parent=None),
+            CanonicalCategory(code="X1", name="원본 L2", level=2, parent="X")]
+    foreign = [CanonicalCategory(code="X", name="다른 파일이 부른 이름", level=1, parent=None, external=True),
+               CanonicalCategory(code="X1", name="다른 이름 L2", level=2, parent="X", external=True),
+               CanonicalCategory(code="X2", name="새 외부 L2", level=2, parent="X", external=True)]
+
+    async def _run_both():
+        async with SessionLocal() as session:
+            await upsert_categories(session, home)
+            await session.commit()
+        async with SessionLocal() as session:
+            ids = await upsert_categories(session, foreign)
+            await session.commit()
+            rows = (await session.scalars(
+                select(ProcessCategory).where(ProcessCategory.code.in_(["X", "X1", "X2"]))
+                .order_by(ProcessCategory.code))).all()
+        return ids, rows
+
+    ids, rows = _run(_run_both())
+    assert [r.name for r in rows] == ["원본 루트", "원본 L2", "새 외부 L2"]  # 기존 2행 불변, 신규 1행 생성
+    assert rows[2].parent_id == ids["X"] and ids["X2"] == rows[2].id

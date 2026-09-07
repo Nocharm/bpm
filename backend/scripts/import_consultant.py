@@ -315,8 +315,9 @@ async def upsert_categories(
             session.add(row)
             await session.flush()
             existing[cat.code] = row
-        else:
+        elif not cat.external:
             row.name, row.level, row.parent_id, row.sort_order = cat.name, cat.level, parent_id, order
+        # cat.external and 기존 행 → 불변: 타 L5의 계보를 이 파일이 개명·이동하지 않는다 (spec 2026-09-07 §6.1)
         ids[cat.code] = row.id
 
     # 위 루프는 전달분 code만 건드린다 — UI 생성 카테고리(`ui-*`, POST /api/categories)는

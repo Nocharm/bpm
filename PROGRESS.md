@@ -10,6 +10,7 @@
 - T1 lineage 헬퍼: `external_ref_lineage_key`(홈 L5|refId 네임스페이스 — 파일 간 같은 refId 충돌 차단)·`normalize_task_name`(NFKC·casefold·공백 제거) — 어댑터/엔진/후차 해소가 공유.
 - T2 어댑터: `externalTasks[]` 파싱(`ExternalRef`, error/warning 표 §4.4)·엣지 끝점 해석 rows→refId→미선언(taskId 플레이스홀더+경고 유지)·`InterviewLinkage.external_refs`(엔진 전환 전까지 `external_codes` 호환 프로퍼티)·`quote` 제목 KeyError 픽스·0.5 수용(0.4 유지, 0.3 거부 문구 0.5로).
 - T3 외부 계보: `CanonicalCategory.external`(홈 `l5.nodeCode` 조상 체인 밖 = 외부) 마킹, 부모가 파일에 없는 외부 항목은 `_prune_external_lineage`가 경고 후 제외(홈 체인 끊김은 여전히 파일 error).
+- T4 카테고리: `upsert_categories`는 external 행이 이미 있으면 4필드 불변(없을 때만 생성), 라우터 파일 간 병합은 홈 주장 우선(외부가 홈을 덮지 않음, 외부↔외부 이름 차이는 경고 없음).
 
 ## 2026-09-07 — 슬라이드 매뉴얼 4종 재생성: 08-31 이후 md 델타 반영 (docs/manual-pdf-refresh)
 - **범위 판단**: md 매뉴얼 6종은 09-07 커밋까지 증분 갱신돼 최신(잔여 3커밋은 체크박스 모양·모션 리팩터라 문서 영향 없음) → 실제 정체는 08-31에 만든 슬라이드 HTML/PDF. `git diff e89aabe5..HEAD -- docs/manual/*.md`(225+/71−)를 델타로 삼아 슬라이드에 흡수.

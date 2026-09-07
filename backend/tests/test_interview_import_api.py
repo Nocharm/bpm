@@ -574,3 +574,47 @@ def test_external_source_endpoint_places_placeholder_as_edge_source(client: Test
     own_map = _map_row(doc["rows"][0]["taskId"])
     own_node = next(n for n in nodes if n.linked_map_id == own_map.id)
     assert any(e.source_node_id == ph.id and e.target_node_id == own_node.id for e in edges)
+
+
+# ── 0.5 externalTasks — spec 2026-09-07 ────────────────────────────────────────────
+
+
+def test_home_claim_wins_over_external_lineage_across_files(client: TestClient) -> None:
+    """같은 code를 한 파일은 홈으로, 다른 파일은 외부 계보로 실으면 파일 순서와 무관하게 홈 이름이 남는다 (spec 2026-09-07 §4.3)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+
+    def _pair(order: str) -> list[dict]:
+        home = _interview()
+        home["schema_version"] = "0.5-bpm-interface-draft"
+        home["framework"]["categories"] = [
+            {"code": "HW", "name": "홈 루트", "level": 1, "parent": None},
+            {"code": "HW-1", "name": "홈 L2", "level": 2, "parent": "HW"},
+            {"code": "HW-1-1", "name": "홈 L3", "level": 3, "parent": "HW-1"},
+            {"code": "HW-1-1-1", "name": "홈 L4", "level": 4, "parent": "HW-1-1"},
+            {"code": "HW-1-1-1-1", "name": "홈 L5 정식명", "level": 5, "parent": "HW-1-1-1"},
+        ]
+        home["l5"] = {"label": "홈 L5 정식명", "nodeCode": "HW-1-1-1-1"}
+        home["rows"][0]["taskId"] = f"hw-task-{order}"
+        other = _interview()
+        other["schema_version"] = "0.5-bpm-interface-draft"
+        other["framework"]["categories"] += home["framework"]["categories"][:4] + [
+            {"code": "HW-1-1-1-1", "name": "다른 파일이 부른 이름", "level": 5, "parent": "HW-1-1-1"}]
+        other["rows"][0]["taskId"] = f"hw-other-{order}"
+        other["externalTasks"] = [{"refId": "ext-hw", "l5": {"nodeCode": "HW-1-1-1-1", "label": None}, "l6": "아무 업무", "note": None}]
+        other["relations"]["edges"] = [{"src": f"hw-other-{order}", "dst": "ext-hw", "kind": "seq", "gateway": None,
+                                        "condition": None, "label": None, "quote": None}]
+        files = [{"name": "home.json", "content": home}, {"name": "other.json", "content": other}]
+        return files if order == "a" else list(reversed(files))
+
+    async def _name():
+        async with SessionLocal() as session:
+            return await session.scalar(select(ProcessCategory.name).where(ProcessCategory.code == "HW-1-1-1-1"))
+
+    for order in ("a", "b"):
+        res = _post(client, _pair(order), apply=True)
+        assert res.status_code == 200, res.text
+        assert all(f["ok"] for f in res.json()["files"]), res.json()["files"]
+        assert _run(_name()) == "홈 L5 정식명"

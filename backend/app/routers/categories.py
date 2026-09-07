@@ -769,7 +769,9 @@ async def import_interview_delivery(
         if ok:
             for cat in result.categories:
                 prev = merged_cats.get(cat.code)
-                if prev is not None and prev.name != cat.name:
+                if prev is not None and cat.external and not prev.external:
+                    continue  # 홈 주장 우선 — 외부 계보는 다른 파일의 홈 항목을 덮지 않는다 (spec 2026-09-07 §4.3)
+                if prev is not None and prev.name != cat.name and not (prev.external or cat.external):
                     issues.append(AdapterIssue(
                         "warning", "framework.categories",
                         f"category {cat.code} name differs across files - later file wins"
