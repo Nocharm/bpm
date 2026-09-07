@@ -8,6 +8,7 @@
 - **결정**: A안(최상위 `externalTasks[]` + 엣지는 `refId` 참조, 외부 L5 계보는 `framework.categories`에 그대로·create-only), 같은 L5 안 정규화 이름 정확 일치만 자동 연결, 미선언 코드는 기존 taskId 플레이스홀더 동작 유지. 샘플 7종 전부 0.5 재작성(L6 ≥4·loop+branch, 있는/없는 시나리오 매트릭스). 조사 중 발견: 외부 엣지 `quote` → 어댑터 KeyError(dry-run 500) — 같은 트랙에서 픽스.
 - **구현 플랜** `docs/superpowers/plans/2026-09-07-interview-external-refs.md` — 10태스크(계보 헬퍼 → 어댑터 2 → 엔진 3 → FE 리포트 → 샘플 A/B → 문서·게이트·푸시), 리포트 문구는 FE PATTERNS와 계약이라 플랜에 verbatim 고정.
 - T1 lineage 헬퍼: `external_ref_lineage_key`(홈 L5|refId 네임스페이스 — 파일 간 같은 refId 충돌 차단)·`normalize_task_name`(NFKC·casefold·공백 제거) — 어댑터/엔진/후차 해소가 공유.
+- T2 어댑터: `externalTasks[]` 파싱(`ExternalRef`, error/warning 표 §4.4)·엣지 끝점 해석 rows→refId→미선언(taskId 플레이스홀더+경고 유지)·`InterviewLinkage.external_refs`(엔진 전환 전까지 `external_codes` 호환 프로퍼티)·`quote` 제목 KeyError 픽스·0.5 수용(0.4 유지, 0.3 거부 문구 0.5로).
 
 ## 2026-09-07 — 슬라이드 매뉴얼 4종 재생성: 08-31 이후 md 델타 반영 (docs/manual-pdf-refresh)
 - **범위 판단**: md 매뉴얼 6종은 09-07 커밋까지 증분 갱신돼 최신(잔여 3커밋은 체크박스 모양·모션 리팩터라 문서 영향 없음) → 실제 정체는 08-31에 만든 슬라이드 HTML/PDF. `git diff e89aabe5..HEAD -- docs/manual/*.md`(225+/71−)를 델타로 삼아 슬라이드에 흡수.

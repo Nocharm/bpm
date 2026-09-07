@@ -229,7 +229,7 @@ def test_schema_version_03_is_rejected() -> None:
     data["schema_version"] = "0.3-bpm-interface-draft"
     res = convert_interview(data)
     assert res.has_error() and res.maps == []
-    assert any("re-deliver as 0.4" in i.message for i in res.issues)
+    assert any("re-deliver as 0.5" in i.message for i in res.issues)  # 0.5 = 최신 계약 (2026-09-07)
 
 
 def test_numeric_params_survive_json_numbers() -> None:
@@ -292,7 +292,7 @@ def test_edge_with_missing_endpoint_is_dropped_not_treated_as_external() -> None
     lk = res.linkage
     assert lk is not None
     assert lk.edges == []
-    assert lk.external_codes == []
+    assert lk.external_refs == {}
     assert sum("edge missing src/dst" in i.message for i in res.issues) == 2
 
 
@@ -516,7 +516,112 @@ def test_adapter_keeps_edge_to_external_task_as_placeholder_source() -> None:
     assert edges[("task-run-0002", "other-l5-task-9")].external is True
     # 양쪽 모두 rows에 없는 엣지는 드랍
     assert ("ghost-a", "ghost-b") not in edges
-    # external_codes는 외부 taskId 목록
-    assert lk.external_codes == ["other-l5-task-9"]
+    # external_refs는 외부 끝점 목록 — 미선언이라 declared=False
+    assert list(lk.external_refs) == ["other-l5-task-9"]
+    assert lk.external_refs["other-l5-task-9"].declared is False
     # placeholder 메시지 포함
     assert any("placeholder" in i.message for i in result.issues)
+
+
+# ── 0.5 외부 L6 참조(externalTasks) — spec 2026-09-07 §4·§5 ─────────────────────────
+
+
+def _external_task(ref_id: str, node_code: str, l6: object = "외부 업무", **over: object) -> dict:
+    base: dict = {"refId": ref_id, "l5": {"nodeCode": node_code, "label": "외부 L5"}, "l6": l6, "note": None}
+    base.update(over)
+    return base
+
+
+def _with_external(data: dict) -> dict:
+    """홈 rows 1건 + 외부 L5(19-01-02-01-01) 계보 동봉 + 선언 ref 1건."""
+    data["schema_version"] = "0.5-bpm-interface-draft"
+    data["framework"]["categories"] += [
+        {"code": "19-01-02", "name": "유틸리티 운전", "level": 3, "parent": "19-01"},
+        {"code": "19-01-02-01", "name": "정제수 시스템 운전", "level": 4, "parent": "19-01-02"},
+        {"code": "19-01-02-01-01", "name": "정제수 일상 점검", "level": 5, "parent": "19-01-02-01"},
+    ]
+    data["externalTasks"] = [_external_task("ext-util", "19-01-02-01-01", "정제수 일상 점검 수행",
+                                            note="점검 라운드가 끝나야 교정 준비를 시작한다고 함")]
+    data["relations"]["edges"] = [_edge("ext-util", "task-prep-0001", label="점검 후 준비")]
+    return data
+
+
+def test_declared_external_task_becomes_external_ref_without_warning() -> None:
+    res = convert_interview(_with_external(_interview()))
+    assert not res.has_error()
+    lk = res.linkage
+    assert lk is not None
+    ref = lk.external_refs["ext-util"]
+    assert (ref.l5_code, ref.l5_label, ref.name, ref.declared) == (
+        "19-01-02-01-01", "외부 L5", "정제수 일상 점검 수행", True)
+    assert ref.note == "점검 라운드가 끝나야 교정 준비를 시작한다고 함"
+    assert [(e.source, e.target, e.external) for e in lk.edges] == [("ext-util", "task-prep-0001", True)]
+    assert not any("external" in i.message and i.severity == "warning" for i in res.issues)
+    note = next(n for n in res.notes if n.kind == "external")
+    assert note.title == "정제수 일상 점검 수행 (외부 L5)" and note.category_code == "19-01-06-01-02"
+
+
+def test_undeclared_endpoint_keeps_legacy_taskid_placeholder_with_warning() -> None:
+    data = _interview()
+    data["relations"]["edges"] = [_edge("task-prep-0001", "other-l5-task-0009")]
+    res = convert_interview(data)
+    assert not res.has_error()
+    ref = res.linkage.external_refs["other-l5-task-0009"]
+    assert ref.declared is False and ref.l5_code is None and ref.name == ""
+    assert any("kept as placeholder" in i.message and "not declared in externalTasks" in i.message
+               for i in res.issues)
+
+
+def test_external_edge_quote_no_longer_crashes_and_becomes_flow_note() -> None:
+    data = _with_external(_interview())
+    data["relations"]["edges"][0]["quote"] = "라운드 끝나면 그때 준비 들어가요."
+    res = convert_interview(data)  # 이전엔 row_names[src] KeyError
+    assert not res.has_error()
+    flow = next(n for n in res.notes if n.kind == "flow")
+    assert flow.title == "정제수 일상 점검 수행 → 교정 준비"
+
+
+def test_external_task_l6_null_keeps_empty_name() -> None:
+    data = _with_external(_interview())
+    data["externalTasks"][0]["l6"] = None
+    res = convert_interview(data)
+    assert not res.has_error()
+    assert res.linkage.external_refs["ext-util"].name == ""  # 제목은 엔진이 "(L6 unspecified) L5명"으로
+
+
+def test_external_task_errors_and_warnings() -> None:
+    data = _with_external(_interview())
+    data["externalTasks"] += [
+        _external_task("ext-util", "19-01-02-01-01"),               # 중복 refId
+        _external_task("task-prep-0001", "19-01-02-01-01"),          # taskId 충돌
+        {"refId": "ext-nol5", "l6": "x"},                            # l5 누락
+        {"refId": "ext-nocode", "l5": {"label": "이름만"}, "l6": "x"},  # nodeCode 누락
+    ]
+    res = convert_interview(data)
+    msgs = [(i.severity, i.message) for i in res.issues]
+    assert ("error", "duplicate refId 'ext-util' (참조 id 중복)") in msgs
+    assert any(s == "error" and "collides with rows[].taskId" in m for s, m in msgs)
+    assert any(s == "error" and m.startswith("l5 missing") for s, m in msgs)
+    assert any(s == "error" and m.startswith("nodeCode missing") for s, m in msgs)
+
+
+def test_external_task_unknown_l5_and_unreferenced_are_warnings() -> None:
+    data = _with_external(_interview())
+    data["externalTasks"].append(_external_task("ext-unused", "77-01-01-01-01"))  # 파일 categories에 없음 + 엣지 미참조
+    res = convert_interview(data)
+    assert not res.has_error()
+    assert any(i.severity == "warning" and "external L5 '77-01-01-01-01' not in framework.categories" in i.message
+               for i in res.issues)
+    assert any(i.severity == "warning" and "refId 'ext-unused' not referenced by any edge" in i.message
+               for i in res.issues)
+    assert "ext-unused" not in res.linkage.external_refs
+
+
+def test_edge_between_two_external_endpoints_is_dropped() -> None:
+    data = _with_external(_interview())
+    data["externalTasks"].append(_external_task("ext-two", "19-01-02-01-01", "다른 외부"))
+    data["relations"]["edges"].append(_edge("ext-util", "ext-two"))
+    res = convert_interview(data)
+    assert not res.has_error()
+    assert [(e.source, e.target) for e in res.linkage.edges] == [("ext-util", "task-prep-0001")]
+    assert any("references unknown taskId" in i.message for i in res.issues)

@@ -25,6 +25,7 @@ from scripts.consultant_canonical import (
 _TOP_KEYS = {
     "_readme", "schema_version", "labelSource", "framework", "l5",
     "relations", "rows", "tasks", "summary", "openItems", "sideNotes",
+    "externalTasks",
 }
 _ROW_KEYS = {
     "taskId", "unitId", "l6", "owner", "ownerRole", "approvers",
@@ -55,6 +56,9 @@ _EDGE_KEYS = {"src", "dst", "kind", "gateway", "condition", "label", "quote"}
 _KNOWN_EDGE_KINDS = {"seq", "branch", "loop", "bypass"}
 _KNOWN_GATEWAYS = {"exclusive", "parallel"}
 _KNOWN_TRIGGERS = {"message", "timer", "condition", "manual"}
+# 0.5 — 타 L5의 L6 참조 레지스트리. 엣지 src/dst가 rows[].taskId가 아니면 여기서 찾는다 (spec 2026-09-07 §4)
+_EXTERNAL_TASK_KEYS = {"refId", "l5", "l6", "note"}
+_EXTERNAL_L5_KEYS = {"nodeCode", "label"}
 
 # self 루프에서 합성되는 분기 노드 고정 이름 — dry-run 노티와 L5 창작부(import_consultant)가 공유
 LOOP_BRANCH_NODE_NAME = "반복 여부(자동 생성됨)"
@@ -91,8 +95,24 @@ class InterviewNote:
 
 
 @dataclass
+class ExternalRef:
+    """타 L5의 L6 참조 — externalTasks[] 선언(declared) 또는 엣지 끝점에만 등장한 원문 코드(미선언).
+
+    미선언은 "실 taskId를 아는 외부 L6"(dev 2026-09-06 동작)로 취급돼 l5_code/name이 비고,
+    엔진이 taskId 계보 키(external_lineage_key)로 배치·해소한다 (spec 2026-09-07 §5).
+    """
+
+    code: str                      # refId 또는 미선언 원문 코드 — 엣지 src/dst 값 그대로
+    l5_code: str | None = None
+    l5_label: str = ""
+    name: str = ""                 # 이름 힌트 — 비면 자동 매칭 대상 아님(제목은 엔진이 만든다)
+    note: str = ""
+    declared: bool = True
+
+
+@dataclass
 class InterviewLinkageEdge:
-    """L5 연계 캔버스 엣지 원료 — 끝점은 rows[].taskId(=맵 consultant_code).
+    """L5 연계 캔버스 엣지 원료 — 끝점은 rows[].taskId(=맵 consultant_code) 또는 externalTasks[].refId.
 
     kind는 저장되지 않지만 배치에 필요하다 — loop을 선행으로 세면 사이클이라 랭크가 무너진다.
     """
@@ -118,7 +138,13 @@ class InterviewLinkage:
     map_codes: list[str] = field(default_factory=list)
     edges: list[InterviewLinkageEdge] = field(default_factory=list)
     params: dict[str, tuple[str, str]] = field(default_factory=dict)
-    external_codes: list[str] = field(default_factory=list)
+    # code → ExternalRef, 엣지에 처음 등장한 순서. 선언 ref와 미선언 코드가 함께 들어간다 (spec 2026-09-07 §5)
+    external_refs: dict[str, ExternalRef] = field(default_factory=dict)
+
+    @property
+    def external_codes(self) -> list[str]:
+        # 엔진 전환(플랜 Task 5)까지의 호환 뷰 — 이후 제거
+        return sorted(self.external_refs)
 
 
 @dataclass
@@ -449,8 +475,63 @@ def _build_flow_edges(
     return edges, notes, loop_nodes
 
 
+def _parse_external_tasks(
+    raw: object,
+    row_codes: set[str],
+    category_codes: set[str],
+    issues: list[AdapterIssue],
+) -> dict[str, ExternalRef]:
+    """externalTasks[] → refId별 ExternalRef. error: refId 누락/중복/taskId 충돌·l5/nodeCode 누락 (spec 2026-09-07 §4.4)."""
+    refs: dict[str, ExternalRef] = {}
+    if raw is None:
+        return refs
+    if not isinstance(raw, list):
+        issues.append(AdapterIssue("error", "externalTasks", "externalTasks is not a list (외부 업무 목록 형식 오류)"))
+        return refs
+    for i, item in enumerate(raw):
+        path = f"externalTasks[{i}]"
+        if not isinstance(item, dict):
+            issues.append(AdapterIssue("error", path, "external task is not an object (외부 업무 형식 오류)"))
+            continue
+        _warn_unknown_keys(item, _EXTERNAL_TASK_KEYS, path, issues)
+        ref_id = _clean(item.get("refId"))
+        if not ref_id:
+            issues.append(AdapterIssue("error", path, "refId missing (참조 id 없음)"))
+            continue
+        if ref_id in refs:
+            issues.append(AdapterIssue("error", path, f"duplicate refId {ref_id!r} (참조 id 중복)"))
+            continue
+        if ref_id in row_codes:
+            issues.append(AdapterIssue("error", path, f"refId {ref_id!r} collides with rows[].taskId (행 taskId와 충돌)"))
+            continue
+        l5 = item.get("l5")
+        if not isinstance(l5, dict):
+            issues.append(AdapterIssue("error", f"{path}.l5", "l5 missing or not an object (소속 L5 정보 없음)"))
+            continue
+        _warn_unknown_keys(l5, _EXTERNAL_L5_KEYS, f"{path}.l5", issues)
+        l5_code = _clean(l5.get("nodeCode"))
+        if not l5_code:
+            issues.append(AdapterIssue("error", f"{path}.l5", "nodeCode missing (소속 L5 코드 없음)"))
+            continue
+        if l5_code not in category_codes:
+            issues.append(AdapterIssue(
+                "warning", f"{path}.l5",
+                f"external L5 {l5_code!r} not in framework.categories - resolved against existing framework "
+                "(파일에 없는 L5 - 기존 체계로 해석)"))
+        refs[ref_id] = ExternalRef(
+            code=ref_id, l5_code=l5_code, l5_label=_clean(l5.get("label")),
+            name=_truncate(_clean(item.get("l6")), 200, path, "l6", issues),
+            note=_clean(item.get("note")),
+        )
+    return refs
+
+
 def _build_linkage(
-    relations: object, l5_code: str, row_names: dict[str, str], issues: list[AdapterIssue]
+    relations: object,
+    l5_code: str,
+    row_names: dict[str, str],
+    declared: dict[str, ExternalRef],
+    issues: list[AdapterIssue],
 ) -> tuple[InterviewLinkage, list[InterviewNote]]:
     """최상위 relations → L5 연계 캔버스 원료 + entry 노트 (design 2026-09-01 §3).
 
@@ -519,11 +600,16 @@ def _build_linkage(
         external = not (src_known and dst_known)
         if external:
             ext = dst if src_known else src
-            if ext not in linkage.external_codes:
-                linkage.external_codes.append(ext)
-            issues.append(AdapterIssue(
-                "warning", epath,
-                f"edge to external taskId {ext!r} kept as placeholder (다른 L5의 업무 - 플레이스홀더 노드로 배치됨)"))
+            ref = declared.get(ext)
+            if ref is None:
+                # 미선언 — dev 2026-09-06 동작 유지: 원문을 실 taskId로 보고 플레이스홀더 (spec 2026-09-07 §4.2)
+                ref = linkage.external_refs.get(ext) or ExternalRef(code=ext, declared=False)
+                if ext not in linkage.external_refs:
+                    issues.append(AdapterIssue(
+                        "warning", epath,
+                        f"edge to external taskId {ext!r} kept as placeholder - not declared in externalTasks "
+                        "(다른 L5의 업무 - externalTasks 미선언, taskId 플레이스홀더로 배치됨)"))
+            linkage.external_refs.setdefault(ext, ref)
         is_self = src == dst
         if is_self:
             # 자기 반복 — 드랍하지 않고 loop로 강제 유지. 임포트 엔진(expand_linkage_branches)이
@@ -557,13 +643,19 @@ def _build_linkage(
         ))
         quote = _clean(raw.get("quote"))
         if quote:
+            # 외부 끝점은 rows에 없다 — 이름 힌트(없으면 코드)로 제목을 만든다(예전엔 KeyError로 dry-run이 죽었다)
+            names = {**row_names, **{c: (r.name or c) for c, r in linkage.external_refs.items()}}
             notes.append(InterviewNote(
                 kind="flow",
-                title=f"{row_names[src]} → {row_names[dst]}"[:300],
+                title=f"{names[src]} → {names[dst]}"[:300],
                 text=_flow_note_text(kind, gateway, condition, quote),
                 category_code=l5_code,
             ))
-    linkage.external_codes.sort()
+    for ref_id in declared:
+        if ref_id not in linkage.external_refs:
+            issues.append(AdapterIssue(
+                "warning", "externalTasks",
+                f"refId {ref_id!r} not referenced by any edge - ignored (엣지에서 참조되지 않은 외부 업무 - 무시됨)"))
     return linkage, notes
 
 
@@ -578,11 +670,12 @@ def convert_interview(raw: object) -> AdapterResult:
 
     # 0.4 전용 — 0.3은 흐름 그래프(relations)가 없어 수용하면 조용히 일직선 맵이 되고 그 사실이
     # 경고 한 줄에 묻힌다. 하위호환 대신 명시적 거부 (design 2026-09-01 §1).
+    # 0.5 = 0.4 + externalTasks(선택 키) — 0.4 파일은 그대로 동작한다 (spec 2026-09-07 §4.1)
     version = _clean(raw.get("schema_version"))
-    if not version.startswith("0.4"):
+    if not (version.startswith("0.4") or version.startswith("0.5")):
         issues.append(AdapterIssue(
             "error", "schema_version",
-            f"unsupported schema_version {version!r} - re-deliver as 0.4-bpm-interface-draft (지원하지 않는 스키마 버전 - 0.4로 재전달 필요)",
+            f"unsupported schema_version {version!r} - re-deliver as 0.5-bpm-interface-draft (지원하지 않는 스키마 버전 - 0.5로 재전달 필요)",
         ))
         return result
 
@@ -759,8 +852,18 @@ def convert_interview(raw: object) -> AdapterResult:
         if task_note:
             result.notes.append(InterviewNote(kind="task_note", text=task_note, map_code=task_id))
 
+    # 0.5 외부 참조 — rows 파싱 뒤(taskId 충돌 검사), relations 전(끝점 해석) (spec 2026-09-07 §4)
+    declared_refs = _parse_external_tasks(raw.get("externalTasks"), seen_task_ids, set(codes), issues)
+    for ref in declared_refs.values():
+        if ref.note:
+            result.notes.append(InterviewNote(
+                kind="external", text=ref.note,
+                title=f"{ref.name or ref.code} ({ref.l5_label or ref.l5_code})",
+                category_code=l5_code,
+            ))
+
     # L6 사이 흐름 → L5 연계 캔버스 원료. annual_count/fte는 여기서만 착지한다 (design §3)
-    linkage, entry_notes = _build_linkage(raw.get("relations"), l5_code, row_names, issues)
+    linkage, entry_notes = _build_linkage(raw.get("relations"), l5_code, row_names, declared_refs, issues)
     linkage.params = {
         m.code: (m.params.annual_count, m.params.fte)
         for m in result.maps
