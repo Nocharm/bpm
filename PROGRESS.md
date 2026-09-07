@@ -4,6 +4,8 @@
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
 ## 2026-09-07 — 슬롯 거버넌스 UX 2라운드: 트리 모션·L5 플레이스홀더 생성·라이브러리 필터 (feat/fw-slot-handover → dev)
+
+- **CLAUDE.md 감사(claude-md-improver)**: 낡은 수치·목록 교정(에디터 ~12,500줄, `settings-and-forms` lessons), 프론트 게이트(tsc·vitest·카탈로그 검사)와 Playwright/dev 인증 관례를 Commands에, 이번 트랙들의 계약(오버레이 z 사다리·라이브러리 행 부서=`sp_department` 리프명·`useSectionMotion`/`CheckInput`)을 Lessons에 추가. 템플릿 메타 문구 제거. `frontend/AGENTS.md`엔 zsh `--include` 인용 함정.
 - **트리(사용자 요청)**: 슬롯 배정 모달·플레이스홀더 연결 다이얼로그·"Framework L6" 목록(같은 `FrameworkTreePicker`) 모두 하위 후보가 하나뿐이면 끝까지 자동 펼침(L5·갈래에서 멈춤, 6홉 상한)하고, 펼침/접힘은 홈 트리의 `accordion-open/close/static`(`useClosingKeys`)으로 시선이 따라가게 — 사용자가 클릭한 노드만 `open`, 자동 펼침은 `static`, 접힘은 고스트 `close` 뒤 언마운트, 쉐브론 회전.
 - **L5 플레이스홀더 생성**: "Framework L6" 라이브러리 하단 입력+버튼(`framework-placeholder-name/create`)으로 미연결 subprocess 노드를 만든다(`linked_map_id`·`placeholder_category_id` null, 가운데 빈자리 배치·플래시·토스트). 임포트 플레이스홀더와 같은 룩("Connect" CTA → 연결 다이얼로그), 확정 게이트 `placeholder`가 막는다. 연결 다이얼로그에는 이 footer가 뜨지 않는다.
 - **라이브러리 필터(일반 맵)**: `/library/processes` 행에 `my_role`(배치 해석, sysadmin=owner) 동봉 → `lib/library-filters.ts`(부서 전체경로/말단 매칭·권한 any-of·미등록은 재조회 플래그, `bpm.library.filters` 영속) + 패널 Filter 팝오버(부서 다중선택·Owner/Editor/Viewer·미등록 토글)와 × 달린 필·일괄 삭제·"N of M". `library-unregistered-toggle`은 팝오버 안으로(수동 검증 스크립트 2종에 팝오버 열기 추가).

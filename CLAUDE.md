@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **BPM (Business Process Management) — 프로세스맵을 그리는 웹 서비스.** 현업이 노드/엣지로 계층형 프로세스 흐름을 시각적으로 작성·편집하고, As-Is/To-Be를 버전으로 관리·비교하는 도구. **기능 명세: `docs/spec.md`** (데이터 모델, UX, 구현 순서).
 
 > 상태(메인 기준): ⑤ Keycloak 인증 · ⑥ docker-compose 배포(9900) · ⑦ **하위프로세스 참조 모델(Call Activity)** — 인라인 계층 편집(`parent_node_id`) 폐기, 평면 노드 + 다른 맵 링크(읽기전용 임베드) · ⑧ **권한 관리(RBAC) 백엔드**(맵 가시성·협업자·승인자·버전 워크플로·유저그룹) · ⑨ **플로우 규칙(F1 디시전 드롭·F14 흐름 하이라이트)·Settings v2(가시성 스테이징·승인자 카드)·맵 소프트삭제+휴지통·타임스탬프 KST(`backend/app/clock.py`)·로그인 기록(`login_records`)·역할/상태 i18n 영어 고정** · ⑩ **거버넌스 UX(권한/가시성 승인 라이프사이클·결재 대기 통합·게시 동봉·협업자 스택 저장)·승인 단계 코멘트(`VersionEvent.note`)·HR 웹훅 디렉터리(AD→n8n, `backend/app/hr/`)·조직 기준 departments(EDW 직책 부서장)·업무체계 Framework(시범)** 머지 완료. 진행 현황은 `PROGRESS.md`, 구현 순서는 `docs/spec.md` §6.
+> ⑪(dev, 2026-09-07) **L5 퍼블리시 거버넌스(confirmed 계약·게이트 6종·레벨 위임) · 슬롯 거버넌스(`fw_slot` 승인·캔버스 자동 재지정·임포트 플레이스홀더, `docs/qa/2026-09-fw-slot-governance-qa.md`) · 라이브러리 필터(부서 트리 플라이아웃·역할 필·미등록 스위치)**.
 > DB: 로컬 네이티브는 sqlite 파일(무설정), 서버 compose는 postgres. 스키마는 startup `create_all`(마이그레이션 후속). **DB 초기화·데모 시드: `docs/deploy/db-seed.md`**(`python -m scripts.reset_db`). **자동 백업·복구: `docs/deploy/backup.md`**(compose `db-backup` 사이드카, 일간 04:00 KST·14일 보존).
 > ⚠️ **캔버스/에디터 작업 전 `docs/lessons/`(시행착오 방지)를 먼저 읽을 것** — 아래 "Lessons" 섹션. (단, 인라인 계층 *편집*은 ⑦에서 제거됨 → 읽기전용 임베드. lessons는 React Flow/좌표/검증 함정 위주로 유효.)
 
@@ -29,8 +30,14 @@ uv venv .venv && uv pip install --python .venv/bin/python -r requirements-dev.tx
 # frontend (frontend/ 에서, 로컬 네이티브)
 npm install
 npm run dev    # 개발 서버 :3000 — /api는 BACKEND_URL(기본 localhost:8000)로 프록시
-npm run build  # 프로덕션 빌드 (standalone)
+npm run build  # 프로덕션 빌드 (standalone) — next dev를 먼저 내려야 한다
 npm run lint
+npx tsc --noEmit -p tsconfig.json                  # 타입 게이트
+npx vitest run                                     # 단위 테스트(~900) — 커밋 전 필수
+node scripts/build-component-catalog.mjs --check   # COMPONENTS.md 최신 검사
+# 브라우저 검증: frontend/에서 BASE_URL=http://localhost:3000 node scripts/pw-<name>.mjs
+# dev 인증 = localStorage `bpm.devUser` / 헤더 `X-Dev-User`. 역할 차등을 보려면 backend를
+# DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys 로 기동 (docs/deploy/db-seed.md)
 ```
 
 ```powershell
@@ -48,6 +55,10 @@ npm install
 npm run dev
 npm run build
 npm run lint
+npx tsc --noEmit -p tsconfig.json
+npx vitest run
+node scripts\build-component-catalog.mjs --check
+# 브라우저 검증: $env:BASE_URL="http://localhost:3000"; node scripts\pw-<name>.mjs
 ```
 
 ```bash
@@ -74,7 +85,7 @@ docker compose up -d --build   # 접속: http://<서버>:9900
 
 **디렉터리 구조:**
 ```
-frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~9400줄 단일 컴포넌트)
+frontend/   # Next.js 앱 (에디터: src/app/maps/[mapId]/page.tsx — ~12,500줄 단일 컴포넌트) · scripts/pw-*.mjs = Playwright 검증 스크립트
 backend/    # Python API 서버 + requirements.txt / requirements-dev.txt
 nginx/      # 리버스 프록시 설정
 docs/       # 인덱스 docs/README.md · spec.md · lessons/(시행착오 방지) · deploy/·qa/·design/(설계 기록)·manual/
@@ -91,9 +102,13 @@ docker-compose.yml
 - [`docs/lessons/scope-save-and-coordinates.md`](docs/lessons/scope-save-and-coordinates.md) — 자식 스코프 저장 `getGraph→변형→PUT`(그룹 보존), fullGraph 낙관적 갱신, 스코프상대↔표시 좌표(`childOffsets`/`scopeOffsets`), buildScope는 dagre 대신 저장 pos.
 - [`docs/lessons/browser-verification.md`](docs/lessons/browser-verification.md) — Playwright+시스템 Chrome 검증, **dev.db 오염/readonly 함정**("0 events"는 코드 아닌 오염일 수 있음), 연결 드롭 flaky, node cwd.
 - [`docs/lessons/react-ts-patterns.md`](docs/lessons/react-ts-patterns.md) — useCallback deps TDZ → ref 미러, set-state-in-effect 린트, 큰 상태 모델은 메인 state 오염 금지.
+- [`docs/lessons/settings-and-forms.md`](docs/lessons/settings-and-forms.md) — 설정/관리자 화면·폼/모달/피커(비캔버스) 교훈.
 - **노드 속성 추가 체크리스트** — 열거 지점 전부 갱신: `models.py` 컬럼 · `schemas.NodeIn`(+검증기) · `graph.py` upsert · `versions.py` clone_graph · `csv-import.ts`(NODE_DEFAULTS·mergeNode pick·행 변환) · AI 변환 2곳(`buildGraphFromAiProposal`, page.tsx `aiNodeToGraphNode`). 값 정규화는 CSV·AI 경로 대칭 필수 — 한쪽만 하면 무효 에코가 pick을 통과해 백엔드 소거로 기존값이 유실된다. 회당 파라미터는 7필드(`duration`·`touch_time`·`cost_krw`·`cost_usd`·`headcount`·`annual_count`·`fte`, 단일 소스 `frontend/src/lib/params.ts` `PARAM_FIELDS`) — 구 `etf`/`cost`/`extra`(SP는 `sp_etf`/`sp_cost`/`sp_extra`)는 폐기. **신규 컬럼은 `db.py` `_ADDED_COLUMNS`에 수동 등록 필수**(서버는 배포 시 자동 ALTER로 보강 — 리셋 불가, 운영 데이터 있음: `docs/deploy/db-seed.md`).
 - **레이아웃 이중 구현** — 임포트 배치(`backend/scripts/consultant_layout.py`)는 에디터 자동정렬(`frontend/src/lib/flow-layout.ts` `autoLayoutFlow`, LR)의 파이썬 동치본이다(dagre 대신 rank+배리센터). `duration.ts`↔`duration.py`와 같은 계약 — 한쪽을 고치면 다른 쪽과 테스트를 같이 옮긴다. 좌표·엣지 변은 `_graph_signature` 밖이라 **무변경 재임포트는 배치를 갱신하지 않는다**.
 - **숫자 파라미터(duration H.MM) 계약** — duration 소수부는 분(0.30=30분, ≥60 이월). 정규화는 FE `lib/duration.ts` ↔ BE `app/duration.py` 동치 이중 구현(수정 시 양쪽+테스트 동기화). 무효값은 경계에서 `""` 소거(422 아님 — from_attributes 응답 겸용) → **시드/픽스처의 자유텍스트 duration은 조용히 증발**. 표시는 편집 중만 `1.30`, 그 외 `formatDurationHm`(`1h30m`) — CSV(왕복)/Excel(숫자 셀) 예외. raw dict 직렬화 엔드포인트(library.py류)는 응답 validator를 우회 — 경계 규칙 추가 시 별도 스윕. 비용은 `cost_krw`/`cost_usd` 배타 — 동시 입력이면 저장 422(`NodeIn`/`SubprocessDesignationIn` model_validator). subprocess 노드는 `annual_count`·`fte`만 직접 편집 — 나머지 5필드는 링크 맵 SP 지정값 읽기전용 상속이며, UI(`getEditableParamFields`)·CSV(`dropUneditableParams`)·AI 변환(`resolveAiParamPatch`) 3표면 모두 강제(프롬프트 문구만으론 안 막힘).
+- **오버레이 z 사다리** — 1200 모달·컨텍스트 메뉴 · 1300 확인/프롬프트·토스트·조직 카드 · 1350 포털 드롭다운(SearchSelect)·플라이아웃 · 1400 툴팁·호버 카드·플라이아웃 위 카드(`OrgInfoModal elevated`). 새 오버레이는 이 사다리에 맞춘다 — 낮게 두면 포털 뒤로 숨는다.
+- **라이브러리 행 `department` = SP 지정 `sp_department`(리프명, 조직 경로 아님)** — 조직 경로 해석은 `frontend/src/lib/library-dept-options.ts`(`DeptPathIndex`) 한 곳; 하위 트리 필터·한글명·조직 카드가 같은 값을 본다. 중복 리프(두 상위 아래 같은 이름)는 후보 전부 매칭.
+- **트리 아코디언 모션은 `useSectionMotion`(`frontend/src/lib/use-closing-keys.ts`)+`.accordion-open/-close/-static`** — 행이 도착한 뒤 마운트, 닫힘 고스트 유지, 사용자가 편 노드만 `open`(자동 드릴인은 `static`). 체크박스는 공용 `CheckInput`(네이티브 체크박스 금지).
 
 ## Operations / Deployment
 
@@ -133,17 +148,13 @@ docker-compose.yml
 @rules/common/documentation.md
 @rules/common/testing.md
 
-## Rules — 백엔드/Docker (아니면 이 블록 삭제)
-
-배포/컨테이너 전제 규칙. 라이브러리·CLI·프론트 단독 프로젝트면 이 블록을 통째로 삭제한다.
+## Rules — 백엔드/Docker
 
 @rules/backend/config.md
 @rules/backend/docker.md
 @rules/backend/sync-checklist.md
 
 ## Language-Specific Rules
-
-프로젝트에서 사용하는 언어만 남기고 나머지 줄은 삭제한다.
 
 @rules/languages/python.md
 @rules/languages/typescript.md

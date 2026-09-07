@@ -6,11 +6,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## This repo — gotchas
 
-- **Editor lives in `src/app/maps/[mapId]/page.tsx`** — one ~9400-line client component (canvas, context menu, node/edge/group creation, undo, autosave). Most editor work happens here, not in small components.
+- **Editor lives in `src/app/maps/[mapId]/page.tsx`** — one ~12,500-line client component (canvas, context menu, node/edge/group creation, undo, autosave). Most editor work happens here, not in small components.
 - **React Compiler breaks the build on mismatched manual memoization** — a `useCallback`/`useMemo` whose inferred deps differ from the declared array fails `npm run lint`/`build` with `react-hooks/preserve-manual-memoization` (esp. handlers that only call setState — the compiler infers the setter as the dep). Fix: make trivial handlers **plain functions** (let the compiler memoize) or align deps. Also avoid synchronous setState in effects (`react-hooks/set-state-in-effect`) — use a `reloadKey` bump or anchor-derived state.
 - **Timestamps are KST.** Backend `app/clock.now()` (UTC+9) is the canonical "now" (`models._now` + routers). Display via `lib/datetime.formatKst`/`formatKstShort` (Asia/Seoul) — never raw `toLocaleString()`/`getHours()` (browser tz).
 - **Generate ids with `genId()` from `@/lib/id`, never `crypto.randomUUID()`** — the server runs over plain HTTP (insecure context) where Web Crypto is undefined. Same reason `crypto.subtle`/PKCE is disabled.
 - **`grep` is ugrep here and silently skips bracket dirs** (Next.js dynamic routes like `[mapId]`, `[id]`). Recursive `grep -r` can miss files under them — verify with `find`+per-file grep, Python, or Read directly.
+- **Quote `--include` globs in zsh** — `grep -rn foo src --include=*.tsx` dies with "no matches found" because zsh expands the glob first; write `--include="*.tsx"`.
 - **Numeric param inputs use shared `ParamInput`** (`components/param-input.tsx` — typing filter, blur normalize, duration 1h30m display swap). Any new duration display site must apply `formatDurationHm` (group-bulk-modal miss precedent). Collapse state key: `bpm.paramsCollapsed`.
 - **Heavy export libs (exceljs, fflate) are dynamic-import only** — a static import pollutes the editor bundle (exceljs alone is 912K; keep it in its own chunk).
 - **`COMPONENTS.md` is the shared-component map** — before changing a component used by several surfaces (tiles, popovers, pickers), read its "사용처" row there and cover every surface; after adding/moving a component or changing where it's used, regenerate with `node scripts/build-component-catalog.mjs` in the same commit (rule: `rules/frontend/components.md`).
