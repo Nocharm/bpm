@@ -84,7 +84,7 @@ export function FrameworkTreePicker({
   const [rootError, setRootError] = useState(false);
   // 아코디언 펼침 모션 — 노드별 userOpenedIds 추적(자동 드릴인은 static, 사용자가 직접 편
   // 노드만 open 애니메이션)을 공용 훅으로 이관(F4) — framework-assign-modal.tsx와 중복이던 배선.
-  const { closingKeys, sectionClass, openSection, closeSection } = useSectionMotion<number>();
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
 
   // 하단 플레이스홀더 생성 폼 입력 — submitPlaceholder가 트리밍·클리어까지 담당
   const [placeholderName, setPlaceholderName] = useState("");
@@ -360,7 +360,7 @@ export function FrameworkTreePicker({
           <ChevronRight
             size={12}
             strokeWidth={1.5}
-            className={`shrink-0 motion-safe:transition-transform duration-150 ease-smooth ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"} ${open ? "rotate-90" : ""}`}
+            className={`shrink-0 motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"} ${open ? "rotate-90" : ""}`}
           />
           <span
             className={`min-w-0 truncate text-fine ${
@@ -378,7 +378,7 @@ export function FrameworkTreePicker({
         {/* 콘텐츠 도착 후에만 마운트 — 빈 박스 위에서 accordion-open이 헛도는 것 방지 (F1) */}
         {showContent &&
           ((node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0) || children.length > 0) && (
-            <div className={sectionClass(node.id)}>
+            <div className={getSectionClass(node.id)}>
               {/* 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 하위 카테고리 아코디언만 */}
               {node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0 && (
                 <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">

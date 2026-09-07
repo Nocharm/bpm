@@ -81,7 +81,7 @@ export function FrameworkAssignModal({
 
   // 아코디언 펼침 모션 — 노드별 userOpenedIds 추적(자동 드릴인은 static, 사용자가 직접 편
   // 노드만 open 애니메이션)을 공용 훅으로 이관(F4) — framework-tree-picker.tsx와 중복이던 배선.
-  const { closingKeys, sectionClass, openSection, closeSection } = useSectionMotion<number>();
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
 
   // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(tree-picker AUTO_DRILL_MAX와 동일 값).
   const AUTO_DRILL_MAX = 6;
@@ -293,7 +293,7 @@ export function FrameworkAssignModal({
             <ChevronRight
               size={14}
               strokeWidth={1.5}
-              className={`shrink-0 motion-safe:transition-transform duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
+              className={`shrink-0 motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
             />
           )}
           <span className="min-w-0 truncate">{node.name}</span>
@@ -308,7 +308,7 @@ export function FrameworkAssignModal({
             </p>
           ) : (
             children.length > 0 && (
-              <div className={sectionClass(node.id)}>
+              <div className={getSectionClass(node.id)}>
                 <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
               </div>
             )

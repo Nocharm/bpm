@@ -80,14 +80,14 @@ export function useClosingKeys<K>(): {
  * 고스트가 방금 재펼침한 섹션을 accordion-close로 덮지 않게 한다. */
 export function useSectionMotion<K>(): {
   closingKeys: Set<K>;
-  sectionClass: (key: K) => string;
+  getSectionClass: (key: K) => string;
   openSection: (key: K, byUser: boolean) => void;
   closeSection: (key: K) => void;
 } {
   const { closingKeys, beginClose, cancelClose } = useClosingKeys<K>();
   const [userOpenedIds, setUserOpenedIds] = useState<Set<K>>(new Set());
 
-  const sectionClass = (key: K): string => pickSectionClass(closingKeys.has(key), userOpenedIds.has(key));
+  const getSectionClass = (key: K): string => pickSectionClass(closingKeys.has(key), userOpenedIds.has(key));
 
   const openSection = (key: K, byUser: boolean): void => {
     cancelClose(key);
@@ -103,5 +103,5 @@ export function useSectionMotion<K>(): {
     });
   };
 
-  return { closingKeys, sectionClass, openSection, closeSection };
+  return { closingKeys, getSectionClass, openSection, closeSection };
 }
