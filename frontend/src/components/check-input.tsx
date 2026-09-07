@@ -1,5 +1,6 @@
-// 앱 공통 체크박스 — 네이티브 대신 rounded-sm·hairline→accent·Check 아이콘(framework-confirm-section.tsx
-// 메이저 승급 토글, process-library-panel.tsx 필터 팝오버 3종이 공유).
+// 앱 공통 체크박스 — 네이티브 대신 hairline→accent·Check 아이콘(framework-confirm-section.tsx
+// 메이저 승급 토글, process-library-panel.tsx 필터 팝오버 3종이 공유). 모양은 라운드 네모(rounded-xs) —
+// 16px 박스에 rounded-sm(8px)은 원이 돼 버린다(사용자 지시 2026-09-07).
 "use client";
 
 import { Check } from "lucide-react";
@@ -33,7 +34,7 @@ export function CheckInput({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-sm border border-hairline bg-surface transition-colors duration-150 checked:border-accent checked:bg-accent hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
+        className="peer absolute inset-0 h-4 w-4 cursor-pointer appearance-none rounded-xs border border-hairline bg-surface transition-colors duration-150 checked:border-accent checked:bg-accent hover:border-accent disabled:cursor-not-allowed disabled:opacity-50"
       />
       <Check
         size={12}
