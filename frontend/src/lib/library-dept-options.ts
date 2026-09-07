@@ -33,8 +33,9 @@ export function resolveDepartmentPaths(value: string, index: DeptPathIndex): str
 export function buildLibraryDeptOptions(
   directoryDepts: DirectoryDept[],
   rowDepartments: (string | null)[],
+  // 호출자가 이미 만든 인덱스를 넘기면 재계산하지 않는다(패널은 필터와 같은 인덱스를 공유)
+  index: DeptPathIndex = buildDeptPathIndex(directoryDepts),
 ): DeptPathOption[] {
-  const index = buildDeptPathIndex(directoryDepts);
   const byId = new Map<string, DeptPathOption>();
   for (const d of directoryDepts) byId.set(d.id, { id: d.id, name: d.name, korean_name: d.korean_name });
   for (const value of rowDepartments) {

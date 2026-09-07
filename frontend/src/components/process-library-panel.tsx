@@ -191,8 +191,8 @@ export function ProcessLibraryPanel({
   // 부서 트리 소스 — 조직도 부서(약 500) ∪ 행에만 있는 부서(컨설턴트 임포트 등).
   // filters 자체가 아니라 linkableRows에서 파생해, 필터를 걸수록 다른 옵션이 사라지지 않는다.
   const deptOptions = useMemo(
-    () => buildLibraryDeptOptions(directoryDepts, linkableRows.map((r) => r.department)),
-    [directoryDepts, linkableRows],
+    () => buildLibraryDeptOptions(directoryDepts, linkableRows.map((r) => r.department), deptIndex),
+    [directoryDepts, linkableRows, deptIndex],
   );
   const chainPaths = useMemo(() => buildMyDeptChain(myOrgPath), [myOrgPath]);
   // 팝오버는 "내 위쪽"만 — 루트→내 부서 체인(부서 미지정이면 트리 루트)에, 체인 밖에서 이미
