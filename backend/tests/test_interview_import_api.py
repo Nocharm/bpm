@@ -693,7 +693,7 @@ def test_declared_external_ref_links_directly_when_exact_name_exists(client: Tes
     linked = [n for n in graph["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is not None]
     ext = next(n for n in linked if n["title"] == "검체 접수")
     assert graph["subprocess_refs"][str(ext["linked_map_id"])]["category_path"].endswith("PHY-D-EXT")
-    assert any(r["detail"].startswith("linked external task '검체접수' -> map ") for r in res.json()["rows"])
+    assert any(r["detail"].startswith("linked external task '검체접수' @ PHY-D-EXT -> map ") for r in res.json()["rows"])
 
 
 def test_declared_external_ref_ambiguous_name_stays_placeholder(client: TestClient) -> None:

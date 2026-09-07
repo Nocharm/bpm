@@ -1414,7 +1414,8 @@ async def apply_interview_linkage(
                         if normalize_task_name(mname) == wanted]
                 if len(hits) == 1:
                     map_ids[c], map_names[hits[0][0]] = hits[0][0], hits[0][1]
-                    report.add(code, "linkage", f"linked external task '{ext_title[c]}' -> map {hits[0][0]}")
+                    report.add(code, "linkage",
+                               f"linked external task '{ext_title[c]}' @ {ref.l5_code} -> map {hits[0][0]}")
                 elif len(hits) > 1:
                     report.add(code, "warning",
                                f"external task '{ext_title[c]}' @ {ref.l5_code}: {len(hits)} maps share the name"

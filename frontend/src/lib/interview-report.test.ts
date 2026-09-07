@@ -83,11 +83,12 @@ describe("classifyDetail", () => {
   });
 
   it("classifies the external-reference messages from the importer", () => {
-    expect(classifyDetail("linkage", "linked external task '검체 접수' -> map 12")).toMatchObject({
+    expect(classifyDetail("linkage", "linked external task '검체 접수' @ 20-01-01-01-01 -> map 12")).toMatchObject({
       kind: "external-linked",
       severity: "info",
       subject: "검체 접수",
       numbers: [12],
+      captures: ["검체 접수", "20-01-01-01-01", "12"],
     });
     expect(
       classifyDetail("linkage", "placeholder for external task '외부 업무' @ 20-02-01-01-01 (map not delivered yet)"),
@@ -131,6 +132,34 @@ describe("buildImportReportView", () => {
 
     expect(view.groups[0].canvas).toMatchObject({ code: "19-01-06-01-02", name: "Calibration 수행" });
     expect(view.groups[0].canvas?.messages[0]).toMatchObject({ kind: "canvas", numbers: [21, 11] });
+    expect(view.externalRefs).toEqual([]);
+    expect(view.externalSummary).toEqual({ linked: 0, placeholder: 0, ambiguous: 0, unknownOrigin: 0, resolved: 0 });
+  });
+
+  it("collects external L6 references into one table, action-needed first", () => {
+    const external: ImportRow[] = [
+      ...rows,
+      { code: "19-01-06-01-02", action: "linkage", detail: "linked external task '정제수 일상 점검 수행' @ 19-01-02-01-01 -> map 41" },
+      { code: "19-01-06-01-02", action: "warning", detail: "external L5 19-01-05-01-01 not found - placeholder without origin" },
+      { code: "19-01-06-01-02", action: "linkage", detail: "placeholder for external task '작업지시 발행 및 배정' @ 19-01-05-01-01 (map not delivered yet)" },
+      { code: "19-01-06-01-02", action: "warning", detail: "external task '중복 이름' @ 20-02-01-01-01: 2 maps share the name - left as placeholder" },
+      { code: "19-01-06-01-02", action: "linkage", detail: "placeholder for external task '중복 이름' @ 20-02-01-01-01 (map not delivered yet)" },
+      { code: "19-01-06-01-02", action: "linkage", detail: "placeholder for external task 'phx-ext-0001' @ unknown (map not delivered yet)" },
+      { code: "linkage", action: "linkage", detail: "resolved 3 external placeholder node(s)" },
+    ];
+    const view = buildImportReportView(external, buildInterviewIndex([FILE_A]));
+
+    expect(view.externalRefs.map((r) => [r.title, r.l5Code, r.state])).toEqual([
+      ["작업지시 발행 및 배정", "19-01-05-01-01", "unknown-origin"],
+      ["중복 이름", "20-02-01-01-01", "ambiguous"], // 모호 경고가 같은 참조의 자리표 행을 이긴다
+      ["phx-ext-0001", "unknown", "placeholder"],
+      ["정제수 일상 점검 수행", "19-01-02-01-01", "linked"],
+    ]);
+    expect(view.externalRefs[3]).toMatchObject({ mapId: 41, canvasName: "Calibration 수행" });
+    expect(view.externalRefs[1].sameNameCount).toBe(2);
+    expect(view.externalSummary).toEqual({ linked: 1, placeholder: 1, ambiguous: 1, unknownOrigin: 1, resolved: 3 });
+    // "linkage" 고정 코드의 후차 해소 행은 맵 항목을 만들지 않는다
+    expect(view.groups.every((g) => g.file !== "")).toBe(true);
   });
 
   it("folds repeated warnings into one digest line per kind", () => {

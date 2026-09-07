@@ -124,7 +124,7 @@ dev에는 이미 "끝점이 rows 밖인 엣지 → L5 연계 캔버스 플레이
 | detail | kind |
 |---|---|
 | `placeholder for external task '{title}' @ {l5_code} (map not delivered yet)` | `external-placeholder` |
-| `linked external task '{title}' -> map {id}` | `external-linked` |
+| `linked external task '{title}' @ {l5_code} -> map {id}` | `external-linked` |
 | `external task '{title}' @ {l5_code}: {n} maps share the name - left as placeholder` | `external-ambiguous` |
 | `external L5 {code} not found - placeholder without origin` | `external-l5-unknown` |
 | `resolved {n} external placeholder node(s)` | `external-resolved` |

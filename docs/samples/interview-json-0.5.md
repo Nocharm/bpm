@@ -56,7 +56,7 @@
 2. 그 L5가 나중에 전달되면 같은 규칙으로 플레이스홀더를 자동 연결한다(엣지·좌표 유지).
 3. 자동 연결이 안 된 플레이스홀더는 캔버스에서 **Connect** 배너 → 연결 다이얼로그(출처 L5 자동 펼침)로 사람이 연결한다. 미해소 플레이스홀더가 있으면 그 L5는 확정(confirmed)으로 갈 수 없다.
 4. 재전달 시 같은 `refId`의 미연결 플레이스홀더는 제목·출처가 새 값으로 갱신된다(중복 노드 없음). 이미 연결된 노드는 건드리지 않는다.
-5. dry-run 리포트 문구: `linked external task '…' -> map N`(직결) · `placeholder for external task '…' @ L5코드 (map not delivered yet)` · `external task '…' @ L5코드: N maps share the name - left as placeholder`(모호) · `external L5 코드 not found - placeholder without origin`(출처 없음) · `resolved N external placeholder node(s)`(후차 해소).
+5. dry-run 리포트 문구: `linked external task '…' @ L5코드 -> map N`(직결) · `placeholder for external task '…' @ L5코드 (map not delivered yet)` · `external task '…' @ L5코드: N maps share the name - left as placeholder`(모호) · `external L5 코드 not found - placeholder without origin`(출처 없음) · `resolved N external placeholder node(s)`(후차 해소). 리포트 화면은 이 문구들을 **"외부 L6 참조" 표**(외부 L6 · 출처 L5 · 캔버스 · 상태)로 모아 보여 준다 — 조치 필요(출처 없음·확인 필요·자리표)가 먼저, 연결됨이 뒤.
 
 ## 7. 샘플 7종 — 시나리오 매트릭스
 

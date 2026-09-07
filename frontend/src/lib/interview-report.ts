@@ -63,7 +63,30 @@ export interface ReportMessage {
   severity: Severity;
   subject: string; // 문구에서 뽑은 가변부(로그인 id·사유 등) — 없으면 ""
   numbers: number[]; // 캔버스 map id·노드수처럼 문구에 박힌 수치
+  captures: string[]; // 정규식 캡처 전부(순서 그대로) — 외부 참조처럼 가변부가 둘 이상인 문구용
   raw: string;
+}
+
+// ── 외부 L6 참조(인터뷰 0.5) — 캔버스 문구 5종을 사람이 읽는 표 한 장으로 (spec 2026-09-07 §6.5)
+
+export type ExternalRefState = "linked" | "placeholder" | "ambiguous" | "unknown-origin";
+
+export interface ExternalRefEntry {
+  title: string; // 외부 L6 이름 힌트(미선언 코드면 코드 그대로)
+  l5Code: string; // 출처 L5 코드 — 미선언은 "unknown"
+  canvasCode: string; // 홈 L5 코드("" = 전달 파일과 매칭되지 않은 행)
+  canvasName: string;
+  state: ExternalRefState;
+  mapId: number | null; // linked일 때 연결된 맵 id
+  sameNameCount: number | null; // ambiguous일 때 같은 이름 맵 수
+}
+
+export interface ExternalRefSummary {
+  linked: number;
+  placeholder: number;
+  ambiguous: number;
+  unknownOrigin: number;
+  resolved: number; // 후차 해소로 이번 전달이 이어 준 자리표 수(전 캔버스 합)
 }
 
 export interface ReportMapEntry {
@@ -104,6 +127,8 @@ export interface DigestGroup {
 export interface ImportReportView {
   groups: ReportGroup[];
   digest: DigestGroup[];
+  externalRefs: ExternalRefEntry[]; // 조치 필요(출처 없음·모호·자리표) 먼저, 연결됨 뒤
+  externalSummary: ExternalRefSummary;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -180,7 +205,7 @@ const PATTERNS: { kind: DetailKind; re: RegExp }[] = [
   { kind: "no-landing", re: /^annual_count\/fte have no landing site/ },
   { kind: "linkage-skipped", re: /^linkage skipped - (.*)$/ },
   // 외부 L6 참조(인터뷰 0.5) — 문구는 import_consultant.apply_interview_linkage/resolve_external_placeholders와 계약
-  { kind: "external-linked", re: /^linked external task '(.*)' -> map (\d+)$/ },
+  { kind: "external-linked", re: /^linked external task '(.*)' @ (\S+) -> map (\d+)$/ },
   { kind: "external-placeholder", re: /^placeholder for external task '(.*)' @ (\S+) \(map not delivered yet\)$/ },
   { kind: "external-ambiguous", re: /^external task '(.*)' @ (\S+): (\d+) maps share the name - left as placeholder$/ },
   { kind: "external-l5-unknown", re: /^external L5 (\S+) not found - placeholder without origin$/ },
@@ -200,9 +225,9 @@ export function classifyDetail(action: string, detail: string): ReportMessage {
     const captures = m.slice(1);
     const numbers = captures.filter((c) => /^\d+$/.test(c)).map(Number);
     const subject = /^\d+$/.test(captures[0] ?? "") ? "" : (captures[0] ?? "");
-    return { kind, severity, subject, numbers, raw };
+    return { kind, severity, subject, numbers, captures, raw };
   }
-  return { kind: "other", severity, subject: "", numbers: [], raw };
+  return { kind: "other", severity, subject: "", numbers: [], captures: [], raw };
 }
 
 // 같은 종류 반복을 한 줄로 접기 위한 그룹 키 — "other"만 원문(가변부 마스킹)으로 구분한다.
@@ -211,7 +236,46 @@ function getDigestKey(msg: ReportMessage): string {
   return `other:${msg.raw.replace(/'[^']*'/g, "'*'").replace(/\d+/g, "#")}`;
 }
 
-/** 평면 rows를 파일→맵 계층 + 경고 다이제스트로 재구성. */
+const EXTERNAL_KINDS: ReadonlySet<DetailKind> = new Set([
+  "external-linked", "external-placeholder", "external-ambiguous", "external-l5-unknown", "external-resolved",
+]);
+
+/** 외부 참조 문구 1건을 표 항목으로. 모호 경고와 자리표 행은 같은 참조에 함께 나오므로 모호가 상태를 이긴다. */
+function collectExternalRef(
+  msg: ReportMessage,
+  canvas: { code: string; name: string } | null,
+  byKey: Map<string, ExternalRefEntry>,
+  unknownOrigins: Set<string>,
+): void {
+  const canvasCode = canvas?.code ?? "";
+  if (msg.kind === "external-l5-unknown") {
+    unknownOrigins.add(`${canvasCode}|${msg.captures[0] ?? ""}`);
+    return;
+  }
+  if (msg.kind !== "external-linked" && msg.kind !== "external-placeholder" && msg.kind !== "external-ambiguous") return;
+  const title = msg.captures[0] ?? "";
+  const l5Code = msg.captures[1] ?? "unknown";
+  const key = `${canvasCode}|${l5Code}|${title}`;
+  const state: ExternalRefState =
+    msg.kind === "external-linked" ? "linked" : msg.kind === "external-ambiguous" ? "ambiguous" : "placeholder";
+  const prev = byKey.get(key);
+  if (prev?.state === "ambiguous" && state === "placeholder") return;
+  byKey.set(key, {
+    title,
+    l5Code,
+    canvasCode,
+    canvasName: canvas?.name ?? "",
+    state,
+    mapId: msg.kind === "external-linked" ? (msg.numbers[0] ?? null) : null,
+    sameNameCount: msg.kind === "external-ambiguous" ? (msg.numbers[0] ?? null) : null,
+  });
+}
+
+const EXTERNAL_STATE_ORDER: Record<ExternalRefState, number> = {
+  "unknown-origin": 0, ambiguous: 1, placeholder: 2, linked: 3,
+};
+
+/** 평면 rows를 파일→맵 계층 + 경고 다이제스트 + 외부 참조 표로 재구성. */
 export function buildImportReportView(rows: ImportRow[], index: InterviewIndex): ImportReportView {
   const groups: ReportGroup[] = index.files.map((f) => ({ file: f.name, canvas: null, maps: [] }));
   const orphan: ReportGroup = { file: "", canvas: null, maps: [] };
@@ -220,6 +284,9 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
   index.files.forEach((f, i) => {
     if (f.l5Code) canvasFileByCode.set(f.l5Code, i);
   });
+  const externalByKey = new Map<string, ExternalRefEntry>();
+  const unknownOrigins = new Set<string>();
+  let resolvedCount = 0;
 
   const takeMapEntry = (code: string): ReportMapEntry => {
     const known = entryByCode.get(code);
@@ -243,12 +310,23 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
 
   for (const row of rows) {
     const msg = classifyDetail(row.action, row.detail);
+    if (msg.kind === "external-resolved") {
+      // 코드가 "linkage" 고정인 전 캔버스 일괄 행 — 어느 맵/캔버스에도 속하지 않는다
+      resolvedCount += msg.numbers[0] ?? 0;
+      continue;
+    }
     const canvasFile = index.maps.has(row.code) ? undefined : canvasFileByCode.get(row.code);
     if (canvasFile !== undefined) {
       const group = groups[canvasFile];
       const file = index.files[canvasFile];
       group.canvas ??= { code: row.code, name: file.l5Name, path: file.categoryPath, messages: [] };
       group.canvas.messages.push(msg);
+      collectExternalRef(msg, group.canvas, externalByKey, unknownOrigins);
+      continue;
+    }
+    if (EXTERNAL_KINDS.has(msg.kind) && !index.maps.has(row.code)) {
+      // 후차 해소 경고처럼 "linkage" 코드로 오는 외부 참조 행 — 맵 항목으로 만들지 않고 표에만 싣는다
+      collectExternalRef(msg, null, externalByKey, unknownOrigins);
       continue;
     }
     const entry = takeMapEntry(row.code);
@@ -298,7 +376,30 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
     (a, b) => (a.severity === b.severity ? b.count - a.count : a.severity === "error" ? -1 : 1),
   );
 
-  return { groups, digest };
+  // 출처 L5가 파일에도 DB에도 없다는 경고는 같은 캔버스·같은 L5의 자리표 상태를 "출처 없음"으로 바꾼다
+  const canvasOrder = new Map<string, number>();
+  index.files.forEach((f, i) => canvasOrder.set(f.l5Code, i));
+  const externalRefs = [...externalByKey.values()]
+    .map((ref) =>
+      ref.state === "placeholder" && unknownOrigins.has(`${ref.canvasCode}|${ref.l5Code}`)
+        ? { ...ref, state: "unknown-origin" as const }
+        : ref,
+    )
+    .sort(
+      (a, b) =>
+        EXTERNAL_STATE_ORDER[a.state] - EXTERNAL_STATE_ORDER[b.state] ||
+        (canvasOrder.get(a.canvasCode) ?? 99) - (canvasOrder.get(b.canvasCode) ?? 99) ||
+        a.title.localeCompare(b.title),
+    );
+  const externalSummary: ExternalRefSummary = {
+    linked: externalRefs.filter((r) => r.state === "linked").length,
+    placeholder: externalRefs.filter((r) => r.state === "placeholder").length,
+    ambiguous: externalRefs.filter((r) => r.state === "ambiguous").length,
+    unknownOrigin: externalRefs.filter((r) => r.state === "unknown-origin").length,
+    resolved: resolvedCount,
+  };
+
+  return { groups, digest, externalRefs, externalSummary };
 }
 
 // ── 거버넌스 확인 섹션 — dry-run governance[]를 맵 단위로 묶고 체크 키를 왕복한다 (spec 2026-09-03 §6)

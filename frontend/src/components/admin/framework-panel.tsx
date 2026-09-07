@@ -14,9 +14,11 @@ import {
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  CircleDashed,
   FolderPlus,
   FolderTree,
   Hash,
+  Link2,
   Move as MoveIcon,
   Pencil,
   Plus,
@@ -57,6 +59,8 @@ import {
   governanceKey,
   parseGovernanceKey,
   type DigestGroup,
+  type ExternalRefState,
+  type ImportReportView,
   type ReportMapEntry,
   type ReportMessage,
 } from "@/lib/interview-report";
@@ -652,6 +656,104 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   }
 
   // 반복 경고 접기 — 같은 종류를 한 줄로 모으고, 영향받은 맵은 이름으로(코드는 툴팁) 보여준다.
+  // 외부 L6 참조(인터뷰 0.5) — 캔버스 행에 문구가 줄줄이 붙는 대신 표 한 장: 조치 필요(출처 없음·모호·자리표)가
+  // 먼저, 연결된 것은 뒤. 파일 아코디언을 펼치지 않아도 보이도록 다이제스트 바로 아래에 둔다 (사용자 요청 2026-09-07)
+  function renderExternalState(state: ExternalRefState, sameNameCount: number | null) {
+    const tone =
+      state === "linked"
+        ? "border-accent/30 bg-accent-tint text-accent"
+        : state === "placeholder"
+          ? "border-error/40 bg-error/10 text-error"
+          : "border-changed/40 bg-changed/10 text-changed";
+    const Icon = state === "linked" ? Link2 : state === "placeholder" ? CircleDashed : AlertTriangle;
+    const label =
+      state === "linked"
+        ? t("framework.importExternalStateLinked")
+        : state === "placeholder"
+          ? t("framework.importExternalStatePlaceholder")
+          : state === "ambiguous"
+            ? t("framework.importExternalStateAmbiguous", { count: sameNameCount ?? 0 })
+            : t("framework.importExternalStateUnknown");
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${tone}`}>
+        <Icon size={12} strokeWidth={1.5} />
+        {label}
+      </span>
+    );
+  }
+
+  function renderExternalRefs(view: ImportReportView) {
+    const refs = view.externalRefs;
+    const sum = view.externalSummary;
+    if (refs.length === 0 && sum.resolved === 0) return null;
+    const needsAction = sum.placeholder + sum.ambiguous + sum.unknownOrigin;
+    const chips: { key: string; count: number; label: string; tone: string }[] = [
+      { key: "linked", count: sum.linked, label: t("framework.importExternalStateLinked"), tone: "border-accent/30 bg-accent-tint text-accent" },
+      { key: "placeholder", count: sum.placeholder, label: t("framework.importExternalStatePlaceholder"), tone: "border-error/40 bg-error/10 text-error" },
+      { key: "ambiguous", count: sum.ambiguous, label: t("framework.importExternalStateAmbiguous", { count: sum.ambiguous }), tone: "border-changed/40 bg-changed/10 text-changed" },
+      { key: "unknown", count: sum.unknownOrigin, label: t("framework.importExternalStateUnknown"), tone: "border-changed/40 bg-changed/10 text-changed" },
+      { key: "resolved", count: sum.resolved, label: t("framework.importExternalResolved", { count: sum.resolved }), tone: "border-added/40 bg-added/10 text-added" },
+    ].filter((c) => c.count > 0);
+    return (
+      <div className="rounded-sm border border-hairline" data-id="interview-import-external">
+        <div className="flex flex-wrap items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1">
+          <Link2 size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          <span className="text-fine text-ink-tertiary">{t("framework.importExternalTitle")}</span>
+          {chips.map((chip) => (
+            <span
+              key={chip.key}
+              data-id={`interview-external-chip-${chip.key}`}
+              className={`rounded-sm border px-1.5 py-0.5 text-fine ${chip.tone}`}
+            >
+              {chip.key === "ambiguous" || chip.key === "resolved" ? chip.label : `${chip.label} ${chip.count}`}
+            </span>
+          ))}
+        </div>
+        {refs.length > 0 && (
+          <div className="scroll-soft max-h-64 overflow-y-auto">
+            <table className="w-full text-fine">
+              <thead className="sticky top-0 z-[1]">
+                <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
+                  <th className="px-2 py-1.5">{t("framework.importExternalColTask")}</th>
+                  <th className="px-2 py-1.5">{t("framework.importExternalColOrigin")}</th>
+                  <th className="px-2 py-1.5">{t("framework.importExternalColCanvas")}</th>
+                  <th className="px-2 py-1.5">{t("framework.importExternalColState")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {refs.map((ref, i) => (
+                  <tr
+                    key={`${ref.canvasCode}|${ref.l5Code}|${ref.title}`}
+                    data-id={`interview-external-row-${i}`}
+                    className={`border-b border-divider last:border-0 ${
+                      ref.state === "linked" ? "" : ref.state === "placeholder" ? "bg-error/5" : "bg-changed/10"
+                    }`}
+                  >
+                    <td className="px-2 py-1 text-ink">{ref.title || "—"}</td>
+                    <td className="px-2 py-1 font-mono text-ink-secondary">{ref.l5Code === "unknown" ? "—" : ref.l5Code}</td>
+                    <td className="px-2 py-1 text-ink-secondary">{ref.canvasName || "—"}</td>
+                    <td className="px-2 py-1">
+                      {renderExternalState(ref.state, ref.sameNameCount)}
+                      {ref.state === "linked" && ref.mapId !== null ? (
+                        <span className="ml-1 text-ink-tertiary">→ map {ref.mapId}</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {needsAction > 0 && (
+          <p className="flex items-center gap-1.5 px-2 py-1.5 text-fine text-ink-tertiary" data-id="interview-external-hint">
+            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0 text-changed" />
+            {t("framework.importExternalHint")}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   function renderDigest(digest: DigestGroup[]) {
     if (digest.length === 0) return null;
     return (
@@ -934,6 +1036,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             )}
             {renderImportSummary(interviewResult)}
             {renderDigest(interviewView.digest)}
+            {renderExternalRefs(interviewView)}
             <ul className="flex flex-col gap-1" data-id="interview-import-file-reports">
               {interviewResult.files.map((file, i) => {
                 const open = openReportFiles.has(i);
@@ -1029,19 +1132,39 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
                             <span className="min-w-0 flex-1 truncate text-caption text-ink">
                               {t("framework.importCanvas")}
                             </span>
-                            {canvas.messages.map((msg, j) => (
-                              <span
-                                key={j}
-                                className={`shrink-0 text-fine ${
-                                  msg.severity === "info" ? "text-ink-tertiary" : "text-changed"
-                                }`}
-                              >
-                                {describeMessage(msg.kind, msg.subject, msg.raw)}
-                                {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
-                                  ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
-                                  : ""}
-                              </span>
-                            ))}
+                            {/* 외부 참조 문구는 위 전용 표가 맡는다 — 여기선 카운트 한 조각만 */}
+                            {canvas.messages
+                              .filter((msg) => !msg.kind.startsWith("external-"))
+                              .map((msg, j) => (
+                                <span
+                                  key={j}
+                                  className={`shrink-0 text-fine ${
+                                    msg.severity === "info" ? "text-ink-tertiary" : "text-changed"
+                                  }`}
+                                >
+                                  {describeMessage(msg.kind, msg.subject, msg.raw)}
+                                  {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
+                                    ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
+                                    : ""}
+                                </span>
+                              ))}
+                            {(() => {
+                              const linked = canvas.messages.filter((m) => m.kind === "external-linked").length;
+                              const placeholders = canvas.messages.filter((m) => m.kind === "external-placeholder").length;
+                              if (linked + placeholders === 0) return null;
+                              const parts = [
+                                linked > 0 ? t("framework.importExternalCountLinked", { count: linked }) : "",
+                                placeholders > 0 ? t("framework.importExternalCountPlaceholder", { count: placeholders }) : "",
+                              ].filter(Boolean);
+                              return (
+                                <span
+                                  data-id={`interview-canvas-external-${i}`}
+                                  className={`shrink-0 text-fine ${placeholders > 0 ? "text-error" : "text-ink-tertiary"}`}
+                                >
+                                  {t("framework.importExternalColTask")} · {parts.join(" · ")}
+                                </span>
+                              );
+                            })()}
                             {renderKeyIcon(
                               [
                                 [t("framework.importIdCategory"), canvas.code],
