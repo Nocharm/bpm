@@ -729,3 +729,58 @@ def test_legacy_undeclared_code_still_uses_taskid_lineage(client: TestClient) ->
     assert len(ph) == 1 and ph[0]["title"] == "phy-g-ext-0001" and ph[0]["placeholder_category_id"] is None
     assert any(r["detail"] == "placeholder for external task 'phy-g-ext-0001' @ unknown (map not delivered yet)"
                for r in res.json()["rows"])
+
+
+def test_name_placeholder_resolves_when_origin_l5_is_delivered_later(client: TestClient) -> None:
+    doc_a = _ext_ref_delivery("PHZ-A", "ext-za", "PHZ-A-EXT", "OOS 접수 및 초동 평가")
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    ph = _placeholders(client, "PHZ-A")
+    assert len(ph) == 1 and ph[0]["placeholder_category_id"] == _category_id("PHZ-A-EXT")
+
+    later = _ext_delivery("PHZ-A-EXT", task_ids=["phz-a-ext-0001", "phz-a-ext-0002"])
+    later["rows"][0]["l6"] = "OOS접수 및 초동평가"  # 공백만 다름 → 정규화 일치
+    res = _post(client, _files(later), apply=True)
+    assert res.status_code == 200, res.text
+    assert any(r["detail"] == "resolved 1 external placeholder node(s)" for r in res.json()["rows"])
+    graph = client.get(f"/api/versions/{_draft_id(client, _canvas_map_id(client, 'PHZ-A'))}/graph").json()
+    node = next(n for n in graph["nodes"] if n["id"] == ph[0]["id"])
+    assert node["linked_map_id"] is not None and node["placeholder_category_id"] is None
+    assert node["title"] == "OOS접수 및 초동평가"
+    assert any(e["target_node_id"] == node["id"] for e in graph["edges"])  # 엣지 유지
+
+
+def test_name_placeholder_stays_when_delivery_has_two_maps_with_that_name(client: TestClient) -> None:
+    doc_a = _ext_ref_delivery("PHZ-B", "ext-zb", "PHZ-B-EXT", "중복")
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    later = _ext_delivery("PHZ-B-EXT", task_ids=["phz-b-ext-0001", "phz-b-ext-0002"])
+    later["rows"][0]["l6"] = "중복"
+    later["rows"][1]["l6"] = "중 복"
+    res = _post(client, _files(later), apply=True)
+    assert res.status_code == 200
+    assert len(_placeholders(client, "PHZ-B")) == 1
+    assert any(r["detail"] == "external task '중복' @ PHZ-B-EXT: 2 maps share the name - left as placeholder"
+               for r in res.json()["rows"])
+
+
+def test_hand_made_placeholder_without_origin_is_not_auto_linked(client: TestClient) -> None:
+    """UI 라이브러리 footer가 만드는 이름만 있는 플레이스홀더(placeholder_category_id NULL)는 이름 경로 대상이 아니다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Node
+
+    doc_a = _ext_ref_delivery("PHZ-C", "ext-zc", "PHZ-C-EXT", "손으로 만든 이름")
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    ph = _placeholders(client, "PHZ-C")[0]
+
+    async def _strip_origin():
+        async with SessionLocal() as session:
+            node = await session.scalar(select(Node).where(Node.id == ph["id"]))
+            node.placeholder_category_id = None
+            await session.commit()
+    _run(_strip_origin())
+
+    later = _ext_delivery("PHZ-C-EXT", task_ids=["phz-c-ext-0001"])
+    later["rows"][0]["l6"] = "손으로 만든 이름"
+    assert _post(client, _files(later), apply=True).status_code == 200
+    assert [n["id"] for n in _placeholders(client, "PHZ-C")] == [ph["id"]]

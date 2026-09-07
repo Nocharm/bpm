@@ -726,13 +726,13 @@ async def resolve_external_placeholders(
     if not code_to_map:
         return 0
     live_rows = (await session.execute(
-        select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.category_id).where(
+        select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.category_id, ProcessMap.name).where(
             ProcessMap.consultant_code.in_(list(code_to_map.keys())),
             ProcessMap.deleted_at.is_(None),
         )
     )).all()
     live_by_code: dict[str, int] = {}
-    for mid, ccode, category_id in live_rows:
+    for mid, ccode, category_id, _name in live_rows:
         if ccode not in live_by_code or category_id is not None:
             live_by_code[ccode] = mid
     if not live_by_code:
@@ -762,6 +762,49 @@ async def resolve_external_placeholders(
         node.title = names.get(node.linked_map_id, node.title)
         node.follow_latest = True
         resolved += 1
+
+    # 이름 경로 — 이번 전달분이 건드린 L5마다, 출처가 그 L5인 미연결 플레이스홀더를 정규화 이름 정확 일치(라이브 맵
+    # 정확히 1개)로 연결한다. 손으로 만든 플레이스홀더(출처 NULL)는 대상 아님 (spec 2026-09-07 §6.4)
+    touched_l5 = sorted({cid for _, _, cid, _ in live_rows if cid is not None})
+    if touched_l5:
+        cat_codes = dict((await session.execute(
+            select(ProcessCategory.id, ProcessCategory.code).where(ProcessCategory.id.in_(touched_l5))
+        )).all())
+        live_named = (await session.execute(
+            select(ProcessMap.id, ProcessMap.category_id, ProcessMap.name).where(
+                ProcessMap.category_id.in_(touched_l5), ProcessMap.deleted_at.is_(None))
+        )).all()
+        by_l5_name: dict[tuple[int, str], list[int]] = {}
+        name_by_id: dict[int, str] = {}
+        for mid, cid, mname in live_named:
+            by_l5_name.setdefault((cid, normalize_task_name(mname)), []).append(mid)
+            name_by_id[mid] = mname
+        ph_rows = (await session.execute(
+            select(Node, MapVersion.checked_out_by, MapVersion.map_id)
+            .join(MapVersion, MapVersion.id == Node.version_id).where(
+                Node.node_type == "subprocess", Node.linked_map_id.is_(None),
+                Node.placeholder_category_id.in_(touched_l5), MapVersion.status == "draft",
+            )
+        )).all()
+        for node, checked_out_by, canvas_map_id in ph_rows:
+            if node.placeholder_category_id is None:
+                continue
+            hits = by_l5_name.get((node.placeholder_category_id, normalize_task_name(node.title)), [])
+            if len(hits) > 1:
+                report.add("linkage", "warning",
+                           f"external task '{node.title}' @ {cat_codes.get(node.placeholder_category_id, '?')}: "
+                           f"{len(hits)} maps share the name - left as placeholder")
+                continue
+            if not hits:
+                continue
+            if checked_out_by not in (None, actor):
+                skipped_canvases.add(canvas_map_id)
+                continue
+            node.linked_map_id = hits[0]
+            node.title = name_by_id[hits[0]]
+            node.follow_latest = True
+            node.placeholder_category_id = None  # 연결 뒤 출처는 링크맵 카테고리 — FE 연결·슬롯 채움과 같은 소거 규약
+            resolved += 1
     if resolved:
         # map_code 없이 "linkage" 고정 코드 — 이번 해소는 여러 캔버스에 걸쳐 일괄 적용돼 단일 맵 하나로 못 묶는다
         report.add("linkage", "linkage", f"resolved {resolved} external placeholder node(s)")

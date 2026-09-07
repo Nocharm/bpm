@@ -12,6 +12,7 @@
 - T3 외부 계보: `CanonicalCategory.external`(홈 `l5.nodeCode` 조상 체인 밖 = 외부) 마킹, 부모가 파일에 없는 외부 항목은 `_prune_external_lineage`가 경고 후 제외(홈 체인 끊김은 여전히 파일 error).
 - T4 카테고리: `upsert_categories`는 external 행이 이미 있으면 4필드 불변(없을 때만 생성), 라우터 파일 간 병합은 홈 주장 우선(외부가 홈을 덮지 않음, 외부↔외부 이름 차이는 경고 없음).
 - T5 연계 캔버스: 선언 ref는 출처 L5 조회 → 그 L5 라이브 맵 정규화 이름 일치 1건이면 직결(`linked external task …`), 2건+는 경고·플레이스홀더, 0건은 `title=l6∥(L6 unspecified) L5명`·`placeholder_category_id` 채운 플레이스홀더. 계보키 `external_ref_lineage_key(홈, refId)`, 미선언은 기존 taskId 키·`@ unknown`. 재임포트는 미연결 노드의 제목·출처만 갱신. `external_codes` 호환 프로퍼티 제거.
+- T6 후차 해소: `resolve_external_placeholders`에 이름 경로 추가 — 전달분이 건드린 L5를 `placeholder_category_id`로 가진 미연결 플레이스홀더를 전 캔버스 draft에서 스캔, 라이브 맵 정규화 이름 일치 정확히 1개면 연결(`placeholder_category_id` 소거), 2개+는 경고. 손으로 만든 플레이스홀더(출처 NULL)는 제외.
 
 ## 2026-09-07 — 슬라이드 매뉴얼 4종 재생성: 08-31 이후 md 델타 반영 (docs/manual-pdf-refresh)
 - **범위 판단**: md 매뉴얼 6종은 09-07 커밋까지 증분 갱신돼 최신(잔여 3커밋은 체크박스 모양·모션 리팩터라 문서 영향 없음) → 실제 정체는 08-31에 만든 슬라이드 HTML/PDF. `git diff e89aabe5..HEAD -- docs/manual/*.md`(225+/71−)를 델타로 삼아 슬라이드에 흡수.
