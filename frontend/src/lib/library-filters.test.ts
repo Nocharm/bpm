@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { LibraryProcess } from "./api";
+import { buildDeptPathIndex } from "./library-dept-options";
 import {
   applyLibraryFilters,
   countActiveFilters,
@@ -89,6 +90,50 @@ describe("applyLibraryFilters — department", () => {
     const rows = [makeRow({ map_id: 1, department: "Growth Center/Marketing Office/Growth Team" })];
     const filters: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Team"] };
     expect(applyLibraryFilters(rows, filters).map((r) => r.map_id)).toEqual([1]);
+  });
+});
+
+// 행의 department(sp_department)는 실무상 리프명만 담기는 일이 많다 — 조직도 인덱스로 경로를 복원해
+// 상위 부서 선택이 먹히게 한다. 인덱스를 안 넘기면 예전 동작(정확/리프 일치)이 그대로여야 한다.
+describe("applyLibraryFilters — department (조직도 인덱스)", () => {
+  const dir = [
+    { id: "Growth Center", name: "Growth Center", korean_name: "" },
+    {
+      id: "Growth Center/Marketing Office/Brand Team/Brand Part 1",
+      name: "Brand Part 1",
+      korean_name: "",
+    },
+    { id: "Operations Center", name: "Operations Center", korean_name: "" },
+    { id: "Operations Center/QC Office/Sample Team", name: "Sample Team", korean_name: "" },
+  ];
+  const index = buildDeptPathIndex(dir);
+
+  it("리프명만 저장된 행도 상위 부서 선택에 매치(다른 상위에는 안 걸림)", () => {
+    const row = makeRow({ map_id: 1, department: "Brand Part 1" });
+    const growth: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Center"] };
+    const ops: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Operations Center"] };
+    expect(applyLibraryFilters([row], growth, index)).toHaveLength(1);
+    expect(applyLibraryFilters([row], ops, index)).toHaveLength(0);
+  });
+
+  it("같은 리프가 두 상위에 있으면 어느 쪽 선택으로도 매치(중의성 허용)", () => {
+    const ambiguous = buildDeptPathIndex([
+      ...dir,
+      { id: "Growth Center/Sample Team", name: "Sample Team", korean_name: "" },
+    ]);
+    const row = makeRow({ map_id: 1, department: "Sample Team" });
+    const growth: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Center"] };
+    const ops: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Operations Center"] };
+    expect(applyLibraryFilters([row], growth, ambiguous)).toHaveLength(1);
+    expect(applyLibraryFilters([row], ops, ambiguous)).toHaveLength(1);
+  });
+
+  it("인덱스 없이는 기존 동작 — 리프명 행은 정확/리프 일치로만", () => {
+    const row = makeRow({ map_id: 1, department: "Brand Part 1" });
+    const parent: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Center"] };
+    const exact: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Brand Part 1"] };
+    expect(applyLibraryFilters([row], parent)).toHaveLength(0);
+    expect(applyLibraryFilters([row], exact)).toHaveLength(1);
   });
 });
 

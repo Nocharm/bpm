@@ -20,7 +20,11 @@ import {
 } from "@/components/subprocess-preview-peek";
 import { buildDeptPathTree } from "@/lib/dept-path-tree";
 import { useDirectoryDepartments } from "@/lib/directory";
-import { buildLibraryDeptOptions, buildMyDeptChain } from "@/lib/library-dept-options";
+import {
+  buildDeptPathIndex,
+  buildLibraryDeptOptions,
+  buildMyDeptChain,
+} from "@/lib/library-dept-options";
 import { useMe } from "@/lib/me";
 import { filterByQuery } from "@/lib/search";
 import { formatDeptName } from "@/lib/korean-dept";
@@ -160,6 +164,8 @@ export function ProcessLibraryPanel({
     () => buildLibraryDeptOptions(directoryDepts, linkableRows.map((r) => r.department)),
     [directoryDepts, linkableRows],
   );
+  // 행의 부서(sp_department)는 리프명만 담기는 일이 많다 — 필터가 조직도 경로로 해석해 매칭한다.
+  const deptIndex = useMemo(() => buildDeptPathIndex(directoryDepts), [directoryDepts]);
   const chainPaths = useMemo(() => buildMyDeptChain(myOrgPath), [myOrgPath]);
   // 팝오버는 "내 위쪽"만 — 루트→내 부서 체인(부서 미지정이면 트리 루트)에, 체인 밖에서 이미
   // 선택된 부서를 덧붙인다(활성 필을 팝오버에서도 해제할 수 있어야 한다). 전체 탐색은 플라이아웃.
@@ -169,7 +175,10 @@ export function ProcessLibraryPanel({
     return [...base, ...filters.departments.filter((d) => !base.includes(d))];
   }, [chainPaths, deptOptions, filters.departments]);
   // 부서/역할 필터 → 부분일치+초성+로마자+시퀀스 매칭(filterByQuery, 이름·부서 대상, 랭크순) 순.
-  const listRows = useMemo(() => applyLibraryFilters(linkableRows, filters), [linkableRows, filters]);
+  const listRows = useMemo(
+    () => applyLibraryFilters(linkableRows, filters, deptIndex),
+    [linkableRows, filters, deptIndex],
+  );
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return listRows;

@@ -1,6 +1,7 @@
 // 프로세스 라이브러리 필터 필(부서·권한·미등록) — 순수 매칭/영속 헬퍼.
 // process-library-panel.tsx의 필터 팝오버·필 렌더는 이 모듈을 소비하는 thin 레이어다.
 import type { LibraryProcess } from "./api";
+import { resolveDepartmentPaths, type DeptPathIndex } from "./library-dept-options";
 
 export type LibraryRole = "owner" | "editor" | "viewer";
 
@@ -28,13 +29,22 @@ function getDepartmentLeaf(dept: string): string {
 
 // 선택값은 행의 전체경로 또는 리프 문자열 그대로와 일치해야 매치 — 서로 다른 상위경로가 리프만
 // 우연히 같다고 교차 매치되지 않는다(리프 추출은 행 쪽에만 적용, 선택값은 원문 비교).
-function matchesDepartment(rowDept: string | null, selected: string[]): boolean {
+function matchesDepartment(
+  rowDept: string | null,
+  selected: string[],
+  deptIndex?: DeptPathIndex,
+): boolean {
   if (selected.length === 0) return true;
   if (rowDept === null) return false;
   const leaf = getDepartmentLeaf(rowDept);
+  // 행의 저장값(sp_department)은 리프명만인 경우가 많다 — 조직도로 전체 경로 후보를 복원해야
+  // 상위 부서 선택이 먹는다. 인덱스가 없으면 저장값 그대로(예전 동작).
+  const candidates = deptIndex ? resolveDepartmentPaths(rowDept, deptIndex) : [rowDept];
   // 선택 경로의 하위 부서까지 포함(트리 선택) — 레거시 저장값(리프명)은 리프 일치로 유지.
   // 경계는 "/"까지 봐야 한다 — "Growth Center"가 "Growth Center 2/..."를 삼키지 않도록.
-  return selected.some((s) => rowDept === s || rowDept.startsWith(`${s}/`) || s === leaf);
+  return selected.some(
+    (s) => candidates.some((c) => c === s || c.startsWith(`${s}/`)) || s === leaf,
+  );
 }
 
 function matchesRole(myRole: LibraryProcess["my_role"], selected: LibraryRole[]): boolean {
@@ -44,13 +54,15 @@ function matchesRole(myRole: LibraryProcess["my_role"], selected: LibraryRole[])
 
 // 부서(선택 경로의 서브트리 또는 리프 일치) + 역할(any-of) 필터. showUnregistered는 fetch 단계 플래그라 여기선 무시 —
 // 호출부가 listLibraryProcesses(filters.showUnregistered)로 별도 반영한다.
+// deptIndex는 선택 — 넘기면 행의 리프명 부서를 조직도 전체 경로로 해석해 서브트리 매칭에 태운다.
 export function applyLibraryFilters(
   rows: LibraryProcess[],
   filters: LibraryFilters,
+  deptIndex?: DeptPathIndex,
 ): LibraryProcess[] {
   return rows.filter(
     (row) =>
-      matchesDepartment(row.department, filters.departments) &&
+      matchesDepartment(row.department, filters.departments, deptIndex) &&
       matchesRole(row.my_role, filters.roles),
   );
 }
