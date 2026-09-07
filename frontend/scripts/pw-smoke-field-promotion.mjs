@@ -66,10 +66,11 @@ try {
   await runDryRun(page);
   const okBadges = await page
     .locator('[data-id="interview-import-file-reports"]').getByText("OK", { exact: true }).count();
-  const dryCreated = await chip(page, "Created", 4).isVisible().catch(() => false);
-  check("[1] dry-run: 2 files OK + Created 4", okBadges === 2 && dryCreated, `ok=${okBadges}`);
-  const dryNotes = await chip(page, "Notes", 8).isVisible().catch(() => false);
-  check("[1b] dry-run: Notes 8 (open_item/task_note 포함)", dryNotes);
+  // 0.5 샘플 기준(2026-09-07) — calibration 5 + utility 4 = 9맵, 노트 41건
+  const dryCreated = await chip(page, "Created", 9).isVisible().catch(() => false);
+  check("[1] dry-run: 2 files OK + Created 9", okBadges === 2 && dryCreated, `ok=${okBadges}`);
+  const dryNotes = await chip(page, "Notes", 41).isVisible().catch(() => false);
+  check("[1b] dry-run: Notes 41 (open_item/task_note/external 포함)", dryNotes);
   await page.locator('[data-id="interview-import-apply"]').click();
   await page.locator('[data-id="confirm-dialog-confirm"]').click();
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 25000 });
@@ -146,8 +147,9 @@ try {
     .waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
-  check("[7] notes rows include task_note (4 rows)",
-    noteRows === 4 && notesText.includes("표준기 관리대장은 아직 엑셀"), `rows=${noteRows}`);
+  // 0.5 샘플 기준 7행 — flow 3 + exception 1 + task_note 1 + voc 2 (교정 준비 맵)
+  check("[7] notes rows include task_note (7 rows)",
+    noteRows === 7 && notesText.includes("표준기 관리대장은 아직 엑셀"), `rows=${noteRows}`);
 
   // ── [8][9][10] 에디터(published 읽기) — Details·배지·힌트·파라미터 7행 ────
   await page.goto(`${BASE}/maps/${calMap.id}`, { waitUntil: "networkidle" });

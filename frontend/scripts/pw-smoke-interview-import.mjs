@@ -65,27 +65,28 @@ try {
   const okBadges = await page
     .locator('[data-id="interview-import-file-reports"]').getByText("OK", { exact: true }).count();
   check("both files OK", okBadges === 2, `ok=${okBadges}`);
-  const dryCreated = await chip(page, "Created", 4).waitFor({ state: "visible", timeout: 8000 })
+  // 0.5 샘플 기준(2026-09-07) — calibration 5 + utility 4 = 9맵
+  const dryCreated = await chip(page, "Created", 9).waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
-  check("dry-run summary shows Created 4", dryCreated);
-  // 0.4 샘플 기준 17건 — 승격 노트(예외·사이드·open·task) + relations entry/flow 인용 (2026-09-01 이후)
-  const dryNotes = await chip(page, "Notes", 17).isVisible().catch(() => false);
-  check("dry-run summary shows Notes 17", dryNotes);
+  check("dry-run summary shows Created 9", dryCreated);
+  // 0.5 샘플 기준 41건 — 승격 노트(예외·사이드·open·task) + relations entry/flow 인용 + 외부 참조 note(kind=external)
+  const dryNotes = await chip(page, "Notes", 41).isVisible().catch(() => false);
+  check("dry-run summary shows Notes 41", dryNotes);
   // dry-run 직후 전 파일이 자동 펼침 — 아코디언은 이슈 표 대신 맵 행(교정 준비 …)을 보여준다
   const mapRows = await page.locator('[data-id="interview-import-file-reports"] > li').first()
     .getByText("교정 준비").first().waitFor({ state: "visible", timeout: 5000 })
     .then(() => true).catch(() => false);
   check("clean file accordion lists its maps", mapRows);
 
-  // ── 4) Apply(하단 고정 바, 확인 다이얼로그 없음) → 재-dry-run 멱등(Unchanged 4) ──
+  // ── 4) Apply(하단 고정 바, 확인 다이얼로그 없음) → 재-dry-run 멱등(Unchanged 9) ──
   const noGov = await page.locator('[data-id="import-governance-none"]').isVisible().catch(() => false);
   check("first delivery has no governance diffs (all maps new)", noGov);
   await page.locator('[data-id="interview-import-apply"]').click();
   await page.waitForSelector('[data-id="interview-import-apply"]:disabled', { timeout: 20000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
-  const idempotent = await chip(page, "Unchanged", 4).waitFor({ state: "visible", timeout: 15000 })
+  const idempotent = await chip(page, "Unchanged", 9).waitFor({ state: "visible", timeout: 15000 })
     .then(() => true).catch(() => false);
-  check("re-dry-run reports Unchanged 4 (idempotent)", idempotent);
+  check("re-dry-run reports Unchanged 9 (idempotent)", idempotent);
 
   // ── 4b) 거버넌스 확인 — 오너가 실린 재전달은 체크한 것만 교체 (spec 2026-09-03) ──
   // 재전달 오너 = 디렉터리에서 임포터(admin.sys)가 아닌 첫 로그인(시드 로그인은 랜덤 생성이라 런타임 조회)
@@ -177,8 +178,8 @@ try {
   await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').first()
     .waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
   const noteRows = await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').count();
-  // 승격(2026-08-19) 예외2+매칭 사이드1+task_note1 + 0.4 relations 흐름 인용(kind=flow) 2 = 6
-  check("notes rows include exceptions + side notes + task note + flow quotes", noteRows === 6, `rows=${noteRows}`);
+  // 0.5 샘플(2026-09-07) 교정 준비 맵: flow 3 + exception 1 + task_note 1 + voc 2 = 7
+  check("notes rows include exceptions + side notes + task note + flow quotes", noteRows === 7, `rows=${noteRows}`);
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
   check("exception title rendered", notesText.includes("현장 수기 기록"));
   // 종류 배지는 i18n 라벨("Exception") — 대소문자 무시

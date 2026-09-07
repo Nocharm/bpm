@@ -41,5 +41,5 @@
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
-[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON(0.4) 합성 샘플 2파일(설정 > Framework > Interview import 입력, 실전달물 아님). 흐름 그래프(relations) 포함. canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.
-[`samples/framework-linkage-dummy/`](samples/framework-linkage-dummy/) — L5 연계 캔버스 시연용 더미 L5 4종(0.4). `change-control-l5.json`은 0.4 전 기능(분기·병행·루프·건너뛰기·IO 자동 연결) 시연용 1세트.
+[`samples/consultant-interview-sample/`](samples/consultant-interview-sample/) — 인터뷰 결과 JSON(0.5) 합성 샘플 2파일(EPCV: calibration·utility). 각 L5에 L6 ≥4, 순환·분기 포함, 타 L5 참조(`externalTasks`) 동봉. 계약·시나리오 매트릭스: [`samples/interview-json-0.5.md`](samples/interview-json-0.5.md). 설정 > Framework > Interview import 입력, 실전달물 아님. canonical 전달물 샘플은 인터뷰 JSON 단일화(2026-08-18)로 제거.
+[`samples/framework-linkage-dummy/`](samples/framework-linkage-dummy/) — L5 연계 캔버스 시연용 더미 L5 5종(0.5, Quality 계열: qc-raw-material·qc-finished-product·qa-deviation-oos·change-control·brr). 서로를 `externalTasks`로 참조해 정확 일치 직결·근사 불일치 플레이스홀더·후차 해소·origin unknown을 한 세트로 시연한다.

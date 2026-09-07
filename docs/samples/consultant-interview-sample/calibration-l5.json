@@ -1,30 +1,103 @@
 {
   "_readme": [
-    "합성 샘플 — 실전달물 아님. 손타이핑 인터페이스 스펙(0.4-bpm-interface-draft) 기반.",
-    "설정 > Framework > Interview import에 utility-l5.json과 함께 올려 dry-run/apply를 시험한다.",
-    "0.3 대비 달라진 것: (1) 최상위 relations = L6 사이 흐름 그래프(edges[].src/dst는 rows[].taskId),",
-    "(2) rows[].relations = 그 L6 내부 L7 흐름 그래프(edges[].src/dst는 actions[].seq),",
-    "(3) edge.kind 4종 seq/branch/loop/bypass + branch에는 gateway(exclusive|parallel),",
-    "(4) relations.entry = 프로세스 시작 이벤트(triggerType: message|timer|condition|manual),",
-    "(5) labelSource=human-confirmed, (6) 수치 병기 필드(total_time_min·touch_time_min·annual_count·",
-    "headcount·fte)와 owner/approvers/department가 실제 값으로 채워짐, (7) summary에 l6_edge_total·l7_edge_total 추가.",
-    "0.4에서 actions[].seq는 relations의 참조키이므로 row 안에서 유일하다(0.3의 중복 seq=병렬 관례는 폐기)."
+    "합성 샘플 — 실전달물 아님. 계약·시나리오: docs/samples/interview-json-0.5.md"
   ],
-  "schema_version": "0.4-bpm-interface-draft",
+  "schema_version": "0.5-bpm-interface-draft",
   "labelSource": "human-confirmed",
   "framework": {
     "categories": [
-      { "code": "19", "name": "EPCV", "level": 1, "parent": null },
-      { "code": "19-01", "name": "Facility", "level": 2, "parent": "19" },
-      { "code": "19-01-06", "name": "계측 보전", "level": 3, "parent": "19-01" },
-      { "code": "19-01-06-01", "name": "Calibration 기획 및 운영", "level": 4, "parent": "19-01-06" },
-      { "code": "19-01-06-01-02", "name": "Calibration 수행 및 결과 보고", "level": 5, "parent": "19-01-06-01" }
+      {
+        "code": "19",
+        "name": "EPCV",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "19-01",
+        "name": "Facility",
+        "level": 2,
+        "parent": "19"
+      },
+      {
+        "code": "19-01-06",
+        "name": "계측 보전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-06-01",
+        "name": "Calibration 기획 및 운영",
+        "level": 4,
+        "parent": "19-01-06"
+      },
+      {
+        "code": "19-01-06-01-02",
+        "name": "Calibration 수행 및 결과 보고",
+        "level": 5,
+        "parent": "19-01-06-01"
+      },
+      {
+        "code": "19-01-02",
+        "name": "유틸리티 운전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-02-01",
+        "name": "정제수 시스템 운전",
+        "level": 4,
+        "parent": "19-01-02"
+      },
+      {
+        "code": "19-01-02-01-01",
+        "name": "정제수 일상 점검",
+        "level": 5,
+        "parent": "19-01-02-01"
+      },
+      {
+        "code": "19-01-05",
+        "name": "설비 보전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-05-01",
+        "name": "작업지시 관리",
+        "level": 4,
+        "parent": "19-01-05"
+      },
+      {
+        "code": "19-01-05-01-01",
+        "name": "설비 작업지시 운영",
+        "level": 5,
+        "parent": "19-01-05-01"
+      }
     ]
   },
   "l5": {
     "label": "Calibration 수행 및 결과 보고",
     "nodeCode": "19-01-06-01-02"
   },
+  "externalTasks": [
+    {
+      "refId": "ext-util-daily-check",
+      "l5": {
+        "nodeCode": "19-01-02-01-01",
+        "label": "정제수 일상 점검"
+      },
+      "l6": "정제수 일상 점검 수행",
+      "note": "교정 끝난 계기는 그날 라운드부터 다시 본다고 함"
+    },
+    {
+      "refId": "ext-eam-work-order",
+      "l5": {
+        "nodeCode": "19-01-05-01-01",
+        "label": "설비 작업지시 운영"
+      },
+      "l6": "작업지시 발행 및 배정",
+      "note": "발행 주체는 설비보전팀 — 이 L5는 아직 인터뷰 전"
+    }
+  ],
   "relations": {
     "entry": {
       "taskId": "smp-cal-task-0001",
@@ -68,6 +141,60 @@
         "condition": "현장에서 표준기 유효기간 경과를 발견한 경우",
         "label": "표준기 교체 후 처음부터 재수행",
         "quote": "나가서 보니 표준기 유효기간이 지났으면 그건 다시 준비부터 해야죠."
+      },
+      {
+        "src": "smp-cal-task-0002",
+        "dst": "smp-cal-task-0004",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "현장에서 표준기 이상 발견",
+        "label": "표준기 확인",
+        "quote": "현장에서 표준기가 이상하면 관리자한테 넘겨요."
+      },
+      {
+        "src": "smp-cal-task-0004",
+        "dst": "smp-cal-task-0002",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "표준기 교체 완료",
+        "label": "교체 후 재수행",
+        "quote": null
+      },
+      {
+        "src": "smp-cal-task-0002",
+        "dst": "smp-cal-task-0005",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "허용오차 초과",
+        "label": "부적합 처리",
+        "quote": null
+      },
+      {
+        "src": "smp-cal-task-0005",
+        "dst": "smp-cal-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "처리 결과 확정",
+        "label": "부적합 처리 후 보고",
+        "quote": null
+      },
+      {
+        "src": "smp-cal-task-0003",
+        "dst": "ext-util-daily-check",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "교정 완료 계측기 복귀",
+        "label": "교정 완료 계측기 일상 점검 재개",
+        "quote": "교정 끝난 계기는 그날 라운드부터 다시 봐요."
+      },
+      {
+        "src": "ext-eam-work-order",
+        "dst": "smp-cal-task-0001",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "EAM 작업지시 발행",
+        "label": "작업지시 발행 후 준비 시작",
+        "quote": null
       }
     ]
   },
@@ -78,7 +205,10 @@
       "l6": "교정 준비",
       "owner": null,
       "ownerRole": "교정 담당자",
-      "approvers": ["cheolsu.kim", "younghee.lee"],
+      "approvers": [
+        "cheolsu.kim",
+        "younghee.lee"
+      ],
       "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
         "start_condition": "교정 주기 도래 시 EAM에서 작업지시 자동 발생",
@@ -249,10 +379,42 @@
             "label": "현장 수기 대체",
             "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요."
           },
-          { "src": 4, "dst": 6, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
-          { "src": 5, "dst": 6, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
-          { "src": 6, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
-          { "src": 2, "dst": 7, "kind": "seq", "gateway": null, "condition": "표준기 후보 산출 시", "label": null, "quote": null },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": "표준기 후보 산출 시",
+            "label": null,
+            "quote": null
+          },
           {
             "src": 7,
             "dst": 2,
@@ -262,7 +424,15 @@
             "label": "표준기 재선정",
             "quote": "지났으면 다른 표준기로 다시 골라야죠."
           },
-          { "src": 7, "dst": 8, "kind": "seq", "gateway": null, "condition": "확정 표준기 산출 시", "label": null, "quote": null }
+          {
+            "src": 7,
+            "dst": 8,
+            "kind": "seq",
+            "gateway": null,
+            "condition": "확정 표준기 산출 시",
+            "label": null,
+            "quote": null
+          }
         ]
       }
     },
@@ -272,7 +442,9 @@
       "l6": "현장 교정 수행",
       "owner": null,
       "ownerRole": "교정 담당자",
-      "approvers": ["cheolsu.kim"],
+      "approvers": [
+        "cheolsu.kim"
+      ],
       "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
         "start_condition": "준비 목록 확정 후 현장 출동",
@@ -393,9 +565,33 @@
       ],
       "relations": {
         "edges": [
-          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
-          { "src": 2, "dst": 3, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null },
-          { "src": 3, "dst": 4, "kind": "seq", "gateway": null, "condition": "교정 측정값 산출 시", "label": null, "quote": null },
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": "교정 측정값 산출 시",
+            "label": null,
+            "quote": null
+          },
           {
             "src": 4,
             "dst": 5,
@@ -423,7 +619,15 @@
             "label": "기록 확정",
             "quote": null
           },
-          { "src": 6, "dst": 7, "kind": "seq", "gateway": null, "condition": null, "label": null, "quote": null }
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
         ]
       }
     },
@@ -433,7 +637,10 @@
       "l6": "교정 결과 보고 및 이력 등록",
       "owner": null,
       "ownerRole": "교정 담당자",
-      "approvers": ["cheolsu.kim", "younghee.lee"],
+      "approvers": [
+        "cheolsu.kim",
+        "younghee.lee"
+      ],
       "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
       "fields": {
         "start_condition": "현장 기록지 인수",
@@ -522,11 +729,33 @@
           "screen": "교정 이력 등록화면",
           "dataForm": "structured",
           "quote": "승인 끝나면 EAM에 이력 걸고 작업지시를 닫아요."
+        },
+        {
+          "seq": 6,
+          "label": "사용 부서 통보",
+          "name": "교정 완료와 이력 등록을 계측기 사용 부서에 통보한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "EAM 교정 이력",
+          "output": "통보 기록",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
         }
       ],
       "relations": {
         "edges": [
-          { "src": 1, "dst": 2, "kind": "seq", "gateway": null, "condition": "교정 성적서(초안) 산출 시", "label": null, "quote": null },
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": "교정 성적서(초안) 산출 시",
+            "label": null,
+            "quote": null
+          },
           {
             "src": 2,
             "dst": 3,
@@ -554,7 +783,437 @@
             "label": "승인 상신",
             "quote": null
           },
-          { "src": 4, "dst": 5, "kind": "seq", "gateway": null, "condition": "교정 성적서 승인 시", "label": null, "quote": null }
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": "교정 성적서 승인 시",
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "smp-cal-task-0004",
+      "unitId": "smp-cal-unit-0004",
+      "l6": "표준기 유효성 확인 및 교체",
+      "owner": null,
+      "ownerRole": "표준기 관리자",
+      "approvers": [
+        "cheolsu.kim"
+      ],
+      "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
+      "fields": {
+        "start_condition": "현장에서 표준기 유효기간 경과 의심",
+        "input_data": "표준기 관리대장",
+        "output_data": "유효 표준기 확정 목록",
+        "done_criteria": "유효 표준기가 확정되고 대장이 갱신되면 끝",
+        "systems": "EAM",
+        "total_time": "건당 30분",
+        "total_time_min": 30,
+        "touch_time": "20분",
+        "touch_time_min": 20,
+        "frequency": "월 2회",
+        "annual_count": 24,
+        "headcount": 1,
+        "fte": 0.01,
+        "gmp": "표준기 관리대장은 GMP 기록",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "대장 조회",
+          "name": "표준기 관리대장에서 해당 표준기의 유효기간을 조회한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "표준기 관리대장",
+          "output": "유효기간 확인 결과",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "유효기간 판정",
+          "name": "유효기간 내인지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "유효기간 내면 계속 사용, 경과면 교체",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "대체 표준기 선정",
+          "name": "같은 범위를 커버하는 대체 표준기를 고른다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "유효기간 확인 결과",
+          "output": "대체 표준기",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "임시 사용 승인",
+          "name": "대체가 없으면 QA에 임시 사용 승인을 받는다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "대체 표준기 없음 > QA 임시 사용 승인",
+          "input": "유효기간 확인 결과",
+          "output": "임시 사용 승인서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": "대체가 없으면 QA 승인 받고 그냥 써요."
+        },
+        {
+          "seq": 5,
+          "label": "대장 갱신",
+          "name": "표준기 관리대장을 갱신한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "대체 표준기",
+          "output": "갱신된 관리대장",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "현장 인계",
+          "name": "확정 표준기를 현장 교정 담당자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "갱신된 관리대장",
+          "output": "유효 표준기 확정 목록",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 6,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "유효기간 내",
+            "label": "계속 사용",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "유효기간 경과",
+            "label": "교체",
+            "quote": "기간 지났으면 바꿔야죠."
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "bypass",
+            "gateway": null,
+            "condition": "대체 표준기 없음",
+            "label": "임시 사용",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "갱신 후 재확인",
+            "label": "재확인",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "smp-cal-task-0005",
+      "unitId": "smp-cal-unit-0005",
+      "l6": "교정 부적합 처리",
+      "owner": null,
+      "ownerRole": "교정 담당자",
+      "approvers": [
+        "cheolsu.kim",
+        "younghee.lee"
+      ],
+      "department": "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
+      "fields": {
+        "start_condition": "현장 교정 결과 허용오차 초과",
+        "input_data": "현장 기록지",
+        "output_data": "부적합 처리 결과서",
+        "done_criteria": "처리 결과서가 QA에 인계되면 끝",
+        "systems": "QMS, EAM",
+        "total_time": "건당 반나절",
+        "total_time_min": 240,
+        "touch_time": "90분",
+        "touch_time_min": 90,
+        "frequency": "월 1회",
+        "annual_count": 12,
+        "headcount": 1,
+        "fte": 0.02,
+        "gmp": "부적합 처리 기록은 GMP 기록",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "부적합 접수",
+          "name": "허용오차를 벗어난 교정 결과를 접수한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "현장 기록지",
+          "output": "부적합 접수 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "사용 부서 통보",
+          "name": "해당 계측기 사용 부서에 부적합을 통보한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "부적합 접수 기록",
+          "output": "통보 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "격리 표시",
+          "name": "계측기에 사용 금지 태그를 붙인다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "부적합 접수 기록",
+          "output": "격리 태그 사진",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "처리 방향 판정",
+          "name": "재교정·수리·폐기 중 처리 방향을 정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "조정 가능하면 재교정, 불가면 폐기",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "재교정 수행",
+          "name": "조정 후 재교정을 수행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "통보 기록",
+          "output": "재교정 결과",
+          "system": "EAM",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "폐기 처리",
+          "name": "수리 불가면 폐기 절차를 밟는다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "수리 불가 > 폐기 승인 후 자산 제거",
+          "input": "통보 기록",
+          "output": "폐기 승인서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 7,
+          "label": "QA 인계",
+          "name": "처리 결과를 QA 일탈 담당에 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "재교정 결과",
+          "output": "부적합 처리 결과서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "접수 즉시 통보와 격리를 동시에",
+            "label": "통보 라인",
+            "quote": "통보하고 태그 붙이는 건 같이 해요."
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "접수 즉시 통보와 격리를 동시에",
+            "label": "격리 라인",
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 7,
+            "kind": "bypass",
+            "gateway": null,
+            "condition": "이미 폐기 예정 계측기",
+            "label": "바로 QA 인계",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "조정 가능",
+            "label": "재교정",
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "수리 불가",
+            "label": "폐기",
+            "quote": "못 고치면 버리는 거죠."
+          },
+          {
+            "src": 6,
+            "dst": 2,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "재교정 후 재판정",
+            "label": "재판정",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
         ]
       }
     }
@@ -568,8 +1227,16 @@
       "note": "준비 단계에서 표준기 유효기간을 놓치면 현장에서 되돌아온다 — 재수행 유발 지점",
       "state": "confirmed",
       "evidence": [
-        { "id": "smp-cal-ev-0001", "quote": "EAM에서 그 주 작업지시를 열어 대상 계측기랑 측정 범위를 확인해요.", "sourceKind": "chat" },
-        { "id": "smp-cal-ev-0002", "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요.", "sourceKind": "chat" }
+        {
+          "id": "smp-cal-ev-0001",
+          "quote": "EAM에서 그 주 작업지시를 열어 대상 계측기랑 측정 범위를 확인해요.",
+          "sourceKind": "chat"
+        },
+        {
+          "id": "smp-cal-ev-0002",
+          "quote": "급할 때는 양식을 미리 안 뽑고 현장에서 손으로 적어요.",
+          "sourceKind": "chat"
+        }
       ],
       "revision": 1,
       "ownerRole": "교정 담당자",
@@ -591,7 +1258,11 @@
       "note": null,
       "state": "confirmed",
       "evidence": [
-        { "id": "smp-cal-ev-0003", "quote": "포인트마다 표준기 값이랑 계측기 값을 같이 적어요.", "sourceKind": "chat" }
+        {
+          "id": "smp-cal-ev-0003",
+          "quote": "포인트마다 표준기 값이랑 계측기 값을 같이 적어요.",
+          "sourceKind": "chat"
+        }
       ],
       "revision": 1,
       "ownerRole": "교정 담당자",
@@ -613,32 +1284,107 @@
       "note": null,
       "state": "confirmed",
       "evidence": [
-        { "id": "smp-cal-ev-0004", "quote": "승인 끝나면 EAM에 이력 걸고 작업지시를 닫아요.", "sourceKind": "chat" }
+        {
+          "id": "smp-cal-ev-0004",
+          "quote": "승인 끝나면 EAM에 이력 걸고 작업지시를 닫아요.",
+          "sourceKind": "chat"
+        }
       ],
       "revision": 1,
       "ownerRole": "교정 담당자",
       "exceptions": [],
       "endCondition": "EAM 이력 등록 완료",
       "startCondition": "현장 기록지 인수"
+    },
+    {
+      "id": "smp-cal-task-0004",
+      "doc": null,
+      "seq": null,
+      "name": "표준기 유효성 확인 및 교체",
+      "note": "표준기 교체 지연이 현장 재수행의 주원인",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "표준기 관리자",
+      "exceptions": [
+        {
+          "name": "대체 표준기가 없으면 QA 임시 사용 승인을 받는다",
+          "rule": "대체 표준기 없음 > QA 임시 사용 승인 후 사용",
+          "evidence": []
+        }
+      ],
+      "endCondition": "유효 표준기가 확정되고 대장이 갱신되면 끝",
+      "startCondition": "현장에서 표준기 유효기간 경과 의심"
+    },
+    {
+      "id": "smp-cal-task-0005",
+      "doc": null,
+      "seq": null,
+      "name": "교정 부적합 처리",
+      "note": "폐기 판정은 자산 담당과 협의 — 리드타임 변수",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "교정 담당자",
+      "exceptions": [
+        {
+          "name": "수리 불가 계측기는 폐기 절차를 밟는다",
+          "rule": "수리 불가 > 폐기 승인 후 자산 제거",
+          "evidence": []
+        }
+      ],
+      "endCondition": "처리 결과서가 QA에 인계되면 끝",
+      "startCondition": "현장 교정 결과 허용오차 초과"
     }
   ],
   "summary": {
-    "kept": { "files": 0, "messages": 54, "free_texts": 0, "evidence_total": 4 },
-    "l6_total": 3,
-    "l7_total": 20,
-    "l6_edge_total": 4,
-    "l7_edge_total": 22,
-    "voc_total": 2,
-    "rows_total": 3,
+    "kept": {
+      "files": 0,
+      "messages": 96,
+      "free_texts": 0,
+      "evidence_total": 4
+    },
+    "l6_total": 5,
+    "l7_total": 34,
+    "l6_edge_total": 10,
+    "l7_edge_total": 41,
+    "external_task_total": 2,
+    "voc_total": 4,
+    "rows_total": 5,
     "open_items_total": 1,
-    "side_notes_total": 3
+    "side_notes_total": 5
   },
   "openItems": [
-    { "text": "교정 성적서 전자화 범위 — IT와 협의 필요", "unitId": null }
+    {
+      "text": "교정 성적서 전자화 범위 — IT와 협의 필요",
+      "unitId": null
+    }
   ],
   "sideNotes": [
-    { "kind": "voc", "text": "급한 건은 시스템 상신 외에 팀 메신저로 한번 더 알려야 함 — 이중 소통 채널", "unitId": null },
-    { "kind": "voc", "text": "표준기 유효기간을 준비 단계에서 자동 경고해주면 현장 재수행이 줄어든다", "unitId": "smp-cal-unit-0001" },
-    { "kind": "rule_basis", "text": "허용오차 기준은 교정관리 SOP(EM-CAL-001) 부속서를 따른다", "unitId": "smp-cal-unit-0002" }
+    {
+      "kind": "voc",
+      "text": "급한 건은 시스템 상신 외에 팀 메신저로 한번 더 알려야 함 — 이중 소통 채널",
+      "unitId": null
+    },
+    {
+      "kind": "voc",
+      "text": "표준기 유효기간을 준비 단계에서 자동 경고해주면 현장 재수행이 줄어든다",
+      "unitId": "smp-cal-unit-0001"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "허용오차 기준은 교정관리 SOP(EM-CAL-001) 부속서를 따른다",
+      "unitId": "smp-cal-unit-0002"
+    },
+    {
+      "kind": "voc",
+      "text": "표준기 교체 승인이 메일로만 오가서 이력 추적이 어렵다",
+      "unitId": "smp-cal-unit-0004"
+    },
+    {
+      "kind": "voc",
+      "text": "표준기 관리대장은 아직 엑셀 — EAM 연동 요청",
+      "unitId": "smp-cal-unit-0001"
+    }
   ]
 }

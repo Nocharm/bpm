@@ -14,6 +14,7 @@
 - T5 연계 캔버스: 선언 ref는 출처 L5 조회 → 그 L5 라이브 맵 정규화 이름 일치 1건이면 직결(`linked external task …`), 2건+는 경고·플레이스홀더, 0건은 `title=l6∥(L6 unspecified) L5명`·`placeholder_category_id` 채운 플레이스홀더. 계보키 `external_ref_lineage_key(홈, refId)`, 미선언은 기존 taskId 키·`@ unknown`. 재임포트는 미연결 노드의 제목·출처만 갱신. `external_codes` 호환 프로퍼티 제거.
 - T6 후차 해소: `resolve_external_placeholders`에 이름 경로 추가 — 전달분이 건드린 L5를 `placeholder_category_id`로 가진 미연결 플레이스홀더를 전 캔버스 draft에서 스캔, 라이브 맵 정규화 이름 일치 정확히 1개면 연결(`placeholder_category_id` 소거), 2개+는 경고. 손으로 만든 플레이스홀더(출처 NULL)는 제외.
 - T7 FE 리포트: `DetailKind` 5종(external-linked/placeholder/ambiguous/l5-unknown/resolved) + PATTERNS(엔진 문구와 계약) + `describeMessage` 라벨 en/ko — 미등록이면 "other"로 원문 노출되던 것을 분류.
+- T8/T9 샘플 7종 0.5 재작성(`brr-large-l5.json`→`brr-l5.json`): 파일당 L6 ≥4·행마다 decision+branch·loop, 파일마다 parallel·bypass·exception·handoff, 외부 참조 시나리오 매트릭스(정확 일치 직결·공백 변형 정규화·근사 불일치·`l6:null`·계보 동봉 빈 카테고리·계보 없음 origin unknown 1건). calibration 1~3행·utility 1행 메타는 스모크 앵커로 보존. `tests/test_samples_0_5.py`가 규격·B세트 e2e(4파일→qa-deviation 후차 해소 4건)를 고정. 스모크 카운트 Created 9·Notes 41·교정 준비 노트 7행(field-promotion이 찾던 "표준기 관리대장은 아직 엑셀" VOC를 샘플에 추가 — 이전엔 없어 낡아 있었음).
 
 ## 2026-09-07 — 슬라이드 매뉴얼 4종 재생성: 08-31 이후 md 델타 반영 (docs/manual-pdf-refresh)
 - **범위 판단**: md 매뉴얼 6종은 09-07 커밋까지 증분 갱신돼 최신(잔여 3커밋은 체크박스 모양·모션 리팩터라 문서 영향 없음) → 실제 정체는 08-31에 만든 슬라이드 HTML/PDF. `git diff e89aabe5..HEAD -- docs/manual/*.md`(225+/71−)를 델타로 삼아 슬라이드에 흡수.

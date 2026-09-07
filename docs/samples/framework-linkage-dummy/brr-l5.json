@@ -1,0 +1,1512 @@
+{
+  "_readme": [
+    "합성 샘플 — 실전달물 아님. 계약·시나리오: docs/samples/interview-json-0.5.md"
+  ],
+  "schema_version": "0.5-bpm-interface-draft",
+  "labelSource": "human-confirmed",
+  "framework": {
+    "categories": [
+      {
+        "code": "21",
+        "name": "Quality System",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "21-06",
+        "name": "배치기록 검토",
+        "level": 2,
+        "parent": "21"
+      },
+      {
+        "code": "21-06-01",
+        "name": "완제품 배치기록 검토",
+        "level": 3,
+        "parent": "21-06"
+      },
+      {
+        "code": "21-06-01-01",
+        "name": "BRR 수행 및 종결",
+        "level": 4,
+        "parent": "21-06-01"
+      },
+      {
+        "code": "21-06-01-01-01",
+        "name": "완제품 배치기록 검토 수행",
+        "level": 5,
+        "parent": "21-06-01-01"
+      },
+      {
+        "code": "20",
+        "name": "Quality",
+        "level": 1,
+        "parent": null
+      },
+      {
+        "code": "20-01",
+        "name": "품질관리(QC)",
+        "level": 2,
+        "parent": "20"
+      },
+      {
+        "code": "20-01-01",
+        "name": "시험 운영",
+        "level": 3,
+        "parent": "20-01"
+      },
+      {
+        "code": "20-01-01-02",
+        "name": "완제품 시험",
+        "level": 4,
+        "parent": "20-01-01"
+      },
+      {
+        "code": "20-01-01-02-01",
+        "name": "완제품 출하 시험 관리",
+        "level": 5,
+        "parent": "20-01-01-02"
+      },
+      {
+        "code": "20-02",
+        "name": "품질보증(QA)",
+        "level": 2,
+        "parent": "20"
+      },
+      {
+        "code": "20-02-01",
+        "name": "품질 이벤트 관리",
+        "level": 3,
+        "parent": "20-02"
+      },
+      {
+        "code": "20-02-01-01",
+        "name": "일탈 관리",
+        "level": 4,
+        "parent": "20-02-01"
+      },
+      {
+        "code": "20-02-01-01-01",
+        "name": "시험 일탈·OOS 관리",
+        "level": 5,
+        "parent": "20-02-01-01"
+      }
+    ]
+  },
+  "l5": {
+    "label": "완제품 배치기록 검토 수행",
+    "nodeCode": "21-06-01-01-01"
+  },
+  "externalTasks": [
+    {
+      "refId": "ext-fp-cert",
+      "l5": {
+        "nodeCode": "20-01-01-02-01",
+        "label": "완제품 출하 시험 관리"
+      },
+      "l6": "시험 성적서 발행 및 출하 승인",
+      "note": "COA가 와야 대조를 시작한다고 함"
+    },
+    {
+      "refId": "ext-dev-closure",
+      "l5": {
+        "nodeCode": "20-02-01-01-01",
+        "label": "시험 일탈·OOS 관리"
+      },
+      "l6": "일탈 종결 및 효과성 평가",
+      "note": "미종결 일탈은 QA 이벤트 종결이 선행"
+    }
+  ],
+  "relations": {
+    "entry": {
+      "taskId": "brr-task-0001",
+      "triggerType": "message",
+      "label": "출하 요청서가 접수되면 시작",
+      "quote": "출하 요청이 뜨면 그 배치 기록부터 모읍니다."
+    },
+    "edges": [
+      {
+        "src": "brr-task-0001",
+        "dst": "brr-task-0002",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "편성 확정 배치 목록 인계",
+        "label": "편성 확정 → 전수 검토",
+        "quote": null
+      },
+      {
+        "src": "brr-task-0002",
+        "dst": "brr-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "제조기록 검토 완료 목록 인계",
+        "label": "제조기록 완료 → 시험 대조",
+        "quote": null
+      },
+      {
+        "src": "brr-task-0003",
+        "dst": "brr-task-0004",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "일탈·OOS 연계가 표기된 배치",
+        "label": "연계 확인 경유",
+        "quote": "일탈이 걸려 있으면 그것부터 닫아야죠."
+      },
+      {
+        "src": "brr-task-0003",
+        "dst": "brr-task-0005",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "특이사항 없는 배치",
+        "label": "바로 종결 판정",
+        "quote": null
+      },
+      {
+        "src": "brr-task-0004",
+        "dst": "brr-task-0005",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "일탈 연계 확인서 등록",
+        "label": "연계 확인 → 종결 판정",
+        "quote": null
+      },
+      {
+        "src": "brr-task-0005",
+        "dst": "brr-task-0002",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "보완 재검토가 지시된 경우",
+        "label": "보완 재검토",
+        "quote": "판정에서 걸리면 해당 구획은 처음부터 다시 봅니다."
+      },
+      {
+        "src": "brr-task-0005",
+        "dst": "brr-task-0006",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "종결 판정 확정",
+        "label": "판정 확정 → 발행",
+        "quote": null
+      },
+      {
+        "src": "ext-fp-cert",
+        "dst": "brr-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "COA 발행",
+        "label": "성적서 수령 후 대조",
+        "quote": null
+      },
+      {
+        "src": "brr-task-0004",
+        "dst": "ext-dev-closure",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "미종결 일탈 있음",
+        "label": "일탈 종결 대기",
+        "quote": "일탈이 안 닫혀 있으면 배치가 보류로 빠져요."
+      },
+      {
+        "src": "ext-dev-closure",
+        "dst": "brr-task-0005",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "일탈 종결 승인",
+        "label": "종결 확인 후 판정",
+        "quote": null
+      }
+    ]
+  },
+  "rows": [
+    {
+      "taskId": "brr-task-0001",
+      "unitId": "brr-unit-0001",
+      "l6": "검토 접수 및 배치 편성",
+      "owner": null,
+      "ownerRole": "BRR 편성 담당자",
+      "approvers": [
+        "jihoon.park"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "출하 요청서 접수",
+        "input_data": "출하 요청서",
+        "output_data": "편성 확정 배치 목록",
+        "done_criteria": "검토 편성이 승인되고 배치 목록이 확정되면 끝",
+        "systems": "EBR, QMS",
+        "total_time": "건당 반나절",
+        "total_time_min": 240,
+        "touch_time": "실제 편성 작업은 90분",
+        "touch_time_min": 90,
+        "frequency": "주 5건",
+        "annual_count": 250,
+        "headcount": 1,
+        "fte": 0.3,
+        "gmp": "GMP 기록 — 검토 편성표는 BRR SOP(QA-BR-001) 부속 양식",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "출하 요청 확인",
+          "name": "출하 요청서를 확인하고 대상 배치를 식별한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "출하 요청서",
+          "output": "대상 배치 목록",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": "출하 요청이 뜨면 그 배치 기록부터 모읍니다."
+        },
+        {
+          "seq": 2,
+          "label": "기록 완결 판정",
+          "name": "배치 기록이 전자적으로 완결됐는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "EBR 완결이면 편성, 미완결이면 반송",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "검토 편성",
+          "name": "검토자·대조자를 편성한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "대상 배치 목록",
+          "output": "편성표",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "미완결 반송",
+          "name": "기록 미완결이면 제조에 완결을 요청한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "기록 미완결 > 제조 완결 요청 후 재확인",
+          "input": "대상 배치 목록",
+          "output": "완결 요청",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "편성 승인",
+          "name": "편성표를 승인받는다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "편성표",
+          "output": "편성 확정 배치 목록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "검토 인계",
+          "name": "편성 확정 배치 목록을 검토자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "편성 확정 배치 목록",
+          "output": "인계 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "기록 완결",
+            "label": "편성",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "기록 미완결",
+            "label": "완결 요청",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "편성 변경 요청",
+            "label": "재편성",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "brr-task-0002",
+      "unitId": "brr-unit-0002",
+      "l6": "제조기록 전수 검토",
+      "owner": null,
+      "ownerRole": "제조기록 검토자",
+      "approvers": [
+        "jihoon.park",
+        "sujin.han"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "편성 확정 배치 목록 접수",
+        "input_data": "편성 확정 배치 목록",
+        "output_data": "제조기록 검토 완료 목록",
+        "done_criteria": "전 구획 취합본이 종합되면 끝",
+        "systems": "EBR, MES",
+        "total_time": "배치당 2~3일",
+        "total_time_min": 960,
+        "touch_time": "실제 검토는 7시간",
+        "touch_time_min": 420,
+        "frequency": "주 5건",
+        "annual_count": 250,
+        "headcount": 4,
+        "fte": 2.6,
+        "gmp": "GMP 기록 — 구획 점검 판정은 배치기록에 직접 남긴다",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "검토 착수",
+          "name": "편성 확정 배치 목록을 확인하고 검토를 착수한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "편성 확정 배치 목록",
+          "output": "검토 착수 기록",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "공정 구획 검토",
+          "name": "제조 공정 구획 기록을 검토한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "검토 착수 기록",
+          "output": "공정 구획 점검 결과",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "포장 구획 검토",
+          "name": "포장 구획 기록을 검토한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "검토 착수 기록",
+          "output": "포장 구획 점검 결과",
+          "system": "MES",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "이상 유무 판정",
+          "name": "구획 점검에서 이상이 있는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "이상 없으면 취합, 있으면 소명 요청",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "취합",
+          "name": "구획 점검 결과를 취합한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "공정 구획 점검 결과",
+          "output": "제조기록 검토 완료 목록",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "이상 조회",
+          "name": "기록 이상이면 제조 담당에 소명을 요청한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "기록 이상 > 제조 소명 요청 후 재검토",
+          "input": "포장 구획 점검 결과",
+          "output": "소명 요청",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 7,
+          "label": "대조 인계",
+          "name": "검토 완료 목록을 대조자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "제조기록 검토 완료 목록",
+          "output": "인계 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "공정·포장 구획을 병행 검토",
+            "label": "공정 라인",
+            "quote": "공정이랑 포장은 검토자가 달라서 동시에 봐요."
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "공정·포장 구획을 병행 검토",
+            "label": "포장 라인",
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 7,
+            "kind": "bypass",
+            "gateway": null,
+            "condition": "포장 미실시 배치(벌크)",
+            "label": "공정만 검토",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "이상 없음",
+            "label": "취합",
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "기록 이상",
+            "label": "소명 요청",
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 2,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "소명 접수",
+            "label": "재검토",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "brr-task-0003",
+      "unitId": "brr-unit-0003",
+      "l6": "시험기록 대조 확인",
+      "owner": null,
+      "ownerRole": "시험기록 대조자",
+      "approvers": [
+        "sujin.han"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "제조기록 검토 완료 목록 접수",
+        "input_data": "제조기록 검토 완료 목록",
+        "output_data": "시험기록 대조 완료 목록",
+        "done_criteria": "시험 항목 대조가 전부 취합되면 끝",
+        "systems": "LIMS",
+        "total_time": "배치당 1일",
+        "total_time_min": 480,
+        "touch_time": "실제 대조는 3시간",
+        "touch_time_min": 180,
+        "frequency": "주 5건",
+        "annual_count": 250,
+        "headcount": 2,
+        "fte": 1.1,
+        "gmp": "GMP 기록 — 대조 판정은 LIMS 결과와 교차 서명",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "성적서 수령",
+          "name": "완제품 시험 성적서를 수령한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "제조기록 검토 완료 목록",
+          "output": "수령 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "결과 일치 판정",
+          "name": "시험 결과와 배치 기록 표기가 일치하는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "결과 일치면 대조 확인, 불일치면 QC 확인 요청",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "대조 확인",
+          "name": "시험 항목별 대조를 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "수령 기록",
+          "output": "시험기록 대조 완료 목록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "불일치 조회",
+          "name": "불일치면 QC에 결과 확인을 요청한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "결과 불일치 > QC 확인 후 재대조",
+          "input": "수령 기록",
+          "output": "확인 요청",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "교차 서명",
+          "name": "대조 판정을 LIMS 결과와 교차 서명한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "시험기록 대조 완료 목록",
+          "output": "교차 서명 기록",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "연계 확인 인계",
+          "name": "대조 결과를 일탈 연계 확인자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "교차 서명 기록",
+          "output": "인계 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "결과 일치",
+            "label": "대조 확인",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "결과 불일치",
+            "label": "QC 확인 요청",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "QC 회신 접수",
+            "label": "재대조",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "brr-task-0004",
+      "unitId": "brr-unit-0004",
+      "l6": "일탈·OOS 연계 확인",
+      "owner": null,
+      "ownerRole": "일탈 연계 확인자",
+      "approvers": [
+        "jihoon.park"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "대조 결과에 일탈·OOS 연계가 표기된 경우",
+        "input_data": "시험기록 대조 완료 목록",
+        "output_data": "일탈 연계 확인서",
+        "done_criteria": "연계 확인서가 등록되면 끝",
+        "systems": "QMS",
+        "total_time": "건당 1일",
+        "total_time_min": 480,
+        "touch_time": "실제 확인은 2시간",
+        "touch_time_min": 120,
+        "frequency": "주 2건",
+        "annual_count": 100,
+        "headcount": 1,
+        "fte": 0.4,
+        "gmp": "GMP 기록 — 확인서는 QMS 등재",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "연계 표기 확인",
+          "name": "대조 결과에 표기된 일탈·OOS 연계를 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "시험기록 대조 완료 목록",
+          "output": "연계 목록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "종결 상태 판정",
+          "name": "연계 일탈이 모두 종결됐는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "연계 일탈 전부 종결이면 확인서, 아니면 보류",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "확인서 작성",
+          "name": "일탈 연계 확인서를 작성한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "연계 목록",
+          "output": "일탈 연계 확인서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "보류 처리",
+          "name": "미종결 일탈이 있으면 배치를 보류로 전환한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "미종결 일탈 > 배치 보류 전환, 종결 후 재확인",
+          "input": "연계 목록",
+          "output": "보류 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "확인서 등록",
+          "name": "확인서를 QMS에 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "일탈 연계 확인서",
+          "output": "등록 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "판정 인계",
+          "name": "확인서를 판정 책임자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "등록 기록",
+          "output": "인계 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "전부 종결",
+            "label": "확인서",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "미종결 일탈",
+            "label": "보류",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "일탈 종결 통보",
+            "label": "재확인",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "brr-task-0005",
+      "unitId": "brr-unit-0005",
+      "l6": "검토 종결 판정",
+      "owner": null,
+      "ownerRole": "BRR 판정 책임자",
+      "approvers": [
+        "jihoon.park",
+        "sujin.han"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "검토·대조·연계 확인 결과 취합",
+        "input_data": "일탈 연계 확인서",
+        "output_data": "종결 판정 결과",
+        "done_criteria": "종결 판정이 확정되면 끝",
+        "systems": "QMS, EBR",
+        "total_time": "건당 반나절",
+        "total_time_min": 240,
+        "touch_time": "실제 판정 작업은 60분",
+        "touch_time_min": 60,
+        "frequency": "주 5건",
+        "annual_count": 250,
+        "headcount": 1,
+        "fte": 0.35,
+        "gmp": "GMP 기록 — 판정 근거는 배치기록에 첨부",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "결과 취합",
+          "name": "검토·대조·연계 확인 결과를 취합한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "일탈 연계 확인서",
+          "output": "판정 자료",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "종결 판정",
+          "name": "적합 종결 가능한지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "보완 사항 없으면 종결",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "판정 확정",
+          "name": "종결 판정을 확정하고 근거를 첨부한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "판정 자료",
+          "output": "종결 판정 결과",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "보완 재검토 지시",
+          "name": "보완 필요면 해당 구획 재검토를 지시한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "보완 필요 > 해당 구획 재검토 지시",
+          "input": "판정 자료",
+          "output": "재검토 지시",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "판정 기록",
+          "name": "판정 결과를 배치기록에 기록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "종결 판정 결과",
+          "output": "판정 기록",
+          "system": "EBR",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "발행 인계",
+          "name": "판정 결과를 판정서 발행 담당에 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "판정 기록",
+          "output": "인계 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "보완 없음",
+            "label": "종결",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "보완 필요",
+            "label": "재검토 지시",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "재검토 결과 접수",
+            "label": "재판정",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "brr-task-0006",
+      "unitId": "brr-unit-0006",
+      "l6": "적합 판정서 발행 및 통보",
+      "owner": null,
+      "ownerRole": "판정서 발행 담당자",
+      "approvers": [
+        "sujin.han"
+      ],
+      "department": "Quality Center/QA Department/Change Control Team",
+      "fields": {
+        "start_condition": "종결 판정 결과 접수",
+        "input_data": "종결 판정 결과",
+        "output_data": "적합 판정서",
+        "done_criteria": "판정서가 발행·통보되면 끝",
+        "systems": "QMS, ERP",
+        "total_time": "건당 2시간",
+        "total_time_min": 120,
+        "touch_time": "실제 발행 작업은 40분",
+        "touch_time_min": 40,
+        "frequency": "주 5건",
+        "annual_count": 250,
+        "headcount": 1,
+        "fte": 0.2,
+        "gmp": "GMP 문서 — 판정서는 통제 문서로 발행",
+        "artifact_role": "deliverable"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "판정 결과 접수",
+          "name": "종결 판정 결과를 접수한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "종결 판정 결과",
+          "output": "접수 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "판정서 형식 판정",
+          "name": "판정서 필수 기재 사항이 충족되는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "필수 기재 충족 시 발행",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "판정서 발행",
+          "name": "적합 판정서를 통제 문서로 발행한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "접수 기록",
+          "output": "적합 판정서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "수기 보정",
+          "name": "기재 누락이면 판정서를 보정하고 재발행한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "기재 누락 > 보정 후 재발행",
+          "input": "접수 기록",
+          "output": "보정 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "상태 코드 변경",
+          "name": "ERP 배치 상태 코드를 출하 가능으로 변경한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "적합 판정서",
+          "output": "상태 변경 기록",
+          "system": "ERP",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "출하 통보",
+          "name": "판정서와 상태 변경을 물류에 통보한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "상태 변경 기록",
+          "output": "통보 기록",
+          "system": "ERP",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "기재 충족",
+            "label": "발행",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "기재 누락",
+            "label": "보정",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "상태 코드 변경 실패",
+            "label": "재시도",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "id": "brr-task-0001",
+      "doc": null,
+      "seq": 1,
+      "name": "검토 접수 및 배치 편성",
+      "note": "편성 단계 지연이 전체 리드타임의 30%를 차지한다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0001",
+          "quote": "검토 접수 및 배치 편성 단계는 편성 단계 지연이 전체 리드타임의 30%를 차지한다",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "BRR 편성 담당자",
+      "exceptions": [],
+      "endCondition": "검토 편성이 승인되고 배치 목록이 확정되면 끝",
+      "startCondition": "출하 요청서 접수"
+    },
+    {
+      "id": "brr-task-0002",
+      "doc": null,
+      "seq": 2,
+      "name": "제조기록 전수 검토",
+      "note": "구획 수·항목 수가 많아 검토 부하가 가장 크다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0002",
+          "quote": "제조기록 전수 검토 단계는 구획 수·항목 수가 많아 검토 부하가 가장 크다 — 대형맵 스트레스 대상",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "제조기록 검토자",
+      "exceptions": [],
+      "endCondition": "전 구획 취합본이 종합되면 끝",
+      "startCondition": "편성 확정 배치 목록 접수"
+    },
+    {
+      "id": "brr-task-0003",
+      "doc": null,
+      "seq": 3,
+      "name": "시험기록 대조 확인",
+      "note": "LIMS 결과 지연 시 대조가 밀린다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0003",
+          "quote": "시험기록 대조 확인 단계는 LIMS 결과 지연 시 대조가 밀린다",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "시험기록 대조자",
+      "exceptions": [],
+      "endCondition": "시험 항목 대조가 전부 취합되면 끝",
+      "startCondition": "제조기록 검토 완료 목록 접수"
+    },
+    {
+      "id": "brr-task-0004",
+      "doc": null,
+      "seq": 4,
+      "name": "일탈·OOS 연계 확인",
+      "note": "미종결 일탈이 걸리면 배치가 보류로 빠진다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0004",
+          "quote": "일탈·OOS 연계 확인 단계는 미종결 일탈이 걸리면 배치가 보류로 빠진다",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "일탈 연계 확인자",
+      "exceptions": [],
+      "endCondition": "연계 확인서가 등록되면 끝",
+      "startCondition": "대조 결과에 일탈·OOS 연계가 표기된 경우"
+    },
+    {
+      "id": "brr-task-0005",
+      "doc": null,
+      "seq": 5,
+      "name": "검토 종결 판정",
+      "note": "보완 재검토 루프가 잦아 리드타임 편차가 크다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0005",
+          "quote": "검토 종결 판정 단계는 보완 재검토 루프가 잦아 리드타임 편차가 크다",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "BRR 판정 책임자",
+      "exceptions": [],
+      "endCondition": "종결 판정이 확정되면 끝",
+      "startCondition": "검토·대조·연계 확인 결과 취합"
+    },
+    {
+      "id": "brr-task-0006",
+      "doc": null,
+      "seq": 6,
+      "name": "적합 판정서 발행 및 통보",
+      "note": "상태 코드 변경 확인이 수작업이라 지연이 생긴다",
+      "state": "confirmed",
+      "evidence": [
+        {
+          "id": "brr-ev-0006",
+          "quote": "적합 판정서 발행 및 통보 단계는 상태 코드 변경 확인이 수작업이라 지연이 생긴다",
+          "sourceKind": "chat"
+        }
+      ],
+      "revision": 1,
+      "ownerRole": "판정서 발행 담당자",
+      "exceptions": [],
+      "endCondition": "판정서가 발행·통보되면 끝",
+      "startCondition": "종결 판정 결과 접수"
+    }
+  ],
+  "summary": {
+    "kept": {
+      "files": 0,
+      "messages": 150,
+      "free_texts": 0,
+      "evidence_total": 6
+    },
+    "l6_total": 6,
+    "l7_total": 37,
+    "l6_edge_total": 10,
+    "l7_edge_total": 45,
+    "external_task_total": 2,
+    "voc_total": 2,
+    "rows_total": 6,
+    "open_items_total": 1,
+    "side_notes_total": 3
+  },
+  "openItems": [
+    {
+      "text": "구획 점검 항목의 전자검증 자동화 범위 확대 — EBR 협의 필요",
+      "unitId": "brr-unit-0002"
+    }
+  ],
+  "sideNotes": [
+    {
+      "kind": "voc",
+      "text": "구획 점검 항목이 많아 검토자 피로도가 높다 — 항목 통합 검토 요청",
+      "unitId": "brr-unit-0002"
+    },
+    {
+      "kind": "voc",
+      "text": "보완 재검토가 걸리면 전 구획을 다시 여는 구조라 리드타임이 두 배가 된다",
+      "unitId": "brr-unit-0005"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "점검 항목 목록은 BRR SOP(QA-BR-001) 부속서 1을 따른다",
+      "unitId": null
+    }
+  ]
+}

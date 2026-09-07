@@ -1,9 +1,8 @@
 {
   "_readme": [
-    "합성 샘플 — 실전달물 아님. calibration-l5.json과 함께 다중 파일 임포트 시험용.",
-    "0.4 변환본 — 0.3의 중복 seq(병렬) 관례를 relations.edges(kind=seq)로 명시화했다."
+    "합성 샘플 — 실전달물 아님. 계약·시나리오: docs/samples/interview-json-0.5.md"
   ],
-  "schema_version": "0.4-bpm-interface-draft",
+  "schema_version": "0.5-bpm-interface-draft",
   "labelSource": "human-confirmed",
   "framework": {
     "categories": [
@@ -36,6 +35,42 @@
         "name": "정제수 일상 점검",
         "level": 5,
         "parent": "19-01-02-01"
+      },
+      {
+        "code": "19-01-06",
+        "name": "계측 보전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-06-01",
+        "name": "Calibration 기획 및 운영",
+        "level": 4,
+        "parent": "19-01-06"
+      },
+      {
+        "code": "19-01-06-01-02",
+        "name": "Calibration 수행 및 결과 보고",
+        "level": 5,
+        "parent": "19-01-06-01"
+      },
+      {
+        "code": "19-01-05",
+        "name": "설비 보전",
+        "level": 3,
+        "parent": "19-01"
+      },
+      {
+        "code": "19-01-05-01",
+        "name": "작업지시 관리",
+        "level": 4,
+        "parent": "19-01-05"
+      },
+      {
+        "code": "19-01-05-01-01",
+        "name": "설비 작업지시 운영",
+        "level": 5,
+        "parent": "19-01-05-01"
       }
     ]
   },
@@ -43,6 +78,26 @@
     "label": "정제수 일상 점검",
     "nodeCode": "19-01-02-01-01"
   },
+  "externalTasks": [
+    {
+      "refId": "ext-cal-report",
+      "l5": {
+        "nodeCode": "19-01-06-01-02",
+        "label": "Calibration 수행 및 결과 보고"
+      },
+      "l6": "교정 결과 보고",
+      "note": "실제 업무명이 더 길 수 있음(…및 이력 등록) — 이름 근사 케이스"
+    },
+    {
+      "refId": "ext-eam-unnamed",
+      "l5": {
+        "nodeCode": "19-01-05-01-01",
+        "label": "설비 작업지시 운영"
+      },
+      "l6": null,
+      "note": "어느 작업지시 업무인지 미확정 — L5만 아는 케이스"
+    }
+  ],
   "relations": {
     "entry": {
       "taskId": "smp-util-task-0001",
@@ -50,7 +105,80 @@
       "label": "매일 오전 점검 라운드 시작",
       "quote": null
     },
-    "edges": []
+    "edges": [
+      {
+        "src": "smp-util-task-0001",
+        "dst": "smp-util-task-0002",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "재측정에서도 이상값",
+        "label": "수질 이상 대응",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0001",
+        "dst": "smp-util-task-0004",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "정상 라운드 마감",
+        "label": "기록 검토",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0002",
+        "dst": "smp-util-task-0001",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "계기 오류로 확인",
+        "label": "재측정 후 라운드 복귀",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0002",
+        "dst": "smp-util-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "실제 오염 의심",
+        "label": "오염 의심 시 소독",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0003",
+        "dst": "smp-util-task-0004",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "소독 운전 기록 산출",
+        "label": "소독 기록 검토",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0004",
+        "dst": "smp-util-task-0001",
+        "kind": "loop",
+        "gateway": null,
+        "condition": "보완 요청",
+        "label": "반려 시 재점검",
+        "quote": null
+      },
+      {
+        "src": "smp-util-task-0002",
+        "dst": "ext-cal-report",
+        "kind": "branch",
+        "gateway": "exclusive",
+        "condition": "계기 이상 의심",
+        "label": "계기 이상 의심 시 교정 의뢰",
+        "quote": "계기가 의심되면 교정 쪽에 결과를 물어봐요."
+      },
+      {
+        "src": "ext-eam-unnamed",
+        "dst": "smp-util-task-0003",
+        "kind": "seq",
+        "gateway": null,
+        "condition": "소독 작업지시 발행",
+        "label": "소독 작업지시 발행",
+        "quote": null
+      }
+    ]
   },
   "rows": [
     {
@@ -87,25 +215,81 @@
           "variant": "normal",
           "rule": null,
           "input": "점검 체크리스트",
-          "output": "계기값",
+          "output": "계기값 대조 결과",
           "system": "BMS",
-          "screen": "Trend",
+          "screen": null,
           "dataForm": "structured",
-          "quote": "BMS 값이랑 현장 게이지를 같이 봐요."
+          "quote": "BMS 값하고 현장 계기 값을 같이 봐요."
         },
         {
           "seq": 2,
-          "label": "점검 기록 작성",
-          "name": "체크리스트에 값과 이상 유무를 기록하고 서명한다",
+          "label": "이상 여부 판정",
+          "name": "경보 한계 대비 이상값인지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "경보 한계 내면 정상, 벗어나면 재측정",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "정상 기록",
+          "name": "체크리스트에 정상값을 기록한다",
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "계기값",
+          "input": "계기값 대조 결과",
           "output": "점검 기록",
           "system": null,
           "screen": null,
-          "dataForm": "document",
-          "quote": "적고 서명하면 그날 점검은 끝이에요."
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "재측정",
+          "name": "이상값이면 5분 뒤 재측정하고 경보 로그를 캡처한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "한계 초과 > 5분 뒤 재측정, 두 번 연속이면 수질 이상 대응으로",
+          "input": "계기값 대조 결과",
+          "output": "재측정 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "라운드 마감",
+          "name": "라운드 완료를 BMS에 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "점검 기록",
+          "output": "라운드 마감 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "교대 인계",
+          "name": "이상 사항을 다음 교대에 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "라운드 마감 기록",
+          "output": "인계 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
         }
       ],
       "relations": {
@@ -113,6 +297,638 @@
           {
             "src": 1,
             "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "한계 내",
+            "label": "정상",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "한계 초과",
+            "label": "재측정",
+            "quote": "한 번 튀면 조금 있다 다시 봐요."
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "다음 포인트 이동",
+            "label": "다음 포인트",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "smp-util-task-0002",
+      "unitId": "smp-util-unit-0002",
+      "l6": "수질 이상 대응",
+      "owner": null,
+      "ownerRole": "유틸리티 운전원",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "재측정에서도 경보 한계 초과",
+        "input_data": "재측정 기록",
+        "output_data": "이상 대응 기록",
+        "done_criteria": "원인 조치 후 수질이 한계 내로 복귀하면 끝",
+        "systems": "BMS, QMS",
+        "total_time": "건당 두 시간",
+        "total_time_min": 120,
+        "touch_time": "한 시간",
+        "touch_time_min": 60,
+        "frequency": "월 1~2회",
+        "annual_count": 18,
+        "headcount": 2,
+        "fte": 0.02,
+        "gmp": "이상 대응 기록은 GMP 기록",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "이상 접수",
+          "name": "재측정 기록을 확인하고 이상 대응을 개시한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "재측정 기록",
+          "output": "이상 접수 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "공급 차단",
+          "name": "해당 루프의 사용점 공급을 차단한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "이상 접수 기록",
+          "output": "차단 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "QC 검체 의뢰",
+          "name": "QC에 수질 검체 채취를 의뢰한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "이상 접수 기록",
+          "output": "검체 의뢰서",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "원인 판정",
+          "name": "계기 오류인지 실제 수질 이상인지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "계기 오류면 재개, 실제 오염이면 소독",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "공급 재개",
+          "name": "계기 오류로 확인되면 공급을 재개한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "차단 기록",
+          "output": "재개 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "소독 의뢰",
+          "name": "실제 오염이면 소독 운전을 의뢰한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "실제 오염 > 소독 운전 의뢰 후 재검",
+          "input": "검체 의뢰서",
+          "output": "소독 의뢰서",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 7,
+          "label": "QA 보고",
+          "name": "대응 결과를 QA에 보고한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "재개 기록",
+          "output": "이상 대응 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "차단과 검체 의뢰를 동시에",
+            "label": "차단 라인",
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "parallel",
+            "condition": "차단과 검체 의뢰를 동시에",
+            "label": "검체 라인",
+            "quote": null
+          },
+          {
+            "src": 1,
+            "dst": 7,
+            "kind": "bypass",
+            "gateway": null,
+            "condition": "이미 소독 진행 중인 루프",
+            "label": "바로 보고",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 4,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "계기 오류",
+            "label": "공급 재개",
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 6,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "실제 오염",
+            "label": "소독",
+            "quote": "진짜 오염이면 소독 돌려야 해요."
+          },
+          {
+            "src": 6,
+            "dst": 2,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "소독 후 재검 이상",
+            "label": "재차단",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 6,
+            "dst": 7,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "smp-util-task-0003",
+      "unitId": "smp-util-unit-0003",
+      "l6": "정제수 시스템 소독 운전",
+      "owner": null,
+      "ownerRole": "유틸리티 운전원",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "소독 의뢰서 접수 또는 정기 소독 주기 도래",
+        "input_data": "소독 의뢰서",
+        "output_data": "소독 운전 기록",
+        "done_criteria": "소독 후 수질이 기준 내로 확인되면 끝",
+        "systems": "BMS",
+        "total_time": "회당 6시간",
+        "total_time_min": 360,
+        "touch_time": "두 시간",
+        "touch_time_min": 120,
+        "frequency": "월 1회",
+        "annual_count": 12,
+        "headcount": 2,
+        "fte": 0.03,
+        "gmp": "소독 운전 기록은 GMP 기록",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "소독 준비",
+          "name": "소독 모드 전환 전 사용점 차단을 확인한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "소독 의뢰서",
+          "output": "차단 확인 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "가열 도달 판정",
+          "name": "소독 온도 도달 여부를 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "규정 온도 도달이면 유지, 미도달이면 재가열",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "소독 유지",
+          "name": "소독 온도를 규정 시간 유지한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "차단 확인 기록",
+          "output": "소독 유지 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "가열 실패 조치",
+          "name": "온도 미도달이면 히터를 점검하고 재가열한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "온도 미도달 > 히터 점검 후 재가열",
+          "input": "차단 확인 기록",
+          "output": "재가열 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "냉각·재검",
+          "name": "냉각 후 수질을 재검한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "소독 유지 기록",
+          "output": "재검 결과",
+          "system": "LIMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "검토 인계",
+          "name": "소독 운전 기록을 검토자에게 인계한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "재검 결과",
+          "output": "소독 운전 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "온도 도달",
+            "label": "유지",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "온도 미도달",
+            "label": "재가열",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "재검 부적합",
+            "label": "재소독",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          }
+        ]
+      }
+    },
+    {
+      "taskId": "smp-util-task-0004",
+      "unitId": "smp-util-unit-0004",
+      "l6": "점검 기록 검토 및 승인",
+      "owner": null,
+      "ownerRole": "유틸리티 파트 리더",
+      "approvers": [],
+      "department": null,
+      "fields": {
+        "start_condition": "라운드 마감 기록 접수",
+        "input_data": "점검 기록",
+        "output_data": "승인된 점검 기록",
+        "done_criteria": "점검 기록이 승인·보관되면 끝",
+        "systems": "BMS, QMS",
+        "total_time": "일 20분",
+        "total_time_min": 20,
+        "touch_time": "15분",
+        "touch_time_min": 15,
+        "frequency": "일 1회",
+        "annual_count": 365,
+        "headcount": 1,
+        "fte": 0.05,
+        "gmp": "점검 기록 승인은 GMP 절차",
+        "artifact_role": "record"
+      },
+      "actions": [
+        {
+          "seq": 1,
+          "label": "기록 수집",
+          "name": "당일 라운드 점검 기록을 모은다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "점검 기록",
+          "output": "수집 기록",
+          "system": "BMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 2,
+          "label": "누락 판정",
+          "name": "누락·오기재가 있는지 판정한다",
+          "kind": "decision",
+          "variant": "normal",
+          "rule": "누락 없으면 승인, 있으면 보완 요청",
+          "input": null,
+          "output": null,
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 3,
+          "label": "승인 서명",
+          "name": "점검 기록을 승인 서명한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "수집 기록",
+          "output": "승인된 점검 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 4,
+          "label": "보완 요청",
+          "name": "누락이 있으면 운전원에게 보완을 요청한다",
+          "kind": "action",
+          "variant": "exception",
+          "rule": "누락 > 운전원 보완 후 재검토",
+          "input": "수집 기록",
+          "output": "보완 요청 기록",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        },
+        {
+          "seq": 5,
+          "label": "보관 등록",
+          "name": "승인 기록을 문서 보관함에 등록한다",
+          "kind": "action",
+          "variant": "normal",
+          "rule": null,
+          "input": "승인된 점검 기록",
+          "output": "보관 등록 기록",
+          "system": "QMS",
+          "screen": null,
+          "dataForm": "structured",
+          "quote": null
+        },
+        {
+          "seq": 6,
+          "label": "QA 공유",
+          "name": "월간 점검 요약을 QA에 공유한다",
+          "kind": "handoff",
+          "variant": "normal",
+          "rule": null,
+          "input": "보관 등록 기록",
+          "output": "월간 요약",
+          "system": null,
+          "screen": null,
+          "dataForm": null,
+          "quote": null
+        }
+      ],
+      "relations": {
+        "edges": [
+          {
+            "src": 1,
+            "dst": 2,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 3,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "누락 없음",
+            "label": "승인",
+            "quote": null
+          },
+          {
+            "src": 2,
+            "dst": 4,
+            "kind": "branch",
+            "gateway": "exclusive",
+            "condition": "누락·오기재",
+            "label": "보완 요청",
+            "quote": null
+          },
+          {
+            "src": 3,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 4,
+            "dst": 5,
+            "kind": "seq",
+            "gateway": null,
+            "condition": null,
+            "label": null,
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 1,
+            "kind": "loop",
+            "gateway": null,
+            "condition": "보완 기록 재접수",
+            "label": "재검토",
+            "quote": null
+          },
+          {
+            "src": 5,
+            "dst": 6,
             "kind": "seq",
             "gateway": null,
             "condition": null,
@@ -137,29 +953,94 @@
       "exceptions": [],
       "endCondition": "체크리스트 전 항목 기록 완료",
       "startCondition": "매일 오전 점검 라운드 시작"
+    },
+    {
+      "id": "smp-util-task-0002",
+      "doc": null,
+      "seq": null,
+      "name": "수질 이상 대응",
+      "note": "계기 오류와 실제 오염 구분에 시간이 가장 많이 든다",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "유틸리티 운전원",
+      "exceptions": [
+        {
+          "name": "실제 오염이면 소독 운전을 의뢰한다",
+          "rule": "실제 오염 > 소독 운전 의뢰 후 재검",
+          "evidence": []
+        }
+      ],
+      "endCondition": "원인 조치 후 수질이 한계 내로 복귀하면 끝",
+      "startCondition": "재측정에서도 경보 한계 초과"
+    },
+    {
+      "id": "smp-util-task-0003",
+      "doc": null,
+      "seq": null,
+      "name": "정제수 시스템 소독 운전",
+      "note": null,
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "유틸리티 운전원",
+      "exceptions": [
+        {
+          "name": "온도 미도달이면 히터 점검 후 재가열",
+          "rule": "온도 미도달 > 히터 점검 후 재가열",
+          "evidence": []
+        }
+      ],
+      "endCondition": "소독 후 수질이 기준 내로 확인되면 끝",
+      "startCondition": "소독 의뢰서 접수 또는 정기 소독 주기 도래"
+    },
+    {
+      "id": "smp-util-task-0004",
+      "doc": null,
+      "seq": null,
+      "name": "점검 기록 검토 및 승인",
+      "note": "야간 라운드 기록이 몰려 다음날 검토 부담이 크다",
+      "state": "confirmed",
+      "evidence": [],
+      "revision": 1,
+      "ownerRole": "유틸리티 파트 리더",
+      "exceptions": [],
+      "endCondition": "점검 기록이 승인·보관되면 끝",
+      "startCondition": "라운드 마감 기록 접수"
     }
   ],
   "summary": {
     "kept": {
       "files": 0,
-      "messages": 12,
+      "messages": 48,
       "free_texts": 0,
       "evidence_total": 0
     },
-    "l6_total": 1,
-    "l7_total": 2,
+    "l6_total": 4,
+    "l7_total": 25,
+    "l6_edge_total": 8,
+    "l7_edge_total": 31,
+    "external_task_total": 2,
     "voc_total": 1,
-    "rows_total": 1,
-    "open_items_total": 0,
-    "side_notes_total": 1,
-    "l6_edge_total": 0,
-    "l7_edge_total": 1
+    "rows_total": 4,
+    "open_items_total": 1,
+    "side_notes_total": 2
   },
-  "openItems": [],
+  "openItems": [
+    {
+      "text": "소독 주기 연장 검토 — QA 협의 필요",
+      "unitId": "smp-util-unit-0003"
+    }
+  ],
   "sideNotes": [
     {
       "kind": "voc",
       "text": "야간 라운드는 인원이 없어 주간에 몰아서 기록하는 경우가 있음",
+      "unitId": "smp-util-unit-0001"
+    },
+    {
+      "kind": "rule_basis",
+      "text": "경보 한계값은 정제수 운전 SOP(UT-PW-002) 부속서를 따른다",
       "unitId": "smp-util-unit-0001"
     }
   ]
