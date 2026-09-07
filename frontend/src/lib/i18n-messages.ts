@@ -1482,6 +1482,11 @@ const en = {
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "Filter",
   "library.filterDepartment": "Department",
+  "library.filterDeptBrowse": "All departments…",
+  "library.filterDeptEmpty": "No departments match",
+  "library.filterDeptFindMine": "Find my department",
+  "library.filterDeptMine": "My dept",
+  "library.filterDeptSearch": "Search departments",
   "library.filterRole": "Role",
   "library.filterUnregistered": "Unregistered maps",
   "library.filterClear": "Clear filters",
@@ -3749,6 +3754,11 @@ const ko: Record<MessageKey, string> = {
   // ── 필터 필(부서/권한/미등록) — 영속 (2026-09-07) ──
   "library.filter": "필터",
   "library.filterDepartment": "부서",
+  "library.filterDeptBrowse": "전체 부서…",
+  "library.filterDeptEmpty": "일치하는 부서가 없습니다",
+  "library.filterDeptFindMine": "내 부서 찾기",
+  "library.filterDeptMine": "내 부서",
+  "library.filterDeptSearch": "부서 검색",
   "library.filterRole": "권한",
   "library.filterUnregistered": "미등록 맵",
   "library.filterClear": "필터 전체삭제",

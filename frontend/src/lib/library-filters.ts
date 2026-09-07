@@ -31,7 +31,10 @@ function getDepartmentLeaf(dept: string): string {
 function matchesDepartment(rowDept: string | null, selected: string[]): boolean {
   if (selected.length === 0) return true;
   if (rowDept === null) return false;
-  return selected.includes(rowDept) || selected.includes(getDepartmentLeaf(rowDept));
+  const leaf = getDepartmentLeaf(rowDept);
+  // 선택 경로의 하위 부서까지 포함(트리 선택) — 레거시 저장값(리프명)은 리프 일치로 유지.
+  // 경계는 "/"까지 봐야 한다 — "Growth Center"가 "Growth Center 2/..."를 삼키지 않도록.
+  return selected.some((s) => rowDept === s || rowDept.startsWith(`${s}/`) || s === leaf);
 }
 
 function matchesRole(myRole: LibraryProcess["my_role"], selected: LibraryRole[]): boolean {
@@ -39,7 +42,7 @@ function matchesRole(myRole: LibraryProcess["my_role"], selected: LibraryRole[])
   return myRole !== null && selected.includes(myRole);
 }
 
-// 부서(전체경로 또는 리프 일치) + 역할(any-of) 필터. showUnregistered는 fetch 단계 플래그라 여기선 무시 —
+// 부서(선택 경로의 서브트리 또는 리프 일치) + 역할(any-of) 필터. showUnregistered는 fetch 단계 플래그라 여기선 무시 —
 // 호출부가 listLibraryProcesses(filters.showUnregistered)로 별도 반영한다.
 export function applyLibraryFilters(
   rows: LibraryProcess[],

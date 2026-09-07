@@ -64,6 +64,32 @@ describe("applyLibraryFilters — department", () => {
     const filters: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Team 1"] };
     expect(applyLibraryFilters([row], filters)).toHaveLength(0);
   });
+
+  it("선택 경로의 하위 부서 전체가 매치(트리 선택)", () => {
+    const rows = [
+      makeRow({ map_id: 1, department: "Growth Center/Marketing Office/Brand Team/Brand Part 1" }),
+      makeRow({ map_id: 2, department: "Growth Center/Strategy Office" }),
+      makeRow({ map_id: 3, department: "Operations Center/Delivery Office" }),
+      makeRow({ map_id: 4, department: null }),
+    ];
+    const filters: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Center"] };
+    expect(applyLibraryFilters(rows, filters).map((r) => r.map_id)).toEqual([1, 2]);
+  });
+
+  it("문자열 접두만 같은 형제 부서는 매치하지 않는다", () => {
+    const rows = [
+      makeRow({ map_id: 1, department: "Growth Center 2/Team" }),
+      makeRow({ map_id: 2, department: "Growth Center/Team" }),
+    ];
+    const filters: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Center"] };
+    expect(applyLibraryFilters(rows, filters).map((r) => r.map_id)).toEqual([2]);
+  });
+
+  it("레거시 리프명 저장값은 리프 일치로 계속 매치", () => {
+    const rows = [makeRow({ map_id: 1, department: "Growth Center/Marketing Office/Growth Team" })];
+    const filters: LibraryFilters = { ...EMPTY_LIBRARY_FILTERS, departments: ["Growth Team"] };
+    expect(applyLibraryFilters(rows, filters).map((r) => r.map_id)).toEqual([1]);
+  });
 });
 
 describe("applyLibraryFilters — role", () => {
