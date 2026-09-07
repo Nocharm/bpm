@@ -395,34 +395,64 @@ export function ProcessLibraryPanel({
                 data-id="library-filter-popover"
                 className="absolute left-0 top-6 z-[1300] w-52 rounded-md border border-hairline bg-surface p-2 shadow-lg"
               >
-                <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">
+                {/* 미등록 맵 — 행 전체가 스위치(행 클릭도 토글). 부서보다 위 (사용자 지시 2026-09-07) */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={filters.showUnregistered}
+                  data-id="library-unregistered-toggle"
+                  onClick={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
+                  className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                >
+                  <span className="min-w-0 truncate">{t("library.filterUnregistered")}</span>
+                  <span
+                    aria-hidden="true"
+                    className={`relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150 ${
+                      filters.showUnregistered ? "bg-accent" : "bg-border-strong"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-3 w-3 rounded-full bg-surface transition-all duration-150 ${
+                        filters.showUnregistered ? "left-3.5" : "left-0.5"
+                      }`}
+                    />
+                  </span>
+                </button>
+                <p className="border-t border-hairline px-1 pb-1 pt-1.5 text-fine font-semibold text-ink-tertiary">
                   {t("library.filterDepartment")}
                 </p>
                 <div className="max-h-36 overflow-y-auto">
-                  {quickPaths.map((dept, index) => (
-                    <label
-                      key={dept}
-                      title={dept}
-                      // 체인 들여쓰기 — 루트(depth 0)는 기존 px-1(4px)과 같은 자리에 선다
-                      style={{ paddingLeft: `${(dept.split("/").length - 1) * 8 + 4}px` }}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
-                    >
-                      <CheckInput
-                        data-id={`library-filter-dept-${index}`}
-                        checked={filters.departments.includes(dept)}
-                        onChange={() => toggleDepartment(dept)}
-                      />
-                      <span className="min-w-0 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
-                      {dept === myOrgPath && (
-                        <span
-                          data-id="library-dept-mine"
-                          className="ml-auto shrink-0 rounded-full bg-accent-tint px-1.5 text-[10px] leading-4 text-accent"
-                        >
-                          {t("library.filterDeptMine")}
-                        </span>
-                      )}
-                    </label>
-                  ))}
+                  {quickPaths.map((dept, index) => {
+                    const checked = filters.departments.includes(dept);
+                    return (
+                      <label
+                        key={dept}
+                        title={dept}
+                        // 체인 들여쓰기 — 루트(depth 0)는 기존 px-1(4px)과 같은 자리에 선다
+                        style={{ paddingLeft: `${(dept.split("/").length - 1) * 8 + 4}px` }}
+                        className="group flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
+                      >
+                        <span className="min-w-0 flex-1 truncate">{formatDeptName(dept, lang, koreanDeptByPath)}</span>
+                        {dept === myOrgPath && (
+                          <span
+                            data-id="library-dept-mine"
+                            className="shrink-0 rounded-full bg-accent-tint px-1.5 text-[10px] leading-4 text-accent"
+                          >
+                            {t("library.filterDeptMine")}
+                          </span>
+                        )}
+                        {/* 체크는 이름 뒤, 호버·포커스·선택 상태에서만 보인다 */}
+                        <CheckInput
+                          data-id={`library-filter-dept-${index}`}
+                          checked={checked}
+                          onChange={() => toggleDepartment(dept)}
+                          className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                            checked ? "" : "opacity-0"
+                          }`}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
                 <button
                   type="button"
@@ -463,14 +493,6 @@ export function ProcessLibraryPanel({
                     );
                   })}
                 </div>
-                <label className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary">
-                  <CheckInput
-                    data-id="library-unregistered-toggle"
-                    checked={filters.showUnregistered}
-                    onChange={() => updateFilters({ ...filters, showUnregistered: !filters.showUnregistered })}
-                  />
-                  {t("library.filterUnregistered")}
-                </label>
               </div>
             )}
             {deptFlyoutAnchor && (

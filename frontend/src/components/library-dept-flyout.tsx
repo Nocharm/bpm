@@ -171,20 +171,27 @@ export function LibraryDeptFlyout({
               else rowRefs.current.delete(node.path);
             }}
             title={node.path}
-            className={`flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink transition-colors duration-350 hover:bg-surface-alt ${
+            className={`group flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink transition-colors duration-350 hover:bg-surface-alt ${
               flashPath === node.path ? "bg-accent-tint" : ""
             }`}
           >
-            <CheckInput checked={selected.includes(node.path)} onChange={() => onToggle(node.path)} />
-            <span className="min-w-0 truncate">{formatDeptName(node.path, lang, koreanDeptByPath)}</span>
+            <span className="min-w-0 flex-1 truncate">{formatDeptName(node.path, lang, koreanDeptByPath)}</span>
             {node.path === myOrgPath && (
               <span
                 data-id="library-dept-mine"
-                className="ml-auto shrink-0 rounded-full bg-accent-tint px-1.5 text-[10px] leading-4 text-accent"
+                className="shrink-0 rounded-full bg-accent-tint px-1.5 text-[10px] leading-4 text-accent"
               >
                 {t("library.filterDeptMine")}
               </span>
             )}
+            {/* 체크는 이름 뒤, 호버·포커스·선택 상태에서만 보인다 (사용자 지시 2026-09-07) */}
+            <CheckInput
+              checked={selected.includes(node.path)}
+              onChange={() => onToggle(node.path)}
+              className={`transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 ${
+                selected.includes(node.path) ? "" : "opacity-0"
+              }`}
+            />
           </label>
         </div>
         {showChildren && (
