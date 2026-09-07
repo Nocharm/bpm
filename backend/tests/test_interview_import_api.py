@@ -618,3 +618,114 @@ def test_home_claim_wins_over_external_lineage_across_files(client: TestClient) 
         assert res.status_code == 200, res.text
         assert all(f["ok"] for f in res.json()["files"]), res.json()["files"]
         assert _run(_name()) == "홈 L5 정식명"
+
+
+def _ext_ref_delivery(l5_code: str, ref_id: str, target_l5: str, l6: object, *, target_lineage: bool = True,
+                      task_ids: list[str] | None = None) -> dict:
+    """홈 L5 최소 문서(rows 2) + 선언 외부 참조 1건(rows[0] → ref). target_lineage=False면 외부 L5 계보 미동봉."""
+    doc = _ext_delivery(l5_code, task_ids)
+    doc["schema_version"] = "0.5-bpm-interface-draft"
+    if target_lineage:
+        doc["framework"]["categories"].append(
+            {"code": target_l5, "name": f"L5 {target_l5}", "level": 5, "parent": "19-01-06-01"})
+    doc["externalTasks"] = [{"refId": ref_id, "l5": {"nodeCode": target_l5, "label": f"L5 {target_l5}"}, "l6": l6, "note": None}]
+    doc["relations"]["edges"] = [{"src": doc["rows"][0]["taskId"], "dst": ref_id, "kind": "seq", "gateway": None,
+                                  "condition": None, "label": "인계", "quote": None}]
+    return doc
+
+
+def _category_id(code: str) -> int | None:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessCategory
+
+    async def _load():
+        async with SessionLocal() as session:
+            return await session.scalar(select(ProcessCategory.id).where(ProcessCategory.code == code))
+    return _run(_load())
+
+
+def _placeholders(client: TestClient, l5_code: str) -> list[dict]:
+    graph = client.get(f"/api/versions/{_draft_id(client, _canvas_map_id(client, l5_code))}/graph").json()
+    return [n for n in graph["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is None]
+
+
+def test_declared_external_ref_places_placeholder_with_origin_and_title(client: TestClient) -> None:
+    doc = _ext_ref_delivery("PHY-A", "ext-a1", "PHY-A-EXT", "외부 업무 A")
+    res = _post(client, _files(doc), apply=True)
+    assert res.status_code == 200, res.text
+    ph = _placeholders(client, "PHY-A")
+    assert len(ph) == 1
+    assert ph[0]["title"] == "외부 업무 A"
+    assert ph[0]["placeholder_category_id"] == _category_id("PHY-A-EXT")  # 계보 동봉 → 빈 카테고리 생성
+    assert any(r["detail"] == "placeholder for external task '외부 업무 A' @ PHY-A-EXT (map not delivered yet)"
+               for r in res.json()["rows"])
+
+
+def test_declared_external_ref_with_null_l6_gets_unspecified_title(client: TestClient) -> None:
+    doc = _ext_ref_delivery("PHY-B", "ext-b1", "PHY-B-EXT", None)
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    ph = _placeholders(client, "PHY-B")
+    assert len(ph) == 1 and ph[0]["title"] == "(L6 unspecified) L5 PHY-B-EXT"
+
+
+def test_declared_external_ref_unknown_l5_has_no_origin_but_warns(client: TestClient) -> None:
+    doc = _ext_ref_delivery("PHY-C", "ext-c1", "PHY-C-NOWHERE", "어딘가의 업무", target_lineage=False)
+    res = _post(client, _files(doc), apply=True)
+    assert res.status_code == 200
+    ph = _placeholders(client, "PHY-C")
+    assert len(ph) == 1 and ph[0]["placeholder_category_id"] is None and ph[0]["title"] == "어딘가의 업무"
+    assert any(r["detail"] == "external L5 PHY-C-NOWHERE not found - placeholder without origin"
+               for r in res.json()["rows"])
+
+
+def test_declared_external_ref_links_directly_when_exact_name_exists(client: TestClient) -> None:
+    # 외부 L5 먼저 전달 — 이름 "검체 접수"
+    target = _ext_delivery("PHY-D-EXT", task_ids=["phy-d-ext-0001"])
+    target["rows"][0]["l6"] = "검체 접수"
+    assert _post(client, _files(target), apply=True).status_code == 200
+    doc = _ext_ref_delivery("PHY-D", "ext-d1", "PHY-D-EXT", "검체접수")  # 공백만 다름 → 정규화 일치
+    res = _post(client, _files(doc), apply=True)
+    assert res.status_code == 200
+    assert _placeholders(client, "PHY-D") == []
+    graph = client.get(f"/api/versions/{_draft_id(client, _canvas_map_id(client, 'PHY-D'))}/graph").json()
+    linked = [n for n in graph["nodes"] if n["node_type"] == "subprocess" and n["linked_map_id"] is not None]
+    ext = next(n for n in linked if n["title"] == "검체 접수")
+    assert graph["subprocess_refs"][str(ext["linked_map_id"])]["category_path"].endswith("PHY-D-EXT")
+    assert any(r["detail"].startswith("linked external task '검체접수' -> map ") for r in res.json()["rows"])
+
+
+def test_declared_external_ref_ambiguous_name_stays_placeholder(client: TestClient) -> None:
+    target = _ext_delivery("PHY-E-EXT", task_ids=["phy-e-ext-0001", "phy-e-ext-0002"])
+    target["rows"][0]["l6"] = "중복 이름"
+    target["rows"][1]["l6"] = "중복이름"
+    assert _post(client, _files(target), apply=True).status_code == 200
+    res = _post(client, _files(_ext_ref_delivery("PHY-E", "ext-e1", "PHY-E-EXT", "중복 이름")), apply=True)
+    assert res.status_code == 200
+    assert len(_placeholders(client, "PHY-E")) == 1
+    assert any(r["detail"] == "external task '중복 이름' @ PHY-E-EXT: 2 maps share the name - left as placeholder"
+               for r in res.json()["rows"])
+
+
+def test_reimport_updates_unlinked_placeholder_title_and_origin_without_duplicating(client: TestClient) -> None:
+    doc = _ext_ref_delivery("PHY-F", "ext-f1", "PHY-F-EXT", "옛 이름")
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    doc["externalTasks"][0]["l6"] = "고친 이름"
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    ph = _placeholders(client, "PHY-F")
+    assert len(ph) == 1 and ph[0]["title"] == "고친 이름"
+    graph = client.get(f"/api/versions/{_draft_id(client, _canvas_map_id(client, 'PHY-F'))}/graph").json()
+    assert sum(1 for e in graph["edges"] if e["target_node_id"] == ph[0]["id"]) == 1
+
+
+def test_legacy_undeclared_code_still_uses_taskid_lineage(client: TestClient) -> None:
+    """미선언 코드는 dev 2026-09-06 동작 그대로 — taskId 계보 키, 제목=코드, 출처 없음, 리포트는 @ unknown."""
+    doc = _ext_delivery("PHY-G")
+    doc["relations"]["edges"].append({"src": doc["rows"][0]["taskId"], "dst": "phy-g-ext-0001", "kind": "seq"})
+    res = _post(client, _files(doc), apply=True)
+    assert res.status_code == 200
+    ph = _placeholders(client, "PHY-G")
+    assert len(ph) == 1 and ph[0]["title"] == "phy-g-ext-0001" and ph[0]["placeholder_category_id"] is None
+    assert any(r["detail"] == "placeholder for external task 'phy-g-ext-0001' @ unknown (map not delivered yet)"
+               for r in res.json()["rows"])

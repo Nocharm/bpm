@@ -141,11 +141,6 @@ class InterviewLinkage:
     # code → ExternalRef, 엣지에 처음 등장한 순서. 선언 ref와 미선언 코드가 함께 들어간다 (spec 2026-09-07 §5)
     external_refs: dict[str, ExternalRef] = field(default_factory=dict)
 
-    @property
-    def external_codes(self) -> list[str]:
-        # 엔진 전환(플랜 Task 5)까지의 호환 뷰 — 이후 제거
-        return sorted(self.external_refs)
-
 
 @dataclass
 class AdapterResult:

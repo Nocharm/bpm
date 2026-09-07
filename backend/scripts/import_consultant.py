@@ -28,7 +28,7 @@ from sqlalchemy.orm import selectinload
 
 from app.clock import now as now_kst
 from app.duration import normalize_duration
-from app.lineage import external_lineage_key, make_node_id
+from app.lineage import external_lineage_key, external_ref_lineage_key, make_node_id, normalize_task_name
 from app.models import (
     Edge,
     Employee,
@@ -1315,7 +1315,9 @@ async def apply_interview_linkage(
 
         # 조회 대상을 엣지 끝점까지 넓힌다 — 외부 L6가 이미 DB에 있으면(다른 L5가 먼저 전달) 플레이스홀더
         # 대신 실 노드로 붙인다 (spec 2026-09-06 §8)
-        lookup_codes = set(linkage.map_codes) | {e.source for e in linkage.edges} | {e.target for e in linkage.edges}
+        # 선언 refId는 consultant_code가 아니다 — 우연히 같은 문자열의 맵에 붙지 않게 조회에서 뺀다
+        ext_refs = linkage.external_refs
+        lookup_codes = set(linkage.map_codes) | {c for c, r in ext_refs.items() if not r.declared}
         placed = (await session.execute(
             select(ProcessMap.id, ProcessMap.consultant_code, ProcessMap.name).where(
                 ProcessMap.consultant_code.in_(sorted(lookup_codes)),
@@ -1327,6 +1329,53 @@ async def apply_interview_linkage(
         if not map_ids:
             report.add(code, "warning", "linkage skipped - no imported maps to place")
             continue
+
+        # 외부 참조 해석 — 선언 ref: 출처 L5 + 그 L5 안 정규화 이름 정확 일치 1건이면 선해소.
+        # 미선언 코드: taskId로 취급(제목=코드, 출처 없음) (spec 2026-09-07 §6.3)
+        ext_l5_ids: dict[str, int] = {}
+        ext_l5_names: dict[int, str] = {}
+        wanted_l5 = sorted({r.l5_code for r in ext_refs.values() if r.declared and r.l5_code})
+        if wanted_l5:
+            for cid, ccode, cname in (await session.execute(
+                select(ProcessCategory.id, ProcessCategory.code, ProcessCategory.name)
+                .where(ProcessCategory.code.in_(wanted_l5))
+            )).all():
+                ext_l5_ids[ccode] = cid
+                ext_l5_names[cid] = cname
+        maps_by_l5: dict[int, list[tuple[int, str]]] = {}
+        if ext_l5_ids:
+            for mid, cid, mname in (await session.execute(
+                select(ProcessMap.id, ProcessMap.category_id, ProcessMap.name).where(
+                    ProcessMap.category_id.in_(sorted(ext_l5_ids.values())), ProcessMap.deleted_at.is_(None))
+            )).all():
+                maps_by_l5.setdefault(cid, []).append((mid, mname))
+        ext_key: dict[str, str] = {}
+        ext_title: dict[str, str] = {}
+        ext_origin: dict[str, int | None] = {}
+        ext_l5_label: dict[str, str] = {}
+        for c, ref in ext_refs.items():
+            if not ref.declared:
+                ext_key[c], ext_title[c], ext_origin[c], ext_l5_label[c] = external_lineage_key(c), c, None, "unknown"
+                continue
+            ext_key[c] = external_ref_lineage_key(code, c)
+            ext_l5_label[c] = ref.l5_code or "unknown"
+            l5_id = ext_l5_ids.get(ref.l5_code or "")
+            if l5_id is None:
+                report.add(code, "warning", f"external L5 {ref.l5_code} not found - placeholder without origin")
+            ext_origin[c] = l5_id
+            l5_name = ext_l5_names.get(l5_id) if l5_id is not None else None
+            ext_title[c] = ref.name or f"(L6 unspecified) {l5_name or ref.l5_label or ref.l5_code}"
+            if ref.name and l5_id is not None:
+                wanted = normalize_task_name(ref.name)
+                hits = [(mid, mname) for mid, mname in maps_by_l5.get(l5_id, [])
+                        if normalize_task_name(mname) == wanted]
+                if len(hits) == 1:
+                    map_ids[c], map_names[hits[0][0]] = hits[0][0], hits[0][1]
+                    report.add(code, "linkage", f"linked external task '{ext_title[c]}' -> map {hits[0][0]}")
+                elif len(hits) > 1:
+                    report.add(code, "warning",
+                               f"external task '{ext_title[c]}' @ {ref.l5_code}: {len(hits)} maps share the name"
+                               " - left as placeholder")
 
         canvas = (
             await session.get(ProcessMap, category.linkage_map_id)
@@ -1385,8 +1434,8 @@ async def apply_interview_linkage(
         # 분기 팬아웃 앞에 분기 노드를 끼운 흐름 — 배치·엣지 모두 이 재작성본을 쓴다
         placed_codes = {c for c in linkage.map_codes if c in map_ids}
         # 외부 L6 — DB에 있으면 실 노드(외부 L6 색·배지), 없으면 플레이스홀더 (spec 2026-09-06 §8)
-        external_present = {c for c in linkage.external_codes if c in map_ids}
-        external_missing = [c for c in linkage.external_codes if c not in map_ids]
+        external_present = {c for c in ext_refs if c in map_ids}
+        external_missing = [c for c in ext_refs if c not in map_ids]
         present_codes = placed_codes | external_present | set(external_missing)
         flow, branch_of, back_pairs = expand_linkage_branches(linkage.edges, present_codes)
 
@@ -1398,7 +1447,7 @@ async def apply_interview_linkage(
         # 안 보여 재임포트가 옆에 중복을 만들고 엣지를 그 중복으로 옮겨 원본을 고아로 만든다
         # (controller ruling F1-2, 레거시 노드로 재현됨).
         for c in external_present:
-            key = external_lineage_key(c)
+            key = ext_key[c]
             lineage_node = lineage_nodes.get(key)
             if lineage_node is not None:
                 if lineage_node.linked_map_id is None:
@@ -1412,10 +1461,17 @@ async def apply_interview_linkage(
                 legacy_node.source_node_id = key
                 lineage_nodes[key] = legacy_node
 
+        # 미연결 계보 노드는 이번 값으로 제목·출처 갱신(이름 수정 전파). 연결된 노드는 불변 (spec 2026-09-07 §6.3-4)
+        for c, ref in ext_refs.items():
+            node = lineage_nodes.get(ext_key[c])
+            if node is not None and node.linked_map_id is None and ref.declared:
+                node.title = ext_title[c]
+                node.placeholder_category_id = ext_origin[c]
+
         # 배치 순서 = linkage.map_codes(진입 L6가 맨 앞) 중 아직 캔버스에 없는 것 + 신규 분기 노드
         missing = [c for c in linkage.map_codes if c in map_ids and map_ids[c] not in node_by_map]
-        missing_external = [c for c in external_present if external_lineage_key(c) not in lineage_nodes]
-        missing_placeholders = [c for c in external_missing if external_lineage_key(c) not in lineage_nodes]
+        missing_external = [c for c in external_present if ext_key[c] not in lineage_nodes]
+        missing_placeholders = [c for c in external_missing if ext_key[c] not in lineage_nodes]
         missing_branches = [
             key for key in branch_of
             if make_node_id(code, key) not in branch_nodes
@@ -1473,26 +1529,30 @@ async def apply_interview_linkage(
                 node_type="subprocess", linked_map_id=map_ids[c], follow_latest=True,
                 # 계보 키를 남긴다 — 안 남기면 이 노드가 다음 재임포트에서 linked_map_id로만
                 # 찾아지고, 그 값이 어긋나는 순간(F1 시나리오) 다시 찾을 방법이 없어진다.
-                source_node_id=external_lineage_key(c),
+                source_node_id=ext_key[c],
                 pos_x=x, pos_y=y, sort_order=next_sort + offset + i,
             )
             session.add(node)
             node_by_map[map_ids[c]] = node
-            lineage_nodes[external_lineage_key(c)] = node
+            lineage_nodes[ext_key[c]] = node
             added += 1
         offset += len(missing_external)
         for i, c in enumerate(missing_placeholders):
             px, py = grid[offset + i]
             x, y = placed.get(c, (px, py))
+            # 선언 ref: 제목=이름 힌트(없으면 "(L6 unspecified) L5명"), 출처=외부 L5 → FE 배지·연결 다이얼로그 자동 펼침.
+            # 미선언 코드: 제목=코드, 출처 없음 (spec 2026-09-07 §6.3)
             node = Node(
-                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=external_lineage_key(c),
-                title=c, node_type="subprocess", linked_map_id=None, placeholder_category_id=None,
+                id=uuid.uuid4().hex, version_id=draft.id, source_node_id=ext_key[c],
+                title=ext_title[c], node_type="subprocess", linked_map_id=None,
+                placeholder_category_id=ext_origin[c],
                 follow_latest=True, pos_x=x, pos_y=y, sort_order=next_sort + offset + i,
             )
             session.add(node)
-            lineage_nodes[external_lineage_key(c)] = node
+            lineage_nodes[ext_key[c]] = node
             added += 1
-            report.add(code, "linkage", f"placeholder for external task {c} (map not delivered yet)")
+            report.add(code, "linkage",
+                       f"placeholder for external task '{ext_title[c]}' @ {ext_l5_label[c]} (map not delivered yet)")
         offset += len(missing_placeholders)
         for j, key in enumerate(missing_branches):
             lineage = make_node_id(code, key)
@@ -1546,7 +1606,7 @@ async def apply_interview_linkage(
                 # 재연결로 다른 맵에 물려도 엣지가 계속 붙는다), 계보 키가 아직 없는 노드는
                 # linked_map_id 폴백으로 찾는다(위 백필 루프가 이미 대부분 채우지만 대칭을 위해
                 # 여기도 같은 2단 조회를 쓴다 — controller ruling F1-2).
-                return lineage_nodes.get(external_lineage_key(key)) or node_by_map.get(map_ids.get(key))
+                return lineage_nodes.get(ext_key.get(key, external_lineage_key(key))) or node_by_map.get(map_ids.get(key))
             return node_by_map.get(map_ids.get(key))
 
         for src_key, dst_key, label, gateway in flow:
