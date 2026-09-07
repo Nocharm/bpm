@@ -609,6 +609,16 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         return subject === "created"
           ? t("framework.importMsgCanvasCreated")
           : t("framework.importMsgCanvasAugmented");
+      case "external-linked":
+        return `${t("framework.importMsgExternalLinked")}: ${subject}`;
+      case "external-placeholder":
+        return `${t("framework.importMsgExternalPlaceholder")}: ${subject}`;
+      case "external-ambiguous":
+        return `${t("framework.importMsgExternalAmbiguous")}: ${subject}`;
+      case "external-l5-unknown":
+        return `${t("framework.importMsgExternalL5Unknown")}: ${subject}`;
+      case "external-resolved":
+        return t("framework.importMsgExternalResolved");
       default:
         return raw;
     }

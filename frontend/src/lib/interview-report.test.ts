@@ -81,6 +81,29 @@ describe("classifyDetail", () => {
     expect(msg.kind).toBe("other");
     expect(msg.raw).toBe("something new happened");
   });
+
+  it("classifies the external-reference messages from the importer", () => {
+    expect(classifyDetail("linkage", "linked external task '검체 접수' -> map 12")).toMatchObject({
+      kind: "external-linked",
+      severity: "info",
+      subject: "검체 접수",
+      numbers: [12],
+    });
+    expect(
+      classifyDetail("linkage", "placeholder for external task '외부 업무' @ 20-02-01-01-01 (map not delivered yet)"),
+    ).toMatchObject({ kind: "external-placeholder", subject: "외부 업무" });
+    expect(
+      classifyDetail("warning", "external task '중복' @ 20-02-01-01-01: 2 maps share the name - left as placeholder"),
+    ).toMatchObject({ kind: "external-ambiguous", severity: "warning", subject: "중복", numbers: [2] });
+    expect(
+      classifyDetail("warning", "external L5 22-01-01-01-01 not found - placeholder without origin"),
+    ).toMatchObject({ kind: "external-l5-unknown", subject: "22-01-01-01-01" });
+    expect(classifyDetail("linkage", "resolved 3 external placeholder node(s)")).toMatchObject({
+      kind: "external-resolved",
+      numbers: [3],
+      subject: "",
+    });
+  });
 });
 
 describe("buildImportReportView", () => {

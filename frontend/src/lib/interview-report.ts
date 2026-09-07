@@ -48,6 +48,11 @@ export type DetailKind =
   | "no-landing"
   | "canvas"
   | "linkage-skipped"
+  | "external-linked"
+  | "external-placeholder"
+  | "external-ambiguous"
+  | "external-l5-unknown"
+  | "external-resolved"
   | "published"
   | "other";
 
@@ -174,6 +179,12 @@ const PATTERNS: { kind: DetailKind; re: RegExp }[] = [
   { kind: "in-trash", re: /^map is in trash/ },
   { kind: "no-landing", re: /^annual_count\/fte have no landing site/ },
   { kind: "linkage-skipped", re: /^linkage skipped - (.*)$/ },
+  // 외부 L6 참조(인터뷰 0.5) — 문구는 import_consultant.apply_interview_linkage/resolve_external_placeholders와 계약
+  { kind: "external-linked", re: /^linked external task '(.*)' -> map (\d+)$/ },
+  { kind: "external-placeholder", re: /^placeholder for external task '(.*)' @ (\S+) \(map not delivered yet\)$/ },
+  { kind: "external-ambiguous", re: /^external task '(.*)' @ (\S+): (\d+) maps share the name - left as placeholder$/ },
+  { kind: "external-l5-unknown", re: /^external L5 (\S+) not found - placeholder without origin$/ },
+  { kind: "external-resolved", re: /^resolved (\d+) external placeholder node\(s\)$/ },
   // verb는 created|augmented (import_consultant.apply_interview_linkage) — 새 동사가 생겨도 통과시킨다
   { kind: "canvas", re: /^canvas ([a-z]+) \(map (\d+), \+(\d+) nodes\/edges\)$/ },
   { kind: "published", re: /^published v(\d+)$/ },
