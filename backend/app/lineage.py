@@ -8,6 +8,7 @@ these names so `from scripts.import_consultant import make_node_id` keeps workin
 """
 
 import hashlib
+import unicodedata
 
 
 def make_node_id(map_code: str, node_code: str) -> str:
@@ -23,3 +24,15 @@ EXTERNAL_LINEAGE_SCOPE = "__ext__"
 def external_lineage_key(code: str) -> str:
     """타 L5 taskId 플레이스홀더의 계보 키 — 캔버스 L5와 무관하게 코드만으로 결정돼 재전달 해소가 전 캔버스를 찾는다."""
     return make_node_id(EXTERNAL_LINEAGE_SCOPE, code)
+
+
+def external_ref_lineage_key(home_code: str, ref_id: str) -> str:
+    """externalTasks[].refId 플레이스홀더의 계보 키 — 파일 안에서만 유일한 refId를 홈 L5 코드로
+    네임스페이스한다. 미선언 원문 코드(taskId)는 external_lineage_key를 그대로 쓴다 (spec 2026-09-07 §6.2)."""
+    return make_node_id(EXTERNAL_LINEAGE_SCOPE, f"{home_code}|{ref_id}")
+
+
+def normalize_task_name(name: str) -> str:
+    """"정확 일치" 비교용 — NFKC·casefold·공백 전부 제거("OOS 접수" == "OOS접수"). 자동 연결은 이 값이
+    같은 맵이 그 L5에 정확히 1개일 때만 (spec 2026-09-07 §6.2)."""
+    return "".join(unicodedata.normalize("NFKC", name).casefold().split())
