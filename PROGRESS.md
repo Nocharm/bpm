@@ -15,6 +15,7 @@
 - T6 후차 해소: `resolve_external_placeholders`에 이름 경로 추가 — 전달분이 건드린 L5를 `placeholder_category_id`로 가진 미연결 플레이스홀더를 전 캔버스 draft에서 스캔, 라이브 맵 정규화 이름 일치 정확히 1개면 연결(`placeholder_category_id` 소거), 2개+는 경고. 손으로 만든 플레이스홀더(출처 NULL)는 제외.
 - T7 FE 리포트: `DetailKind` 5종(external-linked/placeholder/ambiguous/l5-unknown/resolved) + PATTERNS(엔진 문구와 계약) + `describeMessage` 라벨 en/ko — 미등록이면 "other"로 원문 노출되던 것을 분류.
 - T8/T9 샘플 7종 0.5 재작성(`brr-large-l5.json`→`brr-l5.json`): 파일당 L6 ≥4·행마다 decision+branch·loop, 파일마다 parallel·bypass·exception·handoff, 외부 참조 시나리오 매트릭스(정확 일치 직결·공백 변형 정규화·근사 불일치·`l6:null`·계보 동봉 빈 카테고리·계보 없음 origin unknown 1건). calibration 1~3행·utility 1행 메타는 스모크 앵커로 보존. `tests/test_samples_0_5.py`가 규격·B세트 e2e(4파일→qa-deviation 후차 해소 4건)를 고정. 스모크 카운트 Created 9·Notes 41·교정 준비 노트 7행(field-promotion이 찾던 "표준기 관리대장은 아직 엑셀" VOC를 샘플에 추가 — 이전엔 없어 낡아 있었음).
+- 스모크 실측(8047/3047 — 8000·8010·3010은 다른 세션 점유): interview-import 25/25·import-followups 23/23·node-modal-tiles 63/63·framework-slot 20/20·field-promotion 9/10(잔여 실패 `[18] gmp select saves via PATCH`는 GMP 셀렉트 PATCH 단언 — 이 트랙이 건드린 코드가 아니며 재실행에도 동일, 별건). field-promotion의 폐지된 확인 다이얼로그 클릭은 optional로, Unchanged 4→9.
 - T10 문서: 컨설턴트 전달용 계약 `docs/samples/interview-json-0.5.md`(델타·필드표·심각도·끝점 해석·외부 계보·리포트 문구·샘플 매트릭스·후차 해소 시연 수순), `docs/qa/interview-import-field-map.md`(externalTasks·외부 계보 행, §2-2 해소 규칙, §5 거부 조건), fw-slot 스펙 §8 follow-up 각주, v04-result §1.1/§4 갱신, docs/README 샘플 2줄.
 
 ## 2026-09-07 — 슬라이드 매뉴얼 4종 재생성: 08-31 이후 md 델타 반영 (docs/manual-pdf-refresh)

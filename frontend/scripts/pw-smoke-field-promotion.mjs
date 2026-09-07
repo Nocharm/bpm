@@ -72,12 +72,13 @@ try {
   const dryNotes = await chip(page, "Notes", 41).isVisible().catch(() => false);
   check("[1b] dry-run: Notes 41 (open_item/task_note/external 포함)", dryNotes);
   await page.locator('[data-id="interview-import-apply"]').click();
-  await page.locator('[data-id="confirm-dialog-confirm"]').click();
+  // 적용 바의 확인 다이얼로그는 폐지됨(e3c57c1f) — 남아 있는 빌드에서만 누르고, 없으면 그대로 진행
+  await page.locator('[data-id="confirm-dialog-confirm"]').click({ timeout: 3000 }).catch(() => {});
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 25000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
-  const idempotent = await chip(page, "Unchanged", 4).waitFor({ state: "visible", timeout: 15000 })
+  const idempotent = await chip(page, "Unchanged", 9).waitFor({ state: "visible", timeout: 15000 })
     .then(() => true).catch(() => false);
-  check("[2] re-dry-run Unchanged 4 (idempotent)", idempotent);
+  check("[2] re-dry-run Unchanged 9 (idempotent)", idempotent);
 
   // ── 임포트 결과 API 대조 — 맵/버전/그래프 ────────────────────────────────
   const maps = await api("/maps");
