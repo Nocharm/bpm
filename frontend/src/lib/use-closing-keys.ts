@@ -71,3 +71,37 @@ export function useClosingKeys<K>(): {
 
   return { closingKeys, beginClose, cancelClose, getSectionClass };
 }
+
+/** 피커·모달처럼 아코디언이 여러 겹 붙는 화면의 모션 배선 — useClosingKeys의 interacted는 전역
+ * 플래그 1개뿐이라 "자동 드릴인은 static, 사용자가 직접 편 노드만 open 애니메이션"을 노드별로
+ * 구분 못 한다. userOpenedIds를 직접 들고 pickSectionClass를 호출하던 framework-tree-picker.tsx/
+ * framework-assign-modal.tsx의 중복 배선을 하나로 합친다. openSection의 byUser=false는 자동
+ * 드릴인 경로용(열되 애니메이션 없이 static) — 두 경우 모두 cancelClose를 먼저 태워, 닫히는 중이던
+ * 고스트가 방금 재펼침한 섹션을 accordion-close로 덮지 않게 한다. */
+export function useSectionMotion<K>(): {
+  closingKeys: Set<K>;
+  sectionClass: (key: K) => string;
+  openSection: (key: K, byUser: boolean) => void;
+  closeSection: (key: K) => void;
+} {
+  const { closingKeys, beginClose, cancelClose } = useClosingKeys<K>();
+  const [userOpenedIds, setUserOpenedIds] = useState<Set<K>>(new Set());
+
+  const sectionClass = (key: K): string => pickSectionClass(closingKeys.has(key), userOpenedIds.has(key));
+
+  const openSection = (key: K, byUser: boolean): void => {
+    cancelClose(key);
+    if (byUser) setUserOpenedIds((prev) => new Set(prev).add(key));
+  };
+
+  const closeSection = (key: K): void => {
+    beginClose(key);
+    setUserOpenedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
+
+  return { closingKeys, sectionClass, openSection, closeSection };
+}

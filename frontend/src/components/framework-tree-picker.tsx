@@ -29,7 +29,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import type { NodeDisplayToggle } from "@/lib/node-actions";
-import { pickSectionClass, useClosingKeys } from "@/lib/use-closing-keys";
+import { useSectionMotion } from "@/lib/use-closing-keys";
 
 export interface FrameworkTreePickerProps {
   currentMapId: number;
@@ -82,15 +82,9 @@ export function FrameworkTreePicker({
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
   const [rootError, setRootError] = useState(false);
-  // 아코디언 펼침 모션 — 접힘 고스트 렌더는 홈 트리와 동일 훅. 훅의 interacted는 전역 플래그
-  // 1개뿐이라(한 번이라도 조작하면 이후 전부 open 처리) "자동 드릴인은 static, 사용자가 편
-  // 노드만 open"을 구분 못 한다 — getSectionClass 대신 pickSectionClass를 우리가 노드별로
-  // 추적하는 userOpenedIds로 직접 호출한다.
-  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
-  const [userOpenedIds, setUserOpenedIds] = useState<Set<number>>(new Set());
-  function sectionClass(categoryId: number): string {
-    return pickSectionClass(closingKeys.has(categoryId), userOpenedIds.has(categoryId));
-  }
+  // 아코디언 펼침 모션 — 노드별 userOpenedIds 추적(자동 드릴인은 static, 사용자가 직접 편
+  // 노드만 open 애니메이션)을 공용 훅으로 이관(F4) — framework-assign-modal.tsx와 중복이던 배선.
+  const { closingKeys, sectionClass, openSection, closeSection } = useSectionMotion<number>();
 
   // 하단 플레이스홀더 생성 폼 입력 — submitPlaceholder가 트리밍·클리어까지 담당
   const [placeholderName, setPlaceholderName] = useState("");
@@ -209,6 +203,7 @@ export function FrameworkTreePicker({
   // 갈래가 둘 이상이면 거기서 멈춘다 — 선택지가 생기는 지점은 사용자가 고른다 (사용자 요청 2026-08-31)
   async function autoDrillIn(categoryId: number, hop: number): Promise<void> {
     if (hop >= AUTO_DRILL_MAX) return;
+    openSection(categoryId, false); // F5: 닫히는 중이던 고스트가 방금 재펼침을 덮지 않게 먼저 취소
     setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     let kids = stateRef.current.childrenByParent.get(categoryId);
     let maps = stateRef.current.mapsByCategory.get(categoryId);
@@ -229,17 +224,11 @@ export function FrameworkTreePicker({
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {
-      beginClose(categoryId); // 고스트 렌더로 accordion-close 재생 후 언마운트
-      setUserOpenedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(categoryId);
-        return next;
-      });
+      closeSection(categoryId); // 고스트 렌더로 accordion-close 재생 후 언마운트
       setState((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
-    cancelClose(categoryId);
-    setUserOpenedIds((prev) => new Set(prev).add(categoryId)); // 사용자가 직접 편 노드만 accordion-open 재생
+    openSection(categoryId, true); // 사용자가 직접 편 노드만 accordion-open 재생
     setState((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     if (shouldFetchChildren(state, categoryId)) {
       setState((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
@@ -371,7 +360,7 @@ export function FrameworkTreePicker({
           <ChevronRight
             size={12}
             strokeWidth={1.5}
-            className={`shrink-0 transition-transform duration-150 ease-smooth ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"} ${open ? "rotate-90" : ""}`}
+            className={`shrink-0 motion-safe:transition-transform duration-150 ease-smooth ${isCurrentL5 ? "text-accent" : "text-ink-tertiary"} ${open ? "rotate-90" : ""}`}
           />
           <span
             className={`min-w-0 truncate text-fine ${
@@ -386,19 +375,21 @@ export function FrameworkTreePicker({
             </span>
           )}
         </button>
-        {showContent && (
-          <div className={sectionClass(node.id)}>
-            {/* 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 하위 카테고리 아코디언만 */}
-            {node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0 && (
-              <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">
-                {mapsData.maps.map((row) => renderMapRow(row, node.id, pathNames))}
-              </div>
-            )}
-            {children.length > 0 && (
-              <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1, [...trailNames, node.name]))}</ul>
-            )}
-          </div>
-        )}
+        {/* 콘텐츠 도착 후에만 마운트 — 빈 박스 위에서 accordion-open이 헛도는 것 방지 (F1) */}
+        {showContent &&
+          ((node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0) || children.length > 0) && (
+            <div className={sectionClass(node.id)}>
+              {/* 맵 슬롯은 L5 전용(2026-08-30 확정) — 상위 레벨은 하위 카테고리 아코디언만 */}
+              {node.level === 5 && mapsData !== undefined && mapsData.maps.length > 0 && (
+                <div style={{ paddingLeft: `${(depth + 1) * 10 + 4}px` }} className="flex flex-col">
+                  {mapsData.maps.map((row) => renderMapRow(row, node.id, pathNames))}
+                </div>
+              )}
+              {children.length > 0 && (
+                <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1, [...trailNames, node.name]))}</ul>
+              )}
+            </div>
+          )}
       </li>
     );
   };

@@ -29,7 +29,7 @@ import { SlotChangeDialog } from "@/components/maps/slot-change-dialog";
 import { UserPill } from "@/components/user-pill";
 import { isSlotAction, SLOT_ACTION_KEY } from "@/lib/framework-slot-state";
 import { useI18n } from "@/lib/i18n";
-import { pickSectionClass, useClosingKeys } from "@/lib/use-closing-keys";
+import { useSectionMotion } from "@/lib/use-closing-keys";
 
 interface FrameworkAssignModalProps {
   mapId: number;
@@ -79,15 +79,9 @@ export function FrameworkAssignModal({
   // 철회 진행 중 — 더블클릭으로 withdrawSlotChange가 두 번 나가지 않도록.
   const [withdrawing, setWithdrawing] = useState(false);
 
-  // 아코디언 펼침 모션 — 접힘은 고스트 렌더 후 언마운트(framework-tree.tsx와 동일 훅 재사용).
-  // 훅의 interacted는 전역 플래그 1개뿐이라(한 번이라도 조작하면 이후 전부 open 처리) "자동
-  // 드릴인은 static, 사용자가 직접 편 노드만 open"을 구분 못 한다 — getSectionClass 대신
-  // pickSectionClass를 우리가 노드별로 추적하는 userOpenedIds로 직접 호출한다.
-  const { closingKeys, beginClose, cancelClose } = useClosingKeys<number>();
-  const [userOpenedIds, setUserOpenedIds] = useState<Set<number>>(new Set());
-  function sectionClass(categoryId: number): string {
-    return pickSectionClass(closingKeys.has(categoryId), userOpenedIds.has(categoryId));
-  }
+  // 아코디언 펼침 모션 — 노드별 userOpenedIds 추적(자동 드릴인은 static, 사용자가 직접 편
+  // 노드만 open 애니메이션)을 공용 훅으로 이관(F4) — framework-tree-picker.tsx와 중복이던 배선.
+  const { closingKeys, sectionClass, openSection, closeSection } = useSectionMotion<number>();
 
   // 자동 드릴인 상한 — 단일 후보 체인이라도 무한히 파고들지 않게(tree-picker AUTO_DRILL_MAX와 동일 값).
   const AUTO_DRILL_MAX = 6;
@@ -105,7 +99,8 @@ export function FrameworkAssignModal({
     const only = kids[0];
     const isInertLeaf = only.child_count === 0 && only.level !== 5;
     if (isInertLeaf) return; // 더 펼칠 것도 고를 것도 없는 막다른 길 — 열지 않는다
-    setOpenIds((prev) => new Set(prev).add(only.id)); // userOpenedIds에는 넣지 않는다 — static으로 렌더
+    openSection(only.id, false); // F5: 닫히는 중이던 고스트가 방금 재펼침을 덮지 않게 먼저 취소 — static으로 렌더
+    setOpenIds((prev) => new Set(prev).add(only.id));
     if (only.level === 5) return; // 선택 가능한 종착점 — 자동 선택 없이 멈춘다
     const cached = childrenByParentRef.current.get(only.id);
     if (cached !== undefined) {
@@ -200,12 +195,7 @@ export function FrameworkAssignModal({
       return; // 비-L5 말단 — 선택도 펼침도 없음
     }
     if (openIds.has(node.id)) {
-      beginClose(node.id); // 고스트 렌더로 accordion-close 재생 후 언마운트
-      setUserOpenedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(node.id);
-        return next;
-      });
+      closeSection(node.id); // 고스트 렌더로 accordion-close 재생 후 언마운트
       setOpenIds((prev) => {
         const next = new Set(prev);
         next.delete(node.id);
@@ -213,8 +203,7 @@ export function FrameworkAssignModal({
       });
       return;
     }
-    cancelClose(node.id);
-    setUserOpenedIds((prev) => new Set(prev).add(node.id)); // 사용자가 직접 편 노드만 accordion-open 재생
+    openSection(node.id, true); // 사용자가 직접 편 노드만 accordion-open 재생
     setOpenIds((prev) => new Set(prev).add(node.id));
     const cachedKids = childrenByParent.get(node.id);
     if (cachedKids !== undefined) {
@@ -304,24 +293,26 @@ export function FrameworkAssignModal({
             <ChevronRight
               size={14}
               strokeWidth={1.5}
-              className={`shrink-0 transition-transform duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
+              className={`shrink-0 motion-safe:transition-transform duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
             />
           )}
           <span className="min-w-0 truncate">{node.name}</span>
           {selected && <Check size={14} strokeWidth={2} className="ml-auto shrink-0" />}
         </button>
         {showContent && (
-          <div className={sectionClass(node.id)}>
-            {loadingIds.has(node.id) ? (
-              <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
-                {t("common.loading")}
-              </p>
-            ) : (
-              children.length > 0 && (
+          // 로딩 문구는 애니메이션 래퍼 밖 — 콘텐츠(children ul) 도착 후에만 마운트해 빈 박스 위에서
+          // accordion-open이 헛도는 것을 막는다 (F1, framework-tree.tsx와 동일 패턴).
+          loadingIds.has(node.id) ? (
+            <p style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }} className="py-0.5 text-fine text-ink-tertiary">
+              {t("common.loading")}
+            </p>
+          ) : (
+            children.length > 0 && (
+              <div className={sectionClass(node.id)}>
                 <ul className="flex flex-col">{children.map((c) => renderNode(c, depth + 1))}</ul>
-              )
-            )}
-          </div>
+              </div>
+            )
+          )
         )}
       </li>
     );
