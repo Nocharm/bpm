@@ -4,7 +4,20 @@
 // 하단 New map은 검색어가 있을 때만 — 그 이름으로 생성 즉시 링크 (spec 2026-07-19).
 "use client";
 
-import { ChevronRight, Filter, FolderTree, Network, Plus, Search, X } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Crown,
+  Eye,
+  Filter,
+  FolderTree,
+  type LucideIcon,
+  Network,
+  PenLine,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listLibraryProcesses, type LibraryProcess } from "@/lib/api";
@@ -63,6 +76,9 @@ export interface ProcessLibraryPanelProps {
   // 이미 이 맵에 들어와 있는 행 클릭 — 미리보기 대신 캔버스의 그 노드로 포커스 (사용자 요청 2026-08-31)
   onFocusLinkedNode: (linkedMapId: number) => void;
 }
+
+// 역할 필 앞 아이콘 — 선택되면 Check로 바뀐다(사용자 지시 2026-09-07)
+const ROLE_ICONS: Record<LibraryRole, LucideIcon> = { owner: Crown, editor: PenLine, viewer: Eye };
 
 export function ProcessLibraryPanel({
   currentMapId,
@@ -419,20 +435,33 @@ export function ProcessLibraryPanel({
                   <ChevronRight size={12} strokeWidth={1.5} className="ml-auto" />
                 </button>
                 <p className="px-1 pb-1 text-fine font-semibold text-ink-tertiary">{t("library.filterRole")}</p>
-                <div className="mb-2 flex flex-col">
-                  {(["owner", "editor", "viewer"] as const).map((role) => (
-                    <label
-                      key={role}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-xs px-1 py-1 text-fine text-ink hover:bg-surface-alt"
-                    >
-                      <CheckInput
+                {/* 역할은 한 줄 필 토글 — 아무것도 안 고르면 전체와 같다(빈 roles = 필터 없음) */}
+                <div className="mb-2 flex gap-1 px-0.5">
+                  {(["owner", "editor", "viewer"] as const).map((role) => {
+                    const active = filters.roles.includes(role);
+                    const RoleIcon = ROLE_ICONS[role];
+                    return (
+                      <button
+                        key={role}
+                        type="button"
                         data-id={`library-filter-role-${role}`}
-                        checked={filters.roles.includes(role)}
-                        onChange={() => toggleRole(role)}
-                      />
-                      {roleLabels[role]}
-                    </label>
-                  ))}
+                        aria-pressed={active}
+                        onClick={() => toggleRole(role)}
+                        className={`flex items-center gap-0.5 whitespace-nowrap rounded-full border px-1 py-0.5 text-fine transition-colors duration-150 ${
+                          active
+                            ? "border-accent bg-accent-tint text-accent"
+                            : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                        }`}
+                      >
+                        {active ? (
+                          <Check size={12} strokeWidth={2} />
+                        ) : (
+                          <RoleIcon size={12} strokeWidth={1.5} />
+                        )}
+                        {roleLabels[role]}
+                      </button>
+                    );
+                  })}
                 </div>
                 <label className="flex cursor-pointer items-center gap-1.5 border-t border-hairline px-1 pt-1.5 text-fine text-ink-tertiary">
                   <CheckInput
