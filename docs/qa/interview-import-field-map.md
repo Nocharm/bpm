@@ -4,7 +4,7 @@
 무엇이 조용히 다르게 변환될 수 있는지. 실파일 대조 시 이 표를 기준으로 dry-run 리포트를 읽는다.
 
 구현: `backend/scripts/consultant_interview.py`(어댑터) · `backend/scripts/import_consultant.py`(엔진).
-설계: `2026-09-01-interview-import-v04-design.md`.
+설계: `2026-09-01-interview-import-v04-design.md` · 0.5 외부 참조: `docs/superpowers/specs/2026-09-07-interview-external-refs-design.md`(컨설턴트 계약 `docs/samples/interview-json-0.5.md`).
 
 ---
 
@@ -23,6 +23,8 @@
 | `tasks[]` | `taskId` 조인으로 `exceptions`·`note`만 소비 (아래 §3) |
 | `sideNotes[]` | `map_notes` — `unitId` 매칭 시 그 맵, null이면 L5 스코프. `kind` 그대로 |
 | `openItems[]` | `map_notes` kind=`open_item`, L5 스코프 |
+| `externalTasks[]` (0.5) | 타 L5의 L6 참조 레지스트리 — 엣지 끝점이 `refId`면 **L5 연계 캔버스 플레이스홀더 SP 노드**(`title=l6`∥`(L6 unspecified) L5명`, `placeholder_category_id=l5.nodeCode의 카테고리`, 계보키 `__ext__|홈L5|refId`). 그 L5에 정규화 이름 정확 일치 라이브 맵이 1개면 실 노드로 직결. `note`는 홈 L5 노트(kind=`external`). 계약: `docs/samples/interview-json-0.5.md` |
+| `framework.categories[]` 중 홈 체인 밖 (0.5) | 외부 계보 — **없을 때만 생성**(있으면 name/level/parent/sort 불변). 부모가 파일에 없으면 경고 후 제외 |
 
 ### rows[]
 
@@ -97,6 +99,16 @@
 
 ---
 
+## 2-2. 외부 참조 해소 (0.5)
+
+| 시점 | 규칙 |
+|---|---|
+| 임포트 시 | `externalTasks[].l5.nodeCode` 카테고리(파일 동봉 또는 DB)의 라이브 맵 중 `normalize_task_name(name) == normalize_task_name(l6)`가 **정확히 1개** → 직결(`linked external task …`). 2개 이상 → 경고, 플레이스홀더 유지. `l6: null`은 매칭 대상 아님 |
+| 재전달(다른 L5) | 전달분이 건드린 카테고리를 `placeholder_category_id`로 가진 미연결 플레이스홀더를 전 캔버스 draft에서 스캔 → 같은 규칙으로 연결(`placeholder_category_id`는 소거, `resolved N external placeholder node(s)`). 손으로 만든 플레이스홀더(출처 NULL)는 대상 아님 |
+| 재임포트(같은 파일) | 같은 `refId`의 미연결 플레이스홀더는 제목·출처 갱신, 연결된 노드는 불변 |
+| 미선언 코드 | `externalTasks`에 없는 끝점 문자열은 실 taskId로 취급(dev 2026-09-06 동작) — 제목=코드, 출처 없음, 계보키 `__ext__|코드`, 리포트 `@ unknown` |
+| 정규화 | `app/lineage.py` `normalize_task_name` = NFKC → casefold → 공백 전부 제거 |
+
 ## 3. 무시 — 저장하지 않는 필드
 
 리포트 카운트에도 안 잡히고 조용히 버려진다. **미지 키가 아니므로 warning도 안 난다** — 의도된 제외.
@@ -152,8 +164,9 @@ dry-run 경고를 반드시 읽어야 하는 지점.
 
 error가 1건이라도 있으면 **그 파일은 통째로 스킵**되고 다른 파일은 계속 진행된다(부분 임포트 없음).
 
-- `schema_version`이 `0.4`로 시작하지 않음
-- `framework.categories` 누락/구조 위반(중복 code·부모 미존재·레벨 불일치)
+- `schema_version`이 `0.4`/`0.5`로 시작하지 않음
+- `framework.categories` 누락/구조 위반(중복 code·부모 미존재·레벨 불일치) — 홈 체인 기준. 외부 계보의 부모 미존재는 경고 후 제외(0.5)
+- (0.5) `externalTasks`가 리스트가 아님 · 항목이 객체가 아님 · `refId` 누락/중복/`rows[].taskId`와 충돌 · `l5` 또는 `l5.nodeCode` 누락
 - `l5.nodeCode`가 `framework.categories`에 없음
 - `rows`가 리스트가 아님
 - row의 `taskId` 누락 / 파일 내 중복 / **파일 간 중복**

@@ -185,6 +185,8 @@ impact: {home_canvas_nodes: int, other_canvas_nodes: int, referencing_maps: int,
 
 > **amendment (2026-09-06, 구현 확정)**: 플레이스홀더 계보 키는 스케치대로의 `make_node_id(l5code, 코드)`가 아니라 **`make_node_id("__ext__", 코드)`**(= `external_lineage_key`, 신설 `app/lineage.py`)로 확정됐다 — 캔버스 L5와 무관하게 코드만으로 정해져야 재전달 해소가 그 코드를 참조하는 **모든** 캔버스를 한 번에 찾는다. `resolve_external_placeholders`(`scripts/import_consultant.py`)는 **pass 1 직후**(pass 2 전) 실행되고 **라이브 draft 캔버스만** 대상이며(confirmed 스냅샷 불변), `deleted_at IS NULL`인 행만 후보로 삼아 **휴지통 맵으로는 연결하지 않는다**(같은 코드로 라이브 행이 여럿이면 슬롯을 쥔 행을 우선). 맵이 슬롯 변경(`assign`/`move`)으로 그 L5에 들어올 때도(§5 `_append_contained_node`) 새 노드를 얹기 전에 같은 계보 키의 플레이스홀더가 있으면 **그 자리를 채운다**(엣지·좌표 보존, 중복 노드 방지). 아직 어느 쪽 맵도 없는 "반쯤 알려진" 엣지(코드는 알지만 이번 전달에 실 맵이 없는 target)는 버리지 않고 `external` 플레이스홀더로 유지된다.
 
+> **follow-up (2026-09-07)**: "계약 확장은 인터뷰 트랙 백로그"는 `2026-09-07-interview-external-refs-design.md`(인터뷰 JSON 0.5 `externalTasks`)로 해소 — 플레이스홀더가 출처 L5(`placeholder_category_id`)·이름 힌트(`title`)를 갖고, 같은 L5 안 정규화 이름 정확 일치는 임포트 시·후차 전달 시 자동 연결된다. 선언 ref의 계보 키는 `external_ref_lineage_key(홈 L5, refId)`, 미선언 코드는 이 절의 `external_lineage_key(코드)` 그대로.
+
 ## 9. 옆문·가드
 
 - `mode != 'normal'`인 맵은 슬롯 대상·이양 대상·후계자 모두 422 — `apply_slot_change` 전제와 레거시 어댑터 양쪽.

@@ -19,7 +19,7 @@
 |---|---|
 | 버전 게이트 | **0.4 전용**. 0.3은 file error로 거부 — 수용하면 흐름이 조용히 일직선이 되고 그 사실이 경고 한 줄에 묻힌다 |
 | `actions[].seq` | relations의 참조키 → row 안에서 유일. **중복이면 file error**(0.3의 "중복 seq=병렬" 관례 폐기) |
-| 저장소 샘플 | 6종 전부 0.4 (`consultant-interview-sample/` 2 + `framework-linkage-dummy/` 4) |
+| 저장소 샘플 | 7종 전부 **0.5**(2026-09-07 재작성 — `consultant-interview-sample/` 2 + `framework-linkage-dummy/` 5, 외부 참조 시나리오 매트릭스는 `docs/samples/interview-json-0.5.md`) |
 
 ### 1.2 L7 흐름 (`rows[].relations` → 맵 그래프)
 
@@ -138,6 +138,9 @@ L5 연계 캔버스 7노드(SP 4 + 분기 3) 9엣지 · L5 노트 8건
 4. **L5 SP 간 IO 연결** — SP IO는 영구 원본 규약이라 미러 쪽 취급을 새로 정해야 한다(설계 필요).
 5. **대량 전달 경로** — 웹 임포트는 단일 요청이라 수백 파일 규모에서 한계 가능. 필요 시 인터뷰 CLI 신설
    (구 canonical CLI 부활이 아님).
+6. **타 L5 L6 참조(`externalTasks`, 0.5)** — **구현됨 2026-09-07**(feat/interview-external-refs): 설계
+   `docs/superpowers/specs/2026-09-07-interview-external-refs-design.md`, 컨설턴트 계약 `docs/samples/interview-json-0.5.md`.
+   엣지 끝점 rows→refId→미선언 코드, 출처 있는 플레이스홀더, 같은 L5 안 정규화 이름 정확 일치 자동 연결(임포트 시·후차 전달 시).
 
 ---
 
