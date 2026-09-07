@@ -625,3 +625,39 @@ def test_edge_between_two_external_endpoints_is_dropped() -> None:
     assert not res.has_error()
     assert [(e.source, e.target) for e in res.linkage.edges] == [("ext-util", "task-prep-0001")]
     assert any("references unknown taskId" in i.message for i in res.issues)
+
+
+def test_schema_version_05_accepted_and_04_still_works() -> None:
+    data = _interview()
+    data["schema_version"] = "0.5-bpm-interface-draft"
+    assert not convert_interview(data).has_error()
+    data["schema_version"] = "0.4-bpm-interface-draft"
+    assert not convert_interview(data).has_error()
+
+
+def test_categories_outside_home_chain_are_marked_external() -> None:
+    res = convert_interview(_with_external(_interview()))
+    flags = {c.code: c.external for c in res.categories}
+    assert flags["19"] is False and flags["19-01"] is False  # 공유 조상은 홈 체인
+    assert flags["19-01-06-01-02"] is False
+    assert flags["19-01-02"] is True and flags["19-01-02-01-01"] is True
+
+
+def test_broken_external_chain_is_dropped_with_warning_not_error() -> None:
+    data = _with_external(_interview())
+    # 외부 L5의 L4 부모(19-01-02-01)를 빼 체인을 끊는다 → L5도 부모 없음으로 연쇄 제외
+    data["framework"]["categories"] = [c for c in data["framework"]["categories"] if c["code"] != "19-01-02-01"]
+    res = convert_interview(data)
+    assert not res.has_error()
+    codes = {c.code for c in res.categories}
+    assert "19-01-02" in codes and "19-01-02-01-01" not in codes
+    assert sum("dropped - parent" in i.message for i in res.issues if i.severity == "warning") == 1
+    # nodeCode는 이제 파일에 없다 → 기존 체계로 해석 경고
+    assert any("not in framework.categories" in i.message for i in res.issues)
+
+
+def test_broken_home_chain_is_still_file_error() -> None:
+    data = _interview()
+    data["framework"]["categories"] = [c for c in data["framework"]["categories"] if c["code"] != "19-01-06"]
+    res = convert_interview(data)
+    assert res.has_error()

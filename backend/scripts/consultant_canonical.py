@@ -21,6 +21,8 @@ class CanonicalCategory(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     level: int = Field(ge=1, le=5)
     parent: str | None = None
+    # 홈 L5 조상 체인 밖 계보(타 L5 참조용 동봉) — 엔진은 없을 때만 생성, 있으면 불변 (spec 2026-09-07 §4.3)
+    external: bool = False
 
 
 class CanonicalParams(BaseModel):

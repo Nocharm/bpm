@@ -659,6 +659,38 @@ def _build_linkage(
     return linkage, notes
 
 
+def _prune_external_lineage(raw_cats: list, l5_code: str, issues: list[AdapterIssue]) -> list:
+    """홈 체인(l5_code의 조상) 밖 카테고리 중 부모가 파일에 없는 것을 경고 후 제외한다 — 외부 계보는
+    파일 error가 아니다(nodeCode는 DB 기존 체계로 해석). 홈 체인은 손대지 않아 parse_categories가
+    그대로 검증한다 (spec 2026-09-07 §4.3)."""
+    by_code: dict[str, dict] = {}
+    for c in raw_cats:
+        if isinstance(c, dict) and _clean(c.get("code")):
+            by_code[_clean(c.get("code"))] = c
+    home: set[str] = set()
+    cursor: str | None = l5_code
+    while cursor and cursor in by_code and cursor not in home and len(home) < 10:
+        home.add(cursor)
+        parent = by_code[cursor].get("parent")
+        cursor = _clean(parent) if parent is not None else None
+    kept = list(raw_cats)
+    while True:
+        codes = {_clean(c.get("code")) for c in kept if isinstance(c, dict)}
+        dropped = [
+            c for c in kept
+            if isinstance(c, dict) and _clean(c.get("code")) not in home
+            and c.get("parent") is not None and _clean(c.get("parent")) not in codes
+        ]
+        if not dropped:
+            return kept
+        for c in dropped:
+            issues.append(AdapterIssue(
+                "warning", "framework.categories",
+                f"category {_clean(c.get('code'))} dropped - parent {_clean(c.get('parent'))} not in file "
+                "(외부 계보 체인 끊김 - 기존 체계로 해석)"))
+        kept = [c for c in kept if c not in dropped]
+
+
 def convert_interview(raw: object) -> AdapterResult:
     """인터뷰 파일 1건 → canonical 변환. 예외를 던지지 않는다 — 문제는 전부 issues로."""
     result = AdapterResult()
@@ -683,16 +715,17 @@ def convert_interview(raw: object) -> AdapterResult:
     if not isinstance(framework, dict) or not isinstance(framework.get("categories"), list):
         issues.append(AdapterIssue("error", "framework", "framework.categories missing (업무체계 분류 정보 누락)"))
         return result
-    try:
-        result.categories = parse_categories({"categories": framework["categories"]})
-    except CanonicalError as exc:
-        issues.append(AdapterIssue("error", "framework.categories", str(exc)))
-        return result
-
     l5 = raw.get("l5")
     if isinstance(l5, dict):
         _warn_unknown_keys(l5, _L5_KEYS, "l5", issues)
     l5_code = _clean(l5.get("nodeCode")) if isinstance(l5, dict) else ""
+    # 외부 계보(홈 체인 밖)의 끊긴 항목은 error가 아니라 제외 — 홈 체인은 parse_categories가 그대로 검증
+    raw_cats = _prune_external_lineage(framework["categories"], l5_code, issues)
+    try:
+        result.categories = parse_categories({"categories": raw_cats})
+    except CanonicalError as exc:
+        issues.append(AdapterIssue("error", "framework.categories", str(exc)))
+        return result
     codes = {c.code: c for c in result.categories}
     if not l5_code or l5_code not in codes:
         issues.append(AdapterIssue("error", "l5.nodeCode",
@@ -701,6 +734,14 @@ def convert_interview(raw: object) -> AdapterResult:
     if codes[l5_code].level != 5:
         issues.append(AdapterIssue("warning", "l5.nodeCode",
                                    f"nodeCode {l5_code!r} is level {codes[l5_code].level}, expected 5 (L5 코드가 아님)"))
+    # 홈 체인 밖 = 외부 계보 — 엔진이 create-only로 다룬다 (spec 2026-09-07 §4.3)
+    home_chain: set[str] = set()
+    cursor: str | None = l5_code
+    while cursor and cursor in codes and cursor not in home_chain:
+        home_chain.add(cursor)
+        cursor = codes[cursor].parent
+    for cat in result.categories:
+        cat.external = cat.code not in home_chain
 
     rows = raw.get("rows")
     if not isinstance(rows, list):
