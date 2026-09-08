@@ -9,25 +9,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
-  CircleCheck,
-  CircleDashed,
   FolderPlus,
   FolderTree,
-  Hash,
-  Link2,
   Move as MoveIcon,
   Pencil,
   Plus,
   ShieldCheck,
   Trash2,
   Upload,
-  Workflow,
   X,
-  XCircle,
 } from "lucide-react";
 
 import {
@@ -58,17 +51,12 @@ import {
   buildInterviewIndex,
   governanceKey,
   parseGovernanceKey,
-  type DigestGroup,
-  type ExternalRefState,
-  type ImportReportView,
-  type ReportMapEntry,
-  type ReportMessage,
 } from "@/lib/interview-report";
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
-import { ImportGovernanceReview } from "@/components/admin/import-governance-review";
+import { InterviewImportReport } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -82,21 +70,6 @@ const ROW_ICON_BTN =
 const IMPORT_FILE_BTN =
   "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline px-2.5 py-1.5 " +
   "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
-
-// dry-run 리포트 맵 행의 결과 배지 — 색은 diff 토큰과 같은 의미축(added/changed/error)을 쓴다.
-const OUTCOME_PILL = {
-  created: "border-added/40 bg-added/10 text-added",
-  updated: "border-changed/40 bg-changed/10 text-changed",
-  unchanged: "border-hairline bg-surface-alt text-ink-tertiary",
-  error: "border-error/40 bg-error/10 text-error",
-} as const;
-
-const OUTCOME_LABEL = {
-  created: "framework.importCreated",
-  updated: "framework.importUpdated",
-  unchanged: "framework.importUnchanged",
-  error: "framework.interviewFileError",
-} as const;
 
 interface InterviewFileState {
   name: string;
@@ -171,7 +144,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const [interviewBusy, setInterviewBusy] = useState(false);
   // 거버넌스 체크 키(`code:field`) — dry-run 결과마다 비우고, 파일 변경 시 리포트와 함께 무효화 (spec 2026-09-03 §6)
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
-  const [openReportFiles, setOpenReportFiles] = useState<Set<number>>(new Set());
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
@@ -290,8 +262,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       setInterviewResult(result);
       // 기본 체크는 서버가 정한다 — 임포트 노트 교체는 사람이 고친 게 없으면 체크(현행), 거버넌스 3종은 해제
       setGovernanceChecked(new Set(result.governance.filter((d) => d.default_checked).map(governanceKey)));
-      // 전 파일 자동 펼침 — 결과 본문(맵·연계 캔버스)이 파일 카드 안에 있어 접힌 채로는 읽을 게 없다.
-      setOpenReportFiles(new Set(result.files.map((_, i) => i)));
     } catch (err) {
       onToast(getApiErrorDetail(err));
     } finally {
@@ -331,53 +301,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   function toggleAllGovernance(next: boolean) {
     setGovernanceChecked(
       next && interviewResult ? new Set(interviewResult.governance.map(governanceKey)) : new Set(),
-    );
-  }
-
-  // 요약 칩 5종 — 전부 summary에서 읽는다(0이면 키 자체가 없음). warning은 backend
-  // ImportReport.counts() 집계에서 제외되지만, endpoint가 rows 전체(500행 캡 이전) 기준으로
-  // summary["warning"]을 별도로 채워 보낸다 — rows에서 세면 캡 초과 시 undercount된다(fix round 1).
-  function renderImportSummary(result: { summary: Record<string, number> }) {
-    const chips: { key: string; label: string; count: number; danger?: boolean }[] = [
-      { key: "created", label: t("framework.importCreated"), count: result.summary.created ?? 0 },
-      { key: "updated", label: t("framework.importUpdated"), count: result.summary.updated ?? 0 },
-      { key: "unchanged", label: t("framework.importUnchanged"), count: result.summary.unchanged ?? 0 },
-      { key: "errors", label: t("framework.importErrors"), count: result.summary.error ?? 0, danger: true },
-      { key: "warnings", label: t("framework.importWarnings"), count: result.summary.warning ?? 0 },
-    ];
-    // 인터뷰 임포트 전용 카운트 — 키가 있을 때만(기존 canonical 임포트 응답엔 없음)
-    if (result.summary.notes !== undefined) {
-      chips.push({ key: "notes", label: t("framework.interviewNotes"), count: result.summary.notes });
-    }
-    if (result.summary.linkage !== undefined) {
-      chips.push({
-        key: "linkage",
-        label: t("framework.interviewLinkage"),
-        count: result.summary.linkage,
-      });
-    }
-    if (result.summary.governance !== undefined) {
-      chips.push({
-        key: "governance",
-        label: t("framework.interviewGovernance"),
-        count: result.summary.governance,
-      });
-    }
-    return (
-      <div className="flex flex-wrap gap-2">
-        {chips.map((chip) => (
-          <span
-            key={chip.key}
-            className={`rounded-sm border px-2 py-1 text-fine ${
-              chip.danger && chip.count > 0
-                ? "border-error/40 bg-error/10 text-error"
-                : "border-hairline bg-surface-alt text-ink-secondary"
-            }`}
-          >
-            {chip.label} {chip.count}
-          </span>
-        ))}
-      </div>
     );
   }
 
@@ -586,352 +509,21 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     );
   };
 
-  // 상세 문구 사람말 — 백엔드 영문 원문(kind 미등록)은 그대로 통과시켜 정보를 잃지 않는다.
-  function describeMessage(kind: ReportMessage["kind"], subject: string, raw: string): string {
-    switch (kind) {
-      case "owner-fallback":
-        return t("framework.importMsgOwnerFallback");
-      case "owner-not-found":
-        return `${t("framework.importMsgOwnerNotFound")}: ${subject}`;
-      case "approver-not-found":
-        return `${t("framework.importMsgApproverNotFound")}: ${subject}`;
-      case "sp-department-empty":
-        return t("framework.importMsgSpDepartment");
-      case "duplicate-name":
-        return `${t("framework.importMsgDuplicateName")}: ${subject}`;
-      case "duplicate-code":
-        return t("framework.importMsgDuplicateCode");
-      case "unknown-category":
-        return `${t("framework.importMsgUnknownCategory")}: ${subject}`;
-      case "in-trash":
-        return t("framework.importMsgInTrash");
-      case "no-landing":
-        return t("framework.importMsgNoLanding");
-      case "linkage-skipped":
-        return `${t("framework.importMsgLinkageSkipped")} - ${subject}`;
-      case "canvas":
-        return subject === "created"
-          ? t("framework.importMsgCanvasCreated")
-          : t("framework.importMsgCanvasAugmented");
-      case "external-linked":
-        return `${t("framework.importMsgExternalLinked")}: ${subject}`;
-      case "external-placeholder":
-        return `${t("framework.importMsgExternalPlaceholder")}: ${subject}`;
-      case "external-ambiguous":
-        return `${t("framework.importMsgExternalAmbiguous")}: ${subject}`;
-      case "external-l5-unknown":
-        return `${t("framework.importMsgExternalL5Unknown")}: ${subject}`;
-      case "external-resolved":
-        return t("framework.importMsgExternalResolved");
-      case "category-admin":
-        return `${t("framework.importMsgCategoryAdminAdded")}: ${subject}`;
-      case "category-admin-unknown":
-        return `${t("framework.importMsgCategoryAdminUnknown")}: ${subject}`;
-      default:
-        return raw;
-    }
-  }
-
-  // 고유키 카드 — 행에는 이름만 두고, 실데이터 키는 Hash 아이콘 호버로만 꺼내 본다.
-  // 폭 고정(w-60)이 필수: 툴팁은 fixed라 화면 오른쪽 끝 앵커에서 가용폭이 0에 수렴해 한 글자씩 세로로 접힌다.
-  function renderKeyCard(entries: [string, string][]) {
-    return (
-      <span className="flex w-60 flex-col gap-1">
-        {entries
-          .filter(([, value]) => value)
-          .map(([label, value]) => (
-            <span key={label} className="flex gap-2">
-              <span className="shrink-0 text-fine text-ink-tertiary">{label}</span>
-              <span className="min-w-0 flex-1 break-all font-mono text-fine text-ink">{value}</span>
-            </span>
-          ))}
-      </span>
-    );
-  }
-
-  function renderKeyIcon(entries: [string, string][], dataId: string) {
-    return (
-      <Tooltip content={renderKeyCard(entries)}>
-        <span data-id={dataId} className="shrink-0 cursor-help text-ink-muted hover:text-ink-secondary">
-          <Hash size={13} strokeWidth={1.5} />
-        </span>
-      </Tooltip>
-    );
-  }
-
-  // 반복 경고 접기 — 같은 종류를 한 줄로 모으고, 영향받은 맵은 이름으로(코드는 툴팁) 보여준다.
-  // 외부 L6 참조(인터뷰 0.5) — 캔버스 행에 문구가 줄줄이 붙는 대신 표 한 장: 조치 필요(출처 없음·모호·자리표)가
-  // 먼저, 연결된 것은 뒤. 파일 아코디언을 펼치지 않아도 보이도록 다이제스트 바로 아래에 둔다 (사용자 요청 2026-09-07)
-  function renderExternalState(state: ExternalRefState, sameNameCount: number | null) {
-    const tone =
-      state === "linked"
-        ? "border-accent/30 bg-accent-tint text-accent"
-        : state === "placeholder"
-          ? "border-error/40 bg-error/10 text-error"
-          : "border-changed/40 bg-changed/10 text-changed";
-    const Icon = state === "linked" ? Link2 : state === "placeholder" ? CircleDashed : AlertTriangle;
-    const label =
-      state === "linked"
-        ? t("framework.importExternalStateLinked")
-        : state === "placeholder"
-          ? t("framework.importExternalStatePlaceholder")
-          : state === "ambiguous"
-            ? t("framework.importExternalStateAmbiguous", { count: sameNameCount ?? 0 })
-            : t("framework.importExternalStateUnknown");
-    return (
-      <span className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${tone}`}>
-        <Icon size={12} strokeWidth={1.5} />
-        {label}
-      </span>
-    );
-  }
-
-  function renderExternalRefs(view: ImportReportView) {
-    const refs = view.externalRefs;
-    const sum = view.externalSummary;
-    if (refs.length === 0 && sum.resolved === 0) return null;
-    const needsAction = sum.placeholder + sum.ambiguous + sum.unknownOrigin;
-    const chips: { key: string; count: number; label: string; tone: string }[] = [
-      { key: "linked", count: sum.linked, label: t("framework.importExternalStateLinked"), tone: "border-accent/30 bg-accent-tint text-accent" },
-      { key: "placeholder", count: sum.placeholder, label: t("framework.importExternalStatePlaceholder"), tone: "border-error/40 bg-error/10 text-error" },
-      { key: "ambiguous", count: sum.ambiguous, label: t("framework.importExternalStateAmbiguous", { count: sum.ambiguous }), tone: "border-changed/40 bg-changed/10 text-changed" },
-      { key: "unknown", count: sum.unknownOrigin, label: t("framework.importExternalStateUnknown"), tone: "border-changed/40 bg-changed/10 text-changed" },
-      { key: "resolved", count: sum.resolved, label: t("framework.importExternalResolved", { count: sum.resolved }), tone: "border-added/40 bg-added/10 text-added" },
-    ].filter((c) => c.count > 0);
-    return (
-      <div className="rounded-sm border border-hairline" data-id="interview-import-external">
-        <div className="flex flex-wrap items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1">
-          <Link2 size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <span className="text-fine text-ink-tertiary">{t("framework.importExternalTitle")}</span>
-          {chips.map((chip) => (
-            <span
-              key={chip.key}
-              data-id={`interview-external-chip-${chip.key}`}
-              className={`rounded-sm border px-1.5 py-0.5 text-fine ${chip.tone}`}
-            >
-              {chip.key === "ambiguous" || chip.key === "resolved" ? chip.label : `${chip.label} ${chip.count}`}
-            </span>
-          ))}
-        </div>
-        {refs.length > 0 && (
-          <div className="scroll-soft max-h-64 overflow-y-auto">
-            <table className="w-full text-fine">
-              <thead className="sticky top-0 z-[1]">
-                <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
-                  <th className="px-2 py-1.5">{t("framework.importExternalColTask")}</th>
-                  <th className="px-2 py-1.5">{t("framework.importExternalColOrigin")}</th>
-                  <th className="px-2 py-1.5">{t("framework.importExternalColCanvas")}</th>
-                  <th className="px-2 py-1.5">{t("framework.importExternalColState")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {refs.map((ref, i) => (
-                  <tr
-                    key={`${ref.canvasCode}|${ref.l5Code}|${ref.title}`}
-                    data-id={`interview-external-row-${i}`}
-                    className={`border-b border-divider last:border-0 ${
-                      ref.state === "linked" ? "" : ref.state === "placeholder" ? "bg-error/5" : "bg-changed/10"
-                    }`}
-                  >
-                    <td className="px-2 py-1 text-ink">{ref.title || "—"}</td>
-                    <td className="px-2 py-1 font-mono text-ink-secondary">{ref.l5Code === "unknown" ? "—" : ref.l5Code}</td>
-                    <td className="px-2 py-1 text-ink-secondary">{ref.canvasName || "—"}</td>
-                    <td className="px-2 py-1">
-                      {renderExternalState(ref.state, ref.sameNameCount)}
-                      {ref.state === "linked" && ref.mapId !== null ? (
-                        <span className="ml-1 text-ink-tertiary">→ map {ref.mapId}</span>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {needsAction > 0 && (
-          <p className="flex items-center gap-1.5 px-2 py-1.5 text-fine text-ink-tertiary" data-id="interview-external-hint">
-            <AlertTriangle size={12} strokeWidth={1.5} className="shrink-0 text-changed" />
-            {t("framework.importExternalHint")}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  // 파일 admins(0.5)로 추가된 카테고리 관리자 — 추가만 하므로 "누가 어디에" 한 줄씩. 미등재 로그인은 경고 톤.
-  function renderAdminChanges(view: ImportReportView) {
-    const rows = view.adminChanges;
-    if (rows.length === 0) return null;
-    return (
-      <div className="rounded-sm border border-hairline" data-id="interview-import-admins">
-        <div className="flex flex-wrap items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1">
-          <ShieldCheck size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <span className="text-fine text-ink-tertiary">{t("framework.importCategoryAdmins")}</span>
-          <span className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary">
-            {rows.length}
-          </span>
-        </div>
-        <ul className="flex flex-col">
-          {rows.map((row, i) => (
-            <li
-              key={`${row.code}|${row.login}`}
-              data-id={`interview-admin-row-${i}`}
-              className={`flex items-center gap-2 border-b border-divider px-2 py-1 text-fine last:border-b-0 ${
-                row.state === "unknown" ? "bg-changed/10" : ""
-              }`}
-            >
-              <span className="font-mono text-ink-secondary">{row.code}</span>
-              <span className="text-ink">{row.login}</span>
-              <span
-                className={`ml-auto rounded-sm border px-1.5 py-0.5 ${
-                  row.state === "unknown"
-                    ? "border-changed/40 bg-changed/10 text-changed"
-                    : "border-accent/30 bg-accent-tint text-accent"
-                }`}
-              >
-                {row.state === "unknown"
-                  ? t("framework.importMsgCategoryAdminUnknown")
-                  : t("framework.importMsgCategoryAdminAdded")}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="px-2 py-1.5 text-fine text-ink-tertiary">{t("framework.importCategoryAdminsHint")}</p>
-      </div>
-    );
-  }
-
-  function renderDigest(digest: DigestGroup[]) {
-    if (digest.length === 0) return null;
-    return (
-      <div className="rounded-sm border border-hairline" data-id="interview-import-digest">
-        <p className="border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
-          {t("framework.importAttention")}
-        </p>
-        <ul className="flex flex-col">
-          {digest.map((group) => (
-            <li
-              key={group.key}
-              data-id={`interview-digest-${group.key}`}
-              className="flex items-center gap-2 border-b border-divider px-2 py-1.5 last:border-b-0"
-            >
-              {group.severity === "error" ? (
-                <XCircle size={14} strokeWidth={1.5} className="shrink-0 text-error" />
-              ) : (
-                <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0 text-changed" />
-              )}
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-caption text-ink">
-                  {/* 가변부(승인자 id 등)는 3개까지만 — 나머지 수는 옆 배지 툴팁이 전부 보여준다 */}
-                  {describeMessage(
-                    group.kind,
-                    group.subjects.slice(0, 3).join(", ") +
-                      (group.subjects.length > 3 ? ` +${group.subjects.length - 3}` : ""),
-                    group.raw,
-                  )}
-                </span>
-                <span className="truncate text-fine text-ink-tertiary">
-                  {group.maps
-                    .slice(0, 4)
-                    .map((m) => m.name)
-                    .join(" · ")}
-                  {group.maps.length > 4 ? ` +${group.maps.length - 4}` : ""}
-                </span>
-              </span>
-              <Tooltip
-                content={renderKeyCard(group.maps.map((m) => [m.name, m.code] as [string, string]))}
-              >
-                <span className="shrink-0 cursor-help rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-fine text-ink-secondary">
-                  {t("framework.importAffectedMaps", { count: group.maps.length })}
-                </span>
-              </Tooltip>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  // 맵 1행 = [결과 배지][맵 이름][버전][경고 수(호버=문구)][고유키(호버=코드)] — 코드는 화면에서 뺀다.
-  function renderMapRows(entries: ReportMapEntry[], dataId: string) {
-    return (
-      <ul className="flex flex-col" data-id={dataId}>
-        {entries.map((entry) => {
-          const hasError = entry.messages.some((m) => m.severity === "error");
-          return (
-            <li
-              key={entry.code}
-              data-id={`interview-map-${entry.code}`}
-              className="flex items-center gap-2 border-t border-divider px-2 py-1 first:border-t-0"
-            >
-              <span
-                className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${
-                  OUTCOME_PILL[entry.outcome ?? "unchanged"]
-                }`}
-              >
-                {t(OUTCOME_LABEL[entry.outcome ?? "unchanged"])}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-caption text-ink">{entry.name}</span>
-              {entry.version !== null && (
-                <span className="shrink-0 text-fine text-ink-muted">v{entry.version}</span>
-              )}
-              {entry.messages.length > 0 && (
-                <Tooltip
-                  content={
-                    <span className="flex w-60 flex-col gap-1">
-                      {entry.messages.map((msg, i) => (
-                        <span key={i} className="text-fine text-ink">
-                          {describeMessage(msg.kind, msg.subject, msg.raw)}
-                        </span>
-                      ))}
-                    </span>
-                  }
-                >
-                  <span
-                    className={`inline-flex shrink-0 cursor-help items-center gap-0.5 text-fine ${
-                      hasError ? "text-error" : "text-changed"
-                    }`}
-                  >
-                    <AlertTriangle size={12} strokeWidth={1.5} />
-                    {entry.messages.length}
-                  </span>
-                </Tooltip>
-              )}
-              {renderKeyIcon(
-                [
-                  [t("framework.importIdTask"), entry.code],
-                  [t("framework.importIdUnit"), entry.unitId],
-                  [t("framework.importIdDept"), entry.department],
-                  [t("framework.importIdRole"), entry.ownerRole],
-                ],
-                `interview-map-key-${entry.code}`,
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    );
-  }
-
   const roots = childrenByParent.get(null) ?? [];
   // 스코프 모드의 roots는 항상 seed 노드 자신 — 임명 버튼 게이팅 기준 최소 레벨 (Track C Task 6)
   const minSeedLevel = scopeRootIds ? Math.min(...roots.map((r) => r.level)) : undefined;
 
   // 리포트 뷰모델 — 맵 이름·카테고리 경로는 업로드한 JSON에서만 나온다(서버 rows는 코드만 싣는다).
   // 파일 목록이 바뀌면 결과를 지우므로(handleInterviewFiles/RemoveFile) 둘은 항상 같은 전달분이다.
-  const interviewView = useMemo(
-    () =>
-      interviewResult
-        ? buildImportReportView(
-            interviewResult.rows,
-            buildInterviewIndex(
-              interviewFiles.filter((f) => !f.error).map((f) => ({ name: f.name, content: f.content })),
-            ),
-          )
-        : null,
-    [interviewResult, interviewFiles],
+  const interviewPayloadFiles = useMemo(
+    () => interviewFiles.filter((f) => !f.error).map((f) => ({ name: f.name, content: f.content })),
+    [interviewFiles],
   );
-  const orphanGroup = interviewView?.groups.find((g) => g.file === "") ?? null;
+  const interviewIndex = useMemo(() => buildInterviewIndex(interviewPayloadFiles), [interviewPayloadFiles]);
+  const interviewView = useMemo(
+    () => (interviewResult ? buildImportReportView(interviewResult.rows, interviewIndex) : null),
+    [interviewResult, interviewIndex],
+  );
 
   return (
     <div className="flex flex-col gap-4" data-id="framework-panel">
@@ -1070,241 +662,22 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         </div>
 
         {interviewResult && interviewView && (
-          // 드라이런 결과와 적용 바를 한 테두리 안에 — 결과 본문은 안쪽 패딩, 적용 바는 카드 푸터(고정 없이 맨 아래)
-          // (사용자 요청 2026-09-03)
-          <div className="rounded-md border border-hairline" data-id="interview-import-report">
-          <div className="relative flex flex-col gap-2 p-3">
-            {/* 적용 완료 음영 — 본문을 덮어 두 번 누르지 않게(푸터의 Cancel로 닫기, 사용자 요청 2026-09-03) */}
-            {interviewResult.applied && (
-              <div
-                data-id="interview-import-applied-overlay"
-                className="absolute inset-0 z-[2] rounded-t-md bg-surface/70 backdrop-blur-[1px]"
-              />
-            )}
-            {renderImportSummary(interviewResult)}
-            {renderDigest(interviewView.digest)}
-            {renderExternalRefs(interviewView)}
-            {renderAdminChanges(interviewView)}
-            <ul className="flex flex-col gap-1" data-id="interview-import-file-reports">
-              {interviewResult.files.map((file, i) => {
-                const open = openReportFiles.has(i);
-                // 파일 순서는 요청 payload 그대로 돌아온다 — 이름까지 맞을 때만 그룹을 붙인다.
-                const group =
-                  interviewView.groups[i]?.file === file.name ? interviewView.groups[i] : undefined;
-                const canvas = group?.canvas;
-                return (
-                  <li key={`${file.name}-${i}`} className="rounded-sm border border-hairline">
-                    <button
-                      type="button"
-                      data-id={`interview-file-toggle-${i}`}
-                      className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-surface-alt"
-                      onClick={() =>
-                        setOpenReportFiles((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(i)) {
-                            next.delete(i);
-                          } else {
-                            next.add(i);
-                          }
-                          return next;
-                        })
-                      }
-                    >
-                      {open ? (
-                        <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                      ) : (
-                        <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                      )}
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        {/* 파일명보다 사람이 아는 이름(L5 프로세스)이 먼저 — 파일명은 출처 표시로 강등 */}
-                        <span className="truncate text-caption text-ink">{canvas?.name ?? file.name}</span>
-                        <span className="truncate text-fine text-ink-tertiary">
-                          {canvas ? `${file.name}${canvas.path ? ` · ${canvas.path}` : ""}` : ""}
-                        </span>
-                      </span>
-                      <span
-                        className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine ${
-                          file.ok
-                            ? "border-hairline bg-surface-alt text-ink-secondary"
-                            : "border-error/40 bg-error/10 text-error"
-                        }`}
-                      >
-                        {file.ok ? t("framework.interviewFileOk") : t("framework.interviewFileError")}
-                      </span>
-                      <span className="shrink-0 text-fine text-ink-tertiary">
-                        {t("framework.interviewMaps")} {file.map_count} · {t("framework.interviewNotes")}{" "}
-                        {file.note_count}
-                      </span>
-                    </button>
-                    {open && (
-                      <div className="border-t border-divider">
-                        {file.issues.length > 0 && (
-                          <div className="scroll-soft max-h-48 overflow-y-auto">
-                            <table className="w-full text-fine">
-                              <thead className="sticky top-0 z-[1]">
-                                <tr className="border-b border-hairline bg-surface-alt text-left text-ink-tertiary">
-                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColSeverity")}</th>
-                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColPath")}</th>
-                                  <th className="px-2 py-1.5">{t("framework.interviewIssueColMessage")}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {file.issues.map((issue, j) => (
-                                  <tr
-                                    key={j}
-                                    className={`border-b border-divider last:border-0 ${
-                                      issue.severity === "error" ? "bg-error/10" : "bg-changed/10"
-                                    }`}
-                                  >
-                                    <td
-                                      className={`px-2 py-1 ${
-                                        issue.severity === "error" ? "text-error" : "text-changed"
-                                      }`}
-                                    >
-                                      {issue.severity}
-                                    </td>
-                                    <td className="px-2 py-1 font-mono text-ink-secondary">{issue.path}</td>
-                                    <td className="px-2 py-1 text-ink-tertiary">{issue.message}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                        {canvas && (
-                          <div
-                            data-id={`interview-file-canvas-${i}`}
-                            className="flex items-center gap-2 bg-surface-pearl px-2 py-1.5"
-                          >
-                            <Workflow size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                            <span className="min-w-0 flex-1 truncate text-caption text-ink">
-                              {t("framework.importCanvas")}
-                            </span>
-                            {/* 외부 참조 문구는 위 전용 표가 맡는다 — 여기선 카운트 한 조각만 */}
-                            {canvas.messages
-                              .filter((msg) => !msg.kind.startsWith("external-"))
-                              .map((msg, j) => (
-                                <span
-                                  key={j}
-                                  className={`shrink-0 text-fine ${
-                                    msg.severity === "info" ? "text-ink-tertiary" : "text-changed"
-                                  }`}
-                                >
-                                  {describeMessage(msg.kind, msg.subject, msg.raw)}
-                                  {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
-                                    ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
-                                    : ""}
-                                </span>
-                              ))}
-                            {(() => {
-                              const linked = canvas.messages.filter((m) => m.kind === "external-linked").length;
-                              const placeholders = canvas.messages.filter((m) => m.kind === "external-placeholder").length;
-                              if (linked + placeholders === 0) return null;
-                              const parts = [
-                                linked > 0 ? t("framework.importExternalCountLinked", { count: linked }) : "",
-                                placeholders > 0 ? t("framework.importExternalCountPlaceholder", { count: placeholders }) : "",
-                              ].filter(Boolean);
-                              return (
-                                <span
-                                  data-id={`interview-canvas-external-${i}`}
-                                  className={`shrink-0 text-fine ${placeholders > 0 ? "text-error" : "text-ink-tertiary"}`}
-                                >
-                                  {t("framework.importExternalColTask")} · {parts.join(" · ")}
-                                </span>
-                              );
-                            })()}
-                            {renderKeyIcon(
-                              [
-                                [t("framework.importIdCategory"), canvas.code],
-                                [t("framework.importIdPath"), canvas.path],
-                              ],
-                              `interview-canvas-key-${i}`,
-                            )}
-                          </div>
-                        )}
-                        {group && group.maps.length > 0 ? (
-                          renderMapRows(group.maps, `interview-file-maps-${i}`)
-                        ) : (
-                          <p className="px-2 py-1.5 text-fine text-ink-tertiary">
-                            {file.issues.length > 0
-                              ? t("framework.importNoMaps")
-                              : t("framework.interviewNoIssues")}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {orphanGroup && orphanGroup.maps.length > 0 && (
-              <div className="rounded-sm border border-hairline" data-id="interview-import-unmatched">
-                <p className="border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
-                  {t("framework.importUnmatched")}
-                </p>
-                {renderMapRows(orphanGroup.maps, "interview-unmatched-maps")}
-              </div>
-            )}
-            {interviewResult.truncated && (
-              <p className="text-fine text-ink-tertiary">{t("framework.importTruncated")}</p>
-            )}
-            {/* 거버넌스 확인 + 하단 고정 바 — 체크한 것만 교체, 명시적 Apply가 확인 역할 (spec 2026-09-03 §6) */}
-            <ImportGovernanceReview
-              diffs={interviewResult.governance}
-              checked={governanceChecked}
-              onToggle={toggleGovernance}
-              onToggleAll={toggleAllGovernance}
-              applied={interviewResult.applied}
-            />
-          </div>
-            <div
-              data-id="interview-import-actions"
-              // 카드 푸터(고정 아님) — 스크롤 중 본문이 바 뒤로 넘어가지 않게, 끝까지 내려서 누른다 (사용자 피드백 2026-09-03)
-              className="flex items-center gap-2 rounded-b-md border-t border-hairline bg-surface px-3 py-2"
-            >
-              {interviewResult.applied ? (
-                <span
-                  data-id="interview-import-applied"
-                  className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-fine text-accent"
-                >
-                  <CircleCheck size={14} strokeWidth={1.5} className="shrink-0" />
-                  <span className="min-w-0 truncate">{t("framework.importAppliedOverlay")}</span>
-                </span>
-              ) : (
-                <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
-                  {t("framework.importApplyBar", {
-                    // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
-                    maps:
-                      (interviewResult.summary.created ?? 0) +
-                      (interviewResult.summary.updated ?? 0) +
-                      (interviewResult.summary.unchanged ?? 0),
-                    changes: governanceChecked.size,
-                  })}
-                </span>
-              )}
-              <button
-                type="button"
-                data-id="interview-import-cancel"
-                disabled={interviewBusy}
-                className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
-                onClick={() => {
-                  setInterviewResult(null);
-                  setGovernanceChecked(new Set());
-                }}
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                type="button"
-                data-id="interview-import-apply"
-                disabled={interviewBusy || interviewResult.applied}
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                onClick={() => void handleInterviewApply()}
-              >
-                {t("framework.importApply")}
-              </button>
-            </div>
-          </div>
+          <InterviewImportReport
+            result={interviewResult}
+            view={interviewView}
+            index={interviewIndex}
+            files={interviewPayloadFiles}
+            governanceChecked={governanceChecked}
+            onToggleGovernance={toggleGovernance}
+            onToggleAllGovernance={toggleAllGovernance}
+            busy={interviewBusy}
+            onCancel={() => {
+              setInterviewResult(null);
+              setGovernanceChecked(new Set());
+            }}
+            onApply={() => void handleInterviewApply()}
+            onToast={onToast}
+          />
         )}
       </div>
       )}

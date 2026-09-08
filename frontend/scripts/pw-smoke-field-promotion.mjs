@@ -64,8 +64,9 @@ try {
 
   // ── [1][2] 임포트: dry-run → apply → 재dry-run 멱등 ─────────────────────
   await runDryRun(page);
+  // 2열 리포트(2026-09-08) — 파일 상태는 Lv5 필 색(data-state)으로 읽는다
   const okBadges = await page
-    .locator('[data-id="interview-import-file-reports"]').getByText("OK", { exact: true }).count();
+    .locator('[data-id="interview-import-file-reports"] [data-id^="interview-file-lv5-"][data-state="ok"]').count();
   // 0.5 샘플 기준(2026-09-07) — calibration 5 + utility 4 = 9맵, 노트 41건
   const dryCreated = await chip(page, "Created", 9).isVisible().catch(() => false);
   check("[1] dry-run: 2 files OK + Created 9", okBadges === 2 && dryCreated, `ok=${okBadges}`);

@@ -153,7 +153,7 @@ dry-run 경고를 반드시 읽어야 하는 지점.
 | **맵 이름이 기존 맵과 중복** | 차단하지 않는다 — 양쪽 다 살아남는다 | `duplicate map name ...` |
 | **휴지통에 있는 맵과 같은 taskId** | 파일 error — 되살리지 않는다 | `map is in trash` |
 | `owner`/`approvers`가 employees에 없음 | 저장은 되지만 승인 정족수에서 제외된다 | `owner ... not found in employees` |
-| **기존 맵에 새 owner/department/approvers** | **자동 적용되지 않는다** — 리포트 "Governance changes" 섹션에서 체크한 것만 교체, 나머지는 현재값 유지(오너 대기 맵도 동일, 2026-09-03) | governance 차이 행 + 체크 시 `governance` 리포트 행 |
+| **기존 맵에 새 owner/department/approvers** | **자동 적용되지 않는다** — 리포트 "Governance changes" 섹션에서 교체(Replace)로 고른 것만 교체, 유지(Keep)는 현재값 유지(오너 대기 맵도 동일, 2026-09-03; 2026-09-08부터 체크박스 대신 드롭다운, 굵은 값 = 적용 뒤 값) | governance 차이 행 + 교체 선택 시 `governance` 리포트 행 |
 | **`sp_gmp`(검토 선정값)** | 재전달이 절대 못 덮는다 — `gmp`는 fallback 컬럼에만 | 없음(설계 의도) |
 | **내용이 같은 재임포트** | `unchanged`로 끝나 **좌표·엣지 변이 갱신되지 않는다**(레이아웃은 시그니처 밖) | 없음 — 재정렬하려면 내용이 바뀌거나 에디터 "자동 정렬" |
 | **동명 IO 항목이 여러 상류에 있음** | 최근접 상류 **하나만** 연결된다(한 항목=링크 1개) | 없음 |

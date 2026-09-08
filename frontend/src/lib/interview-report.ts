@@ -28,6 +28,7 @@ export interface IndexedFile {
   l5Code: string;
   l5Name: string;
   categoryPath: string;
+  chain: { code: string; name: string }[]; // 루트→L5 계보(코드+이름) — 헤더 브레드크럼·관리자 행 매칭용
 }
 
 export interface InterviewIndex {
@@ -167,19 +168,20 @@ export function buildInterviewIndex(files: { name: string; content: unknown }[])
       }
     }
     // 카테고리 경로 — 루트→L5. parent 체인이 끊기면 거기서 멈춘다(어댑터가 별도 검증).
-    const chain: string[] = [];
+    const chain: { code: string; name: string }[] = [];
     let cursor = l5Code;
     while (cursor && byCode.has(cursor) && chain.length < 10) {
       const node = byCode.get(cursor);
       if (!node) break;
-      chain.unshift(node.name || cursor);
+      chain.unshift({ code: cursor, name: node.name || cursor });
       cursor = node.parent;
     }
     index.files.push({
       name: file.name,
       l5Code,
       l5Name: asText(l5?.label) || byCode.get(l5Code)?.name || l5Code,
-      categoryPath: chain.join(" › "),
+      categoryPath: chain.map((c) => c.name).join(" › "),
+      chain,
     });
 
     const rows = root?.rows;
@@ -422,6 +424,68 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
   };
 
   return { groups, digest, externalRefs, externalSummary, adminChanges };
+}
+
+// ── 2열 리포트(A안) 보조 — 파일 헤더 카운트·요약 셀·좌측 항목↔우측 파일 관계 (사용자 승인 목업 2026-09-08)
+
+export interface ExternalCanvasCounts {
+  linked: number;
+  placeholder: number;
+  ambiguous: number;
+  unknownOrigin: number;
+}
+
+/** 외부 참조를 홈 L5(캔버스 코드)별로 센다 — 우측 파일 헤더의 "N linked · N placeholder" 필. */
+export function countExternalByCanvas(refs: ExternalRefEntry[]): Map<string, ExternalCanvasCounts> {
+  const out = new Map<string, ExternalCanvasCounts>();
+  for (const ref of refs) {
+    const counts = out.get(ref.canvasCode) ?? { linked: 0, placeholder: 0, ambiguous: 0, unknownOrigin: 0 };
+    if (ref.state === "linked") counts.linked += 1;
+    else if (ref.state === "placeholder") counts.placeholder += 1;
+    else if (ref.state === "ambiguous") counts.ambiguous += 1;
+    else counts.unknownOrigin += 1;
+    out.set(ref.canvasCode, counts);
+  }
+  return out;
+}
+
+/** 연계 캔버스에 더해진 노드·엣지 수 합(요약 셀) — 캔버스 문구 "(map N, +K nodes/edges)"의 K. */
+export function sumCanvasAdditions(view: ImportReportView): number {
+  let total = 0;
+  for (const group of view.groups) {
+    for (const msg of group.canvas?.messages ?? []) {
+      if (msg.kind === "canvas") total += msg.numbers[1] ?? 0;
+    }
+  }
+  return total;
+}
+
+export interface ReportRelations {
+  fileOfMap: Map<string, number>; // 맵 코드 → 파일 index
+  fileOfCanvas: Map<string, number>; // 홈 L5 코드 → 파일 index
+  filesOfCategory: Map<string, number[]>; // 계보 코드(L1~L5) → 그 코드를 계보에 가진 파일 index들
+}
+
+/** 좌측 항목(경고·외부 참조·관리자·거버넌스)이 가리키는 코드를 우측 파일로 잇는 색인. */
+export function buildReportRelations(index: InterviewIndex): ReportRelations {
+  const fileOfMap = new Map<string, number>();
+  for (const map of index.maps.values()) fileOfMap.set(map.code, map.fileIndex);
+  const fileOfCanvas = new Map<string, number>();
+  const filesOfCategory = new Map<string, number[]>();
+  index.files.forEach((file, i) => {
+    if (file.l5Code) fileOfCanvas.set(file.l5Code, i);
+    for (const step of file.chain) {
+      const list = filesOfCategory.get(step.code) ?? [];
+      list.push(i);
+      filesOfCategory.set(step.code, list);
+    }
+  });
+  return { fileOfMap, fileOfCanvas, filesOfCategory };
+}
+
+/** 코드(맵 또는 홈 L5) → 파일 index. 어디에도 없으면 null(파일과 매칭되지 않은 코드 묶음). */
+export function fileOfCode(relations: ReportRelations, code: string): number | null {
+  return relations.fileOfMap.get(code) ?? relations.fileOfCanvas.get(code) ?? null;
 }
 
 // ── 거버넌스 확인 섹션 — dry-run governance[]를 맵 단위로 묶고 체크 키를 왕복한다 (spec 2026-09-03 §6)

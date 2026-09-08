@@ -4,10 +4,15 @@ import type { GovernanceDiff } from "./api";
 import {
   buildImportReportView,
   buildInterviewIndex,
+  buildReportRelations,
   classifyDetail,
+  countExternalByCanvas,
+  fileOfCode,
   governanceKey,
   groupGovernanceDiffs,
   parseGovernanceKey,
+  sumCanvasAdditions,
+  type ExternalRefEntry,
   type ImportRow,
 } from "./interview-report";
 
@@ -232,5 +237,49 @@ describe("groupGovernanceDiffs", () => {
     const key = governanceKey({ code: "a:b", field: "owner" });
     expect(key).toBe("a:b:owner");
     expect(parseGovernanceKey(key)).toEqual({ code: "a:b", field: "owner" });
+  });
+});
+
+describe("layout A helpers", () => {
+  const ref = (canvasCode: string, state: ExternalRefEntry["state"]): ExternalRefEntry => ({
+    title: "t", l5Code: "x", canvasCode, canvasName: "", state, mapId: null, sameNameCount: null,
+  });
+
+  it("keeps the lineage chain with codes for the header breadcrumb", () => {
+    const index = buildInterviewIndex([FILE_A]);
+
+    expect(index.files[0].chain.map((c) => c.code)).toEqual(["19", "19-01", "19-01-06-01-02"]);
+    expect(index.files[0].chain[1].name).toBe("Facility");
+  });
+
+  it("counts external references per home canvas", () => {
+    const counts = countExternalByCanvas([
+      ref("A", "linked"), ref("A", "placeholder"), ref("B", "unknown-origin"), ref("A", "ambiguous"),
+    ]);
+
+    expect(counts.get("A")).toEqual({ linked: 1, placeholder: 1, ambiguous: 1, unknownOrigin: 0 });
+    expect(counts.get("B")).toEqual({ linked: 0, placeholder: 0, ambiguous: 0, unknownOrigin: 1 });
+  });
+
+  it("sums the nodes and edges added to linkage canvases", () => {
+    const view = buildImportReportView(
+      [
+        { code: "19-01-06-01-02", action: "linkage", detail: "canvas created (map 21, +11 nodes/edges)" },
+        { code: "task-0001", action: "created", detail: "published v1" },
+      ],
+      buildInterviewIndex([FILE_A]),
+    );
+
+    expect(sumCanvasAdditions(view)).toBe(11);
+  });
+
+  it("relates map, canvas and lineage codes back to their file", () => {
+    const relations = buildReportRelations(buildInterviewIndex([FILE_A]));
+
+    expect(fileOfCode(relations, "task-0001")).toBe(0);
+    expect(fileOfCode(relations, "19-01-06-01-02")).toBe(0);
+    expect(fileOfCode(relations, "nope")).toBeNull();
+    expect(relations.filesOfCategory.get("19")).toEqual([0]);
+    expect(relations.filesOfCategory.get("19-01-06-01-02")).toEqual([0]);
   });
 });

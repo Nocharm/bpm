@@ -62,9 +62,12 @@ try {
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });
   const fileReports = await page.locator('[data-id="interview-import-file-reports"] > li').count();
   check("per-file reports rendered", fileReports === 2, `rows=${fileReports}`);
+  // 2열 리포트(2026-09-08) — 파일 상태는 "OK" 배지 대신 Lv5 필 색(data-state)으로 읽는다
   const okBadges = await page
-    .locator('[data-id="interview-import-file-reports"]').getByText("OK", { exact: true }).count();
+    .locator('[data-id="interview-import-file-reports"] [data-id^="interview-file-lv5-"][data-state="ok"]').count();
   check("both files OK", okBadges === 2, `ok=${okBadges}`);
+  const summaryCard = await page.locator('[data-id="interview-report-summary"]').isVisible().catch(() => false);
+  check("summary card rendered top-left", summaryCard);
   // 0.5 샘플 기준(2026-09-07) — calibration 5 + utility 4 = 9맵
   const dryCreated = await chip(page, "Created", 9).waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
@@ -108,14 +111,18 @@ try {
   await page.waitForSelector('[data-id="import-governance-review"]', { timeout: 15000 });
   const ownerRow = page.locator(`[data-id="import-governance-row-${govCode}-owner"]`);
   check("governance owner diff listed", await ownerRow.isVisible());
-  check("owner diff shows delivered login", ((await ownerRow.textContent()) ?? "").includes(String(govOwner)));
+  // 전달 오너는 사용자 필(이름 표시, 로그인은 title) — 디렉터리 도착 전엔 스켈레톤이라 필이 뜰 때까지 기다린다 (2026-09-08)
+  const ownerPill = await ownerRow.locator(`[title="${govOwner}"]`).first()
+    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  check("owner diff shows delivered login", ownerPill);
   await page.locator('[data-id="interview-import-actions"]').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(SCRATCH, "import-governance-unchecked.png") });
   // 노트 교체는 기본 체크(사람이 고친 노트가 없을 때, 9f8bcfea) — 절대값 대신 체크 전후 +1로 판정
   const countChecked = async () =>
     Number((((await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "").match(/(\d+) governance/) ?? [])[1] ?? -1);
   const checkedBefore = await countChecked();
-  await page.locator(`[data-id="import-governance-check-${govCode}-owner"]`).check();
+  // 유지/교체는 드롭다운(2026-09-08) — 체크박스 대신 select 값으로 고른다
+  await page.locator(`[data-id="import-governance-check-${govCode}-owner"]`).selectOption("replace");
   const checkedAfter = await countChecked();
   const barText = (await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "";
   check("apply bar counts the checked change", checkedBefore >= 0 && checkedAfter === checkedBefore + 1, barText.trim());
