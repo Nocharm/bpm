@@ -29,6 +29,23 @@
 | `l6` | — | 외부 L6 이름 힌트. `null` 허용(L5만 아는 경우) → BPM 제목 `"(L6 unspecified) {L5명}"` |
 | `note` | — | 참조에 대한 메모 → BPM 홈 L5 노트(kind `external`) |
 
+## 2-1. 카테고리 관리자 — `framework.categories[].admins` (선택)
+
+```jsonc
+"framework": { "categories": [
+  { "code": "21", "name": "Quality System", "level": 1, "parent": null, "admins": ["qs.head"] },
+  { "code": "21-03-02-01-01", "name": "공정 변경관리 실행", "level": 5, "parent": "21-03-02-01", "admins": ["jihoon.park"] }
+]}
+```
+
+| 규칙 | 내용 |
+|---|---|
+| 어디에 | **어느 레벨(L1~L5) 행에나** 넣을 수 있다. L5가 주 용도지만 상위 카테고리 관리자도 같은 자리에 적는다 |
+| 값 | 로그인 id 배열. 공백·중복은 정리된다 |
+| 적용 범위 | **홈 체인 행만**. 옆 L5의 계보(외부 행)에 적힌 admins는 경고 후 무시된다 — 남의 L5 권한은 그 L5 파일이 가져와야 한다 |
+| 정책 | **추가만, 제거 없음.** 파일의 로그인을 그 카테고리 관리자로 더하고, 이미 있는 관리자(사람·그룹)는 그대로 둔다. 빼는 건 설정 › Framework › 관리자 화면에서 |
+| 리포트 | `category admin 'login' added @ 코드` 행(추가된 것만) · 직원 목록에 없는 로그인은 `not found in employees` 경고(그래도 추가됨 — 나중에 직원 동기화되면 유효) |
+
 ## 3. 엣지 끝점 해석
 
 `relations.edges[].src|dst`는 **① `rows[].taskId` → ② `externalTasks[].refId` → ③ 둘 다 아님** 순으로 해석한다.
@@ -57,6 +74,7 @@
 3. 자동 연결이 안 된 플레이스홀더는 캔버스에서 **Connect** 배너 → 연결 다이얼로그(출처 L5 자동 펼침)로 사람이 연결한다. 미해소 플레이스홀더가 있으면 그 L5는 확정(confirmed)으로 갈 수 없다.
 4. 재전달 시 같은 `refId`의 미연결 플레이스홀더는 제목·출처가 새 값으로 갱신된다(중복 노드 없음). 이미 연결된 노드는 건드리지 않는다.
 5. dry-run 리포트 문구: `linked external task '…' @ L5코드 -> map N`(직결) · `placeholder for external task '…' @ L5코드 (map not delivered yet)` · `external task '…' @ L5코드: N maps share the name - left as placeholder`(모호) · `external L5 코드 not found - placeholder without origin`(출처 없음) · `resolved N external placeholder node(s)`(후차 해소). 리포트 화면은 이 문구들을 **"외부 L6 참조" 표**(외부 L6 · 출처 L5 · 캔버스 · 상태)로 모아 보여 준다 — 조치 필요(출처 없음·확인 필요·자리표)가 먼저, 연결됨이 뒤.
+6. **알림**: 나중에 온 파일이 자리표를 자동 연결하면 알림 `fw_external_linked`가 간다 — 수신자는 자리표를 가진 L5의 관리자(직속+상위) **와** 실제로 연결된 L6가 속한 L5의 관리자(직속+상위), 임포트 실행자는 제외. 제목=캔버스 이름, 본문에 전달된 L5·연결된 L6·개수, "관련 맵" 버튼은 그 캔버스로. dry-run은 알림을 만들지 않는다.
 
 ## 7. 샘플 7종 — 시나리오 매트릭스
 

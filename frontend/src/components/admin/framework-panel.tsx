@@ -623,6 +623,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         return `${t("framework.importMsgExternalL5Unknown")}: ${subject}`;
       case "external-resolved":
         return t("framework.importMsgExternalResolved");
+      case "category-admin":
+        return `${t("framework.importMsgCategoryAdminAdded")}: ${subject}`;
+      case "category-admin-unknown":
+        return `${t("framework.importMsgCategoryAdminUnknown")}: ${subject}`;
       default:
         return raw;
     }
@@ -750,6 +754,49 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {t("framework.importExternalHint")}
           </p>
         )}
+      </div>
+    );
+  }
+
+  // 파일 admins(0.5)로 추가된 카테고리 관리자 — 추가만 하므로 "누가 어디에" 한 줄씩. 미등재 로그인은 경고 톤.
+  function renderAdminChanges(view: ImportReportView) {
+    const rows = view.adminChanges;
+    if (rows.length === 0) return null;
+    return (
+      <div className="rounded-sm border border-hairline" data-id="interview-import-admins">
+        <div className="flex flex-wrap items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1">
+          <ShieldCheck size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          <span className="text-fine text-ink-tertiary">{t("framework.importCategoryAdmins")}</span>
+          <span className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary">
+            {rows.length}
+          </span>
+        </div>
+        <ul className="flex flex-col">
+          {rows.map((row, i) => (
+            <li
+              key={`${row.code}|${row.login}`}
+              data-id={`interview-admin-row-${i}`}
+              className={`flex items-center gap-2 border-b border-divider px-2 py-1 text-fine last:border-b-0 ${
+                row.state === "unknown" ? "bg-changed/10" : ""
+              }`}
+            >
+              <span className="font-mono text-ink-secondary">{row.code}</span>
+              <span className="text-ink">{row.login}</span>
+              <span
+                className={`ml-auto rounded-sm border px-1.5 py-0.5 ${
+                  row.state === "unknown"
+                    ? "border-changed/40 bg-changed/10 text-changed"
+                    : "border-accent/30 bg-accent-tint text-accent"
+                }`}
+              >
+                {row.state === "unknown"
+                  ? t("framework.importMsgCategoryAdminUnknown")
+                  : t("framework.importMsgCategoryAdminAdded")}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="px-2 py-1.5 text-fine text-ink-tertiary">{t("framework.importCategoryAdminsHint")}</p>
       </div>
     );
   }
@@ -1037,6 +1084,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {renderImportSummary(interviewResult)}
             {renderDigest(interviewView.digest)}
             {renderExternalRefs(interviewView)}
+            {renderAdminChanges(interviewView)}
             <ul className="flex flex-col gap-1" data-id="interview-import-file-reports">
               {interviewResult.files.map((file, i) => {
                 const open = openReportFiles.has(i);

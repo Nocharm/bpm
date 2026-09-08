@@ -162,6 +162,25 @@ describe("buildImportReportView", () => {
     expect(view.groups.every((g) => g.file !== "")).toBe(true);
   });
 
+  it("lists category admins added from the file apart from maps and canvases", () => {
+    const withAdmins: ImportRow[] = [
+      ...rows,
+      { code: "19-01-06-01-02", action: "category", detail: "category admin 'cheolsu.kim' added @ 19-01-06-01-02" },
+      { code: "19-01", action: "warning", detail: "category admin 'ghost.user' not found in employees @ 19-01" },
+      { code: "19-01", action: "category", detail: "category admin 'ghost.user' added @ 19-01" },
+    ];
+    const view = buildImportReportView(withAdmins, buildInterviewIndex([FILE_A]));
+
+    expect(view.adminChanges).toEqual([
+      { code: "19-01-06-01-02", login: "cheolsu.kim", state: "added" },
+      { code: "19-01", login: "ghost.user", state: "unknown" },
+      { code: "19-01", login: "ghost.user", state: "added" },
+    ]);
+    // L5 코드 행이지만 캔버스 문구로 새지 않고, 상위 코드 행도 미매칭 그룹을 만들지 않는다
+    expect(view.groups[0].canvas?.messages.every((m) => !m.kind.startsWith("category-admin"))).toBe(true);
+    expect(view.groups.every((g) => g.file !== "")).toBe(true);
+  });
+
   it("folds repeated warnings into one digest line per kind", () => {
     const view = buildImportReportView(rows, buildInterviewIndex([FILE_A]));
 

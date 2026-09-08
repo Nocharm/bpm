@@ -20,6 +20,25 @@ const base: Omit<NotificationItem, "type" | "message" | "payload"> = {
 };
 
 describe("formatNotification", () => {
+  it("fw_external_linked - 제목=캔버스 이름, 본문에 행위자·전달 L5·연결 L6·개수, 칩 분할", () => {
+    const item: NotificationItem = {
+      ...base, type: "fw_external_linked", version_id: null,
+      message: "Kim A delivered 'QA deviation' - 2 placeholder(s) on 'Change control linkage' now link to 'Deviation closure'",
+      payload: { map_name: "공정 변경관리 실행 연계", actor: "kim.a", actor_name: "Kim A",
+                 from_name: "시험 일탈·OOS 관리", to_name: "일탈 종결 및 효과성 평가", count: 2 },
+    };
+    const en = formatNotification(item, makeT("en"));
+    expect(en.label).toBe("External L6 linked");
+    expect(en.title).toBe("공정 변경관리 실행 연계");
+    expect(en.body).toBe("Kim A delivered '시험 일탈·OOS 관리' - 2 placeholder(s) on this canvas now link to '일탈 종결 및 효과성 평가'");
+    const ko = formatNotification(item, makeT("ko"));
+    expect(ko.body).toBe("Kim A님이 '시험 일탈·OOS 관리'을(를) 전달해 이 캔버스의 자리표 2개가 '일탈 종결 및 효과성 평가'에 연결되었습니다");
+    const parts = formatNotificationBodyParts(item, makeT("en"));
+    expect(parts).toContainEqual({ actorLogin: "kim.a", actorName: "Kim A" });
+    expect(parts).toContainEqual({ chip: "시험 일탈·OOS 관리", kind: "name" });
+    expect(parts).toContainEqual({ chip: "일탈 종결 및 효과성 평가", kind: "name" });
+  });
+
   it("published - 제목=맵 이름, 본문에 버전(v번호)·행위자, 언어 토글 반영", () => {
     const item: NotificationItem = {
       ...base, type: "published", message: "'Release 5' was published",

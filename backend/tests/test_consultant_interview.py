@@ -661,3 +661,19 @@ def test_broken_home_chain_is_still_file_error() -> None:
     data["framework"]["categories"] = [c for c in data["framework"]["categories"] if c["code"] != "19-01-06"]
     res = convert_interview(data)
     assert res.has_error()
+
+
+def test_category_admins_are_normalized_and_ignored_on_external_lineage() -> None:
+    """framework.categories[].admins(0.5) — 어느 레벨에나, 공백·중복 정리. 외부 계보 행의 admins는 경고 후 비운다."""
+    data = _with_external(_interview())
+    cats = {c["code"]: c for c in data["framework"]["categories"]}
+    cats["19-01-06-01-02"]["admins"] = [" cheolsu.kim ", "cheolsu.kim", "", "younghee.lee"]
+    cats["19-01"]["admins"] = ["facility.lead"]  # 상위(L2) 카테고리도 파라미터 허용
+    cats["19-01-02-01-01"]["admins"] = ["someone.else"]  # 외부 계보 → 무시
+    res = convert_interview(data)
+    assert not res.has_error()
+    by_code = {c.code: c for c in res.categories}
+    assert by_code["19-01-06-01-02"].admins == ["cheolsu.kim", "younghee.lee"]
+    assert by_code["19-01"].admins == ["facility.lead"]
+    assert by_code["19-01-02-01-01"].admins == []
+    assert any("admins ignored - external lineage" in i.message for i in res.issues)

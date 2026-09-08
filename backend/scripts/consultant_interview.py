@@ -737,6 +737,14 @@ def convert_interview(raw: object) -> AdapterResult:
         cursor = codes[cursor].parent
     for cat in result.categories:
         cat.external = cat.code not in home_chain
+        # 관리자 로그인 정규화 — 빈 값 제거·중복 제거. 외부 계보 행의 admins는 남의 L5 권한이라 무시 (spec 2026-09-07 §4.7)
+        admins = [_clean(a) for a in cat.admins if _clean(a)]
+        cat.admins = list(dict.fromkeys(admins))
+        if cat.external and cat.admins:
+            issues.append(AdapterIssue(
+                "warning", "framework.categories",
+                f"category {cat.code} admins ignored - external lineage (외부 계보의 관리자 지정은 무시)"))
+            cat.admins = []
 
     rows = raw.get("rows")
     if not isinstance(rows, list):

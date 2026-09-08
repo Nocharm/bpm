@@ -1913,6 +1913,7 @@ export interface NotificationPayload {
   snippet?: string;
   status_label?: string;
   title?: string;
+  count?: number; // fw_external_linked — 이번 전달로 이어진 자리표 수
 }
 
 export interface NotificationItem {

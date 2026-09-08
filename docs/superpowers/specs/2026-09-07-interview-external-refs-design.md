@@ -88,6 +88,12 @@ dev에는 이미 "끝점이 rows 밖인 엣지 → L5 연계 캔버스 플레이
 
 파일 내부 `_readme` 대신 **`docs/samples/interview-json-0.5.md`**(한글)에 계약을 쓴다 — 0.4 대비 델타, `externalTasks` 필드표, 심각도, 엣지 끝점 해석, 외부 계보 규칙, 샘플 7종 시나리오 매트릭스, 후차 해소 시연 수순. 샘플의 `_readme`는 이 문서를 가리키는 한 줄만 남긴다.
 
+### 4.7 카테고리 관리자 `framework.categories[].admins` (2026-09-08 추가)
+
+- 어느 레벨 행에나 `admins: ["login", …]`. 어댑터가 공백·중복 정리, **외부 계보 행의 admins는 경고 후 비운다**.
+- 엔진 `upsert_categories(..., actor, report, known_logins)`: 홈 체인 행만 `CategoryPermission(user)` **add-only**(기존 사람·그룹 권한자 불변, 제거는 설정 화면 PUT만 — 사용자 결정 2026-09-08). 리포트 `category admin '{login}' added @ {code}`(action `category`) / 미등재 `... not found in employees @ {code}`(warning, 그래도 추가).
+- FE 리포트: kind `category-admin`/`category-admin-unknown` → 다이제스트·외부 참조 표 아래 "카테고리 관리자(파일에서)" 목록(코드·로그인·상태). L5 코드 행이라도 캔버스 문구로 새지 않도록 L5 매칭 전에 가로챈다.
+
 ## 5. 어댑터 규칙 (`scripts/consultant_interview.py`)
 
 - 상수: `_TOP_KEYS += {"externalTasks"}`, `_EXTERNAL_TASK_KEYS = {"refId","l5","l6","note"}`, `_EXTERNAL_L5_KEYS = {"nodeCode","label"}`.
@@ -128,6 +134,10 @@ dev에는 이미 "끝점이 rows 밖인 엣지 → L5 연계 캔버스 플레이
 | `external task '{title}' @ {l5_code}: {n} maps share the name - left as placeholder` | `external-ambiguous` |
 | `external L5 {code} not found - placeholder without origin` | `external-l5-unknown` |
 | `resolved {n} external placeholder node(s)` | `external-resolved` |
+
+### 6.6 후차 해소 알림 `fw_external_linked` (2026-09-08 추가)
+
+`resolve_external_placeholders`가 자리표를 이으면(taskId 경로·이름 경로 모두) **캔버스 단위 1건** — `_notify_external_linked`. 수신자 = 캔버스 L5의 직속·조상 관리자(`get_category_admin_logins(direct_only=False)`, 그룹은 멤버 확장) ∪ 연결된 맵이 속한 실제 L5의 직속·조상 관리자, 실행자 제외. `map_id`=캔버스(인박스 "관련 맵" 버튼이 캔버스로), payload `map_name`(제목)·`actor/actor_name`·`from_name`(전달 L5 이름, 칩)·`to_name`(연결 L6 이름 최대 3개 +n, 칩)·`count`·`origin_category_ids`·`linked_map_ids`. FE: `KNOWN_TYPES`·`notifLabel/notifBody.fw_external_linked`(en/ko)·아이콘 Link2·`{count}` 변수. 같은 세션이라 dry-run rollback에 함께 사라진다. 사용자 요청 "가시성·시인성": 제목=캔버스 이름, 본문은 인물 필+굵은 칩 2개+개수로 한 문장.
 
 ## 7. FE (`frontend/src/lib/interview-report.ts`)
 

@@ -23,6 +23,8 @@ class CanonicalCategory(BaseModel):
     parent: str | None = None
     # 홈 L5 조상 체인 밖 계보(타 L5 참조용 동봉) — 엔진은 없을 때만 생성, 있으면 불변 (spec 2026-09-07 §4.3)
     external: bool = False
+    # 카테고리 관리자 로그인(0.5, 어느 레벨에나) — 홈 체인에만 적용, 추가만·제거 없음 (사용자 결정 2026-09-08)
+    admins: list[str] = Field(default_factory=list)
 
 
 class CanonicalParams(BaseModel):

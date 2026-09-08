@@ -784,3 +784,84 @@ def test_hand_made_placeholder_without_origin_is_not_auto_linked(client: TestCli
     later["rows"][0]["l6"] = "손으로 만든 이름"
     assert _post(client, _files(later), apply=True).status_code == 200
     assert [n["id"] for n in _placeholders(client, "PHZ-C")] == [ph["id"]]
+
+
+def _category_admins(code: str) -> list[str]:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import CategoryPermission, ProcessCategory
+
+    async def _load():
+        async with SessionLocal() as session:
+            cid = await session.scalar(select(ProcessCategory.id).where(ProcessCategory.code == code))
+            return sorted((await session.scalars(
+                select(CategoryPermission.principal_id).where(
+                    CategoryPermission.category_id == cid, CategoryPermission.principal_type == "user"))).all())
+    return _run(_load())
+
+
+def _notifications(recipient: str, type_: str) -> list[dict]:
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Notification
+
+    async def _load():
+        async with SessionLocal() as session:
+            rows = (await session.scalars(select(Notification).where(
+                Notification.recipient == recipient, Notification.type == type_))).all()
+            return [{"map_id": n.map_id, "message": n.message, "payload": n.payload} for n in rows]
+    return _run(_load())
+
+
+def test_category_admins_from_file_are_added_but_never_removed(client: TestClient) -> None:
+    """framework.categories[].admins(0.5) — 홈 체인 행에 add-only. 재전달에서 빠진 관리자는 그대로 남는다 (2026-09-08)."""
+    doc = _ext_delivery("PHW-A")
+    doc["schema_version"] = "0.5-bpm-interface-draft"
+    l5 = next(c for c in doc["framework"]["categories"] if c["code"] == "PHW-A")
+    l5["admins"] = ["adm.first", "adm.second"]
+    l4 = next(c for c in doc["framework"]["categories"] if c["code"] == "19-01-06-01")
+    l4["admins"] = ["adm.upper"]
+    res = _post(client, _files(doc), apply=True)
+    assert res.status_code == 200, res.text
+    assert _category_admins("PHW-A") == ["adm.first", "adm.second"]
+    assert "adm.upper" in _category_admins("19-01-06-01")
+    rows = res.json()["rows"]
+    assert any(r["detail"] == "category admin 'adm.first' added @ PHW-A" for r in rows)
+    assert any(r["detail"] == "category admin 'adm.first' not found in employees @ PHW-A" and r["action"] == "warning"
+               for r in rows)
+
+    l5["admins"] = ["adm.third"]  # 재전달 — 기존 둘은 유지, 셋째만 추가
+    assert _post(client, _files(doc), apply=True).status_code == 200
+    assert _category_admins("PHW-A") == ["adm.first", "adm.second", "adm.third"]
+
+
+def test_later_delivery_notifies_admins_of_both_l5s_when_placeholders_resolve(client: TestClient) -> None:
+    """후차 해소 알림 fw_external_linked — 캔버스 L5 관리자(직속·조상) + 실제 L5 관리자, 실행자 제외 (2026-09-08)."""
+    doc_a = _ext_ref_delivery("PHV-A", "ext-va", "PHV-A-EXT", "검체 인수")
+    doc_a["framework"]["categories"] = [
+        {**c, "admins": ["home.admin"]} if c["code"] == "PHV-A" else c for c in doc_a["framework"]["categories"]]
+    assert _post(client, _files(doc_a), apply=True).status_code == 200
+    assert _notifications("home.admin", "fw_external_linked") == []
+
+    later = _ext_delivery("PHV-A-EXT", task_ids=["phv-a-ext-0001"])
+    later["schema_version"] = "0.5-bpm-interface-draft"
+    later["rows"][0]["l6"] = "검체 인수"
+    for c in later["framework"]["categories"]:
+        if c["code"] == "PHV-A-EXT":
+            c["admins"] = ["origin.admin"]
+    # dry-run은 알림을 남기지 않는다(같은 세션 rollback)
+    assert _post(client, _files(later), apply=False).status_code == 200
+    assert _notifications("home.admin", "fw_external_linked") == []
+    res = _post(client, _files(later), apply=True)
+    assert res.status_code == 200, res.text
+    canvas_id = _canvas_map_id(client, "PHV-A")
+    for login in ("home.admin", "origin.admin"):
+        notes = _notifications(login, "fw_external_linked")
+        assert len(notes) == 1, login
+        assert notes[0]["map_id"] == canvas_id
+        assert notes[0]["payload"]["to_name"] == "검체 인수" and notes[0]["payload"]["count"] == 1
+        # 외부 계보로 먼저 생긴 "L5 PHV-A-EXT"는 홈 파일(later)이 오면 정식 이름 "PHV-A-EXT"로 개명된다(홈 우선)
+        assert notes[0]["payload"]["from_name"] == "PHV-A-EXT"
+        assert notes[0]["payload"]["map_name"] == "PHV-A 연계"

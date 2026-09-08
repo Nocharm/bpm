@@ -53,6 +53,8 @@ export type DetailKind =
   | "external-ambiguous"
   | "external-l5-unknown"
   | "external-resolved"
+  | "category-admin"
+  | "category-admin-unknown"
   | "published"
   | "other";
 
@@ -129,6 +131,13 @@ export interface ImportReportView {
   digest: DigestGroup[];
   externalRefs: ExternalRefEntry[]; // 조치 필요(출처 없음·모호·자리표) 먼저, 연결됨 뒤
   externalSummary: ExternalRefSummary;
+  adminChanges: AdminChangeEntry[]; // 파일 admins로 추가된 카테고리 관리자(+미등재 경고)
+}
+
+export interface AdminChangeEntry {
+  code: string; // 카테고리 코드(L1~L5 어느 레벨이든)
+  login: string;
+  state: "added" | "unknown";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -205,6 +214,9 @@ const PATTERNS: { kind: DetailKind; re: RegExp }[] = [
   { kind: "no-landing", re: /^annual_count\/fte have no landing site/ },
   { kind: "linkage-skipped", re: /^linkage skipped - (.*)$/ },
   // 외부 L6 참조(인터뷰 0.5) — 문구는 import_consultant.apply_interview_linkage/resolve_external_placeholders와 계약
+  // 카테고리 관리자(0.5 admins) — import_consultant.upsert_categories 문구와 계약
+  { kind: "category-admin", re: /^category admin '(.*)' added @ (\S+)$/ },
+  { kind: "category-admin-unknown", re: /^category admin '(.*)' not found in employees @ (\S+)$/ },
   { kind: "external-linked", re: /^linked external task '(.*)' @ (\S+) -> map (\d+)$/ },
   { kind: "external-placeholder", re: /^placeholder for external task '(.*)' @ (\S+) \(map not delivered yet\)$/ },
   { kind: "external-ambiguous", re: /^external task '(.*)' @ (\S+): (\d+) maps share the name - left as placeholder$/ },
@@ -287,6 +299,7 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
   const externalByKey = new Map<string, ExternalRefEntry>();
   const unknownOrigins = new Set<string>();
   let resolvedCount = 0;
+  const adminChanges: AdminChangeEntry[] = [];
 
   const takeMapEntry = (code: string): ReportMapEntry => {
     const known = entryByCode.get(code);
@@ -313,6 +326,15 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
     if (msg.kind === "external-resolved") {
       // 코드가 "linkage" 고정인 전 캔버스 일괄 행 — 어느 맵/캔버스에도 속하지 않는다
       resolvedCount += msg.numbers[0] ?? 0;
+      continue;
+    }
+    if (msg.kind === "category-admin" || msg.kind === "category-admin-unknown") {
+      // 카테고리 코드(L1~L5)로 오는 관리자 행 — 캔버스 문구·맵 항목이 아니라 별도 목록으로(L5 코드 매칭 전에 가로챈다)
+      adminChanges.push({
+        code: msg.captures[1] ?? row.code,
+        login: msg.captures[0] ?? "",
+        state: msg.kind === "category-admin" ? "added" : "unknown",
+      });
       continue;
     }
     const canvasFile = index.maps.has(row.code) ? undefined : canvasFileByCode.get(row.code);
@@ -399,7 +421,7 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
     resolved: resolvedCount,
   };
 
-  return { groups, digest, externalRefs, externalSummary };
+  return { groups, digest, externalRefs, externalSummary, adminChanges };
 }
 
 // ── 거버넌스 확인 섹션 — dry-run governance[]를 맵 단위로 묶고 체크 키를 왕복한다 (spec 2026-09-03 §6)

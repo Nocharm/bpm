@@ -30,6 +30,7 @@ from app.clock import now as now_kst
 from app.duration import normalize_duration
 from app.lineage import external_lineage_key, external_ref_lineage_key, make_node_id, normalize_task_name
 from app.models import (
+    CategoryPermission,
     Edge,
     Employee,
     Group,
@@ -61,7 +62,9 @@ from app.subprocess import (
     unique_linkage_name,
 )
 from app.routers.versions import clone_graph
+from app.permissions.access import get_category_admin_logins
 from app.version_events import record_version_event
+from app import workflow
 from scripts.consultant_canonical import (
     CanonicalCategory,
     CanonicalMap,
@@ -299,9 +302,17 @@ def build_graph_rows(
 
 
 async def upsert_categories(
-    session: AsyncSession, cats: list[CanonicalCategory]
+    session: AsyncSession,
+    cats: list[CanonicalCategory],
+    *,
+    actor: str | None = None,
+    report: "ImportReport | None" = None,  # 아래에서 정의되는 dataclass — 문자열 어노테이션
+    known_logins: set[str] | None = None,
 ) -> dict[str, int]:
-    """code 기준 멱등 업서트 — 개명 안전. 반환: code→id (parent 해석용)."""
+    """code 기준 멱등 업서트 — 개명 안전. 반환: code→id (parent 해석용).
+
+    cats[].admins(0.5)는 홈 체인 행에만 카테고리 관리자로 **추가**한다 — 기존 user/group 권한자는
+    건드리지 않는다(제거는 설정 화면 PUT만, 사용자 결정 2026-09-08). actor가 granted_by."""
     existing = {
         c.code: c for c in (await session.scalars(select(ProcessCategory))).all()
     }
@@ -342,6 +353,29 @@ async def upsert_categories(
                 row.level = level
             next_frontier.extend((cid, level + 1) for cid in children_by_parent.get(rid, []))
         frontier = next_frontier
+
+    # 관리자 추가(0.5 admins) — 홈 체인 행만, user 권한자 add-only. 어댑터가 외부 행의 admins는 이미 비웠다.
+    wanted = [(cat, login) for cat in cats if not cat.external for login in cat.admins]
+    if wanted:
+        cat_ids = sorted({ids[cat.code] for cat, _ in wanted})
+        existing_admins = {
+            (cid, pid) for cid, pid in (await session.execute(
+                select(CategoryPermission.category_id, CategoryPermission.principal_id).where(
+                    CategoryPermission.category_id.in_(cat_ids), CategoryPermission.principal_type == "user")
+            )).all()
+        }
+        for cat, login in wanted:
+            cid = ids[cat.code]
+            if known_logins is not None and login not in known_logins and report is not None:
+                report.add(cat.code, "warning", f"category admin '{login}' not found in employees @ {cat.code}")
+            if (cid, login) in existing_admins:
+                continue
+            session.add(CategoryPermission(
+                category_id=cid, principal_type="user", principal_id=login, granted_by=actor or "import",
+            ))
+            existing_admins.add((cid, login))
+            if report is not None:
+                report.add(cat.code, "category", f"category admin '{login}' added @ {cat.code}")
     return ids
 
 
@@ -710,6 +744,60 @@ async def _review_governance(
                 report.add(cmap.code, "governance", "approvers replaced")
 
 
+async def _notify_external_linked(
+    session: AsyncSession, events: list[tuple[int, str, int]], *, actor: str
+) -> None:
+    """후차 해소 알림 fw_external_linked — 캔버스(자리표를 가진 L5) 단위 1건 (사용자 요청 2026-09-08).
+
+    수신자 = 캔버스 L5의 직속·조상 관리자 ∪ 연결된 맵이 속한 실제 L5의 직속·조상 관리자(그룹은 멤버로
+    확장), 실행자 제외. 제목=캔버스 이름(payload.map_name), 본문 칩 {from}=전달된 L5, {to}=연결된 L6들.
+    같은 세션이라 dry-run rollback에 함께 사라진다.
+    """
+    by_canvas: dict[int, list[tuple[str, int]]] = {}
+    for canvas_id, title, map_id in events:
+        by_canvas.setdefault(canvas_id, []).append((title, map_id))
+    canvas_ids = sorted(by_canvas)
+    canvas_names = dict((await session.execute(
+        select(ProcessMap.id, ProcessMap.name).where(ProcessMap.id.in_(canvas_ids))
+    )).all())
+    canvas_category = dict((await session.execute(
+        select(ProcessCategory.linkage_map_id, ProcessCategory.id).where(
+            ProcessCategory.linkage_map_id.in_(canvas_ids))
+    )).all())
+    linked_ids = sorted({mid for evs in by_canvas.values() for _, mid in evs})
+    map_category = dict((await session.execute(
+        select(ProcessMap.id, ProcessMap.category_id).where(ProcessMap.id.in_(linked_ids))
+    )).all())
+    origin_ids = sorted({cid for cid in map_category.values() if cid is not None})
+    origin_names = dict((await session.execute(
+        select(ProcessCategory.id, ProcessCategory.name).where(ProcessCategory.id.in_(origin_ids))
+    )).all()) if origin_ids else {}
+    actor_name = await workflow.get_display_name(session, actor)
+    for canvas_id in canvas_ids:
+        evs = by_canvas[canvas_id]
+        origins = sorted({map_category[mid] for _, mid in evs if map_category.get(mid) is not None})
+        recipients: list[str] = []
+        home_cid = canvas_category.get(canvas_id)
+        for cid in ([home_cid] if home_cid is not None else []) + origins:
+            recipients += await get_category_admin_logins(session, cid, direct_only=False)
+        recipients = [r for r in dict.fromkeys(recipients) if r != actor]
+        if not recipients:
+            continue
+        titles = list(dict.fromkeys(t for t, _ in evs))
+        from_name = ", ".join(origin_names.get(cid, "?") for cid in origins) or "?"
+        to_name = ", ".join(titles[:3]) + (f" +{len(titles) - 3}" if len(titles) > 3 else "")
+        canvas_name = canvas_names.get(canvas_id, "")
+        await workflow.create_notifications(
+            session, recipients, type="fw_external_linked", map_id=canvas_id,
+            message=f"{actor_name} delivered '{from_name}' - {len(evs)} placeholder(s) on '{canvas_name}' now link to '{to_name}'",
+            payload={
+                "map_name": canvas_name, "actor": actor, "actor_name": actor_name,
+                "from_name": from_name, "to_name": to_name, "count": len(evs),
+                "origin_category_ids": origins, "linked_map_ids": [mid for _, mid in evs],
+            },
+        )
+
+
 async def resolve_external_placeholders(
     session: AsyncSession, code_to_map: dict[str, int], report: ImportReport, *, actor: str
 ) -> int:
@@ -752,6 +840,7 @@ async def resolve_external_placeholders(
     )).all()
     resolved = 0
     skipped_canvases: set[int] = set()
+    linked_events: list[tuple[int, str, int]] = []  # (캔버스 map id, 연결된 노드 제목, 연결된 맵 id) — 알림 원료
     for node, checked_out_by, canvas_map_id in rows:
         if node.source_node_id is None:  # 위 IN 필터가 이미 비-None만 반환하지만 컬럼 타입은 str | None
             continue
@@ -762,6 +851,7 @@ async def resolve_external_placeholders(
         node.title = names.get(node.linked_map_id, node.title)
         node.follow_latest = True
         resolved += 1
+        linked_events.append((canvas_map_id, node.title, node.linked_map_id))
 
     # 이름 경로 — 이번 전달분이 건드린 L5마다, 출처가 그 L5인 미연결 플레이스홀더를 정규화 이름 정확 일치(라이브 맵
     # 정확히 1개)로 연결한다. 손으로 만든 플레이스홀더(출처 NULL)는 대상 아님 (spec 2026-09-07 §6.4)
@@ -805,6 +895,9 @@ async def resolve_external_placeholders(
             node.follow_latest = True
             node.placeholder_category_id = None  # 연결 뒤 출처는 링크맵 카테고리 — FE 연결·슬롯 채움과 같은 소거 규약
             resolved += 1
+            linked_events.append((canvas_map_id, node.title, node.linked_map_id))
+    if linked_events:
+        await _notify_external_linked(session, linked_events, actor=actor)
     if resolved:
         # map_code 없이 "linkage" 고정 코드 — 이번 해소는 여러 캔버스에 걸쳐 일괄 적용돼 단일 맵 하나로 못 묶는다
         report.add("linkage", "linkage", f"resolved {resolved} external placeholder node(s)")
@@ -845,7 +938,12 @@ async def import_delivery(
     maps = deduped
     delivery_codes = {m.code for m in maps}
 
-    category_ids = await upsert_categories(session, categories)
+    # owner/approver/admin 유령(직원 미등재) 감지용 — 조회는 한 번만. 승인 정족수는 안 막힌다(load_active_approvers가
+    # 미등재를 이미 걸러냄) — 관측용 경고.
+    known_logins: set[str] = set((await session.scalars(select(Employee.login_id))).all())
+    category_ids = await upsert_categories(
+        session, categories, actor=actor, report=report, known_logins=known_logins,
+    )
     known = await load_valid_org_prefixes(session)  # 피커·오우닝 검증과 동일 소스
     dept_index = await load_dept_index(session)
     dept_chains = build_dept_chains(dept_index)  # 직원 없는 부서 정렬용 — 전달분당 1회
@@ -903,9 +1001,6 @@ async def import_delivery(
         if existing_names.get(m.name, set()) - {m.code}:
             report.add(m.code, "warning", f"duplicate map name {m.name!r} already used by an existing map")
 
-    # owner/approver 유령(직원 미등재) 감지 — 승인 정족수는 안 막힌다(load_active_approvers가
-    # 미등재를 이미 걸러냄) — 관측용 경고. 조회는 한 번만.
-    known_logins: set[str] = set((await session.scalars(select(Employee.login_id))).all())
 
     # pass 1 — 맵 껍데기 확보(신규 생성 포함) → link_targets 완성. 거버넌스 필드는 신규 생성 시에만 설정.
     created: set[str] = set()

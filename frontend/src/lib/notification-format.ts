@@ -10,6 +10,7 @@ import {
   CircleX,
   Copy,
   FileCheck,
+  Link2,
   Megaphone,
   MessageSquareReply,
   Network,
@@ -44,6 +45,7 @@ const KNOWN_TYPES = new Set([
   "map_copied", "map_retired", "feedback_reply", "feedback_status", "notice",
   "fw_confirm_requested", "fw_confirm_done", "fw_confirm_rejected",
   "fw_slot_requested", "fw_slot_applied", "fw_slot_rejected",
+  "fw_external_linked",
 ]);
 
 // 기계 코드 사유(bundled/direct/auto)는 번역, 자유 텍스트(거절 사유)는 원문 유지
@@ -77,6 +79,7 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type === "map_retired") return Trash2;
   if (type.startsWith("feedback_")) return MessageSquareReply;
   if (type === "notice") return Megaphone;
+  if (type === "fw_external_linked") return Link2;
   if (type.startsWith("fw_slot")) return ArrowLeftRight;
   if (type.startsWith("fw_confirm")) return BadgeCheck;
   return Bell;
@@ -100,6 +103,7 @@ function buildBody(
     copy: overrides.copy ?? p.copy_name ?? "",
     snippet: overrides.snippet ?? p.snippet ?? "",
     status: p.status_label ?? "",
+    count: p.count ?? "",
   };
   // permission_requested는 kind(visibility_change)별 문구 분기
   const bodyKey =
