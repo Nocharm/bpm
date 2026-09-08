@@ -143,7 +143,8 @@ export function AttentionSection({
                   <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0 text-changed" />
                 )}
                 <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-caption text-ink">
-                  <span className="truncate" title={text}>
+                  {/* 두 줄까지 보이고 그 뒤는 말줄임 — 단계 이름처럼 뒤에 붙는 가변부가 잘리지 않게. 파일 이슈는 원문(한글 설명 포함)을 title로 */}
+                  <span className="line-clamp-2 break-words" title={group.kind.startsWith("file-") ? group.raw : text}>
                     {text}
                   </span>
                   {usesPills && subjects.map((login) => <PersonPill key={login} login={login} />)}

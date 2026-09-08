@@ -521,7 +521,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   );
   const interviewIndex = useMemo(() => buildInterviewIndex(interviewPayloadFiles), [interviewPayloadFiles]);
   const interviewView = useMemo(
-    () => (interviewResult ? buildImportReportView(interviewResult.rows, interviewIndex) : null),
+    () =>
+      interviewResult ? buildImportReportView(interviewResult.rows, interviewIndex, interviewResult.files) : null,
     [interviewResult, interviewIndex],
   );
 

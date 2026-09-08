@@ -21,6 +21,7 @@ export interface IndexedMap {
   department: string;
   ownerRole: string;
   unitId: string;
+  steps: Map<number, string>; // actions[].seq → label — 파일 이슈 문구의 a0N/seq N을 사람이 아는 단계 이름으로
 }
 
 export interface IndexedFile {
@@ -57,6 +58,12 @@ export type DetailKind =
   | "category-admin"
   | "category-admin-unknown"
   | "published"
+  // 파일 이슈(어댑터 AdapterIssue, files[].issues) — 리포트 행이 아니라 별도 분류 (2026-09-08)
+  | "file-self-edge"
+  | "file-decision-promoted"
+  | "file-external-l5-missing"
+  | "file-seq-fallback"
+  | "file-issue"
   | "other";
 
 export type Severity = "error" | "warning" | "info";
@@ -133,6 +140,19 @@ export interface ImportReportView {
   externalRefs: ExternalRefEntry[]; // 조치 필요(출처 없음·모호·자리표) 먼저, 연결됨 뒤
   externalSummary: ExternalRefSummary;
   adminChanges: AdminChangeEntry[]; // 파일 admins로 추가된 카테고리 관리자(+미등재 경고)
+  fileIssueCounts: { warnings: number; errors: number }; // files[].issues 합 — 요약 셀이 리포트 행 경고에 더한다
+}
+
+/** 서버 files[].issues 한 건 — 어댑터 검증 이슈(severity error|warning, path는 JSON 경로). */
+export interface FileIssueIn {
+  severity: string;
+  path: string;
+  message: string;
+}
+
+export interface ReportFileIn {
+  name: string;
+  issues: FileIssueIn[];
 }
 
 export interface AdminChangeEntry {
@@ -190,6 +210,15 @@ export function buildInterviewIndex(files: { name: string; content: unknown }[])
       const row = asRecord(raw);
       const code = asText(row?.taskId);
       if (!code || index.maps.has(code)) return; // 중복 taskId는 어댑터가 에러로 잡는다
+      const steps = new Map<number, string>();
+      const actions = row?.actions;
+      if (Array.isArray(actions)) {
+        actions.forEach((rawAction, i) => {
+          const action = asRecord(rawAction);
+          const seq = typeof action?.seq === "number" && Number.isInteger(action.seq) ? action.seq : i + 1;
+          if (!steps.has(seq)) steps.set(seq, asText(action?.label) || `Step ${seq}`);
+        });
+      }
       index.maps.set(code, {
         code,
         name: asText(row?.l6) || code,
@@ -198,6 +227,7 @@ export function buildInterviewIndex(files: { name: string; content: unknown }[])
         department: asText(row?.department),
         ownerRole: asText(row?.ownerRole),
         unitId: asText(row?.unitId),
+        steps,
       });
     });
   });
@@ -244,10 +274,45 @@ export function classifyDetail(action: string, detail: string): ReportMessage {
   return { kind: "other", severity, subject: "", numbers: [], captures: [], raw };
 }
 
-// 같은 종류 반복을 한 줄로 접기 위한 그룹 키 — "other"만 원문(가변부 마스킹)으로 구분한다.
+// 같은 종류 반복을 한 줄로 접기 위한 그룹 키 — "other"·"file-issue"만 원문(가변부 마스킹)으로 구분한다.
 function getDigestKey(msg: ReportMessage): string {
-  if (msg.kind !== "other") return msg.kind;
-  return `other:${msg.raw.replace(/'[^']*'/g, "'*'").replace(/\d+/g, "#")}`;
+  if (msg.kind !== "other" && msg.kind !== "file-issue") return msg.kind;
+  return `${msg.kind}:${msg.raw.replace(/'[^']*'/g, "'*'").replace(/\d+/g, "#")}`;
+}
+
+// 파일 이슈 문구 — consultant_interview.py의 AdapterIssue 메시지와 계약(영문 앞부분만 본다, 한글 괄호 설명은 뒤따름)
+const FILE_ISSUE_PATTERNS: { kind: DetailKind; re: RegExp }[] = [
+  { kind: "file-self-edge", re: /^self edge on seq (\d+) - kept as loop via auto-generated branch node (\S+)/ },
+  { kind: "file-decision-promoted", re: /^(\S+) promoted to decision \(exclusive branch edge\)/ },
+  { kind: "file-external-l5-missing", re: /^external L5 '(.*)' not in framework\.categories/ },
+  { kind: "file-seq-fallback", re: /seq chain fallback/ },
+];
+
+/** files[].issues 한 건을 리포트 메시지로 — 미등록 문구는 "file-issue"로 원문 보존(마스킹 키로 묶인다). */
+export function classifyFileIssue(issue: FileIssueIn): ReportMessage {
+  const severity: Severity = issue.severity === "error" ? "error" : "warning";
+  const raw = issue.message.trim();
+  for (const { kind, re } of FILE_ISSUE_PATTERNS) {
+    const m = re.exec(raw);
+    if (!m) continue;
+    const captures = m.slice(1);
+    const numbers = captures.filter((c) => /^\d+$/.test(c)).map(Number);
+    return { kind, severity, subject: captures[0] ?? "", numbers, captures, raw };
+  }
+  return { kind: "file-issue", severity, subject: "", numbers: [], captures: [], raw };
+}
+
+// 이슈 경로 rows[i]… → 행 index. 파일 수준 경로(framework.categories·externalTasks·$)는 null
+function rowIndexOfPath(path: string): number | null {
+  const m = /^rows\[(\d+)\]/.exec(path);
+  return m ? Number(m[1]) : null;
+}
+
+// a0N / a0Nr / "N" → actions 단계 이름. 못 풀면 원문 그대로(코드)
+function resolveStepLabel(map: IndexedMap | undefined, ref: string): string {
+  const m = /^a(\d+)r?$/.exec(ref) ?? /^(\d+)$/.exec(ref);
+  if (!map || !m) return ref;
+  return map.steps.get(Number(m[1])) ?? ref;
 }
 
 const EXTERNAL_KINDS: ReadonlySet<DetailKind> = new Set([
@@ -289,8 +354,12 @@ const EXTERNAL_STATE_ORDER: Record<ExternalRefState, number> = {
   "unknown-origin": 0, ambiguous: 1, placeholder: 2, linked: 3,
 };
 
-/** 평면 rows를 파일→맵 계층 + 경고 다이제스트 + 외부 참조 표로 재구성. */
-export function buildImportReportView(rows: ImportRow[], index: InterviewIndex): ImportReportView {
+/** 평면 rows를 파일→맵 계층 + 경고 다이제스트 + 외부 참조 표로 재구성. files[].issues(어댑터 이슈)는 다이제스트·맵 행·요약 수에 합친다. */
+export function buildImportReportView(
+  rows: ImportRow[],
+  index: InterviewIndex,
+  files: ReportFileIn[] = [],
+): ImportReportView {
   const groups: ReportGroup[] = index.files.map((f) => ({ file: f.name, canvas: null, maps: [] }));
   const orphan: ReportGroup = { file: "", canvas: null, maps: [] };
   const entryByCode = new Map<string, ReportMapEntry>();
@@ -371,6 +440,33 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
   }
   if (orphan.maps.length > 0) groups.push(orphan);
 
+  // 파일 이슈(files[].issues) — rows[i] 경로는 그 행의 맵에(맵 항목이 있으면 행 경고 수에도), 파일 수준 경로는
+  // 홈 L5(캔버스)에 귀속. 파일이 제외돼 맵 항목이 없어도 다이제스트에는 맵 이름으로 남긴다.
+  const fileLevelIssues: { msg: ReportMessage; owner: { code: string; name: string } }[] = [];
+  const fileIssueCounts = { warnings: 0, errors: 0 };
+  files.forEach((file, i) => {
+    const indexed = index.files[i]?.name === file.name ? index.files[i] : undefined;
+    const mapsOfFile = [...index.maps.values()].filter((m) => m.fileIndex === i);
+    for (const issue of file.issues) {
+      const msg = classifyFileIssue(issue);
+      if (msg.severity === "error") fileIssueCounts.errors += 1;
+      else fileIssueCounts.warnings += 1;
+      const rowIndex = rowIndexOfPath(issue.path);
+      const map = rowIndex === null ? undefined : mapsOfFile.find((m) => m.order === rowIndex);
+      if (msg.kind === "file-self-edge" || msg.kind === "file-decision-promoted") {
+        msg.subject = resolveStepLabel(map, msg.subject);
+      }
+      if (map) {
+        const entry = entryByCode.get(map.code);
+        if (entry) entry.messages.push(msg);
+        else fileLevelIssues.push({ msg, owner: { code: map.code, name: map.name } });
+        continue;
+      }
+      const code = indexed?.l5Code || file.name;
+      fileLevelIssues.push({ msg, owner: { code, name: indexed?.l5Name || file.name } });
+    }
+  });
+
   const digestByKey = new Map<string, DigestGroup>();
   const collect = (msgs: ReportMessage[], owner: { code: string; name: string }) => {
     for (const msg of msgs) {
@@ -396,6 +492,7 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
     if (group.canvas) collect(group.canvas.messages, { code: group.canvas.code, name: group.canvas.name });
     for (const entry of group.maps) collect(entry.messages, { code: entry.code, name: entry.name });
   }
+  for (const { msg, owner } of fileLevelIssues) collect([msg], owner);
   const digest = [...digestByKey.values()].sort(
     (a, b) => (a.severity === b.severity ? b.count - a.count : a.severity === "error" ? -1 : 1),
   );
@@ -423,7 +520,7 @@ export function buildImportReportView(rows: ImportRow[], index: InterviewIndex):
     resolved: resolvedCount,
   };
 
-  return { groups, digest, externalRefs, externalSummary, adminChanges };
+  return { groups, digest, externalRefs, externalSummary, adminChanges, fileIssueCounts };
 }
 
 // ── 2열 리포트(A안) 보조 — 파일 헤더 카운트·요약 셀·좌측 항목↔우측 파일 관계 (사용자 승인 목업 2026-09-08)

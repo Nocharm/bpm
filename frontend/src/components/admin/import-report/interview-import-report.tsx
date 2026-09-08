@@ -94,6 +94,15 @@ function useDescribe(): Describe {
         return `${t("framework.importMsgCategoryAdminAdded")}: ${subject}`;
       case "category-admin-unknown":
         return `${t("framework.importMsgCategoryAdminUnknown")}: ${subject}`;
+      // 파일 이슈(어댑터) — subject는 뷰모델이 단계 이름으로 바꿔 둔다(a0N → actions 라벨)
+      case "file-self-edge":
+        return `${t("framework.importMsgFileSelfEdge")}: ${subject}`;
+      case "file-decision-promoted":
+        return `${t("framework.importMsgFilePromoted")}: ${subject}`;
+      case "file-external-l5-missing":
+        return `${t("framework.importMsgFileExternalL5Missing")}: ${subject}`;
+      case "file-seq-fallback":
+        return t("framework.importMsgFileSeqFallback");
       default:
         return raw;
     }
@@ -251,6 +260,7 @@ export function InterviewImportReport({
                 applied={result.applied}
                 summary={result.summary}
                 canvasAdditions={sumCanvasAdditions(view)}
+                fileIssues={view.fileIssueCounts}
                 external={view.externalSummary}
                 governanceTotal={result.governance.length}
                 governanceReplace={governanceReplace}

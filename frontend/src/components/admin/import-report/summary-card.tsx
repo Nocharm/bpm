@@ -14,6 +14,7 @@ interface ImportSummaryCardProps {
   applied: boolean;
   summary: Record<string, number>;
   canvasAdditions: number;
+  fileIssues: { warnings: number; errors: number }; // files[].issues 합 — 리포트 행 경고·오류에 더한다
   external: ExternalRefSummary;
   governanceTotal: number;
   governanceReplace: number;
@@ -24,6 +25,7 @@ export function ImportSummaryCard({
   applied,
   summary,
   canvasAdditions,
+  fileIssues,
   external,
   governanceTotal,
   governanceReplace,
@@ -31,6 +33,8 @@ export function ImportSummaryCard({
   const { t } = useI18n();
   const n = (key: string) => summary[key] ?? 0;
   const review = external.ambiguous + external.unknownOrigin;
+  const warnings = n("warning") + fileIssues.warnings;
+  const errors = n("error") + fileIssues.errors;
   const cells: { key: string; label: string; value: ReactNode; sub: string; tone?: string }[] = [
     {
       key: "created",
@@ -42,9 +46,12 @@ export function ImportSummaryCard({
     {
       key: "warnings",
       label: t("framework.importWarnings"),
-      value: n("warning"),
-      sub: t("framework.report.cellWarningsSub", { errors: n("error") }),
-      tone: n("error") > 0 ? "text-error" : n("warning") > 0 ? "text-changed" : "",
+      value: warnings,
+      sub: t("framework.report.cellWarningsSub", {
+        errors,
+        files: fileIssues.warnings + fileIssues.errors,
+      }),
+      tone: errors > 0 ? "text-error" : warnings > 0 ? "text-changed" : "",
     },
     { key: "notes", label: t("framework.interviewNotes"), value: n("notes"), sub: t("framework.report.cellNotesSub") },
     {

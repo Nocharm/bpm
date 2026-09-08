@@ -6,6 +6,7 @@ import {
   buildInterviewIndex,
   buildReportRelations,
   classifyDetail,
+  classifyFileIssue,
   countExternalByCanvas,
   fileOfCode,
   governanceKey,
@@ -34,6 +35,11 @@ function makeFile(name: string, l5Code: string, l5Label: string, rows: [string, 
         unitId: `${taskId}-unit`,
         department: "QC/QC Support",
         ownerRole: "교정 담당자",
+        actions: [
+          { seq: 1, label: "준비", kind: "action" },
+          { seq: 2, label: "판정", kind: "decision" },
+          { seq: 3, label: "수행", kind: "action" },
+        ],
       })),
     },
   };
@@ -237,6 +243,80 @@ describe("groupGovernanceDiffs", () => {
     const key = governanceKey({ code: "a:b", field: "owner" });
     expect(key).toBe("a:b:owner");
     expect(parseGovernanceKey(key)).toEqual({ code: "a:b", field: "owner" });
+  });
+});
+
+describe("file issues folded into the digest", () => {
+  const files = [
+    {
+      name: "calibration.json",
+      issues: [
+        {
+          severity: "warning",
+          path: "rows[1].relations.edges[0]",
+          message: "a02 promoted to decision (exclusive branch edge) - 택일 분기가 있어 판단(마름모) 노드로 자동 변환",
+        },
+        {
+          severity: "warning",
+          path: "rows[0].relations.edges[2]",
+          message:
+            "self edge on seq 3 - kept as loop via auto-generated branch node a03r (자기 반복 - 분기 노드 '반복 여부(자동 생성됨)'를 자동 생성해 되도는 연결로 변환)",
+        },
+        {
+          severity: "warning",
+          path: "externalTasks[1].l5",
+          message:
+            "external L5 '22-01-01-01-01' not in framework.categories - resolved against existing framework (파일에 없는 L5 - 기존 체계로 해석)",
+        },
+        { severity: "error", path: "rows[1].actions[0].label", message: "label too long - truncated (200자 초과)" },
+      ],
+    },
+  ];
+
+  it("classifies adapter messages by their English head", () => {
+    expect(classifyFileIssue(files[0].issues[0])).toMatchObject({
+      kind: "file-decision-promoted",
+      severity: "warning",
+      subject: "a02",
+    });
+    expect(classifyFileIssue(files[0].issues[1])).toMatchObject({ kind: "file-self-edge", numbers: [3] });
+    expect(classifyFileIssue(files[0].issues[2])).toMatchObject({
+      kind: "file-external-l5-missing",
+      subject: "22-01-01-01-01",
+    });
+    expect(classifyFileIssue(files[0].issues[3])).toMatchObject({ kind: "file-issue", severity: "error" });
+  });
+
+  it("attaches row issues to the map (step names, row warning count) and file issues to the canvas", () => {
+    const view = buildImportReportView(
+      [
+        { code: "task-0001", action: "created", detail: "published v1" },
+        { code: "task-0002", action: "created", detail: "published v1" },
+      ],
+      buildInterviewIndex([FILE_A]),
+      files,
+    );
+
+    const promoted = view.digest.find((g) => g.kind === "file-decision-promoted");
+    expect(promoted?.subjects).toEqual(["판정"]); // a02 → actions seq 2 라벨
+    expect(promoted?.maps.map((m) => m.code)).toEqual(["task-0002"]);
+    const selfEdge = view.digest.find((g) => g.kind === "file-self-edge");
+    expect(selfEdge?.subjects).toEqual(["수행"]); // seq 3
+    expect(selfEdge?.maps[0]).toMatchObject({ code: "task-0001", name: "교정 준비" });
+    const external = view.digest.find((g) => g.kind === "file-external-l5-missing");
+    expect(external?.maps[0]).toMatchObject({ code: "19-01-06-01-02", name: "Calibration 수행" });
+    expect(view.groups[0].maps.find((m) => m.code === "task-0002")?.messages.map((m) => m.kind)).toEqual([
+      "file-decision-promoted",
+      "file-issue",
+    ]);
+    expect(view.fileIssueCounts).toEqual({ warnings: 3, errors: 1 });
+  });
+
+  it("keeps issues of an excluded file (no map rows) in the digest under the map name", () => {
+    const view = buildImportReportView([], buildInterviewIndex([FILE_A]), files);
+
+    expect(view.groups[0].maps).toHaveLength(0);
+    expect(view.digest.find((g) => g.kind === "file-self-edge")?.maps[0].name).toBe("교정 준비");
   });
 });
 
