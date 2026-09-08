@@ -139,6 +139,8 @@ dev에는 이미 "끝점이 rows 밖인 엣지 → L5 연계 캔버스 플레이
 
 `resolve_external_placeholders`가 자리표를 이으면(taskId 경로·이름 경로 모두) **캔버스 단위 1건** — `_notify_external_linked`. 수신자 = 캔버스 L5의 직속·조상 관리자(`get_category_admin_logins(direct_only=False)`, 그룹은 멤버 확장) ∪ 연결된 맵이 속한 실제 L5의 직속·조상 관리자, 실행자 제외. `map_id`=캔버스(인박스 "관련 맵" 버튼이 캔버스로), payload `map_name`(제목)·`actor/actor_name`·`from_name`(전달 L5 이름, 칩)·`to_name`(연결 L6 이름 최대 3개 +n, 칩)·`count`·`origin_category_ids`·`linked_map_ids`. FE: `KNOWN_TYPES`·`notifLabel/notifBody.fw_external_linked`(en/ko)·아이콘 Link2·`{count}` 변수. 같은 세션이라 dry-run rollback에 함께 사라진다. 사용자 요청 "가시성·시인성": 제목=캔버스 이름, 본문은 인물 필+굵은 칩 2개+개수로 한 문장.
 
+배선 검토(2026-09-08) 반영: ① 인박스 카테고리 필터 `getNotificationCategory` — `fw_external*` → `subprocess`(미매핑이면 "전체"에서만 보이고 카테고리 통계에서 빠짐). ② 감사 기록 — 해소된 draft마다 `VersionEvent(event_type="external_linked", note=연결된 제목들)`(슬롯 채움의 `slot_changed`와 같은 자리), 타임라인 라벨 `home.verEvent.external_linked`·Link2 아이콘·액센트 틴트 칩. ③ 확정 게이트는 확정 시점에 `validate_confirm_readiness`를 다시 돌리므로 자리표가 남은 캔버스는 확정 요청 자체가 막히고, 해소 뒤 재시도로 통과한다 — 대기 중 요청과의 경합 없음.
+
 ## 7. FE (`frontend/src/lib/interview-report.ts`)
 
 `DetailKind` 5종 추가 + `PATTERNS` 정규식 + 다이제스트 라벨(en/ko, subject·숫자 보존). 그 외 FE 무변경(배지·연결 다이얼로그·게이트는 `placeholder_category_id` 소비 중). 완료 시 캔버스 실브라우저 캡처 1장(외부 L6 2종 색 + 플레이스홀더 배지) 공유.

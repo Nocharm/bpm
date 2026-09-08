@@ -841,6 +841,7 @@ async def resolve_external_placeholders(
     resolved = 0
     skipped_canvases: set[int] = set()
     linked_events: list[tuple[int, str, int]] = []  # (캔버스 map id, 연결된 노드 제목, 연결된 맵 id) — 알림 원료
+    touched_drafts: dict[int, list[str]] = {}  # draft version id → 연결된 노드 제목들 — 버전 이벤트(감사 기록) 원료
     for node, checked_out_by, canvas_map_id in rows:
         if node.source_node_id is None:  # 위 IN 필터가 이미 비-None만 반환하지만 컬럼 타입은 str | None
             continue
@@ -852,6 +853,7 @@ async def resolve_external_placeholders(
         node.follow_latest = True
         resolved += 1
         linked_events.append((canvas_map_id, node.title, node.linked_map_id))
+        touched_drafts.setdefault(node.version_id, []).append(node.title)
 
     # 이름 경로 — 이번 전달분이 건드린 L5마다, 출처가 그 L5인 미연결 플레이스홀더를 정규화 이름 정확 일치(라이브 맵
     # 정확히 1개)로 연결한다. 손으로 만든 플레이스홀더(출처 NULL)는 대상 아님 (spec 2026-09-07 §6.4)
@@ -896,6 +898,11 @@ async def resolve_external_placeholders(
             node.placeholder_category_id = None  # 연결 뒤 출처는 링크맵 카테고리 — FE 연결·슬롯 채움과 같은 소거 규약
             resolved += 1
             linked_events.append((canvas_map_id, node.title, node.linked_map_id))
+            touched_drafts.setdefault(node.version_id, []).append(node.title)
+    # 감사 기록 — 슬롯 채움(slot_changed)과 같은 자리(버전 이벤트). 캔버스 타임라인이 "누가 언제 무엇을 이었나"를 남긴다
+    for version_id, titles in touched_drafts.items():
+        note = ", ".join(dict.fromkeys(titles))
+        record_version_event(session, version_id, "external_linked", actor, note=note[:300])
     if linked_events:
         await _notify_external_linked(session, linked_events, actor=actor)
     if resolved:

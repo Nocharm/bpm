@@ -865,3 +865,18 @@ def test_later_delivery_notifies_admins_of_both_l5s_when_placeholders_resolve(cl
         # 외부 계보로 먼저 생긴 "L5 PHV-A-EXT"는 홈 파일(later)이 오면 정식 이름 "PHV-A-EXT"로 개명된다(홈 우선)
         assert notes[0]["payload"]["from_name"] == "PHV-A-EXT"
         assert notes[0]["payload"]["map_name"] == "PHV-A 연계"
+
+    # 감사 기록 — 캔버스 draft에 external_linked 버전 이벤트(슬롯 채움의 slot_changed와 같은 자리)
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import VersionEvent
+
+    draft_id = _draft_id(client, canvas_id)  # 중첩 이벤트 루프 방지 — 비동기 블록 밖에서 먼저 조회
+
+    async def _events():
+        async with SessionLocal() as session:
+            return (await session.scalars(select(VersionEvent).where(
+                VersionEvent.version_id == draft_id, VersionEvent.event_type == "external_linked"))).all()
+    events = _run(_events())
+    assert len(events) == 1 and events[0].note == "검체 인수"

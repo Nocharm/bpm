@@ -26,7 +26,7 @@
 | `externalTasks[]` (0.5) | 타 L5의 L6 참조 레지스트리 — 엣지 끝점이 `refId`면 **L5 연계 캔버스 플레이스홀더 SP 노드**(`title=l6`∥`(L6 unspecified) L5명`, `placeholder_category_id=l5.nodeCode의 카테고리`, 계보키 `__ext__|홈L5|refId`). 그 L5에 정규화 이름 정확 일치 라이브 맵이 1개면 실 노드로 직결. `note`는 홈 L5 노트(kind=`external`). 계약: `docs/samples/interview-json-0.5.md` |
 | `framework.categories[]` 중 홈 체인 밖 (0.5) | 외부 계보 — **없을 때만 생성**(있으면 name/level/parent/sort 불변). 부모가 파일에 없으면 경고 후 제외 |
 | `framework.categories[].admins` (0.5) | `category_permissions`(user) **add-only** — 홈 체인 행만, 기존 사람·그룹 권한자 불변, `granted_by`=실행자. 외부 행의 admins는 경고 후 무시. 리포트 `category admin 'x' added @ 코드` / 미등재 `not found in employees` 경고 |
-| (후차 해소 알림, 0.5) | 자리표가 자동 연결되면 `fw_external_linked` 알림 — 캔버스 L5 직속·조상 관리자 ∪ 연결된 맵 L5 직속·조상 관리자(그룹은 멤버 확장), 실행자 제외. payload `map_name`(캔버스)·`from_name`(전달 L5)·`to_name`(연결 L6들)·`count`. dry-run은 rollback으로 미생성 |
+| (후차 해소 알림, 0.5) | 자리표가 자동 연결되면 `fw_external_linked` 알림 — 캔버스 L5 직속·조상 관리자 ∪ 연결된 맵 L5 직속·조상 관리자(그룹은 멤버 확장), 실행자 제외. payload `map_name`(캔버스)·`from_name`(전달 L5)·`to_name`(연결 L6들)·`count`. 인박스 카테고리=subprocess. 같은 트랜잭션에 캔버스 draft `VersionEvent(external_linked, note=연결 제목들)`. dry-run은 rollback으로 미생성 |
 
 ### rows[]
 

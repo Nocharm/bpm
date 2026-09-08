@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 
-import { ArrowRight, BadgeCheck, Check, ChevronRight, Clock, GitCommit, Layers, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, ChevronRight, Clock, GitCommit, Layers, Link2, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
@@ -27,6 +27,7 @@ const EVENT_LABEL: Record<string, MessageKey> = {
   published: "home.verEvent.published",
   confirmed: "home.verEvent.confirmed",
   withdrawn: "home.verEvent.withdrawn",
+  external_linked: "home.verEvent.external_linked",
 };
 
 // 이벤트 칩/단계 아이콘 / icon per event type.
@@ -38,6 +39,7 @@ function EventIcon({ type }: { type: string }) {
   if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
   if (type === "confirmed") return <BadgeCheck size={12} strokeWidth={1.7} />;
   if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.7} />;
+  if (type === "external_linked") return <Link2 size={12} strokeWidth={1.7} />;
   return <GitCommit size={12} strokeWidth={1.7} />;
 }
 
@@ -50,6 +52,7 @@ const EVENT_CHIP: Record<string, string> = {
   confirmed: "border-accent-tint-border bg-accent-tint text-accent",
   rejected: "border-error/40 bg-error/10 text-error",
   withdrawn: "border-changed/40 bg-changed/10 text-changed",
+  external_linked: "border-accent-tint-border bg-accent-tint text-accent",
 };
 
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green, 담당자확정=채움 액센트).

@@ -13,6 +13,7 @@ describe("getNotificationCategory", () => {
     expect(getNotificationCategory("checkout_rejected")).toBe("checkout");
     expect(getNotificationCategory("permission_approved")).toBe("permission");
     expect(getNotificationCategory("subprocess_registered")).toBe("subprocess");
+    expect(getNotificationCategory("fw_external_linked")).toBe("subprocess"); // 필터·카테고리 통계에서 빠지지 않게
     expect(getNotificationCategory("notice")).toBe("notice");
   });
   it("returns null for unknown types (All에서만 노출)", () => {

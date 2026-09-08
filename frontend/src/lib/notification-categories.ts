@@ -25,6 +25,7 @@ export function getNotificationCategory(type: string): NotificationCategory | nu
   if (type.startsWith("rename_") || type === "map_renamed") return "permission";
   if (type.startsWith("fw_confirm") || type.startsWith("fw_slot")) return "permission";
   if (type === "subprocess_registered") return "subprocess";
+  if (type.startsWith("fw_external")) return "subprocess"; // 외부 L6 자리표 연결 — 서브프로세스 링크 계열 (2026-09-08)
   if (type === "notice") return "notice";
   return null; // 미지 type — All에서만 노출
 }
