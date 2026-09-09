@@ -23,6 +23,7 @@ import {
   PencilLine,
   RotateCcw,
   Settings,
+  StickyNote,
   Trash2,
   TriangleAlert,
   User,
@@ -48,12 +49,11 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
-import { formatDurationHm } from "@/lib/duration";
-import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { DeleteMapDialog } from "@/components/maps/delete-map-dialog";
 import { deptLeaf, deptLevelRank, DeptLevelIcon } from "@/components/maps/dept-level-icon";
 import { FrameworkAssignModal } from "@/components/maps/framework-assign-modal";
-import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
+import { DETAIL_CLIP_HEIGHT_PX, MapDetailDescription } from "@/components/maps/map-detail-description";
+import { MapDetailSpSection } from "@/components/maps/map-detail-sp-section";
 import { MapNotesSection } from "@/components/maps/map-notes-section";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SlotDeleteDialog } from "@/components/maps/slot-delete-dialog";
@@ -930,67 +930,21 @@ export function MapDetailCard({
         </div>
       )}
 
-      <div
-        data-id="map-detail-description"
-        className="rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
-      >
-        {detail.description ? (
-          detail.description
-        ) : (
-          <span className="text-ink-tertiary">{t("home.descEmpty")}</span>
-        )}
+      {/* 상단 3:2 — 설명 | 노트(카드형). 두 섹션이 같은 접힘 높이로 클립(넘치면 페이드·펼치기), 폭 <40rem이면
+          세로 쌓임. 그 아래 서브프로세스 정보(SP 지정값 + 원문 메모 타일) — 비SP 맵이면 렌더되지 않는다
+          (사용자 결정 2026-09-09, 목업 v5) */}
+      <div className="grid gap-3 @[40rem]:grid-cols-[3fr_2fr]">
+        <MapDetailDescription description={detail.description} />
+        <MapNotesSection
+          scope={{ mapId: detail.id }}
+          canEdit={isOwner}
+          icon={StickyNote}
+          layout="cards"
+          clipHeight={DETAIL_CLIP_HEIGHT_PX}
+          defaultCollapsed={false}
+        />
       </div>
-
-      {/* 지정 I/O + 인터뷰 승격 필드 — 값 있는 행만 노출(비인터뷰 맵 노이즈 없음, design 2026-08-19 §5.1) */}
-      {(detail.sp_input || detail.sp_output || detail.sp_start_condition || detail.sp_end_condition ||
-        detail.sp_gmp || detail.sp_touch_time) && (
-        <div
-          data-id="map-detail-io"
-          className="flex flex-col gap-1 rounded-sm border border-hairline bg-surface p-3 text-caption text-ink"
-        >
-          {detail.sp_gmp && formatGmp(detail.sp_gmp) && (
-            <p data-id="map-detail-gmp">
-              <span className="rounded-full px-1.5 py-0.5 text-fine" style={getGmpBadgeStyle(detail.sp_gmp)}>
-                {formatGmp(detail.sp_gmp)}
-              </span>
-            </p>
-          )}
-          {detail.sp_input && (
-            <p className="whitespace-pre-wrap">
-              <span className="text-ink-tertiary">{t("home.ioInput")}: </span>
-              {detail.sp_input}
-            </p>
-          )}
-          {detail.sp_output && (
-            <p className="whitespace-pre-wrap">
-              <span className="text-ink-tertiary">{t("home.ioOutput")}: </span>
-              {detail.sp_output}
-            </p>
-          )}
-          {detail.sp_start_condition && (
-            <p data-id="map-detail-start-condition">
-              <span className="text-ink-tertiary">{t("field.startCondition")}: </span>
-              {detail.sp_start_condition}
-            </p>
-          )}
-          {detail.sp_end_condition && (
-            <p data-id="map-detail-end-condition">
-              <span className="text-ink-tertiary">{t("field.endCondition")}: </span>
-              {detail.sp_end_condition}
-            </p>
-          )}
-          {detail.sp_touch_time && formatDurationHm(detail.sp_touch_time) && (
-            <p data-id="map-detail-touch-time">
-              <span className="text-ink-tertiary">{t("field.touchTime")}: </span>
-              {formatDurationHm(detail.sp_touch_time)}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* 인터뷰 원문 메모(읽기) → 노트 — 에디터 맵 탭과 같은 순서 (design 2026-09-03 followups §2) */}
-      <MapFallbackNotes mapId={detail.id} />
-      <MapNotesSection scope={{ mapId: detail.id }} canEdit={isOwner} />
+      <MapDetailSpSection detail={detail} koreanDeptByPath={koreanDeptByPath} />
 
       {owningPickerOpen &&
         createPortal(
@@ -1479,7 +1433,8 @@ export function MapDetailCard({
   // 홈 우측 패널 — 내부 스크롤 + 하단 고정 버튼바 / home: internal scroll + pinned footer.
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">{body}</div>
+      {/* scrollbar-hidden — 우측 스크롤바 없이 휠 스크롤(사용자 결정 2026-09-09). @container — 섹션 2열 분기 기준 폭 */}
+      <div className="scrollbar-hidden @container flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">{body}</div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hairline p-3">
         <div className="flex items-center gap-2">
           <Link

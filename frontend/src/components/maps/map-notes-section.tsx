@@ -4,9 +4,11 @@
 // L5 연계 캔버스 공용. 쓰기는 맵=오너, L5=체인 권한자/sysadmin(서버 can_edit) — 나머지는 열람 + 안내 문구
 // (design 2026-09-03 followups §3). 필(kind)은 프리셋 칩 또는 '[' 자동완성(현재 노트 kind + 프리셋).
 
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { ClipBody, ClipToggle, useClipOverflow } from "@/components/clip-body";
+import { SectionHeader } from "@/components/section-header";
 import {
   createCategoryNote,
   createMapNote,
@@ -32,6 +34,14 @@ interface MapNotesSectionProps {
   // 맵 스코프 쓰기 권한(오너) — 부모가 판정. L5 스코프는 서버 응답 can_edit가 진실이라 무시된다
   canEdit?: boolean;
   onToast?: (message: string) => void;
+  // 헤더 아이콘 — 홈 상세 카드처럼 섹션 머리를 통일하는 표면만 (없으면 기존 체브론+제목)
+  icon?: LucideIcon;
+  // cards: 노트마다 테두리 카드 + 노트가 없어도 빈 상태를 그린다(홈 3:2 행의 열을 비우지 않게). list: 기존 행 목록
+  layout?: "list" | "cards";
+  // 고정 높이 클립(px) — 넘치면 스크롤바 없이 페이드 + 헤더 펼치기/접기. 없으면 기존 max-h-72 내부 스크롤
+  clipHeight?: number;
+  // 기본 접힘 — 인스펙터 카드는 접힘(2026-08-20), 홈 상세 카드는 펼침
+  defaultCollapsed?: boolean;
 }
 
 // 프리셋 kind — 임포트가 쓰는 어휘와 동일. 라벨은 i18n, 그 외 kind는 원문 표기
@@ -61,17 +71,22 @@ const scopeKey = (scope: NotesScope): string => ("mapId" in scope ? `map:${scope
 // '[' 자동완성 — 입력값이 '['로 시작하면 괄호 안 텍스트로 후보를 거른다. 저장값은 괄호 없는 kind
 const stripBrackets = (raw: string): string => raw.replace(/^\[/, "").replace(/\]$/, "").trim();
 
-export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSectionProps) {
+export function MapNotesSection({
+  scope, canEdit = false, onToast, icon, layout = "list", clipHeight, defaultCollapsed = true,
+}: MapNotesSectionProps) {
   const { t } = useI18n();
   const key = scopeKey(scope);
   const [loaded, setLoaded] = useState<{ key: string; notes: MapNote[]; canEdit: boolean } | null>(null);
   // 기본 접힘 — 노트는 참고 정보라 필요할 때만 펼친다 (사용자 결정 2026-08-20)
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleting, setDeleting] = useState<MapNote | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [kindOpen, setKindOpen] = useState(false);
+  // 고정 높이 클립(홈 카드) — clipHeight가 있을 때만 ClipBody가 마운트되어 측정된다
+  const [clipOpen, setClipOpen] = useState(false);
+  const { ref: clipRef, overflowing: clipOverflowing } = useClipOverflow(clipHeight ?? 0);
 
   useEffect(() => {
     let active = true;
@@ -95,7 +110,8 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
   const notes = loaded?.key === key ? loaded.notes : [];
   const effectiveCanEdit = loaded?.key === key ? loaded.canEdit : false;
   if (loaded?.key !== key) return null;
-  if (notes.length === 0 && !effectiveCanEdit) return null;
+  // 카드형(홈)은 빈 상태를 그린다 — 3:2 행의 노트 열이 비어 설명만 덩그러니 남지 않게
+  if (notes.length === 0 && !effectiveCanEdit && layout !== "cards") return null;
 
   const kindLabel = (kind: string): string => (KIND_LABEL[kind] ? t(KIND_LABEL[kind]) : kind);
   const kindSuggestions = (query: string): string[] => {
@@ -312,47 +328,19 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
       </li>
     );
 
-  return (
-    <div data-id="map-notes-section" className="rounded-md border border-hairline bg-surface p-3">
-      <div className="flex items-center gap-1">
-        {/* 아코디언 — 기본 접힘, 인스펙터 카드(수행 지표 등)와 동일 패턴 (사용자 결정 2026-08-20) */}
-        <button
-          type="button"
-          data-id="map-notes-toggle"
-          data-acc-toggle
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink"
-        >
-          <ChevronRight
-            size={12}
-            strokeWidth={1.5}
-            className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
-          />
-          {t("notes.title")}
-          <span className="font-normal text-ink-tertiary">({notes.length})</span>
-        </button>
-        {effectiveCanEdit && (
-          <button
-            type="button"
-            data-id="map-notes-add"
-            aria-label={t("notes.add")}
-            title={t("notes.add")}
-            className="shrink-0 rounded-sm p-0.5 text-accent hover:bg-accent-tint"
-            onClick={openNew}
-          >
-            <Plus size={14} strokeWidth={1.5} />
-          </button>
-        )}
-      </div>
-      {!collapsed && (
-        <ul className="scroll-soft mt-1.5 flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+  const isCards = layout === "cards";
+  const listItems = (
+    <>
           {draft?.id === null && renderForm()}
           {notes.map((note) =>
             draft?.id === note.id ? (
               <li key={note.id}>{renderForm()}</li>
             ) : (
-              <li key={note.id} data-id={`map-note-${note.id}`} className="group flex flex-col gap-0.5">
+              <li
+                key={note.id}
+                data-id={`map-note-${note.id}`}
+                className={`group flex flex-col gap-0.5 ${isCards ? "rounded-sm border border-hairline bg-surface-pearl px-2.5 py-2" : ""}`}
+              >
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-fine uppercase ${
@@ -363,7 +351,12 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
                   >
                     {kindLabel(note.kind)}
                   </span>
-                  {note.title && <span className="min-w-0 truncate text-caption-strong text-ink">{note.title}</span>}
+                  {/* 카드형(좁은 열)은 제목을 줄바꿈 — 말줄임이면 흐름 노트의 "A → B" 뒤가 잘린다 */}
+                  {note.title && (
+                    <span className={`min-w-0 text-caption-strong text-ink ${isCards ? "break-keep" : "truncate"}`}>
+                      {note.title}
+                    </span>
+                  )}
                   <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
                     {note.source === "consultant-import" ? t("notes.imported") : ""}
                     {note.edited_at ? ` · ${t("notes.edited")}` : ""}
@@ -395,13 +388,58 @@ export function MapNotesSection({ scope, canEdit = false, onToast }: MapNotesSec
               </li>
             ),
           )}
+          {isCards && notes.length === 0 && draft === null && (
+            <li data-id="map-notes-empty" className="text-fine text-ink-tertiary">{t("notes.empty")}</li>
+          )}
           {!effectiveCanEdit && (
             <li data-id="map-notes-readonly-hint" className="text-fine text-ink-tertiary">
               {"mapId" in scope ? t("notes.readOnlyMap") : t("notes.readOnlyCategory")}
             </li>
           )}
-        </ul>
-      )}
+    </>
+  );
+
+  return (
+    <div
+      data-id="map-notes-section"
+      className={`rounded-md border border-hairline bg-surface p-3 ${clipHeight !== undefined ? "flex min-h-0 flex-col" : ""}`}
+    >
+      {/* 아코디언 — 기본 접힘, 인스펙터 카드(수행 지표 등)와 동일 패턴 (사용자 결정 2026-08-20) */}
+      <SectionHeader
+        dataId="map-notes-toggle"
+        icon={icon}
+        title={t("notes.title")}
+        count={notes.length}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((v) => !v)}
+        right={
+          <>
+            {effectiveCanEdit && (
+              <button
+                type="button"
+                data-id="map-notes-add"
+                aria-label={t("notes.add")}
+                title={t("notes.add")}
+                className="shrink-0 rounded-sm p-0.5 text-accent hover:bg-accent-tint"
+                onClick={openNew}
+              >
+                <Plus size={14} strokeWidth={1.5} />
+              </button>
+            )}
+            {clipHeight !== undefined && !collapsed && clipOverflowing && (
+              <ClipToggle dataId="map-notes-expand" open={clipOpen} onToggle={() => setClipOpen((v) => !v)} />
+            )}
+          </>
+        }
+      />
+      {!collapsed &&
+        (clipHeight !== undefined ? (
+          <ClipBody bodyRef={clipRef} maxHeight={clipHeight} open={clipOpen} overflowing={clipOverflowing} className="mt-1.5">
+            <ul className="flex flex-col gap-1.5">{listItems}</ul>
+          </ClipBody>
+        ) : (
+          <ul className="scroll-soft mt-1.5 flex max-h-72 flex-col gap-1.5 overflow-y-auto">{listItems}</ul>
+        ))}
       {deleting && (
         <ConfirmDialog
           title={t("notes.deleteTitle")}

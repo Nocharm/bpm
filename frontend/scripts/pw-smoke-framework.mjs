@@ -145,9 +145,9 @@ try {
   const categoryText = (await page.locator('[data-id="map-detail-category"]:visible').first().textContent()) ?? "";
   check("map-detail-category shows L1..L5 path badge", categoryText.includes(L5_PATH), categoryText.trim());
 
-  await page.waitForSelector('[data-id="map-detail-io"]:visible', { timeout: 8000 });
-  const ioText = (await page.locator('[data-id="map-detail-io"]:visible').first().textContent()) ?? "";
-  check("map-detail-io shows Input/Output values",
+  await page.waitForSelector('[data-id="map-detail-sp-section"]:visible', { timeout: 8000 });
+  const ioText = (await page.locator('[data-id="map-detail-sp-section"]:visible').first().textContent()) ?? "";
+  check("map-detail-sp-section shows Input/Output values",
     ioText.includes("교정 작업지시") && ioText.includes("준비 목록"), ioText.trim());
 
   // ── 7) Departments 복귀 — 조직도 회귀 + 3.5개 클램프/전체 펼치기 ───────────

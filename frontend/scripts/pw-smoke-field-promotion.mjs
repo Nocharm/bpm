@@ -133,8 +133,8 @@ try {
   await page.locator('[data-id="framework-node"] > button').filter({ hasText: "EPCV" }).first().click();
   await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" })
     .first().click();
-  await page.waitForSelector('[data-id="map-detail-io"]:visible', { timeout: 10000 });
-  const ioText = (await page.locator('[data-id="map-detail-io"]:visible').first().textContent()) ?? "";
+  await page.waitForSelector('[data-id="map-detail-sp-section"]:visible', { timeout: 10000 });
+  const ioText = (await page.locator('[data-id="map-detail-sp-section"]:visible').first().textContent()) ?? "";
   check("[6] detail card rows: conditions + touch time",
     ioText.includes("Start condition") && ioText.includes("준비 목록 나오면 끝") && ioText.includes("1h"));
   check("[18b] detail card GMP badge", ioText.includes("GMP Direct"));

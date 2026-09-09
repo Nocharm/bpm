@@ -167,17 +167,18 @@ try {
   check("SP card action buttons stay single-line at 320px", !!editBox && editBox.height < 34, `h=${editBox?.height}`);
   await shot(page, "sp-card-narrow");
 
-  // ── 5) 홈 상세 카드 — 읽기 전용 interview notes + notes(오너 추가 버튼) ────────
+  // ── 5) 홈 상세 카드 — 서브프로세스 정보 타일의 원문 메모(읽기) + notes(오너 추가 버튼) ────────
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
   await page.waitForSelector('[data-id="framework-tree"]', { timeout: 10000 });
   await page.locator('[data-id="framework-node"] button').filter({ hasText: "EPCV" }).first().click();
   await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" }).first().click();
-  await page.waitForSelector('[data-id="map-fallback-notes"]:visible', { timeout: 10000 });
-  const homeToggle = page.locator('[data-id="map-fallback-notes"]:visible [data-id="map-fallback-notes-toggle"]').first();
-  if ((await homeToggle.getAttribute("aria-expanded")) === "false") await homeToggle.click();
-  const homeFb = await page.locator('[data-id="map-fallback-notes"]:visible').first().textContent();
-  check("home card shows interview notes read-only", (homeFb ?? "").includes("EAM, 수기 대장"));
+  // 홈 카드는 원문 메모를 서브프로세스 정보 타일에 흡수 — 시스템 타일 아이콘(점) 클릭 → 읽기 팝오버 (2026-09-09)
+  await page.waitForSelector('[data-id="map-detail-sp-section"]:visible', { timeout: 10000 });
+  await page.locator('[data-id="map-detail-sp-section"]:visible [data-id="map-detail-sp-note-system"]').first().click();
+  const homeFb = await page.locator('[data-id="map-detail-sp-note-system-popover"]').first().textContent().catch(() => "");
+  check("home card shows the source note in the system tile popover", (homeFb ?? "").includes("EAM, 수기 대장"));
+  await page.keyboard.press("Escape");
   const homeAdd = await page.locator('[data-id="map-notes-section"]:visible [data-id="map-notes-add"]').count();
   check("home card notes section offers Add for the owner", homeAdd === 1);
   await shot(page, "home-card");

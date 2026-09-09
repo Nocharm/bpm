@@ -30,6 +30,9 @@ interface SpFieldTileProps {
   active?: boolean;
   wide?: boolean;
   readOnly?: boolean;
+  // 라벨 고정 — 값이 길어도 라벨을 지우지 않고 값 쪽을 말줄임. 원문 메모만 있는 읽기 타일처럼 라벨이 있어야
+  // 값의 뜻이 통하는 경우(홈 상세 폴백 타일, 사용자 결정 2026-09-09)
+  labelFixed?: boolean;
   onOpen?: (at: { x: number; y: number }) => void;
 }
 
@@ -39,7 +42,7 @@ const MIN_LABEL_WIDTH = 44;
 
 export function SpFieldTile({
   dataId, icon: Icon, label, value, valueNode, iconSlot, placeholder, valueTone = "default", valueSize = "caption",
-  disabled, disabledHint, active, wide, readOnly, onOpen,
+  disabled, disabledHint, active, wide, readOnly, labelFixed, onOpen,
 }: SpFieldTileProps) {
   const filled = value.trim() !== "" || valueNode != null;
   const isFallback = filled && valueTone === "fallback";
@@ -48,11 +51,11 @@ export function SpFieldTile({
   const [hideLabel, setHideLabel] = useState(false);
 
   // 값의 실제 폭(scrollWidth)이 라벨 최소 폭까지 잡아먹으면 라벨 생략 — 리사이즈에도 재판정.
-  // wide 타일은 라벨을 항상 그린다(값이 줄바꿈으로 내려간다)
+  // wide 타일은 라벨을 항상 그린다(값이 줄바꿈으로 내려간다). labelFixed는 라벨 대신 값을 말줄임
   useLayoutEffect(() => {
     const button = buttonRef.current;
     const valueEl = valueRef.current;
-    if (!button || !valueEl || !filled || wide) {
+    if (!button || !valueEl || !filled || wide || labelFixed) {
       setHideLabel(false);
       return;
     }
@@ -64,7 +67,7 @@ export function SpFieldTile({
     const observer = new ResizeObserver(measure);
     observer.observe(button);
     return () => observer.disconnect();
-  }, [filled, value, wide]);
+  }, [filled, value, wide, labelFixed]);
 
   // 호버 = 흰 배경 + 보더 강조(틴트를 걷어 행머리 메모 아이콘 스왑이 드러난다, 사용자 피드백 2026-09-03).
   // 읽기 타일은 메모 아이콘(iconSlot)이 있을 때만 호버 반응
@@ -85,16 +88,16 @@ export function SpFieldTile({
   const body = filled ? (
     <>
       {(wide || !hideLabel) && (
-        <span className={`text-fine text-ink-tertiary ${wide ? "shrink-0" : "min-w-0 truncate"}`}>{label}</span>
+        <span className={`text-fine text-ink-tertiary ${wide || labelFixed ? "shrink-0" : "min-w-0 truncate"}`}>{label}</span>
       )}
       <span
         ref={valueRef}
         className={`ml-auto inline-flex items-center gap-1.5 ${valueSize === "fine" ? "text-fine" : "text-caption"} ${
           isFallback ? "font-normal italic text-ink-secondary" : "font-semibold text-ink"
-        } ${wide ? "min-w-0 justify-end text-right break-keep" : hideLabel ? "min-w-0 truncate" : "shrink-0"}`}
+        } ${wide ? "min-w-0 justify-end text-right break-keep" : hideLabel || labelFixed ? "min-w-0 truncate" : "shrink-0"}`}
       >
         {valueNode}
-        {value.trim() !== "" && <span className={wide || hideLabel ? "min-w-0 truncate" : ""}>{value}</span>}
+        {value.trim() !== "" && <span className={wide || hideLabel || labelFixed ? "min-w-0 truncate" : ""}>{value}</span>}
       </span>
     </>
   ) : placeholder ? (
