@@ -255,18 +255,40 @@ export function MapCard({
           )}
         </div>
 
-        {/* 오우닝 부서 누락 맵은 카운트 자리에 경고 필로 대체 — 언어 무관 영어 고정, 반투명 error 틴트 */}
+        {/* 오우닝 부서 누락·낡은 참조는 카운트 자리에 경고 필로 대체 — 언어 무관 영어 고정, 반투명 error 틴트. 둘 다 뜰 수 있음 */}
         {!map.owning_department ? (
-          <span
-            data-id="map-card-owning-missing"
-            title={t("home.owningMissingNote")}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
-          >
-            <TriangleAlert size={12} strokeWidth={1.5} />
-            {t("home.owningMissingBadge")}
-          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span
+              data-id="map-card-owning-missing"
+              title={t("home.owningMissingNote")}
+              className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
+            >
+              <TriangleAlert size={12} strokeWidth={1.5} />
+              {t("home.owningMissingBadge")}
+            </span>
+            {(map.stale_ref_count ?? 0) > 0 && (
+              <span
+                data-id="map-card-stale-refs"
+                title={t("home.staleRefsNote", { n: map.stale_ref_count ?? 0 })}
+                className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
+              >
+                <TriangleAlert size={12} strokeWidth={1.5} />
+                {t("home.staleRefsBadge")}
+              </span>
+            )}
+          </div>
         ) : (
           <div className="flex shrink-0 items-center gap-2.5">
+            {(map.stale_ref_count ?? 0) > 0 && (
+              <span
+                data-id="map-card-stale-refs"
+                title={t("home.staleRefsNote", { n: map.stale_ref_count ?? 0 })}
+                className="inline-flex items-center gap-1 rounded-full bg-error/10 px-2 py-0.5 text-error"
+              >
+                <TriangleAlert size={12} strokeWidth={1.5} />
+                {t("home.staleRefsBadge")}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1" title={t("home.nodeCount")}>
               <Workflow size={12} strokeWidth={1.5} />
               {map.node_count ?? 0}

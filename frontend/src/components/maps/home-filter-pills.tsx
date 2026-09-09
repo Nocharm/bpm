@@ -86,6 +86,11 @@ export function HomeFilterPills({
                 label: t("home.owningMissingOption"),
                 icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
               },
+              {
+                value: "stale_refs",
+                label: t("home.staleRefsOption"),
+                icon: <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />,
+              },
             ]}
             selected={owningFilter}
             onToggle={onToggleOwning}
