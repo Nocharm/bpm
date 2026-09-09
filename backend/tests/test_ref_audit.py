@@ -168,3 +168,29 @@ def test_scan_dept_refs_soft_deleted_map_only_owning(client: TestClient) -> None
     groups = asyncio.run(_run())
     mine = [ln for g in groups for ln in g.lines if ln.map_id == map_id]
     assert [ln.source for ln in mine] == ["owning_dept"]
+
+
+def test_scan_dept_refs_skips_blank_principal(client: TestClient) -> None:
+    """빈 부서 값은 고아가 아니다 — map_grant/group_member에 빈 principal_id/member_id가 있어도 value="" 그룹 미생성."""
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "blank principal")
+            g = UserGroup(name=f"blank group {id(object())}", status="active", created_by="user.lee")
+            session.add(g)
+            await session.flush()
+            session.add(MapPermission(map_id=m.id, principal_type="department",
+                                      principal_id="", role="editor", granted_by="user.lee"))
+            session.add(UserGroupMember(group_id=g.id, member_type="department", member_id=""))
+            await session.commit()
+
+    asyncio.run(_seed())
+
+    async def _run() -> list[ref_audit.RefGroup]:
+        async with SessionLocal() as session:
+            valid = await ref_audit.load_valid_sets(session)
+            ctx = await ref_audit.load_scan_context(session)
+            return await ref_audit.scan_dept_refs(session, valid, ctx)
+
+    groups = asyncio.run(_run())
+    assert all(g.value != "" for g in groups)

@@ -200,7 +200,7 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
     grants = (await session.scalars(select(MapPermission).where(MapPermission.principal_type == "department"))).all()
     for grant in grants:
         m = ctx.maps.get(grant.map_id)
-        if m is None or m.deleted_at is not None or grant.principal_id in valid.dept_paths:
+        if m is None or m.deleted_at is not None or not grant.principal_id or grant.principal_id in valid.dept_paths:
             continue
         line = _map_line(ctx, "map_grant", m, f"map_grant:{grant.id}")
         groups.add(grant.principal_id, "path", line)
@@ -213,7 +213,7 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
         )
     ).all()
     for member, group_name in member_rows:
-        if member.member_id in valid.dept_paths:
+        if not member.member_id or member.member_id in valid.dept_paths:
             continue
         groups.add(member.member_id, "path", RefLine(
             source="group_member", fixable=True, count=1, target_id=f"group_member:{member.id}",
