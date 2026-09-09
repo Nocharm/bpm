@@ -539,9 +539,7 @@ def test_notify_bundles_per_owner_and_skips_departed_owner(client: TestClient) -
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["recipients"] == 1 and body["maps"] == 1
-    # 공유 DB에 다른 테스트발 오너-누락 맵이 섞여 있을 수 있어 정확 일치 대신 포함 여부로 검증
-    skipped = next((s for s in body["skipped_maps"] if s["id"] == user_ids["map"]), None)
-    assert skipped is not None and skipped["reason"] == "owner_missing"
+    assert body["skipped_maps"] == [{"id": user_ids["map"], "name": body["skipped_maps"][0]["name"], "reason": "owner_missing"}]
 
     async def _notif() -> dict | None:
         from app.models import Notification
