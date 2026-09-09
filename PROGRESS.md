@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-09 — 고아 참조 감사 설계 확정 (feat/ux-polish, 구현 전)
+- **문제**: 기존 소멸 부서 재지정은 조직 경로 3곳(맵 부서 권한·그룹 부서 멤버·오우닝)만 봤다. 노드·SP 지정의 담당부서(리프명)·담당자(이름)와 사용자 참조(오너·협업자·승인자·그룹·카테고리)는 조직개편·퇴직 뒤 조용히 낡는다.
+- **결정**(`docs/design/2026-09-09-ref-audit-design.md`): 참조 12곳을 **온디맨드 스캔**(저장 테이블 없음) → 설정 > 조직 > "Orphaned refs" 새 탭에서 값별 그룹·라인 체크로 일괄 replace/remove(노드 필드는 드래프트 필요라 캐치·체크 불가), 오너에게 오너당 1건 묶음 알림(`ref_fix_requested`)·오너 교체 시 `owner_assigned`, 홈 카드 "Stale refs" 배지 + Owning 필터를 Issues로 확장. 노드 스캔은 게시본+최신 드래프트. 기존 `dept-remap` API·카드는 흡수·폐기.
+
 ## 2026-09-09 — 임포트 리포트 UI 4종: 세그먼트 토글·L5 미리보기·3노드 높이·노트 내용 diff (feat/ux-polish)
 - **거버넌스 유지/교체 드롭다운 재디자인** — 컨트롤은 드롭다운 그대로 두고 **펼친 목록만** 앱 디자인으로(네이티브 `option` 목록은 OS가 그려 리포트 톤과 어긋났다). 트리거+포털 목록(체크 표시·아이콘·hover), 섹션 본문이 `max-h` 스크롤이라 `absolute`면 잘려 body 포털+fixed(z 1250, SearchSelect와 같은 계약)·아래 공간 부족 시 위로 플립. 스모크는 `selectOption` → 트리거 열고 `-replace` 클릭으로 이관.
 - **L5 연계 캔버스 미리보기 신설** — 캔버스 행 호버 시 Preview 노출(맵 행과 같은 규칙). `buildL5PreviewGraph`가 파일 최상위 `relations.edges`로 rows(subprocess)+`externalTasks`를 잇고, 백엔드 `expand_linkage_branches`처럼 택일 팬아웃 앞에만 분기 노드를 세운다(전부 `parallel`이면 제외). 미선언 끝점은 코드 그대로가 제목.
