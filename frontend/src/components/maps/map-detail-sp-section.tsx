@@ -291,7 +291,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
             {groupHeader("map-detail-sp-attrs-toggle", attrsOpen, () => setAttrsOpen((v) => !v), t("editor.bpmAttrs"), attrCount)}
             {attrsOpen && (
               <div className="ml-2 border-l border-divider pl-2">
-                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1fr_3.5fr] @[40rem]:grid-rows-[repeat(3,auto)]">
+                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1.5fr_3fr] @[40rem]:grid-rows-[repeat(3,auto)]">
                   {/* 세로 타일은 absolute로 셀을 채운다 — 행 높이는 스택 타일 3개가 정하고, 넘치는 인물 필은 잘린다 */}
                   <div className="relative h-32 @[40rem]:row-span-3 @[40rem]:h-auto">
                     <div
