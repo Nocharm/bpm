@@ -226,16 +226,23 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     );
   };
 
-  // 입력물/산출물 반쪽 — 글머리 목록 + 항목별 데이터 형식. 높이는 내용에 맞추고 상한은 3줄 클램프(넘치면 말줄임)
+  // 입력물/산출물 반쪽 — 글머리 목록 + 항목별 데이터 형식. 3행 남짓까지 보이고 넘치면 목록 안에서 세로 스크롤
   const ioHalf = (field: "input" | "output", icon: LucideIcon, label: string, rows: IoRow[]) => (
         // flex-1(균등 분할) 대신 자연 높이 — 항목이 여럿이면 결합 타일이 커지고 그리드 행이 따라 늘어난다.
     // 균등 분할이면 3줄 클램프 전에 반쪽 높이에서 글자가 잘린다(실측)
     <div data-id={`map-detail-sp-${field}`} className="flex flex-col gap-1 px-2.5 py-1.5">
       {vertHead(icon, label, rows.length > 0)}
       {rows.length > 0 && (
-        <ul className="line-clamp-3 text-fine leading-normal break-keep text-ink-secondary">
+        // 항목이 많으면 반쪽 안에서 세로 스크롤(3행 남짓 노출 + 다음 행 살짝 보여 "더 있음" 암시).
+        // scroll-soft — 평소 막대를 숨기고 호버 때만 (사용자 지시 2026-09-09)
+        <ul className="scroll-soft max-h-16 text-fine leading-normal break-keep text-ink-secondary">
           {rows.map((row, i) => (
-            <li key={`${i}-${row.text}`} data-id={`map-detail-sp-${field}-row`} className="pl-2.5 -indent-2.5">
+            <li
+              key={`${i}-${row.text}`}
+              data-id={`map-detail-sp-${field}-row`}
+              // 행 단위 호버 — 어느 항목을 읽는지 짚어주는 표시일 뿐 클릭 동작은 없다(커서·눌림 없음)
+              className="rounded-xs pr-1 pl-2.5 -indent-2.5 transition-colors duration-150 hover:bg-surface-alt"
+            >
               {`• ${row.text}`}
               {row.form !== "" && formPill(row.form)}
             </li>
