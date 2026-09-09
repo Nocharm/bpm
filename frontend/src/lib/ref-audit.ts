@@ -12,12 +12,12 @@ export function isLineCheckable(line: RefLine, mode: RemapMode): boolean {
   return !(mode === "remove" && REMOVE_BLOCKED.has(line.source));
 }
 
-export function checkableTargets(group: RefGroup, mode: RemapMode): string[] {
+export function listCheckableTargets(group: RefGroup, mode: RemapMode): string[] {
   return group.lines.filter((ln) => isLineCheckable(ln, mode)).map((ln) => ln.target_id);
 }
 
 // 알림 대상 = 관리자가 고칠 수 없는 라인(노드 필드) — 서버 OWNER_ACTIONABLE의 부분집합
-export function notifyTargets(group: RefGroup): string[] {
+export function listNotifyTargets(group: RefGroup): string[] {
   return group.lines.filter((ln) => !ln.fixable).map((ln) => ln.target_id);
 }
 

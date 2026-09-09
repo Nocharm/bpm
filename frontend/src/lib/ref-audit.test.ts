@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import type { RefGroup, RefLine } from "@/lib/api";
 import {
-  checkableTargets,
   countNotifyOwners,
   isLineCheckable,
-  notifyTargets,
+  listCheckableTargets,
+  listNotifyTargets,
   summarizeSources,
 } from "@/lib/ref-audit";
 
@@ -40,15 +40,15 @@ describe("isLineCheckable", () => {
   });
 });
 
-describe("checkableTargets / notifyTargets", () => {
+describe("listCheckableTargets / listNotifyTargets", () => {
   it("replace: 고칠 수 있는 라인 전부", () => {
-    expect(checkableTargets(group, "replace")).toEqual(["map_owner:1", "map_collab:7"]);
+    expect(listCheckableTargets(group, "replace")).toEqual(["map_owner:1", "map_collab:7"]);
   });
   it("remove: 오너 제외", () => {
-    expect(checkableTargets(group, "remove")).toEqual(["map_collab:7"]);
+    expect(listCheckableTargets(group, "remove")).toEqual(["map_collab:7"]);
   });
   it("알림 대상은 체크 불가 라인(노드)만", () => {
-    expect(notifyTargets(group)).toEqual(["node_assignee:30", "node_assignee:31"]);
+    expect(listNotifyTargets(group)).toEqual(["node_assignee:30", "node_assignee:31"]);
   });
   it("알림 오너 수는 오너가 있는 노드 라인의 distinct owner", () => {
     expect(countNotifyOwners(group)).toBe(1);
