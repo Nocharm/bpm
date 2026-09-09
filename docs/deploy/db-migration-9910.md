@@ -237,7 +237,7 @@ docker exec -i "$DEV_DB" psql -U processmap -d processmap -c "SELECT count(*) FR
 
 ### 6-4. 고아 부서 경로 이관
 
-설정 → Departments 탭 — **소멸 부서 재지정 섹션이 테이블 위**에 뜬다. §6-1의 `orphan_dept_paths`에 있던 경로가 보이면 새 조직 경로로 재지정(맵 권한·그룹 멤버 일괄 이동). 고아가 없으면 섹션 자체가 안 뜨는 게 정상.
+설정 → 조직 → **Orphaned refs** 탭. §6-1의 `orphan_dept_paths`에 있던 경로가 "Missing departments"에 그룹으로 보이면 라인을 체크해 새 조직 경로로 재지정(맵 권한·그룹 멤버·오우닝 일괄). 노드 담당부서 라인은 체크 불가 — "Notify owners"로 오너에게 묶음 알림. 고아가 없으면 "No missing departments"가 정상.
 
 ---
 

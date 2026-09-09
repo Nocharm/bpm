@@ -31,7 +31,7 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-- [`design/2026-09-09-ref-audit-design.md`](design/2026-09-09-ref-audit-design.md) — 고아 참조 감사: 부서·사용자 참조 12곳 캐치·체크 기반 일괄 재지정·오너 알림·홈 배지 (승인, 구현 전).- [`design/2026-09-01-interview-import-v04-result.md`](design/2026-09-01-interview-import-v04-result.md) — 인터뷰 JSON 0.4 임포트 최종 결과·확장 계획·한계·후속 점검(핸드오프).
+- [`design/2026-09-09-ref-audit-design.md`](design/2026-09-09-ref-audit-design.md) — 고아 참조 감사: 부서·사용자 참조 12곳 캐치·체크 기반 일괄 재지정·오너 알림·홈 배지 (구현 완료, feat/ux-polish).- [`design/2026-09-01-interview-import-v04-result.md`](design/2026-09-01-interview-import-v04-result.md) — 인터뷰 JSON 0.4 임포트 최종 결과·확장 계획·한계·후속 점검(핸드오프).
 
 아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 

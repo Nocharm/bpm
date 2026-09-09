@@ -3,9 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-09 — 고아 참조 감사 설계 확정 (feat/ux-polish, 구현 전)
+## 2026-09-09 — 고아 참조 감사 구현 (feat/ux-polish)
 - **문제**: 기존 소멸 부서 재지정은 조직 경로 3곳(맵 부서 권한·그룹 부서 멤버·오우닝)만 봤다. 노드·SP 지정의 담당부서(리프명)·담당자(이름)와 사용자 참조(오너·협업자·승인자·그룹·카테고리)는 조직개편·퇴직 뒤 조용히 낡는다.
-- **결정**(`docs/design/2026-09-09-ref-audit-design.md`): 참조 12곳을 **온디맨드 스캔**(저장 테이블 없음) → 설정 > 조직 > "Orphaned refs" 새 탭에서 값별 그룹·라인 체크로 일괄 replace/remove(노드 필드는 드래프트 필요라 캐치·체크 불가), 오너에게 오너당 1건 묶음 알림(`ref_fix_requested`)·오너 교체 시 `owner_assigned`, 홈 카드 "Stale refs" 배지 + Owning 필터를 Issues로 확장. 노드 스캔은 게시본+최신 드래프트. 기존 `dept-remap` API·카드는 흡수·폐기. 구현 플랜 `docs/superpowers/plans/2026-09-09-ref-audit.md`(Task 10개: BE 스캔→API→FE 로직→알림→탭→홈→스모크·문서).
+- **구현**(`docs/design/2026-09-09-ref-audit-design.md`, 플랜 10 Task): 참조 12곳을 **온디맨드 스캔**(저장 테이블 없음, `app/ref_audit.py`) → 설정 > 조직 > "Orphaned refs" 탭에서 값별 그룹·라인 체크로 일괄 replace/remove(노드 필드는 드래프트 필요라 캐치·체크 불가), 오너에게 오너당 1건 묶음 알림(`ref_fix_requested`)·오너 교체 시 `owner_assigned`, 홈 카드 "Stale refs" 배지 + Owning 필터를 Issues로 확장. 노드 스캔은 게시본+최신 드래프트. 데모 시드 `backend/scripts/seed_ref_audit_demo.py` + 브라우저 스모크 `frontend/scripts/pw-smoke-ref-audit.mjs`(10/10 PASS) 추가.
+- **검증**: backend pytest·ruff 전체 그린, frontend tsc·lint·vitest·컴포넌트 카탈로그 그린. 포트 8047/3047으로 스모크 확인.
+- **랜드마인**: 그룹 카드 인터랙티브 `data-id`는 Task 8 수정으로 `${kind}-${value_kind}-${value}` 접미사가 붙어 `^=` prefix 스코프 필요. `ref-audit-panel`은 GET 완료 전에도 마운트돼 `.count()` 즉시 호출은 로딩 중 0으로 오탐(그룹 로케이터 `waitFor` 선행 필요). 부서 뷰는 아코디언 미펼침 시 `MapCard` 언마운트라 배지 확인은 검색(평면 목록)으로 우회. 인박스는 좁은 화면용 카드-아래 아코디언이 상세를 이중 마운트(`split:hidden`)해 칩 개수가 2배로 잡히므로 우측 aside로 스코프.
 
 ## 2026-09-09 — 임포트 리포트 UI 4종: 세그먼트 토글·L5 미리보기·3노드 높이·노트 내용 diff (feat/ux-polish)
 - **거버넌스 유지/교체 드롭다운 재디자인** — 컨트롤은 드롭다운 그대로 두고 **펼친 목록만** 앱 디자인으로(네이티브 `option` 목록은 OS가 그려 리포트 톤과 어긋났다). 트리거+포털 목록(체크 표시·아이콘·hover), 섹션 본문이 `max-h` 스크롤이라 `absolute`면 잘려 body 포털+fixed(z 1250, SearchSelect와 같은 계약)·아래 공간 부족 시 위로 플립. 스모크는 `selectOption` → 트리거 열고 `-replace` 클릭으로 이관.
