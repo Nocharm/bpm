@@ -294,6 +294,22 @@ def test_count_stale_refs_by_map(client: TestClient) -> None:
     assert counts[user_ids["map"]] == 3
 
 
+def test_get_ref_audit_requires_sysadmin_and_returns_sections(
+    client: TestClient, sysadmin_enforced: None
+) -> None:
+    ids = asyncio.run(_seed_dept_refs())
+    res = client.get("/api/admin/ref-audit", headers=SYS)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert set(body) == {"departments", "users", "generated_at"}
+    group = next(g for g in body["departments"] if g["value"] == GONE)
+    assert group["kind"] == "dept" and group["value_kind"] == "path"
+    line = next(ln for ln in group["lines"] if ln["map_id"] == ids["map"] and ln["source"] == "map_grant")
+    assert line["fixable"] is True and line["target_id"].startswith("map_grant:")
+    assert client.get("/api/admin/ref-audit", headers={"X-Dev-User": "user.lee"}).status_code == 403
+    assert client.get("/api/admin/dept-remap", headers=SYS).status_code in (404, 405)
+
+
 def test_scan_user_refs_skips_blank_logins(client: TestClient) -> None:
     """빈 로그인 값은 고아가 아니다 — 5개 login 소스 전부에 빈 principal_id/user_id/member_id가 있어도 미노출."""
     from app.models import CategoryPermission, MapApprover, ProcessCategory

@@ -40,6 +40,7 @@ from app.orgchart import (
     resolve_org_path,
 )
 from app.permissions.logic import is_sysadmin, role_rank
+from app import ref_audit
 from app.settings import settings
 from app.schemas import (
     AdminDeptOut,
@@ -49,11 +50,11 @@ from app.schemas import (
     AdminDirectoryOut,
     AdminUserOut,
     DeptRemapIn,
-    DeptRemapItemOut,
     DeptRemapOut,
     NotificationBulkDeleteOut,
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
+    RefAuditOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -138,52 +139,15 @@ async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
     return await load_valid_org_prefixes(session, active_only=True)
 
 
-@router.get("/dept-remap", response_model=list[DeptRemapItemOut])
-async def list_missing_dept_refs(
+@router.get("/ref-audit", response_model=RefAuditOut)
+async def get_ref_audit(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[DeptRemapItemOut]:
-    """sysadmin 전용 — 현 조직에 없는 부서 경로를 참조 중인 맵 권한·그룹 멤버·오우닝 맵 집계 (조직개편 잔재)."""
+) -> RefAuditOut:
+    """sysadmin 전용 — 현 조직에 없는 부서·사용자를 참조하는 12곳 온디맨드 스캔 (design 2026-09-09)."""
     _require_sysadmin(login_id)
-    valid = await _load_valid_org_paths(session)
-    grant_counts = dict(
-        (
-            await session.execute(
-                select(MapPermission.principal_id, func.count())
-                .where(MapPermission.principal_type == "department")
-                .group_by(MapPermission.principal_id)
-            )
-        ).all()
-    )
-    member_counts = dict(
-        (
-            await session.execute(
-                select(UserGroupMember.member_id, func.count())
-                .where(UserGroupMember.member_type == "department")
-                .group_by(UserGroupMember.member_id)
-            )
-        ).all()
-    )
-    # 오우닝 부서 참조 — 홈 "내 부서" 트리가 이 값으로 묶이므로 이관 대상에서 빠지면 맵이 미아가 된다
-    owning_counts = dict(
-        (
-            await session.execute(
-                select(ProcessMap.owning_department, func.count())
-                .where(ProcessMap.owning_department.is_not(None))
-                .group_by(ProcessMap.owning_department)
-            )
-        ).all()
-    )
-    missing = sorted((set(grant_counts) | set(member_counts) | set(owning_counts)) - valid)
-    return [
-        DeptRemapItemOut(
-            path=path,
-            map_grants=grant_counts.get(path, 0),
-            group_members=member_counts.get(path, 0),
-            owning_maps=owning_counts.get(path, 0),
-        )
-        for path in missing
-    ]
+    departments, users = await ref_audit.scan_refs(session)
+    return RefAuditOut(departments=departments, users=users, generated_at=now_kst())
 
 
 @router.post("/dept-remap", response_model=DeptRemapOut)
