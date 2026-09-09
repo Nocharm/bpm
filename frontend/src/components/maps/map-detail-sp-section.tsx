@@ -323,36 +323,23 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
             {attrsOpen && (
               <div className="ml-2 border-l border-divider pl-2">
                 <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1.5fr_3fr] @[40rem]:grid-rows-[repeat(2,auto)]">
-                  {/* 부서 타일은 자연 높이(긴 부서명이 다 보이게) — 행 높이를 정한다. 담당자는 그 높이에 맞춰 클립 */}
-                  <div className="flex @[40rem]:row-span-2">
-                    <div
-                      data-id="map-detail-sp-department"
-                      data-filled={deptPath !== "" ? "true" : "false"}
-                      title={deptOrgPath || undefined}
-                      className={`flex min-w-0 flex-1 flex-col gap-1.5 rounded-sm border px-2.5 py-2 ${deptPath !== "" ? FILLED_TONE : EMPTY_TONE}`}
-                    >
-                      {vertHead(Building2, t("field.department"), deptPath !== "")}
-                      {deptPath !== "" && (
-                        <div className="flex min-w-0 flex-col items-start gap-1">
-                          {/* 말단 부서 — 줄바꿈되는 둥근 사각형(클릭하면 조직 정보 모달: 경로·구성인원·하위 조직) */}
-                          <DeptPill
-                            department={deptOrgPath}
-                            label={deptPrimary}
-                            variant="block"
-                            dataId="map-detail-sp-department-pill"
-                          />
-                          {deptSecondary !== "" && (
-                            <span
-                              data-id="map-detail-sp-department-alt"
-                              className="w-full break-keep text-fine text-ink-tertiary"
-                              title={deptSecondary}
-                            >
-                              {deptSecondary}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                  {/* 부서는 값이 있으면 필 자체가 타일(헤더 생략) — 없을 때만 비활성 헤더 타일 (사용자 지시 2026-09-09).
+                      자연 높이라 긴 부서명이 다 보이고, 행 높이를 이 타일이 정한다(담당자는 그 높이에 맞춰 클립) */}
+                  <div className="flex @[40rem]:row-span-2" data-id="map-detail-sp-department" data-filled={deptPath !== "" ? "true" : "false"}>
+                    {deptPath !== "" ? (
+                      <DeptPill
+                        department={deptOrgPath}
+                        label={deptPrimary}
+                        subLabel={deptSecondary || undefined}
+                        variant="block"
+                        fill
+                        dataId="map-detail-sp-department-pill"
+                      />
+                    ) : (
+                      <div className={`flex min-w-0 flex-1 flex-col gap-1.5 rounded-sm border px-2.5 py-2 ${EMPTY_TONE}`}>
+                        {vertHead(Building2, t("field.department"), false)}
+                      </div>
+                    )}
                   </div>
                   <div className="relative h-32 @[40rem]:row-span-2 @[40rem]:h-auto">
                     <div
@@ -380,8 +367,9 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                   <div className="col-span-2 @[40rem]:col-span-1">
                     {readTile("system", Monitor, t("field.system"), str(detail.sp_system), str(detail.sp_system_fallback))}
                   </div>
-                  {/* GMP·URL — 시스템 아래 한 줄, 1:2 (사용자 지시 2026-09-09) */}
-                  <div className="col-span-2 grid grid-cols-[1fr_2fr] gap-1.5 @[40rem]:col-span-1">
+                  {/* GMP·URL — 시스템 아래 한 줄. URL은 값이 있을 때만 폭(1:2)을 차지하고, 없으면 아이콘 타일로
+                      줄어 GMP가 남는 폭을 가져간다 (사용자 지시 2026-09-09) */}
+                  <div className={`col-span-2 grid gap-1.5 @[40rem]:col-span-1 ${url !== "" ? "grid-cols-[1fr_2fr]" : "grid-cols-[1fr_auto]"}`}>
                     {readTile(
                       "gmp",
                       ShieldCheck,
@@ -394,13 +382,13 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                         </span>
                       ) : undefined,
                     )}
-                    {readTile(
-                      "url",
-                      LinkIcon,
-                      t("field.url"),
-                      "",
-                      "",
-                      url !== "" ? (
+                    {url !== "" ? (
+                      readTile(
+                        "url",
+                        LinkIcon,
+                        t("field.url"),
+                        "",
+                        "",
                         <a
                           href={url}
                           target="_blank"
@@ -409,8 +397,17 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                           className="min-w-0 truncate text-accent underline underline-offset-2"
                         >
                           {str(detail.sp_url_label) || url}
-                        </a>
-                      ) : undefined,
+                        </a>,
+                      )
+                    ) : (
+                      <div
+                        data-id="map-detail-sp-tile-url"
+                        data-filled="false"
+                        title={`${t("field.url")}: ${notSet}`}
+                        className={`flex w-9 items-center justify-center rounded-sm border ${EMPTY_TONE}`}
+                      >
+                        <LinkIcon size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      </div>
                     )}
                   </div>
                 </div>
