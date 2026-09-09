@@ -15,11 +15,13 @@ export const DETAIL_CLIP_HEIGHT_PX = 136;
 
 interface MapDetailDescriptionProps {
   description: string | null | undefined;
+  // 접힘은 부모가 통제 — 이 헤더의 체브론이 옆 노트 섹션까지 같이 접는다 (사용자 지시 2026-09-09)
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
-export function MapDetailDescription({ description }: MapDetailDescriptionProps) {
+export function MapDetailDescription({ description, collapsed, onToggle }: MapDetailDescriptionProps) {
   const { t } = useI18n();
-  const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState(false);
   const { ref, overflowing } = useClipOverflow(DETAIL_CLIP_HEIGHT_PX);
 
@@ -33,7 +35,7 @@ export function MapDetailDescription({ description }: MapDetailDescriptionProps)
         icon={AlignLeft}
         title={t("field.description")}
         collapsed={collapsed}
-        onToggle={() => setCollapsed((v) => !v)}
+        onToggle={onToggle}
         right={
           !collapsed && overflowing ? (
             <ClipToggle dataId="map-detail-description-expand" open={open} onToggle={() => setOpen((v) => !v)} />

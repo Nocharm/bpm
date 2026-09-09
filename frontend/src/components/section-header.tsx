@@ -13,32 +13,40 @@ interface SectionHeaderProps {
   icon?: LucideIcon;
   count?: number;
   collapsed: boolean;
-  onToggle: () => void;
+  // 없으면 접기 토글 없는 정적 헤더(체브론도 안 그린다) — 접힘을 다른 섹션이 통제할 때(홈 노트) (사용자 지시 2026-09-09)
+  onToggle?: () => void;
   right?: ReactNode;
   // 톤다운 — 비활성 느낌의 섹션(SP 미지정 맵의 서브프로세스 정보)
   muted?: boolean;
 }
 
 export function SectionHeader({ dataId, title, icon: Icon, count, collapsed, onToggle, right, muted }: SectionHeaderProps) {
-  return (
-    <div className="flex h-5 shrink-0 items-center gap-1">
-      <button
-        type="button"
-        data-id={dataId}
-        data-acc-toggle
-        aria-expanded={!collapsed}
-        onClick={onToggle}
-        className={`flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold ${muted ? "text-ink-secondary" : "text-ink"}`}
-      >
+  const inner = (
+    <>
+      {onToggle && (
         <ChevronRight
           size={12}
           strokeWidth={1.5}
           className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
         />
-        {Icon && <Icon size={14} strokeWidth={1.5} className={`mr-0.5 shrink-0 ${muted ? "text-ink-tertiary" : "text-accent"}`} />}
-        <span className="min-w-0 truncate">{title}</span>
-        {count !== undefined && <span className="font-normal text-ink-tertiary">({count})</span>}
-      </button>
+      )}
+      {Icon && <Icon size={14} strokeWidth={1.5} className={`mr-0.5 shrink-0 ${muted ? "text-ink-tertiary" : "text-accent"}`} />}
+      <span className="min-w-0 truncate">{title}</span>
+      {count !== undefined && <span className="font-normal text-ink-tertiary">({count})</span>}
+    </>
+  );
+  const className = `flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold ${muted ? "text-ink-secondary" : "text-ink"}`;
+  return (
+    <div className="flex h-5 shrink-0 items-center gap-1">
+      {onToggle ? (
+        <button type="button" data-id={dataId} data-acc-toggle aria-expanded={!collapsed} onClick={onToggle} className={className}>
+          {inner}
+        </button>
+      ) : (
+        <span data-id={dataId} className={className}>
+          {inner}
+        </span>
+      )}
       {right}
     </div>
   );

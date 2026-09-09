@@ -221,6 +221,8 @@ export function MapDetailCard({
   const [orgPathById, setOrgPathById] = useState<Map<string, string>>(new Map());
   // org_path → 확정 한글 부서명(dept_info) — 이름과 같은 규칙으로 부서도 언어 토글 (없으면 영문 폴백)
   const [koreanDeptByPath, setKoreanDeptByPath] = useState<Map<string, string>>(new Map());
+  // 상단 3:2 행(설명·노트)의 공통 접힘 — 설명 헤더의 체브론이 둘을 함께 접는다 (사용자 지시 2026-09-09)
+  const [topCollapsed, setTopCollapsed] = useState(false);
   // 우클릭 컨텍스트 메뉴 — 인물 행=메신저 보내기 · 부서/오우닝=조직 정보 (feedback 2026-08-14)
   const [personMenu, setPersonMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [orgMenu, setOrgMenu] = useState<{ path: string; x: number; y: number } | null>(null);
@@ -934,14 +936,19 @@ export function MapDetailCard({
           세로 쌓임. 그 아래 서브프로세스 정보(SP 지정값 + 원문 메모 타일) — 비SP 맵이면 렌더되지 않는다
           (사용자 결정 2026-09-09, 목업 v5) */}
       <div className="grid gap-3 @[40rem]:grid-cols-[3fr_2fr]">
-        <MapDetailDescription description={detail.description} />
+        {/* 설명 헤더의 체브론이 두 섹션을 함께 접는다 — 노트 헤더엔 펼치기/줄이기만 (사용자 지시 2026-09-09) */}
+        <MapDetailDescription
+          description={detail.description}
+          collapsed={topCollapsed}
+          onToggle={() => setTopCollapsed((v) => !v)}
+        />
         <MapNotesSection
           scope={{ mapId: detail.id }}
           canEdit={isOwner}
           icon={StickyNote}
           layout="cards"
           clipHeight={DETAIL_CLIP_HEIGHT_PX}
-          defaultCollapsed={false}
+          collapsed={topCollapsed}
         />
       </div>
       <MapDetailSpSection detail={detail} koreanDeptByPath={koreanDeptByPath} />

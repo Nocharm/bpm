@@ -44,6 +44,9 @@ interface MapNotesSectionProps {
   clipHeight?: number;
   // 기본 접힘 — 인스펙터 카드는 접힘(2026-08-20), 홈 상세 카드는 펼침
   defaultCollapsed?: boolean;
+  // 접힘을 부모가 통제 — 주면 헤더에 접기 토글이 없고(펼치기/줄이기만) 설명 섹션과 같이 접힌다
+  // (홈 상세 카드, 사용자 지시 2026-09-09)
+  collapsed?: boolean;
 }
 
 // 프리셋 kind — 임포트가 쓰는 어휘와 동일. 라벨은 i18n, 그 외 kind는 원문 표기
@@ -75,12 +78,14 @@ const stripBrackets = (raw: string): string => raw.replace(/^\[/, "").replace(/\
 
 export function MapNotesSection({
   scope, canEdit = false, onToast, icon, layout = "list", clipHeight, defaultCollapsed = true,
+  collapsed: collapsedProp,
 }: MapNotesSectionProps) {
   const { t } = useI18n();
   const key = scopeKey(scope);
   const [loaded, setLoaded] = useState<{ key: string; notes: MapNote[]; canEdit: boolean } | null>(null);
   // 기본 접힘 — 노트는 참고 정보라 필요할 때만 펼친다 (사용자 결정 2026-08-20)
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [ownCollapsed, setOwnCollapsed] = useState(defaultCollapsed);
+  const collapsed = collapsedProp ?? ownCollapsed;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [deleting, setDeleting] = useState<MapNote | null>(null);
   const [busy, setBusy] = useState(false);
@@ -123,7 +128,7 @@ export function MapNotesSection({
   };
 
   function openNew() {
-    setCollapsed(false);
+    setOwnCollapsed(false);
     setError(null);
     setDraft({ id: null, kind: "note", title: "", text: "", original: { kind: "note", title: "", text: "" } });
   }
@@ -471,7 +476,7 @@ export function MapNotesSection({
         title={t("notes.title")}
         count={notes.length}
         collapsed={collapsed}
-        onToggle={() => setCollapsed((v) => !v)}
+        onToggle={collapsedProp === undefined ? () => setOwnCollapsed((v) => !v) : undefined}
         right={
           <>
             {effectiveCanEdit && (

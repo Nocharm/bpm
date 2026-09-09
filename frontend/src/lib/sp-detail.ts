@@ -1,4 +1,4 @@
-// 홈 맵 상세 서브프로세스 섹션의 순수 로직 — 타일 값/원문 해석, 입출력 줄 파싱, 섹션 노출 판정.
+// 홈 맵 상세 서브프로세스 섹션의 순수 로직 — 타일 값/원문 해석, 입출력 행(텍스트+형식) 파싱, 섹션 노출 판정.
 // 렌더 없는 함수만 두어 단위 테스트한다(컴포넌트는 components/maps/map-detail-sp-section.tsx).
 
 import type { MapSummary } from "@/lib/api";
@@ -17,12 +17,20 @@ export function resolveValueOrNote(
   return { value: "", tone: "default" };
 }
 
-/** 입력물/산출물 저장값(줄바꿈 구분) → 항목 목록. 빈 줄은 버린다 */
-export function parseIoLines(joined: string | null | undefined): string[] {
+export interface IoRow {
+  text: string;
+  // 항목별 데이터 형식(sp_input_forms/sp_output_forms의 같은 줄) — 없으면 ""
+  form: string;
+}
+
+/** 입력물/산출물 저장값(줄바꿈 구분) → 항목 행. 형식은 줄 번호로 1:1 정렬(빈 줄=미지정),
+ *  텍스트가 빈 줄은 버리되 형식 정렬이 밀리지 않게 원래 인덱스로 짝짓는다. */
+export function parseIoRows(joined: string | null | undefined, forms?: string | null): IoRow[] {
+  const formLines = (forms ?? "").split("\n");
   return (joined ?? "")
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
+    .map((line, i) => ({ text: line.trim(), form: (formLines[i] ?? "").trim() }))
+    .filter((row) => row.text !== "");
 }
 
 export type SpDetailFields = Pick<

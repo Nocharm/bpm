@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countFilledSpTiles, hasSpContent, parseIoLines, resolveValueOrNote } from "./sp-detail";
+import { countFilledSpTiles, hasSpContent, parseIoRows, resolveValueOrNote } from "./sp-detail";
 
 describe("resolveValueOrNote", () => {
   it("prefers the representative value", () => {
@@ -15,10 +15,32 @@ describe("resolveValueOrNote", () => {
   });
 });
 
-describe("parseIoLines", () => {
-  it("splits by newline, trims, drops blanks", () => {
-    expect(parseIoLines(" 교정 작업지시 \n\n준비 목록\n")).toEqual(["교정 작업지시", "준비 목록"]);
-    expect(parseIoLines(null)).toEqual([]);
+describe("parseIoRows", () => {
+  it("splits by newline, trims, drops blank text rows", () => {
+    expect(parseIoRows(" 교정 작업지시 \n\n준비 목록\n")).toEqual([
+      { text: "교정 작업지시", form: "" },
+      { text: "준비 목록", form: "" },
+    ]);
+    expect(parseIoRows(null)).toEqual([]);
+  });
+  it("pairs each item with the data form on the same line", () => {
+    expect(parseIoRows("작업지시\n대장\n성적서", "Excel\n\nPDF")).toEqual([
+      { text: "작업지시", form: "Excel" },
+      { text: "대장", form: "" },
+      { text: "성적서", form: "PDF" },
+    ]);
+  });
+  it("keeps the form aligned by original line index when a text line is blank", () => {
+    expect(parseIoRows("작업지시\n\n성적서", "Excel\nCSV\nPDF")).toEqual([
+      { text: "작업지시", form: "Excel" },
+      { text: "성적서", form: "PDF" },
+    ]);
+  });
+  it("tolerates a shorter or missing forms column", () => {
+    expect(parseIoRows("a\nb", "Excel")).toEqual([
+      { text: "a", form: "Excel" },
+      { text: "b", form: "" },
+    ]);
   });
 });
 

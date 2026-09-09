@@ -36,11 +36,12 @@ import type { MapDetail } from "@/lib/api";
 import { parseAssignees } from "@/lib/assignee";
 import { formatKst } from "@/lib/datetime";
 import { useDirectory } from "@/lib/directory";
+import { resolveDataForm } from "@/lib/data-forms";
 import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
 import { formatParamValue, PARAM_LABEL_KEY } from "@/lib/params";
-import { countFilledSpTiles, hasSpContent, parseIoLines, resolveValueOrNote } from "@/lib/sp-detail";
+import { countFilledSpTiles, hasSpContent, parseIoRows, resolveValueOrNote, type IoRow } from "@/lib/sp-detail";
 
 interface MapDetailSpSectionProps {
   detail: MapDetail;
@@ -199,22 +200,38 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   ].filter(Boolean).length;
 
   // ── 입출력 · 조건 ──
-  const inputs = parseIoLines(detail.sp_input);
-  const outputs = parseIoLines(detail.sp_output);
+  const inputs = parseIoRows(detail.sp_input, detail.sp_input_forms);
+  const outputs = parseIoRows(detail.sp_output, detail.sp_output_forms);
   const startCondition = str(detail.sp_start_condition);
   const endCondition = str(detail.sp_end_condition);
   const detailCount = [inputs.length > 0, outputs.length > 0, startCondition !== "", endCondition !== ""].filter(Boolean).length;
   const ioFilled = inputs.length > 0 || outputs.length > 0;
 
-  // 입력물/산출물 반쪽 — 글머리 목록. 높이는 내용에 맞추고 상한은 3줄 클램프(넘치면 말줄임) (사용자 지시 2026-09-09)
-  const ioHalf = (field: "input" | "output", icon: LucideIcon, label: string, items: string[]) => (
+  // 항목별 데이터 형식 필 — 카탈로그에 있으면 아이콘 동반(MultiValueInput 읽기 필과 같은 문법), 미지는 글자만
+  const formPill = (form: string) => {
+    const matched = resolveDataForm(form);
+    const FormIcon = matched?.icon;
+    return (
+      <span
+        // indent-0 — 글머리 행의 음수 들여쓰기가 필 안까지 상속돼 아이콘과 글자가 겹치는 것을 막는다
+        className="ml-1 inline-flex shrink-0 items-center gap-0.5 rounded-xs border border-hairline bg-surface px-1 align-[1px] indent-0 text-[11px] font-normal text-ink-tertiary"
+      >
+        {FormIcon && <FormIcon size={10} strokeWidth={1.5} className="shrink-0" />}
+        {matched?.value ?? form}
+      </span>
+    );
+  };
+
+  // 입력물/산출물 반쪽 — 글머리 목록 + 항목별 데이터 형식. 높이는 내용에 맞추고 상한은 3줄 클램프(넘치면 말줄임)
+  const ioHalf = (field: "input" | "output", icon: LucideIcon, label: string, rows: IoRow[]) => (
     <div data-id={`map-detail-sp-${field}`} className="flex min-h-0 flex-1 flex-col gap-1 px-2.5 py-1.5">
-      {vertHead(icon, label, items.length > 0)}
-      {items.length > 0 && (
+      {vertHead(icon, label, rows.length > 0)}
+      {rows.length > 0 && (
         <ul className="line-clamp-3 text-fine leading-normal break-keep text-ink-secondary">
-          {items.map((item, i) => (
-            <li key={`${i}-${item}`} className="pl-2.5 -indent-2.5">
-              {`• ${item}`}
+          {rows.map((row, i) => (
+            <li key={`${i}-${row.text}`} data-id={`map-detail-sp-${field}-row`} className="pl-2.5 -indent-2.5">
+              {`• ${row.text}`}
+              {row.form !== "" && formPill(row.form)}
             </li>
           ))}
         </ul>
@@ -287,29 +304,34 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
       />
       {!collapsed && (
         <div className="mt-1 flex flex-col">
-          {/* BPM 속성 — 부서·담당자 세로 타일(3행 높이, 넘치면 클립) + 시스템·URL·GMP 스택 */}
+          {/* BPM 속성 — 부서(자연 높이)·담당자(클립) 세로 타일 + 시스템 / GMP·URL(1:2) 2행 스택 */}
           <div className="py-1" data-id="map-detail-sp-attrs">
             {groupHeader("map-detail-sp-attrs-toggle", attrsOpen, () => setAttrsOpen((v) => !v), t("editor.bpmAttrs"), attrCount)}
             {attrsOpen && (
               <div className="ml-2 border-l border-divider pl-2">
-                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1.5fr_3fr] @[40rem]:grid-rows-[repeat(3,auto)]">
-                  {/* 세로 타일은 absolute로 셀을 채운다 — 행 높이는 스택 타일 3개가 정하고, 넘치는 인물 필은 잘린다 */}
-                  <div className="relative h-32 @[40rem]:row-span-3 @[40rem]:h-auto">
+                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1.5fr_3fr] @[40rem]:grid-rows-[repeat(2,auto)]">
+                  {/* 부서 타일은 자연 높이(긴 부서명이 다 보이게) — 행 높이를 정한다. 담당자는 그 높이에 맞춰 클립 */}
+                  <div className="flex @[40rem]:row-span-2">
                     <div
                       data-id="map-detail-sp-department"
                       data-filled={deptPath !== "" ? "true" : "false"}
                       title={deptOrgPath || undefined}
-                      className={`absolute inset-0 flex flex-col gap-1.5 overflow-hidden rounded-sm border px-2.5 py-2 ${deptPath !== "" ? FILLED_TONE : EMPTY_TONE}`}
+                      className={`flex min-w-0 flex-1 flex-col gap-1.5 rounded-sm border px-2.5 py-2 ${deptPath !== "" ? FILLED_TONE : EMPTY_TONE}`}
                     >
                       {vertHead(Building2, t("field.department"), deptPath !== "")}
                       {deptPath !== "" && (
-                        <div className="flex min-h-0 flex-col items-start gap-1">
-                          {/* 말단 부서 필(UI 언어 이름) — 클릭하면 조직 정보 모달(경로·구성인원·하위 조직) */}
-                          <DeptPill department={deptOrgPath} label={deptPrimary} dataId="map-detail-sp-department-pill" />
+                        <div className="flex min-w-0 flex-col items-start gap-1">
+                          {/* 말단 부서 — 줄바꿈되는 둥근 사각형(클릭하면 조직 정보 모달: 경로·구성인원·하위 조직) */}
+                          <DeptPill
+                            department={deptOrgPath}
+                            label={deptPrimary}
+                            variant="block"
+                            dataId="map-detail-sp-department-pill"
+                          />
                           {deptSecondary !== "" && (
                             <span
                               data-id="map-detail-sp-department-alt"
-                              className="w-full truncate text-fine text-ink-tertiary"
+                              className="w-full break-keep text-fine text-ink-tertiary"
                               title={deptSecondary}
                             >
                               {deptSecondary}
@@ -319,7 +341,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                       )}
                     </div>
                   </div>
-                  <div className="relative h-32 @[40rem]:row-span-3 @[40rem]:h-auto">
+                  <div className="relative h-32 @[40rem]:row-span-2 @[40rem]:h-auto">
                     <div
                       data-id="map-detail-sp-assignee"
                       data-filled={names.length > 0 ? "true" : "false"}
@@ -345,7 +367,20 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                   <div className="col-span-2 @[40rem]:col-span-1">
                     {readTile("system", Monitor, t("field.system"), str(detail.sp_system), str(detail.sp_system_fallback))}
                   </div>
-                  <div className="col-span-2 @[40rem]:col-span-1">
+                  {/* GMP·URL — 시스템 아래 한 줄, 1:2 (사용자 지시 2026-09-09) */}
+                  <div className="col-span-2 grid grid-cols-[1fr_2fr] gap-1.5 @[40rem]:col-span-1">
+                    {readTile(
+                      "gmp",
+                      ShieldCheck,
+                      t("field.gmp"),
+                      "",
+                      str(detail.sp_gmp_fallback),
+                      gmpText !== "" && detail.sp_gmp ? (
+                        <span className="rounded-full px-1.5 py-0.5 text-fine font-normal" style={getGmpBadgeStyle(detail.sp_gmp)}>
+                          {gmpText}
+                        </span>
+                      ) : undefined,
+                    )}
                     {readTile(
                       "url",
                       LinkIcon,
@@ -362,20 +397,6 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                         >
                           {str(detail.sp_url_label) || url}
                         </a>
-                      ) : undefined,
-                    )}
-                  </div>
-                  <div className="col-span-2 @[40rem]:col-span-1">
-                    {readTile(
-                      "gmp",
-                      ShieldCheck,
-                      t("field.gmp"),
-                      "",
-                      str(detail.sp_gmp_fallback),
-                      gmpText !== "" && detail.sp_gmp ? (
-                        <span className="rounded-full px-1.5 py-0.5 text-fine font-normal" style={getGmpBadgeStyle(detail.sp_gmp)}>
-                          {gmpText}
-                        </span>
                       ) : undefined,
                     )}
                   </div>
