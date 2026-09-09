@@ -108,21 +108,32 @@ try {
       (await api("/notifications")).some((n) => n.type === "owner_assigned" && n.map_id === ownerMap.id));
 
   // [6] 홈 배지 + Issues 필터
-  // 부서 뷰는 카드가 접힌 아코디언 안에 있어 펼치기 전엔 마운트되지 않는다 — 검색으로 평면 목록(renderRow)에
-  // 태워 배지를 즉시 노출시킨다("Ref demo" 검색어는 이번 데모 맵 2개만 매치).
+  // 부서 뷰는 카드가 접힌 아코디언 안에 있어 펼치기 전엔 마운트되지 않는다 — 검색 대신 실제 트리 토글을
+  // 3단(Old Division→Old Office→Old Team) 펼쳐 데모 맵 카드를 노출시킨다("Unassigned department"
+  // 섹션은 기본 펼침이라 배지 없는 카드 기준선도 검색 없이 이미 존재한다).
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.locator('[data-id="home-map-search"]').fill("Ref demo");
+  await page.locator('[data-id="org-node-toggle"][data-path="Old Division"]').click();
+  await page.locator('[data-id="org-node-toggle"][data-path="Old Division/Old Office"]').click();
+  await page.locator('[data-id="org-node-toggle"][data-path="Old Division/Old Office/Old Team"]').click();
   const badge = page.locator('[data-id="map-card-stale-refs"]');
   await badge.first().waitFor({ timeout: 10000 });
   check("[6] stale refs badge on home card", (await badge.count()) >= 1);
   await page.screenshot({ path: `${SHOT_DIR}/shot-home-badge.png`, fullPage: true });
+
+  const mapCard = () => page.locator('[data-id="map-card"]');
+  const mapCardWithBadge = () => page.locator('[data-id="map-card"]:has([data-id="map-card-stale-refs"])');
+  const totalBefore = await mapCard().count();
+  const withBadgeBefore = await mapCardWithBadge().count();
+  check("[6a] some cards lack the badge before filtering (baseline diversity)",
+    totalBefore > withBadgeBefore, `total=${totalBefore} withBadge=${withBadgeBefore}`);
+
   await page.locator('[data-id="home-owning-filter"]').click();
   await page.getByText("Stale references").first().click();
   await page.locator('[data-id="home-owning-filter"]').click(); // 드롭다운 닫기(카드 리렌더 대기)
-  const cards = await page.locator('[data-id^="map-card"] [data-id="map-card-stale-refs"]').count();
-  const allCards = await page.locator('[data-id="map-card-stale-refs"]').count();
-  check("[6b] Issues filter keeps only stale-ref maps", cards === allCards && allCards >= 1,
-    `cards=${cards} allCards=${allCards}`);
+  const totalAfter = await mapCard().count();
+  const withBadgeAfter = await mapCardWithBadge().count();
+  check("[6b] Issues filter keeps only stale-ref maps",
+    totalAfter >= 1 && withBadgeAfter === totalAfter, `total=${totalAfter} withBadge=${withBadgeAfter}`);
 
   // [7] 인박스 렌더
   // 좁은 화면용 카드-아래 아코디언(`notification-detail-accordion`, split:hidden)도 같은 상세를 마운트해
