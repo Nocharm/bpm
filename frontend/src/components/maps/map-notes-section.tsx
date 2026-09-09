@@ -6,8 +6,10 @@
 
 import { Pencil, Plus, Trash2, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ClipBody, ClipToggle, useClipOverflow } from "@/components/clip-body";
+import { ModalBackdrop } from "@/components/modal-backdrop";
 import { SectionHeader } from "@/components/section-header";
 import {
   createCategoryNote,
@@ -206,25 +208,10 @@ export function MapNotesSection({
     }
   }
 
-  const renderForm = () =>
+  // 폼 필드 — 인라인 li(에디터 맵 탭 등)와 모달(홈 카드형)이 공유
+  const renderFormFields = () =>
     draft && (
-      <li
-        data-id="map-note-form"
-        className="flex flex-col gap-1.5 rounded-sm border border-accent-tint-border bg-accent-tint/30 p-2"
-        onKeyDown={(e) => {
-          // Esc=저장 없이 닫기, ⌘/Ctrl+Enter=저장하고 닫기 — 타일 팝오버와 같은 키 규칙
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            setDraft(null);
-            return;
-          }
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void save(true);
-          }
-        }}
-      >
+      <>
         {/* kind — 프리셋 칩 + 자유 입력('[' 자동완성) */}
         <div className="flex flex-wrap items-center gap-1">
           {PRESET_KINDS.map((k) => (
@@ -315,6 +302,29 @@ export function MapNotesSection({
           onChange={(e) => setDraft({ ...draft, text: e.target.value })}
         />
         {error && <p className="text-fine text-error">{error}</p>}
+      </>
+    );
+
+  const renderForm = () =>
+    draft && (
+      <li
+        data-id="map-note-form"
+        className="flex flex-col gap-1.5 rounded-sm border border-accent-tint-border bg-accent-tint/30 p-2"
+        onKeyDown={(e) => {
+          // Esc=저장 없이 닫기, ⌘/Ctrl+Enter=저장하고 닫기 — 타일 팝오버와 같은 키 규칙
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            setDraft(null);
+            return;
+          }
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void save(true);
+          }
+        }}
+      >
+        {renderFormFields()}
         {/* 공용 푸터 — 변경 없음 Cancel / 있음 Save(저장하고 닫기) / 메뉴 Save(계속 편집)·Save and close·Close without saving */}
         <PopoverActionBar
           dataId="map-note"
@@ -328,12 +338,62 @@ export function MapNotesSection({
       </li>
     );
 
+  // 카드형(홈)은 폼을 섹션 안이 아니라 모달로 — 접힘 높이 안에 폼이 들어갈 자리가 없다 (사용자 지시 2026-09-09).
+  // 취소·확정(저장하고 닫기) 두 버튼, ⌘/Ctrl+Enter=확정, Esc·바깥 누름=취소(ModalBackdrop)
+  const renderModal = () => {
+    if (!draft) return null;
+    const Icon = icon;
+    return createPortal(
+      <ModalBackdrop
+        onClose={() => setDraft(null)}
+        className="fixed inset-0 z-[1200] flex items-start justify-center bg-ink/20 px-4 pt-[12vh] backdrop-blur-sm"
+      >
+        <div
+          data-id="map-note-modal"
+          className="flex w-full max-w-md flex-col gap-2 rounded-md bg-surface p-5 shadow-lg"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void save(true);
+            }
+          }}
+        >
+          <h2 className="flex items-center gap-2 text-body-strong text-ink">
+            {Icon && <Icon size={16} strokeWidth={1.5} className="shrink-0 text-accent" />}
+            {t(draft.id === null ? "notes.add" : "notes.edit")}
+          </h2>
+          {renderFormFields()}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              data-id="map-note-modal-cancel"
+              className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt"
+              onClick={() => setDraft(null)}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              data-id="map-note-modal-confirm"
+              className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+              disabled={busy || draft.text.trim() === ""}
+              onClick={() => void save(true)}
+            >
+              {t("notes.confirm")}
+            </button>
+          </div>
+        </div>
+      </ModalBackdrop>,
+      document.body,
+    );
+  };
+
   const isCards = layout === "cards";
   const listItems = (
     <>
-          {draft?.id === null && renderForm()}
+          {!isCards && draft?.id === null && renderForm()}
           {notes.map((note) =>
-            draft?.id === note.id ? (
+            !isCards && draft?.id === note.id ? (
               <li key={note.id}>{renderForm()}</li>
             ) : (
               <li
@@ -440,6 +500,7 @@ export function MapNotesSection({
         ) : (
           <ul className="scroll-soft mt-1.5 flex max-h-72 flex-col gap-1.5 overflow-y-auto">{listItems}</ul>
         ))}
+      {isCards && renderModal()}
       {deleting && (
         <ConfirmDialog
           title={t("notes.deleteTitle")}

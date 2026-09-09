@@ -61,7 +61,9 @@ const str = (v: string | null | undefined): string => (v ?? "").trim();
 export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSectionProps) {
   const { t, lang } = useI18n();
   const dir = useDirectory();
-  const [collapsed, setCollapsed] = useState(false);
+  const designated = str(detail.sp_designated_at) !== "";
+  // SP 미지정 맵은 비활성 느낌(톤다운 배경·헤더)으로 접힌 채 시작 (사용자 지시 2026-09-09)
+  const [collapsed, setCollapsed] = useState(!designated);
   // 기본은 BPM 속성 + 수행 지표 헤더까지만 — 나머지(지표 타일·입출력)는 아코디언으로 접혀 있다.
   // 섹션 호버 시 헤더의 지정 필이 "모두 펼치기"로 바뀌고, 누르면 안의 그룹까지 전부 펼친다 (사용자 지시 2026-09-09)
   const [expanded, setExpanded] = useState(false);
@@ -69,6 +71,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const [metricsOpen, setMetricsOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const expandAll = () => {
+    setCollapsed(false);
     setExpanded(true);
     setAttrsOpen(true);
     setMetricsOpen(true);
@@ -78,7 +81,6 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   if (!hasSpContent(detail)) return null;
 
   const notSet = t("sp.tile.notSet");
-  const designated = str(detail.sp_designated_at) !== "";
 
   // 원문 메모가 있는 타일 — 아이콘에 점, 호버 시 메모 아이콘으로 스왑, 클릭=원문 팝오버(읽기). 없으면 기본 아이콘.
   // 대표값이 없고 메모만 있으면 아이콘 톤도 임시값(tertiary)
@@ -237,7 +239,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     <section
       data-id="map-detail-sp-section"
       data-expanded={expanded ? "true" : "false"}
-      className="group @container rounded-md border border-hairline bg-surface p-3"
+      className={`group @container rounded-md border border-hairline p-3 ${designated ? "bg-surface" : "bg-surface-alt"}`}
     >
       <SectionHeader
         dataId="map-detail-sp-toggle"
@@ -245,14 +247,23 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
         title={t("home.spSection")}
         count={countFilledSpTiles(detail)}
         collapsed={collapsed}
+        muted={!designated}
         onToggle={() => setCollapsed((v) => !v)}
         right={
-          <span className="relative flex shrink-0 items-center text-fine text-ink-tertiary">
-            {/* 평소: 지정 상태 필(SP 지정 모달과 동일, 영어 고정) + 지정일. 섹션 호버 시 모두 펼치기/접기 버튼으로 크로스페이드 */}
-            <span
-              data-id="map-detail-sp-status-wrap"
-              className="flex items-center gap-1.5 transition-opacity duration-150 group-hover:opacity-0 group-has-[button:focus-visible]:opacity-0"
+          <span className="relative flex shrink-0 items-center whitespace-nowrap text-fine text-ink-tertiary">
+            {/* 섹션 호버 시 상태 필 왼쪽에 페이드로 나타나는 모두 펼치기/접기 — 필은 그대로, 줄바꿈 없음 */}
+            <button
+              type="button"
+              data-id="map-detail-sp-expand-all"
+              aria-expanded={expanded}
+              onClick={() => (expanded ? setExpanded(false) : expandAll())}
+              className="pointer-events-none absolute top-1/2 right-full mr-1.5 flex -translate-y-1/2 items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine whitespace-nowrap text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-surface-alt hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100"
             >
+              {expanded ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
+              {t(expanded ? "inspector.collapseAll" : "inspector.expandAll")}
+            </button>
+            {/* 지정 상태 필(SP 지정 모달과 동일, 영어 고정) + 지정일 */}
+            <span data-id="map-detail-sp-status-wrap" className="flex items-center gap-1.5">
               {designated ? (
                 <span
                   data-id="map-detail-sp-status"
@@ -271,16 +282,6 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
               {/* 지정일 — "YYYY-MM-DD"(KST)만, 시각은 헤더에 과하다 */}
               {designated && <span>{formatKst(detail.sp_designated_at).slice(0, 10)}</span>}
             </span>
-            <button
-              type="button"
-              data-id="map-detail-sp-expand-all"
-              aria-expanded={expanded}
-              onClick={() => (expanded ? setExpanded(false) : expandAll())}
-              className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 rounded-sm px-1.5 text-fine text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-surface-alt hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100"
-            >
-              {expanded ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
-              {t(expanded ? "inspector.collapseAll" : "inspector.expandAll")}
-            </button>
           </span>
         }
       />
