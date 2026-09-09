@@ -292,3 +292,40 @@ def test_count_stale_refs_by_map(client: TestClient) -> None:
     assert counts[dept_ids["map"]] == 4
     # user map: 노드 담당자 2 + SP 담당자 1 = 3 (오너·협업자는 오너 액션 대상 아님)
     assert counts[user_ids["map"]] == 3
+
+
+def test_scan_user_refs_skips_blank_logins(client: TestClient) -> None:
+    """빈 로그인 값은 고아가 아니다 — 5개 login 소스 전부에 빈 principal_id/user_id/member_id가 있어도 미노출."""
+    from app.models import CategoryPermission, MapApprover, ProcessCategory
+
+    async def _seed() -> dict[str, int]:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "blank logins")
+            m.owner_id = ""
+            g = UserGroup(name=f"blank user group {id(object())}", status="active", created_by="user.lee")
+            cat = ProcessCategory(code=f"REF-{uuid.uuid4().hex}", name="Blank Cat", level=1)
+            session.add_all([g, cat])
+            await session.flush()
+            session.add_all([
+                MapPermission(map_id=m.id, principal_type="user", principal_id="", role="viewer", granted_by="user.lee"),
+                MapApprover(map_id=m.id, user_id=""),
+                UserGroupMember(group_id=g.id, member_type="user", member_id=""),
+                CategoryPermission(category_id=cat.id, principal_type="user", principal_id="", granted_by="user.lee"),
+            ])
+            await session.commit()
+            return {"map": m.id, "group": g.id, "cat": cat.id}
+
+    ids = asyncio.run(_seed())
+
+    async def _run() -> list[ref_audit.RefGroup]:
+        async with SessionLocal() as session:
+            valid = await ref_audit.load_valid_sets(session)
+            ctx = await ref_audit.load_scan_context(session)
+            return await ref_audit.scan_user_refs(session, valid, ctx)
+
+    groups = asyncio.run(_run())
+    assert all(g.value != "" for g in groups)
+    assert all(
+        ln.map_id != ids["map"] and ln.group_id != ids["group"] and ln.category_id != ids["cat"]
+        for g in groups for ln in g.lines
+    )
