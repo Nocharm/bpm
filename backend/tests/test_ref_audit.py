@@ -6,6 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app import ref_audit
 from app.db import SessionLocal
@@ -345,3 +346,184 @@ def test_scan_user_refs_skips_blank_logins(client: TestClient) -> None:
         ln.map_id != ids["map"] and ln.group_id != ids["group"] and ln.category_id != ids["cat"]
         for g in groups for ln in g.lines
     )
+
+
+def _remap(client: TestClient, **body) -> object:
+    return client.post("/api/admin/ref-audit/remap", headers=SYS, json=body)
+
+
+def test_remap_dept_replace_moves_checked_lines_only(client: TestClient) -> None:
+    ids = asyncio.run(_seed_dept_refs())
+
+    async def _grant_id() -> int:
+        async with SessionLocal() as session:
+            return (await session.scalar(select(MapPermission.id).where(
+                MapPermission.map_id == ids["map"], MapPermission.principal_id == GONE)))
+
+    grant_id = asyncio.run(_grant_id())
+    res = _remap(client, kind="dept", from_value=GONE, mode="replace", to_value=LIVE,
+                 target_ids=[f"map_grant:{grant_id}", f"owning_dept:{ids['map']}"])
+    assert res.status_code == 200, res.text
+    assert res.json() == {"applied": {"map_grant": 1, "owning_dept": 1}, "skipped": []}
+
+    async def _check() -> tuple[str | None, list[str], list[str]]:
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, ids["map"])
+            grants = list((await session.scalars(select(MapPermission.principal_id).where(
+                MapPermission.map_id == ids["map"], MapPermission.principal_type == "department"))).all())
+            members = list((await session.scalars(select(UserGroupMember.member_id).where(
+                UserGroupMember.group_id == ids["group"]))).all())
+            return m.owning_department, grants, members
+
+    owning, grants, members = asyncio.run(_check())
+    assert owning == LIVE and grants == [LIVE]
+    assert members == [GONE]  # 체크 안 한 그룹 멤버는 그대로
+
+
+def test_remap_merges_duplicate_grant_keeping_higher_role(client: TestClient) -> None:
+    async def _seed() -> tuple[int, int]:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "merge", owning_department=LIVE)
+            gone = MapPermission(map_id=m.id, principal_type="department", principal_id=GONE,
+                                 role="editor", granted_by="user.lee")
+            session.add_all([gone, MapPermission(map_id=m.id, principal_type="department",
+                                                 principal_id=LIVE, role="viewer", granted_by="user.lee")])
+            await session.commit()
+            return m.id, gone.id
+
+    map_id, gone_id = asyncio.run(_seed())
+    res = _remap(client, kind="dept", from_value=GONE, to_value=LIVE, target_ids=[f"map_grant:{gone_id}"])
+    assert res.status_code == 200
+
+    async def _grants() -> list[tuple[str, str]]:
+        async with SessionLocal() as session:
+            return [(p.principal_id, p.role) for p in (await session.scalars(select(MapPermission).where(
+                MapPermission.map_id == map_id, MapPermission.principal_type == "department"))).all()]
+
+    assert asyncio.run(_grants()) == [(LIVE, "editor")]
+
+
+def test_remap_sp_dept_writes_leaf_and_stamps(client: TestClient) -> None:
+    ids = asyncio.run(_seed_dept_refs())
+    res = _remap(client, kind="dept", from_value=GONE_LEAF, to_value=LIVE, target_ids=[f"sp_dept:{ids['map']}"])
+    assert res.status_code == 200 and res.json()["applied"] == {"sp_dept": 1}
+
+    async def _check() -> tuple[str | None, str | None]:
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, ids["map"])
+            return m.sp_department, m.sp_changed_by
+
+    assert asyncio.run(_check()) == (LIVE_LEAF, "admin.kim")
+
+
+def test_remap_rejections(client: TestClient, sysadmin_enforced: None) -> None:
+    ids = asyncio.run(_seed_dept_refs())
+    # 노드 소스는 불가
+    assert _remap(client, kind="dept", from_value=GONE_LEAF, to_value=LIVE,
+                  target_ids=[f"node_dept:{ids['pub']}"]).status_code == 422
+    # 미존재 대상 경로
+    assert _remap(client, kind="dept", from_value=GONE, to_value="Nope/Nowhere",
+                  target_ids=[f"owning_dept:{ids['map']}"]).status_code == 422
+    # 오우닝·SP 부서는 remove 불가
+    assert _remap(client, kind="dept", from_value=GONE, mode="remove",
+                  target_ids=[f"owning_dept:{ids['map']}"]).status_code == 422
+    assert _remap(client, kind="dept", from_value=GONE_LEAF, mode="remove",
+                  target_ids=[f"sp_dept:{ids['map']}"]).status_code == 422
+    # 비 sysadmin
+    assert client.post("/api/admin/ref-audit/remap", headers={"X-Dev-User": "user.lee"},
+                       json={"kind": "dept", "from_value": GONE, "to_value": LIVE,
+                             "target_ids": [f"owning_dept:{ids['map']}"]}).status_code == 403
+    # 값이 이미 바뀐 라인은 skipped
+    res = _remap(client, kind="dept", from_value="Some/Other", to_value=LIVE,
+                 target_ids=[f"owning_dept:{ids['map']}"])
+    assert res.status_code == 200 and res.json() == {"applied": {}, "skipped": [f"owning_dept:{ids['map']}"]}
+
+
+def test_remap_user_replace_owner_and_others(client: TestClient) -> None:
+    ids = asyncio.run(_seed_user_refs())
+
+    async def _targets() -> list[str]:
+        async with SessionLocal() as session:
+            collab = await session.scalar(select(MapPermission.id).where(
+                MapPermission.map_id == ids["map"], MapPermission.principal_id == "gone.user"))
+            member = await session.scalar(select(UserGroupMember.id).where(
+                UserGroupMember.group_id == ids["group"], UserGroupMember.member_id == "gone.user"))
+            from app.models import CategoryPermission
+            perm = await session.scalar(select(CategoryPermission.id).where(
+                CategoryPermission.category_id == ids["cat"], CategoryPermission.principal_id == "gone.user"))
+            return [f"map_owner:{ids['map']}", f"map_collab:{collab}", f"map_approver:{ids['map']}",
+                    f"group_user:{member}", f"category_perm:{perm}", f"sp_assignee:{ids['map']}"]
+
+    targets = asyncio.run(_targets())
+    # sp_assignee는 이름 그룹("Gone Person")이라 별도 요청 — login 그룹 요청에 섞이면 skipped
+    res = _remap(client, kind="user", from_value="gone.user", to_value="user.park", target_ids=targets)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["applied"] == {"map_owner": 1, "map_approver": 1, "group_user": 1, "category_perm": 1}
+    # 오너 grant는 map_owner 절차가 처리 → map_collab 라인은 skipped, sp_assignee는 값 불일치로 skipped
+    assert sorted(body["skipped"]) == sorted([targets[1], targets[5]])
+
+    async def _check() -> dict:
+        from app.models import CategoryPermission, MapApprover, Notification
+        async with SessionLocal() as session:
+            m = await session.get(ProcessMap, ids["map"])
+            grants = [(p.principal_id, p.role) for p in (await session.scalars(select(MapPermission).where(
+                MapPermission.map_id == ids["map"], MapPermission.principal_type == "user"))).all()]
+            approvers = list((await session.scalars(select(MapApprover.user_id).where(
+                MapApprover.map_id == ids["map"]))).all())
+            members = list((await session.scalars(select(UserGroupMember.member_id).where(
+                UserGroupMember.group_id == ids["group"]))).all())
+            perms = list((await session.scalars(select(CategoryPermission.principal_id).where(
+                CategoryPermission.category_id == ids["cat"]))).all())
+            notif = (await session.scalars(select(Notification).where(
+                Notification.recipient == "user.park", Notification.type == "owner_assigned",
+                Notification.map_id == ids["map"]))).first()
+            return {"owner": m.owner_id, "pending": m.consultant_owner_pending, "grants": sorted(grants),
+                    "approvers": approvers, "members": members, "perms": perms,
+                    "notif": notif.payload if notif else None}
+
+    got = asyncio.run(_check())
+    assert got["owner"] == "user.park" and got["pending"] is False
+    assert got["grants"] == [("nobody", "viewer"), ("user.park", "owner")]
+    assert got["approvers"] == ["user.park"] and got["members"] == ["user.park"] and got["perms"] == ["user.park"]
+    assert got["notif"]["map_name"] and got["notif"]["actor"] == "admin.kim"
+    assert got["notif"]["from_name"] == "Gone Person"
+
+    # 이름 그룹: SP 담당자 치환 — to_value는 login, 저장은 그 직원의 name
+    res = _remap(client, kind="user", from_value="Gone Person", to_value="user.park",
+                 target_ids=[f"sp_assignee:{ids['map']}"])
+    assert res.status_code == 200 and res.json()["applied"] == {"sp_assignee": 1}
+
+    async def _sp() -> str | None:
+        async with SessionLocal() as session:
+            return (await session.get(ProcessMap, ids["map"])).sp_assignee
+
+    assert asyncio.run(_sp()) == "Minjae Lee, Soyeon Park"
+
+
+def test_remap_user_remove_and_owner_guard(client: TestClient) -> None:
+    ids = asyncio.run(_seed_user_refs())
+
+    async def _collab_id() -> int:
+        async with SessionLocal() as session:
+            return await session.scalar(select(MapPermission.id).where(
+                MapPermission.map_id == ids["map"], MapPermission.principal_id == "nobody"))
+
+    collab = asyncio.run(_collab_id())
+    assert _remap(client, kind="user", from_value="gone.user", mode="remove",
+                  target_ids=[f"map_owner:{ids['map']}"]).status_code == 422
+    assert _remap(client, kind="user", from_value="gone.user", to_value="ghost.person",
+                  target_ids=[f"map_approver:{ids['map']}"]).status_code == 422  # active 아닌 대상
+    res = _remap(client, kind="user", from_value="nobody", mode="remove",
+                 target_ids=[f"map_collab:{collab}", f"map_approver:{ids['map']}"])
+    assert res.status_code == 200
+    assert res.json() == {"applied": {"map_collab": 1}, "skipped": [f"map_approver:{ids['map']}"]}
+    res = _remap(client, kind="user", from_value="Gone Person", mode="remove",
+                 target_ids=[f"sp_assignee:{ids['map']}"])
+    assert res.status_code == 200 and res.json()["applied"] == {"sp_assignee": 1}
+
+    async def _sp() -> str | None:
+        async with SessionLocal() as session:
+            return (await session.get(ProcessMap, ids["map"])).sp_assignee
+
+    assert asyncio.run(_sp()) == "Minjae Lee"

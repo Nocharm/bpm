@@ -1865,19 +1865,6 @@ class RefNotifyOut(BaseModel):
     skipped_maps: list[RefNotifySkippedOut]
 
 
-class DeptRemapIn(BaseModel):
-    """소멸 부서 일괄 재지정 — from_path 참조 전부를 to_path(현존 경로)로 이동."""
-
-    from_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
-    to_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
-
-
-class DeptRemapOut(BaseModel):
-    map_grants: int
-    group_members: int
-    owning_maps: int = 0
-
-
 class AdminDirectoryOut(BaseModel):
     users: list[AdminUserOut]
     departments: list[AdminDeptOut]
