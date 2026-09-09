@@ -134,3 +134,9 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 - **승인**: 요청자가 L5 직속 관리자/sysadmin이면 즉시 적용(화면은 안내 모달), 아니면 `ApprovalRequest(kind="fw_slot")`. 이동은 보내는·받는 L5 각 1명(동일인 1회). 결정은 `POST /api/approval-requests/{id}/decide`, 철회 `DELETE /maps/{id}/slot-changes/pending`.
 - **적용**(`app/framework_slots.py apply_slot_change`): 데이터 변경 + 홈 L5 캔버스 draft 노드 재지정(대체·후계자 삭제, 엣지 유지) + `retired_to_map_id` 계보 + `framework_slot_events` 이력 + `fw_slot_applied` 알림. 해제·삭제 노드는 링크를 끊지 않고 미싱 룩으로 표시, 확정 게이트 `stale_link`가 잡는다.
 - **가드**: `mode='normal'`만 슬롯 보유. 슬롯 맵의 `DELETE /maps/{id}`·`copy retire_source`는 409 → slot-changes. 임포트는 승인 없이 그대로(부트스트랩), 미배치 taskId 엣지는 플레이스홀더 노드로.
+
+### 7.x 고아 참조 감사 (2026-09-09)
+
+- **대상 12곳**: 부서 경로 3(맵 부서 권한·그룹 부서 멤버·오우닝) + 리프 2(SP 지정 부서·노드 담당부서) + 사용자 login 5(오너·협업자·승인자·그룹 user 멤버·카테고리 권한자) + 이름 2(SP 담당자·노드 담당자). 유효 집합은 active 직원 기준(`app/ref_audit.py load_valid_sets`). 노드는 게시본+최신 드래프트만.
+- **온디맨드**: 저장 테이블 없음. `GET /api/admin/ref-audit`(sysadmin)·`POST …/remap`(체크한 `target_id`만 replace/remove, 값이 바뀐 라인은 `skipped`)·`POST …/notify`(오너당 1건 `ref_fix_requested`). 오너 교체는 `owner_assigned` 알림. `GET /api/maps`의 `stale_ref_count`가 홈 배지·Issues 필터 소스.
+- **불변식**: 노드 필드(`node_dept`·`node_assignee`)는 관리자가 못 고친다(드래프트 필요) — 캐치·알림만. 오너·오우닝·SP 부서는 remove 불가. 이름 기반 참조는 이름이 그룹 키(동명이인 1명 active면 유효).

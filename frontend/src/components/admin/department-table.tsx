@@ -1,6 +1,6 @@
 "use client";
 
-// 부서 탭 — 조직도 트리 테이블(들여쓰기·접기) + 소멸 부서 재지정(대상은 트리 모달로 선택).
+// 부서 탭 — 조직도 트리 테이블(들여쓰기·접기).
 // 경로 세그먼트 내 "/"는 백엔드가 전각 슬래시로 새니타이즈해 split 안전 (2026-08 9910 검증 개편).
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,12 +9,9 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 import {
   type AdminUser,
-  type DeptRemapItem,
   type DirectoryDept,
   getAdminUsers,
-  getDeptRemap,
   getDirectory,
-  postDeptRemap,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { buildDeptPathTree } from "@/lib/dept-path-tree";
@@ -22,7 +19,6 @@ import { useI18n } from "@/lib/i18n";
 import { formatRosterName, getDeptMembers } from "@/lib/korean-dept";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, TableCard } from "./admin-table";
-import { DeptTreePicker } from "./dept-tree-picker";
 import { ExportCsvButton } from "./export-csv-button";
 
 const PILL =
@@ -145,20 +141,12 @@ function flattenDeptRows(
 export function DepartmentTable() {
   const { t } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  // 관리 테이블 소스 — 전 직원(퇴직자 포함) 경로. 선택 모달은 active만(dirDepts).
+  // 관리 테이블 소스 — 전 직원(퇴직자 포함) 경로. dirDepts는 active 기준 한글명 보강용.
   const [adminPaths, setAdminPaths] = useState<string[]>([]);
   const [adminKorean, setAdminKorean] = useState<Map<string, string>>(new Map());
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  // 재지정 적용 후 재조회 트리거 — reloadKey 범프(effect 내 함수 dep 회피)
-  const [reloadKey, setReloadKey] = useState(0);
-  // 소멸 부서(조직개편 잔재) 참조 목록 + 행별 재지정 대상 선택
-  const [missingRefs, setMissingRefs] = useState<DeptRemapItem[]>([]);
-  const [remapTargets, setRemapTargets] = useState<Record<string, string>>({});
-  const [pickingFor, setPickingFor] = useState<string | null>(null);
-  const [remapBusy, setRemapBusy] = useState(false);
-  const [remapMsg, setRemapMsg] = useState("");
 
   useEffect(() => {
     getAdminUsers()
@@ -178,28 +166,7 @@ export function DepartmentTable() {
     getDirectory()
       .then((dir) => setDirDepts(dir.departments))
       .catch(() => setDirDepts([]));
-    getDeptRemap()
-      .then(setMissingRefs)
-      .catch(() => setMissingRefs([]));
-  }, [reloadKey, t]);
-
-  const applyRemap = async (fromPath: string) => {
-    const toPath = remapTargets[fromPath];
-    if (!toPath) return;
-    setRemapBusy(true);
-    setRemapMsg("");
-    try {
-      const res = await postDeptRemap(fromPath, toPath);
-      setRemapMsg(
-        `${fromPath} → ${toPath} · grants ${res.map_grants} · group members ${res.group_members} · owning maps ${res.owning_maps}`,
-      );
-      setReloadKey((k) => k + 1);
-    } catch (err) {
-      setRemapMsg(humanizeApiError(err, t));
-    } finally {
-      setRemapBusy(false);
-    }
-  };
+  }, [t]);
 
   // 조직도 트리 — 전 직원 경로의 전 프리픽스를 노드로(중간 부서 포함), 접기 상태 반영해 평탄화
   const rows: DeptRow[] = useMemo(
@@ -228,50 +195,6 @@ export function DepartmentTable() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* 소멸 부서 재지정 — 조직개편으로 사라진 경로를 참조하는 권한/그룹 멤버/오우닝 일괄 이동 */}
-      {missingRefs.length > 0 && (
-        <div
-          className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-alt p-4"
-          data-id="dept-remap-card"
-        >
-          <p className="text-caption-strong text-ink">{t("admin.deptRemapTitle")}</p>
-          <p className="text-fine text-ink-tertiary">{t("admin.deptRemapHint")}</p>
-          {missingRefs.map((ref) => (
-            <div key={ref.path} className="flex items-center gap-3" data-id="dept-remap-row">
-              <span className="min-w-0 flex-1 truncate font-mono text-caption text-error">
-                {ref.path}
-              </span>
-              <span className="shrink-0 text-fine text-ink-tertiary">
-                {t("admin.deptRemapRefs", {
-                  grants: String(ref.map_grants),
-                  members: String(ref.group_members),
-                  owning: String(ref.owning_maps),
-                })}
-              </span>
-              <button
-                type="button"
-                data-id="dept-remap-target-btn"
-                className="max-w-[16rem] truncate rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt"
-                title={remapTargets[ref.path] ?? ""}
-                onClick={() => setPickingFor(ref.path)}
-              >
-                {remapTargets[ref.path] ?? t("admin.deptRemapPick")}
-              </button>
-              <button
-                type="button"
-                data-id="dept-remap-apply"
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                disabled={remapBusy || !remapTargets[ref.path]}
-                onClick={() => void applyRemap(ref.path)}
-              >
-                {t("admin.deptRemapApply")}
-              </button>
-            </div>
-          ))}
-          {remapMsg && <p className="text-fine text-ink-tertiary">{remapMsg}</p>}
-        </div>
-      )}
-
       <div className="flex justify-end">
         <ExportCsvButton
           dataId="departments-export-csv"
@@ -337,18 +260,6 @@ export function DepartmentTable() {
           </tbody>
         </TableCard>
       </div>
-
-      {pickingFor !== null && (
-        <DeptTreePicker
-          title={t("admin.deptPickTitle")}
-          departments={dirDepts.map((d) => ({ id: d.id, name: d.name, korean_name: d.korean_name }))}
-          onPick={(path) => {
-            setRemapTargets((prev) => ({ ...prev, [pickingFor]: path }));
-            setPickingFor(null);
-          }}
-          onClose={() => setPickingFor(null)}
-        />
-      )}
     </div>
   );
 }

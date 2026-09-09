@@ -264,7 +264,7 @@ export default function MapListPage() {
         setPermFilter(new Set(s.perm.filter((x): x is string => typeof x === "string")));
       }
       if (Array.isArray(s.owning)) {
-        setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing")));
+        setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing" || x === "stale_refs")));
       }
       if (Array.isArray(s.sp)) {
         setSpFilter(new Set(s.sp.filter((x): x is string => x === "sp" || x === "non_sp")));
@@ -452,7 +452,9 @@ export default function MapListPage() {
         const permOk =
           permFilter.size === 0 || (m.my_role !== null && permFilter.has(m.my_role));
         const owningOk =
-          owningFilter.size === 0 || (owningFilter.has("missing") && !m.owning_department);
+          owningFilter.size === 0 ||
+          (owningFilter.has("missing") && !m.owning_department) ||
+          (owningFilter.has("stale_refs") && (m.stale_ref_count ?? 0) > 0);
         const spOk =
           spFilter.size === 0 ||
           (spFilter.has("sp") && !!m.sp_designated_at) ||

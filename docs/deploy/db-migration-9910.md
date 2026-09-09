@@ -56,7 +56,7 @@ git diff <운영커밋>..<검증커밋> -- backend/app/db.py backend/app/models.
 - **employees 단일 소스가 AD LDAP → HR 웹훅**: sync 시 `source='ad'`가 `'hr'`로 전환, HR 피드에 없는 구 계정은 삭제(20% 상한 가드), 퇴직자는 `active=false`로 잔류하되 피커·디렉터리에서 제외. title은 계속 AD에서 후속 패스로.
 - **한글 부서명 소스가 dept_info → departments.name_ko**: HR 미러에서 자동. 수동 JSON 임포트 2종은 API째 삭제(호출 시 404).
 - **승인자 피커 Manager 태그**: 내 부서 체인(리프→루트)의 노출 직책(EDW FRNM) 보유자.
-- **부서 권한 판정 경로**: 저장된 principal(경로 문자열)은 그대로, 직원의 소속 경로 해석만 departments 부모 체인 기준으로 바뀐다. 고아 경로는 dept-remap 콘솔에서 이관.
+- **부서 권한 판정 경로**: 저장된 principal(경로 문자열)은 그대로, 직원의 소속 경로 해석만 departments 부모 체인 기준으로 바뀐다. 고아 경로는 Orphaned refs 탭(ref-audit)에서 이관.
 
 ---
 
@@ -237,7 +237,7 @@ docker exec -i "$DEV_DB" psql -U processmap -d processmap -c "SELECT count(*) FR
 
 ### 6-4. 고아 부서 경로 이관
 
-설정 → Departments 탭 — **소멸 부서 재지정 섹션이 테이블 위**에 뜬다. §6-1의 `orphan_dept_paths`에 있던 경로가 보이면 새 조직 경로로 재지정(맵 권한·그룹 멤버 일괄 이동). 고아가 없으면 섹션 자체가 안 뜨는 게 정상.
+설정 → 조직 → **Orphaned refs** 탭. §6-1의 `orphan_dept_paths`에 있던 경로가 "Missing departments"에 그룹으로 보이면 라인을 체크해 새 조직 경로로 재지정(맵 권한·그룹 멤버·오우닝 일괄). 노드 담당부서 라인은 체크 불가 — "Notify owners"로 오너에게 묶음 알림. 고아가 없으면 "No missing departments"가 정상.
 
 ---
 
@@ -325,6 +325,6 @@ curl -s http://localhost:9900/api/health
 curl -s http://localhost:9900/api/auth/mode; echo
 ```
 
-- §4 스키마 확인 → **§6 이행 절차를 운영에서 재수행**(드라이런으로 case 불일치 0 재확인 → 첫 수동 sync → §6-4 dept-remap 이관 → §7-2 노출 직책 확정) → `.env`의 `HR_SYNC_INTERVAL_HOURS=24` + backend 재기동으로 스케줄러 ON.
+- §4 스키마 확인 → **§6 이행 절차를 운영에서 재수행**(드라이런으로 case 불일치 0 재확인 → 첫 수동 sync → §6-4 Orphaned refs 탭(ref-audit) 이관 → §7-2 노출 직책 확정) → `.env`의 `HR_SYNC_INTERVAL_HOURS=24` + backend 재기동으로 스케줄러 ON.
 - **롤백**: additive+완화 스키마라 코드만 되돌리면 된다(`git checkout <직전 main> && docker compose up -d --build`). 데이터까지 되돌릴 일이 생기면 백업 덤프로 §3-3 방식 복원.
 - 승격 후: 공지·매뉴얼 갱신 여부 판단(설정 → 콘텐츠).

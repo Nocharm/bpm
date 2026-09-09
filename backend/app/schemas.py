@@ -746,6 +746,8 @@ class MapOut(BaseModel):
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+    # 낡은 부서·담당자 참조 수(게시본/드래프트 노드 + SP 지정값) — 홈 카드 배지·Issues 필터 (design 2026-09-09)
+    stale_ref_count: int = 0
     # Word 맵 모드 & 임포트 카탈로그 — mode="word"인 맵만 doc_name·doc_sections 사용 (design 2026-07-18)
     mode: str = "normal"
     doc_name: str = ""
@@ -1789,26 +1791,80 @@ class AdminDeptOut(BaseModel):
     korean_name: str = ""  # departments.name_ko (2026-08-11 dept_info→departments 전환)
 
 
-class DeptRemapItemOut(BaseModel):
-    """소멸 부서 참조 집계 — path는 현 조직(employees org 프리픽스)에 없는 org_path."""
+# ── 고아 참조 감사 (design 2026-09-09) ──────────────────────────────
 
-    path: str
-    map_grants: int      # 이 경로를 참조하는 맵 부서 권한 행 수
-    group_members: int   # 이 경로를 참조하는 그룹 부서 멤버 행 수
-    owning_maps: int = 0  # 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
-
-
-class DeptRemapIn(BaseModel):
-    """소멸 부서 일괄 재지정 — from_path 참조 전부를 to_path(현존 경로)로 이동."""
-
-    from_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
-    to_path: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+RefSource = Literal[
+    "map_grant", "group_member", "owning_dept", "sp_dept", "node_dept",
+    "map_owner", "map_collab", "map_approver", "group_user", "category_perm",
+    "sp_assignee", "node_assignee",
+]
 
 
-class DeptRemapOut(BaseModel):
-    map_grants: int
-    group_members: int
-    owning_maps: int = 0
+class RefLineOut(BaseModel):
+    """참조 라인 — target_id는 remap/notify가 되돌려주는 행 키('{source}:{pk}')."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    source: RefSource
+    fixable: bool
+    count: int
+    target_id: str
+    map_id: int | None = None
+    map_name: str | None = None
+    owner_id: str | None = None
+    owner_name: str | None = None
+    group_id: int | None = None
+    group_name: str | None = None
+    category_id: int | None = None
+    category_name: str | None = None
+    version_id: int | None = None
+    version_status: str | None = None
+
+
+class RefGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    kind: Literal["dept", "user"]
+    value: str
+    value_kind: Literal["path", "leaf", "login", "name"]
+    lines: list[RefLineOut]
+
+
+class RefAuditOut(BaseModel):
+    departments: list[RefGroupOut]
+    users: list[RefGroupOut]
+    generated_at: datetime
+
+
+class RefRemapIn(BaseModel):
+    """체크한 라인만 from_value → to_value 치환(replace) 또는 제거(remove)."""
+
+    kind: Literal["dept", "user"]
+    from_value: Annotated[str, StringConstraints(min_length=1, max_length=1200)]
+    mode: Literal["replace", "remove"] = "replace"
+    to_value: Annotated[str, StringConstraints(max_length=1200)] = ""
+    target_ids: list[Annotated[str, StringConstraints(min_length=3, max_length=100)]] = Field(min_length=1)
+
+
+class RefRemapOut(BaseModel):
+    applied: dict[str, int]  # source → 처리 행 수
+    skipped: list[str]       # 값이 이미 바뀐 target_id
+
+
+class RefNotifyIn(BaseModel):
+    target_ids: list[Annotated[str, StringConstraints(min_length=3, max_length=100)]] = Field(min_length=1)
+
+
+class RefNotifySkippedOut(BaseModel):
+    id: int
+    name: str
+    reason: Literal["owner_missing"]
+
+
+class RefNotifyOut(BaseModel):
+    recipients: int
+    maps: int
+    skipped_maps: list[RefNotifySkippedOut]
 
 
 class AdminDirectoryOut(BaseModel):

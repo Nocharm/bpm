@@ -1071,6 +1071,26 @@ function NotificationDetail({
           )}
         </p>
       )}
+      {notification.type === "ref_fix_requested" && notification.payload?.maps && notification.payload.maps.length > 0 && (
+        <div className="mt-3 flex flex-col gap-1.5" data-id="inbox-ref-fix-maps">
+          <span className="text-fine text-ink-tertiary">{t("inbox.refFixMaps")}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {notification.payload.maps.map((entry) => (
+              <Link
+                key={entry.id}
+                href={`/maps/${entry.id}`}
+                data-id={`inbox-ref-fix-map-${entry.id}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface-alt px-2.5 py-0.5 text-fine text-ink hover:border-accent hover:text-accent"
+              >
+                <span className="max-w-[16rem] truncate">{entry.name}</span>
+                <span className="rounded-full bg-error/10 px-1.5 text-error">
+                  {t("inbox.refFixCount", { n: entry.node_dept + entry.node_assignee + entry.sp_dept + entry.sp_assignee })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex items-center gap-2">
         <TimePills iso={notification.created_at} nowMs={nowMs} />
         {/* 절대 시각(KST) — 상대 필과 병기 */}

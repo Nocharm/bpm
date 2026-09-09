@@ -19,6 +19,7 @@ import { BatchRunsPanel } from "@/components/admin/batch-runs-panel";
 import { EmployeeTable } from "@/components/admin/employee-table";
 import { ApprovalQueue } from "@/components/admin/approval-queue";
 import { DepartmentTable } from "@/components/admin/department-table";
+import { RefAuditPanel } from "@/components/admin/ref-audit-panel";
 import { LocalAccountTable } from "@/components/admin/local-account-table";
 import { TableViewer } from "@/components/admin/table-viewer";
 import { DeletedMapsPanel } from "@/components/admin/deleted-maps-panel";
@@ -37,6 +38,7 @@ type TabId =
   | "employees"
   | "queue"
   | "depts"
+  | "refs"
   | "localAccounts"
   | "tables"
   | "batch"
@@ -78,6 +80,7 @@ const CATEGORIES: Category[] = [
     tabs: [
       { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
+      { id: "refs", labelKey: "admin.refAuditTab" },
       { id: "localAccounts", labelKey: "localAccount.tab" },
     ],
   },
@@ -288,6 +291,7 @@ export default function SettingsPage() {
               </p>
             ))}
           {current === "depts" && <DepartmentTable />}
+          {current === "refs" && <RefAuditPanel />}
           {current === "localAccounts" && (
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />
           )}

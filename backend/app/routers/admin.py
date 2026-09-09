@@ -28,18 +28,15 @@ from app.models import (
     Employee,
     FeedbackNote,
     FeedbackNoteRevision,
-    MapPermission,
     Notification,
-    ProcessMap,
-    UserGroupMember,
 )
 from app.orgchart import (
     has_org_info,
     load_dept_index,
-    load_valid_org_prefixes,
     resolve_org_path,
 )
-from app.permissions.logic import is_sysadmin, role_rank
+from app.permissions.logic import is_sysadmin
+from app import ref_audit
 from app.settings import settings
 from app.schemas import (
     AdminDeptOut,
@@ -48,12 +45,14 @@ from app.schemas import (
     BatchRunOut,
     AdminDirectoryOut,
     AdminUserOut,
-    DeptRemapIn,
-    DeptRemapItemOut,
-    DeptRemapOut,
     NotificationBulkDeleteOut,
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
+    RefAuditOut,
+    RefNotifyIn,
+    RefNotifyOut,
+    RefRemapIn,
+    RefRemapOut,
     TableDataOut,
     TableInfoOut,
 )
@@ -133,135 +132,50 @@ def _require_sysadmin(login_id: str) -> None:
         raise HTTPException(status_code=403, detail="sysadmin required")
 
 
-async def _load_valid_org_paths(session: AsyncSession) -> set[str]:
-    """현 조직 유효 경로 프리픽스 — orgchart 공용 헬퍼 위임. remap은 active 부서만(퇴직자만 남은 부서 제외)."""
-    return await load_valid_org_prefixes(session, active_only=True)
-
-
-@router.get("/dept-remap", response_model=list[DeptRemapItemOut])
-async def list_missing_dept_refs(
+@router.get("/ref-audit", response_model=RefAuditOut)
+async def get_ref_audit(
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[DeptRemapItemOut]:
-    """sysadmin 전용 — 현 조직에 없는 부서 경로를 참조 중인 맵 권한·그룹 멤버·오우닝 맵 집계 (조직개편 잔재)."""
+) -> RefAuditOut:
+    """sysadmin 전용 — 현 조직에 없는 부서·사용자를 참조하는 12곳 온디맨드 스캔 (design 2026-09-09)."""
     _require_sysadmin(login_id)
-    valid = await _load_valid_org_paths(session)
-    grant_counts = dict(
-        (
-            await session.execute(
-                select(MapPermission.principal_id, func.count())
-                .where(MapPermission.principal_type == "department")
-                .group_by(MapPermission.principal_id)
-            )
-        ).all()
-    )
-    member_counts = dict(
-        (
-            await session.execute(
-                select(UserGroupMember.member_id, func.count())
-                .where(UserGroupMember.member_type == "department")
-                .group_by(UserGroupMember.member_id)
-            )
-        ).all()
-    )
-    # 오우닝 부서 참조 — 홈 "내 부서" 트리가 이 값으로 묶이므로 이관 대상에서 빠지면 맵이 미아가 된다
-    owning_counts = dict(
-        (
-            await session.execute(
-                select(ProcessMap.owning_department, func.count())
-                .where(ProcessMap.owning_department.is_not(None))
-                .group_by(ProcessMap.owning_department)
-            )
-        ).all()
-    )
-    missing = sorted((set(grant_counts) | set(member_counts) | set(owning_counts)) - valid)
-    return [
-        DeptRemapItemOut(
-            path=path,
-            map_grants=grant_counts.get(path, 0),
-            group_members=member_counts.get(path, 0),
-            owning_maps=owning_counts.get(path, 0),
-        )
-        for path in missing
-    ]
+    departments, users = await ref_audit.scan_refs(session)
+    return RefAuditOut(departments=departments, users=users, generated_at=now_kst())
 
 
-@router.post("/dept-remap", response_model=DeptRemapOut)
-async def remap_dept_refs(
-    payload: DeptRemapIn,
+@router.post("/ref-audit/remap", response_model=RefRemapOut)
+async def post_ref_remap(
+    payload: RefRemapIn,
     login_id: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> DeptRemapOut:
-    """sysadmin 전용 — from_path를 참조하는 맵 권한·그룹 멤버·오우닝 부서를 to_path(현존 경로)로 일괄 이동.
-
-    대상에 같은 부서 행이 이미 있으면 병합 — 맵 권한은 높은 역할 유지, 그룹 멤버는 중복 제거.
-    오우닝은 단일 컬럼 치환(소프트삭제 맵 포함 — 복구 시 일관성 유지).
-    """
+) -> RefRemapOut:
+    """sysadmin 전용 — 체크한 라인만 replace/remove. 검증 실패는 전체 422(부분 적용 없음)."""
     _require_sysadmin(login_id)
-    valid = await _load_valid_org_paths(session)
-    if payload.to_path not in valid:
-        raise HTTPException(status_code=422, detail="to_path is not a current department path")
-
-    grants = (
-        await session.scalars(
-            select(MapPermission).where(
-                MapPermission.principal_type == "department",
-                MapPermission.principal_id == payload.from_path,
-            )
+    try:
+        result = await ref_audit.apply_remap(
+            session, kind=payload.kind, from_value=payload.from_value, mode=payload.mode,
+            to_value=payload.to_value, target_ids=payload.target_ids, actor=login_id,
         )
-    ).all()
-    moved_grants = 0
-    for grant in grants:
-        dup = await session.scalar(
-            select(MapPermission).where(
-                MapPermission.map_id == grant.map_id,
-                MapPermission.principal_type == "department",
-                MapPermission.principal_id == payload.to_path,
-            )
-        )
-        if dup is not None:
-            if role_rank(grant.role) > role_rank(dup.role):
-                dup.role = grant.role
-            await session.delete(grant)
-        else:
-            grant.principal_id = payload.to_path
-        moved_grants += 1
-
-    members = (
-        await session.scalars(
-            select(UserGroupMember).where(
-                UserGroupMember.member_type == "department",
-                UserGroupMember.member_id == payload.from_path,
-            )
-        )
-    ).all()
-    moved_members = 0
-    for member in members:
-        dup = await session.scalar(
-            select(UserGroupMember).where(
-                UserGroupMember.group_id == member.group_id,
-                UserGroupMember.member_type == "department",
-                UserGroupMember.member_id == payload.to_path,
-            )
-        )
-        if dup is not None:
-            await session.delete(member)
-        else:
-            member.member_id = payload.to_path
-        moved_members += 1
-
-    owning_maps = (
-        await session.scalars(
-            select(ProcessMap).where(ProcessMap.owning_department == payload.from_path)
-        )
-    ).all()
-    for m in owning_maps:
-        m.owning_department = payload.to_path
-
+    except ref_audit.RemapError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
-    return DeptRemapOut(
-        map_grants=moved_grants, group_members=moved_members, owning_maps=len(owning_maps)
-    )
+    return RefRemapOut(applied=result.applied, skipped=result.skipped)
+
+
+@router.post("/ref-audit/notify", response_model=RefNotifyOut)
+async def post_ref_notify(
+    payload: RefNotifyIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RefNotifyOut:
+    """sysadmin 전용 — 노드/SP 낡은 참조를 맵 오너에게 오너당 1건으로 묶어 알린다."""
+    _require_sysadmin(login_id)
+    try:
+        result = await ref_audit.send_fix_requests(session, payload.target_ids, login_id)
+    except ref_audit.RemapError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return RefNotifyOut(recipients=result.recipients, maps=result.maps, skipped_maps=result.skipped_maps)
 
 
 @router.get("/batch-runs", response_model=list[BatchRunOut])

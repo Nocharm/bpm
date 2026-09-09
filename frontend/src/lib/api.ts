@@ -79,6 +79,8 @@ export interface MapSummary {
   sp_changed_at?: string | null;
   // 오우닝 부서 org_path — null=누락(레거시). 홈 배지·필터, 설정 표시 (spec 2026-07-10)
   owning_department?: string | null;
+  // 낡은 부서·담당자 참조 수 — 홈 배지·Issues 필터 (design 2026-09-09)
+  stale_ref_count?: number;
   // Word 맵 모드 & 임포트 카탈로그 — 목록 응답(MapOut)에도 포함되어 홈 분리(processMaps/wordMaps)에 필요 (design 2026-07-24 §2)
   mode?: string;
   doc_name?: string;
@@ -1808,26 +1810,77 @@ export interface AdminDept {
   korean_name: string; // dept_info 임포트값 — 없으면 ""
 }
 
-export interface DeptRemapItem {
-  path: string;         // 현 조직에 없는 org_path (조직개편 잔재)
-  map_grants: number;   // 이 경로를 참조하는 맵 부서 권한 수
-  group_members: number; // 이 경로를 참조하는 그룹 부서 멤버 수
-  owning_maps: number;  // 이 경로를 오우닝 부서로 갖는 맵 수 — 홈 트리 미아 방지
+// ── 고아 참조 감사 (design 2026-09-09) ────────────────────────────────
+
+export type RefSource =
+  | "map_grant" | "group_member" | "owning_dept" | "sp_dept" | "node_dept"
+  | "map_owner" | "map_collab" | "map_approver" | "group_user" | "category_perm"
+  | "sp_assignee" | "node_assignee";
+
+export interface RefLine {
+  source: RefSource;
+  fixable: boolean;   // false = 노드 필드(드래프트 필요) — 캐치·알림만
+  count: number;      // 노드 계열=해당 버전의 노드 수, 그 외 1
+  target_id: string;  // '{source}:{pk}' — remap/notify 요청 키
+  map_id: number | null;
+  map_name: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
+  group_id: number | null;
+  group_name: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  version_id: number | null;
+  version_status: string | null; // published | draft (노드 계열만)
 }
 
-/** sysadmin 전용 — 소멸 부서 경로를 참조 중인 권한·그룹 멤버·오우닝 맵 집계. */
-export function getDeptRemap(): Promise<DeptRemapItem[]> {
-  return request<DeptRemapItem[]>("/admin/dept-remap");
+export interface RefGroup {
+  kind: "dept" | "user";
+  value: string;
+  value_kind: "path" | "leaf" | "login" | "name";
+  lines: RefLine[];
 }
 
-/** sysadmin 전용 — from_path 참조 전부(권한·그룹 멤버·오우닝)를 현존 to_path로 일괄 이동(중복은 병합). */
-export function postDeptRemap(
-  fromPath: string,
-  toPath: string,
-): Promise<{ map_grants: number; group_members: number; owning_maps: number }> {
-  return request("/admin/dept-remap", {
+export interface RefAudit {
+  departments: RefGroup[];
+  users: RefGroup[];
+  generated_at: string;
+}
+
+export interface RefRemapBody {
+  kind: "dept" | "user";
+  from_value: string;
+  mode: "replace" | "remove";
+  to_value?: string;
+  target_ids: string[];
+}
+
+export interface RefRemapResult {
+  applied: Record<string, number>;
+  skipped: string[];
+}
+
+export interface RefNotifyResult {
+  recipients: number;
+  maps: number;
+  skipped_maps: { id: number; name: string; reason: "owner_missing" }[];
+}
+
+/** sysadmin 전용 — 현 조직에 없는 부서·사용자 참조 12곳 온디맨드 스캔. */
+export function getRefAudit(): Promise<RefAudit> {
+  return request<RefAudit>("/admin/ref-audit");
+}
+
+/** sysadmin 전용 — 체크한 라인만 replace/remove(부분 실패 없음, 값이 바뀐 라인은 skipped). */
+export function postRefRemap(body: RefRemapBody): Promise<RefRemapResult> {
+  return request<RefRemapResult>("/admin/ref-audit/remap", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** sysadmin 전용 — 노드/SP 낡은 참조를 맵 오너당 1건으로 묶어 알림. */
+export function postRefNotify(targetIds: string[]): Promise<RefNotifyResult> {
+  return request<RefNotifyResult>("/admin/ref-audit/notify", {
     method: "POST",
-    body: JSON.stringify({ from_path: fromPath, to_path: toPath }),
+    body: JSON.stringify({ target_ids: targetIds }),
   });
 }
 
@@ -1896,6 +1949,15 @@ export function deleteLocalAccount(loginId: string): Promise<void> {
   });
 }
 
+export interface NotificationMapEntry {
+  id: number;
+  name: string;
+  node_dept: number;
+  node_assignee: number;
+  sp_dept: number;
+  sp_assignee: number;
+}
+
 // 알림 구조화 컨텍스트 — 백엔드 create_notifications payload 계약(유형별 부분 집합).
 // FE가 언어 토글에 맞춰 렌더(lib/notification-format.ts), null(레거시)이면 message 폴백.
 export interface NotificationPayload {
@@ -1914,6 +1976,7 @@ export interface NotificationPayload {
   status_label?: string;
   title?: string;
   count?: number; // fw_external_linked — 이번 전달로 이어진 자리표 수
+  maps?: NotificationMapEntry[]; // ref_fix_requested — 오너당 묶음 알림의 맵 목록
 }
 
 export interface NotificationItem {

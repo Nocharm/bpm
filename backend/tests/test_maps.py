@@ -137,6 +137,20 @@ def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     assert "owner_name" in row
 
 
+def test_list_maps_includes_stale_ref_count(client: TestClient) -> None:
+    """홈 배지용 — 게시본/드래프트 노드의 낡은 부서·담당자 + SP 낡은 값 합. 정상 맵은 0."""
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "stale"}).json()
+    vid = created["versions"][0]["id"]
+    client.post(f"/api/versions/{vid}/checkout", json={})
+    save = client.put(f"/api/versions/{vid}/graph", json={"nodes": [
+        {"id": "s", "title": "Start", "node_type": "start"},
+        {"id": "a", "title": "A", "department": "Old Team", "assignee": "Gone Person, Minjae Lee"},
+    ], "edges": []})
+    assert save.status_code == 200, save.text
+    rows = {m["id"]: m for m in client.get("/api/maps").json()}
+    assert rows[created["id"]]["stale_ref_count"] == 2
+
+
 def test_get_map_detail_includes_owner_name(client: TestClient) -> None:
     """상세 응답도 소유자 직원명을 동봉 — PNG 정보 카드 소스. conftest가 테스트 유저를 name=login_id로 시드."""
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "상세오너"}).json()

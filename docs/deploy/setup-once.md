@@ -156,7 +156,7 @@ docker compose restart backend   # ⚠️ 필수 — 백필은 별도 프로세�
 
 1. **드라이런 먼저**(설정 → Employees → sync-preview). `case_mismatches == 0`이 아니면 **중단** — loginId 표기가 다르면 실 sync가 신규행 생성 + 구행 삭제로 권한·승인자 참조를 고아로 만든다.
 2. 첫 수동 sync. `aborted_reason`이 null이고 `deleted`가 프리뷰의 `would_delete`와 일치하는지 확인(20% 상한 초과 시 전체 중단·DB 무변경).
-3. 설정 → Departments 탭 상단 **소멸 부서 재지정** 섹션에서 고아 경로를 새 조직 경로로 이관(맵 권한·그룹 멤버 일괄 이동). 고아가 없으면 섹션이 안 뜨는 게 정상.
+3. 설정 → 조직 → **Orphaned refs** 탭. §6-1의 `orphan_dept_paths`에 있던 경로가 "Missing departments"에 그룹으로 보이면 라인을 체크해 새 조직 경로로 재지정(맵 권한·그룹 멤버·오우닝 일괄). 노드 담당부서 라인은 체크 불가 — "Notify owners"로 오너에게 묶음 알림. 고아가 없으면 "No missing departments"가 정상.
 4. 끝난 뒤 `.env`의 `HR_SYNC_INTERVAL_HOURS=24` + backend 재기동으로 스케줄러를 켠다(이행 중에는 `0`으로 꺼둔다).
 
 ### B5. 노출 직책 확정 — EDW 직책 첫 sync 이후 1회
