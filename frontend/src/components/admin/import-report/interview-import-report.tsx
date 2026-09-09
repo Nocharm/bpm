@@ -31,6 +31,11 @@ import type { Describe } from "./report-bits";
 import { ReportSection } from "./report-section";
 import { ImportSummaryCard } from "./summary-card";
 
+// 미리보기는 맵 행과 L5 캔버스가 previewCode 한 칸을 나눠 쓴다 — 맵 코드와 겹치지 않게 접두를 단다
+function buildCanvasPreviewKey(fileIndex: number): string {
+  return `canvas:${fileIndex}`;
+}
+
 interface InterviewImportReportProps {
   result: InterviewImportResult;
   view: ImportReportView;
@@ -310,10 +315,12 @@ export function InterviewImportReport({
                       indexed={indexed}
                       group={group}
                       extCounts={indexed ? extByCanvas.get(indexed.l5Code) : undefined}
+                      content={files[i]?.name === file.name ? files[i].content : undefined}
                       focus={focus}
                       hover={hover}
                       expanded={expandedFiles.has(i)}
                       previewCode={previewCode}
+                      canvasPreviewing={previewCode === buildCanvasPreviewKey(i)}
                       browseBusy={browseBusy}
                       rowOf={(code) => rowsByCode.get(code)}
                       describe={describe}
@@ -321,6 +328,7 @@ export function InterviewImportReport({
                       onFocusMap={focusCode}
                       onToggleExpanded={() => toggleFileExpanded(i)}
                       onTogglePreview={togglePreview}
+                      onToggleCanvasPreview={() => togglePreview(buildCanvasPreviewKey(i))}
                       onBrowse={() => void handleBrowse(i)}
                     />
                   );

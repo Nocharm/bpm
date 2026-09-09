@@ -6,6 +6,7 @@
 
 ## 유지 중 (아직 소비될 문서)
 
+- [고아 참조 감사(Ref audit) 설계](2026-09-09-ref-audit-design.md) — 부서·사용자 참조 12곳 온디맨드 스캔, 체크 기반 일괄 재지정(replace/remove), 오너 알림(`ref_fix_requested`·`owner_assigned`), 홈 배지·Issues 필터. **승인·구현 전**(feat/ux-polish).
 - [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — 스키마·엔진(§5) 설계 원본. canonical(§4)은 외부 전달 양식에서 **내부 IR로 강등**(2026-08-18) — 파일 로더·CLI·웹 canonical 임포트는 제거됨.
 - [인터뷰 JSON 0.4 임포트 — 최종 결과·확장 계획·한계](2026-09-01-interview-import-v04-result.md) — 이번 트랙의 **핸드오프 문서**(확정 계약·검증 수치·한계·후속 점검). 규칙 근거는 아래 설계 스냅샷.
 - [인터뷰 JSON 0.4 임포트 설계](2026-09-01-interview-import-v04-design.md) — 흐름 그래프(relations) 수용·L5 연계 캔버스 시드/분기 노드·가로 자동정렬·IO 자동 연결·편집용 draft. **dev 구현 완료, main 미머지.**

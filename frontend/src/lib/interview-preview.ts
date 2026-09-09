@@ -187,6 +187,146 @@ export function buildPreviewGraph(row: unknown): VersionGraph | null {
   return { nodes, edges };
 }
 
+// L5 연계 캔버스 미리보기 — 파일 최상위 relations.edges가 rows(홈 L6)와 externalTasks(타 L5의 L6)를
+// taskId/refId로 잇는다. 노드는 전부 subprocess라 분기 src를 decision으로 승격할 수 없어, 백엔드
+// expand_linkage_branches처럼 팬아웃 앞에 분기 노드를 새로 세운다(전부 gateway="parallel"인 병행 팬아웃은 제외).
+// 표시 전용 근사치 — 좌표·핸들·계보 키 등 저장 계약은 싣지 않는다.
+const L5_FANOUT_MIN = 2;
+
+interface L5Node {
+  code: string;
+  name: string;
+  type: "subprocess" | "decision";
+}
+
+/** externalTasks[] → refId별 표시 제목. 미선언 끝점은 호출부가 코드 자체를 제목으로 쓴다 (spec 2026-09-07 §6.3). */
+function readExternalTitles(raw: unknown): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(raw)) return out;
+  for (const item of raw) {
+    const ext = asRecord(item);
+    const refId = ext ? asText(ext.refId) : "";
+    if (!ext || !refId) continue;
+    const l5 = asRecord(ext.l5);
+    const l5Label = l5 ? asText(l5.label) : "";
+    const l6 = asText(ext.l6) || refId;
+    out.set(refId, l5Label ? `${l6} (${l5Label})` : l6);
+  }
+  return out;
+}
+
+/** 파일 1건(rows + relations + externalTasks) → 배치 전 연계 캔버스 그래프. rows가 없으면 null. */
+export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
+  const rec = asRecord(file);
+  if (!rec) return null;
+  const rawRows = Array.isArray(rec.rows) ? rec.rows : [];
+  const byCode = new Map<string, L5Node>();
+  for (const raw of rawRows) {
+    const row = asRecord(raw);
+    const code = row ? asText(row.taskId) : "";
+    if (!row || !code || byCode.has(code)) continue;
+    byCode.set(code, { code, name: asText(row.l6) || code, type: "subprocess" });
+  }
+  if (byCode.size === 0) return null;
+  const externalTitles = readExternalTitles(rec.externalTasks);
+
+  // 엣지 수집 — 끝점이 rows에 없으면 외부 L6 노드로 세운다(선언 제목 또는 원문 코드)
+  const rawEdges = asRecord(rec.relations)?.edges;
+  const edges: PreviewEdge[] = [];
+  const gatewayOf = new Map<string, string>();
+  const seen = new Set<string>();
+  const ensure = (code: string): L5Node => {
+    const known = byCode.get(code);
+    if (known) return known;
+    const made: L5Node = { code, name: externalTitles.get(code) ?? code, type: "subprocess" };
+    byCode.set(code, made);
+    return made;
+  };
+  for (const raw of Array.isArray(rawEdges) ? rawEdges : []) {
+    const edge = asRecord(raw);
+    const from = edge ? asText(edge.src) : "";
+    const to = edge ? asText(edge.dst) : "";
+    if (!edge || !from || !to) continue;
+    const pair = `${from}>${to}`;
+    if (seen.has(pair)) continue;
+    seen.add(pair);
+    ensure(from);
+    ensure(to);
+    const kindRaw = asText(edge.kind) || "seq";
+    const label = [asText(edge.label), asText(edge.condition)].filter(Boolean).join("\n");
+    edges.push({ from, to, label, kind: KNOWN_EDGE_KINDS.has(kindRaw) ? kindRaw : "seq" });
+    gatewayOf.set(pair, asText(edge.gateway));
+  }
+  const ordered = [...byCode.values()];
+  if (edges.length === 0) {
+    for (let i = 1; i < ordered.length; i += 1) {
+      edges.push({ from: ordered[i - 1].code, to: ordered[i].code, label: "", kind: "seq" });
+    }
+  }
+
+  // 팬아웃 앞 분기 노드 — 자기 자신으로 돌아오는 엣지(되돌아감)가 섞였으면 일괄 생성 티를 내는 이름을 쓴다
+  const outgoing = new Map<string, PreviewEdge[]>();
+  for (const edge of edges) {
+    const list = outgoing.get(edge.from);
+    if (list) list.push(edge);
+    else outgoing.set(edge.from, [edge]);
+  }
+  const flow: PreviewEdge[] = [];
+  const branches: { anchor: string; node: L5Node }[] = [];
+  for (const node of ordered) {
+    const outs = outgoing.get(node.code) ?? [];
+    const allParallel = outs.length > 0 && outs.every((e) => gatewayOf.get(`${e.from}>${e.to}`) === "parallel");
+    if (outs.length < L5_FANOUT_MIN || allParallel) {
+      flow.push(...outs);
+      continue;
+    }
+    const loops = outs.some((e) => e.to === node.code || e.kind === "loop");
+    const branch: L5Node = {
+      code: `${node.code}__b`,
+      name: loops ? PREVIEW_LOOP_BRANCH_NAME : `${node.name} 결과`,
+      type: "decision",
+    };
+    branches.push({ anchor: node.code, node: branch });
+    flow.push({ from: node.code, to: branch.code, label: "", kind: "seq" });
+    for (const edge of outs) flow.push({ ...edge, from: branch.code });
+  }
+  const withBranches: L5Node[] = [];
+  for (const node of ordered) {
+    withBranches.push(node);
+    for (const branch of branches) {
+      if (branch.anchor === node.code) withBranches.push(branch.node);
+    }
+  }
+
+  // Start/End 보강 — L6와 같은 규칙(loop 진입은 진입으로 치지 않는다)
+  const hasIn = new Set(flow.filter((e) => e.kind !== "loop").map((e) => e.to));
+  const hasOut = new Set(flow.map((e) => e.from));
+  const full: PreviewEdge[] = [...flow];
+  for (const node of withBranches) {
+    if (!hasIn.has(node.code)) full.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
+    if (!hasOut.has(node.code)) full.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
+  }
+  const nodes: FlatNode[] = [
+    makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
+    ...withBranches.map((node, i) => makeFlatNode(node.code, node.name, node.type, "", i + 1)),
+    makeFlatNode(PREVIEW_END_ID, "End", "end", "", withBranches.length + 1),
+  ];
+  return {
+    nodes,
+    edges: full.map((edge, i) => ({
+      id: `e${i}`,
+      source_node_id: edge.from,
+      target_node_id: edge.to,
+      label: edge.label,
+      source_side: "right",
+      target_side: "left",
+      source_handle: null,
+      target_handle: null,
+      line_style: "",
+    })),
+  };
+}
+
 /** 에디터 자동정렬(LR)로 좌표를 채운다 — 임포트 배치(consultant_layout.py)와 같은 계약이라 실제 맵과 같은 모양. */
 export function layoutPreviewGraph(graph: VersionGraph): VersionGraph {
   const nodes: AppNode[] = graph.nodes.map((node) => ({

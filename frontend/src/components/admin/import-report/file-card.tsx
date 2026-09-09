@@ -5,7 +5,7 @@
 // 헤더 클릭=L5 포커스, 행 클릭=맵 포커스, 좌측 항목 호버 시 해당 행/헤더가 peer로 밝아진다 (사용자 승인 목업 2026-09-08).
 
 import { AlertTriangle, ChevronRight, Eye, FolderTree, Workflow } from "lucide-react";
-import { Fragment, useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import type { InterviewFileReport } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -56,6 +56,9 @@ export function ImportMapRow({
   onTogglePreview,
 }: ImportMapRowProps) {
   const { t } = useI18n();
+  // 그래프 빌드는 한 번 열어 본 행만 — 닫아도 언마운트하지 않아야 접힘 전환이 보인다
+  const [everOpened, setEverOpened] = useState(previewing);
+  if (previewing && !everOpened) setEverOpened(true);
   const hasError = entry.messages.some((m) => m.severity === "error");
   const tone = focused
     ? FOCUS_ROW_CLASS
@@ -68,6 +71,7 @@ export function ImportMapRow({
     <li
       data-id={`interview-map-${entry.code}`}
       data-focused={focused ? "true" : undefined}
+      data-previewing={previewing ? "true" : undefined}
       className={`group border-t border-divider transition-colors duration-150 first:border-t-0 ${tone}`}
     >
       <div
@@ -140,11 +144,25 @@ export function ImportMapRow({
           />
         </span>
       </div>
-      {previewing && (
-        <div className="px-2.5 pb-2" data-stop>
-          <ImportMapPreview row={row} dataId={`interview-map-preview-${entry.code}`} onClose={onTogglePreview} />
+      {/* 펼침/접힘 애니메이션 — 래퍼는 항상 두고(첫 열림도 전환되도록) 그래프만 열어 본 뒤 붙인다 */}
+      <div
+        data-stop
+        className={`grid transition-[grid-template-rows] duration-350 ease-smooth ${
+          previewing ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}
+      >
+        <div className="overflow-hidden" data-preview-body>
+          {everOpened && (
+            <div className="px-2.5 pb-2">
+              <ImportMapPreview
+                source={row}
+                dataId={`interview-map-preview-${entry.code}`}
+                onClose={onTogglePreview}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </li>
   );
 }
@@ -155,10 +173,12 @@ interface ImportFileCardProps {
   indexed: IndexedFile | undefined; // 업로드 JSON 색인(계보·L5 이름) — 파일명이 맞을 때만
   group: ReportGroup | undefined; // 리포트 뷰모델의 파일 그룹(캔버스·맵) — 파일명이 맞을 때만
   extCounts: ExternalCanvasCounts | undefined;
+  content: unknown; // 업로드 JSON 원문 — L5 연계 캔버스 미리보기용(파일명이 맞을 때만)
   focus: ReportFocus | null;
   hover: RelatedTags | null;
   expanded: boolean; // "모두 보기" 상태
   previewCode: string | null;
+  canvasPreviewing: boolean;
   browseBusy: boolean;
   rowOf: (code: string) => unknown;
   describe: Describe;
@@ -166,6 +186,7 @@ interface ImportFileCardProps {
   onFocusMap: (code: string) => void;
   onToggleExpanded: () => void;
   onTogglePreview: (code: string) => void;
+  onToggleCanvasPreview: () => void;
   onBrowse: () => void;
 }
 
@@ -175,10 +196,12 @@ export function ImportFileCard({
   indexed,
   group,
   extCounts,
+  content,
   focus,
   hover,
   expanded,
   previewCode,
+  canvasPreviewing,
   browseBusy,
   rowOf,
   describe,
@@ -186,10 +209,14 @@ export function ImportFileCard({
   onFocusMap,
   onToggleExpanded,
   onTogglePreview,
+  onToggleCanvasPreview,
   onBrowse,
 }: ImportFileCardProps) {
   const { t } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
+  // 맵 행과 같은 규칙 — 한 번 연 뒤엔 접혀도 남겨 둬야 접힘 전환이 보인다
+  const [canvasEverOpened, setCanvasEverOpened] = useState(canvasPreviewing);
+  if (canvasPreviewing && !canvasEverOpened) setCanvasEverOpened(true);
   const maps = group?.maps ?? [];
   const capped = maps.length > VISIBLE_ROWS && !expanded;
 
@@ -201,8 +228,14 @@ export function ImportFileCard({
       list.style.maxHeight = "";
       return;
     }
-    const rows = Array.from(list.children).slice(0, VISIBLE_ROWS);
-    const height = rows.reduce((sum, el) => sum + (el instanceof HTMLElement ? el.offsetHeight : 0), 0);
+    const rows = Array.from(list.children).filter((el) => el instanceof HTMLElement).slice(0, VISIBLE_ROWS);
+    let height = rows.reduce((sum, el) => sum + el.offsetHeight, 0);
+    // 펼침 전환(350ms)이 시작되기 전이라 열리는 행의 그리드 트랙은 아직 0 — offsetHeight엔 미리보기가 안 잡힌다.
+    // 안쪽 실제 콘텐츠 높이를 더해 목록이 미리보기와 같은 속도로 늘어나게 한다(안 하면 미리보기가 잘린다).
+    const openPane = rows
+      .find((el) => el.dataset.previewing === "true")
+      ?.querySelector<HTMLElement>("[data-preview-body]");
+    if (openPane) height += Math.max(0, openPane.scrollHeight - openPane.offsetHeight);
     list.style.maxHeight = `${height}px`;
   }, [capped, previewCode, maps.length]);
 
@@ -341,41 +374,77 @@ export function ImportFileCard({
       )}
 
       {canvas && (
-        <div
-          data-id={`interview-file-canvas-${index}`}
-          className="flex items-center gap-2 border-t border-divider bg-surface-pearl px-2.5 py-1 text-fine"
-        >
-          <Workflow size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-          <span className="min-w-0 truncate text-ink-secondary">
-            {t("framework.importCanvas")}
-            {canvasMessages.map((msg, j) => (
-              <span key={j} className={msg.severity === "info" ? "" : "text-changed"}>
-                {" · "}
-                {describe(msg.kind, msg.subject, msg.raw)}
-                {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
-                  ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
-                  : ""}
-              </span>
-            ))}
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-2">
-            {extTotal > 0 && (
-              <span
-                data-id={`interview-canvas-external-${index}`}
-                className={extTotal - (extCounts?.linked ?? 0) > 0 ? "text-error" : "text-ink-tertiary"}
+        <>
+          <div
+            data-id={`interview-file-canvas-${index}`}
+            className="group/canvas flex items-center gap-2 border-t border-divider bg-surface-pearl px-2.5 py-1 text-fine"
+          >
+            <Workflow size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <span className="min-w-0 truncate text-ink-secondary">
+              {t("framework.importCanvas")}
+              {canvasMessages.map((msg, j) => (
+                <span key={j} className={msg.severity === "info" ? "" : "text-changed"}>
+                  {" · "}
+                  {describe(msg.kind, msg.subject, msg.raw)}
+                  {msg.kind === "canvas" && (msg.numbers[1] ?? 0) > 0
+                    ? ` · ${t("framework.importNodesEdges", { count: msg.numbers[1] })}`
+                    : ""}
+                </span>
+              ))}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-2">
+              {/* L5 미리보기 — 맵 행과 같은 호버 노출 규칙 (사용자 지시 2026-09-09) */}
+              <button
+                type="button"
+                data-id={`interview-canvas-preview-btn-${index}`}
+                aria-label={t("framework.report.previewCanvas")}
+                aria-pressed={canvasPreviewing}
+                className={`inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-surface px-1.5 py-px text-accent transition-opacity duration-150 hover:bg-accent-tint ${
+                  canvasPreviewing
+                    ? "opacity-100"
+                    : "opacity-0 focus-visible:opacity-100 group-hover/canvas:opacity-100"
+                }`}
+                onClick={onToggleCanvasPreview}
               >
-                {t("framework.importExternalColTask")} · {extParts.join(" · ")}
-              </span>
-            )}
-            <KeyIcon
-              entries={[
-                [t("framework.importIdCategory"), canvas.code],
-                [t("framework.importIdPath"), canvas.path],
-              ]}
-              dataId={`interview-canvas-key-${index}`}
-            />
-          </span>
-        </div>
+                <Eye size={12} strokeWidth={1.5} />
+                {t("framework.report.preview")}
+              </button>
+              {extTotal > 0 && (
+                <span
+                  data-id={`interview-canvas-external-${index}`}
+                  className={extTotal - (extCounts?.linked ?? 0) > 0 ? "text-error" : "text-ink-tertiary"}
+                >
+                  {t("framework.importExternalColTask")} · {extParts.join(" · ")}
+                </span>
+              )}
+              <KeyIcon
+                entries={[
+                  [t("framework.importIdCategory"), canvas.code],
+                  [t("framework.importIdPath"), canvas.path],
+                ]}
+                dataId={`interview-canvas-key-${index}`}
+              />
+            </span>
+          </div>
+          <div
+            className={`grid border-t border-divider transition-[grid-template-rows] duration-350 ease-smooth ${
+              canvasPreviewing ? "grid-rows-[1fr]" : "grid-rows-[0fr] border-t-0"
+            }`}
+          >
+            <div className="overflow-hidden">
+              {canvasEverOpened && (
+                <div className="px-2.5 py-2">
+                  <ImportMapPreview
+                    source={content}
+                    scope="canvas"
+                    dataId={`interview-canvas-preview-${index}`}
+                    onClose={onToggleCanvasPreview}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {maps.length > 0 ? (

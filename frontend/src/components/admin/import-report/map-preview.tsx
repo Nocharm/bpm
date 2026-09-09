@@ -1,7 +1,8 @@
 "use client";
 
-// 맵 행 미리보기 — 업로드 JSON의 actions/relations로 그린 L6 흐름(lib/interview-preview)을 ScopePreview(경량 SVG)로.
-// 한 번에 하나만 열리고(호출부의 previewCode 단일 상태), 뷰포트는 1.5노드 높이 고정, 기본 배율은 노드가 읽히는 크기,
+// 임포트 리포트 미리보기 — 업로드 JSON으로 그린 흐름(lib/interview-preview)을 ScopePreview(경량 SVG)로.
+// scope="map"은 행 하나의 L6 흐름(actions/relations), scope="canvas"는 파일 전체의 L5 연계 캔버스.
+// 한 번에 하나만 열리고(호출부의 previewCode 단일 상태), 뷰포트는 5노드 높이 고정, 기본 배율은 노드가 읽히는 크기,
 // 드래그 팬·휠 줌·+/−/맞춤 버튼 — 서브프로세스 피크와 같은 조작감 (사용자 결정 2026-09-08).
 
 import { Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -10,10 +11,10 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { VersionGraph } from "@/lib/api";
 import { NODE_HEIGHT, nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 import { useI18n } from "@/lib/i18n";
-import { buildPreviewGraph, layoutPreviewGraph } from "@/lib/interview-preview";
+import { buildL5PreviewGraph, buildPreviewGraph, layoutPreviewGraph } from "@/lib/interview-preview";
 import { ScopePreview } from "@/components/scope-preview";
 
-const VIEW_HEIGHT = 84; // px — 노드 52 × 1.5 + 여백
+const VIEW_HEIGHT = 266; // px — 노드 52 × 5 + 여백 (3배에서 더 키움, 사용자 지시 2026-09-09)
 const VIEW_PAD = 40; // ScopePreview의 viewBox 패딩과 동일
 const TARGET_NODE_PX = 44; // 기본 배율에서 process 노드가 보이는 높이
 const ZOOM_MIN = 1;
@@ -33,12 +34,19 @@ function fitZoom(graph: VersionGraph): number {
 const ZOOM_BTN =
   "inline-flex h-5 w-5 items-center justify-center rounded-sm border border-hairline bg-surface/90 text-ink-secondary hover:bg-accent-tint hover:text-accent";
 
-export function ImportMapPreview({ row, dataId, onClose }: { row: unknown; dataId: string; onClose: () => void }) {
+interface ImportMapPreviewProps {
+  source: unknown; // scope="map"이면 rows[i], scope="canvas"면 파일 원문 전체
+  scope?: "map" | "canvas";
+  dataId: string;
+  onClose: () => void;
+}
+
+export function ImportMapPreview({ source, scope = "map", dataId, onClose }: ImportMapPreviewProps) {
   const { t } = useI18n();
   const graph = useMemo(() => {
-    const built = buildPreviewGraph(row);
+    const built = scope === "canvas" ? buildL5PreviewGraph(source) : buildPreviewGraph(source);
     return built ? layoutPreviewGraph(built) : null;
-  }, [row]);
+  }, [source, scope]);
   const [zoom, setZoom] = useState<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // 기본 배율이 1보다 크면 SVG가 컨테이너보다 커서 좌상단 빈 여백부터 보인다 — 마운트 시 Start 노드가 왼쪽에,

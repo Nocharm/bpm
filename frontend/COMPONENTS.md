@@ -169,7 +169,7 @@
 | `file-card.tsx` | `ImportMapRow`, `ImportFileCard` | 우측 L5 파일 카드 | `components/admin/import-report/interview-import-report.tsx` |
 | `governance-section.tsx` | `GovernanceSection` | 거버넌스 확인 | `components/admin/import-report/interview-import-report.tsx` |
 | `interview-import-report.tsx` | `InterviewImportReport` | 인터뷰 임포트 dry-run 리포트(2열, A안) | `components/admin/framework-panel.tsx` |
-| `map-preview.tsx` | `ImportMapPreview` | 맵 행 미리보기 | `components/admin/import-report/file-card.tsx` |
+| `map-preview.tsx` | `ImportMapPreview` | 임포트 리포트 미리보기 | `components/admin/import-report/file-card.tsx` |
 | `person-pill.tsx` | `PersonPill` | 임포트 리포트의 사용자 필 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/governance-section.tsx` |
 | `report-bits.tsx` | `ExternalStatePill`, `KeyCard`, `KeyIcon` | 임포트 리포트 공용 조각 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |
 | `report-section.tsx` | `ReportSection` | 2열 임포트 리포트의 섹션 셸 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |

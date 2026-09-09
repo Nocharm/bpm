@@ -121,8 +121,9 @@ try {
   const countChecked = async () =>
     Number((((await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "").match(/(\d+) governance/) ?? [])[1] ?? -1);
   const checkedBefore = await countChecked();
-  // 유지/교체는 드롭다운(2026-09-08) — 체크박스 대신 select 값으로 고른다
-  await page.locator(`[data-id="import-governance-check-${govCode}-owner"]`).selectOption("replace");
+  // 유지/교체는 커스텀 드롭다운(2026-09-09) — 트리거를 열고 포털 목록에서 Replace를 고른다
+  await page.locator(`[data-id="import-governance-select-${govCode}-owner"]`).click();
+  await page.locator(`[data-id="import-governance-select-${govCode}-owner-replace"]`).click();
   const checkedAfter = await countChecked();
   const barText = (await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "";
   check("apply bar counts the checked change", checkedBefore >= 0 && checkedAfter === checkedBefore + 1, barText.trim());

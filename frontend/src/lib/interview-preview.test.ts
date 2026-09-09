@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildL5PreviewGraph,
   buildPreviewGraph,
   layoutPreviewGraph,
   PREVIEW_EXCEPTION_COLOR,
@@ -113,5 +114,81 @@ describe("layoutPreviewGraph", () => {
     expect(x("a01")).toBeLessThan(x("a02"));
     expect(x("a02")).toBeLessThan(x("a03"));
     expect(x("a03")).toBeLessThan(x("__end__"));
+  });
+});
+
+describe("buildL5PreviewGraph", () => {
+  const rows = (...codes: [string, string][]) => codes.map(([taskId, l6]) => ({ taskId, l6 }));
+
+  it("returns null without usable rows", () => {
+    expect(buildL5PreviewGraph(null)).toBeNull();
+    expect(buildL5PreviewGraph({ rows: [] })).toBeNull();
+    expect(buildL5PreviewGraph({ rows: [{ l6: "코드 없음" }] })).toBeNull();
+  });
+
+  it("chains rows in order when the file declares no L5 relations", () => {
+    const graph = buildL5PreviewGraph({ rows: rows(["t1", "준비"], ["t2", "수행"]) });
+
+    expect(graph?.nodes.map((n) => n.id)).toEqual(["__start__", "t1", "t2", "__end__"]);
+    expect(graph?.nodes.find((n) => n.id === "t1")?.node_type).toBe("subprocess");
+    expect(pairsOf(graph!)).toEqual(["t1>t2", "__start__>t1", "t2>__end__"]);
+  });
+
+  it("names undeclared endpoints by code and declared externals by their L5 label", () => {
+    const graph = buildL5PreviewGraph({
+      rows: rows(["t1", "준비"]),
+      externalTasks: [{ refId: "ext-a", l6: "작업지시 발행", l5: { label: "설비 작업지시 운영" } }],
+      relations: { edges: [{ src: "t1", dst: "ext-a" }, { src: "ext-a", dst: "ghost-code" }] },
+    });
+
+    const titleOf = (id: string) => graph?.nodes.find((n) => n.id === id)?.title;
+    expect(titleOf("ext-a")).toBe("작업지시 발행 (설비 작업지시 운영)");
+    expect(titleOf("ghost-code")).toBe("ghost-code"); // 미선언 끝점은 코드 그대로
+  });
+
+  it("inserts a branch node before an exclusive fan-out but not a parallel one", () => {
+    const fanout = buildL5PreviewGraph({
+      rows: rows(["t1", "준비"], ["t2", "수행"], ["t3", "보고"]),
+      relations: {
+        edges: [
+          { src: "t1", dst: "t2", kind: "branch", gateway: "exclusive" },
+          { src: "t1", dst: "t3", kind: "bypass" },
+        ],
+      },
+    });
+    expect(fanout?.nodes.find((n) => n.id === "t1__b")?.node_type).toBe("decision");
+    expect(pairsOf(fanout!)).toContain("t1>t1__b");
+    expect(pairsOf(fanout!)).toEqual(expect.arrayContaining(["t1__b>t2", "t1__b>t3"]));
+    expect(pairsOf(fanout!)).not.toContain("t1>t2");
+
+    // 병행 팬아웃은 택일이 아니라 마름모를 세우면 오독된다 — 백엔드 expand_linkage_branches와 같은 판단
+    const parallel = buildL5PreviewGraph({
+      rows: rows(["t1", "준비"], ["t2", "수행"], ["t3", "보고"]),
+      relations: {
+        edges: [
+          { src: "t1", dst: "t2", kind: "branch", gateway: "parallel" },
+          { src: "t1", dst: "t3", kind: "branch", gateway: "parallel" },
+        ],
+      },
+    });
+    expect(parallel?.nodes.some((n) => n.id === "t1__b")).toBe(false);
+    expect(pairsOf(parallel!)).toEqual(expect.arrayContaining(["t1>t2", "t1>t3"]));
+  });
+
+  it("labels a fan-out that loops back with the auto-generated branch name", () => {
+    const graph = buildL5PreviewGraph({
+      rows: rows(["t1", "준비"], ["t2", "수행"]),
+      relations: {
+        edges: [
+          { src: "t2", dst: "t1", kind: "loop", condition: "표준기 교체 후 재수행" },
+          { src: "t2", dst: "t1", kind: "loop" },
+          { src: "t2", dst: "t3", kind: "branch", gateway: "exclusive" },
+        ],
+      },
+    });
+
+    expect(graph?.nodes.find((n) => n.id === "t2__b")?.title).toBe(PREVIEW_LOOP_BRANCH_NAME);
+    // 같은 (src, dst) 쌍은 한 번만 — 중복 선언은 버린다
+    expect(pairsOf(graph!).filter((p) => p === "t2__b>t1")).toHaveLength(1);
   });
 });
