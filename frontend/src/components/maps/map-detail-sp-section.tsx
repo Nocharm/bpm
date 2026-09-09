@@ -207,24 +207,30 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const detailCount = [inputs.length > 0, outputs.length > 0, startCondition !== "", endCondition !== ""].filter(Boolean).length;
   const ioFilled = inputs.length > 0 || outputs.length > 0;
 
-  // 항목별 데이터 형식 필 — 카탈로그에 있으면 아이콘 동반(MultiValueInput 읽기 필과 같은 문법), 미지는 글자만
+  // 항목별 데이터 형식 필 — 카탈로그에 있으면 아이콘 동반(MultiValueInput 읽기 필과 같은 문법), 미지는 글자만.
+  // align-middle + 행 줄높이(18px)와 같은 높이 + -top-px 보정(실측 0.8px 하향 상쇄) → 행 글자와 세로 중앙이 맞는다.
+  // 긴 형식명은 8rem에서 말줄임(제목 속성에 전문)
   const formPill = (form: string) => {
     const matched = resolveDataForm(form);
     const FormIcon = matched?.icon;
+    const label = matched?.value ?? form;
     return (
       <span
+        title={form}
         // indent-0 — 글머리 행의 음수 들여쓰기가 필 안까지 상속돼 아이콘과 글자가 겹치는 것을 막는다
-        className="ml-1 inline-flex shrink-0 items-center gap-0.5 rounded-xs border border-hairline bg-surface px-1 align-[1px] indent-0 text-[11px] font-normal text-ink-tertiary"
+        className="relative -top-px ml-1 inline-flex h-[18px] max-w-[8rem] shrink-0 items-center gap-0.5 rounded-xs border border-hairline bg-surface px-1 indent-0 align-middle text-[11px] leading-none font-normal text-ink-tertiary"
       >
         {FormIcon && <FormIcon size={10} strokeWidth={1.5} className="shrink-0" />}
-        {matched?.value ?? form}
+        <span className="min-w-0 truncate">{label}</span>
       </span>
     );
   };
 
   // 입력물/산출물 반쪽 — 글머리 목록 + 항목별 데이터 형식. 높이는 내용에 맞추고 상한은 3줄 클램프(넘치면 말줄임)
   const ioHalf = (field: "input" | "output", icon: LucideIcon, label: string, rows: IoRow[]) => (
-    <div data-id={`map-detail-sp-${field}`} className="flex min-h-0 flex-1 flex-col gap-1 px-2.5 py-1.5">
+        // flex-1(균등 분할) 대신 자연 높이 — 항목이 여럿이면 결합 타일이 커지고 그리드 행이 따라 늘어난다.
+    // 균등 분할이면 3줄 클램프 전에 반쪽 높이에서 글자가 잘린다(실측)
+    <div data-id={`map-detail-sp-${field}`} className="flex flex-col gap-1 px-2.5 py-1.5">
       {vertHead(icon, label, rows.length > 0)}
       {rows.length > 0 && (
         <ul className="line-clamp-3 text-fine leading-normal break-keep text-ink-secondary">
