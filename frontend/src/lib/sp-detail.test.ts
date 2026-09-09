@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildDeptTreeLevels,
-  countFilledSpTiles,
-  hasSpContent,
-  parseIoLines,
-  resolveValueOrNote,
-} from "./sp-detail";
+import { countFilledSpTiles, hasSpContent, parseIoLines, resolveValueOrNote } from "./sp-detail";
 
 describe("resolveValueOrNote", () => {
   it("prefers the representative value", () => {
@@ -18,34 +12,6 @@ describe("resolveValueOrNote", () => {
   });
   it("returns an empty default when both are blank", () => {
     expect(resolveValueOrNote("", null)).toEqual({ value: "", tone: "default" });
-  });
-});
-
-describe("buildDeptTreeLevels", () => {
-  it("maps up to four levels root→leaf with increasing depth", () => {
-    const levels = buildDeptTreeLevels("Quality Center/QC Department/QC Support Team/QC Sample Management Group");
-    expect(levels.map((l) => l.depth)).toEqual([0, 1, 2, 3]);
-    expect(levels.map((l) => l.path)).toEqual([
-      "Quality Center",
-      "Quality Center/QC Department",
-      "Quality Center/QC Department/QC Support Team",
-      "Quality Center/QC Department/QC Support Team/QC Sample Management Group",
-    ]);
-    expect(levels.filter((l) => l.leaf)).toHaveLength(1);
-    expect(levels[3].leaf).toBe(true);
-    expect(levels.some((l) => l.ellipsis)).toBe(false);
-  });
-  it("collapses the middle of deep paths into one ellipsis row so the leaf stays visible", () => {
-    const levels = buildDeptTreeLevels("A/B/C/D/E/F");
-    expect(levels).toHaveLength(4);
-    expect(levels[0]).toMatchObject({ path: "A", depth: 0, ellipsis: false });
-    expect(levels[1]).toMatchObject({ path: "", depth: 1, ellipsis: true });
-    expect(levels[2]).toMatchObject({ path: "A/B/C/D/E", depth: 2, leaf: false });
-    expect(levels[3]).toMatchObject({ path: "A/B/C/D/E/F", depth: 3, leaf: true });
-  });
-  it("handles a single level and blanks", () => {
-    expect(buildDeptTreeLevels("Solo")).toEqual([{ path: "Solo", depth: 0, leaf: true, ellipsis: false }]);
-    expect(buildDeptTreeLevels("")).toEqual([]);
   });
 });
 

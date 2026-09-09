@@ -15,9 +15,11 @@ import { useDirectory } from "@/lib/directory";
 interface DeptPillProps {
   department: string;
   dataId: string;
+  // 표시 이름 대체 — UI 언어 한글명처럼 말단 영문 대신 보일 글자(홈 상세 부서 타일). 없으면 영문 말단
+  label?: string;
 }
 
-export function DeptPill({ department, dataId }: DeptPillProps) {
+export function DeptPill({ department, dataId, label }: DeptPillProps) {
   const dir = useDirectory();
   const koreanDeptByPath = useKoreanDeptByPath();
   const [orgInfo, setOrgInfo] = useState<{ x: number; y: number } | null>(null);
@@ -58,7 +60,7 @@ export function DeptPill({ department, dataId }: DeptPillProps) {
         onKeyDown={handleKey}
       >
         <Building2 size={11} strokeWidth={1.5} className="shrink-0" />
-        <span className="min-w-0 truncate">{deptLeaf(path)}</span>
+        <span className="min-w-0 truncate">{label || deptLeaf(path)}</span>
       </span>
       {orgInfo && (
         <OrgInfoModal orgPath={path} koreanDeptByPath={koreanDeptByPath} origin={orgInfo} onClose={() => setOrgInfo(null)} />

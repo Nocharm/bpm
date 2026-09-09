@@ -10,8 +10,8 @@ import { ClipBody, ClipToggle, useClipOverflow } from "@/components/clip-body";
 import { SectionHeader } from "@/components/section-header";
 import { useI18n } from "@/lib/i18n";
 
-// 접힘 본문 높이(px) — 노트 카드 3장쯤 보이는 높이. 설명·노트 두 섹션이 공유해 3:2 행의 키가 맞는다
-export const DETAIL_CLIP_HEIGHT_PX = 272;
+// 접힘 본문 높이(px) — 노트 카드 한 장 반쯤(사용자 지시 2026-09-09: 처음 안의 절반). 설명·노트 두 섹션이 공유해 3:2 행의 키가 맞는다
+export const DETAIL_CLIP_HEIGHT_PX = 136;
 
 interface MapDetailDescriptionProps {
   description: string | null | undefined;

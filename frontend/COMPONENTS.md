@@ -16,7 +16,7 @@
 | `ai-chat-panel.tsx` | `AiChatPanel` | 에디터 AI 채팅 패널 | `app/maps/[mapId]/page.tsx` |
 | `approval-panel.tsx` | `ApprovalPanel` | R5c 승인 탭 | `app/maps/[mapId]/page.tsx` |
 | `approver-manager.tsx` | `ApproverManager` | 맵 소유자가 승인자 목록을 편집 | `app/maps/[mapId]/page.tsx` |
-| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `components/attribute-read-rows.tsx`, `components/bpm-attribute-picker.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `assignee-pills.tsx` | `AssigneePills` | 담당자 필 | `components/attribute-read-rows.tsx`, `components/bpm-attribute-picker.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx` |
 | `attribute-read-rows.tsx` | `AttributeReadRows` | 읽기 전용 BPM 속성 행 | `app/maps/[mapId]/page.tsx` |
 | `auth-loading.tsx` | `AuthLoadingScreen` |   | `app/login/page.tsx`, `components/providers.tsx` |
 | `auto-height.tsx` | `AutoHeight` | 내용 높이에 맞춰 늘어나고, 바뀔 때 부드럽게 전환되는 컨테이너. | `app/inbox/page.tsx`, `components/group-bulk-modal.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
@@ -37,7 +37,7 @@
 | `csv-import-tab.tsx` | `CsvImportTab` | 인스펙터 Import 탭 | `app/maps/[mapId]/page.tsx` |
 | `csv-template-actions.tsx` | `CsvTemplateActions` | CSV 준비 액션 | `components/csv-create-modal.tsx`, `components/csv-import-section.tsx` |
 | `data-form-picker.tsx` | `DataFormPicker` | IO 항목별 데이터 폼 피커 | `components/multi-value-input.tsx` |
-| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/attribute-read-rows.tsx`, `components/permissions/attribute-tiles.tsx` |
+| `dept-pill.tsx` | `DeptPill` | 부서 말단 필 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx` |
 | `dev-login-modal.tsx` | `DevLoginModal` | 로컬(인증 OFF) 임시 로그인 피커 | `app/login/page.tsx` |
 | `edge-action-modal.tsx` | `EdgeActionModal` | 출력 1개 충돌 시 선택 모달 | `app/maps/[mapId]/page.tsx` |
 | `edge-branch-modal.tsx` | `EdgeBranchModal` | 판단(decision) 노드에서 엣지를 연결할 때 뜨는 분기 선택 | `app/maps/[mapId]/page.tsx` |
@@ -229,7 +229,7 @@
 | `dashboard-map-row.tsx` | `DashboardMapRow` | 대시보드 컴팩트 맵 행 | `components/maps/recent-opened-list.tsx`, `components/maps/status-donut-card.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
+| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |
 | `framework-assign-modal.tsx` | `FrameworkAssignModal` | 업무 체계 카테고리 연결/해제 + 슬롯 이양 | `components/maps/map-detail-card.tsx` |
 | `framework-tree.tsx` | `FrameworkTree` | 홈 Framework 뷰 | `app/page.tsx` |

@@ -1,6 +1,6 @@
 "use client";
 
-// 홈 맵 상세 — 서브프로세스 정보 섹션. SP 지정값과 원문 메모를 한 카드에: 부서 트리·담당자 목록(세로 타일) +
+// 홈 맵 상세 — 서브프로세스 정보 섹션. SP 지정값과 원문 메모를 한 카드에: 부서 필·담당자 인물 필(세로 타일) +
 // 시스템·URL·GMP 스택 · 수행 지표 3열 · 입력물/산출물 결합 타일 + 시작/종료 조건. 메모가 있는 타일은 아이콘
 // 점 + 호버 스왑 + 클릭 원문 팝오버(FallbackHint 읽기)이고, 대표값이 없을 때만 원문을 회색 작은 글씨로 타일에
 // 노출(폴백 톤). 지정 안 됐고 값·메모도 없으면 렌더하지 않는다 (사용자 결정 2026-09-09, 목업 v5).
@@ -9,7 +9,8 @@
 import {
   Building2,
   ChevronRight,
-  CornerDownRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Flag,
   Link as LinkIcon,
   LogIn,
@@ -17,38 +18,33 @@ import {
   Monitor,
   Play,
   ShieldCheck,
-  User,
   Users,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { AssigneePills } from "@/components/assignee-pills";
 import { CurrencyPill, type CostUnit } from "@/components/cost-unit";
+import { DeptPill } from "@/components/dept-pill";
 import { FallbackHint } from "@/components/fallback-hint";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { PARAM_ICON } from "@/components/param-icons";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { SectionHeader } from "@/components/section-header";
-import type { DirectoryUser, MapDetail } from "@/lib/api";
+import type { MapDetail } from "@/lib/api";
 import { parseAssignees } from "@/lib/assignee";
 import { formatKst } from "@/lib/datetime";
 import { useDirectory } from "@/lib/directory";
 import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
-import { formatDeptName } from "@/lib/korean-dept";
 import { formatParamValue, PARAM_LABEL_KEY } from "@/lib/params";
-import {
-  buildDeptTreeLevels,
-  countFilledSpTiles,
-  hasSpContent,
-  parseIoLines,
-  resolveValueOrNote,
-} from "@/lib/sp-detail";
+import { countFilledSpTiles, hasSpContent, parseIoLines, resolveValueOrNote } from "@/lib/sp-detail";
 
 interface MapDetailSpSectionProps {
   detail: MapDetail;
-  // org_path → 한글 부서명(카드가 디렉터리에서 만든 조회표) — 부서 트리 레벨 표시명
+  // org_path → 한글 부서명(카드가 디렉터리에서 만든 조회표) — 부서 필의 UI 언어 이름·반대 언어 줄
   koreanDeptByPath: Map<string, string>;
 }
 
@@ -66,9 +62,18 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const { t, lang } = useI18n();
   const dir = useDirectory();
   const [collapsed, setCollapsed] = useState(false);
+  // 기본은 BPM 속성 + 수행 지표 헤더까지만 — 나머지(지표 타일·입출력)는 아코디언으로 접혀 있다.
+  // 섹션 호버 시 헤더의 지정 필이 "모두 펼치기"로 바뀌고, 누르면 안의 그룹까지 전부 펼친다 (사용자 지시 2026-09-09)
+  const [expanded, setExpanded] = useState(false);
   const [attrsOpen, setAttrsOpen] = useState(true);
   const [metricsOpen, setMetricsOpen] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const expandAll = () => {
+    setExpanded(true);
+    setAttrsOpen(true);
+    setMetricsOpen(true);
+    setDetailsOpen(true);
+  };
 
   if (!hasSpContent(detail)) return null;
 
@@ -147,18 +152,21 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
 
   // ── BPM 속성 ──
   const deptPath = str(detail.sp_department);
-  const deptLevels = buildDeptTreeLevels(deptPath);
+  // 저장값이 말단 이름뿐이면(라이브러리 행 규칙) 디렉터리에서 말단 일치 경로를 찾아 한글명을 조회한다 — DeptPill과 같은 규칙
+  const deptOrgPath = (() => {
+    if (deptPath === "" || deptPath.includes("/")) return deptPath;
+    for (const user of dir.values()) {
+      const path = user.org_path ?? "";
+      if (path !== "" && deptLeaf(path) === deptPath) return path;
+    }
+    return deptPath;
+  })();
+  const deptLeafName = deptLeaf(deptOrgPath);
+  const deptKorean = (koreanDeptByPath.get(deptOrgPath) ?? "").trim();
+  // 필 = UI 언어 이름, 아랫줄 = 반대 언어 이름(톤다운). 반대 언어 이름을 모르면 아랫줄 생략 (사용자 지시 2026-09-09)
+  const deptPrimary = lang === "ko" ? deptKorean || deptLeafName : deptLeafName;
+  const deptSecondary = lang === "ko" ? (deptKorean !== "" ? deptLeafName : "") : deptKorean;
   const names = parseAssignees(str(detail.sp_assignee));
-  // 저장값은 영문 name — 디렉터리에서 name(또는 한글명) 일치로 인물 해석 (AssigneePills와 같은 규칙)
-  const byName = new Map<string, DirectoryUser>();
-  for (const user of dir.values()) {
-    byName.set(user.name, user);
-    if (user.korean_name) byName.set(user.korean_name, user);
-  }
-  const assigneeLabel = (name: string): string => {
-    const user = byName.get(name);
-    return user ? (lang === "ko" ? user.korean_name || user.name : user.name) : name;
-  };
   const url = str(detail.sp_url);
   const gmpText = detail.sp_gmp ? formatGmp(detail.sp_gmp) : "";
   const attrCount = [
@@ -226,7 +234,11 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   );
 
   return (
-    <section data-id="map-detail-sp-section" className="@container rounded-md border border-hairline bg-surface p-3">
+    <section
+      data-id="map-detail-sp-section"
+      data-expanded={expanded ? "true" : "false"}
+      className="group @container rounded-md border border-hairline bg-surface p-3"
+    >
       <SectionHeader
         dataId="map-detail-sp-toggle"
         icon={Workflow}
@@ -235,25 +247,40 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
         right={
-          <span className="flex shrink-0 items-center gap-1.5 text-fine text-ink-tertiary">
-            {/* 지정 상태 필 — SP 지정 모달과 동일(영어 고정) */}
-            {designated ? (
-              <span
-                data-id="map-detail-sp-status"
-                className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-accent"
-              >
-                Designated
-              </span>
-            ) : (
-              <span
-                data-id="map-detail-sp-status"
-                className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-ink-secondary"
-              >
-                Not designated
-              </span>
-            )}
-            {/* 지정일 — "YYYY-MM-DD"(KST)만, 시각은 헤더에 과하다 */}
-            {designated && <span>{formatKst(detail.sp_designated_at).slice(0, 10)}</span>}
+          <span className="relative flex shrink-0 items-center text-fine text-ink-tertiary">
+            {/* 평소: 지정 상태 필(SP 지정 모달과 동일, 영어 고정) + 지정일. 섹션 호버 시 모두 펼치기/접기 버튼으로 크로스페이드 */}
+            <span
+              data-id="map-detail-sp-status-wrap"
+              className="flex items-center gap-1.5 transition-opacity duration-150 group-hover:opacity-0 group-has-[button:focus-visible]:opacity-0"
+            >
+              {designated ? (
+                <span
+                  data-id="map-detail-sp-status"
+                  className="rounded-xs border border-accent-tint-border bg-accent-tint px-1.5 py-0.5 text-accent"
+                >
+                  Designated
+                </span>
+              ) : (
+                <span
+                  data-id="map-detail-sp-status"
+                  className="rounded-xs border border-hairline bg-surface-alt px-1.5 py-0.5 text-ink-secondary"
+                >
+                  Not designated
+                </span>
+              )}
+              {/* 지정일 — "YYYY-MM-DD"(KST)만, 시각은 헤더에 과하다 */}
+              {designated && <span>{formatKst(detail.sp_designated_at).slice(0, 10)}</span>}
+            </span>
+            <button
+              type="button"
+              data-id="map-detail-sp-expand-all"
+              aria-expanded={expanded}
+              onClick={() => (expanded ? setExpanded(false) : expandAll())}
+              className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1 rounded-sm px-1.5 text-fine text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-surface-alt hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100"
+            >
+              {expanded ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
+              {t(expanded ? "inspector.collapseAll" : "inspector.expandAll")}
+            </button>
           </span>
         }
       />
@@ -265,41 +292,29 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
             {attrsOpen && (
               <div className="ml-2 border-l border-divider pl-2">
                 <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1fr_3.5fr] @[40rem]:grid-rows-[repeat(3,auto)]">
-                  {/* 세로 타일은 absolute로 셀을 채운다 — 행 높이는 스택 타일 3개가 정하고, 넘치는 트리·이름은 잘린다 */}
+                  {/* 세로 타일은 absolute로 셀을 채운다 — 행 높이는 스택 타일 3개가 정하고, 넘치는 인물 필은 잘린다 */}
                   <div className="relative h-32 @[40rem]:row-span-3 @[40rem]:h-auto">
                     <div
                       data-id="map-detail-sp-department"
                       data-filled={deptPath !== "" ? "true" : "false"}
-                      title={deptPath || undefined}
+                      title={deptOrgPath || undefined}
                       className={`absolute inset-0 flex flex-col gap-1.5 overflow-hidden rounded-sm border px-2.5 py-2 ${deptPath !== "" ? FILLED_TONE : EMPTY_TONE}`}
                     >
                       {vertHead(Building2, t("field.department"), deptPath !== "")}
                       {deptPath !== "" && (
-                        <div className="flex min-h-0 flex-col gap-px text-fine leading-[1.3] text-ink-tertiary">
-                          {deptLevels.map((lv) => (
-                            <div
-                              key={`${lv.depth}-${lv.path}`}
-                              className="flex min-w-0 shrink-0 items-start gap-0.5"
-                              style={{ paddingLeft: lv.depth * 6 }}
+                        <div className="flex min-h-0 flex-col items-start gap-1">
+                          {/* 말단 부서 필(UI 언어 이름) — 클릭하면 조직 정보 모달(경로·구성인원·하위 조직) */}
+                          <DeptPill department={deptOrgPath} label={deptPrimary} dataId="map-detail-sp-department-pill" />
+                          {deptSecondary !== "" && (
+                            <span
+                              data-id="map-detail-sp-department-alt"
+                              className="w-full truncate text-fine text-ink-tertiary"
+                              title={deptSecondary}
                             >
-                              {lv.depth > 0 && (
-                                <CornerDownRight size={10} strokeWidth={1.5} className="mt-[3px] shrink-0 text-ink-muted" />
-                              )}
-                              {lv.ellipsis ? (
-                                <span>…</span>
-                              ) : lv.leaf ? (
-                                <span className="line-clamp-2 break-keep font-semibold text-accent">
-                                  {formatDeptName(lv.path, lang, koreanDeptByPath)}
-                                </span>
-                              ) : (
-                                <span className="min-w-0 truncate">{formatDeptName(lv.path, lang, koreanDeptByPath)}</span>
-                              )}
-                            </div>
-                          ))}
+                              {deptSecondary}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      {deptPath !== "" && (
-                        <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-4" style={VERT_FADE_STYLE} />
                       )}
                     </div>
                   </div>
@@ -316,13 +331,9 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                         <span className="shrink-0 text-fine text-ink-tertiary">{t("home.assigneeCount", { n: names.length })}</span>,
                       )}
                       {names.length > 0 && (
-                        <div className="flex min-h-0 flex-col gap-0.5 text-fine leading-[1.3] text-ink-secondary">
-                          {names.map((name) => (
-                            <div key={name} className="flex min-w-0 shrink-0 items-center gap-1" title={name}>
-                              <User size={11} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                              <span className="min-w-0 truncate">{assigneeLabel(name)}</span>
-                            </div>
-                          ))}
+                        <div className="min-h-0">
+                          {/* 인물 필 — 호버 0.7초/클릭으로 인물 카드(이름·아이디·말단 부서·조직 경로), 줄바꿈 나열 */}
+                          <AssigneePills assignee={str(detail.sp_assignee)} dataIdPrefix="map-detail-sp" align="start" />
                         </div>
                       )}
                       {names.length > 0 && (
@@ -372,42 +383,56 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
             )}
           </div>
 
-          {/* 수행 지표 — 1행 타일 3열 */}
+          {/* 수행 지표 헤더는 항상 보인다(접힘 기본 높이의 경계). 접혀 있으면 헤더 클릭도 모두 펼치기 */}
           <div className="py-1" data-id="map-detail-sp-metrics">
-            {groupHeader("map-detail-sp-metrics-toggle", metricsOpen, () => setMetricsOpen((v) => !v), t("inspector.parameters"), metricCount)}
-            {metricsOpen && (
-              <div className="ml-2 border-l border-divider pl-2">
-                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-3">
-                  {readTile("duration", PARAM_ICON.duration, t(PARAM_LABEL_KEY.duration), metricValues.duration, str(detail.sp_total_time_fallback))}
-                  {readTile("touch_time", PARAM_ICON.touch_time, t(PARAM_LABEL_KEY.touch_time), metricValues.touch_time, str(detail.sp_touch_time_fallback))}
-                  {readTile("cost", PARAM_ICON[costUnit], t("field.costRun"), costValue, "", costValue !== "" ? <CurrencyPill unit={costUnit} /> : undefined)}
-                  {readTile("headcount", PARAM_ICON.headcount, t(PARAM_LABEL_KEY.headcount), metricValues.headcount)}
-                  {readTile("annual_count", PARAM_ICON.annual_count, t(PARAM_LABEL_KEY.annual_count), metricValues.annual_count, str(detail.sp_frequency_fallback))}
-                  {readTile("fte", PARAM_ICON.fte, t(PARAM_LABEL_KEY.fte), metricValues.fte)}
-                </div>
-              </div>
+            {groupHeader(
+              "map-detail-sp-metrics-toggle",
+              expanded && metricsOpen,
+              () => (expanded ? setMetricsOpen((v) => !v) : expandAll()),
+              t("inspector.parameters"),
+              metricCount,
             )}
           </div>
-
-          {/* 입출력 · 조건 — 좌측 입력물+산출물 결합 타일(2행), 우측 위 시작 조건·아래 종료 조건 */}
-          <div className="py-1" data-id="map-detail-sp-details">
-            {groupHeader("map-detail-sp-details-toggle", detailsOpen, () => setDetailsOpen((v) => !v), t("inspector.details"), detailCount)}
-            {detailsOpen && (
-              <div className="ml-2 border-l border-divider pl-2">
-                <div className="grid grid-cols-1 gap-1.5 py-1 @[40rem]:grid-cols-[5fr_7fr]">
-                  <div
-                    data-id="map-detail-sp-io"
-                    className={`flex flex-col overflow-hidden rounded-sm border @[40rem]:row-span-2 ${ioFilled ? FILLED_TONE : EMPTY_TONE}`}
-                  >
-                    {ioHalf("input", LogIn, t("field.input"), inputs)}
-                    <div className={`shrink-0 border-t ${ioFilled ? "border-accent-tint-border" : "border-hairline"}`} />
-                    {ioHalf("output", LogOut, t("field.output"), outputs)}
+          {/* 아코디언 — 지표 타일 + 입출력·조건. grid-rows 0fr↔1fr 전환(멤버 카드 펼침과 같은 패턴) */}
+          <div
+            data-id="map-detail-sp-accordion"
+            className={`grid transition-[grid-template-rows] duration-350 ease-smooth ${expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              {metricsOpen && (
+                <div className="-mt-1 mb-1 ml-2 border-l border-divider pl-2">
+                  <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-3">
+                    {readTile("duration", PARAM_ICON.duration, t(PARAM_LABEL_KEY.duration), metricValues.duration, str(detail.sp_total_time_fallback))}
+                    {readTile("touch_time", PARAM_ICON.touch_time, t(PARAM_LABEL_KEY.touch_time), metricValues.touch_time, str(detail.sp_touch_time_fallback))}
+                    {readTile("cost", PARAM_ICON[costUnit], t("field.costRun"), costValue, "", costValue !== "" ? <CurrencyPill unit={costUnit} /> : undefined)}
+                    {readTile("headcount", PARAM_ICON.headcount, t(PARAM_LABEL_KEY.headcount), metricValues.headcount)}
+                    {readTile("annual_count", PARAM_ICON.annual_count, t(PARAM_LABEL_KEY.annual_count), metricValues.annual_count, str(detail.sp_frequency_fallback))}
+                    {readTile("fte", PARAM_ICON.fte, t(PARAM_LABEL_KEY.fte), metricValues.fte)}
                   </div>
-                  {conditionTile("start_condition", Play, t("field.startCondition"), startCondition)}
-                  {conditionTile("end_condition", Flag, t("field.endCondition"), endCondition)}
                 </div>
+              )}
+
+              {/* 입출력 · 조건 — 좌측 입력물+산출물 결합 타일(2행), 우측 위 시작 조건·아래 종료 조건 */}
+              <div className="py-1" data-id="map-detail-sp-details">
+                {groupHeader("map-detail-sp-details-toggle", detailsOpen, () => setDetailsOpen((v) => !v), t("inspector.details"), detailCount)}
+                {detailsOpen && (
+                  <div className="ml-2 border-l border-divider pl-2">
+                    <div className="grid grid-cols-1 gap-1.5 py-1 @[40rem]:grid-cols-[5fr_7fr]">
+                      <div
+                        data-id="map-detail-sp-io"
+                        className={`flex flex-col overflow-hidden rounded-sm border @[40rem]:row-span-2 ${ioFilled ? FILLED_TONE : EMPTY_TONE}`}
+                      >
+                        {ioHalf("input", LogIn, t("field.input"), inputs)}
+                        <div className={`shrink-0 border-t ${ioFilled ? "border-accent-tint-border" : "border-hairline"}`} />
+                        {ioHalf("output", LogOut, t("field.output"), outputs)}
+                      </div>
+                      {conditionTile("start_condition", Play, t("field.startCondition"), startCondition)}
+                      {conditionTile("end_condition", Flag, t("field.endCondition"), endCondition)}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       )}

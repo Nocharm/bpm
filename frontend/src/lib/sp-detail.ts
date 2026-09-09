@@ -1,8 +1,7 @@
-// 홈 맵 상세 서브프로세스 섹션의 순수 로직 — 타일 값/원문 해석, 부서 트리 레벨, 입출력 줄 파싱, 섹션 노출 판정.
+// 홈 맵 상세 서브프로세스 섹션의 순수 로직 — 타일 값/원문 해석, 입출력 줄 파싱, 섹션 노출 판정.
 // 렌더 없는 함수만 두어 단위 테스트한다(컴포넌트는 components/maps/map-detail-sp-section.tsx).
 
 import type { MapSummary } from "@/lib/api";
-import { buildOrgPathChain } from "@/lib/korean-dept";
 
 export type ValueTone = "default" | "fallback";
 
@@ -16,32 +15,6 @@ export function resolveValueOrNote(
   const n = (note ?? "").trim();
   if (n !== "") return { value: n, tone: "fallback" };
   return { value: "", tone: "default" };
-}
-
-export interface DeptTreeLevel {
-  // 이 레벨까지의 org_path — 표시명 조회 키. ellipsis 행은 ""
-  path: string;
-  depth: number;
-  leaf: boolean;
-  ellipsis: boolean;
-}
-
-// 트리에 그리는 최대 레벨 수 — 세로 타일(3행 높이)에 말단 2줄까지 들어가는 한계
-const DEPT_TREE_MAX_LEVELS = 4;
-
-/** 부서 경로 → 트리 레벨(상위→말단). 5단 이상은 루트·…·부모·말단으로 접어 말단이 항상 보이게 */
-export function buildDeptTreeLevels(orgPath: string): DeptTreeLevel[] {
-  const chain = buildOrgPathChain(orgPath);
-  if (chain.length === 0) return [];
-  if (chain.length <= DEPT_TREE_MAX_LEVELS) {
-    return chain.map((path, i) => ({ path, depth: i, leaf: i === chain.length - 1, ellipsis: false }));
-  }
-  return [
-    { path: chain[0], depth: 0, leaf: false, ellipsis: false },
-    { path: "", depth: 1, leaf: false, ellipsis: true },
-    { path: chain[chain.length - 2], depth: 2, leaf: false, ellipsis: false },
-    { path: chain[chain.length - 1], depth: 3, leaf: true, ellipsis: false },
-  ];
 }
 
 /** 입력물/산출물 저장값(줄바꿈 구분) → 항목 목록. 빈 줄은 버린다 */
