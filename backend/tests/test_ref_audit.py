@@ -1,6 +1,7 @@
 """고아 참조 감사 — 스캔(부서 5곳·사용자 7곳)·remap·notify·stale_ref_count (design 2026-09-09)."""
 
 import asyncio
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -194,3 +195,100 @@ def test_scan_dept_refs_skips_blank_principal(client: TestClient) -> None:
 
     groups = asyncio.run(_run())
     assert all(g.value != "" for g in groups)
+
+
+async def _seed_user_refs() -> dict[str, int]:
+    """퇴직자(gone.user, active=False)·미등록(nobody) 참조 + 이름 기반(SP 담당자·노드 담당자)."""
+    from app.models import CategoryPermission, MapApprover, ProcessCategory
+
+    async with SessionLocal() as session:
+        if await session.get(Employee, "gone.user") is None:
+            session.add(Employee(login_id="gone.user", name="Gone Person", source="local", active=False,
+                                 org_l1="Management Support Division", department="Procurement Office"))
+        m = await _new_map(session, "user refs", owning_department=LIVE,
+                           sp_department=LIVE_LEAF, sp_assignee="Minjae Lee, Gone Person")
+        m.owner_id = "gone.user"
+        g = UserGroup(name=f"user group {id(object())}", status="active", created_by="user.lee")
+        # code는 unique 컬럼 — id(object())는 CPython이 즉시 재활용해 두 번째 호출과 충돌 가능(전체 스위트에서 실측)
+        cat = ProcessCategory(code=f"REF-{uuid.uuid4().hex}", name="Ref Cat", level=1)
+        session.add_all([g, cat])
+        await session.flush()
+        session.add_all([
+            MapPermission(map_id=m.id, principal_type="user", principal_id="gone.user", role="owner", granted_by="user.lee"),
+            MapPermission(map_id=m.id, principal_type="user", principal_id="nobody", role="viewer", granted_by="user.lee"),
+            MapApprover(map_id=m.id, user_id="gone.user"),
+            UserGroupMember(group_id=g.id, member_type="user", member_id="gone.user"),
+            CategoryPermission(category_id=cat.id, principal_type="user", principal_id="gone.user", granted_by="user.lee"),
+        ])
+        pub = MapVersion(map_id=m.id, label="pub", status="published")
+        session.add(pub)
+        await session.flush()
+        session.add_all([
+            Node(id=f"a1-{pub.id}", version_id=pub.id, title="a1", assignee="Gone Person, Minjae Lee"),
+            Node(id=f"a2-{pub.id}", version_id=pub.id, title="a2", assignee="Gone Person"),
+        ])
+        await session.commit()
+        return {"map": m.id, "group": g.id, "cat": cat.id, "pub": pub.id}
+
+
+def test_scan_user_refs_reports_logins_and_names(client: TestClient) -> None:
+    ids = asyncio.run(_seed_user_refs())
+
+    async def _run() -> list[ref_audit.RefGroup]:
+        async with SessionLocal() as session:
+            valid = await ref_audit.load_valid_sets(session)
+            ctx = await ref_audit.load_scan_context(session)
+            return await ref_audit.scan_user_refs(session, valid, ctx)
+
+    groups = asyncio.run(_run())
+    gone = [ln for ln in _lines(groups, "gone.user")
+            if ln.map_id == ids["map"] or ln.group_id == ids["group"] or ln.category_id == ids["cat"]]
+    assert sorted(ln.source for ln in gone) == [
+        "category_perm", "group_user", "map_approver", "map_collab", "map_owner",
+    ]
+    owner = next(ln for ln in gone if ln.source == "map_owner")
+    assert owner.target_id == f"map_owner:{ids['map']}" and owner.owner_id == "gone.user"
+    assert next(ln for ln in gone if ln.source == "category_perm").category_name == "Ref Cat"
+    assert next(g for g in groups if g.value == "gone.user").value_kind == "login"
+    # 행 없는 login도 고아
+    nobody = [ln for ln in _lines(groups, "nobody") if ln.map_id == ids["map"]]
+    assert [ln.source for ln in nobody] == ["map_collab"]
+    # 이름 기반 — SP 담당자 1 + 노드 담당자(게시본 2노드)
+    names = [ln for ln in _lines(groups, "Gone Person") if ln.map_id == ids["map"]]
+    by_source = {ln.source: ln for ln in names}
+    assert by_source["sp_assignee"].fixable and by_source["sp_assignee"].target_id == f"sp_assignee:{ids['map']}"
+    assert by_source["node_assignee"].count == 2 and not by_source["node_assignee"].fixable
+    assert next(g for g in groups if g.value == "Gone Person").value_kind == "name"
+    assert all(g.value != "Minjae Lee" for g in groups)
+
+
+def test_scan_refs_returns_both_sections(client: TestClient) -> None:
+    asyncio.run(_seed_dept_refs())
+    asyncio.run(_seed_user_refs())
+
+    async def _run() -> tuple[list[ref_audit.RefGroup], list[ref_audit.RefGroup]]:
+        async with SessionLocal() as session:
+            return await ref_audit.scan_refs(session)
+
+    depts, users = asyncio.run(_run())
+    assert any(g.value == GONE for g in depts) and all(g.kind == "dept" for g in depts)
+    assert any(g.value == "gone.user" for g in users) and all(g.kind == "user" for g in users)
+
+
+def test_count_stale_refs_by_map(client: TestClient) -> None:
+    dept_ids = asyncio.run(_seed_dept_refs())
+    user_ids = asyncio.run(_seed_user_refs())
+
+    async def _run() -> dict[int, int]:
+        async with SessionLocal() as session:
+            maps = [await session.get(ProcessMap, dept_ids["map"]), await session.get(ProcessMap, user_ids["map"])]
+            return await ref_audit.count_stale_refs_by_map(
+                session, maps,
+                {dept_ids["map"]: [dept_ids["pub"], dept_ids["draft"]], user_ids["map"]: [user_ids["pub"]]},
+            )
+
+    counts = asyncio.run(_run())
+    # dept map: 노드 부서 2(pub)+1(draft) + SP 부서 1 = 4
+    assert counts[dept_ids["map"]] == 4
+    # user map: 노드 담당자 2 + SP 담당자 1 = 3 (오너·협업자는 오너 액션 대상 아님)
+    assert counts[user_ids["map"]] == 3

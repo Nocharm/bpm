@@ -10,10 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    CategoryPermission,
     Employee,
+    MapApprover,
     MapPermission,
     MapVersion,
     Node,
+    ProcessCategory,
     ProcessMap,
     UserGroup,
     UserGroupMember,
@@ -244,3 +247,117 @@ async def scan_dept_refs(session: AsyncSession, valid: ValidSets, ctx: ScanConte
             version_id=version_id, version_status=status,
         ))
     return groups.finish()
+
+
+async def scan_user_refs(session: AsyncSession, valid: ValidSets, ctx: ScanContext) -> list[RefGroup]:
+    """사용자 참조 7곳 — login 5곳은 active login 집합, 이름 2곳(SP·노드 담당자)은 이름 집합과 대조."""
+    groups = _Groups("user")
+
+    for m in _live_maps(ctx):
+        if m.owner_id and m.owner_id not in valid.user_ids:
+            groups.add(m.owner_id, "login", _map_line(ctx, "map_owner", m, f"map_owner:{m.id}"))
+
+    grants = (await session.scalars(select(MapPermission).where(MapPermission.principal_type == "user"))).all()
+    for grant in grants:
+        m = ctx.maps.get(grant.map_id)
+        if m is None or m.deleted_at is not None or not grant.principal_id or grant.principal_id in valid.user_ids:
+            continue
+        groups.add(grant.principal_id, "login", _map_line(ctx, "map_collab", m, f"map_collab:{grant.id}"))
+
+    approvers = (await session.scalars(select(MapApprover))).all()
+    for approver in approvers:
+        m = ctx.maps.get(approver.map_id)
+        if m is None or m.deleted_at is not None or not approver.user_id or approver.user_id in valid.user_ids:
+            continue
+        groups.add(approver.user_id, "login", _map_line(ctx, "map_approver", m, f"map_approver:{m.id}"))
+
+    member_rows = (
+        await session.execute(
+            select(UserGroupMember, UserGroup.name)
+            .join(UserGroup, UserGroup.id == UserGroupMember.group_id)
+            .where(UserGroupMember.member_type == "user", UserGroup.deleted_at.is_(None))
+        )
+    ).all()
+    for member, group_name in member_rows:
+        if not member.member_id or member.member_id in valid.user_ids:
+            continue
+        groups.add(member.member_id, "login", RefLine(
+            source="group_user", fixable=True, count=1, target_id=f"group_user:{member.id}",
+            group_id=member.group_id, group_name=group_name,
+        ))
+
+    perm_rows = (
+        await session.execute(
+            select(CategoryPermission, ProcessCategory.name)
+            .join(ProcessCategory, ProcessCategory.id == CategoryPermission.category_id)
+            .where(CategoryPermission.principal_type == "user")
+        )
+    ).all()
+    for perm, category_name in perm_rows:
+        if not perm.principal_id or perm.principal_id in valid.user_ids:
+            continue
+        groups.add(perm.principal_id, "login", RefLine(
+            source="category_perm", fixable=True, count=1, target_id=f"category_perm:{perm.id}",
+            category_id=perm.category_id, category_name=category_name,
+        ))
+
+    for m in _live_maps(ctx):
+        for name in split_names(m.sp_assignee):
+            if name not in valid.user_names:
+                groups.add(name, "name", _map_line(ctx, "sp_assignee", m, f"sp_assignee:{m.id}"))
+
+    status_by_vid = {vid: (mid, status) for mid, pairs in ctx.versions.items() for vid, status in pairs}
+    counts: dict[tuple[int, str], int] = {}
+    for version_id, _department, assignee in await _load_node_columns(session, ctx):
+        for name in split_names(assignee):
+            if name not in valid.user_names:
+                counts[(version_id, name)] = counts.get((version_id, name), 0) + 1
+    for (version_id, name), count in counts.items():
+        map_id, status = status_by_vid[version_id]
+        m = ctx.maps.get(map_id)
+        if m is None or m.deleted_at is not None:
+            continue
+        groups.add(name, "name", _map_line(
+            ctx, "node_assignee", m, f"node_assignee:{version_id}", count=count,
+            version_id=version_id, version_status=status,
+        ))
+    return groups.finish()
+
+
+async def scan_refs(session: AsyncSession) -> tuple[list[RefGroup], list[RefGroup]]:
+    """전체 스캔 — (departments, users). 유효 집합·컨텍스트는 1회만 로드."""
+    valid = await load_valid_sets(session)
+    ctx = await load_scan_context(session)
+    return await scan_dept_refs(session, valid, ctx), await scan_user_refs(session, valid, ctx)
+
+
+async def count_stale_refs_by_map(
+    session: AsyncSession, maps: list[ProcessMap], version_ids_by_map: dict[int, list[int]]
+) -> dict[int, int]:
+    """홈 카드용 경량 집계 — 오너가 손댈 수 있는 4곳(노드 부서·담당자, SP 부서·담당자)만. 쿼리 3개 고정."""
+    valid = await load_valid_sets(session)
+    counts: dict[int, int] = {}
+    for m in maps:
+        stale = 0
+        if m.sp_department and m.sp_department not in valid.dept_leaves:
+            stale += 1
+        stale += sum(1 for name in split_names(m.sp_assignee) if name not in valid.user_names)
+        if stale:
+            counts[m.id] = stale
+    map_by_vid = {vid: mid for mid, vids in version_ids_by_map.items() for vid in vids}
+    if map_by_vid:
+        rows = (
+            await session.execute(
+                select(Node.version_id, Node.department, Node.assignee)
+                .where(Node.version_id.in_(list(map_by_vid)))
+            )
+        ).all()
+        for version_id, department, assignee in rows:
+            stale = 0
+            if department and department not in valid.dept_leaves:
+                stale += 1
+            stale += sum(1 for name in split_names(assignee) if name not in valid.user_names)
+            if stale:
+                map_id = map_by_vid[version_id]
+                counts[map_id] = counts.get(map_id, 0) + stale
+    return counts
