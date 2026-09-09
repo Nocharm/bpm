@@ -9,6 +9,7 @@ import {
   CircleCheck,
   CircleX,
   Copy,
+  Crown,
   FileCheck,
   Link2,
   Megaphone,
@@ -17,6 +18,7 @@ import {
   PencilLine,
   ShieldCheck,
   Trash2,
+  TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +48,7 @@ const KNOWN_TYPES = new Set([
   "fw_confirm_requested", "fw_confirm_done", "fw_confirm_rejected",
   "fw_slot_requested", "fw_slot_applied", "fw_slot_rejected",
   "fw_external_linked",
+  "ref_fix_requested", "owner_assigned",
 ]);
 
 // 기계 코드 사유(bundled/direct/auto)는 번역, 자유 텍스트(거절 사유)는 원문 유지
@@ -79,6 +82,8 @@ export function getNotificationIcon(type: string): LucideIcon {
   if (type === "map_retired") return Trash2;
   if (type.startsWith("feedback_")) return MessageSquareReply;
   if (type === "notice") return Megaphone;
+  if (type === "ref_fix_requested") return TriangleAlert;
+  if (type === "owner_assigned") return Crown;
   if (type === "fw_external_linked") return Link2;
   if (type.startsWith("fw_slot")) return ArrowLeftRight;
   if (type.startsWith("fw_confirm")) return BadgeCheck;

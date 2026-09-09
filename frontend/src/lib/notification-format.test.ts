@@ -202,4 +202,31 @@ describe("formatNotificationBodyParts", () => {
       { chip: "빠른 답변 감사합니다", kind: "quote" },
     ]);
   });
+
+  it("ref_fix_requested - 라벨·본문에 행위자·맵 수, 제목은 라벨(복수 맵)", () => {
+    const item: NotificationItem = {
+      ...base, type: "ref_fix_requested", map_id: null, version_id: null,
+      message: "Junho Kim asked you to fix stale department/assignee references in 2 map(s)",
+      payload: { actor: "admin.kim", actor_name: "Junho Kim", count: 2,
+                 maps: [{ id: 1, name: "Order intake", node_dept: 3, node_assignee: 0, sp_dept: 0, sp_assignee: 1 },
+                        { id: 2, name: "Refund", node_dept: 0, node_assignee: 2, sp_dept: 0, sp_assignee: 0 }] },
+    };
+    const en = formatNotification(item, makeT("en"));
+    expect(en.label).toBe("Stale references");
+    expect(en.title).toBe("Stale references");
+    expect(en.body).toBe("Junho Kim asked you to fix department or assignee references that no longer match the current org in 2 map(s)");
+    expect(formatNotificationBodyParts(item, makeT("en"))).toContainEqual({ actorLogin: "admin.kim", actorName: "Junho Kim" });
+  });
+
+  it("owner_assigned - 제목=맵 이름, 본문에 행위자·이전 오너 칩", () => {
+    const item: NotificationItem = {
+      ...base, type: "owner_assigned", version_id: null,
+      message: "Junho Kim made you the owner of 'Refund' (previous owner Gone Person has left)",
+      payload: { map_name: "Refund", actor: "admin.kim", actor_name: "Junho Kim", from_name: "Gone Person" },
+    };
+    const en = formatNotification(item, makeT("en"));
+    expect(en.title).toBe("Refund");
+    expect(en.body).toBe("Junho Kim made you the owner of this map - previous owner 'Gone Person' has left");
+    expect(formatNotificationBodyParts(item, makeT("en"))).toContainEqual({ chip: "Gone Person", kind: "name" });
+  });
 });
