@@ -118,7 +118,7 @@ def resolve_org_prefixes(path: str) -> list[str]:
 async def load_valid_org_prefixes(session: AsyncSession, *, active_only: bool = False) -> set[str]:
     """현 조직 유효 경로 프리픽스 합집합 — 직원 resolved 경로 기준.
 
-    피커(directory)·오우닝 부서 검증(maps)·dept-remap(admin)이 같은 집합을 봐야
+    피커(directory)·오우닝 부서 검증(maps)·ref-audit(admin)이 같은 집합을 봐야
     "피커에서 고른 값이 검증에서 거부"되는 불일치가 안 생긴다 (2026-08 9910 검증에서 적발).
     active_only=True면 퇴직자만 남은 부서를 제외 — 선택지·remap 대상용. 오우닝 *검증*은
     기본(전 직원) 유지 — 비활성 직원이 받치는 기존 부서(conftest 앵커 등)를 깨지 않게 관대하게.

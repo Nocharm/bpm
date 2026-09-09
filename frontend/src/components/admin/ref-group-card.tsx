@@ -205,7 +205,7 @@ export function RefGroupCard({
                     {line.version_status ? t("refAudit.nodes", { n: line.count }) : "—"}
                   </span>
                   {hint ? (
-                    <span className="shrink-0 text-ink-tertiary" title={hint} data-id="ref-audit-line-hint">
+                    <span className="shrink-0 text-ink-tertiary" title={hint} data-id={`ref-audit-line-hint-${line.target_id}`}>
                       <Info size={13} strokeWidth={1.5} />
                     </span>
                   ) : <span className="w-[13px] shrink-0" />}
@@ -213,7 +213,7 @@ export function RefGroupCard({
               );
             })}
 
-            <div className="flex flex-wrap items-center gap-2 border-t border-divider px-4 py-2.5" data-id="ref-audit-actions">
+            <div className="flex flex-wrap items-center gap-2 border-t border-divider px-4 py-2.5" data-id={`ref-audit-actions-${key}`}>
               {group.kind === "user" && (
                 <span className="flex items-center gap-1 rounded-sm border border-hairline p-0.5 text-fine">
                   {(["replace", "remove"] as const).map((m) => (

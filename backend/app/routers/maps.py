@@ -237,15 +237,14 @@ async def list_maps(
         ).all()
     }
 
-    # 낡은 참조 집계 — 게시본 + 최신 드래프트(최신 버전이 draft일 때) 노드 + SP 지정값 (design 2026-09-09)
-    stale_version_ids: dict[int, list[int]] = {}
-    for m in maps:
-        vids = [published_vid[m.id]] if m.id in published_vid else []
-        latest = latest_vid.get(m.id)
-        if latest is not None and latest_status.get(m.id) == workflow.DRAFT and latest not in vids:
-            vids.append(latest)
-        if vids:
-            stale_version_ids[m.id] = vids
+    # 낡은 참조 집계 — 감사 탭과 동일한 스캔 대상(게시본 + 최신 드래프트, 최신 버전 상태와 무관) + SP 지정값
+    # (audit tab과 홈 배지가 다른 대상을 세면 숫자가 어긋난다 — ref_audit.load_target_versions로 단일화, design 2026-09-09)
+    target_versions = await ref_audit.load_target_versions(session)
+    stale_version_ids: dict[int, list[int]] = {
+        m.id: [vid for vid, _status in target_versions[m.id]]
+        for m in maps
+        if m.id in target_versions
+    }
     stale_counts = await ref_audit.count_stale_refs_by_map(session, maps, stale_version_ids)
 
     def _set_card_metrics(m: ProcessMap) -> None:

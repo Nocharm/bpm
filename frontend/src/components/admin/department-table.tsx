@@ -141,7 +141,7 @@ function flattenDeptRows(
 export function DepartmentTable() {
   const { t } = useI18n();
   const [users, setUsers] = useState<AdminUser[]>([]);
-  // 관리 테이블 소스 — 전 직원(퇴직자 포함) 경로. 선택 모달은 active만(dirDepts).
+  // 관리 테이블 소스 — 전 직원(퇴직자 포함) 경로. dirDepts는 active 기준 한글명 보강용.
   const [adminPaths, setAdminPaths] = useState<string[]>([]);
   const [adminKorean, setAdminKorean] = useState<Map<string, string>>(new Map());
   const [dirDepts, setDirDepts] = useState<DirectoryDept[]>([]);

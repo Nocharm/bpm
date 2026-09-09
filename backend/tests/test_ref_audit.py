@@ -295,6 +295,35 @@ def test_count_stale_refs_by_map(client: TestClient) -> None:
     assert counts[user_ids["map"]] == 3
 
 
+def test_list_maps_stale_ref_count_matches_audit_scan_scope(client: TestClient) -> None:
+    """홈 배지(GET /api/maps)와 감사 스캔은 같은 대상(게시본+최신 드래프트)을 봐야 한다.
+
+    published v1(정상) → draft v2(낡은 부서 1건) → 그 뒤에 만들어진 v3(pending, 최신 버전)
+    순서라도, v2가 여전히 "최신 드래프트"이므로 스캔 대상에 포함돼야 한다(finding A:
+    list_maps가 예전엔 "최신 버전==draft"일 때만 셌고, ref_audit은 최신 드래프트를 항상 셌다).
+    """
+    async def _seed() -> int:
+        async with SessionLocal() as session:
+            m = await _new_map(session, f"scope-parity-{uuid.uuid4().hex}", owning_department=LIVE)
+            v1 = MapVersion(map_id=m.id, label="v1", status="published")
+            v2 = MapVersion(map_id=m.id, label="v2", status="draft")
+            session.add_all([v1, v2])
+            await session.flush()
+            v3 = MapVersion(map_id=m.id, label="v3", status="pending")
+            session.add(v3)
+            await session.flush()
+            session.add_all([
+                Node(id=f"n1-{v1.id}", version_id=v1.id, title="clean", department=LIVE_LEAF),
+                Node(id=f"n2-{v2.id}", version_id=v2.id, title="stale", department=GONE_LEAF),
+            ])
+            await session.commit()
+            return m.id
+
+    map_id = asyncio.run(_seed())
+    rows = {m["id"]: m for m in client.get("/api/maps", headers=SYS).json()}
+    assert rows[map_id]["stale_ref_count"] == 1
+
+
 def test_get_ref_audit_requires_sysadmin_and_returns_sections(
     client: TestClient, sysadmin_enforced: None
 ) -> None:

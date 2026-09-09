@@ -61,7 +61,7 @@ try {
 
   // [2] 리프 그룹 펼침 — 노드 라인 체크 불가, SP 라인 체크 가능
   await leafGroup.locator('[data-id^="ref-audit-group-toggle-"]').click();
-  await leafGroup.locator('[data-id="ref-audit-actions"]').waitFor({ timeout: 5000 });
+  await leafGroup.locator('[data-id^="ref-audit-actions-"]').waitFor({ timeout: 5000 });
   const nodeLines = await leafGroup.locator('[data-id^="ref-audit-line-node_dept:"][data-checkable="false"]').count();
   const spLines = await leafGroup.locator('[data-id^="ref-audit-line-sp_dept:"][data-checkable="true"]').count();
   check("[2] node lines uncheckable (published+draft), sp line checkable", nodeLines === 2 && spLines === 1,
@@ -80,7 +80,7 @@ try {
   check("[3] apply applied 1 line", /Applied 1/.test(msg), msg);
   await page.screenshot({ path: `${SHOT_DIR}/shot-apply-applied.png`, fullPage: true });
   await leafGroup.locator('[data-id^="ref-audit-group-toggle-"]').click();
-  await leafGroup.locator('[data-id="ref-audit-actions"]').waitFor({ timeout: 5000 });
+  await leafGroup.locator('[data-id^="ref-audit-actions-"]').waitFor({ timeout: 5000 });
   check("[3b] sp line gone after rescan",
     (await leafGroup.locator('[data-id^="ref-audit-line-sp_dept:"]').count()) === 0);
 
@@ -95,7 +95,7 @@ try {
 
   // [5] 사용자 그룹 — replace 오너 → owner_assigned 알림
   await userGroup.locator('[data-id^="ref-audit-group-toggle-"]').click();
-  await userGroup.locator('[data-id="ref-audit-actions"]').waitFor({ timeout: 5000 });
+  await userGroup.locator('[data-id^="ref-audit-actions-"]').waitFor({ timeout: 5000 });
   await userGroup.locator('[data-id^="ref-audit-check-all-"]').click();
   await userGroup.locator('[data-id^="ref-audit-pick-user-"] input').fill("System Admin");
   await page.locator('[data-id="principal-picker-dropdown"]').getByText("System Admin").first().click();

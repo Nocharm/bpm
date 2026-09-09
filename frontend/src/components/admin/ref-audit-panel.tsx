@@ -35,6 +35,13 @@ export function RefAuditPanel() {
     }
   }, [t]);
 
+  // 명시적 Rescan 클릭만 이전 결과 문구를 지운다 — 적용/알림 뒤 자동 재로드(done→load)는
+  // 방금 세팅한 성공 메시지를 유지해야 하므로 load() 자체에는 넣지 않는다.
+  const rescan = () => {
+    setMessage("");
+    void load();
+  };
+
   useEffect(() => { void load(); }, [load]);
 
   const deptOptions = departments.map((d) => ({ id: d.id, name: d.name, korean_name: d.korean_name }));
@@ -86,8 +93,6 @@ export function RefAuditPanel() {
     </section>
   );
 
-  if (error) return <div className="text-caption text-error" data-id="ref-audit-error">{error}</div>;
-
   return (
     <div className="flex flex-col gap-4" data-id="ref-audit-panel">
       <div className="flex items-start gap-3">
@@ -97,12 +102,13 @@ export function RefAuditPanel() {
           data-id="ref-audit-rescan"
           className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
           disabled={loading}
-          onClick={() => void load()}
+          onClick={rescan}
         >
           <RefreshCw size={14} strokeWidth={1.5} className={loading ? "animate-spin" : ""} />
           {t("refAudit.rescan")}
         </button>
       </div>
+      {error && <p className="text-caption text-error" data-id="ref-audit-error">{error}</p>}
       {message && <p className="text-fine text-ink-secondary" data-id="ref-audit-message">{message}</p>}
       {audit && section(t("refAudit.deptTitle"), t("refAudit.emptyDept"), audit.departments, "ref-audit-depts")}
       {audit && section(t("refAudit.userTitle"), t("refAudit.emptyUser"), audit.users, "ref-audit-users")}

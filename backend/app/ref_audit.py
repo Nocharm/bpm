@@ -6,7 +6,7 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
@@ -348,10 +348,17 @@ async def count_stale_refs_by_map(
             counts[m.id] = stale
     map_by_vid = {vid: mid for mid, vids in version_ids_by_map.items() for vid in vids}
     if map_by_vid:
+        # 후보만 SQL에서 걸러 행 볼륨을 줄인다 — GET /api/maps 핫패스라 맵마다 전체 노드를 끌어오면 느리다.
+        # 판정 자체(department가 valid.dept_leaves에 있는지 등)는 Python에서 그대로 재확인.
         rows = (
             await session.execute(
-                select(Node.version_id, Node.department, Node.assignee)
-                .where(Node.version_id.in_(list(map_by_vid)))
+                select(Node.version_id, Node.department, Node.assignee).where(
+                    Node.version_id.in_(list(map_by_vid)),
+                    or_(
+                        and_(Node.department != "", Node.department.notin_(sorted(valid.dept_leaves))),
+                        Node.assignee != "",
+                    ),
+                )
             )
         ).all()
         for version_id, department, assignee in rows:
@@ -423,7 +430,6 @@ class RemapResult:
 
 
 REMOVE_BLOCKED: frozenset[str] = frozenset({"map_owner", "owning_dept", "sp_dept"})
-_NAME_SOURCES: frozenset[str] = frozenset({"sp_assignee"})
 
 
 def _parse_target(target_id: str) -> tuple[str, int]:
