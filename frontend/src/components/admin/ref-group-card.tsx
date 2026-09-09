@@ -39,7 +39,10 @@ interface RefGroupCardProps {
   pickerUsers: PickerUser[];
   userDepartments: Record<string, string>;
   sectionClass: string;
+  // 마운트 게이트 — 닫히는 중(고스트)도 true라 accordion-close가 재생된다.
   expanded: boolean;
+  // 실제 토글 상태 — 쉐브런/aria-expanded는 이걸 따라 닫힘 클릭 즉시 반응한다.
+  open: boolean;
   onToggle: () => void;
   // 적용/알림 뒤 재스캔 + 결과 문구 — 부모가 상태를 가진다
   onDone: (message: string) => void;
@@ -61,7 +64,7 @@ function LineSubject({ line }: { line: RefLine }) {
 }
 
 export function RefGroupCard({
-  group, deptOptions, pickerUsers, userDepartments, sectionClass, expanded, onToggle, onDone,
+  group, deptOptions, pickerUsers, userDepartments, sectionClass, expanded, open, onToggle, onDone,
 }: RefGroupCardProps) {
   const { t } = useI18n();
   const [mode, setMode] = useState<RemapMode>("replace");
@@ -133,13 +136,13 @@ export function RefGroupCard({
     <div className="rounded-md border border-hairline bg-surface" data-id={`ref-audit-group-${key}`}>
       <button
         type="button"
-        data-id="ref-audit-group-toggle"
+        data-id={`ref-audit-group-toggle-${key}`}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-alt"
         onClick={onToggle}
-        aria-expanded={expanded}
+        aria-expanded={open}
       >
-        {expanded ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                  : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
+        {open ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />}
         <span className={`min-w-0 flex-1 truncate text-caption-strong text-error ${group.value_kind === "path" ? "font-mono" : ""}`}>
           {group.value}
         </span>
@@ -156,7 +159,7 @@ export function RefGroupCard({
           <div className="flex min-w-0 flex-col border-t border-divider">
             <div className="flex items-center gap-3 bg-surface-alt px-4 py-1.5 text-fine text-ink-tertiary">
               <CheckInput
-                data-id="ref-audit-check-all"
+                data-id={`ref-audit-check-all-${key}`}
                 checked={checkable.length > 0 && selected.length === checkable.length}
                 disabled={checkable.length === 0}
                 onChange={toggleAll}
@@ -176,7 +179,7 @@ export function RefGroupCard({
                   className={`flex items-center gap-3 border-b border-divider px-4 py-2 text-caption last:border-0 ${ok ? "text-ink" : "text-ink-tertiary"}`}
                 >
                   <CheckInput
-                    data-id="ref-audit-line-check"
+                    data-id={`ref-audit-line-check-${line.target_id}`}
                     checked={checked.has(line.target_id) && ok}
                     disabled={!ok}
                     onChange={() => setChecked((prev) => {
@@ -217,7 +220,7 @@ export function RefGroupCard({
                     <button
                       key={m}
                       type="button"
-                      data-id={`ref-audit-mode-${m}`}
+                      data-id={`ref-audit-mode-${m}-${key}`}
                       className={`rounded-xs px-2 py-1 ${mode === m ? "bg-accent-tint text-accent" : "text-ink-secondary hover:bg-surface-alt"}`}
                       onClick={() => switchMode(m)}
                     >
@@ -229,7 +232,7 @@ export function RefGroupCard({
               {mode === "replace" && group.kind === "dept" && (
                 <>
                   <span className="text-fine text-ink-tertiary">{t("refAudit.reassignTo")}</span>
-                  <button type="button" data-id="ref-audit-pick-dept" className={`${BTN} max-w-[18rem] truncate`}
+                  <button type="button" data-id={`ref-audit-pick-dept-${key}`} className={`${BTN} max-w-[18rem] truncate`}
                           title={target?.id ?? ""} onClick={() => setPickingDept(true)}>
                     {target?.label ?? t("refAudit.pickDept")}
                   </button>
@@ -237,11 +240,11 @@ export function RefGroupCard({
               )}
               {mode === "replace" && group.kind === "user" && (
                 target ? (
-                  <button type="button" data-id="ref-audit-pick-user" className={BTN} onClick={() => setTarget(null)}>
+                  <button type="button" data-id={`ref-audit-pick-user-${key}`} className={BTN} onClick={() => setTarget(null)}>
                     {target.label}
                   </button>
                 ) : (
-                  <span className="min-w-[16rem]" data-id="ref-audit-pick-user">
+                  <span className="min-w-[16rem]" data-id={`ref-audit-pick-user-${key}`}>
                     <PrincipalPicker
                       users={pickerUsers}
                       departments={[]}
@@ -256,18 +259,18 @@ export function RefGroupCard({
                 )
               )}
               <span className="flex-1" />
-              <button type="button" data-id="ref-audit-apply" className={PRIMARY} disabled={!canApply}
+              <button type="button" data-id={`ref-audit-apply-${key}`} className={PRIMARY} disabled={!canApply}
                       onClick={() => setConfirm("apply")}>
                 {t("refAudit.apply", { n: selected.length })}
               </button>
-              <button type="button" data-id="ref-audit-notify" className={BTN}
+              <button type="button" data-id={`ref-audit-notify-${key}`} className={BTN}
                       disabled={busy || notifyIds.length === 0}
                       title={notifyIds.length > 0 && notifyOwners === 0 ? t("refAudit.ownerMissing") : ""}
                       onClick={() => setConfirm("notify")}>
                 {t("refAudit.notify", { n: notifyOwners })}
               </button>
             </div>
-            {error && <p className="px-4 pb-2 text-fine text-error" data-id="ref-audit-error">{error}</p>}
+            {error && <p className="px-4 pb-2 text-fine text-error" data-id={`ref-audit-error-${key}`}>{error}</p>}
           </div>
         </div>
       )}

@@ -19,7 +19,7 @@ export function RefAuditPanel() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { getSectionClass, openSection, closeSection } = useSectionMotion<string>();
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<string>();
   const directory = useDirectory();
   const departments = useDirectoryDepartments();
 
@@ -76,7 +76,9 @@ export function RefAuditPanel() {
           pickerUsers={pickerUsers}
           userDepartments={userDepartments}
           sectionClass={getSectionClass(keyOf(g))}
-          expanded={expanded.has(keyOf(g))}
+          // 닫히는 중(고스트)도 마운트 유지해 accordion-close가 재생되게 한다 — 쉐브런/aria는 open(실제 토글)만 따른다.
+          expanded={expanded.has(keyOf(g)) || closingKeys.has(keyOf(g))}
+          open={expanded.has(keyOf(g))}
           onToggle={() => toggle(g)}
           onDone={done}
         />
