@@ -49,6 +49,8 @@ from app.schemas import (
     NotificationPurgeGroupOut,
     NotificationPurgeIn,
     RefAuditOut,
+    RefNotifyIn,
+    RefNotifyOut,
     RefRemapIn,
     RefRemapOut,
     TableDataOut,
@@ -158,6 +160,22 @@ async def post_ref_remap(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await session.commit()
     return RefRemapOut(applied=result.applied, skipped=result.skipped)
+
+
+@router.post("/ref-audit/notify", response_model=RefNotifyOut)
+async def post_ref_notify(
+    payload: RefNotifyIn,
+    login_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> RefNotifyOut:
+    """sysadmin 전용 — 노드/SP 낡은 참조를 맵 오너에게 오너당 1건으로 묶어 알린다."""
+    _require_sysadmin(login_id)
+    try:
+        result = await ref_audit.send_fix_requests(session, payload.target_ids, login_id)
+    except ref_audit.RemapError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return RefNotifyOut(recipients=result.recipients, maps=result.maps, skipped_maps=result.skipped_maps)
 
 
 @router.get("/batch-runs", response_model=list[BatchRunOut])

@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app import workflow
+from app import ref_audit, workflow
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
@@ -237,6 +237,17 @@ async def list_maps(
         ).all()
     }
 
+    # 낡은 참조 집계 — 게시본 + 최신 드래프트(최신 버전이 draft일 때) 노드 + SP 지정값 (design 2026-09-09)
+    stale_version_ids: dict[int, list[int]] = {}
+    for m in maps:
+        vids = [published_vid[m.id]] if m.id in published_vid else []
+        latest = latest_vid.get(m.id)
+        if latest is not None and latest_status.get(m.id) == workflow.DRAFT and latest not in vids:
+            vids.append(latest)
+        if vids:
+            stale_version_ids[m.id] = vids
+    stale_counts = await ref_audit.count_stale_refs_by_map(session, maps, stale_version_ids)
+
     def _set_card_metrics(m: ProcessMap) -> None:
         """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
         m.latest_version_status = latest_status.get(m.id)
@@ -247,6 +258,7 @@ async def list_maps(
         owner_login = m.owner_id or m.created_by
         m.owner_name = owner_name.get(owner_login) if owner_login else None
         m.category_path = category_paths.get(m.category_id) if m.category_id else None
+        m.stale_ref_count = stale_counts.get(m.id, 0)
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)

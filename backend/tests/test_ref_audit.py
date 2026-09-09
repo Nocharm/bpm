@@ -527,3 +527,36 @@ def test_remap_user_remove_and_owner_guard(client: TestClient) -> None:
             return (await session.get(ProcessMap, ids["map"])).sp_assignee
 
     assert asyncio.run(_sp()) == "Minjae Lee"
+
+
+def test_notify_bundles_per_owner_and_skips_departed_owner(client: TestClient) -> None:
+    dept_ids = asyncio.run(_seed_dept_refs())   # 오너 user.lee — 노드 부서 pub 2 + draft 1, SP 부서 1
+    user_ids = asyncio.run(_seed_user_refs())   # 오너 gone.user(퇴직) — 노드 담당자 2
+    res = client.post("/api/admin/ref-audit/notify", headers=SYS, json={"target_ids": [
+        f"node_dept:{dept_ids['pub']}", f"node_dept:{dept_ids['draft']}", f"sp_dept:{dept_ids['map']}",
+        f"node_assignee:{user_ids['pub']}",
+    ]})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["recipients"] == 1 and body["maps"] == 1
+    # 공유 DB에 다른 테스트발 오너-누락 맵이 섞여 있을 수 있어 정확 일치 대신 포함 여부로 검증
+    skipped = next((s for s in body["skipped_maps"] if s["id"] == user_ids["map"]), None)
+    assert skipped is not None and skipped["reason"] == "owner_missing"
+
+    async def _notif() -> dict | None:
+        from app.models import Notification
+
+        async with SessionLocal() as session:
+            rows = (await session.scalars(select(Notification).where(
+                Notification.recipient == "user.lee", Notification.type == "ref_fix_requested"
+            ).order_by(Notification.id.desc()))).all()
+            return rows[0].payload if rows else None
+
+    payload = asyncio.run(_notif())
+    assert payload is not None and payload["actor"] == "admin.kim" and payload["count"] == 1
+    entry = next(e for e in payload["maps"] if e["id"] == dept_ids["map"])
+    assert entry == {"id": dept_ids["map"], "name": entry["name"], "node_dept": 3, "node_assignee": 0,
+                     "sp_dept": 1, "sp_assignee": 0}
+    # 오너 액션 대상이 아닌 소스는 422
+    assert client.post("/api/admin/ref-audit/notify", headers=SYS,
+                       json={"target_ids": [f"owning_dept:{dept_ids['map']}"]}).status_code == 422

@@ -746,6 +746,8 @@ class MapOut(BaseModel):
     sp_changed_at: datetime | None = None
     # 오우닝 부서 org_path — None=누락(레거시). 홈 배지·필터, 설정 표시용 (spec 2026-07-10)
     owning_department: str | None = None
+    # 낡은 부서·담당자 참조 수(게시본/드래프트 노드 + SP 지정값) — 홈 카드 배지·Issues 필터 (design 2026-09-09)
+    stale_ref_count: int = 0
     # Word 맵 모드 & 임포트 카탈로그 — mode="word"인 맵만 doc_name·doc_sections 사용 (design 2026-07-18)
     mode: str = "normal"
     doc_name: str = ""

@@ -370,6 +370,50 @@ class RemapError(ValueError):
 
 
 @dataclass
+class NotifyResult:
+    recipients: int
+    maps: int
+    skipped_maps: list[dict] = field(default_factory=list)
+
+
+async def send_fix_requests(session: AsyncSession, target_ids: list[str], actor: str) -> NotifyResult:
+    """오너 액션 대상 라인을 맵→오너로 묶어 오너당 알림 1건. 오너 없음/퇴직은 skipped. commit은 호출자."""
+    for target_id in target_ids:
+        source = target_id.partition(":")[0]
+        if source not in OWNER_ACTIONABLE:
+            raise RemapError(f"{source} is not owner-actionable")
+    wanted = set(target_ids)
+    valid = await load_valid_sets(session)
+    ctx = await load_scan_context(session)
+    lines = [ln for group in (await scan_dept_refs(session, valid, ctx)) + (await scan_user_refs(session, valid, ctx))
+             for ln in group.lines if ln.target_id in wanted and ln.map_id is not None]
+    per_map: dict[int, dict] = {}
+    for ln in lines:
+        entry = per_map.setdefault(ln.map_id, {
+            "id": ln.map_id, "name": ln.map_name or "", "node_dept": 0, "node_assignee": 0,
+            "sp_dept": 0, "sp_assignee": 0, "_owner": ln.owner_id,
+        })
+        entry[ln.source] += ln.count
+    by_owner: dict[str, list[dict]] = {}
+    skipped: list[dict] = []
+    for entry in per_map.values():
+        owner = entry.pop("_owner")
+        if not owner or owner not in valid.user_ids:
+            skipped.append({"id": entry["id"], "name": entry["name"], "reason": "owner_missing"})
+            continue
+        by_owner.setdefault(owner, []).append(entry)
+    actor_emp = await session.get(Employee, actor)
+    actor_name = actor_emp.name if actor_emp and actor_emp.name else actor
+    for owner, maps in by_owner.items():
+        await create_notifications(
+            session, [owner], type="ref_fix_requested",
+            message=f"{actor_name} asked you to fix stale department/assignee references in {len(maps)} map(s)",
+            payload={"actor": actor, "actor_name": actor_name, "count": len(maps), "maps": maps},
+        )
+    return NotifyResult(recipients=len(by_owner), maps=sum(len(v) for v in by_owner.values()), skipped_maps=skipped)
+
+
+@dataclass
 class RemapResult:
     applied: dict[str, int] = field(default_factory=dict)
     skipped: list[str] = field(default_factory=list)
