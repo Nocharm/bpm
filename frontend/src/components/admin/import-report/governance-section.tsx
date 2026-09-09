@@ -1,13 +1,14 @@
 "use client";
 
-// 거버넌스 확인 — dry-run governance[]를 맵별로 묶어 "현재 → 전달"을 보여주고, 행마다 유지/교체 세그먼트 토글.
+// 거버넌스 확인 — dry-run governance[]를 맵별로 묶어 "현재 → 전달"을 보여주고, 행마다 유지/교체 드롭다운.
 // 굵은 값 = 적용 뒤 남는 값, 버려지는 값은 취소선. 체크한 (code, field)만 apply가 교체 (spec 2026-09-03 §6).
-// apply 결과 보기(applied=true)는 토글 대신 적용/유지 배지. 오너·승인자는 사용자 필, 행 호버=우측 그 맵 강조.
+// apply 결과 보기(applied=true)는 드롭다운 대신 적용/유지 배지. 오너·승인자는 사용자 필, 행 호버=우측 그 맵 강조.
 // notes 행은 내용이 다를 때만 서버가 내려보내고(같으면 행 없음), 행 호버 시 뜨는 "변경사항 자세히"로
 // git diff식 요약을 아코디언으로 편다 (사용자 결정 2026-09-09).
 
-import { ArrowRight, ChevronDown, GitCompare, ListChecks, Repeat, Undo2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { ArrowRight, Check, ChevronDown, GitCompare, ListChecks, Repeat, Undo2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { GovernanceDiff, GovernanceField, NoteChange } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -61,11 +62,12 @@ function GovernanceValue({ text, field, final }: { text: string; field: Governan
   );
 }
 
-// 유지/교체 세그먼트 토글 — 리포트의 필 어휘(rounded-full·hairline·톤 틴트)를 그대로 쓴다.
-// 네이티브 select는 OS 크롬이 섞여 같은 행의 결과 배지·상태 필과 톤이 어긋났다 (사용자 지시 2026-09-09).
-const SEG_BTN = "inline-flex items-center gap-1 px-1.5 py-0.5 text-fine transition-colors duration-150";
+// 유지/교체 드롭다운 — 트리거는 그대로 두고 **펼친 목록만** 앱 디자인으로 바꾼다. 네이티브 select의
+// option 목록은 OS가 그려 리포트 톤과 어긋났다 (사용자 지시 2026-09-09).
+// 목록은 body 포털 + fixed — 섹션 본문이 max-h 스크롤이라 absolute면 잘린다(SearchSelect와 같은 계약).
+const MENU_WIDTH = 132; // px — 두 옵션 라벨 + 아이콘이 줄바꿈 없이 들어가는 폭
 
-function KeepReplaceToggle({
+function KeepReplaceMenu({
   replace,
   dataId,
   onSelect,
@@ -75,37 +77,100 @@ function KeepReplaceToggle({
   onSelect: (next: boolean) => void;
 }) {
   const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      // 아래 공간이 모자라면 위로 뒤집는다 — 섹션 하단 행에서 목록이 화면 밖으로 나가지 않게
+      const below = window.innerHeight - rect.bottom;
+      const height = 72; // 옵션 2개 + 패딩
+      setPos({
+        left: Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8),
+        top: below < height ? rect.top - height - 4 : rect.bottom + 4,
+      });
+    };
+    updatePos(); // DOM 측정은 커밋 후에만 — pos=null 동안은 안 그리므로 엉뚱한 자리로 깜빡이지 않는다
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true); // capture — 섹션 내부 스크롤까지 따라간다
+    return () => {
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
+  }, [open]);
+
+  const choose = (next: boolean) => {
+    setOpen(false);
+    if (next !== replace) onSelect(next);
+  };
+  const options: { value: boolean; label: string; Icon: typeof Undo2 }[] = [
+    { value: false, label: t("framework.governance.keepShort"), Icon: Undo2 },
+    { value: true, label: t("framework.governance.replace"), Icon: Repeat },
+  ];
+
   return (
-    <span
-      data-id={dataId}
-      data-state={replace ? "replace" : "keep"}
-      className="inline-flex shrink-0 overflow-hidden rounded-full border border-hairline bg-surface"
-    >
+    <>
       <button
+        ref={triggerRef}
         type="button"
-        data-id={`${dataId}-keep`}
-        aria-pressed={!replace}
-        className={`${SEG_BTN} ${
-          replace ? "text-ink-tertiary hover:bg-surface-alt" : "bg-surface-alt font-semibold text-ink"
+        data-id={dataId}
+        data-state={replace ? "replace" : "keep"}
+        aria-expanded={open}
+        className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine transition-colors duration-150 ${
+          replace
+            ? "border-changed/40 bg-changed/10 text-changed hover:bg-changed/20"
+            : "border-hairline bg-surface text-ink-secondary hover:bg-surface-alt"
         }`}
-        onClick={() => onSelect(false)}
+        onClick={() => setOpen((v) => !v)}
       >
-        <Undo2 size={11} strokeWidth={1.5} />
-        {t("framework.governance.keepShort")}
+        {replace ? <Repeat size={12} strokeWidth={1.5} /> : <Undo2 size={12} strokeWidth={1.5} />}
+        {replace ? t("framework.governance.replace") : t("framework.governance.keepShort")}
+        <ChevronDown
+          size={11}
+          strokeWidth={1.5}
+          className={`transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+        />
       </button>
-      <button
-        type="button"
-        data-id={`${dataId}-replace`}
-        aria-pressed={replace}
-        className={`${SEG_BTN} border-l border-hairline ${
-          replace ? "bg-changed/10 font-semibold text-changed" : "text-ink-tertiary hover:bg-surface-alt"
-        }`}
-        onClick={() => onSelect(true)}
-      >
-        <Repeat size={11} strokeWidth={1.5} />
-        {t("framework.governance.replace")}
-      </button>
-    </span>
+      {open &&
+        pos &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[1240]" onClick={() => setOpen(false)} />
+            <div
+              data-id={`${dataId}-menu`}
+              role="listbox"
+              style={{ left: pos.left, top: pos.top, width: MENU_WIDTH }}
+              className="fixed z-[1250] rounded-md border border-hairline bg-surface py-1 shadow-lg"
+            >
+              {options.map(({ value, label, Icon }) => {
+                const active = value === replace;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    data-id={`${dataId}-${value ? "replace" : "keep"}`}
+                    className={`flex w-full items-center gap-1.5 px-2 py-1 text-left text-fine hover:bg-surface-alt ${
+                      active ? "text-ink" : "text-ink-secondary"
+                    }`}
+                    onClick={() => choose(value)}
+                  >
+                    <Icon size={12} strokeWidth={1.5} className={value ? "text-changed" : "text-ink-tertiary"} />
+                    <span className="flex-1 truncate">{label}</span>
+                    {active && <Check size={12} strokeWidth={1.7} className="shrink-0 text-accent" />}
+                  </button>
+                );
+              })}
+            </div>
+          </>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -303,12 +368,10 @@ export function GovernanceSection({
                             {d.applied ? t("framework.governance.applied") : t("framework.governance.kept")}
                           </span>
                         ) : (
-                          <KeepReplaceToggle
+                          <KeepReplaceMenu
                             replace={replace}
                             dataId={`import-governance-select-${d.code}-${d.field}`}
-                            onSelect={(next) => {
-                              if (next !== replace) onToggle(key);
-                            }}
+                            onSelect={() => onToggle(key)}
                           />
                         )}
                       </div>

@@ -2,7 +2,7 @@
 
 // 임포트 리포트 미리보기 — 업로드 JSON으로 그린 흐름(lib/interview-preview)을 ScopePreview(경량 SVG)로.
 // scope="map"은 행 하나의 L6 흐름(actions/relations), scope="canvas"는 파일 전체의 L5 연계 캔버스.
-// 한 번에 하나만 열리고(호출부의 previewCode 단일 상태), 뷰포트는 3노드 높이 고정, 기본 배율은 노드가 읽히는 크기,
+// 한 번에 하나만 열리고(호출부의 previewCode 단일 상태), 뷰포트는 5노드 높이 고정, 기본 배율은 노드가 읽히는 크기,
 // 드래그 팬·휠 줌·+/−/맞춤 버튼 — 서브프로세스 피크와 같은 조작감 (사용자 결정 2026-09-08).
 
 import { Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -14,7 +14,7 @@ import { useI18n } from "@/lib/i18n";
 import { buildL5PreviewGraph, buildPreviewGraph, layoutPreviewGraph } from "@/lib/interview-preview";
 import { ScopePreview } from "@/components/scope-preview";
 
-const VIEW_HEIGHT = 162; // px — 노드 52 × 3 + 여백 (사용자 지시 2026-09-09)
+const VIEW_HEIGHT = 266; // px — 노드 52 × 5 + 여백 (3배에서 더 키움, 사용자 지시 2026-09-09)
 const VIEW_PAD = 40; // ScopePreview의 viewBox 패딩과 동일
 const TARGET_NODE_PX = 44; // 기본 배율에서 process 노드가 보이는 높이
 const ZOOM_MIN = 1;

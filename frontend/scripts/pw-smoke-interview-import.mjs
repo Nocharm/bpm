@@ -121,7 +121,8 @@ try {
   const countChecked = async () =>
     Number((((await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "").match(/(\d+) governance/) ?? [])[1] ?? -1);
   const checkedBefore = await countChecked();
-  // 유지/교체는 세그먼트 토글(2026-09-09) — 네이티브 select를 걷어내고 Replace 쪽을 누른다
+  // 유지/교체는 커스텀 드롭다운(2026-09-09) — 트리거를 열고 포털 목록에서 Replace를 고른다
+  await page.locator(`[data-id="import-governance-select-${govCode}-owner"]`).click();
   await page.locator(`[data-id="import-governance-select-${govCode}-owner-replace"]`).click();
   const checkedAfter = await countChecked();
   const barText = (await page.locator('[data-id="interview-import-actions"]').textContent()) ?? "";
