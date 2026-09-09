@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 238개 · 2026-09-08 기준
+총 238개 · 2026-09-09 기준
 
 ## components/
 
@@ -167,7 +167,7 @@
 | `file-card.tsx` | `ImportMapRow`, `ImportFileCard` | 우측 L5 파일 카드 | `components/admin/import-report/interview-import-report.tsx` |
 | `governance-section.tsx` | `GovernanceSection` | 거버넌스 확인 | `components/admin/import-report/interview-import-report.tsx` |
 | `interview-import-report.tsx` | `InterviewImportReport` | 인터뷰 임포트 dry-run 리포트(2열, A안) | `components/admin/framework-panel.tsx` |
-| `map-preview.tsx` | `ImportMapPreview` | 맵 행 미리보기 | `components/admin/import-report/file-card.tsx` |
+| `map-preview.tsx` | `ImportMapPreview` | 임포트 리포트 미리보기 | `components/admin/import-report/file-card.tsx` |
 | `person-pill.tsx` | `PersonPill` | 임포트 리포트의 사용자 필 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/governance-section.tsx` |
 | `report-bits.tsx` | `ExternalStatePill`, `KeyCard`, `KeyIcon` | 임포트 리포트 공용 조각 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |
 | `report-section.tsx` | `ReportSection` | 2열 임포트 리포트의 섹션 셸 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |

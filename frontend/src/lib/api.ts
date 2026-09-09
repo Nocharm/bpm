@@ -2943,6 +2943,15 @@ export interface InterviewFileReport {
 export type GovernanceField = "owner" | "department" | "approvers" | "notes";
 
 // dry-run 응답의 기존 맵 거버넌스 차이 — 체크한 (code, field)만 apply가 교체 (spec 2026-09-03 §3)
+// 임포트 노트 1건의 내용 차이 — field="notes" 행이 git diff식 요약으로 펼쳐 보여준다
+export interface NoteChange {
+  op: "added" | "removed" | "changed";
+  kind: string;
+  title: string;
+  text: string; // 적용 뒤 남을 본문 — removed는 사라질 기존 본문
+  prev_text: string; // changed의 기존 본문, 그 외 ""
+}
+
 export interface GovernanceDiff {
   code: string;
   name: string;
@@ -2952,6 +2961,8 @@ export interface GovernanceDiff {
   applied: boolean;
   // 화면 기본 체크 — notes만 True일 수 있다(고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
   default_checked?: boolean;
+  // field="notes" 전용 — 내용이 같은 스코프는 서버가 행 자체를 안 내려보내므로 항상 1건 이상이다
+  note_changes?: NoteChange[];
 }
 
 export interface GovernanceDecision {

@@ -13,6 +13,7 @@ docs/design/2026-08-18-interview-import-design.md. 승인 워크플로·알림�
 import hashlib
 import uuid
 from dataclasses import dataclass, field
+from dataclasses import field as dc_field  # GovernanceDiff는 속성명이 field라 클래스 본문에서 이름이 가려진다
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -495,6 +496,17 @@ async def resolve_owning_department(
 
 
 @dataclass
+class NoteChange:
+    """임포트 노트 1건의 내용 차이 — field="notes" 거버넌스 행이 실어 보내는 git diff식 요약 단위."""
+
+    op: str  # added(전달본에만) | removed(기존본에만) | changed(같은 kind·title, 본문만 다름)
+    kind: str
+    title: str
+    text: str  # 적용 뒤 남을 본문 — removed는 사라질 기존 본문
+    prev_text: str = ""  # changed의 기존 본문, 그 외 ""
+
+
+@dataclass
 class GovernanceDiff:
     """기존 맵 거버넌스 3필드(owner/department/approvers) 차이 1건 — 응답 GovernanceDiffOut과 동형."""
 
@@ -505,6 +517,8 @@ class GovernanceDiff:
     delivered: str
     applied: bool = False
     default_checked: bool = False
+    # field="notes" 전용 — 내용 비교 결과. 빈 리스트면 내용이 같다는 뜻이라 행 자체를 안 올린다
+    note_changes: list[NoteChange] = dc_field(default_factory=list)
 
 
 @dataclass
@@ -1262,6 +1276,39 @@ async def import_delivery(
     return report
 
 
+def diff_import_notes(
+    existing: list[tuple[str, str, str]],
+    delivered: list[tuple[str, str, str]],
+) -> list[NoteChange]:
+    """기존 임포트 노트 ↔ 전달 노트 내용 비교 — (kind, title) 키로 짝지어 added/removed/changed만 남긴다.
+
+    입력은 (kind, title, text) 튜플. 같은 키가 여러 건이면 등장 순서대로 짝짓는다 — 노트는 순서에
+    의미가 없어 개수만 맞추면 된다. 본문까지 같은 짝은 결과에서 빠지므로 **빈 결과 = 내용 무변경**이고,
+    호출부는 그 스코프의 거버넌스 행을 아예 올리지 않는다 (사용자 결정 2026-09-09).
+    """
+    def key(kind: str, title: str) -> tuple[str, str]:
+        return (kind.strip(), (title or "").strip())
+
+    remaining: dict[tuple[str, str], list[str]] = {}
+    for kind, title, text in existing:
+        remaining.setdefault(key(kind, title), []).append(text)
+
+    changes: list[NoteChange] = []
+    for kind, title, text in delivered:
+        k = key(kind, title)
+        bucket = remaining.get(k)
+        if not bucket:
+            changes.append(NoteChange("added", k[0], k[1], text))
+            continue
+        prev = bucket.pop(0)
+        if prev.strip() != text.strip():
+            changes.append(NoteChange("changed", k[0], k[1], text, prev))
+    for (kind, title), texts in remaining.items():
+        for text in texts:
+            changes.append(NoteChange("removed", kind, title, text))
+    return changes
+
+
 async def apply_interview_notes(
     session: AsyncSession,
     notes: list["InterviewNote"],
@@ -1308,36 +1355,49 @@ async def apply_interview_notes(
     existing_rows = []
     if scope_conds:
         existing_rows = (await session.execute(
-            select(MapNote.map_id, MapNote.category_code, MapNote.edited_at).where(
-                MapNote.source == "consultant-import", or_(*scope_conds),
-            )
+            select(
+                MapNote.map_id, MapNote.category_code, MapNote.edited_at,
+                MapNote.kind, MapNote.title, MapNote.text,
+            ).where(MapNote.source == "consultant-import", or_(*scope_conds))
         )).all()
     id_to_code = {mid: code for code, mid in code_to_id.items()}
     existing: dict[str, tuple[int, int]] = {}
-    for mid, ccode, edited_at in existing_rows:
+    existing_notes: dict[str, list[tuple[str, str, str]]] = {}
+    for mid, ccode, edited_at, kind, title, text in existing_rows:
         scope_code = id_to_code.get(mid) if mid is not None else ccode
         if scope_code is None:
             continue
         total, edited = existing.get(scope_code, (0, 0))
         existing[scope_code] = (total + 1, edited + (1 if edited_at is not None else 0))
+        existing_notes.setdefault(scope_code, []).append((kind, title or "", text))
 
     delivered_counts: dict[str, int] = {}
+    delivered_notes: dict[str, list[tuple[str, str, str]]] = {}
     for n in notes:
         scope_code = n.map_code or n.category_code
         if scope_code:
             delivered_counts[scope_code] = delivered_counts.get(scope_code, 0) + 1
+            delivered_notes.setdefault(scope_code, []).append((n.kind, n.title or "", n.text))
 
     # 교체 대상 스코프 — 기존 임포트 노트가 없으면 그냥 삽입, 있으면 체크된 것만 지우고 재삽입
     replace_scopes: set[str] = set()
     skip_scopes: set[str] = set()
     for scope_code, (total, edited) in sorted(existing.items()):
+        # 내용 비교가 1차 — 전달본이 기존 임포트 노트와 같으면 교체할 것이 없으니 행을 올리지 않고
+        # 그대로 건너뛴다(재삽입해도 결과가 같다). 사용자 결정 2026-09-09.
+        note_changes = diff_import_notes(
+            existing_notes.get(scope_code, []), delivered_notes.get(scope_code, []),
+        )
+        if not note_changes:
+            skip_scopes.add(scope_code)
+            continue
         is_checked = (scope_code, "notes") in checked
         if report is not None:
             report.governance.append(GovernanceDiff(
                 scope_code, map_names.get(scope_code) or cat_names.get(scope_code) or scope_code, "notes",
                 f"{total} notes" + (f" · {edited} edited" if edited else ""),
                 f"{delivered_counts.get(scope_code, 0)} notes",
-                is_checked, default_checked=edited == 0,
+                is_checked, default_checked=edited == 0, note_changes=note_changes,
             ))
         if is_checked:
             replace_scopes.add(scope_code)

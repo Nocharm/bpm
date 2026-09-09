@@ -1106,6 +1106,18 @@ class FallbackNotesIn(BaseModel):
     system_fallback: str | None = Field(default=None, max_length=200)
 
 
+class NoteChangeOut(BaseModel):
+    """임포트 노트 1건의 내용 차이 — 리포트가 git diff식 요약으로 펼쳐 보여준다."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    op: Literal["added", "removed", "changed"]
+    kind: str
+    title: str
+    text: str
+    prev_text: str = ""
+
+
 class GovernanceDiffOut(BaseModel):
     """기존 맵 거버넌스 필드 차이 1건 — 체크한 것만 apply가 교체한다 (spec 2026-09-03 §3)."""
 
@@ -1119,6 +1131,8 @@ class GovernanceDiffOut(BaseModel):
     applied: bool
     # 화면 기본 체크 — notes만 True일 수 있다(사람이 고친 임포트 노트가 없으면 현행처럼 교체) (followups §3)
     default_checked: bool = False
+    # field="notes" 전용 — 내용이 같은 스코프는 애초에 행이 안 오므로 항상 1건 이상이다
+    note_changes: list[NoteChangeOut] = []
 
 
 class MapNoteOut(BaseModel):

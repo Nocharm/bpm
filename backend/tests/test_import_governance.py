@@ -70,7 +70,8 @@ def test_dry_run_lists_diffs_for_confirmed_owner_without_writing(client: TestCli
                  apply=False).json()
     owner = _gov(body, "owner")
     assert owner == {"code": code, "name": "교정 준비", "field": "owner",
-                     "current": "a", "delivered": "b", "applied": False, "default_checked": False}
+                     "current": "a", "delivered": "b", "applied": False, "default_checked": False,
+                     "note_changes": []}  # note_changes는 field="notes" 전용
     approvers = _gov(body, "approvers")
     assert approvers["current"] == "boss" and approvers["delivered"] == "lead"
     assert _gov(body, "department") is None  # 전달 부서 없음 = 차이 아님
@@ -165,8 +166,9 @@ def _notes(map_id: int) -> list[dict]:
 
 
 def test_reimport_notes_replace_is_a_decision(client: TestClient) -> None:
-    """임포트 노트가 있는 맵은 notes 차이 행 — 미수정이면 기본 체크, 사람이 고쳤으면 기본 해제.
-    체크 시 임포트 노트만 교체(사용자 노트 보존) (design 2026-09-03 followups §3)."""
+    """임포트 노트 차이 행은 **내용 비교가 1차** — 같으면 행 자체가 없고, 다를 때만 결정 대상이 된다.
+    기본 체크는 사람 수정 여부로 갈리고(미수정=체크, 수정=해제), 체크 시 임포트 노트만 교체한다
+    (사용자 노트 보존, design 2026-09-03 followups §3 + 사용자 결정 2026-09-09)."""
     code = "task-gov-notes"
     data = _delivery(code, owner="a", approvers=[], department=None)
     assert _post(client, data, apply=True).status_code == 200
@@ -174,16 +176,26 @@ def test_reimport_notes_replace_is_a_decision(client: TestClient) -> None:
     before = _notes(m.id)
     assert len(before) > 0 and all(n["source"] == "consultant-import" for n in before)
 
-    def notes_row_of(body: dict) -> dict:
+    def notes_row_of(body: dict) -> dict | None:
         # L5 스코프(카테고리 code) notes 행도 함께 오므로 맵 code로 고른다
-        return next(g for g in body["governance"] if g["field"] == "notes" and g["code"] == code)
+        return next((g for g in body["governance"] if g["field"] == "notes" and g["code"] == code), None)
 
-    # 미결정 재임포트 → 노트 그대로, 차이 행은 기본 체크(수정 없음)
+    # 같은 전달 재임포트 → 내용이 같으니 차이 행을 안 낸다, 노트도 그대로
     body = _post(client, data, apply=True).json()
+    assert notes_row_of(body) is None
+    assert [n["id"] for n in _notes(m.id)] == [n["id"] for n in before]
+
+    # 본문이 바뀐 전달 → 차이 행 등장, 사람 수정이 없으니 기본 체크 + git diff식 요약이 실린다
+    changed = _delivery(code, owner="a", approvers=[], department=None)
+    # unitId로 이 맵에 붙는 sideNote — tasks[]는 taskId로 찾으므로 code를 바꾼 이 전달엔 안 걸린다
+    changed["sideNotes"][1]["text"] = "tacit: 준비목록에 교정 성적서 번호까지 적는다"
+    body = _post(client, changed, apply=False).json()
     notes_row = notes_row_of(body)
     assert notes_row["default_checked"] is True and notes_row["applied"] is False
     assert notes_row["current"] == f"{len(before)} notes"
-    assert [n["id"] for n in _notes(m.id)] == [n["id"] for n in before]
+    assert [c["op"] for c in notes_row["note_changes"]] == ["changed"]
+    assert "교정 성적서 번호" in notes_row["note_changes"][0]["text"]
+    assert "준비목록이 나오면 끝" in notes_row["note_changes"][0]["prev_text"]
 
     # 오너가 임포트 노트 하나를 고치고 사용자 노트도 하나 추가
     edited_id = before[0]["id"]

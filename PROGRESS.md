@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-09 — 임포트 리포트 UI 4종: 세그먼트 토글·L5 미리보기·3노드 높이·노트 내용 diff (feat/ux-polish)
+- **거버넌스 유지/교체는 네이티브 `<select>` 폐기** → 리포트 필 어휘 그대로인 세그먼트 토글(`KeepReplaceToggle`). OS 크롬이 섞여 같은 행의 결과 배지·상태 필과 톤이 어긋나던 문제. 스모크는 `selectOption` → `-replace` 버튼 클릭으로 이관.
+- **L5 연계 캔버스 미리보기 신설** — 캔버스 행 호버 시 Preview 노출(맵 행과 같은 규칙). `buildL5PreviewGraph`가 파일 최상위 `relations.edges`로 rows(subprocess)+`externalTasks`를 잇고, 백엔드 `expand_linkage_branches`처럼 택일 팬아웃 앞에만 분기 노드를 세운다(전부 `parallel`이면 제외). 미선언 끝점은 코드 그대로가 제목.
+- **미리보기 높이 1.5노드 → 3노드(162px) + 펼침/접힘 애니메이션**(grid-rows 0fr↔1fr, 350ms). 랜드마인: 맵 목록 4행 캡의 `useLayoutEffect` 실측이 전환 시작 전 값을 재 미리보기가 잘렸다 — 열리는 행은 안쪽 `data-preview-body`의 `scrollHeight`로 보정해 목록이 같은 속도로 늘어나게 했다.
+- **임포트 노트 거버넌스는 내용 비교가 1차**(백엔드 동반 수정) — `diff_import_notes`가 (kind, title) 키로 짝지어 added/removed/changed만 남기고, **차이가 없으면 행 자체를 안 내려보낸다**(재삽입해도 결과가 같아 그냥 skip). 다르면 `GovernanceDiffOut.note_changes`로 실어 보내 행 호버 시 뜨는 "변경사항 자세히"가 git diff식 아코디언(`-` 기존 / `+` 남을 본문)을 편다. 종전 "임포트 노트가 있으면 항상 결정 행"은 폐기 — 회귀 테스트도 새 계약으로 옮겼다.
+- **검증**: backend pytest 1440·ruff, vitest 917(L5 빌더 5케이스 신설), tsc·lint·카탈로그, 스모크 interview-import 26/26, 캡처 6장(호버 노출·펼침·토글·노트 diff). 포트 8047/3047.
+
 ## 2026-09-08 — 인터뷰 JSON 0.5 외부 L6 참조(`externalTasks`) + 드라이런 리포트 2열 (feat/interview-external-refs → dev)
 - **목적**: 컨설턴트가 L5 단위로 전달하면서 타 L5의 L6를 "소속 L5 코드 + 불확실한 이름"으로만 아는 경우(taskId 없음)를 임포트가 받도록, 우리가 JSON 계약을 먼저 제안·구현(컨설턴트 측 Fable 5.1이 이 계약대로 생성). 스펙 `docs/superpowers/specs/2026-09-07-interview-external-refs-design.md`, 플랜 `docs/superpowers/plans/2026-09-07-interview-external-refs.md`, 컨설턴트 전달용 계약 `docs/samples/interview-json-0.5.md`, 필드 맵 `docs/qa/interview-import-field-map.md`.
 - **계약(A안, 사용자 결정)**: 최상위 `externalTasks[]` `{refId, l5{nodeCode,label}, l6|null, note}` — 엣지 끝점은 rows taskId → refId → 미선언 원문(기존 taskId 플레이스홀더+경고) 순으로 해석, 양쪽 외부면 드롭. 외부 L5 계보는 `framework.categories`에 그대로 동봉(create-only, 라우터 병합은 홈 주장 우선, 끊긴 외부 체인은 경고 후 제외). 플레이스홀더는 제목 `l6∥(L6 unspecified) L5명`·출처 `placeholder_category_id`·계보키 `external_ref_lineage_key(홈 L5|refId)`. 자동 연결은 **같은 L5 안 정규화 이름(`normalize_task_name`) 정확 일치 라이브 맵 1건만**(임포트 시 선해소 + 후차 `resolve_external_placeholders` 이름 경로), 2건+는 경고·플레이스홀더 유지, 재임포트는 미연결 노드 제목·출처만 갱신. 리포트 문구 5종은 FE `interview-report.ts` PATTERNS와 verbatim 계약. 어댑터는 0.4/0.5 수용, 0.3 거부("re-deliver as 0.5"). 조사 중 발견한 외부 엣지 `quote` KeyError(dry-run 500)도 픽스.

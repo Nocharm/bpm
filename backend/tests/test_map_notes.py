@@ -152,3 +152,70 @@ def test_map_notes_respects_visibility(client: TestClient, enforce: None) -> Non
 
     act_as("note.owner")
     assert client.get(f"/api/maps/{map_id}/notes").status_code == 200
+
+
+def _apply_with_report(notes, label: str):
+    """apply_interview_notes를 리포트와 함께 — 거버넌스 notes 행 산출을 본다."""
+    from app.db import SessionLocal
+    from scripts.import_consultant import ImportReport, apply_interview_notes
+
+    async def _do():
+        report = ImportReport()
+        async with SessionLocal() as session:
+            await apply_interview_notes(session, notes, label=label, report=report)
+            await session.commit()
+        return report
+
+    return _run(_do())
+
+
+def test_diff_import_notes_pairs_by_kind_and_title() -> None:
+    from scripts.import_consultant import diff_import_notes
+
+    # 본문까지 같은 짝은 결과에서 빠진다 — 빈 결과가 "내용 무변경"의 신호다
+    assert diff_import_notes([("voc", "t", "same")], [("voc", "t", "same")]) == []
+    # 공백만 다른 본문도 무변경 취급
+    assert diff_import_notes([("voc", "t", "same\n")], [("voc", "t", " same")]) == []
+
+    changes = diff_import_notes(
+        [("voc", "keep", "old"), ("exception", "gone", "사라질 본문")],
+        [("voc", "keep", "new"), ("rule_basis", "fresh", "새 본문")],
+    )
+    assert [(c.op, c.kind, c.title) for c in changes] == [
+        ("changed", "voc", "keep"),
+        ("added", "rule_basis", "fresh"),
+        ("removed", "exception", "gone"),
+    ]
+    assert changes[0].prev_text == "old" and changes[0].text == "new"
+    assert changes[2].text == "사라질 본문"
+
+
+def test_diff_import_notes_pairs_duplicate_keys_in_order() -> None:
+    from scripts.import_consultant import diff_import_notes
+
+    # 같은 (kind, title)이 여러 건이면 등장 순서대로 짝짓고 남는 쪽만 added/removed
+    changes = diff_import_notes(
+        [("voc", "dup", "a"), ("voc", "dup", "b")],
+        [("voc", "dup", "a"), ("voc", "dup", "B"), ("voc", "dup", "c")],
+    )
+    assert [(c.op, c.text) for c in changes] == [("changed", "B"), ("added", "c")]
+
+
+def test_governance_notes_row_hidden_when_content_matches(client: TestClient) -> None:
+    from scripts.consultant_interview import InterviewNote
+
+    _seed_consultant_map("NOTE-T3", "노트 내용 비교 대상")
+    notes = [InterviewNote(kind="exception", text="예외 본문", title="예외", map_code="NOTE-T3")]
+
+    # 1차 전달 — 기존 임포트 노트가 없으니 거버넌스 행 없이 그냥 삽입
+    assert _apply_with_report(notes, "IV diff 1").governance == []
+    # 2차 전달, 내용 동일 — 교체할 것이 없어 행을 올리지 않는다
+    assert _apply_with_report(notes, "IV diff 2").governance == []
+
+    # 3차 전달, 본문 변경 — 행이 올라오고 note_changes가 실린다
+    changed = [InterviewNote(kind="exception", text="고친 본문", title="예외", map_code="NOTE-T3")]
+    rows = _apply_with_report(changed, "IV diff 3").governance
+    assert [(r.code, r.field) for r in rows] == [("NOTE-T3", "notes")]
+    assert [(c.op, c.prev_text, c.text) for c in rows[0].note_changes] == [
+        ("changed", "예외 본문", "고친 본문"),
+    ]
