@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 홈 맵 상세 SP 섹션: 타일 단위 메모 아이콘 호버 + 부서 타일 축소 (feat/home-sp-tile-hover)
+
+- **메모 아이콘 일괄 스왑 원인**: 섹션 루트가 "모두 펼치기" 버튼용 무명 `group`이라 `.group:hover .note-swap-*`가 섹션 어디를 호버해도 안의 모든 타일 아이콘을 한꺼번에 바꿨다. 섹션은 named group `group/sp`로 바꿔(멤버 카드 `group/member` 선례) 타일의 무명 `group` 호버만 스왑을 켠다.
+- **부서 타일(DeptPill block)**: 글자 caption→fine, 보조 이름(반대 언어)은 필 호버 때만 opacity로 노출(자리는 유지 — 호버로 그리드 행 높이 안 튐), 인터랙티브면 `cursor-pointer`. 아이콘은 열 밖 `mt-0.5` 고정 오프셋 대신 이름과 같은 행 `items-center`로 — 글자 크기를 바꿔도 세로 중앙 유지(사용자 지적).
+- **검증**: tsc·lint·vitest 948·카탈로그 그린. 신규 스모크 `scripts/pw-smoke-home-sp-tile-hover.mjs` 9/9(섹션 호버=펼치기 버튼만·타일 호버=그 타일 아이콘만·부서 12px·중앙 gap 0·pointer). 보조 이름 호버 노출은 시드에 한글 부서명이 없어 미실측.
+
 ## 2026-09-10 — 홈 맵 상세 SP 섹션: 미지정 맵도 접힌 채 노출 + 부서 타일 상시 경고 픽스 (feat/home-sp-section)
 
 - **섹션 상시 노출**: SP 미지정이고 값·메모도 없는 맵은 섹션을 아예 안 그렸는데(목업 v5 결정), 톤다운 배경·muted 헤더·`Not designated` 필로 접힌 채 남긴다(사용자 지시). 펼치면 빈 타일(Not set)만 보인다.

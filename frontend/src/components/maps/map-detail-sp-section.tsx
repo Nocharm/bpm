@@ -267,7 +267,9 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     <section
       data-id="map-detail-sp-section"
       data-expanded={expanded ? "true" : "false"}
-      className={`group @container rounded-md border border-hairline p-3 ${designated ? "bg-surface" : "bg-surface-alt"}`}
+      // named group — 무명 `group`이면 섹션 호버가 안의 모든 타일(`group` 루트)의 메모 아이콘 스왑까지 일괄로
+      // 켜버린다(.group:hover .note-swap-*). 섹션 호버는 "모두 펼치기" 버튼만 반응해야 한다 (사용자 지시 2026-09-10)
+      className={`group/sp @container rounded-md border border-hairline p-3 ${designated ? "bg-surface" : "bg-surface-alt"}`}
     >
       <SectionHeader
         dataId="map-detail-sp-toggle"
@@ -285,7 +287,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
               data-id="map-detail-sp-expand-all"
               aria-expanded={expanded}
               onClick={() => (expanded ? setExpanded(false) : expandAll())}
-              className="pointer-events-none absolute top-1/2 right-full mr-1.5 flex -translate-y-1/2 items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine whitespace-nowrap text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-surface-alt hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100"
+              className="pointer-events-none absolute top-1/2 right-full mr-1.5 flex -translate-y-1/2 items-center gap-1 rounded-sm px-1.5 py-0.5 text-fine whitespace-nowrap text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover/sp:pointer-events-auto group-hover/sp:opacity-100 hover:bg-surface-alt hover:text-ink focus-visible:pointer-events-auto focus-visible:opacity-100"
             >
               {expanded ? <ChevronsDownUp size={13} strokeWidth={1.5} /> : <ChevronsUpDown size={13} strokeWidth={1.5} />}
               {t(expanded ? "inspector.collapseAll" : "inspector.expandAll")}

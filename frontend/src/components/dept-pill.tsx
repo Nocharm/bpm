@@ -69,31 +69,48 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
         data-id={dataId}
         data-orphan={isOrphan ? "true" : undefined}
         title={isOrphan ? `${department} — ${t("orphan.dept")}` : koreanName ? `${path} (${koreanName})` : path}
-        // min-w-0 — 좁은 행(인스펙터)에서 말단 이름이 말줄임되며 카드 밖으로 안 나간다. 호버=보더 액센트+틴트 진해짐+그림자
-        className={`inline-flex min-w-0 max-w-full gap-1 border font-semibold transition-[background-color,border-color,box-shadow] duration-150 ${
+        // min-w-0 — 좁은 행(인스펙터)에서 말단 이름이 말줄임되며 카드 밖으로 안 나간다. 호버=보더 액센트+틴트 진해짐+그림자.
+        // group/dept — 보조 줄(subLabel)을 필 호버에만 드러내는 트리거(무명 group은 바깥 타일 호버에 섞인다)
+        className={`group/dept inline-flex min-w-0 max-w-full gap-1 border font-semibold transition-[background-color,border-color,box-shadow] duration-150 ${
           isOrphan
             ? "border-notice-border bg-notice text-warn"
-            : "border-accent-tint-border bg-accent-tint/60 text-accent hover:border-accent hover:bg-accent-tint hover:shadow-sm"
+            : `border-accent-tint-border bg-accent-tint/60 text-accent hover:border-accent hover:bg-accent-tint hover:shadow-sm ${interactive ? "cursor-pointer" : ""}`
         } ${
           variant === "block"
-            ? `items-start rounded-sm px-2 py-1 text-caption ${fill ? "h-full w-full" : ""}`
+            ? `items-start rounded-sm px-2 py-1 text-fine ${fill ? "h-full w-full" : ""}`
             : "items-center rounded-full px-2 py-0.5 text-fine"
         }`}
         onClick={interactive ? handleClick : undefined}
         onKeyDown={interactive ? handleKey : undefined}
       >
-        {isOrphan ? (
-          <TriangleAlert size={variant === "block" ? 13 : 11} strokeWidth={1.5} className={`shrink-0 ${variant === "block" ? "mt-0.5" : ""}`} />
-        ) : (
-          <Building2 size={variant === "block" ? 13 : 11} strokeWidth={1.5} className={`shrink-0 ${variant === "block" ? "mt-0.5" : ""}`} />
-        )}
         {variant === "block" ? (
+          // 아이콘은 이름과 같은 행에서 세로 중앙 — 열 밖에 고정 오프셋(mt)으로 두면 글자 크기가 바뀔 때마다 어긋난다
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="min-w-0 break-keep">{label || deptLeaf(path)}</span>
-            {subLabel && <span className="min-w-0 break-keep text-fine font-normal text-accent/60">{subLabel}</span>}
+            <span className="flex min-w-0 items-center gap-1">
+              {isOrphan ? (
+                <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0" />
+              ) : (
+                <Building2 size={13} strokeWidth={1.5} className="shrink-0" />
+              )}
+              <span className="min-w-0 break-keep">{label || deptLeaf(path)}</span>
+            </span>
+            {/* 보조 줄은 호버 때만 — 자리는 늘 차지해(opacity) 호버로 타일·그리드 행 높이가 튀지 않는다 (사용자 지시 2026-09-10).
+                들여쓰기 = 아이콘 13 + 간격 4로 이름 아래 정렬 */}
+            {subLabel && (
+              <span className="min-w-0 break-keep pl-[17px] text-fine font-normal text-accent/60 opacity-0 transition-opacity duration-150 group-hover/dept:opacity-100">
+                {subLabel}
+              </span>
+            )}
           </span>
         ) : (
-          <span className="min-w-0 truncate">{label || deptLeaf(path)}</span>
+          <>
+            {isOrphan ? (
+              <TriangleAlert size={11} strokeWidth={1.5} className="shrink-0" />
+            ) : (
+              <Building2 size={11} strokeWidth={1.5} className="shrink-0" />
+            )}
+            <span className="min-w-0 truncate">{label || deptLeaf(path)}</span>
+          </>
         )}
       </span>
       {orgInfo && interactive && (
