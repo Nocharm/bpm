@@ -322,7 +322,8 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
             {groupHeader("map-detail-sp-attrs-toggle", attrsOpen, () => setAttrsOpen((v) => !v), t("editor.bpmAttrs"), attrCount)}
             {attrsOpen && (
               <div className="ml-2 border-l border-divider pl-2">
-                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.5fr_1.5fr_3fr] @[40rem]:grid-rows-[repeat(2,auto)]">
+                {/* 열 비율 — 부서 1.75 : 담당자 1.28(이전 1.5의 85%) : 시스템 스택 3 (사용자 지시 2026-09-10) */}
+                <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.75fr_1.28fr_3fr] @[40rem]:grid-rows-[repeat(2,auto)]">
                   {/* 부서는 값이 있으면 필 자체가 타일(헤더 생략) — 없을 때만 비활성 헤더 타일 (사용자 지시 2026-09-09).
                       자연 높이라 긴 부서명이 다 보이고, 행 높이를 이 타일이 정한다(담당자는 그 높이에 맞춰 클립) */}
                   <div className="flex @[40rem]:row-span-2" data-id="map-detail-sp-department" data-filled={deptPath !== "" ? "true" : "false"}>
