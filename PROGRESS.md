@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 트리 조상 강조 템포 조정 (feat/tree-guide-tempo)
+
+- **피드백**: 200ms 즉응이 촘촘한 트리에서 마우스를 따라 행마다 튀어 어지럽다. 전환을 350ms `ease-smooth`로 늦추고 진입 지연 120ms(스치는 이동은 반응 안 함)·이탈 지연 80ms를 둔다. 휴식 규칙의 transition=이탈, 활성 규칙의 transition=진입으로 나눠 비대칭 지연 구현. 템포 값은 `:root` `--tree-tempo`/`--tree-delay-in`/`--tree-delay-out` 한 곳. 이름 색·굵기도 같은 템포(정적 굵기라 굵기는 즉시).
+
 ## 2026-09-10 — 트리 조상 강조 2차: 가이드 라인 + 밀림 애니메이션 (feat/tree-ancestor-guide)
 
 - **배경**: 1차(이름만 검정)가 12px에서 너무 약했다. 목업 4안(현재/A 글자 강화/B 행 틴트/C 가이드 라인) 비교 후 **A+C** 확정(사용자).
