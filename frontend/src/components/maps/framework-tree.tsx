@@ -32,6 +32,7 @@ import { CLAMP_VISIBLE, ClampedList } from "@/components/maps/clamped-list";
 import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
+import { getTreeIndentStyle, TREE_INDENT_PADDING_CLASS } from "@/lib/tree-indent";
 
 interface FrameworkTreeProps {
   // page.tsx의 기존 renderCard를 그대로 물려받아 맵 행 렌더를 OrgAccordion과 일원화 (selectedId는 renderCard 클로저 내부 처리).
@@ -297,7 +298,9 @@ export function FrameworkTree({
     const header = (
       <div
         data-tree-head
-        className={`group flex w-full items-center gap-1 rounded-sm ${
+        style={getTreeIndentStyle(depth)}
+        // relative — 조상 가이드 라인(::before, globals.css)의 기준. 들여쓰기 변수는 여기, 패딩은 안쪽 버튼
+        className={`group relative flex w-full items-center gap-1 rounded-sm ${
           selected ? "bg-accent-tint text-accent" : "hover:bg-divider"
         }`}
       >
@@ -308,8 +311,7 @@ export function FrameworkTree({
             handleToggle(node.id);
             onSelectCategory?.(node);
           }}
-          style={{ paddingLeft: `${depth * 12 + 4}px` }}
-          className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+          className={`flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left ${TREE_INDENT_PADDING_CLASS}`}
         >
           {open
             ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />

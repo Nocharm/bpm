@@ -499,9 +499,50 @@ button:not(:disabled):active {
 [data-tree-name] {
   transition: color 150ms var(--ease-smooth);
 }
+/* 가이드 라인 — 헤더 왼쪽(원래 들여쓰기 자리)에 2px 액센트 선이 세로로 자라나고(scaleY), 체브론·이름은
+   --tree-shift만큼 오른쪽으로 밀렸다가 호버가 떠나면 당겨진다(패딩 전환). 호버 행 자신도 같은 선을
+   켜 조상 경로와 한 줄로 이어진다. 패딩 변수 계약은 lib/tree-indent.ts (사용자 지시 2026-09-10, A+C안). */
+[data-tree-head] {
+  --tree-shift: 0px;
+}
+[data-tree-head],
+[data-tree-head] > button {
+  transition: padding-left 200ms var(--ease-smooth), background-color 150ms var(--ease-smooth);
+}
+[data-tree-head]::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: var(--tree-indent, 4px);
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  transform: scaleY(0);
+  transition: transform 200ms var(--ease-smooth);
+}
+li[data-tree-node]:has(li:hover) > [data-tree-head],
+li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head],
+[data-tree-head]:hover {
+  --tree-shift: 10px;
+}
+li[data-tree-node]:has(li:hover) > [data-tree-head]::before,
+li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head]::before,
+[data-tree-head]:hover::before {
+  transform: scaleY(1);
+}
+/* 조상 이름 — 검정 + 400·600 사이 굵기(500). 디자인 룰의 300/400/600 사다리 밖이라 사용자 확인 필요 항목 */
 li[data-tree-node]:has(li:hover) > [data-tree-head] [data-tree-name],
 li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree-name] {
   color: var(--color-ink);
+  font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tree-head],
+  [data-tree-head] > button,
+  [data-tree-head]::before {
+    transition: none;
+  }
 }
 
 /* 홈 아코디언 펼침(부서·업무 체계) — 드러나는 영역이 0→콘텐츠 높이로 자라며 아래 행을 밀어낸다

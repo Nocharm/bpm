@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 트리 조상 강조 2차: 가이드 라인 + 밀림 애니메이션 (feat/tree-ancestor-guide)
+
+- **배경**: 1차(이름만 검정)가 12px에서 너무 약했다. 목업 4안(현재/A 글자 강화/B 행 틴트/C 가이드 라인) 비교 후 **A+C** 확정(사용자).
+- **구현**: 헤더 `[data-tree-head]`에 `::before` 2px 액센트 선(원래 들여쓰기 자리, scaleY 0→1 200ms)이 켜지고 `--tree-shift: 10px`로 체브론·이름이 오른쪽으로 밀렸다가 호버가 떠나면 당겨진다(padding-left 전환). 들여쓰기는 인라인 px 대신 `--tree-indent` 변수 + `pl-[calc(...)]` 클래스(`lib/tree-indent.ts` 단일 소스 — 업무 체계는 div 헤더/button 패딩이 분리라 변수·클래스 분리). 호버 행 자신도 선을 켜 조상과 한 줄로 잇는다. 조상 이름은 검정 + **500**. reduced-motion이면 전환 없음.
+- **⚠️ 굵기 500**: 디자인 룰 굵기 사다리(300/400/600, 500 금지) 밖 — "600보다 가볍게" 지시로 우선 500 적용, 확인 필요.
+- **검증**: tsc·lint·vitest 948·카탈로그 그린. 실측(부서 Growth Team 호버): Growth Center·Marketing Office pad +10px·선 scaleY(1)·500·검정, 형제 Brand Team 미변. 업무 체계: 선택 EPCV는 선·밀림만(액센트 유지). `pw-smoke-framework.mjs`의 `framework-node > button` 셀렉터는 헤더 div 도입(이전 커밋) 이후 낡은 것 — 이번 변경과 무관.
+
 ## 2026-09-10 — 홈 맵 상세 SP 섹션: 타일 단위 메모 아이콘 호버 + 부서 타일 축소 (feat/home-sp-tile-hover)
 
 - **메모 아이콘 일괄 스왑 원인**: 섹션 루트가 "모두 펼치기" 버튼용 무명 `group`이라 `.group:hover .note-swap-*`가 섹션 어디를 호버해도 안의 모든 타일 아이콘을 한꺼번에 바꿨다. 섹션은 named group `group/sp`로 바꿔(멤버 카드 `group/member` 선례) 타일의 무명 `group` 호버만 스왑을 켠다.

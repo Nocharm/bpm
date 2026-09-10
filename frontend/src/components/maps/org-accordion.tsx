@@ -15,6 +15,7 @@ import { CountTag } from "@/components/maps/count-tag";
 import { DeptGroupBox } from "@/components/maps/dept-group-box";
 import { MapCard } from "@/components/maps/map-card";
 import { StickyBoxHeader } from "@/components/maps/sticky-box-header";
+import { getTreeIndentStyle, TREE_INDENT_PADDING_CLASS } from "@/lib/tree-indent";
 
 // 리스트 3.5개 클램프의 "전체 펼치기" 상태 영속 키 — 트리 펼침(bpm.home.tree)과 별도 보관.
 const LIST_EXPAND_KEY = "bpm.home.deptListExpand";
@@ -120,8 +121,9 @@ export function OrgAccordion(props: OrgAccordionProps) {
           else cancelClose(node.path);
           onToggle(node.path);
         }}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
-        className="group flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider"
+        style={getTreeIndentStyle(depth)}
+        // relative — 조상 가이드 라인(::before, globals.css)의 기준. 패딩은 들여쓰기 + 밀림 변수
+        className={`group relative flex w-full items-center gap-1.5 rounded-sm py-1 text-left hover:bg-divider ${TREE_INDENT_PADDING_CLASS}`}
       >
         {open
           ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
