@@ -386,6 +386,156 @@ def test_resolve_owning_department_uses_dept_tree_without_employees(client) -> N
     assert "aligned" in (note or "")
 
 
+def _seed_slashed_dept_tree() -> None:
+    """이름 자체에 "/"가 든 부서(ADC T/F) 4레벨 체인 + 소속 직원 — 트림(2) 후 canonical 2레벨."""
+    from app.db import SessionLocal
+    from app.models import Department, Employee
+
+    async def _arrange() -> None:
+        async with SessionLocal() as session:
+            if await session.get(Department, "ADC-L1") is None:
+                for code, parent, level, name in (
+                    ("ADC-L1", None, 1, "Bio Corp"),
+                    ("ADC-L2", "ADC-L1", 2, "Research Center"),
+                    ("ADC-L3", "ADC-L2", 3, "ADC Division"),
+                    ("ADC-L4", "ADC-L3", 4, "ADC T/F"),
+                ):
+                    session.add(Department(dept_code=code, parent_dept_code=parent, level=level, name=name))
+            if await session.get(Employee, "adc.member") is None:
+                session.add(Employee(login_id="adc.member", name="adc.member", source="local",
+                                     active=True, dept_code="ADC-L4", department="ADC T/F"))
+            await session.commit()
+
+    _run(_arrange())
+
+
+def test_match_known_department_merges_slashed_dept_name(client) -> None:
+    """부서명 자체에 "/"가 든 경우(ADC T/F) 전달물 경로가 오분해되지 않는다.
+
+    경로 구분자와 이름 속 "/"가 같은 문자라 그냥 쪼개면 두 칸으로 찢어져 영영 미매칭이다
+    — 쪼개기 전 실제 부서명을 전각형으로 되돌려 붙인다(2026-09-10).
+    """
+    from app.db import SessionLocal
+    from app.orgchart import load_dept_index, load_valid_org_prefixes
+    from scripts.import_consultant import (
+        build_dept_chains,
+        collect_slashed_dept_names,
+        match_known_department,
+    )
+
+    _seed_slashed_dept_tree()
+    delivered = "Bio Corp/Research Center/ADC Division/ADC T/F"
+
+    async def _load() -> tuple:
+        async with SessionLocal() as session:
+            known = await load_valid_org_prefixes(session)
+            chains = build_dept_chains(await load_dept_index(session))
+            return known, chains
+
+    known, chains = _run(_load())
+    slashed = collect_slashed_dept_names(known, chains)
+    assert slashed == {"ADC T/F": "ADC T\uff0fF"}
+
+    matched, _note = match_known_department(known, delivered, chains, slashed_names=slashed)
+    assert matched == "ADC Division/ADC T\uff0fF"
+    # 사전 없이는 못 맞춘다 — 이 테스트가 지키는 게 사전 자체임을 고정
+    assert match_known_department(known, delivered, chains) == (None, None)
+
+
+def test_import_stores_sp_department_as_leaf(client) -> None:
+    """SP 지정 부서는 착지 경로의 리프명 — 전체 경로를 박으면 부서 트리·고아 점검이 못 알아본다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    _seed_qc_tree()
+    cmap = _canonical_map(
+        code="IV-SP1", name="시료 접수", owner=None, approvers=[],
+        department="Quality Center/QC Department/QC Support Team/QC Sample Management Group",
+    )
+    _run(_import_once(maps=[cmap]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-SP1"))).one()
+
+    m = _run(_load())
+    assert m.sp_department == "QC Sample Management Group"
+    # 소유 부서는 종전대로 트림된 전체 경로 — 두 칸의 역할이 다르다
+    assert m.owning_department == "QC Department/QC Support Team/QC Sample Management Group"
+
+
+def test_import_keeps_unmatched_department_whole(client) -> None:
+    """착지 실패한 부서에서 리프를 뽑으면 안 된다 — "품질센터/ADC T/F"의 마지막 칸은 "F"다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    cmap = _canonical_map(
+        code="IV-SP2", name="미착지", owner=None, approvers=[],
+        department="Nowhere Div/Nowhere Team",
+    )
+    _run(_import_once(maps=[cmap]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-SP2"))).one()
+
+    assert _run(_load()).sp_department == "Nowhere Div/Nowhere Team"
+
+
+def test_import_sp_department_keeps_slashed_leaf_intact(client) -> None:
+    """"/" 든 부서명은 리프로 줄여도 이름이 온전해야 한다 — "F"로 잘리면 안 된다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    _seed_slashed_dept_tree()
+    cmap = _canonical_map(
+        code="IV-SP3", name="ADC 과제", owner=None, approvers=[],
+        department="Bio Corp/Research Center/ADC Division/ADC T/F",
+    )
+    _run(_import_once(maps=[cmap]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-SP3"))).one()
+
+    m = _run(_load())
+    assert m.sp_department == "ADC T\uff0fF"
+    assert m.owning_department == "ADC Division/ADC T\uff0fF"
+
+
+def test_import_falls_back_to_owning_leaf_when_department_empty(client) -> None:
+    """전달 부서가 비면 소유 부서에서 리프를 뽑는다 — 경로 통째로 박지 않는다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import ProcessMap
+
+    _seed_import_employees()
+    cmap = _canonical_map(code="IV-SP4", name="부서 없음", department="")
+    _run(_import_once(maps=[cmap]))
+
+    async def _load():
+        async with SessionLocal() as session:
+            return (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-SP4"))).one()
+
+    m = _run(_load())
+    assert m.owning_department == "Consult Div/Consult Team"  # 오너 org 폴백
+    assert m.sp_department == "Consult Team"
+
+
 def test_import_ghost_owner_full_chain_department_sets_owning(client) -> None:
     """유령 오너(직원 미등재)라도 전달물 부서가 트리 정렬로 해석되면 owning에 등록된다.
 

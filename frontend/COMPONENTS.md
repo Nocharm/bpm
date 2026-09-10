@@ -67,7 +67,7 @@
 | `group-bulk-modal.tsx` | `GroupBulkModal` | 그룹 멤버 일괄 편집 | `app/maps/[mapId]/page.tsx` |
 | `group-title-bar.tsx` | `GroupTitleBar` | 그룹 박스 타이틀바 | `app/maps/[mapId]/page.tsx` |
 | `highlight.tsx` | `Highlight` | 매치 구간 하이라이트 | `components/maps/map-card.tsx`, `components/permissions/principal-picker.tsx`, `components/search-select.tsx` |
-| `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx` |
+| `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx`, `components/process-node.tsx` |
 | `html-view.tsx` | `HtmlView` | 게시된 HTML 매뉴얼 렌더 | `app/manual/page.tsx`, `components/settings/manual-manage-panel.tsx` |
 | `icon-action-button.tsx` | `IconActionButton` | 아이콘 전용 버튼 | `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/groups/group-actions.tsx` |
 | `icon-pill-filter.tsx` | `IconPillFilter` | 아이콘 필 필터 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx` |

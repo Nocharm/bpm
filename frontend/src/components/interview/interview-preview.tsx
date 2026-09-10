@@ -51,6 +51,7 @@ const PREVIEW_NODE_ACTIONS: NodeActions = {
   onHoverIoLink: null,
   onConnectPlaceholder: null,
   onResizeNode: null,
+        refCheck: null,
 };
 
 interface InterviewPreviewProps {

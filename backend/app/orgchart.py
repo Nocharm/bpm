@@ -17,12 +17,12 @@ from app.settings import settings
 _MAX_DEPTH = 15
 
 # 부서명 내 "/" 치환 문자 — 경로 구분자와 충돌 방지(U+FF0F 전각 슬래시). AX/PI Department 등 실부서명 존재.
-_SEGMENT_SLASH = "／"
+SEGMENT_SLASH = "／"
 
 
 def sanitize_org_segment(name: str) -> str:
     """경로 세그먼트용 부서명 — 이름 속 "/"를 전각 슬래시로 치환해 split/프리픽스 파손 방지."""
-    return name.replace("/", _SEGMENT_SLASH)
+    return name.replace("/", SEGMENT_SLASH)
 
 # by_code 값: (name, parent_dept_code)
 DeptEntry = tuple[str, str | None]

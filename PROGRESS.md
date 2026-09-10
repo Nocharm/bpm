@@ -3,6 +3,20 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 노드 고아 부서·담당자 경고: 인라인 아이콘 + 배지 호버 내역 (dev)
+
+- **기존 우하단 배지 실태**: `AssigneeWarningBadge`는 "담당자 부서 불일치" `title` 하나로 세 상황(재직자 명단에 없음·이 맵 열람권한 없음·부서 드리프트)을 뭉쳐 있었고, 판정 소스가 `eligible`(맵 열람권한자)이라 **비공개 맵에서 재직자를 미등재로 오판**했다. 부서 고아는 아예 신호가 없었고 SP 노드는 `hasBpmAttributes` 가드로 제외됐다.
+- **구현**: 판정을 `/directory`(active 전 직원) 기준으로 옮겨 감사(`app/ref_audit.load_valid_sets`)와 같은 집합을 보게 하고(`lib/node-ref-warnings.ts` 단일 소스), `eligible`은 "열람권한 없음"만 가르는 역할로 축소. 캔버스는 속성 줄 아이콘만 경고색으로 바꾸고(글자색 유지 — 노드가 많아도 도배 안 됨) 우하단 배지에 건수 + 호버 내역(`HoverTip`)을 붙였다. `DeptPill`·`AssigneePills`는 스스로 고아를 판정해 인스펙터·노드 편집 모달·홈 상세가 같은 톤을 공유한다. 새 토큰 `--color-warn`(#b45309) — 고아는 error가 아니라 "확인 필요"라 error 재사용은 과하다(사용자 결정).
+- **가드**: 디렉터리 미도착이면 `refCheck=null`로 판정 자체를 건너뛴다 — 로드 전 판정은 전 노드를 경고로 물들인다. 비교·프리뷰 표면도 null(디렉터리를 안 부른다). 판정은 노드 컴포넌트가 컨텍스트로 직접 해서 RF 노드 data를 안 건드린다(재렌더 churn 없음).
+- **검증**: tsc·lint·vitest 945(신규 9)·카탈로그 그린. 브라우저 캡처 `scripts/pw-orphan-warning-shots.mjs` 4/4(8047/3047, `seed_ref_audit_demo`).
+
+## 2026-09-10 — 임포트 부서 인덱싱: sp_department 리프화 + "/" 든 부서명 사전 (dev)
+
+- **문제**: JSON 임포트가 `owning_department`만 조직 트리에 정렬하고 `sp_department`엔 전달물 전체 경로를 그대로 박았다(실측 `Quality Center/QC Department/...`). 앱의 sp_department 계약은 리프명이라 라이브러리 부서 트리는 어느 부서를 눌러도 0건(임포트 값이 별도 루트로 튐), 고아 참조 감사는 임포트 맵을 전부 고아로 신고했다.
+- **구현**: `resolve_sp_department`가 착지 경로의 리프명을 쓴다. 착지 실패한 값에서 리프를 뽑는 건 금지 — `A/ADC T/F`의 마지막 칸은 `F`라 가짜 부서가 생긴다(전달값 통째로 유지). 부서명 자체에 `/`가 든 실부서(`ADC T/F`, `AX/PI Department`)는 경로 구분자와 같은 문자라 쪼개면 두 칸으로 찢어져 영영 미매칭이었다 — `collect_slashed_dept_names`가 조직 미러에서 그런 이름 사전을 만들고 `merge_slashed_segments`가 **쪼개기 전에** 전각형으로 되붙인다(세그먼트 경계 치환·긴 이름 우선으로 오탐/비결정성 차단).
+- **검증**: backend pytest 1459·ruff 그린. 신규 테스트 5종(4종은 구현 전 red 확인).
+- **잔여**: 리프 표기 통일은 보류 — `/` 든 부서의 리프가 임포트는 전각형(트리·감사와 일치), 피커는 원본형(`Employee.department`)이라 갈린다. 임포트와 무관한 기존 문제라 별도 건으로 남긴다.
+
 ## 2026-09-09 — 고아 참조 감사 구현 (feat/ux-polish)
 - **문제**: 기존 소멸 부서 재지정은 조직 경로 3곳(맵 부서 권한·그룹 부서 멤버·오우닝)만 봤다. 노드·SP 지정의 담당부서(리프명)·담당자(이름)와 사용자 참조(오너·협업자·승인자·그룹·카테고리)는 조직개편·퇴직 뒤 조용히 낡는다.
 - **구현**(`docs/design/2026-09-09-ref-audit-design.md`, 플랜 10 Task): 참조 12곳을 **온디맨드 스캔**(저장 테이블 없음, `app/ref_audit.py`) → 설정 > 조직 > "Orphaned refs" 탭에서 값별 그룹·라인 체크로 일괄 replace/remove(노드 필드는 드래프트 필요라 캐치·체크 불가), 오너에게 오너당 1건 묶음 알림(`ref_fix_requested`)·오너 교체 시 `owner_assigned`, 홈 카드 "Stale refs" 배지 + Owning 필터를 Issues로 확장. 노드 스캔은 게시본+최신 드래프트. 데모 시드 `backend/scripts/seed_ref_audit_demo.py` + 브라우저 스모크 `frontend/scripts/pw-smoke-ref-audit.mjs`(10/10 PASS) 추가.

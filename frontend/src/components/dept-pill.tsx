@@ -4,13 +4,14 @@
 // (경로·구성인원·하위 조직 트리). 타일(role=button) 안에 놓여도 클릭이 타일로 올라가지 않는다(span role=button).
 // 노드 편집 모달·지정 모달의 부서 타일, 인스펙터 속성 탭(SP 상속 행·읽기 전용 행)이 공유한다 (2026-09-03).
 
-import { Building2 } from "lucide-react";
+import { Building2, TriangleAlert } from "lucide-react";
 import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import { useKoreanDeptByPath } from "@/components/map-ownership-section";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { OrgInfoModal } from "@/components/org-info-modal";
-import { useDirectory } from "@/lib/directory";
+import { useDirectory, useValidDeptLeaves } from "@/lib/directory";
+import { useI18n } from "@/lib/i18n";
 
 interface DeptPillProps {
   department: string;
@@ -28,9 +29,13 @@ interface DeptPillProps {
 
 export function DeptPill({ department, dataId, label, variant = "pill", subLabel, fill }: DeptPillProps) {
   const dir = useDirectory();
+  const { t } = useI18n();
   const koreanDeptByPath = useKoreanDeptByPath();
+  const deptLeaves = useValidDeptLeaves();
   const [orgInfo, setOrgInfo] = useState<{ x: number; y: number } | null>(null);
   if (department.trim() === "") return null;
+  // 조직도에 없는 부서 — 감사(ref_audit)와 같은 판정(저장값 그대로 대조). 집합이 null이면 판정 보류
+  const isOrphan = deptLeaves !== null && !deptLeaves.has(department.trim());
   // 부서 값(말단 이름 또는 전달된 슬래시 경로) → 조직 경로 — 디렉터리 전체에서 말단 일치를 찾는다
   const resolvePath = (): string => {
     if (department.includes("/")) return department;
@@ -54,23 +59,34 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
     const rect = e.currentTarget.getBoundingClientRect();
     setOrgInfo({ x: rect.left + rect.width / 2, y: rect.bottom });
   };
+  // 고아 부서는 조직 정보 모달을 열 게 없다 — 버튼 역할을 떼고 안내 문구만 남긴다
+  const interactive = !isOrphan;
   return (
     <>
       <span
-        role="button"
-        tabIndex={0}
+        role={interactive ? "button" : undefined}
+        tabIndex={interactive ? 0 : undefined}
         data-id={dataId}
-        title={koreanName ? `${path} (${koreanName})` : path}
+        data-orphan={isOrphan ? "true" : undefined}
+        title={isOrphan ? `${department} — ${t("orphan.dept")}` : koreanName ? `${path} (${koreanName})` : path}
         // min-w-0 — 좁은 행(인스펙터)에서 말단 이름이 말줄임되며 카드 밖으로 안 나간다. 호버=보더 액센트+틴트 진해짐+그림자
-        className={`inline-flex min-w-0 max-w-full gap-1 border border-accent-tint-border bg-accent-tint/60 font-semibold text-accent transition-[background-color,border-color,box-shadow] duration-150 hover:border-accent hover:bg-accent-tint hover:shadow-sm ${
+        className={`inline-flex min-w-0 max-w-full gap-1 border font-semibold transition-[background-color,border-color,box-shadow] duration-150 ${
+          isOrphan
+            ? "border-notice-border bg-notice text-warn"
+            : "border-accent-tint-border bg-accent-tint/60 text-accent hover:border-accent hover:bg-accent-tint hover:shadow-sm"
+        } ${
           variant === "block"
             ? `items-start rounded-sm px-2 py-1 text-caption ${fill ? "h-full w-full" : ""}`
             : "items-center rounded-full px-2 py-0.5 text-fine"
         }`}
-        onClick={handleClick}
-        onKeyDown={handleKey}
+        onClick={interactive ? handleClick : undefined}
+        onKeyDown={interactive ? handleKey : undefined}
       >
-        <Building2 size={variant === "block" ? 13 : 11} strokeWidth={1.5} className={`shrink-0 ${variant === "block" ? "mt-0.5" : ""}`} />
+        {isOrphan ? (
+          <TriangleAlert size={variant === "block" ? 13 : 11} strokeWidth={1.5} className={`shrink-0 ${variant === "block" ? "mt-0.5" : ""}`} />
+        ) : (
+          <Building2 size={variant === "block" ? 13 : 11} strokeWidth={1.5} className={`shrink-0 ${variant === "block" ? "mt-0.5" : ""}`} />
+        )}
         {variant === "block" ? (
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="min-w-0 break-keep">{label || deptLeaf(path)}</span>
@@ -80,7 +96,7 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
           <span className="min-w-0 truncate">{label || deptLeaf(path)}</span>
         )}
       </span>
-      {orgInfo && (
+      {orgInfo && interactive && (
         <OrgInfoModal orgPath={path} koreanDeptByPath={koreanDeptByPath} origin={orgInfo} onClose={() => setOrgInfo(null)} />
       )}
     </>

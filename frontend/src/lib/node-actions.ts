@@ -4,6 +4,7 @@
 import { createContext, useContext } from "react";
 
 import type { IoSide } from "./io-items";
+import type { NodeRefCheck } from "./node-ref-warnings";
 
 // 노드에 표시할 정보 필드 — 인스펙터 Node display 토글 (BPM 속성 + URL + 승격 IO/조건, 2026-08-20).
 // 조건은 시작/종료를 "conditions" 하나로 묶어 토글(표시는 두 줄) — 사용자 결정 2026-08-20.
@@ -89,6 +90,9 @@ export interface NodeActions {
   onConnectPlaceholder: ((nodeId: string) => void) | null;
   // SP 폭 그립 확정 — 드래그 종료 시 폭 저장(null=기본 복귀). 편집 표면에서만 제공 (2026-08-30)
   onResizeNode: ((nodeId: string, width: number | null) => void) | null;
+  // 조직 참조 점검 소스 — null이면 판정 비활성(디렉터리·후보 미도착, 비교/프리뷰 표면).
+  // null 가드가 핵심: 로드 전에 판정하면 전 노드가 경고로 물든다 (2026-09-10)
+  refCheck: NodeRefCheck | null;
 }
 
 // IO 체크리스트 3단계(#2): collapsed=0줄(헤더만) · capped=3.5줄+오버플로 히든 · all=전부
@@ -112,6 +116,7 @@ const defaultActions: NodeActions = {
   onHoverIoLink: null,
   onConnectPlaceholder: null,
   onResizeNode: null,
+  refCheck: null,
 };
 
 export const NodeActionsContext = createContext<NodeActions>(defaultActions);

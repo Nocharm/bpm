@@ -5,12 +5,12 @@
 // 노드 편집 모달·지정 모달의 담당자 타일(+피커 초안)과 인스펙터 BPM 속성 담당자 행이 공유한다
 // (사용자 요청 2026-09-03, 부서 말단 필과 같은 문법).
 
-import { User, X } from "lucide-react";
+import { TriangleAlert, User, X } from "lucide-react";
 
 import { PersonHoverCard } from "@/components/person-hover-card";
 import type { DirectoryUser } from "@/lib/api";
 import { parseAssignees } from "@/lib/assignee";
-import { useDirectory } from "@/lib/directory";
+import { useDirectoryState } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 
 interface AssigneePillsProps {
@@ -26,7 +26,7 @@ interface AssigneePillsProps {
 
 export function AssigneePills({ assignee, dataIdPrefix, onRemove, drifted = [], align = "end" }: AssigneePillsProps) {
   const { t, lang } = useI18n();
-  const dir = useDirectory();
+  const { users: dir, ready: dirReady } = useDirectoryState();
   const names = parseAssignees(assignee);
   if (names.length === 0) return null;
   // 저장값은 영문 name — 디렉터리에서 name(또는 한글명) 일치로 인물 해석
@@ -39,11 +39,17 @@ export function AssigneePills({ assignee, dataIdPrefix, onRemove, drifted = [], 
     <span className={`flex min-w-0 flex-wrap items-center gap-1 ${align === "end" ? "justify-end" : ""}`}>
       {names.map((name) => {
         const user = byName.get(name);
+        // 디렉터리 도착 후에도 못 찾은 이름 = 재직자 명단에 없음(고아). 도착 전엔 판정 보류
+        const isOrphan = dirReady && !user;
         const isDrift = drifted.includes(name);
         const label = user ? (lang === "ko" ? user.korean_name || user.name : user.name) : name;
         const body = (
           <>
-            <User size={11} strokeWidth={1.5} className="shrink-0" />
+            {isOrphan ? (
+              <TriangleAlert size={11} strokeWidth={1.5} className="shrink-0" />
+            ) : (
+              <User size={11} strokeWidth={1.5} className="shrink-0" />
+            )}
             <span className="min-w-0 truncate">{label}</span>
           </>
         );
@@ -52,11 +58,22 @@ export function AssigneePills({ assignee, dataIdPrefix, onRemove, drifted = [], 
             key={name}
             data-id={`${dataIdPrefix}-assignee-pill`}
             data-resolved={user ? "true" : "false"}
-            title={user ? `${user.name}${user.korean_name ? ` (${user.korean_name})` : ""} · ${user.department}` : name}
+            data-orphan={isOrphan ? "true" : undefined}
+            title={
+              user
+                ? `${user.name}${user.korean_name ? ` (${user.korean_name})` : ""} · ${user.department}`
+                : isOrphan
+                  ? `${name} — ${t("orphan.assignee")}`
+                  : name
+            }
             // 인물 필은 중립 톤(surface-alt) — 액센트 톤인 부서 필과 한눈에 구분 (사용자 피드백 2026-09-03).
             // 호버 시 이름만 액센트로(PersonHoverCard 트리거)
             className={`inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-fine font-semibold ${
-              isDrift ? "border-error/40 bg-error/10 text-error" : "border-hairline bg-surface-alt text-ink-secondary"
+              isDrift
+                ? "border-error/40 bg-error/10 text-error"
+                : isOrphan
+                  ? "border-notice-border bg-notice text-warn"
+                  : "border-hairline bg-surface-alt text-ink-secondary"
             }`}
           >
             {user ? (

@@ -4,9 +4,10 @@
 // 여러 페이지·컴포넌트가 공유(UserPill 등). 이름 우선·id 보조 표시의 단일 소스.
 // 부서 목록(departments)도 같은 응답에 실려 오므로 한 번의 fetch를 유저·부서가 함께 쓴다.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getDirectory, type Directory, type DirectoryDept, type DirectoryUser } from "@/lib/api";
+import { buildDeptLeaves } from "@/lib/node-ref-warnings";
 
 let cache: Directory | null = null;
 let usersCache: Map<string, DirectoryUser> | null = null;
@@ -55,6 +56,17 @@ export function useDirectoryState(): { users: Map<string, DirectoryUser>; ready:
     };
   }, []);
   return { users, ready };
+}
+
+/** 조직도 유효 부서 리프명 — 도착 전이면 null(판정 보류). 부서 필·노드 경고의 고아 판정 단일 소스.
+ *  null 가드가 핵심 — 로드 전에 판정하면 화면의 모든 부서가 고아로 물든다 (2026-09-10). */
+export function useValidDeptLeaves(): ReadonlySet<string> | null {
+  const { users, ready } = useDirectoryState();
+  const departments = useDirectoryDepartments();
+  return useMemo(
+    () => (ready && users.size > 0 ? buildDeptLeaves(users.values(), departments) : null),
+    [ready, users, departments],
+  );
 }
 
 /** 조직도 부서 목록(org_path 전체). 유저 맵과 같은 fetch를 공유 — 부서 트리 UI의 소스. */
