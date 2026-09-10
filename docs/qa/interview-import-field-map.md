@@ -38,7 +38,7 @@
 | `owner` | 신규 맵: 맵 오너(null이면 **실행자 폴백 + `consultant_owner_pending=True`**, 카드에 "Owner unconfirmed" 필). 기존 맵: 현재값과 다르면 dry-run `governance[]` 차이 행 — **체크한 것만 교체**(체크 시 대기 플래그 해제, 수동 오너 이전도 해제) |
 | `ownerRole` | 맵 설명 `[Interview]` 섹션 `Owner role:` 줄 |
 | `approvers[]` | 신규 맵: `map_approvers`. 기존 맵: 비어 있지 않고 집합이 다르면 governance 차이 행 — 체크 시 전부 교체 |
-| `department` | `sp_department`(항상) + 신규 맵 `owning_department`. 기존 맵: 해석 결과가 현재 owning과 다르면 governance 차이 행 — 체크 시 교체 |
+| `department` | `sp_department`(항상, **조직 트리에 착지한 경로의 리프명**) + 신규 맵 `owning_department`(트림된 전체 경로). 기존 맵: 해석 결과가 현재 owning과 다르면 governance 차이 행 — 체크 시 교체 |
 | `actions[]` | 노드 (아래) |
 | `relations.edges[]` | 맵 엣지 (아래 §2) |
 
@@ -140,6 +140,8 @@ dry-run 경고를 반드시 읽어야 하는 지점.
 |---|---|---|
 | **`department`가 조직 트리에 없음** | 오너의 조직 경로로 **폴백**된다(값이 바뀌었는데 임포트는 성공) | `department ... unknown — fallback to owner org` |
 | `department`의 `/` 앞뒤 공백 | 어댑터가 세그먼트별 strip 후 재결합 — **정상화되지만 원문과 다름** | 없음(의도된 정규화) |
+| **`department`가 착지 실패** | `sp_department`에 전달값이 **경로 통째로** 남는다(리프를 뽑지 않는다 — `A/ADC T/F`의 마지막 칸은 `F`) | owning 쪽 `not in org tree` 경고 |
+| 부서명 자체에 `/`가 든 부서(`ADC T/F`) | 조직 미러의 부서명 사전으로 **쪼개기 전에 되붙인다** — 정상 착지 | 없음(의도된 정규화) |
 | **`annual_count`/`fte`에 값이 있는데 연계 캔버스 보강이 스킵됨** | 두 값이 갈 곳을 잃는다 | `linkage skipped — canvas checked out by ...` |
 | **연계 캔버스 SP 노드에 이미 값이 있음** | 전달값이 **적용되지 않는다**(사용자 편집 우선) | `annual_count 'X' kept (delivery has 'Y')` |
 | `total_time_min`/`touch_time_min`이 숫자가 아님 | 해당 파라미터가 빈 값으로 남는다 | `... not a number` |

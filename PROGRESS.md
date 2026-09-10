@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 임포트 부서 인덱싱: sp_department 리프화 + "/" 든 부서명 사전 (dev)
+
+- **문제**: JSON 임포트가 `owning_department`만 조직 트리에 정렬하고 `sp_department`엔 전달물 전체 경로를 그대로 박았다(실측 `Quality Center/QC Department/...`). 앱의 sp_department 계약은 리프명이라 라이브러리 부서 트리는 어느 부서를 눌러도 0건(임포트 값이 별도 루트로 튐), 고아 참조 감사는 임포트 맵을 전부 고아로 신고했다.
+- **구현**: `resolve_sp_department`가 착지 경로의 리프명을 쓴다. 착지 실패한 값에서 리프를 뽑는 건 금지 — `A/ADC T/F`의 마지막 칸은 `F`라 가짜 부서가 생긴다(전달값 통째로 유지). 부서명 자체에 `/`가 든 실부서(`ADC T/F`, `AX/PI Department`)는 경로 구분자와 같은 문자라 쪼개면 두 칸으로 찢어져 영영 미매칭이었다 — `collect_slashed_dept_names`가 조직 미러에서 그런 이름 사전을 만들고 `merge_slashed_segments`가 **쪼개기 전에** 전각형으로 되붙인다(세그먼트 경계 치환·긴 이름 우선으로 오탐/비결정성 차단).
+- **검증**: backend pytest 1459·ruff 그린. 신규 테스트 5종(4종은 구현 전 red 확인).
+- **잔여**: 리프 표기 통일은 보류 — `/` 든 부서의 리프가 임포트는 전각형(트리·감사와 일치), 피커는 원본형(`Employee.department`)이라 갈린다. 임포트와 무관한 기존 문제라 별도 건으로 남긴다.
+
 ## 2026-09-09 — 고아 참조 감사 구현 (feat/ux-polish)
 - **문제**: 기존 소멸 부서 재지정은 조직 경로 3곳(맵 부서 권한·그룹 부서 멤버·오우닝)만 봤다. 노드·SP 지정의 담당부서(리프명)·담당자(이름)와 사용자 참조(오너·협업자·승인자·그룹·카테고리)는 조직개편·퇴직 뒤 조용히 낡는다.
 - **구현**(`docs/design/2026-09-09-ref-audit-design.md`, 플랜 10 Task): 참조 12곳을 **온디맨드 스캔**(저장 테이블 없음, `app/ref_audit.py`) → 설정 > 조직 > "Orphaned refs" 탭에서 값별 그룹·라인 체크로 일괄 replace/remove(노드 필드는 드래프트 필요라 캐치·체크 불가), 오너에게 오너당 1건 묶음 알림(`ref_fix_requested`)·오너 교체 시 `owner_assigned`, 홈 카드 "Stale refs" 배지 + Owning 필터를 Issues로 확장. 노드 스캔은 게시본+최신 드래프트. 데모 시드 `backend/scripts/seed_ref_audit_demo.py` + 브라우저 스모크 `frontend/scripts/pw-smoke-ref-audit.mjs`(10/10 PASS) 추가.

@@ -45,6 +45,7 @@ from app.models import (
 )
 from app.orgchart import (
     DeptIndex,
+    SEGMENT_SLASH,
     load_dept_index,
     load_valid_org_prefixes,
     resolve_org_path,
@@ -404,8 +405,37 @@ def build_dept_chains(index: DeptIndex) -> list[list[str]]:
     return chains
 
 
+def collect_slashed_dept_names(known: set[str], chains: list[list[str]]) -> dict[str, str]:
+    """전달물 표기(raw "/") → 사니타이즈 부서명 — 이름 자체에 "/"가 든 부서만.
+
+    경로 구분자와 부서명 속 "/"가 같은 문자라 전달물 경로를 그냥 쪼개면 "ADC T/F"가 두 칸으로
+    찢어져 영영 미매칭된다(2026-09-10 실측). known은 직원 있는 부서만이라 chains(미러 전체)도
+    함께 훑는다. import_delivery당 1회 계산.
+    """
+    names = {seg for path in known for seg in path.split("/") if SEGMENT_SLASH in seg}
+    names.update(seg for chain in chains for seg in chain if SEGMENT_SLASH in seg)
+    return {name.replace(SEGMENT_SLASH, "/"): name for name in names}
+
+
+def merge_slashed_segments(dept: str, slashed_names: dict[str, str]) -> str:
+    """전달물 경로 속 "/" 포함 부서명을 전각형으로 되붙인다 — 쪼개기 전 전처리.
+
+    세그먼트 경계("/"로 감싼 형태)로만 치환해 "BC/DE"가 부서 "C/D"에 걸리는 오탐을 막고,
+    긴 이름부터 시도해 부분 겹침에서도 결과가 결정적이다.
+    """
+    if not slashed_names:
+        return dept
+    padded = f"/{dept}/"
+    for raw in sorted(slashed_names, key=len, reverse=True):
+        needle = f"/{raw}/"
+        if needle in padded:
+            padded = padded.replace(needle, f"/{slashed_names[raw]}/")
+    return padded[1:-1]
+
+
 def match_known_department(
-    known: set[str], dept: str, chains: list[list[str]] | None = None
+    known: set[str], dept: str, chains: list[list[str]] | None = None,
+    slashed_names: dict[str, str] | None = None,
 ) -> tuple[str | None, str | None]:
     """전달물 부서 경로를 canonical 유효 경로에 트리 정렬로 매칭 — (경로, note).
 
@@ -415,7 +445,8 @@ def match_known_department(
     — 트림 적용 canonical 산출) 순으로 착지시킨다. 여러 canonical에 걸리면 모호 — 매칭 포기
     (note만 남김). 2026-09-02 4단계 부서구조 임포트 대응.
     """
-    dept = dept.strip()
+    # 이름에 "/"가 든 부서를 먼저 전각형으로 되붙인 뒤 쪼갠다 — 안 하면 한 칸이 두 칸으로 찢어진다
+    dept = merge_slashed_segments(dept.strip(), slashed_names or {})
     if not dept:
         return None, None
     if dept in known:
@@ -451,15 +482,16 @@ def match_known_department(
 
 
 def match_delivered_department(
-    known: set[str], dept: str, chains: list[list[str]] | None = None
+    known: set[str], dept: str, chains: list[list[str]] | None = None,
+    slashed_names: dict[str, str] | None = None,
 ) -> tuple[str | None, str | None]:
     """부서 정렬 매칭 + 최후 as-delivered — 오너 org 폴백이 없는 경로(pending 계열)용.
 
     오너 미확정 맵은 actor 조직 폴백이 금지라 resolve_owning_department를 못 쓴다 — 매칭
     실패한 비어있지 않은 부서는 정규화 경로 그대로 등록한다(2026-09-02 사용자 결정).
     """
-    dept = dept.strip()
-    owning, note = match_known_department(known, dept, chains)
+    dept = merge_slashed_segments(dept.strip(), slashed_names or {})
+    owning, note = match_known_department(known, dept, chains, slashed_names)
     if owning is None and dept:
         reason = note or f"department {dept!r} not in org tree"
         return dept, f"{reason} - registered as delivered"
@@ -468,7 +500,7 @@ def match_delivered_department(
 
 async def resolve_owning_department(
     session: AsyncSession, known: set[str], index: DeptIndex, dept: str, owner: str,
-    chains: list[list[str]] | None = None,
+    chains: list[list[str]] | None = None, slashed_names: dict[str, str] | None = None,
 ) -> tuple[str | None, str | None]:
     """canonical department 트리 정렬 매칭 → 오너 org 폴백 → 전달물 그대로 등록 (design §5.3).
 
@@ -478,8 +510,8 @@ async def resolve_owning_department(
     어디에도 못 착지한 비어있지 않은 부서는 NULL 대신 정규화 경로 그대로 등록한다
     (2026-09-02 사용자 결정 — 조직 미유입 환경에서 임포트 부서 증발 방지).
     """
-    dept = dept.strip()
-    matched, match_note = match_known_department(known, dept, chains)
+    dept = merge_slashed_segments(dept.strip(), slashed_names or {})
+    matched, match_note = match_known_department(known, dept, chains, slashed_names)
     if matched is not None:
         return matched, match_note
     employee = await session.get(Employee, owner)
@@ -493,6 +525,27 @@ async def resolve_owning_department(
         reason = match_note or f"department {dept!r} not in org tree"
         return dept, f"{reason} - registered as delivered"
     return None, f"department empty and owner {owner!r} has no org - left NULL"
+
+
+def resolve_sp_department(
+    known: set[str], delivered: str, owning: str | None,
+    chains: list[list[str]] | None = None, slashed_names: dict[str, str] | None = None,
+) -> str:
+    """SP 지정 부서 = 조직 트리에 착지한 경로의 리프명 (2026-09-10 사용자 결정).
+
+    앱의 sp_department 계약은 리프명이다(피커·라이브러리 부서 트리·고아 참조 점검 전부) —
+    전달물 전체 경로를 그대로 박으면 어느 부서로 걸러도 안 잡히고 감사에 고아로 뜬다.
+    착지 실패한 값에서 리프를 뽑는 건 금지 — "Nowhere Div/ADC T/F"의 마지막 칸은 "F"다.
+    그 경우 전달값을 통째로 남겨 사람이 고칠 수 있게 둔다(임포트로 부서를 지어내지 않는다).
+    """
+    for candidate in (delivered.strip(), (owning or "").strip()):
+        if not candidate:
+            continue
+        matched, _note = match_known_department(known, candidate, chains, slashed_names)
+        if matched is None:
+            return candidate
+        return matched.rsplit("/", 1)[-1]
+    return ""
 
 
 @dataclass
@@ -698,6 +751,7 @@ async def _review_governance(
     known: set[str],
     dept_index: DeptIndex,
     dept_chains: list[list[str]],
+    slashed_names: dict[str, str],
     known_logins: set[str],
     actor: str,
     decisions: set[tuple[str, str]],
@@ -727,7 +781,7 @@ async def _review_governance(
     if cmap.department.strip():
         owner_for_dept = delivered_owner or found.owner_id or actor
         delivered_dept, note = await resolve_owning_department(
-            session, known, dept_index, cmap.department, owner_for_dept, dept_chains)
+            session, known, dept_index, cmap.department, owner_for_dept, dept_chains, slashed_names)
         if delivered_dept is not None and delivered_dept != (found.owning_department or None):
             checked = (cmap.code, "department") in decisions
             report.governance.append(GovernanceDiff(
@@ -968,6 +1022,7 @@ async def import_delivery(
     known = await load_valid_org_prefixes(session)  # 피커·오우닝 검증과 동일 소스
     dept_index = await load_dept_index(session)
     dept_chains = build_dept_chains(dept_index)  # 직원 없는 부서 정렬용 — 전달분당 1회
+    slashed_names = collect_slashed_dept_names(known, dept_chains)  # "/" 든 부서명 사전 — 전달분당 1회
 
     # consultant_code is_not(None)로 이미 필터했지만 컬럼 타입은 str | None이라 아래서 str 키로
     # 쓰려면 명시 가드가 필요(Pyright dict[str, ...] 추론).
@@ -1041,6 +1096,7 @@ async def import_delivery(
             await _review_governance(
                 session, existing[cmap.code], cmap, report,
                 known=known, dept_index=dept_index, dept_chains=dept_chains,
+                slashed_names=slashed_names,
                 known_logins=known_logins, actor=actor, decisions=decisions,
             )
             continue
@@ -1053,11 +1109,12 @@ async def import_delivery(
             # 하되, 전달물 부서는 임포터와 무관하므로 부서 정렬 매칭만으로 owning을 등록한다
             # (2026-09-02) — 실오너 배정 시 위 예외 분기가 재해석한다.
             owner_login = actor
-            owning, note = match_delivered_department(known, cmap.department, dept_chains)
+            owning, note = match_delivered_department(
+                known, cmap.department, dept_chains, slashed_names)
             report.add(cmap.code, "warning", "owner missing - fallback to importer (pending)")
         else:
             owning, note = await resolve_owning_department(
-                session, known, dept_index, cmap.department, owner_login, dept_chains
+                session, known, dept_index, cmap.department, owner_login, dept_chains, slashed_names
             )
         if note:
             report.add(cmap.code, "warning", note)
@@ -1176,7 +1233,8 @@ async def import_delivery(
         if latest is not None:
             graph_changed = _graph_signature(old_nodes, old_edges) != _graph_signature(nodes, edges)
 
-        sp_department = cmap.department.strip() or found_map.owning_department or ""
+        sp_department = resolve_sp_department(
+            known, cmap.department, found_map.owning_department, dept_chains, slashed_names)
         if not sp_department:
             report.add(cmap.code, "warning", "sp_department empty")
         old_name = found_map.name
