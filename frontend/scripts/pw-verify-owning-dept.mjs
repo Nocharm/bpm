@@ -232,7 +232,7 @@ try {
   const missingCard = page.locator('[data-id="map-card"]').filter({ hasText: missingSample.name });
   check(
     "missing map shows the owning-missing badge",
-    await missingCard.locator('[data-id="map-card-owning-missing"]').isVisible(),
+    await missingCard.locator('[data-id="map-card-warnings"][data-kinds~="owning_missing"]').isVisible(),
   );
   await page.locator('[data-id="home-owning-filter"]').click();
   await page.getByRole("button", { name: "Missing owning dept" }).click();
@@ -246,7 +246,7 @@ try {
     (await page.locator('[data-id="map-card"]').filter({ hasText: assignedSample.name }).count()) === 0,
   );
   const cardCount = await page.locator('[data-id="map-card"]').count();
-  const badgeCount = await page.locator('[data-id="map-card-owning-missing"]').count();
+  const badgeCount = await page.locator('[data-id="map-card-warnings"][data-kinds~="owning_missing"]').count();
   check(
     "every card visible under the filter carries the missing badge",
     cardCount === badgeCount && cardCount > 0,

@@ -41,7 +41,7 @@ await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForTimeout(1800);
 
 // 좌측 맵 카드의 태그는 그대로(비클릭) — 상세 카드의 필만 버튼이어야 한다
-const cardTag = page.locator('[data-id="map-card-owning-missing"]').first();
+const cardTag = page.locator('[data-id="map-card-warnings"][data-kinds~="owning_missing"]').first();
 if (await cardTag.count()) {
   const tagName = await cardTag.evaluate((el) => el.tagName.toLowerCase());
   check("[17] 맵 카드 태그는 그대로(button 아님)", tagName !== "button", `tag=${tagName}`);

@@ -263,9 +263,43 @@ button:not(:disabled):active {
   pointer-events: none;
 }
 
+/* 홈 맵 카드 호버 요약 모달 — 아래에서 살짝 떠오르며 등장(180ms), 같은 경로로 가라앉으며 퇴장(150ms,
+   frontend map-card HOVER_MODAL_CLOSE_MS와 동기). 언마운트는 호출측이 퇴장 길이만큼 늦춘다. (2026-09-10) */
+@keyframes hover-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes hover-modal-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.animate-hover-modal-in {
+  animation: hover-modal-in 180ms var(--ease-smooth);
+}
+
+.animate-hover-modal-out {
+  animation: hover-modal-out 150ms var(--ease-smooth) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-item-in,
-  .animate-item-out {
+  .animate-item-out,
+  .animate-hover-modal-in,
+  .animate-hover-modal-out {
     animation: none;
   }
 }

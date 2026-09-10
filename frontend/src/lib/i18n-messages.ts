@@ -2188,6 +2188,20 @@ const en = {
   "category.summary.openCanvas": "Open canvas",
   "category.summary.subtreeSection": "Subtree confirmation",
   "category.summary.notReady": "Not ready",
+  // ── 홈 레벨 요약 카드 개편 (2026-09-10) ──
+  "category.summary.mapsSection": "Maps",
+  "category.summary.noMaps": "No maps in this category yet",
+  "category.summary.noChildren": "No child categories",
+  "category.summary.canvasHint": "Create a canvas to see the L5 confirmation gate here.",
+  "category.summary.l5Count": "L5 {n}",
+  "category.summary.mapCountShort": "{n} maps",
+  // ── 홈 맵 카드 경고 모달 (2026-09-10) ──
+  "home.warnings.title": "{n} warning(s)",
+  "home.warnings.badgeTip": "{n} warning(s) - click for details",
+  "home.warnings.owningTitle": "Owning department not assigned",
+  "home.warnings.staleTitle": "{n} stale reference(s)",
+  "home.warnings.openSettings": "Open map settings",
+  "home.warnings.openMap": "Open map",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "Dry run",
   "framework.importApply": "Apply",
@@ -4600,6 +4614,20 @@ const ko: Record<MessageKey, string> = {
   "category.summary.openCanvas": "캔버스 열기",
   "category.summary.subtreeSection": "서브트리 확정 현황",
   "category.summary.notReady": "미충족",
+  // ── 홈 레벨 요약 카드 개편 (2026-09-10) ──
+  "category.summary.mapsSection": "소속 맵",
+  "category.summary.noMaps": "이 카테고리에 소속된 맵이 아직 없습니다",
+  "category.summary.noChildren": "하위 카테고리 없음",
+  "category.summary.canvasHint": "캔버스를 만들면 L5 확정 게이트가 여기 표시됩니다.",
+  "category.summary.l5Count": "L5 {n}건",
+  "category.summary.mapCountShort": "맵 {n}",
+  // ── 홈 맵 카드 경고 모달 (2026-09-10) ──
+  "home.warnings.title": "경고 {n}건",
+  "home.warnings.badgeTip": "경고 {n}건 - 클릭해서 확인",
+  "home.warnings.owningTitle": "오우닝 부서 미지정",
+  "home.warnings.staleTitle": "낡은 참조 {n}건",
+  "home.warnings.openSettings": "맵 설정 열기",
+  "home.warnings.openMap": "맵 열기",
   // ── Framework 탭 — 대량 임포트 (Task 4) ──
   "framework.importDryRun": "드라이런",
   "framework.importApply": "적용",

@@ -115,13 +115,13 @@ try {
   await page.locator('[data-id="org-node-toggle"][data-path="Old Division"]').click();
   await page.locator('[data-id="org-node-toggle"][data-path="Old Division/Old Office"]').click();
   await page.locator('[data-id="org-node-toggle"][data-path="Old Division/Old Office/Old Team"]').click();
-  const badge = page.locator('[data-id="map-card-stale-refs"]');
+  const badge = page.locator('[data-id="map-card-warnings"][data-kinds~="stale_refs"]');
   await badge.first().waitFor({ timeout: 10000 });
   check("[6] stale refs badge on home card", (await badge.count()) >= 1);
   await page.screenshot({ path: `${SHOT_DIR}/shot-home-badge.png`, fullPage: true });
 
   const mapCard = () => page.locator('[data-id="map-card"]');
-  const mapCardWithBadge = () => page.locator('[data-id="map-card"]:has([data-id="map-card-stale-refs"])');
+  const mapCardWithBadge = () => page.locator('[data-id="map-card"]:has([data-id="map-card-warnings"][data-kinds~="stale_refs"])');
   const totalBefore = await mapCard().count();
   const withBadgeBefore = await mapCardWithBadge().count();
   check("[6a] some cards lack the badge before filtering (baseline diversity)",

@@ -166,7 +166,7 @@ try {
     .first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
   check("imported map visible under framework tree", mapVisible);
   // 오너 없이 임포트된 맵(유틸리티 샘플)은 "Owner unconfirmed" 필 — 교정 준비는 위에서 오너가 배정됐다
-  const pendingPills = await page.locator('[data-id="framework-tree"] [data-id="map-owner-pending"]').count();
+  const pendingPills = await page.locator('[data-id="framework-tree"] [data-id="map-card-owner"][data-pending="true"]').count();
   check("owner-unconfirmed pill shown on pending maps", pendingPills > 0, `pills=${pendingPills}`);
 
   // ── 6) 맵 상세 — [Interview] 설명 + Notes 섹션(예외·VOC) ────────────────

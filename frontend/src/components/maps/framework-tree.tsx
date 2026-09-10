@@ -6,7 +6,7 @@
 import { ChevronDown, ChevronRight, FolderTree, Workflow } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { CategoryMaps, CategoryNode, MapSummary } from "@/lib/api";
+import { getCategoryChain, type CategoryMaps, type CategoryNode, type MapSummary } from "@/lib/api";
 import {
   applyCategoryLoaded,
   CASCADE_BUDGET,
@@ -44,6 +44,9 @@ interface FrameworkTreeProps {
   // 홈 레벨 요약 카드(Task 8) — 선택된 카테고리 id·선택 콜백. 헤더 클릭이 펼침 토글과 함께 이 카테고리를 선택한다.
   selectedCategoryId?: number | null;
   onSelectCategory?: (node: CategoryNode) => void;
+  // 우측 레벨 요약 카드의 "직계 하위" 행 클릭(드릴다운) — 해당 카테고리까지의 조상 체인을 트리에서 펼쳐
+  // 선택 행이 보이게 한다. seq가 바뀔 때마다 처리(같은 id 재클릭도 다시 펼침). (사용자 결정 2026-09-10)
+  revealRequest?: { id: number; seq: number } | null;
 }
 
 export function FrameworkTree({
@@ -52,6 +55,7 @@ export function FrameworkTree({
   onOpenLinkage,
   selectedCategoryId,
   onSelectCategory,
+  revealRequest,
 }: FrameworkTreeProps) {
   const { t } = useI18n();
   const [state, setState] = useState<FrameworkTreeState>(createInitialState());
@@ -143,6 +147,35 @@ export function FrameworkTree({
         setState((prev) => reduceFrameworkTree(prev, { type: "loading_ended", categoryId }));
       });
   }
+
+  // 드릴다운 펼침 — 체인(루트→대상)을 서버에서 받아 전부 opened로 두고, 캐시 없는 노드만 재fetch(캐스케이드 없음:
+  // 사용자가 고른 한 경로만 연다). 접힘 고스트가 진행 중이면 취소해 재펼침이 즉시 반영되게 한다.
+  useEffect(() => {
+    if (!revealRequest) return;
+    let active = true;
+    void getCategoryChain(revealRequest.id)
+      .then((chain) => {
+        if (!active) return;
+        const ids = chain.map((n) => n.id);
+        for (const id of ids) cancelClose(id);
+        setState((prev) => {
+          let next = prev;
+          for (const id of ids) next = reduceFrameworkTree(next, { type: "opened", categoryId: id });
+          return next;
+        });
+        for (const id of ids) {
+          if (shouldFetchChildren(state, id)) loadChildren(id, false);
+        }
+      })
+      .catch(() => {
+        // 체인 조회 실패 — 선택 자체는 page.tsx가 이미 반영했으므로 트리 펼침만 생략(무해).
+      });
+    return () => {
+      active = false;
+    };
+    // revealRequest.seq만 감시 — state/loadChildren는 실행 시점 최신값을 쓰면 충분(재실행 트리거 아님).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealRequest?.seq]);
 
   function handleToggle(categoryId: number) {
     if (state.openIds.has(categoryId)) {

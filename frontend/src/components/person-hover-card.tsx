@@ -123,10 +123,12 @@ interface PersonHoverCardProps {
   userId: string;
   /** 트리거 래퍼(span)에 적용 — 기존 자리의 레이아웃 클래스를 그대로 이어받는다. */
   className?: string;
+  /** 카드 본문 위 안내 배너 — 홈 맵 카드의 "오너 미확정" 사유 등 (사용자 결정 2026-09-10). 없으면 기존 카드 그대로. */
+  notice?: ReactNode;
   children: ReactNode;
 }
 
-export function PersonHoverCard({ userId, className, children }: PersonHoverCardProps) {
+export function PersonHoverCard({ userId, className, notice, children }: PersonHoverCardProps) {
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
@@ -221,6 +223,11 @@ export function PersonHoverCard({ userId, className, children }: PersonHoverCard
             onMouseDown={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
           >
+            {notice && (
+              <div data-id="person-hover-notice" className="-mx-3 -mt-3 mb-3 rounded-t-md border-b border-changed/25 bg-changed/10 px-3 py-2 text-fine leading-snug text-changed">
+                {notice}
+              </div>
+            )}
             <PersonCardContent userId={userId} />
           </div>,
           document.body,

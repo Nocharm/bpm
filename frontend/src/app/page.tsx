@@ -98,6 +98,8 @@ export default function MapListPage() {
   const [homeView, setHomeView] = useState<"departments" | "framework">("departments");
   // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkTree key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
   const [frameworkVersion, setFrameworkVersion] = useState(0);
+  // 요약 카드 드릴다운 → 트리 펼침 요청(id·seq). seq 증가로 같은 id 재요청도 트리거된다.
+  const [revealRequest, setRevealRequest] = useState<{ id: number; seq: number } | null>(null);
   const handleFrameworkChanged = () => setFrameworkVersion((v) => v + 1);
 
   // 최근 열람 캐시(마운트 후 로드) — 검색 모드 상단 고정 매치에 사용 /
@@ -613,6 +615,11 @@ export default function MapListPage() {
     setSelectedCategoryId(node.id);
     setSelectedId(null);
   };
+  // 요약 카드 "직계 하위" 드릴다운 — 선택 + 트리에서 체인 펼침(FrameworkTree revealRequest). (2026-09-10)
+  const selectChildCategory = (node: CategoryNode) => {
+    selectCategory(node);
+    setRevealRequest((prev) => ({ id: node.id, seq: (prev?.seq ?? 0) + 1 }));
+  };
 
   // 연계 캔버스 열기 — 있으면 이동, 없으면 생성(권한자) 후 이동. Framework 트리의 Linkage 버튼과
   // 카테고리 요약 카드의 Open canvas 버튼이 이 핸들러를 공유한다.
@@ -916,6 +923,7 @@ export default function MapListPage() {
                   onOpenLinkage={handleOpenLinkage}
                   selectedCategoryId={selectedCategoryId}
                   onSelectCategory={selectCategory}
+                  revealRequest={revealRequest}
                 />
               ) : mapHits.length === 0 ? (
                 /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
@@ -1014,6 +1022,8 @@ export default function MapListPage() {
                   key={selectedCategoryId}
                   categoryId={selectedCategoryId}
                   onOpenCanvas={handleOpenLinkage}
+                  onSelectChild={selectChildCategory}
+                  onSelectMap={selectMap}
                 />
               ) : (
                 <HomeDashboard maps={processMaps} onSelect={selectMap} />
