@@ -416,9 +416,9 @@ export function MapNotesSection({
                   >
                     {kindLabel(note.kind)}
                   </span>
-                  {/* 카드형(좁은 열)은 제목을 줄바꿈 — 말줄임이면 흐름 노트의 "A → B" 뒤가 잘린다 */}
+                  {/* 제목은 한 줄 말줄임(전문은 title 속성) — 카드형 줄바꿈은 폐기, 글자도 한 단계 작게 (사용자 지시 2026-09-10) */}
                   {note.title && (
-                    <span className={`min-w-0 text-caption-strong text-ink ${isCards ? "break-keep" : "truncate"}`}>
+                    <span title={note.title} className="min-w-0 truncate text-fine font-semibold text-ink">
                       {note.title}
                     </span>
                   )}
@@ -450,7 +450,7 @@ export function MapNotesSection({
                     </span>
                   )}
                 </div>
-                <p className="whitespace-pre-wrap text-caption text-ink-secondary">{note.text}</p>
+                <p className="whitespace-pre-wrap text-fine text-ink-secondary">{note.text}</p>
               </li>
             ),
           )}
