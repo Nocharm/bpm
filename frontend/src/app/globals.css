@@ -491,6 +491,19 @@ button:not(:disabled):active {
   }
 }
 
+/* 트리 조상 강조(부서 트리·업무 체계 트리 공용) — 하위 행(또는 그 안의 맵 카드)을 호버하면 그 경로의
+   상위 행 이름만 검정으로 되살린다. 펼친 행은 톤다운(tertiary)이라 어느 가지에 있는지 잃기 쉽다
+   (사용자 지시 2026-09-10). li[data-tree-node]:has(li:hover)가 조상, 그 헤더는 li 직계(미박스) 또는
+   DeptGroupBox > StickyBoxHeader > 래퍼 아래(박스)의 [data-tree-head]. 호버 행 자신·형제·자손은 매칭되지
+   않는다(자기 li 안에 호버된 li가 없다). 비레이어 규칙이라 Tailwind 색 유틸리티(@layer)를 이긴다. */
+[data-tree-name] {
+  transition: color 150ms var(--ease-smooth);
+}
+li[data-tree-node]:has(li:hover) > [data-tree-head] [data-tree-name],
+li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree-name] {
+  color: var(--color-ink);
+}
+
 /* 홈 아코디언 펼침(부서·업무 체계) — 드러나는 영역이 0→콘텐츠 높이로 자라며 아래 행을 밀어낸다
    (즉시 등장 "뿅" 방지, 시선이 성장하는 영역을 따라가게). grid 0fr→1fr 트릭이라 높이 측정이 필요 없다.
    overflow는 keyframe 안에서만 hidden(비애니메이션 속성은 재생 중에만 적용) — 종료 후엔 카드

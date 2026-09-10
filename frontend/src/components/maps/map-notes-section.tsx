@@ -450,7 +450,8 @@ export function MapNotesSection({
                     </span>
                   )}
                 </div>
-                <p className="whitespace-pre-wrap text-fine text-ink-secondary">{note.text}</p>
+                {/* 본문은 fine보다 한 단계 아래(11px) — 시맨틱 스케일 밖이라 leading-snug로 줄간격 보전 (사용자 지시 2026-09-10) */}
+                <p className="whitespace-pre-wrap text-[11px] leading-snug text-ink-secondary">{note.text}</p>
               </li>
             ),
           )}

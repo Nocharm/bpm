@@ -111,6 +111,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
         type="button"
         data-id="org-node-toggle"
         data-path={node.path}
+        data-tree-head
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
@@ -125,9 +126,11 @@ export function OrgAccordion(props: OrgAccordionProps) {
         {open
           ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
           : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
-        {/* 펼친 행은 톤다운 — 지나온 경로는 뒤로 물러나고 아직 안 연 부서가 앞으로 나온다 */}
+        {/* 펼친 행은 톤다운 — 지나온 경로는 뒤로 물러나고 아직 안 연 부서가 앞으로 나온다.
+            data-tree-name — 하위 행 호버 시 조상 경로만 검정으로 되살리는 CSS 훅(globals.css 트리 조상 강조) */}
         <span
           data-id="org-node-name"
+          data-tree-name
           className={`truncate text-fine ${open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"}`}
         >
           {/* 한/영 토글 연동 — ko는 한글명 우선(없으면 영문 유지) */}
@@ -138,7 +141,7 @@ export function OrgAccordion(props: OrgAccordionProps) {
     );
 
     return (
-      <li key={node.path} className="flex flex-col gap-2">
+      <li key={node.path} data-tree-node className="flex flex-col gap-2">
         {boxed ? (
           <DeptGroupBox>
             <StickyBoxHeader

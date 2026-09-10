@@ -8,7 +8,8 @@
 - **메모 아이콘 일괄 스왑 원인**: 섹션 루트가 "모두 펼치기" 버튼용 무명 `group`이라 `.group:hover .note-swap-*`가 섹션 어디를 호버해도 안의 모든 타일 아이콘을 한꺼번에 바꿨다. 섹션은 named group `group/sp`로 바꿔(멤버 카드 `group/member` 선례) 타일의 무명 `group` 호버만 스왑을 켠다.
 - **부서 타일(DeptPill block)**: 글자 caption→fine, 보조 이름(반대 언어)은 필 호버 때만 opacity로 노출(자리는 유지 — 호버로 그리드 행 높이 안 튐), 인터랙티브면 `cursor-pointer`. 아이콘은 열 밖 `mt-0.5` 고정 오프셋 대신 이름과 같은 행 `items-center`로 — 글자 크기를 바꿔도 세로 중앙 유지(사용자 지적).
 - **열 비율**: BPM 속성 그리드(≥40rem) 부서 1.5→1.75fr, 담당자 1.5→1.28fr(85%), 시스템 스택 3fr 유지 — 실측 219/160/375px. 담당자 미입력은 "Not set" 대신 짧은 대시(`vertHead` emptyText).
-- **노트 카드**: 제목 caption-strong→fine semibold·본문 caption→fine, 제목은 카드형도 한 줄 말줄임(전문은 title 속성 — 줄바꿈 예외 폐기). 출처(Imported)·수정됨 표시는 행 호버 때만(opacity, 편집/삭제 버튼과 같은 규칙). `ClipBody`는 클립 중(넘침·미펼침)에만 내용 하단 `pb-8` — 끝까지 스크롤해도 마지막 노트가 h-10 페이드 밑에 깔리지 않는다(설명 섹션도 같은 공용이라 함께 적용).
+- **트리 조상 강조(부서·업무 체계 공용)**: 하위 행(또는 L5 박스 안 맵 카드)을 호버하면 그 경로의 상위 행 이름만 검정(`--color-ink`)으로 — 펼친 행은 tertiary 톤다운이라 가지를 잃기 쉬웠다. CSS `li[data-tree-node]:has(li:hover)` + 헤더 훅 `data-tree-head`/`data-tree-name`(globals.css, 비레이어라 Tailwind 색 유틸리티를 이김). 선택 행(업무 체계)은 액센트 유지(훅 미부여). 실측: 부서 Growth Team 호버→Growth Center·Marketing Office만 검정, 형제 Brand Team 제외 / 업무 체계 L5 호버→Facility·계측 보전·Calibration 기획 및 운영 / 카드 호버→소유 L5까지 5단.
+- **노트 카드**: 제목 caption-strong→fine semibold·본문 caption→fine→**11px(leading-snug)**, 제목은 카드형도 한 줄 말줄임(전문은 title 속성 — 줄바꿈 예외 폐기). 출처(Imported)·수정됨 표시는 행 호버 때만(opacity, 편집/삭제 버튼과 같은 규칙). `ClipBody`는 클립 중(넘침·미펼침)에만 내용 하단 `pb-8` — 끝까지 스크롤해도 마지막 노트가 h-10 페이드 밑에 깔리지 않는다(설명 섹션도 같은 공용이라 함께 적용).
 - **검증**: tsc·lint·vitest 948·카탈로그 그린. 신규 스모크 `scripts/pw-smoke-home-sp-tile-hover.mjs` 9/9(섹션 호버=펼치기 버튼만·타일 호버=그 타일 아이콘만·부서 12px·중앙 gap 0·pointer). 보조 이름 호버 노출은 시드에 한글 부서명이 없어 미실측.
 
 ## 2026-09-10 — 홈 맵 상세 SP 섹션: 미지정 맵도 접힌 채 노출 + 부서 타일 상시 경고 픽스 (feat/home-sp-section)

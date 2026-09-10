@@ -296,6 +296,7 @@ export function FrameworkTree({
     const selected = selectedCategoryId === node.id;
     const header = (
       <div
+        data-tree-head
         className={`group flex w-full items-center gap-1 rounded-sm ${
           selected ? "bg-accent-tint text-accent" : "hover:bg-divider"
         }`}
@@ -313,7 +314,9 @@ export function FrameworkTree({
           {open
             ? <ChevronDown size={14} strokeWidth={1.5} className="shrink-0" />
             : <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />}
+          {/* data-tree-name — 하위 행 호버 시 조상 경로를 검정으로(globals.css 트리 조상 강조). 선택 행은 액센트 유지 */}
           <span
+            data-tree-name={selected ? undefined : ""}
             className={`truncate text-fine ${
               selected ? "text-accent" : open ? "text-ink-tertiary" : "text-ink-secondary group-hover:text-ink"
             }`}
@@ -345,7 +348,7 @@ export function FrameworkTree({
       : 0;
 
     return (
-      <li key={node.id} data-id="framework-node" className="flex flex-col gap-2">
+      <li key={node.id} data-id="framework-node" data-tree-node className="flex flex-col gap-2">
         {boxed
           ? (
             <DeptGroupBox dataId="framework-group-box">
