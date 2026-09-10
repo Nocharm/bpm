@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 홈 맵 상세 SP 섹션: 미지정 맵도 접힌 채 노출 + 부서 타일 상시 경고 픽스 (feat/home-sp-section)
+
+- **섹션 상시 노출**: SP 미지정이고 값·메모도 없는 맵은 섹션을 아예 안 그렸는데(목업 v5 결정), 톤다운 배경·muted 헤더·`Not designated` 필로 접힌 채 남긴다(사용자 지시). 펼치면 빈 타일(Not set)만 보인다.
+- **부서 타일 상시 경고 원인**: 섹션이 `DeptPill`에 저장 리프명 대신 해석된 슬래시 조직 경로를 넘겨 유효 리프 집합(`buildDeptLeaves`, 세그먼트/리프명 집합) 대조가 항상 실패 → 정상 지정 부서도 고아 경고. 저장값(리프명)을 그대로 넘기고 경로 해석은 필이 다시 하도록 정정(인스펙터·지정 모달 타일과 같은 호출 방식).
+- **검증**: tsc·lint·vitest 948·카탈로그 그린. 신규 스모크 `scripts/pw-smoke-home-sp-section.mjs` 9/9(맵 1 Order Fulfillment=Brand Part 1 경고 없음, 맵 2 Employee Onboarding 접힌 회색 섹션).
+
 ## 2026-09-10 — 노드 고아 부서·담당자 경고: 인라인 아이콘 + 배지 호버 내역 (dev)
 
 - **기존 우하단 배지 실태**: `AssigneeWarningBadge`는 "담당자 부서 불일치" `title` 하나로 세 상황(재직자 명단에 없음·이 맵 열람권한 없음·부서 드리프트)을 뭉쳐 있었고, 판정 소스가 `eligible`(맵 열람권한자)이라 **비공개 맵에서 재직자를 미등재로 오판**했다. 부서 고아는 아예 신호가 없었고 SP 노드는 `hasBpmAttributes` 가드로 제외됐다.

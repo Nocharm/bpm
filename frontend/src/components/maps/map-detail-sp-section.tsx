@@ -3,8 +3,8 @@
 // 홈 맵 상세 — 서브프로세스 정보 섹션. SP 지정값과 원문 메모를 한 카드에: 부서 필·담당자 인물 필(세로 타일) +
 // 시스템·URL·GMP 스택 · 수행 지표 3열 · 입력물/산출물 결합 타일 + 시작/종료 조건. 메모가 있는 타일은 아이콘
 // 점 + 호버 스왑 + 클릭 원문 팝오버(FallbackHint 읽기)이고, 대표값이 없을 때만 원문을 회색 작은 글씨로 타일에
-// 노출(폴백 톤). 지정 안 됐고 값·메모도 없으면 렌더하지 않는다 (사용자 결정 2026-09-09, 목업 v5).
-// 폭 ≥40rem(컨테이너 쿼리)에서 2열·3열 혼합, 그보다 좁으면 세로 쌓임.
+// 노출(폴백 톤). 지정 안 됐고 값·메모도 없어도 섹션은 남긴다 — 톤다운 배경·헤더로 접힌 채 (사용자 지시 2026-09-10,
+// 이전엔 미렌더). 폭 ≥40rem(컨테이너 쿼리)에서 2열·3열 혼합, 그보다 좁으면 세로 쌓임.
 
 import {
   Building2,
@@ -41,7 +41,7 @@ import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
 import { formatParamValue, PARAM_LABEL_KEY } from "@/lib/params";
-import { countFilledSpTiles, hasSpContent, parseIoRows, resolveValueOrNote, type IoRow } from "@/lib/sp-detail";
+import { countFilledSpTiles, parseIoRows, resolveValueOrNote, type IoRow } from "@/lib/sp-detail";
 
 interface MapDetailSpSectionProps {
   detail: MapDetail;
@@ -78,8 +78,6 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     setMetricsOpen(true);
     setDetailsOpen(true);
   };
-
-  if (!hasSpContent(detail)) return null;
 
   const notSet = t("sp.tile.notSet");
 
@@ -327,8 +325,10 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                       자연 높이라 긴 부서명이 다 보이고, 행 높이를 이 타일이 정한다(담당자는 그 높이에 맞춰 클립) */}
                   <div className="flex @[40rem]:row-span-2" data-id="map-detail-sp-department" data-filled={deptPath !== "" ? "true" : "false"}>
                     {deptPath !== "" ? (
+                      // 저장값(리프명) 그대로 넘긴다 — 필의 고아 판정은 유효 리프 집합과 저장값을 대조하므로
+                      // 해석된 슬래시 경로를 주면 정상 부서도 늘 경고로 떴다(2026-09-10). 경로 해석은 필이 다시 한다
                       <DeptPill
-                        department={deptOrgPath}
+                        department={deptPath}
                         label={deptPrimary}
                         subLabel={deptSecondary || undefined}
                         variant="block"
