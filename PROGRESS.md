@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-10 — 노드 고아 부서·담당자 경고: 인라인 아이콘 + 배지 호버 내역 (dev)
+
+- **기존 우하단 배지 실태**: `AssigneeWarningBadge`는 "담당자 부서 불일치" `title` 하나로 세 상황(재직자 명단에 없음·이 맵 열람권한 없음·부서 드리프트)을 뭉쳐 있었고, 판정 소스가 `eligible`(맵 열람권한자)이라 **비공개 맵에서 재직자를 미등재로 오판**했다. 부서 고아는 아예 신호가 없었고 SP 노드는 `hasBpmAttributes` 가드로 제외됐다.
+- **구현**: 판정을 `/directory`(active 전 직원) 기준으로 옮겨 감사(`app/ref_audit.load_valid_sets`)와 같은 집합을 보게 하고(`lib/node-ref-warnings.ts` 단일 소스), `eligible`은 "열람권한 없음"만 가르는 역할로 축소. 캔버스는 속성 줄 아이콘만 경고색으로 바꾸고(글자색 유지 — 노드가 많아도 도배 안 됨) 우하단 배지에 건수 + 호버 내역(`HoverTip`)을 붙였다. `DeptPill`·`AssigneePills`는 스스로 고아를 판정해 인스펙터·노드 편집 모달·홈 상세가 같은 톤을 공유한다. 새 토큰 `--color-warn`(#b45309) — 고아는 error가 아니라 "확인 필요"라 error 재사용은 과하다(사용자 결정).
+- **가드**: 디렉터리 미도착이면 `refCheck=null`로 판정 자체를 건너뛴다 — 로드 전 판정은 전 노드를 경고로 물들인다. 비교·프리뷰 표면도 null(디렉터리를 안 부른다). 판정은 노드 컴포넌트가 컨텍스트로 직접 해서 RF 노드 data를 안 건드린다(재렌더 churn 없음).
+- **검증**: tsc·lint·vitest 945(신규 9)·카탈로그 그린. 브라우저 캡처 `scripts/pw-orphan-warning-shots.mjs` 4/4(8047/3047, `seed_ref_audit_demo`).
+
 ## 2026-09-10 — 임포트 부서 인덱싱: sp_department 리프화 + "/" 든 부서명 사전 (dev)
 
 - **문제**: JSON 임포트가 `owning_department`만 조직 트리에 정렬하고 `sp_department`엔 전달물 전체 경로를 그대로 박았다(실측 `Quality Center/QC Department/...`). 앱의 sp_department 계약은 리프명이라 라이브러리 부서 트리는 어느 부서를 눌러도 0건(임포트 값이 별도 루트로 튐), 고아 참조 감사는 임포트 맵을 전부 고아로 신고했다.

@@ -285,6 +285,8 @@ import {
 } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { useI18n } from "@/lib/i18n";
+import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
+import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { useClosingKeys } from "@/lib/use-closing-keys";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
 import {
@@ -300,7 +302,6 @@ import {
   type NodeDisplayToggle,
   parseDisplayToggles,
 } from "@/lib/node-actions";
-import { parseAssignees } from "@/lib/assignee";
 import { buildBulkAttrPatch } from "@/lib/bulk-params";
 import { buildGraphFromAiProposal, type CsvImportOutcome, withKeptNodes } from "@/lib/csv-import";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "@/lib/duration";
@@ -1254,6 +1255,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [isSysadmin, setIsSysadmin] = useState(false);
   // 담당자 후보 목록 — 버전별 로드. 드리프트 경고 계산용(읽기전용에서도 로드).
   const [eligible, setEligible] = useState<EligibleAssignees | null>(null);
+  // 노드 부서·담당자 고아 판정 소스(캔버스 경고 배지) — 디렉터리는 모듈 캐시라 세션당 1회만 fetch
+  const { users: directoryUsers, ready: directoryReady } = useDirectoryState();
+  const directoryDepts = useDirectoryDepartments();
   // 미리보기 — AI 제안과 CSV 임포트가 공유. null이 아니면 자동저장이 꺼진다(Apply 전 영속화 방지).
   const [previewSource, setPreviewSource] = useState<"ai" | "csv" | null>(null);
   // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
@@ -7349,18 +7353,17 @@ function MapEditor({ mapId }: { mapId: number }) {
 
   // 담당자 드리프트 판정용 name→dept 인덱스 — displayNodes가 매 프레임 노드×담당자마다 users를
   // 선형 스캔하지 않게 eligible 변경 시 1회만 구성. 동명이인은 users 선두 우선(구 deptOf find와 동일).
-  const eligibleDeptByName = useMemo(() => {
-    if (eligible === null) {
-      return null;
-    }
-    const byName = new Map<string, string>();
-    for (const user of eligible.users) {
-      if (!byName.has(user.name)) {
-        byName.set(user.name, user.department);
-      }
-    }
-    return byName;
-  }, [eligible]);
+  // 조직 참조 점검 소스 — 고아 판정은 /directory(active 전 직원) 기준이라 설정 > Orphaned refs
+  // 감사와 같은 답을 낸다. eligible은 "재직 중이나 이 맵 열람권한 없음"만 가른다. 셋 중 하나라도
+  // 안 왔으면 null — 로드 전 판정은 전 노드를 경고로 물들인다 (2026-09-10).
+  const refCheck = useMemo(() => {
+    if (eligible === null || !directoryReady || directoryUsers.size === 0) return null;
+    return buildNodeRefCheck(
+      directoryUsers.values(),
+      directoryDepts,
+      new Set(eligible.users.map((user) => user.name)),
+    );
+  }, [eligible, directoryReady, directoryUsers, directoryDepts]);
 
   const displayNodes = useMemo(() => {
     // 인라인 펼침 중이면 합성·재배치된 노드(현재+자식)를, 아니면 현재 노드를 기준으로 코멘트 수 주입
@@ -7417,18 +7420,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         count === (display.data.commentCount ?? 0)
           ? display
           : { ...display, data: { ...display.data, commentCount: count } };
-      // 담당자 부서 드리프트 경고 — eligible 로드 완료 후 & BPM 속성 노드만 계산(로드 전 오탐·차단타입 미표시), 읽기전용에서도 표시
-      const hasWarning =
-        eligibleDeptByName !== null &&
-        hasBpmAttributes(withCount.data.nodeType) &&
-        parseAssignees(withCount.data.assignee).some((name) => {
-          const dept = eligibleDeptByName.get(name);
-          return dept === undefined || dept !== withCount.data.department;
-        });
-      const withWarning =
-        hasWarning === (withCount.data.assigneeWarning ?? false)
-          ? withCount
-          : { ...withCount, data: { ...withCount.data, assigneeWarning: hasWarning } };
+      const withWarning = withCount;
       // Ctrl+드래그로 끌리는 원본은 반투명 사본 스타일 — 원위치엔 ghostNodes(솔리드)가 남아 원본을 대신한다.
       const withCopyStyle = ctrlGhostIdSet?.has(node.id)
         ? { ...withWarning, className: [withWarning.className, "bpm-node-ctrl-copy"].filter(Boolean).join(" ") }
@@ -7495,7 +7487,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     childNodes,
     inlineComposition,
     unresolvedCounts,
-    eligibleDeptByName,
     ancestorContextNodes,
     currentScopeIsReadOnly,
     dragLiveById,
@@ -8116,6 +8107,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       onConnectPlaceholder: isFrameworkMap && !readOnly ? openConnectPlaceholder : null,
       // SP 폭 그립 — 편집 표면에서만(비교·프리뷰·읽기전용은 null → 그립 미노출) (2026-08-30)
       onResizeNode: readOnly ? null : resizeSpNode,
+      refCheck,
     }),
     [
       toggleInlineExpand,
@@ -8138,6 +8130,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       readOnly,
       openConnectPlaceholder,
       resizeSpNode,
+      refCheck,
     ],
   );
 

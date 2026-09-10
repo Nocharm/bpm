@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 244개 · 2026-09-09 기준
+총 244개 · 2026-09-10 기준
 
 ## components/
 
@@ -67,7 +67,7 @@
 | `group-bulk-modal.tsx` | `GroupBulkModal` | 그룹 멤버 일괄 편집 | `app/maps/[mapId]/page.tsx` |
 | `group-title-bar.tsx` | `GroupTitleBar` | 그룹 박스 타이틀바 | `app/maps/[mapId]/page.tsx` |
 | `highlight.tsx` | `Highlight` | 매치 구간 하이라이트 | `components/maps/map-card.tsx`, `components/permissions/principal-picker.tsx`, `components/search-select.tsx` |
-| `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx` |
+| `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx`, `components/process-node.tsx` |
 | `html-view.tsx` | `HtmlView` | 게시된 HTML 매뉴얼 렌더 | `app/manual/page.tsx`, `components/settings/manual-manage-panel.tsx` |
 | `icon-action-button.tsx` | `IconActionButton` | 아이콘 전용 버튼 | `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/groups/group-actions.tsx` |
 | `icon-pill-filter.tsx` | `IconPillFilter` | 아이콘 필 필터 | `app/feedback/page.tsx`, `app/inbox/page.tsx`, `app/notices/page.tsx` |

@@ -41,6 +41,7 @@
 
   /* Feedback */
   --color-error: #cc3300;
+  --color-warn: #b45309; /* "확인 필요" — 조직도에 없는 부서·담당자 등. error보다 낮은 단계 */
   --color-notice: #fdf8ec; /* 안내 스트립(뷰어 읽기전용 등) 연한 옐로우 bg */
   --color-notice-border: #e2c98f;
 

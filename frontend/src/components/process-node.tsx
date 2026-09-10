@@ -12,6 +12,7 @@ import {
   CircleArrowUp,
   CornerDownRight,
   Flag,
+  Info,
   Link as LinkIcon,
   Link2,
   Lock,
@@ -51,6 +52,12 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import {
+  collectNodeWarnings,
+  hasAssigneeWarning,
+  type NodeWarning,
+} from "@/lib/node-ref-warnings";
+import { HoverTip } from "@/components/hover-tip";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
@@ -72,6 +79,21 @@ const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = 
   output: LogOut,
 };
 
+const NO_WARNINGS: NodeWarning[] = [];
+
+// 노드 1건의 조직 참조 경고 — 부서/담당자가 조직도에 없거나 어긋날 때. refCheck가 null이면
+// (디렉터리 미도착·비교/프리뷰 표면) 판정하지 않는다. subprocess는 지정 어트리뷰트를 본다.
+function useNodeWarnings(data: AppNode["data"]): NodeWarning[] {
+  const { refCheck } = useNodeActions();
+  const isSubprocess = data.nodeType === "subprocess";
+  if (refCheck === null || (!hasBpmAttributes(data.nodeType) && !isSubprocess)) return NO_WARNINGS;
+  return collectNodeWarnings(
+    isSubprocess ? data.spDepartment : data.department,
+    isSubprocess ? data.spAssignee : data.assignee,
+    refCheck,
+  );
+}
+
 // 캔버스 규범 순서(#10) — 표시 순서는 토글을 켠 순서가 아니라 고정: 속성 → 지표(NodeParams) →
 // 조건 → 인풋 → 아웃풋. 속성 줄은 NodeFields, 조건·IO는 NodeIoDetails(지표 뒤)가 담당.
 // url 줄은 폐기 — 좌하단 UrlBadge + 액션 바 링크가 전부 (사용자 결정 2026-08-25).
@@ -81,8 +103,15 @@ const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 // start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
+  const warnings = useNodeWarnings(data);
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  // 경고 줄은 아이콘만 경고색으로 바꾼다(글자색 유지) — 노드가 많아도 캔버스가 경고색으로 안 도배된다
+  const warnedFields = {
+    department: warnings.some((w) => w.kind === "deptOrphan"),
+    assignee: hasAssigneeWarning(warnings),
+    system: false,
+  };
   const spValues: Record<(typeof ATTR_FIELD_ORDER)[number], string | null | undefined> = {
     assignee: data.spAssignee,
     department: data.spDepartment,
@@ -93,11 +122,12 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
       {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
         const value = isSubprocess ? spValues[field] : data[field];
         if (!value) return null;
-        const Icon = FIELD_ICON[field];
+        const warned = warnedFields[field];
+        const Icon = warned ? TriangleAlert : FIELD_ICON[field];
         return (
           <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
             <span className="inline-flex items-center gap-1">
-              <Icon size={12} strokeWidth={1.5} />
+              <Icon size={12} strokeWidth={1.5} className={warned ? "text-warn" : undefined} />
               {value}
             </span>
           </div>
@@ -741,16 +771,62 @@ function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: 
   );
 }
 
-// 담당자 부서 드리프트 경고 뱃지 — 담당자의 현재 부서가 노드 부서와 다를 때 (에디터 전용)
-function AssigneeWarningBadge({ className = "-bottom-2 -right-2" }: { className?: string }) {
+const WARNING_REASON: Record<NodeWarning["kind"], MessageKey> = {
+  deptOrphan: "nodeWarn.deptOrphan",
+  assigneeOrphan: "nodeWarn.assigneeOrphan",
+  assigneeNoAccess: "nodeWarn.assigneeNoAccess",
+  assigneeDrift: "nodeWarn.assigneeDrift",
+};
+
+// 조직 참조 경고 배지 — 건수 + 호버 시 내역. 종전 AssigneeWarningBadge(단일 title "부서 불일치")를
+// 대체한다: 담당자 미등재·열람권한 없음·부서 드리프트가 한 문구로 뭉쳐 있어 이유를 알 수 없었다.
+// 드리프트는 확인 필요(경고)보다 약한 정보라 톤을 낮춘다 (2026-09-10).
+function NodeWarningBadge({
+  data,
+  className = "-bottom-2 -right-2",
+}: {
+  data: AppNode["data"];
+  className?: string;
+}) {
   const { t } = useI18n();
+  const warnings = useNodeWarnings(data);
+  if (warnings.length === 0) return null;
+  const tip = (
+    <div className="flex flex-col gap-1" data-id="node-warning-tip">
+      <span className="border-b border-hairline pb-1 text-fine font-semibold text-ink-tertiary">
+        {`${t("nodeWarn.title")} ${warnings.length}`}
+      </span>
+      {warnings.map((w) => (
+        <span
+          key={`${w.kind}:${w.value}`}
+          className={`flex items-start gap-1 text-fine ${
+            w.kind === "assigneeDrift" ? "text-ink-tertiary" : "text-warn"
+          }`}
+        >
+          {w.kind === "assigneeDrift" ? (
+            <Info size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+          ) : (
+            <TriangleAlert size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+          )}
+          <span className="min-w-0">
+            <b className="font-semibold text-ink">{w.value}</b>
+            {` — ${t(WARNING_REASON[w.kind])}`}
+            {w.personDept ? ` (${w.personDept})` : ""}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
   return (
-    <span
-      className={`absolute ${className} rounded-full border border-hairline bg-surface p-0.5 shadow-sm`}
-      title={t("assignee.driftWarn")}
-    >
-      <AlertTriangle size={12} strokeWidth={1.5} className="text-error" />
-    </span>
+    <HoverTip tip={tip} className={`absolute ${className} z-10`}>
+      <span
+        data-id="node-warning-badge"
+        className="flex items-center gap-0.5 rounded-full border border-hairline bg-surface px-1 py-0.5 text-fine font-semibold text-warn shadow-sm"
+      >
+        <TriangleAlert size={12} strokeWidth={1.5} />
+        {warnings.length}
+      </span>
+    </HoverTip>
   );
 }
 
@@ -1195,7 +1271,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {data.hasDescendantChange && <DescendantChangeBadge />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
         {data.spUrl && <UrlBadge url={data.spUrl} />}
-        {data.assigneeWarning && <AssigneeWarningBadge />}
+        <NodeWarningBadge data={data} />
         {/* 미지정 상태는 점선 바디+배너가 신호 — 코너 삼각 배지는 제거, 잠금 배지도 그동안 억제 (2026-08-30 통일) */}
         {!data.undesignated && data.locked ? <LockedBadge /> : null}
         {/* 핸들은 잠금 무관 유지 — 호스트의 입력/대표출력 엣지가 살아있어야 봉인 박스가 흐름에 연결됨.
@@ -1252,7 +1328,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         {data.hasDescendantChange && <DescendantChangeBadge className="right-3 top-3" />}
         {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} className="right-0 top-0" />}
         {data.url && <UrlBadge url={data.url} className="bottom-0 left-0" />}
-        {data.assigneeWarning && <AssigneeWarningBadge className="bottom-0 right-0" />}
+        <NodeWarningBadge data={data} className="bottom-0 right-0" />
         {showCopyBadge && <CopyDragBadge className="right-3 top-3" />}
         <NodeHandles connectable={isConnectable ?? true} />
       </div>
@@ -1320,7 +1396,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {data.hasDescendantChange && <DescendantChangeBadge />}
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.url && <UrlBadge url={data.url} />}
-      {data.assigneeWarning && <AssigneeWarningBadge />}
+      <NodeWarningBadge data={data} />
       {data.staleAnchor && (
         <span
           title="Section no longer exists in the imported document"
