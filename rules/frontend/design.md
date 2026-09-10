@@ -12,7 +12,7 @@ BPM 프론트엔드 시각 언어 — Whimsical 파생 토큰 시스템(`fronten
 - 캔버스 배경은 `bg-canvas`(`#F6F6F8`) + dot-grid(`<Background variant="dots">`, `--color-canvas-dot`). 노드는 파스텔 fill + 1.5px 채도 stroke, 둥근 기하(`rounded-sm`/알약/마름모) 일관.
 
 ## 3. 타입
-- Pretendard. 본문 17px(`text-body`), 굵기 사다리 **300/400/600**(500 금지).
+- Pretendard. 본문 17px(`text-body`), 굵기 사다리 **300/400/600**(500 금지). 유일한 예외: 홈 트리 조상 강조 이름(`globals.css` `[data-tree-name]` 호버 경로)은 500 — 600은 12px 행에서 과하다는 사용자 결정(2026-09-10).
 - 시맨틱 스케일: `text-tagline`/`text-body-strong`/`text-body`/`text-caption`/`text-caption-strong`/`text-fine`.
 
 ## 4. 모션

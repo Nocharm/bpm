@@ -531,7 +531,7 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head]::before,
 [data-tree-head]:hover::before {
   transform: scaleY(1);
 }
-/* 조상 이름 — 검정 + 400·600 사이 굵기(500). 디자인 룰의 300/400/600 사다리 밖이라 사용자 확인 필요 항목 */
+/* 조상 이름 — 검정 + 500. 굵기 사다리(300/400/600)의 유일한 예외 — 600은 12px 행에서 과하다(사용자 결정 2026-09-10, design.md) */
 li[data-tree-node]:has(li:hover) > [data-tree-head] [data-tree-name],
 li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree-name] {
   color: var(--color-ink);
