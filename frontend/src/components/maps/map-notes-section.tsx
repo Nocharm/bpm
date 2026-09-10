@@ -422,7 +422,8 @@ export function MapNotesSection({
                       {note.title}
                     </span>
                   )}
-                  <span className="ml-auto shrink-0 text-fine text-ink-tertiary">
+                  {/* 출처·수정 표시는 행 호버 때만 — 평소엔 필·제목·본문만 남겨 목록을 조용하게 (사용자 지시 2026-09-10) */}
+                  <span className="ml-auto shrink-0 text-fine text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                     {note.source === "consultant-import" ? t("notes.imported") : ""}
                     {note.edited_at ? ` · ${t("notes.edited")}` : ""}
                   </span>

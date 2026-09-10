@@ -139,14 +139,14 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     </button>
   );
 
-  // 세로 타일 머리 행 — 아이콘 + 라벨 (+ 우측 슬롯). 값이 없으면 우측에 "미입력"
-  const vertHead = (icon: LucideIcon, label: string, filled: boolean, right?: ReactNode) => {
+  // 세로 타일 머리 행 — 아이콘 + 라벨 (+ 우측 슬롯). 값이 없으면 우측에 "미입력"(emptyText로 대체 가능)
+  const vertHead = (icon: LucideIcon, label: string, filled: boolean, right?: ReactNode, emptyText = notSet) => {
     const Icon = icon;
     return (
       <div className="flex shrink-0 items-center gap-2">
         <Icon size={16} strokeWidth={1.5} className={`shrink-0 ${filled ? "text-accent" : "text-ink-tertiary"}`} />
         <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{label}</span>
-        {filled ? right : <span className="shrink-0 text-caption text-ink-muted">{notSet}</span>}
+        {filled ? right : <span className="shrink-0 text-caption text-ink-muted">{emptyText}</span>}
       </div>
     );
   };
@@ -350,11 +350,13 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                       data-filled={names.length > 0 ? "true" : "false"}
                       className={`absolute inset-0 flex flex-col gap-1.5 overflow-hidden rounded-sm border px-2.5 py-2 ${names.length > 0 ? FILLED_TONE : EMPTY_TONE}`}
                     >
+                      {/* 담당자 미입력은 "Not set" 대신 짧은 대시 — 좁아진 열(1.28fr)에서 글자가 라벨을 밀지 않게 (사용자 지시 2026-09-10) */}
                       {vertHead(
                         Users,
                         t("field.assignee"),
                         names.length > 0,
                         <span className="shrink-0 text-fine text-ink-tertiary">{t("home.assigneeCount", { n: names.length })}</span>,
+                        "–",
                       )}
                       {names.length > 0 && (
                         <div className="min-h-0">

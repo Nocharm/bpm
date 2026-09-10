@@ -47,7 +47,8 @@ export function ClipBody({ bodyRef, maxHeight, open, overflowing, className = ""
         className="scrollbar-hidden min-h-0 overflow-y-auto"
         style={open ? undefined : { maxHeight }}
       >
-        <div>{children}</div>
+        {/* 클립 중 하단 여백 — 끝까지 스크롤했을 때 마지막 항목이 페이드(h-10) 밑에 깔리지 않게 (사용자 지시 2026-09-10) */}
+        <div className={overflowing && !open ? "pb-8" : undefined}>{children}</div>
       </div>
       {overflowing && !open && (
         <span
