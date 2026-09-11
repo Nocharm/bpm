@@ -46,7 +46,7 @@ export function HomeDashboard({
   // 비권한자용 체계 경로 — 내 부서 맵 중 카테고리 연결된 첫 맵의 경로
   const crumb = myDeptMaps.find((m) => m.category_path)?.category_path ?? null;
   return (
-    <div data-id="home-dashboard" className="@container flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
+    <div data-id="home-dashboard" className="scrollbar-hidden @container flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
       {me && <DashboardProfile me={me} activity={data?.activity ?? null} onFilterMine={onFilterMine} />}
       {loadError && (
         <p data-id="home-dashboard-error" className="rounded-sm border border-notice-border bg-notice px-3 py-1.5 text-fine text-ink-secondary">
@@ -59,7 +59,7 @@ export function HomeDashboard({
         <MyDocumentsCard maps={maps} onSelect={onSelect} onFilterStatus={onFilterStatus} onCreate={onCreate} />
       </div>
       <div className="grid grid-cols-1 items-start gap-2.5 @[42rem]:grid-cols-2">
-        <DeptMapsCard maps={myDeptMaps} deptLabel={myDeptLabel} onSelect={onSelect} onShowInTree={onShowInTree} />
+        <DeptMapsCard maps={maps} orgPath={me?.org_path ?? ""} deptLabel={myDeptLabel} onSelect={onSelect} onShowInTree={onShowInTree} />
         <FrameworkCard categories={loadError ? [] : (data?.framework ?? null)} crumb={crumb} onOpenLinkage={onOpenLinkage} onBrowse={onBrowseFramework} />
       </div>
       <div className="grid grid-cols-1 items-start gap-2.5 @[42rem]:grid-cols-2">

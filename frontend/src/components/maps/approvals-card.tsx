@@ -3,7 +3,7 @@
 
 import { ArrowLeftRight, CheckCircle2, FileSignature, Inbox, KeyRound, Layers, Link2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 import { listInboxApprovals, type InboxApproval } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
@@ -11,6 +11,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { useAgo } from "@/lib/use-ago";
 import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
+import { useGoToMenu } from "@/components/maps/go-to-menu";
 import { SkeletonLine } from "@/components/skeleton";
 
 const ROW_CAP = 5;
@@ -51,7 +52,9 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  const goInbox = () => router.push("/inbox");
+  // 인박스 이동은 마우스 위치의 "…로 이동" 메뉴를 거친다 (사용자 지시 2026-09-11)
+  const { menu, openAt } = useGoToMenu();
+  const goInbox = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goInbox"), onSelect: () => router.push("/inbox") }]);
   return (
     <DashboardSection
       dataId="home-needs-approval"
@@ -98,6 +101,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
           {items.length > ROW_CAP && <DashboardFoot label={t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}
         </>
       )}
+      {menu}
     </DashboardSection>
   );
 }

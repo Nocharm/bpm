@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import type { Me, MeDashboardActivity } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { useGoToMenu } from "@/components/maps/go-to-menu";
 import { SkeletonLine } from "@/components/skeleton";
 import { Tooltip } from "@/components/tooltip";
 
@@ -31,6 +32,8 @@ export function DashboardProfile({ me, activity, onFilterMine }: DashboardProfil
   const parents = segments.slice(0, -1).join(" / ");
   const isFrameworkAdmin = (me.category_admin_root_ids?.length ?? 0) > 0;
   const unread = activity?.unread_notifications ?? 0;
+  // 알림은 이동 메뉴를 거치고, 설정·체계 설정은 바로 이동 (사용자 지시 2026-09-11)
+  const { menu, openAt } = useGoToMenu();
   return (
     <div data-id="home-profile" className="flex items-center gap-3.5 px-1 pt-1">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-accent-tint-border bg-accent-tint text-body-strong text-accent-elevated">
@@ -76,7 +79,7 @@ export function DashboardProfile({ me, activity, onFilterMine }: DashboardProfil
           {t("home.dash.myMapsOnly")}
         </button>
         <Tooltip label={t("home.dash.notifications")}>
-          <button type="button" data-id="home-profile-inbox" aria-label={t("home.dash.notifications")} onClick={() => router.push("/inbox")} className={ICON_ACTION}>
+          <button type="button" data-id="home-profile-inbox" aria-label={t("home.dash.notifications")} onClick={(e) => openAt(e, [{ label: t("home.dash.goInbox"), onSelect: () => router.push("/inbox") }])} className={ICON_ACTION}>
             <Bell size={16} strokeWidth={1.5} />
             <span
               data-id="home-profile-unread"
@@ -99,6 +102,7 @@ export function DashboardProfile({ me, activity, onFilterMine }: DashboardProfil
           </button>
         </Tooltip>
       </div>
+      {menu}
     </div>
   );
 }

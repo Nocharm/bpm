@@ -2,7 +2,7 @@
 "use client";
 
 import { ChevronRight, ArrowRight } from "lucide-react";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 interface DashboardSectionProps {
   dataId: string;
@@ -10,7 +10,7 @@ interface DashboardSectionProps {
   title: string;
   count?: number | null; // null/undefined면 칩 생략
   countHot?: boolean; // 내 결정이 필요한 건수 등 강조
-  more?: { label: string; onClick: () => void };
+  more?: { label: string; onClick: (e: MouseEvent<HTMLButtonElement>) => void }; // 이벤트 = 이동 메뉴 앵커 좌표
   children: ReactNode;
 }
 
@@ -31,7 +31,7 @@ export function DashboardSection({ dataId, icon, title, count, countHot, more, c
           <button
             type="button"
             data-id={`${dataId}-more`}
-            onClick={(e) => { e.stopPropagation(); more.onClick(); }}
+            onClick={(e) => { e.stopPropagation(); more.onClick(e); }}
             className="ml-auto inline-flex items-center gap-0.5 text-fine text-ink-tertiary hover:text-accent"
           >
             {more.label}
@@ -73,7 +73,7 @@ export function DashboardEmpty({ dataId, icon, text, action }: DashboardEmptyPro
 
 interface DashboardFootProps {
   label: string;
-  onClick: () => void;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
 }
 
 // 하단 링크아웃 행 — 행 상한(5~6)을 넘는 나머지는 목록/탭으로 보낸다(과다 유저 대응).
@@ -81,7 +81,7 @@ export function DashboardFoot({ label, onClick }: DashboardFootProps) {
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => { e.stopPropagation(); onClick(e); }}
       className="inline-flex items-center gap-1 border-t border-divider px-3 py-2 text-left text-fine text-ink-tertiary hover:text-accent"
     >
       <ArrowRight size={14} strokeWidth={1.5} />

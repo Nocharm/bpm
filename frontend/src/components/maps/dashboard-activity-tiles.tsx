@@ -4,11 +4,12 @@
 
 import { Bell, Inbox, Lock, MessageSquare, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { MeDashboard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAgo } from "@/lib/use-ago";
+import { useGoToMenu } from "@/components/maps/go-to-menu";
 import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
 
 interface DashboardActivityTilesProps {
@@ -21,6 +22,10 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
   const router = useRouter();
   const ago = useAgo();
   const [checkoutsOpen, setCheckoutsOpen] = useState(false);
+  // 페이지 전환 타일은 바로 이동하지 않고 마우스 위치에 "…로 이동" 메뉴를 먼저 띄운다 (사용자 지시 2026-09-11)
+  const { menu, openAt } = useGoToMenu();
+  const goInbox = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goInbox"), onSelect: () => router.push("/inbox") }]);
+  const goFeedback = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goFeedback"), onSelect: () => router.push("/feedback") }]);
   if (data === null) {
     return (
       <div data-id="home-activity" className="grid grid-cols-5 gap-2">
@@ -46,7 +51,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           value={a.approvals_pending}
           hot
           sub={a.approvals_pending > 0 ? t("home.dash.tileApprovalsSub") : t("home.dash.tileApprovalsNone")}
-          onClick={() => router.push("/inbox")}
+          onClick={goInbox}
         />
         <Tile
           dataId="home-activity-requests"
@@ -54,7 +59,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           label={t("home.dash.tileRequests")}
           value={a.requests_pending}
           sub={a.requests_pending > 0 ? t("home.dash.tileRequestsSub") : t("home.dash.tileRequestsNone")}
-          onClick={() => router.push("/inbox")}
+          onClick={goInbox}
         />
         <Tile
           dataId="home-activity-checkouts"
@@ -78,7 +83,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           label={t("home.dash.tileUnread")}
           value={a.unread_notifications}
           sub={a.unread_notifications > 0 ? t("home.dash.tileUnreadSub") : t("home.dash.tileUnreadNone")}
-          onClick={() => router.push("/inbox")}
+          onClick={goInbox}
         />
         <Tile
           dataId="home-activity-feedback"
@@ -92,9 +97,10 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
                 ? t("home.dash.tileFeedbackOpen", { n: a.feedback_mine_open })
                 : t("home.dash.tileFeedbackDone")
           }
-          onClick={() => router.push("/feedback")}
+          onClick={goFeedback}
         />
       </div>
+      {menu}
       {checkoutsOpen && data.checkouts.length > 0 && (
         <ul data-id="home-activity-checkout-list" className="flex flex-col rounded-sm border border-hairline bg-surface">
           {data.checkouts.map((c) => (
@@ -129,7 +135,7 @@ interface TileProps {
   hot?: boolean; // 0 초과일 때 액센트 강조(내 결정 필요)
   warn?: boolean; // 보조 문구 경고색
   pressed?: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
 }
 
 function Tile({ dataId, icon, label, value, sub, hot, warn, pressed, onClick }: TileProps) {
@@ -148,7 +154,7 @@ function Tile({ dataId, icon, label, value, sub, hot, warn, pressed, onClick }: 
     </>
   );
   return onClick ? (
-    <button type="button" data-id={dataId} aria-pressed={pressed} onClick={(e) => { e.stopPropagation(); onClick(); }} className={cls}>
+    <button type="button" data-id={dataId} aria-pressed={pressed} onClick={(e) => { e.stopPropagation(); onClick(e); }} className={cls}>
       {inner}
     </button>
   ) : (

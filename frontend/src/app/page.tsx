@@ -117,6 +117,8 @@ export default function MapListPage() {
   // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
   const clearBtnRef = useRef<HTMLButtonElement | null>(null);
   const [filterMode, setFilterMode] = useState<FilterDisplayMode>("full");
+  // 대시보드 버튼이 좌측 필터를 바꿨을 때 필터 행 1회 강조(애니메이션 끝나면 해제) — 변경을 인식시킨다
+  const [filterFlash, setFilterFlash] = useState(false);
 
   const showToast = useCallback((message: string, tone?: "error") => {
     setToasts((prev) => [{ id: genId(), message, tone }, ...prev]);
@@ -801,7 +803,9 @@ export default function MapListPage() {
               <div
                 data-id="home-filter-row"
                 ref={filterRowRef}
-                className="relative flex min-w-0 items-center gap-1.5"
+                data-flash={filterFlash || undefined}
+                onAnimationEnd={() => setFilterFlash(false)}
+                className={`relative flex min-w-0 items-center gap-1.5 ${filterFlash ? "animate-filter-flash" : ""}`}
               >
                 <HomeFilterPills
                   display={filterMode}
@@ -1035,10 +1039,14 @@ export default function MapListPage() {
                   myDeptMaps={myDeptAllMaps}
                   myDeptLabel={myDeptLabel}
                   onSelect={selectMap}
-                  onFilterMine={() => setPermFilter(new Set(["owner"]))}
+                  onFilterMine={() => {
+                    setPermFilter(new Set(["owner"]));
+                    setFilterFlash(true);
+                  }}
                   onFilterStatus={(s) => {
                     setPermFilter(new Set(["owner"]));
                     setStatusFilter(new Set([s]));
+                    setFilterFlash(true);
                   }}
                   onCreate={() => {
                     setCreateMenuOpen(false);

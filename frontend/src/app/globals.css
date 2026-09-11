@@ -296,7 +296,24 @@ button:not(:disabled):active {
   animation: hover-modal-out 150ms var(--ease-smooth) forwards;
 }
 
+/* 홈 좌측 필터 행 1회 강조 — 대시보드의 "내 맵만"/상태 필터 버튼이 좌측 필터를 바꿨음을 알린다 (2026-09-11) */
+@keyframes filter-flash {
+  0% {
+    background-color: var(--color-accent-tint);
+    box-shadow: 0 0 0 3px var(--color-accent-tint-border);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.animate-filter-flash {
+  animation: filter-flash 900ms var(--ease-smooth);
+  border-radius: var(--radius-sm);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .animate-filter-flash,
   .animate-item-in,
   .animate-item-out,
   .animate-hover-modal-in,
