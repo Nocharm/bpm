@@ -49,11 +49,15 @@ export function SuggestInput({
   const menuRef = useRef<HTMLUListElement | null>(null);
   // 바깥 값 변경(다른 노드 선택 등) → 초안 동기화. 편집 중(open)엔 seen·draft 갱신을 함께 미뤄
   // 메뉴가 닫힌 다음 렌더에서 반영한다 — 둘 중 하나만 미루면 열린 동안 온 변경이 소리없이 유실된다.
+  // 커밋 직후(resyncPending)에는 값이 안 바뀌었어도 draft를 저장값으로 되돌린다 — 부모가 입력을 다른 값으로
+  // 정규화하거나(시스템 Other) 버렸을 때 입력창이 버려진 글자를 계속 보여주지 않게 (review 2026-09-11)
   // (렌더 중 상태 조정, effect 아님)
   const [seen, setSeen] = useState(value);
-  if (value !== seen && !open) {
+  const [resyncPending, setResyncPending] = useState(false);
+  if (!open && (value !== seen || resyncPending)) {
     setSeen(value);
     setDraft(value);
+    if (resyncPending) setResyncPending(false);
   }
 
   const hits = open
@@ -83,6 +87,7 @@ export function SuggestInput({
     const trimmed = next.trim();
     closeMenu();
     setDraft(trimmed);
+    setResyncPending(true);
     if (trimmed !== value.trim()) onCommit(trimmed);
   };
   // Enter/blur — 하이라이트 항목 > 대소문자 무시 정확 일치(표기 정규화) > 자유값 > 되돌림
