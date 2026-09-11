@@ -10,6 +10,7 @@
 - 참고: `get_exposed_positions`는 공용 관리 목록 헬퍼(`normalize_managed_list`) 위로 재구현되며 대소문자 무시 중복 제거 + 항목 100자 컷이 붙었다 — spec §3.1 "동작 불변" 전제와 다른 미세 동작 변화(관리자가 대소문자만 다른 직책을 두 번 넣거나 100자 넘는 값을 넣는 극단 케이스에서만 관측).
 - **Task 2**: 프론트 `CatalogEntry` 타입·별칭 정규화·CSV 2열 — `api.ts` `Catalogs`/`AppSettings.assignee_roles|systems`가 `CatalogEntry[]`, `lib/catalogs.ts`에 `findCatalogEntry`/별칭 인식 `normalizeToCatalog`·`commitSystem` 추가, `lib/catalog-csv.ts`를 value,aliases 2열 파싱+`mergeCatalogEntries`(별칭 합집합)+`normalizeAliases`(서버 불변식 FE 미러)로 교체. tsc 잔여 에러는 예상대로 소비자 4곳(`bpm-attribute-picker`·`role-tile`·`system-suggest-input`·`catalogs-panel`, Task 3·4에서 해소) 한정, 전체 vitest 976 green. 리뷰 픽스: `parseCatalogCsv`가 같은 값의 여러 행을 `normalizeAliases` 직행 대신 `mergeCatalogEntries`로 합쳐 별칭이 통째로 버려지던 문제 수정, 전체 vitest 977 green.
 - **Task 3**: `SuggestInput`이 `SuggestOption{value, aliases?}`(`CatalogEntry`가 그대로 만족)를 받아 별칭까지 `filterByQuery`로 검색하고, 값·별칭 정확 일치는 정식 표기(`value`)로 치환해 커밋 — 드롭다운 항목에 별칭 보조 텍스트(`text-fine text-ink-tertiary`) 추가. 소비자 3곳(`bpm-attribute-picker`·`role-tile`·`system-suggest-input`)은 `useCatalogs()`가 이미 `CatalogEntry[]`를 반환해 무변경으로 타입이 맞음. tsc 잔여 에러는 예상대로 `catalogs-panel.tsx`(Task 4) 한정, vitest 977 green.
+- **Task 4**: `catalogs-panel.tsx`를 `CatalogEntry[]`로 마무리 — 값 칩이 버튼으로 바뀌어 클릭 시 인라인 별칭 편집 줄(`applyAliases`, `normalizeAliases`로 서버 불변식 재적용) 토글, 별칭 있으면 `+n` 배지. `Other`는 삭제만 잠금이고 별칭은 편집 가능. CSV 임포트 결과 문구에 병합된 별칭 수 추가, 카드 힌트 아래 `catalog.csvHint` 한 줄. tsc 전체 clean(잔여 8건 해소), vitest 977 green, COMPONENTS.md 무변경.
 
 ## 2026-09-11 — 노드 assignee_role 컬럼(백엔드) (dev)
 

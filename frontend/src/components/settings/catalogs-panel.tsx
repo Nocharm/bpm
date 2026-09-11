@@ -1,22 +1,23 @@
 "use client";
 
-// 관리 목록(카탈로그) 탭 — 역할·시스템 자동완성 목록을 sysadmin이 편집(칩 삭제·직접 추가·사용 중 값 승격·CSV 임포트·저장).
+// 관리 목록(카탈로그) 탭 — 역할·시스템 자동완성 목록을 sysadmin이 편집(칩 삭제·별칭 편집·직접 추가·사용 중 값 승격·CSV 임포트·저장).
 // 저장 API(/admin/app-settings)는 sysadmin 전용 — 비sysadmin은 /catalogs로 읽기 전용 표시 (design 2026-09-11 §5).
 
 import { Plus, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { CheckInput } from "@/components/check-input";
+import type { CatalogEntry } from "@/lib/api";
 import { getAppSettings, getCatalogs, putAppSettings } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
-import { mergeCatalogValues, parseCatalogCsv } from "@/lib/catalog-csv";
+import { mergeCatalogEntries, normalizeAliases, parseCatalogCsv } from "@/lib/catalog-csv";
 import { invalidateCatalogs, OTHER_SYSTEM } from "@/lib/catalogs";
 import { decodeCsvBuffer } from "@/lib/csv-import";
 import { useI18n } from "@/lib/i18n";
 
 interface Lists {
-  assignee_roles: string[];
-  systems: string[];
+  assignee_roles: CatalogEntry[];
+  systems: CatalogEntry[];
   available_systems: string[];
 }
 
@@ -34,13 +35,13 @@ interface ManagedListCardProps {
   dataId: string;
   title: string;
   hint: string;
-  values: string[];
-  // 삭제 불가 항목(시스템 Other)
+  values: CatalogEntry[];
+  // 삭제 불가 항목(시스템 Other) — 별칭은 편집 가능
   lockedValues?: readonly string[];
   // 사용 중 값 후보 — 체크하면 목록에 추가(시스템 카드만)
   available?: string[];
   readOnly: boolean;
-  onSave: (next: string[]) => Promise<string[]>;
+  onSave: (next: CatalogEntry[]) => Promise<CatalogEntry[]>;
   onToast: (message: string) => void;
 }
 
@@ -48,13 +49,16 @@ function ManagedListCard({
   dataId, title, hint, values, lockedValues = [], available = [], readOnly, onSave, onToast,
 }: ManagedListCardProps) {
   const { t } = useI18n();
-  const [draft, setDraft] = useState<string[]>(values);
+  const [draft, setDraft] = useState<CatalogEntry[]>(values);
+  const [editingAlias, setEditingAlias] = useState<string | null>(null);
+  const [aliasDraft, setAliasDraft] = useState("");
   // 서버 값이 내용상 바뀌었을 때만 초안을 새 값으로 — 참조 비교면 형제 카드 저장·재조회마다 미저장 초안이 날아간다 (review 2026-09-11)
   const valuesKey = JSON.stringify(values);
   const [seenKey, setSeenKey] = useState(valuesKey);
   if (valuesKey !== seenKey) {
     setSeenKey(valuesKey);
     setDraft(values);
+    setEditingAlias(null);
   }
   const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,21 +67,28 @@ function ManagedListCard({
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(values);
   const isLocked = (value: string) => lockedValues.some((locked) => locked.toLocaleLowerCase() === value.toLocaleLowerCase());
-  const has = (value: string) => draft.some((item) => item.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
-  const addValues = (incoming: string[]) => {
-    const result = mergeCatalogValues(draft, incoming);
+  const has = (value: string) => draft.some((item) => item.value.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
+  const addValues = (incoming: CatalogEntry[]) => {
+    const result = mergeCatalogEntries(draft, incoming);
     setDraft(result.next);
     return result;
   };
   const handleAdd = () => {
     if (adding.trim() === "") return;
-    addValues([adding]);
+    addValues([{ value: adding, aliases: [] }]);
     setAdding("");
   };
   const handleFile = async (file: File) => {
     const text = decodeCsvBuffer(await file.arrayBuffer());
-    const { added, duplicates } = addValues(parseCatalogCsv(text));
-    setImportNote(t("catalog.importResult", { added, duplicates }));
+    const { added, duplicates, aliasesAdded } = addValues(parseCatalogCsv(text));
+    setImportNote(t("catalog.importResult", { added, duplicates, aliases: aliasesAdded }));
+  };
+  const applyAliases = () => {
+    if (editingAlias === null) return;
+    const aliases = aliasDraft.split(",").map((alias) => alias.trim()).filter((alias) => alias !== "");
+    // 값·별칭 전역 불변식은 normalizeAliases가 서버 규칙 그대로 집행(값 우선·casefold 중복 제거)
+    setDraft((prev) => normalizeAliases(prev.map((entry) => (entry.value === editingAlias ? { value: entry.value, aliases } : entry))));
+    setEditingAlias(null);
   };
   const handleSave = async () => {
     setBusy(true);
@@ -99,26 +110,43 @@ function ManagedListCard({
       <div>
         <p className="text-caption-strong text-ink">{title}</p>
         <p className="text-fine text-ink-tertiary">{hint}</p>
+        <p className="text-fine text-ink-tertiary">{t("catalog.csvHint")}</p>
       </div>
       <div className="flex flex-wrap gap-1.5" data-id={`${dataId}-chips`}>
         {draft.length === 0 && <span className="text-fine text-ink-tertiary">{t("catalog.empty")}</span>}
-        {draft.map((value) => {
-          const locked = isLocked(value);
+        {draft.map((entry) => {
+          const locked = isLocked(entry.value);
+          const editing = editingAlias === entry.value;
           return (
             <span
-              key={value}
+              key={entry.value}
               data-id={`${dataId}-chip`}
-              className="inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-caption text-ink"
+              data-value={entry.value}
+              className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-caption text-ink ${
+                editing ? "border-accent bg-accent-tint" : "border-hairline bg-surface"
+              }`}
             >
-              {value}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1"
+                title={entry.aliases.length > 0 ? t("suggest.aliasesOf", { list: entry.aliases.join(", ") }) : t("catalog.aliases")}
+                disabled={readOnly}
+                onClick={() => {
+                  setEditingAlias(editing ? null : entry.value);
+                  setAliasDraft(entry.aliases.join(", "));
+                }}
+              >
+                {entry.value}
+                {entry.aliases.length > 0 && (
+                  <span data-id={`${dataId}-alias-badge`} className="rounded-xs bg-surface-alt px-1 text-fine text-ink-tertiary">
+                    +{entry.aliases.length}
+                  </span>
+                )}
+              </button>
               {locked && <span className="text-fine text-ink-tertiary">{t("catalog.otherLocked")}</span>}
               {!readOnly && !locked && (
-                <button
-                  type="button"
-                  aria-label={t("catalog.remove")}
-                  className="text-ink-tertiary hover:text-ink"
-                  onClick={() => setDraft((prev) => prev.filter((item) => item !== value))}
-                >
+                <button type="button" aria-label={t("catalog.remove")} className="text-ink-tertiary hover:text-ink"
+                  onClick={() => { setDraft((prev) => prev.filter((item) => item.value !== entry.value)); if (editing) setEditingAlias(null); }}>
                   <X size={11} strokeWidth={1.5} />
                 </button>
               )}
@@ -126,6 +154,26 @@ function ManagedListCard({
           );
         })}
       </div>
+      {!readOnly && editingAlias !== null && (
+        <div data-id={`${dataId}-alias-editor`} className="flex items-center gap-2 rounded-sm border border-accent-tint-border bg-surface px-2 py-1.5">
+          <span className="shrink-0 text-fine text-ink-secondary">{t("catalog.aliasesFor", { value: editingAlias })}</span>
+          <input
+            data-id={`${dataId}-alias-input`}
+            className={INPUT_CLASS}
+            value={aliasDraft}
+            placeholder={t("catalog.aliasesPlaceholder")}
+            maxLength={400}
+            autoFocus
+            onChange={(event) => setAliasDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") { event.preventDefault(); applyAliases(); }
+              if (event.key === "Escape") { event.stopPropagation(); setEditingAlias(null); }
+            }}
+          />
+          <button type="button" data-id={`${dataId}-alias-apply`} className={SECONDARY_BUTTON} onClick={applyAliases}>{t("catalog.aliasesApply")}</button>
+          <button type="button" data-id={`${dataId}-alias-cancel`} className={SECONDARY_BUTTON} onClick={() => setEditingAlias(null)}>{t("catalog.aliasesCancel")}</button>
+        </div>
+      )}
       {!readOnly && (
         <>
           <div className="flex items-center gap-2">
@@ -173,7 +221,7 @@ function ManagedListCard({
               <div className="flex flex-wrap gap-x-4 gap-y-1.5" data-id={`${dataId}-candidates`}>
                 {candidates.map((value) => (
                   <label key={value} className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
-                    <CheckInput checked={false} onChange={() => addValues([value])} />
+                    <CheckInput checked={false} onChange={() => addValues([{ value, aliases: [] }])} />
                     {value}
                   </label>
                 ))}
@@ -221,7 +269,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
     // t는 의도적으로 제외 — 언어 토글마다 새 클로저가 돼 재조회를 유발하면 두 카드의 미저장 초안이 날아간다 (review 2026-09-11)
   }, [isSysadmin]);
 
-  const save = async (patch: { assignee_roles?: string[]; systems?: string[] }): Promise<string[]> => {
+  const save = async (patch: { assignee_roles?: CatalogEntry[]; systems?: CatalogEntry[] }): Promise<CatalogEntry[]> => {
     const saved = await putAppSettings(patch);
     setLists({ assignee_roles: saved.assignee_roles, systems: saved.systems, available_systems: saved.available_systems });
     return patch.assignee_roles !== undefined ? saved.assignee_roles : saved.systems;
