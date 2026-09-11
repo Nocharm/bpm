@@ -23,7 +23,7 @@
 | `app_settings` | `systems` | JSON `string[]` | 시스템 정규화 목록. 기본 `["Other"]` — `Other`는 예약 항목(삭제 불가, 항상 포함) |
 
 - `db.py _ADDED_COLUMNS`에 두 컬럼 수동 등록(서버는 배포 시 자동 ALTER).
-- 백엔드 열거 지점: `models.Node`·`models.ProcessMap` · `schemas.NodeIn`(max_length 100) · `SubprocessDesignationIn.assignee_role` · `MapOut.sp_assignee_role` · `SubprocessRefOut.assignee_role` · `graph.py` upsert · `versions.py` clone · `maps.py` SP 지정 저장 · `subprocess.py` ref 빌드(spAssignee와 같은 소스) · `library.py` 행(`assignee_role` 컬럼만 실어 보냄, 표시는 후속).
+- 백엔드 열거 지점: `models.Node`·`models.ProcessMap` · `schemas.NodeIn`(max_length 100) · `SubprocessDesignationIn.assignee_role` · `MapOut.sp_assignee_role` · `SubprocessRefOut.assignee_role` · `graph.py` upsert · `versions.py` clone · `maps.py` SP 지정 저장 · `subprocess.py` ref 빌드(spAssignee와 같은 소스). 라이브러리 행(`library.py`)은 후속.
 - **경고·감사 무영향**: `ref_audit`·`node-ref-warnings`는 `assignee`만 읽는다. 새 컬럼은 대상이 아니며 테스트로 고정한다.
 - 백엔드 검증: trim + 길이만. 목록 일치 강제 없음(역할은 자유입력, 시스템 정규화는 FE 커밋 시점 규칙 — §4).
 
@@ -37,7 +37,7 @@
 
 ### 3.2 프론트
 - `lib/catalogs.ts`: 모듈 캐시 + `useCatalogs()`(`lib/directory.ts` 패턴: 세션당 1회 fetch, 실패 시 inflight 리셋) + `invalidateCatalogs()`(관리자 저장 후). 순수 함수 `normalizeToCatalog(value, list): string | null` — trim 후 대소문자 무시 일치면 목록 표기, 아니면 null.
-- `components/suggest-input.tsx` **`SuggestInput`**: 단일값 자유입력 + 제안 드롭다운. props: `value`, `options: string[]`, `onCommit(next: string)`, `dataId`, `placeholder`, `mode: "row" | "field"`(인스펙터 우측정렬 행 / 팝오버 안 일반 필드), `allowFree`(기본 true). 동작: `filterByQuery` 랭킹, ↑↓ 이동·Enter 확정·Esc 취소, 일치 없으면 입력값 그대로 확정(`allowFree`), blur 시 확정. 드롭다운은 body 포털 + fixed, z 1350(오버레이 사다리). `DataFormPicker`는 손대지 않는다(후속 통합 후보).
+- `components/suggest-input.tsx` **`SuggestInput`**: 단일값 자유입력 + 제안 드롭다운. props: `value`, `options: string[]`, `onCommit(next: string)`, `dataId`, `placeholder`, `mode: "row" | "field"`(인스펙터 우측정렬 행 / 팝오버 안 일반 필드), `allowFree`(기본 true). 동작: `filterByQuery` 랭킹, ↑↓ 이동·Enter 확정·Esc 취소, 일치 없으면 입력값 그대로 확정(`allowFree`), blur 시 확정. 드롭다운은 body 포털 + fixed, z 1400(타일 팝오버 1350 위에 떠야 한다 — `DataFormPicker`와 같은 층). `DataFormPicker`는 손대지 않는다(후속 통합 후보).
 - i18n: `field.assigneeRole`("Role"/"역할"), `catalog.*` 탭·카드·CSV 문구, `system.other`("Other"/"기타") 표시 라벨.
 
 ## 4. 적용 규칙
@@ -55,7 +55,7 @@
 - 커밋 규칙(FE `lib/catalogs.ts commitSystem(raw, list, currentFallback)` 순수 함수 — 4곳 공용):
   - `raw` 빈값 → `{system: "", system_fallback: currentFallback}` (원문 메모 유지).
   - `normalizeToCatalog(raw, list)` 일치 → `{system: 표기, system_fallback: currentFallback}`.
-  - 불일치 → `{system: "Other", system_fallback: raw}`. `currentFallback`이 비어 있지 않고 `raw`와 다르면 **확인 다이얼로그**("원문 메모를 교체할까요?") 후 교체, 취소 시 커밋 취소.
+  - 불일치 → `system: "Other"`. `system_fallback`은 비어 있으면 `raw`로 채우고, 이미 값이 있으면 **유지**한다(`replacedNote: false`). 인스펙터 행은 이때 `ConfirmDialog`("원문 메모를 입력값으로 교체할까요?")를 띄워 확인하면 교체; 타일 팝오버(노드 모달·SP 지정)는 메모 칸이 같은 팝오버에 보이므로 다이얼로그 없이 안내문 한 줄(`catalog.systemKeptNote`)만 띄운다.
 - `FallbackHint` "적용"(원문 → 대표값)도 같은 규칙을 통과한다(원문이 목록에 없으면 `Other` + 원문 유지).
 - 레거시 자유값은 그대로 표시·유지(정규화는 편집 커밋 시점에만). 관리자가 `available_systems`에서 체크로 목록에 올리면 그때부터 자동완성·정규화 대상.
 - `Other` 표시: 값이 정확히 `Other`이면 `t("system.other")`로 렌더(캔버스·인스펙터·타일·SP 표면). 저장값은 `Other` 고정(UI 영어 기본 규칙).
@@ -74,7 +74,7 @@
 ## 6. 검증
 
 - BE pytest: `test_graph.py` 역할 PUT/GET 왕복 + 빈 페이로드 소거 · `test_versions.py` clone 이월 · `test_subprocess_designation.py` `sp_assignee_role` 저장→`SubprocessRefOut.assignee_role` · `test_app_settings.py` 두 목록 PUT/GET·`Other` 보강·정규화(trim·중복)·`available_systems` · `GET /catalogs` 비sysadmin 200 · `test_ref_audit.py` 역할이 고아로 안 잡힘.
-- FE vitest: `catalogs.test.ts`(`normalizeToCatalog`·`commitSystem` 분기 4종) · `csv-import.test.ts` mergeNode 보존 · `diff.test.ts` 필드 · `excel-export.test.ts` 열 · `node-ref-warnings.test.ts` 무영향 · `suggest-input` 키 내비(jsdom).
+- FE vitest: `catalogs.test.ts`(`normalizeToCatalog`·`commitSystem` 분기 4종) · `csv-import.test.ts` mergeNode 보존 · `diff.test.ts` 필드 · `excel-export.test.ts` 열 · `node-ref-warnings.test.ts` 무영향. `SuggestInput` 키 내비는 컴포넌트 테스트 인프라가 없어 Playwright로 검증.
 - Playwright(`scripts/pw-smoke-assignee-role.mjs`): 인스펙터 역할 입력→자동완성 선택→저장→새로고침→캔버스 칩 · 시스템에 목록 외 값 입력→`Other`+폴백 메모 · SP 지정 역할→subprocess 노드 상속 · Catalogs 탭 CSV 임포트→피커 옵션 반영. 스크린샷 공유.
 - 게이트: `ruff` · `pytest`(AI_ENABLED=false …) · `tsc --noEmit` · `vitest run` · `lint` · `build-component-catalog.mjs`. FE/BE 동시 배포, 신규 컬럼은 서버 자동 ALTER.
 
@@ -83,4 +83,4 @@
 - 그룹 벌크 모달 역할 일괄 지정.
 - `DataFormPicker`를 `SuggestInput` 위로 통합.
 - 시스템 별칭 매핑(`lims`→`LIMS` 외의 동의어).
-- 라이브러리 패널 행·홈 SP 섹션의 역할 표시(값은 실어 보내되 UI는 후속).
+- 라이브러리 패널 행(`library.py`)·SP 피크의 역할 표시.
