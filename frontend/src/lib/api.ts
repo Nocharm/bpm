@@ -66,6 +66,7 @@ export interface MapSummary {
   sp_designated_at?: string | null;
   sp_department?: string | null;
   sp_assignee?: string | null;
+  sp_assignee_role?: string | null;
   sp_system?: string | null;
   sp_duration?: string | null;
   // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
@@ -134,6 +135,7 @@ export interface GraphNode {
   node_type: string;
   color: string;
   assignee: string;
+  assignee_role?: string; // 단일값 역할 — 담당자 옆 표시, CSV/AI 표면 제외(패스스루) (design 2026-09-11)
   department: string;
   system: string;
   duration: string;
@@ -238,6 +240,7 @@ export interface SubprocessRef {
   map_updated_at?: string | null;
   department: string | null;
   assignee: string | null;
+  assignee_role?: string | null;
   system: string | null;
   duration: string | null;
   // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
@@ -528,6 +531,7 @@ export function getMap(mapId: number): Promise<MapDetail> {
 export interface SubprocessDesignationBody {
   department: string;
   assignee?: string;
+  assignee_role?: string;
   system?: string;
   duration?: string;
   // 회당 파라미터 — sp 지정값 4종 + touch_time (design 2026-07-13, 2026-08-19 §2)

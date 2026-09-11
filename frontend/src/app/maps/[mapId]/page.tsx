@@ -703,6 +703,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       nodeType: normalizeNodeType(node.node_type),
       color: node.color,
       assignee: node.assignee,
+      assignee_role: node.assignee_role ?? "",
       department: node.department,
       system: node.system,
       duration: node.duration,
@@ -800,6 +801,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
         : coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
     assignee: attr?.assignee ?? "",
+    assignee_role: "",  // 역할은 AI 표면 제외 — 매칭 노드는 mergeNode가 기존값 보존 (design 2026-09-11 §4.3)
     department: attr?.department ?? "",
     system: attr?.system ?? "",
     // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
@@ -862,6 +864,7 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
       node_type: node.data.nodeType,
       color: node.data.color,
       assignee: node.data.assignee,
+      assignee_role: node.data.assignee_role ?? "",
       department: node.data.department,
       system: node.data.system,
       duration: node.data.duration,
@@ -1711,6 +1714,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? {
             spDepartment: ref.department,
             spAssignee: ref.assignee,
+            spAssigneeRole: ref.assignee_role ?? null,
             spSystem: ref.system,
             spDuration: ref.duration,
             spCostKrw: ref.cost_krw,
@@ -1752,6 +1756,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         : {
             spDepartment: null,
             spAssignee: null,
+            spAssigneeRole: null,
             spSystem: null,
             spDuration: null,
             spCostKrw: null,
@@ -4841,6 +4846,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           nodeType: "subprocess",
           color: "",
           assignee: "",
+          assignee_role: "",
           department: "",
           system: "",
           duration: "",
@@ -5021,6 +5027,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           nodeType: "subprocess",
           color: "",
           assignee: "",
+          assignee_role: "",
           department: "",
           system: "",
           duration: "",
@@ -5083,6 +5090,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           nodeType: "subprocess",
           color: "",
           assignee: "",
+          assignee_role: "",
           department: "",
           system: "",
           duration: "",

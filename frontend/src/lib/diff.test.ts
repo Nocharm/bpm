@@ -67,3 +67,19 @@ describe("computeVersionDiff - CSV 머지 임포트 후", () => {
     expect(computeVersionDiff(v1, v2).entries.filter((e) => e.status === "removed")).toEqual([]);
   });
 });
+
+describe("computeVersionDiff - assignee_role", () => {
+  it("역할 변경을 changedFields로 잡는다", () => {
+    const left: VersionGraph = {
+      nodes: [{ ...FLAT, id: "r1", title: "Weigh", node_type: "process", assignee_role: "Operator", source_node_id: null }],
+      edges: [],
+    };
+    const right: VersionGraph = {
+      nodes: [{ ...FLAT, id: "r2", title: "Weigh", node_type: "process", assignee_role: "Reviewer", source_node_id: "r1" }],
+      edges: [],
+    };
+    const entry = computeVersionDiff(left, right).entries.find((e) => e.title === "Weigh");
+    expect(entry?.status).toBe("changed");
+    expect(entry?.changedFields).toContain("assignee_role");
+  });
+});

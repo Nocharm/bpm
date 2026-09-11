@@ -14,6 +14,7 @@ export interface WbsNodeRow {
   type: string;
   description: string;
   assignee: string;
+  assignee_role: string;
   department: string;
   system: string;
   duration: string;
@@ -158,6 +159,7 @@ export async function buildWbsModel({
             node.description,
           ),
           assignee: node.assignee,
+          assignee_role: node.assignee_role ?? "",
           department: node.department,
           system: node.system,
           ...getNodeRunParams(g, node),
@@ -182,6 +184,7 @@ export async function buildWbsModel({
         type: node.node_type,
         description: node.description,
         assignee: node.assignee,
+        assignee_role: node.assignee_role ?? "",
         department: node.department,
         system: node.system,
         ...getNodeRunParams(g, node),
@@ -277,7 +280,7 @@ export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsMo
     }
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
-      row.no, ...levelCells, row.title, row.type, row.description, row.assignee, row.department, row.system,
+      row.no, ...levelCells, row.title, row.type, row.description, row.assignee, row.assignee_role, row.department, row.system,
       num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);

@@ -16,6 +16,7 @@ export interface ExcelNodeRow {
   type: string;
   description: string;
   assignee: string;
+  assignee_role: string;
   department: string;
   system: string;
   // 회당 파라미터 7종 — 표시 순서는 lib/params.ts PARAM_FIELDS와 동일
@@ -172,6 +173,7 @@ export async function buildExcelModel({
               )
             : node.description,
         assignee: node.assignee,
+        assignee_role: node.assignee_role ?? "",
         department: node.department,
         system: node.system,
         ...getNodeRunParams(g, node),
@@ -254,7 +256,8 @@ export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
 // 컬럼 추가/재배열 시 인덱스가 조용히 어긋나는 사고를 막는다.
 export const COLUMNS = [
   { header: "No", width: 6 }, { header: "Name", width: 32 }, { header: "Type", width: 12 },
-  { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Department", width: 18 },
+  { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Role", width: 14 },
+  { header: "Department", width: 18 },
   { header: "System", width: 14 },
   { header: "Duration (h)", width: 12, numFmt: "0.00" }, // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
   { header: "Touch time (h)", width: 13, numFmt: "0.00" },
@@ -299,7 +302,7 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
     }
     const num = (v: string) => (v === "" ? "" : Number(v));
     const r = sheet.addRow([
-      row.no, row.title, row.type, row.description, row.assignee, row.department, row.system,
+      row.no, row.title, row.type, row.description, row.assignee, row.assignee_role, row.department, row.system,
       num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
       "", row.groups, row.next,
     ]);

@@ -12,6 +12,7 @@ export type ChangedField =
   | "type"
   | "color"
   | "assignee"
+  | "assignee_role"
   | "department"
   | "system"
   | "duration"
@@ -60,6 +61,7 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["node_type", "type"],
   ["color", "color"],
   ["assignee", "assignee"],
+  ["assignee_role", "assignee_role"],
   ["department", "department"],
   ["system", "system"],
   ["duration", "duration"],
@@ -86,6 +88,7 @@ export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   type: "field.type",
   color: "field.color",
   assignee: "field.assignee",
+  assignee_role: "field.assigneeRole",
   department: "field.department",
   system: "field.system",
   duration: "field.duration",

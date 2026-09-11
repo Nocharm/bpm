@@ -182,6 +182,7 @@ const NODE_DEFAULTS = {
   description: "",
   color: "",
   assignee: "",
+  assignee_role: "",  // CSV/AI 표면 제외 — 병합은 기존값 보존 (design 2026-09-11 §4.3)
   department: "",
   system: "",
   duration: "",
@@ -288,6 +289,7 @@ const mergeNode = (
       linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
       assignee: pick(next.assignee, existing.assignee),
+      assignee_role: existing.assignee_role ?? "",  // 후보에 열이 없다 — 항상 기존값
       department: pick(next.department, existing.department),
       system: pick(next.system, existing.system),
       duration: pick(allowed.duration ?? "", existing.duration),
@@ -912,6 +914,7 @@ export function buildGraphFromAiProposal(
       linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : NODE_DEFAULTS.linked_map_id,
       description: node.description,
       assignee: attr?.assignee ?? "",
+      assignee_role: "",
       department: attr?.department ?? "",
       system: attr?.system ?? "",
       duration: normalizeDuration(attr?.duration ?? "") ?? "",

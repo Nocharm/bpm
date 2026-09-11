@@ -439,7 +439,7 @@ function baseGraph(): Graph {
       { ...NODE_BASE, id: "s1", title: "시작", node_type: "start", sort_order: 0 },
       {
         ...NODE_BASE, id: "a1", title: "Review request", node_type: "process", sort_order: 1,
-        pos_x: 300, pos_y: 40, color: "#334155", assignee: "홍길동", department: "Quality Part 1",
+        pos_x: 300, pos_y: 40, color: "#334155", assignee: "홍길동", assignee_role: "Reviewer", department: "Quality Part 1",
         system: "SAP", description: "기존 설명", group_ids: ["g1"],
       },
       { ...NODE_BASE, id: "e1", title: "종료", node_type: "end", sort_order: 2, pos_x: 600, is_primary_end: true },
@@ -498,6 +498,7 @@ describe("buildGraphFromCsv - 머지", () => {
     expect(node.color).toBe("#334155");
     expect(node.group_ids).toEqual(["g1"]);
     expect(node.pos_x).toBe(300);
+    expect(node.assignee_role).toBe("Reviewer");
   });
 
   it("기존 그룹을 그대로 통과시킨다", () => {
@@ -749,7 +750,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
   });
 
   it("reuses matched node id and preserves coords/color/group/assignee", () => {
-    const existing = baseNode("n1", "견적 검토");
+    const existing = baseNode("n1", "견적 검토", { assignee_role: "Reviewer" });
     const outcome = buildGraphFromAiProposal(
       { nodes: [aiNode("a", "견적 검토")], edges: [], groups: [] },
       { base: base([existing]) },
@@ -760,6 +761,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(merged?.color).toBe("#6a9985");
     expect(merged?.group_ids).toEqual(["g1"]);
     expect(merged?.assignee).toBe("홍길동"); // AI가 비우면 기존 유지
+    expect(merged?.assignee_role).toBe("Reviewer"); // 역할은 AI 표면 제외 — 기존 유지
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 

@@ -38,6 +38,7 @@ export type NodeData = {
   nodeType: ProcessNodeType;
   color: string;
   assignee: string;
+  assignee_role?: string;
   department: string;
   system: string;
   duration: string;
@@ -127,6 +128,7 @@ export type NodeData = {
   // 지정 어트리뷰트(라이브 참조) — 노드 자체 BPM 필드와 별개, subprocess_refs에서 렌더 시 주입. 지정된 링크맵만 채움.
   spDepartment?: string | null;
   spAssignee?: string | null;
+  spAssigneeRole?: string | null;
   spSystem?: string | null;
   spDuration?: string | null;
   // 회당 파라미터 — sp 지정값 4종 (design 2026-07-13)
@@ -196,6 +198,7 @@ export function buildNodeData(
     nodeType,
     color: "",
     assignee: "",
+    assignee_role: "",
     department: "",
     system: "",
     duration: "",

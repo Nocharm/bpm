@@ -285,7 +285,7 @@ describe("writeWbsSheet", () => {
   }
   const baseRow = {
     kind: "node" as const, no: 1, levels: ["Root", "Sub"], title: "P", type: "process",
-    description: "", assignee: "", department: "", system: "",
+    description: "", assignee: "", assignee_role: "", department: "", system: "",
     duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
     url: "https://example.com/doc", urlLabel: "Doc", groups: "", next: "Next step",
   };

@@ -906,7 +906,7 @@ describe("buildExcelModel", () => {
 describe("COLUMNS", () => {
   it("헤더가 새 라벨·순서를 따른다(design 2026-07-13 §5.2)", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
-      "No", "Name", "Type", "Description", "Assignee", "Department", "System",
+      "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
       "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
       "URL", "Groups", "Next",
     ]);
@@ -930,7 +930,7 @@ describe("writeExcelSheet", () => {
     writeExcelSheet(workbook, {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13T00:00:00+09:00", truncated: false,
       rows: [{
-        kind: "node", no: 1, depth: 0, title: "P", type: "process", description: "", assignee: "",
+        kind: "node", no: 1, depth: 0, title: "P", type: "process", description: "", assignee: "", assignee_role: "",
         department: "", system: "", url: "", urlLabel: "", groups: "", next: "", ...base,
       }],
     });
@@ -969,7 +969,7 @@ describe("writeExcelSheet", () => {
     writeExcelSheet(workbook, {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00", truncated: false,
       rows: [{
-        kind: "node", no: 7, depth: 0, title: "P", type: "process", description: "", assignee: "",
+        kind: "node", no: 7, depth: 0, title: "P", type: "process", description: "", assignee: "", assignee_role: "",
         department: "", system: "", duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "",
         annual_count: "", fte: "", url: "", urlLabel: "", groups: "", next: "",
       }],
