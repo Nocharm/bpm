@@ -4,7 +4,8 @@
 // 제안은 lib/search filterByQuery 랭킹(부분일치·초성·로마자), ↑↓ 이동·Enter 확정·Esc 되돌림·blur 확정.
 // 일치 없으면 입력값 그대로 확정(allowFree). 드롭다운은 body 포털 fixed z-[1400] — 타일 팝오버(1350) 위,
 // DataFormPicker와 같은 층. row=인스펙터 행(우측 정렬 w-32) / field=팝오버·폼 전폭.
-// 설계: docs/design/2026-09-11-assignee-role-catalog-design.md §3.2
+// 별칭(aliases)으로도 검색되고, 값·별칭 정확 일치 시 정식 표기(value)로 치환해 커밋한다.
+// 설계: docs/design/2026-09-11-assignee-role-catalog-design.md §3.2, docs/design/2026-09-12-catalog-alias-node-swap-design.md §2
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -12,9 +13,15 @@ import { createPortal } from "react-dom";
 import { useI18n } from "@/lib/i18n";
 import { filterByQuery } from "@/lib/search";
 
+// 카탈로그 옵션 — 정식 표기 + 선택적 별칭. CatalogEntry가 그대로 만족한다.
+export interface SuggestOption {
+  value: string;
+  aliases?: readonly string[];
+}
+
 interface SuggestInputProps {
   value: string;
-  options: readonly string[];
+  options: readonly SuggestOption[];
   // 확정 콜백 — 값이 바뀐 경우에만(trim 적용)
   onCommit: (next: string) => void;
   dataId: string;
@@ -61,7 +68,10 @@ export function SuggestInput({
   }
 
   const hits = open
-    ? filterByQuery([...options], draft, (item) => [{ field: "value", text: item }])
+    ? filterByQuery([...options], draft, (item) => [
+        { field: "value", text: item.value },
+        ...(item.aliases ?? []).map((alias) => ({ field: "alias", text: alias })),
+      ])
         .slice(0, MAX_SUGGESTIONS)
         .map((hit) => hit.item)
     : [];
@@ -96,13 +106,17 @@ export function SuggestInput({
   // 순서: (Enter만) 하이라이트 항목 > 대소문자 무시 정확 일치(표기 정규화) > 자유값 > 되돌림
   const settle = (useHighlight: boolean) => {
     if (useHighlight && highlight >= 0 && highlight < hits.length) {
-      commit(hits[highlight]);
+      commit(hits[highlight].value);
       return;
     }
     const key = draft.trim().toLocaleLowerCase();
-    const exact = options.find((option) => option.toLocaleLowerCase() === key);
+    const exact = options.find(
+      (option) =>
+        option.value.toLocaleLowerCase() === key ||
+        (option.aliases ?? []).some((alias) => alias.toLocaleLowerCase() === key),
+    );
     if (exact !== undefined) {
-      commit(exact);
+      commit(exact.value); // 별칭 입력도 정식 표기로 (design 2026-09-12 §2)
       return;
     }
     if (allowFree || key === "") {
@@ -188,25 +202,36 @@ export function SuggestInput({
             style={{ top: pos.top, left: pos.left, width: DROPDOWN_WIDTH }}
             onMouseLeave={() => setHighlight(-1)}
           >
-            {hits.map((item, index) => (
-              <li key={item} role="option" aria-selected={highlight === index}>
-                <button
-                  type="button"
-                  data-id={`${dataId}-option-${index}`}
-                  className={`flex w-full items-center px-2 py-1 text-left text-caption ${
-                    highlight === index ? "bg-accent-tint text-accent" : "text-ink hover:bg-surface-alt"
-                  }`}
-                  // mousedown + preventDefault — 포커스가 안 움직여 blur(settle)가 안 나고, 여기서만 확정
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    commit(item);
-                  }}
-                  onMouseEnter={() => setHighlight(index)}
-                >
-                  <span className="min-w-0 truncate">{item}</span>
-                </button>
-              </li>
-            ))}
+            {hits.map((item, index) => {
+              const aliases = item.aliases ?? [];
+              return (
+                <li key={item.value} role="option" aria-selected={highlight === index}>
+                  <button
+                    type="button"
+                    data-id={`${dataId}-option-${index}`}
+                    className={`flex w-full items-center px-2 py-1 text-left text-caption ${
+                      highlight === index ? "bg-accent-tint text-accent" : "text-ink hover:bg-surface-alt"
+                    }`}
+                    // mousedown + preventDefault — 포커스가 안 움직여 blur(settle)가 안 나고, 여기서만 확정
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      commit(item.value);
+                    }}
+                    onMouseEnter={() => setHighlight(index)}
+                  >
+                    <span className="min-w-0 truncate">{item.value}</span>
+                    {aliases.length > 0 && (
+                      <span
+                        className="ml-auto min-w-0 shrink truncate pl-2 text-fine text-ink-tertiary"
+                        title={t("suggest.aliasesOf", { list: aliases.join(", ") })}
+                      >
+                        {aliases.join(", ")}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
             {hits.length === 0 && (
               <li className="px-2 py-1 text-fine text-ink-tertiary">
                 {t(allowFree ? "suggest.noMatchFree" : "suggest.noMatch")}
