@@ -96,6 +96,16 @@ export default function MapListPage() {
   const [treeTouched, setTreeTouched] = useState(false);
   // 좌측 컬럼 뷰 — 부서 트리(기존) ↔ 업무 체계(Framework, Phase 2 lazy 카테고리 트리)
   const [homeView, setHomeView] = useState<"departments" | "framework">("departments");
+  // 대시보드 하위 부서 모달에서 고른 부서 — 트리가 펼쳐진 다음 렌더에서 그 노드로 스크롤(상태 대신 ref: 렌더 후 1회 소비)
+  const revealDeptRef = useRef<string | null>(null);
+  useEffect(() => {
+    const path = revealDeptRef.current;
+    if (!path) return;
+    revealDeptRef.current = null;
+    document
+      .querySelector(`[data-id="org-node-toggle"][data-path="${CSS.escape(path)}"]`)
+      ?.scrollIntoView({ block: "center" });
+  }, [orgOpen]);
   // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkTree key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
   const [frameworkVersion, setFrameworkVersion] = useState(0);
   // 요약 카드 드릴다운 → 트리 펼침 요청(id·seq). seq 증가로 같은 id 재요청도 트리거된다.
@@ -1056,6 +1066,17 @@ export default function MapListPage() {
                     setHomeView("departments");
                     setFavOpen(true);
                     writeTree(orgOpen, true, wordOpen, unassignedOpen, treeTouched, "departments");
+                  }}
+                  onRevealDept={(path) => {
+                    // 조상 전부 + 해당 부서(단일 자식 체인 이어서) 펼침
+                    const segs = path.split("/").filter(Boolean);
+                    const next = new Set(orgOpen);
+                    for (let i = 1; i <= segs.length; i += 1) next.add(segs.slice(0, i).join("/"));
+                    for (const p of collectSingleChildChain(orgTree.roots, path)) next.add(p);
+                    revealDeptRef.current = path;
+                    setHomeView("departments");
+                    setOrgOpen(next);
+                    writeTree(next, favOpen, wordOpen, unassignedOpen, true, "departments");
                   }}
                   onBrowseFramework={() => {
                     setHomeView("framework");

@@ -54,6 +54,14 @@
   --color-added: #16794f;
   --color-removed: #cc3300;
   --color-changed: #9a6b00;
+  /* 분포 막대·상태 점 채움 — 텍스트용 시맨틱(added/changed/error)은 어둡고 탁해 조각으로 깔면 칙칙하다(사용자 피드백 2026-09-11).
+     같은 의미를 밝고 채도 높은 채움색으로 — 흰 바탕 위 8px 점·막대 전용, 텍스트에 쓰지 않는다. */
+  --color-chart-draft: #c9c5dc;
+  --color-chart-pending: #f4b33d;
+  --color-chart-approved: #8f70ff;
+  --color-chart-published: #2fc48c;
+  --color-chart-rejected: #ff6b5e;
+  --color-chart-expired: #aeabbf;
 
   /* 엣지 방향 강조 — 선택 노드로 들어오는(teal)·나가는(orange) 흐름. 한류/난류 대비로 방향 구분 */
   --color-edge-in: #0d9488;
@@ -312,7 +320,8 @@ button:not(:disabled):active {
   border-radius: var(--radius-sm);
 }
 
-/* 지연 실행 카운트다운 링 — 0.6초(lib/use-delayed-nav NAV_DELAY_MS와 동일) 동안 호가 채워지며 한 바퀴 돈다 (2026-09-11) */
+/* 지연 실행 카운트다운 링 — 0.6초(lib/use-delayed-nav NAV_DELAY_MS와 동일) 동안 호가 채워진다. 회전은 같은 시간에 반 바퀴만 —
+   한 바퀴는 급해 보인다는 사용자 피드백(2026-09-11)으로 속도 절반. */
 @keyframes nav-ring-fill {
   to {
     stroke-dashoffset: 0;
@@ -320,7 +329,7 @@ button:not(:disabled):active {
 }
 @keyframes nav-ring-spin {
   to {
-    transform: rotate(360deg);
+    transform: rotate(180deg);
   }
 }
 .nav-ring {

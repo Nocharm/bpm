@@ -172,13 +172,16 @@ async def list_maps(
     # 맵별 최신 버전(최대 id) 상태·id — 홈 카드 표시용. 한 번의 쿼리로 N+1 회피.
     latest_status: dict[int, str] = {}
     latest_vid: dict[int, int] = {}
-    for mid, vid, status in (
+    latest_vnum: dict[int, int | None] = {}
+    for mid, vid, status, vnum in (
         await session.execute(
-            select(MapVersion.map_id, MapVersion.id, MapVersion.status).order_by(MapVersion.id)
+            select(MapVersion.map_id, MapVersion.id, MapVersion.status, MapVersion.version_number)
+            .order_by(MapVersion.id)
         )
     ).all():
         latest_status[mid] = status  # id 오름차순 → 마지막이 최신
         latest_vid[mid] = vid
+        latest_vnum[mid] = vnum
     # H5b 집계 — 전체 버전 수 / 라이브(published) 버전 id / 소유자 직원명 (각 1쿼리, N+1 회피)
     version_count: dict[int, int] = {
         mid: cnt
@@ -188,16 +191,17 @@ async def list_maps(
             )
         ).all()
     }
-    published_vid: dict[int, int] = {
-        mid: vid
-        for mid, vid in (
-            await session.execute(
-                select(MapVersion.map_id, MapVersion.id).where(
-                    MapVersion.status == workflow.PUBLISHED
-                )
+    published_vid: dict[int, int] = {}
+    published_vnum: dict[int, int | None] = {}
+    for mid, vid, vnum in (
+        await session.execute(
+            select(MapVersion.map_id, MapVersion.id, MapVersion.version_number).where(
+                MapVersion.status == workflow.PUBLISHED
             )
-        ).all()
-    }
+        )
+    ).all():
+        published_vid[mid] = vid
+        published_vnum[mid] = vnum
     # 노드 수는 라이브(published) 버전 기준 — 없으면 최신 버전으로 폴백
     target_vids = {published_vid.get(m.id, latest_vid.get(m.id)) for m in maps}
     target_vids.discard(None)
@@ -250,6 +254,8 @@ async def list_maps(
     def _set_card_metrics(m: ProcessMap) -> None:
         """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
         m.latest_version_status = latest_status.get(m.id)
+        m.latest_version_number = latest_vnum.get(m.id)
+        m.published_version_number = published_vnum.get(m.id)
         m.version_count = version_count.get(m.id, 0)
         tvid = published_vid.get(m.id, latest_vid.get(m.id))
         m.node_count = node_count_by_vid.get(tvid, 0) if tvid is not None else 0

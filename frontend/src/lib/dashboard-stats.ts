@@ -29,6 +29,41 @@ export function sortForStatus(maps: MapSummary[], status: VersionStatus | null):
   return [...hit, ...rest];
 }
 
+// 버전 탭 버킷 — 맵 하나를 게시본 유무 + 최신 버전 상태로 넷 중 하나에 넣는다(순서 = 막대·범례 순).
+export type VersionBucket = "unpublished" | "current" | "updating" | "recheck";
+export const VERSION_BUCKET_ORDER: VersionBucket[] = ["unpublished", "current", "updating", "recheck"];
+
+export interface VersionBucketCount {
+  bucket: VersionBucket;
+  count: number;
+}
+
+// 만료·반려 → 재확인 · 최신이 게시/확정 → 최신 · 게시본이 있는데 최신이 진행 중 → 업데이트 중 · 게시본 없음 → 미게시
+export function bucketOfMap(m: MapSummary): VersionBucket {
+  const s = m.latest_version_status ?? "draft";
+  if (s === "expired" || s === "rejected") return "recheck";
+  if (s === "published" || s === "confirmed") return "current";
+  return m.published_version_number != null ? "updating" : "unpublished";
+}
+
+export function countByBucket(maps: MapSummary[]): VersionBucketCount[] {
+  const counts = new Map<VersionBucket, number>();
+  for (const m of maps) {
+    const b = bucketOfMap(m);
+    counts.set(b, (counts.get(b) ?? 0) + 1);
+  }
+  return VERSION_BUCKET_ORDER.filter((b) => (counts.get(b) ?? 0) > 0).map((b) => ({ bucket: b, count: counts.get(b) ?? 0 }));
+}
+
+// 선택 버킷 우선, 그 안에서는 최근 갱신순 (sortForStatus와 같은 규칙)
+export function sortForBucket(maps: MapSummary[], bucket: VersionBucket | null): MapSummary[] {
+  const byUpdated = (a: MapSummary, b: MapSummary) => b.updated_at.localeCompare(a.updated_at);
+  if (bucket === null) return [...maps].sort(byUpdated);
+  const hit = maps.filter((m) => bucketOfMap(m) === bucket).sort(byUpdated);
+  const rest = maps.filter((m) => bucketOfMap(m) !== bucket).sort(byUpdated);
+  return [...hit, ...rest];
+}
+
 export interface DeptStats {
   total: number;
   staleRefs: number; // 고아 참조가 1건 이상인 맵 수

@@ -27,13 +27,14 @@ export const VERSION_STATUS_LABEL_EN: Record<VersionStatus, string> = {
 
 // 홈 맵 카드 상태 필 — 도트+틴트 배경 톤(테두리 없음). [필 배경+글자, 도트] 순.
 export const VERSION_STATUS_TONE: Record<VersionStatus, { pill: string; dot: string }> = {
-  draft: { pill: "bg-ink/5 text-ink-tertiary", dot: "bg-surface-chip" },
-  pending: { pill: "bg-changed/10 text-changed", dot: "bg-changed" },
-  approved: { pill: "bg-accent-tint text-accent", dot: "bg-accent" },
-  published: { pill: "bg-added/10 text-added", dot: "bg-added" },
-  confirmed: { pill: "bg-accent-tint text-accent", dot: "bg-accent" },
-  rejected: { pill: "bg-error/10 text-error", dot: "bg-error" },
-  expired: { pill: "bg-ink/5 text-ink-muted", dot: "bg-surface-chip" },
+  // dot은 차트 전용 채움 토큰(globals.css --color-chart-*) — 텍스트 시맨틱보다 밝아 8px 점·막대 조각에서 칙칙하지 않다
+  draft: { pill: "bg-ink/5 text-ink-tertiary", dot: "bg-chart-draft" },
+  pending: { pill: "bg-changed/10 text-changed", dot: "bg-chart-pending" },
+  approved: { pill: "bg-accent-tint text-accent", dot: "bg-chart-approved" },
+  published: { pill: "bg-added/10 text-added", dot: "bg-chart-published" },
+  confirmed: { pill: "bg-accent-tint text-accent", dot: "bg-chart-approved" },
+  rejected: { pill: "bg-error/10 text-error", dot: "bg-chart-rejected" },
+  expired: { pill: "bg-ink/5 text-ink-muted", dot: "bg-chart-expired" },
 };
 
 // 상태별 pill 스타일 — 토큰만(raw hex 금지) / status pill styles, tokens only.

@@ -3,6 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 대시보드 섹션 순서·내 부서 직속 범위·점유 아코디언·승인 딥링크 (dev)
+
+- **섹션 순서** (최근 열어본|업무 체계) → (내 부서|내 문서) → (승인 필요|최근 변경) — 사용자 지시. **내 부서**: 고른 부서가 직접 소유한 맵만 목록·지표에 올리고 하위 부서 맵은 건수 한 줄(`splitDeptMaps`, 직속 0건이면 빈 상태 + "하위 부서 맵 N건" 풋). 좌측 트리의 내 부서 섹션(`filterMyDeptMaps`, 자손 포함)은 그대로. **하위 부서 모달** `dept-sub-maps-modal.tsx`: 건수(지표 줄·빈 상태 풋) 클릭 → 부서별 맵 묶음. 부서 행 = 범위 전환(체인 밖 부서는 드롭다운 맨 위에 끼움, `isAllowedScope`는 내 최상위 조직 아래면 허용) + 좌측 조직 트리를 조상까지 펼치고 노드로 스크롤(`onRevealDept`, ref 소비 후 orgOpen 효과에서 스크롤), 맵 행 = 선택.
+- **점유 목록**: `useClosingKeys` 아코디언 펼침/접힘, 행 선두는 맵 공개 범위 아이콘(Globe/Lock — `MeDashboardCheckoutOut.visibility` 추가) 이고 클릭 대기 링이 그 자리를 대체(`HoverLinkedRow leading`). **링 회전** 한 바퀴→반 바퀴(호 채움 0.6초 동일). **승인 필요 행** 클릭은 맵 상세 대신 `/inbox?approval=<kind>:<id>` — 인박스가 파라미터를 소비해 승인 탭 전환·카드 선택·스크롤(`?notification=`과 같은 패턴).
+- **상태|버전 탭 + 막대 재디자인**: 내 부서·내 문서 헤더 우측 세그먼트 탭(`DistributionTabs`, 카드별 localStorage 영속). 버전 탭은 맵을 미게시·게시본 최신·업데이트 진행 중·재확인 필요 넷으로 센다(`bucketOfMap` — 만료/반려→재확인, 최신이 게시/확정→최신, 게시본 있는데 최신이 진행 중→업데이트 중). BE 목록 응답에 `latest_version_number`·`published_version_number` 추가(행 메타 `v1 → Draft` 칩). 막대는 2px 간격 알약 조각 + 폭 전환 애니 + 조각 호버↔범례 필 연동(선택/호버 중 나머지 조각 opacity 35%). 옛 `StatusBar`/`StatusLegend`는 범용 `Distribution`으로 통합(목업 `docs` 없음 — 아티팩트로 비교 후 A안 확정). **차트 채움 토큰** `--color-chart-*`(draft·pending·approved·published·rejected·expired) 신설 — 텍스트 시맨틱(added/changed/error)은 조각으로 깔면 칙칙하다는 피드백. `VERSION_STATUS_TONE.dot`이 전부 이 토큰을 보므로 맵 카드·행·비교 화면 상태 점도 같이 밝아진다(pill 텍스트 색은 그대로).
+- **업무 체계 행 연계 캔버스 버튼**: 상시 노출 → 행 호버(키보드 포커스 포함) 시에만 grid 0fr→1fr로 열리며 등장(진입 300ms 지연·이탈 즉시, 맵 행 열기 버튼과 같은 규칙). ⚠️ 페이드는 `<button>`이 아니라 감싼 span에 — 전역 `button { transition: transform }`(globals.css, 무레이어)이 유틸리티 transition·delay를 덮어쓴다(맵 행은 `<a>`라 무사했음).
+- **빈 상태 재배치**: `DashboardSection`에 `empty` 슬롯 — 아이콘+문구 세로 스택을 본문 중앙(2열 stretch 높이 기준)에 띄우고, 다음 행동(새 맵 만들기·체계 탐색·내 부서 맵·하위 부서 맵 N건)은 헤더 우측 `more` 링크로 이동. `DashboardEmpty.action` 제거. 빈 상태 컨테이너는 측정 래퍼(bodyRef) 밖이라 자연 높이·펼침 토글 판정에 안 잡힌다.
+- **권한 게이트 검토**(변경 없음): 대시보드의 모든 블록이 기존 API 집합을 재사용 — 맵 계열은 `GET /maps`(load_my_roles 가시성 필터) 위에서 FE가 자르고, 최근 변경은 owner/editor 맵만(BE), 결재는 inbox 큐, 체계는 get_admin_scope seed, 점유·요청·알림·피드백은 본인 행만. 하위 부서 건수·최근 열람도 접근 가능 맵으로만 센다.
+
 ## 2026-09-11 — 대시보드 후속 4종 + 지연 0.6초·행 선택 지연 (dev)
 
 - **프로필 부서**: 긴 조직 경로 대신 말단 부서만 무채색 필(전체 경로는 title). **최근 변경 행**: 조각(유저 필·맵 이름·버전 칩·글자)을 flex items-center로 세로 중앙 정렬(실측 중심 y 전부 동일), 맵 이름만 말줄임·버전 칩은 안쪽 span 말줄임.

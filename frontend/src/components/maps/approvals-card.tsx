@@ -1,7 +1,9 @@
 // 홈 대시보드 — 내 결재 대기 큐. 종류 칩(아이콘+라벨)·맵·요청자·경과, 5행 상한 + 인박스 링크아웃. status 파생 단계만(백엔드 무변경).
+// 행 클릭은 맵 상세가 아니라 승인 탭의 해당 카드로 간다(`/inbox?approval=<kind>:<id>`, 사용자 지시 2026-09-11).
 "use client";
 
 import { ArrowLeftRight, CheckCircle2, FileSignature, Inbox, KeyRound, Layers, Link2, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { listInboxApprovals, type InboxApproval } from "@/lib/api";
@@ -32,10 +34,9 @@ function resolveKind(a: InboxApproval): { key: MessageKey; icon: ReactNode; cls:
   return { key: "inbox.approvalKind.approval_request", icon: icon(<KeyRound size={12} strokeWidth={1.5} />), cls: "border border-hairline bg-surface-alt text-ink-secondary" };
 }
 
-interface ApprovalsCardProps { onSelect: (id: number) => void }
-
-export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
+export function ApprovalsCard() {
   const { t } = useI18n();
+  const router = useRouter();
   const ago = useAgo();
   const dir = useDirectory();
   const [items, setItems] = useState<InboxApproval[]>([]);
@@ -63,6 +64,14 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       count={loading ? null : items.length}
       countHot={items.length > 0}
       more={items.length > ROW_CAP ? { label: inboxLabel, onClick: goInbox } : undefined}
+      empty={
+        !loading && items.length === 0 ? (
+          <DashboardEmpty
+            icon={<CheckCircle2 size={14} strokeWidth={1.5} />}
+            text={loadError ? t("home.approvalsLoadError") : t("home.dash.approvalsEmpty")}
+          />
+        ) : undefined
+      }
     >
       {loading ? (
         <div className="flex flex-col gap-2 border-t border-divider px-3 py-3">
@@ -70,12 +79,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
           <SkeletonLine className="w-3/5" />
           <SkeletonLine className="w-2/3" />
         </div>
-      ) : items.length === 0 ? (
-        <DashboardEmpty
-          icon={<CheckCircle2 size={14} strokeWidth={1.5} />}
-          text={loadError ? t("home.approvalsLoadError") : t("home.dash.approvalsEmpty")}
-        />
-      ) : (
+      ) : items.length === 0 ? null : (
         <>
           {items.slice(0, ROW_CAP).map((a) => {
             const k = resolveKind(a);
@@ -84,7 +88,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
                 key={`${a.kind}:${a.id}`}
                 mapId={a.map_id}
                 dataId={`home-approval-${a.kind}-${a.id}`}
-                onClick={() => onSelect(a.map_id)}
+                onClick={() => router.push(`/inbox?approval=${a.kind}:${a.id}`)}
                 className="flex w-full items-center gap-2 border-t border-divider px-3 py-1.5 text-left"
               >
                 <span className={`inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1.5 text-[11px] font-semibold ${k.cls}`}>

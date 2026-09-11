@@ -51,15 +51,18 @@ export function RecentEventsCard({ events, onSelect }: RecentEventsCardProps) {
   const ago = useAgo();
   const dir = useDirectory();
   return (
-    <DashboardSection dataId="home-recent-events" icon={<History size={16} strokeWidth={1.5} />} title={t("home.dash.recentChanges")}>
+    <DashboardSection
+      dataId="home-recent-events"
+      icon={<History size={16} strokeWidth={1.5} />}
+      title={t("home.dash.recentChanges")}
+      empty={events !== null && events.length === 0 ? <DashboardEmpty icon={<History size={14} strokeWidth={1.5} />} text={t("home.dash.recentChangesEmpty")} /> : undefined}
+    >
       {events === null ? (
         <div className="flex flex-col gap-2 border-t border-divider px-3 py-3">
           <SkeletonLine className="w-4/5" />
           <SkeletonLine className="w-3/5" />
         </div>
-      ) : events.length === 0 ? (
-        <DashboardEmpty icon={<History size={14} strokeWidth={1.5} />} text={t("home.dash.recentChangesEmpty")} />
-      ) : (
+      ) : events.length === 0 ? null : (
         events.slice(0, ROW_CAP).map((e) => {
           const style = EVENT_STYLE[e.event_type];
           const actorName = e.actor_name ?? dir.get(e.actor)?.name ?? e.actor;

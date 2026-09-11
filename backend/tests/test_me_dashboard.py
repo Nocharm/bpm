@@ -143,6 +143,7 @@ def test_activity_counts_after_seeding(client: TestClient) -> None:
     assert [c["version_id"] for c in body["checkouts"]] == [version_id]
     checkout = body["checkouts"][0]
     assert checkout["map_id"] == map_id
+    assert checkout["visibility"] == "private"  # 생성 기본값 — 행 선두 공개 범위 아이콘
     assert checkout["waiting_requests"] == 1
 
     kinds = sorted(r["kind"] for r in body["requests"])

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps, type OrgNode } from "@/lib/org-tree";
+import { buildOrgTree, collectSingleChildChain, filterMyDeptMaps, splitDeptMaps, type OrgNode } from "@/lib/org-tree";
 import type { DirectoryDept, MapSummary } from "@/lib/api";
 
 function makeMap(id: number, dept: string | null): MapSummary {
@@ -65,6 +65,24 @@ describe("filterMyDeptMaps", () => {
   it("matches my org_path and its descendants only", () => {
     const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeA/Team"), makeMap(3, "Div/OfficeB"), makeMap(4, null)];
     expect(filterMyDeptMaps(maps, "Div/OfficeA").map((m) => m.id).sort()).toEqual([1, 2]);
+  });
+});
+
+describe("splitDeptMaps", () => {
+  it("separates maps owned by the path itself from those under descendant departments", () => {
+    const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeA/Team"), makeMap(3, "Div/OfficeB"), makeMap(4, null)];
+    const { direct, descendants } = splitDeptMaps(maps, "Div/OfficeA");
+    expect(direct.map((m) => m.id)).toEqual([1]);
+    expect(descendants.map((m) => m.id)).toEqual([2]);
+  });
+
+  it("does not treat a sibling with a shared prefix as a descendant", () => {
+    const maps = [makeMap(1, "Div/OfficeA"), makeMap(2, "Div/OfficeAB")];
+    expect(splitDeptMaps(maps, "Div/OfficeA").descendants).toEqual([]);
+  });
+
+  it("returns empty buckets for an empty path", () => {
+    expect(splitDeptMaps([makeMap(1, "Div")], "")).toEqual({ direct: [], descendants: [] });
   });
 });
 

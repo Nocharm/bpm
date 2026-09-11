@@ -52,6 +52,9 @@ export interface MapSummary {
   visibility: "public" | "private";
   // 최신 버전(최대 id) 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
   latest_version_status: VersionStatus | null;
+  // 홈 대시보드 버전 탭 — 최신·라이브(published) 버전 번호(게시 전 드래프트는 null)
+  latest_version_number?: number | null;
+  published_version_number?: number | null;
   // H5b — 홈 카드 집계 (목록 응답에서만 채워짐): 전체 버전 수·라이브(published) 노드 수·허용 인원 수·소유자 직원명
   version_count?: number;
   node_count?: number;
@@ -924,6 +927,7 @@ export interface MeDashboardActivity {
 export interface MeDashboardCheckout {
   map_id: number;
   map_name: string;
+  visibility: MapSummary["visibility"];
   version_id: number;
   version_label: string;
   version_number: number | null;

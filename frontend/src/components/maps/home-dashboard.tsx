@@ -1,4 +1,5 @@
-// 홈 우측 — 미선택 시 개인 대시보드. 프로필 마스트헤드 → 활동 타일 → (결재|내 문서) → (내 부서|업무 체계) → (최근 변경|최근 열람).
+// 홈 우측 — 미선택 시 개인 대시보드. 프로필 마스트헤드 → 활동 타일 → (최근 열람|업무 체계) → (내 부서|내 문서) → (결재|최근 변경).
+// 순서는 사용자 지시(2026-09-11) — 되돌아갈 곳(최근 열람)·전체 지도(체계)가 먼저, 처리할 일(결재)은 뒤.
 // GET /me/dashboard 1회 fetch로 타일·체계·변경 피드를 채우고, 결재 목록은 ApprovalsCard가 따로 가져온다.
 // 2열 분기는 aside 폭 기준(@container) — split 하한(24rem)에서는 1열.
 "use client";
@@ -27,12 +28,13 @@ interface HomeDashboardProps {
   onFilterStatus: (status: VersionStatus) => void; // 권한 owner + 상태 필터
   onCreate: () => void;
   onShowInTree: () => void; // 부서 뷰 + 내 부서 섹션 펼침
+  onRevealDept: (path: string) => void; // 부서 뷰 + 조직 트리를 해당 부서까지 펼침
   onBrowseFramework: () => void; // 업무 체계 뷰
   onOpenLinkage: (cat: { id: number; linkage_map_id: number | null }) => void;
 }
 
 export function HomeDashboard({
-  maps, me, myDeptMaps, myDeptLabel, onSelect, onFilterMine, onFilterStatus, onCreate, onShowInTree, onBrowseFramework, onOpenLinkage,
+  maps, me, myDeptMaps, myDeptLabel, onSelect, onFilterMine, onFilterStatus, onCreate, onShowInTree, onRevealDept, onBrowseFramework, onOpenLinkage,
 }: HomeDashboardProps) {
   const { t } = useI18n();
   const [data, setData] = useState<MeDashboard | null>(null);
@@ -64,16 +66,16 @@ export function HomeDashboard({
       </div>
       {/* 2열은 같은 높이(stretch) — 섹션 자체가 SECTION_CAP으로 상한을 갖는다(dashboard-section.tsx) */}
       <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
-        <ApprovalsCard onSelect={onSelect} />
-        <MyDocumentsCard maps={maps} onSelect={onSelect} onFilterStatus={onFilterStatus} onCreate={onCreate} />
-      </div>
-      <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
-        <DeptMapsCard maps={maps} orgPath={me?.org_path ?? ""} deptLabel={myDeptLabel} onSelect={onSelect} onShowInTree={onShowInTree} />
+        <RecentOpenedList maps={maps} onSelect={onSelect} onEmptyAction={myDeptMaps.length > 0 ? onShowInTree : undefined} />
         <FrameworkCard categories={loadError ? [] : (data?.framework ?? null)} crumb={crumb} onOpenLinkage={onOpenLinkage} onBrowse={onBrowseFramework} />
       </div>
       <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
+        <DeptMapsCard maps={maps} orgPath={me?.org_path ?? ""} deptLabel={myDeptLabel} onSelect={onSelect} onShowInTree={onShowInTree} onRevealDept={onRevealDept} />
+        <MyDocumentsCard maps={maps} onSelect={onSelect} onFilterStatus={onFilterStatus} onCreate={onCreate} />
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
+        <ApprovalsCard />
         <RecentEventsCard events={loadError ? [] : (data?.recent_events ?? null)} onSelect={onSelect} />
-        <RecentOpenedList maps={maps} onSelect={onSelect} onEmptyAction={myDeptMaps.length > 0 ? onShowInTree : undefined} />
       </div>
     </div>
     </HoverMapProvider>

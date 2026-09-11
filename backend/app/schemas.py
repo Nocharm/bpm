@@ -719,6 +719,9 @@ class MapOut(BaseModel):
     visibility: str = "private"
     # 최신 버전(최대 id)의 워크플로 상태 — 홈 카드 표시용 (목록 응답에서만 채움)
     latest_version_status: str | None = None
+    # 홈 대시보드 버전 탭 — 최신 버전·라이브(published) 버전의 번호(게시 전 드래프트는 번호 없음 → None)
+    latest_version_number: int | None = None
+    published_version_number: int | None = None
     # H5b — 홈 카드 집계(목록 응답에서만 채움): 전체 버전 수 · 라이브(published, 없으면 최신) 노드 수 · 허용 인원 수 · 소유자 직원명
     version_count: int = 0
     node_count: int = 0
@@ -1731,6 +1734,7 @@ class MeDashboardActivityOut(BaseModel):
 class MeDashboardCheckoutOut(BaseModel):
     map_id: int
     map_name: str
+    visibility: Literal["private", "public"] = "private"  # 행 선두 아이콘용
     version_id: int
     version_label: str
     version_number: int | None = None

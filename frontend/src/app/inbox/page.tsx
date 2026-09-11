@@ -223,7 +223,15 @@ export default function InboxPage() {
       }
     });
     listInboxApprovals().then((data) => {
-      if (alive) setApprovals(data);
+      if (!alive) return;
+      setApprovals(data);
+      // 홈 대시보드 승인 행의 딥링크(`?approval=<kind>:<id>`) 소비 — 승인 탭으로 전환해 해당 카드를 선택·스크롤
+      const target = new URLSearchParams(window.location.search).get("approval");
+      if (target) {
+        setTab("approvals");
+        if (data.some((a) => `${a.kind}:${a.id}` === target)) setSelectedApprovalKey(target);
+        router.replace("/inbox");
+      }
     });
     return () => {
       alive = false;
@@ -269,6 +277,13 @@ export default function InboxPage() {
   const approvalKey = (a: InboxApproval) => `${a.kind}:${a.id}`;
   const selectedApproval =
     approvals.find((a) => approvalKey(a) === selectedApprovalKey) ?? null;
+  // 딥링크로 선택된 카드가 목록 중간이면 보이게 — 렌더 뒤 한 번(리스트 li의 data-id 기준)
+  useEffect(() => {
+    if (!selectedApprovalKey || tab !== "approvals") return;
+    document
+      .querySelector(`[data-id="inbox-approval-${CSS.escape(selectedApprovalKey)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedApprovalKey, tab]);
 
   const openNotification = async (notification: NotificationItem) => {
     setSelectedId(notification.id);
@@ -575,7 +590,7 @@ export default function InboxPage() {
                   {shownApprovals.map((a) => {
                     const key = approvalKey(a);
                     return (
-                      <li key={key} className="flex flex-col">
+                      <li key={key} data-id={`inbox-approval-${key}`} className="flex flex-col">
                         <button
                           type="button"
                           onClick={(e) => {

@@ -130,6 +130,7 @@ async def _load_checkouts(session: AsyncSession, user: str) -> list[MeDashboardC
         MeDashboardCheckoutOut(
             map_id=pm.id,
             map_name=pm.name,
+            visibility=pm.visibility,
             version_id=ver.id,
             version_label=ver.label,
             version_number=ver.version_number,

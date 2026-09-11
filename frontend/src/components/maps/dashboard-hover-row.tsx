@@ -1,5 +1,6 @@
 // 대시보드 버튼 행(결재·점유·최근 변경) — 맵 호버 연동이 붙은 <button>. 같은 맵을 가리키는 다른 행이 호버되면 함께 강조.
 // 클릭(카드 선택)은 0.6초 지연 실행 — 좌측 가장자리에 링, 행 틴트, 다시 클릭하면 취소(맵 행과 같은 규칙).
+// leading을 주면 링이 가장자리 대신 그 선두 아이콘 자리를 대체한다(점유 목록 — 사용자 지시 2026-09-11).
 "use client";
 
 import type { ReactNode } from "react";
@@ -15,10 +16,11 @@ interface HoverLinkedRowProps {
   className: string; // 레이아웃 클래스 — 호버·연동 배경은 여기서 덧붙인다
   dataId?: string;
   extraData?: Record<string, string | undefined>; // data-* 부가 속성(이벤트 유형 등)
+  leading?: ReactNode; // 선두 아이콘(14px) — 대기 중엔 같은 자리에 링
   children: ReactNode;
 }
 
-export function HoverLinkedRow({ mapId, onClick, className, dataId, extraData, children }: HoverLinkedRowProps) {
+export function HoverLinkedRow({ mapId, onClick, className, dataId, extraData, leading, children }: HoverLinkedRowProps) {
   const { t } = useI18n();
   const { linked, handlers } = useHoverMap(mapId);
   const { pending, toggleAction } = useDelayedNav();
@@ -40,10 +42,14 @@ export function HoverLinkedRow({ mapId, onClick, className, dataId, extraData, c
         selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
       }`}
     >
-      {selecting && (
-        <span className="pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2">
-          <NavRing size={8} />
-        </span>
+      {leading !== undefined ? (
+        selecting ? <NavRing size={14} /> : leading
+      ) : (
+        selecting && (
+          <span className="pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2">
+            <NavRing size={8} />
+          </span>
+        )
       )}
       {children}
     </button>

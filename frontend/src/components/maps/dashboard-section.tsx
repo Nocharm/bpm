@@ -19,10 +19,11 @@ interface DashboardSectionProps {
   countHot?: boolean; // 내 결정이 필요한 건수 등 강조
   aside?: ReactNode; // 헤더 우측 슬롯(범위 드롭다운 등) — more보다 앞
   more?: { label: string; onClick: (e: MouseEvent<HTMLButtonElement>) => void }; // 이벤트 = 이동 메뉴 앵커 좌표
-  children: ReactNode;
+  empty?: ReactNode; // 빈 상태 — 본문 중앙(세로·가로)에 띄운다. 다음 행동 링크는 more 슬롯(헤더 우측)으로 (사용자 지시 2026-09-11)
+  children?: ReactNode;
 }
 
-export function DashboardSection({ dataId, icon, title, count, countHot, aside, more, children }: DashboardSectionProps) {
+export function DashboardSection({ dataId, icon, title, count, countHot, aside, more, empty, children }: DashboardSectionProps) {
   const { t } = useI18n();
   const headRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -94,8 +95,14 @@ export function DashboardSection({ dataId, icon, title, count, countHot, aside, 
         </span>
       </div>
       {/* 본문 — 접혀서 넘치면 여기만 스크롤(막대는 호버 때만). 스크롤 체이닝은 기본값 그대로: 끝에 닿으면 바깥(대시보드)으로 이어진다 */}
-      <div data-id={`${dataId}-body`} className="scroll-soft min-h-0 flex-1">
+      <div data-id={`${dataId}-body`} className="scroll-soft flex min-h-0 flex-1 flex-col">
         <div ref={bodyRef} className="flex flex-col">{children}</div>
+        {/* 빈 상태는 측정 래퍼 밖 — 2열 stretch로 늘어난 높이의 중앙에 놓이되 자연 높이 계산(contentHeight)에는 안 잡힌다 */}
+        {empty && (
+          <div data-id={`${dataId}-empty`} className="flex min-h-[6.5rem] flex-1 items-center justify-center px-6 py-5">
+            {empty}
+          </div>
+        )}
       </div>
       {/* 접힌 채 넘칠 때 하단 페이드 — 잘린 행이 "끊긴" 게 아니라 "더 있음"으로 읽히게 */}
       {overflows && !expanded && (
@@ -109,25 +116,15 @@ interface DashboardEmptyProps {
   dataId?: string;
   icon: ReactNode;
   text: string;
-  action?: { label: string; onClick: () => void };
 }
 
-// 빈 상태 — 섹션을 숨기지 않고 한 줄로 유지 + 다음 행동 링크 (빈약 유저도 구조가 같게 보이도록).
-export function DashboardEmpty({ dataId, icon, text, action }: DashboardEmptyProps) {
+// 빈 상태 — 섹션을 숨기지 않고 본문 중앙에 아이콘+문구 세로 스택(빈약 유저도 구조가 같게 보이도록). DashboardSection의 empty 슬롯에 넣는다.
+export function DashboardEmpty({ dataId, icon, text }: DashboardEmptyProps) {
   return (
-    <div data-id={dataId} className="flex items-center gap-2.5 border-t border-divider px-3 py-3.5 text-[13px] text-ink-tertiary">
-      <span className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-alt text-ink-muted">{icon}</span>
-      <span className="min-w-0">{text}</span>
-      {action && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); action.onClick(); }}
-          className="ml-auto inline-flex shrink-0 items-center gap-0.5 text-fine font-semibold text-accent hover:text-accent-focus"
-        >
-          {action.label}
-          <ChevronRight size={14} strokeWidth={1.5} />
-        </button>
-      )}
+    <div data-id={dataId} className="flex max-w-[30ch] flex-col items-center gap-2 text-center text-[13px] text-ink-tertiary">
+      <span className="inline-grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-alt text-ink-muted">{icon}</span>
+      {/* break-keep — 한글은 기본값이 글자 단위 줄바꿈이라 "부/서"처럼 단어가 갈라진다(실측 2026-09-11) */}
+      <span className="text-balance break-keep">{text}</span>
     </div>
   );
 }

@@ -112,6 +112,32 @@ def test_list_maps_includes_latest_version_status(client: TestClient) -> None:
     assert row["latest_version_status"] == "draft"
 
 
+def test_list_maps_includes_version_numbers(client: TestClient) -> None:
+    """목록은 게시본 번호·최신 버전 번호를 동봉 — 게시본 v1 뒤에 드래프트가 붙으면 최신 번호는 None(게시 전)."""
+    created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"버전번호-{uuid4().hex[:6]}"}).json()
+    map_id, vid = created["id"], created["versions"][0]["id"]
+
+    row = next(m for m in client.get("/api/maps").json() if m["id"] == map_id)
+    assert row["published_version_number"] is None
+    assert row["latest_version_number"] is None
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            ver = await session.get(MapVersion, vid)
+            assert ver is not None
+            ver.status = "published"
+            ver.version_number = 1
+            session.add(MapVersion(map_id=map_id, label="To-Be", status="draft"))
+            await session.commit()
+
+    asyncio.run(_seed())
+
+    row = next(m for m in client.get("/api/maps").json() if m["id"] == map_id)
+    assert row["published_version_number"] == 1
+    assert row["latest_version_number"] is None
+    assert row["latest_version_status"] == "draft"
+
+
 def test_list_maps_includes_card_metrics(client: TestClient) -> None:
     """목록은 카드 집계(전체 버전 수·라이브 노드 수·소유자명)를 동봉 (H5b)."""
     created = client.post("/api/maps", json={"owning_department": "Owning Anchor Division", "name": "카드집계"}).json()

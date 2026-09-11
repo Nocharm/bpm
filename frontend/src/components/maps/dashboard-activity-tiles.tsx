@@ -1,14 +1,16 @@
 // 홈 대시보드 활동 타일 5종 — 결재 대기·내가 낸 요청·점유 중 버전·미읽음 알림·내 피드백. 0도 숨기지 않고 뮤트.
-// 점유 타일은 클릭 시 아래로 점유 목록을 펼친다. 페이지 이동 타일은 1클릭 지연 이동 — 타일이 카운트다운 링으로 바뀌고 1초 뒤
+// 점유 타일은 클릭 시 아래로 점유 목록을 아코디언으로 펼친다(접힘 고스트는 useClosingKeys). 목록 행 선두는 맵 공개 범위 아이콘이고
+// 클릭 대기 중엔 그 자리가 링으로 바뀐다. 페이지 이동 타일은 1클릭 지연 이동 — 타일이 카운트다운 링으로 바뀌고 0.6초 뒤
 // 이동, 그 사이 다시 클릭하면 취소(실수 클릭 복귀, 사용자 지시 2026-09-11).
 "use client";
 
-import { Bell, Inbox, Lock, MessageSquare, Send } from "lucide-react";
+import { Bell, Globe, Inbox, Lock, MessageSquare, Send } from "lucide-react";
 import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { MeDashboard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAgo } from "@/lib/use-ago";
+import { useClosingKeys } from "@/lib/use-closing-keys";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { NavRing } from "@/components/nav-ring";
@@ -23,6 +25,12 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
   const { t } = useI18n();
   const ago = useAgo();
   const [checkoutsOpen, setCheckoutsOpen] = useState(false);
+  const { closingKeys, beginClose, cancelClose, getSectionClass } = useClosingKeys<"checkouts">();
+  const toggleCheckouts = () => {
+    if (checkoutsOpen) beginClose("checkouts");
+    else cancelClose("checkouts");
+    setCheckoutsOpen((v) => !v);
+  };
   const { pending, toggle } = useDelayedNav();
   // 같은 목적지(인박스) 타일이 셋이라 href만으로는 어느 타일을 눌렀는지 모른다 — 클릭한 타일만 링으로 바꾼다
   const [clicked, setClicked] = useState<string | null>(null);
@@ -81,7 +89,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           }
           warn={waiting > 0}
           pressed={checkoutsOpen}
-          onClick={a.checkouts_held > 0 ? () => setCheckoutsOpen((v) => !v) : undefined}
+          onClick={a.checkouts_held > 0 ? toggleCheckouts : undefined}
         />
         <Tile
           dataId="home-activity-unread"
@@ -108,7 +116,8 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           onClick={() => go("home-activity-feedback", "/feedback")}
         />
       </div>
-      {checkoutsOpen && data.checkouts.length > 0 && (
+      {(checkoutsOpen || closingKeys.has("checkouts")) && data.checkouts.length > 0 && (
+        <div className={getSectionClass("checkouts")}>
         <ul data-id="home-activity-checkout-list" className="flex flex-col rounded-sm border border-hairline bg-surface">
           {data.checkouts.map((c) => (
             <li key={c.version_id}>
@@ -116,8 +125,14 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
                 mapId={c.map_id}
                 onClick={() => onSelect(c.map_id)}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left [li+li>&]:border-t [li+li>&]:border-divider"
+                leading={
+                  c.visibility === "public" ? (
+                    <Globe size={14} strokeWidth={1.5} className="shrink-0 text-accent" aria-label={t("perm.visibilityPublic")} />
+                  ) : (
+                    <Lock size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" aria-label={t("perm.visibilityPrivate")} />
+                  )
+                }
               >
-                <Lock size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <span className="min-w-0 flex-1 truncate text-caption text-ink">{c.map_name}</span>
                 <span className="shrink-0 text-fine text-ink-tertiary">{c.version_number != null ? `v${c.version_number}` : c.version_label}</span>
                 {c.waiting_requests > 0 && (
@@ -128,6 +143,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
             </li>
           ))}
         </ul>
+        </div>
       )}
     </div>
   );

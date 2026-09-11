@@ -34,14 +34,14 @@ export function RecentOpenedList({ maps, onSelect, onEmptyAction }: RecentOpened
   const animate = useMemo(() => peekTopChanged(topId), [topId]);
   useEffect(() => { commitTop(topId); }, [topId]);
   return (
-    <DashboardSection dataId="home-recent" icon={<Eye size={16} strokeWidth={1.5} />} title={t("home.recentTitle")}>
-      {recent.length === 0 ? (
-        <DashboardEmpty
-          icon={<Eye size={14} strokeWidth={1.5} />}
-          text={t("home.dash.recentEmpty")}
-          action={onEmptyAction ? { label: t("home.dash.recentEmptyAction"), onClick: onEmptyAction } : undefined}
-        />
-      ) : (
+    <DashboardSection
+      dataId="home-recent"
+      icon={<Eye size={16} strokeWidth={1.5} />}
+      title={t("home.recentTitle")}
+      more={recent.length === 0 && onEmptyAction ? { label: t("home.dash.recentEmptyAction"), onClick: onEmptyAction } : undefined}
+      empty={recent.length === 0 ? <DashboardEmpty icon={<Eye size={14} strokeWidth={1.5} />} text={t("home.dash.recentEmpty")} /> : undefined}
+    >
+      {recent.length === 0 ? null : (
         recent.slice(0, ROW_CAP).map(({ map, at }, i) => (
           // top 변경 시 새 최상단(i===0)은 강조 진입, 나머지 기존 행은 한 슬롯 아래로 밀려 내려온다 → "하나가 위에 추가되며 전부 밀림".
           <div

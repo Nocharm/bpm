@@ -78,6 +78,19 @@ export function filterMyDeptMaps(maps: MapSummary[], myOrgPath: string): MapSumm
   );
 }
 
+// 부서 경로 기준 분리 — direct는 그 부서 소유 맵만, descendants는 하위 부서(자손) 소유 맵.
+// 대시보드 내 부서 카드용: 상위 부서를 고르면 그 부서 맵만 목록에 올리고 하위는 건수로만 알린다(사용자 지시 2026-09-11).
+export function splitDeptMaps(maps: MapSummary[], path: string): { direct: MapSummary[]; descendants: MapSummary[] } {
+  if (!path) return { direct: [], descendants: [] };
+  const direct: MapSummary[] = [];
+  const descendants: MapSummary[] = [];
+  for (const m of maps) {
+    if (m.owning_department === path) direct.push(m);
+    else if (m.owning_department?.startsWith(path + "/")) descendants.push(m);
+  }
+  return { direct, descendants };
+}
+
 // 단일 하위 체인 수집 — path 노드를 펼칠 때 하위 부서가 정확히 1개뿐인 구간을 이어서 반환(반복).
 // 수동 펼침 UX용: 선택지 없는 중간 단계 클릭 반복을 없앤다. 하위 2개 이상·말단이면 멈춤.
 export function collectSingleChildChain(roots: OrgNode[], path: string): string[] {
