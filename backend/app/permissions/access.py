@@ -259,6 +259,62 @@ async def get_admin_scope(
     return admin_ids, seeds
 
 
+async def load_my_roles(
+    session: AsyncSession, login_id: str, maps: list[ProcessMap]
+) -> dict[int, str]:
+    """맵 목록에 대한 map_id→유효 역할 일괄 판정 — 접근 불가(None) 맵은 키 자체를 뺀다.
+
+    권한 행·승인자·그룹을 각 1회만 로드해 메모리에서 logic.effective_role을 돌린다(N+1 회피).
+    홈 목록(list_maps)과 개인 대시보드가 공유하는 경로라 단건 get_effective_role과 달리
+    framework 캔버스의 카테고리 체인 파생은 적용하지 않는다(홈 목록 종전 동작 유지).
+    """
+    if logic.is_sysadmin(login_id):
+        return {m.id: "owner" for m in maps}  # sysadmin → 전 맵 owner (effective_role parity)
+
+    emp = await session.get(Employee, login_id)
+    emp_org_path = (
+        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
+    )
+    perm_rows = (
+        await session.execute(
+            select(
+                MapPermission.map_id,
+                MapPermission.principal_type,
+                MapPermission.principal_id,
+                MapPermission.role,
+            )
+        )
+    ).all()
+    perms_by_map: dict[int, list[logic.Permission]] = {}
+    for mid, ptype, pid, role in perm_rows:
+        perms_by_map.setdefault(mid, []).append((ptype, pid, role))
+    approver_map_ids = set(
+        (
+            await session.scalars(
+                select(MapApprover.map_id).where(MapApprover.user_id == login_id)
+            )
+        ).all()
+    )
+    # 호출자가 속한 active 그룹 id — 맵 무관이라 루프 밖에서 1회만 산정
+    user_group_ids = await get_user_active_group_ids(session, login_id, emp_org_path)
+
+    roles: dict[int, str] = {}
+    for m in maps:
+        role = logic.effective_role(
+            login_id,
+            False,  # sysadmin은 위에서 조기 반환
+            emp_org_path,
+            m.visibility,
+            perms_by_map.get(m.id, []),
+            m.id in approver_map_ids,
+            user_group_ids,
+            owning_department=m.owning_department,
+        )
+        if role is not None:
+            roles[m.id] = role
+    return roles
+
+
 async def get_effective_role(
     session: AsyncSession, login_id: str, map_id: int
 ) -> str | None:

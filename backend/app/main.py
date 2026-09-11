@@ -43,6 +43,7 @@ from app.routers import (
     local_accounts,
     manual,
     maps,
+    me_dashboard,
     notices,
     notifications,
     permissions,
@@ -107,6 +108,7 @@ app.include_router(auth_router.router)
 app.include_router(categories.router)
 app.include_router(embed.router)
 app.include_router(maps.router)
+app.include_router(me_dashboard.router)
 app.include_router(slot_changes.router)
 app.include_router(versions.router)
 app.include_router(checkout.router)

@@ -21,7 +21,7 @@ from app.framework_slots import (
     can_decide_slot_for_map,
     validate_slot_change,
 )
-from app.models import ApprovalRequest, Employee, MapApprover, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
+from app.models import ApprovalRequest, Employee, MapNote, MapPermission, MapVersion, Node, ProcessCategory, ProcessMap, UserGroup, UserGroupMember, _now
 from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
@@ -30,9 +30,9 @@ from app.permissions.access import (
     get_effective_role,
     get_eligible_users,
     get_framework_category_id,
-    get_user_active_group_ids,
     is_category_admin,
     is_direct_l5_admin,
+    load_my_roles,
 )
 from app.permissions.deps import require_map_role
 from app.routers.categories import build_category_paths
@@ -264,47 +264,12 @@ async def list_maps(
             _set_card_metrics(m)
         return maps  # 필터 불필요(쿼리도 생략)
 
-    emp = await session.get(Employee, user)
-    emp_org_path = (
-        resolve_org_path(emp, await load_dept_index(session)) if emp is not None else ""
-    )
-    # 사용자에게 걸린 권한 행 전체(맵별로 묶어 메모리 판정)
-    perm_rows = (
-        await session.execute(
-            select(
-                MapPermission.map_id,
-                MapPermission.principal_type,
-                MapPermission.principal_id,
-                MapPermission.role,
-            )
-        )
-    ).all()
-    perms_by_map: dict[int, list[logic.Permission]] = {}
-    for mid, ptype, pid, role in perm_rows:
-        perms_by_map.setdefault(mid, []).append((ptype, pid, role))
-    approver_map_ids = set(
-        (
-            await session.scalars(
-                select(MapApprover.map_id).where(MapApprover.user_id == user)
-            )
-        ).all()
-    )
-    # 호출자가 속한 active 그룹 id — 맵 무관이라 루프 밖에서 1회만 산정
-    user_group_ids = await get_user_active_group_ids(session, user, emp_org_path)
-
     # 가시성 필터와 my_role 노출을 한 번의 effective_role 계산으로 처리 (이중 계산 회피).
+    # 일괄 판정은 access.load_my_roles — 개인 대시보드(me_dashboard)와 공유.
+    roles = await load_my_roles(session, user, maps)
     visible: list[ProcessMap] = []
     for m in maps:
-        role = logic.effective_role(
-            user,
-            False,  # is_admin True는 위에서 조기 반환
-            emp_org_path,
-            m.visibility,
-            perms_by_map.get(m.id, []),
-            m.id in approver_map_ids,
-            user_group_ids,
-            owning_department=m.owning_department,
-        )
+        role = roles.get(m.id)
         if role is not None:  # is_visible == (effective_role is not None)
             m.my_role = role
             _set_card_metrics(m)

@@ -1716,6 +1716,70 @@ class MeOut(BaseModel):
     category_admin_root_ids: list[int] = []
 
 
+class MeDashboardActivityOut(BaseModel):
+    """홈 개인 대시보드 활동 카운터 — 각 값은 해당 목록 API와 같은 집합을 센다."""
+
+    approvals_pending: int  # GET /inbox/approvals 항목 수
+    requests_pending: int  # 내가 올린 pending 승인 요청 + 점유권 이전 요청
+    checkouts_held: int  # 내가 점유 중인 버전(소프트삭제 맵 제외)
+    unread_notifications: int
+    feedback_mine: int
+    feedback_mine_open: int  # status != done
+    last_login_at: datetime | None = None  # 오늘(KST) 이전의 마지막 로그인 기록 — 없으면 None
+
+
+class MeDashboardCheckoutOut(BaseModel):
+    map_id: int
+    map_name: str
+    version_id: int
+    version_label: str
+    version_number: int | None = None
+    checked_out_at: datetime | None = None
+    waiting_requests: int = 0  # 이 버전을 향한 pending 점유권 이전 요청 수
+
+
+class MeDashboardRequestOut(BaseModel):
+    kind: str  # ApprovalRequest.kind 또는 "checkout_transfer"
+    id: int
+    map_id: int
+    map_name: str
+    status: str
+    created_at: datetime
+
+
+class MeDashboardEventOut(BaseModel):
+    event_type: str
+    map_id: int
+    map_name: str
+    version_id: int
+    version_label: str
+    version_number: int | None = None
+    actor: str
+    actor_name: str | None = None
+    note: str | None = None
+    created_at: datetime
+
+
+class MeDashboardCategoryOut(BaseModel):
+    """내가 권한자인 seed 카테고리 1개의 서브트리 요약 (category_admin_root_ids 순서)."""
+
+    category_id: int
+    name: str
+    level: int
+    linkage_map_id: int | None = None
+    l5_count: int  # 서브트리(자기 자신 포함)의 level 5 카테고리 수
+    unconfirmed_count: int  # 그중 연계 캔버스는 있으나 confirmed 스냅샷이 없는 L5 수
+    slot_pending_count: int  # 서브트리 카테고리에 걸린 맵의 pending fw_slot 요청 수
+
+
+class MeDashboardOut(BaseModel):
+    activity: MeDashboardActivityOut
+    checkouts: list[MeDashboardCheckoutOut] = []
+    requests: list[MeDashboardRequestOut] = []
+    recent_events: list[MeDashboardEventOut] = []
+    framework: list[MeDashboardCategoryOut] = []
+
+
 class EmployeeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
