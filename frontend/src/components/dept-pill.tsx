@@ -76,8 +76,9 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
             ? "border-notice-border bg-notice text-warn"
             : `border-accent-tint-border bg-accent-tint/60 text-accent hover:border-accent hover:bg-accent-tint hover:shadow-sm ${interactive ? "cursor-pointer" : ""}`
         } ${
+          // fill(타일 대체)은 빈 타일 머리 행과 같은 여백(px-2.5 py-2) — 값 유무로 위치·크기가 어긋나지 않게 (2026-09-11)
           variant === "block"
-            ? `items-start rounded-sm px-2 py-1 text-fine ${fill ? "h-full w-full" : ""}`
+            ? `items-start rounded-sm text-fine ${fill ? "h-full w-full px-2.5 py-2" : "px-2 py-1"}`
             : "items-center rounded-full px-2 py-0.5 text-fine"
         }`}
         onClick={interactive ? handleClick : undefined}
@@ -86,18 +87,20 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
         {variant === "block" ? (
           // 아이콘은 이름과 같은 행에서 세로 중앙 — 열 밖에 고정 오프셋(mt)으로 두면 글자 크기가 바뀔 때마다 어긋난다
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-1">
+            {/* fill은 아이콘 16·간격 8·행 높이 20 — 빈 타일 머리 행(아이콘 16 + gap-2, "–" 캡션으로 20px)과 같은 자리에 이름이 온다.
+                이름이 두 줄로 감겨도 아이콘은 첫 줄 기준(items-start + 아이콘 2px·글자 4px 내림 = 20px 행 안에서 각각 세로 중앙) */}
+            <span className={`flex min-w-0 ${fill ? "min-h-5 items-start gap-2" : "items-center gap-1"}`}>
               {isOrphan ? (
-                <TriangleAlert size={13} strokeWidth={1.5} className="shrink-0" />
+                <TriangleAlert size={fill ? 16 : 13} strokeWidth={1.5} className={`shrink-0 ${fill ? "mt-0.5" : ""}`} />
               ) : (
-                <Building2 size={13} strokeWidth={1.5} className="shrink-0" />
+                <Building2 size={fill ? 16 : 13} strokeWidth={1.5} className={`shrink-0 ${fill ? "mt-0.5" : ""}`} />
               )}
-              <span className="min-w-0 break-keep">{label || deptLeaf(path)}</span>
+              <span className={`min-w-0 break-keep ${fill ? "mt-1" : ""}`}>{label || deptLeaf(path)}</span>
             </span>
             {/* 보조 줄은 호버 때만 — 자리는 늘 차지해(opacity) 호버로 타일·그리드 행 높이가 튀지 않는다 (사용자 지시 2026-09-10).
-                들여쓰기 = 아이콘 13 + 간격 4로 이름 아래 정렬 */}
+                들여쓰기 = 아이콘 + 간격으로 이름 아래 정렬 */}
             {subLabel && (
-              <span className="min-w-0 break-keep pl-[17px] text-fine font-normal text-accent/60 opacity-0 transition-opacity duration-150 group-hover/dept:opacity-100">
+              <span className={`min-w-0 break-keep text-fine font-normal text-accent/60 opacity-0 transition-opacity duration-150 group-hover/dept:opacity-100 ${fill ? "pl-6" : "pl-[17px]"}`}>
                 {subLabel}
               </span>
             )}
