@@ -69,25 +69,37 @@ function ManagedListCard({
   const isLocked = (value: string) => lockedValues.some((locked) => locked.toLocaleLowerCase() === value.toLocaleLowerCase());
   const has = (value: string) => draft.some((item) => item.value.toLocaleLowerCase() === value.trim().toLocaleLowerCase());
   const addValues = (incoming: CatalogEntry[]) => {
+    // 기존 항목의 별칭 총수를 전후로 비교 — normalizeAliases가 새 값/별칭과 충돌해 조용히 지운 개수(dropped)를 admin에게 알린다
+    const before = draft.reduce((sum, entry) => sum + entry.aliases.length, 0);
     const result = mergeCatalogEntries(draft, incoming);
     setDraft(result.next);
-    return result;
+    const after = result.next
+      .filter((entry) => draft.some((existing) => existing.value.toLocaleLowerCase() === entry.value.toLocaleLowerCase()))
+      .reduce((sum, entry) => sum + entry.aliases.length, 0);
+    const dropped = Math.max(0, before - after);
+    return { ...result, dropped };
   };
   const handleAdd = () => {
     if (adding.trim() === "") return;
-    addValues([{ value: adding, aliases: [] }]);
+    const { dropped } = addValues([{ value: adding, aliases: [] }]);
+    setImportNote(dropped > 0 ? t("catalog.aliasesDropped", { count: dropped }) : "");
     setAdding("");
   };
   const handleFile = async (file: File) => {
     const text = decodeCsvBuffer(await file.arrayBuffer());
-    const { added, duplicates, aliasesAdded } = addValues(parseCatalogCsv(text));
-    setImportNote(t("catalog.importResult", { added, duplicates, aliases: aliasesAdded }));
+    const { added, duplicates, aliasesAdded, dropped } = addValues(parseCatalogCsv(text));
+    const base = t("catalog.importResult", { added, duplicates, aliases: aliasesAdded });
+    setImportNote(dropped > 0 ? `${base} ${t("catalog.aliasesDropped", { count: dropped })}` : base);
   };
   const applyAliases = () => {
     if (editingAlias === null) return;
     const aliases = aliasDraft.split(",").map((alias) => alias.trim()).filter((alias) => alias !== "");
+    const requested = aliases.length;
     // 값·별칭 전역 불변식은 normalizeAliases가 서버 규칙 그대로 집행(값 우선·casefold 중복 제거)
-    setDraft((prev) => normalizeAliases(prev.map((entry) => (entry.value === editingAlias ? { value: entry.value, aliases } : entry))));
+    const next = normalizeAliases(draft.map((entry) => (entry.value === editingAlias ? { value: entry.value, aliases } : entry)));
+    setDraft(next);
+    const kept = next.find((entry) => entry.value === editingAlias)?.aliases.length ?? 0;
+    setImportNote(requested - kept > 0 ? t("catalog.aliasesDropped", { count: requested - kept }) : "");
     setEditingAlias(null);
   };
   const handleSave = async () => {
@@ -221,7 +233,13 @@ function ManagedListCard({
               <div className="flex flex-wrap gap-x-4 gap-y-1.5" data-id={`${dataId}-candidates`}>
                 {candidates.map((value) => (
                   <label key={value} className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
-                    <CheckInput checked={false} onChange={() => addValues([{ value, aliases: [] }])} />
+                    <CheckInput
+                      checked={false}
+                      onChange={() => {
+                        const { dropped } = addValues([{ value, aliases: [] }]);
+                        setImportNote(dropped > 0 ? t("catalog.aliasesDropped", { count: dropped }) : "");
+                      }}
+                    />
                     {value}
                   </label>
                 ))}

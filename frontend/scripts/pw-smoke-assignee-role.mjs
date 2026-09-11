@@ -99,6 +99,7 @@ try {
   check("hover swaps to the assignee after the delay", (await line.getAttribute("data-alt")) === "true" && ((await line.textContent()) ?? "").includes("Admin Sys"));
   await page.screenshot({ path: path.join(SHOT_DIR, "alias-node-swap-hover.png") });
   await page.mouse.move(10, 10);
+  // 이탈은 render-time 즉시 복귀(useDelayedFlag) — 페이드(350ms)만 기다리면 된다
   await page.waitForTimeout(300);
   check("leaving returns to the role", (await line.getAttribute("data-alt")) === "false");
 

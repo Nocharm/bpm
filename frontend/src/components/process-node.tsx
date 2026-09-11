@@ -114,6 +114,7 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
   const alt = useDelayedFlag(active, NODE_ALT_DELAY_MS);
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
+  // 경고 줄은 아이콘만 경고색으로 바꾼다(글자색 유지) — 노드가 많아도 캔버스가 경고색으로 안 도배된다
   const warnedFields = {
     department: warnings.some((w) => w.kind === "deptOrphan"),
     assignee: hasAssigneeWarning(warnings),
