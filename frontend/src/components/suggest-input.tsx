@@ -47,11 +47,13 @@ export function SuggestInput({
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLUListElement | null>(null);
-  // 바깥 값 변경(다른 노드 선택 등) → 초안 동기화. 편집 중엔 사용자 입력을 지킨다 (렌더 중 상태 조정, effect 아님)
+  // 바깥 값 변경(다른 노드 선택 등) → 초안 동기화. 편집 중(open)엔 seen·draft 갱신을 함께 미뤄
+  // 메뉴가 닫힌 다음 렌더에서 반영한다 — 둘 중 하나만 미루면 열린 동안 온 변경이 소리없이 유실된다.
+  // (렌더 중 상태 조정, effect 아님)
   const [seen, setSeen] = useState(value);
-  if (value !== seen) {
+  if (value !== seen && !open) {
     setSeen(value);
-    if (!open) setDraft(value);
+    setDraft(value);
   }
 
   const hits = open
