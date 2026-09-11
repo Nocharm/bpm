@@ -12,6 +12,7 @@
 
 - `app_settings.py`에 범용 관리 목록 헬퍼(`normalize_managed_list`/`get_managed_list`/`set_managed_list`) 추가하고 기존 `get_exposed_positions`를 그 위로 재구현. 신규 목록 `assignee_roles`(역할, 빈 목록 기본)·`systems`(시스템, `Other` 예약 항목이 항상 0번)를 얹고 `GET /api/catalogs`(로그인 유저 전원 읽기)를 신설, `PUT /admin/app-settings`에도 편집 필드와 `available_systems`(사용 중 값 승격 후보) 노출. 테스트 4종 추가, 전체 스위트 1468 green.
 - **Task 4**: 프론트 카탈로그 클라이언트 기반 — `api.ts` `Catalogs`/`getCatalogs()`·`AppSettings.assignee_roles/systems/available_systems`·`putAppSettings` 패치 확장. `lib/catalogs.ts` 신설 — 모듈 캐시 `useCatalogs()`/`invalidateCatalogs()`(`lib/directory.ts` 패턴) + 순수 함수 `normalizeToCatalog`/`commitSystem`/`formatSystem`(시스템 불일치=Other+원문 메모 보존 규칙). i18n 12키(en/ko) 추가. 아직 UI 미연결. `catalogs.test.ts` 8종 green, 전체 vitest 968 green, tsc/lint clean.
+- **Task 5**: `components/suggest-input.tsx` — 자유입력+제안 드롭다운 공용 엔진(`SuggestInput`). `lib/search.filterByQuery` 랭킹·↑↓/Enter/Esc/blur 확정·body 포털 `z-[1400]`(row=인스펙터 행 / field=팝오버 전폭). 아직 미사용(다음 태스크에서 연결). a11y 경고(`role="combobox"`에 `aria-controls` 누락) 1건을 `aria-controls`+메뉴 `id` 추가로 해소. tsc/lint clean, vitest 968 green.
 
 ## 2026-09-11 — 대시보드 섹션 순서·내 부서 직속 범위·점유 아코디언·승인 딥링크 (dev)
 
