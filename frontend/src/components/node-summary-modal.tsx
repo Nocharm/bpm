@@ -46,6 +46,7 @@ import { NewlineHint } from "@/components/newline-hint";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
+import { RoleTile } from "@/components/permissions/role-tile";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { buildPopoverActionLabels } from "@/components/popover-action-bar";
@@ -82,6 +83,7 @@ export type NodeEditPatch = Partial<{
   nodeType: ProcessNodeType;
   color: string;
   assignee: string;
+  assignee_role: string;
   department: string;
   system: string;
   // 시스템 원문 메모 — 타일 호버 메모 아이콘·시스템 팝오버 메모 칸이 고친다
@@ -283,6 +285,7 @@ interface Form {
   description: string;
   color: string;
   assignee: string;
+  assignee_role: string;
   department: string;
   system: string;
   system_fallback: string;
@@ -307,7 +310,7 @@ interface Form {
   end_condition: string;
 }
 const FORM_KEYS = [
-  "label", "description", "color", "assignee", "department", "system", "system_fallback", "duration",
+  "label", "description", "color", "assignee", "assignee_role", "department", "system", "system_fallback", "duration",
   "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "urlLabel",
   "input", "output", "input_forms", "output_forms", "output_ids", "input_links", "output_links", "input_flags",
   "start_condition", "end_condition",
@@ -420,6 +423,8 @@ interface NodeSummaryModalProps {
   description: string;
   color: string;
   assignee: string;
+  // 단일 역할 — 담당자 타일 옆 역할 타일 (design 2026-09-11)
+  assigneeRole: string;
   department: string;
   system: string;
   // 시스템 원문 메모(노드 컬럼) — 시스템 타일 호버 메모 아이콘·팝오버 메모 칸
@@ -451,6 +456,7 @@ interface NodeSummaryModalProps {
   sp?: {
     department?: string | null;
     assignee?: string | null;
+    assignee_role?: string | null;
     system?: string | null;
     url?: string | null;
     url_label?: string | null;
@@ -503,6 +509,7 @@ export function NodeSummaryModal({
   description,
   color,
   assignee,
+  assigneeRole,
   department,
   system,
   systemFallback,
@@ -579,7 +586,7 @@ export function NodeSummaryModal({
   };
   // 노드 값(props) 스냅샷 — 폼은 이 미러에서 시작해 편집 즉시 노드로 되돌려 쓴다
   const propsForm: Form = {
-    label: title, description, color, assignee, department, system, system_fallback: systemFallback, duration,
+    label: title, description, color, assignee, assignee_role: assigneeRole, department, system, system_fallback: systemFallback, duration,
     touch_time, cost_krw, cost_usd, headcount, annual_count, fte, url, urlLabel,
     input, output, input_forms, output_forms, output_ids, input_links, output_links, input_flags,
     start_condition, end_condition,
@@ -848,8 +855,8 @@ export function NodeSummaryModal({
   const gmpValue = gmp ?? "";
   // 접힘 헤더의 채워진 개수 — 폼 기준(SP는 상속값)
   const filledAttrCount = isSp
-    ? [spDept, spAssignee, spSystem, spUrl].filter((v) => v !== "").length
-    : [form.department, form.assignee, form.system, form.url].filter((v) => v !== "").length;
+    ? [spDept, spAssignee, sp?.assignee_role ?? "", spSystem, spUrl].filter((v) => v !== "").length
+    : [form.department, form.assignee, form.assignee_role, form.system, form.url].filter((v) => v !== "").length;
   const filledParamCount = PARAM_TILES.filter((f) => tileValue(f) !== "").length;
   const filledDetailCount = isSp
     ? [sp?.input, sp?.output, sp?.start_condition, sp?.end_condition].filter((v) => (v ?? "") !== "").length
@@ -943,6 +950,7 @@ export function NodeSummaryModal({
   const attrTiles = isSp ? (
     <>
       <DeptAssigneeTiles versionId={null} department={spDept} assignee={spAssignee} readOnly dataIdPrefix="summary-tile" labels={labels} onChange={() => {}} />
+      <RoleTile value={sp?.assignee_role ?? ""} readOnly dataIdPrefix="summary-tile" labels={labels} onChange={() => {}} />
       {spSystem !== "" && (
         <SpFieldTile dataId="summary-tile-system" icon={Monitor} label={t("field.system")} value={spSystem} readOnly />
       )}
@@ -962,6 +970,7 @@ export function NodeSummaryModal({
         labels={labels}
         onChange={(patch) => patchLive(patch)}
       />
+      <RoleTile value={form.assignee_role} readOnly={readOnly} dataIdPrefix="summary-tile" labels={labels} onChange={(next) => patchLive({ assignee_role: next })} />
       {renderTile("system")}
       {renderTile("url")}
       {gmpTile}

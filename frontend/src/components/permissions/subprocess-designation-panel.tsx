@@ -35,6 +35,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
   const [modalInitial, setModalInitial] = useState<DesignationForm>({
     department: "",
     assignee: "",
+    assignee_role: "",
     system: "",
     duration: "",
     touch_time: "",
@@ -109,6 +110,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     setModalInitial({
       department: detail?.sp_department ?? "",
       assignee: detail?.sp_assignee ?? "",
+      assignee_role: detail?.sp_assignee_role ?? "",
       system: detail?.sp_system ?? "",
       duration: detail?.sp_duration ?? "",
       touch_time: detail?.sp_touch_time ?? "",

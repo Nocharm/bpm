@@ -383,6 +383,7 @@ export default function InboxPage() {
     ? {
         department: spModal.detail.sp_department ?? "",
         assignee: spModal.detail.sp_assignee ?? "",
+        assignee_role: spModal.detail.sp_assignee_role ?? "",
         system: spModal.detail.sp_system ?? "",
         duration: spModal.detail.sp_duration ?? "",
         touch_time: spModal.detail.sp_touch_time ?? "",

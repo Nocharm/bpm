@@ -32,6 +32,7 @@ import { MultiValueInput, type MultiValueInputHandle } from "@/components/multi-
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
+import { RoleTile } from "@/components/permissions/role-tile";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { buildPopoverActionLabels } from "@/components/popover-action-bar";
@@ -59,6 +60,7 @@ import { isHttpUrl } from "@/lib/url";
 export interface DesignationForm {
   department: string;
   assignee: string;
+  assignee_role: string;
   system: string;
   duration: string;
   touch_time: string;
@@ -173,7 +175,7 @@ export function SubprocessDesignationModal({
     setDetailsCollapsed(next);
     writeDetailsCollapsed(next);
   };
-  const filledAttrCount = [form.department, form.assignee, form.system, form.url]
+  const filledAttrCount = [form.department, form.assignee, form.assignee_role, form.system, form.url]
     .filter((v) => v.trim() !== "").length;
   const filledParamCount = [...SP_PARAM_FIELDS, ...SP_CONTEXT_FIELDS].filter((f) => form[f] !== "").length;
   const filledDetailCount = [form.input, form.output, form.start_condition, form.end_condition]
@@ -344,6 +346,7 @@ export function SubprocessDesignationModal({
       const updated = await putSubprocessDesignation(mapId, {
         department: form.department.trim(),
         assignee: form.assignee,
+        assignee_role: form.assignee_role.trim(),
         system: form.system,
         duration: form.duration,
         touch_time: form.touch_time,
@@ -644,6 +647,12 @@ export function SubprocessDesignationModal({
                       dataIdPrefix="sp-tile"
                       labels={labels}
                       onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                    />
+                    <RoleTile
+                      value={form.assignee_role}
+                      dataIdPrefix="sp-tile"
+                      labels={labels}
+                      onChange={(next) => setForm((prev) => ({ ...prev, assignee_role: next }))}
                     />
                     {(["system", "url"] as const).map(renderTile)}
                   </div>

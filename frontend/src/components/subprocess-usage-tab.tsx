@@ -18,6 +18,7 @@ import { FallbackHint } from "@/components/fallback-hint";
 import { MultiValueInput } from "@/components/multi-value-input";
 import { PARAM_ICON } from "@/components/param-icons";
 import { DeptAssigneeTiles } from "@/components/permissions/attribute-tiles";
+import { RoleTile } from "@/components/permissions/role-tile";
 import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { SubprocessDesignationModal, type DesignationForm } from "@/components/permissions/subprocess-designation-modal";
@@ -48,6 +49,7 @@ function toDesignationForm(detail: MapSummary): DesignationForm {
   return {
     department: detail.sp_department ?? "",
     assignee: detail.sp_assignee ?? "",
+    assignee_role: detail.sp_assignee_role ?? "",
     system: detail.sp_system ?? "",
     duration: detail.sp_duration ?? "",
     touch_time: detail.sp_touch_time ?? "",
@@ -292,6 +294,14 @@ export function SubprocessUsageTab({
                 versionId={null}
                 department={form.department}
                 assignee={form.assignee}
+                readOnly
+                placeholder={notSet}
+                dataIdPrefix="sp-usage-tile"
+                labels={labels}
+                onChange={() => {}}
+              />
+              <RoleTile
+                value={form.assignee_role}
                 readOnly
                 placeholder={notSet}
                 dataIdPrefix="sp-usage-tile"

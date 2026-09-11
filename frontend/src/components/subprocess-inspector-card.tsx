@@ -63,6 +63,7 @@ export function SubprocessInspectorCard({
   const [modalInitial, setModalInitial] = useState<DesignationForm>({
     department: "",
     assignee: "",
+    assignee_role: "",
     system: "",
     duration: "",
     touch_time: "",
@@ -176,6 +177,7 @@ export function SubprocessInspectorCard({
     setModalInitial({
       department: detail.sp_department ?? "",
       assignee: detail.sp_assignee ?? "",
+      assignee_role: detail.sp_assignee_role ?? "",
       system: detail.sp_system ?? "",
       duration: detail.sp_duration ?? "",
       touch_time: detail.sp_touch_time ?? "",
@@ -227,6 +229,7 @@ export function SubprocessInspectorCard({
   const attrRows: { label: string; value: string | null | undefined }[] = [
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
+    { label: t("field.assigneeRole"), value: detail.sp_assignee_role },
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },

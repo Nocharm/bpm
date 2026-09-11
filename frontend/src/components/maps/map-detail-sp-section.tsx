@@ -31,6 +31,7 @@ import { FallbackHint } from "@/components/fallback-hint";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { PARAM_ICON } from "@/components/param-icons";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
+import { RoleChip } from "@/components/role-chip";
 import { SectionHeader } from "@/components/section-header";
 import type { MapDetail } from "@/lib/api";
 import { parseAssignees } from "@/lib/assignee";
@@ -170,6 +171,8 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const deptPrimary = lang === "ko" ? deptKorean || deptLeafName : deptLeafName;
   const deptSecondary = lang === "ko" ? (deptKorean !== "" ? deptLeafName : "") : deptKorean;
   const names = parseAssignees(str(detail.sp_assignee));
+  const role = str(detail.sp_assignee_role);
+  const assigneeFilled = names.length > 0 || role !== "";
   const url = str(detail.sp_url);
   const gmpText = detail.sp_gmp ? formatGmp(detail.sp_gmp) : "";
   const attrCount = [
@@ -350,20 +353,21 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                   <div className="relative h-32 @[40rem]:row-span-2 @[40rem]:h-auto">
                     <div
                       data-id="map-detail-sp-assignee"
-                      data-filled={names.length > 0 ? "true" : "false"}
-                      className={`absolute inset-0 flex flex-col gap-1.5 overflow-hidden rounded-sm border px-2.5 py-2 ${names.length > 0 ? FILLED_TONE : EMPTY_TONE}`}
+                      data-filled={assigneeFilled ? "true" : "false"}
+                      className={`absolute inset-0 flex flex-col gap-1.5 overflow-hidden rounded-sm border px-2.5 py-2 ${assigneeFilled ? FILLED_TONE : EMPTY_TONE}`}
                     >
                       {/* 담당자 미입력은 "Not set" 대신 짧은 대시 — 좁아진 열(1.28fr)에서 글자가 라벨을 밀지 않게 (사용자 지시 2026-09-10) */}
                       {vertHead(
                         Users,
                         t("field.assignee"),
-                        names.length > 0,
+                        assigneeFilled,
                         <span className="shrink-0 text-fine text-ink-tertiary">{t("home.assigneeCount", { n: names.length })}</span>,
                       )}
-                      {names.length > 0 && (
-                        <div className="min-h-0">
+                      {assigneeFilled && (
+                        <div className="flex min-h-0 flex-wrap items-start gap-1">
+                          {role !== "" && <RoleChip role={role} dataId="map-detail-sp-role-chip" />}
                           {/* 인물 필 — 호버 0.7초/클릭으로 인물 카드(이름·아이디·말단 부서·조직 경로), 줄바꿈 나열 */}
-                          <AssigneePills assignee={str(detail.sp_assignee)} dataIdPrefix="map-detail-sp" align="start" />
+                          {names.length > 0 && <AssigneePills assignee={str(detail.sp_assignee)} dataIdPrefix="map-detail-sp" align="start" />}
                         </div>
                       )}
                       {names.length > 0 && (

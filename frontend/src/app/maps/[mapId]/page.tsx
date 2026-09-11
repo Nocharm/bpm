@@ -10425,6 +10425,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 description={node.data.description}
                 color={node.data.color}
                 assignee={node.data.assignee}
+                assigneeRole={node.data.assignee_role ?? ""}
                 department={node.data.department}
                 system={node.data.system}
                 systemFallback={node.data.system_fallback ?? ""}
