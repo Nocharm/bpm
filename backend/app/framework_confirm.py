@@ -41,7 +41,7 @@ def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     node_sig = sorted(
         (
             n.source_node_id or n.id, n.title, n.description, n.node_type, n.color,
-            n.assignee, n.department, n.system, n.duration, n.touch_time,
+            n.assignee, n.assignee_role, n.department, n.system, n.duration, n.touch_time,
             n.cost_krw, n.cost_usd, n.headcount, n.annual_count, n.fte,
             n.input, n.output, n.input_forms, n.output_forms, n.gmp,
             n.start_condition, n.end_condition,

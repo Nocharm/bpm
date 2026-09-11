@@ -34,7 +34,7 @@ export interface ChangeSummary {
 // 엣지 비교는 별도 시그니처(buildEdgeSignatures)라 노드만 담는다. 좌표는 diff 제외 계약.
 // lineageById: 라이브 노드 id → 계보 루트(rootGraph의 source_node_id). 미전달이면 자기 id —
 // 게시본을 열어둔 일반 맵에서 스냅샷(클론) 계보와 짝이 안 맞아 전량 삭제+추가로 오탐된다 (2026-08-30 픽스).
-function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<string, string>): VersionGraph {
+export function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<string, string>): VersionGraph {
   const flat: FlatNode[] = nodes.map((node, index) => ({
     id: node.id,
     title: node.data.label,
@@ -42,6 +42,7 @@ function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<string, stri
     node_type: node.data.nodeType,
     color: node.data.color,
     assignee: node.data.assignee,
+    assignee_role: node.data.assignee_role ?? "",
     department: node.data.department,
     system: node.data.system,
     duration: node.data.duration,

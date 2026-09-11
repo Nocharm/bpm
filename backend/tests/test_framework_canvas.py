@@ -6,7 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.auth as auth_mod
+from app.framework_confirm import _canvas_content_signature
 from app.main import app
+from app.models import Node
 from app.settings import settings
 
 SYSADMIN = "fwc.sysadmin"
@@ -1118,3 +1120,44 @@ def test_framework_draft_visible_only_to_chain_admins(client: TestClient, enforc
     act_as(SYSADMIN)
     body = client.get(f"/api/maps/{map_id}").json()
     assert body["can_view_draft"] is True and "draft" in [v["status"] for v in body["versions"]]
+
+
+def _make_node(node_id: str, assignee_role: str) -> Node:
+    """시그니처 비교용 최소 Node — id 외 나머지는 두 인스턴스 간 동일하게 고정."""
+    return Node(
+        id=node_id,
+        title="Review",
+        description="",
+        node_type="process",
+        color="",
+        assignee="",
+        assignee_role=assignee_role,
+        department="",
+        system="",
+        duration="",
+        touch_time="",
+        cost_krw="",
+        cost_usd="",
+        headcount="",
+        annual_count="",
+        fte="",
+        input="",
+        output="",
+        input_forms="",
+        output_forms="",
+        gmp="",
+        start_condition="",
+        end_condition="",
+        linked_map_id=None,
+        follow_latest=True,
+        is_primary_end=False,
+        placeholder_category_id=None,
+        source_node_id=None,
+    )
+
+
+def test_canvas_content_signature_detects_assignee_role_only_change() -> None:
+    """역할만 다른 두 노드 집합은 다른 시그니처를 내야 한다 — 확정 게이트가 역할 변경을 놓치면 안 된다."""
+    base = [_make_node("n1", "")]
+    changed = [_make_node("n1", "Reviewer")]
+    assert _canvas_content_signature(base, []) != _canvas_content_signature(changed, [])

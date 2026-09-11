@@ -343,6 +343,7 @@ function buildAppNodes(
       nodeType: normalizeNodeType(m.node.node_type),
       color: m.node.color,
       assignee: m.node.assignee,
+      assignee_role: m.node.assignee_role ?? "",
       department: m.node.department,
       system: m.node.system,
       duration: m.node.duration,
@@ -2087,6 +2088,7 @@ function ComparePane({
                   {(
                     [
                       "assignee",
+                      "assignee_role",
                       "department",
                       "system",
                       "duration",
