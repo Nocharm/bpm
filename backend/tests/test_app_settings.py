@@ -160,22 +160,76 @@ def test_catalogs_default_has_other_only(client: TestClient) -> None:
     # 관리 목록 미설정 상태 — 역할은 빈 목록, 시스템은 예약 항목 Other만
     body = client.get("/api/catalogs").json()
     assert body["assignee_roles"] == []
-    assert body["systems"] == ["Other"]
+    assert body["systems"] == [{"value": "Other", "aliases": []}]
 
 
 def test_app_settings_managed_lists_roundtrip(client: TestClient) -> None:
     body = client.put(
         "/api/admin/app-settings",
-        json={"assignee_roles": [" 실험자 ", "검토자", "실험자", ""], "systems": ["lims", "LIMS", "SAP", "other"]},
+        json={
+            # 문자열(구 클라이언트)과 엔트리가 섞여도 전부 엔트리로 승격된다
+            "assignee_roles": [" 실험자 ", {"value": "검토자", "aliases": [" 리뷰어 ", "review", "리뷰어", "검토자"]}, "실험자", ""],
+            "systems": ["lims", {"value": "LIMS", "aliases": ["랩정보"]}, "SAP", {"value": "other", "aliases": ["기타"]}],
+        },
     ).json()
-    # trim·빈값 제거·대소문자 무시 중복 제거(첫 표기 유지), Other는 항상 맨 앞 1개
-    assert body["assignee_roles"] == ["실험자", "검토자"]
-    assert body["systems"] == ["Other", "lims", "SAP"]
+    # 값: trim·casefold 중복 제거(첫 표기). 별칭: trim·중복 제거·자기 값과 같은 별칭 제거
+    assert body["assignee_roles"] == [
+        {"value": "실험자", "aliases": []},
+        {"value": "검토자", "aliases": ["리뷰어", "review"]},
+    ]
+    # Other는 맨 앞·별칭 보존. 뒤에 온 LIMS 엔트리는 값 중복이라 통째로 버려진다(별칭도 승계 안 함)
+    assert body["systems"] == [
+        {"value": "Other", "aliases": ["기타"]},
+        {"value": "lims", "aliases": []},
+        {"value": "SAP", "aliases": []},
+    ]
     catalogs = client.get("/api/catalogs").json()
-    assert catalogs == {"assignee_roles": ["실험자", "검토자"], "systems": ["Other", "lims", "SAP"]}
-    # 빈 목록 저장 = 역할 없음 / 시스템은 Other만 남는다
+    assert catalogs["assignee_roles"] == body["assignee_roles"]
+    assert catalogs["systems"] == body["systems"]
     body = client.put("/api/admin/app-settings", json={"assignee_roles": [], "systems": []}).json()
-    assert body["assignee_roles"] == [] and body["systems"] == ["Other"]
+    assert body["assignee_roles"] == [] and body["systems"] == [{"value": "Other", "aliases": []}]
+
+
+def test_app_settings_alias_conflicts_prefer_values(client: TestClient) -> None:
+    """별칭 하나 → 정식 표기 하나: 다른 항목의 값·앞선 별칭과 겹치는 별칭은 버린다 (design 2026-09-12 §1)."""
+    body = client.put(
+        "/api/admin/app-settings",
+        json={
+            "assignee_roles": [
+                {"value": "Reviewer", "aliases": ["검토자", "approver"]},
+                {"value": "Approver", "aliases": ["승인자", "검토자"]},
+            ],
+        },
+    ).json()
+    assert body["assignee_roles"] == [
+        {"value": "Reviewer", "aliases": ["검토자"]},
+        {"value": "Approver", "aliases": ["승인자"]},
+    ]
+    client.put("/api/admin/app-settings", json={"assignee_roles": []})
+
+
+def test_app_settings_alias_cap_and_legacy_string_storage(client: TestClient) -> None:
+    """별칭 20개 상한 + 저장된 레거시 문자열 배열은 읽기 시 승격."""
+    import asyncio
+
+    from app.app_settings import ASSIGNEE_ROLES_KEY, set_app_setting
+    from app.db import SessionLocal
+
+    too_many = {"value": "Operator", "aliases": [f"a{i}" for i in range(25)]}
+    body = client.put("/api/admin/app-settings", json={"assignee_roles": [too_many]}).json()
+    assert len(body["assignee_roles"][0]["aliases"]) == 20
+
+    async def _seed_legacy() -> None:
+        async with SessionLocal() as session:
+            await set_app_setting(session, ASSIGNEE_ROLES_KEY, '["Legacy One", "Legacy Two"]', "test")
+            await session.commit()
+
+    asyncio.run(_seed_legacy())
+    assert client.get("/api/catalogs").json()["assignee_roles"] == [
+        {"value": "Legacy One", "aliases": []},
+        {"value": "Legacy Two", "aliases": []},
+    ]
+    client.put("/api/admin/app-settings", json={"assignee_roles": []})
 
 
 def test_app_settings_available_systems_lists_values_in_use(client: TestClient) -> None:

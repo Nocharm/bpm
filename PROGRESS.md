@@ -5,6 +5,7 @@
 
 ## 2026-09-12 — assignee_role/카탈로그 최종 픽스 웨이브 (dev)
 
+- **Task 1(catalog-alias-node-swap)**: 카탈로그 항목(`assignee_roles`/`systems`)이 `{value, aliases[]}` 엔트리로 승격 — `app_settings.py`에 `normalize_managed_entries`/`get_managed_entries`/`set_managed_entries` 추가(불변식 "별칭 하나 → 정식 표기 하나": 값이 별칭보다 우선, 겹치면 별칭 폐기, 항목당 20개 상한). `CatalogEntryIn`/`CatalogEntryOut` 스키마 신설, PUT은 구 문자열 페이로드도 그대로 받아 승격(`pw-smoke-assignee-role.mjs` 호환). `Other`는 저장된 별칭을 보존한 채 항상 0번. 전체 스위트 1475 green.
 - 전체 브랜치 리뷰에서 나온 잔여 6건 정리: `assignee_role`이 빠져 있던 비교/확정 시그니처 3곳(`change-summary-section.tsx` `buildLiveGraph`·`compare/page.tsx` `buildAppNodes`+인스펙터 행 목록·`backend/app/framework_confirm.py` `_canvas_content_signature`) — 역할만 바꿔도 확정 게이트가 안 걸리고 승인 탭 변경 요약이 매 노드를 오탐하던 문제. `SuggestInput` blur가 호버 중이던 항목을 커밋하던 버그(`settle(useHighlight)`로 분리, Enter만 하이라이트 반영). 스모크 스크립트(`pw-smoke-assignee-role.mjs`) 시드/정리 순서·에러 무시 정리, 홈 SP 섹션 attrCount 역할 단독 입력 카운트 누락 픽스.
 - 참고: `get_exposed_positions`는 공용 관리 목록 헬퍼(`normalize_managed_list`) 위로 재구현되며 대소문자 무시 중복 제거 + 항목 100자 컷이 붙었다 — spec §3.1 "동작 불변" 전제와 다른 미세 동작 변화(관리자가 대소문자만 다른 직책을 두 번 넣거나 100자 넘는 값을 넣는 극단 케이스에서만 관측).
 

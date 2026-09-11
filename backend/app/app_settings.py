@@ -18,6 +18,7 @@ SYSTEMS_KEY = "systems"
 OTHER_SYSTEM = "Other"
 MANAGED_LIST_MAX = 500
 MANAGED_ITEM_MAX_LEN = 100
+MANAGED_ALIASES_MAX = 20
 
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
 AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
@@ -95,23 +96,90 @@ async def set_managed_list(session: AsyncSession, key: str, values: list[str], u
     return cleaned
 
 
+def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
+    """카탈로그 엔트리 정규화 — str은 별칭 없는 엔트리로 승격. 값·별칭 모두 trim·100자·casefold 중복 제거.
+    불변식 "별칭 하나 → 정식 표기 하나": 값을 먼저 전부 확보하고, 별칭은 어떤 값(자기 포함)·앞선 별칭과
+    겹치면 버린다(값이 별칭보다 우선). 항목당 별칭 20개 (design 2026-09-12 §1)."""
+    taken: set[str] = set()
+    staged: list[tuple[str, list[object]]] = []
+    for raw in values:
+        if isinstance(raw, str):
+            value, aliases = raw, []
+        elif isinstance(raw, dict):
+            value = raw.get("value")
+            aliases_raw = raw.get("aliases")
+            aliases = aliases_raw if isinstance(aliases_raw, list) else []
+        else:
+            continue
+        if not isinstance(value, str):
+            continue
+        value = value.strip()[:MANAGED_ITEM_MAX_LEN]
+        if not value or value.casefold() in taken:
+            continue
+        taken.add(value.casefold())
+        staged.append((value, aliases))
+    out: list[dict[str, object]] = []
+    for value, aliases in staged:
+        cleaned: list[str] = []
+        for alias in aliases:
+            if not isinstance(alias, str):
+                continue
+            text = alias.strip()[:MANAGED_ITEM_MAX_LEN]
+            if not text or text.casefold() in taken:
+                continue
+            taken.add(text.casefold())
+            cleaned.append(text)
+            if len(cleaned) >= MANAGED_ALIASES_MAX:
+                break
+        out.append({"value": value, "aliases": cleaned})
+    return out
+
+
+async def get_managed_entries(session: AsyncSession, key: str) -> list[dict[str, object]]:
+    """엔트리 목록 — 레거시 문자열 배열도 승격해 돌려준다. 행 부재/파싱 불가/배열 아님이면 빈 목록."""
+    row = await session.get(AppSetting, key)
+    if row is None:
+        return []
+    try:
+        stored = json.loads(row.value)
+    except ValueError:
+        return []
+    if not isinstance(stored, list):
+        return []
+    return normalize_managed_entries(stored)
+
+
+async def set_managed_entries(
+    session: AsyncSession, key: str, values: list[object], user: str
+) -> list[dict[str, object]]:
+    cleaned = normalize_managed_entries(list(values))[:MANAGED_LIST_MAX]
+    await set_app_setting(session, key, json.dumps(cleaned, ensure_ascii=False), user)
+    return cleaned
+
+
 async def get_exposed_positions(session: AsyncSession) -> list[str]:
     """노출 직책 allowlist — 저장된 빈 목록은 그대로(전부 비노출은 유효한 관리자 의도)."""
     return await get_managed_list(session, EXPOSED_POSITIONS_KEY, DEFAULT_EXPOSED_POSITIONS)
 
 
-async def get_assignee_roles(session: AsyncSession) -> list[str]:
-    return await get_managed_list(session, ASSIGNEE_ROLES_KEY, [])
+async def get_assignee_roles(session: AsyncSession) -> list[dict[str, object]]:
+    return await get_managed_entries(session, ASSIGNEE_ROLES_KEY)
 
 
-def ensure_other_first(systems: list[str]) -> list[str]:
-    """예약 항목 불변식 — Other는 항상 1개, 맨 앞."""
-    rest = [s for s in systems if s.casefold() != OTHER_SYSTEM.casefold()]
-    return [OTHER_SYSTEM, *rest]
+def ensure_other_first(entries: list[dict[str, object]]) -> list[dict[str, object]]:
+    """예약 항목 불변식 — Other는 항상 1개, 맨 앞. 저장된 Other 엔트리가 있으면 별칭을 보존한다."""
+    other: dict[str, object] = {"value": OTHER_SYSTEM, "aliases": []}
+    rest: list[dict[str, object]] = []
+    for entry in entries:
+        if str(entry["value"]).casefold() == OTHER_SYSTEM.casefold():
+            other = {"value": OTHER_SYSTEM, "aliases": entry["aliases"]}
+        else:
+            rest.append(entry)
+    return [other, *rest]
 
 
-async def get_systems(session: AsyncSession) -> list[str]:
-    return ensure_other_first(await get_managed_list(session, SYSTEMS_KEY, []))
+async def get_systems(session: AsyncSession) -> list[dict[str, object]]:
+    return ensure_other_first(await get_managed_entries(session, SYSTEMS_KEY))
 
 
 async def get_ai_chat_tips(session: AsyncSession) -> list[str]:

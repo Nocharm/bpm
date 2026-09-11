@@ -2005,6 +2005,20 @@ class EligibleAssigneesOut(BaseModel):
 AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
 
 
+class CatalogEntryIn(BaseModel):
+    """카탈로그 항목 — 정식 표기 + 별칭(검색·입력 시 정식 표기로 치환) (design 2026-09-12 §1)."""
+
+    value: str = Field(min_length=1, max_length=100)
+    # 개수 상한은 pydantic이 아니라 서버 정규화(normalize_managed_entries)가 집행 — 422 대신
+    # 초과분을 조용히 잘라 저장한다(레거시 대량 데이터 유입 시에도 요청 자체는 성공해야 함)
+    aliases: list[str] = Field(default_factory=list)
+
+
+class CatalogEntryOut(BaseModel):
+    value: str
+    aliases: list[str] = []
+
+
 class AppSettingsOut(BaseModel):
     """앱 런타임 설정 — AI 챗 기능 팁 + 대화 보존 상한 + 노출 직책 allowlist."""
 
@@ -2018,9 +2032,9 @@ class AppSettingsOut(BaseModel):
     exposed_positions: list[str] = []
     # employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
     available_positions: list[str] = []
-    # 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션 (design 2026-09-11 §3.1)
-    assignee_roles: list[str] = []
-    systems: list[str] = []
+    # 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션 + 별칭 (design 2026-09-11 §3.1, 2026-09-12 §1)
+    assignee_roles: list[CatalogEntryOut] = []
+    systems: list[CatalogEntryOut] = []
     # nodes.system ∪ process_maps.sp_system distinct — 관리자가 사용 중 값을 목록으로 승격하는 후보(읽기전용)
     available_systems: list[str] = []
     updated_by: str | None = None
@@ -2038,15 +2052,16 @@ class AppSettingsUpdate(BaseModel):
     # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
     exposed_positions: list[str] | None = Field(default=None, max_length=50)
     # 관리 목록 — 서버가 trim·중복 제거·100자 컷. 빈 목록 저장 허용(시스템은 Other만 남는다)
-    assignee_roles: list[str] | None = Field(default=None, max_length=500)
-    systems: list[str] | None = Field(default=None, max_length=500)
+    # 문자열은 별칭 없는 엔트리로 승격(구 클라이언트·스크립트 호환)
+    assignee_roles: list[CatalogEntryIn | str] | None = Field(default=None, max_length=500)
+    systems: list[CatalogEntryIn | str] | None = Field(default=None, max_length=500)
 
 
 class CatalogsOut(BaseModel):
     """관리 목록 읽기 — 로그인 유저 전원(에디터 자동완성 소스). 편집은 /admin/app-settings(sysadmin)."""
 
-    assignee_roles: list[str]
-    systems: list[str]
+    assignee_roles: list[CatalogEntryOut]
+    systems: list[CatalogEntryOut]
 
 
 class AiPromptOut(BaseModel):

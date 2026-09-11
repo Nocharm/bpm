@@ -14,7 +14,6 @@ from app.app_settings import (
     AI_CHAT_TIPS_KEY,
     ASSIGNEE_ROLES_KEY,
     EXPOSED_POSITIONS_KEY,
-    OTHER_SYSTEM,
     SYSTEMS_KEY,
     get_ai_chat_max_messages,
     get_ai_chat_max_sessions,
@@ -25,12 +24,12 @@ from app.app_settings import (
     get_exposed_positions,
     get_systems,
     set_app_setting,
-    set_managed_list,
+    set_managed_entries,
 )
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
 from app.models import AppSetting, Employee, Node, ProcessMap
-from app.schemas import AppSettingsOut, AppSettingsUpdate
+from app.schemas import AppSettingsOut, AppSettingsUpdate, CatalogEntryIn
 
 router = APIRouter(
     prefix="/api",
@@ -108,11 +107,12 @@ async def put_app_settings(
         positions = [p.strip() for p in payload.exposed_positions if p.strip()]
         await set_app_setting(session, EXPOSED_POSITIONS_KEY, json.dumps(positions), user)
     if payload.assignee_roles is not None:
-        await set_managed_list(session, ASSIGNEE_ROLES_KEY, payload.assignee_roles, user)
+        await set_managed_entries(
+            session, ASSIGNEE_ROLES_KEY, [_entry_payload(e) for e in payload.assignee_roles], user
+        )
     if payload.systems is not None:
-        # Other는 저장값에서 빼고 읽기 시 보강 — 관리자가 지워도 목록에서 사라지지 않는다
-        systems = [s for s in payload.systems if s.strip().casefold() != OTHER_SYSTEM.casefold()]
-        await set_managed_list(session, SYSTEMS_KEY, systems, user)
+        # Other는 값 잠금·별칭 허용 — 저장은 그대로 두고 읽기(get_systems)가 맨 앞으로 옮긴다
+        await set_managed_entries(session, SYSTEMS_KEY, [_entry_payload(e) for e in payload.systems], user)
     for key, value in (
         (AI_CHAT_MAX_SESSIONS_KEY, payload.ai_chat_max_sessions_per_map),
         (AI_CHAT_MAX_MESSAGES_KEY, payload.ai_chat_max_messages_per_session),
@@ -127,3 +127,8 @@ async def put_app_settings(
         )
     await session.commit()
     return await _to_out(session)
+
+
+def _entry_payload(entry: "CatalogEntryIn | str") -> object:
+    """PUT 페이로드 항목 → 정규화 입력(str 그대로 / 모델은 dict)."""
+    return entry if isinstance(entry, str) else entry.model_dump()
