@@ -1,5 +1,6 @@
 // 대시보드 컴팩트 맵 행 — 섹션 안의 평면 행(구분선). 상태 점이 맨 앞, 제목 톤다운, SP 아이콘(맵 카드와 동일)은 제목 바로 뒤,
-// 우측 메타. hover 시 열기 버튼이 지연 후 폭을 벌리며 등장(우측 항목이 밀림, 맵 카드 열기 필과 같은 디자인). 클릭은 선택.
+// 우측 메타. hover 시 열기 버튼이 지연 후 폭을 벌리며 등장(우측 항목이 밀림, 맵 카드 열기 필과 같은 디자인).
+// 행 클릭(카드 선택)과 열기(에디터 이동) 모두 0.6초 지연 실행 — 상태 점/열기 아이콘 자리에 링, 다시 클릭하면 취소.
 "use client";
 
 import { ArrowUpRight, Workflow } from "lucide-react";
@@ -8,6 +9,7 @@ import Link from "next/link";
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { HOVER_LINKED_CLASS, useHoverMap } from "@/components/maps/dashboard-hover";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_TONE } from "@/lib/version-status";
 import { NavRing } from "@/components/nav-ring";
 import { Tooltip } from "@/components/tooltip";
@@ -20,17 +22,29 @@ interface DashboardMapRowProps {
 
 export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
   const { t } = useI18n();
-  const { pending, toggle } = useDelayedNav();
+  const { pending, toggle, toggleAction } = useDelayedNav();
   const href = `/maps/${map.id}`;
   const navigating = pending === href;
+  const selectKey = `select:${map.id}`;
+  const selecting = pending === selectKey;
+  const { linked, handlers } = useHoverMap(map.id);
   return (
     <div
       data-id="dashboard-map-row"
-      onClick={(e) => { e.stopPropagation(); onSelect(map.id); }}
-      className="group flex cursor-pointer items-center gap-2 border-t border-divider px-3 py-1.5 hover:bg-surface-pearl"
+      onClick={(e) => { e.stopPropagation(); toggleAction(selectKey, () => onSelect(map.id)); }}
+      {...handlers}
+      data-map-id={map.id}
+      data-linked={linked || undefined}
+      data-selecting={selecting || undefined}
+      title={selecting ? t("home.dash.navCancel") : undefined}
+      className={`group flex cursor-pointer items-center gap-2 border-t border-divider px-3 py-1.5 transition-colors duration-150 hover:bg-surface-pearl ${
+        selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
+      }`}
     >
-      {/* 상태 점은 맨 앞 — 스캔할 때 상태→이름 순으로 읽힌다 (사용자 지시 2026-09-11) */}
-      {map.latest_version_status ? (
+      {/* 상태 점은 맨 앞 — 스캔할 때 상태→이름 순으로 읽힌다 (사용자 지시 2026-09-11). 선택 대기 중엔 이 자리가 링 */}
+      {selecting ? (
+        <NavRing size={10} />
+      ) : map.latest_version_status ? (
         <Tooltip label={VERSION_STATUS_LABEL_EN[map.latest_version_status]}>
           <span
             data-id="dashboard-map-status"

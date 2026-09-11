@@ -29,7 +29,8 @@ export function DashboardProfile({ me, activity, onFilterMine }: DashboardProfil
   const { t } = useI18n();
   const segments = (me.org_path ?? "").split("/").filter(Boolean);
   const leaf = segments.at(-1) ?? me.department;
-  const parents = segments.slice(0, -1).join(" / ");
+  // 전체 경로는 필의 title로만 — 긴 경로가 이름 아래 한 줄을 차지하지 않게 말단만 필 (사용자 지시 2026-09-11)
+  const fullPath = segments.join(" / ");
   const isFrameworkAdmin = (me.category_admin_root_ids?.length ?? 0) > 0;
   const unread = activity?.unread_notifications ?? 0;
   const { pending, toggle } = useDelayedNav();
@@ -53,14 +54,20 @@ export function DashboardProfile({ me, activity, onFilterMine }: DashboardProfil
           )}
         </div>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[13px] text-ink-tertiary">
-          <Building2 size={14} strokeWidth={1.5} className="shrink-0" />
           {leaf ? (
-            <span className="truncate">
-              {parents && <>{parents} / </>}
-              <span className="font-semibold text-ink-secondary">{leaf}</span>
+            <span
+              data-id="home-profile-dept"
+              title={fullPath || leaf}
+              className="inline-flex h-5 min-w-0 max-w-64 items-center gap-1 rounded-full border border-hairline bg-surface-alt px-1.5 text-[11px] font-semibold text-ink-secondary"
+            >
+              <Building2 size={11} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{leaf}</span>
             </span>
           ) : (
-            <span>{t("home.dash.noDepartment")}</span>
+            <span className="inline-flex items-center gap-1">
+              <Building2 size={14} strokeWidth={1.5} className="shrink-0" />
+              {t("home.dash.noDepartment")}
+            </span>
           )}
           <span className="text-ink-muted">·</span>
           <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-ink-muted">

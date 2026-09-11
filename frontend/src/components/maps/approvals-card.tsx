@@ -10,6 +10,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { useAgo } from "@/lib/use-ago";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
 import { SkeletonLine } from "@/components/skeleton";
 
@@ -79,12 +80,12 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
           {items.slice(0, ROW_CAP).map((a) => {
             const k = resolveKind(a);
             return (
-              <button
+              <HoverLinkedRow
                 key={`${a.kind}:${a.id}`}
-                type="button"
-                data-id={`home-approval-${a.kind}-${a.id}`}
-                onClick={(e) => { e.stopPropagation(); onSelect(a.map_id); }}
-                className="flex w-full items-center gap-2 border-t border-divider px-3 py-1.5 text-left hover:bg-surface-pearl"
+                mapId={a.map_id}
+                dataId={`home-approval-${a.kind}-${a.id}`}
+                onClick={() => onSelect(a.map_id)}
+                className="flex w-full items-center gap-2 border-t border-divider px-3 py-1.5 text-left"
               >
                 <span className={`inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1.5 text-[11px] font-semibold ${k.cls}`}>
                   {k.icon}
@@ -94,7 +95,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
                 <span className="max-w-[30%] shrink-0 truncate text-fine text-ink-secondary">{dir.get(a.requester)?.name ?? a.requester}</span>
                 {a.version_number != null && <span className="shrink-0 text-fine text-ink-tertiary">v{a.version_number}</span>}
                 <span className="shrink-0 text-fine text-ink-tertiary">{ago(a.created_at)}</span>
-              </button>
+              </HoverLinkedRow>
             );
           })}
           {items.length > ROW_CAP && <DashboardFoot label={pending === "/inbox" ? t("home.dash.navPending", { dest: t("home.dash.destInbox") }) : t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}

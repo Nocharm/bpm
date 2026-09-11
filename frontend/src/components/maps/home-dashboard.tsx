@@ -9,6 +9,7 @@ import { getMeDashboard, type MapSummary, type Me, type MeDashboard, type Versio
 import { useI18n } from "@/lib/i18n";
 import { ApprovalsCard } from "@/components/maps/approvals-card";
 import { DashboardActivityTiles } from "@/components/maps/dashboard-activity-tiles";
+import { HoverMapProvider } from "@/components/maps/dashboard-hover";
 import { DashboardProfile } from "@/components/maps/dashboard-profile";
 import { DeptMapsCard } from "@/components/maps/dept-maps-card";
 import { FrameworkCard } from "@/components/maps/framework-card";
@@ -46,6 +47,7 @@ export function HomeDashboard({
   // 비권한자용 체계 경로 — 내 부서 맵 중 카테고리 연결된 첫 맵의 경로
   const crumb = myDeptMaps.find((m) => m.category_path)?.category_path ?? null;
   return (
+    <HoverMapProvider>
     <div data-id="home-dashboard" className="scrollbar-hidden @container flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
       {/* 프로필+활동 타일은 sticky — 아래 섹션이 뒤로 지나갈 때 반투명+약한 블러로 초점을 흐리고, 하단 그라데이션으로 경계를 녹인다 */}
       <div
@@ -74,5 +76,6 @@ export function HomeDashboard({
         <RecentOpenedList maps={maps} onSelect={onSelect} onEmptyAction={myDeptMaps.length > 0 ? onShowInTree : undefined} />
       </div>
     </div>
+    </HoverMapProvider>
   );
 }

@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 대시보드 후속 4종 + 지연 0.6초·행 선택 지연 (dev)
+
+- **프로필 부서**: 긴 조직 경로 대신 말단 부서만 무채색 필(전체 경로는 title). **최근 변경 행**: 조각(유저 필·맵 이름·버전 칩·글자)을 flex items-center로 세로 중앙 정렬(실측 중심 y 전부 동일), 맵 이름만 말줄임·버전 칩은 안쪽 span 말줄임.
+- **섹션 간 맵 호버 연동** `dashboard-hover.tsx`(Provider+`useHoverMap`): 맵 행·최근 변경·결재·점유 행이 같은 맵이면 함께 `bg-surface-alt` 강조(pearl은 실측상 안 보여 한 단계 진하게). 버튼 행은 `HoverLinkedRow`로 통일(`data-map-id`·`data-linked`).
+- **SP 섹션**: 빈 값 표기를 전부 짧은 대시(`–`)로, 부서 타일은 값 유무와 무관하게 머리 행+아래 DeptPill(block, fill 제거) — 담당자 타일과 좌표·높이 동일(실측 top·height 일치).
+- **지연 실행**: `NAV_DELAY_MS` 1000→600(CSS 링 동기), 훅에 `toggleAction(key, run)` 추가 — 맵 행 클릭(카드 선택)·결재/점유/최근 변경 행 클릭도 0.6초 대기 후 선택, 재클릭 취소(맵 행은 상태 점 자리, 버튼 행은 좌측 가장자리에 링 + 행 틴트). 실측: 행 취소 후 대시보드 유지·선택 807ms·알림 이동 730ms(클릭 왕복 포함).
+
 ## 2026-09-11 — 1클릭 지연 이동 (dev)
 
 - **이동 메뉴 폐기 → 지연 이동**: 활동 타일(결재·요청·미읽음·피드백)·프로필 알림/체계 설정/설정 버튼·결재 카드 링크아웃·대시보드 맵 행/맵 카드의 "열기"가 클릭 즉시 `router.prefetch` 후 1초 카운트다운 링(`components/nav-ring.tsx`, `NAV_DELAY_MS`=CSS 1000ms)으로 바뀌고 이동, 그 사이 다시 클릭하면 취소. `lib/use-delayed-nav.ts` — 전역 단일 대기(다른 대상 시작 시 이전 취소), 언마운트 시 폐기, 새 탭 modifier는 브라우저 기본. 열기 버튼은 대기 중 호버가 끝나도 열린 채 유지.

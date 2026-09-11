@@ -11,6 +11,7 @@ import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { useAgo } from "@/lib/use-ago";
+import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { DashboardEmpty, DashboardSection } from "@/components/maps/dashboard-section";
 import { SkeletonLine } from "@/components/skeleton";
 import { Tooltip } from "@/components/tooltip";
@@ -29,11 +30,14 @@ const EVENT_STYLE: Record<string, { chip: string; icon: ReactNode; key: MessageK
 };
 const UNKNOWN_CHIP = "border-hairline bg-surface text-ink-tertiary";
 
-// "{actor} ... {map} {version}" 템플릿을 토큰 자리마다 노드로 치환 — 언어별 어순은 메시지가 정하고, 스타일은 여기서 입힌다
+// "{actor} ... {map} {version}" 템플릿을 토큰 자리마다 노드로 치환 — 언어별 어순은 메시지가 정하고, 스타일은 여기서 입힌다.
+// 행이 flex(items-center)라 글자 조각도 항목으로 감싼다 — 필·칩과 세로 중앙이 맞고, 맵 이름만 말줄임된다
 function renderTemplate(template: string, parts: Record<string, ReactNode>): ReactNode[] {
   return template.split(/(\{actor\}|\{map\}|\{version\})/).map((seg, i) => {
     const token = seg.startsWith("{") ? seg.slice(1, -1) : null;
-    return token && token in parts ? <span key={i}>{parts[token]}</span> : seg;
+    if (token && token in parts) return <span key={i} className="contents">{parts[token]}</span>;
+    const text = seg.trim();
+    return text === "" ? null : <span key={i} className="shrink-0 whitespace-nowrap">{text}</span>;
   });
 }
 
@@ -62,37 +66,41 @@ export function RecentEventsCard({ events, onSelect }: RecentEventsCardProps) {
           const versionText = e.version_number != null ? `v${e.version_number}` : e.version_label;
           const parts: Record<string, ReactNode> = {
             actor: (
-              <span data-id="dashboard-event-actor" className="inline-flex items-center gap-0.5 rounded-full bg-surface-alt px-1.5 py-px align-[1px] text-[11px] font-semibold text-ink-secondary">
+              <span data-id="dashboard-event-actor" className="inline-flex h-[18px] shrink-0 items-center gap-0.5 rounded-full bg-surface-alt px-1.5 text-[11px] font-semibold text-ink-secondary">
                 <User size={10} strokeWidth={2} />
                 {actorName}
               </span>
             ),
-            map: <b data-id="dashboard-event-map" className="font-semibold text-ink">{e.map_name}</b>,
+            map: <b data-id="dashboard-event-map" className="min-w-0 truncate font-semibold text-ink">{e.map_name}</b>,
             version: (
               // 라벨형 버전("Release 6 …")은 칩 안에서 자르고 뒤의 동사는 남긴다
-              <span data-id="dashboard-event-version" title={versionText} className="inline-block max-w-24 truncate rounded-[4px] border border-hairline bg-surface px-1 align-[-3px] text-[11px] tabular-nums text-ink-tertiary">
-                {versionText}
+              <span data-id="dashboard-event-version" title={versionText} className="inline-flex h-[18px] max-w-24 shrink-0 items-center rounded-[4px] border border-hairline bg-surface px-1 text-[11px] tabular-nums text-ink-tertiary">
+                {/* 말줄임은 안쪽 span에 — flex 컨테이너 자체엔 text-overflow가 안 먹는다 */}
+                <span className="truncate">{versionText}</span>
               </span>
             ),
           };
           return (
-            <button
+            <HoverLinkedRow
               key={`${e.version_id}-${e.event_type}-${e.created_at}`}
-              type="button"
-              data-id="dashboard-event-row"
-              data-event={e.event_type}
-              onClick={(ev) => { ev.stopPropagation(); onSelect(e.map_id); }}
-              className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-divider px-3 py-1.5 text-left hover:bg-surface-pearl"
+              mapId={e.map_id}
+              dataId="dashboard-event-row"
+              extraData={{ "data-event": e.event_type }}
+              onClick={() => onSelect(e.map_id)}
+              className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-divider px-3 py-1.5 text-left"
             >
-              <span className="min-w-0 truncate text-[13px] leading-5 text-ink-secondary">
+              {/* 조각(필·이름·칩·글자)을 한 줄 flex로 세로 중앙 정렬 — 이름만 말줄임, 메모는 남는 폭에서 말줄임 */}
+              <span className="flex min-w-0 items-center gap-1 text-[13px] leading-5 text-ink-secondary">
                 {style ? (
                   renderTemplate(t(style.key), parts)
                 ) : (
                   <>
-                    {parts.map} {parts.version} · {e.event_type}
+                    {parts.map}
+                    {parts.version}
+                    <span className="shrink-0">· {e.event_type}</span>
                   </>
                 )}
-                {e.note && <span className="text-ink-tertiary"> — “{e.note}”</span>}
+                {e.note && <span className="min-w-0 truncate text-ink-tertiary">— “{e.note}”</span>}
               </span>
               <span className="text-[11px] text-ink-tertiary">{ago(e.created_at)}</span>
               {/* 이벤트 종류 — 행 끝 아이콘 칩(사용자 지시 2026-09-11: 액션 아이콘은 내용 끝단) */}
@@ -101,7 +109,7 @@ export function RecentEventsCard({ events, onSelect }: RecentEventsCardProps) {
                   {style?.icon ?? <GitCommit size={11} strokeWidth={1.8} />}
                 </span>
               </Tooltip>
-            </button>
+            </HoverLinkedRow>
           );
         })
       )}

@@ -80,6 +80,8 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   };
 
   const notSet = t("sp.tile.notSet");
+  // 빈 값 표기는 전부 짧은 대시 — 좁은 열에서 "미입력" 글자가 라벨을 밀지 않게, 담당자 타일과 통일 (사용자 지시 2026-09-11)
+  const EMPTY_DASH = "–";
 
   // 원문 메모가 있는 타일 — 아이콘에 점, 호버 시 메모 아이콘으로 스왑, 클릭=원문 팝오버(읽기). 없으면 기본 아이콘.
   // 대표값이 없고 메모만 있으면 아이콘 톤도 임시값(tertiary)
@@ -119,7 +121,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
         valueTone={shown.tone}
         valueSize={isFallback ? "fine" : undefined}
         labelFixed={isFallback}
-        placeholder={notSet}
+        placeholder={EMPTY_DASH}
         readOnly
       />
     );
@@ -139,8 +141,8 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
     </button>
   );
 
-  // 세로 타일 머리 행 — 아이콘 + 라벨 (+ 우측 슬롯). 값이 없으면 우측에 "미입력"(emptyText로 대체 가능)
-  const vertHead = (icon: LucideIcon, label: string, filled: boolean, right?: ReactNode, emptyText = notSet) => {
+  // 세로 타일 머리 행 — 아이콘 + 라벨 (+ 우측 슬롯). 값이 없으면 우측에 짧은 대시
+  const vertHead = (icon: LucideIcon, label: string, filled: boolean, right?: ReactNode, emptyText = EMPTY_DASH) => {
     const Icon = icon;
     return (
       <div className="flex shrink-0 items-center gap-2">
@@ -324,23 +326,26 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
               <div className="ml-2 border-l border-divider pl-2">
                 {/* 열 비율 — 부서 1.75 : 담당자 1.28(이전 1.5의 85%) : 시스템 스택 3 (사용자 지시 2026-09-10) */}
                 <div className="grid grid-cols-2 gap-1.5 py-1 @[40rem]:grid-cols-[1.75fr_1.28fr_3fr] @[40rem]:grid-rows-[repeat(2,auto)]">
-                  {/* 부서는 값이 있으면 필 자체가 타일(헤더 생략) — 없을 때만 비활성 헤더 타일 (사용자 지시 2026-09-09).
-                      자연 높이라 긴 부서명이 다 보이고, 행 높이를 이 타일이 정한다(담당자는 그 높이에 맞춰 클립) */}
-                  <div className="flex @[40rem]:row-span-2" data-id="map-detail-sp-department" data-filled={deptPath !== "" ? "true" : "false"}>
-                    {deptPath !== "" ? (
-                      // 저장값(리프명) 그대로 넘긴다 — 필의 고아 판정은 유효 리프 집합과 저장값을 대조하므로
-                      // 해석된 슬래시 경로를 주면 정상 부서도 늘 경고로 떴다(2026-09-10). 경로 해석은 필이 다시 한다
-                      <DeptPill
-                        department={deptPath}
-                        label={deptPrimary}
-                        subLabel={deptSecondary || undefined}
-                        variant="block"
-                        fill
-                        dataId="map-detail-sp-department-pill"
-                      />
-                    ) : (
-                      <div className={`flex min-w-0 flex-1 flex-col gap-1.5 rounded-sm border px-2.5 py-2 ${EMPTY_TONE}`}>
-                        {vertHead(Building2, t("field.department"), false)}
+                  {/* 부서 타일은 값 유무와 무관하게 같은 틀(머리 행 + 아래 필) — 담당자 타일과 위치·크기 통일 (사용자 지시 2026-09-11,
+                      이전엔 값이 있으면 필이 타일을 통째로 대체해 미묘하게 어긋났다). 자연 높이라 긴 부서명이 다 보이고,
+                      행 높이를 이 타일이 정한다(담당자는 그 높이에 맞춰 클립) */}
+                  <div
+                    className={`flex min-w-0 flex-col gap-1.5 rounded-sm border px-2.5 py-2 @[40rem]:row-span-2 ${deptPath !== "" ? FILLED_TONE : EMPTY_TONE}`}
+                    data-id="map-detail-sp-department"
+                    data-filled={deptPath !== "" ? "true" : "false"}
+                  >
+                    {vertHead(Building2, t("field.department"), deptPath !== "")}
+                    {deptPath !== "" && (
+                      <div className="flex min-w-0">
+                        {/* 저장값(리프명) 그대로 넘긴다 — 필의 고아 판정은 유효 리프 집합과 저장값을 대조하므로
+                            해석된 슬래시 경로를 주면 정상 부서도 늘 경고로 떴다(2026-09-10). 경로 해석은 필이 다시 한다 */}
+                        <DeptPill
+                          department={deptPath}
+                          label={deptPrimary}
+                          subLabel={deptSecondary || undefined}
+                          variant="block"
+                          dataId="map-detail-sp-department-pill"
+                        />
                       </div>
                     )}
                   </div>
@@ -356,7 +361,6 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                         t("field.assignee"),
                         names.length > 0,
                         <span className="shrink-0 text-fine text-ink-tertiary">{t("home.assigneeCount", { n: names.length })}</span>,
-                        "–",
                       )}
                       {names.length > 0 && (
                         <div className="min-h-0">

@@ -10,6 +10,7 @@ import type { MeDashboard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAgo } from "@/lib/use-ago";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { NavRing } from "@/components/nav-ring";
 import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
 
@@ -111,10 +112,10 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
         <ul data-id="home-activity-checkout-list" className="flex flex-col rounded-sm border border-hairline bg-surface">
           {data.checkouts.map((c) => (
             <li key={c.version_id}>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onSelect(c.map_id); }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-pearl [li+li>&]:border-t [li+li>&]:border-divider"
+              <HoverLinkedRow
+                mapId={c.map_id}
+                onClick={() => onSelect(c.map_id)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left [li+li>&]:border-t [li+li>&]:border-divider"
               >
                 <Lock size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <span className="min-w-0 flex-1 truncate text-caption text-ink">{c.map_name}</span>
@@ -123,7 +124,7 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
                   <span className="shrink-0 text-fine font-semibold text-warn">{t("home.dash.checkoutWaiting", { n: c.waiting_requests })}</span>
                 )}
                 <span className="shrink-0 text-fine text-ink-tertiary">{ago(c.checked_out_at)}</span>
-              </button>
+              </HoverLinkedRow>
             </li>
           ))}
         </ul>
