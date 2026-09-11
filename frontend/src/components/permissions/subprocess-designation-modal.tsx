@@ -37,6 +37,8 @@ import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { CostUnitTabs, CurrencyPill, type CostUnit } from "@/components/cost-unit";
+import { SystemSuggestInput } from "@/components/system-suggest-input";
+import { formatSystem } from "@/lib/catalogs";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -140,6 +142,7 @@ interface ActiveTile {
   note: string;
   extra: string; // url 라벨 / IO 폼 join
   unit: CostUnit; // 비용 타일의 통화 탭
+  keptNote?: boolean; // 시스템 자유값 커밋에서 기존 원문 메모를 유지했다 — 팝오버 안내문
 }
 
 const INPUT_CLASS =
@@ -230,10 +233,11 @@ export function SubprocessDesignationModal({
       case "headcount":
       case "annual_count":
       case "fte":
-      case "system":
       case "start_condition":
       case "end_condition":
         return form[field];
+      case "system":
+        return formatSystem(form.system, t("system.other"));
       case "url":
         return form.url.trim() ? form.urlLabel.trim() || form.url.trim() : "";
       case "input":
@@ -453,11 +457,27 @@ export function SubprocessDesignationModal({
         {sumField && preview && (
           <p className="text-fine text-ink-tertiary">{t("sp.tile.sumPreview", { v: preview })}</p>
         )}
-        {(field === "system" || field === "start_condition" || field === "end_condition") && (
+        {field === "system" && (
+          <div className="flex flex-col gap-1">
+            <SystemSuggestInput
+              mode="field"
+              autoFocus
+              dataId="sp-tile-input-system"
+              system={active.value}
+              systemFallback={active.note}
+              onCommit={(patch, keptNote) =>
+                setActive((prev) => (prev ? { ...prev, value: patch.system, note: patch.system_fallback, keptNote } : prev))
+              }
+            />
+            {active.keptNote && (
+              <p data-id="sp-tile-system-kept-note" className="text-fine text-ink-tertiary">{t("catalog.systemKeptNote")}</p>
+            )}
+          </div>
+        )}
+        {(field === "start_condition" || field === "end_condition") && (
           <input
             data-id={`sp-tile-input-${field}`}
             className={INPUT_CLASS}
-            maxLength={field === "system" ? 100 : undefined}
             value={active.value}
             onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
           />

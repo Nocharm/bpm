@@ -51,10 +51,12 @@ import { SpFieldPopover } from "@/components/permissions/sp-field-popover";
 import { SpFieldTile } from "@/components/permissions/sp-field-tile";
 import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { ScopePreview } from "@/components/scope-preview";
+import { SystemSuggestInput } from "@/components/system-suggest-input";
 import { createComment, listComments, type CommentItem, type VersionGraph } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { formatAssignees, parseAssignees } from "@/lib/assignee";
 import { NODE_TYPE_OPTIONS, type ProcessNodeType } from "@/lib/canvas";
+import { commitSystem, formatSystem, useCatalogs } from "@/lib/catalogs";
 import { formatThousands } from "@/lib/duration";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
@@ -344,6 +346,7 @@ interface ActiveTile {
   ids: string; // 아웃풋 원본 id 열
   unit: CostUnit; // 비용 타일의 통화 탭
   readOnly: boolean; // 열람 전용(입출력 목록 보기)
+  keptNote?: boolean; // 시스템 자유값 커밋에서 기존 원문 메모를 유지했다 — 팝오버 안내문
 }
 type TileDraft = Pick<ActiveTile, "value" | "note" | "extra" | "links" | "flags" | "ids" | "unit">;
 
@@ -549,6 +552,7 @@ export function NodeSummaryModal({
   onOpenChild,
 }: NodeSummaryModalProps) {
   const { t } = useI18n();
+  const { systems: systemCatalog } = useCatalogs();
   const isSp = nodeType === "subprocess";
   const labels = buildPopoverActionLabels(t);
   // 독 카드의 타입 표기 — 캔버스 노드 타입 옵션과 같은 번역 키
@@ -752,10 +756,11 @@ export function NodeSummaryModal({
           : formatThousands(form[costUnitOf(form)]);
       case "annual_count":
       case "fte":
-      case "system":
       case "start_condition":
       case "end_condition":
         return form[field];
+      case "system":
+        return formatSystem(form.system, t("system.other"));
       case "url":
         return form.url.trim() ? form.urlLabel.trim() || form.url.trim() : "";
       case "input":
@@ -805,7 +810,14 @@ export function NodeSummaryModal({
           padded={false}
           restClassName={rest}
           onSaveFallback={readOnly ? undefined : (text) => patchLive({ system_fallback: text })}
-          onApply={readOnly ? undefined : () => patchLive({ system: form.system_fallback.slice(0, 100) })}
+          onApply={
+            readOnly
+              ? undefined
+              : () => {
+                  const r = commitSystem(form.system_fallback, systemCatalog, form.system_fallback);
+                  patchLive({ system: r.system, system_fallback: r.system_fallback });
+                }
+          }
         />
       );
     }
@@ -850,7 +862,7 @@ export function NodeSummaryModal({
 
   const spDept = sp?.department ?? "";
   const spAssignee = formatAssignees(parseAssignees(sp?.assignee ?? ""));
-  const spSystem = sp?.system ?? "";
+  const spSystem = formatSystem(sp?.system ?? "", t("system.other"));
   const spUrl = (sp?.url ?? "").trim() ? (sp?.url_label ?? "").trim() || (sp?.url ?? "").trim() : "";
   const gmpValue = gmp ?? "";
   // 접힘 헤더의 채워진 개수 — 폼 기준(SP는 상속값)
@@ -1127,11 +1139,27 @@ export function NodeSummaryModal({
             <p className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1 text-caption text-ink">{spFrequencyNote}</p>
           </div>
         )}
-        {(field === "system" || field === "start_condition" || field === "end_condition") && (
+        {field === "system" && (
+          <div className="flex flex-col gap-1">
+            <SystemSuggestInput
+              mode="field"
+              autoFocus
+              dataId="summary-tile-input-system"
+              system={active.value}
+              systemFallback={active.note}
+              onCommit={(patch, keptNote) =>
+                setActive((prev) => (prev ? { ...prev, value: patch.system, note: patch.system_fallback, keptNote } : prev))
+              }
+            />
+            {active.keptNote && (
+              <p data-id="summary-tile-system-kept-note" className="text-fine text-ink-tertiary">{t("catalog.systemKeptNote")}</p>
+            )}
+          </div>
+        )}
+        {(field === "start_condition" || field === "end_condition") && (
           <input
             data-id={`summary-tile-input-${field}`}
             className={INPUT_CLASS}
-            maxLength={field === "system" ? 100 : undefined}
             value={active.value}
             onChange={(e) => setActive((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
           />

@@ -38,6 +38,7 @@ import { PARAM_ICON } from "@/components/param-icons";
 import { resolveNodeStroke } from "@/components/process-node";
 import { ScopePreview } from "@/components/scope-preview";
 import { getExternalL5Color } from "@/lib/canvas";
+import { formatSystem } from "@/lib/catalogs";
 import { formatKstShort } from "@/lib/datetime";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
@@ -294,7 +295,7 @@ export function SubprocessPreviewPeek({
   const infoRows: { key: string; label: string; icon: LucideIcon; value: string }[] = [
     { key: "assignee", label: t("field.assignee"), icon: User, value: info.assignee ?? "" },
     { key: "department", label: t("field.department"), icon: Building2, value: info.department ?? "" },
-    { key: "system", label: t("field.system"), icon: Server, value: info.system ?? "" },
+    { key: "system", label: t("field.system"), icon: Server, value: formatSystem(info.system, t("system.other")) },
     ...SP_PARAM_FIELDS.map((field) => ({
       key: field as string,
       label: t(PARAM_LABEL_KEY[field]),
@@ -335,7 +336,7 @@ export function SubprocessPreviewPeek({
     [
       { key: "assignee", icon: User, value: info.assignee ?? "" },
       { key: "department", icon: Building2, value: info.department ?? "" },
-      { key: "system", icon: Server, value: info.system ?? "" },
+      { key: "system", icon: Server, value: formatSystem(info.system, t("system.other")) },
     ] as const
   ).filter((row) => row.value && (mockHover || displayFields.includes(row.key)));
   const mockParamChips = SP_PARAM_FIELDS.map((field) => ({

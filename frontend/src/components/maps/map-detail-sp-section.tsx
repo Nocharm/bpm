@@ -35,6 +35,7 @@ import { RoleChip } from "@/components/role-chip";
 import { SectionHeader } from "@/components/section-header";
 import type { MapDetail } from "@/lib/api";
 import { parseAssignees } from "@/lib/assignee";
+import { formatSystem } from "@/lib/catalogs";
 import { formatKst } from "@/lib/datetime";
 import { useDirectory } from "@/lib/directory";
 import { resolveDataForm } from "@/lib/data-forms";
@@ -376,7 +377,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
                     </div>
                   </div>
                   <div className="col-span-2 @[40rem]:col-span-1">
-                    {readTile("system", Monitor, t("field.system"), str(detail.sp_system), str(detail.sp_system_fallback))}
+                    {readTile("system", Monitor, t("field.system"), formatSystem(str(detail.sp_system), t("system.other")), str(detail.sp_system_fallback))}
                   </div>
                   {/* GMP·URL — 시스템 아래 한 줄. URL은 값이 있을 때만 폭(1:2)을 차지하고, 없으면 아이콘 타일로
                       줄어 GMP가 남는 폭을 가져간다 (사용자 지시 2026-09-09) */}

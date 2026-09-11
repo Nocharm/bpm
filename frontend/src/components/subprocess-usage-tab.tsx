@@ -26,6 +26,7 @@ import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { Tooltip } from "@/components/tooltip";
 import { UserPill } from "@/components/user-pill";
 import { getMap, type MapDetail, type MapSummary, type SubprocessUsage } from "@/lib/api";
+import { formatSystem } from "@/lib/catalogs";
 import { formatKst } from "@/lib/datetime";
 import { formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
@@ -309,7 +310,7 @@ export function SubprocessUsageTab({
                 onChange={() => {}}
               />
               {(() => {
-                const system = valueOrNote(form.system, form.system_fallback);
+                const system = valueOrNote(formatSystem(form.system, t("system.other")), form.system_fallback);
                 return (
                   <SpFieldTile
                     dataId="sp-usage-tile-system"

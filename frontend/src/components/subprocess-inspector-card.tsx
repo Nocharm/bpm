@@ -25,6 +25,7 @@ import {
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
 import { Tooltip } from "@/components/tooltip";
+import { formatSystem } from "@/lib/catalogs";
 import { formatKstShort } from "@/lib/datetime";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
 import { useI18n } from "@/lib/i18n";
@@ -230,7 +231,7 @@ export function SubprocessInspectorCard({
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
     { label: t("field.assigneeRole"), value: detail.sp_assignee_role },
-    { label: t("field.system"), value: detail.sp_system },
+    { label: t("field.system"), value: formatSystem(detail.sp_system, t("system.other")) },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },
     { label: t("field.costUsd"), value: formatCost(detail.sp_cost_usd, "$") },

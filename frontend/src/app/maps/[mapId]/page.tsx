@@ -118,6 +118,7 @@ import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { GroupBulkModal, type BulkAttrField, type PeopleUpdate } from "@/components/group-bulk-modal";
 import { GroupTitleBar } from "@/components/group-title-bar";
 import { NodeSummaryModal } from "@/components/node-summary-modal";
+import { SystemSuggestInput } from "@/components/system-suggest-input";
 import {
   MapTitleChecklist,
   getSaveCheckStates,
@@ -284,6 +285,7 @@ import {
   type HeightShiftField,
 } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
+import { commitSystem, useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
 import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
@@ -1261,6 +1263,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 노드 부서·담당자 고아 판정 소스(캔버스 경고 배지) — 디렉터리는 모듈 캐시라 세션당 1회만 fetch
   const { users: directoryUsers, ready: directoryReady } = useDirectoryState();
   const directoryDepts = useDirectoryDepartments();
+  // 시스템 자동완성 목록 — 인스펙터 행 정규화(commitSystem)에 필요
+  const { systems: systemCatalog } = useCatalogs();
   // 미리보기 — AI 제안과 CSV 임포트가 공유. null이 아니면 자동저장이 꺼진다(Apply 전 영속화 방지).
   const [previewSource, setPreviewSource] = useState<"ai" | "csv" | null>(null);
   // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
@@ -10897,21 +10901,21 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 padded={false}
                                 restClassName="text-ink-muted"
                                 onSaveFallback={(text) => updateSelectedData({ system_fallback: text }, true)}
-                                onApply={() =>
-                                  updateSelectedData(
-                                    { system: (selectedNode.data.system_fallback ?? "").slice(0, 100) },
-                                    true,
-                                  )
-                                }
+                                onApply={() => {
+                                  const note = selectedNode.data.system_fallback ?? "";
+                                  const result = commitSystem(note, systemCatalog, note);
+                                  updateSelectedData({ system: result.system, system_fallback: result.system_fallback }, true);
+                                }}
                               />
                               {t("field.system")}
                             </span>
-                            <input
-                              data-id="inspector-field-system"
-                              className="w-32 min-w-0 truncate rounded-sm border border-hairline bg-surface-alt px-1.5 py-0.5 text-right text-caption text-ink focus:border-accent focus:outline-none"
-                              value={selectedNode.data.system ?? ""}
-                              title={selectedNode.data.system || undefined}
-                              onChange={(event) => updateSelectedData({ system: event.target.value }, true)}
+                            <SystemSuggestInput
+                              mode="row"
+                              dataId="inspector-field-system"
+                              confirmReplace
+                              system={selectedNode.data.system ?? ""}
+                              systemFallback={selectedNode.data.system_fallback ?? ""}
+                              onCommit={(patch) => updateSelectedData(patch, true)}
                             />
                           </div>
                           {/* GMP 분류 — 캔버스 필과 동일 픽커 재사용(읽기 전용 배지는 AttributeReadRows) (사용자 요청 2026-08-21 #5) */}
