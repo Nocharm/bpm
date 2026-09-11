@@ -427,6 +427,7 @@ async def replace_graph(
             existing.node_type = node.node_type
             existing.color = node.color
             existing.assignee = node.assignee
+            existing.assignee_role = node.assignee_role
             existing.department = node.department
             existing.system = node.system
             existing.duration = node.duration

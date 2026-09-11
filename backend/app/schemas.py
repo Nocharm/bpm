@@ -1238,6 +1238,8 @@ class NodeIn(BaseModel):
     color: str = Field(default="", pattern=r"^$|^#[0-9a-fA-F]{6}$")
     # BPM 속성 (spec §7 Phase B)
     assignee: str = Field(default="", max_length=100)
+    # 단일값 역할 — trim만, 목록 강제 없음 (design 2026-09-11 §2)
+    assignee_role: str = Field(default="", max_length=100)
     department: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
@@ -1287,6 +1289,11 @@ class NodeIn(BaseModel):
     width: int | None = Field(default=None, ge=100, le=400)
     # 대표 끝 (node_type="end")
     is_primary_end: bool = False
+
+    @field_validator("assignee_role", mode="after")
+    @classmethod
+    def _strip_assignee_role(cls, value: str) -> str:
+        return value.strip()
 
     @field_validator("group_ids", mode="before")
     @classmethod

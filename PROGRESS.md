@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 노드 assignee_role 컬럼(백엔드) (dev)
+
+- `nodes.assignee_role`(단일값, 담당자 옆 표시) 신설 — `NodeIn`에 trim validator 얹고 graph upsert·version clone에 이월. 감사(`ref_audit.scan_user_refs`)는 역할을 사람 이름으로 취급하지 않도록 무영향 고정(테스트로 못박음). `process_maps.sp_assignee_role`은 Task 3에서 모델을 붙일 예정이라 DDL만 함께 등록(`db.py` `_ADDED_COLUMNS`). 전체 스위트 1471 green.
+
 ## 2026-09-11 — 관리 목록 엔진(역할·시스템 카탈로그) 백엔드 1단계 (dev)
 
 - `app_settings.py`에 범용 관리 목록 헬퍼(`normalize_managed_list`/`get_managed_list`/`set_managed_list`) 추가하고 기존 `get_exposed_positions`를 그 위로 재구현. 신규 목록 `assignee_roles`(역할, 빈 목록 기본)·`systems`(시스템, `Other` 예약 항목이 항상 0번)를 얹고 `GET /api/catalogs`(로그인 유저 전원 읽기)를 신설, `PUT /admin/app-settings`에도 편집 필드와 `available_systems`(사용 중 값 승격 후보) 노출. 테스트 4종 추가, 전체 스위트 1468 green.

@@ -587,3 +587,27 @@ def test_notify_bundles_per_owner_and_skips_departed_owner(client: TestClient) -
     # 오너 액션 대상이 아닌 소스는 422
     assert client.post("/api/admin/ref-audit/notify", headers=SYS,
                        json={"target_ids": [f"owning_dept:{dept_ids['map']}"]}).status_code == 422
+
+
+def test_scan_user_refs_ignores_assignee_role(client: TestClient) -> None:
+    """역할(assignee_role)은 사람 이름이 아니다 — 감사가 고아 사용자로 잡으면 안 된다 (design 2026-09-11 §2)."""
+
+    async def _seed() -> None:
+        async with SessionLocal() as session:
+            m = await _new_map(session, "role refs", owning_department=LIVE)
+            pub = MapVersion(map_id=m.id, label="pub", status="published")
+            session.add(pub)
+            await session.flush()
+            session.add(Node(id=f"role-{pub.id}", version_id=pub.id, title="r", assignee="", assignee_role="Phantom Reviewer"))
+            await session.commit()
+
+    asyncio.run(_seed())
+
+    async def _run() -> list[ref_audit.RefGroup]:
+        async with SessionLocal() as session:
+            valid = await ref_audit.load_valid_sets(session)
+            ctx = await ref_audit.load_scan_context(session)
+            return await ref_audit.scan_user_refs(session, valid, ctx)
+
+    groups = asyncio.run(_run())
+    assert all(g.value != "Phantom Reviewer" for g in groups)

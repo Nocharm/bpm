@@ -82,6 +82,7 @@ async def clone_graph(
             node_type=node.node_type,
             color=node.color,
             assignee=node.assignee,
+            assignee_role=node.assignee_role,
             department=node.department,
             system=node.system,
             duration=node.duration,

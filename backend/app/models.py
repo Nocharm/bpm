@@ -330,6 +330,8 @@ class Node(Base):
     color: Mapped[str] = mapped_column(String(20), default="")
     # BPM 속성 — 자유 텍스트, 빈 값 허용 (spec §7 Phase B)
     assignee: Mapped[str] = mapped_column(String(100), default="")
+    # 단일값 역할(실험자/검토자…) — 담당자와 같이 표시, 부서 페어·경고·감사 대상 아님 (design 2026-09-11 §2)
+    assignee_role: Mapped[str] = mapped_column(String(100), default="")
     department: Mapped[str] = mapped_column(String(100), default="")
     system: Mapped[str] = mapped_column(String(100), default="")
     duration: Mapped[str] = mapped_column(String(50), default="")

@@ -150,6 +150,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "retired_to_map_id", "INTEGER"),
     # 노드 표시 폭 — SP 그립 조절 영속(180~216, NULL=기본) (2026-08-30)
     ("nodes", "width", "INTEGER"),
+    # 노드 역할 + SP 지정 역할 — 단일값, 담당자 옆 표시 (design 2026-09-11)
+    ("nodes", "assignee_role", "VARCHAR(100) DEFAULT ''"),
+    ("process_maps", "sp_assignee_role", "VARCHAR(100)"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

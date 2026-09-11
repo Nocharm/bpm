@@ -308,3 +308,23 @@ def test_version_out_exposes_updated_at(client: TestClient) -> None:
     assert "updated_at" in version
     # ISO 문자열로 직렬화되는지 (KST 타임스탬프)
     assert isinstance(version["updated_at"], str) and version["updated_at"]
+
+
+def test_new_version_clone_preserves_assignee_role(client: TestClient) -> None:
+    created = _create_map(client)
+    v1 = created["versions"][0]["id"]
+    client.post(f"/api/versions/{v1}/checkout", json={})
+    client.put(
+        f"/api/versions/{v1}/graph",
+        json={
+            "nodes": [
+                {"id": f"role-c0-{v1}", "title": "시작", "node_type": "start"},
+                {"id": f"role-c1-{v1}", "title": "검토", "assignee_role": "Reviewer"},
+            ],
+            "edges": [],
+        },
+    )
+    _set_version_status(v1, "published")
+    v2 = client.post(f"/api/maps/{created['id']}/versions", json={"label": "To-Be", "source_version_id": v1}).json()["id"]
+    cloned = client.get(f"/api/versions/{v2}/graph").json()
+    assert next(n for n in cloned["nodes"] if n["title"] == "검토")["assignee_role"] == "Reviewer"

@@ -869,3 +869,20 @@ def test_node_gmp_roundtrip_and_invalid_scrubbed(client: TestClient) -> None:
     saved = client.get(f"/api/versions/{version_id}/graph").json()
     assert next(n for n in saved["nodes"] if n["id"] == "n1")["gmp"] == "direct"
     assert next(n for n in saved["nodes"] if n["id"] == "n2")["gmp"] == ""
+
+
+def test_assignee_role_roundtrips_and_clears_when_omitted(client: TestClient) -> None:
+    # 단일값 역할 — trim 저장, 페이로드에서 빠지면 ""로 소거(기존 assignee와 같은 규칙)
+    version_id = _create_version(client)
+    nodes = [
+        {"id": f"role-s-{version_id}", "title": "시작", "node_type": "start"},
+        {"id": f"role-p-{version_id}", "title": "칭량", "assignee_role": "  Reviewer  "},
+    ]
+    client.put(f"/api/versions/{version_id}/graph", json={"nodes": nodes, "edges": []})
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    assert next(n for n in saved["nodes"] if n["title"] == "칭량")["assignee_role"] == "Reviewer"
+
+    nodes[1] = {"id": f"role-p-{version_id}", "title": "칭량"}
+    client.put(f"/api/versions/{version_id}/graph", json={"nodes": nodes, "edges": []})
+    saved = client.get(f"/api/versions/{version_id}/graph").json()
+    assert next(n for n in saved["nodes"] if n["title"] == "칭량")["assignee_role"] == ""
