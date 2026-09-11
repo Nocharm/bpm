@@ -11,13 +11,9 @@
 - **후속**: 부서 범위 피커는 무채색 — 필 호버 `bg-surface-alt`/`text-ink`, 메뉴 현재 항목 `bg-surface-pearl` 굵게(공용 `GoToMenu.active` 스타일, 다른 소비자는 active 미사용).
 - 검증: tsc·lint·vitest 953·카탈로그 그린, `pw-verify-home-dashboard.mjs` 18/18(sticky·행 순서·이벤트 아이콘 체크 추가), 실측 admin.sys·yerin.jang(부서 맵 2·드롭다운 4단) 캡처.
 
-## 2026-09-11 — db-viewer 읽기전용 조회 연결 준비 (dev)
+## 2026-09-11 — db-viewer 읽기전용 조회 연결 검증 후 철수 (dev)
 
-- **배경**: 같은 71번 서버의 db-viewer(`:6678`)에서 이 앱 Postgres를 읽기전용으로 보려는 요구. db-viewer 저장소의 멀티 소스 런북(B′ 서비스당 전용 브리지·`dbviewer_ro`)을 이 앱 관점으로 옮겼다 — 앱 소스 무변경.
-- **compose**: db 서비스가 external 네트워크 `dbv`(`name: ${DBV_NETWORK:-dbv-bpm}`)에 별칭 `${DBV_DB_ALIAS:-bpm-db}`로 추가 합류(`default:` 명시 유지). 운영·9910이 같은 파일을 쓰므로 env로 갈라 별칭 충돌 방지. ⚠️ 이후 모든 스택은 `docker network create`가 선행돼야 `up`이 된다(setup-once A9·deploy §3·9910 §2 체크리스트에 반영). `docker compose config`로 9910 값·기본값 보간 확인.
-- **서브넷 실측**: 서버는 `10.203.1.0/24 dbv-bpm9910`로 생성(운영은 `10.203.0.0/24`) — db-viewer 런북의 172.50은 공인 대역이라 RFC1918로 교체. 브리지 대역이 사내 실제 호스트와 겹치면 db-viewer backend가 그 호스트에 못 붙는 함정을 문서에 명시.
-- **9910 연결 성공(2026-09-11)**. `down -v` 주의를 문서화: external 네트워크는 남지만 `dbviewer_ro` 롤은 볼륨과 함께 사라져 복원 후 §5 SQL 재실행 필요(pg_dump는 롤 미포함), `network prune`만 네트워크를 지운다.
-- **문서**: `docs/deploy/db-viewer-readonly.md`(9910 리허설 → 운영 승격, 민감 테이블 REVOKE 포함) + 그림 설명 `db-viewer-readonly.html`. db-viewer 쪽 compose 수정은 그 저장소에서 별도.
+- 같은 71번 서버 db-viewer가 이 앱 Postgres를 읽는 연결을 9910에서 검증(전용 external 브리지 `dbv-bpm9910` 10.203.1.0/24 + 별칭 + `dbviewer_ro`) — **연결 성공**. 이후 가이드는 db-viewer 저장소가 총괄하기로 하고 이 저장소의 compose `dbv` 네트워크 합류·`DBV_*` env·런북 md/html·문서 포인터(setup-once A9·deploy §3·9910 §2)를 전부 되돌렸다(운영은 아직 미연결 — external 네트워크 선행 요구를 compose에 남기지 않는다). 교훈만 기록: 별칭은 스택마다 달리, `down -v`는 롤을 지운다(pg_dump는 롤 미포함), 브리지 대역은 사내 실제 호스트와 겹치면 안 된다.
 
 ## 2026-09-11 — 개인 대시보드 미세 개선 8종 (dev)
 

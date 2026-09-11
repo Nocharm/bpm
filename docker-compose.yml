@@ -119,12 +119,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    # db-viewer 읽기전용 조회용 전용 브리지 합류 (docs/deploy/db-viewer-readonly.md)
-    # networks:를 명시하는 순간 default 자동 연결이 사라지므로 default를 반드시 함께 적는다.
-    networks:
-      default:
-      dbv:
-        aliases: ["${DBV_DB_ALIAS:-bpm-db}"]
     deploy:
       resources:
         limits:
@@ -169,10 +163,3 @@ networks:
       config:
         - subnet: 172.36.0.0/16
           gateway: 172.36.0.1
-  # db-viewer가 이 스택의 db만 읽기전용으로 보는 전용 브리지 — 서버에서 먼저 만들어 둔다(external).
-  # 없으면 up이 "network ... declared as external, but could not be found"로 실패한다:
-  #   docker network create --subnet 10.203.<n>.0/24 <DBV_NETWORK>
-  # 운영(dbv-bpm)과 검증 9910(dbv-bpm9910)은 .env의 DBV_NETWORK·DBV_DB_ALIAS로 갈라 별칭 충돌을 막는다.
-  dbv:
-    external: true
-    name: ${DBV_NETWORK:-dbv-bpm}

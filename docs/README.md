@@ -12,7 +12,6 @@
 - [`deploy/db-seed.md`](deploy/db-seed.md) — DB 초기화·데모 시드(`python -m scripts.reset_db`).
 - [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 검증 스택(9910) 마이그레이션 절차.
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
-- [`deploy/db-viewer-readonly.md`](deploy/db-viewer-readonly.md) — 같은 서버 db-viewer가 이 앱 Postgres를 읽기전용으로 보는 연결 절차(전용 브리지 `DBV_NETWORK`·`dbviewer_ro`, 9910 리허설 → 운영). 그림 설명: [`deploy/db-viewer-readonly.html`](deploy/db-viewer-readonly.html).
 
 ## QA · 검증 ([`qa/`](qa/))
 - [`qa/interview-import-field-map.md`](qa/interview-import-field-map.md) — 인터뷰 JSON 0.4 전달 스키마 필드 대조표(착지·무시·조용한 오변환·파일 거부 조건). 실파일 dry-run 리포트를 읽는 기준.
