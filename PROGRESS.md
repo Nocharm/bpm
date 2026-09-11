@@ -6,6 +6,7 @@
 ## 2026-09-11 — 노드 assignee_role 컬럼(백엔드) (dev)
 
 - `nodes.assignee_role`(단일값, 담당자 옆 표시) 신설 — `NodeIn`에 trim validator 얹고 graph upsert·version clone에 이월. 감사(`ref_audit.scan_user_refs`)는 역할을 사람 이름으로 취급하지 않도록 무영향 고정(테스트로 못박음). `process_maps.sp_assignee_role`은 Task 3에서 모델을 붙일 예정이라 DDL만 함께 등록(`db.py` `_ADDED_COLUMNS`). 전체 스위트 1471 green.
+- **Task 3**: `process_maps.sp_assignee_role` 모델 컬럼 + SP 지정 PUT/응답/호스트 그래프 대칭 — `SubprocessDesignationIn.assignee_role`(trim, 빈값 None) 저장, `MapOut.sp_assignee_role`로 상세 노출, `SubprocessRefOut.assignee_role`로 호스트 맵 `subprocess_refs`에 상속. 전체 스위트 1472 green.
 
 ## 2026-09-11 — 관리 목록 엔진(역할·시스템 카탈로그) 백엔드 1단계 (dev)
 

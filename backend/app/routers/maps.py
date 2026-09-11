@@ -1485,6 +1485,7 @@ async def designate_subprocess(
         found_map.sp_designated_at = now_kst()
     found_map.sp_department = payload.department
     found_map.sp_assignee = payload.assignee
+    found_map.sp_assignee_role = payload.assignee_role.strip() or None
     found_map.sp_system = payload.system
     found_map.sp_duration = payload.duration
     found_map.sp_cost_krw = payload.cost_krw

@@ -151,6 +151,7 @@ class ProcessMap(Base):
     # 지정 어트리뷰트 — 노드 BPM 필드와 1:1 (department 지정 시 필수). 해제해도 유지(재지정 프리필).
     sp_department: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_assignee: Mapped[str | None] = mapped_column(String(100), default=None)
+    sp_assignee_role: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_system: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_duration: Mapped[str | None] = mapped_column(String(50), default=None)
     # SP 지정 파라미터 3종 — 회당 소요시간·회당 추가비용(원/달러 배타)·회당 투입인원.

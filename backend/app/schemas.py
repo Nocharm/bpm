@@ -96,6 +96,7 @@ class SubprocessDesignationIn(BaseModel):
     # 부서 필수 — 공백만은 불가 (지정의 핵심 메타). 나머지는 선택 (spec 2026-07-06)
     department: str = Field(min_length=1, max_length=100)
     assignee: str = Field(default="", max_length=100)
+    assignee_role: str = Field(default="", max_length=100)
     system: str = Field(default="", max_length=100)
     duration: str = Field(default="", max_length=50)
     # SP 지정 파라미터 3종 — 연간 건수·FTE는 부모 맥락 값이라 여기 없다 (design 2026-07-13 §2.2)
@@ -733,6 +734,7 @@ class MapOut(BaseModel):
     sp_designated_at: datetime | None = None
     sp_department: str | None = None
     sp_assignee: str | None = None
+    sp_assignee_role: str | None = None
     sp_system: str | None = None
     sp_duration: str | None = None
     # SP 지정 파라미터 3종 — duration과 함께 4필드 (design 2026-07-13 §2.2)
@@ -1414,6 +1416,7 @@ class SubprocessRefOut(BaseModel):
     map_updated_at: datetime | None = None
     department: str | None = None
     assignee: str | None = None
+    assignee_role: str | None = None
     system: str | None = None
     duration: str | None = None
     # SP 지정 파라미터 3종 — SP 지정 어트리뷰트와 동일 소스 (design 2026-07-13 §2.2)

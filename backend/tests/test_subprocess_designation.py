@@ -128,6 +128,23 @@ def test_designate_happy_path(client: TestClient, enforce) -> None:
     assert data["sp_changed_at"] is not None
 
 
+def test_designate_saves_assignee_role_and_exposes_it_to_hosts(client: TestClient, enforce) -> None:
+    """SP 지정 역할 — trim 저장, 상세 응답·호스트 그래프 subprocess_refs에 노출. 빈값은 None (design 2026-09-11 §2)."""
+    map_id = seed_map("desig-role", published=True)
+    act_as(OWNER)
+    res = client.put(f"/api/maps/{map_id}/subprocess-designation", json={**BODY, "assignee_role": "  Reviewer "})
+    assert res.status_code == 200
+    assert res.json()["sp_assignee_role"] == "Reviewer"
+    assert client.get(f"/api/maps/{map_id}").json()["sp_assignee_role"] == "Reviewer"
+
+    _, host_version_id = seed_host_with_subprocess_node(map_id, f"role-host-{map_id}")
+    refs = client.get(f"/api/versions/{host_version_id}/graph").json()["subprocess_refs"]
+    assert refs[str(map_id)]["assignee_role"] == "Reviewer"
+
+    res = client.put(f"/api/maps/{map_id}/subprocess-designation", json=BODY)
+    assert res.json()["sp_assignee_role"] is None
+
+
 def test_designate_description_writes_map_description(client: TestClient, enforce) -> None:
     """지정 설명은 맵 설명 그 자체 — sp_description 컬럼 폐기 후 계약 (2026-08-31)."""
     map_id = seed_map("desig-description", published=True)
