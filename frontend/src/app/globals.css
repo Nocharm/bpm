@@ -312,6 +312,33 @@ button:not(:disabled):active {
   border-radius: var(--radius-sm);
 }
 
+/* 지연 이동 카운트다운 링 — 1초(lib/use-delayed-nav NAV_DELAY_MS와 동일) 동안 호가 채워지며 한 바퀴 돈다 (2026-09-11) */
+@keyframes nav-ring-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes nav-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.nav-ring {
+  transform: rotate(-90deg);
+  animation: nav-ring-spin 1000ms linear;
+}
+.nav-ring-arc {
+  animation: nav-ring-fill 1000ms linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-ring {
+    animation: none;
+  }
+  .nav-ring-arc {
+    animation-duration: 1ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-filter-flash,
   .animate-item-in,

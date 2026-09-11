@@ -1,15 +1,16 @@
 // 홈 대시보드 활동 타일 5종 — 결재 대기·내가 낸 요청·점유 중 버전·미읽음 알림·내 피드백. 0도 숨기지 않고 뮤트.
-// 점유 타일은 클릭 시 아래로 점유 목록을 펼친다(다른 타일은 인박스/피드백 이동).
+// 점유 타일은 클릭 시 아래로 점유 목록을 펼친다. 페이지 이동 타일은 1클릭 지연 이동 — 타일이 카운트다운 링으로 바뀌고 1초 뒤
+// 이동, 그 사이 다시 클릭하면 취소(실수 클릭 복귀, 사용자 지시 2026-09-11).
 "use client";
 
 import { Bell, Inbox, Lock, MessageSquare, Send } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type MouseEvent, type ReactNode } from "react";
 
 import type { MeDashboard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { useAgo } from "@/lib/use-ago";
-import { useGoToMenu } from "@/components/maps/go-to-menu";
+import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { NavRing } from "@/components/nav-ring";
 import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
 
 interface DashboardActivityTilesProps {
@@ -19,13 +20,15 @@ interface DashboardActivityTilesProps {
 
 export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTilesProps) {
   const { t } = useI18n();
-  const router = useRouter();
   const ago = useAgo();
   const [checkoutsOpen, setCheckoutsOpen] = useState(false);
-  // 페이지 전환 타일은 바로 이동하지 않고 마우스 위치에 "…로 이동" 메뉴를 먼저 띄운다 (사용자 지시 2026-09-11)
-  const { menu, openAt } = useGoToMenu();
-  const goInbox = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goInbox"), onSelect: () => router.push("/inbox") }]);
-  const goFeedback = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goFeedback"), onSelect: () => router.push("/feedback") }]);
+  const { pending, toggle } = useDelayedNav();
+  // 같은 목적지(인박스) 타일이 셋이라 href만으로는 어느 타일을 눌렀는지 모른다 — 클릭한 타일만 링으로 바꾼다
+  const [clicked, setClicked] = useState<string | null>(null);
+  const go = (tileId: string, href: string) => { setClicked(tileId); toggle(href); };
+  const navText = (tileId: string, href: string, dest: string) =>
+    pending === href && clicked === tileId ? t("home.dash.navPending", { dest }) : null;
+  const inboxNav = (tileId: string) => navText(tileId, "/inbox", t("home.dash.destInbox"));
   if (data === null) {
     return (
       <div data-id="home-activity" className="grid grid-cols-5 gap-2">
@@ -51,7 +54,8 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           value={a.approvals_pending}
           hot
           sub={a.approvals_pending > 0 ? t("home.dash.tileApprovalsSub") : t("home.dash.tileApprovalsNone")}
-          onClick={goInbox}
+          navigating={inboxNav("home-activity-approvals")}
+          onClick={() => go("home-activity-approvals", "/inbox")}
         />
         <Tile
           dataId="home-activity-requests"
@@ -59,7 +63,8 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           label={t("home.dash.tileRequests")}
           value={a.requests_pending}
           sub={a.requests_pending > 0 ? t("home.dash.tileRequestsSub") : t("home.dash.tileRequestsNone")}
-          onClick={goInbox}
+          navigating={inboxNav("home-activity-requests")}
+          onClick={() => go("home-activity-requests", "/inbox")}
         />
         <Tile
           dataId="home-activity-checkouts"
@@ -83,7 +88,8 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
           label={t("home.dash.tileUnread")}
           value={a.unread_notifications}
           sub={a.unread_notifications > 0 ? t("home.dash.tileUnreadSub") : t("home.dash.tileUnreadNone")}
-          onClick={goInbox}
+          navigating={inboxNav("home-activity-unread")}
+          onClick={() => go("home-activity-unread", "/inbox")}
         />
         <Tile
           dataId="home-activity-feedback"
@@ -97,10 +103,10 @@ export function DashboardActivityTiles({ data, onSelect }: DashboardActivityTile
                 ? t("home.dash.tileFeedbackOpen", { n: a.feedback_mine_open })
                 : t("home.dash.tileFeedbackDone")
           }
-          onClick={goFeedback}
+          navigating={navText("home-activity-feedback", "/feedback", t("home.dash.destFeedback"))}
+          onClick={() => go("home-activity-feedback", "/feedback")}
         />
       </div>
-      {menu}
       {checkoutsOpen && data.checkouts.length > 0 && (
         <ul data-id="home-activity-checkout-list" className="flex flex-col rounded-sm border border-hairline bg-surface">
           {data.checkouts.map((c) => (
@@ -135,26 +141,28 @@ interface TileProps {
   hot?: boolean; // 0 초과일 때 액센트 강조(내 결정 필요)
   warn?: boolean; // 보조 문구 경고색
   pressed?: boolean;
+  navigating?: string | null; // 지연 이동 대기 중 — 아이콘은 링, 보조 문구는 이 값(취소 안내)
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function Tile({ dataId, icon, label, value, sub, hot, warn, pressed, onClick }: TileProps) {
+function Tile({ dataId, icon, label, value, sub, hot, warn, pressed, navigating, onClick }: TileProps) {
   const zero = value === 0;
-  const cls = `flex min-w-0 flex-col gap-1.5 rounded-sm border bg-surface px-3 py-2.5 text-left ${
-    pressed ? "border-accent-tint-border shadow-sm" : "border-hairline"
+  const active = pressed || Boolean(navigating);
+  const cls = `flex min-w-0 flex-col gap-1.5 rounded-sm border bg-surface px-3 py-2.5 text-left transition-[border-color,box-shadow] duration-150 ease-smooth ${
+    active ? "border-accent-tint-border shadow-sm" : "border-hairline"
   } ${onClick ? "hover:border-accent-tint-border hover:shadow-sm" : "cursor-default"}`;
   const inner = (
     <>
       <span className="inline-flex items-center gap-1.5 truncate text-fine text-ink-tertiary">
-        {icon}
+        {navigating ? <NavRing size={14} /> : icon}
         {label}
       </span>
       <span className={`text-tagline tabular-nums ${zero ? "font-light text-ink-muted" : hot ? "text-accent-elevated" : "text-ink"}`}>{value}</span>
-      <span className={`truncate text-[11px] ${warn ? "text-warn" : "text-ink-tertiary"}`}>{sub}</span>
+      <span className={`truncate text-[11px] ${navigating ? "text-accent" : warn ? "text-warn" : "text-ink-tertiary"}`}>{navigating ?? sub}</span>
     </>
   );
   return onClick ? (
-    <button type="button" data-id={dataId} aria-pressed={pressed} onClick={(e) => { e.stopPropagation(); onClick(e); }} className={cls}>
+    <button type="button" data-id={dataId} aria-pressed={pressed} data-navigating={navigating ? "" : undefined} onClick={(e) => { e.stopPropagation(); onClick(e); }} className={cls}>
       {inner}
     </button>
   ) : (

@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 1클릭 지연 이동 (dev)
+
+- **이동 메뉴 폐기 → 지연 이동**: 활동 타일(결재·요청·미읽음·피드백)·프로필 알림/체계 설정/설정 버튼·결재 카드 링크아웃·대시보드 맵 행/맵 카드의 "열기"가 클릭 즉시 `router.prefetch` 후 1초 카운트다운 링(`components/nav-ring.tsx`, `NAV_DELAY_MS`=CSS 1000ms)으로 바뀌고 이동, 그 사이 다시 클릭하면 취소. `lib/use-delayed-nav.ts` — 전역 단일 대기(다른 대상 시작 시 이전 취소), 언마운트 시 폐기, 새 탭 modifier는 브라우저 기본. 열기 버튼은 대기 중 호버가 끝나도 열린 채 유지.
+- 랜드마인: 훅 인스턴스 식별자를 `useRef({}).current`로 렌더 중 읽으면 `react-hooks/refs` 린트 실패 — `useState(() => ({}))`로. `GoToMenu`는 부서 범위 피커만 남았다.
+- 실측(3051): 타일 클릭→링·취소 후 URL 불변, 알림 버튼 1초 후 `/inbox`, 맵 행 열기 1초 후 `/maps/24`, 피드백 대기 중 설정 클릭 시 피드백 링 해제·`/settings` 착지. `pw-verify-home-dashboard.mjs` 18/18.
+
 ## 2026-09-11 — 개인 대시보드 미세 조정 6종 (dev)
 
 - **부서 카드**: 헤더는 "내 부서"만, 부서명은 헤더 우측 드롭다운(상위 없으면 정적 필 — `DashboardSection.aside` 슬롯 신설), 맵 수·트리 보기는 내 문서처럼 하단 링크아웃 행(`home.dash.deptFoot`)으로 이동(지표 행의 "맵 N"은 중복이라 제거).

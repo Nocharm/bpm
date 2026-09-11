@@ -20,6 +20,8 @@ import { PersonHoverCard } from "@/components/person-hover-card";
 import { MapCardWarningsModal } from "@/components/maps/map-card-warnings-modal";
 import { useI18n } from "@/lib/i18n";
 import { collectMapWarnings } from "@/lib/map-card-warnings";
+import { useDelayedNav } from "@/lib/use-delayed-nav";
+import { NavRing } from "@/components/nav-ring";
 import type { MatchRange } from "@/lib/search";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_TONE } from "@/lib/version-status";
 
@@ -49,6 +51,10 @@ export function MapCard({
   recentOpenedAt,
 }: MapCardProps) {
   const { t } = useI18n();
+  // 열기 버튼의 1초 지연 이동(다시 클릭하면 취소) — 대시보드 행과 같은 훅
+  const { pending: navPending, toggle: toggleNav } = useDelayedNav();
+  const openHref = `/maps/${map.id}`;
+  const openPending = navPending === openHref;
   // 마운트 시점 1회 — 렌더 중 Date.now() 호출은 순수성 규칙 위반이라 상태로 고정 (상대 시각 기준)
   const [now] = useState(() => Date.now());
   // 상대 시각 — "방금 / N분 전 / N시간 전 / N일 전", 30일↑은 절대 날짜 (브라우저=KST 가정, formatKst와 동일)
@@ -319,16 +325,25 @@ export function MapCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {/* 에디터 바로 이동 — 호버 시에만 우측에서 슬라이드 인(자리는 항상 차지해 레이아웃 점프 없음), 비노출 중엔 클릭 불가 */}
+          {/* 에디터 바로 이동 — 호버 시에만 우측에서 슬라이드 인(자리는 항상 차지해 레이아웃 점프 없음), 비노출 중엔 클릭 불가.
+              클릭은 1초 지연 이동(링 카운트다운) — 대기 중엔 호버가 끝나도 보이고, 다시 클릭하면 취소 */}
           <Link
             data-id="map-card-open"
-            href={`/maps/${map.id}`}
-            title={t("home.openMap")}
-            onClick={(e) => e.stopPropagation()}
-            className="pointer-events-none inline-flex shrink-0 translate-x-1 items-center gap-0.5 rounded-[6px] border border-hairline bg-surface px-2 py-[3px] text-fine font-medium text-ink-secondary opacity-0 transition-[opacity,translate] duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:translate-x-0 focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100"
+            data-navigating={openPending ? "" : undefined}
+            href={openHref}
+            title={openPending ? t("home.dash.navPending", { dest: map.name }) : t("home.openMap")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // 새 탭 등은 브라우저 기본 동작
+              e.preventDefault();
+              toggleNav(openHref);
+            }}
+            className={`inline-flex shrink-0 items-center gap-0.5 rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,translate] duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:translate-x-0 focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 ${
+              openPending ? "pointer-events-auto translate-x-0 border-accent text-accent opacity-100" : "pointer-events-none translate-x-1 border-hairline text-ink-secondary opacity-0"
+            }`}
           >
-            <ArrowUpRight size={12} strokeWidth={1.5} />
-            {t("home.openMap")}
+            {openPending ? <NavRing size={12} /> : <ArrowUpRight size={12} strokeWidth={1.5} />}
+            {openPending ? t("home.dash.navCancel") : t("home.openMap")}
           </Link>
           {warnings.length > 0 && (
             <button

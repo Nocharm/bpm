@@ -2,16 +2,15 @@
 "use client";
 
 import { ArrowLeftRight, CheckCircle2, FileSignature, Inbox, KeyRound, Layers, Link2, Pencil } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { listInboxApprovals, type InboxApproval } from "@/lib/api";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { useAgo } from "@/lib/use-ago";
+import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
-import { useGoToMenu } from "@/components/maps/go-to-menu";
 import { SkeletonLine } from "@/components/skeleton";
 
 const ROW_CAP = 5;
@@ -36,7 +35,6 @@ interface ApprovalsCardProps { onSelect: (id: number) => void }
 
 export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
   const { t } = useI18n();
-  const router = useRouter();
   const ago = useAgo();
   const dir = useDirectory();
   const [items, setItems] = useState<InboxApproval[]>([]);
@@ -52,9 +50,10 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  // 인박스 이동은 마우스 위치의 "…로 이동" 메뉴를 거친다 (사용자 지시 2026-09-11)
-  const { menu, openAt } = useGoToMenu();
-  const goInbox = (e: MouseEvent) => openAt(e, [{ label: t("home.dash.goInbox"), onSelect: () => router.push("/inbox") }]);
+  // 인박스 이동은 1클릭 지연 이동 — 1초 안에 다시 클릭하면 취소 (사용자 지시 2026-09-11)
+  const { pending, toggle } = useDelayedNav();
+  const goInbox = () => toggle("/inbox");
+  const inboxLabel = pending === "/inbox" ? t("home.dash.navCancel") : t("home.dash.inboxTab");
   return (
     <DashboardSection
       dataId="home-needs-approval"
@@ -62,7 +61,7 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       title={t("home.needsApproval")}
       count={loading ? null : items.length}
       countHot={items.length > 0}
-      more={items.length > ROW_CAP ? { label: t("home.dash.inboxTab"), onClick: goInbox } : undefined}
+      more={items.length > ROW_CAP ? { label: inboxLabel, onClick: goInbox } : undefined}
     >
       {loading ? (
         <div className="flex flex-col gap-2 border-t border-divider px-3 py-3">
@@ -98,10 +97,9 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
               </button>
             );
           })}
-          {items.length > ROW_CAP && <DashboardFoot label={t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}
+          {items.length > ROW_CAP && <DashboardFoot label={pending === "/inbox" ? t("home.dash.navPending", { dest: t("home.dash.destInbox") }) : t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}
         </>
       )}
-      {menu}
     </DashboardSection>
   );
 }

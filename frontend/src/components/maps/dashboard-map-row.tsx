@@ -7,7 +7,9 @@ import Link from "next/link";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_TONE } from "@/lib/version-status";
+import { NavRing } from "@/components/nav-ring";
 import { Tooltip } from "@/components/tooltip";
 
 interface DashboardMapRowProps {
@@ -18,6 +20,9 @@ interface DashboardMapRowProps {
 
 export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
   const { t } = useI18n();
+  const { pending, toggle } = useDelayedNav();
+  const href = `/maps/${map.id}`;
+  const navigating = pending === href;
   return (
     <div
       data-id="dashboard-map-row"
@@ -48,17 +53,26 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
       )}
       <span className="min-w-0 flex-1" aria-hidden="true" />
       {meta && <span className="shrink-0 text-fine text-ink-tertiary">{meta}</span>}
-      {/* 열기 — grid 0fr→1fr로 폭이 열리며 우측 항목을 밀어낸다. 진입은 300ms 지연(스치는 호버에 산만하지 않게), 이탈은 즉시 */}
-      <span className="-ml-2 grid grid-cols-[0fr] transition-[grid-template-columns,margin] duration-200 ease-smooth delay-0 group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:delay-300">
+      {/* 열기 — grid 0fr→1fr로 폭이 열리며 우측 항목을 밀어낸다. 진입은 300ms 지연(스치는 호버에 산만하지 않게), 이탈은 즉시.
+          클릭은 1초 지연 이동(링 카운트다운) — 대기 중엔 호버가 끝나도 열린 채 남고, 다시 클릭하면 취소 */}
+      <span className={`grid transition-[grid-template-columns,margin] duration-200 ease-smooth delay-0 group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:delay-300 ${navigating ? "ml-0 grid-cols-[1fr]" : "-ml-2 grid-cols-[0fr]"}`}>
         <Link
           data-id="dashboard-map-open"
-          href={`/maps/${map.id}`}
-          title={t("home.openMap")}
-          onClick={(e) => e.stopPropagation()}
-          className="pointer-events-none inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[6px] border border-hairline bg-surface px-2 py-[3px] text-fine font-medium text-ink-secondary opacity-0 transition-[opacity,border-color,color] duration-150 ease-smooth delay-0 hover:border-accent hover:text-accent group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-300"
+          data-navigating={navigating ? "" : undefined}
+          href={href}
+          title={navigating ? t("home.dash.navPending", { dest: map.name }) : t("home.openMap")}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // 새 탭 등은 브라우저 기본 동작
+            e.preventDefault();
+            toggle(href);
+          }}
+          className={`inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,border-color,color] duration-150 ease-smooth delay-0 hover:border-accent hover:text-accent group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-300 ${
+            navigating ? "pointer-events-auto border-accent text-accent opacity-100" : "pointer-events-none border-hairline text-ink-secondary opacity-0"
+          }`}
         >
-          <ArrowUpRight size={12} strokeWidth={1.5} className="shrink-0" />
-          <span className="whitespace-nowrap">{t("home.openMap")}</span>
+          {navigating ? <NavRing size={12} /> : <ArrowUpRight size={12} strokeWidth={1.5} className="shrink-0" />}
+          <span className="whitespace-nowrap">{navigating ? t("home.dash.navCancel") : t("home.openMap")}</span>
         </Link>
       </span>
     </div>
