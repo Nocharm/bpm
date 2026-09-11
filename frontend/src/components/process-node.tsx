@@ -63,6 +63,8 @@ import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
+import { RoleChip } from "@/components/role-chip";
+import { formatSystem } from "@/lib/catalogs";
 import {
   PRIMARY_END_HANDLE,
   SUBPROCESS_IN_HANDLE,
@@ -103,6 +105,7 @@ const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 // start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 function NodeFields({ data }: { data: AppNode["data"] }) {
   const { displayFields } = useNodeActions();
+  const { t } = useI18n();
   const warnings = useNodeWarnings(data);
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
@@ -117,18 +120,22 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
     department: data.spDepartment,
     system: data.spSystem,
   };
+  // 역할은 담당자 줄에 같이 — 이름 앞 칩, 별도 토글 없이 assignee 토글에 묶인다 (design 2026-09-11 §4.1)
+  const role = (isSubprocess ? data.spAssigneeRole : data.assignee_role) ?? "";
   return (
     <>
       {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
-        const value = isSubprocess ? spValues[field] : data[field];
-        if (!value) return null;
+        const value = (isSubprocess ? spValues[field] : data[field]) ?? "";
+        const roleForField = field === "assignee" ? role : "";
+        if (!value && !roleForField) return null;
         const warned = warnedFields[field];
         const Icon = warned ? TriangleAlert : FIELD_ICON[field];
         return (
           <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
             <span className="inline-flex items-center gap-1">
               <Icon size={12} strokeWidth={1.5} className={warned ? "text-warn" : undefined} />
-              {value}
+              {roleForField !== "" && <RoleChip role={roleForField} dataId="node-role-chip" />}
+              {value !== "" && <span>{field === "system" ? formatSystem(value, t("system.other")) : value}</span>}
             </span>
           </div>
         );

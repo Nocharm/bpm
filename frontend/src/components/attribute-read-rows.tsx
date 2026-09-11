@@ -10,13 +10,17 @@ import type { ReactNode } from "react";
 import { AssigneePills } from "@/components/assignee-pills";
 import { DeptPill } from "@/components/dept-pill";
 import { FallbackHint } from "@/components/fallback-hint";
+import { RoleChip } from "@/components/role-chip";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
+import { formatSystem } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { INSPECTOR_ROW, INSPECTOR_ROW_LABEL } from "@/lib/inspector-row";
 
 interface AttributeReadRowsProps {
   department: string;
   assignee: string;
+  // 단일 역할 — 담당자 필 앞 칩 (design 2026-09-11)
+  assigneeRole?: string;
   system: string;
   // 시스템 원문 메모 — 있으면 행머리 아이콘이 호버 시 메모 아이콘(읽기)
   systemNote?: string | null;
@@ -33,7 +37,7 @@ interface AttributeReadRowsProps {
 const EMPTY = <span className="text-caption text-ink">-</span>;
 
 export function AttributeReadRows({
-  department, assignee, system, systemNote, gmp, url, urlLabel, dataIdPrefix, footnote,
+  department, assignee, assigneeRole = "", system, systemNote, gmp, url, urlLabel, dataIdPrefix, footnote,
 }: AttributeReadRowsProps) {
   const { t } = useI18n();
   const note = (systemNote ?? "").trim();
@@ -51,8 +55,11 @@ export function AttributeReadRows({
           <Users size={12} strokeWidth={1.5} className="text-ink-muted" />
           {t("field.assignee")}
         </span>
-        {assignee.trim() !== "" ? (
-          <AssigneePills assignee={assignee} dataIdPrefix={dataIdPrefix} />
+        {assignee.trim() !== "" || assigneeRole.trim() !== "" ? (
+          <span className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+            {assigneeRole.trim() !== "" && <RoleChip role={assigneeRole} dataId={`${dataIdPrefix}-role-chip`} />}
+            <AssigneePills assignee={assignee} dataIdPrefix={dataIdPrefix} />
+          </span>
         ) : (
           <span className="mt-1 text-caption text-ink">-</span>
         )}
@@ -73,8 +80,8 @@ export function AttributeReadRows({
           )}
           {t("field.system")}
         </span>
-        <span className="min-w-0 truncate text-right text-caption text-ink" title={system || undefined}>
-          {system || "-"}
+        <span className="min-w-0 truncate text-right text-caption text-ink" title={formatSystem(system, t("system.other")) || undefined}>
+          {formatSystem(system, t("system.other")) || "-"}
         </span>
       </div>
       {gmp !== undefined && (

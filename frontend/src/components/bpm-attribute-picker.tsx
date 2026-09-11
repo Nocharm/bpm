@@ -4,14 +4,16 @@
 // 읽기 전용 표시는 AttributeReadRows가 맡는다(일반 노드 읽기·SP 상속 공용, 2026-09-03).
 // 비동기 fetch는 active 가드(set-state-in-effect 회피). 저장 배선은 onChange로 위임.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Building2, Users } from "lucide-react";
+import { BriefcaseBusiness, Building2, Users } from "lucide-react";
 
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { AssigneePills } from "@/components/assignee-pills";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { SearchSelect } from "@/components/search-select";
+import { SuggestInput } from "@/components/suggest-input";
 import { addAssignee, driftedAssignees, formatAssignees, parseAssignees } from "@/lib/assignee";
+import { useCatalogs } from "@/lib/catalogs";
 import { getCurrentUser, subscribeCurrentUser } from "@/lib/current-user";
 import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
@@ -22,8 +24,9 @@ import { sortDepartmentsByOrgProximity, sortUsersByOrgProximity } from "@/lib/or
 interface BpmAttributePickerProps {
   versionId: number | null;
   assignee: string;
+  assigneeRole: string;
   department: string;
-  onChange: (patch: { assignee?: string; department?: string }) => void;
+  onChange: (patch: { assignee?: string; department?: string; assignee_role?: string }) => void;
 }
 
 // 행간 구분선 없음 — 어트리뷰트 섹션은 URL 위에만 스페이서 (사용자 결정 2026-08-20). 행 높이·라벨 문법은
@@ -34,10 +37,12 @@ const LABEL = INSPECTOR_ROW_LABEL;
 export function BpmAttributePicker({
   versionId,
   assignee,
+  assigneeRole,
   department,
   onChange,
 }: BpmAttributePickerProps) {
   const { t, lang } = useI18n();
+  const { assignee_roles: roleOptions } = useCatalogs();
   const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
   const loadedFor = useRef<number | null>(null);
   // 부서 변경 확인 — 담당자 있을 때 부서 변경 전 확인 대기
@@ -149,6 +154,23 @@ export function BpmAttributePicker({
             }}
           />
         </div>
+      </div>
+
+      {/* 역할 — 단일값 자유입력 + 관리 목록 자동완성. 부서·담당자 페어 로직과 무관 (design 2026-09-11 §4.1) */}
+      <div className={ROW}>
+        <span className={LABEL}>
+          <BriefcaseBusiness size={12} strokeWidth={1.5} className="text-ink-muted" />
+          {t("field.assigneeRole")}
+        </span>
+        <SuggestInput
+          mode="row"
+          dataId="inspector-field-role"
+          value={assigneeRole}
+          options={roleOptions}
+          placeholder={t("catalog.rolePlaceholder")}
+          ariaLabel={t("field.assigneeRole")}
+          onCommit={(next) => onChange({ assignee_role: next })}
+        />
       </div>
 
       {/* 부서 변경 확인 모달 */}

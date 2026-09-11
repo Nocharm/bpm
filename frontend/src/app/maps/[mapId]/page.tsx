@@ -10828,6 +10828,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         // 채움 카운트 — 헤더 배지·읽기전용 빈 섹션 딤(#3) 공용, gmp 포함 (사용자 요청 2026-08-21)
                         const attrsFilled = [
                           selectedNode.data.assignee,
+                          selectedNode.data.assignee_role,
                           selectedNode.data.department,
                           selectedNode.data.system,
                           selectedNode.data.url,
@@ -10864,6 +10865,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             <AttributeReadRows
                               department={selectedNode.data.department}
                               assignee={selectedNode.data.assignee}
+                              assigneeRole={selectedNode.data.assignee_role ?? ""}
                               system={selectedNode.data.system ?? ""}
                               systemNote={selectedNode.data.system_fallback}
                               gmp={selectedNode.data.gmp ?? ""}
@@ -10877,6 +10879,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <BpmAttributePicker
                             versionId={versionId}
                             assignee={selectedNode.data.assignee}
+                            assigneeRole={selectedNode.data.assignee_role ?? ""}
                             department={selectedNode.data.department}
                             onChange={(patch) => updateSelectedData(patch, true)}
                           />
@@ -11019,6 +11022,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           <AttributeReadRows
                             department={selectedSpRef.department ?? ""}
                             assignee={selectedSpRef.assignee ?? ""}
+                            assigneeRole={selectedSpRef.assignee_role ?? ""}
                             system={selectedSpRef.system ?? ""}
                             url={selectedSpRef.url ?? ""}
                             urlLabel={selectedSpRef.url_label ?? ""}
