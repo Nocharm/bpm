@@ -65,8 +65,9 @@ export function GoToMenu({ x, y, items, onClose }: GoToMenuProps) {
           role="menuitem"
           onClick={(e) => { e.stopPropagation(); onClose(); it.onSelect(); }}
           aria-current={it.active || undefined}
+          // 현재 선택은 무채색 강조(부서 범위 피커, 사용자 지시 2026-09-11) — 액센트는 페이지 이동 항목에 쓰지 않는다
           className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-caption hover:bg-surface-alt ${
-            it.active ? "bg-accent-tint text-accent-elevated" : "text-ink"
+            it.active ? "bg-surface-pearl font-semibold text-ink" : "text-ink"
           }`}
         >
           <span className="inline-flex shrink-0 text-ink-tertiary">{it.icon ?? <ArrowUpRight size={14} strokeWidth={1.5} />}</span>

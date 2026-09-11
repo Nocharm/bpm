@@ -86,7 +86,7 @@ export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree 
           })),
         );
       }}
-      className={`${SCOPE_PILL} hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent-elevated`}
+      className={`${SCOPE_PILL} hover:border-ink-tertiary hover:bg-surface-alt hover:text-ink`}
     >
       <span className="truncate">{scopeLeaf}</span>
       <ChevronDown size={12} strokeWidth={1.5} className="shrink-0" />
