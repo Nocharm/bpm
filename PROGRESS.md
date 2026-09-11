@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 관리 목록 엔진(역할·시스템 카탈로그) 백엔드 1단계 (dev)
+
+- `app_settings.py`에 범용 관리 목록 헬퍼(`normalize_managed_list`/`get_managed_list`/`set_managed_list`) 추가하고 기존 `get_exposed_positions`를 그 위로 재구현. 신규 목록 `assignee_roles`(역할, 빈 목록 기본)·`systems`(시스템, `Other` 예약 항목이 항상 0번)를 얹고 `GET /api/catalogs`(로그인 유저 전원 읽기)를 신설, `PUT /admin/app-settings`에도 편집 필드와 `available_systems`(사용 중 값 승격 후보) 노출. 테스트 4종 추가, 전체 스위트 1468 green.
+
 ## 2026-09-11 — 대시보드 섹션 순서·내 부서 직속 범위·점유 아코디언·승인 딥링크 (dev)
 
 - **섹션 순서** (최근 열어본|업무 체계) → (내 부서|내 문서) → (승인 필요|최근 변경) — 사용자 지시. **내 부서**: 고른 부서가 직접 소유한 맵만 목록·지표에 올리고 하위 부서 맵은 건수 한 줄(`splitDeptMaps`, 직속 0건이면 빈 상태 + "하위 부서 맵 N건" 풋). 좌측 트리의 내 부서 섹션(`filterMyDeptMaps`, 자손 포함)은 그대로. **하위 부서 모달** `dept-sub-maps-modal.tsx`: 건수(지표 줄·빈 상태 풋) 클릭 → 부서별 맵 묶음. 부서 행 = 범위 전환(체인 밖 부서는 드롭다운 맨 위에 끼움, `isAllowedScope`는 내 최상위 조직 아래면 허용) + 좌측 조직 트리를 조상까지 펼치고 노드로 스크롤(`onRevealDept`, ref 소비 후 orgOpen 효과에서 스크롤), 맵 행 = 선택.

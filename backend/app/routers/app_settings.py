@@ -12,18 +12,24 @@ from app.app_settings import (
     AI_CHAT_MAX_SESSIONS_KEY,
     AI_CHAT_RETENTION_DAYS_KEY,
     AI_CHAT_TIPS_KEY,
+    ASSIGNEE_ROLES_KEY,
     EXPOSED_POSITIONS_KEY,
+    OTHER_SYSTEM,
+    SYSTEMS_KEY,
     get_ai_chat_max_messages,
     get_ai_chat_max_sessions,
     get_ai_chat_retention_days,
     get_ai_chat_tips,
     get_ai_access_disabled,
+    get_assignee_roles,
     get_exposed_positions,
+    get_systems,
     set_app_setting,
+    set_managed_list,
 )
 from app.auth import get_current_user, require_sysadmin
 from app.db import get_session
-from app.models import AppSetting, Employee
+from app.models import AppSetting, Employee, Node, ProcessMap
 from app.schemas import AppSettingsOut, AppSettingsUpdate
 
 router = APIRouter(
@@ -41,6 +47,8 @@ async def _to_out(session: AsyncSession) -> AppSettingsOut:
         AI_CHAT_RETENTION_DAYS_KEY,
         AI_ACCESS_DISABLED_KEY,
         EXPOSED_POSITIONS_KEY,
+        ASSIGNEE_ROLES_KEY,
+        SYSTEMS_KEY,
     ]
     rows = (
         await session.scalars(select(AppSetting).where(AppSetting.key.in_(managed)))
@@ -53,6 +61,16 @@ async def _to_out(session: AsyncSession) -> AppSettingsOut:
             .order_by(Employee.position)
         )
     ).all()
+    # 사용 중인 시스템 값 — 노드 system ∪ SP 지정 sp_system (빈값 제외, 대소문자 무시 정렬)
+    node_systems = (await session.scalars(select(distinct(Node.system)).where(Node.system != ""))).all()
+    sp_systems = (
+        await session.scalars(
+            select(distinct(ProcessMap.sp_system)).where(
+                ProcessMap.sp_system.is_not(None), ProcessMap.sp_system != ""
+            )
+        )
+    ).all()
+    available_systems = sorted({*node_systems, *sp_systems}, key=str.casefold)
     return AppSettingsOut(
         ai_chat_tips=await get_ai_chat_tips(session),
         ai_chat_max_sessions_per_map=await get_ai_chat_max_sessions(session),
@@ -61,6 +79,9 @@ async def _to_out(session: AsyncSession) -> AppSettingsOut:
         ai_access_disabled=await get_ai_access_disabled(session),
         exposed_positions=await get_exposed_positions(session),
         available_positions=list(available_positions),
+        assignee_roles=await get_assignee_roles(session),
+        systems=await get_systems(session),
+        available_systems=available_systems,
         updated_by=latest.updated_by if latest else None,
         updated_at=latest.updated_at if latest else None,
     )
@@ -86,6 +107,12 @@ async def put_app_settings(
         # 공백 제거만 — 빈 목록이 되어도 그대로 저장(get_exposed_positions가 기본값 폴백하지 않음)
         positions = [p.strip() for p in payload.exposed_positions if p.strip()]
         await set_app_setting(session, EXPOSED_POSITIONS_KEY, json.dumps(positions), user)
+    if payload.assignee_roles is not None:
+        await set_managed_list(session, ASSIGNEE_ROLES_KEY, payload.assignee_roles, user)
+    if payload.systems is not None:
+        # Other는 저장값에서 빼고 읽기 시 보강 — 관리자가 지워도 목록에서 사라지지 않는다
+        systems = [s for s in payload.systems if s.strip().casefold() != OTHER_SYSTEM.casefold()]
+        await set_managed_list(session, SYSTEMS_KEY, systems, user)
     for key, value in (
         (AI_CHAT_MAX_SESSIONS_KEY, payload.ai_chat_max_sessions_per_map),
         (AI_CHAT_MAX_MESSAGES_KEY, payload.ai_chat_max_messages_per_session),

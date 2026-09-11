@@ -11,6 +11,14 @@ EXPOSED_POSITIONS_KEY = "exposed_positions"
 # 부서장으로 노출할 EDW 직책(FRNM) — 설정 화면에서 교체. 빈 목록 저장 = 전부 비노출(의도 허용).
 DEFAULT_EXPOSED_POSITIONS = ["그룹장", "파트장", "팀장", "센터장"]
 
+# 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션. 설정 Catalogs 탭에서 편집 (design 2026-09-11 §3.1)
+ASSIGNEE_ROLES_KEY = "assignee_roles"
+SYSTEMS_KEY = "systems"
+# 시스템 예약 항목 — 목록 밖 자유값은 FE가 Other로 분류하고 원문을 system_fallback에 남긴다
+OTHER_SYSTEM = "Other"
+MANAGED_LIST_MAX = 500
+MANAGED_ITEM_MAX_LEN = 100
+
 AI_CHAT_TIPS_KEY = "ai_chat_tips"
 AI_CHAT_MAX_SESSIONS_KEY = "ai_chat_max_sessions_per_map"
 AI_CHAT_MAX_MESSAGES_KEY = "ai_chat_max_messages_per_session"
@@ -48,21 +56,62 @@ DEFAULT_AI_CHAT_TIPS = [
 ]
 
 
-async def get_exposed_positions(session: AsyncSession) -> list[str]:
-    """노출 직책 allowlist — 행 부재/파싱 불가면 기본값, 저장된 빈 목록은 그대로 존중.
+def normalize_managed_list(values: list[object]) -> list[str]:
+    """trim · 빈값 제거 · 대소문자 무시 중복 제거(첫 표기 유지) · 항목 100자 컷. 순서는 입력 순."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in values:
+        if not isinstance(raw, str):
+            continue
+        value = raw.strip()[:MANAGED_ITEM_MAX_LEN]
+        if not value:
+            continue
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+    return out
 
-    (get_ai_chat_tips와 달리 빈 목록을 기본값으로 되돌리지 않는다 — 전부 비노출은 유효한 관리자 의도.)
-    """
-    row = await session.get(AppSetting, EXPOSED_POSITIONS_KEY)
+
+async def get_managed_list(session: AsyncSession, key: str, default: list[str]) -> list[str]:
+    """JSON 배열 설정 — 행 부재/파싱 불가/배열 아님이면 default. 저장된 빈 목록은 그대로 존중."""
+    row = await session.get(AppSetting, key)
     if row is None:
-        return list(DEFAULT_EXPOSED_POSITIONS)
+        return list(default)
     try:
         stored = json.loads(row.value)
     except ValueError:
-        return list(DEFAULT_EXPOSED_POSITIONS)
+        return list(default)
     if not isinstance(stored, list):
-        return list(DEFAULT_EXPOSED_POSITIONS)
-    return [v.strip() for v in stored if isinstance(v, str) and v.strip()]
+        return list(default)
+    return normalize_managed_list(stored)
+
+
+async def set_managed_list(session: AsyncSession, key: str, values: list[str], user: str) -> list[str]:
+    """정규화 후 upsert(호출자가 commit). 상한 초과분은 잘라낸다."""
+    cleaned = normalize_managed_list(list(values))[:MANAGED_LIST_MAX]
+    await set_app_setting(session, key, json.dumps(cleaned, ensure_ascii=False), user)
+    return cleaned
+
+
+async def get_exposed_positions(session: AsyncSession) -> list[str]:
+    """노출 직책 allowlist — 저장된 빈 목록은 그대로(전부 비노출은 유효한 관리자 의도)."""
+    return await get_managed_list(session, EXPOSED_POSITIONS_KEY, DEFAULT_EXPOSED_POSITIONS)
+
+
+async def get_assignee_roles(session: AsyncSession) -> list[str]:
+    return await get_managed_list(session, ASSIGNEE_ROLES_KEY, [])
+
+
+def ensure_other_first(systems: list[str]) -> list[str]:
+    """예약 항목 불변식 — Other는 항상 1개, 맨 앞."""
+    rest = [s for s in systems if s.casefold() != OTHER_SYSTEM.casefold()]
+    return [OTHER_SYSTEM, *rest]
+
+
+async def get_systems(session: AsyncSession) -> list[str]:
+    return ensure_other_first(await get_managed_list(session, SYSTEMS_KEY, []))
 
 
 async def get_ai_chat_tips(session: AsyncSession) -> list[str]:

@@ -1,5 +1,6 @@
 """앱 런타임 설정(app-settings) 팁·대화 보존 상한 테스트."""
 
+import uuid
 from typing import Iterator
 
 import pytest
@@ -153,3 +154,52 @@ def test_ai_access_toggle_blocks_all_ai_surfaces(client, monkeypatch) -> None:
     )
     assert resp.status_code == 200
     client.delete(f"/api/interviews/{resp.json()['id']}")
+
+
+def test_catalogs_default_has_other_only(client: TestClient) -> None:
+    # 관리 목록 미설정 상태 — 역할은 빈 목록, 시스템은 예약 항목 Other만
+    body = client.get("/api/catalogs").json()
+    assert body["assignee_roles"] == []
+    assert body["systems"] == ["Other"]
+
+
+def test_app_settings_managed_lists_roundtrip(client: TestClient) -> None:
+    body = client.put(
+        "/api/admin/app-settings",
+        json={"assignee_roles": [" 실험자 ", "검토자", "실험자", ""], "systems": ["lims", "LIMS", "SAP", "other"]},
+    ).json()
+    # trim·빈값 제거·대소문자 무시 중복 제거(첫 표기 유지), Other는 항상 맨 앞 1개
+    assert body["assignee_roles"] == ["실험자", "검토자"]
+    assert body["systems"] == ["Other", "lims", "SAP"]
+    catalogs = client.get("/api/catalogs").json()
+    assert catalogs == {"assignee_roles": ["실험자", "검토자"], "systems": ["Other", "lims", "SAP"]}
+    # 빈 목록 저장 = 역할 없음 / 시스템은 Other만 남는다
+    body = client.put("/api/admin/app-settings", json={"assignee_roles": [], "systems": []}).json()
+    assert body["assignee_roles"] == [] and body["systems"] == ["Other"]
+
+
+def test_app_settings_available_systems_lists_values_in_use(client: TestClient) -> None:
+    created = client.post(
+        "/api/maps", json={"owning_department": "Owning Anchor Division", "name": f"catalog probe {uuid.uuid4().hex[:6]}"}
+    ).json()
+    version_id = created["versions"][0]["id"]
+    client.post(f"/api/versions/{version_id}/checkout", json={})
+    probe = f"Probe-{uuid.uuid4().hex[:6]}"
+    client.put(
+        f"/api/versions/{version_id}/graph",
+        json={
+            "nodes": [
+                {"id": f"cat-s-{probe}", "title": "시작", "node_type": "start"},
+                {"id": f"cat-p-{probe}", "title": "작업", "system": probe},
+            ],
+            "edges": [],
+        },
+    )
+    body = client.get("/api/admin/app-settings").json()
+    assert probe in body["available_systems"]
+
+
+def test_catalogs_readable_by_non_sysadmin(client: TestClient, sysadmin_enforced: None) -> None:
+    headers = {"X-Dev-User": NON_SYSADMIN}
+    assert client.get("/api/catalogs", headers=headers).status_code == 200
+    assert client.get("/api/admin/app-settings", headers=headers).status_code == 403

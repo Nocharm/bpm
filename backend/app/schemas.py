@@ -2008,6 +2008,11 @@ class AppSettingsOut(BaseModel):
     exposed_positions: list[str] = []
     # employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
     available_positions: list[str] = []
+    # 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션 (design 2026-09-11 §3.1)
+    assignee_roles: list[str] = []
+    systems: list[str] = []
+    # nodes.system ∪ process_maps.sp_system distinct — 관리자가 사용 중 값을 목록으로 승격하는 후보(읽기전용)
+    available_systems: list[str] = []
     updated_by: str | None = None
     updated_at: datetime | None = None
 
@@ -2022,6 +2027,16 @@ class AppSettingsUpdate(BaseModel):
     ai_access_disabled: bool | None = None
     # 빈 목록 저장 = 전부 비노출(get_exposed_positions가 기본값으로 되돌리지 않음)
     exposed_positions: list[str] | None = Field(default=None, max_length=50)
+    # 관리 목록 — 서버가 trim·중복 제거·100자 컷. 빈 목록 저장 허용(시스템은 Other만 남는다)
+    assignee_roles: list[str] | None = Field(default=None, max_length=500)
+    systems: list[str] | None = Field(default=None, max_length=500)
+
+
+class CatalogsOut(BaseModel):
+    """관리 목록 읽기 — 로그인 유저 전원(에디터 자동완성 소스). 편집은 /admin/app-settings(sysadmin)."""
+
+    assignee_roles: list[str]
+    systems: list[str]
 
 
 class AiPromptOut(BaseModel):
