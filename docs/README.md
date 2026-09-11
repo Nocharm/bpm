@@ -31,6 +31,7 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
+- [`design/2026-09-11-assignee-role-catalog-design.md`](design/2026-09-11-assignee-role-catalog-design.md) — 노드 역할(assignee_role) 단일값 칸 + 재사용 자동완성 엔진(`SuggestInput`·`/catalogs`) + 시스템 정규화(자유값→`Other`+폴백) + 설정 Catalogs 탭(CSV 임포트) (설계 승인, 구현 전).
 - [`design/2026-09-09-ref-audit-design.md`](design/2026-09-09-ref-audit-design.md) — 고아 참조 감사: 부서·사용자 참조 12곳 캐치·체크 기반 일괄 재지정·오너 알림·홈 배지 (구현 완료, feat/ux-polish).
 - [`design/2026-09-01-interview-import-v04-result.md`](design/2026-09-01-interview-import-v04-result.md) — 인터뷰 JSON 0.4 임포트 최종 결과·확장 계획·한계·후속 점검(핸드오프).
 
