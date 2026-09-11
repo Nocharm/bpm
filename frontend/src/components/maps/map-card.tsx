@@ -8,11 +8,12 @@
 // ⚠경고 건수(클릭→모달)·공개범위 아이콘. 노드/버전/인원 수는 카드에서 빼고 호버 요약 모달에만 남긴다.
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Clock, GitBranch, Globe, Lock, TriangleAlert, User, Users, Workflow } from "lucide-react";
 
 import { type MapSummary } from "@/lib/api";
+import { placeBesideAnchor } from "@/lib/clamp-viewport";
 import { formatKst } from "@/lib/datetime";
 import { Highlight } from "@/components/highlight";
 import { PersonHoverCard } from "@/components/person-hover-card";
@@ -90,7 +91,9 @@ export function MapCard({
   // 카드 호버 모달 — 0.7초 호버 시 우측에 요약+인원(읽기 전용). 카드를 벗어나면 페이드 아웃 후 언마운트.
   // 모달은 pointer-events-none(통과) → 디테일 패널/다른 카드 호버를 가리지 않음(호버가 마우스를 따라감).
   const [modalPhase, setModalPhase] = useState<"closed" | "open" | "closing">("closed");
-  const [modalPos, setModalPos] = useState<{ left: number; top: number } | null>(null);
+  // top/bottom = 카드 실측 — 모달 높이는 내용(행 수)에 따라 달라 열린 뒤 실측해 아래로 넘치면 카드 하단 정렬로 반전(아래 레이아웃 이펙트)
+  const [modalPos, setModalPos] = useState<{ left: number; top: number; bottom: number } | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,10 +139,19 @@ export function MapCard({
     openTimer.current = setTimeout(() => {
       openTimer.current = null;
       const rect = rootRef.current?.getBoundingClientRect();
-      if (rect) setModalPos({ left: rect.right + 8, top: rect.top });
+      if (rect) setModalPos({ left: rect.right + 8, top: rect.top, bottom: rect.bottom });
       setModalPhase("open");
     }, HOVER_MODAL_OPEN_MS);
   };
+
+  // 열린 직후 실측 높이로 세로 위치 확정 — 화면 아래 카드는 카드 하단에 모달 하단을 맞춘다(반전).
+  // top은 이 이펙트가 단독 소유(state로 되돌리면 한 프레임 튐 + 재렌더).
+  useLayoutEffect(() => {
+    const el = modalRef.current;
+    if (!el || modalPhase !== "open" || !modalPos) return;
+    // offsetHeight — 등장 애니메이션 첫 프레임의 scale(0.98)이 getBoundingClientRect 높이를 줄여 4px 어긋난다
+    el.style.top = `${placeBesideAnchor(modalPos, el.offsetHeight, window.innerHeight)}px`;
+  }, [modalPhase, modalPos]);
 
   // 스크롤/리사이즈 시 위치가 어긋나므로 닫음
   useEffect(() => {
@@ -366,6 +378,7 @@ export function MapCard({
         modalPos &&
         createPortal(
           <div
+            ref={modalRef}
             data-id="map-card-hover-modal"
             data-phase={modalPhase}
             className={`pointer-events-none fixed z-[1201] w-64 rounded-md border border-hairline bg-surface p-3 text-fine shadow-lg ${

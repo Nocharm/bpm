@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 맵 카드 호버 모달 화면 하단 반전 (dev)
+
+- **원인**: 호버 요약 모달이 `fixed`로 카드 상단(`rect.top`)에만 고정되고 뷰포트 높이를 보지 않아, 화면 아래쪽 카드에서는 모달 하단이 잘렸다(높이는 행 수에 따라 가변).
+- **수정**: `lib/clamp-viewport.placeBesideAnchor`(상단 정렬 → 넘치면 카드 하단 정렬로 반전 → 그래도 안 들어가면 여백 클램프, 단위 테스트 3) + 모달 ref 레이아웃 이펙트에서 실측 `offsetHeight`로 top 확정(`getBoundingClientRect`는 등장 애니메이션 `scale(0.98)` 첫 프레임에 4px 작게 잰다). 실측(700px 뷰포트, 카드 하단 676px): 모달 하단 676px 정렬.
+
 ## 2026-09-11 — 홈 개인 대시보드 재구성 + 프로필 빠른 액션 (feat/map-tab-dashboard)
 
 - **배경**: 맵 탭 미선택 aside가 최근 열람·오너 도넛·승인 3카드뿐이라 오너 맵 없는 유저는 카드 하나만 남고, 과다 유저는 목록이 무제한으로 늘어졌다. HTML 목업(빈약·중간·과다 3시나리오) 확정 후 구현.
