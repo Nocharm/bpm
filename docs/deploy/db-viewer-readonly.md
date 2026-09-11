@@ -16,7 +16,7 @@ db-viewer 쪽 원본 런북은 그 저장소의 `docs/connect-sources.md`·`docs
 
 | 항목 | 값(검증 9910) | 값(운영 9900) |
 |---|---|---|
-| 전용 브리지 네트워크 | `dbv-bpm9910` (`172.50.1.0/24`) | `dbv-bpm` (`172.50.0.0/24`) |
+| 전용 브리지 네트워크 | `dbv-bpm9910` (`10.203.1.0/24`) | `dbv-bpm` (`10.203.0.0/24`) |
 | db 컨테이너 별칭(= db-viewer가 입력할 host) | `bpm9910-db` | `bpm-db` |
 | compose 프로젝트 / db 컨테이너 | `bpm-9910` / `bpm-9910-db-1` | `business-process-mgmt` / `business-process-mgmt-db-1` |
 | `.env` 키 | `DBV_NETWORK=dbv-bpm9910` · `DBV_DB_ALIAS=bpm9910-db` | `DBV_NETWORK=dbv-bpm` · `DBV_DB_ALIAS=bpm-db` |
@@ -59,11 +59,12 @@ could not be found`로 `up`이 실패한다 — 만들고 다시 `up` 하면 된
 
 ```bash
 docker network ls | grep -E "dbv-|172"                        # 이름 충돌 확인
-docker network create --subnet 172.50.1.0/24 dbv-bpm9910      # 검증 9910
-# 운영 승격 때:  docker network create --subnet 172.50.0.0/24 dbv-bpm
+docker network create --subnet 10.203.1.0/24 dbv-bpm9910      # 검증 9910
+# 운영 승격 때:  docker network create --subnet 10.203.0.0/24 dbv-bpm
 ```
 
-`172.50.x.0/24`는 기존 서비스 대역(172.36~46)과 db-viewer 자신의 대역(172.48.0.0/16)에 겹치지 않는 값.
+`10.203.<n>.0/24`는 사설 대역(RFC1918)이면서 기존 서비스 대역(172.36~46)·db-viewer 자신의 대역(172.48.0.0/16)과 겹치지 않는 값(서버 실측 2026-09-11 — db-viewer 런북의 172.50은 공인 대역이라 쓰지 않는다).
+**주의**: 브리지 서브넷은 그 대역으로 가는 라우트를 컨테이너 안에서 가로챈다 — 사내망에 실제 10.203.<n>.x 호스트(AD·n8n·AI 등)가 있으면 db-viewer backend가 거기에 못 붙는다. `ip route | grep 10.203`과 db-viewer `.env`의 주소들로 충돌이 없는지 먼저 본다.
 `Pool overlaps with other one on this address space`가 나면 `<n>`을 바꾼다.
 
 ### 2-2. db-viewer 쪽 전제 확인
@@ -181,7 +182,7 @@ cd <db-viewer 디렉터리>
 docker compose up -d --build backend
 docker compose logs backend | grep -i alembic | tail -3       # 오류 없이 head 까지
 curl -s http://localhost:6678/api/health                      # {"status":"ok"}
-docker compose exec backend python -c "import socket; print(socket.gethostbyname('bpm9910-db'))"   # 172.50.1.x
+docker compose exec backend python -c "import socket; print(socket.gethostbyname('bpm9910-db'))"   # 10.203.1.x
 ```
 
 ### 6-2. `/admin` 소스 패널에서 등록 → 테스트 → 수집 → 허용
@@ -204,7 +205,7 @@ docker compose exec backend python -c "import socket; print(socket.gethostbyname
 값만 바꿔 §2-1 → §3 → §4 → §5 → §6을 반복한다.
 
 ```bash
-docker network create --subnet 172.50.0.0/24 dbv-bpm
+docker network create --subnet 10.203.0.0/24 dbv-bpm
 cd <운영 디렉터리>            # 프로젝트 business-process-mgmt
 git fetch && git checkout <9910에서 검증한 dev와 같은 내용의 main 커밋>
 printf 'DBV_NETWORK=dbv-bpm\nDBV_DB_ALIAS=bpm-db\n' >> .env
@@ -231,7 +232,7 @@ db-viewer compose에는 `dbv-bpm`을 **추가로** 나열하고(`dbv-bpm9910`은
 | `network dbv-bpm9910 declared as external, but could not be found` | §2-1 `docker network create` 누락 — 만들고 다시 `up` |
 | db 재생성 후 backend가 `db` 를 못 찾음 / 502 | compose `db.networks`에 `default:`가 빠졌다 — 이 커밋의 compose 그대로인지 확인 |
 | backend 로그 `ConnectionDoesNotExistError` 몇 건 | db 재생성 직후 풀의 구 연결 — `restart backend` (§4) |
-| `Pool overlaps with other one on this address space` | `172.50.<n>`이 이미 사용 중 — 다른 `<n>` |
+| `Pool overlaps with other one on this address space` | `10.203.<n>`이 이미 사용 중 — 다른 `<n>` |
 | 연결 테스트 초록인데 `database`가 다른 이름 | 별칭 오타·다른 서비스 별칭 — host를 `bpm9910-db`/`bpm-db`로 |
 | 연결 테스트 502 | 별칭 해석 실패(6-1의 `gethostbyname`으로 확인)·비밀번호 오류·db-viewer backend가 네트워크에 안 붙음 |
 | 연결 테스트 503 | db-viewer `SOURCE_SECRET_KEY` 미설정/불일치 (§2-2) |

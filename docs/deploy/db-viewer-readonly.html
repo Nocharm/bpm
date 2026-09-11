@@ -129,7 +129,7 @@
       <!-- dbv network -->
       <rect x="470" y="196" width="230" height="80" rx="12" fill="#efeaff" stroke="#6A41FF"/>
       <text x="585" y="222" text-anchor="middle" font-weight="600" fill="#6A41FF">dbv-bpm9910</text>
-      <text x="585" y="240" text-anchor="middle" fill="#5c5c66">172.50.1.0/24 · external</text>
+      <text x="585" y="240" text-anchor="middle" fill="#5c5c66">10.203.1.0/24 · external</text>
       <text x="585" y="258" text-anchor="middle" fill="#5c5c66">멤버 = db + db-viewer backend 둘뿐</text>
       <!-- dbviewer stack -->
       <rect x="700" y="30" width="260" height="270" rx="14" fill="#fbeee4" stroke="#b05a2a" stroke-dasharray="5 4"/>
@@ -167,7 +167,7 @@
   <div class="tw"><table>
     <thead><tr><th>항목</th><th>검증 9910</th><th>운영 9900</th><th>비고</th></tr></thead>
     <tbody>
-      <tr><td>전용 네트워크</td><td><code>dbv-bpm9910</code> / <code>172.50.1.0/24</code></td><td><code>dbv-bpm</code> / <code>172.50.0.0/24</code></td><td>서버에서 <code>docker network create</code>로 먼저</td></tr>
+      <tr><td>전용 네트워크</td><td><code>dbv-bpm9910</code> / <code>10.203.1.0/24</code></td><td><code>dbv-bpm</code> / <code>10.203.0.0/24</code></td><td>서버에서 <code>docker network create</code>로 먼저</td></tr>
       <tr><td>db 별칭 (= db-viewer host)</td><td><code>bpm9910-db</code></td><td><code>bpm-db</code></td><td><code>.env</code> <code>DBV_DB_ALIAS</code></td></tr>
       <tr><td>db 컨테이너명</td><td><code>bpm-9910-db-1</code></td><td><code>business-process-mgmt-db-1</code></td><td><code>docker inspect</code> 대상</td></tr>
       <tr><td>DB / 계정</td><td colspan="2"><code>processmap</code> / <code>dbviewer_ro</code> (SELECT만, 민감 테이블 REVOKE)</td><td>스키마는 <code>public</code> 하나</td></tr>
@@ -180,7 +180,7 @@
     <div class="step"><div>
       <h3>전용 네트워크 만들기 <span class="pill dbv who">서버 · 1회</span></h3>
       <p>겹치지 않는 대역으로 외부 네트워크를 만든다. compose는 이 네트워크를 <code>external</code>로 참조하므로 반드시 먼저.</p>
-      <pre>docker network create --subnet 172.50.1.0/24 <b>dbv-bpm9910</b></pre>
+      <pre>docker network create --subnet 10.203.1.0/24 <b>dbv-bpm9910</b></pre>
     </div></div>
     <div class="step"><div>
       <h3>db-viewer 전제 확인 <span class="pill dbv who">db-viewer</span></h3>
@@ -230,7 +230,7 @@ networks:
 
   <h2>4. 9910 통과 후 운영 승격</h2>
   <div class="card tint">
-    <p style="font-size:14px">같은 7단계를 값만 바꿔 반복한다 — 네트워크 <code>dbv-bpm</code>(172.50.0.0/24), 별칭 <code>bpm-db</code>, 컨테이너 <code>business-process-mgmt-db-1</code>,
+    <p style="font-size:14px">같은 7단계를 값만 바꿔 반복한다 — 네트워크 <code>dbv-bpm</code>(10.203.0.0/24), 별칭 <code>bpm-db</code>, 컨테이너 <code>business-process-mgmt-db-1</code>,
       운영 <code>.env</code>에 <code>DBV_NETWORK=dbv-bpm</code>·<code>DBV_DB_ALIAS=bpm-db</code>. db-viewer compose에는 <code>dbv-bpm</code>을 <b>추가로</b> 나열하고 소스를 따로 등록한다.</p>
     <p style="font-size:14px;margin:0"><b>운영 배포 규칙에 추가된 것 하나:</b> 이 커밋 이후 운영 <code>docker compose up</code>은 <code>dbv-bpm</code> 네트워크가 있어야 성공한다. 서버 재구축 때 1단계를 다시 밟는다(<code>setup-once.md</code> A9).</p>
   </div>

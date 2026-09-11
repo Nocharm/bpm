@@ -171,7 +171,7 @@ networks:
           gateway: 172.36.0.1
   # db-viewer가 이 스택의 db만 읽기전용으로 보는 전용 브리지 — 서버에서 먼저 만들어 둔다(external).
   # 없으면 up이 "network ... declared as external, but could not be found"로 실패한다:
-  #   docker network create --subnet 172.50.<n>.0/24 <DBV_NETWORK>
+  #   docker network create --subnet 10.203.<n>.0/24 <DBV_NETWORK>
   # 운영(dbv-bpm)과 검증 9910(dbv-bpm9910)은 .env의 DBV_NETWORK·DBV_DB_ALIAS로 갈라 별칭 충돌을 막는다.
   dbv:
     external: true

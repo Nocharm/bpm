@@ -123,8 +123,8 @@ docker compose exec backend python -m scripts.reset_db
 db 서비스가 external 네트워크 `${DBV_NETWORK:-dbv-bpm}`에 합류하므로, 이 네트워크가 없으면 `docker compose up` 자체가 실패한다. 스택마다 이름·대역을 달리 만든다:
 
 ```bash
-docker network create --subnet 172.50.0.0/24 dbv-bpm         # 운영 9900 (.env 기본값)
-docker network create --subnet 172.50.1.0/24 dbv-bpm9910     # 검증 9910 (.env.9910: DBV_NETWORK=dbv-bpm9910 · DBV_DB_ALIAS=bpm9910-db)
+docker network create --subnet 10.203.0.0/24 dbv-bpm         # 운영 9900 (.env 기본값)
+docker network create --subnet 10.203.1.0/24 dbv-bpm9910     # 검증 9910 (.env.9910: DBV_NETWORK=dbv-bpm9910 · DBV_DB_ALIAS=bpm9910-db)
 ```
 
 db-viewer가 실제로 읽어가게 하는 나머지 절차(읽기전용 계정·db-viewer 쪽 등록)는 [`db-viewer-readonly.md`](db-viewer-readonly.md).

@@ -110,7 +110,7 @@ docker compose up -d --build
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
 - **데모 데이터 시드**는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `reset_db`는 `drop_all`이라 **운영에서 실행 금지**.
-- **db-viewer 전용 네트워크가 있어야 `up`이 된다**(2026-09-11) — db 서비스가 external 네트워크 `${DBV_NETWORK:-dbv-bpm}`에 합류하므로 `network dbv-bpm declared as external, but could not be found`가 나면 `docker network create --subnet 172.50.0.0/24 dbv-bpm` 후 재시도([`setup-once.md`](setup-once.md) A9 · 절차 전체는 [`db-viewer-readonly.md`](db-viewer-readonly.md)).
+- **db-viewer 전용 네트워크가 있어야 `up`이 된다**(2026-09-11) — db 서비스가 external 네트워크 `${DBV_NETWORK:-dbv-bpm}`에 합류하므로 `network dbv-bpm declared as external, but could not be found`가 나면 `docker network create --subnet 10.203.0.0/24 dbv-bpm` 후 재시도([`setup-once.md`](setup-once.md) A9 · 절차 전체는 [`db-viewer-readonly.md`](db-viewer-readonly.md)).
 
 ## 4. 헬스체크 + 인증/AD 검증
 
