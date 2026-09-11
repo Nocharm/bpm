@@ -28,6 +28,7 @@ import { NoticesManagePanel } from "@/components/notices/notices-manage-panel";
 import { AiChatSettingsPanel } from "@/components/settings/ai-chat-settings-panel";
 import { AiPromptsPanel } from "@/components/settings/ai-prompts-panel";
 import { FrameworkPanel } from "@/components/admin/framework-panel";
+import { CatalogsPanel } from "@/components/settings/catalogs-panel";
 import { KbManagePanel } from "@/components/settings/kb-manage-panel";
 import { ManualManagePanel } from "@/components/settings/manual-manage-panel";
 import { DashboardPanel } from "@/components/settings/dashboard-panel";
@@ -50,7 +51,8 @@ type TabId =
   | "aiChat"
   | "aiPrompts"
   | "dashboard"
-  | "framework";
+  | "framework"
+  | "catalogs";
 type Access = "everyone" | "admin" | "sysadmin" | "dashboard" | "frameworkAdmin";
 
 interface Category {
@@ -80,6 +82,7 @@ const CATEGORIES: Category[] = [
     tabs: [
       { id: "employees", labelKey: "admin.title" },
       { id: "depts", labelKey: "perm.sysadmin.tabDepts" },
+      { id: "catalogs", labelKey: "catalog.tab" },
       { id: "refs", labelKey: "admin.refAuditTab" },
       { id: "localAccounts", labelKey: "localAccount.tab" },
     ],
@@ -291,6 +294,12 @@ export default function SettingsPage() {
               </p>
             ))}
           {current === "depts" && <DepartmentTable />}
+          {current === "catalogs" && (
+            <CatalogsPanel
+              isSysadmin={user?.isSysadmin ?? false}
+              onToast={(message) => showToast({ id: genId(), message })}
+            />
+          )}
           {current === "refs" && <RefAuditPanel />}
           {current === "localAccounts" && (
             <LocalAccountTable onToast={(message) => showToast({ id: genId(), message })} />

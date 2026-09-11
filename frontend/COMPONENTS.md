@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 260개 · 2026-09-11 기준
+총 261개 · 2026-09-11 기준
 
 ## components/
 
@@ -24,7 +24,7 @@
 | `branch-icon.tsx` | `BranchGlyph` | 분기(Yes/No/Other) 아이콘 | `app/maps/[mapId]/page.tsx`, `components/edge-branch-modal.tsx`, `components/edge-select-modal.tsx` |
 | `canvas-zoom-scale.tsx` | `CanvasZoomScale` | 캔버스 줌 컨트롤 pill | `app/maps/[mapId]/page.tsx` |
 | `change-summary-section.tsx` | `ChangeSummaryDisclosure`, `ChangeSummarySection` | 기준 버전 대비 변경 요약 | `app/maps/[mapId]/page.tsx`, `components/framework-confirm-section.tsx` |
-| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `components/admin/ref-group-card.tsx`, `components/framework-confirm-section.tsx`, `components/library-dept-flyout.tsx`, `components/process-library-panel.tsx` |
+| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `components/admin/ref-group-card.tsx`, `components/framework-confirm-section.tsx`, `components/library-dept-flyout.tsx`, `components/process-library-panel.tsx`, `components/settings/catalogs-panel.tsx` |
 | `checkout-panel.tsx` | `CheckoutPanel` | 점유권 탭 | `components/approval-panel.tsx` |
 | `clip-body.tsx` | `ClipBody`, `ClipToggle` | 고정 높이 클립 본문 | `components/maps/map-detail-description.tsx`, `components/maps/map-notes-section.tsx` |
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |
@@ -307,6 +307,7 @@
 |------|----------|------|--------|
 | `ai-chat-settings-panel.tsx` | `AiChatSettingsPanel` | AI 챗 설정(sysadmin) | `app/settings/page.tsx` |
 | `ai-prompts-panel.tsx` | `AiPromptsPanel` | AI 프롬프트 관리 패널 | `app/settings/page.tsx` |
+| `catalogs-panel.tsx` | `CatalogsPanel` | 관리 목록(카탈로그) 탭 | `app/settings/page.tsx` |
 | `dashboard-panel.tsx` | `DashboardPanel` | 운영 대시보드 | `app/settings/page.tsx` |
 | `kb-manage-panel.tsx` | `KbManagePanel` | 설정 · 지식기반 라이브러리(P2) | `app/settings/page.tsx` |
 | `manual-manage-panel.tsx` | `ManualManagePanel` | 설정 · 매뉴얼 편집·게시 | `app/settings/page.tsx` |
