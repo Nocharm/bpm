@@ -223,6 +223,16 @@ db-viewer compose에는 `dbv-bpm`을 **추가로** 나열하고(`dbv-bpm9910`은
 
 ## 8. 되돌리기 · 트러블슈팅
 
+**`docker compose down -v` 이후(검증 스택에서 흔함)** — 네트워크는 남고 계정은 사라진다.
+
+- `dbv-*`는 `external`이라 `down`이 지우지 않는다(compose는 자기가 만든 `*_default`만 지운다). 다음 `up`은 그대로 된다.
+- `-v`로 `pgdata`가 지워지면 **`dbviewer_ro` 롤과 권한도 함께 사라진다**. 운영 덤프를 복원해도 돌아오지 않는다(`pg_dump`는 롤을 담지 않는다). 복원 직후 §5 SQL을 다시 실행한다 — 파일로 두고 한 줄로:
+  ```bash
+  docker compose -p bpm-9910 --env-file .env.9910 exec -T db psql -U processmap -d processmap < dbviewer-ro.sql
+  ```
+  db-viewer 쪽 소스 등록은 그대로 유효하다(재등록 불필요) — 계정만 살리면 연결 테스트가 다시 초록이 된다.
+- `docker network prune`은 다르다 — 붙은 컨테이너가 하나도 없는 네트워크를 지운다. bpm과 db-viewer를 둘 다 내린 상태에서 돌리면 `dbv-*`가 사라지고 다음 `up`이 `not found`로 실패한다 → §2-1로 다시 만든다.
+
 **연결 해제**: db-viewer `/admin`에서 소스 비활성화(또는 스냅샷·정책 정리 후 삭제) → db-viewer compose에서
 네트워크 제거 후 `up -d backend` → 이 스택에서 `DROP ROLE dbviewer_ro`(먼저 `REASSIGN`/`DROP OWNED` 불필요 —
 소유 객체 없음). compose의 `dbv` 합류를 빼려면 코드 revert 후 `up -d db`.

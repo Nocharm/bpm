@@ -303,7 +303,7 @@ docker exec -i "$DEV_DB" psql -U processmap -d processmap -c \
 
 ## 10. 정리·롤백
 
-- **9910 스택 폐기**(복사본이므로 운영 무영향):
+- **9910 스택 폐기**(복사본이므로 운영 무영향). db-viewer 전용 네트워크 `dbv-bpm9910`은 external이라 남는다(정상). 다음 회차에 복원한 뒤에는 `dbviewer_ro` 롤을 다시 만들어야 db-viewer가 붙는다([`db-viewer-readonly.md`](db-viewer-readonly.md) §8):
   ```bash
   docker compose -p bpm-9910 --env-file .env.9910 down -v      # -v: 복제 DB 볼륨까지 삭제
   ```
