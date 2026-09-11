@@ -42,12 +42,11 @@ await api("PUT", `/versions/${versionId}/graph`, {
     { id: `${nodeId}-e2`, source_node_id: nodeId, target_node_id: `${nodeId}-e`, label: "" },
   ],
 });
-// 카탈로그 초기화 — 역할 목록에 "Reviewer"만
-await api("PUT", "/admin/app-settings", { assignee_roles: ["Reviewer"], systems: ["LIMS"] });
-
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const pageErrors = [];
 try {
+  // 카탈로그 초기화 — 역할 목록에 "Reviewer"만. try 안 첫 문장이라야 실패해도 finally 정리가 돈다.
+  await api("PUT", "/admin/app-settings", { assignee_roles: ["Reviewer"], systems: ["LIMS"] });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript((user) => {
     window.localStorage.setItem("bpm.devUser", user);
@@ -122,7 +121,8 @@ try {
 } finally {
   await browser.close();
   // 시드 정리 — 카탈로그는 비우고 맵은 남긴다(휴지통 절차 대신 이름에 stamp)
-  await api("PUT", "/admin/app-settings", { assignee_roles: [], systems: [] }).catch(() => undefined);
+  await api("PUT", "/admin/app-settings", { assignee_roles: [], systems: [] })
+    .catch((err) => console.warn("catalog reset failed", err));
 }
 check("no page errors", pageErrors.length === 0, pageErrors.join(" | "));
 const failed = results.filter((r) => !r.ok).length;

@@ -178,7 +178,7 @@ export function MapDetailSpSection({ detail, koreanDeptByPath }: MapDetailSpSect
   const gmpText = detail.sp_gmp ? formatGmp(detail.sp_gmp) : "";
   const attrCount = [
     deptPath !== "",
-    names.length > 0,
+    assigneeFilled,
     str(detail.sp_system) !== "" || str(detail.sp_system_fallback) !== "",
     url !== "",
     gmpText !== "" || str(detail.sp_gmp_fallback) !== "",

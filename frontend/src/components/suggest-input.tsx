@@ -90,9 +90,12 @@ export function SuggestInput({
     setResyncPending(true);
     if (trimmed !== value.trim()) onCommit(trimmed);
   };
-  // Enter/blur — 하이라이트 항목 > 대소문자 무시 정확 일치(표기 정규화) > 자유값 > 되돌림
-  const settle = () => {
-    if (highlight >= 0 && highlight < hits.length) {
+  // Enter(useHighlight=true) — 하이라이트 항목 우선. blur(useHighlight=false)는 하이라이트를
+  // 무시한다 — 마우스 호버만으로 highlight가 옮겨져 있을 수 있어(클릭 없이 딴 곳 blur), 그 상태로
+  // 하이라이트를 확정하면 타이핑 중이던 draft가 아니라 호버 중이던 항목이 커밋된다.
+  // 순서: (Enter만) 하이라이트 항목 > 대소문자 무시 정확 일치(표기 정규화) > 자유값 > 되돌림
+  const settle = (useHighlight: boolean) => {
+    if (useHighlight && highlight >= 0 && highlight < hits.length) {
       commit(hits[highlight]);
       return;
     }
@@ -149,7 +152,7 @@ export function SuggestInput({
           setHighlight(-1);
           if (!open) openMenu();
         }}
-        onBlur={settle}
+        onBlur={() => settle(false)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
@@ -163,7 +166,7 @@ export function SuggestInput({
           } else if (event.key === "Enter") {
             event.preventDefault();
             event.stopPropagation(); // 팝오버 전역 Enter 확정·모달 submit과 분리
-            settle();
+            settle(true);
           } else if (event.key === "Escape") {
             event.stopPropagation(); // 모달/인스펙터 Esc 닫힘으로 번지지 않게
             setDraft(value);
@@ -183,6 +186,7 @@ export function SuggestInput({
             role="listbox"
             className="fixed z-[1400] max-h-56 overflow-y-auto rounded-sm border border-hairline bg-surface py-1 shadow-lg"
             style={{ top: pos.top, left: pos.left, width: DROPDOWN_WIDTH }}
+            onMouseLeave={() => setHighlight(-1)}
           >
             {hits.map((item, index) => (
               <li key={item} role="option" aria-selected={highlight === index}>
