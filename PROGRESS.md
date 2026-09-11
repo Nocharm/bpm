@@ -12,6 +12,7 @@
 - **Task 3**: `SuggestInput`이 `SuggestOption{value, aliases?}`(`CatalogEntry`가 그대로 만족)를 받아 별칭까지 `filterByQuery`로 검색하고, 값·별칭 정확 일치는 정식 표기(`value`)로 치환해 커밋 — 드롭다운 항목에 별칭 보조 텍스트(`text-fine text-ink-tertiary`) 추가. 소비자 3곳(`bpm-attribute-picker`·`role-tile`·`system-suggest-input`)은 `useCatalogs()`가 이미 `CatalogEntry[]`를 반환해 무변경으로 타입이 맞음. tsc 잔여 에러는 예상대로 `catalogs-panel.tsx`(Task 4) 한정, vitest 977 green.
 - **Task 4**: `catalogs-panel.tsx`를 `CatalogEntry[]`로 마무리 — 값 칩이 버튼으로 바뀌어 클릭 시 인라인 별칭 편집 줄(`applyAliases`, `normalizeAliases`로 서버 불변식 재적용) 토글, 별칭 있으면 `+n` 배지. `Other`는 삭제만 잠금이고 별칭은 편집 가능. CSV 임포트 결과 문구에 병합된 별칭 수 추가, 카드 힌트 아래 `catalog.csvHint` 한 줄. tsc 전체 clean(잔여 8건 해소), vitest 977 green, COMPONENTS.md 무변경.
 - **Task 5**: 캔버스 노드 담당자/시스템 줄 휴식↔활성 전환 — `NODE_ALT_DELAY_MS`(1000ms, `lib/canvas.ts`) 이상 호버·선택이 지속되면 담당자 줄(역할 칩→담당자 이름)·시스템 줄(정식명→원문 메모)이 opacity 교차 페이드. `RoleChip`에 `tone="mono"` 추가(캔버스 안은 흑백, 다른 사용처는 액센트 유지). `useDelayedFlag`는 즉시 리셋은 render-time state adjust, 지연 설정은 effect+setTimeout(React Compiler lint 준수). tsc/lint/vitest(977) 전체 green, COMPONENTS.md 무변경.
+- **Task 6**: `pw-smoke-assignee-role.mjs`를 엔트리 카탈로그로 확장 — 별칭 입력(`검토자`→`Reviewer`, `랩정보`→`LIMS`) 정규화 확인, 담당자 줄 휴식(역할 칩)↔호버 1300ms 뒤 활성(담당자 이름) 전환, Catalogs 탭 CSV 2열 임포트+칩 별칭 편집→저장→`/catalogs` deep-equal 검증(15/15 PASS). 설계 문서 상태를 "dev 구현 완료"로 갱신.
 
 ## 2026-09-11 — 노드 assignee_role 컬럼(백엔드) (dev)
 
