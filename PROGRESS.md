@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — db-viewer 읽기전용 조회 연결 준비 (dev)
+
+- **배경**: 같은 71번 서버의 db-viewer(`:6678`)에서 이 앱 Postgres를 읽기전용으로 보려는 요구. db-viewer 저장소의 멀티 소스 런북(B′ 서비스당 전용 브리지·`dbviewer_ro`)을 이 앱 관점으로 옮겼다 — 앱 소스 무변경.
+- **compose**: db 서비스가 external 네트워크 `dbv`(`name: ${DBV_NETWORK:-dbv-bpm}`)에 별칭 `${DBV_DB_ALIAS:-bpm-db}`로 추가 합류(`default:` 명시 유지). 운영·9910이 같은 파일을 쓰므로 env로 갈라 별칭 충돌 방지. ⚠️ 이후 모든 스택은 `docker network create`가 선행돼야 `up`이 된다(setup-once A9·deploy §3·9910 §2 체크리스트에 반영). `docker compose config`로 9910 값·기본값 보간 확인.
+- **문서**: `docs/deploy/db-viewer-readonly.md`(9910 리허설 → 운영 승격, 민감 테이블 REVOKE 포함) + 그림 설명 `db-viewer-readonly.html`. db-viewer 쪽 compose 수정은 그 저장소에서 별도.
+
 ## 2026-09-11 — 개인 대시보드 미세 개선 8종 (dev)
 
 - **행**: 제목 톤다운(ink-secondary)·SP는 맵 카드와 같은 아이콘 박스·상태는 점 인디케이터만(툴팁 라벨, 범례 라벨은 유지)·열기 버튼은 맵 카드 호버 필과 동일 디자인 + 버튼 자체 호버(액센트 테두리) + `grid-cols-[0fr→1fr]`로 폭이 열리며 우측 항목이 밀리는 등장(진입 300ms 지연, 이탈 즉시).

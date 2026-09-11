@@ -82,6 +82,12 @@ git diff <운영커밋>..<검증커밋> -- backend/app/db.py backend/app/models.
   ```bash
   docker network rm bpm-9910_default 2>/dev/null
   ```
+- [ ] db-viewer 전용 네트워크(2026-09-11 이후 compose는 external 네트워크 없이는 `up`이 실패한다):
+  ```bash
+  docker network create --subnet 172.50.1.0/24 dbv-bpm9910 2>/dev/null
+  printf 'DBV_NETWORK=dbv-bpm9910\nDBV_DB_ALIAS=bpm9910-db\n' >> .env.9910
+  ```
+  db-viewer 연결 자체는 [`db-viewer-readonly.md`](db-viewer-readonly.md).
 
 ---
 

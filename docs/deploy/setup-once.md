@@ -118,6 +118,17 @@ docker compose exec backend python -m scripts.reset_db
 
 상세·부분 시드는 [`db-seed.md`](db-seed.md). 운영 DB 복사본으로 세우는 검증 스택은 시드하지 않는다 — 복원이 곧 데이터다.
 
+### A9. db-viewer 전용 네트워크 (스택당 1회, 2026-09-11 이후 필수)
+
+db 서비스가 external 네트워크 `${DBV_NETWORK:-dbv-bpm}`에 합류하므로, 이 네트워크가 없으면 `docker compose up` 자체가 실패한다. 스택마다 이름·대역을 달리 만든다:
+
+```bash
+docker network create --subnet 172.50.0.0/24 dbv-bpm         # 운영 9900 (.env 기본값)
+docker network create --subnet 172.50.1.0/24 dbv-bpm9910     # 검증 9910 (.env.9910: DBV_NETWORK=dbv-bpm9910 · DBV_DB_ALIAS=bpm9910-db)
+```
+
+db-viewer가 실제로 읽어가게 하는 나머지 절차(읽기전용 계정·db-viewer 쪽 등록)는 [`db-viewer-readonly.md`](db-viewer-readonly.md).
+
 ---
 
 ## B. 릴리스 이후 1회
