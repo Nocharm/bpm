@@ -49,10 +49,11 @@ function ManagedListCard({
 }: ManagedListCardProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<string[]>(values);
-  // 서버 값이 바뀌면(저장·재조회) 초안을 새 값으로 — 렌더 중 상태 조정
-  const [seen, setSeen] = useState(values);
-  if (values !== seen) {
-    setSeen(values);
+  // 서버 값이 내용상 바뀌었을 때만 초안을 새 값으로 — 참조 비교면 형제 카드 저장·재조회마다 미저장 초안이 날아간다 (review 2026-09-11)
+  const valuesKey = JSON.stringify(values);
+  const [seenKey, setSeenKey] = useState(valuesKey);
+  if (valuesKey !== seenKey) {
+    setSeenKey(valuesKey);
     setDraft(values);
   }
   const [adding, setAdding] = useState("");
@@ -199,7 +200,7 @@ function ManagedListCard({
 export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
   const { t } = useI18n();
   const [lists, setLists] = useState<Lists | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     let alive = true;
@@ -212,12 +213,13 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
         if (alive) setLists(next);
       })
       .catch((err) => {
-        if (alive) setError(humanizeApiError(err, t));
+        if (alive) setError(err);
       });
     return () => {
       alive = false;
     };
-  }, [isSysadmin, t]);
+    // t는 의도적으로 제외 — 언어 토글마다 새 클로저가 돼 재조회를 유발하면 두 카드의 미저장 초안이 날아간다 (review 2026-09-11)
+  }, [isSysadmin]);
 
   const save = async (patch: { assignee_roles?: string[]; systems?: string[] }): Promise<string[]> => {
     const saved = await putAppSettings(patch);
@@ -225,7 +227,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
     return patch.assignee_roles !== undefined ? saved.assignee_roles : saved.systems;
   };
 
-  if (error !== null) return <p className="text-caption text-error">{error}</p>;
+  if (error !== null) return <p className="text-caption text-error">{humanizeApiError(error, t)}</p>;
   if (lists === null) return <p className="text-caption text-ink-tertiary">{t("catalog.loading")}</p>;
   return (
     <div className="flex max-w-3xl flex-col gap-6" data-id="catalogs-panel">
