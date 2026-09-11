@@ -13,6 +13,9 @@ describe("parseCatalogCsv", () => {
   it("accepts a headerless single-column file", () => {
     expect(parseCatalogCsv("LIMS\nSAP\n")).toEqual([{ value: "LIMS", aliases: [] }, { value: "SAP", aliases: [] }]);
   });
+  it("unions aliases when the same value appears on several rows", () => {
+    expect(parseCatalogCsv("LIMS,랩정보\nlims,lab info|랩정보\n")).toEqual([{ value: "LIMS", aliases: ["랩정보", "lab info"] }]);
+  });
 });
 
 describe("mergeCatalogEntries", () => {

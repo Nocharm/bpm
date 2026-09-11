@@ -44,7 +44,8 @@ export function parseCatalogCsv(text: string): CatalogEntry[] {
     }))
     .filter((entry) => entry.value !== "");
   if (entries.length > 0 && entries[0].value.toLocaleLowerCase() === "value") entries.shift();
-  return normalizeAliases(entries);
+  // merge (not normalizeAliases directly) so rows sharing a value union their aliases instead of the dup row being dropped whole
+  return mergeCatalogEntries([], entries).next;
 }
 
 export function mergeCatalogEntries(
@@ -72,5 +73,6 @@ export function mergeCatalogEntries(
   const normalized = normalizeAliases(next);
   const before = current.reduce((sum, entry) => sum + entry.aliases.length, 0);
   const after = normalized.reduce((sum, entry) => sum + entry.aliases.length, 0);
+  // net delta post-normalization — collisions dropped by normalizeAliases are not counted as "added"
   return { next: normalized, added, duplicates, aliasesAdded: Math.max(0, after - before) };
 }
