@@ -6,12 +6,12 @@
 
 import { useEffect, useState } from "react";
 
-import { getCatalogs, type Catalogs } from "@/lib/api";
+import { getCatalogs, type CatalogEntry, type Catalogs } from "@/lib/api";
 
 // 시스템 예약 항목 — 목록 밖 자유값은 Other로 분류하고 원문을 system_fallback에 남긴다 (저장값 고정, 표시는 i18n)
 export const OTHER_SYSTEM = "Other";
 
-const EMPTY: Catalogs = { assignee_roles: [], systems: [OTHER_SYSTEM] };
+const EMPTY: Catalogs = { assignee_roles: [], systems: [{ value: OTHER_SYSTEM, aliases: [] }] };
 
 let cache: Catalogs | null = null;
 let inflight: Promise<Catalogs> | null = null;
@@ -64,11 +64,21 @@ export function useCatalogs(): Catalogs {
   return data;
 }
 
-/** trim 후 대소문자 무시 일치 → 목록 표기. 빈값·불일치는 null. */
-export function normalizeToCatalog(value: string, list: readonly string[]): string | null {
+/** 값 또는 별칭이 대소문자 무시로 일치하는 항목 — 없으면 null */
+export function findCatalogEntry(value: string, entries: readonly CatalogEntry[]): CatalogEntry | null {
   const key = value.trim().toLocaleLowerCase();
   if (key === "") return null;
-  return list.find((item) => item.toLocaleLowerCase() === key) ?? null;
+  return (
+    entries.find(
+      (entry) =>
+        entry.value.toLocaleLowerCase() === key || entry.aliases.some((alias) => alias.toLocaleLowerCase() === key),
+    ) ?? null
+  );
+}
+
+/** trim 후 값·별칭 대소문자 무시 일치 → 정식 표기(value). 빈값·불일치는 null. */
+export function normalizeToCatalog(value: string, entries: readonly CatalogEntry[]): string | null {
+  return findCatalogEntry(value, entries)?.value ?? null;
 }
 
 export interface SystemCommit {
@@ -80,7 +90,7 @@ export interface SystemCommit {
 
 /** 시스템 커밋 규칙 — 4 표면(인스펙터·노드 모달·SP 지정·적용) 공용.
  *  빈값=시스템 비움 · 목록 일치=표기 저장 · 불일치=Other + 원문 메모(비어 있을 때만 채움) */
-export function commitSystem(raw: string, systems: readonly string[], currentFallback: string): SystemCommit {
+export function commitSystem(raw: string, systems: readonly CatalogEntry[], currentFallback: string): SystemCommit {
   const trimmed = raw.trim();
   if (trimmed === "") return { system: "", system_fallback: currentFallback, keptNote: false };
   const matched = normalizeToCatalog(trimmed, systems);

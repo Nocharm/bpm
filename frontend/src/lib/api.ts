@@ -1428,18 +1428,24 @@ export interface AppSettings {
   // employees.position distinct 정렬 목록 — allowlist 편집 UI 참고용, 읽기전용
   available_positions: string[];
   // 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션 (design 2026-09-11 §3.1)
-  assignee_roles: string[];
-  systems: string[];
+  assignee_roles: CatalogEntry[];
+  systems: CatalogEntry[];
   // nodes.system ∪ sp_system distinct — 사용 중 값을 목록으로 승격하는 후보(읽기전용)
   available_systems: string[];
   updated_by: string | null;
   updated_at: string | null;
 }
 
+// 카탈로그 항목 — 정식 표기 + 별칭(검색·입력 시 정식 표기로 치환) (design 2026-09-12 §1)
+export interface CatalogEntry {
+  value: string;
+  aliases: string[];
+}
+
 // 관리 목록 읽기 — 로그인 유저 전원(에디터 자동완성 소스). 편집은 putAppSettings(sysadmin)
 export interface Catalogs {
-  assignee_roles: string[];
-  systems: string[];
+  assignee_roles: CatalogEntry[];
+  systems: CatalogEntry[];
 }
 
 export function getCatalogs(): Promise<Catalogs> {
@@ -1458,8 +1464,8 @@ export function putAppSettings(patch: {
   ai_chat_retention_days?: number;
   ai_access_disabled?: boolean;
   exposed_positions?: string[];
-  assignee_roles?: string[];
-  systems?: string[];
+  assignee_roles?: CatalogEntry[];
+  systems?: CatalogEntry[];
 }): Promise<AppSettings> {
   return request<AppSettings>("/admin/app-settings", {
     method: "PUT",

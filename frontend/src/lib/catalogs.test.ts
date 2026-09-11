@@ -1,9 +1,13 @@
-// 카탈로그 순수 함수 — 시스템 정규화·Other 폴백 규칙 (design 2026-09-11 §4.2)
+// 카탈로그 순수 함수 — 시스템 정규화·별칭 매칭·Other 폴백 규칙 (design 2026-09-11 §4.2, 2026-09-12 §1)
 import { describe, expect, it } from "vitest";
 
 import { commitSystem, formatSystem, normalizeToCatalog, OTHER_SYSTEM } from "./catalogs";
 
-const SYSTEMS = [OTHER_SYSTEM, "LIMS", "SAP"];
+const SYSTEMS = [
+  { value: OTHER_SYSTEM, aliases: ["기타"] },
+  { value: "LIMS", aliases: ["랩정보", "lab info"] },
+  { value: "SAP", aliases: [] },
+];
 
 describe("normalizeToCatalog", () => {
   it("matches case-insensitively and returns the catalog spelling", () => {
@@ -13,6 +17,11 @@ describe("normalizeToCatalog", () => {
   it("returns null for empty or unknown values", () => {
     expect(normalizeToCatalog("", SYSTEMS)).toBeNull();
     expect(normalizeToCatalog("Excel", SYSTEMS)).toBeNull();
+  });
+  it("matches an alias and returns the canonical value", () => {
+    expect(normalizeToCatalog("랩정보", SYSTEMS)).toBe("LIMS");
+    expect(normalizeToCatalog(" LAB INFO ", SYSTEMS)).toBe("LIMS");
+    expect(normalizeToCatalog("기타", SYSTEMS)).toBe("Other");
   });
 });
 
@@ -37,6 +46,9 @@ describe("commitSystem", () => {
     expect(commitSystem("old memo", SYSTEMS, "old memo")).toEqual({
       system: "Other", system_fallback: "old memo", keptNote: false,
     });
+  });
+  it("alias input stores the canonical system, not Other", () => {
+    expect(commitSystem("랩정보", SYSTEMS, "memo")).toEqual({ system: "LIMS", system_fallback: "memo", keptNote: false });
   });
 });
 
