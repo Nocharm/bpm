@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 245개 · 2026-09-10 기준
+총 251개 · 2026-09-11 기준
 
 ## components/
 
@@ -118,7 +118,7 @@
 | `section-header.tsx` | `SectionHeader` | 섹션 헤더 | `components/maps/category-summary-card.tsx`, `components/maps/map-detail-description.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-notes-section.tsx` |
 | `section-panel.tsx` | `SectionPanel` | 섹션 피커 패널 | `app/maps/[mapId]/page.tsx` |
 | `self-publish-popover.tsx` | `SelfPublishPopover` | 셀프 게시 확인 팝오버 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
-| `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/home-skeleton.tsx`, `components/user-pill.tsx` |
+| `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/framework-card.tsx`, `components/maps/home-skeleton.tsx`, `components/maps/recent-events-card.tsx`, `components/user-pill.tsx` |
 | `status-badge.tsx` | `StatusBadge` | 버전 라이프사이클 상태 pill | `app/maps/[mapId]/page.tsx`, `components/approval-panel.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `subprocess-inspector-card.tsx` | `SubprocessInspectorCard` | 인스펙터 서브프로세스 카드 | `app/maps/[mapId]/page.tsx` |
 | `subprocess-preview-peek.tsx` | `SubprocessPreviewPeek` | 서브프로세스 라이브러리/체계 피커 행의 미리보기 피크 | `app/maps/[mapId]/page.tsx`, `components/framework-connect-dialog.tsx`, `components/framework-tree-picker.tsx`, `components/process-library-panel.tsx` |
@@ -127,7 +127,7 @@
 | `subprocess-version-picker.tsx` | `SubprocessVersionPicker` | 하위프로세스 노드 버전 선택 | `app/maps/[mapId]/page.tsx` |
 | `time-pills.tsx` | `TimePills` | 카드 시각 표시 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx` |
 | `toast-stack.tsx` | `ToastStack` | 우상단(Nav 아래) 토스트 스택 | `app/feedback/page.tsx`, `app/groups/[groupId]/page.tsx`, `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `app/maps/[mapId]/settings/page.tsx`, `app/notices/page.tsx`, `app/page.tsx`, `app/settings/page.tsx`, `components/admin/approval-queue.tsx`, `components/feedback-side-panel.tsx`, `components/groups/groups-panel.tsx`, `components/map-settings/checkout-requests-panel.tsx`, `components/permissions/pending-approvals-panel.tsx` |
-| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/map-detail-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
+| `tooltip.tsx` | `Tooltip` | 호버 툴팁 | `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/report-bits.tsx`, `components/csv-import-tab.tsx`, `components/editor-toolbar.tsx`, `components/info-tip.tsx`, `components/inspector-panel.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/map-detail-card.tsx`, `components/node-metrics-card.tsx`, `components/notices/notices-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/subprocess-usage-tab.tsx`, `components/top-nav.tsx` |
 | `top-nav.tsx` | `TopNav` | 전역 네비게이션 바 | `app/layout.tsx` |
 | `url-label-field.tsx` | `UrlLabelField` | URL+라벨 공용 편집 필드 | `app/maps/[mapId]/page.tsx` |
 | `user-hover-card.tsx` | `UserHoverCard` | 유저 호버 카드 | `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/user-pill.tsx` |
@@ -177,12 +177,6 @@
 | `report-section.tsx` | `ReportSection` | 2열 임포트 리포트의 섹션 셸 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |
 | `summary-card.tsx` | `ImportSummaryCard` | 요약 카드 | `components/admin/import-report/interview-import-report.tsx` |
 
-## components/charts/
-
-| 파일 | 컴포넌트 | 역할 | 사용처 |
-|------|----------|------|--------|
-| `donut.tsx` | `Donut` | 작은 SVG 도넛 | `components/maps/approvals-card.tsx`, `components/maps/status-donut-card.tsx` |
-
 ## components/dashboard/
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
@@ -228,12 +222,17 @@
 | `category-summary-card.tsx` | `CategorySummaryCard` | 홈 Framework 뷰 | `app/page.tsx` |
 | `clamped-list.tsx` | `ClampedList` | 맵 카드 리스트 3.5개 높이 클램프 | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `count-tag.tsx` | `CountTag` | 맵 개수 태그 | `components/admin/framework-panel.tsx`, `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `dashboard-map-row.tsx` | `DashboardMapRow` | 대시보드 컴팩트 맵 행 | `components/maps/recent-opened-list.tsx`, `components/maps/status-donut-card.tsx` |
+| `dashboard-activity-tiles.tsx` | `DashboardActivityTiles` | 홈 대시보드 활동 타일 5종 | `components/maps/home-dashboard.tsx` |
+| `dashboard-map-row.tsx` | `DashboardMapRow` | 대시보드 컴팩트 맵 행 | `components/maps/dept-maps-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-opened-list.tsx` |
+| `dashboard-profile.tsx` | `DashboardProfile` | 홈 대시보드 마스트헤드 | `components/maps/home-dashboard.tsx` |
+| `dashboard-section.tsx` | `DashboardSection`, `DashboardEmpty`, `DashboardFoot` | 홈 대시보드 섹션 셸 | `components/maps/approvals-card.tsx`, `components/maps/dept-maps-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-events-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
+| `dept-maps-card.tsx` | `DeptMapsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |
 | `framework-assign-modal.tsx` | `FrameworkAssignModal` | 업무 체계 카테고리 연결/해제 + 슬롯 이양 | `components/maps/map-detail-card.tsx` |
+| `framework-card.tsx` | `FrameworkCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `framework-tree.tsx` | `FrameworkTree` | 홈 Framework 뷰 | `app/page.tsx` |
 | `home-dashboard.tsx` | `HomeDashboard` | 홈 우측 | `app/page.tsx` |
 | `home-filter-pills.tsx` | `HomeFilterPills` | 홈 상태·권한·오우닝·SP 필터 필 4종 | `app/page.tsx` |
@@ -246,11 +245,13 @@
 | `map-fallback-notes.tsx` | `MapFallbackNotes` | 맵 단위 인터뷰 원문 메모 5종(GMP·빈도·총시간·실작업·시스템) | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |
 | `map-notes-section.tsx` | `MapNotesSection` | 맵/L5 노트 섹션 | `app/maps/[mapId]/page.tsx`, `components/maps/map-detail-card.tsx`, `components/node-summary-modal.tsx` |
 | `my-dept-favorites.tsx` | `MyDeptFavorites` | 홈 좌측 상단 | `app/page.tsx` |
+| `my-documents-card.tsx` | `MyDocumentsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `org-accordion.tsx` | `OrgAccordion` | 홈 좌측 | `app/page.tsx` |
-| `recent-opened-list.tsx` | `RecentOpenedList` | 홈 대시보드 최상단 | `components/maps/home-dashboard.tsx` |
+| `recent-events-card.tsx` | `RecentEventsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
+| `recent-opened-list.tsx` | `RecentOpenedList` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `slot-change-dialog.tsx` | `SlotChangeDialog` | 슬롯 변경 확인 다이얼로그 | `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx` |
 | `slot-delete-dialog.tsx` | `SlotDeleteDialog` | 슬롯 있는 L6 삭제 | `components/maps/map-detail-card.tsx` |
-| `status-donut-card.tsx` | `StatusDonutCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
+| `status-distribution.tsx` | `StatusBar`, `StatusLegend` | 버전 상태 분포 | `components/maps/dept-maps-card.tsx`, `components/maps/my-documents-card.tsx` |
 | `sticky-box-header.tsx` | `StickyBoxHeader` | 틴트 박스 헤더의 스티키 래퍼 | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `version-timeline.tsx` | `VersionTimeline` | 버전 히스토리 | `components/maps/map-detail-card.tsx` |
 | `welcome-placeholder.tsx` | `WelcomePlaceholder` | 빈 상태/미선택 자리 | `app/page.tsx` |

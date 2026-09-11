@@ -519,6 +519,9 @@ export default function MapListPage() {
   );
   // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
   const myDeptLabel = (me?.department || me?.org_path?.split("/").pop()) ?? "";
+  // 대시보드 내 부서 카드용 — 검색·필터 전 전체(위 myDeptMaps는 필터 결과라 목록 섹션 전용)
+  // (플레인 식 — 수동 useMemo는 React Compiler가 me?.org_path 의존을 보존 못 해 린트 실패)
+  const myDeptAllMaps = me?.org_path ? filterMyDeptMaps(processMaps, me.org_path) : [];
 
   // 아코디언 초기 펼침 — 내 부서 섹션이 진입점이므로, 내 부서 맵이 있으면 조직도는 접힌 채로 둔다.
   // me·maps가 모두 도착한 뒤 1회만 판단한다 — 먼저 도착한 쪽만 보고 시드하면 뒤늦게 뜬 My dept 섹션과
@@ -1026,7 +1029,32 @@ export default function MapListPage() {
                   onSelectMap={selectMap}
                 />
               ) : (
-                <HomeDashboard maps={processMaps} onSelect={selectMap} />
+                <HomeDashboard
+                  maps={processMaps}
+                  me={me}
+                  myDeptMaps={myDeptAllMaps}
+                  myDeptLabel={myDeptLabel}
+                  onSelect={selectMap}
+                  onFilterMine={() => setPermFilter(new Set(["owner"]))}
+                  onFilterStatus={(s) => {
+                    setPermFilter(new Set(["owner"]));
+                    setStatusFilter(new Set([s]));
+                  }}
+                  onCreate={() => {
+                    setCreateMenuOpen(false);
+                    setDialogOpen(true);
+                  }}
+                  onShowInTree={() => {
+                    setHomeView("departments");
+                    setFavOpen(true);
+                    writeTree(orgOpen, true, wordOpen, unassignedOpen, treeTouched, "departments");
+                  }}
+                  onBrowseFramework={() => {
+                    setHomeView("framework");
+                    writeTree(orgOpen, favOpen, wordOpen, unassignedOpen, treeTouched, "framework");
+                  }}
+                  onOpenLinkage={handleOpenLinkage}
+                />
               )}
             </aside>
           </>

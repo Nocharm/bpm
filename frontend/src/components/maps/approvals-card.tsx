@@ -1,28 +1,47 @@
-// 홈 대시보드 — 내 승인 대기 큐(kind별 도넛 + 목록). status 파생 단계만(백엔드 무변경).
+// 홈 대시보드 — 내 결재 대기 큐. 종류 칩(아이콘+라벨)·맵·요청자·경과, 5행 상한 + 인박스 링크아웃. status 파생 단계만(백엔드 무변경).
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeftRight, CheckCircle2, FileSignature, Inbox, KeyRound, Layers, Link2, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { listInboxApprovals, type InboxApproval } from "@/lib/api";
+import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
-import { Donut } from "@/components/charts/donut";
-import { SkeletonBlock, SkeletonLine } from "@/components/skeleton";
+import type { MessageKey } from "@/lib/i18n-messages";
+import { useAgo } from "@/lib/use-ago";
+import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
+import { SkeletonLine } from "@/components/skeleton";
 
-// kind → 토큰 색변수. checkout_transfer는 --color-warning(미존재) 대신 --color-changed 사용.
-const KIND_COLOR: Record<InboxApproval["kind"], string> = {
-  version_approval: "--color-accent",
-  checkout_transfer: "--color-changed",
-  approval_request: "--color-ink-tertiary",
-};
+const ROW_CAP = 5;
+
+// 종류 판정 — approval_request는 title이 세부 종류(map_rename·sp_designation·fw_slot·visibility/permission).
+function resolveKind(a: InboxApproval): { key: MessageKey; icon: ReactNode; cls: string } {
+  const icon = (n: ReactNode) => n;
+  if (a.kind === "version_approval")
+    return { key: "inbox.approvalKind.version_approval", icon: icon(<FileSignature size={12} strokeWidth={1.5} />), cls: "bg-accent-tint text-accent-elevated" };
+  if (a.kind === "checkout_transfer")
+    return { key: "inbox.approvalKind.checkout_transfer", icon: icon(<ArrowLeftRight size={12} strokeWidth={1.5} />), cls: "bg-changed/10 text-changed" };
+  if (a.title === "map_rename")
+    return { key: "inbox.reqKind.map_rename", icon: icon(<Pencil size={12} strokeWidth={1.5} />), cls: "border border-hairline bg-surface-alt text-ink-secondary" };
+  if (a.title === "sp_designation")
+    return { key: "inbox.reqKind.sp_designation", icon: icon(<Link2 size={12} strokeWidth={1.5} />), cls: "bg-accent-tint text-accent" };
+  if (a.title === "fw_slot")
+    return { key: "inbox.reqKind.fw_slot", icon: icon(<Layers size={12} strokeWidth={1.5} />), cls: "bg-added/10 text-added" };
+  return { key: "inbox.approvalKind.approval_request", icon: icon(<KeyRound size={12} strokeWidth={1.5} />), cls: "border border-hairline bg-surface-alt text-ink-secondary" };
+}
 
 interface ApprovalsCardProps { onSelect: (id: number) => void }
 
 export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
   const { t } = useI18n();
+  const router = useRouter();
+  const ago = useAgo();
+  const dir = useDirectory();
   const [items, setItems] = useState<InboxApproval[]>([]);
   // 조회 실패와 진짜 0건을 구분 — 실패 시 "모두 처리됨"으로 오인시키지 않는다
   const [loadError, setLoadError] = useState(false);
-  // 도착 전 0건도 마찬가지 — "모두 처리됨"을 먼저 띄웠다가 목록으로 뒤집히지 않게 스켈레톤으로 대기
+  // 도착 전 0건도 마찬가지 — 빈 상태를 먼저 띄웠다가 목록으로 뒤집히지 않게 스켈레톤으로 대기
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
@@ -32,57 +51,53 @@ export function ApprovalsCard({ onSelect }: ApprovalsCardProps) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  const segments = useMemo(() => {
-    const g = new Map<InboxApproval["kind"], number>();
-    for (const a of items) g.set(a.kind, (g.get(a.kind) ?? 0) + 1);
-    return [...g.entries()].map(([k, v]) => ({ key: k, value: v, colorVar: KIND_COLOR[k] }));
-  }, [items]);
+  const goInbox = () => router.push("/inbox");
   return (
-    <section data-id="home-needs-approval" className="flex flex-col gap-3 rounded-sm border border-hairline bg-surface-alt p-3">
-      <div className="text-caption-strong text-ink">{t("home.needsApproval")}</div>
+    <DashboardSection
+      dataId="home-needs-approval"
+      icon={<Inbox size={16} strokeWidth={1.5} />}
+      title={t("home.needsApproval")}
+      count={loading ? null : items.length}
+      countHot={items.length > 0}
+      more={items.length > ROW_CAP ? { label: t("home.dash.inboxTab"), onClick: goInbox } : undefined}
+    >
       {loading ? (
-        <div className="flex items-center gap-3">
-          <SkeletonBlock className="h-[104px] w-[104px] rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <SkeletonLine className="w-4/5" />
-            <SkeletonLine className="w-3/5" />
-            <SkeletonLine className="w-2/3" />
-          </div>
+        <div className="flex flex-col gap-2 border-t border-divider px-3 py-3">
+          <SkeletonLine className="w-4/5" />
+          <SkeletonLine className="w-3/5" />
+          <SkeletonLine className="w-2/3" />
         </div>
       ) : items.length === 0 ? (
-        <p className="py-4 text-center text-fine text-ink-tertiary">
-          {loadError ? t("home.approvalsLoadError") : t("home.allCaughtUp")}
-        </p>
+        <DashboardEmpty
+          icon={<CheckCircle2 size={14} strokeWidth={1.5} />}
+          text={loadError ? t("home.approvalsLoadError") : t("home.dash.approvalsEmpty")}
+        />
       ) : (
         <>
-          <div className="flex items-center gap-3">
-            <Donut segments={segments} size={104} label={t("home.needsApproval")} centerCaption={t("home.donutTotal")} />
-            <ul className="flex flex-col gap-1 text-fine">
-              {segments.map((s) => (
-                <li key={s.key} className="flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: `var(${s.colorVar})` }} />
-                  <span className="text-ink-secondary">{t(`inbox.approvalKind.${s.key}`)}</span>
-                  <span className="ml-auto text-ink-tertiary">{s.value}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <ul className="flex flex-col gap-1.5">
-            {items.map((a) => (
-              <li key={`${a.kind}:${a.id}`}>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onSelect(a.map_id); }}
-                  className="flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface px-3 py-2 text-left hover:bg-surface-alt"
-                >
-                  <span className="min-w-0 flex-1 truncate text-caption text-ink">{a.map_name}</span>
-                  {a.version_number != null && <span className="shrink-0 text-fine text-ink-tertiary">v{a.version_number}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {items.slice(0, ROW_CAP).map((a) => {
+            const k = resolveKind(a);
+            return (
+              <button
+                key={`${a.kind}:${a.id}`}
+                type="button"
+                data-id={`home-approval-${a.kind}-${a.id}`}
+                onClick={(e) => { e.stopPropagation(); onSelect(a.map_id); }}
+                className="flex w-full items-center gap-2 border-t border-divider px-3 py-1.5 text-left hover:bg-surface-pearl"
+              >
+                <span className={`inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1.5 text-[11px] font-semibold ${k.cls}`}>
+                  {k.icon}
+                  {t(k.key)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-caption text-ink">{a.map_name}</span>
+                <span className="max-w-[30%] shrink-0 truncate text-fine text-ink-secondary">{dir.get(a.requester)?.name ?? a.requester}</span>
+                {a.version_number != null && <span className="shrink-0 text-fine text-ink-tertiary">v{a.version_number}</span>}
+                <span className="shrink-0 text-fine text-ink-tertiary">{ago(a.created_at)}</span>
+              </button>
+            );
+          })}
+          {items.length > ROW_CAP && <DashboardFoot label={t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}
         </>
       )}
-    </section>
+    </DashboardSection>
   );
 }

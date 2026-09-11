@@ -82,21 +82,29 @@ if (rowCount > 0 && firstMapId) {
   console.log("no seeded row in home-recent - skip hover/click/auto-expand checks");
 }
 
-// 도넛 세그먼트 클릭 → 목록 변경 확인 (StatusDonutCard 내부, my-documents 카드로 재접근)
+// 상태 범례 클릭 → 선택 상태(aria-pressed) 전환 + 목록 유지 (MyDocumentsCard, 도넛 대체 2026-09-11)
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
-await page.waitForTimeout(1000);
-const donutCard = page.locator('[data-id="home-my-documents"]');
-const segPath = donutCard.locator("svg path, svg circle").first();
-if (await segPath.count().catch(() => 0) > 0) {
-  const beforeRows = await donutCard.locator('[data-id="dashboard-map-row"]').count();
-  await segPath.click({ force: true }).catch(() => {});
-  await page.waitForTimeout(300);
-  const afterRows = await donutCard.locator('[data-id="dashboard-map-row"]').count();
-  check("donut segment click renders a list (rows >= 0)", afterRows >= 0);
-  console.log(`donut rows before=${beforeRows} after=${afterRows}`);
+await page.waitForTimeout(1500);
+const docsCard = page.locator('[data-id="home-my-documents"]');
+const legendBtns = docsCard.locator('[data-id^="status-legend-"]');
+const legendCount = await legendBtns.count().catch(() => 0);
+if (legendCount > 0) {
+  const target = legendBtns.last();
+  await target.click();
+  await page.waitForTimeout(200);
+  check("status legend click marks the segment pressed", (await target.getAttribute("aria-pressed")) === "true");
+  check("my-documents keeps a row list after legend click", (await docsCard.locator('[data-id="dashboard-map-row"]').count()) > 0);
 } else {
-  console.log("no donut segments (owned maps empty for this dev user) - skip donut click check");
+  console.log("no status legend (owned maps empty for this dev user) - skip legend click check");
 }
+
+// 신규 섹션 5종 + /me/dashboard 도착 후 활동 타일 숫자 렌더
+for (const id of ["home-profile", "home-activity", "home-dept-maps", "home-framework", "home-recent-events"]) {
+  check(`${id} visible`, await page.locator(`[data-id="${id}"]`).isVisible().catch(() => false));
+}
+await page.waitForSelector('[data-id="home-activity-approvals"]', { timeout: 5000 }).catch(() => {});
+check("activity tiles rendered from /me/dashboard", (await page.locator('[data-id="home-activity-approvals"]').count()) === 1);
+check("no dashboard load error banner", (await page.locator('[data-id="home-dashboard-error"]').count()) === 0);
 
 check("no console/page errors", errors.length === 0);
 if (errors.length) console.log("console errors:\n" + errors.join("\n"));

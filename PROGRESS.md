@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 홈 개인 대시보드 재구성 + 프로필 빠른 액션 (feat/map-tab-dashboard)
+
+- **배경**: 맵 탭 미선택 aside가 최근 열람·오너 도넛·승인 3카드뿐이라 오너 맵 없는 유저는 카드 하나만 남고, 과다 유저는 목록이 무제한으로 늘어졌다. HTML 목업(빈약·중간·과다 3시나리오) 확정 후 구현.
+- **구성**: 프로필 마스트헤드(아바타·역할 칩 Sysadmin/체계 권한자·부서 경로·직전 로그인 + 빠른 액션 — 내 맵만 필터는 라벨, 알림·체계 설정·설정은 아이콘 전용+툴팁) → 활동 타일 5(결재 대기·내가 낸 요청·점유 중 버전(클릭 시 목록 펼침)·미읽음·내 피드백) → (승인 필요|내 문서) → (내 부서 맵|업무 체계) → (최근 변경|최근 열어본). 2열은 aside 폭 `@container 42rem` 기준. 모든 섹션 **행 상한(3~6) + "N건 더" 링크아웃**, 빈 데이터는 `null` 반환 대신 **한 줄 빈 상태 + 다음 행동**. 도넛은 상태 분포 바+범례 필터로 대체(`charts/donut`·`donut-geometry` 삭제).
+- **백엔드**: `GET /api/me/dashboard`(`routers/me_dashboard.py`) 단일 집계 — 결재/요청/점유/미읽음/피드백 수·직전 로그인·점유 목록·내 요청·최근 이벤트(오너/편집자 맵, 내 draft 잡음 제외)·권한 카테고리별 L5/미확정/슬롯 대기. `list_maps`의 유효 역할 블록을 `permissions/access.load_my_roles`로 추출해 공유. 스키마 변경 없음.
+- **검증**: backend pytest 1463·ruff 그린 / tsc·lint·vitest 950(신규 `dashboard-stats.test.ts` 5)·카탈로그 그린 / `pw-verify-home-dashboard.mjs` 16/16(도넛 체크→범례 클릭·신규 섹션 5종·타일 렌더로 갱신). 실측 admin.sys(오너 19·점유 2·이벤트 20)·admin.kim(전부 빈 상태) 캡처.
+
 ## 2026-09-10 — 트리 조상 강조 템포 조정 (feat/tree-guide-tempo)
 
 - **피드백**: 200ms 즉응이 촘촘한 트리에서 마우스를 따라 행마다 튀어 어지럽다. 전환을 350ms `ease-smooth`로 늦추고 진입 지연 120ms(스치는 이동은 반응 안 함)·이탈 지연 80ms를 둔다. 휴식 규칙의 transition=이탈, 활성 규칙의 transition=진입으로 나눠 비대칭 지연 구현. 템포 값은 `:root` `--tree-tempo`/`--tree-delay-in`/`--tree-delay-out` 한 곳. 이름 색·굵기도 같은 템포(정적 굵기라 굵기는 즉시).

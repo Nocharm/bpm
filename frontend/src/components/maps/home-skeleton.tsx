@@ -35,10 +35,21 @@ export function HomeSkeleton() {
       </div>
 
       {/* 우측 — 대시보드/상세 패널 자리 (≥split에서만 보이는 것도 실제 레이아웃과 동일) */}
-      <div className="hidden min-w-[24rem] flex-[2] flex-col gap-3 rounded-sm border border-hairline bg-surface-alt p-4 split:flex">
-        <SkeletonLine className="w-32" />
-        <SkeletonBlock className="h-40 w-full" />
-        <div className="flex flex-col gap-2">
+      <div className="hidden min-w-[24rem] flex-[2] flex-col gap-3.5 rounded-sm border border-hairline bg-surface-alt p-4 split:flex">
+        {/* 대시보드 실제 형태 — 프로필 마스트헤드 · 활동 타일 5 · 2열 카드 */}
+        <div className="flex items-center gap-3.5 px-1">
+          <SkeletonBlock className="h-11 w-11 rounded-full" />
+          <div className="flex flex-1 flex-col gap-2">
+            <SkeletonLine className="w-40" />
+            <SkeletonLine className="w-64" />
+          </div>
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {[0, 1, 2, 3, 4].map((tile) => (
+            <SkeletonBlock key={tile} className="h-[74px] w-full" />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
           <SkeletonCard />
           <SkeletonCard />
         </div>

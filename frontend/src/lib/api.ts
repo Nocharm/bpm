@@ -908,6 +908,73 @@ export function getMe(): Promise<Me> {
   return request<Me>("/me");
 }
 
+// 홈 개인 대시보드 집계 — GET /me/dashboard 단일 응답 (결재·요청·점유·알림·피드백 수 + 목록 4종).
+// 결재 대기 목록 자체는 listInboxApprovals가 담당하고 여기서는 건수만 온다.
+export interface MeDashboardActivity {
+  approvals_pending: number;
+  requests_pending: number;
+  checkouts_held: number;
+  unread_notifications: number;
+  feedback_mine: number;
+  feedback_mine_open: number;
+  // 직전 로그인(오늘 기록 제외) — 없으면 null
+  last_login_at: string | null;
+}
+
+export interface MeDashboardCheckout {
+  map_id: number;
+  map_name: string;
+  version_id: number;
+  version_label: string;
+  version_number: number | null;
+  checked_out_at: string | null;
+  waiting_requests: number;
+}
+
+export interface MeDashboardRequest {
+  kind: string; // ApprovalRequest.kind 또는 "checkout_transfer"
+  id: number;
+  map_id: number;
+  map_name: string;
+  status: string;
+  created_at: string;
+}
+
+export interface MeDashboardEvent {
+  event_type: string;
+  map_id: number;
+  map_name: string;
+  version_id: number;
+  version_label: string;
+  version_number: number | null;
+  actor: string;
+  actor_name: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface MeDashboardCategory {
+  category_id: number;
+  name: string;
+  level: number;
+  linkage_map_id: number | null;
+  l5_count: number;
+  unconfirmed_count: number;
+  slot_pending_count: number;
+}
+
+export interface MeDashboard {
+  activity: MeDashboardActivity;
+  checkouts: MeDashboardCheckout[];
+  requests: MeDashboardRequest[];
+  recent_events: MeDashboardEvent[];
+  framework: MeDashboardCategory[];
+}
+
+export function getMeDashboard(): Promise<MeDashboard> {
+  return request<MeDashboard>("/me/dashboard");
+}
+
 export interface EmployeeRow {
   login_id: string;
   name: string;
