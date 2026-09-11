@@ -62,3 +62,8 @@ dry-run(이슈 0)·`artifact_role` 유실 회귀 봉합(`[Interview]` 섹션 잔
 - Word 내보내기 제외(구현 보류). KB 인덱싱 패리티는 범위 밖(선택되지 않음 — 백로그).
 - AI 계약(챗·컨설턴트 인터뷰)은 `feat/ai-contract-parity`에서 선행 구현 — 프롬프트/직렬화·touch_time
   7종 완성·set_attr 텍스트 필드 적용(정렬 폐기 동반).
+
+## 후속 (2026-09-11)
+
+역할(`assignee_role`) CSV `Role` 열·Excel 왕복·AI `attributes.assignee_role`·인터뷰 에이전트 역할 수집,
+시스템 CSV 값의 카탈로그 정규화 — 2026-09-11 설계 §4.3 이관.
