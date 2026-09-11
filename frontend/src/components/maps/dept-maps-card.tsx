@@ -1,5 +1,6 @@
-// 홈 대시보드 — 내 부서 맵 현황. 맵 수·고아 참조·SP 미지정 지표 + 상태 분포 + 최근 갱신 3행. 우측 드롭다운으로 내 조직 경로의
-// 상위 부서까지 범위를 넓힐 수 있고 선택은 localStorage에 영속(bpm.home.dashDeptScope). 부서 없는 유저는 빈 상태.
+// 홈 대시보드 — 내 부서 맵 현황. 헤더는 "내 부서"만, 부서명은 헤더 우측 드롭다운(내 조직 경로의 상위까지 범위 확장, 선택은
+// localStorage bpm.home.dashDeptScope에 영속). 고아 참조·SP 미지정 지표 + 상태 분포 + 최근 갱신 3행, 맵 수·트리 보기는 하단 행.
+// 부서 없는 유저는 빈 상태.
 "use client";
 
 import { Building2, Check, ChevronDown } from "lucide-react";
@@ -11,7 +12,7 @@ import { useI18n } from "@/lib/i18n";
 import { filterMyDeptMaps } from "@/lib/org-tree";
 import { useAgo } from "@/lib/use-ago";
 import { DashboardMapRow } from "@/components/maps/dashboard-map-row";
-import { DashboardEmpty, DashboardSection } from "@/components/maps/dashboard-section";
+import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
 import { useGoToMenu } from "@/components/maps/go-to-menu";
 import { StatusBar, StatusLegend } from "@/components/maps/status-distribution";
 
@@ -43,6 +44,8 @@ interface DeptMapsCardProps {
   onShowInTree: () => void; // 좌측 트리 내 부서 섹션으로
 }
 
+const SCOPE_PILL = "inline-flex h-6 max-w-48 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 text-fine text-ink-secondary";
+
 export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree }: DeptMapsCardProps) {
   const { t } = useI18n();
   const ago = useAgo();
@@ -53,7 +56,6 @@ export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree 
   const counts = useMemo(() => countByStatus(scoped), [scoped]);
   const recent = useMemo(() => sortForStatus(scoped, null).slice(0, ROW_CAP), [scoped]);
   const scopeLeaf = scope.split("/").filter(Boolean).at(-1) ?? deptLabel;
-  const title = orgPath ? t("home.dash.deptTitle", { dept: scopeLeaf }) : t("home.dash.deptTitleNone");
   // 범위 드롭다운 — 앵커 버튼 아래에 리프→루트 순으로, 현재 선택은 체크. 저장은 핸들러에서(StrictMode 이펙트 리셋 회피)
   const { menu, openAt } = useGoToMenu();
   const pickScope = (path: string) => {
@@ -64,42 +66,43 @@ export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree 
       // 저장 실패(프라이빗 모드 등)는 이번 세션 선택만 유지
     }
   };
+  // 헤더 우측 — 부서명. 상위 부서가 있으면 드롭다운, 리프뿐이면 정적 필
+  const scopeAside = !orgPath ? null : scopePaths.length > 1 ? (
+    <button
+      type="button"
+      data-id="home-dept-scope"
+      aria-haspopup="menu"
+      title={t("home.dash.deptPick")}
+      onClick={(e) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        openAt(
+          { clientX: rect.left, clientY: rect.bottom + 4 },
+          scopePaths.map((path) => ({
+            label: path.split("/").at(-1) ?? path,
+            active: path === scope,
+            icon: path === scope ? <Check size={14} strokeWidth={1.5} /> : <Building2 size={14} strokeWidth={1.5} />,
+            onSelect: () => pickScope(path),
+          })),
+        );
+      }}
+      className={`${SCOPE_PILL} hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent-elevated`}
+    >
+      <span className="truncate">{scopeLeaf}</span>
+      <ChevronDown size={12} strokeWidth={1.5} className="shrink-0" />
+    </button>
+  ) : (
+    <span data-id="home-dept-scope" className={SCOPE_PILL}>
+      <span className="truncate">{scopeLeaf}</span>
+    </span>
+  );
   return (
     <DashboardSection
       dataId="home-dept-maps"
       icon={<Building2 size={16} strokeWidth={1.5} />}
-      title={title}
-      count={scoped.length > 0 ? scoped.length : null}
-      more={scoped.length > 0 ? { label: t("home.dash.showInTree"), onClick: onShowInTree } : undefined}
+      title={t("home.dash.deptTitle")}
+      aside={scopeAside}
     >
-      {scopePaths.length > 1 && (
-        <div className="flex justify-end px-3 pb-2">
-          <button
-            type="button"
-            data-id="home-dept-scope"
-            aria-haspopup="menu"
-            title={t("home.dash.deptPick")}
-            onClick={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              openAt(
-                { clientX: rect.left, clientY: rect.bottom + 4 },
-                scopePaths.map((path) => ({
-                  label: path.split("/").at(-1) ?? path,
-                  active: path === scope,
-                  icon: path === scope ? <Check size={14} strokeWidth={1.5} /> : <Building2 size={14} strokeWidth={1.5} />,
-                  onSelect: () => pickScope(path),
-                })),
-              );
-            }}
-            className="inline-flex h-6 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 text-fine text-ink-secondary hover:border-accent-tint-border hover:bg-accent-tint hover:text-accent-elevated"
-          >
-            <Building2 size={12} strokeWidth={1.5} />
-            <span className="max-w-40 truncate">{scopeLeaf}</span>
-            <ChevronDown size={12} strokeWidth={1.5} />
-          </button>
-        </div>
-      )}
       {scoped.length === 0 ? (
         <DashboardEmpty
           icon={<Building2 size={14} strokeWidth={1.5} />}
@@ -108,9 +111,6 @@ export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree 
       ) : (
         <>
           <div className="flex gap-3.5 px-3 pb-2.5 text-fine text-ink-tertiary">
-            <span>
-              {t("home.dash.deptMaps")} <b className="font-semibold text-ink tabular-nums">{stats.total}</b>
-            </span>
             <span data-id="home-dept-stale">
               {t("home.dash.deptStaleRefs")}{" "}
               <b className={`font-semibold tabular-nums ${stats.staleRefs > 0 ? "text-warn" : "text-ink"}`}>{stats.staleRefs}</b>
@@ -124,6 +124,8 @@ export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree 
           <StatusLegend counts={counts} selected={null} />
           <div className="px-3 pb-1.5 text-fine text-ink-tertiary">{t("home.dash.deptRecent")}</div>
           {recent.map((m) => <DashboardMapRow key={m.id} map={m} meta={ago(m.updated_at)} onSelect={onSelect} />)}
+          {/* 맵 수 + 트리 보기는 목록 맨 아래(내 문서의 링크아웃 행과 같은 자리) */}
+          <DashboardFoot label={t("home.dash.deptFoot", { n: stats.total })} onClick={onShowInTree} />
         </>
       )}
       {menu}

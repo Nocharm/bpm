@@ -47,22 +47,29 @@ export function HomeDashboard({
   const crumb = myDeptMaps.find((m) => m.category_path)?.category_path ?? null;
   return (
     <div data-id="home-dashboard" className="scrollbar-hidden @container flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
-      {me && <DashboardProfile me={me} activity={data?.activity ?? null} onFilterMine={onFilterMine} />}
-      {loadError && (
-        <p data-id="home-dashboard-error" className="rounded-sm border border-notice-border bg-notice px-3 py-1.5 text-fine text-ink-secondary">
-          {t("home.dash.loadError")}
-        </p>
-      )}
-      {!loadError && <DashboardActivityTiles data={data} onSelect={onSelect} />}
-      <div className="grid grid-cols-1 items-start gap-2.5 @[42rem]:grid-cols-2">
+      {/* 프로필+활동 타일은 sticky — 아래 섹션이 뒤로 지나갈 때 반투명+약한 블러로 초점을 흐리고, 하단 그라데이션으로 경계를 녹인다 */}
+      <div
+        data-id="home-dashboard-top"
+        className="sticky -top-4 z-10 -mx-4 -mt-4 flex flex-col gap-3.5 bg-surface-alt/85 px-4 pb-3 pt-4 backdrop-blur-[3px] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-surface-alt/80 after:to-transparent"
+      >
+        {me && <DashboardProfile me={me} activity={data?.activity ?? null} onFilterMine={onFilterMine} />}
+        {loadError && (
+          <p data-id="home-dashboard-error" className="rounded-sm border border-notice-border bg-notice px-3 py-1.5 text-fine text-ink-secondary">
+            {t("home.dash.loadError")}
+          </p>
+        )}
+        {!loadError && <DashboardActivityTiles data={data} onSelect={onSelect} />}
+      </div>
+      {/* 2열은 같은 높이(stretch) — 섹션 자체가 SECTION_CAP으로 상한을 갖는다(dashboard-section.tsx) */}
+      <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
         <ApprovalsCard onSelect={onSelect} />
         <MyDocumentsCard maps={maps} onSelect={onSelect} onFilterStatus={onFilterStatus} onCreate={onCreate} />
       </div>
-      <div className="grid grid-cols-1 items-start gap-2.5 @[42rem]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
         <DeptMapsCard maps={maps} orgPath={me?.org_path ?? ""} deptLabel={myDeptLabel} onSelect={onSelect} onShowInTree={onShowInTree} />
         <FrameworkCard categories={loadError ? [] : (data?.framework ?? null)} crumb={crumb} onOpenLinkage={onOpenLinkage} onBrowse={onBrowseFramework} />
       </div>
-      <div className="grid grid-cols-1 items-start gap-2.5 @[42rem]:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 @[42rem]:grid-cols-2">
         <RecentEventsCard events={loadError ? [] : (data?.recent_events ?? null)} onSelect={onSelect} />
         <RecentOpenedList maps={maps} onSelect={onSelect} onEmptyAction={myDeptMaps.length > 0 ? onShowInTree : undefined} />
       </div>

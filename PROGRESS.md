@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-11 — 개인 대시보드 미세 조정 6종 (dev)
+
+- **부서 카드**: 헤더는 "내 부서"만, 부서명은 헤더 우측 드롭다운(상위 없으면 정적 필 — `DashboardSection.aside` 슬롯 신설), 맵 수·트리 보기는 내 문서처럼 하단 링크아웃 행(`home.dash.deptFoot`)으로 이동(지표 행의 "맵 N"은 중복이라 제거).
+- **최근 변경**: 문장 템플릿을 토큰 단위로 쪼개(`renderTemplate`) 유저=필·맵=굵은 이름·버전=칩(라벨형은 `max-w-24` 절단)으로 구분, 이벤트 종류 아이콘 칩(버전 타임라인과 같은 톤)은 행 끝. **맵 행**: 상태 점이 맨 앞, SP 아이콘은 이름 바로 뒤.
+- **섹션 높이 상한** `SECTION_CAP`(272px) + overflow hidden + 하단 페이드, 넘칠 때만 헤더에 펼침 토글(max-height 350ms) — 2열 그리드는 stretch로 좌우 같은 높이. **상단 sticky**: 프로필+타일 블록 `sticky -top-4`(컨테이너 패딩 보정) + `bg-surface-alt/85`·`backdrop-blur-[3px]` + 하단 그라데이션으로 지나가는 섹션을 흐린다.
+- 검증: tsc·lint·vitest 953·카탈로그 그린, `pw-verify-home-dashboard.mjs` 18/18(sticky·행 순서·이벤트 아이콘 체크 추가), 실측 admin.sys·yerin.jang(부서 맵 2·드롭다운 4단) 캡처.
+
 ## 2026-09-11 — db-viewer 읽기전용 조회 연결 준비 (dev)
 
 - **배경**: 같은 71번 서버의 db-viewer(`:6678`)에서 이 앱 Postgres를 읽기전용으로 보려는 요구. db-viewer 저장소의 멀티 소스 런북(B′ 서비스당 전용 브리지·`dbviewer_ro`)을 이 앱 관점으로 옮겼다 — 앱 소스 무변경.

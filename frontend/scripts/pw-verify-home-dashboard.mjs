@@ -106,6 +106,18 @@ await page.waitForSelector('[data-id="home-activity-approvals"]', { timeout: 500
 check("activity tiles rendered from /me/dashboard", (await page.locator('[data-id="home-activity-approvals"]').count()) === 1);
 check("no dashboard load error banner", (await page.locator('[data-id="home-dashboard-error"]').count()) === 0);
 
+// 미세 조정 6종(2026-09-11) — 상단 sticky 블록·행 순서(상태 점이 맨 앞)·최근 변경 행 끝 이벤트 아이콘
+check("profile+tiles block is sticky", (await page.locator('[data-id="home-dashboard-top"]').evaluate((el) => getComputedStyle(el).position).catch(() => "")) === "sticky");
+const anyRow = page.locator('[data-id="dashboard-map-row"]').first();
+if (await anyRow.count()) {
+  const firstChild = await anyRow.evaluate((el) => el.firstElementChild?.getAttribute("data-id") ?? el.firstElementChild?.tagName.toLowerCase());
+  check("map row leads with the status dot", firstChild === "dashboard-map-status" || firstChild === "span");
+}
+const eventRow = page.locator('[data-id="dashboard-event-row"]').first();
+if (await eventRow.count()) {
+  check("event row ends with the event-type icon", await eventRow.evaluate((el) => el.lastElementChild?.querySelector('[data-id="dashboard-event-icon"]') != null || el.lastElementChild?.getAttribute("data-id") === "dashboard-event-icon"));
+}
+
 check("no console/page errors", errors.length === 0);
 if (errors.length) console.log("console errors:\n" + errors.join("\n"));
 
