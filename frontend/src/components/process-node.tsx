@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
 import {
@@ -35,6 +35,7 @@ import {
 import {
   hasBpmAttributes,
   hasCustomTerminalLabel,
+  NODE_ALT_DELAY_MS,
   type AppNode,
   type HandleSide,
   type ProcessNodeType,
@@ -64,7 +65,7 @@ import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
 import { RoleChip } from "@/components/role-chip";
-import { formatSystem } from "@/lib/catalogs";
+import { OTHER_SYSTEM } from "@/lib/catalogs";
 import {
   PRIMARY_END_HANDLE,
   SUBPROCESS_IN_HANDLE,
@@ -103,13 +104,16 @@ const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 
 // 노드 속성 줄(담당자/부서/시스템) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
 // start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
-function NodeFields({ data }: { data: AppNode["data"] }) {
+// 휴식↔활성 전환(design 2026-09-12 §4): 담당자 줄은 휴식=역할 칩(있으면)·활성(호버/선택 NODE_ALT_DELAY_MS 지속)=
+// 담당자 이름, 시스템 줄은 휴식=정식명(Other면 원문)·활성=원문 메모. 두 표기를 같은 grid 칸에 겹쳐 opacity로
+// 교차 페이드해 높이가 흔들리지 않는다. 역할/원문이 없으면 전환 없이 단일 표기.
+function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }) {
   const { displayFields } = useNodeActions();
   const { t } = useI18n();
   const warnings = useNodeWarnings(data);
+  const alt = useDelayedFlag(active, NODE_ALT_DELAY_MS);
   const isSubprocess = data.nodeType === "subprocess";
   if (!hasBpmAttributes(data.nodeType) && !isSubprocess) return null;
-  // 경고 줄은 아이콘만 경고색으로 바꾼다(글자색 유지) — 노드가 많아도 캔버스가 경고색으로 안 도배된다
   const warnedFields = {
     department: warnings.some((w) => w.kind === "deptOrphan"),
     assignee: hasAssigneeWarning(warnings),
@@ -120,28 +124,79 @@ function NodeFields({ data }: { data: AppNode["data"] }) {
     department: data.spDepartment,
     system: data.spSystem,
   };
-  // 역할은 담당자 줄에 같이 — 이름 앞 칩, 별도 토글 없이 assignee 토글에 묶인다 (design 2026-09-11 §4.1)
   const role = (isSubprocess ? data.spAssigneeRole : data.assignee_role) ?? "";
+  const note = isSubprocess ? "" : (data.system_fallback ?? "").trim();
+  const otherLabel = t("system.other");
   return (
     <>
       {ATTR_FIELD_ORDER.filter((field) => displayFields.includes(field)).map((field) => {
         const value = (isSubprocess ? spValues[field] : data[field]) ?? "";
-        const roleForField = field === "assignee" ? role : "";
-        if (!value && !roleForField) return null;
+        // 휴식/활성 표기 — 같으면 전환 없음
+        let rest: ReactNode = value !== "" ? <span>{value}</span> : null;
+        let alternate: ReactNode = rest;
+        if (field === "assignee") {
+          const names = value !== "" ? <span>{value}</span> : null;
+          rest = role !== "" ? <RoleChip role={role} dataId="node-role-chip" tone="mono" /> : names;
+          alternate = names ?? rest;
+        } else if (field === "system") {
+          const restText = value === OTHER_SYSTEM ? note || otherLabel : value;
+          rest = value !== "" ? <span>{restText}</span> : null;
+          alternate = note !== "" && note !== restText ? <span>{note}</span> : rest;
+        }
+        if (rest === null) return null;
+        const swaps = alternate !== rest;
         const warned = warnedFields[field];
         const Icon = warned ? TriangleAlert : FIELD_ICON[field];
         return (
-          <div key={field} className="mt-0.5 text-xs text-ink-tertiary">
+          <div
+            key={field}
+            data-id={`node-${field}-line`}
+            data-alt={swaps && alt ? "true" : "false"}
+            className="mt-0.5 text-xs text-ink-tertiary"
+          >
             <span className="inline-flex items-center gap-1">
               <Icon size={12} strokeWidth={1.5} className={warned ? "text-warn" : undefined} />
-              {roleForField !== "" && <RoleChip role={roleForField} dataId="node-role-chip" />}
-              {value !== "" && <span>{field === "system" ? formatSystem(value, t("system.other")) : value}</span>}
+              {swaps ? (
+                // 교차 페이드 — 두 표기를 같은 칸에 겹치고 opacity만 바꾼다(높이=둘 중 큰 쪽)
+                <span className="grid">
+                  <span
+                    aria-hidden={alt}
+                    className={`col-start-1 row-start-1 transition-opacity duration-350 ease-smooth motion-reduce:transition-none ${alt ? "pointer-events-none opacity-0" : "opacity-100"}`}
+                  >
+                    {rest}
+                  </span>
+                  <span
+                    aria-hidden={!alt}
+                    className={`col-start-1 row-start-1 transition-opacity duration-350 ease-smooth motion-reduce:transition-none ${alt ? "opacity-100" : "pointer-events-none opacity-0"}`}
+                  >
+                    {alternate}
+                  </span>
+                </span>
+              ) : (
+                rest
+              )}
             </span>
           </div>
         );
       })}
     </>
   );
+}
+
+// 활성이 delayMs 이상 지속되면 true, 비활성이면 즉시 false — 타이머는 effect, 즉시 복귀는 render-time adjust
+function useDelayedFlag(active: boolean, delayMs: number): boolean {
+  const [flag, setFlag] = useState(false);
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (!active) setFlag(false);
+  }
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = window.setTimeout(() => setFlag(true), delayMs);
+    return () => window.clearTimeout(id);
+  }, [active, delayMs]);
+  return flag;
 }
 
 // 조건·IO 표시 — 지표 뒤 고정 순서(조건→인풋→아웃풋, #10). IO는 체크리스트 영역(#9):
@@ -999,6 +1054,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
   // SP 폭 조절 — 드래그 중엔 로컬(전 캔버스 리렌더 방지), 종료 시 onResizeNode로 영속.
   // zoom은 구독 없이 드래그 시작 때 스토어에서 읽는다(줌 변경마다 전 노드 리렌더 금지).
   const rfStore = useStoreApi();
+  // 휴식↔활성 배선 — 호버 또는 선택이면 활성(NodeFields의 NODE_ALT_DELAY_MS 카운트 시작 트리거)
+  const [hovered, setHovered] = useState(false);
+  const fieldsActive = hovered || (selected ?? false);
   const [spDragWidth, setSpDragWidth] = useState<number | null>(null);
   const spResizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; zoom: number } | null>(null);
   // 표시 폭 — 드래그 로컬 > 저장값 > 기본. 저장값도 렌더에서 클램프(경계 밖 값 방어)
@@ -1045,6 +1103,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
         className="group bpm-node-emph relative flex min-h-[64px] w-[180px] flex-col justify-start rounded-sm px-3 py-2 text-sm transition-all duration-150"
         style={spWidth !== null ? ({ ...style, width: spWidth } as CSSProperties) : style}
         title={data.diffNote}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
         {/* 폭 조절 그립 — 우측 경계 전체 높이, 노드 호버 시 히트박스 표시→그립 호버 시 강조 (2026-08-30 #5·#6).
             DOM 첫 자식 배치라 뒤에 오는 출력 핸들이 자연히 위에 얹혀 연결 드래그와 공존한다. */}
@@ -1157,7 +1217,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             </div>
           ))}
         {/* 지정 어트리뷰트 줄 — 표시 필드 설정(displayFields)을 따르고, 미지정이면 sp* 비어 자동 생략 */}
-        <NodeFields data={data} />
+        <NodeFields data={data} active={fieldsActive} />
         <NodeParams data={data} />
         <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
         {/* 버전 추적 배너(하단) — 새 발행본이 우선(핀 고정을 함의), 아니면 핀 고정 안내만.
@@ -1298,6 +1358,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       <div
         className="group relative flex h-24 w-[116px] items-center justify-center"
         title={data.diffNote}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
         {/* 마름모는 회전한 정사각형 + 화면축 scaleX(1.2)로 가로가 살짝 긴 1:1.2 비율(사용자 요청 2026-08-23).
             텍스트는 회전하지 않은 레이어에 둔다. 박스 폭 116은 canvas.ts nodeSizeOf와 동기화 필수 */}
@@ -1327,7 +1389,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           data-id="node-below-extension"
           className="absolute left-1/2 top-full w-max max-w-44 -translate-x-1/2"
         >
-          <NodeFields data={data} />
+          <NodeFields data={data} active={fieldsActive} />
           <NodeParams data={data} className="justify-center" />
           {selected && <NodeIoDetails nodeId={id} data={data} nodeSelected framed />}
         </div>
@@ -1359,6 +1421,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       }`}
       style={style}
       title={data.diffNote}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
@@ -1391,7 +1455,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           }
         />
       </div>
-      <NodeFields data={data} />
+      <NodeFields data={data} active={fieldsActive} />
       <NodeParams data={data} />
       <NodeIoDetails nodeId={id} data={data} nodeSelected={selected ?? false} />
       {data.hasChildren && (

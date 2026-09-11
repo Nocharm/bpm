@@ -213,6 +213,10 @@ export function buildNodeData(
   };
 }
 
+// 노드 표시 전환 지연 — 호버/선택이 이만큼 지속되면 담당자 줄(역할→담당자)·시스템 줄(정식명→원문)을
+// 페이드 전환한다. 미세 조정은 여기서만 (design 2026-09-12 §4)
+export const NODE_ALT_DELAY_MS = 1000;
+
 // ProcessNode 렌더 크기 — dagre 레이아웃 박스 산정·커서 중앙 배치에 사용
 export const NODE_WIDTH = 170;
 export const NODE_HEIGHT = 52;
