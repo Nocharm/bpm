@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — 담당 역할 잔여 표면 동기화 (dev)
+
+- `assignee_role`/`sp_assignee_role`가 라이브러리 행·피크(디테일/목업)·SP 지정 패널·sp-detail 타일 카운트·플레이스홀더 낙관 참조까지 전 표면에 노출되도록 마감. 그룹 일괄편집 모달에 `assignee_role`을 `system`과 같은 단일필드 모드(append 제외, `SuggestInput` 카탈로그 자동완성)로 추가. 백엔드 `library.py` raw select 컬럼 인덱스 시프트에 주의(assignee 뒤 삽입 → 이후 튜플 언패킹 전부 한 칸씩 밀림). 게이트 tsc/lint/vitest(982)/ruff/pytest(1476)/COMPONENTS.md green.
+
 ## 2026-09-12 — Other 노드 원문 메모 클램프 (dev)
 
 - 캔버스 시스템 줄: `Other`면 라벨 대신 원문 메모를 보이되 휴식은 1줄 말줄임(`title`로 전문), 호버/선택 `NODE_ALT_DELAY_MS` 뒤 클램프 해제로 전문 표시 — 교차 페이드 대신 같은 요소의 클래스 토글이라 휴식 높이를 예약하지 않는다(사용자 결정: 메모 우선·1줄·호버 전문). 편집 입력의 raw `Other`·필터에 가려진 선택 행·후보 접기는 현행 유지로 완결.
