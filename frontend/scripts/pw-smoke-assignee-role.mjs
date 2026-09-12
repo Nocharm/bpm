@@ -1,8 +1,8 @@
 // 역할(assignee_role)·시스템 정규화·별칭 치환·노드 담당자 줄 호버 전환·Catalogs 탭 별칭 편집 스모크.
 // API로 맵/드래프트를 만든 뒤 브라우저에서 (1) 인스펙터 역할 입력(자동완성+별칭)→새로고침→캔버스 칩
 // (2) 담당자 줄 휴식(역할 칩)↔호버/선택 후 NODE_ALT_DELAY_MS 지연 활성(담당자 이름) 전환
-// (3) 시스템 자유값→Other+원문 메모, 별칭→카탈로그 표기 (4) Catalogs 탭 추가·CSV 임포트(2열: value,aliases)·
-// 칩 별칭 편집→피커 옵션.
+// (3) 시스템 자유값→Other+원문 메모, 별칭→카탈로그 표기 (4) Catalogs 탭(마스터-디테일) 탭 전환·추가·
+// CSV 임포트(2열: value,aliases)·행 선택→별칭 편집→적용→단일 저장→/catalogs 반영.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 API_URL=http://localhost:8000 node scripts/pw-smoke-assignee-role.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, dev 인증(admin.sys=sysadmin). 스크린샷은 SHOT_DIR(기본 /tmp).
 import { chromium } from "playwright-core";
@@ -131,10 +131,11 @@ try {
   check("alias input is normalized to the canonical system", node?.system === "LIMS", `got=${node?.system}`);
   await page.locator('[data-id="inspector-field-system"]').screenshot({ path: path.join(SHOT_DIR, "assignee-role-system-row.png") });
 
-  // ── 4) Catalogs 탭 — 직접 추가 + CSV(2열) 임포트 → 저장 → /catalogs 반영 ─────
+  // ── 4) Catalogs 탭 — 탭 전환 + 직접 추가 + CSV(2열) 임포트 → 선택→별칭 편집 → 저장 → /catalogs 반영 ─────
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Catalogs" }).click();
   await page.locator('[data-id="catalogs-panel"]').waitFor({ state: "visible", timeout: 10000 });
+  await page.locator('[data-id="catalog-tab-roles"]').click(); // roles가 기본값이지만 탭 클릭 자체를 검증
   const addInput = page.locator('[data-id="catalog-roles-add-input"]');
   await addInput.fill("Approver");
   await addInput.press("Enter");
@@ -144,24 +145,22 @@ try {
   await page.locator('[data-id="catalog-roles-import-note"]').waitFor({ state: "visible", timeout: 3000 });
   check("csv import note reports added/merged/duplicates",
     /Added 1, merged 2/.test((await page.locator('[data-id="catalog-roles-import-note"]').textContent()) ?? ""));
-  await page.locator('[data-id="catalog-roles-save"]').click();
-  await page.waitForTimeout(800);
-  let catalogs = await api("GET", "/catalogs");
-  check("saved roles reach /catalogs", JSON.stringify(catalogs.assignee_roles.map((e) => e.value)) === JSON.stringify(["Reviewer", "Approver", "Operator"]),
-    JSON.stringify(catalogs.assignee_roles));
-  check("systems keep the reserved Other first", catalogs.systems[0]?.value === "Other" && catalogs.systems.some((e) => e.value === "LIMS"));
-  await page.locator('[data-id="catalogs-panel"]').screenshot({ path: path.join(SHOT_DIR, "assignee-role-catalogs-tab.png") });
-
-  // ── 5) 칩 별칭 편집 — 클릭 → 별칭 입력 → 적용 → 저장 → /catalogs 반영 ──────────
-  await page.locator('[data-id="catalog-roles-chip"][data-value="Reviewer"] button').first().click();
+  // 선택 → 별칭 편집 → 적용 (저장 전에 편집해 한 번의 저장으로 추가+별칭이 함께 반영되는지 검증)
+  await page.locator('[data-id="catalog-roles-row"][data-value="Reviewer"]').click();
   const aliasInput = page.locator('[data-id="catalog-roles-alias-input"]');
   await aliasInput.waitFor({ state: "visible", timeout: 3000 });
   await aliasInput.fill("검토자, 리뷰어");
   await page.locator('[data-id="catalog-roles-alias-apply"]').click();
-  await page.screenshot({ path: path.join(SHOT_DIR, "alias-node-swap-catalogs.png") });
+  await page.screenshot({ path: path.join(SHOT_DIR, "assignee-role-catalogs-tab.png") });
   await page.locator('[data-id="catalog-roles-save"]').click();
   await page.waitForTimeout(800);
-  catalogs = await api("GET", "/catalogs");
+  const catalogs = await api("GET", "/catalogs");
+  check("saved roles reach /catalogs", JSON.stringify(catalogs.assignee_roles.map((e) => e.value)) === JSON.stringify(["Reviewer", "Approver", "Operator"]),
+    JSON.stringify(catalogs.assignee_roles));
+  check("systems keep the reserved Other first", catalogs.systems[0]?.value === "Other" && catalogs.systems.some((e) => e.value === "LIMS"));
+  await page.locator('[data-id="catalogs-panel"]').screenshot({ path: path.join(SHOT_DIR, "assignee-role-catalogs-tab-saved.png") });
+
+  // ── 5) 저장된 별칭이 한 번의 저장으로 함께 반영됐는지 확인(추가+CSV+별칭 편집이 단일 저장) ──
   const expectedRoles = [
     { value: "Reviewer", aliases: ["검토자", "리뷰어"] },
     { value: "Approver", aliases: [] },

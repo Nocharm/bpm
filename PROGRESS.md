@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — Catalogs 탭 마스터-디테일 재구성 (dev)
+
+- 밀도 재구성(칩 클라우드)을 탭(역할|시스템)+좌측 목록/우측 별칭 편집 2단 레이아웃으로 교체 — 두 `ManagedListCard` 모두 마운트 유지하고 비활성 탭은 `hidden`(미저장 초안 보존). 카드별 `selected`/`filter` state 신설, 로직(`mergeCatalogEntries`/`normalizeAliases`/`parseCatalogCsv`/resync·`Other` 잠금)은 무변경. i18n `catalog.filterPlaceholder`/`catalog.selectHint` 추가, `catalog.aliasesFor` 폐기(en/ko). 스모크(`pw-smoke-assignee-role.mjs`) Catalogs 섹션을 탭 클릭→추가→CSV 임포트→행 선택→별칭 적용→단일 저장 흐름으로 갱신. 게이트 tsc/lint/vitest(980)/COMPONENTS.md(CheckInput·HoverTip 사용처에서 catalogs-panel 제외) green.
+
 ## 2026-09-12 — Settings Catalogs 탭 밀도 재구성 (dev)
 
 - `catalogs-panel.tsx` 두 카드를 `max-w-6xl xl:grid-cols-2`로 나란히, 카드 헤더를 한 줄(제목·건수 배지·`HoverTip` 정보 아이콘·우측 추가입력+추가+CSV+저장)로 압축. 칩·별칭 편집 줄·사용 중 값 후보를 컴팩트 톤(`text-fine`)으로, 후보 8개 초과 시 스크롤. 로직(`applyAliases`·`addValues`·resync·`Other` 잠금) 무변경, `data-id` 전량 유지. i18n `catalog.count` 추가(en/ko). tsc/lint/vitest(980)/COMPONENTS.md(HoverTip 사용처에 catalogs-panel 추가) 전체 green.
