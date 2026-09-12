@@ -137,10 +137,12 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         let rest: ReactNode = value !== "" ? <span>{value}</span> : null;
         let alternate: ReactNode = rest;
         if (field === "assignee") {
+          // 같은 이름이 중복 입력되어도 칩 key 충돌을 막기 위해 정리
+          const names = Array.from(new Set(parseAssignees(value)));
           const chips =
             value !== "" ? (
               <span className="flex flex-wrap items-center gap-1">
-                {parseAssignees(value).map((name) => (
+                {names.map((name) => (
                   <span
                     key={name}
                     data-id="node-assignee-chip"
@@ -177,11 +179,16 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
             data-alt={swaps && alt ? "true" : "false"}
             className="mt-0.5 text-xs text-ink-tertiary"
           >
-            <span className="inline-flex items-center gap-1">
-              <Icon size={12} strokeWidth={1.5} className={warned ? "text-warn" : undefined} />
+            <span className="inline-flex items-start gap-1">
+              <Icon
+                size={12}
+                strokeWidth={1.5}
+                className={`mt-0.5 shrink-0 ${warned ? "text-warn" : ""}`}
+              />
               {swaps ? (
-                // 교차 페이드 — 두 표기를 같은 칸에 겹치고 opacity만 바꾼다(높이=둘 중 큰 쪽)
-                <span className="grid">
+                // 교차 페이드 — 두 표기를 같은 칸에 겹치고 opacity만 바꾼다(높이=둘 중 큰 쪽).
+                // place-items-start로 칩이 여러 줄로 접혀도(높이>role 텍스트) 상단 정렬 유지.
+                <span className="grid place-items-start">
                   <span
                     aria-hidden={alt}
                     className={`col-start-1 row-start-1 transition-opacity duration-350 ease-smooth motion-reduce:transition-none ${alt ? "pointer-events-none opacity-0" : "opacity-100"}`}

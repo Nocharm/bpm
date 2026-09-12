@@ -86,14 +86,14 @@ try {
   node = graph.nodes.find((n) => n.id === nodeId);
   check("alias input is normalized to the canonical role", node?.assignee_role === "Reviewer", `got=${node?.assignee_role}`);
   await page.reload({ waitUntil: "networkidle" });
-  const chip = page.locator(".react-flow__node", { hasText: "Weigh sample" }).locator('[data-id="node-role-chip"]');
+  const chip = page.locator(".react-flow__node", { hasText: "Weigh sample" }).locator('[data-id="node-role-text"]');
   await chip.waitFor({ state: "visible", timeout: 10000 });
-  check("canvas shows the role chip on the assignee line", ((await chip.textContent()) ?? "").trim() === "Reviewer");
+  check("canvas shows the role text on the assignee line", ((await chip.textContent()) ?? "").trim() === "Reviewer");
   await page.screenshot({ path: path.join(SHOT_DIR, "assignee-role-canvas.png") });
 
   // ── 2) 담당자 줄 휴식↔활성 전환 — 휴식=역할 칩, 호버/선택 NODE_ALT_DELAY_MS 뒤 활성=담당자 이름 ──
   const line = page.locator(".react-flow__node", { hasText: "Weigh sample" }).locator('[data-id="node-assignee-line"]');
-  check("rest state shows the role chip", (await line.getAttribute("data-alt")) === "false" && (await line.locator('[data-id="node-role-chip"]').count()) === 1);
+  check("rest state shows the role text", (await line.getAttribute("data-alt")) === "false" && (await line.locator('[data-id="node-role-text"]').count()) === 1);
   await page.locator(".react-flow__node", { hasText: "Weigh sample" }).first().hover();
   await page.waitForTimeout(1300); // NODE_ALT_DELAY_MS(1000) + 여유
   check("hover swaps to the assignee after the delay", (await line.getAttribute("data-alt")) === "true" && ((await line.textContent()) ?? "").includes("Admin Sys"));
