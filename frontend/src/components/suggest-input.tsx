@@ -1,7 +1,8 @@
 "use client";
 
 // 단일값 자유입력 + 제안 드롭다운 — 관리 목록(카탈로그) 자동완성 필드의 공용 엔진(역할·시스템).
-// 제안은 lib/search filterByQuery 랭킹(부분일치·초성·로마자), ↑↓ 이동·Enter 확정·Esc 되돌림·blur 확정.
+// 제안은 lib/search filterByQuery 랭킹(부분일치·초성·로마자), 타이핑 중 접두 일치 첫 제안 자동 하이라이트(Enter/Tab 완성),
+// ↑↓ 이동·Enter 확정·Esc 되돌림·blur 확정.
 // 일치 없으면 입력값 그대로 확정(allowFree). 드롭다운은 body 포털 fixed z-[1400] — 타일 팝오버(1350) 위,
 // DataFormPicker와 같은 층. row=인스펙터 행(우측 정렬 w-32) / field=팝오버·폼 전폭.
 // 별칭(aliases)으로도 검색되고, 값·별칭 정확 일치 시 정식 표기(value)로 치환해 커밋한다.
@@ -75,11 +76,22 @@ export function SuggestInput({
         .slice(0, MAX_SUGGESTIONS)
         .map((hit) => hit.item)
     : [];
+  // 자동완성 느낌 — 타이핑 중이고 첫 제안이 입력의 접두(값 또는 별칭)면 그 항목을 미리 하이라이트해
+  // Enter/Tab 한 번으로 완성. 접두가 아닌 부분일치는 자유값 입력을 가로채지 않도록 하이라이트하지 않는다
+  // (사용자 결정 2026-09-12). 명시적 ↑↓·호버 하이라이트가 있으면 그쪽이 우선.
+  const [typed, setTyped] = useState(false);
+  const prefix = draft.trim().toLocaleLowerCase();
+  const isPrefixHit = (item: SuggestOption) =>
+    item.value.toLocaleLowerCase().startsWith(prefix) ||
+    (item.aliases ?? []).some((alias) => alias.toLocaleLowerCase().startsWith(prefix));
+  const activeIndex =
+    highlight >= 0 ? highlight : typed && prefix !== "" && hits.length > 0 && isPrefixHit(hits[0]) ? 0 : -1;
 
   const closeMenu = () => {
     setOpen(false);
     setPos(null);
     setHighlight(-1);
+    setTyped(false);
   };
   const openMenu = () => {
     const el = inputRef.current;
@@ -105,8 +117,8 @@ export function SuggestInput({
   // 하이라이트를 확정하면 타이핑 중이던 draft가 아니라 호버 중이던 항목이 커밋된다.
   // 순서: (Enter만) 하이라이트 항목 > 대소문자 무시 정확 일치(표기 정규화) > 자유값 > 되돌림
   const settle = (useHighlight: boolean) => {
-    if (useHighlight && highlight >= 0 && highlight < hits.length) {
-      commit(hits[highlight].value);
+    if (useHighlight && activeIndex >= 0 && activeIndex < hits.length) {
+      commit(hits[activeIndex].value);
       return;
     }
     const key = draft.trim().toLocaleLowerCase();
@@ -164,6 +176,7 @@ export function SuggestInput({
         onChange={(event) => {
           setDraft(event.target.value);
           setHighlight(-1);
+          setTyped(true);
           if (!open) openMenu();
         }}
         onBlur={() => settle(false)}
@@ -176,7 +189,8 @@ export function SuggestInput({
             }
             if (hits.length === 0) return;
             const delta = event.key === "ArrowDown" ? 1 : -1;
-            setHighlight((current) => (current + delta + hits.length) % hits.length);
+            // 자동 하이라이트(activeIndex)에서 이어서 이동
+            setHighlight((activeIndex + delta + hits.length) % hits.length);
           } else if (event.key === "Enter") {
             event.preventDefault();
             event.stopPropagation(); // 팝오버 전역 Enter 확정·모달 submit과 분리
@@ -186,7 +200,9 @@ export function SuggestInput({
             setDraft(value);
             closeMenu();
           } else if (event.key === "Tab") {
-            closeMenu(); // 포커스 이동의 blur가 settle
+            // 자동 하이라이트가 있으면 Tab도 완성(자동완성 관례). 없으면 포커스 이동의 blur가 settle
+            if (activeIndex >= 0 && activeIndex < hits.length) commit(hits[activeIndex].value);
+            else closeMenu();
           }
         }}
       />
@@ -205,12 +221,12 @@ export function SuggestInput({
             {hits.map((item, index) => {
               const aliases = item.aliases ?? [];
               return (
-                <li key={item.value} role="option" aria-selected={highlight === index}>
+                <li key={item.value} role="option" aria-selected={activeIndex === index}>
                   <button
                     type="button"
                     data-id={`${dataId}-option-${index}`}
                     className={`flex w-full items-center px-2 py-1 text-left text-caption ${
-                      highlight === index ? "bg-accent-tint text-accent" : "text-ink hover:bg-surface-alt"
+                      activeIndex === index ? "bg-accent-tint text-accent" : "text-ink hover:bg-surface-alt"
                     }`}
                     // mousedown + preventDefault — 포커스가 안 움직여 blur(settle)가 안 나고, 여기서만 확정
                     onMouseDown={(event) => {

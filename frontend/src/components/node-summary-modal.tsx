@@ -960,8 +960,21 @@ export function NodeSummaryModal({
   const showAttrSection = showAttributes || isSp;
   const attrTiles = isSp ? (
     <>
-      <DeptAssigneeTiles versionId={null} department={spDept} assignee={spAssignee} readOnly dataIdPrefix="summary-tile" labels={labels} onChange={() => {}} />
-      <RoleTile value={sp?.assignee_role ?? ""} readOnly dataIdPrefix="summary-tile" labels={labels} onChange={() => {}} />
+      <DeptAssigneeTiles
+        versionId={null}
+        department={spDept}
+        assignee={spAssignee}
+        readOnly
+        dataIdPrefix="summary-tile"
+        labels={labels}
+        onChange={() => {}}
+        // 읽기 전용 빈 역할은 RoleTile이 null을 돌려주므로 슬롯을 비워 2:1 행이 빈 칸을 남기지 않게
+        roleTile={
+          (sp?.assignee_role ?? "") !== "" ? (
+            <RoleTile value={sp?.assignee_role ?? ""} readOnly dataIdPrefix="summary-tile" labels={labels} spanColumns={false} onChange={() => {}} />
+          ) : undefined
+        }
+      />
       {spSystem !== "" && (
         <SpFieldTile dataId="summary-tile-system" icon={Monitor} label={t("field.system")} value={spSystem} readOnly />
       )}
@@ -980,8 +993,19 @@ export function NodeSummaryModal({
         dataIdPrefix="summary-tile"
         labels={labels}
         onChange={(patch) => patchLive(patch)}
+        roleTile={
+          !readOnly || form.assignee_role !== "" ? (
+            <RoleTile
+              value={form.assignee_role}
+              readOnly={readOnly}
+              dataIdPrefix="summary-tile"
+              labels={labels}
+              spanColumns={false}
+              onChange={(next) => patchLive({ assignee_role: next })}
+            />
+          ) : undefined
+        }
       />
-      <RoleTile value={form.assignee_role} readOnly={readOnly} dataIdPrefix="summary-tile" labels={labels} onChange={(next) => patchLive({ assignee_role: next })} />
       {renderTile("system")}
       {renderTile("url")}
       {gmpTile}

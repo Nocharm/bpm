@@ -23,10 +23,12 @@ interface RoleTileProps {
   labels: PopoverActionLabels;
   // 읽기 전용에서 빈 값도 타일로 남길 때의 안내("미입력") — 없으면 빈 타일은 숨긴다
   placeholder?: string;
+  // DeptAssigneeTiles의 roleTile 슬롯(담당자 2 : 역할 1 한 행) 안에서는 false — 그리드 열 스팬 해제
+  spanColumns?: boolean;
   onChange: (next: string) => void;
 }
 
-export function RoleTile({ value, readOnly = false, dataIdPrefix, labels, placeholder, onChange }: RoleTileProps) {
+export function RoleTile({ value, readOnly = false, dataIdPrefix, labels, placeholder, spanColumns = true, onChange }: RoleTileProps) {
   const { t } = useI18n();
   const { assignee_roles: roleOptions } = useCatalogs();
   // 팝오버 로컬 초안 — 확정 시에만 부모에 반영, Esc면 폐기
@@ -41,6 +43,7 @@ export function RoleTile({ value, readOnly = false, dataIdPrefix, labels, placeh
       valueNode={value !== "" ? <RoleChip role={value} dataId={`${dataIdPrefix}-role-chip`} /> : undefined}
       placeholder={placeholder}
       wide
+      spanColumns={spanColumns}
       readOnly={readOnly}
       active={active !== null}
       onOpen={(at) => setActive({ at, draft: value })}

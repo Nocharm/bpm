@@ -8,7 +8,7 @@
 // 곧 취소). 읽기 전용이면 값 있는 정적 타일만.
 
 import { Building2, Users } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { AssigneePills } from "@/components/assignee-pills";
 import { DeptPill } from "@/components/dept-pill";
@@ -36,6 +36,9 @@ interface DeptAssigneeTilesProps {
   labels: PopoverActionLabels;
   // 읽기 전용에서 빈 값도 타일로 남길 때의 안내 문구("미입력") — 없으면 빈 타일은 숨긴다
   placeholder?: string;
+  // 역할 타일 슬롯 — 담당자 타일과 한 행(2:1)에 놓인다(사용자 결정 2026-09-12). RoleTile은 spanColumns={false}로 넘길 것.
+  // 담당자 타일이 숨는 읽기 전용 빈 값이면 역할만 전폭으로 남는다.
+  roleTile?: ReactNode;
   onChange: (patch: { department: string; assignee: string }) => void;
 }
 
@@ -50,7 +53,7 @@ interface ActivePicker {
 }
 
 export function DeptAssigneeTiles({
-  versionId, department, assignee, readOnly = false, dataIdPrefix, labels, placeholder, onChange,
+  versionId, department, assignee, readOnly = false, dataIdPrefix, labels, placeholder, roleTile, onChange,
 }: DeptAssigneeTilesProps) {
   const { t, lang } = useI18n();
   const [data, setData] = useState<EligibleAssignees>({ users: [], departments: [] });
@@ -106,6 +109,23 @@ export function DeptAssigneeTiles({
     apply();
     setActive(null);
   };
+  const showAssignee = !readOnly || assigneeText !== "" || Boolean(placeholder);
+  const assigneeTile = showAssignee ? (
+    <SpFieldTile
+      dataId={`${dataIdPrefix}-assignee`}
+      icon={Users}
+      label={t("field.assignee")}
+      value=""
+      // 담당자는 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함) (사용자 요청 2026-09-03)
+      valueNode={assigneeText !== "" ? <AssigneePills assignee={assignee} dataIdPrefix={dataIdPrefix} /> : undefined}
+      placeholder={placeholder}
+      wide
+      spanColumns={roleTile == null}
+      readOnly={readOnly}
+      active={active?.field === "assignee"}
+      onOpen={(at) => openPicker("assignee", at)}
+    />
+  ) : null;
   const tiles = (
     <>
       {(!readOnly || department !== "" || placeholder) && (
@@ -124,20 +144,16 @@ export function DeptAssigneeTiles({
           onOpen={(at) => openPicker("department", at)}
         />
       )}
-      {(!readOnly || assigneeText !== "" || placeholder) && (
-        <SpFieldTile
-          dataId={`${dataIdPrefix}-assignee`}
-          icon={Users}
-          label={t("field.assignee")}
-          value=""
-          // 담당자는 인물 필 — 호버/클릭으로 인물 카드(부서 트리 포함) (사용자 요청 2026-09-03)
-          valueNode={assigneeText !== "" ? <AssigneePills assignee={assignee} dataIdPrefix={dataIdPrefix} /> : undefined}
-          placeholder={placeholder}
-          wide
-          readOnly={readOnly}
-          active={active?.field === "assignee"}
-          onOpen={(at) => openPicker("assignee", at)}
-        />
+      {roleTile != null && assigneeTile !== null ? (
+        <div className="col-span-2 grid grid-cols-[2fr_1fr] gap-1.5" data-id={`${dataIdPrefix}-assignee-role-row`}>
+          {assigneeTile}
+          {roleTile}
+        </div>
+      ) : (
+        <>
+          {assigneeTile}
+          {roleTile}
+        </>
       )}
     </>
   );

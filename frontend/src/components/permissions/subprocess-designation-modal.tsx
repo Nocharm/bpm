@@ -663,12 +663,15 @@ export function SubprocessDesignationModal({
                       dataIdPrefix="sp-tile"
                       labels={labels}
                       onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
-                    />
-                    <RoleTile
-                      value={form.assignee_role}
-                      dataIdPrefix="sp-tile"
-                      labels={labels}
-                      onChange={(next) => setForm((prev) => ({ ...prev, assignee_role: next }))}
+                      roleTile={
+                        <RoleTile
+                          value={form.assignee_role}
+                          dataIdPrefix="sp-tile"
+                          labels={labels}
+                          spanColumns={false}
+                          onChange={(next) => setForm((prev) => ({ ...prev, assignee_role: next }))}
+                        />
+                      }
                     />
                     {(["system", "url"] as const).map(renderTile)}
                   </div>
