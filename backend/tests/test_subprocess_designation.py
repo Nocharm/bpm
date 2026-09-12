@@ -246,6 +246,21 @@ def test_library_lists_only_designated(client: TestClient, enforce) -> None:
     assert mine["assignee"] == "Kim"
 
 
+def test_library_rows_expose_assignee_role(client: TestClient, enforce) -> None:
+    """라이브러리 행 assignee_role — 지정 맵은 값, 미지정 맵은 "" (마스킹, 2026-09-12)."""
+    designated = seed_map("lib-role-designated", published=True)
+    plain = seed_map("lib-role-plain", published=True)  # 미지정 — "" 기대
+    act_as(OWNER)
+    client.put(
+        f"/api/maps/{designated}/subprocess-designation",
+        json={**BODY, "assignee_role": "Reviewer"},
+    )
+    rows = client.get("/api/library/processes", params={"include_undesignated": True}).json()
+    by_id = {r["map_id"]: r for r in rows}
+    assert by_id[designated]["assignee_role"] == "Reviewer"
+    assert by_id[plain]["assignee_role"] == ""
+
+
 def test_library_excludes_soft_deleted(client: TestClient, enforce) -> None:
     map_id = seed_map("lib-deleted", published=True)
     act_as(OWNER)

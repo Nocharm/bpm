@@ -93,6 +93,7 @@ async def list_processes(
                 func.max(MapVersion.id),
                 ProcessMap.sp_department,
                 ProcessMap.sp_assignee,
+                ProcessMap.sp_assignee_role,
                 ProcessMap.sp_system,
                 ProcessMap.sp_duration,
                 ProcessMap.sp_designated_at,
@@ -114,6 +115,7 @@ async def list_processes(
                 ProcessMap.name,
                 ProcessMap.sp_department,
                 ProcessMap.sp_assignee,
+                ProcessMap.sp_assignee_role,
                 ProcessMap.sp_system,
                 ProcessMap.sp_duration,
                 ProcessMap.sp_designated_at,
@@ -132,12 +134,12 @@ async def list_processes(
     # 미지정 맵은 비공개 이름 유출 방지를 위해 가시성 판정 후 남긴다 (지정 맵은 기존대로 전체 공개 라이브러리).
     # 역할은 전 행에 대해 산정 — my_role 노출(피커 권한 필터)과 미지정 가시성 판정을 한 번에 처리.
     roles = await _resolve_roles(
-        session, user, [(row[0], row[8], row[9]) for row in latest_rows]
+        session, user, [(row[0], row[9], row[10]) for row in latest_rows]
     )
     latest_rows = [
         row
         for row in latest_rows
-        if row[7] is not None or roles.get(row[0]) is not None  # sp_designated_at
+        if row[8] is not None or roles.get(row[0]) is not None  # sp_designated_at
     ]
     pub_rows = (
         await session.execute(
@@ -172,6 +174,7 @@ async def list_processes(
             # 미지정 행은 직전 지정 잔존값 유출 방지 — sp 어트리뷰트 마스킹 (spec 2026-07-19)
             "department": department if designated_at is not None else None,
             "assignee": assignee if designated_at is not None else None,
+            "assignee_role": (assignee_role or "") if designated_at is not None else "",
             "system": system if designated_at is not None else None,
             # raw dict 직렬화는 MapOut/SubprocessRefOut validator를 안 탄다 —
             # 레거시 자유텍스트("2일")를 여기서도 소거(무효→None) (design 2026-07-11 SP)
@@ -188,7 +191,7 @@ async def list_processes(
             "annual_count": annual_count if designated_at is not None else None,
             "fte": fte if designated_at is not None else None,
         }
-        for mid, name, latest, department, assignee, system, duration, designated_at, _, _, touch_time, cost_krw, cost_usd, headcount, annual_count, fte in latest_rows
+        for mid, name, latest, department, assignee, assignee_role, system, duration, designated_at, _, _, touch_time, cost_krw, cost_usd, headcount, annual_count, fte in latest_rows
     ]
 
 
