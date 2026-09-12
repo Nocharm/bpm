@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — 캔버스 담당자 흑백 칩·역할 텍스트 (dev)
+
+- `NodeFields`(`process-node.tsx`) 담당자 줄 톤 반전 — 휴식=역할 플레인 텍스트(`BriefcaseBusiness` 아이콘), 활성=담당자 이름을 `parseAssignees`로 나눠 흑백 칩(사람마다 1개, wrap 허용)으로. 기존 `RoleChip tone="mono"` 캔버스 사용처 제거(다른 표면은 액센트 톤 유지, `role-chip.tsx` 자체는 무변경). 게이트 tsc/lint/vitest(980) green, COMPONENTS.md 갱신(RoleChip 사용처에서 process-node.tsx 제외).
+
 ## 2026-09-12 — assignee_role/카탈로그 최종 픽스 웨이브 (dev)
 
 - **Task 1(catalog-alias-node-swap)**: 카탈로그 항목(`assignee_roles`/`systems`)이 `{value, aliases[]}` 엔트리로 승격 — `app_settings.py`에 `normalize_managed_entries`/`get_managed_entries`/`set_managed_entries` 추가(불변식 "별칭 하나 → 정식 표기 하나": 값이 별칭보다 우선, 겹치면 별칭 폐기, 항목당 20개 상한). `CatalogEntryIn`/`CatalogEntryOut` 스키마 신설, PUT은 구 문자열 페이로드도 그대로 받아 승격(`pw-smoke-assignee-role.mjs` 호환). `Other`는 저장된 별칭을 보존한 채 항상 0번. 전체 스위트 1475 green.

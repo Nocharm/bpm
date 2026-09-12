@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNo
 import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
 import {
   AlertTriangle,
+  BriefcaseBusiness,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -64,7 +65,7 @@ import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
 import { getIoLine } from "@/lib/io-items";
 import { formatParamValue, PARAM_FIELDS, type ParamField } from "@/lib/params";
-import { RoleChip } from "@/components/role-chip";
+import { parseAssignees } from "@/lib/assignee";
 import { OTHER_SYSTEM } from "@/lib/catalogs";
 import {
   PRIMARY_END_HANDLE,
@@ -136,9 +137,30 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         let rest: ReactNode = value !== "" ? <span>{value}</span> : null;
         let alternate: ReactNode = rest;
         if (field === "assignee") {
-          const names = value !== "" ? <span>{value}</span> : null;
-          rest = role !== "" ? <RoleChip role={role} dataId="node-role-chip" tone="mono" /> : names;
-          alternate = names ?? rest;
+          const chips =
+            value !== "" ? (
+              <span className="flex flex-wrap items-center gap-1">
+                {parseAssignees(value).map((name) => (
+                  <span
+                    key={name}
+                    data-id="node-assignee-chip"
+                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-hairline bg-surface-alt px-1.5 py-0 text-[11px] leading-4 text-ink-secondary"
+                  >
+                    <User size={10} strokeWidth={1.5} className="shrink-0" />
+                    <span className="min-w-0 truncate">{name}</span>
+                  </span>
+                ))}
+              </span>
+            ) : null;
+          const roleText =
+            role !== "" ? (
+              <span data-id="node-role-text" className="inline-flex items-center gap-1">
+                <BriefcaseBusiness size={12} strokeWidth={1.5} />
+                {role}
+              </span>
+            ) : null;
+          rest = roleText ?? chips;
+          alternate = chips ?? rest;
         } else if (field === "system") {
           const restText = value === OTHER_SYSTEM ? note || otherLabel : value;
           rest = value !== "" ? <span>{restText}</span> : null;

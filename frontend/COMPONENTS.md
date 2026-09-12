@@ -111,7 +111,7 @@
 | `prompt-dialog.tsx` | `PromptDialog` | 플로팅 입력 모달 | `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `providers.tsx` | `Providers` |   | `app/layout.tsx` |
 | `quick-connect-line.tsx` | `QuickConnectLine` | 빠른 연결 미리보기 | `app/maps/[mapId]/page.tsx` |
-| `role-chip.tsx` | `RoleChip` | 역할 칩 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/role-tile.tsx`, `components/process-node.tsx` |
+| `role-chip.tsx` | `RoleChip` | 역할 칩 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/role-tile.tsx` |
 | `save-checklist.tsx` | `MapTitleChecklist` | 좌상단 맵 제목 칩 + 저장(그래프 검증) 조건 아코디언 | `app/maps/[mapId]/page.tsx` |
 | `scope-preview.tsx` | `ScopePreview` | 비활성(조상) 창의 정적 프리뷰 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/map-preview.tsx`, `components/node-summary-modal.tsx`, `components/subprocess-preview-peek.tsx` |
 | `scope-window.tsx` | `ScopeWindow` | 떠있는 스코프 창 | `app/maps/[mapId]/page.tsx` |
