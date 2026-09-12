@@ -10912,7 +10912,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                             <SystemSuggestInput
                               mode="row"
                               dataId="inspector-field-system"
-                              confirmReplace
                               system={selectedNode.data.system ?? ""}
                               systemFallback={selectedNode.data.system_fallback ?? ""}
                               onCommit={(patch) => updateSelectedData(patch, true)}

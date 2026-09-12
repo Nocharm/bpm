@@ -14,6 +14,7 @@
 - **Task 5**: 캔버스 노드 담당자/시스템 줄 휴식↔활성 전환 — `NODE_ALT_DELAY_MS`(1000ms, `lib/canvas.ts`) 이상 호버·선택이 지속되면 담당자 줄(역할 칩→담당자 이름)·시스템 줄(정식명→원문 메모)이 opacity 교차 페이드. `RoleChip`에 `tone="mono"` 추가(캔버스 안은 흑백, 다른 사용처는 액센트 유지). `useDelayedFlag`는 즉시 리셋은 render-time state adjust, 지연 설정은 effect+setTimeout(React Compiler lint 준수). tsc/lint/vitest(977) 전체 green, COMPONENTS.md 무변경.
 - **Task 6**: `pw-smoke-assignee-role.mjs`를 엔트리 카탈로그로 확장 — 별칭 입력(`검토자`→`Reviewer`, `랩정보`→`LIMS`) 정규화 확인, 담당자 줄 휴식(역할 칩)↔호버 1300ms 뒤 활성(담당자 이름) 전환, Catalogs 탭 CSV 2열 임포트+칩 별칭 편집→저장→`/catalogs` deep-equal 검증(15/15 PASS). 설계 문서 상태를 "dev 구현 완료"로 갱신.
 - **최종 픽스 웨이브**: Catalogs 탭이 다른 항목과 충돌하는 별칭을 `normalizeAliases`가 조용히 제외하던 UX 결함 수정 — `applyAliases`/`addValues`(handleAdd·candidate 체크·CSV 임포트 공용)가 드롭된 개수를 계산해 `catalog.aliasesDropped` 안내를 노출. 리뷰에서 빠졌던 주석 2건(`process-node.tsx` 경고 아이콘, `pw-smoke-assignee-role.mjs` 300ms 대기 사유) 복원. tsc/lint/vitest(977)/COMPONENTS.md 전체 green.
+- **시스템 원문 메모 3택**: 시스템이 기타로 떨어질 때 기존 원문 메모를 교체/추가/취소 3지 선택으로 통일(`SystemSuggestInput` 재작성) — 행 모드는 `ModalBackdrop` 다이얼로그(z 1300), 필드 모드(타일 팝오버 z 1350 안)는 다이얼로그가 가려지므로 입력 아래 인라인 줄로 대체. `appendSystemNote`(`lib/catalogs.ts`) 순수 함수로 추가 병합, `keptNote` 안내문·`confirmReplace` prop·구 i18n 키 3종 폐기. tsc/lint/vitest(980)/COMPONENTS.md 전체 green.
 
 ## 2026-09-11 — 노드 assignee_role 컬럼(백엔드) (dev)
 

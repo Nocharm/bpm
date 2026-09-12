@@ -346,7 +346,6 @@ interface ActiveTile {
   ids: string; // 아웃풋 원본 id 열
   unit: CostUnit; // 비용 타일의 통화 탭
   readOnly: boolean; // 열람 전용(입출력 목록 보기)
-  keptNote?: boolean; // 시스템 자유값 커밋에서 기존 원문 메모를 유지했다 — 팝오버 안내문
 }
 type TileDraft = Pick<ActiveTile, "value" | "note" | "extra" | "links" | "flags" | "ids" | "unit">;
 
@@ -1147,13 +1146,10 @@ export function NodeSummaryModal({
               dataId="summary-tile-input-system"
               system={active.value}
               systemFallback={active.note}
-              onCommit={(patch, keptNote) =>
-                setActive((prev) => (prev ? { ...prev, value: patch.system, note: patch.system_fallback, keptNote } : prev))
+              onCommit={(patch) =>
+                setActive((prev) => (prev ? { ...prev, value: patch.system, note: patch.system_fallback } : prev))
               }
             />
-            {active.keptNote && (
-              <p data-id="summary-tile-system-kept-note" className="text-fine text-ink-tertiary">{t("catalog.systemKeptNote")}</p>
-            )}
           </div>
         )}
         {(field === "start_condition" || field === "end_condition") && (

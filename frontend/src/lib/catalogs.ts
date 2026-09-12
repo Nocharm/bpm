@@ -100,6 +100,13 @@ export function commitSystem(raw: string, systems: readonly CatalogEntry[], curr
   return { system: OTHER_SYSTEM, system_fallback: currentFallback, keptNote: true };
 }
 
+/** 원문 메모에 새 자유값을 이어붙인다 — 기존이 비면 raw만, 아니면 줄바꿈 후 raw */
+export function appendSystemNote(existing: string, raw: string): string {
+  const trimmedExisting = existing.trimEnd();
+  const trimmedRaw = raw.trim();
+  return trimmedExisting === "" ? trimmedRaw : `${trimmedExisting}\n${trimmedRaw}`;
+}
+
 /** 표시용 — 저장값 Other만 i18n 라벨로, 나머지는 그대로 */
 export function formatSystem(value: string | null | undefined, otherLabel: string): string {
   const system = value ?? "";

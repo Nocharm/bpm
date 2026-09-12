@@ -1,7 +1,7 @@
 // 카탈로그 순수 함수 — 시스템 정규화·별칭 매칭·Other 폴백 규칙 (design 2026-09-11 §4.2, 2026-09-12 §1)
 import { describe, expect, it } from "vitest";
 
-import { commitSystem, formatSystem, normalizeToCatalog, OTHER_SYSTEM } from "./catalogs";
+import { appendSystemNote, commitSystem, formatSystem, normalizeToCatalog, OTHER_SYSTEM } from "./catalogs";
 
 const SYSTEMS = [
   { value: OTHER_SYSTEM, aliases: ["기타"] },
@@ -49,6 +49,18 @@ describe("commitSystem", () => {
   });
   it("alias input stores the canonical system, not Other", () => {
     expect(commitSystem("랩정보", SYSTEMS, "memo")).toEqual({ system: "LIMS", system_fallback: "memo", keptNote: false });
+  });
+});
+
+describe("appendSystemNote", () => {
+  it("returns the raw text when the existing note is empty", () => {
+    expect(appendSystemNote("", "Excel macro")).toBe("Excel macro");
+  });
+  it("appends the raw text on a new line after the existing note", () => {
+    expect(appendSystemNote("old", "new")).toBe("old\nnew");
+  });
+  it("trims trailing whitespace off the existing note and surrounding whitespace off the raw text", () => {
+    expect(appendSystemNote("old   \n", "  new  ")).toBe("old\nnew");
   });
 });
 
