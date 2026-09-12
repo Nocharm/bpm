@@ -3,10 +3,11 @@
 // 관리 목록(카탈로그) 탭 — 역할·시스템 자동완성 목록을 sysadmin이 편집(칩 삭제·별칭 편집·직접 추가·사용 중 값 승격·CSV 임포트·저장).
 // 저장 API(/admin/app-settings)는 sysadmin 전용 — 비sysadmin은 /catalogs로 읽기 전용 표시 (design 2026-09-11 §5).
 
-import { Plus, Upload, X } from "lucide-react";
+import { Info, Plus, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { CheckInput } from "@/components/check-input";
+import { HoverTip } from "@/components/hover-tip";
 import type { CatalogEntry } from "@/lib/api";
 import { getAppSettings, getCatalogs, putAppSettings } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
@@ -27,9 +28,11 @@ interface CatalogsPanelProps {
 }
 
 const INPUT_CLASS =
-  "min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-3 py-1.5 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
+  "min-w-0 rounded-sm border border-hairline bg-surface px-3 py-1 text-caption text-ink outline-none placeholder:italic placeholder:text-ink-tertiary focus:border-accent";
 const SECONDARY_BUTTON =
   "inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40";
+const ALIAS_BUTTON =
+  "inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40";
 
 interface ManagedListCardProps {
   dataId: string;
@@ -118,13 +121,76 @@ function ManagedListCard({
   const candidates = available.filter((value) => !has(value));
 
   return (
-    <section data-id={dataId} className="flex flex-col gap-3 rounded-md border border-hairline bg-surface-alt p-4">
-      <div>
+    <section data-id={dataId} className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-alt p-3">
+      <div className="flex flex-wrap items-center gap-2">
         <p className="text-caption-strong text-ink">{title}</p>
-        <p className="text-fine text-ink-tertiary">{hint}</p>
-        <p className="text-fine text-ink-tertiary">{t("catalog.csvHint")}</p>
+        <span className="text-fine text-ink-tertiary">{t("catalog.count", { n: draft.length })}</span>
+        <HoverTip
+          tip={
+            <div className="flex flex-col gap-1 text-fine text-ink-secondary">
+              <p>{hint}</p>
+              <p>{t("catalog.csvHint")}</p>
+            </div>
+          }
+        >
+          <Info size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+        </HoverTip>
+        {!readOnly && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <input
+              data-id={`${dataId}-add-input`}
+              className={`${INPUT_CLASS} w-56`}
+              value={adding}
+              placeholder={t("catalog.addPlaceholder")}
+              maxLength={100}
+              onChange={(event) => setAdding(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAdd();
+                }
+              }}
+            />
+            <button type="button" data-id={`${dataId}-add`} className={SECONDARY_BUTTON} disabled={adding.trim() === ""} onClick={handleAdd}>
+              <Plus size={14} strokeWidth={1.5} />
+              {t("catalog.add")}
+            </button>
+            <button type="button" data-id={`${dataId}-import`} className={SECONDARY_BUTTON} onClick={() => fileRef.current?.click()}>
+              <Upload size={14} strokeWidth={1.5} />
+              {t("catalog.importCsv")}
+            </button>
+            <input
+              ref={fileRef}
+              data-id={`${dataId}-file`}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void handleFile(file);
+                event.target.value = ""; // 같은 파일 재선택 허용
+              }}
+            />
+            <button
+              type="button"
+              data-id={`${dataId}-save`}
+              disabled={busy || !dirty}
+              className={
+                dirty
+                  ? "rounded-sm bg-accent px-3 py-1 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                  : "rounded-sm border border-hairline px-3 py-1 text-caption font-semibold text-ink-tertiary disabled:opacity-40"
+              }
+              onClick={() => void handleSave()}
+            >
+              {t("catalog.save")}
+            </button>
+          </div>
+        )}
       </div>
-      <div className="flex flex-wrap gap-1.5" data-id={`${dataId}-chips`}>
+      {importNote !== "" && (
+        <p data-id={`${dataId}-import-note`} className="text-fine text-ink-tertiary">{importNote}</p>
+      )}
+      <div className="flex flex-wrap gap-1" data-id={`${dataId}-chips`}>
         {draft.length === 0 && <span className="text-fine text-ink-tertiary">{t("catalog.empty")}</span>}
         {draft.map((entry) => {
           const locked = isLocked(entry.value);
@@ -134,7 +200,7 @@ function ManagedListCard({
               key={entry.value}
               data-id={`${dataId}-chip`}
               data-value={entry.value}
-              className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-caption text-ink ${
+              className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0 text-fine text-ink ${
                 editing ? "border-accent bg-accent-tint" : "border-hairline bg-surface"
               }`}
             >
@@ -167,11 +233,11 @@ function ManagedListCard({
         })}
       </div>
       {!readOnly && editingAlias !== null && (
-        <div data-id={`${dataId}-alias-editor`} className="flex items-center gap-2 rounded-sm border border-accent-tint-border bg-surface px-2 py-1.5">
+        <div data-id={`${dataId}-alias-editor`} className="flex items-center gap-2 rounded-sm border border-accent-tint-border bg-surface px-2 py-1">
           <span className="shrink-0 text-fine text-ink-secondary">{t("catalog.aliasesFor", { value: editingAlias })}</span>
           <input
             data-id={`${dataId}-alias-input`}
-            className={INPUT_CLASS}
+            className={`${INPUT_CLASS} flex-1`}
             value={aliasDraft}
             placeholder={t("catalog.aliasesPlaceholder")}
             maxLength={400}
@@ -182,82 +248,31 @@ function ManagedListCard({
               if (event.key === "Escape") { event.stopPropagation(); setEditingAlias(null); }
             }}
           />
-          <button type="button" data-id={`${dataId}-alias-apply`} className={SECONDARY_BUTTON} onClick={applyAliases}>{t("catalog.aliasesApply")}</button>
-          <button type="button" data-id={`${dataId}-alias-cancel`} className={SECONDARY_BUTTON} onClick={() => setEditingAlias(null)}>{t("catalog.aliasesCancel")}</button>
+          <button type="button" data-id={`${dataId}-alias-apply`} className={ALIAS_BUTTON} onClick={applyAliases}>{t("catalog.aliasesApply")}</button>
+          <button type="button" data-id={`${dataId}-alias-cancel`} className={ALIAS_BUTTON} onClick={() => setEditingAlias(null)}>{t("catalog.aliasesCancel")}</button>
         </div>
       )}
-      {!readOnly && (
-        <>
-          <div className="flex items-center gap-2">
-            <input
-              data-id={`${dataId}-add-input`}
-              className={INPUT_CLASS}
-              value={adding}
-              placeholder={t("catalog.addPlaceholder")}
-              maxLength={100}
-              onChange={(event) => setAdding(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleAdd();
-                }
-              }}
-            />
-            <button type="button" data-id={`${dataId}-add`} className={SECONDARY_BUTTON} disabled={adding.trim() === ""} onClick={handleAdd}>
-              <Plus size={14} strokeWidth={1.5} />
-              {t("catalog.add")}
-            </button>
-            <button type="button" data-id={`${dataId}-import`} className={SECONDARY_BUTTON} onClick={() => fileRef.current?.click()}>
-              <Upload size={14} strokeWidth={1.5} />
-              {t("catalog.importCsv")}
-            </button>
-            <input
-              ref={fileRef}
-              data-id={`${dataId}-file`}
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void handleFile(file);
-                event.target.value = ""; // 같은 파일 재선택 허용
-              }}
-            />
+      {!readOnly && candidates.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="text-fine text-ink-secondary">{t("catalog.inUse")}</p>
+          <div
+            className={`grid grid-cols-2 gap-x-3 gap-y-1 md:grid-cols-3 ${candidates.length > 8 ? "max-h-24 overflow-y-auto" : ""}`}
+            data-id={`${dataId}-candidates`}
+          >
+            {candidates.map((value) => (
+              <label key={value} className="flex cursor-pointer items-center gap-1.5 text-fine text-ink-secondary">
+                <CheckInput
+                  checked={false}
+                  onChange={() => {
+                    const { dropped } = addValues([{ value, aliases: [] }]);
+                    setImportNote(dropped > 0 ? t("catalog.aliasesDropped", { count: dropped }) : "");
+                  }}
+                />
+                {value}
+              </label>
+            ))}
           </div>
-          {importNote !== "" && (
-            <p data-id={`${dataId}-import-note`} className="text-fine text-ink-tertiary">{importNote}</p>
-          )}
-          {candidates.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="text-fine text-ink-secondary">{t("catalog.inUse")}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5" data-id={`${dataId}-candidates`}>
-                {candidates.map((value) => (
-                  <label key={value} className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary">
-                    <CheckInput
-                      checked={false}
-                      onChange={() => {
-                        const { dropped } = addValues([{ value, aliases: [] }]);
-                        setImportNote(dropped > 0 ? t("catalog.aliasesDropped", { count: dropped }) : "");
-                      }}
-                    />
-                    {value}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="flex justify-end">
-            <button
-              type="button"
-              data-id={`${dataId}-save`}
-              disabled={busy || !dirty}
-              className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              onClick={() => void handleSave()}
-            >
-              {t("catalog.save")}
-            </button>
-          </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -296,31 +311,33 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
   if (error !== null) return <p className="text-caption text-error">{humanizeApiError(error, t)}</p>;
   if (lists === null) return <p className="text-caption text-ink-tertiary">{t("catalog.loading")}</p>;
   return (
-    <div className="flex max-w-3xl flex-col gap-6" data-id="catalogs-panel">
+    <div className="flex max-w-6xl flex-col gap-6" data-id="catalogs-panel">
       <div>
         <h2 className="text-body-strong text-ink">{t("catalog.tab")}</h2>
         <p className="text-caption text-ink-tertiary">{isSysadmin ? t("catalog.pageHint") : t("catalog.readOnly")}</p>
       </div>
-      <ManagedListCard
-        dataId="catalog-roles"
-        title={t("catalog.rolesTitle")}
-        hint={t("catalog.rolesHint")}
-        values={lists.assignee_roles}
-        readOnly={!isSysadmin}
-        onSave={(next) => save({ assignee_roles: next })}
-        onToast={onToast}
-      />
-      <ManagedListCard
-        dataId="catalog-systems"
-        title={t("catalog.systemsTitle")}
-        hint={t("catalog.systemsHint")}
-        values={lists.systems}
-        lockedValues={[OTHER_SYSTEM]}
-        available={lists.available_systems}
-        readOnly={!isSysadmin}
-        onSave={(next) => save({ systems: next })}
-        onToast={onToast}
-      />
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ManagedListCard
+          dataId="catalog-roles"
+          title={t("catalog.rolesTitle")}
+          hint={t("catalog.rolesHint")}
+          values={lists.assignee_roles}
+          readOnly={!isSysadmin}
+          onSave={(next) => save({ assignee_roles: next })}
+          onToast={onToast}
+        />
+        <ManagedListCard
+          dataId="catalog-systems"
+          title={t("catalog.systemsTitle")}
+          hint={t("catalog.systemsHint")}
+          values={lists.systems}
+          lockedValues={[OTHER_SYSTEM]}
+          available={lists.available_systems}
+          readOnly={!isSysadmin}
+          onSave={(next) => save({ systems: next })}
+          onToast={onToast}
+        />
+      </div>
     </div>
   );
 }
