@@ -336,13 +336,15 @@ export function SubprocessPreviewPeek({
   // 2026-08-31 반전: 호버로 "줄어들면" 커서가 목업 밖으로 나가 unhover→확대→재hover 점프 루프가 생긴다.
   // 호버가 항상 아래로 자라는 방향이면 커서는 계속 안쪽이라 루프가 없다 (사용자 지적).
   const [mockHover, setMockHover] = useState(false);
+  // 담당 역할은 캔버스와 같이 담당자 토글에 동승(별도 토글 없음) — 담당자 줄 바로 뒤 플레인 텍스트
   const mockAttrRows = (
     [
-      { key: "assignee", icon: User, value: info.assignee ?? "" },
-      { key: "department", icon: Building2, value: info.department ?? "" },
-      { key: "system", icon: Server, value: formatSystem(info.system, t("system.other")) },
+      { key: "assignee", toggle: "assignee", icon: User, value: info.assignee ?? "" },
+      { key: "assignee_role", toggle: "assignee", icon: BriefcaseBusiness, value: info.assigneeRole ?? "" },
+      { key: "department", toggle: "department", icon: Building2, value: info.department ?? "" },
+      { key: "system", toggle: "system", icon: Server, value: formatSystem(info.system, t("system.other")) },
     ] as const
-  ).filter((row) => row.value && (mockHover || displayFields.includes(row.key)));
+  ).filter((row) => row.value && (mockHover || displayFields.includes(row.toggle)));
   const mockParamChips = SP_PARAM_FIELDS.map((field) => ({
     field,
     text: formatParamValue(field, spParamValue(field)),
@@ -656,12 +658,6 @@ export function SubprocessPreviewPeek({
                           </span>
                         );
                       })}
-                      {/* 담당 역할 — 담당자 목업 줄 바로 뒤(RoleChip은 빈 값에 null 반환) (2026-09-12) */}
-                      {info.assigneeRole && (mockHover || displayFields.includes("assignee")) ? (
-                        <span className="flex items-center gap-1">
-                          <RoleChip role={info.assigneeRole} dataId="sp-peek-mock-role" />
-                        </span>
-                      ) : null}
                     </div>
                   )}
                   {/* 파라미터 칩 — 캔버스 NodeParams 미러(아이콘+표시형), 기본은 "params" 토글 기준 */}

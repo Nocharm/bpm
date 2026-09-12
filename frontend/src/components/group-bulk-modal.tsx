@@ -31,7 +31,7 @@ import { SearchSelect } from "@/components/search-select";
 import { SuggestInput } from "@/components/suggest-input";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
-import { canBulkEditField, isBulkParamField, type BulkDetailField } from "@/lib/bulk-params";
+import { canBulkEditField, isBulkParamField, isSingleValuedBulkField, type BulkDetailField } from "@/lib/bulk-params";
 import { useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
@@ -290,12 +290,9 @@ export function GroupBulkModal({
       : action === "set" && attrConflicts.length > 0;
 
   // Available policies — people+dept-only omits append (department is single-valued).
-  // 파라미터 모드도 append 제외 — 숫자에 콤마 append는 무효값이 되어 백엔드 소거로 기존값 유실.
-  // 담당 역할도 단일값이라 append 제외 (2026-09-12).
+  // 단일값 필드(파라미터·담당 역할)도 append 제외 — 판정은 isSingleValuedBulkField 한 곳.
   const availablePolicies: Set<BulkPolicy> = new Set<BulkPolicy>(
-    (mode === "people" && !hasAssignees) ||
-      (attrField !== null && isBulkParamField(attrField)) ||
-      attrField === "assignee_role"
+    (mode === "people" && !hasAssignees) || (attrField !== null && isSingleValuedBulkField(attrField))
       ? ["replace", "individual", "skip"]
       : ["replace", "append", "skip", "individual"],
   );
@@ -748,7 +745,7 @@ export function GroupBulkModal({
                 <Replace size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.replace")}
               </button>
-              {!(attrField !== null && isBulkParamField(attrField)) && attrField !== "assignee_role" && (
+              {!(attrField !== null && isSingleValuedBulkField(attrField)) && (
                 <button
                   type="button"
                   className={`${btn} flex items-center gap-1`}
@@ -980,7 +977,7 @@ export function GroupBulkModal({
                   />
                 ) : attrField === "assignee_role" ? (
                   <SuggestInput
-                    mode="row"
+                    mode="field" // 모달의 다른 값 입력과 같은 전체 폭·좌측 정렬(row는 인스펙터 행용 우측 정렬)
                     options={catalogs.assignee_roles}
                     value={value}
                     onCommit={setValue}

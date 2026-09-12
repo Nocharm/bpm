@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildBulkAttrPatch, canBulkEditField, isBulkParamField } from "./bulk-params";
+import { buildBulkAttrPatch, canBulkEditField, isBulkParamField, isSingleValuedBulkField } from "./bulk-params";
 
 describe("canBulkEditField", () => {
   it("people/system은 process·decision만", () => {
@@ -32,6 +32,16 @@ describe("canBulkEditField", () => {
   it("assignee_role은 system과 동일 규칙 — BPM 속성 노드만", () => {
     expect(canBulkEditField("process", "assignee_role")).toBe(true);
     expect(canBulkEditField("subprocess", "assignee_role")).toBe(false);
+  });
+});
+
+describe("isSingleValuedBulkField", () => {
+  it("역할·파라미터는 append 불가, system·IO·조건은 가능", () => {
+    expect(isSingleValuedBulkField("assignee_role")).toBe(true);
+    expect(isSingleValuedBulkField("duration")).toBe(true);
+    expect(isSingleValuedBulkField("system")).toBe(false);
+    expect(isSingleValuedBulkField("input")).toBe(false);
+    expect(isSingleValuedBulkField("start_condition")).toBe(false);
   });
 });
 

@@ -28,6 +28,12 @@ export function canBulkEditField(
   return (getEditableParamFields(nodeType) as readonly string[]).includes(field);
 }
 
+/** append 불가 필드 — 파라미터는 숫자에 콤마 append가 무효값이 되어 백엔드 소거로 기존값 유실,
+ *  담당 역할은 단일값 계약(설계 2026-09-11). 정책 목록과 개별 선택 마법사가 같은 판정을 쓴다. */
+export function isSingleValuedBulkField(field: "system" | "assignee_role" | ParamField | BulkDetailField): boolean {
+  return field === "assignee_role" || isBulkParamField(field);
+}
+
 /** 비용 배타 — 설정 시 반대 통화 명시적 소거, 비우기는 양쪽 소거(노드의 비용은 하나라는 불변식 유지).
  *  input/output은 줄 1:1 정렬 열(폼 + IO 링크)을 지킨다 — 기존 항목이 줄 경계 접두로 보존되는
  *  변경(동일/append)만 그 열들을 유지하고, 그 외(교체·비우기)는 함께 소거한다

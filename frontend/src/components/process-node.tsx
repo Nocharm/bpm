@@ -106,8 +106,8 @@ const ATTR_FIELD_ORDER = ["assignee", "department", "system"] as const;
 // 노드 속성 줄(담당자/부서/시스템) — 켜진 필드 중 값이 있는 것만, 규범 순서 고정.
 // start/end는 BPM 속성 줄을 표시하지 않음. subprocess는 지정 어트리뷰트(sp*, 라이브 참조) (spec 2026-07-06).
 // 휴식↔활성 전환(design 2026-09-12 §4): 담당자 줄은 휴식=역할 칩(있으면)·활성(호버/선택 NODE_ALT_DELAY_MS 지속)=
-// 담당자 이름, 시스템 줄은 휴식=정식명(Other면 원문)·활성=원문 메모. 두 표기를 같은 grid 칸에 겹쳐 opacity로
-// 교차 페이드해 높이가 흔들리지 않는다. 역할/원문이 없으면 전환 없이 단일 표기.
+// 담당자 이름. 두 표기를 같은 grid 칸에 겹쳐 opacity로 교차 페이드해 높이가 흔들리지 않는다. 역할이 없으면
+// 전환 없이 단일 표기. 시스템 줄은 전환 없음 — 정식명(Other면 원문 메모)을 항상 1줄 말줄임.
 function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }) {
   const { displayFields } = useNodeActions();
   const { t } = useI18n();
@@ -136,8 +136,6 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         // 휴식/활성 표기 — 같으면 전환 없음
         let rest: ReactNode = value !== "" ? <span>{value}</span> : null;
         let alternate: ReactNode = rest;
-        // 시스템 줄: 교차 페이드 대신 같은 요소의 클램프만 푼다(높이 예약 없이 활성 때만 커짐)
-        let expands = false;
         if (field === "assignee") {
           // 같은 이름이 중복 입력되어도 칩 key 충돌을 막기 위해 정리
           const names = Array.from(new Set(parseAssignees(value)));
@@ -166,18 +164,12 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
           rest = roleText ?? chips;
           alternate = chips ?? rest;
         } else if (field === "system") {
-          // Other면 라벨 대신 원문 메모. 휴식은 1줄 말줄임, 활성이면 클램프를 풀어 전문 표시(사용자 결정 2026-09-12)
+          // Other면 라벨 대신 원문 메모 — 노드에선 항상 1줄 말줄임, 전문은 더블클릭 편집 모달에서 (사용자 결정 2026-09-12)
           const restText = value === OTHER_SYSTEM ? note || otherLabel : value;
-          const expanded = note !== "" ? note : restText;
-          expands = expanded !== restText || note === restText;
           rest =
             value !== "" ? (
-              <span
-                data-id="node-system-text"
-                title={expands && !alt ? expanded : undefined}
-                className={expands && alt ? "min-w-0 whitespace-pre-wrap break-words" : "block min-w-0 truncate"}
-              >
-                {expands && alt ? expanded : restText}
+              <span data-id="node-system-text" title={note !== "" ? note : undefined} className="block min-w-0 truncate">
+                {restText}
               </span>
             ) : null;
           alternate = rest;
@@ -190,7 +182,7 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
           <div
             key={field}
             data-id={`node-${field}-line`}
-            data-alt={(swaps || expands) && alt ? "true" : "false"}
+            data-alt={swaps && alt ? "true" : "false"}
             className="mt-0.5 text-xs text-ink-tertiary"
           >
             <span className="inline-flex max-w-full items-start gap-1">
