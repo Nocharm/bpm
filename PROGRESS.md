@@ -6,6 +6,7 @@
 ## 2026-09-12 — Catalogs 탭 마스터-디테일 재구성 (dev)
 
 - 밀도 재구성(칩 클라우드)을 탭(역할|시스템)+좌측 목록/우측 별칭 편집 2단 레이아웃으로 교체 — 두 `ManagedListCard` 모두 마운트 유지하고 비활성 탭은 `hidden`(미저장 초안 보존). 카드별 `selected`/`filter` state 신설, 로직(`mergeCatalogEntries`/`normalizeAliases`/`parseCatalogCsv`/resync·`Other` 잠금)은 무변경. i18n `catalog.filterPlaceholder`/`catalog.selectHint` 추가, `catalog.aliasesFor` 폐기(en/ko). 스모크(`pw-smoke-assignee-role.mjs`) Catalogs 섹션을 탭 클릭→추가→CSV 임포트→행 선택→별칭 적용→단일 저장 흐름으로 갱신. 게이트 tsc/lint/vitest(980)/COMPONENTS.md(CheckInput·HoverTip 사용처에서 catalogs-panel 제외) green.
+- 리뷰 픽스: 탭 라벨 개수를 미저장 초안 기준(`onCountChange`, `catalog.count` 재사용)·`role=listbox/option`을 `aria-pressed` 토글 버튼으로(로빙 탭인덱스 없는 가짜 리스트박스 제거)·`catalog.inUse` 문구 "체크"→"클릭"·별칭 입력 autoFocus(선택별 remount)+Esc 되돌리기·필터 무일치 안내(`suggest.noMatch`)·후보 아이콘 14px·추가 버튼 텍스트 복원·`handleRemove` 잠금 가드. 스모크에 탭 전환 초안 유지·초안 개수·저장 후 선택 유지·2차 저장 4건 추가(19/19).
 
 ## 2026-09-12 — Settings Catalogs 탭 밀도 재구성 (dev)
 

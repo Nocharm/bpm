@@ -2,7 +2,7 @@
 // API로 맵/드래프트를 만든 뒤 브라우저에서 (1) 인스펙터 역할 입력(자동완성+별칭)→새로고침→캔버스 칩
 // (2) 담당자 줄 휴식(역할 칩)↔호버/선택 후 NODE_ALT_DELAY_MS 지연 활성(담당자 이름) 전환
 // (3) 시스템 자유값→Other+원문 메모, 별칭→카탈로그 표기 (4) Catalogs 탭(마스터-디테일) 탭 전환·추가·
-// CSV 임포트(2열: value,aliases)·행 선택→별칭 편집→적용→단일 저장→/catalogs 반영.
+// CSV 임포트(2열: value,aliases)·탭 전환 시 초안 유지·행 선택→별칭 편집→적용→저장→/catalogs 반영·저장 후 선택 유지+2차 저장.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 API_URL=http://localhost:8000 node scripts/pw-smoke-assignee-role.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, dev 인증(admin.sys=sysadmin). 스크린샷은 SHOT_DIR(기본 /tmp).
 import { chromium } from "playwright-core";
@@ -145,8 +145,17 @@ try {
   await page.locator('[data-id="catalog-roles-import-note"]').waitFor({ state: "visible", timeout: 3000 });
   check("csv import note reports added/merged/duplicates",
     /Added 1, merged 2/.test((await page.locator('[data-id="catalog-roles-import-note"]').textContent()) ?? ""));
+  // 탭 전환 — 두 카드는 항상 마운트(hidden 토글)라 미저장 초안이 살아남아야 한다
+  await page.locator('[data-id="catalog-tab-systems"]').click();
+  const rolesHidden = await page.locator('[data-id="catalog-roles"]').evaluate((el) => el.hidden);
+  await page.locator('[data-id="catalog-tab-roles"]').click();
+  const operatorRow = page.locator('[data-id="catalog-roles-row"][data-value="Operator"]');
+  check("unsaved draft survives a tab switch",
+    rolesHidden && (await operatorRow.count()) === 1 && (await page.locator('[data-id="catalog-roles-save"]').isEnabled()));
+  check("tab label counts the unsaved draft", /3/.test((await page.locator('[data-id="catalog-tab-roles"]').textContent()) ?? ""));
   // 선택 → 별칭 편집 → 적용 (저장 전에 편집해 한 번의 저장으로 추가+별칭이 함께 반영되는지 검증)
-  await page.locator('[data-id="catalog-roles-row"][data-value="Reviewer"]').click();
+  const reviewerRow = page.locator('[data-id="catalog-roles-row"][data-value="Reviewer"]');
+  await reviewerRow.click();
   const aliasInput = page.locator('[data-id="catalog-roles-alias-input"]');
   await aliasInput.waitFor({ state: "visible", timeout: 3000 });
   await aliasInput.fill("검토자, 리뷰어");
@@ -158,15 +167,24 @@ try {
   check("saved roles reach /catalogs", JSON.stringify(catalogs.assignee_roles.map((e) => e.value)) === JSON.stringify(["Reviewer", "Approver", "Operator"]),
     JSON.stringify(catalogs.assignee_roles));
   check("systems keep the reserved Other first", catalogs.systems[0]?.value === "Other" && catalogs.systems.some((e) => e.value === "LIMS"));
-  await page.locator('[data-id="catalogs-panel"]').screenshot({ path: path.join(SHOT_DIR, "assignee-role-catalogs-tab-saved.png") });
-
-  // ── 5) 저장된 별칭이 한 번의 저장으로 함께 반영됐는지 확인(추가+CSV+별칭 편집이 단일 저장) ──
   const expectedRoles = [
     { value: "Reviewer", aliases: ["검토자", "리뷰어"] },
     { value: "Approver", aliases: [] },
     { value: "Operator", aliases: ["오퍼레이터", "작업자"] },
   ];
   check("aliases saved", JSON.stringify(catalogs.assignee_roles) === JSON.stringify(expectedRoles), JSON.stringify(catalogs.assignee_roles));
+  await page.locator('[data-id="catalogs-panel"]').screenshot({ path: path.join(SHOT_DIR, "assignee-role-catalogs-tab-saved.png") });
+
+  // ── 5) 저장 후 서버 재동기화(valuesKey 변경)에도 선택이 유지되고, 2차 별칭 편집→저장이 반영되는지 ──
+  check("selection survives the post-save resync", (await reviewerRow.getAttribute("aria-pressed")) === "true");
+  await aliasInput.fill("검토자, 리뷰어, 리뷰");
+  await aliasInput.press("Enter");
+  await page.locator('[data-id="catalog-roles-save"]').click();
+  await page.waitForTimeout(800);
+  const catalogs2 = await api("GET", "/catalogs");
+  check("second alias edit saved after resync",
+    JSON.stringify(catalogs2.assignee_roles[0]) === JSON.stringify({ value: "Reviewer", aliases: ["검토자", "리뷰어", "리뷰"] }),
+    JSON.stringify(catalogs2.assignee_roles[0]));
 } finally {
   await browser.close();
   // 시드 정리 — 카탈로그는 비우고 맵은 남긴다(휴지통 절차 대신 이름에 stamp)

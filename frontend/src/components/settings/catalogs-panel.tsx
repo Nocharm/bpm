@@ -37,7 +37,7 @@ const PRIMARY_ALIAS_BUTTON =
 
 interface ManagedListCardProps {
   dataId: string;
-  // 렌더링에는 쓰지 않음(헤더 제거) — 저장 완료 토스트 문구에만 사용
+  // 저장 완료 토스트 문구에만 사용(헤더는 탭 바가 대신함)
   title: string;
   values: CatalogEntry[];
   // 삭제 불가 항목(시스템 Other) — 별칭은 편집 가능
@@ -48,10 +48,12 @@ interface ManagedListCardProps {
   hidden: boolean;
   onSave: (next: CatalogEntry[]) => Promise<CatalogEntry[]>;
   onToast: (message: string) => void;
+  // 탭 라벨의 개수는 미저장 초안 기준 — 항목 수가 바뀌는 핸들러에서만 부모에 알린다(render 중 호출 금지)
+  onCountChange: (count: number) => void;
 }
 
 function ManagedListCard({
-  dataId, title, values, lockedValues = [], available = [], readOnly, hidden, onSave, onToast,
+  dataId, title, values, lockedValues = [], available = [], readOnly, hidden, onSave, onToast, onCountChange,
 }: ManagedListCardProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<CatalogEntry[]>(values);
@@ -82,11 +84,15 @@ function ManagedListCard({
     setAliasDraft(selectedEntry?.aliases.join(", ") ?? "");
   }
 
+  const commitDraft = (next: CatalogEntry[]) => {
+    setDraft(next);
+    onCountChange(next.length);
+  };
   const addValues = (incoming: CatalogEntry[]) => {
     // 기존 항목의 별칭 총수를 전후로 비교 — normalizeAliases가 새 값/별칭과 충돌해 조용히 지운 개수(dropped)를 admin에게 알린다
     const before = draft.reduce((sum, entry) => sum + entry.aliases.length, 0);
     const result = mergeCatalogEntries(draft, incoming);
-    setDraft(result.next);
+    commitDraft(result.next);
     const after = result.next
       .filter((entry) => draft.some((existing) => existing.value.toLocaleLowerCase() === entry.value.toLocaleLowerCase()))
       .reduce((sum, entry) => sum + entry.aliases.length, 0);
@@ -95,7 +101,7 @@ function ManagedListCard({
   };
   const selectMatch = (result: { next: CatalogEntry[] }, value: string) => {
     const match = result.next.find((entry) => entry.value.toLocaleLowerCase() === value.toLocaleLowerCase());
-    setSelected(match?.value ?? value);
+    if (match) setSelected(match.value);
   };
   const handleAdd = () => {
     if (adding.trim() === "") return;
@@ -123,15 +129,15 @@ function ManagedListCard({
     setImportNote(requested - kept.length > 0 ? t("catalog.aliasesDropped", { count: requested - kept.length }) : "");
   };
   const handleRemove = () => {
-    if (selected === null) return;
-    setDraft((prev) => prev.filter((item) => item.value !== selected));
+    if (selected === null || isLocked(selected)) return;
+    commitDraft(draft.filter((item) => item.value !== selected));
     setSelected(null);
   };
   const handleSave = async () => {
     setBusy(true);
     try {
       const saved = await onSave(draft);
-      setDraft(saved);
+      commitDraft(saved);
       invalidateCatalogs();
       onToast(t("catalog.saved", { title }));
     } catch (err) {
@@ -160,8 +166,11 @@ function ManagedListCard({
           placeholder={t("catalog.filterPlaceholder")}
           onChange={(event) => setFilter(event.target.value)}
         />
-        <div role="listbox" aria-label={title} className="flex max-h-[360px] flex-col gap-0.5 overflow-y-auto">
+        <div className="flex max-h-[360px] flex-col gap-0.5 overflow-y-auto">
           {draft.length === 0 && <p className="px-1 py-1 text-fine text-ink-tertiary">{t("catalog.empty")}</p>}
+          {draft.length > 0 && filteredDraft.length === 0 && (
+            <p className="px-1 py-1 text-fine text-ink-tertiary">{t("suggest.noMatch")}</p>
+          )}
           {filteredDraft.map((entry) => {
             const locked = isLocked(entry.value);
             const isSelected = selected === entry.value;
@@ -169,10 +178,9 @@ function ManagedListCard({
               <button
                 key={entry.value}
                 type="button"
-                role="option"
                 data-id={`${dataId}-row`}
                 data-value={entry.value}
-                aria-selected={isSelected}
+                aria-pressed={isSelected}
                 className={`flex items-center gap-1.5 rounded-sm px-2 py-1 text-left text-caption ${
                   isSelected ? "bg-accent-tint text-accent" : "text-ink hover:bg-surface"
                 }`}
@@ -180,7 +188,11 @@ function ManagedListCard({
               >
                 <span className="min-w-0 flex-1 truncate">{entry.value}</span>
                 {entry.aliases.length > 0 && (
-                  <span data-id={`${dataId}-alias-badge`} className="shrink-0 rounded-xs bg-surface px-1 text-fine text-ink-tertiary">
+                  <span
+                    data-id={`${dataId}-alias-badge`}
+                    title={entry.aliases.join(", ")}
+                    className="shrink-0 rounded-xs bg-surface px-1 text-fine text-ink-tertiary"
+                  >
                     +{entry.aliases.length}
                   </span>
                 )}
@@ -209,12 +221,12 @@ function ManagedListCard({
               <button
                 type="button"
                 data-id={`${dataId}-add`}
-                aria-label={t("catalog.add")}
                 className={SECONDARY_BUTTON}
                 disabled={adding.trim() === ""}
                 onClick={handleAdd}
               >
                 <Plus size={14} strokeWidth={1.5} />
+                {t("catalog.add")}
               </button>
             </div>
             {candidates.length > 0 && (
@@ -237,7 +249,7 @@ function ManagedListCard({
                         selectMatch(result, value);
                       }}
                     >
-                      <Plus size={12} strokeWidth={1.5} />
+                      <Plus size={14} strokeWidth={1.5} className="shrink-0" />
                       {value}
                     </button>
                   ))}
@@ -294,7 +306,7 @@ function ManagedListCard({
               <div className="flex flex-col gap-1">
                 <p className="text-caption-strong text-ink-secondary">{t("catalog.aliases")}</p>
                 <div className="flex flex-wrap gap-1">
-                  {selectedEntry.aliases.length === 0 && <span className="text-fine text-ink-tertiary">{t("catalog.empty")}</span>}
+                  {selectedEntry.aliases.length === 0 && <span className="text-fine text-ink-tertiary">—</span>}
                   {selectedEntry.aliases.map((alias) => (
                     <span key={alias} className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink">{alias}</span>
                   ))}
@@ -302,18 +314,25 @@ function ManagedListCard({
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
-                <label className="text-caption-strong text-ink-secondary">{t("catalog.aliases")}</label>
+                <label htmlFor={`${dataId}-alias-input`} className="text-caption-strong text-ink-secondary">{t("catalog.aliases")}</label>
                 <input
+                  // 선택이 바뀌면 다시 마운트해 autoFocus가 새 항목에서도 걸리게
+                  key={selectedEntry.value}
+                  id={`${dataId}-alias-input`}
                   data-id={`${dataId}-alias-input`}
                   className={INPUT_CLASS}
                   value={aliasDraft}
                   placeholder={t("catalog.aliasesPlaceholder")}
                   maxLength={400}
+                  autoFocus
                   onChange={(event) => setAliasDraft(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
                       applyAliases();
+                    } else if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setAliasDraft(selectedEntry.aliases.join(", "));
                     }
                   }}
                 />
@@ -354,6 +373,8 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
   const [lists, setLists] = useState<Lists | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [activeTab, setActiveTab] = useState<"roles" | "systems">("roles");
+  // 탭 라벨 개수 — 카드의 미저장 초안 기준(없으면 서버 값)
+  const [draftCounts, setDraftCounts] = useState<{ roles: number | null; systems: number | null }>({ roles: null, systems: null });
 
   useEffect(() => {
     let alive = true;
@@ -383,6 +404,8 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
   if (error !== null) return <p className="text-caption text-error">{humanizeApiError(error, t)}</p>;
   if (lists === null) return <p className="text-caption text-ink-tertiary">{t("catalog.loading")}</p>;
   const activeHint = activeTab === "roles" ? t("catalog.rolesHint") : t("catalog.systemsHint");
+  const rolesCount = draftCounts.roles ?? lists.assignee_roles.length;
+  const systemsCount = draftCounts.systems ?? lists.systems.length;
   return (
     <div className="flex max-w-6xl flex-col gap-4" data-id="catalogs-panel">
       <div>
@@ -396,7 +419,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
           className={`border-b-2 px-1 pb-2 text-caption-strong ${activeTab === "roles" ? "border-accent text-ink" : "border-transparent text-ink-secondary"}`}
           onClick={() => setActiveTab("roles")}
         >
-          {t("catalog.rolesTitle")} ({lists.assignee_roles.length})
+          {t("catalog.rolesTitle")} · {t("catalog.count", { n: rolesCount })}
         </button>
         <button
           type="button"
@@ -404,7 +427,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
           className={`border-b-2 px-1 pb-2 text-caption-strong ${activeTab === "systems" ? "border-accent text-ink" : "border-transparent text-ink-secondary"}`}
           onClick={() => setActiveTab("systems")}
         >
-          {t("catalog.systemsTitle")} ({lists.systems.length})
+          {t("catalog.systemsTitle")} · {t("catalog.count", { n: systemsCount })}
         </button>
       </div>
       <p className="text-fine text-ink-tertiary">{activeHint} · {t("catalog.csvHint")}</p>
@@ -416,6 +439,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
         hidden={activeTab !== "roles"}
         onSave={(next) => save({ assignee_roles: next })}
         onToast={onToast}
+        onCountChange={(count) => setDraftCounts((prev) => ({ ...prev, roles: count }))}
       />
       <ManagedListCard
         dataId="catalog-systems"
@@ -427,6 +451,7 @@ export function CatalogsPanel({ isSysadmin, onToast }: CatalogsPanelProps) {
         hidden={activeTab !== "systems"}
         onSave={(next) => save({ systems: next })}
         onToast={onToast}
+        onCountChange={(count) => setDraftCounts((prev) => ({ ...prev, systems: count }))}
       />
     </div>
   );
