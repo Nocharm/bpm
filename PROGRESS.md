@@ -7,6 +7,10 @@
 
 - `assignee_role`/`sp_assignee_role`가 라이브러리 행·피크(디테일/목업)·SP 지정 패널·sp-detail 타일 카운트·플레이스홀더 낙관 참조까지 전 표면에 노출되도록 마감. 그룹 일괄편집 모달에 `assignee_role`을 `system`과 같은 단일필드 모드(append 제외, `SuggestInput` 카탈로그 자동완성)로 추가. 백엔드 `library.py` raw select 컬럼 인덱스 시프트에 주의(assignee 뒤 삽입 → 이후 튜플 언패킹 전부 한 칸씩 밀림). 게이트 tsc/lint/vitest(982)/ruff/pytest(1476)/COMPONENTS.md green.
 
+## 2026-09-12 — 역할·카탈로그 트랙 마무리 → origin/dev 반영 (dev)
+
+- 이번 라운드(2026-09-11~12, 역할 칸·카탈로그 엔진·별칭·노드 전환·카탈로그 탭·역할 전 표면 동기화·타일 2:1·자동완성)를 `origin/dev`에 푸시. 다음 세션 핸드오프 `docs/design/2026-09-12-assignee-role-next-session.md` — 타깃은 AI 계약·CSV 임포트·컨설턴트 임포트 최신화, 관련 결정은 그때 확정.
+
 ## 2026-09-12 — Other 노드 원문 메모 클램프 (dev)
 
 - 캔버스 시스템 줄: `Other`면 라벨 대신 원문 메모를 **항상 1줄 말줄임**(`title`로 전문), 전문은 더블클릭 편집 모달에서 — 호버 확장안은 사용자 결정으로 철회(노드 높이 고정). 편집 입력의 raw `Other`·필터에 가려진 선택 행·후보 접기는 현행 유지로 완결.

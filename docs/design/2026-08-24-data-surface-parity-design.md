@@ -67,3 +67,4 @@ dry-run(이슈 0)·`artifact_role` 유실 회귀 봉합(`[Interview]` 섹션 잔
 
 역할(`assignee_role`) CSV `Role` 열·Excel 왕복·AI `attributes.assignee_role`·인터뷰 에이전트 역할 수집,
 시스템 CSV 값의 카탈로그 정규화 — 2026-09-11 설계 §4.3 이관.
+다음 세션 핸드오프: `2026-09-12-assignee-role-next-session.md`.
