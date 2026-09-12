@@ -50,6 +50,8 @@ describe("countFilledSpTiles / hasSpContent", () => {
     expect(countFilledSpTiles({ sp_annual_count: "", sp_frequency_fallback: "주 1회" })).toBe(1);
     expect(countFilledSpTiles({ sp_duration: "2.30", sp_total_time_fallback: "두 시간 반" })).toBe(1);
     expect(countFilledSpTiles({ sp_cost_krw: "", sp_cost_usd: "120" })).toBe(1);
+    // 담당자 이름 없이 역할만 있어도 같은 타일이 채움으로 잡힌다 (2026-09-12)
+    expect(countFilledSpTiles({ sp_assignee: "", sp_assignee_role: "Reviewer" })).toBe(1);
   });
   it("counts every tile once — 15 when everything is filled", () => {
     expect(

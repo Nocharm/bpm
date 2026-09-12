@@ -38,6 +38,7 @@ export type SpDetailFields = Pick<
   | "sp_designated_at"
   | "sp_department"
   | "sp_assignee"
+  | "sp_assignee_role"
   | "sp_system"
   | "sp_system_fallback"
   | "sp_url"
@@ -65,7 +66,8 @@ const has = (v: string | null | undefined): boolean => (v ?? "").trim() !== "";
 export function countFilledSpTiles(d: SpDetailFields): number {
   const tiles: boolean[] = [
     has(d.sp_department),
-    has(d.sp_assignee),
+    // 담당 역할은 담당자와 같은 타일(부서와는 짝짓지 않음) — 이름 없이 역할만 있어도 채움으로 센다
+    has(d.sp_assignee) || has(d.sp_assignee_role),
     has(d.sp_system) || has(d.sp_system_fallback),
     has(d.sp_url),
     has(d.sp_gmp) || has(d.sp_gmp_fallback),

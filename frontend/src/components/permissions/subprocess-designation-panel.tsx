@@ -162,6 +162,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
   const attrRows: { label: string; value: string | null | undefined }[] = [
     { label: t("field.department"), value: detail.sp_department },
     { label: t("field.assignee"), value: detail.sp_assignee },
+    { label: t("field.assigneeRole"), value: detail.sp_assignee_role ?? "" },
     { label: t("field.system"), value: detail.sp_system },
     { label: t("field.duration"), value: formatDurationHm(detail.sp_duration ?? "") },
     { label: t("field.costKrw"), value: formatCost(detail.sp_cost_krw, "₩") },

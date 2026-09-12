@@ -475,6 +475,7 @@ export function FrameworkTreePicker({
           info={{
             department: peek.row.sp_department ?? null,
             assignee: peek.row.sp_assignee ?? null,
+            assigneeRole: peek.row.sp_assignee_role ?? "",
             system: peek.row.sp_system ?? null,
             duration: peek.row.sp_duration ?? null,
             touch_time: peek.row.sp_touch_time ?? null,

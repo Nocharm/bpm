@@ -667,6 +667,7 @@ export interface LibraryProcess {
   // 지정 어트리뷰트 — 미지정 행은 항상 null(잔존값 마스킹) (spec 2026-07-06/19)
   department: string | null;
   assignee: string | null;
+  assignee_role?: string;
   system: string | null;
   duration: string | null;
   // SP 파라미터 4종 — 피커 미리보기 목업 "전체 파라미터" 소스, 마스킹 규칙 동일 (2026-08-30)

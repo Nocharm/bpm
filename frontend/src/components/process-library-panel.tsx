@@ -750,6 +750,7 @@ export function ProcessLibraryPanel({
           info={{
             department: peek.row.department,
             assignee: peek.row.assignee,
+            assigneeRole: peek.row.assignee_role ?? "",
             system: peek.row.system,
             duration: peek.row.duration,
             touch_time: peek.row.touch_time,

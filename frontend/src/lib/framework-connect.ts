@@ -18,6 +18,7 @@ export function makeOptimisticRef(meta: OptimisticRefMeta): SubprocessRef {
     category_path: meta.categoryPath,
     department: null,
     assignee: null,
+    assignee_role: null,
     system: null,
     duration: null,
     cost_krw: null,

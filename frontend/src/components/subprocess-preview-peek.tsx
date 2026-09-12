@@ -7,6 +7,7 @@
 // 목업 노드는 클릭=드롭다운, 드래그=캔버스 드롭 추가(dragPayload) (사용자 요청 2026-09-03).
 
 import {
+  BriefcaseBusiness,
   Building2,
   CalendarClock,
   ChevronRight,
@@ -29,13 +30,14 @@ import {
   ZoomOut,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getMap, getResolvedGraph, type VersionGraph } from "@/lib/api";
 import { FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { PARAM_ICON } from "@/components/param-icons";
 import { resolveNodeStroke } from "@/components/process-node";
+import { RoleChip } from "@/components/role-chip";
 import { ScopePreview } from "@/components/scope-preview";
 import { getExternalL5Color } from "@/lib/canvas";
 import { formatSystem } from "@/lib/catalogs";
@@ -62,6 +64,8 @@ const ACTION_WIDTH = "w-[8.5rem]";
 export interface SubprocessPeekInfo {
   department: string | null;
   assignee: string | null;
+  // 단일 역할 — 담당자 옆 칩 표시 (design 2026-09-11)
+  assigneeRole?: string;
   system: string | null;
   duration: string | null;
   // SP 파라미터 나머지 4종 — 목업 "전체 파라미터" 표시 소스 (2026-08-30)
@@ -652,6 +656,12 @@ export function SubprocessPreviewPeek({
                           </span>
                         );
                       })}
+                      {/* 담당 역할 — 담당자 목업 줄 바로 뒤(RoleChip은 빈 값에 null 반환) (2026-09-12) */}
+                      {info.assigneeRole && (mockHover || displayFields.includes("assignee")) ? (
+                        <span className="flex items-center gap-1">
+                          <RoleChip role={info.assigneeRole} dataId="sp-peek-mock-role" />
+                        </span>
+                      ) : null}
                     </div>
                   )}
                   {/* 파라미터 칩 — 캔버스 NodeParams 미러(아이콘+표시형), 기본은 "params" 토글 기준 */}
@@ -776,22 +786,33 @@ export function SubprocessPreviewPeek({
               {infoRows.map((row) => {
                 const Icon = row.icon;
                 return (
-                  // 아이콘 + 라벨 + 값 필 — 값 없는 행도 나열하되 톤 다운 (사용자 피드백 2026-08-30)
-                  <div
-                    key={row.key}
-                    title={row.label}
-                    className={`flex items-center gap-1.5 ${row.value ? "" : "opacity-40"}`}
-                  >
-                    <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                    <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
-                    {row.value ? (
-                      <span className="max-w-[55%] truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
-                        {row.value}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 text-fine text-ink-tertiary">-</span>
-                    )}
-                  </div>
+                  <Fragment key={row.key}>
+                    {/* 아이콘 + 라벨 + 값 필 — 값 없는 행도 나열하되 톤 다운 (사용자 피드백 2026-08-30) */}
+                    <div
+                      title={row.label}
+                      className={`flex items-center gap-1.5 ${row.value ? "" : "opacity-40"}`}
+                    >
+                      <Icon size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">{row.label}</span>
+                      {row.value ? (
+                        <span className="max-w-[55%] truncate rounded-xs border border-hairline bg-surface-alt px-1.5 py-px text-fine text-ink">
+                          {row.value}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-fine text-ink-tertiary">-</span>
+                      )}
+                    </div>
+                    {/* 담당 역할 — 담당자 행 바로 뒤, 값 있을 때만(RoleChip은 빈 값에 null 반환) (2026-09-12) */}
+                    {row.key === "assignee" && info.assigneeRole ? (
+                      <div title={t("field.assigneeRole")} className="flex items-center gap-1.5">
+                        <BriefcaseBusiness size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                        <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
+                          {t("field.assigneeRole")}
+                        </span>
+                        <RoleChip role={info.assigneeRole} dataId="sp-peek-role" />
+                      </div>
+                    ) : null}
+                  </Fragment>
                 );
               })}
               {/* 조건·IO·GMP — SP 지정의 나머지 표시 필드. 없는 값은 동일하게 톤다운 대시 (사용자 피드백 2026-08-30) */}
