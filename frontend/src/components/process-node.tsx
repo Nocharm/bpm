@@ -136,6 +136,8 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         // 휴식/활성 표기 — 같으면 전환 없음
         let rest: ReactNode = value !== "" ? <span>{value}</span> : null;
         let alternate: ReactNode = rest;
+        // 시스템 줄: 교차 페이드 대신 같은 요소의 클램프만 푼다(높이 예약 없이 활성 때만 커짐)
+        let expands = false;
         if (field === "assignee") {
           // 같은 이름이 중복 입력되어도 칩 key 충돌을 막기 위해 정리
           const names = Array.from(new Set(parseAssignees(value)));
@@ -164,9 +166,21 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
           rest = roleText ?? chips;
           alternate = chips ?? rest;
         } else if (field === "system") {
+          // Other면 라벨 대신 원문 메모. 휴식은 1줄 말줄임, 활성이면 클램프를 풀어 전문 표시(사용자 결정 2026-09-12)
           const restText = value === OTHER_SYSTEM ? note || otherLabel : value;
-          rest = value !== "" ? <span>{restText}</span> : null;
-          alternate = note !== "" && note !== restText ? <span>{note}</span> : rest;
+          const expanded = note !== "" ? note : restText;
+          expands = expanded !== restText || note === restText;
+          rest =
+            value !== "" ? (
+              <span
+                data-id="node-system-text"
+                title={expands && !alt ? expanded : undefined}
+                className={expands && alt ? "min-w-0 whitespace-pre-wrap break-words" : "block min-w-0 truncate"}
+              >
+                {expands && alt ? expanded : restText}
+              </span>
+            ) : null;
+          alternate = rest;
         }
         if (rest === null) return null;
         const swaps = alternate !== rest;
@@ -176,10 +190,10 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
           <div
             key={field}
             data-id={`node-${field}-line`}
-            data-alt={swaps && alt ? "true" : "false"}
+            data-alt={(swaps || expands) && alt ? "true" : "false"}
             className="mt-0.5 text-xs text-ink-tertiary"
           >
-            <span className="inline-flex items-start gap-1">
+            <span className="inline-flex max-w-full items-start gap-1">
               <Icon
                 size={12}
                 strokeWidth={1.5}

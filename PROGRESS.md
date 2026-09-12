@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — Other 노드 원문 메모 클램프 (dev)
+
+- 캔버스 시스템 줄: `Other`면 라벨 대신 원문 메모를 보이되 휴식은 1줄 말줄임(`title`로 전문), 호버/선택 `NODE_ALT_DELAY_MS` 뒤 클램프 해제로 전문 표시 — 교차 페이드 대신 같은 요소의 클래스 토글이라 휴식 높이를 예약하지 않는다(사용자 결정: 메모 우선·1줄·호버 전문). 편집 입력의 raw `Other`·필터에 가려진 선택 행·후보 접기는 현행 유지로 완결.
+
 ## 2026-09-12 — Catalogs 탭 마스터-디테일 재구성 (dev)
 
 - 밀도 재구성(칩 클라우드)을 탭(역할|시스템)+좌측 목록/우측 별칭 편집 2단 레이아웃으로 교체 — 두 `ManagedListCard` 모두 마운트 유지하고 비활성 탭은 `hidden`(미저장 초안 보존). 카드별 `selected`/`filter` state 신설, 로직(`mergeCatalogEntries`/`normalizeAliases`/`parseCatalogCsv`/resync·`Other` 잠금)은 무변경. i18n `catalog.filterPlaceholder`/`catalog.selectHint` 추가, `catalog.aliasesFor` 폐기(en/ko). 스모크(`pw-smoke-assignee-role.mjs`) Catalogs 섹션을 탭 클릭→추가→CSV 임포트→행 선택→별칭 적용→단일 저장 흐름으로 갱신. 게이트 tsc/lint/vitest(980)/COMPONENTS.md(CheckInput·HoverTip 사용처에서 catalogs-panel 제외) green.
