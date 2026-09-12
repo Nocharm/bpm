@@ -31,6 +31,8 @@ interface SpFieldTileProps {
   wide?: boolean;
   // wide 타일이 부모 2열 그리드를 가로지를지 — 담당자·역할처럼 한 행을 나눠 쓰는 래퍼 안에서는 false
   spanColumns?: boolean;
+  // 값이 있으면 라벨을 생략하고 값만 — 좁은 칸의 역할 타일(아이콘이 뜻을 대신, 사용자 결정 2026-09-12)
+  labelHiddenWhenFilled?: boolean;
   readOnly?: boolean;
   // 라벨 고정 — 값이 길어도 라벨을 지우지 않고 값 쪽을 말줄임. 원문 메모만 있는 읽기 타일처럼 라벨이 있어야
   // 값의 뜻이 통하는 경우(홈 상세 폴백 타일, 사용자 결정 2026-09-09)
@@ -44,7 +46,7 @@ const MIN_LABEL_WIDTH = 44;
 
 export function SpFieldTile({
   dataId, icon: Icon, label, value, valueNode, iconSlot, placeholder, valueTone = "default", valueSize = "caption",
-  disabled, disabledHint, active, wide, spanColumns = true, readOnly, labelFixed, onOpen,
+  disabled, disabledHint, active, wide, spanColumns = true, labelHiddenWhenFilled = false, readOnly, labelFixed, onOpen,
 }: SpFieldTileProps) {
   const filled = value.trim() !== "" || valueNode != null;
   const isFallback = filled && valueTone === "fallback";
@@ -89,7 +91,7 @@ export function SpFieldTile({
   // wide 타일은 라벨을 자연폭으로 고정하고 값이 줄바꿈으로 내려간다(부서 경로처럼 긴 값)
   const body = filled ? (
     <>
-      {(wide || !hideLabel) && (
+      {(wide || !hideLabel) && !labelHiddenWhenFilled && (
         <span className={`text-fine text-ink-tertiary ${wide || labelFixed ? "shrink-0" : "min-w-0 truncate"}`}>{label}</span>
       )}
       <span

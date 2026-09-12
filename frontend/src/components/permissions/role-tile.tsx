@@ -41,7 +41,9 @@ export function RoleTile({ value, readOnly = false, dataIdPrefix, labels, placeh
       label={t("field.assigneeRole")}
       value=""
       valueNode={value !== "" ? <RoleChip role={value} dataId={`${dataIdPrefix}-role-chip`} /> : undefined}
-      placeholder={placeholder}
+      // 값 있으면 라벨 없이 칩만, 편집 가능한데 비어 있으면 라벨 + 짧은 대시 (사용자 결정 2026-09-12)
+      placeholder={placeholder ?? (readOnly ? undefined : "–")}
+      labelHiddenWhenFilled
       wide
       spanColumns={spanColumns}
       readOnly={readOnly}

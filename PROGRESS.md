@@ -10,6 +10,7 @@
 ## 2026-09-12 — Other 노드 원문 메모 클램프 (dev)
 
 - 캔버스 시스템 줄: `Other`면 라벨 대신 원문 메모를 **항상 1줄 말줄임**(`title`로 전문), 전문은 더블클릭 편집 모달에서 — 호버 확장안은 사용자 결정으로 철회(노드 높이 고정). 편집 입력의 raw `Other`·필터에 가려진 선택 행·후보 접기는 현행 유지로 완결.
+- 역할 타일: 값이 있으면 라벨 없이 칩만(`SpFieldTile labelHiddenWhenFilled`), 편집 가능한데 비어 있으면 라벨+짧은 대시 — 1/3 칸에서 "Revie…" 말줄임 해소.
 - 모달 타일: 담당자·역할을 한 행 2:1(`DeptAssigneeTiles roleTile` 슬롯 + `SpFieldTile spanColumns`)로, 노드 편집·SP 지정 모달 동일. `SuggestInput`은 타이핑 중 접두 일치 첫 제안을 자동 하이라이트해 Enter/Tab으로 완성(부분일치는 자유값 보호 위해 제외).
 - 역할 표면 동기화 리뷰 픽스: 피크 목업 노드의 역할을 담당자 줄 바로 뒤 플레인 행(담당자 토글 동승)으로, 역할만 있어도 표시. 일괄 편집 append 금지 판정을 `isSingleValuedBulkField` 한 곳으로(테스트), 역할 입력은 `SuggestInput` field 모드(모달 폭·좌측 정렬).
 
