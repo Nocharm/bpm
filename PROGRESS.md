@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — 9월 1차 공지 초안 + 매뉴얼 6종·AI 챗 매뉴얼·슬라이드 최신화 (dev)
+
+- 08-25(8월 3차) 이후 dev 전체(feat 235·fix 91)를 `docs/notices/2026-09-12-release.md`로 정리 — 홈 개인 대시보드·L5 연계 캔버스/확정 거버넌스·슬롯 승인·역할(Role)+카탈로그·AI 역할 계약·CSV Role·노드 편집 창·낡은 참조 감사·인터뷰 임포트 0.5/리포트·백업. md 매뉴얼 3종(ko)에 09-07 이후 델타(대시보드 후속·1클릭 지연·Issues/Stale refs·레벨 상세 패널·역할/시스템 카탈로그·고아 경고·Catalogs/Orphaned refs 탭·임포트 0.5·2열 리포트·유지/교체) 반영 후 en은 에이전트가 미러. `backend/app/manual.md`(AI 챗 근거)는 7/20 이후 낡은 서술(CSV 14열·파라미터 6개·30분 자동 해제·딥 뷰)을 전면 정정하고 홈 대시보드·업무 체계 절을 신설. 슬라이드 4종은 `build_slides.py`(scratch) 증분 수술 + 신규 캡처 5종(대시보드·역할·모달·Catalogs·Orphaned refs)으로 재생성·PDF 재출력.
+
 ## 2026-09-12 — 데이터 계약 3종 최신화: AI·CSV·컨설턴트 임포트에 역할·카탈로그 정규화 (dev)
 
 - **결정(사용자)**: AI(챗 ops/graph·인터뷰 드래프터)는 담당자 실명을 쓸 수 없고 사람 필드는 **역할(`assignee_role`)만** — `AiNodeAttributes.assignee` 제거(에코해도 pydantic이 버림), 프롬프트에 `[역할 목록]`·`[시스템 목록]` 주입, 인터뷰 roles 스테이지가 역할 후보를 options로 묻는다. CSV·컨설턴트 임포트의 시스템은 에디터 `commitSystem`과 같은 규칙(별칭→정식 표기, 미일치→Other+원문 메모, 기존 메모 다르면 유지+경고). `rows[].ownerRole`은 `sp_assignee_role`에 착지(설명 줄도 유지), L6 action 노드엔 전파하지 않음.
