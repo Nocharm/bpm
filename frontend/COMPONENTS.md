@@ -111,7 +111,7 @@
 | `prompt-dialog.tsx` | `PromptDialog` | 플로팅 입력 모달 | `app/maps/[mapId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `providers.tsx` | `Providers` |   | `app/layout.tsx` |
 | `quick-connect-line.tsx` | `QuickConnectLine` | 빠른 연결 미리보기 | `app/maps/[mapId]/page.tsx` |
-| `role-chip.tsx` | `RoleChip` | 역할 칩 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/role-tile.tsx` |
+| `role-chip.tsx` | `RoleChip` | 역할 칩 | `components/attribute-read-rows.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/role-tile.tsx`, `components/subprocess-preview-peek.tsx` |
 | `save-checklist.tsx` | `MapTitleChecklist` | 좌상단 맵 제목 칩 + 저장(그래프 검증) 조건 아코디언 | `app/maps/[mapId]/page.tsx` |
 | `scope-preview.tsx` | `ScopePreview` | 비활성(조상) 창의 정적 프리뷰 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/map-preview.tsx`, `components/node-summary-modal.tsx`, `components/subprocess-preview-peek.tsx` |
 | `scope-window.tsx` | `ScopeWindow` | 떠있는 스코프 창 | `app/maps/[mapId]/page.tsx` |
@@ -127,7 +127,7 @@
 | `subprocess-registration-cta.tsx` | `SubprocessRegistrationCta` | 미지정 링크 등록 요청 CTA | `app/maps/[mapId]/page.tsx` |
 | `subprocess-usage-tab.tsx` | `SubprocessUsageTab` | 인스펙터 Subprocess 탭 | `app/maps/[mapId]/page.tsx` |
 | `subprocess-version-picker.tsx` | `SubprocessVersionPicker` | 하위프로세스 노드 버전 선택 | `app/maps/[mapId]/page.tsx` |
-| `suggest-input.tsx` | `SuggestInput` | 단일값 자유입력 + 제안 드롭다운 | `components/bpm-attribute-picker.tsx`, `components/permissions/role-tile.tsx`, `components/system-suggest-input.tsx` |
+| `suggest-input.tsx` | `SuggestInput` | 단일값 자유입력 + 제안 드롭다운 | `components/bpm-attribute-picker.tsx`, `components/group-bulk-modal.tsx`, `components/permissions/role-tile.tsx`, `components/system-suggest-input.tsx` |
 | `system-suggest-input.tsx` | `SystemSuggestInput` | 시스템 입력 | `app/maps/[mapId]/page.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
 | `time-pills.tsx` | `TimePills` | 카드 시각 표시 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `components/feedback-detail-modal.tsx`, `components/feedback-notes-flyout.tsx` |
 | `toast-stack.tsx` | `ToastStack` | 우상단(Nav 아래) 토스트 스택 | `app/feedback/page.tsx`, `app/groups/[groupId]/page.tsx`, `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/maps/[mapId]/page.tsx`, `app/maps/[mapId]/settings/page.tsx`, `app/notices/page.tsx`, `app/page.tsx`, `app/settings/page.tsx`, `components/admin/approval-queue.tsx`, `components/feedback-side-panel.tsx`, `components/groups/groups-panel.tsx`, `components/map-settings/checkout-requests-panel.tsx`, `components/permissions/pending-approvals-panel.tsx` |

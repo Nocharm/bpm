@@ -10508,6 +10508,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                   label: n.data.label,
                   assignee: n.data.assignee,
                   department: n.data.department,
+                  assignee_role: n.data.assignee_role ?? "",
                   system: n.data.system,
                   duration: n.data.duration,
                   touch_time: n.data.touch_time ?? "",

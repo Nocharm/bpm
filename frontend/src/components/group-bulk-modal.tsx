@@ -4,6 +4,7 @@
 import {
   AlertTriangle,
   ArrowRight,
+  BriefcaseBusiness,
   ChevronRight,
   Eraser,
   ListChecks,
@@ -27,16 +28,18 @@ import { DETAIL_FIELD_ICONS } from "@/components/node-details-fields";
 import { PARAM_ICON } from "@/components/param-icons";
 import { ParamInput } from "@/components/param-input";
 import { SearchSelect } from "@/components/search-select";
+import { SuggestInput } from "@/components/suggest-input";
 import { getEligibleAssignees, type EligibleAssignees } from "@/lib/api";
 import { addAssignee, formatAssignees, parseAssignees } from "@/lib/assignee";
 import { canBulkEditField, isBulkParamField, type BulkDetailField } from "@/lib/bulk-params";
+import { useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { buildAssigneeOptions, buildDepartmentOptions } from "@/lib/korean-dept";
 import { formatParamValue, PARAM_FIELDS, PARAM_LABEL_KEY, type ParamField } from "@/lib/params";
 import type { MessageKey } from "@/lib/i18n-messages";
 
-// "people" = combined assignee+department mode; 나머지는 단일 필드 모드(system + 파라미터 7종 + IO·조건)
-export type BulkAttrField = "system" | ParamField | BulkDetailField;
+// "people" = combined assignee+department mode; 나머지는 단일 필드 모드(system·역할 + 파라미터 7종 + IO·조건)
+export type BulkAttrField = "system" | "assignee_role" | ParamField | BulkDetailField;
 export type BulkMode = "people" | BulkAttrField;
 export type BulkAction = "set" | "clear";
 // 충돌 처리: 교체/추가(system·조건=콤마, IO=줄)/건너뛰기/개별 선택. null=미선택(필수)
@@ -60,6 +63,7 @@ const CATEGORY_META: { key: BulkCategory; labelKey: MessageKey; modes: ModeMeta[
     labelKey: "bulk.catAttributes",
     modes: [
       { key: "people", icon: Users, labelKey: "bulk.modePeople" },
+      { key: "assignee_role", icon: BriefcaseBusiness, labelKey: "field.assigneeRole" },
       { key: "system", icon: Server, labelKey: "field.system" },
     ],
   },
@@ -113,6 +117,7 @@ export interface BulkMember {
   label: string;
   assignee: string;
   department: string;
+  assignee_role: string;
   system: string;
   duration: string;
   touch_time: string;
@@ -172,6 +177,7 @@ export function GroupBulkModal({
   onClose,
 }: GroupBulkModalProps) {
   const { t, lang } = useI18n();
+  const catalogs = useCatalogs();
 
   // Shared UI state
   const [mode, setMode] = useState<BulkMode>("people");
@@ -285,8 +291,11 @@ export function GroupBulkModal({
 
   // Available policies — people+dept-only omits append (department is single-valued).
   // 파라미터 모드도 append 제외 — 숫자에 콤마 append는 무효값이 되어 백엔드 소거로 기존값 유실.
+  // 담당 역할도 단일값이라 append 제외 (2026-09-12).
   const availablePolicies: Set<BulkPolicy> = new Set<BulkPolicy>(
-    (mode === "people" && !hasAssignees) || (attrField !== null && isBulkParamField(attrField))
+    (mode === "people" && !hasAssignees) ||
+      (attrField !== null && isBulkParamField(attrField)) ||
+      attrField === "assignee_role"
       ? ["replace", "individual", "skip"]
       : ["replace", "append", "skip", "individual"],
   );
@@ -739,7 +748,7 @@ export function GroupBulkModal({
                 <Replace size={13} strokeWidth={1.5} className="shrink-0" />
                 {t("bulk.replace")}
               </button>
-              {!(attrField !== null && isBulkParamField(attrField)) && (
+              {!(attrField !== null && isBulkParamField(attrField)) && attrField !== "assignee_role" && (
                 <button
                   type="button"
                   className={`${btn} flex items-center gap-1`}
@@ -968,6 +977,17 @@ export function GroupBulkModal({
                     ariaLabel={t("bulk.value")}
                     value={value}
                     onCommit={setValue}
+                  />
+                ) : attrField === "assignee_role" ? (
+                  <SuggestInput
+                    mode="row"
+                    options={catalogs.assignee_roles}
+                    value={value}
+                    onCommit={setValue}
+                    dataId="bulk-value-role"
+                    placeholder={t("catalog.rolePlaceholder")}
+                    maxLength={100}
+                    allowFree
                   />
                 ) : attrField === "input" || attrField === "output" ? (
                   /* IO는 개행 복수 — 줄=항목. 항목별 데이터 폼은 일괄 대상 아님(교체 시 정렬 무효화는

@@ -20,9 +20,9 @@ export function isBulkDetailField(field: string): field is BulkDetailField {
  *  파라미터는 노드 타입별 편집 가능 집합(SP는 annual_count·fte). */
 export function canBulkEditField(
   nodeType: string,
-  field: "people" | "system" | ParamField | BulkDetailField,
+  field: "people" | "system" | "assignee_role" | ParamField | BulkDetailField,
 ): boolean {
-  if (field === "people" || field === "system" || isBulkDetailField(field)) {
+  if (field === "people" || field === "system" || field === "assignee_role" || isBulkDetailField(field)) {
     return hasBpmAttributes(nodeType);
   }
   return (getEditableParamFields(nodeType) as readonly string[]).includes(field);
@@ -33,7 +33,7 @@ export function canBulkEditField(
  *  변경(동일/append)만 그 열들을 유지하고, 그 외(교체·비우기)는 함께 소거한다
  *  (백엔드 재임포트 승계와 동일 규칙, 2026-08-20 / io-linking §3). */
 export function buildBulkAttrPatch(
-  field: "system" | ParamField | BulkDetailField,
+  field: "system" | "assignee_role" | ParamField | BulkDetailField,
   value: string,
   existing?: { input?: string; output?: string },
 ): Record<string, string> {
