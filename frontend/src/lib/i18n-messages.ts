@@ -2434,6 +2434,8 @@ const en = {
   "framework.importCategoryAdminsHint": "Import only adds admins - remove them from Settings › Framework › Admins.",
   "framework.importMsgCategoryAdminAdded": "Added as category admin",
   "framework.importMsgCategoryAdminUnknown": "Admin login not in the employee directory",
+  "framework.importMsgSystemNormalized": "System matched to the catalog spelling",
+  "framework.importMsgSystemOther": "System not in the catalog - stored as Other with the original text as a note",
   // ── dry-run 리포트 2열(A안) — 요약 카드·섹션 i 설명·L5 헤더·L6 목록·필터 바 (components/admin/import-report/) ──
   "framework.report.summaryTitle": "Summary",
   "framework.report.summaryMetaDry": "{files} files · dry run",
@@ -4991,6 +4993,8 @@ const ko: Record<MessageKey, string> = {
   "framework.importCategoryAdminsHint": "임포트는 관리자를 추가만 한다 — 제거는 설정 › Framework › 관리자에서.",
   "framework.importMsgCategoryAdminAdded": "카테고리 관리자로 추가",
   "framework.importMsgCategoryAdminUnknown": "직원 목록에 없는 관리자 로그인",
+  "framework.importMsgSystemNormalized": "시스템을 관리 목록 표기로 맞춤",
+  "framework.importMsgSystemOther": "관리 목록에 없는 시스템 - Other로 저장하고 원문은 메모로 남김",
   "framework.report.summaryTitle": "요약",
   "framework.report.summaryMetaDry": "파일 {files}개 · 드라이런",
   "framework.report.summaryMetaApplied": "파일 {files}개 · 적용됨",

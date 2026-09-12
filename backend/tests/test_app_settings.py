@@ -257,3 +257,32 @@ def test_catalogs_readable_by_non_sysadmin(client: TestClient, sysadmin_enforced
     headers = {"X-Dev-User": NON_SYSADMIN}
     assert client.get("/api/catalogs", headers=headers).status_code == 200
     assert client.get("/api/admin/app-settings", headers=headers).status_code == 403
+
+
+# ── 커밋 규칙 이중 구현 — FE lib/catalogs.ts commitRole/commitSystem과 동치 (design 2026-09-12) ──
+
+_SYSTEMS = [
+    {"value": "Other", "aliases": []},
+    {"value": "SAP ERP", "aliases": ["sap", "ERP"]},
+]
+_ROLES = [{"value": "Buyer", "aliases": ["구매 담당자"]}]
+
+
+def test_commit_role_maps_alias_to_canonical_and_keeps_free_text() -> None:
+    from app.app_settings import commit_role
+
+    assert commit_role(" 구매 담당자 ", _ROLES) == "Buyer"
+    assert commit_role("buyer", _ROLES) == "Buyer"
+    assert commit_role("  QA reviewer ", _ROLES) == "QA reviewer"
+    assert commit_role("", _ROLES) == ""
+
+
+def test_commit_system_mirrors_frontend_rule() -> None:
+    from app.app_settings import commit_system
+
+    assert commit_system("", _SYSTEMS, "note") == ("", "note")
+    assert commit_system("erp", _SYSTEMS, "note") == ("SAP ERP", "note")
+    assert commit_system("Legacy ledger", _SYSTEMS, "") == ("Other", "Legacy ledger")
+    assert commit_system("Legacy ledger", _SYSTEMS, "Legacy ledger") == ("Other", "Legacy ledger")
+    # 기존 메모가 다른 내용이면 메모는 지키고 Other만 기록
+    assert commit_system("Legacy ledger", _SYSTEMS, "old note") == ("Other", "old note")

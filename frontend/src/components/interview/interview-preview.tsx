@@ -17,6 +17,7 @@ import {
 import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, highlightConnectedEdges } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
+import { useCatalogs } from "@/lib/catalogs";
 import { EDGE_DEFAULTS } from "@/lib/canvas";
 import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
@@ -231,6 +232,8 @@ export function InterviewPreview({
   paramsAvailable, onOpenParams,
 }: InterviewPreviewProps) {
   const router = useRouter();
+  // 관리 목록 — 적용 시 역할·시스템 정규화(buildGraphFromAiProposal은 순수 함수라 인자로 넘긴다)
+  const catalogs = useCatalogs();
   const wrapperRef = useRef<HTMLDivElement>(null);
   // 체크포인트 클릭 = 맵만 먼저 프리뷰, 확정 버튼으로 실제 revert (실사용 피드백 2026-07-27)
   const [previewStage, setPreviewStage] = useState<string | null>(null);
@@ -277,7 +280,7 @@ export function InterviewPreview({
       const base = await getGraph(interview.version_id);
       const outcome = buildGraphFromAiProposal(
         { nodes: graph.nodes, edges: graph.edges, groups: graph.groups },
-        { base },
+        { base, catalogs },
       );
       const builtGraph = outcome.graph;
       if (!builtGraph) {
@@ -515,7 +518,7 @@ export function InterviewPreview({
               const attrs = node.attributes;
               // 값 있는 행만 — 인터뷰 초반 노드가 대시 9줄이 되지 않게 (P1 #9)
               const rows: [string, string][] = ([
-                ["Assignee", attrs?.assignee || ""],
+                ["Role", attrs?.assignee_role || ""],
                 ["Department", attrs?.department || ""],
                 ["System", attrs?.system || ""],
                 ...PARAM_FIELDS.map((field): [string, string] => [

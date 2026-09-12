@@ -27,6 +27,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.app_settings import OTHER_SYSTEM, commit_system, get_systems
 from app.clock import now as now_kst
 from app.duration import normalize_duration
 from app.lineage import external_lineage_key, external_ref_lineage_key, make_node_id, normalize_task_name
@@ -596,6 +597,37 @@ class ImportReport:
         return out
 
 
+def _report_system_change(
+    report: ImportReport, code: str, raw: str, value: str, seen: set[str]
+) -> None:
+    """정규화 리포트 행 — 맵당 원문 1회. 문구는 FE interview-report.ts PATTERNS(system-other/system-normalized)와 계약."""
+    key = raw.strip()
+    if not key or key in seen:
+        return
+    seen.add(key)
+    if value == OTHER_SYSTEM and key.casefold() != OTHER_SYSTEM.casefold():
+        report.add(code, "warning", f"system {key!r} not in catalog - stored as Other")
+    elif value != key:
+        report.add(code, "warning", f"system {key!r} normalized to {value!r}")
+
+
+def _normalize_systems(
+    maps: list[CanonicalMap], systems: list[dict[str, object]], report: ImportReport
+) -> None:
+    """맵 지정값(sp_system)·L6 노드 system을 카탈로그로 정규화 — 에디터 commitSystem과 같은 규칙
+    (app_settings.commit_system). 별칭→정식 표기, 미일치→Other + 원문은 폴백(어댑터가 이미 원문을
+    실어 둠)에 남는다. 정규화 전 값으로 비교하면 재전달마다 "변경"으로 보이므로 서명 계산 전에 돌린다."""
+    for cmap in maps:
+        seen: set[str] = set()
+        raw = cmap.system
+        cmap.system, cmap.system_fallback = commit_system(raw, systems, cmap.system_fallback)
+        _report_system_change(report, cmap.code, raw, cmap.system, seen)
+        for node in cmap.nodes:
+            raw = node.system
+            node.system, node.system_fallback = commit_system(raw, systems, node.system_fallback)
+            _report_system_change(report, cmap.code, raw, node.system, seen)
+
+
 def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalParams:
     """duration/cost/headcount 정규화 — 무효값은 경고 후 "" 소거(422 아님, §7 무효값 계약과 동형)."""
     p = cmap.params.model_copy()
@@ -1012,6 +1044,8 @@ async def import_delivery(
         deduped.append(cmap)
     maps = deduped
     delivery_codes = {m.code for m in maps}
+    # 시스템 카탈로그 정규화 — 에디터 commitSystem과 같은 규칙을 전달분에 적용(dry-run·apply 공통)
+    _normalize_systems(maps, await get_systems(session), report)
 
     # owner/approver/admin 유령(직원 미등재) 감지용 — 조회는 한 번만. 승인 정족수는 안 막힌다(load_active_approvers가
     # 미등재를 이미 걸러냄) — 관측용 경고.
@@ -1262,6 +1296,8 @@ async def import_delivery(
             or (found_map.sp_total_time_fallback or "") != cmap.total_time_fallback
             or (found_map.sp_touch_time_fallback or "") != cmap.touch_time_fallback
             or (found_map.sp_system_fallback or "") != cmap.system_fallback
+            # 오너 역할(rows[].ownerRole) — 맵 지정값 착지 (2026-09-12)
+            or (found_map.sp_assignee_role or "") != cmap.assignee_role
         )
         is_new = cmap.code in created
         # 내용이 그대로면 아무것도 쓰지 않는다 — 안 그러면 재전달마다 updated_at이 갱신돼 홈
@@ -1292,6 +1328,7 @@ async def import_delivery(
             found_map.sp_total_time_fallback = cmap.total_time_fallback
             found_map.sp_touch_time_fallback = cmap.touch_time_fallback
             found_map.sp_system_fallback = cmap.system_fallback
+            found_map.sp_assignee_role = cmap.assignee_role
             found_map.sp_changed_by = actor
             found_map.sp_changed_at = now_kst()
 

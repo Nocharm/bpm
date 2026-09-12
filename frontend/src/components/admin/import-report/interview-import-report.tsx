@@ -99,6 +99,13 @@ function useDescribe(): Describe {
         return `${t("framework.importMsgCategoryAdminAdded")}: ${subject}`;
       case "category-admin-unknown":
         return `${t("framework.importMsgCategoryAdminUnknown")}: ${subject}`;
+      // 시스템 카탈로그 정규화(2026-09-12) — 두 번째 가변부(정식 표기)는 원문에서 다시 뽑는다
+      case "system-normalized": {
+        const canonical = /normalized to ['"](.*)['"]$/.exec(raw)?.[1] ?? "";
+        return `${t("framework.importMsgSystemNormalized")}: ${subject} → ${canonical}`;
+      }
+      case "system-other":
+        return `${t("framework.importMsgSystemOther")}: ${subject}`;
       // 파일 이슈(어댑터) — subject는 뷰모델이 단계 이름으로 바꿔 둔다(a0N → actions 라벨)
       case "file-self-edge":
         return `${t("framework.importMsgFileSelfEdge")}: ${subject}`;

@@ -16,7 +16,7 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
  "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":""},
+           "attributes":{"assignee_role":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":""},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
@@ -58,7 +58,8 @@ node_ids는 [현재 그래프]의 기존 id만 사용. suggestion은 실행 가�
 
 [규칙]
 1. graph의 edges·group_key는 같은 응답의 key 참조. ops의 node_id·source·target은 [현재 그래프]의 기존 id를 그대로 쓰고, 같은 배치에서 add한 노드는 그 새 key로 참조하세요. 좌표는 넣지 마세요(자동 배치).
-2. 담당자/부서(attributes의 assignee/department)는 사용자 지시가 명시적으로 요구할 때만 설정하세요. 그 외에는 빈 문자열로 두세요(지어내지 말 것) - 빈 값은 기존 노드의 값을 유지합니다.
+2. 사람 필드는 역할(assignee_role)만 다룹니다 - 담당자 실명(assignee)은 AI가 설정할 수 없으니(에디터 담당자 피커 전용) 담당자 지정을 요청받으면 message에 피커 안내만 하세요. 역할·부서(assignee_role/department)는 사용자 지시가 명시적으로 요구하거나 [현재 그래프]에 근거가 있을 때만 설정하고, 그 외에는 빈 문자열로 두세요(지어내지 말 것) - 빈 값은 기존 노드의 값을 유지합니다.
+   역할은 [역할 목록]의 표기를 우선 사용하고(목록 밖 역할명도 허용), 시스템(system)은 [시스템 목록]의 정식 표기로 적으세요 - 목록에 없는 시스템은 원문 그대로 적으면 시스템이 "Other"로 분류하고 원문을 메모로 남깁니다.
 3. [현재 그래프]에 없는 노드를 참조하지 말고, 부득이하면 message에 그 사실을 적으세요.
 4. node_type="subprocess" 노드는 다른 맵의 읽기전용 참조 - 내부를 편집(ops 대상)하지 말고 루트만 다루세요.
 5. answer는 [제품 매뉴얼]에 근거해 답하고 가능하면 섹션(예: "3. 승인 워크플로우")을 인용하세요. 매뉴얼에 없는 내용은 모른다고 답하세요(지어내지 말 것).
@@ -79,6 +80,8 @@ def _serialize_node(node: NodeOut) -> str:
     meta: list[str] = []
     if node.assignee:
         meta.append(f"담당={node.assignee}")
+    if node.assignee_role:
+        meta.append(f"역할={node.assignee_role}")
     if node.department:
         meta.append(f"부서={node.department}")
     if node.system:
@@ -268,6 +271,7 @@ def build_system_prompt(
     current_graph: GraphOut,
     can_edit: bool,
     overrides: Mapping[str, str] | None = None,
+    catalogs: Mapping[str, list[dict[str, object]]] | None = None,
 ) -> str:
     instructions = (overrides or {}).get("ai_chat_instructions") or _INSTRUCTIONS
     edit_note = (
@@ -281,10 +285,43 @@ def build_system_prompt(
     )
     return (
         f"{instructions}\n{edit_note}\n\n"
+        f"{format_catalog_block(catalogs)}"
         f"{hint_block}"
         f"[현재 그래프]\n{_serialize_graph(current_graph)}\n\n"
         f"[제품 매뉴얼]\n{manual}"
     )
+
+
+_CATALOG_PROMPT_CAP = 300  # 목록당 프롬프트에 싣는 항목 상한 — 관리 목록 상한(500)이 프롬프트를 삼키지 않게
+
+
+def _format_catalog_entries(entries: list[dict[str, object]]) -> str:
+    lines: list[str] = []
+    for entry in entries[:_CATALOG_PROMPT_CAP]:
+        aliases = entry.get("aliases")
+        alias_text = (
+            f" (별칭: {', '.join(str(a) for a in aliases)})"
+            if isinstance(aliases, list) and aliases else ""
+        )
+        lines.append(f"- {entry.get('value')}{alias_text}")
+    if len(entries) > _CATALOG_PROMPT_CAP:
+        lines.append(f"- …외 {len(entries) - _CATALOG_PROMPT_CAP}개")
+    return "\n".join(lines)
+
+
+def format_catalog_block(catalogs: Mapping[str, list[dict[str, object]]] | None) -> str:
+    """관리 목록 블록 — 역할·시스템 카탈로그(값+별칭)를 모델이 정식 표기로 적게 한다. 비면 생략.
+    규칙 2가 [역할 목록]/[시스템 목록] 헤더를 참조하므로 헤더 문구는 계약 (design 2026-09-12)."""
+    if not catalogs:
+        return ""
+    blocks: list[str] = []
+    roles = catalogs.get("assignee_roles") or []
+    if roles:
+        blocks.append(f"[역할 목록 - assignee_role은 이 표기를 우선 사용]\n{_format_catalog_entries(roles)}")
+    systems = catalogs.get("systems") or []
+    if systems:
+        blocks.append(f"[시스템 목록 - system은 이 정식 표기로]\n{_format_catalog_entries(systems)}")
+    return "\n\n".join(blocks) + "\n\n" if blocks else ""
 
 
 def build_messages(
@@ -294,11 +331,12 @@ def build_messages(
     instruction: str,
     history: list[AiChatTurn],
     overrides: Mapping[str, str] | None = None,
+    catalogs: Mapping[str, list[dict[str, object]]] | None = None,
 ) -> list[dict]:
     messages: list[dict] = [
         {
             "role": "system",
-            "content": build_system_prompt(manual, current_graph, can_edit, overrides),
+            "content": build_system_prompt(manual, current_graph, can_edit, overrides, catalogs),
         }
     ]
     for turn in history:

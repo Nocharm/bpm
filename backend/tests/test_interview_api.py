@@ -342,7 +342,8 @@ def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, 
     graph = {
         "nodes": [
             {"id": "n-s", "title": "Start", "node_type": "start"},
-            {"id": "n-1", "title": "요청서 작성", "node_type": "process", "assignee": "김담당"},
+            # 담당자 실명은 시드 제외(AI 표면 밖) — 역할만 작업본으로 (2026-09-12)
+            {"id": "n-1", "title": "요청서 작성", "node_type": "process", "assignee": "김담당", "assignee_role": "구매 담당자"},
             {"id": "n-2", "title": "승인 여부", "node_type": "decision"},
             {"id": "n-e", "title": "End", "node_type": "end"},
         ],
@@ -361,7 +362,8 @@ def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, 
     assert seeded is not None
     assert {n["key"] for n in seeded["nodes"]} == {"n-s", "n-1", "n-2", "n-e"}
     by_key = {n["key"]: n for n in seeded["nodes"]}
-    assert by_key["n-1"]["attributes"]["assignee"] == "김담당"
+    assert by_key["n-1"]["attributes"]["assignee_role"] == "구매 담당자"
+    assert "assignee" not in by_key["n-1"]["attributes"]
     assert {(e["source"], e["target"]) for e in seeded["edges"]} == {
         ("n-s", "n-1"), ("n-1", "n-2"), ("n-2", "n-e")
     }

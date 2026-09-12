@@ -1,8 +1,9 @@
 // CSV 임포트 — 템플릿·RFC4180 파싱·그래프 변환(자동 Start/End·decision 추론).
 // 설계: 2026-07-10-csv-import-merge-design.md
-import type { AiEdge, AiGroup, AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
+import type { AiEdge, AiGroup, AiNode, Catalogs, Directory, Graph, GraphEdge, GraphNode } from "./api";
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
+import { commitRole, commitSystem } from "./catalogs";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
 import {
@@ -64,12 +65,16 @@ export interface CsvImportContext {
   directory?: CsvDirectory;
   // 머지 대상 기존 그래프. 없거나 비어 있으면 전량 신규(현행 동작).
   base?: Graph;
+  // 관리 목록(역할·시스템) — 역할 별칭→정식 표기, 시스템 미일치→Other+원문 메모(commitSystem). 없으면 정규화 없이 원문.
+  // 순수 함수라 useCatalogs() 훅 값을 호출부가 넘긴다 (design 2026-09-12)
+  catalogs?: Catalogs;
 }
 
-// 20컬럼 스키마 (design 2026-07-13 §5.1, 승격 필드 2026-08-19) — Input/Output은 셀 내 개행으로 복수.
-// 폴백 컬럼(system_fallback 등)은 CSV 표면 제외 — 병합이 기존값을 보존한다 (design 2026-08-19 §3)
+// 21컬럼 스키마 (design 2026-07-13 §5.1, 승격 필드 2026-08-19, Role 2026-09-12) — Input/Output은 셀 내 개행으로 복수.
+// 폴백 컬럼(system_fallback 등)은 CSV 표면 제외 — 병합이 기존값을 보존한다 (design 2026-08-19 §3).
+// 단 System 셀이 Other 미일치 원문이면 commitSystem이 메모(system_fallback)를 채운다.
 const HEADER_COLUMNS = [
-  "name", "description", "assignee", "department", "system", "duration", "touch_time",
+  "name", "description", "assignee", "role", "department", "system", "duration", "touch_time",
   "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
   "input", "input_flags", "output", "start_condition", "end_condition",
   "url", "url_label", "section_anchor", "next",
@@ -85,6 +90,7 @@ const MAX_LEN: Record<
 > = {
   name: 200,
   assignee: 100,   // NodeIn.assignee — 해석된 "이름" 문자열 기준
+  role: 100,       // NodeIn.assignee_role — 정규화(별칭→정식 표기) 후 길이
   department: 100, // NodeIn.department
   system: 100,
   duration: 50,
@@ -230,16 +236,45 @@ const alignFlagLines = (flags: string, text: string): string => {
 // 서브프로세스 노드는 node_type도 보존 — 추론/제안값으로 덮으면 Call Activity 렌더가 깨진다.
 // 서브프로세스는 duration/cost_krw/cost_usd/headcount가 링크 맵 지정값(읽기전용)이라 CSV/AI 값을
 // dropUneditableParams로 걸러낸다 — droppedFields는 caller가 경고를 낼 수 있게 그대로 반환.
+// 시스템 병합 — 후보가 비면 기존(시스템+메모) 유지, 카탈로그가 있으면 commitSystem(별칭→정식 표기,
+// 미일치→Other+원문 메모), 없으면 원문 그대로. keptNote=기존 메모가 달라 지킨 경우(호출부가 경고).
+const resolveSystemFields = (
+  nextRaw: string,
+  existingSystem: string,
+  existingFallback: string,
+  catalogs: Catalogs | undefined,
+): { system: string; system_fallback: string; keptNote: boolean } => {
+  if (nextRaw === "") return { system: existingSystem, system_fallback: existingFallback, keptNote: false };
+  if (!catalogs) return { system: nextRaw, system_fallback: existingFallback, keptNote: false };
+  return commitSystem(nextRaw, catalogs.systems, existingFallback);
+};
+
+interface MergeResult {
+  node: GraphNode;
+  droppedParamFields: ParamField[];
+  droppedTextFields: (SpInheritedTextField | "input_flags")[];
+  // 시스템 자유값인데 기존 원문 메모가 다른 내용이라 메모를 지켰다 — 호출부가 경고
+  keptSystemNote: boolean;
+}
+
 const mergeNode = (
   existing: GraphNode | null,
   next: GraphNode,
-): { node: GraphNode; droppedParamFields: ParamField[]; droppedTextFields: (SpInheritedTextField | "input_flags")[] } => {
+  catalogs: Catalogs | undefined,
+): MergeResult => {
   if (existing === null) {
     // 신규 노드도 flags를 자기 Input 줄 수에 정렬 — CSV가 초과 줄을 실어도 고아 값이 안 남게
+    const system = resolveSystemFields(next.system, "", next.system_fallback ?? "", catalogs);
     return {
-      node: { ...next, input_flags: alignFlagLines(next.input_flags ?? "", next.input ?? "") },
+      node: {
+        ...next,
+        system: system.system,
+        system_fallback: system.system_fallback,
+        input_flags: alignFlagLines(next.input_flags ?? "", next.input ?? ""),
+      },
       droppedParamFields: [],
       droppedTextFields: [],
+      keptSystemNote: false,
     };
   }
   const { allowed, droppedFields } = dropUneditableParams(existing.node_type, {
@@ -272,6 +307,7 @@ const mergeNode = (
   // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
   const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
   const mergedSectionAnchor = pick(next.section_anchor ?? "", existing.section_anchor ?? "");
+  const mergedSystem = resolveSystemFields(next.system, existing.system, existing.system_fallback ?? "", catalogs);
   return {
     node: {
       ...existing,
@@ -289,9 +325,11 @@ const mergeNode = (
       linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
       assignee: pick(next.assignee, existing.assignee),
-      assignee_role: existing.assignee_role ?? "",  // 후보에 열이 없다 — 항상 기존값
+      // 역할 — CSV Role 열·AI assignee_role(commitRole 정규화 후), 빈값은 기존 유지 (2026-09-12)
+      assignee_role: pick(next.assignee_role ?? "", existing.assignee_role ?? ""),
       department: pick(next.department, existing.department),
-      system: pick(next.system, existing.system),
+      system: mergedSystem.system,
+      system_fallback: mergedSystem.system_fallback,
       duration: pick(allowed.duration ?? "", existing.duration),
       touch_time: pick(allowed.touch_time ?? "", existing.touch_time ?? ""),
       cost_krw: cost.cost_krw,
@@ -322,6 +360,7 @@ const mergeNode = (
     },
     droppedParamFields: droppedFields,
     droppedTextFields,
+    keptSystemNote: mergedSystem.keptNote,
   };
 };
 
@@ -488,6 +527,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     name: cellOf(r, "name"),
     description: cellOf(r, "description"),
     assignee: cellOf(r, "assignee"),
+    role: cellOf(r, "role"),
     department: cellOf(r, "department"),
     system: cellOf(r, "system"),
     duration: cellOf(r, "duration"),
@@ -521,7 +561,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
+    for (const col of ["name", "role", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -598,6 +638,9 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   }
   if (errors.length > 0) return fail(errors);
 
+  // 관리 목록 — 역할·시스템 정규화(없으면 원문 그대로)
+  const catalogs = context?.catalogs;
+
   // ── 기존 그래프와 매칭 ────────────────────────────────────────
   const baseNodes = context?.base?.nodes ?? [];
   const baseStart = baseNodes.find((node) => node.node_type === "start") ?? null;
@@ -639,16 +682,18 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   // 노드 — Next 대상 2개 이상이면 decision. Start/End는 자동 생성(또는 base에서 매칭)
   const nodes: GraphNode[] = [
     // Start/End는 CSV가 이름을 싣지 않는다 → 기존 제목 유지("시작"을 "Start"로 덮으면 거짓 변경)
-    mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }).node,
+    mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }, catalogs).node,
     ...rows.map((row, i) => {
       const normalizedFlags = normalizeInputFlagsCell(row.input_flags, row.line, warnings);
-      const { node, droppedParamFields, droppedTextFields } = mergeNode(byTitle.get(row.name) ?? null, {
+      const { node, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(byTitle.get(row.name) ?? null, {
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
         title: row.name,
         node_type: (nextsOf.get(row.name) ?? []).length >= 2 ? "decision" : "process",
         description: row.description,
         assignee: resolved.get(row.name)?.assignee ?? "",
+        // 역할 — 별칭→정식 표기, 미일치는 자유값 그대로 (commitRole)
+        assignee_role: catalogs ? commitRole(row.role, catalogs.assignee_roles) : row.role,
         department: resolved.get(row.name)?.department ?? "",
         system: row.system,
         duration: normalizeDuration(row.duration) ?? "",
@@ -667,7 +712,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         url_label: row.url_label,
         section_anchor: row.section_anchor,
         sort_order: i + 1,
-      });
+      }, catalogs);
       // 셀이 제공됐다면(전 줄 무효·전 줄 required 포함) 병합 결과에 확정 반영 — 전량 무효가 ""로
       // 정규화되면 mergeNode가 "셀 생략"으로 읽어 기존 optional을 지키던 결함 픽스 (QA 이슈 #2)
       if (row.input_flags.trim() !== "" && node.node_type !== "subprocess") {
@@ -684,10 +729,16 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
           message: `Subprocess "${row.name}" only accepts Annual_Count/FTE from CSV - ${fields} come from the linked map and were ignored`,
         });
       }
+      if (keptSystemNote) {
+        warnings.push({
+          line: row.line,
+          message: `System "${row.system}" is not in the catalog - stored as Other, existing note kept`,
+        });
+      }
       return node;
     }),
     {
-      ...mergeNode(baseEnd, { ...NODE_DEFAULTS, id: endId, title: baseEnd?.title ?? "End", node_type: "end", sort_order: rows.length + 1 }).node,
+      ...mergeNode(baseEnd, { ...NODE_DEFAULTS, id: endId, title: baseEnd?.title ?? "End", node_type: "end", sort_order: rows.length + 1 }, catalogs).node,
       // 유일한 끝이므로 대표를 강제 — 기존 대표가 삭제 대상이었던 경우를 덮는다
       is_primary_end: true,
     },
@@ -815,6 +866,8 @@ export function buildGraphFromAiProposal(
 
   // AI 변환 가드 경고 — 프롬프트만 믿지 않고 SP 제한·통화 배타를 여기서 다시 강제한다 (design 2026-07-13 §6)
   const warnings: CsvImportWarning[] = [];
+  // 관리 목록 — 역할·시스템 정규화(프롬프트가 정식 표기를 안내해도 변환단이 다시 강제)
+  const catalogs = context?.catalogs;
 
   const baseNodes = context?.base?.nodes ?? [];
   const isMerge = baseNodes.length > 0;
@@ -913,9 +966,11 @@ export function buildGraphFromAiProposal(
           : coerceAiNewNodeType(node.node_type),
       linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : NODE_DEFAULTS.linked_map_id,
       description: node.description,
-      assignee: attr?.assignee ?? "",
-      assignee_role: "",
+      // 담당자 실명은 AI 표면 제외 — 항상 ""(=mergeNode pick이 기존값 유지, 신규는 빈값). 사람 필드는 역할만 (2026-09-12)
+      assignee: "",
+      assignee_role: catalogs ? commitRole(attr?.assignee_role ?? "", catalogs.assignee_roles) : (attr?.assignee_role ?? "").trim(),
       department: attr?.department ?? "",
+      // 시스템 — mergeNode(resolveSystemFields)가 카탈로그 정규화·Other+메모를 처리
       system: attr?.system ?? "",
       duration: normalizeDuration(attr?.duration ?? "") ?? "",
       touch_time: normalizeDuration(attr?.touch_time ?? "") ?? "",
@@ -939,7 +994,7 @@ export function buildGraphFromAiProposal(
     };
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
     // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.
-    const { node: merged, droppedParamFields, droppedTextFields } = mergeNode(existing, candidate);
+    const { node: merged, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(existing, candidate, catalogs);
     if (droppedParamFields.length > 0 || droppedTextFields.length > 0) {
       const fields = [
         ...droppedParamFields.map((f) => PARAM_FIELD_LABEL[f]),
@@ -948,6 +1003,12 @@ export function buildGraphFromAiProposal(
       warnings.push({
         line: 0,
         message: `Subprocess "${title}" only accepts Annual_Count/FTE from AI - ${fields} come from the linked map and were ignored`,
+      });
+    }
+    if (keptSystemNote) {
+      warnings.push({
+        line: 0,
+        message: `"${title}": system "${attr?.system ?? ""}" is not in the catalog - stored as Other, existing note kept`,
       });
     }
     // 신규 노드는 AI 색 허용, 매칭 노드는 mergeNode({...existing})가 기존 색 유지
@@ -1071,23 +1132,23 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
 /** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
  *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
 export function buildTemplateCsv(): string {
-  // 셀 배열로 조립 — 20컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지).
-  // 자료 형식은 IO 항목별 값이라 CSV 표면에 없다(Data_Form 열 폐기, 2026-09-03)
+  // 셀 배열로 조립 — 21컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지).
+  // 자료 형식은 IO 항목별 값이라 CSV 표면에 없다(Data_Form 열 폐기, 2026-09-03). Role 열 2026-09-12.
   const rows: string[][] = [
-    ["Name", "Description", "Assignee", "Department", "System", "Duration", "Touch_Time",
+    ["Name", "Description", "Assignee", "Role", "Department", "System", "Duration", "Touch_Time",
      "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE",
      "Input", "Input_Flags", "Output", "Start_Condition", "End_Condition",
      "URL", "URL_Label", "Next"],
-    ["Review request", "Check the request against the purchasing policy", "hong.gd", "Quality Part 1",
+    ["Review request", "Check the request against the purchasing policy", "hong.gd", "Buyer", "Quality Part 1",
      "SAP ERP", "16", "8", "50000", "", "1", "", "",
      "Purchase request", "", "Review result", "PR submitted", "Review recorded",
      "", "", "Approval decision"],
-    ["Approval decision", "", '"hong.gd, kim.cs"', "Quality Part 1", "", "0.30", "",
+    ["Approval decision", "", '"hong.gd, kim.cs"', "Approver", "Quality Part 1", "", "0.30", "",
      "", "20", "2", "", "", "", "", "", "", "", "", "",
      "Sign contract:approved;Notify rejection:rejected"],
-    ["Sign contract", "", "lee.yh", "Finance Part", "", "24", "", "", "", "1", "", "",
+    ["Sign contract", "", "lee.yh", "", "Finance Part", "", "24", "", "", "", "1", "", "",
      "", "", "", "", "", "https://example.com/contract", "Contract", ""],
-    ["Notify rejection", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["Notify rejection", "", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
   ];
   return rows.map((cells) => cells.join(",")).join("\r\n");
 }
@@ -1115,8 +1176,9 @@ export function buildAiPromptText(): string {
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
     "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
     `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 - 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    `- Role: 선택, 그 단계를 수행하는 역할명(예: 구매 담당자, QA 검토자 - ${MAX_LEN.role}자 이하). 실명이 아니라 역할로 적으세요. 모르면 비워두세요.`,
     `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
-    `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 모르면 비워두세요.`,
+    `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 문서에 적힌 시스템명 그대로 쓰세요(등록된 목록과 대조해 정식 표기로 맞추고, 없는 시스템은 Other로 분류해 원문을 메모로 남깁니다). 모르면 비워두세요.`,
     "- Duration: 선택, 소요 시간(시간 단위 숫자, H.MM 표기 - 소수부 2자리는 분: 0.30=30분, 1.30=1시간 30분. \"2일\" 같은 텍스트 금지).",
     "- Touch_Time: 선택, 실작업 시간(Duration과 같은 H.MM 표기). 모르면 비워두세요.",
     "- Cost_KRW: 선택, 건당 비용(원화, 숫자만). Cost_USD와 동시에 채우지 마세요. 모르면 비워두세요.",

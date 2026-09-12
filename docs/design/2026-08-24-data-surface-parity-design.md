@@ -63,8 +63,9 @@ dry-run(이슈 0)·`artifact_role` 유실 회귀 봉합(`[Interview]` 섹션 잔
 - AI 계약(챗·컨설턴트 인터뷰)은 `feat/ai-contract-parity`에서 선행 구현 — 프롬프트/직렬화·touch_time
   7종 완성·set_attr 텍스트 필드 적용(정렬 폐기 동반).
 
-## 후속 (2026-09-11)
+## 후속 (2026-09-11 → 2026-09-12 완료)
 
 역할(`assignee_role`) CSV `Role` 열·Excel 왕복·AI `attributes.assignee_role`·인터뷰 에이전트 역할 수집,
-시스템 CSV 값의 카탈로그 정규화 — 2026-09-11 설계 §4.3 이관.
-다음 세션 핸드오프: `2026-09-12-assignee-role-next-session.md`.
+시스템 CSV/AI/컨설턴트 임포트 값의 카탈로그 정규화 — 2026-09-12 dev 구현 완료. 결정: AI는 담당자 실명
+불가·역할만(`AiNodeAttributes.assignee` 제거), 시스템 미일치는 에디터 `commitSystem`과 같은 Other+원문 메모,
+`rows[].ownerRole`→`sp_assignee_role`. 규칙은 FE `lib/catalogs.ts` ↔ BE `app_settings.py` 이중 구현.

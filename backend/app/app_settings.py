@@ -135,6 +135,48 @@ def normalize_managed_entries(values: list[object]) -> list[dict[str, object]]:
     return out
 
 
+def normalize_to_catalog(value: str, entries: list[dict[str, object]]) -> str | None:
+    """trim 후 값·별칭 casefold 일치 → 정식 표기(value). 빈값·불일치는 None.
+    FE `normalizeToCatalog`(lib/catalogs.ts)와 동치 — 한쪽을 고치면 다른 쪽도 같이 옮긴다."""
+    key = value.strip().casefold()
+    if not key:
+        return None
+    for entry in entries:
+        canonical = str(entry.get("value") or "")
+        aliases = entry.get("aliases")
+        if canonical.casefold() == key:
+            return canonical
+        if isinstance(aliases, list) and any(
+            isinstance(alias, str) and alias.casefold() == key for alias in aliases
+        ):
+            return canonical
+    return None
+
+
+def commit_role(raw: str, roles: list[dict[str, object]]) -> str:
+    """역할 커밋 — 목록 일치(별칭 포함)면 정식 표기, 아니면 trim한 자유값(역할엔 Other 폴백이 없다).
+    FE `commitRole`과 동치."""
+    trimmed = raw.strip()
+    return normalize_to_catalog(trimmed, roles) or trimmed
+
+
+def commit_system(
+    raw: str, systems: list[dict[str, object]], current_fallback: str
+) -> tuple[str, str]:
+    """시스템 커밋 — FE `commitSystem`과 동치. 빈값=시스템 비움(메모 유지) · 목록 일치=정식 표기 ·
+    불일치=Other + 원문 메모(메모가 비었거나 같을 때만 채움, 다르면 기존 메모 유지). (system, fallback)."""
+    trimmed = raw.strip()
+    if not trimmed:
+        return "", current_fallback
+    matched = normalize_to_catalog(trimmed, systems)
+    if matched is not None:
+        return matched, current_fallback
+    note = current_fallback.strip()
+    if not note or note == trimmed:
+        return OTHER_SYSTEM, trimmed
+    return OTHER_SYSTEM, current_fallback
+
+
 async def get_managed_entries(session: AsyncSession, key: str) -> list[dict[str, object]]:
     """엔트리 목록 — 레거시 문자열 배열도 승격해 돌려준다. 행 부재/파싱 불가/배열 아님이면 빈 목록."""
     row = await session.get(AppSetting, key)

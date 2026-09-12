@@ -338,7 +338,7 @@ _PREV = {
     "nodes": [
         {"key": "s", "title": "시작", "node_type": "start", "description": "", "attributes": None, "group_key": None},
         {"key": "a", "title": "요청서 작성", "node_type": "process", "description": "설명",
-         "attributes": {"assignee": "김담당"}, "group_key": None},
+         "attributes": {"assignee_role": "구매 담당자"}, "group_key": None},
         {"key": "e", "title": "끝", "node_type": "end", "description": "", "attributes": None, "group_key": None},
     ],
     "edges": [{"source": "s", "target": "a", "label": ""}, {"source": "a", "target": "e", "label": ""}],
@@ -366,7 +366,7 @@ def test_expand_delta_restores_echoed_nodes() -> None:
     by_key = {n.key: n for n in expanded.nodes}
     assert by_key["a"].title == "요청서 작성"
     assert by_key["a"].description == "설명"
-    assert by_key["a"].attributes is not None and by_key["a"].attributes.assignee == "김담당"
+    assert by_key["a"].attributes is not None and by_key["a"].attributes.assignee_role == "구매 담당자"
     assert by_key["s"].node_type == "start" and by_key["e"].node_type == "end"
     assert by_key["n1"].title == "견적 비교"  # 신규 노드는 풀 스펙 그대로
 
@@ -491,7 +491,7 @@ def test_expand_delta_deep_merges_attributes() -> None:
     proposal = AiProposal.model_validate({
         "kind": "graph", "message": "",
         "nodes": [{"key": "a", "title": "구매 요청서 작성", "node_type": "process",
-                   "attributes": {"assignee": "김구매"}}],
+                   "attributes": {"assignee_role": "구매 담당자"}}],
         "edges": [], "groups": [],
     })
     out = orchestrator._expand_delta(proposal, prev)
@@ -499,7 +499,7 @@ def test_expand_delta_deep_merges_attributes() -> None:
     assert attrs is not None
     assert attrs.duration == "0.30"  # 기존 params 보존
     assert attrs.cost_krw == "1000"
-    assert attrs.assignee == "김구매"  # 명시 필드는 반영
+    assert attrs.assignee_role == "구매 담당자"  # 명시 필드는 반영
     assert out.nodes[0].title == "구매 요청서 작성"
 
 

@@ -1228,7 +1228,9 @@ def test_map_promoted_fields_land_and_gmp_review_survives(client) -> None:
                 select(ProcessMap).where(ProcessMap.consultant_code == "IV-F1"))).one()
 
     m = _run(_load())
-    assert m.sp_system == "EAM" and m.sp_system_fallback == "EAM"
+    # 카탈로그가 비어 있으면 미일치 → Other + 원문 폴백 (에디터 commitSystem과 동일 규칙, 2026-09-12)
+    assert m.sp_system == "Other" and m.sp_system_fallback == "EAM"
+    assert ("IV-F1", "warning", "system 'EAM' not in catalog - stored as Other") in report.rows
     assert m.sp_start_condition == "주기 도래" and m.sp_end_condition == "목록 완성"
     assert m.sp_gmp is None and m.sp_gmp_fallback == "GMP 문서 맞음"  # 대표는 검토에서 선정
     assert m.sp_frequency_fallback == "주 1회"
@@ -1459,3 +1461,66 @@ def test_upsert_categories_external_is_create_only(client) -> None:
     ids, rows = _run(_run_both())
     assert [r.name for r in rows] == ["원본 루트", "원본 L2", "새 외부 L2"]  # 기존 2행 불변, 신규 1행 생성
     assert rows[2].parent_id == ids["X"] and ids["X2"] == rows[2].id
+
+
+def test_import_normalizes_systems_to_catalog_and_lands_owner_role(client) -> None:
+    """시스템 카탈로그 정규화(별칭→정식 표기·미일치→Other+원문) + ownerRole→sp_assignee_role (2026-09-12)."""
+    from sqlalchemy import select
+
+    from app.app_settings import SYSTEMS_KEY, set_managed_entries
+    from app.db import SessionLocal
+    from app.models import Node, ProcessMap
+
+    _seed_import_employees()
+
+    async def _seed_catalog() -> None:
+        async with SessionLocal() as session:
+            await set_managed_entries(
+                session, SYSTEMS_KEY, [{"value": "SAP ERP", "aliases": ["sap"]}], "admin.sys",
+            )
+            await session.commit()
+
+    _run(_seed_catalog())
+
+    def _make():
+        return _canonical_map(
+            code="IV-SYS", name="시스템 정규화", system="sap", system_fallback="sap",
+            assignee_role="교정 담당자",
+            nodes=[
+                {"code": "N1", "name": "요청", "type": "process", "seq": 1,
+                 "system": "Legacy ledger", "system_fallback": "Legacy ledger"},
+                {"code": "N2", "name": "발주", "type": "process", "seq": 2,
+                 "system": "SAP erp", "system_fallback": "SAP erp"},
+            ],
+        )
+
+    report = _run(_import_once(maps=[_make()]))
+    assert report.counts() == {"created": 1}
+    assert ("IV-SYS", "warning", "system 'sap' normalized to 'SAP ERP'") in report.rows
+    assert ("IV-SYS", "warning", "system 'Legacy ledger' not in catalog - stored as Other") in report.rows
+    assert ("IV-SYS", "warning", "system 'SAP erp' normalized to 'SAP ERP'") in report.rows
+
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "IV-SYS"))).one()
+            nodes = (await session.scalars(
+                select(Node).where(Node.title.in_(["요청", "발주"])).order_by(Node.sort_order))).all()
+            return m, [(n.title, n.system, n.system_fallback) for n in nodes]
+
+    m, nodes = _run(_load())
+    assert m.sp_system == "SAP ERP" and m.sp_system_fallback == "sap"
+    assert m.sp_assignee_role == "교정 담당자"
+    assert ("요청", "Other", "Legacy ledger") in nodes
+    assert ("발주", "SAP ERP", "SAP erp") in nodes
+
+    # 동일 재전달 → unchanged — 정규화가 서명 계산 전에 돌아 재전달마다 "변경"으로 보이지 않는다
+    report2 = _run(_import_once(maps=[_make()]))
+    assert report2.counts() == {"unchanged": 1}
+
+    async def _clear_catalog() -> None:
+        async with SessionLocal() as session:
+            await set_managed_entries(session, SYSTEMS_KEY, [], "admin.sys")
+            await session.commit()
+
+    _run(_clear_catalog())

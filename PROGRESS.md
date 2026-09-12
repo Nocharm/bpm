@@ -3,13 +3,18 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-12 — 데이터 계약 3종 최신화: AI·CSV·컨설턴트 임포트에 역할·카탈로그 정규화 (dev)
+
+- **결정(사용자)**: AI(챗 ops/graph·인터뷰 드래프터)는 담당자 실명을 쓸 수 없고 사람 필드는 **역할(`assignee_role`)만** — `AiNodeAttributes.assignee` 제거(에코해도 pydantic이 버림), 프롬프트에 `[역할 목록]`·`[시스템 목록]` 주입, 인터뷰 roles 스테이지가 역할 후보를 options로 묻는다. CSV·컨설턴트 임포트의 시스템은 에디터 `commitSystem`과 같은 규칙(별칭→정식 표기, 미일치→Other+원문 메모, 기존 메모 다르면 유지+경고). `rows[].ownerRole`은 `sp_assignee_role`에 착지(설명 줄도 유지), L6 action 노드엔 전파하지 않음.
+- 규칙 이중 구현: FE `commitRole`/`commitSystem`(`lib/catalogs.ts`) ↔ BE `commit_role`/`commit_system`(`app_settings.py`). CSV는 `Role` 열(Assignee 다음) 왕복 + Other 노드는 System 셀에 원문 메모를 실어 재임포트가 같은 Other+메모로 복원. 변환단(`buildGraphFromCsv`·`buildGraphFromAiProposal`·`aiNodeToGraphNode`·set_attr)은 카탈로그를 **인자**로 받는다(`CsvImportContext.catalogs`, 에디터는 `catalogsRef`). 임포트 리포트 행 2종(`system 'x' normalized to 'y'` / `not in catalog - stored as Other`) FE 분류·i18n 추가. 핸드오프 문서는 소비 완료로 삭제. 게이트 tsc/lint/vitest(994)/ruff/pytest(1483)/COMPONENTS.md green.
+
 ## 2026-09-12 — 담당 역할 잔여 표면 동기화 (dev)
 
 - `assignee_role`/`sp_assignee_role`가 라이브러리 행·피크(디테일/목업)·SP 지정 패널·sp-detail 타일 카운트·플레이스홀더 낙관 참조까지 전 표면에 노출되도록 마감. 그룹 일괄편집 모달에 `assignee_role`을 `system`과 같은 단일필드 모드(append 제외, `SuggestInput` 카탈로그 자동완성)로 추가. 백엔드 `library.py` raw select 컬럼 인덱스 시프트에 주의(assignee 뒤 삽입 → 이후 튜플 언패킹 전부 한 칸씩 밀림). 게이트 tsc/lint/vitest(982)/ruff/pytest(1476)/COMPONENTS.md green.
 
 ## 2026-09-12 — 역할·카탈로그 트랙 마무리 → origin/dev 반영 (dev)
 
-- 이번 라운드(2026-09-11~12, 역할 칸·카탈로그 엔진·별칭·노드 전환·카탈로그 탭·역할 전 표면 동기화·타일 2:1·자동완성)를 `origin/dev`에 푸시. 다음 세션 핸드오프 `docs/design/2026-09-12-assignee-role-next-session.md` — 타깃은 AI 계약·CSV 임포트·컨설턴트 임포트 최신화, 관련 결정은 그때 확정.
+- 이번 라운드(2026-09-11~12, 역할 칸·카탈로그 엔진·별칭·노드 전환·카탈로그 탭·역할 전 표면 동기화·타일 2:1·자동완성)를 `origin/dev`에 푸시. 다음 세션 타깃(AI 계약·CSV 임포트·컨설턴트 임포트 최신화)은 위 항목에서 완료·핸드오프 문서 삭제.
 
 ## 2026-09-12 — Other 노드 원문 메모 클램프 (dev)
 

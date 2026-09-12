@@ -847,6 +847,8 @@ def convert_interview(raw: object) -> AdapterResult:
                 department=_truncate(
                     normalize_dept_path(row.get("department")), 100, path, "department", issues),
                 description=format_map_description(row.get("ownerRole"), fields.get("artifact_role")),
+                # 오너 역할 — 설명 [Interview] 줄과 별개로 맵 지정값(sp_assignee_role)에도 착지 (2026-09-12)
+                assignee_role=_truncate(_clean(row.get("ownerRole")), 100, path, "ownerRole", issues),
                 # 승격 대표 필드 — systems는 sp_system 원문+폴백 이중 기록 (design 2026-08-19 §4.1)
                 system=_truncate(_clean(fields.get("systems")), 100, fpath, "systems", issues),
                 start_condition=_clean(fields.get("start_condition")),

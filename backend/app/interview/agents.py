@@ -104,7 +104,7 @@ _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 
 10. **미정도 확정입니다**: 일부 항목이 미정인 채로 진행하자는 데 사용자가 동의하면, 그 항목들을 facts_patch에 값 "미정"으로 확정하고 다음으로 넘어가세요. 이미 확인했거나 미정으로 확정한 항목을 다시 묻는 것은 금지.
 11. 사용자가 "맵을 그려줘/보여줘/업데이트해줘"처럼 맵 갱신을 요청하면 redraw를 true로 설정하세요 - 시스템이 지금까지의 facts로 맵을 다시 그립니다.
 12. **기존 맵 우선**: [현재 작업본 요약]에 이미 노드가 있으면 백지에서 시작하지 말고, 그 내용을 먼저 파악한 근거로 확인·보완 질문을 하세요. 사용자가 처음부터 다시 만들자고 하지 않는 한 기존 구조를 유지·개선합니다.
-13. **담당자·부서**: 담당자(assignee)는 인터뷰에서 수집하지 않습니다 - 실명 지정이 필요해 에디터의 담당자 피커에서 지정한다고 한 번만 안내하고 묻지 마세요. 부서를 확인할 땐 [부서 후보 목록]에서 이 프로세스와 관련성이 높아 보이는 항목 2~4개를 골라 options 보기로 제시하고, 마지막 보기로 "부서 지정은 건너뛰기"를 포함하세요. 목록에 없는 부서명은 facts에 기록 금지, 사용자가 생략을 원하면 부서 없이 진행합니다.
+13. **담당자·역할·부서**: 담당자(assignee) 실명은 인터뷰에서 수집하지 않습니다 - 에디터의 담당자 피커에서 지정한다고 한 번만 안내하고 묻지 마세요. 대신 roles 단계에서 활동별 **역할**(assignee_role, 예: "구매 담당자")을 확인하세요 - [역할 후보 목록]이 있으면 이 프로세스와 관련성이 높아 보이는 항목 2~4개를 options 보기로 제시하되 목록 밖 역할명도 그대로 받아 facts에 기록합니다(사용자가 말한 표기 유지). 부서를 확인할 땐 [부서 후보 목록]에서 관련성이 높아 보이는 항목 2~4개를 골라 options 보기로 제시하고, 마지막 보기로 "부서 지정은 건너뛰기"를 포함하세요. 목록에 없는 부서명은 facts에 기록 금지, 사용자가 생략을 원하면 부서 없이 진행합니다. 시스템은 [시스템 목록]의 정식 표기를 우선 쓰되 목록 밖 시스템명도 원문 그대로 기록합니다.
 14. **간결하게**: 문장은 짧게 쓰세요. 인사치레·사족·"~해 주시면 감사하겠습니다"류 과한 격식 금지 - 정중하되 담백하게.
 15. **문서로 바로 그리기(패스트트랙)**: 사용자가 첨부 문서로 바로 그리길 원하면 [참고 문서]에서 프로세스 이름·목적·범위를 추론해 제안하고, options를 정확히 ["이대로 그리기", "수정할래요", "일반 인터뷰로 진행"]으로 주세요(영어 세션은 ["Draw it as proposed", "I want changes", "Continue the full interview"]). 수정 의견을 받으면 범위만 고쳐 같은 보기로 재제안하세요. facts_patch에는 제안한 scope 값(process_name·purpose·boundaries)을 담으세요."""
 
@@ -112,7 +112,7 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
 반드시 아래 JSON 하나만 반환 (kind는 항상 "graph"):
 {"kind": "graph", "message": <이 안만의 차별점 한 줄 - 어떤 안에나 해당할 일반 설명은 금지, [이 안의 방향]이 그래프에 어떻게 반영됐는지만 간결히>,
  "nodes": [{"key": <임시키>, "title": <제목>, "node_type": "start|process|decision|end",
-            "description": <설명>, "attributes": {"assignee": …, "department": …, "system": …,
+            "description": <설명>, "attributes": {"assignee_role": …, "department": …, "system": …,
             "duration": …, "touch_time": …, "cost_krw": …, "headcount": …, "annual_count": …, "fte": …,
             "input": <개행 구분 복수>, "output": <개행 구분 복수>, "start_condition": …, "end_condition": …} 또는 생략,
             "group_key": <그룹키 또는 생략>}],
@@ -124,7 +124,7 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
 2. 좌표는 넣지 마세요(자동 배치). 노드 제목은 조직 표준 '명사+동사' 명사구('요청서 작성') -
    '~하기' 동명사형·존댓말 금지, start/end 제목은 자유. (톤 검수는 별도 단계 없이 여기서 완결)
 3. 분기는 node_type="decision" + 나가는 엣지에 라벨.
-4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** - 확인되지 않은 담당자·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다.
+4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** - 확인되지 않은 역할·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다. 담당자 실명(assignee)은 attributes에 넣지 않습니다(에디터 피커 전용) - 사람은 역할(assignee_role)로만 적으세요.
 5. **기존 작업본 보존**: [현재 작업본]에 이미 노드가 있으면 백지 재생성 금지 - 확정 facts와 모순되지 않는 노드·흐름·attributes는 그대로 유지하고 필요한 부분만 추가·수정하세요.
 6. **델타 출력**: 최종 그래프에 포함할 노드 전체 목록을 쓰되, [현재 작업본]에 이미 있고 그대로
    유지할 노드는 {"key":"<키>"}만 쓰세요(다른 필드 생략 - 시스템이 기존 내용을 복원합니다).
@@ -199,6 +199,8 @@ def build_interviewer_messages(
     section_catalog: str = "",
     dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
+    role_catalog: str = "",
+    system_catalog: str = "",
 ) -> list[dict]:
     stage = get_stage(stage_key, mode)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
@@ -212,11 +214,22 @@ def build_interviewer_messages(
         f"[부서 후보 목록 - department 값은 이 목록의 항목만 사용]\n{dept_catalog}\n\n"
         if dept_catalog else ""
     )
+    # 관리 목록(카탈로그) — 계약 룰 13이 헤더를 참조하므로 문구는 계약 (design 2026-09-12)
+    role_block = (
+        f"[역할 후보 목록 - assignee_role은 이 표기를 우선, 목록 밖 역할명도 허용]\n{role_catalog}\n\n"
+        if role_catalog else ""
+    )
+    system_block = (
+        f"[시스템 목록 - system은 이 정식 표기를 우선]\n{system_catalog}\n\n"
+        if system_catalog else ""
+    )
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
         f"{_context_block(context_text)}"
         f"{catalog_block}"
         f"{dept_block}"
+        f"{role_block}"
+        f"{system_block}"
         f"[현재 스테이지] {stage.key} - {goal}\n"
         f"[누적 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본 요약]\n{graph_summary or '(빈 캔버스)'}"

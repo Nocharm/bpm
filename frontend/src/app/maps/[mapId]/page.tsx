@@ -231,6 +231,7 @@ import {
   type AiNode,
   type AiNodeAttributes,
   type AiProposal,
+  type Catalogs,
   type CheckoutState,
   type CommentItem,
   type DirectoryUser,
@@ -285,7 +286,7 @@ import {
   type HeightShiftField,
 } from "@/lib/height-shift";
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
-import { commitSystem, useCatalogs } from "@/lib/catalogs";
+import { commitRole, commitSystem, useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
 import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
@@ -787,10 +788,12 @@ export function toAppEdges(graph: Graph): Edge[] {
 // AI 노드 → GraphNode (graph 생성·ops add 공용). 미제공 attributes는 빈값 (D1)
 // 신규 노드라 보호할 기존 SP 지정값이 없다 — SP 게이트는 미적용(csv-import mergeNode의
 // existing===null 분기와 동일 전제). 통화 배타는 신규 여부와 무관해 그대로 적용.
-function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined): GraphNode {
+function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined, catalogs: Catalogs): GraphNode {
   const attr = node.attributes;
   const num = (raw: string | null | undefined) => normalizeNumericParam(stripThousands(raw ?? "")) ?? "";
   const { values: cost } = dropConflictingCurrency({ cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd) });
+  // 시스템 — 카탈로그 정규화(별칭→정식 표기, 미일치→Other+원문 메모). 신규 노드라 기존 메모 없음
+  const sys = commitSystem(attr?.system ?? "", catalogs.systems, "");
   return {
     id,
     title: node.title,
@@ -802,10 +805,10 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
         ? "subprocess"
         : coerceAiNewNodeType(node.node_type),
     color: attr?.color ?? "",
-    assignee: attr?.assignee ?? "",
-    assignee_role: "",  // 역할은 AI 표면 제외 — 매칭 노드는 mergeNode가 기존값 보존 (design 2026-09-11 §4.3)
+    assignee: "",  // 담당자 실명은 AI 표면 제외 — 사람 필드는 역할만 (2026-09-12)
+    assignee_role: commitRole(attr?.assignee_role ?? "", catalogs.assignee_roles),
     department: attr?.department ?? "",
-    system: attr?.system ?? "",
+    system: sys.system,
     // 무효 duration은 ""로 — 프리뷰가 저장 결과(백엔드 소거)와 일치하게 (csv-import와 동일 규칙)
     duration: normalizeDuration(attr?.duration ?? "") ?? "",
     cost_krw: cost.cost_krw ?? "",
@@ -827,7 +830,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     input_flags: "",
     start_condition: attr?.start_condition ?? "",
     end_condition: attr?.end_condition ?? "",
-    system_fallback: "",  // 폴백은 AI 표면 제외 — 신규 노드는 빈 값 (design 2026-08-19 §3)
+    system_fallback: sys.system_fallback,  // 미일치 시스템의 원문 메모(commitSystem) — 그 외 빈 값
     gmp: "",  // 검토값 — AI 표면 제외 (design 2026-08-20)
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
@@ -1263,8 +1266,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 노드 부서·담당자 고아 판정 소스(캔버스 경고 배지) — 디렉터리는 모듈 캐시라 세션당 1회만 fetch
   const { users: directoryUsers, ready: directoryReady } = useDirectoryState();
   const directoryDepts = useDirectoryDepartments();
-  // 시스템 자동완성 목록 — 인스펙터 행 정규화(commitSystem)에 필요
-  const { systems: systemCatalog } = useCatalogs();
+  // 관리 목록 — 인스펙터 행 정규화(commitSystem)·CSV/AI 변환단(역할 별칭·시스템 정규화)에 인자로 넘긴다
+  const catalogs = useCatalogs();
+  const { systems: systemCatalog } = catalogs;
   // 미리보기 — AI 제안과 CSV 임포트가 공유. null이 아니면 자동저장이 꺼진다(Apply 전 영속화 방지).
   const [previewSource, setPreviewSource] = useState<"ai" | "csv" | null>(null);
   // previewSource와 항상 동기화되는 소스 유니온 — 하나의 undo 스냅샷/자동저장 억제 슬롯을 두 기능이 공유하므로
@@ -1816,6 +1820,11 @@ function MapEditor({ mapId }: { mapId: number }) {
   useEffect(() => {
     childNodesRef.current = childNodes;
   }, [childNodes]);
+  // 관리 목록 ref 미러 — AI 변환 콜백(deps 없이 ref만 읽는 enterAiGraphPreview·applyAiOps)이 최신 카탈로그를 읽도록
+  const catalogsRef = useRef<Catalogs>(catalogs);
+  useEffect(() => {
+    catalogsRef.current = catalogs;
+  }, [catalogs]);
   // lockedKeys ref 미러 — canExpand(deps []) 콜백이 stale 없이 최신 잠금 집합을 읽도록.
   useEffect(() => {
     lockedKeysRef.current = lockedKeys;
@@ -2397,6 +2406,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (versionId === null) return;
       const outcome = buildGraphFromAiProposal(proposal, {
         base: buildGraph(nodesRef.current, edgesRef.current, groupsRef.current),
+        catalogs: catalogsRef.current,
       });
       if (!outcome.graph) {
         showToast(t("ai.error"));
@@ -2439,7 +2449,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             op.node.group_key && existingGroupIds.has(op.node.group_key)
               ? op.node.group_key
               : undefined;
-          addedGraphNodes.push(aiNodeToGraphNode(op.node, id, gid));
+          addedGraphNodes.push(aiNodeToGraphNode(op.node, id, gid, catalogsRef.current));
         }
       }
       const resolve = (ref: string | null): string | null =>
@@ -2493,6 +2503,11 @@ function MapEditor({ mapId }: { mapId: number }) {
           const desc = setDescs.get(node.id);
           const attr = setAttrs.get(node.id);
           if (title === undefined && desc === undefined && attr === undefined) return node;
+          // 시스템 — 에디터 commitSystem과 같은 규칙(별칭→정식 표기, 미일치→Other+원문 메모, 기존 메모가 다르면 유지)
+          const systemPatch =
+            attr?.system != null
+              ? commitSystem(attr.system, catalogsRef.current.systems, node.data.system_fallback ?? "")
+              : null;
           return {
             ...node,
             data: {
@@ -2505,9 +2520,14 @@ function MapEditor({ mapId }: { mapId: number }) {
                     ...(attr.color != null && node.data.nodeType !== "subprocess"
                       ? { color: attr.color }
                       : {}),
-                    ...(attr.assignee != null ? { assignee: attr.assignee } : {}),
+                    // 담당자 실명은 AI 표면 제외 — 역할만(별칭→정식 표기, 자유값 허용) (2026-09-12)
+                    ...(attr.assignee_role != null
+                      ? { assignee_role: commitRole(attr.assignee_role, catalogsRef.current.assignee_roles) }
+                      : {}),
                     ...(attr.department != null ? { department: attr.department } : {}),
-                    ...(attr.system != null ? { system: attr.system } : {}),
+                    ...(systemPatch
+                      ? { system: systemPatch.system, system_fallback: systemPatch.system_fallback }
+                      : {}),
                     // 파라미터 6종 — SP 노드는 annual_count·fte만 수정 가능(design 2026-07-13 §6) + 통화
                     // 배타를 resolveAiParamPatch(buildGraphFromAiProposal과 같은 규칙 재사용)로 강제.
                     // 위반 필드는 색과 같은 방식으로 조용히 드롭 — 이 경로엔 프리뷰 경고 채널이 없다.
@@ -12398,6 +12418,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 // refs가 아닌 렌더 state 사용 — ref.current를 렌더 중 읽으면 react-hooks/refs 위반
                 base: buildGraph(nodes, edges, groups),
                 directory: eligible ?? undefined,
+                catalogs,
               }}
               onChange={(nextOutcome, nextFileName) => {
                 setCsvOutcome(nextOutcome);

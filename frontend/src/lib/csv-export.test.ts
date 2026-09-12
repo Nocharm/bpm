@@ -80,7 +80,7 @@ describe("buildCsvFromGraph - round trip", () => {
     const { csv: exported } = buildCsvFromGraph(graph);
     const bCells = exported.split("\r\n").find((line) => line.startsWith("B,"))?.split(",");
     expect(bCells?.[0]).toBe("B"); // Name
-    expect(bCells?.[19]).toBe("C:approved;D:rejected"); // Next (20번째 컬럼 — Data_Form 폐기로 -1)
+    expect(bCells?.[20]).toBe("C:approved;D:rejected"); // Next (21번째 컬럼 — Role 열 추가로 +1)
   });
 
   it("따옴표·쉼표·줄바꿈 셀 이스케이프 - export → re-import에서 원문 보존", () => {
@@ -133,7 +133,7 @@ describe("buildCsvFromGraph - round trip", () => {
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
     expect(aCells?.[0]).toBe("A"); // Name
-    expect(aCells?.[19]).toBe("B:approve"); // Next(20번째) — reject 브랜치는 드롭됨
+    expect(aCells?.[20]).toBe("B:approve"); // Next(21번째) — reject 브랜치는 드롭됨
   });
 
   it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
@@ -150,7 +150,7 @@ describe("buildCsvFromGraph - round trip", () => {
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[19]).toBe("B"); // Next(20번째) — End행 엣지는 드랍, B만 남는다
+    expect(aCells?.[20]).toBe("B"); // Next(21번째) — End행 엣지는 드랍, B만 남는다
   });
 
   it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
@@ -170,7 +170,7 @@ describe("buildCsvFromGraph - round trip", () => {
       'Edge label "ok;fine" (from "A") contains ";" - re-import will misparse this reference',
     ]);
     const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[19]).toBe("C:review;B:ok;fine"); // Next(20번째) — 드랍 없이 그대로 직렬화
+    expect(aCells?.[20]).toBe("C:review;B:ok;fine"); // Next(21번째) — 드랍 없이 그대로 직렬화
   });
 
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
@@ -242,5 +242,42 @@ describe("orderNodesByFlow", () => {
     const edges = [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "b1"), makeEdge("x3", "b1", "a1")];
     const ordered = orderNodesByFlow([start, a, b], edges);
     expect(ordered.map((n) => n.id)).toEqual(["s1", "a1", "b1"]);
+  });
+});
+
+// Role 열 왕복 + Other 시스템의 원문 메모 왕복 (design 2026-09-12)
+describe("buildCsvFromGraph - role and system catalog round trip", () => {
+  const catalogs = {
+    assignee_roles: [{ value: "Buyer", aliases: ["구매 담당자"] }],
+    systems: [{ value: "Other", aliases: [] }, { value: "SAP ERP", aliases: ["sap"] }],
+  };
+
+  it("exports the Role column and the raw note for Other systems", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1, { assignee_role: "Buyer", system: "SAP ERP" }),
+        makeNode("b1", "B", "process", 2, { system: "Other", system_fallback: "Legacy ledger" }),
+        makeNode("e1", "End", "end", 3, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "b1"), makeEdge("x3", "b1", "e1")],
+      groups: [],
+    };
+    const { csv } = buildCsvFromGraph(graph);
+    const lines = csv.split("\r\n");
+    expect(lines[0].split(",").slice(0, 6)).toEqual(["Name", "Description", "Assignee", "Role", "Department", "System"]);
+    expect(lines[1].split(",").slice(0, 6)).toEqual(["A", "", "", "Buyer", "", "SAP ERP"]);
+    expect(lines[2].split(",").slice(0, 6)).toEqual(["B", "", "", "", "", "Legacy ledger"]); // Other → 원문 메모
+
+    // 재임포트(카탈로그 있음) → 무변경: 역할 유지, Other+메모 복원
+    const outcome = buildGraphFromCsv(csv, { base: graph, catalogs });
+    expect(outcome.errors).toEqual([]);
+    expect(outcome.warnings).toEqual([]);
+    const a = outcome.graph?.nodes.find((n) => n.id === "a1");
+    const b = outcome.graph?.nodes.find((n) => n.id === "b1");
+    expect(a?.assignee_role).toBe("Buyer");
+    expect(a?.system).toBe("SAP ERP");
+    expect(b?.system).toBe("Other");
+    expect(b?.system_fallback).toBe("Legacy ledger");
   });
 });

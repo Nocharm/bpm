@@ -345,6 +345,8 @@ def test_map_fields_promoted_and_description_shrunk() -> None:
     # [Interview] 직렬화는 기록성 키(Owner role·Artifact role)만 잔류 — 승격 키는 고유/폴백 필드로
     # (design 2026-08-19 §4.1, artifact_role 잔류 복원 2026-08-24)
     assert m.description == "[Interview]\nOwner role: 교정 담당자\nArtifact role: deliverable"
+    # ownerRole은 설명 줄과 별개로 맵 지정값(sp_assignee_role)에도 착지 (사용자 결정 2026-09-12)
+    assert m.assignee_role == "교정 담당자"
     assert m.start_condition == "교정 주기 도래 시 EAM에서 작업지시 자동 발생"
     assert m.end_condition == "준비 목록 나오면 끝"
     assert m.system == "EAM" and m.system_fallback == "EAM"

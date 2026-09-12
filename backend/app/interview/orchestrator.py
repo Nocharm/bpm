@@ -658,6 +658,7 @@ async def _run_skip_turn(
     db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None,
     doc_sections: list[dict] | None = None, dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
+    role_catalog: str = "", system_catalog: str = "",
 ) -> TurnResult:
     """결정적 스테이지 전진 — 미확정 필수 facts를 '미정'으로 채우고 체크포인트 후 다음 단계 개시.
 
@@ -695,6 +696,7 @@ async def _run_skip_turn(
             "[사용자가 다음 단계로 넘어가기를 선택했습니다. 새 단계의 첫 제안이나 질문을 하세요.]",
             mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
             dept_catalog=dept_catalog, overrides=overrides,
+            role_catalog=role_catalog, system_catalog=system_catalog,
         ),
         model, InterviewerOut,
         reasoning="high",  # 대화형 인터뷰어 — 중간 사고로 지연/품질 균형
@@ -716,12 +718,14 @@ async def run_turn(
     doc_sections: list[dict] | None = None,
     dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
+    role_catalog: str = "",
+    system_catalog: str = "",
 ) -> TurnResult:
     """일반 턴 = 인터뷰어 1콜 — 그리기·선택지·톤 검수는 draw 이벤트로 분리 (speed redesign §3)."""
     if turn.type == "skip":
         return await _run_skip_turn(
             db, interview, graph_summary, context_text, model, doc_sections, dept_catalog,
-            overrides=overrides,
+            overrides=overrides, role_catalog=role_catalog, system_catalog=system_catalog,
         )
 
     pre_stage = interview.current_stage
@@ -775,6 +779,7 @@ async def run_turn(
         graph_summary, context_text, _history_tail(interview)[:-1], user_input,
         mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
         dept_catalog=dept_catalog, overrides=overrides,
+        role_catalog=role_catalog, system_catalog=system_catalog,
     )
     # 대화형 인터뷰어 — 중간 사고로 지연/품질 균형
     out = await _ask_json(interviewer_messages, model, InterviewerOut, reasoning="high")

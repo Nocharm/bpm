@@ -1,13 +1,26 @@
 // 카탈로그 순수 함수 — 시스템 정규화·별칭 매칭·Other 폴백 규칙 (design 2026-09-11 §4.2, 2026-09-12 §1)
 import { describe, expect, it } from "vitest";
 
-import { appendSystemNote, commitSystem, formatSystem, normalizeToCatalog, OTHER_SYSTEM } from "./catalogs";
+import { appendSystemNote, commitRole, commitSystem, formatSystem, normalizeToCatalog, OTHER_SYSTEM } from "./catalogs";
 
 const SYSTEMS = [
   { value: OTHER_SYSTEM, aliases: ["기타"] },
   { value: "LIMS", aliases: ["랩정보", "lab info"] },
   { value: "SAP", aliases: [] },
 ];
+
+// BE app_settings.commit_role과 동치 (design 2026-09-12)
+describe("commitRole", () => {
+  const ROLES = [{ value: "Buyer", aliases: ["구매 담당자"] }];
+  it("maps an alias or case-variant to the canonical role", () => {
+    expect(commitRole(" 구매 담당자 ", ROLES)).toBe("Buyer");
+    expect(commitRole("buyer", ROLES)).toBe("Buyer");
+  });
+  it("keeps a trimmed free-text role when nothing matches (no Other fallback for roles)", () => {
+    expect(commitRole("  QA reviewer ", ROLES)).toBe("QA reviewer");
+    expect(commitRole("", ROLES)).toBe("");
+  });
+});
 
 describe("normalizeToCatalog", () => {
   it("matches case-insensitively and returns the catalog spelling", () => {

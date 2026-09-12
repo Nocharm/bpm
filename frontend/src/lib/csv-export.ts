@@ -2,7 +2,13 @@
 // 설계: 2026-07-11-numeric-params-excel-csv-export-design.md §3
 import type { Graph, GraphEdge, GraphNode } from "./api";
 
-const HEADER = "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next";
+// Role 열 — 역할 왕복(2026-09-12). Other 시스템은 원문 메모를 셀에 실어 재임포트가 같은 Other+메모로 돌아오게 한다.
+const HEADER = "Name,Description,Assignee,Role,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next";
+
+/** 내보내기 셀의 시스템 — Other면 원문 메모(있을 때)를 싣는다. 재임포트 commitSystem이 미일치→Other+같은 메모로 복원. */
+export function formatSystemCell(system: string, fallback: string): string {
+  return system === "Other" && fallback.trim() !== "" ? fallback : system;
+}
 
 function escapeCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -87,10 +93,11 @@ export function buildCsvFromGraph(graph: Graph): { csv: string; warnings: string
     // CSV는 왕복(export→import) 포맷이라, 상속값을 쓰면 재임포트 시 "링크 맵 지정값이라 무시됨"
     // drop-warning이 매번 뜬다(mergeNode의 dropUneditableParams). Excel은 읽기전용 리포트라 무관.
     return [
-      node.title, node.description, node.assignee, node.department, node.system,
+      node.title, node.description, node.assignee, node.assignee_role ?? "", node.department,
+      formatSystemCell(node.system, node.system_fallback ?? ""),
       node.duration, node.touch_time ?? "", node.cost_krw ?? "", node.cost_usd ?? "", node.headcount ?? "",
       node.annual_count ?? "", node.fte ?? "",
-      // 승격 필드 — 폴백(system_fallback)은 왕복 표면 제외 (design 2026-08-19 §3)
+      // 승격 필드 — 폴백(system_fallback)은 System 셀(Other일 때)로만 왕복, 별도 열 없음 (design 2026-08-19 §3)
       // Input_Flags — Input 줄과 1:1 정렬(optional/빈 줄), 왕복 표면 (io-linking §3)
       node.input ?? "", node.input_flags ?? "", node.output ?? "",
       node.start_condition ?? "", node.end_condition ?? "",

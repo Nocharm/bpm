@@ -163,7 +163,41 @@ def test_interviewer_contract_bans_assignee_collection() -> None:
         stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
         history=[], user_input="다음은요?",
     )
-    assert "담당자(assignee)는 인터뷰에서 수집하지 않습니다" in msgs[0]["content"]
+    assert "담당자(assignee) 실명은 인터뷰에서 수집하지 않습니다" in msgs[0]["content"]
+    # 사람 필드는 역할로만 — roles 단계에서 활동별 역할을 확인한다 (2026-09-12)
+    assert "활동별 **역할**(assignee_role" in msgs[0]["content"]
+
+
+def test_interviewer_messages_include_role_and_system_catalogs() -> None:
+    """역할·시스템 관리 목록 주입 — 인터뷰어가 정식 표기를 알고 options 후보로 쓰게 (design 2026-09-12)."""
+    msgs = build_interviewer_messages(
+        stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="다음은요?",
+        role_catalog="- Buyer (별칭: 구매 담당자)", system_catalog="- Other\n- SAP ERP",
+    )
+    content = msgs[0]["content"]
+    assert "[역할 후보 목록 - assignee_role" in content and "- Buyer (별칭: 구매 담당자)" in content
+    assert "[시스템 목록 - system" in content and "- SAP ERP" in content
+
+
+def test_interviewer_messages_omit_catalog_blocks_when_empty() -> None:
+    msgs = build_interviewer_messages(
+        stage_key="roles", lang="ko", facts={}, graph_summary="", context_text="",
+        history=[], user_input="다음은요?",
+    )
+    assert "[역할 후보 목록 - assignee_role" not in msgs[0]["content"]
+    assert "[시스템 목록 - system" not in msgs[0]["content"]
+
+
+def test_drafter_contract_uses_role_not_assignee() -> None:
+    from app.interview.agents import build_drafter_messages
+
+    msgs = build_drafter_messages(
+        stage_key="review", lang="ko", facts={}, working_graph=None, context_text="", variant_hint="",
+    )
+    content = msgs[0]["content"]
+    assert '"assignee_role": …' in content
+    assert '"assignee": …' not in content
 
 
 def test_drafter_messages_include_recent_history() -> None:

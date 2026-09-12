@@ -53,8 +53,9 @@
 |---|---|
 | `framework.categories[]` | 카테고리 업서트. `l5.nodeCode`가 categories에 없으면 파일 error |
 | `rows[]` 1건 | 맵 1개 — `consultant_code=taskId`, `name=l6`, `category=l5.nodeCode` |
-| `rows[].fields` | 맵 `description` `[Interview]` 섹션에 key-value 직렬화(빈 값 줄 생략, `ownerRole` 포함) |
-| `actions[]` | 노드 — `title=label`, `description=name` + `Input:/Output:/System:/Screen:/Data form:/Rule:/Quote:` 줄 직렬화. `system`은 노드 `system` 컬럼에도 |
+| `rows[].fields` | 맵 `description` `[Interview]` 섹션에 key-value 직렬화(빈 값 줄 생략, `ownerRole` 포함). `fields.systems`는 `sp_system`(카탈로그 정규화: 별칭→정식 표기, 미일치→`Other`)+`sp_system_fallback`(원문) |
+| `rows[].ownerRole` | 맵 지정값 `sp_assignee_role`(100자) — 설명 줄과 별개로 착지, L6 노드엔 전파하지 않음 (2026-09-12) |
+| `actions[]` | 노드 — `title=label`, `description=name` + `Input:/Output:/System:/Screen:/Data form:/Rule:/Quote:` 줄 직렬화. `system`은 노드 `system` 컬럼에도(맵과 같은 카탈로그 정규화, 원문은 `system_fallback`). 정규화 결과는 리포트 행 `system 'x' normalized to 'y'` / `system 'x' not in catalog - stored as Other`(맵당 원문 1회) |
 | `kind` | `decision`→decision 노드, `action`·`handoff`→process. handoff는 `Kind: handoff` 줄로 보존 |
 | `variant` | `normal` 외 값은 `Variant: <값>` 줄로 노드 노트에 보존. `exception`은 노드 색 rose `#c2849a`(에디터 COLOR_PRESETS와 수동 동기)로 시각 분리 — 흐름 분기는 앵커(분기 시작/합류) 정보 부재로 미구현, 협의 확장 포인트 (2026-08-19) |
 | seq | 그룹 k 전원 → 그룹 k+1 전원 엣지. 유일 seq=순차 체인, **중복 seq=병렬 분기/합류**. Start/End는 엔진 시드·자동 배선 |

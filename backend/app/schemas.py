@@ -2156,9 +2156,13 @@ class AiNodeAttributes(BaseModel):
 
     부분 갱신 시맨틱(증분 편집): None(생략)=기존 값 유지, ""=지움, 값=설정.
     graph 생성/ops add에서는 None을 빈값으로 취급한다(프론트 aiNodeToGraphNode).
+
+    담당자(assignee)는 AI 표면에서 제외 — 실명은 에디터 피커 전용이라 모델이 지어내지 못하게
+    스키마에서 아예 받지 않는다(에코해도 pydantic이 버림). 사람 필드는 역할(assignee_role)만
+    (사용자 결정 2026-09-12).
     """
 
-    assignee: str | None = Field(default=None, max_length=100)
+    assignee_role: str | None = Field(default=None, max_length=100)
     department: str | None = Field(default=None, max_length=100)
     system: str | None = Field(default=None, max_length=100)
     duration: str | None = Field(default=None, max_length=50)

@@ -6,7 +6,6 @@
 
 ## 유지 중 (아직 소비될 문서)
 
-- [역할·카탈로그 트랙 다음 세션 핸드오프](2026-09-12-assignee-role-next-session.md) — 변경 요약·시작 프롬프트·미룬 결정(AI 계약·CSV 임포트·컨설턴트 임포트 최신화).
 - [카탈로그 별칭 + 노드 표시 전환(휴식=역할/활성=담당자)](2026-09-12-catalog-alias-node-swap-design.md) — 항목 `{value, aliases}` 객체화·별칭→정식 표기 치환·SuggestInput 별칭 검색·Catalogs 탭 별칭 편집·CSV 2열, 노드 호버/선택 1초 뒤 페이드 전환(`NODE_ALT_DELAY_MS`)·노드 내 칩 흑백. **dev 구현 완료.**
 - [노드 역할(assignee_role) + 관리 목록 엔진(역할·시스템 카탈로그)](2026-09-11-assignee-role-catalog-design.md) — 담당자 옆 단일값 역할 칸, `SuggestInput`+`/catalogs` 재사용 자동완성, 시스템 자유값→`Other`+폴백 정규화, 설정 Catalogs 탭(CSV 임포트). **dev 구현 완료**(CSV/AI 노출 후속).
 - [고아 참조 감사(Ref audit) 설계](2026-09-09-ref-audit-design.md) — 부서·사용자 참조 12곳 온디맨드 스캔, 체크 기반 일괄 재지정(replace/remove), 오너 알림(`ref_fix_requested`·`owner_assigned`), 홈 배지·Issues 필터. **구현 완료**(feat/ux-polish).

@@ -58,6 +58,9 @@ export type DetailKind =
   | "category-admin"
   | "category-admin-unknown"
   | "published"
+  // 시스템 카탈로그 정규화(2026-09-12) — import_consultant._report_system_change 문구와 계약
+  | "system-normalized"
+  | "system-other"
   // 파일 이슈(어댑터 AdapterIssue, files[].issues) — 리포트 행이 아니라 별도 분류 (2026-09-08)
   | "file-self-edge"
   | "file-decision-promoted"
@@ -257,6 +260,10 @@ const PATTERNS: { kind: DetailKind; re: RegExp }[] = [
   // verb는 created|augmented (import_consultant.apply_interview_linkage) — 새 동사가 생겨도 통과시킨다
   { kind: "canvas", re: /^canvas ([a-z]+) \(map (\d+), \+(\d+) nodes\/edges\)$/ },
   { kind: "published", re: /^published v(\d+)$/ },
+  // 시스템 카탈로그 정규화 — import_consultant._report_system_change 문구와 계약 (2026-09-12).
+  // Python repr 인용부호는 대개 '…'지만 원문에 '가 있으면 "…"로 바뀐다 — 둘 다 받는다.
+  { kind: "system-normalized", re: /^system ['"](.*)['"] normalized to ['"](.*)['"]$/ },
+  { kind: "system-other", re: /^system ['"](.*)['"] not in catalog - stored as Other$/ },
 ];
 
 /** 백엔드 상세 문구를 종류·가변부로 분해. 미등록 문구는 "other"로 원문을 그대로 보존한다. */

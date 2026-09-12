@@ -12,6 +12,8 @@ from app.app_settings import (
     get_ai_chat_max_messages,
     get_ai_chat_max_sessions,
     get_ai_chat_tips,
+    get_assignee_roles,
+    get_systems,
     is_ai_access_enabled,
 )
 from app.manual_select import select_manual_sections
@@ -200,6 +202,11 @@ async def ai_chat(
     messages = build_messages(
         manual_text, current, can_edit, payload.instruction, payload.history,
         overrides=await get_prompt_overrides(session),
+        # 관리 목록 — 모델이 역할·시스템을 정식 표기로 적게 (FE 변환단이 다시 정규화하지만 프롬프트가 1차)
+        catalogs={
+            "assignee_roles": await get_assignee_roles(session),
+            "systems": await get_systems(session),
+        },
     )
 
     try:

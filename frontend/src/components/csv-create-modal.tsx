@@ -17,6 +17,7 @@ import {
   type CsvDirectory,
   type CsvImportOutcome,
 } from "@/lib/csv-import";
+import { useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
 
 interface Props {
@@ -26,6 +27,8 @@ interface Props {
 
 export function CsvCreateModal({ onClose, onContinue }: Props) {
   const { t } = useI18n();
+  // 관리 목록 — Role 별칭 치환·System 카탈로그 정규화(commitSystem)에 필요
+  const catalogs = useCatalogs();
   const fileRef = useRef<HTMLInputElement>(null);
   const [directory, setDirectory] = useState<CsvDirectory | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -62,7 +65,7 @@ export function CsvCreateModal({ onClose, onContinue }: Props) {
   const loadFile = async (file: File) => {
     if (directory === null) return;
     const text = decodeCsvBuffer(await file.arrayBuffer());
-    setOutcome(buildGraphFromCsv(text, { directory }));
+    setOutcome(buildGraphFromCsv(text, { directory, catalogs }));
     setFileName(file.name);
     setStep("pick");
   };

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
-from app.app_settings import is_ai_access_enabled
+from app.app_settings import get_assignee_roles, get_systems, is_ai_access_enabled
 from app.auth import get_current_user
 from app.clock import now as now_kst
 from app.db import get_session
@@ -128,9 +128,9 @@ _EXISTING_NOTE_WORD = {
     "en": "\n\nI've also reviewed the {n} existing nodes - we can refine them against the document.",
 }
 
-# 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키
+# 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키(담당자 실명은 AI 표면 제외, 역할만)
 _SEED_ATTRS = (
-    "assignee", "department", "system",
+    "assignee_role", "department", "system",
     "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
 )
 
@@ -273,6 +273,33 @@ async def _dept_catalog(session: AsyncSession, interview: InterviewSession) -> s
     eligible = await get_eligible_users(session, interview.map_id)
     departments = sorted({e.department for e in eligible if e.department})
     return "\n".join(f"- {d}" for d in departments[:_DEPT_CATALOG_MAX])
+
+
+# 역할·시스템 카탈로그 주입 상한 — 부서 목록과 같은 프롬프트 예산 가드
+_MANAGED_CATALOG_MAX = 120
+
+
+def _format_managed_catalog(entries: list[dict[str, object]]) -> str:
+    """관리 목록 → 프롬프트 불릿(값 + 별칭). 인터뷰어가 사용자의 별칭 표현을 정식 표기로 잇게 한다."""
+    lines: list[str] = []
+    for entry in entries[:_MANAGED_CATALOG_MAX]:
+        aliases = entry.get("aliases")
+        alias_text = (
+            f" (별칭: {', '.join(str(a) for a in aliases)})"
+            if isinstance(aliases, list) and aliases else ""
+        )
+        lines.append(f"- {entry.get('value')}{alias_text}")
+    return "\n".join(lines)
+
+
+async def _managed_catalogs(session: AsyncSession, interview: InterviewSession) -> tuple[str, str]:
+    """(역할 후보 목록, 시스템 목록) — roles 스테이지 options 후보이자 정식 표기 힌트 (design 2026-09-12)."""
+    if interview.mode != "normal":
+        return "", ""
+    return (
+        _format_managed_catalog(await get_assignee_roles(session)),
+        _format_managed_catalog(await get_systems(session)),
+    )
 
 
 # 지식기반 검색 주입 (design 2026-07-23 §7 P2) — 실패는 턴을 죽이지 않는다(그레이스풀 디그레이드)
@@ -550,11 +577,13 @@ async def post_turn(
         doc_sections = list(found_map.doc_sections) if found_map else []
     usage: list[tuple[int | None, int | None]] = []
     usage_token = usage_log.set(usage)
+    role_catalog, system_catalog = await _managed_catalogs(session, interview)
     try:
         result = await run_turn(
             session, interview, payload, graph_summary, context_text,
             doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
             overrides=await get_prompt_overrides(session),
+            role_catalog=role_catalog, system_catalog=system_catalog,
         )
     except TurnError as exc:
         await session.rollback()

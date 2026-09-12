@@ -79,6 +79,13 @@ describe("classifyDetail", () => {
       "owner-fallback",
     );
     expect(classifyDetail("created", "published v3")).toMatchObject({ kind: "published", numbers: [3] });
+    // 시스템 카탈로그 정규화 행 — import_consultant._report_system_change 문구 계약 (2026-09-12)
+    expect(classifyDetail("warning", "system 'sap' normalized to 'SAP ERP'")).toMatchObject({
+      kind: "system-normalized", severity: "warning", subject: "sap", captures: ["sap", "SAP ERP"],
+    });
+    expect(classifyDetail("warning", "system 'Legacy ledger' not in catalog - stored as Other")).toMatchObject({
+      kind: "system-other", subject: "Legacy ledger",
+    });
     expect(classifyDetail("linkage", "canvas created (map 21, +11 nodes/edges)")).toMatchObject({
       kind: "canvas",
       subject: "created",

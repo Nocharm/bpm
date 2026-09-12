@@ -98,6 +98,8 @@ class CanonicalMap(BaseModel):
     total_time_fallback: str = Field(default="", max_length=200)
     touch_time_fallback: str = Field(default="", max_length=200)
     system_fallback: str = Field(default="", max_length=200)
+    # 태스크 오너 역할(rows[].ownerRole) → 맵 지정값 sp_assignee_role(String 100) (사용자 결정 2026-09-12)
+    assignee_role: str = Field(default="", max_length=100)
     visibility: Literal["public", "private"] = "public"
     # 인터뷰 fields KV 직렬화 착지 — ProcessMap.description(Text), 캡 금지 (design 2026-08-18 §3)
     description: str = ""

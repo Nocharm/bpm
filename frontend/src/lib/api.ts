@@ -2367,8 +2367,9 @@ export function deleteNotice(id: number): Promise<void> {
 // ── 온프레미스 AI 채팅 (design 2026-06-15) ──────────────
 
 // 부분 갱신 시맨틱(증분 편집) — null/생략=유지, ""=지움, 값=설정 (백엔드 AiNodeAttributes 미러)
+// 담당자 실명(assignee)은 AI 표면 제외 — 사람 필드는 역할(assignee_role)만, 변환단이 commitRole로 정규화 (2026-09-12)
 export interface AiNodeAttributes {
-  assignee?: string | null;
+  assignee_role?: string | null;
   department?: string | null;
   system?: string | null;
   duration?: string | null;

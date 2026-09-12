@@ -100,6 +100,13 @@ export function commitSystem(raw: string, systems: readonly CatalogEntry[], curr
   return { system: OTHER_SYSTEM, system_fallback: currentFallback, keptNote: true };
 }
 
+/** 역할 커밋 규칙 — 목록 일치(별칭 포함)면 정식 표기, 아니면 trim한 자유값(역할엔 Other 폴백이 없다).
+ *  CSV·AI 변환단 공용. BE `app_settings.commit_role`과 동치 (design 2026-09-12). */
+export function commitRole(raw: string, roles: readonly CatalogEntry[]): string {
+  const trimmed = raw.trim();
+  return normalizeToCatalog(trimmed, roles) ?? trimmed;
+}
+
 /** 원문 메모에 새 자유값을 이어붙인다 — 기존이 비면 raw만, 아니면 줄바꿈 후 raw */
 export function appendSystemNote(existing: string, raw: string): string {
   const trimmedExisting = existing.trimEnd();

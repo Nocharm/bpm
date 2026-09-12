@@ -316,7 +316,8 @@ def test_proposal_graph_carries_attributes_and_group() -> None:
                     "key": "a",
                     "title": "발주",
                     "node_type": "process",
-                    "attributes": {"assignee": "김철수", "department": "구매팀"},
+                    # 담당자 실명은 AI 표면 제외 — 에코해도 스키마가 버리고 역할만 남는다 (2026-09-12)
+                    "attributes": {"assignee": "김철수", "assignee_role": "구매 담당자", "department": "구매팀"},
                     "group_key": "g1",
                 }
             ],
@@ -324,7 +325,8 @@ def test_proposal_graph_carries_attributes_and_group() -> None:
         }
     )
     assert proposal.nodes[0].attributes is not None
-    assert proposal.nodes[0].attributes.assignee == "김철수"
+    assert proposal.nodes[0].attributes.assignee_role == "구매 담당자"
+    assert not hasattr(proposal.nodes[0].attributes, "assignee")
     assert proposal.nodes[0].group_key == "g1"
     assert proposal.groups[0].label == "구매팀"
 
@@ -441,7 +443,7 @@ def test_ai_graph_proposal_preserves_attributes(
                     "key": "a",
                     "title": "발주",
                     "node_type": "process",
-                    "attributes": {"assignee": "김철수"},
+                    "attributes": {"assignee": "김철수", "assignee_role": "구매 담당자"},
                     "group_key": "g1",
                 }
             ],
@@ -456,7 +458,9 @@ def test_ai_graph_proposal_preserves_attributes(
 
     body = resp.json()
     assert resp.status_code == 200
-    assert body["nodes"][0]["attributes"]["assignee"] == "김철수"
+    # 담당자 실명 에코는 응답에서 사라지고 역할만 통과 (2026-09-12)
+    assert body["nodes"][0]["attributes"]["assignee_role"] == "구매 담당자"
+    assert "assignee" not in body["nodes"][0]["attributes"]
     assert body["nodes"][0]["group_key"] == "g1"
     assert body["groups"][0]["label"] == "구매팀"
 
@@ -689,6 +693,31 @@ def test_ai_grounds_on_registered_manual_docs(
     assert client.delete(f"/api/manual/docs/{doc_id}").status_code in (200, 204)
 
 
+def test_system_prompt_carries_catalogs_and_role_rule() -> None:
+    """관리 목록 주입 + 담당자 금지/역할 규칙 — 모델이 정식 표기를 알고 실명은 안 적게 (design 2026-09-12)."""
+    from app.ai_prompt import build_system_prompt
+    from app.schemas import GraphOut, NodeOut
+
+    graph = GraphOut(
+        groups=[], edges=[],
+        nodes=[NodeOut(id="p1", title="검토", node_type="process", assignee_role="구매 담당자")],
+    )
+    prompt = build_system_prompt(
+        "", graph, can_edit=True,
+        catalogs={
+            "assignee_roles": [{"value": "Buyer", "aliases": ["구매 담당자"]}],
+            "systems": [{"value": "Other", "aliases": []}, {"value": "SAP ERP", "aliases": ["sap"]}],
+        },
+    )
+    assert "[역할 목록 - assignee_role" in prompt and "- Buyer (별칭: 구매 담당자)" in prompt
+    assert "[시스템 목록 - system" in prompt and "- SAP ERP (별칭: sap)" in prompt
+    assert "역할=구매 담당자" in prompt  # 현재 그래프 직렬화에 역할 노출
+    assert '"assignee_role":""' in prompt and '"assignee":""' not in prompt
+    assert "담당자 실명(assignee)은 AI가 설정할 수 없으니" in prompt
+    # 목록이 없으면 블록 자체를 생략 (규칙 2가 "[역할 목록]"을 언급하므로 블록 헤더 전체로 판정)
+    assert "[역할 목록 - assignee_role" not in build_system_prompt("", graph, can_edit=True)
+
+
 def test_structure_hints_detect_data_feedback_targets() -> None:
     """분석 고도화 — 도달성·분기·속성 누락·막다른 노드·중복 제목을 사전탐지."""
     from app.ai_prompt import _structure_hints
@@ -765,7 +794,7 @@ def test_ops_set_attr_partial_and_url() -> None:
     assert attr is not None
     assert attr.url == "https://example.com/spec"
     assert attr.url_label == "규정"
-    assert attr.assignee is None  # 생략 = 유지
+    assert attr.assignee_role is None  # 생략 = 유지
     assert attr.department is None
 
 

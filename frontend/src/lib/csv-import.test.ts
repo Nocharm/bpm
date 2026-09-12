@@ -232,8 +232,9 @@ describe("외부 AI 왕복 - 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
     expect(prompt).toContain(
-      "Name,Description,Assignee,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next",
-    ); // 헤더 명시
+      "Name,Description,Assignee,Role,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next",
+    ); // 헤더 명시(Role 열 2026-09-12)
+    expect(prompt).toContain("- Role: 선택, 그 단계를 수행하는 역할명"); // 실명 대신 역할
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
     expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생
@@ -736,7 +737,7 @@ describe("toCsvDirectory", () => {
 describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
   const aiNode = (key: string, title: string, node_type = "process", attributes: Partial<NonNullable<AiNode["attributes"]>> | null = null): AiNode => ({
     key, title, node_type, description: "",
-    attributes: attributes ? { assignee: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, ...attributes } : null,
+    attributes: attributes ? { assignee_role: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, ...attributes } : null,
     group_key: null,
   });
   const baseNode = (id: string, title: string, over: Partial<GraphNode> = {}): GraphNode => ({
@@ -831,12 +832,75 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(merged?.color).toBe(""); // 매칭 노드 색은 기존 유지(AI 색 무시)
   });
 
-  it("sets assignee when AI provides one explicitly", () => {
+  // 담당자 실명은 AI 표면 제외 — 사람 필드는 역할만, 카탈로그로 정규화 (사용자 결정 2026-09-12)
+  const catalogs = {
+    assignee_roles: [{ value: "Buyer", aliases: ["구매 담당자"] }],
+    systems: [{ value: "Other", aliases: [] }, { value: "SAP ERP", aliases: ["sap"] }],
+  };
+
+  it("keeps the existing assignee and sets the role via the catalog alias", () => {
     const outcome = buildGraphFromAiProposal(
-      { nodes: [aiNode("a", "견적 검토", "process", { assignee: "김담당" })], edges: [], groups: [] },
+      { nodes: [aiNode("a", "견적 검토", "process", { assignee_role: " 구매 담당자 " })], edges: [], groups: [] },
+      { base: base([baseNode("n1", "견적 검토")]), catalogs },
+    );
+    const merged = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(merged?.assignee).toBe("홍길동"); // AI는 실명을 못 바꾼다
+    expect(merged?.assignee_role).toBe("Buyer");
+  });
+
+  it("keeps a free-text role as-is and the existing role when AI omits it", () => {
+    const withFree = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { assignee_role: "QA reviewer" })], edges: [], groups: [] },
+      { base: base([baseNode("n1", "견적 검토", { assignee_role: "Reviewer" })]), catalogs },
+    );
+    expect(withFree.graph?.nodes.find((n) => n.id === "n1")?.assignee_role).toBe("QA reviewer");
+    const omitted = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { assignee_role: "" })], edges: [], groups: [] },
+      { base: base([baseNode("n1", "견적 검토", { assignee_role: "Reviewer" })]), catalogs },
+    );
+    expect(omitted.graph?.nodes.find((n) => n.id === "n1")?.assignee_role).toBe("Reviewer");
+  });
+
+  it("normalizes the system through the catalog: alias to canonical, unknown to Other with a note", () => {
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [
+          aiNode("a", "견적 검토", "process", { system: "sap" }),
+          aiNode("b", "신규 작업", "process", { system: "Legacy ledger" }),
+        ],
+        edges: [], groups: [],
+      },
+      { base: base([baseNode("n1", "견적 검토")]), catalogs },
+    );
+    const merged = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(merged?.system).toBe("SAP ERP");
+    const added = outcome.graph?.nodes.find((n) => n.title === "신규 작업");
+    expect(added?.system).toBe("Other");
+    expect(added?.system_fallback).toBe("Legacy ledger");
+    expect(outcome.warnings).toEqual([]);
+  });
+
+  it("keeps a differing existing note for an unknown system and warns", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { system: "Legacy ledger" })], edges: [], groups: [] },
+      { base: base([baseNode("n1", "견적 검토", { system: "Other", system_fallback: "old note" })]), catalogs },
+    );
+    const merged = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(merged?.system).toBe("Other");
+    expect(merged?.system_fallback).toBe("old note");
+    expect(outcome.warnings.map((w) => w.message)).toEqual([
+      '"견적 검토": system "Legacy ledger" is not in the catalog - stored as Other, existing note kept',
+    ]);
+  });
+
+  it("passes the system through untouched when no catalogs are given", () => {
+    const outcome = buildGraphFromAiProposal(
+      { nodes: [aiNode("a", "견적 검토", "process", { system: "sap", assignee_role: "구매 담당자" })], edges: [], groups: [] },
       { base: base([baseNode("n1", "견적 검토")]) },
     );
-    expect(outcome.graph?.nodes.find((n) => n.id === "n1")?.assignee).toBe("김담당");
+    const merged = outcome.graph?.nodes.find((n) => n.id === "n1");
+    expect(merged?.system).toBe("sap");
+    expect(merged?.assignee_role).toBe("구매 담당자");
   });
 
   // finding pin — ops set_attr(params.test.ts resolveAiParamPatch)와 같은 무효 에코 케이스가
@@ -1116,6 +1180,57 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.start_condition).toBe("기존 시작");
     expect(node.end_condition).toBe("기존 종료");
     expect(node.system_fallback).toBe("EAM(원문)"); // CSV 표면 제외 — 병합이 무조건 보존
+  });
+
+  // Role 열 + 시스템 카탈로그 정규화 — 에디터 commitRole/commitSystem과 같은 규칙 (design 2026-09-12)
+  describe("Role 열·시스템 카탈로그 정규화", () => {
+    const catalogs = {
+      assignee_roles: [{ value: "Buyer", aliases: ["구매 담당자"] }],
+      systems: [{ value: "Other", aliases: [] }, { value: "SAP ERP", aliases: ["sap"] }],
+    };
+    const HR = "Name,Assignee,Role,System,Next";
+
+    it("Role 셀은 별칭→정식 표기, 미일치는 자유값, 빈 셀은 기존 유지", () => {
+      const base = baseGraph();
+      base.nodes[1] = { ...base.nodes[1], assignee_role: "Reviewer" };
+      const o = buildGraphFromCsv(`${HR}\nReview request,, 구매 담당자 ,,\nNew step,,QA reviewer,,\nKeep,,,,\n`, { base, catalogs });
+      expect(o.errors).toEqual([]);
+      expect(o.graph!.nodes.find((n) => n.id === "a1")!.assignee_role).toBe("Buyer");
+      expect(o.graph!.nodes.find((n) => n.title === "New step")!.assignee_role).toBe("QA reviewer");
+      const keep = buildGraphFromCsv(`${HR}\nReview request,,,,\n`, { base, catalogs });
+      expect(keep.graph!.nodes.find((n) => n.id === "a1")!.assignee_role).toBe("Reviewer");
+    });
+
+    it("Role 열이 없거나 카탈로그가 없으면 원문/기존값 그대로", () => {
+      const base = baseGraph();
+      base.nodes[1] = { ...base.nodes[1], assignee_role: "Reviewer" };
+      const noColumn = mergeOf(`${H9}\nReview request,,,,,,,,\n`, base);
+      expect(noColumn.graph!.nodes.find((n) => n.id === "a1")!.assignee_role).toBe("Reviewer");
+      const noCatalog = buildGraphFromCsv(`${HR}\nReview request,,구매 담당자,,\n`, { base });
+      expect(noCatalog.graph!.nodes.find((n) => n.id === "a1")!.assignee_role).toBe("구매 담당자");
+    });
+
+    it("System 셀은 별칭→정식 표기, 미일치→Other+원문 메모, 기존 메모가 다르면 유지+경고", () => {
+      const base = baseGraph();
+      base.nodes[1] = { ...base.nodes[1], system: "Other", system_fallback: "old note" };
+      const o = buildGraphFromCsv(`${HR}\nReview request,,,Legacy ledger,\nNew step,,,sap,\nFresh,,,Homegrown tool,\n`, { base, catalogs });
+      expect(o.errors).toEqual([]);
+      const existing = o.graph!.nodes.find((n) => n.id === "a1")!;
+      expect(existing.system).toBe("Other");
+      expect(existing.system_fallback).toBe("old note");
+      expect(o.warnings.map((w) => w.message)).toEqual([
+        'System "Legacy ledger" is not in the catalog - stored as Other, existing note kept',
+      ]);
+      expect(o.graph!.nodes.find((n) => n.title === "New step")!.system).toBe("SAP ERP");
+      const fresh = o.graph!.nodes.find((n) => n.title === "Fresh")!;
+      expect(fresh.system).toBe("Other");
+      expect(fresh.system_fallback).toBe("Homegrown tool");
+    });
+
+    it("Role 셀 100자 초과는 에러", () => {
+      const o = buildGraphFromCsv(`${HR}\nReview request,,${"r".repeat(101)},,\n`, { catalogs });
+      expect(o.errors.map((e) => e.message)).toEqual(["role exceeds 100 characters"]);
+    });
   });
 
   it("IO 링크 필드(io-linking §3) - output 텍스트가 바뀌면 output_ids/output_links를 소거하고, input 셀이 비어 기존 텍스트가 유지되면 input_links/input_flags를 지킨다", () => {
