@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-14 — 맵 카드 최근 열람 배지: 호버 시 펼쳐지는 폭 (main)
+
+- 최근 열람 맵 카드가 두 문구(수정시각·최근 접속)를 같은 그리드 셀에 겹쳐 두느라 **평소에도 넓은 쪽 폭을 잡고 있어 오너 이름 필이 미리 줄어 보였다.** 평소엔 수정시각 칩만 자리를 차지하고 호버 시 최근 접속 필이 폭을 늘리며 들어오도록 전환(max-width 애니, 상한은 최장 문구보다 조금 크게). 영문 `home.recentBadge`는 "Recently opened" → "Opened"로 단축(한글 "최근 접속"과 길이 균형). 실측: 배지 폭 rest 56/84px(ko/en) → hover 127/128px, 좁은 폭에서 이름이 호버 때만 말줄임.
+
 ## 2026-09-14 — db-viewer 공유 브리지 상시 합류 + 배포 문서 정리 (dev)
 
 - db-viewer가 서버에 `dbv-shared`(`10.203.0.0/24`)를 띄우고 backend를 상시 합류시켜 둔 상태라, 2026-09-11에 되돌렸던 compose 합류를 **공유 방식으로 다시 넣었다** — db 서비스가 `default` + `dbv`(external, `DBV_NETWORK` 기본 `dbv-shared`)에 붙고 별칭은 `DBV_DB_ALIAS`(운영 `bpm-db` · 9910 `bpm9910-db`). 스택마다 별칭을 갈라야 공유 네트워크에서 엉뚱한 DB에 붙는 사고를 막는다. 되돌린 이유였던 "운영 미연결 + external 선행 요구"는 네트워크가 이미 서버에 있어 해소 — 대신 `up` 전제조건이 되었으므로 deploy §0·§5, setup-once A9에 명시.

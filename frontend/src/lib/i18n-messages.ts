@@ -72,7 +72,7 @@ const en = {
   "home.recentTitle": "Recently opened",
   "home.recentMore": "Show more",
   "home.recentCollapse": "Collapse",
-  "home.recentBadge": "Recently opened",
+  "home.recentBadge": "Opened",
   "home.myDocuments": "My documents",
   "home.donutTotal": "total",
   "home.needsApproval": "Needs approval",

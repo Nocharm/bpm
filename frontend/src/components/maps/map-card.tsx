@@ -303,19 +303,22 @@ export function MapCard({
             </PersonHoverCard>
           )}
           {recentOpenedAt !== undefined ? (
-            // 최근 열람 맵 — 기본은 수정시각(시계 아이콘만 accent), 호버 시 최근 접속 기록으로 교체.
-            // 두 텍스트를 같은 그리드 셀에 겹쳐 박스를 더 넓은 쪽 폭으로 고정 → 교체 시 폭 점프 없음.
-            // 전환은 양방향 모두 0.5초 페이드지만 지연은 비대칭이다 — 들어올 땐 0.5초 머문 뒤
-            // 시작(스쳐 지나는 커서에 반응하지 않게), 나갈 땐 지연 없이 바로 페이드로 복귀.
-            <div data-id="map-card-recent-badge" className="grid w-fit shrink-0 items-center">
-              <div className="col-start-1 row-start-1 flex items-center gap-2 whitespace-nowrap transition-opacity delay-0 duration-500 ease-smooth group-hover:opacity-0 group-hover:delay-500">
+            // 최근 열람 맵 — 평소엔 수정시각 칩만 자리를 차지해 왼쪽 오너 이름 필이 넉넉히 펴지고,
+            // 호버 시 칩이 접히며 최근 접속 필이 폭을 늘려 들어온다(그만큼 이름이 줄어든다).
+            // 폭은 max-width 전환 — 두 텍스트 길이가 가변이라 고정 폭을 잡을 수 없다. 상한은 실제
+            // 최장 문구("최근 접속 · 2026-08-12")보다 조금 크게만 잡는다(너무 크면 전환이 일찍 끝난 듯 보인다).
+            // 지연은 비대칭: 들어올 땐 0.5초 머문 뒤 시작(스쳐 지나는 커서 무시), 나갈 땐 즉시 복귀.
+            <div data-id="map-card-recent-badge" className="flex shrink-0 items-center">
+              <div className="flex max-w-[8rem] items-center gap-2 overflow-hidden whitespace-nowrap transition-[max-width,opacity] delay-0 duration-500 ease-smooth group-hover:max-w-0 group-hover:opacity-0 group-hover:delay-500">
                 {renderUpdatedChip(true)}
               </div>
               <span
                 data-id="map-card-recent-pill"
-                className="col-start-1 row-start-1 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-accent-tint px-2 py-0.5 text-accent opacity-0 transition-opacity delay-0 duration-500 ease-smooth group-hover:opacity-100 group-hover:delay-500"
+                className="inline-flex max-w-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-accent-tint px-0 py-0.5 text-accent opacity-0 transition-[max-width,opacity,padding] delay-0 duration-500 ease-smooth group-hover:max-w-[13rem] group-hover:px-2 group-hover:opacity-100 group-hover:delay-500"
               >
-                <Clock size={12} strokeWidth={1.5} />
+                <span className="shrink-0">
+                  <Clock size={12} strokeWidth={1.5} />
+                </span>
                 {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
               </span>
             </div>
