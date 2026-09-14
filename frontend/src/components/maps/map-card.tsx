@@ -8,7 +8,7 @@
 // ⚠경고 건수(클릭→모달)·공개범위 아이콘. 노드/버전/인원 수는 카드에서 빼고 호버 요약 모달에만 남긴다.
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Clock, GitBranch, Globe, Lock, TriangleAlert, User, Users, Workflow } from "lucide-react";
 
@@ -70,6 +70,25 @@ export function MapCard({
     return formatKst(iso).slice(0, 10);
   };
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // 최근 열람 배지 — 평소(수정 시각)와 호버(최근 접속 필)의 실측 폭. 전환은 이 두 값 사이의
+  // 단일 width 애니메이션이어야 한다: 두 칸을 각각 max-width로 접고 펴면 중간에 합계가 최종보다
+  // 커져 이름 필이 줄었다 늘어나는 튐이 생긴다(2026-09-14 실측 피크 147px > 최종 127px).
+  // 자식은 nowrap이라 컨테이너가 잘라도 offsetWidth는 항상 natural 폭이다.
+  const updatedLabel = relativeTime(map.updated_at);
+  const recentLabel =
+    recentOpenedAt === undefined
+      ? ""
+      : `${t("home.recentBadge")} · ${relativeTime(new Date(recentOpenedAt).toISOString())}`;
+  const chipRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const [badgeWidths, setBadgeWidths] = useState<{ rest: number; hover: number } | null>(null);
+  useEffect(() => {
+    const rest = chipRef.current?.offsetWidth ?? 0;
+    const hover = pillRef.current?.offsetWidth ?? 0;
+    if (!rest || !hover) return;
+    setBadgeWidths((prev) => (prev && prev.rest === rest && prev.hover === hover ? prev : { rest, hover }));
+  }, [updatedLabel, recentLabel]);
 
   // 강조되면 화면으로 스크롤 (복사 직후 새 카드로 이동)
   useEffect(() => {
@@ -195,7 +214,7 @@ export function MapCard({
       >
         <Clock size={12} strokeWidth={1.5} />
       </span>
-      {relativeTime(map.updated_at)}
+      {updatedLabel}
     </span>
   );
 
@@ -303,23 +322,33 @@ export function MapCard({
             </PersonHoverCard>
           )}
           {recentOpenedAt !== undefined ? (
-            // 최근 열람 맵 — 평소엔 수정시각 칩만 자리를 차지해 왼쪽 오너 이름 필이 넉넉히 펴지고,
-            // 호버 시 칩이 접히며 최근 접속 필이 폭을 늘려 들어온다(그만큼 이름이 줄어든다).
-            // 폭은 max-width 전환 — 두 텍스트 길이가 가변이라 고정 폭을 잡을 수 없다. 상한은 실제
-            // 최장 문구("최근 접속 · 2026-08-12")보다 조금 크게만 잡는다(너무 크면 전환이 일찍 끝난 듯 보인다).
+            // 최근 열람 맵 — 평소엔 수정시각 칩 폭만 차지해 왼쪽 이름 필이 넉넉히 펴지고, 호버 시
+            // 실측한 필 폭까지 한 번에 넓어지며 최근 접속 기록이 드러난다(폭이 남으면 이름은 그대로,
+            // 모자랄 때만 말줄임). 필은 absolute — 두 요소가 폭을 나눠 가지면 전환 중간 합계가
+            // 최종보다 커져 이름이 줄었다 늘어나는 튐이 생긴다. 측정 전(첫 페인트)엔 칩 폭 = auto.
             // 지연은 비대칭: 들어올 땐 0.5초 머문 뒤 시작(스쳐 지나는 커서 무시), 나갈 땐 즉시 복귀.
-            <div data-id="map-card-recent-badge" className="flex shrink-0 items-center">
-              <div className="flex max-w-[8rem] items-center gap-2 overflow-hidden whitespace-nowrap transition-[max-width,opacity] delay-0 duration-500 ease-smooth group-hover:max-w-0 group-hover:opacity-0 group-hover:delay-500">
+            <div
+              data-id="map-card-recent-badge"
+              style={
+                badgeWidths
+                  ? ({ "--rb-rest": `${badgeWidths.rest}px`, "--rb-hover": `${badgeWidths.hover}px` } as CSSProperties)
+                  : undefined
+              }
+              className="relative flex h-[22px] w-[var(--rb-rest,auto)] shrink-0 items-center overflow-hidden transition-[width] delay-0 duration-500 ease-smooth group-hover:w-[var(--rb-hover,auto)] group-hover:delay-500"
+            >
+              <div
+                ref={chipRef}
+                className="flex w-max items-center gap-2 whitespace-nowrap transition-opacity delay-0 duration-500 ease-smooth group-hover:opacity-0 group-hover:delay-500"
+              >
                 {renderUpdatedChip(true)}
               </div>
               <span
+                ref={pillRef}
                 data-id="map-card-recent-pill"
-                className="inline-flex max-w-0 items-center gap-1 overflow-hidden whitespace-nowrap rounded-full bg-accent-tint px-0 py-0.5 text-accent opacity-0 transition-[max-width,opacity,padding] delay-0 duration-500 ease-smooth group-hover:max-w-[13rem] group-hover:px-2 group-hover:opacity-100 group-hover:delay-500"
+                className="absolute left-0 top-1/2 inline-flex w-max -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-accent-tint px-2 py-0.5 text-accent opacity-0 transition-opacity delay-0 duration-500 ease-smooth group-hover:opacity-100 group-hover:delay-500"
               >
-                <span className="shrink-0">
-                  <Clock size={12} strokeWidth={1.5} />
-                </span>
-                {t("home.recentBadge")} · {relativeTime(new Date(recentOpenedAt).toISOString())}
+                <Clock size={12} strokeWidth={1.5} />
+                {recentLabel}
               </span>
             </div>
           ) : (
