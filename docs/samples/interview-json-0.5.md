@@ -1,7 +1,7 @@
 # 인터뷰 결과 JSON `0.5-bpm-interface-draft` — 외부 L6 참조 계약
 
 컨설턴트 전달용. 0.4(흐름 그래프)와의 델타만 다룬다 — 나머지 키는 0.4와 동일하며 `docs/qa/interview-import-field-map.md`가 착지를 설명한다.
-설계: `docs/superpowers/specs/2026-09-07-interview-external-refs-design.md`.
+설계: `2026-09-07-interview-external-refs-design.md`(폐기 — git history).
 
 ## 1. 왜 필요한가
 

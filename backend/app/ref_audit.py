@@ -1,6 +1,6 @@
 """고아 참조 감사 — 현 조직에 없는 부서·사용자를 참조하는 12곳 온디맨드 스캔·일괄 재지정·오너 알림.
 
-설계: docs/design/2026-09-09-ref-audit-design.md. 저장 테이블 없음 — 호출 시점에 계산한다.
+설계: 2026-09-09-ref-audit-design.md (git history). 저장 테이블 없음 — 호출 시점에 계산한다.
 """
 
 from dataclasses import dataclass, field

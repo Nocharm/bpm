@@ -1,6 +1,6 @@
 # 초기 1회 셋업 모음
 
-배포 문서 전반에 흩어져 있던 **한 번만 하면 되는 작업**을 모은 문서. 매 배포마다 반복하는 절차는 각 런북에 있고([`deploy.md`](deploy.md) · [`db-migration-9910.md`](db-migration-9910.md) · [`backup.md`](backup.md) · [`kb-embedding.md`](kb-embedding.md) · [`db-seed.md`](db-seed.md)), 여기엔 **최초 1회**만 온다.
+배포 문서 전반에 흩어져 있던 **한 번만 하면 되는 작업**을 모은 문서. 매 배포마다 반복하는 절차는 각 런북에 있고([`deploy.md`](deploy.md) · [`db-migration-9910.md`](db-migration-9910.md) · [`backup.md`](backup.md) · [`kb-embedding.md`](kb-embedding.md)), 여기엔 **최초 1회**만 온다.
 
 1회성은 두 종류이고 성격이 다르다 — 섞으면 사고가 난다.
 
@@ -116,7 +116,21 @@ docker network rm bpm-9910_default 2>/dev/null   # 잔재 정리
 docker compose exec backend python -m scripts.reset_db
 ```
 
-상세·부분 시드는 [`db-seed.md`](db-seed.md). 운영 DB 복사본으로 세우는 검증 스택은 시드하지 않는다 — 복원이 곧 데이터다.
+`reset_db`는 스키마를 `drop_all`+`create_all`로 다시 만들고 종합 데모(조직도·직원 ~400·그룹 6·맵 12)를 한 번에 채운다(`backend/scripts/seed_org_demo.py`, RNG 고정). 운영 DB 복사본으로 세우는 검증 스택은 시드하지 않는다 — 복원이 곧 데이터다.
+
+### A9. db-viewer 조회용 공유 브리지 `dbv-shared` (서버 전체에 1회)
+
+compose의 db 서비스가 `external` 네트워크로 참조하므로 **없으면 `up` 자체가 실패한다**(스택 종류 무관):
+
+```bash
+docker network inspect dbv-shared -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # 10.203.0.0/24
+docker network create --subnet 10.203.0.0/24 dbv-shared      # 없을 때만
+```
+
+`10.203.0.0/24`는 db-viewer가 정한 값이고 네트워크는 **어느 compose도 소유하지 않는다**(그 저장소
+`docs/connect-sources.md`). 실제 조회를 열려면 계정 발급·소스 등록이 더 필요하다 →
+[`db-viewer-readonly.md`](db-viewer-readonly.md). 9910처럼 스택을 하나 더 세울 땐 `.env`에
+`DBV_DB_ALIAS=bpm9910-db`로 별칭을 갈라 준다(공유 네트워크라 별칭이 겹치면 엉뚱한 DB에 붙는다).
 
 ---
 
@@ -167,6 +181,6 @@ docker compose restart backend   # ⚠️ 필수 — 백필은 별도 프로세�
 
 ## C. 절대 하지 말 것
 
-- **운영 DB에 `reset_db`** — `drop_all`이라 현업 데이터가 전부 사라진다. 서버 스키마 변경은 배포(앱 기동)만으로 반영된다([`db-seed.md`](db-seed.md)).
+- **운영 DB에 `reset_db`** — `drop_all`이라 현업 데이터가 전부 사라진다. 서버 스키마 변경은 배포(앱 기동)만으로 반영된다([`deploy.md`](deploy.md) §3).
 - **`docker compose down -v`를 운영에서** — `pgdata` 볼륨이 삭제된다. 롤백은 코드만 되돌리면 된다([`deploy.md`](deploy.md) §8).
 - **`docker exec -t`로 덤프** — TTY가 붙으면 바이너리 덤프에 CR이 섞여 아카이브가 깨진다. `-i`만 쓴다.

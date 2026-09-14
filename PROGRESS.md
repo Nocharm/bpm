@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-14 — db-viewer 공유 브리지 상시 합류 + 배포 문서 정리 (dev)
+
+- db-viewer가 서버에 `dbv-shared`(`10.203.0.0/24`)를 띄우고 backend를 상시 합류시켜 둔 상태라, 2026-09-11에 되돌렸던 compose 합류를 **공유 방식으로 다시 넣었다** — db 서비스가 `default` + `dbv`(external, `DBV_NETWORK` 기본 `dbv-shared`)에 붙고 별칭은 `DBV_DB_ALIAS`(운영 `bpm-db` · 9910 `bpm9910-db`). 스택마다 별칭을 갈라야 공유 네트워크에서 엉뚱한 DB에 붙는 사고를 막는다. 되돌린 이유였던 "운영 미연결 + external 선행 요구"는 네트워크가 이미 서버에 있어 해소 — 대신 `up` 전제조건이 되었으므로 deploy §0·§5, setup-once A9에 명시.
+- 서버에서 사람이 해야 하는 나머지(네트워크 확인·볼륨 점검·`up -d db`·`dbviewer_ro` 발급과 민감 테이블 REVOKE·db-viewer `/admin` 등록)는 [`docs/deploy/db-viewer-readonly.md`](docs/deploy/db-viewer-readonly.md)로 복원. db-viewer 저장소의 `connect-sources.md`가 방식·정책 총괄이고 이 문서는 BPM 스택 부분만 담는다.
+- 문서 정리: 런칭 이후 운영 리셋이 금지라 `docs/deploy/db-seed.md`를 폐기(스키마 자동 보강 설명은 deploy §3으로 흡수, 시드 실행은 setup-once A8·README에 유지). main 머지 완료된 설계 스냅샷·구현 플랜 17건(superpowers plans 9·specs 6·ref-audit 설계·해소된 7/17 핸드오프)과 낡은 `qa/dev-vs-main-checklist.md` 삭제 — 코드 주석은 경로 접두만 떼고 파일명 유지.
+
 ## 2026-09-12 — 9월 1차 공지 초안 + 매뉴얼 6종·AI 챗 매뉴얼·슬라이드 최신화 (dev)
 
 - 08-25(8월 3차) 이후 dev 전체(feat 235·fix 91)를 `docs/notices/2026-09-12-release.md`로 정리 — 홈 개인 대시보드·L5 연계 캔버스/확정 거버넌스·슬롯 승인·역할(Role)+카탈로그·AI 역할 계약·CSV Role·노드 편집 창·낡은 참조 감사·인터뷰 임포트 0.5/리포트·백업. md 매뉴얼 3종(ko)에 09-07 이후 델타(대시보드 후속·1클릭 지연·Issues/Stale refs·레벨 상세 패널·역할/시스템 카탈로그·고아 경고·Catalogs/Orphaned refs 탭·임포트 0.5·2열 리포트·유지/교체) 반영 후 en은 에이전트가 미러. `backend/app/manual.md`(AI 챗 근거)는 7/20 이후 낡은 서술(CSV 14열·파라미터 6개·30분 자동 해제·딥 뷰)을 전면 정정하고 홈 대시보드·업무 체계 절을 신설. 슬라이드 4종은 `build_slides.py`(scratch) 증분 수술 + 신규 캡처 5종(대시보드·역할·모달·Catalogs·Orphaned refs)으로 재생성·PDF 재출력.

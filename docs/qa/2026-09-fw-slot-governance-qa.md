@@ -1,6 +1,6 @@
 # Framework 슬롯 거버넌스 QA (2026-09)
 
-설계 `docs/superpowers/specs/2026-09-06-fw-slot-governance-design.md`. 자동 항목은 `frontend/scripts/pw-smoke-framework-slot.mjs`·pytest `tests/test_framework_slots.py`가 검사하고, 수동 항목은 구현자가 실브라우저로 확인해 결과 열에 기록한다(사용자 지시 2026-09-06: 기능·시나리오 둘 다, 브라우저 검증 직접 수행).
+설계 `2026-09-06-fw-slot-governance-design.md`(폐기 — git history). 자동 항목은 `frontend/scripts/pw-smoke-framework-slot.mjs`·pytest `tests/test_framework_slots.py`가 검사하고, 수동 항목은 구현자가 실브라우저로 확인해 결과 열에 기록한다(사용자 지시 2026-09-06: 기능·시나리오 둘 다, 브라우저 검증 직접 수행).
 
 **환경**: `reset_db` 시드 + backend 8000(`DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys AI_ENABLED=false`) + frontend 3000 네이티브, 시스템 Chrome(playwright-core). 계정: `admin.sys`(sysadmin) · `slot.l5admin`(L5 직속 관리자) · `slot.owner`(L6 owner, 비관리자).
 

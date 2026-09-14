@@ -9,7 +9,7 @@
 - [`deploy/setup-once.md`](deploy/setup-once.md) — **초기 1회 셋업 모음**(스택 구축 1회 A절 · 릴리스 이후 1회 B절). 다른 배포 문서가 여기를 참조한다.
 - [`deploy/deploy.md`](deploy/deploy.md) — 서버 docker-compose 배포 절차(매 배포 반복분 — 포트·nginx 토폴로지·인증 모드·헬스체크·트러블슈팅·롤백).
 - [`deploy/backup.md`](deploy/backup.md) — DB 자동 백업 정책(db-backup 사이드카, 일간 04:00 KST·14일 보존)·복구 런북.
-- [`deploy/db-seed.md`](deploy/db-seed.md) — DB 초기화·데모 시드(`python -m scripts.reset_db`).
+- [`deploy/db-viewer-readonly.md`](deploy/db-viewer-readonly.md) — db-viewer(:6678) 읽기전용 조회 연결의 **서버 수작업분**(공유 브리지 `dbv-shared` 확인·`dbviewer_ro` 발급·소스 등록). compose 합류는 이미 반영돼 있다.
 - [`deploy/db-migration-9910.md`](deploy/db-migration-9910.md) — 운영 DB 복사 → 검증 스택(9910) 마이그레이션 절차.
 - [`deploy/kb-embedding.md`](deploy/kb-embedding.md) — 지식기반(P2) 임베딩 설정(`EMBED_*`)·게시본 백필 절차.
 
@@ -18,7 +18,6 @@
 - [`qa/node-spacing-qa.md`](qa/node-spacing-qa.md) — height-shift(노드 간격 자동 재조정) 브라우저 QA T라운드 8항목(워스트 겹침·트윈·그룹/PNG·무오염·인라인 배제).
 - [`qa/2026-08-20-field-promotion-qa.md`](qa/2026-08-20-field-promotion-qa.md) — 인터뷰 필드 승격 실브라우저 QA 29항목(스모크 `pw-smoke-field-promotion.mjs` 주도).
 - [`qa/governance-ux-checklist.md`](qa/governance-ux-checklist.md) — 거버넌스 UX 4페이즈(P0 라이프사이클·C 승인 탭·B 카드 멤버·A 게시 동봉) 사용자 실검증 체크리스트.
-- [`qa/dev-vs-main-checklist.md`](qa/dev-vs-main-checklist.md) — dev↔main 미반영 3묶음(컨설턴트 체계·HR 웹훅·조직 기준 전환)의 배포 순서·서버 확인 항목·백로그 12건.
 - [`qa/alarm-audit.md`](qa/alarm-audit.md) — 알림 기능 전수 조사·감사.
 - [`qa/2026-09-fw-slot-governance-qa.md`](qa/2026-09-fw-slot-governance-qa.md) — 슬롯 거버넌스 기능·시나리오 QA (기능 26·시나리오 10·스모크 `pw-smoke-framework-slot.mjs`).
 
@@ -33,7 +32,6 @@
 ## 설계 기록 ([`design/`](design/README.md))
 - [`design/2026-09-12-catalog-alias-node-swap-design.md`](design/2026-09-12-catalog-alias-node-swap-design.md) — 카탈로그 별칭(정식 표기 치환·CSV 2열·탭 편집) + 노드 담당자/시스템 줄 휴식↔활성 페이드 전환(1초 상수) + 노드 내 칩 흑백 (**dev 구현 완료**).
 - [`design/2026-09-11-assignee-role-catalog-design.md`](design/2026-09-11-assignee-role-catalog-design.md) — 노드 역할(assignee_role) 단일값 칸 + 재사용 자동완성 엔진(`SuggestInput`·`/catalogs`) + 시스템 정규화(자유값→`Other`+폴백) + 설정 Catalogs 탭(CSV 임포트) (**dev 구현 완료**(CSV/AI 노출 후속)).
-- [`design/2026-09-09-ref-audit-design.md`](design/2026-09-09-ref-audit-design.md) — 고아 참조 감사: 부서·사용자 참조 12곳 캐치·체크 기반 일괄 재지정·오너 알림·홈 배지 (구현 완료, feat/ux-polish).
 - [`design/2026-09-01-interview-import-v04-result.md`](design/2026-09-01-interview-import-v04-result.md) — 인터뷰 JSON 0.4 임포트 최종 결과·확장 계획·한계·후속 점검(핸드오프).
 
 아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).

@@ -76,6 +76,7 @@ git diff <운영커밋>..<검증커밋> -- backend/app/db.py backend/app/models.
   cp /path/to/운영/.env .env.9910
   # 수정: APP_PORT=9910
   # 검증 중에는 HR_SYNC_INTERVAL_HOURS=0 (스케줄러 OFF, 수동 sync로만 진행)
+  # db-viewer 조회용 별칭은 운영과 갈라야 한다: DBV_DB_ALIAS=bpm9910-db (db-viewer-readonly.md)
   ```
   ⚠️ compose backend에는 `env_file:`이 없다 — 신규 키는 `docker-compose.yml`의 `environment:` 블록에 매핑돼 있어야 컨테이너에 닿는다.
 - [ ] 잔재 네트워크 정리:
@@ -270,7 +271,7 @@ docker exec -i "$DEV_DB" psql -U processmap -d processmap -c \
 
 ## 8. 화면 검증 — 묶음별 스모크
 
-기본 스모크(맵 목록·에디터 로드·저장·버전 비교) + 이번 회차 추가분. 상세 항목 원본: [`docs/qa/dev-vs-main-checklist.md`](../qa/dev-vs-main-checklist.md) — 통과한 체크박스는 그 문서에서 소거.
+기본 스모크(맵 목록·에디터 로드·저장·버전 비교) + 이번 회차 추가분.
 
 - [ ] **운영 데이터 보존**: §4-2 행수와 화면(맵·버전·알림) 대조. 검증 중 만든 데이터는 복사본에만 남는다.
 - [ ] **L5 연계 캔버스**(이번 회차): 홈 Framework 트리의 L5 행에서 연계 캔버스 진입 → 소속 L6 잠금·분기/끝 노드 허용·확정 게이트 → 확정 시 `fw_major`/`fw_minor` 채번, 메이저 승급 시 프룬 모달. 플레이스홀더 SP(미등록 링크)에 출처 L5 배지가 뜨는지. 카테고리 권한자 관리 모달(sysadmin)에서 부여한 권한이 하위 카테고리로 상속되는지.

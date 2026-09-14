@@ -119,6 +119,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    # db-viewer(:6678) 읽기전용 조회용 공유 브리지 합류 (docs/deploy/db-viewer-readonly.md)
+    # networks:를 명시하는 순간 default 자동 연결이 사라지므로 default를 반드시 함께 적는다.
+    networks:
+      default:
+      dbv:
+        # 공유 네트워크에는 여러 서비스의 db가 함께 있다 — 별칭이 유일한 구별 수단이라 스택마다 다르게
+        # (운영=bpm-db · 검증 9910=.env의 DBV_DB_ALIAS=bpm9910-db).
+        aliases: ["${DBV_DB_ALIAS:-bpm-db}"]
     deploy:
       resources:
         limits:
@@ -163,3 +171,9 @@ networks:
       config:
         - subnet: 172.36.0.0/16
           gateway: 172.36.0.1
+  # db-viewer가 소유하는 공유 브리지 — 서버에서 먼저 만들어 둔다(external, 어느 compose도 소유하지 않음).
+  # 없으면 up이 "network dbv-shared declared as external, but could not be found"로 실패한다:
+  #   docker network create --subnet 10.203.0.0/24 dbv-shared
+  dbv:
+    external: true
+    name: ${DBV_NETWORK:-dbv-shared}

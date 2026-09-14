@@ -1,6 +1,6 @@
 """재임포트 거버넌스 확인 적용 — dry-run이 오너·오우닝 부서·승인자 차이를 내고, apply는 체크한 것만 교체.
 
-설계: docs/superpowers/specs/2026-09-03-import-governance-review-design.md §3·§4.
+설계: 2026-09-03-import-governance-review-design.md §3·§4 (git history).
 """
 
 from fastapi.testclient import TestClient

@@ -9,6 +9,8 @@
 - 서버에 Docker / Docker Compose v2 설치 → [`setup-once.md`](setup-once.md) A1
 - 코드 전송 완료(scp 또는 gitlab pull) — 줄바꿈은 `.gitattributes`로 LF 고정되어 Windows 경유해도 안전
 - Keycloak public 클라이언트 등록 + 인증/AD 인프라 확인 → 아래 §1
+- **공유 브리지 `dbv-shared` 존재**(db-viewer 조회용, compose가 `external`로 참조) → [`setup-once.md`](setup-once.md) A9.
+  없으면 `up`이 `network dbv-shared declared as external, but could not be found`로 **기동 전에 실패**한다
 
 ## 1. Keycloak 클라이언트 + AD 사전 준비 (최초 1회)
 
@@ -106,10 +108,13 @@ docker compose up -d --build
 - `AUTH_MODE`/`AUTH_ENABLED`/`KEYCLOAK_*`/`AUTH_JWT_SECRET`는 backend **런타임** 환경변수(§2.1) → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영. frontend는 부팅 시 backend에 조회하므로 재빌드 불필요.
 - `LDAP_*`는 backend **런타임** 환경변수 → 값만 바꾸면 `docker compose up -d`(재빌드 불필요)로 backend 재생성 시 반영.
 - `AI_*`(AI_ENDPOINTS 포함)는 backend **런타임** 환경변수 → 모델 추가/삭제는 `.env` 수정 후 `docker compose up -d`로 backend 재생성(재빌드 불필요).
-- DB 스키마는 backend 기동 시 `create_all` + `_add_missing_columns`로 보강(마이그레이션은 후속). 신규 테이블·컬럼은 자동 생성되지만 **제거된 테이블은 드롭되지 않는다.**
+- DB 스키마는 backend 기동 시 `create_all` + `_add_missing_columns`로 보강(마이그레이션은 후속) — **배포만으로 컬럼 추가·신규 테이블이 반영된다. 서버에서 리셋할 일은 없다.** 주의할 것은 두 가지:
+  - **새 컬럼은 `backend/app/db.py`의 `_ADDED_COLUMNS`에 수동 등록**해야 자동 ALTER가 돈다(누락하면 서버에서 `column does not exist`로 터진다).
+  - **컬럼 삭제·개명·테이블 제거는 자동 반영되지 않는다** — 구 컬럼이 DB에 남고, 그것이 `NOT NULL`이면 INSERT가 깨진다. 그런 변경은 배포 전에 직접 `DROP`하거나 nullable로 바꾼다.
 - 프룬 도입(2026-07-09) 후 첫 AD 전체 동기화는 스테일 ad 행을 대량 삭제할 수 있음(비활성·퇴사자). 삭제 행의 한글이름/한글부서도 함께 사라지므로, 동기화 전 한글이름 모달의 전체 목록 추출로 백업 권장.
 - **1회성 후처리는 [`setup-once.md`](setup-once.md) B절에 모아뒀다** — `ai_chat_logs` 드랍(B1) · KB 게시본 백필(B2) · 필드 승격 재임포트(B3) · HR 첫 sync와 고아 경로 이관(B4) · 노출 직책 확정(B5). 지난 릴리스라면 이미 끝났을 수 있으니 해당 항목만 골라 확인한다.
-- **데모 데이터 시드**는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `reset_db`는 `drop_all`이라 **운영에서 실행 금지**.
+- **데모 데이터 시드**(`backend/scripts/reset_db.py`)는 빈 DB 전용 → [`setup-once.md`](setup-once.md) A8. ⚠️ `drop_all`이라 **운영에서 실행 금지**.
+- **db-viewer 읽기전용 조회**를 새 스택에 처음 붙일 때만 → [`db-viewer-readonly.md`](db-viewer-readonly.md)(계정 발급·소스 등록은 서버 수작업). 매 배포에 반복하지 않는다.
 
 ## 4. 헬스체크 + 인증/AD 검증
 
@@ -137,6 +142,7 @@ curl -s http://localhost:9900/api/auth/mode; echo  # issuer·clientId가 채워�
 | 증상 | 확인 |
 |------|------|
 | **로그인 버튼 무반응 + `/api/auth/mode` 무응답** | backend 기동 실패. 아래 두 행을 먼저 볼 것 |
+| `up`이 `network dbv-shared ... could not be found` | 공유 브리지 미생성/삭제 — `docker network create --subnet 10.203.0.0/24 dbv-shared` 후 재실행 ([`db-viewer-readonly.md`](db-viewer-readonly.md) §2) |
 | backend 로그에 `SyntaxError`(import 단계) | **로컬 파이썬이 배포 런타임보다 높다.** 배포 이미지는 `python:3.11-slim` — 로컬 3.12+에서 짠 상위 문법(PEP 695 제네릭 `def f[T]()` 등)은 서버에서만 죽는다. `backend/ruff.toml`의 `target-version = "py311"`이 린트에서 잡는다(2026-08-31 실사고) |
 | backend 로그에 `AUTH_MODE=ldap requires AUTH_JWT_SECRET` | `.env`에 서명키 누락 — `openssl rand -hex 32` |
 | `/api/auth/mode`의 `keycloakClientId`가 빈 문자열 | `.env`에 `KEYCLOAK_CLIENT_ID` 누락. compose 기본값이 빈 문자열이라 **에러 없이 조용히** 빈 값이 들어간다 → Keycloak `Invalid parameter: client_id` |

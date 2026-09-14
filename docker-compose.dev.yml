@@ -10,6 +10,9 @@
 #
 # 병합이 정상인 환경에서의 실행:
 #   docker compose -p bpm-dev -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d --build
+#
+# db-viewer 조회용 공유 브리지(dbv-shared)는 운영 compose에 이미 있다 — 이 스택은 .env에서
+# DBV_DB_ALIAS=bpm9910-db 로 별칭만 갈라 운영 db와의 이름 충돌을 막는다(docs/deploy/db-viewer-readonly.md).
 networks:
   default:
     driver: bridge

@@ -4,7 +4,7 @@
 무엇이 조용히 다르게 변환될 수 있는지. 실파일 대조 시 이 표를 기준으로 dry-run 리포트를 읽는다.
 
 구현: `backend/scripts/consultant_interview.py`(어댑터) · `backend/scripts/import_consultant.py`(엔진).
-설계: `2026-09-01-interview-import-v04-design.md` · 0.5 외부 참조: `docs/superpowers/specs/2026-09-07-interview-external-refs-design.md`(컨설턴트 계약 `docs/samples/interview-json-0.5.md`).
+설계: `2026-09-01-interview-import-v04-design.md` · 0.5 외부 참조: 컨설턴트 계약 `docs/samples/interview-json-0.5.md`(설계 `2026-09-07-interview-external-refs-design.md`는 폐기 — git history).
 
 ---
 
