@@ -95,7 +95,9 @@ curl -s http://localhost:9900/api/health          # {"status":"ok"}
 ## 5. 읽기전용 계정 `dbviewer_ro`
 
 ```bash
-docker compose exec db psql -U processmap -d processmap
+# 컨테이너를 직접 지정한다 — compose exec는 프로젝트명(-p)·--env-file 조합이 어긋나면 자주 실패한다(실측).
+DB=business-process-mgmt-db-1        # 9910 스택이면 bpm-9910-db-1
+docker exec -it $DB psql -U processmap -d processmap
 ```
 
 ```sql
@@ -124,15 +126,15 @@ REVOKE SELECT ON local_credentials, login_records,
 위 SQL은 `dbviewer-ro.sql`로 저장해 두면 재실행이 한 줄이다(§7의 볼륨 삭제 복구에 쓴다):
 
 ```bash
-docker compose exec -T db psql -U processmap -d processmap < dbviewer-ro.sql
+docker exec -i $DB psql -U processmap -d processmap < dbviewer-ro.sql   # 파이프 입력은 -i만 (-t 금지)
 ```
 
 ✅ 통과 기준 — 별도 세션에서:
 
 ```bash
-docker compose exec db psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM process_maps;"      # 숫자
-docker compose exec db psql -U dbviewer_ro -d processmap -c "CREATE TABLE zzz_probe (id int);"        # permission denied
-docker compose exec db psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM local_credentials;" # permission denied
+docker exec -i $DB psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM process_maps;"      # 숫자
+docker exec -i $DB psql -U dbviewer_ro -d processmap -c "CREATE TABLE zzz_probe (id int);"        # permission denied
+docker exec -i $DB psql -U dbviewer_ro -d processmap -c "SELECT count(*) FROM local_credentials;" # permission denied
 ```
 
 ## 6. db-viewer `/admin` 등록
@@ -167,7 +169,7 @@ docker compose exec db psql -U dbviewer_ro -d processmap -c "SELECT count(*) FRO
 | db 재생성 후 backend가 db를 못 찾음 / 502 | compose `db.networks`에서 `default:`가 빠졌다(명시하는 순간 자동 연결이 사라진다) |
 | backend 로그 `ConnectionDoesNotExistError` 몇 건 | db 재생성 직후 풀의 구 연결 — `restart backend`(§4) |
 | 연결 테스트 초록인데 `database`가 다른 이름 | 별칭 충돌·오타 — host를 `bpm-db`/`bpm9910-db`로(§1) |
-| 연결 테스트 502 | 별칭 해석 실패·비밀번호 오류. db-viewer에서 `docker compose exec backend python -c "import socket; print(socket.gethostbyname('bpm-db'))"` → `10.203.0.x` |
+| 연결 테스트 502 | 별칭 해석 실패·비밀번호 오류. db-viewer에서 `docker exec -i dbviewer-backend-1 python -c "import socket; print(socket.gethostbyname('bpm-db'))"`(컨테이너명은 `docker ps`로 확인) → `10.203.0.x` |
 | 연결 테스트 503 | db-viewer `SOURCE_SECRET_KEY` 미설정/불일치 — 그쪽 런북 |
 | 미리보기가 비어 있음 | 허용 스키마 미등록(§6-4) 또는 REVOKE 한 테이블 |
 | 새 릴리스 후 신규 테이블이 안 보임 | `ALTER DEFAULT PRIVILEGES` 누락(§5) — 실행 후 카탈로그 재수집 |
