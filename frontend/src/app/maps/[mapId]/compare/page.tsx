@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
@@ -69,6 +69,7 @@ import {
   type VersionSummary,
 } from "@/lib/api";
 import {
+  EDGE_LABEL_MAX_WIDTH,
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
   type HandleSide,
@@ -174,10 +175,14 @@ function LabeledSmoothEdge({
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
       {label && (
         <EdgeLabelRenderer>
+          {/* 최대폭 + 자동 줄바꿈 — 에디터(multiline-edge)와 같은 EDGE_LABEL_MAX_WIDTH. 수평 연결에서
+              긴 라벨이 이웃 노드를 덮거나 잘리지 않게 (사용자 요청 2026-09-18) */}
           <div
-            className="pointer-events-none absolute rounded-xs px-1 text-fine text-ink-secondary"
+            className="pointer-events-none absolute whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              maxWidth: EDGE_LABEL_MAX_WIDTH,
+              overflowWrap: "break-word",
               background: "color-mix(in srgb, var(--color-surface) 55%, transparent)",
               backdropFilter: "blur(3px)",
               WebkitBackdropFilter: "blur(3px)",
@@ -193,13 +198,13 @@ function LabeledSmoothEdge({
 
 const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoothEdge };
 
-// 비교뷰 노드 컨텍스트 — 변경은 diff 필로 보여주므로 박스의 BPM 필드 줄을 숨긴다(속성 4종 제외).
-// 노드 높이가 내용과 무관하게 균일해져 백본 정렬(alignBackbone)이 정확해지고 중복 표시도 제거.
-// 파라미터 칩("params")은 종전처럼 항상 표시 — 에디터 토글과 무관.
+// 비교뷰 노드 컨텍스트 — AI 프리뷰와 같이 역할·부서·시스템 줄 + 파라미터 칩을 기본 표시(값 있는 것만).
+// 변경 전후는 노드 아래 diff 필이 따로 보여준다. 노드 높이가 내용에 따라 달라지므로 배치·백본 정렬·핸들
+// 중심은 실측(measured) 크기로 계산한다(measuredSizes) — 고정 상수 가정 폐기 (사용자 요청 2026-09-18).
 const COMPARE_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: ["params"],
+  displayFields: ["assignee", "department", "system", "params"],
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
@@ -347,6 +352,7 @@ function buildAppNodes(
       department: m.node.department,
       system: m.node.system,
       duration: m.node.duration,
+      touch_time: m.node.touch_time,
       cost_krw: m.node.cost_krw,
       cost_usd: m.node.cost_usd,
       headcount: m.node.headcount,
@@ -395,13 +401,16 @@ const COMPARE_RENDER_W: Record<string, number> = {
 
 // 비교뷰 실측 크기 함수 — 공용 alignBackbone에 주입(에디터는 measured, 비교는 위 상수표).
 // 터미널은 커스텀 라벨의 타입 필 줄(+18px)로 커진 높이를 근사(백본 중심 정렬용 — 노트는 캔버스 미노출).
+// 실측(measured)이 주입돼 있으면 그 값 — 속성 줄·파라미터 칩으로 높이가 달라진 노드도 정확히 정렬.
+// 상수표는 첫 렌더(측정 전) 폴백.
 const compareRenderH = (node: AppNode) => {
+  if (node.measured?.height) return node.measured.height;
   const base = COMPARE_RENDER_H[node.data.nodeType] ?? 38;
   if (node.data.nodeType !== "start" && node.data.nodeType !== "end") return base;
   return hasCustomTerminalLabel(node.data.label) ? base + 18 : base;
 };
 const compareRenderW = (node: AppNode) =>
-  COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
+  node.measured?.width ?? COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
 
 function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
   return merged.map((e) => {
@@ -732,6 +741,14 @@ function ComparePane({
   const [titleMenuOpen, setTitleMenuOpen] = useState(false);
   // 인스펙터 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계). 요약 카드별 펼침/숨김 + 항목 드롭다운.
   const [inspectorTab, setInspectorTab] = useState<"props" | "summary">("props");
+  // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
+  const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
+  // 노드 실측 크기 — RF dimensions 변경에서 수집. 배치(dagre)·백본 정렬·핸들 중심이 이 값을 쓴다.
+  // 첫 렌더는 상수표로 배치하고 측정이 오면 1회 재배치 후 fitView.
+  const [measuredSizes, setMeasuredSizes] = useState<Map<string, { width: number; height: number }>>(
+    () => new Map(),
+  );
+  const refitAfterMeasureRef = useRef(false);
   const [openParams, setOpenParams] = useState<ReadonlySet<string>>(new Set());
   const [hiddenSums, setHiddenSums] = useState<ReadonlySet<string>>(new Set());
   const [sumMenuOpen, setSumMenuOpen] = useState(false);
@@ -753,6 +770,21 @@ function ComparePane({
   // 재계산되어 전 노드/엣지가 새 identity로 재렌더 → 캔버스 전체가 새로고침되듯 끊겼다.
   const handleNodesChange = (changes: NodeChange<AppNode>[]) => {
     setRfNodes((nds) => applyNodeChanges(changes, nds));
+    // 실측 수집 — 값이 실제로 바뀐 노드가 있을 때만 state 교체(재배치 1회, 루프 없음)
+    let next: Map<string, { width: number; height: number }> | null = null;
+    for (const change of changes) {
+      if (change.type !== "dimensions" || !change.dimensions) continue;
+      const width = Math.round(change.dimensions.width);
+      const height = Math.round(change.dimensions.height);
+      const prev = (next ?? measuredSizes).get(change.id);
+      if (prev && prev.width === width && prev.height === height) continue;
+      next ??= new Map(measuredSizes);
+      next.set(change.id, { width, height });
+    }
+    if (next) {
+      refitAfterMeasureRef.current = true;
+      setMeasuredSizes(next);
+    }
   };
   // 드롭 시점에만 세션 위치 커밋 — 핸들 변(handleSides)·센터 재계산이 1회로 끝난다.
   const handleNodeDragStop = (_e: unknown, _node: AppNode, nodes: AppNode[]) => {
@@ -837,12 +869,20 @@ function ComparePane({
           refs: { ...baseGraph.subprocess_refs, ...targetGraph.subprocess_refs },
         }
       : null;
+    // 실측 크기 주입 — dagre 박스·백본 정렬·핸들 중심·removed 오프셋이 모두 실제 높이로 계산된다
+    const withMeasured = (nodes: AppNode[]) =>
+      nodes.map((node) => {
+        const size = measuredSizes.get(node.id);
+        return size ? { ...node, measured: size } : node;
+      });
     const laid = layoutWithDagre(
-      buildAppNodes(
-        merged.nodes.filter((node) => node.status !== "removed"),
-        noteOf,
-        fieldsOf,
-        spVisual,
+      withMeasured(
+        buildAppNodes(
+          merged.nodes.filter((node) => node.status !== "removed"),
+          noteOf,
+          fieldsOf,
+          spVisual,
+        ),
       ),
       buildAppEdges(layoutEdges, keptKeys),
       flowDir,
@@ -862,11 +902,13 @@ function ComparePane({
     // 곁가지 방향(LR=아래, TB=오른쪽)으로 순차 오프셋.
     const occupiedSlots = new Set<string>();
     const slotKey = (x: number, y: number) => `${Math.round(x / 40)}:${Math.round(y / 40)}`;
-    const removed = buildAppNodes(
-      merged.nodes.filter((node) => node.status === "removed"),
-      noteOf,
-      fieldsOf,
-      spVisual,
+    const removed = withMeasured(
+      buildAppNodes(
+        merged.nodes.filter((node) => node.status === "removed"),
+        noteOf,
+        fieldsOf,
+        spVisual,
+      ),
     ).map((node) => {
       const neighbors = merged.edges
         .filter((edge) => edge.status === "removed" && (edge.source === node.id || edge.target === node.id))
@@ -886,7 +928,7 @@ function ComparePane({
       return { ...node, position: { x, y } };
     });
     return [...aligned, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph]);
+  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -897,8 +939,8 @@ function ComparePane({
       const type = node.data.nodeType;
       const pos = sessionPos.get(`${layoutKey}|${node.id}`) ?? node.position;
       centers.set(node.id, {
-        cx: pos.x + (COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w) / 2,
-        cy: pos.y + (COMPARE_RENDER_H[type] ?? 38) / 2,
+        cx: pos.x + (node.measured?.width ?? COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w) / 2,
+        cy: pos.y + (node.measured?.height ?? COMPARE_RENDER_H[type] ?? 38) / 2,
       });
     }
     return centers;
@@ -955,7 +997,13 @@ function ComparePane({
   useEffect(() => {
     // laidNodes는 rfNodes와 무관하게 산출 — cascade 루프 없음 (lessons react-ts §3)
     setRfNodes(laidNodes);
-  }, [laidNodes]);
+    // 실측 재배치 직후 — 초기 fitView는 측정 전 좌표 기준이라 다시 맞춘다
+    if (refitAfterMeasureRef.current) {
+      refitAfterMeasureRef.current = false;
+      const id = window.requestAnimationFrame(() => void flow.fitView({ padding: 0.2 }));
+      return () => window.cancelAnimationFrame(id);
+    }
+  }, [laidNodes, flow]);
 
   // 포커스된 엣지는 굵게 강조
   const appEdges = useMemo(
@@ -1339,7 +1387,7 @@ function ComparePane({
       if (node) {
         // 세션 드래그로 옮긴 노드는 옮긴 좌표로 센터링
         const pos = sessionPos.get(`${layoutKey}|${node.id}`) ?? node.position;
-        const size = nodeSizeOf(node.data.nodeType);
+        const size = { w: compareRenderW(node), h: compareRenderH(node) };
         void flow.setCenter(pos.x + size.w / 2, pos.y + size.h / 2, {
           duration: 350,
           zoom: flow.getZoom(),
@@ -1696,6 +1744,32 @@ function ComparePane({
                   {tab.label}
                 </button>
               ))}
+              {inspectorTab === "props" && selectedNode ? (
+                // 속성 범위 — 모두 / 변경만. 변경 노드가 아니면 "변경만"은 의미가 없어 비활성.
+                <div className="ml-auto flex items-center gap-0.5 rounded-sm border border-hairline p-0.5" data-id="compare-inspector-scope">
+                  {(
+                    [
+                      { key: "all", label: t("compare.scopeAll") },
+                      { key: "changed", label: t("compare.scopeChanged") },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      data-id={`compare-inspector-scope-${opt.key}`}
+                      onClick={() => setPropsScope(opt.key)}
+                      disabled={opt.key === "changed" && selectedNode.status !== "changed"}
+                      className={`rounded-xs px-1.5 py-0.5 text-fine disabled:cursor-default disabled:opacity-40 ${
+                        propsScope === opt.key
+                          ? "bg-accent-tint font-semibold text-accent"
+                          : "text-ink-secondary hover:bg-surface-alt"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {inspectorTab === "summary" ? (
                 // 요약 항목 표시 선택 — 체크 해제=숨김, 숨긴 개수는 (-N)으로 표기 (읽기전용 필 대체)
                 <div className="relative ml-auto">
@@ -2054,24 +2128,37 @@ function ComparePane({
               <div className="px-3 py-3 text-caption text-ink-tertiary">
                 {t("compare.selectNode")}
               </div>
-            ) : (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
+            ) : (() => {
+              // 변경만 — 변경 노드에서 바뀐 필드만 남긴다(제목·설명·타입·색 포함). 그 외 노드는 모두 표시.
+              const changedOnly = propsScope === "changed" && selectedNode.status === "changed";
+              const hasChange = (field: ChangedField) =>
+                selectedNode.fieldChanges.some((fc) => fc.field === field);
+              const show = (field: ChangedField) => !changedOnly || hasChange(field);
+              return (
+              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3" data-id="compare-inspector-props">
+                {show("title") && (
                 <div>
                   <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG.title)}</div>
                   <div className="rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
                     {selectedNode.node.title || t("summary.none")}
                   </div>
                 </div>
+                )}
+                {show("description") && (
                 <div>
                   <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG.description)}</div>
                   <div className="min-h-[2rem] whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption leading-relaxed text-ink-tertiary">
                     {selectedNode.node.description || t("summary.none")}
                   </div>
                 </div>
+                )}
                 <div className="divide-y divide-divider">
+                  {show("type") && (
                   <InspectorRow label={t(FIELD_MSG.type)}>
                     {t(`nodeType.${normalizeNodeType(selectedNode.node.node_type)}` as MessageKey)}
                   </InspectorRow>
+                  )}
+                  {show("color") && (
                   <InspectorRow label={t(FIELD_MSG.color)}>
                     {selectedNode.node.color ? (
                       <span
@@ -2085,6 +2172,7 @@ function ComparePane({
                       <span className="text-ink-tertiary">{t("summary.none")}</span>
                     )}
                   </InspectorRow>
+                  )}
                   {(
                     [
                       "assignee",
@@ -2100,7 +2188,7 @@ function ComparePane({
                       "fte",
                       "gmp",
                     ] as const
-                  ).map((key) => {
+                  ).filter(show).map((key) => {
                     const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
                     const current = displayFieldValue(key, selectedNode.node[key] || "");
                     return (
@@ -2140,7 +2228,7 @@ function ComparePane({
                       change: selectedNode.fieldChanges.find((fc) => fc.field === key),
                       current: selectedNode.node[key] ?? "",
                     }))
-                    .filter((row) => row.change || row.current);
+                    .filter((row) => (changedOnly ? row.change : row.change || row.current));
                   if (rows.length === 0) return null;
                   return (
                     <div className="flex flex-col gap-2" data-id="compare-inspector-io">
@@ -2170,7 +2258,8 @@ function ComparePane({
                   );
                 })()}
               </div>
-            )}
+              );
+            })()}
           </aside>
         )}
       </div>

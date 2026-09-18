@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-18 — 비교 화면 워스트케이스 개선 4종: 엣지 라벨 줄바꿈·속성 범위 토글·전 파라미터 표시·실측 배치 (main)
+
+- 65노드·78변경 워스트케이스(스크래치 시드, 저장소 미포함)로 비교 화면을 실측한 뒤 사용자 지적 4건 반영. ① 비교 엣지 라벨에 에디터와 같은 `EDGE_LABEL_MAX_WIDTH`(160) + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게. ② 속성 탭에 "모두 / 변경만" 범위 토글(기본 변경만) — 변경 노드는 바뀐 필드만(제목·설명·타입·색 포함), 추가·삭제·무변경 노드는 토글 비활성+전체 표시. ③ 비교 노드 표시 필드를 AI 프리뷰와 같은 역할·부서·시스템·파라미터 칩으로(값 있는 것만, 전후는 기존 diff 필). `buildAppNodes`에 `touch_time` 누락 보강.
+- ④ 자동정렬 검토: 비교 화면은 `COMPARE_RENDER_H`(process 38) 고정 상수로 백본 정렬·핸들 중심을 계산했고, 공용 `layoutWithDagre`는 `nodeSizeOf` 고정 박스로 배치해 속성 줄이 켜지면 같은 열 이웃과 겹칠 수 있었다. `layoutWithDagre`가 `node.measured`를 우선하도록 바꾸고(에디터 자동정렬도 실측 박스 사용), 비교·프리뷰 모두 RF `dimensions` 변경에서 실측을 모아 1회 재배치 후 fitView. 상수표는 측정 전 폴백으로만 남긴다. 단위 테스트: 실측 300px 노드가 nodesep(120)만큼 띄워지는지.
+- 주의: `tsc`가 dev 서버 산출물 `.next/dev/types`를 포함해 에디터 `page.tsx`의 기존 `toAppEdges` named export를 Next 페이지 계약 위반으로 잡는다(이번 변경과 무관, dev 서버 기동 후에만 발생).
+
 ## 2026-09-18 — AI 컨설턴트 프리뷰 노드 속성 표시 + Tab 이동, PNG 내보내기 선택 해제 (main)
 
 - 프리뷰가 노드 라벨만 보여 수집된 파라미터를 한눈에 못 본다는 피드백 — 원인은 `layoutWorkingGraph`가 AI `attributes`를 노드 data로 안 옮기고 전부 빈값으로 채운 것(파라미터 칩 토글은 이미 ON). 역할·부서·시스템·회당 7필드를 data에 싣고 프리뷰 표시 필드를 인스펙터 카드와 같은 범위(`assignee`·`department`·`system`·`params`)로 확장. IO·조건·URL은 노드 높이를 키워 제외(카드에서 확인). 선택지 카드 썸네일도 같은 컨텍스트라 함께 표시된다.

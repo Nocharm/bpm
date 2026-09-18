@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
-import type { Node, NodeTypes } from "@xyflow/react";
+import type { Node, NodeChange, NodeTypes } from "@xyflow/react";
 import { CheckCheck, MessageSquarePlus, PenLine, Table2, Undo2, Workflow, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 
@@ -118,8 +118,10 @@ function PreviewCanvas({
   // 클릭 포커스 노드(=인스펙터 대상) — 선택 링 표시 + 클릭 시 카메라 센터/줌 (2026-07-30)
   focusedKey: string | null;
 }) {
+  // 노드 실측 크기 — 속성 줄·파라미터 칩으로 높이가 달라지므로 측정 뒤 1회 재배치(+재fit)
+  const [sizes, setSizes] = useState<Map<string, { width: number; height: number }>>(() => new Map());
   const { nodes, edges } = useMemo(() => {
-    const laid = layoutWorkingGraph(graph, added);
+    const laid = layoutWorkingGraph(graph, added, undefined, sizes);
     // layoutWorkingGraph의 엣지는 스타일 미지정(화살표 없음) — 에디터/비교와 동일한 기본 엣지 스타일을 입힌다.
     // selected 주입 — elementsSelectable=false라 RF 대신 우리가 관리(ProcessNode 선택 링 재사용).
     return {
@@ -130,8 +132,25 @@ function PreviewCanvas({
         focusedKey ? new Set([focusedKey]) : EMPTY_KEYS,
       ),
     };
-  }, [graph, added, focusedKey]);
+  }, [graph, added, focusedKey, sizes]);
   const { fitView, flowToScreenPosition, setCenter, getZoom } = useReactFlow();
+  const lastFitRef = useRef<string | null>(null);
+  function handleNodesChange(changes: NodeChange<Node>[]) {
+    let next: Map<string, { width: number; height: number }> | null = null;
+    for (const change of changes) {
+      if (change.type !== "dimensions" || !change.dimensions) continue;
+      const width = Math.round(change.dimensions.width);
+      const height = Math.round(change.dimensions.height);
+      const prev = (next ?? sizes).get(change.id);
+      if (prev && prev.width === width && prev.height === height) continue;
+      next ??= new Map(sizes);
+      next.set(change.id, { width, height });
+    }
+    if (next) {
+      lastFitRef.current = null; // 재배치 후 카메라를 다시 맞춘다
+      setSizes(next);
+    }
+  }
 
   // 포커스 줌 — 노드를 중앙으로 부드럽게(축소돼 있으면 1.1까지 확대, 확대 상태는 유지). 클릭·Tab 공용.
   const centerOnNode = useCallback(
@@ -174,7 +193,6 @@ function PreviewCanvas({
   // 구조가 실제로 바뀐 때만 카메라 리셋 — 맵이 안 변한 텍스트 턴마다 fitView가
   // 사용자 팬/줌 시점을 뺏지 않게 서명으로 게이팅 (hardening T12)
   const signature = useMemo(() => getGraphSignature(graph), [graph]);
-  const lastFitRef = useRef<string | null>(null);
   useEffect(() => {
     if (nodes.length > 0 && signature !== lastFitRef.current) {
       lastFitRef.current = signature;
@@ -219,6 +237,7 @@ function PreviewCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}

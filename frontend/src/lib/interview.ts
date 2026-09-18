@@ -203,6 +203,9 @@ export function layoutWorkingGraph(
   graph: WorkingGraph | null,
   added: Set<string>,
   changed?: Set<string>,
+  // 실측 크기(노드 key → w/h) — 속성 줄·파라미터 칩으로 커진 노드가 배치에서 이웃과 겹치지 않게.
+  // 없으면 nodeSizeOf 고정 박스(첫 렌더·선택지 카드).
+  sizes?: ReadonlyMap<string, { width: number; height: number }>,
 ): { nodes: AppNode[]; edges: Edge[] } {
   if (!graph || graph.nodes.length === 0) return { nodes: [], edges: [] };
   const nodes: AppNode[] = graph.nodes.map((n) => {
@@ -211,12 +214,14 @@ export function layoutWorkingGraph(
     // 파라미터 칩을 그리게(라벨만 보이면 수집된 파라미터를 한눈에 확인 못 한다, 2026-09-18).
     // AI 표면엔 담당자 실명이 없으므로 assignee는 비우고 역할 칩만 싣는다.
     const attrs = n.attributes;
+    const measured = sizes?.get(n.key);
     return {
       id: n.key,
       type: "process",
       position: { x: 0, y: 0 },
       width: nodeSizeOf(nodeType).w,
       height: nodeSizeOf(nodeType).h,
+      ...(measured ? { measured } : {}),
       data: {
         label: n.title,
         description: n.description,

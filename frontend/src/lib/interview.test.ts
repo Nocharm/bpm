@@ -76,6 +76,33 @@ describe("addedNodeKeys", () => {
 });
 
 describe("layoutWorkingGraph", () => {
+  it("uses measured sizes for dagre placement when provided — taller nodes get more vertical room", () => {
+    // s → a, s → b: a·b는 같은 랭크에 세로로 쌓인다(b가 위). b를 매우 높게 실측하면 a가 그만큼 밀린다.
+    const graph: WorkingGraph = {
+      ...GRAPH,
+      nodes: [
+        ...GRAPH.nodes,
+        { key: "b", title: "병렬 활동", node_type: "process", description: "", attributes: null, group_key: null },
+      ],
+      edges: [{ source: "s", target: "a", label: "" }, { source: "s", target: "b", label: "" }],
+    };
+    const fixed = layoutWorkingGraph(graph, new Set());
+    const sizes = new Map([["b", { width: 170, height: 300 }]]);
+    const measured = layoutWorkingGraph(graph, new Set(), undefined, sizes);
+    // 실제 높이(a=300, b=52)로 두 박스 사이 빈 간격을 잰다 — 고정 박스 배치는 a의 실제 높이를 몰라 겹치고,
+    // 실측 배치는 nodesep(120)만큼 띄운다.
+    const realH = { a: 52, b: 300 } as const;
+    const gap = (laid: { nodes: { id: string; position: { y: number } }[] }) => {
+      const [top, bottom] = laid.nodes
+        .filter((n): n is typeof n & { id: "a" | "b" } => n.id === "a" || n.id === "b")
+        .sort((p, q) => p.position.y - q.position.y);
+      return bottom.position.y - (top.position.y + realH[top.id]);
+    };
+    expect(gap(fixed)).toBeLessThan(0);
+    expect(gap(measured)).toBe(120);
+    expect(measured.nodes.find((n) => n.id === "b")!.measured).toEqual({ width: 170, height: 300 });
+  });
+
   it("carries AI attributes (role·dept·system·params) into node data so the preview node renders them", () => {
     const graph: WorkingGraph = {
       ...GRAPH,

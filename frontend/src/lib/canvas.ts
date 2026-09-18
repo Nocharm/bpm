@@ -1026,8 +1026,14 @@ export function layoutWithDagre(
   graph.setDefaultEdgeLabel(() => ({}));
 
   // 노드별 실제 크기로 박스를 잡아야 큰 노드(마름모) 주변 엣지가 노드를 덜 침범한다.
-  nodes.forEach((node) => {
+  // 실측(measured)이 있으면 그 값 — 속성 줄·파라미터 칩으로 커진 노드가 같은 열의 이웃과 겹치지 않게
+  // (비교/AI 프리뷰가 모든 파라미터를 표시하면서 고정 박스로는 세로 간격이 잠식됨, 2026-09-18).
+  const boxOf = (node: AppNode) => {
     const size = nodeSizeOf(node.data.nodeType);
+    return { w: node.measured?.width ?? size.w, h: node.measured?.height ?? size.h };
+  };
+  nodes.forEach((node) => {
+    const size = boxOf(node);
     graph.setNode(node.id, { width: size.w, height: size.h });
   });
   edges.forEach((edge) => {
@@ -1038,7 +1044,7 @@ export function layoutWithDagre(
   // 배치 결과를 좌상단(0,0) 기준으로 정규화 — 누적 드리프트 없이 항상 원점에서 시작(캔버스 비대화 방지).
   const placed = nodes.map((node) => {
     const positioned = graph.node(node.id);
-    const size = nodeSizeOf(node.data.nodeType);
+    const size = boxOf(node);
     return { node, x: positioned.x - size.w / 2, y: positioned.y - size.h / 2 };
   });
   const minX = Math.min(...placed.map((p) => p.x));
