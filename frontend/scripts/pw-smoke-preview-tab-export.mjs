@@ -12,7 +12,7 @@ const attrs = (o) => ({ assignee_role: "", department: "", system: "", duration:
 const workingGraph = {
   nodes: [
     { key: "s", title: "Start", node_type: "start", description: "", attributes: null, group_key: null },
-    { key: "a", title: "Create purchase request", node_type: "process", description: "Requester fills PR", attributes: attrs({ assignee_role: "Buyer", department: "Purchasing", system: "SAP", duration: "1.30", annual_count: "120", fte: "0.5" }), group_key: null },
+    { key: "a", title: "Create purchase request", node_type: "process", description: "Requester fills PR", attributes: attrs({ assignee_role: "Buyer", department: "Purchasing", system: "SAP", duration: "1.30", annual_count: "120", fte: "0.5", input: "Purchase request form\nBudget code", output: "PR number", start_condition: "Budget approved", end_condition: "PR submitted in SAP" }), group_key: null },
     { key: "b", title: "Approve request", node_type: "process", description: "", attributes: attrs({ assignee_role: "Manager", system: "Groupware", duration: "0.15", cost_krw: "12000" }), group_key: null },
     { key: "c", title: "Issue PO", node_type: "process", description: "", attributes: attrs({ assignee_role: "Buyer", department: "Purchasing", system: "SAP", headcount: "2" }), group_key: null },
     { key: "e", title: "End", node_type: "end", description: "", attributes: null, group_key: null },
@@ -64,6 +64,7 @@ check("preview shows department lines", deptLines === 2, `${deptLines}`);
 check("preview shows system lines", sysLines === 3, `${sysLines}`);
 const nodeAText = await page.locator('[data-id="interview-preview"] .react-flow__node', { hasText: "Create purchase request" }).innerText();
 check("preview node A shows param chips", nodeAText.includes("1h30m") && nodeAText.includes("120") && nodeAText.includes("0.5"), JSON.stringify(nodeAText));
+check("preview node A shows IO + conditions", ["Purchase request form", "Budget code", "PR number", "Budget approved", "PR submitted in SAP"].every((s) => nodeAText.includes(s)), JSON.stringify(nodeAText));
 await page.screenshot({ path: `${OUT}/01-preview-fields.png` });
 
 // Tab 이동 — 노드 A 클릭 → Tab → B, Tab → C, Shift+Tab → B

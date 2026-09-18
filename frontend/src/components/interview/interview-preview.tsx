@@ -34,12 +34,12 @@ const NO_ADDED = new Set<string>();
 const EMPTY_KEYS = new Set<string>();
 
 // compare의 COMPARE_NODE_ACTIONS와 동일 — ProcessNode가 요구하는 읽기전용 context
-// 노드 위 표시 필드 — 인스펙터 카드와 같은 범위(역할·부서·시스템·파라미터 칩). IO·조건·URL은 노드 높이를
-// 키워 제외 — 카드에서 확인 (2026-09-18).
+// 노드 위 표시 필드 — 역할·부서·시스템·파라미터 칩 + 입출력·시작/종료 조건(값 있는 것만). 노드 높이는
+// 실측 재배치가 흡수한다 (사용자 확인 2026-09-18).
 const PREVIEW_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: ["assignee", "department", "system", "params"],
+  displayFields: ["assignee", "department", "system", "params", "input", "output", "conditions"],
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
