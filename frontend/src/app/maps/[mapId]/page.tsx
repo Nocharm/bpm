@@ -11903,7 +11903,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div
                         data-id="approval-workflow-section"
                         // 덮개가 있을 땐 문구·버튼(아이콘+제목+2줄+버튼 ≈ 10rem)이 들어갈 최소 높이 — 게시본의 워크플로 본문은 낮다
-                        className={`relative rounded-md border border-hairline p-3 ${pendingElsewhere ? "min-h-44" : ""}`}
+                        className={`relative rounded-md border border-hairline p-3 ${pendingElsewhere ? "min-h-36" : ""}`}
                       >
                         {/* 내 결재 대기 버전이 따로 있으면 워크플로 섹션만 덮어 이동을 유도 — 이 섹션은 열린 버전 기준이라 오판 방지.
                             덮인 동안은 섹션을 펼친 채 유지해 덮개 문구·버튼이 들어갈 높이를 확보 (사용자 지시 2026-09-19: 탭 전체→섹션만) */}
