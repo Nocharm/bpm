@@ -387,3 +387,38 @@ def test_summary_admins_dedupes_same_person_across_levels(client: TestClient, en
     rows = [a for a in res.json()["admins"] if a["login_id"] == "smy.dup"]
     assert len(rows) == 1  # 조상 행 + 직접 행 2개가 개인 1명으로 dedupe
     assert rows[0]["level"] == 1  # 최소 level(L1, 조상) 채택 — L5(5)가 아니다
+
+
+def test_nodes_l5_card_meta_and_l5_count(client: TestClient, enforce: None) -> None:
+    """GET /categories/nodes — 홈 드릴다운 L5 카드 메타(canvas_state·admin·slot_pending_count)와
+    상위 행 l5_count(서브트리 L5 수). 상위 레벨 행은 카드 메타가 기본값(None/0)이다."""
+    parent = _seed_category(client, "NDM-L4", "노드메타L4", level=4)
+    conf_l5, conf_map_id, _draft = _make_canvas_under(
+        client, "NDM-CONF", "노드확정", parent, confirmer="ndm.confirmer"
+    )
+    act_as("ndm.confirmer")
+    res = client.post(f"/api/maps/{conf_map_id}/framework-confirm", json={"major": False})
+    assert res.status_code == 200, res.text
+    draft_l5, _map, _draft = _make_canvas_under(
+        client, "NDM-DRAFT", "노드드래프트", parent, confirmer="ndm.drafter"
+    )
+    empty_l5 = _seed_category(client, "NDM-EMPTY", "노드빈", level=5, parent_id=parent)
+
+    # 카드 메타는 관리자 여부와 무관하게 로그인 전체에 동일 — 권한 없는 사용자로 조회
+    act_as("ndm.anyone")
+    res = client.get(f"/api/categories/nodes?parent_id={parent}")
+    assert res.status_code == 200, res.text
+    by_id = {r["id"]: r for r in res.json()}
+    assert by_id[conf_l5]["canvas_state"] == "confirmed"
+    assert by_id[conf_l5]["admin"] == {"login_id": "ndm.confirmer", "name": "ndm.confirmer", "level": 5}
+    assert by_id[draft_l5]["canvas_state"] == "draft"
+    assert by_id[draft_l5]["admin"]["login_id"] == "ndm.drafter"
+    assert by_id[empty_l5]["canvas_state"] == "none"
+    assert by_id[empty_l5]["admin"] is None
+    assert all(r["slot_pending_count"] == 0 for r in by_id.values())
+    assert all(r["l5_count"] == 1 for r in by_id.values())  # L5 자신 = 1
+
+    roots = client.get("/api/categories/nodes").json()
+    row = next(r for r in roots if r["code"] == "NDM-L4")
+    assert row["l5_count"] == 3
+    assert row["canvas_state"] is None and row["admin"] is None and row["slot_pending_count"] == 0

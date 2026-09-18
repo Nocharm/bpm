@@ -12,6 +12,7 @@ from app.auth import get_current_user, require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.models import (
+    ApprovalRequest,
     CategoryPermission,
     Employee,
     MapApprover,
@@ -365,6 +366,75 @@ async def list_all_category_permissions(
     )
 
 
+async def _l5_card_meta(session: AsyncSession, l5_rows: Sequence[Row]) -> dict[int, dict]:
+    """홈 드릴다운 L5 카드 메타(canvas_state·admin·slot_pending_count) — 한 부모의 L5 자식만 대상이라
+    직속 관리자 조회는 N+1이어도 무해(_summary_admins 선례). 확정 판정은 요약 subtree_confirm과 같은
+    "확정 스냅샷 존재 여부"(게이트 ready 무관)."""
+    if not l5_rows:
+        return {}
+    linkage_ids = [r.linkage_map_id for r in l5_rows if r.linkage_map_id is not None]
+    confirmed_map_ids: set[int] = set()
+    if linkage_ids:
+        confirmed_map_ids = set(
+            (
+                await session.scalars(
+                    select(MapVersion.map_id)
+                    .where(MapVersion.map_id.in_(linkage_ids), MapVersion.status == workflow.CONFIRMED)
+                    .distinct()
+                )
+            ).all()
+        )
+    login_by_cat: dict[int, str] = {}
+    for r in l5_rows:
+        logins = sorted(await get_category_admin_logins(session, r.id, direct_only=True))
+        if logins:
+            login_by_cat[r.id] = logins[0]
+    name_by_login: dict[str, str] = {}
+    if login_by_cat:
+        name_by_login = dict(
+            (
+                await session.execute(
+                    select(Employee.login_id, Employee.name).where(
+                        Employee.login_id.in_(set(login_by_cat.values()))
+                    )
+                )
+            ).all()
+        )
+    pending_by_cat: dict[int, int] = dict(
+        (
+            await session.execute(
+                select(ProcessMap.category_id, func.count())
+                .select_from(ApprovalRequest)
+                .join(ProcessMap, ProcessMap.id == ApprovalRequest.map_id)
+                .where(
+                    ApprovalRequest.kind == "fw_slot",
+                    ApprovalRequest.status == "pending",
+                    ProcessMap.deleted_at.is_(None),
+                    ProcessMap.category_id.in_([r.id for r in l5_rows]),
+                )
+                .group_by(ProcessMap.category_id)
+            )
+        ).all()
+    )
+    meta: dict[int, dict] = {}
+    for r in l5_rows:
+        login = login_by_cat.get(r.id)
+        meta[r.id] = {
+            "canvas_state": (
+                "none" if r.linkage_map_id is None
+                else "confirmed" if r.linkage_map_id in confirmed_map_ids
+                else "draft"
+            ),
+            "admin": (
+                CategoryAdminOut(login_id=login, name=name_by_login.get(login) or login, level=5)
+                if login is not None
+                else None
+            ),
+            "slot_pending_count": pending_by_cat.get(r.id, 0),
+        }
+    return meta
+
+
 @router.get("/nodes", response_model=list[CategoryNodeOut])
 async def list_category_nodes(
     parent_id: int | None = Query(default=None),
@@ -399,9 +469,12 @@ async def list_category_nodes(
         ).all()
     )
     subtree_count = _subtree_map_counts(rows, own_map_count)
+    # 서브트리 L5 수 — 맵 수와 같은 누적 산식에 "L5면 1"을 자기 값으로 넣는다 (홈 드릴다운 상위 행 카운트)
+    l5_count = _subtree_map_counts(rows, {r.id: 1 for r in rows if r.level == 5})
 
     admin_ids = await _admin_category_ids(session, user)
     targets = sorted(children_by_parent.get(parent_id, []), key=lambda r: (r.sort_order, r.code))
+    l5_meta = await _l5_card_meta(session, [r for r in targets if r.level == 5])
     return [
         CategoryNodeOut(
             id=r.id,
@@ -413,6 +486,8 @@ async def list_category_nodes(
             map_count=subtree_count.get(r.id, 0),
             linkage_map_id=r.linkage_map_id,
             can_edit_linkage=r.id in admin_ids,
+            l5_count=l5_count.get(r.id, 0),
+            **l5_meta.get(r.id, {}),
         )
         for r in targets
     ]

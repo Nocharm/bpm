@@ -2135,6 +2135,13 @@ const en = {
   "home.listShowAll": "Show all ({n})",
   "home.listCollapse": "Collapse",
   "home.frameworkMore": "Load more",
+  // 홈 업무 체계 드릴다운(B안: 브레드크럼 + 형제 칩, 2026-09-18)
+  "framework.drill.up": "Up one level",
+  "framework.drill.siblings": "Other L{level} categories",
+  "framework.drill.pending": "Pending {n}",
+  "framework.drill.unassigned": "Unassigned",
+  "framework.drill.createCanvas": "Create canvas",
+  "framework.drill.retry": "Failed to load — retry",
   // 버전 타임라인 메이저 그룹 헤더 (연계 캔버스, 2026-08-29)
   "home.verMajorGroup": "Version {n}",
   "home.frameworkLoadError": "Failed to load - click to retry.",
@@ -4720,6 +4727,13 @@ const ko: Record<MessageKey, string> = {
   "home.listShowAll": "전체 펼치기 ({n})",
   "home.listCollapse": "다시 접기",
   "home.frameworkMore": "더 보기",
+  // 홈 업무 체계 드릴다운(B안: 브레드크럼 + 형제 칩, 2026-09-18)
+  "framework.drill.up": "상위로",
+  "framework.drill.siblings": "같은 레벨(L{level})의 다른 카테고리",
+  "framework.drill.pending": "승인 대기 {n}",
+  "framework.drill.unassigned": "관리자 미지정",
+  "framework.drill.createCanvas": "캔버스 만들기",
+  "framework.drill.retry": "불러오지 못했습니다 — 다시 시도",
   // 버전 타임라인 메이저 그룹 헤더 (연계 캔버스, 2026-08-29)
   "home.verMajorGroup": "버전 {n}",
   "home.frameworkLoadError": "불러오기 실패 - 클릭해서 재시도하세요.",

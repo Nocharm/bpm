@@ -2801,6 +2801,11 @@ export interface CategoryNode {
   // L5 연계 캔버스 — 결착 맵 id(없으면 null)·호출자 생성/편집 가능 여부(권한자 체인) (design 2026-08-28)
   linkage_map_id: number | null;
   can_edit_linkage: boolean;
+  // 홈 업무 체계 드릴다운(2026-09-18) — 서브트리 L5 수(자기 포함) + L5 카드 메타(/nodes만 채움, /chain은 기본값).
+  l5_count: number;
+  canvas_state: "none" | "draft" | "confirmed" | null;
+  admin: CategorySummaryAdmin | null;
+  slot_pending_count: number;
 }
 
 export interface CategoryMaps {

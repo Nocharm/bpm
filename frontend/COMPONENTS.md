@@ -105,7 +105,7 @@
 | `pagination.tsx` | `Pagination` | 간단 페이지네이션 | `app/feedback/page.tsx`, `components/notices/notices-manage-panel.tsx` |
 | `param-icons.ts` | - | 수행 지표(Metrics) 아이콘 단일 소스 | `app/maps/[mapId]/compare/page.tsx`, `components/group-bulk-modal.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-fallback-notes.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/process-node.tsx`, `components/subprocess-preview-peek.tsx`, `components/subprocess-usage-tab.tsx` |
 | `param-input.tsx` | `ParamInput` | 숫자 파라미터 공용 입력 | `components/group-bulk-modal.tsx`, `components/interview/params-table-dialog.tsx`, `components/node-metrics-card.tsx`, `components/node-summary-modal.tsx`, `components/permissions/process-fields-card.tsx`, `components/permissions/subprocess-designation-modal.tsx` |
-| `person-hover-card.tsx` | `PersonHoverCard`, `PersonInfoPopup` | 인물 카드 | `app/inbox/page.tsx`, `components/admin/ref-group-card.tsx`, `components/approval-panel.tsx`, `components/assignee-pills.tsx`, `components/maps/map-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx`, `components/org-info-modal.tsx` |
+| `person-hover-card.tsx` | `PersonHoverCard`, `PersonInfoPopup` | 인물 카드 | `app/inbox/page.tsx`, `components/admin/ref-group-card.tsx`, `components/approval-panel.tsx`, `components/assignee-pills.tsx`, `components/maps/framework-drill.tsx`, `components/maps/map-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx`, `components/org-info-modal.tsx` |
 | `popover-action-bar.tsx` | `PopoverActionBar` | 소형 입력 팝오버 공용 푸터 | `components/fallback-hint.tsx`, `components/maps/map-notes-section.tsx`, `components/node-summary-modal.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/role-tile.tsx`, `components/permissions/sp-field-popover.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
 | `process-library-panel.tsx` | `ProcessLibraryPanel` | 프로세스 라이브러리 패널 | `app/maps/[mapId]/page.tsx` |
 | `process-node.tsx` | `ProcessNode` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/interview/choice-card.tsx`, `components/interview/interview-preview.tsx`, `components/scope-preview.tsx`, `components/subprocess-preview-peek.tsx` |
@@ -226,8 +226,8 @@
 |------|----------|------|--------|
 | `approvals-card.tsx` | `ApprovalsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `category-summary-card.tsx` | `CategorySummaryCard` | 홈 Framework 뷰 | `app/page.tsx` |
-| `clamped-list.tsx` | `ClampedList` | 맵 카드 리스트 3.5개 높이 클램프 | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `count-tag.tsx` | `CountTag` | 맵 개수 태그 | `components/admin/framework-panel.tsx`, `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
+| `clamped-list.tsx` | `ClampedList` | 맵 카드 리스트 3.5개 높이 클램프 | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
+| `count-tag.tsx` | `CountTag` | 맵 개수 태그 | `components/admin/framework-panel.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `dashboard-activity-tiles.tsx` | `DashboardActivityTiles` | 홈 대시보드 활동 타일 5종 | `components/maps/home-dashboard.tsx` |
 | `dashboard-hover-row.tsx` | `HoverLinkedRow` | 대시보드 버튼 행(결재·점유·최근 변경) | `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/recent-events-card.tsx` |
 | `dashboard-hover.tsx` | `HoverMapProvider` | 홈 대시보드 맵 호버 연동 | `components/maps/dashboard-hover-row.tsx`, `components/maps/dashboard-map-row.tsx`, `components/maps/home-dashboard.tsx` |
@@ -235,14 +235,14 @@
 | `dashboard-profile.tsx` | `DashboardProfile` | 홈 대시보드 마스트헤드 | `components/maps/home-dashboard.tsx` |
 | `dashboard-section.tsx` | `DashboardSection`, `DashboardEmpty`, `DashboardFoot` | 홈 대시보드 섹션 셸 | `components/maps/approvals-card.tsx`, `components/maps/dept-maps-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-events-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
-| `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
+| `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/principal-picker.tsx` |
 | `dept-maps-card.tsx` | `DeptMapsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `dept-sub-maps-modal.tsx` | `DeptSubMapsModal` | 홈 대시보드 내 부서 카드 | `components/maps/dept-maps-card.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |
 | `framework-assign-modal.tsx` | `FrameworkAssignModal` | 업무 체계 카테고리 연결/해제 + 슬롯 이양 | `components/maps/map-detail-card.tsx` |
 | `framework-card.tsx` | `FrameworkCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
-| `framework-tree.tsx` | `FrameworkTree` | 홈 Framework 뷰 | `app/page.tsx` |
+| `framework-drill.tsx` | `FrameworkDrill` | 홈 Framework 뷰 | `app/page.tsx` |
 | `go-to-menu.tsx` | `GoToMenu` | 마우스/앵커 위치 메뉴 | `components/maps/dept-maps-card.tsx` |
 | `home-dashboard.tsx` | `HomeDashboard` | 홈 우측 | `app/page.tsx` |
 | `home-filter-pills.tsx` | `HomeFilterPills` | 홈 상태·권한·오우닝·SP 필터 필 4종 | `app/page.tsx` |
@@ -262,7 +262,7 @@
 | `slot-change-dialog.tsx` | `SlotChangeDialog` | 슬롯 변경 확인 다이얼로그 | `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx` |
 | `slot-delete-dialog.tsx` | `SlotDeleteDialog` | 슬롯 있는 L6 삭제 | `components/maps/map-detail-card.tsx` |
 | `status-distribution.tsx` | `DistributionTabs`, `Distribution`, `VersionChip` | 분포 막대·범례·상태/버전 탭 | `components/maps/dept-maps-card.tsx`, `components/maps/my-documents-card.tsx` |
-| `sticky-box-header.tsx` | `StickyBoxHeader` | 틴트 박스 헤더의 스티키 래퍼 | `components/maps/framework-tree.tsx`, `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
+| `sticky-box-header.tsx` | `StickyBoxHeader` | 틴트 박스 헤더의 스티키 래퍼 | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
 | `version-timeline.tsx` | `VersionTimeline` | 버전 히스토리 | `components/maps/map-detail-card.tsx` |
 | `welcome-placeholder.tsx` | `WelcomePlaceholder` | 빈 상태/미선택 자리 | `app/page.tsx` |
 | `word-docs-section.tsx` | `WordDocsSection` | 홈 Word documents 섹션 | `app/page.tsx` |

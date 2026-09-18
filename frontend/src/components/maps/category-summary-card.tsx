@@ -44,6 +44,9 @@ interface CategorySummaryCardProps {
   onSelectChild?: (node: CategoryNode) => void;
   // 소속 맵 행 클릭(L5) — 맵 상세로 전환(page.tsx selectMap).
   onSelectMap?: (mapId: number) => void;
+  // 좌측 가시성·상태·권한 필터(page.tsx frameworkFilterMap) — 좌측 드릴다운은 L5 카드까지만 보여주므로
+  // 맵 필터는 여기 소속 맵 목록에 적용하고, 숨긴 개수를 노트로 밝힌다(2026-09-18). null이면 필터 없음.
+  filterMap?: ((map: MapSummary) => boolean) | null;
 }
 
 // 요약 타일 — 아이콘 라벨 + 큰 숫자(또는 짧은 텍스트). 색 톤은 확정 현황 타일이 재사용한다.
@@ -79,7 +82,13 @@ function StatTile({
   );
 }
 
-export function CategorySummaryCard({ categoryId, onOpenCanvas, onSelectChild, onSelectMap }: CategorySummaryCardProps) {
+export function CategorySummaryCard({
+  categoryId,
+  onOpenCanvas,
+  onSelectChild,
+  onSelectMap,
+  filterMap = null,
+}: CategorySummaryCardProps) {
   const { t } = useI18n();
   const [summary, setSummary] = useState<CategorySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +177,9 @@ export function CategorySummaryCard({ categoryId, onOpenCanvas, onSelectChild, o
 
   const l5 = summary.l5;
   const subtreeConfirm = summary.subtree_confirm;
+  // 좌측 필터는 로드된 행에만 적용 — total 카운트(헤더)는 서버 전체 기준 그대로, 차이는 필터 노트로 설명한다.
+  const shownMaps = maps ? (filterMap ? maps.maps.filter(filterMap) : maps.maps) : [];
+  const filteredOut = maps ? maps.maps.length - shownMaps.length : 0;
   const pathSegments = summary.path.split("/").filter(Boolean);
   const canOpenCanvas = !!l5 && (l5.linkage_map_id !== null || l5.can_edit_linkage);
 
@@ -513,7 +525,12 @@ export function CategorySummaryCard({ categoryId, onOpenCanvas, onSelectChild, o
               <span className="text-fine text-ink-tertiary">{t("category.summary.noMaps")}</span>
             ) : (
               <ul data-id="category-summary-maps" className="flex flex-col divide-y divide-divider rounded-sm border border-hairline bg-surface">
-                {maps.maps.map(renderMapRow)}
+                {shownMaps.map(renderMapRow)}
+                {filteredOut > 0 && (
+                  <li data-id="category-summary-filtered-note" className="px-3 py-1.5 text-fine text-ink-tertiary">
+                    {t("home.frameworkFilteredOut", { n: filteredOut })}
+                  </li>
+                )}
                 {maps.hidden > 0 && (
                   <li className="px-3 py-1.5 text-fine text-ink-tertiary">{t("home.frameworkHidden", { n: maps.hidden })}</li>
                 )}

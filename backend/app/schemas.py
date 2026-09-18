@@ -831,6 +831,13 @@ class CategoryNodeOut(BaseModel):
     # L5 연계 캔버스 — 결착 맵 id(없으면 None)·호출자 편집 가능 여부(권한자 체인, 배치 계산)
     linkage_map_id: int | None = None
     can_edit_linkage: bool = False
+    # 홈 업무 체계 드릴다운(2026-09-18) — 상위 행 "L5 n" 카운트(서브트리 L5 수, 자기 포함)와 L5 카드 메타.
+    # L5 카드 3종은 /nodes만 채운다(/chain은 기본값) — 캔버스 상태 none/draft/confirmed(확정 스냅샷 유무),
+    # 직속 관리자 1명(권한 행 login 정렬 첫 항목), 이 L5 슬롯에 걸린 pending fw_slot 요청 수.
+    l5_count: int = 0
+    canvas_state: str | None = None
+    admin: "CategoryAdminOut | None" = None
+    slot_pending_count: int = 0
 
 
 class CategoryPermissionEntry(BaseModel):

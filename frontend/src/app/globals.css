@@ -664,6 +664,41 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   }
 }
 
+/* 홈 업무 체계 드릴다운 — 한 레벨 아래로 들어갈 땐 오른쪽에서, 상위로 돌아갈 땐 왼쪽에서 목록이
+   미끄러져 들어와 이동 방향을 알린다(B안, 2026-09-18). 형제 전환은 방향 없이 즉시 교체. */
+@keyframes fw-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fw-slide-back {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fw-slide-in {
+  animation: fw-slide-in 320ms var(--ease-smooth);
+}
+.fw-slide-back {
+  animation: fw-slide-back 320ms var(--ease-smooth);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fw-slide-in,
+  .fw-slide-back {
+    animation: none;
+  }
+}
+
 /* 홈 아코디언 접힘 — 펼침의 역방향(콘텐츠 높이→0). forwards로 0fr을 유지한 채 잠깐 뒤 실제
    언마운트가 따라온다(컴포넌트의 closing 상태가 애니메이션 후 커밋). 시선이 줄어드는 영역을 따라간다. */
 @keyframes accordion-close {

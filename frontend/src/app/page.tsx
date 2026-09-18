@@ -24,7 +24,7 @@ import { CsvCreateModal } from "@/components/csv-create-modal";
 import { WordCreateModal, type WordCreateOutcome } from "@/components/word-create-modal";
 import { WordQuickCreateDialog } from "@/components/word-quick-create-dialog";
 import { CategorySummaryCard } from "@/components/maps/category-summary-card";
-import { FrameworkTree } from "@/components/maps/framework-tree";
+import { FrameworkDrill } from "@/components/maps/framework-drill";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
 import { HomeFilterPills } from "@/components/maps/home-filter-pills";
@@ -106,7 +106,7 @@ export default function MapListPage() {
       .querySelector(`[data-id="org-node-toggle"][data-path="${CSS.escape(path)}"]`)
       ?.scrollIntoView({ block: "center" });
   }, [orgOpen]);
-  // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkTree key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
+  // 카테고리 연결/해제/이양 성공 시 증가 — FrameworkDrill key로 넘겨 강제 리마운트(캐시 무효화, fix round 1 #1).
   const [frameworkVersion, setFrameworkVersion] = useState(0);
   // 요약 카드 드릴다운 → 트리 펼침 요청(id·seq). seq 증가로 같은 id 재요청도 트리거된다.
   const [revealRequest, setRevealRequest] = useState<{ id: number; seq: number } | null>(null);
@@ -630,7 +630,7 @@ export default function MapListPage() {
     setSelectedCategoryId(node.id);
     setSelectedId(null);
   };
-  // 요약 카드 "직계 하위" 드릴다운 — 선택 + 트리에서 체인 펼침(FrameworkTree revealRequest). (2026-09-10)
+  // 요약 카드 "직계 하위" 드릴다운 — 선택 + 좌측 드릴다운을 그 부모 레벨로 이동(FrameworkDrill revealRequest). (2026-09-10)
   const selectChildCategory = (node: CategoryNode) => {
     selectCategory(node);
     setRevealRequest((prev) => ({ id: node.id, seq: (prev?.seq ?? 0) + 1 }));
@@ -932,14 +932,15 @@ export default function MapListPage() {
                   {hasMoreSearch && <li ref={searchSentinelRef} className="h-px shrink-0" />}
                 </ul>
               ) : homeView === "framework" ? (
-                // Framework 브라우즈 — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해 트리 캐시를 무효화(fix round 1 #1).
-                <FrameworkTree
+                // Framework 브라우즈(L5 드릴다운) — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해
+                // 자식 캐시를 무효화(fix round 1 #1). 위치는 영속 id로 복원되므로 리마운트해도 같은 레벨에 머문다.
+                // 맵 필터(frameworkFilterMap)는 좌측이 아니라 우측 요약 카드의 소속 맵 섹션에 적용한다.
+                <FrameworkDrill
                   key={frameworkVersion}
-                  renderCard={renderCard}
-                  filterMap={frameworkFilterMap}
                   onOpenLinkage={handleOpenLinkage}
                   selectedCategoryId={selectedCategoryId}
                   onSelectCategory={selectCategory}
+                  onClearCategory={() => setSelectedCategoryId(null)}
                   revealRequest={revealRequest}
                 />
               ) : mapHits.length === 0 ? (
@@ -1041,6 +1042,7 @@ export default function MapListPage() {
                   onOpenCanvas={handleOpenLinkage}
                   onSelectChild={selectChildCategory}
                   onSelectMap={selectMap}
+                  filterMap={frameworkFilterMap}
                 />
               ) : (
                 <HomeDashboard

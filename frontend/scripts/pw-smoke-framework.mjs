@@ -36,10 +36,8 @@ async function openContext(browser) {
   return ctx;
 }
 
-// framework-node 버튼은 span(카테고리명)+CountTag만 담고, 자식 카테고리의 <ul>은 버튼의 형제라
-// hasText가 조상 li까지 오매칭하지 않는다(li 기준이면 자손 텍스트까지 걸려 .first()가 부모를 집는다).
-const nodeButton = (page, name) =>
-  page.locator('[data-id="framework-node"] > button').filter({ hasText: name });
+// 드릴다운 행(L1~L4)은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 조상/자손 오매칭이 없다.
+const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -74,33 +72,53 @@ try {
   const toggleVisible = await page.locator('[data-id="home-view-toggle"]').isVisible().catch(() => false);
   check("home-view-toggle visible", toggleVisible);
 
-  // ── 2) Framework 클릭 → L1 한 번 클릭 → 캐스케이드로 맵까지 자동 펼침 ──────
+  // ── 2) Framework 클릭 → 드릴다운: L1 행 → L2 → L3 → L4에서 L5 카드 ─────────
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
-  // 루트 카테고리는 마운트 후 비동기 fetch로 채워진다 — isVisible()의 즉시 스냅샷이 아니라
-  // waitFor로 도착을 기다려야 한다(즉시 체크는 아직 미도착 시 거짓 FAIL을 낸다).
-  const rootVisible = await nodeButton(page, CHAIN[0]).first().waitFor({ state: "visible", timeout: 8000 })
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 8000 });
+  // 이전 실행의 영속 위치(localStorage)가 남아 있으면 브레드크럼 루트로 되돌린다
+  await page.locator('[data-id="framework-crumb-root"]').click({ timeout: 1500 }).catch(() => {});
+  // 루트 행은 마운트 후 비동기 fetch로 채워진다 — waitFor로 도착을 기다린다.
+  const rootVisible = await rowByName(page, CHAIN[0]).first().waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
-  check("framework-tree root category row visible", rootVisible, CHAIN[0]);
+  check("drill root shows the L1 row", rootVisible, CHAIN[0]);
+  const rootMeta = (await rowByName(page, CHAIN[0]).first().textContent()) ?? "";
+  check("L1 row carries L5 and map counts", /L5\s*\d+/.test(rootMeta), rootMeta.trim());
 
-  // L1 클릭 1회만 — 맵 있는 가지(map_count>0)가 L5까지 자동 펼쳐져 맵 카드가 바로 보여야 한다.
-  await nodeButton(page, CHAIN[0]).first().click();
-  const mapCard = page.locator('[data-id="framework-tree"] [data-id="map-card-name"]', { hasText: MAP_NAME });
-  const mapVisible = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
-    .then(() => true).catch(() => false);
-  check("one-click cascade reveals imported map card (L1→L5)", mapVisible, MAP_NAME);
-  const midVisible = await nodeButton(page, CHAIN[3]).first().isVisible().catch(() => false);
-  check("cascade auto-opened intermediate levels", midVisible, CHAIN[3]);
-  // 직접 보유 맵이 있는 카테고리(L5)는 부서 목록과 같은 틴트 박스로 묶인다 — 맵 카드가 박스 안에 있어야 한다.
-  const boxedCard = await page
-    .locator('[data-id="framework-group-box"] [data-id="map-card-name"]', { hasText: MAP_NAME })
-    .first().isVisible().catch(() => false);
-  check("map-holding category renders tint group box", boxedCard);
-  // 펼침 진입 애니메이션 — 드러난 영역 래퍼에 accordion-open 키프레임이 실제로 걸려 있어야 한다
-  // (computed animationName은 재생 종료 후에도 유지 — 백그라운드 스로틀과 무관).
-  const animName = await page.locator(".accordion-open").first()
+  for (let i = 0; i < 4; i += 1) {
+    await rowByName(page, CHAIN[i]).first().click();
+    await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });
+  }
+  const crumbText = (await page.locator('[data-id="framework-crumb"]').textContent()) ?? "";
+  check("breadcrumb lists ancestors after drilling to L4",
+    CHAIN.slice(0, 4).every((c) => crumbText.includes(c)), crumbText.trim());
+  const l5Card = page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first();
+  const cardVisible = await l5Card.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  check("L4 level lists the L5 card", cardVisible, CHAIN[4]);
+  const statusText = ((await l5Card.locator('[data-id="framework-l5-status"]').textContent()) ?? "").trim();
+  check("L5 card shows an English canvas status pill", ["Confirmed", "Draft", "No canvas"].includes(statusText), statusText);
+  const noMapCardsLeft = (await page.locator('[data-id="framework-drill"] [data-id="map-card"]').count()) === 0;
+  check("left drill list holds no map cards (maps live in the right summary)", noMapCardsLeft);
+  const slideName = await page.locator('[data-id="framework-drill-list"]')
     .evaluate((el) => getComputedStyle(el).animationName).catch(() => "none");
-  check("expand animation keyframes applied", animName === "accordion-open", animName);
+  check("drill-in slide animation applied", slideName === "fw-slide-in", slideName);
+
+  // ── 2b) L5 카드 선택 → 우측 요약의 소속 맵 목록 ───────────────────────────
+  await l5Card.click();
+  const summaryMapRow = page.locator('[data-id="category-summary-map-row"]', { hasText: MAP_NAME });
+  const mapInSummary = await summaryMapRow.first().waitFor({ state: "visible", timeout: 8000 })
+    .then(() => true).catch(() => false);
+  check("selecting the L5 card lists its maps in the right summary", mapInSummary, MAP_NAME);
+  check("selected L5 card is highlighted", (await l5Card.getAttribute("aria-pressed")) === "true");
+
+  // ── 2c) 형제 칩(현재 칩 1개 강조) + 상위 버튼 → 한 레벨 위 ────────────────
+  const currentChips = await page.locator('[data-id^="framework-sib-"][aria-current="true"]').count();
+  check("sibling chip strip marks the current category", currentChips === 1, `current=${currentChips}`);
+  await page.locator('[data-id="framework-back"]').click();
+  const backTitle = await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[2] })
+    .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+  check("back button moves up one level", backTitle, CHAIN[2]);
+  await rowByName(page, CHAIN[3]).first().click();
+  await l5Card.waitFor({ state: "visible", timeout: 8000 });
 
   // ── 3) 검색 — Framework 뷰에서도 공용 플랫 검색으로 전환·복귀 ──────────────
   await page.locator('[data-id="home-map-search"]').fill(MAP_NAME);
@@ -110,37 +128,41 @@ try {
     .waitFor({ state: "visible", timeout: 8000 })
     .then(() => true)
     .catch(() => false);
-  const treeGoneInSearch = (await page.locator('[data-id="framework-tree"]').count()) === 0;
-  check("search in framework view switches to flat results", searchHit && treeGoneInSearch,
-    `hit=${searchHit} treeGone=${treeGoneInSearch}`);
+  const drillGoneInSearch = (await page.locator('[data-id="framework-drill"]').count()) === 0;
+  check("search in framework view switches to flat results", searchHit && drillGoneInSearch,
+    `hit=${searchHit} drillGone=${drillGoneInSearch}`);
   await page.locator('[data-id="home-map-search"]').fill("");
-  // 검색 해제 → 트리 리마운트 + localStorage 복원으로 펼침 상태가 그대로 돌아와야 한다.
-  const mapBackAfterSearch = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
+  // 검색 해제 → 드릴 리마운트 + 영속 위치 복원으로 같은 L4 레벨(L5 카드)이 그대로 돌아와야 한다.
+  const cardBackAfterSearch = await l5Card.waitFor({ state: "visible", timeout: 12000 })
     .then(() => true).catch(() => false);
-  check("clearing search restores expanded tree (persisted open state)", mapBackAfterSearch);
+  check("clearing search restores the drill position (persisted)", cardBackAfterSearch);
 
-  // ── 4) 필터 — Private 세그먼트 → 카드 숨김 + filtered-out 노트, All 복귀 ───
+  // ── 4) 필터 — Private 세그먼트 → 우측 소속 맵 숨김 + filtered-out 노트, All 복귀 ─
+  await l5Card.click();
+  await summaryMapRow.first().waitFor({ state: "visible", timeout: 8000 });
   await page.locator('[data-id="home-visibility-filter"] button', { hasText: "Private" }).click();
-  const noteVisible = await page.locator('[data-id="framework-filtered-note"]').first()
+  const noteVisible = await page.locator('[data-id="category-summary-filtered-note"]').first()
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-  const cardHidden = !(await mapCard.first().isVisible().catch(() => false));
-  check("Private filter hides public cards with filtered-out note", noteVisible && cardHidden,
-    `note=${noteVisible} cardHidden=${cardHidden}`);
+  const rowHidden = !(await summaryMapRow.first().isVisible().catch(() => false));
+  check("Private filter hides public maps in the summary with a filtered-out note", noteVisible && rowHidden,
+    `note=${noteVisible} rowHidden=${rowHidden}`);
   await page.locator('[data-id="home-visibility-filter"] button', { hasText: "All" }).click();
-  const noteGone = (await page.locator('[data-id="framework-filtered-note"]').count()) === 0;
+  const noteGone = (await page.locator('[data-id="category-summary-filtered-note"]').count()) === 0;
   check("All filter clears filtered-out note", noteGone);
 
-  // ── 5) 새로고침 — framework 뷰 유지 + 펼침 상태 복원(무클릭으로 맵 노출) ────
+  // ── 5) 새로고침 — framework 뷰 유지 + 드릴 위치 복원(무클릭으로 L5 카드 노출) ─
   await page.reload({ waitUntil: "networkidle" });
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
-  const mapAfterReload = await mapCard.first().waitFor({ state: "visible", timeout: 12000 })
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 8000 });
+  const cardAfterReload = await l5Card.waitFor({ state: "visible", timeout: 12000 })
     .then(() => true).catch(() => false);
-  check("reload keeps framework view and restores open state", mapAfterReload);
+  check("reload keeps framework view and restores the drill position", cardAfterReload);
 
-  // ── 6) 맵 선택 → 상세 카드 경로뱃지 + IO ───────────────────────────────────
+  // ── 6) L5 선택 → 우측 소속 맵 행 클릭 → 맵 상세 카드 경로뱃지 + IO ───────
   // map-detail-*는 이중 마운트(모바일 인라인 아코디언 split:hidden + 데스크톱 우측 aside)가 기존
   // 패턴 — 뷰포트 1440에서 인라인 쪽은 CSS로 숨어 있으므로 :visible로 실제 노출본만 골라야 한다.
-  await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: MAP_NAME }).first().click();
+  await l5Card.click();
+  await summaryMapRow.first().waitFor({ state: "visible", timeout: 8000 });
+  await summaryMapRow.first().click();
   await page.waitForSelector('[data-id="map-detail-category"]:visible', { timeout: 8000 });
   const categoryText = (await page.locator('[data-id="map-detail-category"]:visible').first().textContent()) ?? "";
   check("map-detail-category shows L1..L5 path badge", categoryText.includes(L5_PATH), categoryText.trim());

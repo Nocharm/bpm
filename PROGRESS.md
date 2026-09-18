@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-18 — 홈 업무 체계 뷰를 L5 포커스 드릴다운으로 재구성 (feat/fw-l5-list)
+
+- 부서 뷰와 똑같은 아코디언이던 업무 체계 뷰를 **한 번에 한 레벨 + 브레드크럼 + 형제 칩(B안)** 드릴다운으로 교체(`components/maps/framework-drill.tsx`, 구 `framework-tree.tsx` 삭제). HTML 목업 2라운드(1차안 → 대안 A~D 비교)로 사용자 확정: 상위 탐색=드릴다운, L5 클릭=선택(우측 요약)·캔버스는 카드 안 버튼, 소속 맵은 좌측에서 빼고 우측 요약의 소속 맵 섹션이 담당(좌측 가시성/상태/권한 필터를 거기 적용, `category-summary-filtered-note`), 카드 정보=확정 상태(영어 고정 Confirmed/Draft/No canvas)·직속 관리자·소속 맵 수·슬롯 승인 대기, 상위 행 카운트 "L5 n · 맵 n" 둘 다.
+- 형제 칩은 폭을 실측해 넘치면 쉐브론 버튼 → 같은 레벨 전체 목록 드롭다운(현재 항목 체크, 사용자 지시). 현재 칩은 항상 노출(`pickVisibleChips`, `lib/framework-drill.ts` 단위 테스트 5종). 위치는 현재 카테고리 id 하나로 영속(`bpm.home.frameworkDrill`, 구 openIds 영속 대체) → 새로고침·검색 복귀·리마운트 시 체인으로 복원. 우측 요약 "직계 하위" 클릭(revealRequest)은 부모 레벨로 이동.
+- 백엔드 `GET /categories/nodes` 확장(FE/BE 동시 배포): 전 레벨 `l5_count`(서브트리 L5 수, `_subtree_map_counts` 재사용), L5만 `canvas_state`(none/draft/confirmed=확정 스냅샷 유무)·`admin`(직속 관리자 1명)·`slot_pending_count`(pending fw_slot). `/chain`은 기본값 — 헤더 카운트는 부모 자식 목록에서 같은 id를 찾아 쓴다(`resolveCurrentNode`).
+- 검증: `pw-smoke-framework.mjs` 업무 체계 구간을 드릴다운 검사로 교체(19/19 PASS; 이어지는 부서 회귀 구간의 "sticky box header … unassigned" 1건은 시드 의존(미지정 부서 박스 전제)으로 이번 변경 전에도 데이터에 따라 실패 — 미수정). 함정: 칩 숨김에 `inline-flex`+`hidden`을 같이 두면 생성 순서에 따라 hidden이 져서 잘린 채 보인다 → display 클래스는 하나만. 낡은 스크립트: `pw-smoke-framework-canvas/-delegation/-field-promotion/-interview-import/-import-followups`·`pw-verify-fw-detail-cards`는 구 트리 셀렉터(`framework-tree`/`framework-node`/트리 안 맵 카드)를 참조해 이제 맞지 않는다(필요 시 우측 요약 경유로 갱신).
+
 ## 2026-09-18 — 비교 화면 워스트케이스 개선 4종: 엣지 라벨 줄바꿈·속성 범위 토글·전 파라미터 표시·실측 배치 (main)
 
 - 65노드·78변경 워스트케이스(스크래치 시드, 저장소 미포함)로 비교 화면을 실측한 뒤 사용자 지적 4건 반영. ① 비교 엣지 라벨에 에디터와 같은 `EDGE_LABEL_MAX_WIDTH`(160) + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게. ② 속성 탭에 "모두 / 변경만" 범위 토글(기본 변경만) — 변경 노드는 바뀐 필드만(제목·설명·타입·색 포함), 추가·삭제·무변경 노드는 토글 비활성+전체 표시. ③ 비교 노드 표시 필드를 AI 프리뷰와 같은 역할·부서·시스템·파라미터 칩으로(값 있는 것만, 전후는 기존 diff 필). `buildAppNodes`에 `touch_time` 누락 보강.
