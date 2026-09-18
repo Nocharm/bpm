@@ -5,6 +5,7 @@ import { MarkerType, Position, type Edge, type Node } from "@xyflow/react";
 
 import type { EdgeLineStyle } from "@/lib/api";
 import type { FieldDiffStatus } from "@/lib/compare-field-diff";
+import type { IoDiffSummary } from "@/lib/io-diff";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
@@ -84,6 +85,11 @@ export type NodeData = {
   // 변경 노드의 필드 diff (compare 전용) — before→after 필 렌더용. label/before/after는 표시용 포맷 완료값,
   // status는 필드 단위 생성/삭제/변경 분류(compare-field-diff).
   diffFields?: { label: string; before: string; after: string; status: FieldDiffStatus }[];
+  // 비교 전용 — 바뀐 필드 → 상태(added/removed/changed). 노드의 칩·속성 줄·조건 줄 아이콘 색과 배경 틴트로
+  // 노드만 봐도 변경을 유추하게 하는 힌트 (사용자 요청 2026-09-18). 키는 fieldChanges.field.
+  diffFieldStatus?: Partial<Record<string, FieldDiffStatus>>;
+  // 비교 전용 — 입출력 항목 diff 요약. 있으면 노드는 IO 패널 대신 "I/O +N −M" 한 줄 + 통합 호버 툴팁을 그린다.
+  ioDiff?: IoDiffSummary;
   hasDescendantChange?: boolean;
   // 미해결 코멘트 수 — 에디터가 렌더 시 주입 (spec §7 Phase C)
   commentCount?: number;

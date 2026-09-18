@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
 import {
@@ -11,6 +12,7 @@ import {
   ChevronRight,
   ChevronUp,
   CircleArrowUp,
+  ArrowLeftRight,
   CornerDownRight,
   Flag,
   Info,
@@ -60,6 +62,9 @@ import {
   type NodeWarning,
 } from "@/lib/node-ref-warnings";
 import { HoverTip } from "@/components/hover-tip";
+import { clampToViewport } from "@/lib/clamp-viewport";
+import type { IoDiffItem, IoDiffSummary } from "@/lib/io-diff";
+import type { FieldDiffStatus } from "@/lib/compare-field-diff";
 import { PARAM_ICON } from "@/components/param-icons";
 import { formatGmp, getGmpBadgeStyle } from "@/lib/gmp";
 import { resolveDataForm } from "@/lib/data-forms";
@@ -178,18 +183,21 @@ function NodeFields({ data, active }: { data: AppNode["data"]; active: boolean }
         const swaps = alternate !== rest;
         const warned = warnedFields[field];
         const Icon = warned ? TriangleAlert : FIELD_ICON[field];
+        // 담당자 줄은 실명·역할 둘 중 하나만 바뀌어도 힌트
+        const tint = getDiffTint(data, field, ...(field === "assignee" ? ["assignee_role"] : []));
         return (
           <div
             key={field}
             data-id={`node-${field}-line`}
             data-alt={swaps && alt ? "true" : "false"}
+            data-diff={tint ? "true" : undefined}
             className="mt-0.5 text-xs text-ink-tertiary"
           >
-            <span className="inline-flex max-w-full items-start gap-1">
+            <span className={`inline-flex max-w-full items-start gap-1${tint ? ` rounded-xs px-1 ${tint.bg}` : ""}`}>
               <Icon
                 size={12}
                 strokeWidth={1.5}
-                className={`mt-0.5 shrink-0 ${warned ? "text-warn" : ""}`}
+                className={`mt-0.5 shrink-0 ${warned ? "text-warn" : (tint?.icon ?? "")}`}
               />
               {swaps ? (
                 // 교차 페이드 — 두 표기를 같은 칸에 겹치고 opacity만 바꾼다(높이=둘 중 큰 쪽).
@@ -277,17 +285,24 @@ function NodeIoDetails({
         },
       ].filter((line) => !!line.value)
     : [];
-  const sides = (["input", "output"] as const).filter((side) => displayFields.includes(side));
+  // 비교뷰 ioDiff가 있으면 IO 패널 대신 "I/O +N −M" 요약(조건 줄 아래) — 패널 변은 비운다
+  const sides = data.ioDiff
+    ? []
+    : (["input", "output"] as const).filter((side) => displayFields.includes(side));
   return (
     <>
-      {conditionLines.map(({ key, icon: Icon, value }) => (
-        <div key={key} className="mt-0.5 text-xs text-ink-tertiary">
-          <span className="inline-flex items-center gap-1">
-            <Icon size={12} strokeWidth={1.5} />
-            {value}
-          </span>
-        </div>
-      ))}
+      {conditionLines.map(({ key, icon: Icon, value }) => {
+        const tint = getDiffTint(data, key);
+        return (
+          <div key={key} className="mt-0.5 text-xs text-ink-tertiary" data-diff={tint ? "true" : undefined}>
+            <span className={`inline-flex items-center gap-1${tint ? ` rounded-xs px-1 ${tint.bg}` : ""}`}>
+              <Icon size={12} strokeWidth={1.5} className={tint?.icon} />
+              {value}
+            </span>
+          </div>
+        );
+      })}
+      {data.ioDiff && <NodeIoDiffSummary ioDiff={data.ioDiff} />}
       {sides.map((side) => {
         const raw = isSubprocess
           ? side === "input"
@@ -612,9 +627,14 @@ function NodeParams({ data, className }: { data: AppNode["data"]; className?: st
     >
       {filled.map((f) => {
         const Icon = PARAM_ICON[f];
+        const tint = getDiffTint(data, f);
         return (
-          <span key={f} className="inline-flex items-center gap-1">
-            <Icon size={12} strokeWidth={1.5} />
+          <span
+            key={f}
+            data-diff={tint ? "true" : undefined}
+            className={`inline-flex items-center gap-1${tint ? ` rounded-xs px-1 ${tint.bg}` : ""}`}
+          >
+            <Icon size={12} strokeWidth={1.5} className={tint?.icon} />
             {displayValue(f)}
           </span>
         );
@@ -783,6 +803,74 @@ function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffSt
 
 // 필 배경은 노드 fill과 동일한 불투명 틴트 — 뒤로 지나는 엣지(우회 아크)가 비쳐 변경 내용을 가리지 않게.
 const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-changed) 12%, white)";
+
+// 비교뷰 변경 힌트 — 바뀐 필드의 아이콘 색·배경 틴트(added/removed/changed 상태색). 에디터(diffFieldStatus 없음)는 무색.
+const DIFF_TINT: Record<FieldDiffStatus, { icon: string; bg: string }> = {
+  added: { icon: "text-added", bg: "bg-added/10" },
+  removed: { icon: "text-removed", bg: "bg-removed/10" },
+  changed: { icon: "text-changed", bg: "bg-changed/10" },
+};
+function getDiffTint(data: AppNode["data"], ...fields: string[]): { icon: string; bg: string } | null {
+  for (const field of fields) {
+    const status = data.diffFieldStatus?.[field];
+    if (status) return DIFF_TINT[status];
+  }
+  return null;
+}
+
+// 비교뷰 입출력 요약 — 노드엔 "I/O +N −M" 한 줄(추가/삭제 없으면 호출부가 아예 안 넘김), 호버 시 입력·출력을
+// 한 툴팁에 항목별 +/−로 펼친다 (사용자 요청 2026-09-18). 툴팁은 body 포털·fixed(z 1400, 툴팁 사다리).
+const IO_DIFF_ITEM_CLASS: Record<IoDiffItem["status"], string> = {
+  added: "text-added",
+  removed: "text-removed line-through",
+  unchanged: "text-ink-secondary",
+};
+const IO_DIFF_ITEM_MARK: Record<IoDiffItem["status"], string> = { added: "+", removed: "−", unchanged: "" };
+
+function NodeIoDiffSummary({ ioDiff }: { ioDiff: IoDiffSummary }) {
+  const { t } = useI18n();
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const sides = (["input", "output"] as const).filter((side) => ioDiff[side].length > 0);
+  return (
+    <div className="mt-0.5 text-xs text-ink-tertiary" data-id="node-io-diff">
+      <span
+        className="inline-flex cursor-default items-center gap-1"
+        onMouseEnter={(event) => setPos(clampToViewport(event.clientX + 12, event.clientY + 14, 320, 240))}
+        onMouseLeave={() => setPos(null)}
+      >
+        <ArrowLeftRight size={12} strokeWidth={1.5} />
+        {t("node.ioSummary")}
+        {ioDiff.added > 0 && <span className="font-semibold text-added">+{ioDiff.added}</span>}
+        {ioDiff.removed > 0 && <span className="font-semibold text-removed">−{ioDiff.removed}</span>}
+      </span>
+      {pos &&
+        createPortal(
+          <div
+            data-id="node-io-diff-tip"
+            className="pointer-events-none fixed z-[1400] w-max max-w-[320px] rounded-md border border-hairline bg-surface p-2.5 shadow-lg"
+            style={{ left: pos.left, top: pos.top }}
+          >
+            {sides.map((side) => (
+              <div key={side} className={side === "output" && sides.length > 1 ? "mt-2" : ""}>
+                <div className="mb-0.5 text-fine font-semibold text-ink-tertiary">
+                  {t(side === "input" ? "field.input" : "field.output")}
+                </div>
+                <ul className="flex flex-col gap-0.5 text-caption">
+                  {ioDiff[side].map((item, index) => (
+                    <li key={`${item.text}-${index}`} className={`flex items-baseline gap-1 ${IO_DIFF_ITEM_CLASS[item.status]}`}>
+                      <span className="w-2 shrink-0 text-center font-semibold">{IO_DIFF_ITEM_MARK[item.status]}</span>
+                      <span className="min-w-0 break-words">{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
 
 // 변경 필드 before→after 필 — 노드 아래에 절대배치(레이아웃 영향 없음). changed 노드만.
 // 최대 3줄 + "+N more"로 캡(다필드 변경 시 아래 노드 침범 방지). 값은 폭 제한 truncate.

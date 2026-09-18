@@ -83,6 +83,7 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import { humanizeApiError } from "@/lib/api-errors";
+import { buildIoDiff } from "@/lib/io-diff";
 import { classifyFieldDiff } from "@/lib/compare-field-diff";
 import {
   FIELD_DIFF_LABEL_CLASS,
@@ -212,14 +213,14 @@ function LabeledSmoothEdge({
 
 const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoothEdge };
 
-// 비교뷰 노드 컨텍스트 — AI 프리뷰와 같이 역할·부서·시스템 줄 + 파라미터 칩 + 입출력·시작/종료 조건을 기본
-// 표시(값 있는 것만, 사용자 확인 2026-09-18).
+// 비교뷰 노드 컨텍스트 — 역할·부서·시스템 줄 + 파라미터 칩 + 시작/종료 조건을 기본 표시(값 있는 것만).
+// 입출력은 패널 대신 항목 diff 요약("I/O +N −M", data.ioDiff)으로 — 변경 없으면 생략 (사용자 요청 2026-09-18).
 // 변경 전후는 노드 아래 diff 필이 따로 보여준다. 노드 높이가 내용에 따라 달라지므로 배치·백본 정렬·핸들
 // 중심은 실측(measured) 크기로 계산한다(measuredSizes) — 고정 상수 가정 폐기 (사용자 요청 2026-09-18).
 const COMPARE_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: ["assignee", "department", "system", "params", "input", "output", "conditions"],
+  displayFields: ["assignee", "department", "system", "params", "conditions"],
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
@@ -347,6 +348,16 @@ function buildSpVisual(node: FlatNode, ctx: SpVisualContext): Partial<AppNode["d
   };
 }
 
+// 변경 노드의 입출력 항목 diff — fieldChanges에 없는 변은 현재값 그대로(전부 unchanged).
+function buildIoDiffOf(m: MergedNode) {
+  const sideOf = (field: "input" | "output") => {
+    const change = m.fieldChanges.find((fc) => fc.field === field);
+    const after = change ? change.after : (m.node[field] ?? "");
+    return { before: change ? change.before : after, after };
+  };
+  return buildIoDiff({ input: sideOf("input"), output: sideOf("output") });
+}
+
 function buildAppNodes(
   merged: MergedNode[],
   noteOf: (node: MergedNode) => string | undefined,
@@ -373,13 +384,17 @@ function buildAppNodes(
       headcount: m.node.headcount,
       annual_count: m.node.annual_count,
       fte: m.node.fte,
-      // 노드 위 입출력·조건 줄 — 인스펙터와 같은 값(target 우선)
-      input: m.node.input,
-      output: m.node.output,
-      input_forms: m.node.input_forms,
-      output_forms: m.node.output_forms,
+      // 노드 위 조건 줄 — 인스펙터와 같은 값(target 우선). 입출력은 ioDiff 요약으로만.
       start_condition: m.node.start_condition,
       end_condition: m.node.end_condition,
+      ...(m.status === "changed"
+        ? {
+            ioDiff: buildIoDiffOf(m) ?? undefined,
+            diffFieldStatus: Object.fromEntries(
+              m.fieldChanges.map((fc) => [fc.field, classifyFieldDiff(fc.before, fc.after)]),
+            ),
+          }
+        : {}),
       // 링크 상태 전달 — 미전달이면 모든 SP 노드가 "링크 미지정" 배너로 오표시된다 (2026-08-29 픽스)
       linkedMapId: m.node.linked_map_id ?? null,
       // 연계 캔버스면 외부 L6 색·출처 배지·플레이스홀더 배지를 에디터와 동일 파생 (#5)
