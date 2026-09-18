@@ -1,25 +1,36 @@
 // 1클릭 지연 실행 — 클릭 즉시 준비(이동이면 prefetch)하고 NAV_DELAY_MS 뒤에 실행, 그 사이 같은 대상을 다시 클릭하면 취소
 // (실수 클릭 복귀). 전역에서 한 번에 하나만 대기한다 — 다른 대상을 시작하면 이전 대기는 취소된다. 홈 대시보드 타일·프로필
 // 버튼·맵 열기(페이지 이동)와 맵 행 클릭(카드 선택) 공용 — 마우스 위치 "…로 이동" 메뉴 대체(사용자 지시 2026-09-11).
+// 대기 중 안내는 가장 가까운 DelayedNavScopeContext(섹션)에 {label, cancel}로 보고한다 — 섹션이 반투명 레이어 가운데에
+// 문구와 링을 띄우고 레이어 클릭으로 취소한다(아이콘 자리 링 치환 폐기, 사용자 지시 2026-09-18). 스코프 밖(맵 카드)은 보고 없음.
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 // 대기 시간(ms) — 취소할 여유가 있으면서 기다림으로 느껴지지 않는 값(1초→0.6초, 사용자 지시 2026-09-11).
 // nav-ring 애니메이션(globals.css)과 같은 길이.
 export const NAV_DELAY_MS = 600;
+
+export interface DelayedNavPending {
+  label: string; // 레이어 가운데 문구("Going to Inbox" 등)
+  cancel: () => void;
+}
+
+// 섹션이 제공하는 보고 채널 — null 보고 = 대기 종료(취소·실행·언마운트)
+export const DelayedNavScopeContext = createContext<((pending: DelayedNavPending | null) => void) | null>(null);
 
 let activeOwner: object | null = null;
 let activeCancel: (() => void) | null = null;
 
 export function useDelayedNav(): {
   pending: string | null; // 대기 중인 키(href 또는 동작 키), 없으면 null
-  toggle: (href: string) => void; // 페이지 이동 시작 / 같은 href면 취소
-  toggleAction: (key: string, run: () => void) => void; // 임의 동작(맵 선택 등) 시작 / 같은 키면 취소
+  toggle: (href: string, label: string) => void; // 페이지 이동 시작 / 같은 href면 취소
+  toggleAction: (key: string, run: () => void, label: string) => void; // 임의 동작(맵 선택 등) 시작 / 같은 키면 취소
   cancel: () => void;
 } {
   const router = useRouter();
+  const report = useContext(DelayedNavScopeContext);
   const [pending, setPending] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 훅 인스턴스 식별자 — 전역 "대기 중 하나" 소유권 비교용(렌더 중 ref.current 읽기는 린트 위반이라 state로)
@@ -34,10 +45,11 @@ export function useDelayedNav(): {
     if (activeOwner === owner) {
       activeOwner = null;
       activeCancel = null;
+      report?.(null);
     }
   };
 
-  const toggleAction = (key: string, run: () => void) => {
+  const toggleAction = (key: string, run: () => void, label: string) => {
     if (pending === key) {
       cancel();
       return;
@@ -46,18 +58,20 @@ export function useDelayedNav(): {
     activeOwner = owner;
     activeCancel = cancel;
     setPending(key);
+    report?.({ label, cancel });
     timer.current = setTimeout(() => {
       timer.current = null;
       activeOwner = null;
       activeCancel = null;
       setPending(null);
+      report?.(null);
       run();
     }, NAV_DELAY_MS);
   };
 
-  const toggle = (href: string) => {
+  const toggle = (href: string, label: string) => {
     if (pending !== href) router.prefetch(href);
-    toggleAction(href, () => router.push(href));
+    toggleAction(href, () => router.push(href), label);
   };
 
   // 언마운트 시 대기 중인 실행은 버린다 — 화면을 떠난 뒤 엉뚱한 곳으로 튀지 않게
@@ -67,9 +81,10 @@ export function useDelayedNav(): {
       if (activeOwner === owner) {
         activeOwner = null;
         activeCancel = null;
+        report?.(null);
       }
     },
-    [owner],
+    [owner, report],
   );
 
   return { pending, toggle, toggleAction, cancel };

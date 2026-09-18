@@ -14,6 +14,7 @@ import {
   ChevronRight,
   FolderPlus,
   FolderTree,
+  Loader2,
   Move as MoveIcon,
   Pencil,
   Plus,
@@ -56,7 +57,7 @@ import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permiss
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
-import { InterviewImportReport } from "@/components/admin/import-report/interview-import-report";
+import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -141,7 +142,9 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const interviewInputRef = useRef<HTMLInputElement>(null);
   const [interviewFiles, setInterviewFiles] = useState<InterviewFileState[]>([]);
   const [interviewResult, setInterviewResult] = useState<InterviewImportResult | null>(null);
-  const [interviewBusy, setInterviewBusy] = useState(false);
+  // 진행 단계 — dryrun/apply 동안 버튼 비활성, 리포트 영역은 단계별 레이어(드라이런 중 링·적용 중 스피너)
+  const [interviewPhase, setInterviewPhase] = useState<InterviewPhase>(null);
+  const interviewBusy = interviewPhase !== null;
   // 거버넌스 체크 키(`code:field`) — dry-run 결과마다 비우고, 파일 변경 시 리포트와 함께 무효화 (spec 2026-09-03 §6)
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
 
@@ -256,7 +259,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   }
 
   async function handleInterviewDryRun() {
-    setInterviewBusy(true);
+    setInterviewPhase("dryrun");
     try {
       const result = await importInterview({ files: getInterviewPayloadFiles(), apply: false });
       setInterviewResult(result);
@@ -265,13 +268,13 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     } catch (err) {
       onToast(getApiErrorDetail(err));
     } finally {
-      setInterviewBusy(false);
+      setInterviewPhase(null);
     }
   }
 
   async function handleInterviewApply() {
     if (!interviewResult) return;
-    setInterviewBusy(true);
+    setInterviewPhase("apply");
     try {
       const result = await importInterview({
         files: getInterviewPayloadFiles(),
@@ -285,8 +288,14 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     } catch (err) {
       onToast(getApiErrorDetail(err));
     } finally {
-      setInterviewBusy(false);
+      setInterviewPhase(null);
     }
+  }
+
+  function handleClearInterviewFiles() {
+    setInterviewFiles([]);
+    setInterviewResult(null);
+    setGovernanceChecked(new Set());
   }
 
   function toggleGovernance(key: string) {
@@ -628,7 +637,24 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             <span className="truncate">{t("framework.interviewImportPick")}</span>
           </button>
           {interviewFiles.length > 0 && (
-            <ul className="flex flex-col gap-0.5" data-id="interview-import-file-list">
+            <div className="flex flex-col rounded-md border border-hairline" data-id="interview-import-file-box">
+              {/* 파일이 수십 개면 목록이 화면을 다 먹는다 — 건수 헤더 + 8행 높이 내부 스크롤 (30개 워스트 케이스, 2026-09-18) */}
+              <div className="flex items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
+                <span data-id="interview-import-file-count">{t("framework.interviewFileCount", { count: interviewFiles.length })}</span>
+                {interviewFiles.some((f) => f.error) && (
+                  <span className="text-error">· {interviewFiles.filter((f) => f.error).length} error</span>
+                )}
+                <button
+                  type="button"
+                  data-id="interview-import-clear"
+                  disabled={interviewBusy}
+                  className="ml-auto rounded-sm px-1.5 py-px text-fine text-ink-tertiary hover:bg-surface hover:text-accent disabled:opacity-40"
+                  onClick={handleClearInterviewFiles}
+                >
+                  {t("framework.interviewClearFiles")}
+                </button>
+              </div>
+            <ul className="scroll-soft flex max-h-44 flex-col gap-0.5 overflow-y-auto px-2 py-1" data-id="interview-import-file-list">
               {interviewFiles.map((file, i) => (
                 <li key={`${file.name}-${i}`} className="flex items-center gap-1.5 text-fine">
                   <span className={`truncate ${file.error ? "text-error" : "text-ink-secondary"}`}>
@@ -647,6 +673,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
                 </li>
               ))}
             </ul>
+            </div>
           )}
         </div>
 
@@ -662,24 +689,45 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </button>
         </div>
 
-        {interviewResult && interviewView && (
-          <InterviewImportReport
-            result={interviewResult}
-            view={interviewView}
-            index={interviewIndex}
-            files={interviewPayloadFiles}
-            governanceChecked={governanceChecked}
-            onToggleGovernance={toggleGovernance}
-            onToggleAllGovernance={toggleAllGovernance}
-            busy={interviewBusy}
-            onCancel={() => {
-              setInterviewResult(null);
-              setGovernanceChecked(new Set());
-            }}
-            onApply={() => void handleInterviewApply()}
-            onToast={onToast}
-          />
-        )}
+        {/* 리포트 영역은 아코디언(0fr→1fr) — 드라이런을 누르면 먼저 열리며 링이 돌고, 결과가 오면 같은 자리에 리포트가 들어온다.
+            래퍼는 항상 두어야 첫 열림도 전환된다(file-card 미리보기와 같은 규칙). 닫힘(Cancel)은 내용을 바로 비우므로 즉시 접힌다. */}
+        <div
+          data-id="interview-import-report-wrap"
+          className={`grid transition-[grid-template-rows] duration-350 ease-smooth ${
+            interviewResult || interviewPhase === "dryrun" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+          }`}
+        >
+          <div className="min-h-0 overflow-hidden">
+            {interviewResult && interviewView ? (
+              <InterviewImportReport
+                result={interviewResult}
+                view={interviewView}
+                index={interviewIndex}
+                files={interviewPayloadFiles}
+                governanceChecked={governanceChecked}
+                onToggleGovernance={toggleGovernance}
+                onToggleAllGovernance={toggleAllGovernance}
+                phase={interviewPhase}
+                onCancel={() => {
+                  setInterviewResult(null);
+                  setGovernanceChecked(new Set());
+                }}
+                onApply={() => void handleInterviewApply()}
+                onToast={onToast}
+              />
+            ) : interviewPhase === "dryrun" ? (
+              <div
+                data-id="interview-import-pending"
+                className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-md border border-hairline bg-surface-pearl"
+              >
+                <Loader2 size={20} strokeWidth={1.5} className="animate-spin text-accent" />
+                <span className="text-caption text-ink-secondary">
+                  {t("framework.importDryRunPending", { count: interviewPayloadFiles.length })}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
       )}
         </>

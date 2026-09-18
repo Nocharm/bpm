@@ -368,7 +368,7 @@ export function MapCard({
               e.stopPropagation();
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // 새 탭 등은 브라우저 기본 동작
               e.preventDefault();
-              toggleNav(openHref);
+              toggleNav(openHref, t("home.dash.openingMap", { name: map.name }));
             }}
             className={`inline-flex shrink-0 items-center gap-0.5 rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,translate] duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:translate-x-0 focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 ${
               openPending ? "pointer-events-auto translate-x-0 border-accent text-accent opacity-100" : "pointer-events-none translate-x-1 border-hairline text-ink-secondary opacity-0"

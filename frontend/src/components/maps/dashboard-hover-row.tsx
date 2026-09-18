@@ -1,30 +1,27 @@
 // 대시보드 버튼 행(결재·점유·최근 변경) — 맵 호버 연동이 붙은 <button>. 같은 맵을 가리키는 다른 행이 호버되면 함께 강조.
-// 클릭(카드 선택)은 0.6초 지연 실행 — 좌측 가장자리에 링, 행 틴트, 다시 클릭하면 취소(맵 행과 같은 규칙).
-// leading을 주면 링이 가장자리 대신 그 선두 아이콘 자리를 대체한다(점유 목록 — 사용자 지시 2026-09-11).
+// 클릭(카드 선택)은 0.6초 지연 실행 — 행 틴트 + 바깥 섹션이 레이어로 덮이며 pendingLabel을 띄운다(레이어 클릭 = 취소).
 "use client";
 
 import type { ReactNode } from "react";
 
-import { useI18n } from "@/lib/i18n";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { HOVER_LINKED_CLASS, useHoverMap } from "@/components/maps/dashboard-hover";
-import { NavRing } from "@/components/nav-ring";
 
 interface HoverLinkedRowProps {
   mapId: number;
   onClick: () => void;
+  pendingLabel: string; // 대기 중 섹션 레이어 문구("Selecting {map}" 등)
   className: string; // 레이아웃 클래스 — 호버·연동 배경은 여기서 덧붙인다
   dataId?: string;
   extraData?: Record<string, string | undefined>; // data-* 부가 속성(이벤트 유형 등)
-  leading?: ReactNode; // 선두 아이콘(14px) — 대기 중엔 같은 자리에 링
+  leading?: ReactNode; // 선두 아이콘(14px)
   children: ReactNode;
 }
 
-export function HoverLinkedRow({ mapId, onClick, className, dataId, extraData, leading, children }: HoverLinkedRowProps) {
-  const { t } = useI18n();
+export function HoverLinkedRow({ mapId, onClick, pendingLabel, className, dataId, extraData, leading, children }: HoverLinkedRowProps) {
   const { linked, handlers } = useHoverMap(mapId);
   const { pending, toggleAction } = useDelayedNav();
-  // 같은 맵을 가리키는 행이 섹션마다 있어 키에 행 식별자를 섞는다 — 클릭한 행만 링
+  // 같은 맵을 가리키는 행이 섹션마다 있어 키에 행 식별자를 섞는다 — 클릭한 행만 틴트
   const key = `select:${dataId ?? "row"}:${mapId}`;
   const selecting = pending === key;
   return (
@@ -34,23 +31,14 @@ export function HoverLinkedRow({ mapId, onClick, className, dataId, extraData, l
       data-map-id={mapId}
       data-linked={linked || undefined}
       data-selecting={selecting || undefined}
-      title={selecting ? t("home.dash.navCancel") : undefined}
       {...extraData}
-      onClick={(e) => { e.stopPropagation(); toggleAction(key, onClick); }}
+      onClick={(e) => { e.stopPropagation(); toggleAction(key, onClick, pendingLabel); }}
       {...handlers}
-      className={`${className} relative transition-colors duration-150 hover:bg-surface-pearl ${
+      className={`${className} transition-colors duration-150 hover:bg-surface-pearl ${
         selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
       }`}
     >
-      {leading !== undefined ? (
-        selecting ? <NavRing size={14} /> : leading
-      ) : (
-        selecting && (
-          <span className="pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2">
-            <NavRing size={8} />
-          </span>
-        )
-      )}
+      {leading}
       {children}
     </button>
   );

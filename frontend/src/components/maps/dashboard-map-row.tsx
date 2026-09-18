@@ -1,6 +1,6 @@
 // 대시보드 컴팩트 맵 행 — 섹션 안의 평면 행(구분선). 상태 점이 맨 앞, 제목 톤다운, SP 아이콘(맵 카드와 동일)은 제목 바로 뒤,
 // 우측 메타. hover 시 열기 버튼이 지연 후 폭을 벌리며 등장(우측 항목이 밀림, 맵 카드 열기 필과 같은 디자인).
-// 행 클릭(카드 선택)과 열기(에디터 이동) 모두 0.6초 지연 실행 — 상태 점/열기 아이콘 자리에 링, 다시 클릭하면 취소.
+// 행 클릭(카드 선택)과 열기(에디터 이동) 모두 0.6초 지연 실행 — 바깥 섹션이 레이어로 덮이며 안내를 띄운다(레이어 클릭 = 취소).
 "use client";
 
 import { ArrowUpRight, Workflow } from "lucide-react";
@@ -11,7 +11,6 @@ import { useI18n } from "@/lib/i18n";
 import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { HOVER_LINKED_CLASS, useHoverMap } from "@/components/maps/dashboard-hover";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_TONE } from "@/lib/version-status";
-import { NavRing } from "@/components/nav-ring";
 import { Tooltip } from "@/components/tooltip";
 
 interface DashboardMapRowProps {
@@ -31,20 +30,17 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
   return (
     <div
       data-id="dashboard-map-row"
-      onClick={(e) => { e.stopPropagation(); toggleAction(selectKey, () => onSelect(map.id)); }}
+      onClick={(e) => { e.stopPropagation(); toggleAction(selectKey, () => onSelect(map.id), t("home.dash.selectingMap", { name: map.name })); }}
       {...handlers}
       data-map-id={map.id}
       data-linked={linked || undefined}
       data-selecting={selecting || undefined}
-      title={selecting ? t("home.dash.navCancel") : undefined}
       className={`group flex cursor-pointer items-center gap-2 border-t border-divider px-3 py-1.5 transition-colors duration-150 hover:bg-surface-pearl ${
         selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
       }`}
     >
-      {/* 상태 점은 맨 앞 — 스캔할 때 상태→이름 순으로 읽힌다 (사용자 지시 2026-09-11). 선택 대기 중엔 이 자리가 링 */}
-      {selecting ? (
-        <NavRing size={10} />
-      ) : map.latest_version_status ? (
+      {/* 상태 점은 맨 앞 — 스캔할 때 상태→이름 순으로 읽힌다 (사용자 지시 2026-09-11) */}
+      {map.latest_version_status ? (
         <Tooltip label={VERSION_STATUS_LABEL_EN[map.latest_version_status]}>
           <span
             data-id="dashboard-map-status"
@@ -68,25 +64,25 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
       <span className="min-w-0 flex-1" aria-hidden="true" />
       {meta && <span className="shrink-0 text-fine text-ink-tertiary">{meta}</span>}
       {/* 열기 — grid 0fr→1fr로 폭이 열리며 우측 항목을 밀어낸다. 진입은 300ms 지연(스치는 호버에 산만하지 않게), 이탈은 즉시.
-          클릭은 1초 지연 이동(링 카운트다운) — 대기 중엔 호버가 끝나도 열린 채 남고, 다시 클릭하면 취소 */}
+          클릭은 지연 이동 — 대기 중엔 호버가 끝나도 열린 채 남는다(취소는 섹션 레이어) */}
       <span className={`grid transition-[grid-template-columns,margin] duration-200 ease-smooth delay-0 group-hover:ml-0 group-hover:grid-cols-[1fr] group-hover:delay-300 ${navigating ? "ml-0 grid-cols-[1fr]" : "-ml-2 grid-cols-[0fr]"}`}>
         <Link
           data-id="dashboard-map-open"
           data-navigating={navigating ? "" : undefined}
           href={href}
-          title={navigating ? t("home.dash.navPending", { dest: map.name }) : t("home.openMap")}
+          title={t("home.openMap")}
           onClick={(e) => {
             e.stopPropagation();
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // 새 탭 등은 브라우저 기본 동작
             e.preventDefault();
-            toggle(href);
+            toggle(href, t("home.dash.openingMap", { name: map.name }));
           }}
           className={`inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,border-color,color] duration-150 ease-smooth delay-0 hover:border-accent hover:text-accent group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-300 ${
             navigating ? "pointer-events-auto border-accent text-accent opacity-100" : "pointer-events-none border-hairline text-ink-secondary opacity-0"
           }`}
         >
-          {navigating ? <NavRing size={12} /> : <ArrowUpRight size={12} strokeWidth={1.5} className="shrink-0" />}
-          <span className="whitespace-nowrap">{navigating ? t("home.dash.navCancel") : t("home.openMap")}</span>
+          <ArrowUpRight size={12} strokeWidth={1.5} className="shrink-0" />
+          <span className="whitespace-nowrap">{t("home.openMap")}</span>
         </Link>
       </span>
     </div>

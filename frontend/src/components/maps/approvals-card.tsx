@@ -11,7 +11,6 @@ import { useDirectory } from "@/lib/directory";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { useAgo } from "@/lib/use-ago";
-import { useDelayedNav } from "@/lib/use-delayed-nav";
 import { HoverLinkedRow } from "@/components/maps/dashboard-hover-row";
 import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
 import { SkeletonLine } from "@/components/skeleton";
@@ -52,10 +51,8 @@ export function ApprovalsCard() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  // 인박스 이동은 1클릭 지연 이동 — 1초 안에 다시 클릭하면 취소 (사용자 지시 2026-09-11)
-  const { pending, toggle } = useDelayedNav();
-  const goInbox = () => toggle("/inbox");
-  const inboxLabel = pending === "/inbox" ? t("home.dash.navCancel") : t("home.dash.inboxTab");
+  // 인박스 이동은 1클릭 지연 이동 — 섹션 레이어의 문구, 레이어 클릭으로 취소 (사용자 지시 2026-09-18)
+  const inboxPending = t("home.dash.navGoing", { dest: t("home.dash.destInbox") });
   return (
     <DashboardSection
       dataId="home-needs-approval"
@@ -63,7 +60,7 @@ export function ApprovalsCard() {
       title={t("home.needsApproval")}
       count={loading ? null : items.length}
       countHot={items.length > 0}
-      more={items.length > ROW_CAP ? { label: inboxLabel, onClick: goInbox } : undefined}
+      more={items.length > ROW_CAP ? { label: t("home.dash.inboxTab"), href: "/inbox", pendingLabel: inboxPending } : undefined}
       empty={
         !loading && items.length === 0 ? (
           <DashboardEmpty
@@ -89,6 +86,7 @@ export function ApprovalsCard() {
                 mapId={a.map_id}
                 dataId={`home-approval-${a.kind}-${a.id}`}
                 onClick={() => router.push(`/inbox?approval=${a.kind}:${a.id}`)}
+                pendingLabel={inboxPending}
                 className="flex w-full items-center gap-2 border-t border-divider px-3 py-1.5 text-left"
               >
                 <span className={`inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1.5 text-[11px] font-semibold ${k.cls}`}>
@@ -102,7 +100,7 @@ export function ApprovalsCard() {
               </HoverLinkedRow>
             );
           })}
-          {items.length > ROW_CAP && <DashboardFoot label={pending === "/inbox" ? t("home.dash.navPending", { dest: t("home.dash.destInbox") }) : t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} onClick={goInbox} />}
+          {items.length > ROW_CAP && <DashboardFoot label={t("home.dash.approvalsMore", { n: items.length - ROW_CAP })} href="/inbox" pendingLabel={inboxPending} />}
         </>
       )}
     </DashboardSection>

@@ -4,9 +4,12 @@
 // 우측 맵/L5를 고르면 좌측이 관련 항목 우선으로 재정렬(FLIP)·강조·흐림되고, 좌측 항목 호버는 우측 해당 행을 밝힌다.
 // 외부 L6 상태 필은 필터(해당 없는 행은 비활성 표시). 하단 바 = 필터 상태 + 적용 요약 + Cancel/Apply (사용자 승인 목업 2026-09-08).
 // 서버 상세 문구→사람말(describe)은 여기서 t로 닫아 섹션에 내려준다. 업무체계 탐색은 계보 코드를 /nodes로 따라가 id를 찾는다.
+// 본문은 뷰포트 높이 상한 + 좌/우 열 독립 스크롤(우측을 내려도 좌측 요약이 남는다). 우측은 스티키 툴바(건수·검색·정렬)와
+// 10개씩 윈도 렌더(바닥 센티널 IntersectionObserver) — 파일 30개 워스트 케이스 대응(사용자 지시 2026-09-18).
+// 적용 완료·적용 중·재드라이런 중은 본문을 덮는 반투명 레이어 가운데에 문구(SectionOverlay).
 
-import { CircleCheck, FolderX } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CircleCheck, FolderX, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getApiErrorDetail, listCategoryNodes, type InterviewImportResult } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -21,6 +24,7 @@ import {
 } from "@/lib/interview-report";
 import type { RelatedTags, ReportFocus } from "@/lib/interview-report-focus";
 import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
+import { SectionOverlay } from "@/components/section-overlay";
 
 import { AdminsSection } from "./admins-section";
 import { AttentionSection } from "./attention-section";
@@ -36,6 +40,21 @@ function buildCanvasPreviewKey(fileIndex: number): string {
   return `canvas:${fileIndex}`;
 }
 
+// 인터뷰 임포트 진행 단계 — null=대기, dryrun=드라이런 요청 중(결과가 있으면 재실행), apply=적용 요청 중
+export type InterviewPhase = "dryrun" | "apply" | null;
+
+type FileSort = "order" | "name" | "issues" | "maps";
+const FILE_SORTS: FileSort[] = ["order", "name", "issues", "maps"];
+const FILE_SORT_LABEL = {
+  order: "framework.report.sortOrder",
+  name: "framework.report.sortName",
+  issues: "framework.report.sortIssues",
+  maps: "framework.report.sortMaps",
+} as const;
+// 우측 파일 카드 윈도 크기 — 카드가 무거워(맵 목록·미리보기) 한 번에 다 그리지 않고 바닥에 닿을 때마다 이만큼 더 붙인다
+const FILE_PAGE = 10;
+const SORT_PILL = "rounded-full border px-2 py-px text-fine whitespace-nowrap transition-colors duration-150";
+
 interface InterviewImportReportProps {
   result: InterviewImportResult;
   view: ImportReportView;
@@ -44,7 +63,7 @@ interface InterviewImportReportProps {
   governanceChecked: ReadonlySet<string>;
   onToggleGovernance: (key: string) => void;
   onToggleAllGovernance: (next: boolean) => void;
-  busy: boolean;
+  phase: InterviewPhase;
   onCancel: () => void;
   onApply: () => void;
   onToast: (message: string) => void;
@@ -131,7 +150,7 @@ export function InterviewImportReport({
   governanceChecked,
   onToggleGovernance,
   onToggleAllGovernance,
-  busy,
+  phase,
   onCancel,
   onApply,
   onToast,
@@ -146,6 +165,12 @@ export function InterviewImportReport({
   const [previewCode, setPreviewCode] = useState<string | null>(null);
   const [browseId, setBrowseId] = useState<number | null>(null);
   const [browseBusy, setBrowseBusy] = useState(false);
+  const [fileSort, setFileSort] = useState<FileSort>("order");
+  const [fileQuery, setFileQuery] = useState("");
+  const [fileLimit, setFileLimit] = useState(FILE_PAGE);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const busy = phase !== null;
 
   const relations = useMemo(() => buildReportRelations(index), [index]);
   const extByCanvas = useMemo(() => countExternalByCanvas(view.externalRefs), [view.externalRefs]);
@@ -168,10 +193,72 @@ export function InterviewImportReport({
     ? result.governance.filter((d) => d.applied).length
     : governanceChecked.size;
 
+  // 우측 파일 카드 목록 — 파일 순서는 요청 payload 그대로 돌아오므로 이름까지 맞을 때만 색인·그룹을 붙인다.
+  // 정렬·검색은 이 항목 위에서 돌고, 렌더는 fileLimit까지만(윈도).
+  const fileEntries = useMemo(
+    () =>
+      result.files.map((file, i) => {
+        const indexed = index.files[i]?.name === file.name ? index.files[i] : undefined;
+        const group = view.groups[i]?.file === file.name ? view.groups[i] : undefined;
+        const title = indexed?.l5Name || group?.canvas?.name || file.name;
+        const issues =
+          file.issues.length +
+          (group?.canvas?.messages.length ?? 0) +
+          (group?.maps.reduce((n, m) => n + m.messages.length, 0) ?? 0);
+        return { i, file, indexed, group, title, issues };
+      }),
+    [result.files, index.files, view.groups],
+  );
+  const orderedFiles = useMemo(() => {
+    const q = fileQuery.trim().toLowerCase();
+    const list = q
+      ? fileEntries.filter((e) => e.title.toLowerCase().includes(q) || e.file.name.toLowerCase().includes(q))
+      : fileEntries.slice();
+    if (fileSort === "name") list.sort((a, b) => a.title.localeCompare(b.title) || a.i - b.i);
+    else if (fileSort === "issues") list.sort((a, b) => b.issues - a.issues || a.i - b.i);
+    else if (fileSort === "maps") list.sort((a, b) => b.file.map_count - a.file.map_count || a.i - b.i);
+    return list;
+  }, [fileEntries, fileQuery, fileSort]);
+  const visibleFiles = orderedFiles.slice(0, fileLimit);
+  const hasMoreFiles = fileLimit < orderedFiles.length;
+
+  // 바닥 센티널이 보이면 한 페이지 더 — limit마다 관찰을 다시 걸어야 짧은 카드로 센티널이 계속 보일 때도 이어서 붙는다
+  useEffect(() => {
+    const root = rightRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel || !hasMoreFiles) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setFileLimit((n) => n + FILE_PAGE);
+      },
+      { root, rootMargin: "160px 0px" },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasMoreFiles, fileLimit]);
+
+  // 좌측에서 고른 파일이 윈도 밖(또는 검색에 걸러진 상태)이면 보이게 만든 뒤 카드로 스크롤
+  const revealFile = (fileIndex: number) => {
+    const pos = orderedFiles.findIndex((e) => e.i === fileIndex);
+    if (pos === -1) {
+      setFileQuery("");
+      setFileLimit(fileEntries.length);
+    } else if (pos >= fileLimit) {
+      setFileLimit(pos + 1);
+    }
+  };
+  useEffect(() => {
+    if (!focus) return;
+    rightRef.current
+      ?.querySelector(`[data-id="interview-file-card-${focus.fileIndex}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focus, fileLimit]);
+
   const focusFile = (fileIndex: number) => {
     const file = index.files[fileIndex];
     const code = file?.l5Code || file?.name || String(fileIndex);
     const name = file?.l5Name || file?.name || "";
+    revealFile(fileIndex);
     setFocus((prev) => (prev?.kind === "file" && prev.fileIndex === fileIndex ? null : { kind: "file", code, fileIndex, name }));
   };
   // 맵 코드 또는 캔버스(L5) 코드 — 다이제스트 칩은 둘 다 올 수 있다
@@ -183,6 +270,7 @@ export function InterviewImportReport({
       return;
     }
     const name = index.maps.get(code)?.name ?? code;
+    revealFile(fileIndex);
     setFocus((prev) => (prev?.kind === "map" && prev.code === code ? null : { kind: "map", code, fileIndex, name }));
   };
   const toggleExtFilter = (state: ExternalRefState) => {
@@ -257,16 +345,34 @@ export function InterviewImportReport({
   return (
     <>
       <div className="rounded-md border border-hairline" data-id="interview-import-report">
-        <div className="relative flex flex-col gap-3 p-3">
-          {/* 적용 완료 음영 — 본문을 덮어 두 번 누르지 않게(푸터의 Cancel로 닫기) */}
-          {result.applied && (
-            <div
-              data-id="interview-import-applied-overlay"
-              className="absolute inset-0 z-[2] rounded-t-md bg-surface/70 backdrop-blur-[1px]"
+        {/* 본문 — 뷰포트 높이 상한(카드 헤더·페이지 여백 제외), 좌/우 열이 각자 스크롤. 레이어는 본문만 덮는다(푸터 Cancel은 살아 있음) */}
+        <div className="relative flex max-h-[calc(100vh-11rem)] flex-col rounded-t-md p-3">
+          {result.applied ? (
+            <SectionOverlay
+              dataId="interview-import-applied-overlay"
+              icon={<CircleCheck size={18} strokeWidth={1.5} />}
+              title={t("framework.importAppliedTitle")}
+            >
+              <span data-id="interview-import-applied" className="text-fine text-ink-tertiary break-keep text-balance">
+                {t("framework.importAppliedOverlay")}
+              </span>
+            </SectionOverlay>
+          ) : phase === "apply" ? (
+            <SectionOverlay
+              dataId="interview-import-applying-overlay"
+              icon={<Loader2 size={18} strokeWidth={1.5} className="animate-spin" />}
+              title={t("framework.importApplying")}
             />
-          )}
-          <div className="grid gap-3 xl:grid-cols-[2fr_3fr]">
-            <div className="flex min-w-0 flex-col gap-3" data-id="interview-report-left">
+          ) : phase === "dryrun" ? (
+            <SectionOverlay
+              dataId="interview-import-rerun-overlay"
+              icon={<Loader2 size={18} strokeWidth={1.5} className="animate-spin" />}
+              title={t("framework.importDryRunPending", { count: files.length })}
+            />
+          ) : null}
+          <div className="grid min-h-0 flex-1 auto-rows-[minmax(0,1fr)] gap-3 xl:grid-cols-[2fr_3fr]">
+            {/* 열 안의 카드는 shrink-0 — 높이 상한에 걸리면 flex 자식이 눌려 요약 카드가 잘린다(실측 2026-09-18) */}
+            <div className="scroll-soft flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto [&>*]:shrink-0" data-id="interview-report-left">
               <ImportSummaryCard
                 fileCount={result.files.length}
                 applied={result.applied}
@@ -308,39 +414,95 @@ export function InterviewImportReport({
                 onHover={setHover}
               />
             </div>
-            <div className="flex min-w-0 flex-col gap-3" data-id="interview-report-right">
+            <div
+              ref={rightRef}
+              className="scroll-soft flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto [&>*]:shrink-0"
+              data-id="interview-report-right"
+            >
+              {/* 스티키 툴바 — 건수·검색·정렬 필. 검색/정렬이 바뀌면 윈도를 처음부터 다시 연다 */}
+              <div
+                data-id="interview-report-toolbar"
+                className="sticky top-0 z-[3] flex flex-wrap items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 py-1.5 shadow-sm"
+              >
+                <span data-id="interview-report-file-total" className="shrink-0 text-fine text-ink-tertiary">
+                  {t("framework.report.fileTotal", { count: result.files.length })}
+                </span>
+                <input
+                  type="search"
+                  data-id="interview-report-search"
+                  value={fileQuery}
+                  placeholder={t("framework.report.fileSearch")}
+                  onChange={(e) => {
+                    setFileQuery(e.target.value);
+                    setFileLimit(FILE_PAGE);
+                  }}
+                  className="h-6 min-w-32 flex-1 rounded-sm border border-hairline bg-surface px-2 text-fine text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none"
+                />
+                <span className="shrink-0 text-fine text-ink-tertiary">{t("framework.report.sortLabel")}</span>
+                <span className="flex flex-wrap gap-1">
+                  {FILE_SORTS.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      data-id={`interview-report-sort-${key}`}
+                      aria-pressed={fileSort === key}
+                      className={`${SORT_PILL} ${
+                        fileSort === key
+                          ? "border-accent/40 bg-accent-tint text-accent"
+                          : "border-hairline text-ink-secondary hover:bg-surface-alt"
+                      }`}
+                      onClick={() => {
+                        setFileSort(key);
+                        setFileLimit(FILE_PAGE);
+                      }}
+                    >
+                      {t(FILE_SORT_LABEL[key])}
+                    </button>
+                  ))}
+                </span>
+              </div>
               <ul className="flex flex-col gap-3" data-id="interview-import-file-reports">
-                {result.files.map((file, i) => {
-                  // 파일 순서는 요청 payload 그대로 돌아온다 — 이름까지 맞을 때만 색인·그룹을 붙인다
-                  const indexed = index.files[i]?.name === file.name ? index.files[i] : undefined;
-                  const group = view.groups[i]?.file === file.name ? view.groups[i] : undefined;
-                  return (
-                    <ImportFileCard
-                      key={`${file.name}-${i}`}
-                      index={i}
-                      file={file}
-                      indexed={indexed}
-                      group={group}
-                      extCounts={indexed ? extByCanvas.get(indexed.l5Code) : undefined}
-                      content={files[i]?.name === file.name ? files[i].content : undefined}
-                      focus={focus}
-                      hover={hover}
-                      expanded={expandedFiles.has(i)}
-                      previewCode={previewCode}
-                      canvasPreviewing={previewCode === buildCanvasPreviewKey(i)}
-                      browseBusy={browseBusy}
-                      rowOf={(code) => rowsByCode.get(code)}
-                      describe={describe}
-                      onFocusFile={() => focusFile(i)}
-                      onFocusMap={focusCode}
-                      onToggleExpanded={() => toggleFileExpanded(i)}
-                      onTogglePreview={togglePreview}
-                      onToggleCanvasPreview={() => togglePreview(buildCanvasPreviewKey(i))}
-                      onBrowse={() => void handleBrowse(i)}
-                    />
-                  );
-                })}
+                {visibleFiles.map(({ i, file, indexed, group }) => (
+                  <ImportFileCard
+                    key={`${file.name}-${i}`}
+                    index={i}
+                    file={file}
+                    indexed={indexed}
+                    group={group}
+                    extCounts={indexed ? extByCanvas.get(indexed.l5Code) : undefined}
+                    content={files[i]?.name === file.name ? files[i].content : undefined}
+                    focus={focus}
+                    hover={hover}
+                    expanded={expandedFiles.has(i)}
+                    previewCode={previewCode}
+                    canvasPreviewing={previewCode === buildCanvasPreviewKey(i)}
+                    browseBusy={browseBusy}
+                    rowOf={(code) => rowsByCode.get(code)}
+                    describe={describe}
+                    onFocusFile={() => focusFile(i)}
+                    onFocusMap={focusCode}
+                    onToggleExpanded={() => toggleFileExpanded(i)}
+                    onTogglePreview={togglePreview}
+                    onToggleCanvasPreview={() => togglePreview(buildCanvasPreviewKey(i))}
+                    onBrowse={() => void handleBrowse(i)}
+                  />
+                ))}
               </ul>
+              {orderedFiles.length === 0 && (
+                <p data-id="interview-report-search-none" className="py-2 text-center text-fine text-ink-tertiary">
+                  {t("framework.report.fileSearchNone")}
+                </p>
+              )}
+              {hasMoreFiles && (
+                <div
+                  ref={sentinelRef}
+                  data-id="interview-report-more"
+                  className="flex items-center justify-center gap-1.5 py-2 text-fine text-ink-tertiary"
+                >
+                  <Loader2 size={12} strokeWidth={1.5} className="animate-spin" />
+                  {t("framework.report.filesShown", { shown: visibleFiles.length, total: orderedFiles.length })}
+                </div>
+              )}
               {orphanGroup && orphanGroup.maps.length > 0 && (
                 <ReportSection
                   dataId="interview-import-unmatched"
@@ -404,15 +566,8 @@ export function InterviewImportReport({
               </button>
             </span>
           )}
-          {result.applied ? (
-            <span
-              data-id="interview-import-applied"
-              className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-fine text-accent"
-            >
-              <CircleCheck size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="min-w-0 truncate">{t("framework.importAppliedOverlay")}</span>
-            </span>
-          ) : (
+          {/* 적용 완료 문구는 본문 레이어 가운데로 옮겼다(2026-09-18) — 푸터는 버튼만 */}
+          {!result.applied && (
             <span className="min-w-0 flex-1 truncate text-fine text-ink-tertiary">
               {t("framework.importApplyBar", {
                 // 전달분 맵 수 — 무변경 재전달도 맵은 존재하므로 unchanged까지 합산
@@ -426,7 +581,7 @@ export function InterviewImportReport({
             type="button"
             data-id="interview-import-cancel"
             disabled={busy}
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+            className="ml-auto rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
             onClick={onCancel}
           >
             {t("common.cancel")}

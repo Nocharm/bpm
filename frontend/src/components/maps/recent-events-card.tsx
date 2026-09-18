@@ -90,6 +90,7 @@ export function RecentEventsCard({ events, onSelect }: RecentEventsCardProps) {
               dataId="dashboard-event-row"
               extraData={{ "data-event": e.event_type }}
               onClick={() => onSelect(e.map_id)}
+              pendingLabel={t("home.dash.selectingMap", { name: e.map_name })}
               className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-divider px-3 py-1.5 text-left"
             >
               {/* 조각(필·이름·칩·글자)을 한 줄 flex로 세로 중앙 정렬 — 이름만 말줄임, 메모는 남는 폭에서 말줄임 */}
