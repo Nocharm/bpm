@@ -1709,14 +1709,8 @@ function ComparePane({
                           {statusIcon(item.status)}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-caption-strong text-ink">{item.title}</span>
-                            <span
-                              className={`rounded-full px-1.5 text-fine font-semibold ${badgeClass[item.status]}`}
-                            >
-                              {badgeLabel[item.status]}
-                            </span>
-                          </span>
+                          {/* 상태는 왼쪽 아이콘 사각으로 충분 — 틴트 필은 중복이라 제거 (사용자 지시 2026-09-18) */}
+                          <span className="block text-caption-strong text-ink">{item.title}</span>
                           {item.fields && item.fields.length > 0 && (
                             // 필드별 세로 행 — 상태색(생성/삭제/변경)·부분 강조, 잘린 값은 호버 팝오버로 전체 표시.
                             <span className="mt-1 flex flex-col gap-0.5">
