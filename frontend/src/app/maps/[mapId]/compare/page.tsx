@@ -69,7 +69,6 @@ import {
   type VersionSummary,
 } from "@/lib/api";
 import {
-  EDGE_LABEL_MAX_WIDTH,
   getNextNodeAlongFlow,
   getPrevNodeAlongFlow,
   type HandleSide,
@@ -121,6 +120,22 @@ import {
 } from "@/lib/merge-diff";
 
 const nodeTypes: NodeTypes = { process: ProcessNode };
+
+// 읽기전용 필 — 속성 본문 최상단(제목 위). 탭 줄은 범위 토글에 양보 (사용자 요청 2026-09-18).
+function ViewOnlyPill({ label }: { label: string }) {
+  return (
+    <div className="flex justify-end" data-id="compare-inspector-viewonly">
+      <span className="inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
+        <Lock size={12} strokeWidth={1.7} />
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// 비교 엣지 라벨 최대폭(px) — 에디터(160)보다 좁게: 비교 배치는 랭크 간격이 촘촘해(ranksep 120) 수평 연결에서
+// 라벨이 이웃 노드를 덮기 쉽다. 넘치면 자동 줄바꿈 (사용자 결정 2026-09-18).
+const COMPARE_EDGE_LABEL_MAX_WIDTH = 120;
 
 // passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 우회하는 아크(red 점선). C2b.
 // 삭제된 직접 연결이 새 경로(A→X→B)와 겹치지 않게 부풀린 베지어. 방향은 핸들 변으로 결정:
@@ -175,13 +190,12 @@ function LabeledSmoothEdge({
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
       {label && (
         <EdgeLabelRenderer>
-          {/* 최대폭 + 자동 줄바꿈 — 에디터(multiline-edge)와 같은 EDGE_LABEL_MAX_WIDTH. 수평 연결에서
-              긴 라벨이 이웃 노드를 덮거나 잘리지 않게 (사용자 요청 2026-09-18) */}
+          {/* 최대폭 + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게 */}
           <div
             className="pointer-events-none absolute whitespace-pre-wrap rounded-xs px-1 text-center text-fine leading-tight text-ink-secondary"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              maxWidth: EDGE_LABEL_MAX_WIDTH,
+              maxWidth: COMPARE_EDGE_LABEL_MAX_WIDTH,
               overflowWrap: "break-word",
               background: "color-mix(in srgb, var(--color-surface) 55%, transparent)",
               backdropFilter: "blur(3px)",
@@ -1817,12 +1831,7 @@ function ComparePane({
                     </>
                   )}
                 </div>
-              ) : (
-                <span className="ml-auto inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
-                  <Lock size={12} strokeWidth={1.7} />
-                  {t("compare.viewOnly")}
-                </span>
-              )}
+              ) : null}
             </div>
             {inspectorTab === "summary" ? (
               // 요약 탭 — 버전 합계 카드(파라미터·구조·시스템·부서/담당자·GMP). 드롭다운 체크로 숨김.
@@ -2076,6 +2085,7 @@ function ComparePane({
                 className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3"
                 data-id="compare-inspector-edge"
               >
+                <ViewOnlyPill label={t("compare.viewOnly")} />
                 <div>
                   <div className="mb-1 text-fine text-ink-tertiary">{t("compare.kindEdges")}</div>
                   <div className="rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
@@ -2125,8 +2135,9 @@ function ComparePane({
                 </div>
               </div>
             ) : !selectedNode ? (
-              <div className="px-3 py-3 text-caption text-ink-tertiary">
-                {t("compare.selectNode")}
+              <div className="flex flex-col gap-3 px-3 py-3">
+                <ViewOnlyPill label={t("compare.viewOnly")} />
+                <div className="text-caption text-ink-tertiary">{t("compare.selectNode")}</div>
               </div>
             ) : (() => {
               // 변경만 — 변경 노드에서 바뀐 필드만 남긴다(제목·설명·타입·색 포함). 그 외 노드는 모두 표시.
@@ -2134,8 +2145,29 @@ function ComparePane({
               const hasChange = (field: ChangedField) =>
                 selectedNode.fieldChanges.some((fc) => fc.field === field);
               const show = (field: ChangedField) => !changedOnly || hasChange(field);
+              // 변경 노드가 아니면 속성 전체를 톤다운하고 상태 워터마크(추가/삭제/변경 없음)를 덮는다 —
+              // 값 비교 대상이 아님을 한눈에 (사용자 요청 2026-09-18). 워터마크는 스크롤과 무관하게 고정.
+              const dimmed = selectedNode.status !== "changed";
+              const statusMark =
+                selectedNode.status === "unchanged" ? t("compare.statusUnchanged") : badgeLabel[selectedNode.status];
               return (
-              <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3" data-id="compare-inspector-props">
+              <div className="relative flex min-h-0 flex-1 flex-col">
+              {dimmed && (
+                <div
+                  className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center overflow-hidden"
+                  data-id="compare-inspector-watermark"
+                >
+                  <span className="-rotate-[18deg] select-none whitespace-nowrap text-[44px] font-semibold tracking-widest text-ink opacity-[0.08]">
+                    {statusMark}
+                  </span>
+                </div>
+              )}
+              <div
+                className={`flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3${dimmed ? " opacity-55" : ""}`}
+                data-id="compare-inspector-props"
+                data-dimmed={dimmed ? "true" : "false"}
+              >
+                <ViewOnlyPill label={t("compare.viewOnly")} />
                 {show("title") && (
                 <div>
                   <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG.title)}</div>
@@ -2229,12 +2261,17 @@ function ComparePane({
                       current: selectedNode.node[key] ?? "",
                     }))
                     .filter((row) => (changedOnly ? row.change : row.change || row.current));
-                  if (rows.length === 0) return null;
+                  // 변경만 모드에서 바뀐 IO/조건이 없으면 섹션 자체를 생략. 모두 모드에선 비어도 섹션을 남겨
+                  // "입출력·조건이 어디 있나"를 답한다 (사용자 피드백 2026-09-18).
+                  if (rows.length === 0 && changedOnly) return null;
                   return (
-                    <div className="flex flex-col gap-2" data-id="compare-inspector-io">
-                      <div className="text-fine font-semibold text-ink-tertiary">
+                    <div className="flex flex-col gap-2 border-t border-hairline pt-3" data-id="compare-inspector-io">
+                      <div className="text-caption font-semibold text-ink-secondary">
                         {t("inspector.details")}
                       </div>
+                      {rows.length === 0 && (
+                        <div className="text-caption text-ink-tertiary">{t("summary.none")}</div>
+                      )}
                       {rows.map(({ key, change, current }) => (
                         <div key={key}>
                           <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG[key])}</div>
@@ -2257,6 +2294,7 @@ function ComparePane({
                     </div>
                   );
                 })()}
+              </div>
               </div>
               );
             })()}
