@@ -2115,6 +2115,72 @@ class AiModelsOut(BaseModel):
     models: list[str]
 
 
+# ---- 비교 화면 AI 요약 (2026-09-18) ----
+# diff는 프론트(merge-diff.ts)가 계산한 결과를 컴팩트하게 전송 — 파이썬에 diff 로직을 복제하지 않는다.
+# ref는 프론트가 하이라이트 클릭→캔버스 포커스 복원에 쓰는 임시키(n1/e1…); 모델은 이를 인용만 한다.
+class CompareDiffField(BaseModel):
+    field: str = Field(max_length=40)
+    before: str = Field(default="", max_length=500)
+    after: str = Field(default="", max_length=500)
+
+
+class CompareDiffNode(BaseModel):
+    ref: str = Field(max_length=16)
+    status: Literal["added", "removed", "changed"]
+    title: str = Field(max_length=200)
+    node_type: str = Field(default="", max_length=30)
+    changes: list[CompareDiffField] = Field(default_factory=list, max_length=40)
+
+
+class CompareDiffEdge(BaseModel):
+    ref: str = Field(max_length=16)
+    status: Literal["added", "removed", "changed"]
+    source: str = Field(max_length=200)  # 노드 제목
+    target: str = Field(max_length=200)
+    label: str = Field(default="", max_length=200)
+    label_before: str = Field(default="", max_length=200)
+
+
+class CompareDiffTotals(BaseModel):
+    nodes_added: int = Field(default=0, ge=0)
+    nodes_removed: int = Field(default=0, ge=0)
+    nodes_changed: int = Field(default=0, ge=0)
+    edges_added: int = Field(default=0, ge=0)
+    edges_removed: int = Field(default=0, ge=0)
+    edges_changed: int = Field(default=0, ge=0)
+
+
+class CompareDiffPayload(BaseModel):
+    nodes: list[CompareDiffNode] = Field(default_factory=list, max_length=200)
+    edges: list[CompareDiffEdge] = Field(default_factory=list, max_length=200)
+    # 상한 초과로 잘린 개수 — 프롬프트에 "외 N건"으로 알린다
+    omitted_nodes: int = Field(default=0, ge=0)
+    omitted_edges: int = Field(default=0, ge=0)
+    totals: CompareDiffTotals = Field(default_factory=CompareDiffTotals)
+
+
+class CompareSummaryRequest(BaseModel):
+    base_version_id: int
+    target_version_id: int
+    lang: Literal["ko", "en"] = "ko"
+    diff: CompareDiffPayload
+
+
+class CompareSummaryHighlight(BaseModel):
+    kind: Literal["added", "removed", "changed", "flow", "param", "other"] = "other"
+    title: str = Field(max_length=300)
+    detail: str = Field(default="", max_length=1000)
+    refs: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CompareSummaryOut(BaseModel):
+    headline: str = Field(max_length=600)
+    highlights: list[CompareSummaryHighlight] = Field(default_factory=list, max_length=12)
+    impacts: list[str] = Field(default_factory=list, max_length=8)
+    # 서버가 요청 totals를 되돌려 채움 — 모델 출력 아님(집계 카드용)
+    stats: CompareDiffTotals | None = None
+
+
 class AiChatSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

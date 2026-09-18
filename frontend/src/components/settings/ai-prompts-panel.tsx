@@ -46,6 +46,10 @@ const PROMPT_LABELS: Record<string, { name: MessageKey; hint: MessageKey }> = {
     name: "aiPrompts.name.anti_repeat_nudge",
     hint: "aiPrompts.hint.anti_repeat_nudge",
   },
+  compare_summary_contract: {
+    name: "aiPrompts.name.compare_summary_contract",
+    hint: "aiPrompts.hint.compare_summary_contract",
+  },
 };
 
 interface AiPromptsPanelProps {

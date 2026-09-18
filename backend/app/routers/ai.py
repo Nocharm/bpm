@@ -2,6 +2,9 @@
 
 import logging
 from dataclasses import dataclass
+from typing import TypeVar
+
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -28,12 +31,20 @@ from app.ai_prompt import build_messages
 from app.auth import get_current_user
 from app.checkout import is_checkout_active
 from app.db import get_session
-from app.permissions.deps import require_version_map_role
+from app.permissions.deps import require_map_role, require_version_map_role
 from app.manual import get_manual
 from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
 from app.prompt_registry import get_prompt_overrides
 from app.routers.graph import _load_graph
-from app.schemas import AiChatRequest, AiModelsOut, AiProposal, AiTipsOut
+from app.compare_summary import build_compare_summary_messages
+from app.schemas import (
+    AiChatRequest,
+    AiModelsOut,
+    AiProposal,
+    AiTipsOut,
+    CompareSummaryOut,
+    CompareSummaryRequest,
+)
 from app.settings import settings
 
 router = APIRouter(prefix="/api", tags=["ai"], dependencies=[Depends(get_current_user)])
@@ -123,13 +134,17 @@ class AiUsageTotals:
             self.completion_tokens = (self.completion_tokens or 0) + reply.completion_tokens
 
 
+_ReplyT = TypeVar("_ReplyT", bound=BaseModel)
+
+
 async def _ask_and_validate(
-    messages: list[dict], model: str | None
-) -> tuple[AiProposal, AiUsageTotals]:
+    messages: list[dict], model: str | None, *, schema: type[_ReplyT] = AiProposal
+) -> tuple[_ReplyT, AiUsageTotals]:
     """AI 호출 + JSON 검증. 검증 실패 시 1회 재프롬프트, 그래도 실패면 502.
 
     usage는 시도 전체를 누적해 반환 — 실패로 끝나도 호출자가 기록할 수 있게
     HTTPException에 totals를 실어 던진다(exc.usage_totals).
+    schema: 응답 모델 — 챗은 AiProposal, 비교 요약은 CompareSummaryOut.
     """
     totals = AiUsageTotals()
     for attempt in range(2):
@@ -144,7 +159,7 @@ async def _ask_and_validate(
             raise http_exc from exc
         totals.add(reply)
         try:
-            return AiProposal.model_validate_json(_extract_json(reply.content)), totals
+            return schema.model_validate_json(_extract_json(reply.content)), totals
         except ValueError as exc:
             # 원본 출력(모델 텍스트, 비밀 아님)을 서버 로그에만 기록 — 502 원인 진단용. 클라이언트엔 일반 메시지만.
             logger.warning(
@@ -292,6 +307,80 @@ async def ai_chat(
     await session.commit()
     proposal.session_id = chat_session.id
     return proposal
+
+
+@router.post(
+    "/maps/{map_id}/compare/ai-summary",
+    response_model=CompareSummaryOut,
+    # viewer 게이트 — 비교 화면 열람 권한과 동일. diff는 프론트 계산본이라 그래프 재적재 없음.
+    dependencies=[Depends(require_map_role("viewer"))],
+)
+async def ai_compare_summary(
+    map_id: int,
+    payload: CompareSummaryRequest,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CompareSummaryOut:
+    """비교 화면 AI 요약 — 게시본 vs 대기본 diff를 결재자용 총평·하이라이트·영향으로 (2026-09-18)."""
+    if not await is_ai_access_enabled(session):
+        raise HTTPException(status_code=503, detail="AI is disabled")
+    base = await session.get(MapVersion, payload.base_version_id)
+    target = await session.get(MapVersion, payload.target_version_id)
+    # 두 버전 모두 경로의 맵 소속이어야 — 타 맵 버전 id로 권한 우회 금지(존재 노출 안 함)
+    if base is None or base.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"version {payload.base_version_id} not found")
+    if target is None or target.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"version {payload.target_version_id} not found")
+
+    messages = build_compare_summary_messages(
+        payload.diff,
+        base_label=_version_label(base),
+        target_label=_version_label(target),
+        lang=payload.lang,
+        overrides=await get_prompt_overrides(session),
+    )
+    try:
+        summary, usage = await _ask_and_validate(messages, None, schema=CompareSummaryOut)
+    except HTTPException as exc:
+        totals = getattr(exc, "usage_totals", None)
+        try:
+            session.add(
+                AiUsageEvent(
+                    login_id=user,
+                    map_id=map_id,
+                    version_id=target.id,
+                    model="",
+                    kind=None,
+                    prompt_tokens=getattr(totals, "prompt_tokens", None),
+                    completion_tokens=getattr(totals, "completion_tokens", None),
+                    ok=False,
+                )
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답(502)을 바꾸지 않는다
+            await session.rollback()
+            logger.warning("AI usage event insert failed (compare summary failure path)")
+        raise
+    summary.stats = payload.diff.totals
+    session.add(
+        AiUsageEvent(
+            login_id=user,
+            map_id=map_id,
+            version_id=target.id,
+            model="",
+            kind="compare_summary",
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            ok=True,
+        )
+    )
+    await session.commit()
+    return summary
+
+
+def _version_label(version: MapVersion) -> str:
+    number = f"v{version.version_number} " if version.version_number is not None else ""
+    return f"{number}{version.label} ({version.status})"
 
 
 @router.get("/ai/models", response_model=AiModelsOut)

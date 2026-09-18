@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 263개 · 2026-09-18 기준
+총 264개 · 2026-09-18 기준
 
 ## components/
 
@@ -28,6 +28,7 @@
 | `checkout-panel.tsx` | `CheckoutPanel` | 점유권 탭 | `components/approval-panel.tsx` |
 | `clip-body.tsx` | `ClipBody`, `ClipToggle` | 고정 높이 클립 본문 | `components/maps/map-detail-description.tsx`, `components/maps/map-notes-section.tsx` |
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |
+| `compare-ai-summary.tsx` | `CompareAiSummary` | 비교 화면 AI 요약 탭 본문 | `app/maps/[mapId]/compare/page.tsx` |
 | `compare-field-diff.tsx` | `FieldDiffValues`, `FieldDiffHoverable` | 비교 필드 diff 공용 렌더 | `app/maps/[mapId]/compare/page.tsx`, `components/process-node.tsx` |
 | `confirm-dialog.tsx` | `ConfirmDialog` | 범용 확인 모달 | `app/inbox/page.tsx`, `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/consult/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/admin/framework-panel.tsx`, `components/admin/local-account-table.tsx`, `components/admin/ref-group-card.tsx`, `components/admin/table-viewer.tsx`, `components/ai-chat-panel.tsx`, `components/bpm-attribute-picker.tsx`, `components/feedback-detail-modal.tsx`, `components/framework-browse-modal.tsx`, `components/framework-confirm-section.tsx`, `components/framework-connect-dialog.tsx`, `components/groups/group-actions.tsx`, `components/groups/group-detail.tsx`, `components/interview/interview-panel.tsx`, `components/interview/interview-preview.tsx`, `components/map-inspector-tab.tsx`, `components/map-name-dropdown.tsx`, `components/maps/map-notes-section.tsx`, `components/permissions/create-map-dialog.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/kb-manage-panel.tsx`, `components/settings/manual-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/version/approve-confirm-dialog.tsx`, `components/version/approver-status-lines.tsx`, `components/version/publish-confirm-dialog.tsx`, `components/version/reject-dialog.tsx`, `components/version/submit-confirm-dialog.tsx`, `components/version/version-switch-confirm.tsx`, `components/version/withdraw-confirm-dialog.tsx` |
 | `context-menu.tsx` | `ContextMenu`, `EdgeSidesPad` | 마우스 커서 위치에 뜨는 컨텍스트 메뉴 | `app/maps/[mapId]/page.tsx`, `components/library-dept-flyout.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx` |
@@ -119,7 +120,7 @@
 | `search-box.tsx` | `SearchBox` | 공용 검색창 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `app/page.tsx` |
 | `search-select.tsx` | `SearchSelect` | 검색 드롭다운 | `components/bpm-attribute-picker.tsx`, `components/dashboard/access-sidebar.tsx`, `components/group-bulk-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/permissions/attribute-tiles.tsx`, `lib/korean-dept.ts` |
 | `section-header.tsx` | `SectionHeader` | 섹션 헤더 | `components/maps/category-summary-card.tsx`, `components/maps/map-detail-description.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-notes-section.tsx` |
-| `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
+| `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
 | `section-panel.tsx` | `SectionPanel` | 섹션 피커 패널 | `app/maps/[mapId]/page.tsx` |
 | `self-publish-popover.tsx` | `SelfPublishPopover` | 셀프 게시 확인 팝오버 | `app/maps/[mapId]/page.tsx`, `components/permissions/versions-publish-panel.tsx` |
 | `skeleton.tsx` | `SkeletonBlock`, `SkeletonLine`, `SkeletonPill`, `SkeletonCard` | 스켈레톤 플레이스홀더 | `app/notices/page.tsx`, `components/admin/import-report/person-pill.tsx`, `components/map-ownership-section.tsx`, `components/maps/approvals-card.tsx`, `components/maps/dashboard-activity-tiles.tsx`, `components/maps/dashboard-profile.tsx`, `components/maps/framework-card.tsx`, `components/maps/home-skeleton.tsx`, `components/maps/recent-events-card.tsx`, `components/user-pill.tsx` |

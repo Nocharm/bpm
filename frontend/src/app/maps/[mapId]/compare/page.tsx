@@ -36,6 +36,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Loader2,
   Lock,
   type LucideIcon,
   Maximize,
@@ -54,11 +55,13 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
+  aiCompareSummary,
   ApiError,
   type FlatNode,
   getFullGraph,
@@ -83,6 +86,8 @@ import {
   type AppNode,
 } from "@/lib/canvas";
 import { humanizeApiError } from "@/lib/api-errors";
+import { buildCompareSummaryPayload, hasCompareChanges } from "@/lib/compare-summary-payload";
+import { useMe } from "@/lib/me";
 import { buildIoDiff } from "@/lib/io-diff";
 import { classifyFieldDiff } from "@/lib/compare-field-diff";
 import {
@@ -750,6 +755,7 @@ function ComparePane({
   targetId,
   baseGraph,
   targetGraph,
+  graphsFresh,
   onChangeBase,
   onChangeTarget,
 }: {
@@ -761,11 +767,13 @@ function ComparePane({
   targetId: number;
   baseGraph: VersionGraph;
   targetGraph: VersionGraph;
+  graphsFresh: boolean; // 두 그래프가 현재 base/target id의 것인지 — 버전 전환 중엔 false(AI 선행 생성 게이트)
   onChangeBase: (id: number) => void;
   onChangeTarget: (id: number) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const flow = useReactFlow();
+  const me = useMe();
   const [focusId, setFocusId] = useState<string | null>(null);
   // 변경 패널 필터 — 상태(all/추가/삭제/변경) + 종류(all/노드/엣지). 칩 클릭으로 목록 좁힘.
   const [filter, setFilter] = useState<"all" | "added" | "removed" | "changed">("all");
@@ -777,7 +785,7 @@ function ComparePane({
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [titleMenuOpen, setTitleMenuOpen] = useState(false);
   // 인스펙터 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계). 요약 카드별 펼침/숨김 + 항목 드롭다운.
-  const [inspectorTab, setInspectorTab] = useState<"props" | "summary">("props");
+  const [inspectorTab, setInspectorTab] = useState<"props" | "summary" | "ai">("props");
   // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
   const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
   // 노드 실측 크기 — RF dimensions 변경에서 수집. 배치(dagre)·백본 정렬·핸들 중심이 이 값을 쓴다.
@@ -1236,6 +1244,49 @@ function ComparePane({
   const hasChanges = changeItems.length > 0;
 
   // 좌상 카운트 필 + 패널 필터칩 — 노드+엣지를 status별 집계(엣지 추가/삭제 포함, 변경은 노드만).
+  // AI 요약 — 비교 진입(그래프 준비) 시 선행 생성해 탭을 열 때 이미 떠 있게 한다(체감 속도, 2026-09-18).
+  // (base,target) 조합별 결과를 보관해 드롭다운 왕복 시 재호출하지 않는다. 재생성은 헤더 버튼.
+  const aiKey = `${baseId}:${targetId}`;
+  const [aiRuns, setAiRuns] = useState<Map<string, CompareAiRun>>(() => new Map());
+  const aiRun = aiRuns.get(aiKey);
+  const aiEnabled: boolean | null = me ? me.ai_enabled : null;
+  const aiPayload = useMemo(() => buildCompareSummaryPayload(merged), [merged]);
+  const aiNoChanges = !hasCompareChanges(aiPayload.payload.totals);
+  const aiSeqRef = useRef(0);
+  const requestAiSummary = useCallback(() => {
+    const key = aiKey;
+    const seq = ++aiSeqRef.current;
+    setAiRuns((prev) => new Map(prev).set(key, { status: "loading" }));
+    void aiCompareSummary(mapId, baseId, targetId, aiPayload.payload, lang)
+      .then((result) => {
+        if (seq !== aiSeqRef.current) return; // 재생성이 겹치면 마지막 요청만 반영
+        setAiRuns((prev) => new Map(prev).set(key, { status: "done", result }));
+      })
+      .catch((err: unknown) => {
+        if (seq !== aiSeqRef.current) return;
+        setAiRuns((prev) => new Map(prev).set(key, { status: "error", error: humanizeApiError(err, t) }));
+      });
+  }, [aiKey, aiPayload, baseId, targetId, mapId, lang, t]);
+  useEffect(() => {
+    if (aiEnabled !== true || !graphsFresh || aiNoChanges || aiRuns.has(aiKey)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    requestAiSummary(); // intentional: prefetch the summary as soon as both graphs are in
+  }, [aiEnabled, graphsFresh, aiNoChanges, aiRuns, aiKey, requestAiSummary]);
+  // 하이라이트 refs(n1/e1…) → 캔버스 포커스. 응답이 모르는 ref를 인용하면 무시.
+  const focusAiRef = useCallback(
+    (ref: string) => {
+      const hit = aiPayload.refs.get(ref);
+      if (!hit) return;
+      if (hit.kind === "node") {
+        focusNode(hit.id);
+        return;
+      }
+      const edge = merged.edges.find((e) => e.id === hit.id);
+      if (edge) focusEdge(edge);
+    },
+    [aiPayload, merged, focusNode, focusEdge],
+  );
+
   const counts = useMemo(() => {
     const acc = { added: 0, removed: 0, changed: 0 };
     for (const item of changeItems) {
@@ -1658,14 +1709,8 @@ function ComparePane({
                           {statusIcon(item.status)}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-caption-strong text-ink">{item.title}</span>
-                            <span
-                              className={`rounded-full px-1.5 text-fine font-semibold ${badgeClass[item.status]}`}
-                            >
-                              {badgeLabel[item.status]}
-                            </span>
-                          </span>
+                          {/* 상태는 왼쪽 아이콘 사각으로 충분 — 틴트 필은 중복이라 제거 (사용자 지시 2026-09-18) */}
+                          <span className="block text-caption-strong text-ink">{item.title}</span>
                           {item.fields && item.fields.length > 0 && (
                             // 필드별 세로 행 — 상태색(생성/삭제/변경)·부분 강조, 잘린 값은 호버 팝오버로 전체 표시.
                             <span className="mt-1 flex flex-col gap-0.5">
@@ -1765,6 +1810,7 @@ function ComparePane({
                 [
                   { key: "props", label: t("compare.properties") },
                   { key: "summary", label: t("compare.summaryTab") },
+                  { key: "ai", label: t("compare.aiTab") },
                 ] as const
               ).map((tab) => (
                 <button
@@ -1772,15 +1818,20 @@ function ComparePane({
                   type="button"
                   data-id={`compare-inspector-tab-${tab.key}`}
                   onClick={() => setInspectorTab(tab.key)}
-                  className={`rounded-sm px-2 py-0.5 text-caption ${
+                  className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 text-caption ${
                     inspectorTab === tab.key
                       ? "bg-accent-tint font-semibold text-accent"
                       : "text-ink-secondary hover:bg-surface-alt"
                   }`}
                 >
                   {tab.label}
+                  {/* 생성 중 프로그레스 링 — 다른 탭에 있어도 AI 요약이 작업 중임을 알린다 */}
+                  {tab.key === "ai" && aiRun?.status === "loading" && (
+                    <Loader2 size={12} strokeWidth={1.6} className="animate-spin text-accent" data-id="compare-ai-tab-spinner" />
+                  )}
                 </button>
               ))}
+
               {inspectorTab === "props" && selectedNode ? (
                 // 속성 범위 — 모두 / 변경만. 변경 노드가 아니면 "변경만"은 의미가 없어 비활성.
                 <div className="ml-auto flex items-center gap-0.5 rounded-sm border border-hairline p-0.5" data-id="compare-inspector-scope">
@@ -1856,7 +1907,16 @@ function ComparePane({
                 </div>
               ) : null}
             </div>
-            {inspectorTab === "summary" ? (
+            {inspectorTab === "ai" ? (
+              <CompareAiSummary
+                run={aiRun}
+                aiEnabled={aiEnabled}
+                noChanges={aiNoChanges}
+                onFocusRef={focusAiRef}
+                onRetry={requestAiSummary}
+                onRegenerate={requestAiSummary}
+              />
+            ) : inspectorTab === "summary" ? (
               // 요약 탭 — 버전 합계 카드(파라미터·구조·시스템·부서/담당자·GMP). 드롭다운 체크로 숨김.
               <div
                 className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto p-3"
@@ -2356,6 +2416,9 @@ export default function ComparePage() {
   const [targetId, setTargetId] = useState<number | null>(null);
   const [baseGraph, setBaseGraph] = useState<VersionGraph | null>(null);
   const [targetGraph, setTargetGraph] = useState<VersionGraph | null>(null);
+  // 적재된 그래프가 어느 버전 것인지 — 드롭다운 전환 직후 옛 그래프로 AI 요약이 돌지 않게 (2026-09-18)
+  const [baseGraphFor, setBaseGraphFor] = useState<number | null>(null);
+  const [targetGraphFor, setTargetGraphFor] = useState<number | null>(null);
   // 비공개 맵 접근 게이트 — 로드 403이면 에디터와 동일한 안내 모달 후 홈으로 (에디터 page.tsx accessDenied와 동일 패턴)
   const [accessDenied, setAccessDenied] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -2383,8 +2446,14 @@ export default function ComparePage() {
           isFw ? version.status === "confirmed" : version.status === "published",
         );
         const base = baseCandidates.length > 0 ? baseCandidates[baseCandidates.length - 1] : detail.versions[0];
-        setBaseId(base.id);
-        setTargetId(detail.versions[detail.versions.length - 1].id);
+        // 딥링크 ?base=&target= — 승인 탭 "게시본과 비교"가 게시본 vs 대기본으로 진입 (2026-09-18). 모르는 id는 기본값.
+        const search = new URLSearchParams(window.location.search);
+        const pick = (key: string): number | null => {
+          const id = Number(search.get(key));
+          return id && detail.versions.some((v) => v.id === id) ? id : null;
+        };
+        setBaseId(pick("base") ?? base.id);
+        setTargetId(pick("target") ?? detail.versions[detail.versions.length - 1].id);
       } catch (err) {
         if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
       }
@@ -2400,7 +2469,10 @@ export default function ComparePage() {
     void (async () => {
       try {
         const graph = await getFullGraph(baseId);
-        if (active) setBaseGraph(graph);
+        if (active) {
+          setBaseGraph(graph);
+          setBaseGraphFor(baseId);
+        }
       } catch (err) {
         if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
       }
@@ -2416,7 +2488,10 @@ export default function ComparePage() {
     void (async () => {
       try {
         const graph = await getFullGraph(targetId);
-        if (active) setTargetGraph(graph);
+        if (active) {
+          setTargetGraph(graph);
+          setTargetGraphFor(targetId);
+        }
       } catch (err) {
         if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
       }
@@ -2447,6 +2522,7 @@ export default function ComparePage() {
             targetId={targetId}
             baseGraph={baseGraph}
             targetGraph={targetGraph}
+            graphsFresh={baseGraphFor === baseId && targetGraphFor === targetId}
             onChangeBase={setBaseId}
             onChangeTarget={setTargetId}
           />
