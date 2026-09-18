@@ -5938,6 +5938,34 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const handleExportPng = useCallback(async () => {
+    // 선택 링·IO 상세·흐름 강조는 React 상태(selected 플래그·selectedId)가 그린다 — 캡처 전에 선택을
+    // 비우고 한 프레임 기다려 평상시 모습으로 찍은 뒤 원래 선택을 복원한다(사용자 요청 2026-09-18).
+    const prevSelectedId = selectedId;
+    const prevSelectedEdgeId = selectedEdgeId;
+    const prevNodeIds = new Set(nodesRef.current.filter((node) => node.selected).map((node) => node.id));
+    const prevChildIds = new Set(childNodesRef.current.filter((node) => node.selected).map((node) => node.id));
+    const applySelection = (nodeIds: Set<string>, childIds: Set<string>) => {
+      setNodes((current) =>
+        current.map((node) =>
+          node.selected === nodeIds.has(node.id) ? node : { ...node, selected: nodeIds.has(node.id) },
+        ),
+      );
+      setChildNodes((current) =>
+        current.map((node) =>
+          node.selected === childIds.has(node.id) ? node : { ...node, selected: childIds.has(node.id) },
+        ),
+      );
+    };
+    const hadSelection = prevSelectedId !== null || prevSelectedEdgeId !== null || prevNodeIds.size > 0 || prevChildIds.size > 0;
+    if (hadSelection) {
+      setSelectedId(null);
+      setSelectedEdgeId(null);
+      applySelection(new Set(), new Set());
+      // 상태 반영 → 페인트까지 두 프레임
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+    }
     try {
       // getNodesBounds는 전달받은 좌표 그대로 프레임을 잡는데, 캡처 대상(.react-flow__viewport)은
       // height-shift로 밀린 *표시* 위치를 그린다 — 저장 좌표(nodesRef)로 프레임을 잡으면 밀려난
@@ -5978,6 +6006,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       await exportCanvasPng(exportNodes, buildExportFileName("png"), info, l5Charcoal);
     } catch (err) {
       setStatus(humanizeApiError(err, t));
+    } finally {
+      if (hadSelection) {
+        setSelectedId(prevSelectedId);
+        setSelectedEdgeId(prevSelectedEdgeId);
+        applySelection(prevNodeIds, prevChildIds);
+      }
     }
   }, [
     buildExportFileName,
@@ -5991,6 +6025,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     mapCategoryPath,
     isFrameworkMap,
     l5Charcoal,
+    selectedId,
+    selectedEdgeId,
+    setNodes,
+    setChildNodes,
   ]);
 
   const handleExportCsv = useCallback(() => {

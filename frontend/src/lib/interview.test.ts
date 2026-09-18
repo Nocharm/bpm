@@ -76,6 +76,29 @@ describe("addedNodeKeys", () => {
 });
 
 describe("layoutWorkingGraph", () => {
+  it("carries AI attributes (role·dept·system·params) into node data so the preview node renders them", () => {
+    const graph: WorkingGraph = {
+      ...GRAPH,
+      nodes: [
+        GRAPH.nodes[0],
+        {
+          ...GRAPH.nodes[1],
+          attributes: { assignee_role: "Buyer", department: "구매팀", system: "SAP", duration: "1.30", fte: "0.5" },
+        },
+      ],
+    };
+    const { nodes } = layoutWorkingGraph(graph, new Set());
+    const a = nodes.find((n) => n.id === "a")!;
+    expect(a.data.assignee_role).toBe("Buyer");
+    expect(a.data.department).toBe("구매팀");
+    expect(a.data.system).toBe("SAP");
+    expect(a.data.duration).toBe("1.30");
+    expect(a.data.fte).toBe("0.5");
+    expect(a.data.assignee).toBe(""); // AI 표면엔 담당자 실명 없음
+    // attributes null이면 전부 빈 문자열
+    expect(nodes.find((n) => n.id === "s")!.data.department).toBe("");
+  });
+
   it("dagre 배치 후 좌표·diffStatus 부여", () => {
     const { nodes, edges } = layoutWorkingGraph(GRAPH, new Set(["a"]));
     expect(nodes).toHaveLength(2);

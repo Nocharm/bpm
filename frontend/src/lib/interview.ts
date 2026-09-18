@@ -207,6 +207,10 @@ export function layoutWorkingGraph(
   if (!graph || graph.nodes.length === 0) return { nodes: [], edges: [] };
   const nodes: AppNode[] = graph.nodes.map((n) => {
     const nodeType = normalizeNodeType(n.node_type);
+    // AI 속성(역할·부서·시스템·회당 파라미터)을 노드 data로 옮긴다 — 프리뷰 노드가 에디터처럼 속성 줄·
+    // 파라미터 칩을 그리게(라벨만 보이면 수집된 파라미터를 한눈에 확인 못 한다, 2026-09-18).
+    // AI 표면엔 담당자 실명이 없으므로 assignee는 비우고 역할 칩만 싣는다.
+    const attrs = n.attributes;
     return {
       id: n.key,
       type: "process",
@@ -219,9 +223,16 @@ export function layoutWorkingGraph(
         nodeType,
         color: "",
         assignee: "",
-        department: "",
-        system: "",
-        duration: "",
+        assignee_role: attrs?.assignee_role ?? "",
+        department: attrs?.department ?? "",
+        system: attrs?.system ?? "",
+        duration: attrs?.duration ?? "",
+        touch_time: attrs?.touch_time ?? "",
+        cost_krw: attrs?.cost_krw ?? "",
+        cost_usd: attrs?.cost_usd ?? "",
+        headcount: attrs?.headcount ?? "",
+        annual_count: attrs?.annual_count ?? "",
+        fte: attrs?.fte ?? "",
         groupIds: [],
         hasChildren: false,
         sideHandles: true,

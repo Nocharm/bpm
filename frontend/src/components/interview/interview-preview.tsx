@@ -3,7 +3,7 @@
 // 좌측 메인 프리뷰 — 읽기전용 캔버스(워터마크·핸들 숨김) + 체크포인트 스택(좌상단)
 // + 선택지 플로팅 창 오버레이 + 노드 호버 멘션 버튼 (design 2026-07-23 §6, 실사용 피드백 2차)
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import type { Node, NodeTypes } from "@xyflow/react";
@@ -18,7 +18,7 @@ import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, hi
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { useCatalogs } from "@/lib/catalogs";
-import { EDGE_DEFAULTS } from "@/lib/canvas";
+import { EDGE_DEFAULTS, getNextNodeAlongFlow, getPrevNodeAlongFlow } from "@/lib/canvas";
 import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
 import { ProcessNode } from "@/components/process-node";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -34,10 +34,12 @@ const NO_ADDED = new Set<string>();
 const EMPTY_KEYS = new Set<string>();
 
 // compare의 COMPARE_NODE_ACTIONS와 동일 — ProcessNode가 요구하는 읽기전용 context
+// 노드 위 표시 필드 — 인스펙터 카드와 같은 범위(역할·부서·시스템·파라미터 칩). IO·조건·URL은 노드 높이를
+// 키워 제외 — 카드에서 확인 (2026-09-18).
 const PREVIEW_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: ["params"],
+  displayFields: ["assignee", "department", "system", "params"],
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
@@ -130,6 +132,45 @@ function PreviewCanvas({
     };
   }, [graph, added, focusedKey]);
   const { fitView, flowToScreenPosition, setCenter, getZoom } = useReactFlow();
+
+  // 포커스 줌 — 노드를 중앙으로 부드럽게(축소돼 있으면 1.1까지 확대, 확대 상태는 유지). 클릭·Tab 공용.
+  const centerOnNode = useCallback(
+    (node: Node) => {
+      const width = node.measured?.width ?? node.width ?? 120;
+      const height = node.measured?.height ?? node.height ?? 40;
+      void setCenter(node.position.x + width / 2, node.position.y + height / 2, {
+        zoom: Math.max(getZoom(), 1.1),
+        duration: 400,
+      });
+    },
+    [setCenter, getZoom],
+  );
+
+  // Tab / Shift+Tab — 에디터와 같이 흐름상 다음/이전 노드로 포커스 이동(+중앙). 채팅 입력 포커스 중엔 제외.
+  useEffect(() => {
+    if (!focusedKey) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)
+      ) {
+        return;
+      }
+      // 막다른 노드(끝·고립)에서도 브라우저 기본 Tab을 막는다 — 캔버스 밖 버튼으로 포커스가 새지 않게.
+      event.preventDefault();
+      const nextId = event.shiftKey
+        ? getPrevNodeAlongFlow(edges, focusedKey)
+        : getNextNodeAlongFlow(edges, focusedKey);
+      if (!nextId) return;
+      onNodeClick(nextId);
+      const next = nodes.find((n) => n.id === nextId);
+      if (next) centerOnNode(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusedKey, nodes, edges, onNodeClick, centerOnNode]);
   // 구조가 실제로 바뀐 때만 카메라 리셋 — 맵이 안 변한 텍스트 턴마다 fitView가
   // 사용자 팬/줌 시점을 뺏지 않게 서명으로 게이팅 (hardening T12)
   const signature = useMemo(() => getGraphSignature(graph), [graph]);
@@ -193,13 +234,7 @@ function PreviewCanvas({
         onNodeMouseLeave={handleNodeLeave}
         onNodeClick={(_, node) => {
           onNodeClick(node.id);
-          // 포커스 줌 — 클릭 노드를 중앙으로 부드럽게(축소돼 있으면 1.1까지 확대, 확대 상태는 유지)
-          const width = node.measured?.width ?? node.width ?? 120;
-          const height = node.measured?.height ?? node.height ?? 40;
-          void setCenter(node.position.x + width / 2, node.position.y + height / 2, {
-            zoom: Math.max(getZoom(), 1.1),
-            duration: 400,
-          });
+          centerOnNode(node);
         }}
         onPaneClick={() => onNodeClick(null)}
         onMoveStart={() => setHovered(null)}

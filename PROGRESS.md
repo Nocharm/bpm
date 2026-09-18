@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-18 — AI 컨설턴트 프리뷰 노드 속성 표시 + Tab 이동, PNG 내보내기 선택 해제 (main)
+
+- 프리뷰가 노드 라벨만 보여 수집된 파라미터를 한눈에 못 본다는 피드백 — 원인은 `layoutWorkingGraph`가 AI `attributes`를 노드 data로 안 옮기고 전부 빈값으로 채운 것(파라미터 칩 토글은 이미 ON). 역할·부서·시스템·회당 7필드를 data에 싣고 프리뷰 표시 필드를 인스펙터 카드와 같은 범위(`assignee`·`department`·`system`·`params`)로 확장. IO·조건·URL은 노드 높이를 키워 제외(카드에서 확인). 선택지 카드 썸네일도 같은 컨텍스트라 함께 표시된다.
+- 프리뷰 Tab/Shift+Tab — 에디터와 같은 `getNext/PrevNodeAlongFlow`로 흐름상 다음/이전 노드에 포커스(+클릭과 같은 카메라 센터·1.1 줌). 채팅 입력 포커스 중엔 가로채지 않음.
+- 에디터 PNG 내보내기가 선택 링·IO 상세·흐름 강조까지 찍히던 것 — 선택은 React 상태가 그리므로 캡처 전에 `selectedId`/노드 `selected`를 비우고 두 프레임 뒤 캡처, finally에서 원래 선택 복원. 실측: 캡처 시점 `.selected` 0개·액센트 픽셀 0·캡처 후 선택 1개 복원(`scripts/pw-smoke-preview-tab-export.mjs`, 14/14).
+
 ## 2026-09-18 — 지연 실행 안내를 섹션 레이어로 + 인터뷰 임포트 30파일 워스트 케이스 UX (main)
 
 - 홈 대시보드 1클릭 지연 실행(0.6초)의 안내가 **아이콘 자리 링 치환**이라 눈에 안 띈다는 피드백 — `useDelayedNav`가 가장 가까운 스코프(`DelayedNavScopeContext`)에 `{label, cancel}`을 보고하고, 섹션(`DashboardSection`·점유 목록·프로필·이동 타일 한 칸)이 반투명 레이어(`SectionOverlay`, 임포트 완료와 같은 톤) 가운데에 링 + "Going to Inbox / Selecting {맵}" + "클릭하면 취소"를 띄운다(레이어 클릭 = 취소). 타일은 **한 칸 단위**(묶음 아님, 사용자 지시)라 컴팩트 변형. 섹션 밖 맵 카드는 기존 동작 유지. 헤더 더보기·하단 링크아웃은 `SectionLink`(onClick | href+pendingLabel)로 스코프 안에서 훅을 돌린다.
