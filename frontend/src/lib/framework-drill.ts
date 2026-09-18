@@ -21,27 +21,45 @@ export function getCanvasState(node: Pick<CategoryNode, "canvas_state" | "linkag
   return node.linkage_map_id === null ? "none" : "draft";
 }
 
-export function readPersistedDrill(): number | null {
+// 최근 연 카테고리 id 목록 상한 — 형제 칩 MRU 판정용, 그 이상은 오래된 것부터 버린다.
+export const RECENT_CAP = 100;
+
+export interface PersistedDrill {
+  currentId: number | null;
+  // 최근에 현재 위치였던 카테고리 id, 앞이 최신. 넘친 형제 칩을 "현재 + 최근 연 것"으로 고르는 근거
+  recent: number[];
+}
+
+const isId = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+export function readPersistedDrill(): PersistedDrill {
+  const empty: PersistedDrill = { currentId: null, recent: [] };
   try {
     const raw = window.localStorage.getItem(DRILL_STATE_KEY);
-    if (!raw) return null;
+    if (!raw) return empty;
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null && "currentId" in parsed) {
-      const id = (parsed as { currentId: unknown }).currentId;
-      return typeof id === "number" && Number.isFinite(id) ? id : null;
-    }
-    return null;
+    if (typeof parsed !== "object" || parsed === null) return empty;
+    const obj = parsed as { currentId?: unknown; recent?: unknown };
+    return {
+      currentId: isId(obj.currentId) ? obj.currentId : null,
+      recent: Array.isArray(obj.recent) ? obj.recent.filter(isId).slice(0, RECENT_CAP) : [],
+    };
   } catch {
-    return null;
+    return empty;
   }
 }
 
-export function writePersistedDrill(currentId: number | null): void {
+export function writePersistedDrill(state: PersistedDrill): void {
   try {
-    window.localStorage.setItem(DRILL_STATE_KEY, JSON.stringify({ currentId }));
+    window.localStorage.setItem(DRILL_STATE_KEY, JSON.stringify(state));
   } catch {
     // 스토리지 차단(프라이빗 모드 등)은 조용히 무시 — 영속은 편의 기능
   }
+}
+
+// 방문 기록 앞에 id를 올린다(중복 제거·상한). 현재 위치가 바뀔 때마다 호출.
+export function bumpRecent(recent: number[], id: number): number[] {
+  return [id, ...recent.filter((r) => r !== id)].slice(0, RECENT_CAP);
 }
 
 // 형제 칩 후보 — 같은 부모의 level<5 노드만(L5는 드릴인 대상이 아니라 칩이 아닌 카드).
@@ -54,29 +72,46 @@ export function resolveCurrentNode(current: CategoryNode, parentChildren: Catego
   return parentChildren?.find((n) => n.id === current.id) ?? current;
 }
 
-// 형제 칩 노출 인덱스 — 가용 폭 안에 순서대로 채우되 전부 안 들어가면 "더 보기" 버튼 폭을 미리 뺀다.
-// 현재 칩은 항상 보이게: 잘린 구간에 있으면 마지막 자리를 현재 칩으로 바꾼다(순서는 원본 유지).
-export function pickVisibleChips(
-  widths: number[],
-  currentIndex: number,
+// 형제 칩 우선순위 — 현재 칩, 그다음 최근에 연 순(recent 앞이 최신), 나머지는 원래 순서.
+// 매번 같은 앞쪽 칩만 보이면 스트립이 무의미하다는 사용자 지적(2026-09-19)으로 MRU 기준.
+export function orderChipsByRecency<T extends { id: number }>(
+  siblings: T[],
+  currentId: number | null,
+  recent: number[],
+): T[] {
+  const rank = new Map(recent.map((id, i) => [id, i]));
+  return [...siblings].sort((a, b) => {
+    if (a.id === currentId) return -1;
+    if (b.id === currentId) return 1;
+    const ra = rank.get(a.id) ?? Number.POSITIVE_INFINITY;
+    const rb = rank.get(b.id) ?? Number.POSITIVE_INFINITY;
+    if (ra !== rb) return ra - rb;
+    return siblings.indexOf(a) - siblings.indexOf(b);
+  });
+}
+
+// 스트립 배치 — 전부 들어가면 원래 순서로 전부 노출, 넘치면 "더 보기" 버튼 폭을 뺀 나머지에
+// 우선순위(orderChipsByRecency) 순으로 앞에서부터 채운다(처음 안 들어가는 칩에서 멈춤 — 뒤의 작은 칩을
+// 끌어올리면 최근 순이 깨진다). 현재 칩(우선순위 1위)은 폭이 모자라도 최소 하나로 남긴다.
+export function layoutChips<T extends { id: number }>(
+  siblings: T[],
+  priority: T[],
+  widthById: Map<number, number>,
   available: number,
   moreWidth: number,
   gap: number,
-): Set<number> {
-  const total = widths.reduce((sum, w, i) => sum + w + (i > 0 ? gap : 0), 0);
-  if (total <= available) return new Set(widths.map((_, i) => i));
+): { order: T[]; visibleCount: number } {
+  const width = (s: T) => widthById.get(s.id) ?? 0;
+  const total = siblings.reduce((sum, s, i) => sum + width(s) + (i > 0 ? gap : 0), 0);
+  if (total <= available) return { order: siblings, visibleCount: siblings.length };
   const limit = available - moreWidth - gap;
-  const picked: number[] = [];
   let used = 0;
-  for (let i = 0; i < widths.length; i += 1) {
-    const next = used + widths[i] + (picked.length > 0 ? gap : 0);
+  let count = 0;
+  for (const s of priority) {
+    const next = used + width(s) + (count > 0 ? gap : 0);
     if (next > limit) break;
-    picked.push(i);
     used = next;
+    count += 1;
   }
-  if (currentIndex >= 0 && !picked.includes(currentIndex)) {
-    if (picked.length > 0) picked.pop();
-    picked.push(currentIndex);
-  }
-  return new Set(picked);
+  return { order: priority, visibleCount: Math.max(count, 1) };
 }

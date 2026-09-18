@@ -3,9 +3,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { CategoryNode } from "@/lib/api";
 import {
   DRILL_STATE_KEY,
+  RECENT_CAP,
+  bumpRecent,
   getCanvasState,
   getSiblingRows,
-  pickVisibleChips,
+  layoutChips,
+  orderChipsByRecency,
   readPersistedDrill,
   resolveCurrentNode,
   writePersistedDrill,
@@ -33,16 +36,26 @@ describe("framework-drill helpers", () => {
     window.localStorage.removeItem(DRILL_STATE_KEY);
   });
 
-  it("persists the current category id and tolerates broken storage", () => {
-    expect(readPersistedDrill()).toBeNull();
-    writePersistedDrill(42);
-    expect(readPersistedDrill()).toBe(42);
-    writePersistedDrill(null);
-    expect(readPersistedDrill()).toBeNull();
+  it("persists the current id with the recent list and tolerates broken storage", () => {
+    expect(readPersistedDrill()).toEqual({ currentId: null, recent: [] });
+    writePersistedDrill({ currentId: 42, recent: [42, 7] });
+    expect(readPersistedDrill()).toEqual({ currentId: 42, recent: [42, 7] });
+    writePersistedDrill({ currentId: null, recent: [] });
+    expect(readPersistedDrill()).toEqual({ currentId: null, recent: [] });
     window.localStorage.setItem(DRILL_STATE_KEY, "{broken");
-    expect(readPersistedDrill()).toBeNull();
-    window.localStorage.setItem(DRILL_STATE_KEY, JSON.stringify({ currentId: "x" }));
-    expect(readPersistedDrill()).toBeNull();
+    expect(readPersistedDrill()).toEqual({ currentId: null, recent: [] });
+    // 구 포맷(recent 없음)·오염된 항목은 걸러낸다
+    window.localStorage.setItem(DRILL_STATE_KEY, JSON.stringify({ currentId: "x", recent: [1, "b", null, 3] }));
+    expect(readPersistedDrill()).toEqual({ currentId: null, recent: [1, 3] });
+  });
+
+  it("bumpRecent moves the id to the front, dedupes and caps", () => {
+    expect(bumpRecent([3, 1], 1)).toEqual([1, 3]);
+    expect(bumpRecent([], 9)).toEqual([9]);
+    const full = Array.from({ length: RECENT_CAP }, (_, i) => i + 1000);
+    const bumped = bumpRecent(full, 1);
+    expect(bumped).toHaveLength(RECENT_CAP);
+    expect(bumped[0]).toBe(1);
   });
 
   it("derives canvas state from the server field, falling back to linkage presence", () => {
@@ -59,15 +72,36 @@ describe("framework-drill helpers", () => {
     expect(resolveCurrentNode(chainNode, undefined)).toBe(chainNode);
   });
 
-  it("shows every chip when they fit, otherwise reserves the more-button width", () => {
-    expect([...pickVisibleChips([50, 50, 50], 0, 200, 28, 6)]).toEqual([0, 1, 2]);
-    // 156 필요 > 150 가용 → more(28)+gap(6) 예약 후 116 안에 50+6+50=106 → 2개
-    expect([...pickVisibleChips([50, 50, 50], 0, 150, 28, 6)]).toEqual([0, 1]);
+  it("orders chips current-first, then most recently opened, then original order", () => {
+    const sibs = [node(1, 3), node(2, 3), node(3, 3), node(4, 3)];
+    const ordered = orderChipsByRecency(sibs, 3, [4, 3, 1]);
+    expect(ordered.map((s) => s.id)).toEqual([3, 4, 1, 2]);
+    // 방문 기록이 없으면 현재 칩만 앞으로
+    expect(orderChipsByRecency(sibs, 2, []).map((s) => s.id)).toEqual([2, 1, 3, 4]);
   });
 
-  it("keeps the current chip visible by swapping it into the last slot", () => {
-    expect([...pickVisibleChips([50, 50, 50, 50], 3, 150, 28, 6)]).toEqual([0, 3]);
-    // 아무것도 안 들어가는 극단 폭에서도 현재 칩만은 남긴다
-    expect([...pickVisibleChips([80, 80], 1, 60, 28, 6)]).toEqual([1]);
+  it("shows every chip in original order when they fit", () => {
+    const sibs = [node(1, 3), node(2, 3), node(3, 3)];
+    const widths = new Map([[1, 50], [2, 50], [3, 50]]);
+    const out = layoutChips(sibs, orderChipsByRecency(sibs, 3, [3, 2]), widths, 200, 28, 6);
+    expect(out.order.map((s) => s.id)).toEqual([1, 2, 3]);
+    expect(out.visibleCount).toBe(3);
+  });
+
+  it("on overflow fills by priority after reserving the more-button width", () => {
+    const sibs = [node(1, 3), node(2, 3), node(3, 3), node(4, 3)];
+    const widths = new Map([[1, 50], [2, 50], [3, 50], [4, 50]]);
+    // 206 필요 > 150 가용 → more(28)+gap(6) 예약 후 116 안에 50+6+50=106 → 우선순위 앞 2개(현재 3, 최근 4)
+    const out = layoutChips(sibs, orderChipsByRecency(sibs, 3, [4, 1]), widths, 150, 28, 6);
+    expect(out.order.map((s) => s.id)).toEqual([3, 4, 1, 2]);
+    expect(out.visibleCount).toBe(2);
+  });
+
+  it("keeps at least the current chip even when nothing fits", () => {
+    const sibs = [node(1, 3), node(2, 3)];
+    const widths = new Map([[1, 80], [2, 80]]);
+    const out = layoutChips(sibs, orderChipsByRecency(sibs, 2, []), widths, 60, 28, 6);
+    expect(out.order[0].id).toBe(2);
+    expect(out.visibleCount).toBe(1);
   });
 });

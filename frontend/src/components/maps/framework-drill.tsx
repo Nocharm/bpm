@@ -22,9 +22,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { getCategoryChain, listCategoryNodes, type CategoryNode } from "@/lib/api";
 import {
   CANVAS_STATE_LABEL_EN,
+  bumpRecent,
   getCanvasState,
   getSiblingRows,
-  pickVisibleChips,
+  layoutChips,
+  orderChipsByRecency,
   readPersistedDrill,
   resolveCurrentNode,
   writePersistedDrill,
@@ -67,13 +69,15 @@ export function FrameworkDrill({
   const [motion, setMotion] = useState<{ dir: "in" | "back" | null; key: number }>({ dir: null, key: 0 });
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  const stripRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
-  // 형제 세트별 칩 실측 폭 — 모두 렌더된 첫 레이아웃에서 재고 리사이즈 땐 저장값으로 재계산(숨긴 칩은 폭 0)
-  const chipWidthsRef = useRef<{ key: string; widths: number[] } | null>(null);
+  // 형제 세트별 칩 실측 폭(id 키) — 모두 렌더된 첫 레이아웃에서 재고 리사이즈 땐 저장값으로 재계산(숨긴 칩은 폭 0)
+  const chipWidthsRef = useRef<{ key: string; widthById: Map<number, number> } | null>(null);
   const [stripWidth, setStripWidth] = useState(0);
-  // 노출 집합은 세트 키와 함께 보관 — 세트가 바뀐 첫 렌더는 옛 집합을 쓰지 않고 전부 그려 실측한다
-  const [visibleChips, setVisibleChips] = useState<{ key: string; set: Set<number> } | null>(null);
+  // 스트립 배치(표시 순서 + 앞에서 몇 개 노출)는 세트 키와 함께 보관 — 세트가 바뀐 첫 렌더는 옛 배치를
+  // 쓰지 않고 원래 순서로 전부 그려 실측한다
+  const [chipLayout, setChipLayout] = useState<{ key: string; order: number[]; visibleCount: number } | null>(null);
+  // 최근에 현재 위치였던 카테고리(앞이 최신) — 넘친 형제 칩을 "현재 + 최근 연 것"으로 고른다(사용자 지시 2026-09-19)
+  const [recent, setRecent] = useState<number[]>([]);
   const handledRevealSeq = useRef<number | null>(null);
 
   const loadChildren = (key: ParentKey) => {
@@ -104,7 +108,14 @@ export function FrameworkDrill({
   const navigate = (next: CategoryNode[], dir: "in" | "back" | null) => {
     setPath(next);
     setMotion((m) => ({ dir, key: m.key + 1 }));
-    writePersistedDrill(next.length > 0 ? next[next.length - 1].id : null);
+    const currentId = next.length > 0 ? next[next.length - 1].id : null;
+    // 방문 기록은 최신 상태 위에 올린다(이펙트에서 불려도 stale 클로저를 안 탄다). 영속 쓰기는 멱등이라
+    // StrictMode의 updater 이중 호출에도 무해.
+    setRecent((prev) => {
+      const bumped = currentId === null ? prev : bumpRecent(prev, currentId);
+      writePersistedDrill({ currentId, recent: bumped });
+      return bumped;
+    });
     const keys: ParentKey[] = [next.length > 0 ? next[next.length - 1].id : ROOT];
     if (next.length > 0) keys.push(next.length > 1 ? next[next.length - 2].id : ROOT);
     for (const key of keys) if (!children.has(key) && !loading.has(key)) loadChildren(key);
@@ -115,14 +126,16 @@ export function FrameworkDrill({
     let active = true;
     const saved = readPersistedDrill();
     const restore: Promise<CategoryNode[]> =
-      saved === null
+      saved.currentId === null
         ? Promise.resolve([])
-        : getCategoryChain(saved)
+        : getCategoryChain(saved.currentId)
             // 체인 말단이 L5면 그 부모까지만 — L5는 드릴인 대상이 아니다
             .then((chain) => (chain[chain.length - 1]?.level === 5 ? chain.slice(0, -1) : chain))
             .catch(() => []);
     void restore.then((next) => {
-      if (active) navigate(next, null);
+      if (!active) return;
+      setRecent(saved.recent);
+      navigate(next, null);
     });
     return () => {
       active = false;
@@ -156,45 +169,98 @@ export function FrameworkDrill({
   // children 맵이 바뀔 때만 새 배열 — 아래 실측 이펙트 deps에 넣어도 렌더마다 재실행되지 않는다
   const siblings = useMemo(() => (parentChildren ? getSiblingRows(parentChildren) : []), [parentChildren]);
   const current = path && path.length > 0 ? resolveCurrentNode(path[path.length - 1], parentChildren) : null;
-  const currentIndex = current ? siblings.findIndex((s) => s.id === current.id) : -1;
   const siblingsKey = `${String(parentKey)}:${siblings.map((s) => s.id).join(",")}`;
-  const effectiveVisible = visibleChips?.key === siblingsKey ? visibleChips.set : null;
+  const effectiveLayout = chipLayout?.key === siblingsKey ? chipLayout : null;
+  // 표시 순서 — 배치 전(실측 렌더)엔 원래 순서 전부, 배치 후엔 layoutChips가 정한 순서(전부 들어가면 원래 순서,
+  // 넘치면 현재 → 최근 순)로 앞 visibleCount개만 보인다
+  const siblingById = useMemo(() => new Map(siblings.map((s) => [s.id, s])), [siblings]);
+  const displayedChips = effectiveLayout
+    ? effectiveLayout.order.map((id) => siblingById.get(id)).filter((s): s is CategoryNode => s !== undefined)
+    : siblings;
+  const visibleCount = effectiveLayout ? effectiveLayout.visibleCount : displayedChips.length;
 
-  // 형제 칩 폭 실측 → 노출 집합. 세트가 바뀌면(키 불일치) 전부 렌더된 프레임에서 폭을 재고 캐시한다.
+  // 형제 칩 폭 실측 → 배치. 세트가 바뀌면(키 불일치) 전부 렌더된 프레임에서 폭을 재고 캐시한다.
   // setState는 다음 프레임 콜백에서 — 레이아웃 이펙트 본문의 동기 setState(캐스케이드 렌더)를 피한다.
   useLayoutEffect(() => {
     if (siblings.length === 0) return;
     const frame = requestAnimationFrame(() => {
       let cached = chipWidthsRef.current;
       if (!cached || cached.key !== siblingsKey) {
-        const widths = siblings.map((s) => chipRefs.current.get(s.id)?.offsetWidth ?? 0);
+        const widthById = new Map(siblings.map((s) => [s.id, chipRefs.current.get(s.id)?.offsetWidth ?? 0]));
         // 숨김 칩(폭 0)이 섞여 있으면 실측 불가 — 키 불일치 렌더(전부 노출)에서 다시 잰다
-        if (widths.some((w) => w === 0)) return;
-        cached = { key: siblingsKey, widths };
+        if ([...widthById.values()].some((w) => w === 0)) return;
+        cached = { key: siblingsKey, widthById };
         chipWidthsRef.current = cached;
       }
-      const available = stripRef.current?.clientWidth ?? 0;
-      if (available === 0) return;
-      const next = pickVisibleChips(cached.widths, currentIndex, available, MORE_WIDTH, CHIP_GAP);
-      setVisibleChips((prev) => {
-        if (prev && prev.key === siblingsKey && prev.set.size === next.size && [...next].every((i) => prev.set.has(i))) {
+      // 가용 폭은 스트립이 아니라 래퍼(칩 + 더 보기 버튼) 기준 — 스트립은 버튼이 있을 때 그만큼 좁아져
+      // "버튼 때문에 못 들어간다"는 순환(넓혀도 못 돌아옴)이 생긴다
+      const wrapper = moreRef.current;
+      if (!wrapper) return;
+      const style = getComputedStyle(wrapper);
+      const available = wrapper.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      if (available <= 0) return;
+      const priority = orderChipsByRecency(siblings, typeof currentKey === "number" ? currentKey : null, recent);
+      const next = layoutChips(siblings, priority, cached.widthById, available, MORE_WIDTH, CHIP_GAP);
+      const order = next.order.map((s) => s.id);
+      setChipLayout((prev) => {
+        if (
+          prev &&
+          prev.key === siblingsKey &&
+          prev.visibleCount === next.visibleCount &&
+          prev.order.length === order.length &&
+          prev.order.every((id, i) => id === order[i])
+        ) {
           return prev;
         }
-        return { key: siblingsKey, set: next };
+        return { key: siblingsKey, order, visibleCount: next.visibleCount };
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [siblings, siblingsKey, currentIndex, stripWidth]);
+  }, [siblings, siblingsKey, currentKey, recent, stripWidth]);
 
+  // 래퍼는 형제가 있을 때만 렌더된다 — 그 존재 여부에 맞춰 관찰을 붙였다 뗀다(경로 변경 시점엔 아직 없을 수 있다)
+  const hasSiblings = siblings.length > 0;
   useEffect(() => {
-    const el = stripRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    const el = moreRef.current;
+    if (!hasSiblings || !el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver((entries) => {
       setStripWidth(Math.round(entries[0]?.contentRect.width ?? 0));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [path]);
+  }, [hasSiblings]);
+
+  // 칩 전환 애니메이션(사용자 지시 2026-09-19) — 배치가 바뀌면 남는 칩은 이전 자리에서 새 자리로 미끄러지고(FLIP),
+  // 새로 보이는 칩은 살짝 커지며 나타난다. 위치는 렌더 후 실측, 애니메이션은 WAAPI라 상태를 건드리지 않는다.
+  const prevChipRects = useRef<Map<number, DOMRect>>(new Map());
+  useLayoutEffect(() => {
+    const rects = new Map<number, DOMRect>();
+    for (const [id, el] of chipRefs.current) {
+      if (el.offsetParent !== null) rects.set(id, el.getBoundingClientRect());
+    }
+    const prev = prevChipRects.current;
+    prevChipRects.current = rects;
+    if (prev.size === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    for (const [id, rect] of rects) {
+      const el = chipRefs.current.get(id);
+      if (!el) continue;
+      const before = prev.get(id);
+      if (before) {
+        const dx = before.left - rect.left;
+        if (Math.abs(dx) > 1) {
+          el.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], {
+            duration: 350,
+            easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+          });
+        }
+      } else {
+        el.animate(
+          [{ opacity: 0, transform: "scale(0.92)" }, { opacity: 1, transform: "none" }],
+          { duration: 350, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },
+        );
+      }
+    }
+  }, [chipLayout]);
 
   // 드롭다운 바깥 클릭·Esc 닫기 — FilterDropdown과 동일 패턴(document capture 리스너)
   useEffect(() => {
@@ -417,7 +483,7 @@ export function FrameworkDrill({
     );
   }
 
-  const hiddenSiblings = effectiveVisible ? siblings.filter((_, i) => !effectiveVisible.has(i)) : [];
+  const hiddenCount = displayedChips.length - visibleCount;
 
   return (
     <section
@@ -491,10 +557,10 @@ export function FrameworkDrill({
       {/* 형제 칩 스트립 — 같은 부모의 다른 L1~L4로 1클릭 전환. 넘치면 쉐브론 → 전체 목록 드롭다운 */}
       {siblings.length > 0 && (
         <div ref={moreRef} className="relative flex items-center gap-1.5 px-0.5 pb-1">
-          <div ref={stripRef} data-id="framework-sibs" className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-            {siblings.map((s, i) => {
+          <div data-id="framework-sibs" className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+            {displayedChips.map((s, i) => {
               const on = s.id === currentKey;
-              const shown = effectiveVisible === null || effectiveVisible.has(i);
+              const shown = i < visibleCount;
               return (
                 <button
                   key={s.id}
@@ -521,7 +587,7 @@ export function FrameworkDrill({
               );
             })}
           </div>
-          {hiddenSiblings.length > 0 && (
+          {hiddenCount > 0 && (
             <button
               type="button"
               data-id="framework-sibs-more"
