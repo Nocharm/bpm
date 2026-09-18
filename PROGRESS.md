@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-18 — 승인자 착지·결재 대기 안내·게시본 vs 대기본 비교 딥링크·비교 화면 AI 요약 탭 (feat/approval-landing-compare-ai)
+
+- 승인자가 맵을 열면 내가 결재할 pending 버전(승인자 목록에 있고 미결재)으로 착지(`?version=`은 여전히 우선). 다른 버전을 열었을 땐 상단 상태 배너에 "내 결재 대기 버전 열기" 링크, 승인 탭엔 `SectionOverlay` 흰 덮개+"해당 버전으로 이동" 버튼 — 이 탭은 열린 버전 기준이라 오판을 막는다. 판정은 버전별 워크플로 캐시(`wsById`, 진입 조회+현재 버전 조회 미러)로 하므로 결재 직후에도 최신. draft/pending은 공존하지 않아 착지 분기는 `else`.
+- pending 버전을 여는 모든 사용자에게 승인 워크플로와 확정 변경 기준 사이에 "게시본과 비교" 버튼 — 비교 화면 `?base=<최신 게시본>&target=<pending>` 딥링크(비교 페이지가 쿼리를 처음 읽게 됨, 모르는 id는 기본값).
+- 비교 화면 세 번째 탭 **AI 요약**: 프론트가 계산한 병합 diff를 `CompareDiffPayload`(노드/엣지 각 200 상한, ref n1/e1)로 `POST /api/maps/{id}/compare/ai-summary`에 보내고(파이썬에 diff 복제 안 함, viewer 게이트·두 버전 맵 소속 검증) 총평·주요 변경(kind 칩, 클릭=캔버스 포커스)·확인 포인트·집계 칩으로 렌더. 비교 진입 시 그래프가 준비되면 **선행 생성**하고 탭 라벨에 스피너, (base,target) 조합별 결과 보관, 재생성은 총평 카드 우상단. 프롬프트 키 `compare_summary_contract`(관리자 오버라이드 8번째), 계량 `ai_usage_events kind=compare_summary`. `_ask_and_validate`는 `schema` 인자로 일반화.
+- 검증: backend 1489 green·ruff, vitest 1004(+4)·tsc·eslint, Playwright `pw-smoke-approver-landing.mjs` 16/16(맵 32, 승인자 bora.hong). AI 응답은 로컬 OpenAI 호환 스텁으로 렌더만 확인 — 실제 모델(GLM/SGLang) 대상 프롬프트 품질은 서버 배포 후 확인 필요. 함정: 승인자가 뷰어 역할이면 배너 제목이 "Viewer access"라 버전 판정은 pending 전용 비교 CTA로; `networkidle` 대기는 AI 요청이 끝나야 풀려 스피너를 못 본다.
+
 ## 2026-09-18 — 비교 화면 워스트케이스 개선 4종: 엣지 라벨 줄바꿈·속성 범위 토글·전 파라미터 표시·실측 배치 (main)
 
 - 65노드·78변경 워스트케이스(스크래치 시드, 저장소 미포함)로 비교 화면을 실측한 뒤 사용자 지적 4건 반영. ① 비교 엣지 라벨에 에디터와 같은 `EDGE_LABEL_MAX_WIDTH`(160) + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게. ② 속성 탭에 "모두 / 변경만" 범위 토글(기본 변경만) — 변경 노드는 바뀐 필드만(제목·설명·타입·색 포함), 추가·삭제·무변경 노드는 토글 비활성+전체 표시. ③ 비교 노드 표시 필드를 AI 프리뷰와 같은 역할·부서·시스템·파라미터 칩으로(값 있는 것만, 전후는 기존 diff 필). `buildAppNodes`에 `touch_time` 누락 보강.

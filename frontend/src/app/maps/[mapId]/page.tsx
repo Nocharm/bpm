@@ -87,6 +87,7 @@ import { FrameworkConfirmSection } from "@/components/framework-confirm-section"
 import { FrameworkL5Explorer } from "@/components/framework-l5-explorer";
 import { StatusBadge } from "@/components/status-badge";
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
+import { SectionOverlay } from "@/components/section-overlay";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { Tooltip } from "@/components/tooltip";
 import { formatVersionMarker } from "@/lib/version-name";
@@ -1225,6 +1226,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // fw_slot 결정 버튼 노출 — sysadmin/직속 L5 관리자만 true (Track C Task 3)
   const [canDecideSlot, setCanDecideSlot] = useState(false);
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+  // 버전별 워크플로 캐시 — 열린 버전이 아닌 pending 버전의 승인자/결재 여부 판정용(내 결재 대기 안내, 2026-09-18).
+  // 현재 버전 조회(refreshWorkflow)와 진입 시 pending 조회가 모두 여기에 적재되어 결재 후에도 최신을 본다.
+  const [wsById, setWsById] = useState<Map<number, WorkflowState>>(() => new Map());
   const [managingApprovers, setManagingApprovers] = useState(false);
   // 점유권 이전 다이얼로그 / Transfer checkout dialog
   const [transferOpen, setTransferOpen] = useState(false);
@@ -1503,6 +1507,22 @@ function MapEditor({ mapId }: { mapId: number }) {
       : "ownerOnly";
   const isApprover = username !== null && (workflow?.approvers ?? []).includes(username);
   const isSubmitter = username !== null && currentVersion?.submitted_by === username;
+  // 내 결재 대기 버전 — 이 맵의 pending 버전 중 내가 승인자이고 아직 결재하지 않은 것. 다른 버전을 열었을 때
+  // 배너 링크·승인 탭 오버레이로 안내하고, 진입 시엔 그 버전으로 착지한다 (2026-09-18).
+  const pendingVersion = isFrameworkMap ? null : (versions.find((v) => v.status === "pending") ?? null);
+  const pendingWs = pendingVersion ? (wsById.get(pendingVersion.id) ?? null) : null;
+  const myPendingVersionId =
+    pendingVersion !== null &&
+    username !== null &&
+    pendingWs !== null &&
+    pendingWs.approvers.includes(username) &&
+    !pendingWs.approvals.includes(username)
+      ? pendingVersion.id
+      : null;
+  const pendingElsewhere = myPendingVersionId !== null && myPendingVersionId !== versionId;
+  const pendingVersionLabel = pendingVersion
+    ? `${formatVersionMarker(pendingVersion, versions)} · ${pendingVersion.label}`
+    : "";
   // 회수 — 승인요청 단계(pending/approved)는 제출자만, 반려(rejected)는 +오너·sysadmin(백엔드 게이트와 일치).
   const canWithdraw =
     isSubmitter || (currentVersion?.status === "rejected" && (myRole === "owner" || isSysadmin));
@@ -2721,6 +2741,22 @@ function MapEditor({ mapId }: { mapId: number }) {
           } catch {
             // 워크플로우 조회 실패 시 기본값 유지
           }
+        } else {
+          // 내가 결재해야 할 pending 버전이 있으면 그 버전으로 착지 (2026-09-18). draft와 pending은 공존하지 않는다.
+          const pending = detail.versions.find((v) => v.status === "pending");
+          if (pending) {
+            try {
+              const ws = await getWorkflowState(pending.id);
+              if (active) {
+                setWsById((prev) => new Map(prev).set(pending.id, ws));
+                if (ws.approvers.includes(me.username) && !ws.approvals.includes(me.username)) {
+                  initialId = pending.id;
+                }
+              }
+            } catch {
+              // 조회 실패 시 기본 선택 유지
+            }
+          }
         }
         // 홈 "이 버전으로 가기" 등에서 ?version=<id>로 진입 시 해당 버전으로 개시(기본 선택보다 우선).
         const paramVersion = Number(new URLSearchParams(window.location.search).get("version"));
@@ -2796,7 +2832,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   const refreshWorkflow = useCallback(async () => {
     if (versionId === null) return;
     try {
-      setWorkflow(await getWorkflowState(versionId));
+      const ws = await getWorkflowState(versionId);
+      setWorkflow(ws);
+      setWsById((prev) => new Map(prev).set(versionId, ws));
     } catch {
       setWorkflow(null);
     }
@@ -9361,6 +9399,17 @@ function MapEditor({ mapId }: { mapId: number }) {
           <editorNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
           <span className="shrink-0 font-semibold">{editorNotice.title}</span>
           <span className="min-w-0">{editorNotice.desc}</span>
+          {/* 내 결재 대기 버전 링크 — 다른 버전을 열었을 때만. 승인 탭 오버레이와 같은 판정 (2026-09-18) */}
+          {pendingElsewhere && myPendingVersionId !== null && (
+            <button
+              type="button"
+              data-id="editor-notice-pending-link"
+              className="shrink-0 font-semibold underline underline-offset-2 hover:opacity-80"
+              onClick={() => void switchVersion(myPendingVersionId)}
+            >
+              {t("editor.readonly.pendingForMeLink", { label: pendingVersionLabel })}
+            </button>
+          )}
           <button
             type="button"
             data-id="editor-notice-close"
@@ -11736,7 +11785,26 @@ function MapEditor({ mapId }: { mapId: number }) {
                 approvalSlot={
                   // R5c 승인 탭. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
                   // R6 W2: 결재 대기를 최상단으로 재배치·드래프트 CTA 신설(옛 버전 행 자리)·워크플로는 접힘 섹션(기본 펼침)으로 래핑
-                  <div className="flex flex-col gap-4">
+                  <div className="relative flex flex-col gap-4">
+                    {/* 내 결재 대기 버전이 따로 있으면 탭 전체를 덮어 이동을 유도 — 이 탭은 열린 버전 기준이라 오판 방지 (2026-09-18) */}
+                    {pendingElsewhere && myPendingVersionId !== null && (
+                      <SectionOverlay
+                        dataId="approval-pending-for-me-overlay"
+                        icon={<Hourglass size={16} strokeWidth={1.5} />}
+                        title={t("approval.pendingForMeTitle")}
+                        sub={t("approval.pendingForMeSub", { label: pendingVersionLabel })}
+                      >
+                        <button
+                          type="button"
+                          data-id="approval-pending-for-me-go"
+                          onClick={() => void switchVersion(myPendingVersionId)}
+                          className="mt-1.5 inline-flex items-center gap-1.5 rounded-sm border border-accent bg-accent-tint/40 px-3 py-1.5 text-caption text-accent hover:bg-accent-tint"
+                        >
+                          <ArrowRight size={14} strokeWidth={1.5} />
+                          {t("approval.pendingForMeGo")}
+                        </button>
+                      </SectionOverlay>
+                    )}
                     {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 최상단·기본 접힘 (R8, R6 W2 재배치) */}
                     <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
                       <button
@@ -11914,6 +11982,20 @@ function MapEditor({ mapId }: { mapId: number }) {
                           </div>
                         )}
                       </div>
+                    )}
+                    {/* 승인 대기본 열람 중 — 게시본 vs 이 버전 비교 화면으로 바로 진입(누구나) (2026-09-18) */}
+                    {currentVersion?.status === "pending" && !isFrameworkMap && latestPublishedBase !== null && (
+                      <button
+                        type="button"
+                        data-id="approval-compare-cta"
+                        onClick={() =>
+                          router.push(`/maps/${mapId}/compare?base=${latestPublishedBase.id}&target=${currentVersion.id}`)
+                        }
+                        className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption text-ink-secondary hover:bg-surface-alt"
+                      >
+                        <GitCompare size={14} strokeWidth={1.5} />
+                        {t("approval.compareCta")}
+                      </button>
                     )}
                     {/* 게시본 대비 변경 요약 — 승인 워크플로(승인자) 아래, 접힘 1줄→펼침 상세 (2026-08-30 #3) */}
                     {currentVersion && !isFrameworkMap && latestPublishedBase !== null && (

@@ -2496,6 +2496,83 @@ export function aiChat(
   });
 }
 
+// ---------- 비교 화면 AI 요약 (2026-09-18) ----------
+// diff는 프론트(merge-diff.ts→compare-summary-payload.ts)가 계산해 전송 — 백엔드 CompareDiffPayload와 동형
+
+export interface CompareDiffField {
+  field: string;
+  before: string;
+  after: string;
+}
+
+export interface CompareDiffNode {
+  ref: string; // n1, n2… — 응답 highlights.refs가 인용
+  status: "added" | "removed" | "changed";
+  title: string;
+  node_type: string;
+  changes: CompareDiffField[];
+}
+
+export interface CompareDiffEdge {
+  ref: string; // e1, e2…
+  status: "added" | "removed" | "changed";
+  source: string; // 노드 제목
+  target: string;
+  label: string;
+  label_before: string;
+}
+
+export interface CompareDiffTotals {
+  nodes_added: number;
+  nodes_removed: number;
+  nodes_changed: number;
+  edges_added: number;
+  edges_removed: number;
+  edges_changed: number;
+}
+
+export interface CompareDiffPayload {
+  nodes: CompareDiffNode[];
+  edges: CompareDiffEdge[];
+  omitted_nodes: number;
+  omitted_edges: number;
+  totals: CompareDiffTotals;
+}
+
+export type CompareSummaryKind = "added" | "removed" | "changed" | "flow" | "param" | "other";
+
+export interface CompareSummaryHighlight {
+  kind: CompareSummaryKind;
+  title: string;
+  detail: string;
+  refs: string[];
+}
+
+export interface CompareSummaryOut {
+  headline: string;
+  highlights: CompareSummaryHighlight[];
+  impacts: string[];
+  stats: CompareDiffTotals | null; // 서버가 요청 totals를 되돌려 채움
+}
+
+export function aiCompareSummary(
+  mapId: number,
+  baseVersionId: number,
+  targetVersionId: number,
+  diff: CompareDiffPayload,
+  lang: "ko" | "en",
+): Promise<CompareSummaryOut> {
+  return request<CompareSummaryOut>(`/maps/${mapId}/compare/ai-summary`, {
+    method: "POST",
+    body: JSON.stringify({
+      base_version_id: baseVersionId,
+      target_version_id: targetVersionId,
+      lang,
+      diff,
+    }),
+  });
+}
+
 // ---------- AI 컨설턴트 인터뷰 (design 2026-07-23) ----------
 
 export interface WorkingGraph {
