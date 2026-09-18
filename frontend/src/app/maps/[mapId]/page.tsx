@@ -11785,26 +11785,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 approvalSlot={
                   // R5c 승인 탭. 버전 pill + 관리 아이콘은 맵 탭 최상단으로 이동(R6 W1)
                   // R6 W2: 결재 대기를 최상단으로 재배치·드래프트 CTA 신설(옛 버전 행 자리)·워크플로는 접힘 섹션(기본 펼침)으로 래핑
-                  <div className="relative flex flex-col gap-4">
-                    {/* 내 결재 대기 버전이 따로 있으면 탭 전체를 덮어 이동을 유도 — 이 탭은 열린 버전 기준이라 오판 방지 (2026-09-18) */}
-                    {pendingElsewhere && myPendingVersionId !== null && (
-                      <SectionOverlay
-                        dataId="approval-pending-for-me-overlay"
-                        icon={<Hourglass size={16} strokeWidth={1.5} />}
-                        title={t("approval.pendingForMeTitle")}
-                        sub={t("approval.pendingForMeSub", { label: pendingVersionLabel })}
-                      >
-                        <button
-                          type="button"
-                          data-id="approval-pending-for-me-go"
-                          onClick={() => void switchVersion(myPendingVersionId)}
-                          className="mt-1.5 inline-flex items-center gap-1.5 rounded-sm border border-accent bg-accent-tint/40 px-3 py-1.5 text-caption text-accent hover:bg-accent-tint"
-                        >
-                          <ArrowRight size={14} strokeWidth={1.5} />
-                          {t("approval.pendingForMeGo")}
-                        </button>
-                      </SectionOverlay>
-                    )}
+                  <div className="flex flex-col gap-4">
                     {/* 결재 대기 섹션 — 설정 화면 C2와 동일 패널 재사용, 최상단·기본 접힘 (R8, R6 W2 재배치) */}
                     <div data-id="editor-approvals-section" className="rounded-md border border-hairline px-3 py-2">
                       <button
@@ -11919,7 +11900,31 @@ function MapEditor({ mapId }: { mapId: number }) {
                     )}
                     {/* 승인 워크플로 — 접힘 섹션(기본 펼침, 탭의 본론), 내부 ApprovalPanel은 무변경(래핑만) (R6 W2) */}
                     {currentVersion && !isFrameworkMap && (
-                      <div data-id="approval-workflow-section" className="rounded-md border border-hairline p-3">
+                      <div
+                        data-id="approval-workflow-section"
+                        // 덮개가 있을 땐 문구·버튼(아이콘+제목+2줄+버튼 ≈ 10rem)이 들어갈 최소 높이 — 게시본의 워크플로 본문은 낮다
+                        className={`relative rounded-md border border-hairline p-3 ${pendingElsewhere ? "min-h-44" : ""}`}
+                      >
+                        {/* 내 결재 대기 버전이 따로 있으면 워크플로 섹션만 덮어 이동을 유도 — 이 섹션은 열린 버전 기준이라 오판 방지.
+                            덮인 동안은 섹션을 펼친 채 유지해 덮개 문구·버튼이 들어갈 높이를 확보 (사용자 지시 2026-09-19: 탭 전체→섹션만) */}
+                        {pendingElsewhere && myPendingVersionId !== null && (
+                          <SectionOverlay
+                            dataId="approval-pending-for-me-overlay"
+                            icon={<Hourglass size={16} strokeWidth={1.5} />}
+                            title={t("approval.pendingForMeTitle")}
+                            sub={t("approval.pendingForMeSub", { label: pendingVersionLabel })}
+                          >
+                            <button
+                              type="button"
+                              data-id="approval-pending-for-me-go"
+                              onClick={() => void switchVersion(myPendingVersionId)}
+                              className="mt-1.5 inline-flex items-center gap-1.5 rounded-sm border border-accent bg-accent-tint/40 px-3 py-1.5 text-caption text-accent hover:bg-accent-tint"
+                            >
+                              <ArrowRight size={14} strokeWidth={1.5} />
+                              {t("approval.pendingForMeGo")}
+                            </button>
+                          </SectionOverlay>
+                        )}
                         <button
                           type="button"
                           data-acc-toggle
@@ -11942,7 +11947,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             <StatusBadge status={currentVersion.status} />
                           </span>
                         </button>
-                        {(approvalWorkflowSectionOpen || inspectorClosingKeys.has("approvalWorkflow")) && (
+                        {(approvalWorkflowSectionOpen || pendingElsewhere || inspectorClosingKeys.has("approvalWorkflow")) && (
                           <div className={inspectorClosingKeys.has("approvalWorkflow") ? "accordion-close" : "accordion-open"}>
                             <div className="mt-2">
                               <ApprovalPanel

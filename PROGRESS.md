@@ -8,6 +8,7 @@
 - 승인자가 맵을 열면 내가 결재할 pending 버전(승인자 목록에 있고 미결재)으로 착지(`?version=`은 여전히 우선). 다른 버전을 열었을 땐 상단 상태 배너에 "내 결재 대기 버전 열기" 링크, 승인 탭엔 `SectionOverlay` 흰 덮개+"해당 버전으로 이동" 버튼 — 이 탭은 열린 버전 기준이라 오판을 막는다. 판정은 버전별 워크플로 캐시(`wsById`, 진입 조회+현재 버전 조회 미러)로 하므로 결재 직후에도 최신. draft/pending은 공존하지 않아 착지 분기는 `else`.
 - pending 버전을 여는 모든 사용자에게 승인 워크플로와 확정 변경 기준 사이에 "게시본과 비교" 버튼 — 비교 화면 `?base=<최신 게시본>&target=<pending>` 딥링크(비교 페이지가 쿼리를 처음 읽게 됨, 모르는 id는 기본값).
 - 비교 화면 세 번째 탭 **AI 요약**: 프론트가 계산한 병합 diff를 `CompareDiffPayload`(노드/엣지 각 200 상한, ref n1/e1)로 `POST /api/maps/{id}/compare/ai-summary`에 보내고(파이썬에 diff 복제 안 함, viewer 게이트·두 버전 맵 소속 검증) 총평·주요 변경(kind 칩, 클릭=캔버스 포커스)·확인 포인트·집계 칩으로 렌더. 비교 진입 시 그래프가 준비되면 **선행 생성**하고 탭 라벨에 스피너, (base,target) 조합별 결과 보관, 재생성은 총평 카드 우상단. 프롬프트 키 `compare_summary_contract`(관리자 오버라이드 8번째), 계량 `ai_usage_events kind=compare_summary`. `_ask_and_validate`는 `schema` 인자로 일반화.
+- 후속(09-19): 결재 대기 덮개는 승인 탭 전체가 아니라 **승인 워크플로 섹션만** 덮는다(사용자 지시) — 덮인 동안 섹션은 펼침 유지 + `min-h-44`로 문구·버튼 높이 확보(게시본의 워크플로 본문은 낮음). 결재 대기 목록·비교 CTA·SP 카드는 그대로 조작 가능.
 - 후속: 비교 좌측 변경 목록의 항목별 상태 필(Added/Removed/Changed 틴트)은 왼쪽 아이콘 사각과 중복이라 제거 — 제목 한 줄로(사용자 지시). 속성 탭·엣지 인스펙터의 상태 필은 그대로.
 - 검증: backend 1489 green·ruff, vitest 1004(+4)·tsc·eslint, Playwright `pw-smoke-approver-landing.mjs` 16/16(맵 32, 승인자 bora.hong). AI 응답은 로컬 OpenAI 호환 스텁으로 렌더만 확인 — 실제 모델(GLM/SGLang) 대상 프롬프트 품질은 서버 배포 후 확인 필요. 함정: 승인자가 뷰어 역할이면 배너 제목이 "Viewer access"라 버전 판정은 pending 전용 비교 CTA로; `networkidle` 대기는 AI 요청이 끝나야 풀려 스피너를 못 본다.
 
