@@ -833,8 +833,11 @@ function NodeIoDiffSummary({ ioDiff }: { ioDiff: IoDiffSummary }) {
   const sides = (["input", "output"] as const).filter((side) => ioDiff[side].length > 0);
   return (
     <div className="mt-0.5 text-xs text-ink-tertiary" data-id="node-io-diff">
+      {/* title=""로 노드 래퍼의 네이티브 툴팁("변경: 시스템")을 이 줄에선 억제 — 통합 툴팁과 겹치지 않게.
+          호버 이펙트: 배경 틴트 + 글자색 상승 (사용자 요청 2026-09-18) */}
       <span
-        className="inline-flex cursor-default items-center gap-1"
+        title=""
+        className="-mx-1 inline-flex cursor-default items-center gap-1 rounded-xs px-1 transition-colors duration-150 ease-smooth hover:bg-accent-tint hover:text-accent"
         onMouseEnter={(event) => setPos(clampToViewport(event.clientX + 12, event.clientY + 14, 320, 240))}
         onMouseLeave={() => setPos(null)}
       >
