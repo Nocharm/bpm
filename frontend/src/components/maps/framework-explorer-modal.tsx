@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { filterByQuery } from "@/lib/search";
 import { Highlight } from "@/components/highlight";
-import { getLevelPillClass, isLevelInverted, LEVEL_FILL_OPACITY, LevelPill } from "@/components/level-pill";
+import { isLevelInverted, LEVEL_FILL_OPACITY, LevelPill } from "@/components/level-pill";
 import { DIAGRAM, fitScale, layoutDiagram, type DiagramLayout, type DiagramNode } from "@/lib/framework-diagram";
 import {
   applyCategoryLoaded,
@@ -118,7 +118,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
   }
 
   // ── 검색(두 모드 공용) — 전 카테고리를 한 번 받아 클라이언트에서 lib/search(부분일치·초성·비연속 시퀀스)로 걸러
-  // 하이라이트 구간까지 얻는다(사용자 지시 2026-09-19). 결과 행의 왼쪽 레벨 마커는 조상 경로, 호버하면 이름을 보여준다.
+  // 하이라이트 구간까지 얻는다(사용자 지시 2026-09-19). 결과 행의 왼쪽 레벨 필을 호버하면 조상 경로를 보여준다.
   const [query, setQuery] = useState("");
   const [all, setAll] = useState<CategoryLite[] | null>(null);
   useEffect(() => {
@@ -598,32 +598,27 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
                           });
                         }}
                       >
-                        {/* 왼쪽 레벨 마커 — 조상 경로(L1…부모)를 색 사다리 칩으로, 호버하면 그 조상 이름 */}
-                        <span data-id="framework-explorer-markers" className="flex shrink-0 items-center gap-0.5">
-                          {ancestors.map((a) => (
-                            <span
-                              key={a.id}
-                              data-id={`framework-explorer-marker-${a.id}`}
-                              data-level={a.level}
-                              className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] px-1 text-[9px] font-semibold leading-none ${getLevelPillClass(a.level)}`}
-                              onMouseEnter={(e) => {
-                                const box = resultsRef.current?.getBoundingClientRect();
-                                const r = e.currentTarget.getBoundingClientRect();
-                                if (!box) return;
-                                // 마커 아래에 띄운다 — 위로 띄우면 첫 행에서 목록 상단(overflow)에 잘린다
-                                setMarkerTip({
-                                  x: r.left - box.left + r.width / 2,
-                                  y: r.bottom - box.top + (resultsRef.current?.scrollTop ?? 0) + 6,
-                                  text: `L${a.level} · ${a.name}${a.level < 5 ? ` · L5 ${a.l5_count}` : ""}`,
-                                });
-                              }}
-                              onMouseLeave={() => setMarkerTip(null)}
-                            >
-                              {a.level}
-                            </span>
-                          ))}
+                        {/* 왼쪽 레벨 마커 = 레벨 필 하나 — 호버하면 조상 경로(L1 › … › 부모)를 툴팁으로.
+                            조상마다 숫자 칩을 늘어놓는 안은 밀도만 높여 폐기(사용자 피드백 2026-09-19) */}
+                        <span
+                          data-id={`framework-explorer-marker-${c.id}`}
+                          className="inline-flex shrink-0"
+                          onMouseEnter={(e) => {
+                            if (ancestors.length === 0) return;
+                            const box = resultsRef.current?.getBoundingClientRect();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            if (!box) return;
+                            // 마커 아래에 띄운다 — 위로 띄우면 첫 행에서 목록 상단(overflow)에 잘린다
+                            setMarkerTip({
+                              x: r.left - box.left,
+                              y: r.bottom - box.top + (resultsRef.current?.scrollTop ?? 0) + 6,
+                              text: ancestors.map((a) => a.name).join(" › "),
+                            });
+                          }}
+                          onMouseLeave={() => setMarkerTip(null)}
+                        >
+                          <LevelPill level={c.level} size="sm" />
                         </span>
-                        <LevelPill level={c.level} size="sm" />
                         <span className="min-w-0 flex-1 truncate text-caption text-ink">
                           <Highlight text={c.name} ranges={ranges} />
                         </span>
@@ -637,7 +632,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
               )}
               {markerTip && (
                 <li
-                  className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-fine text-on-accent"
+                  className="pointer-events-none absolute z-10 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-fine text-on-accent"
                   style={{ left: markerTip.x, top: markerTip.y }}
                 >
                   {markerTip.text}
