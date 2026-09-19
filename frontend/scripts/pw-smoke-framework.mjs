@@ -92,6 +92,13 @@ try {
   // L1은 형제 열에서, L2~L4는 오른쪽 하위 열에서 드릴인
   await sibByName(page, CHAIN[0]).first().click();
   await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 8000 });
+  // 하위 행(L2~L4) = 앞 레벨 필 · 2줄 관리자 슬롯 · 우측 직계 하위 수("L3 n"), L5 수 없음
+  const l2Row = rowByName(page, CHAIN[1]).first();
+  const l2RowText = ((await l2Row.textContent()) ?? "").trim();
+  check("child row shows a level pill, an admin slot and the direct child count",
+    /^L2/.test(l2RowText) && (await l2Row.locator('[data-id="framework-row-admin"]').count()) === 1 && /L3\s*\d+/.test(l2RowText)
+      && !/L5\s*\d+/.test(l2RowText),
+    l2RowText);
   for (let i = 1; i < 4; i += 1) {
     await rowByName(page, CHAIN[i]).first().click();
     await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });

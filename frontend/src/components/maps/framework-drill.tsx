@@ -5,7 +5,7 @@
 // 소속 맵 목록은 좌측에서 빼고 우측 CategorySummaryCard가 담당한다. 판정 헬퍼는 lib/framework-drill.ts.
 "use client";
 
-import { ArrowUpRight, ChevronLeft, ChevronRight, FolderTree, Hourglass, Loader2, Map as MapIcon, Network, Plus, User, Workflow } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Hourglass, Loader2, Map as MapIcon, Network, Plus, User, Workflow } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { getCategoryChain, listCategoryNodes, type CategoryNode } from "@/lib/api";
@@ -194,20 +194,32 @@ export function FrameworkDrill({
     }
   };
 
+  // L1~L4 행 — 앞 레벨 필, 1줄 이름, 2줄 직속 관리자(없으면 점선 플레이스홀더), 우측 직계 하위 수 · 맵 수(사용자 지시 2026-09-19)
   const renderRow = (node: CategoryNode) => (
     <li key={node.id}>
       <button
         type="button"
         data-id={`framework-row-${node.id}`}
-        className="flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface py-2 pl-2.5 pr-2 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-surface-pearl"
+        className="flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface py-1.5 pl-2.5 pr-2 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-surface-pearl"
         onClick={() => drillIn(node)}
       >
-        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm bg-surface-alt text-ink-tertiary">
-          <FolderTree size={14} strokeWidth={1.5} />
+        <LevelPill level={node.level} size="sm" className="shrink-0" />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="min-w-0 truncate text-caption-strong text-ink">{node.name}</span>
+          {node.admin ? (
+            <span data-id="framework-row-admin" className="inline-flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+              <User size={11} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{node.admin.name}</span>
+            </span>
+          ) : (
+            <span data-id="framework-row-admin" data-unset="" className="inline-flex min-w-0 items-center gap-1 text-fine text-ink-muted">
+              <span className="h-[10px] w-[10px] shrink-0 rounded-full border border-dashed border-ink-muted" />
+              <span className="truncate">{t("framework.drill.unassigned")}</span>
+            </span>
+          )}
         </span>
-        <span className="min-w-0 flex-1 truncate text-caption-strong text-ink">{node.name}</span>
         <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-fine text-ink-tertiary">
-          <span>{t("category.summary.l5Count", { n: node.l5_count })}</span>
+          <span>{t("framework.drill.childCount", { l: node.level + 1, n: node.child_count })}</span>
           <span className="text-ink-muted">·</span>
           <MapIcon size={12} strokeWidth={1.5} />
           {node.map_count}

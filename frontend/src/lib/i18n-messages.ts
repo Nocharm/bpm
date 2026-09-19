@@ -2166,6 +2166,7 @@ const en = {
   "framework.drill.recent": "Opened recently",
   "framework.drill.pending": "Pending {n}",
   "framework.drill.unassigned": "Unassigned",
+  "framework.drill.childCount": "L{l} {n}",
   "framework.drill.createCanvas": "Create canvas",
   "framework.drill.retry": "Failed to load — retry",
   // 업무 체계 탐색 모달 — 계단식 트리 ↔ ERD식 다이어그램 (2026-09-19)
@@ -4799,6 +4800,7 @@ const ko: Record<MessageKey, string> = {
   "framework.drill.recent": "최근 열어봄",
   "framework.drill.pending": "승인 대기 {n}",
   "framework.drill.unassigned": "관리자 미지정",
+  "framework.drill.childCount": "L{l} {n}개",
   "framework.drill.createCanvas": "캔버스 만들기",
   "framework.drill.retry": "불러오지 못했습니다 — 다시 시도",
   // 업무 체계 탐색 모달 — 계단식 트리 ↔ ERD식 다이어그램 (2026-09-19)
