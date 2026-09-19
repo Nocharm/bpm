@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-19 — 캔버스 우하단 노드 표시 정보 플로팅 카드(에디터·비교) + 라이브러리 드롭 중심 보정 (feat/display-fields-float)
+
+- **결과:** 줌 필 왼쪽 눈 버튼(`NodeDisplayFloat`, `components/node-display-float.tsx`) → 위로 뜨는 카드가 `NodeDisplaySection`을 `flat`(테두리·접기 없음)으로 재사용 — 필드 토글·카테고리/전체 보이기·숨기기 그대로. 에디터는 기존 `displayFields` 상태·핸들러를 그대로 넘겨 인스펙터 섹션과 **구조적으로 동기화**(상태 하나). 비교 화면은 상수였던 표시 필드를 `ComparePane` 상태로 승격(`bpm.compare.nodeDisplayFields` 별도 키, 기본값이 에디터와 달라 분리). 토글 규칙은 `lib/node-actions.ts` `toggleDisplayToggle`/`setDisplayCategory` 순수 함수로(비교 화면이 사용, vitest 3건).
+- **드롭 좌표 검토:** 드롭 링(부채꼴)은 실측 dx=dy=0(인스펙터 열림·줌아웃 두 조건) — 링 좌표 로직 이상 없음. 우측 밀림의 실체는 **라이브러리→캔버스 드롭이 노드 좌상단을 커서에** 두던 것(handleAddNode·섹션 드롭은 중심 보정) → 중심 보정으로 통일(중심 오차 59×20px → 3×3px). `CanvasZoomScale`은 `leading` 슬롯 추가.
+- **함정:** 카드는 바깥 mousedown에 닫히므로 인스펙터 스위치를 누르면 카드가 닫힌다(의도, 재열기). 속성 탭 기본 화면의 섹션 접두는 `properties`(맵 탭은 `inspector`).
+
 ## 2026-09-19 — 업무 체계 뷰 2열(형제|하위) + 탐색 플로팅 패널(계단식·ERD식 다이어그램) (feat/fw-drill-columns → dev)
 
 - **결과:** 드릴다운 좌측을 형제(1):하위(2) 두 열로(좌:우 컬럼 1:2 유지, 형제 칩 스트립 폐기). 형제 항목·하위 행(L2~L4) 공통 문법 = 앞 레벨 필 · 이름 · 2줄 직속 관리자(없으면 점선 점 상시, "Unassigned" 라벨은 행 호버 시에만) · 우측 직계 하위 수 "L{n+1} k"·맵 수. L5는 275px 컴팩트 카드(상태 점 영어 라벨·관리자·맵 수·열기). 브레드크럼 우측 트리 아이콘 → **탐색 플로팅 패널**(`components/maps/framework-explorer-modal.tsx`, 딤 없음·헤더 드래그·×/Esc만 닫힘·이동해도 열린 채 따라감): [계단식 440px | 다이어그램 1000px] 스프링 전환. 계단식=lazy 트리(현재 경로 미리 펼침, 자손 호버 시 조상 강조). 다이어그램=`lib/framework-diagram.ts` 순수 레이아웃(상위 체인 L1까지 위 가운데 차콜 → 현재 액센트 → 자식 좌/우 → 손자 계단 스택, 직각 버스 엣지 무교차, 테스트 3종), 좌클릭=재중심 애니, 우클릭=GoToMenu(정보 보기·이 업무체계 보기·이 업무 중심으로 그리기), "전체(L1 중심)" 토글. 검색은 `GET /categories/all` 전 행 클라이언트 검색(`lib/search`: 부분·초성·초성 섞인 비연속 시퀀스, 공백 무시) + 하이라이트, 결과 행=레벨 필(호버=조상 경로 툴팁)+이름+L5 수. **레벨 필 색 사다리** 공용 `components/level-pill.tsx`(L1 100%→L5 12%) 전 표면 교체. BE `/categories/nodes`: `l5_count` 전 레벨, `admin` 전 레벨(`_card_meta`), `canvas_state`·`slot_pending_count`는 L5만 — FE/BE 동시 배포.

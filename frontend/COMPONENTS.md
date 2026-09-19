@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 266개 · 2026-09-19 기준
+총 267개 · 2026-09-19 기준
 
 ## components/
 
@@ -97,7 +97,8 @@
 | `node-action-bar.tsx` | `NodeActionBar` | 단일 선택 노드 하단 중앙의 통합 액션 바 | `app/maps/[mapId]/page.tsx` |
 | `node-details-card.tsx` | `NodeDetailsCard` | 인스펙터 I/O & Conditions 카드 | `app/maps/[mapId]/page.tsx` |
 | `node-details-fields.tsx` | `NodeDetailsFields` | 노드 상세(승격) 필드 편집 | `components/group-bulk-modal.tsx`, `components/node-details-card.tsx` |
-| `node-display-section.tsx` | `NodeDisplaySection` | Node display(캔버스 노드 표시 정보) 토글 섹션 | `app/maps/[mapId]/page.tsx` |
+| `node-display-float.tsx` | `NodeDisplayFloat` | 캔버스 우하단 노드 표시 정보 플로팅 카드 | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |
+| `node-display-section.tsx` | `NodeDisplaySection` | Node display(캔버스 노드 표시 정보) 토글 섹션 | `app/maps/[mapId]/page.tsx`, `components/node-display-float.tsx` |
 | `node-metrics-card.tsx` | `NodeMetricsCard` | 인스펙터 수행 지표 카드 | `app/maps/[mapId]/page.tsx` |
 | `node-search.tsx` | `NodeSearch` | 노드 검색 | `app/maps/[mapId]/page.tsx` |
 | `node-selection-ring.tsx` | `NodeSelectionRing` |   | `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/page.tsx` |

@@ -1,4 +1,4 @@
-// Node display(캔버스 노드 표시 정보) 토글 섹션 — 인스펙터 맵 탭·속성 탭 기본 화면 공용.
+// Node display(캔버스 노드 표시 정보) 토글 섹션 — 인스펙터 맵 탭·속성 탭 기본 화면 + 캔버스 플로팅 카드(NodeDisplayFloat, flat) 공용.
 // 카테고리 계단 구성(속성/수행 지표/입출력·조건) + 행 전체 클릭 토글(사용자 결정 2026-08-20).
 "use client";
 
@@ -60,40 +60,60 @@ interface NodeDisplaySectionProps {
   onToggle: (field: NodeDisplayToggle) => void;
   // 카테고리 일괄 보이기/숨기기(눈 아이콘, 사용자 요청 2026-08-21 #4) — 영속은 핸들러 소유(StrictMode 랜드마인)
   onSetCategory: (fields: NodeDisplayToggle[], on: boolean) => void;
-  // 표면별 data-id 접두("inspector" | "properties") — 같은 화면에 중복 마운트되지 않게 구분
+  // 표면별 data-id 접두("inspector" | "properties" | "canvas" | "compare") — 같은 화면에 중복 마운트되지 않게 구분
   idPrefix: string;
+  // 플로팅 카드 모드(NodeDisplayFloat) — 카드 테두리·접기 없이 항상 펼침. 헤더는 제목 + 전체 토글만.
+  flat?: boolean;
 }
 
 // 전체 일괄 토글 대상 — 카테고리에 속한 모든 필드(카테고리 정의가 단일 소스)
 const ALL_TOGGLES: NodeDisplayToggle[] = TOGGLE_CATEGORIES.flatMap(({ fields }) => fields);
 
-export function NodeDisplaySection({ displayFields, onToggle, onSetCategory, idPrefix }: NodeDisplaySectionProps) {
+export function NodeDisplaySection({
+  displayFields,
+  onToggle,
+  onSetCategory,
+  idPrefix,
+  flat = false,
+}: NodeDisplaySectionProps) {
   const { t } = useI18n();
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsedState, setCollapsed] = useState(true);
+  const collapsed = flat ? false : collapsedState;
   const onCount = displayFields.length;
 
   return (
-    <div data-id={`${idPrefix}-node-display-section`} className="rounded-md border border-hairline p-3">
+    <div
+      data-id={`${idPrefix}-node-display-section`}
+      className={flat ? undefined : "rounded-md border border-hairline p-3"}
+    >
       {/* 헤더는 접힘/펼침 공용 — 전체 일괄 토글을 여기 둬 접은 채로도 쓸 수 있게 (사용자 요청 2026-09-01).
           접기 버튼 안에 버튼을 중첩할 수 없어 행으로 나눈다. */}
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          data-id={`${idPrefix}-node-display-toggle`}
-          data-acc-toggle
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink"
-        >
-          <ChevronRight
-            size={12}
-            strokeWidth={1.5}
-            className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
-          />
-          {t("inspector.nodeDisplay")}
-          {onCount > 0 && <span className="font-normal text-ink-tertiary">({onCount})</span>}
-          <span className="truncate font-normal text-ink-tertiary">· {t("inspector.mapWide")}</span>
-        </button>
+        {flat ? (
+          <p className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink">
+            {t("inspector.nodeDisplay")}
+            {onCount > 0 && <span className="font-normal text-ink-tertiary">({onCount})</span>}
+            <span className="truncate font-normal text-ink-tertiary">· {t("inspector.mapWide")}</span>
+          </p>
+        ) : (
+          <button
+            type="button"
+            data-id={`${idPrefix}-node-display-toggle`}
+            data-acc-toggle
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-1 text-fine font-semibold text-ink"
+          >
+            <ChevronRight
+              size={12}
+              strokeWidth={1.5}
+              className={`shrink-0 transition-transform duration-150 ${collapsed ? "" : "rotate-90"}`}
+            />
+            {t("inspector.nodeDisplay")}
+            {onCount > 0 && <span className="font-normal text-ink-tertiary">({onCount})</span>}
+            <span className="truncate font-normal text-ink-tertiary">· {t("inspector.mapWide")}</span>
+          </button>
+        )}
         <button
           type="button"
           data-id={`${idPrefix}-node-display-all`}

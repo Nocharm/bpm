@@ -57,6 +57,26 @@ export function parseDisplayToggles(
   return null;
 }
 
+// 표시 필드 토글 규칙 — 에디터 인스펙터·캔버스 플로팅·비교 화면 공용(순수). 영속은 호출부 핸들러가
+// 소유한다(상태-의존 effect 영속은 StrictMode 이중 마운트가 저장값을 리셋 — 에디터 실측).
+export function toggleDisplayToggle(
+  current: NodeDisplayToggle[],
+  field: NodeDisplayToggle,
+): NodeDisplayToggle[] {
+  return current.includes(field) ? current.filter((f) => f !== field) : [...current, field];
+}
+
+// 카테고리(또는 전체) 일괄 보이기/숨기기 — 켤 때는 기존 순서 뒤에 빠진 것만 덧붙이고, 끌 때는 해당 필드만 뺀다.
+export function setDisplayCategory(
+  current: NodeDisplayToggle[],
+  fields: NodeDisplayToggle[],
+  on: boolean,
+): NodeDisplayToggle[] {
+  return on
+    ? [...current, ...fields.filter((f) => !current.includes(f))]
+    : current.filter((f) => !fields.includes(f));
+}
+
 export interface NodeActions {
   // 노드 호버 토글 → 인라인 하위 프로세스 펼치기/접기 (Provider 없으면 비활성)
   onToggleExpand: ((nodeId: string) => void) | null;

@@ -58,6 +58,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
+import { NodeDisplayFloat } from "@/components/node-display-float";
 import { NodeSelectionRing } from "@/components/node-selection-ring";
 import { ProcessNode } from "@/components/process-node";
 import {
@@ -116,7 +117,15 @@ import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
-import { NodeActionsContext, type IoListDisplayState, type NodeActions } from "@/lib/node-actions";
+import {
+  NodeActionsContext,
+  parseDisplayToggles,
+  setDisplayCategory,
+  toggleDisplayToggle,
+  type IoListDisplayState,
+  type NodeActions,
+  type NodeDisplayToggle,
+} from "@/lib/node-actions";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
   buildMergedGraph,
@@ -222,10 +231,14 @@ const edgeTypes: EdgeTypes = { removedArc: RemovedArcEdge, labeled: LabeledSmoot
 // 입출력은 패널 대신 항목 diff 요약("I/O +N −M", data.ioDiff)으로 — 변경 없으면 생략 (사용자 요청 2026-09-18).
 // 변경 전후는 노드 아래 diff 필이 따로 보여준다. 노드 높이가 내용에 따라 달라지므로 배치·백본 정렬·핸들
 // 중심은 실측(measured) 크기로 계산한다(measuredSizes) — 고정 상수 가정 폐기 (사용자 요청 2026-09-18).
+// 비교 화면 표시 필드 기본값 — 에디터 기본(담당자+파라미터)보다 넓게, diff 대상 속성이 보이도록.
+// 사용자 조정은 에디터 키와 분리해 영속(bpm.compare.nodeDisplayFields) — 두 화면의 기본값이 다르다.
+const COMPARE_DISPLAY_DEFAULT: NodeDisplayToggle[] = ["assignee", "department", "system", "params", "conditions"];
+const COMPARE_DISPLAY_KEY = "bpm.compare.nodeDisplayFields";
 const COMPARE_NODE_ACTIONS: NodeActions = {
   onToggleExpand: null,
   expandedInlineIds: new Set<string>(),
-  displayFields: ["assignee", "department", "system", "params", "conditions"],
+  displayFields: COMPARE_DISPLAY_DEFAULT,
   editingNodeId: null,
   onStartRename: null,
   onRename: null,
@@ -786,6 +799,24 @@ function ComparePane({
   const [titleMenuOpen, setTitleMenuOpen] = useState(false);
   // 인스펙터 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계). 요약 카드별 펼침/숨김 + 항목 드롭다운.
   const [inspectorTab, setInspectorTab] = useState<"props" | "summary" | "ai">("props");
+  // 노드 표시 필드 — 우하단 플로팅 카드(NodeDisplayFloat)로 조정. 1회 hydration 후 영속은 핸들러에서만
+  // (상태-의존 effect 영속은 StrictMode 이중 마운트가 저장값을 리셋 — 에디터와 같은 랜드마인).
+  const [displayFields, setDisplayFields] = useState<NodeDisplayToggle[]>(COMPARE_DISPLAY_DEFAULT);
+  useEffect(() => {
+    const saved = parseDisplayToggles(window.localStorage.getItem(COMPARE_DISPLAY_KEY), null);
+    if (saved !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 1회 hydration
+      setDisplayFields(saved);
+    }
+  }, []);
+  const commitDisplayFields = (next: NodeDisplayToggle[]) => {
+    window.localStorage.setItem(COMPARE_DISPLAY_KEY, JSON.stringify(next));
+    setDisplayFields(next);
+  };
+  const nodeActions = useMemo<NodeActions>(
+    () => ({ ...COMPARE_NODE_ACTIONS, displayFields }),
+    [displayFields],
+  );
   // 속성 탭 범위 — 모두 / 변경만(변경 노드에서 바뀐 필드만). 추가·삭제 노드는 전체가 새 값이라 모두로 취급.
   const [propsScope, setPropsScope] = useState<"all" | "changed">("changed");
   // 노드 실측 크기 — RF dimensions 변경에서 수집. 배치(dagre)·백본 정렬·핸들 중심이 이 값을 쓴다.
@@ -1754,7 +1785,7 @@ function ComparePane({
               {t("compare.watermark")}
             </span>
           </div>
-          <NodeActionsContext.Provider value={COMPARE_NODE_ACTIONS}>
+          <NodeActionsContext.Provider value={nodeActions}>
           <ReactFlow
             key={flowDir}
             nodes={rfNodes}
@@ -1793,7 +1824,17 @@ function ComparePane({
             >
               <DiffLegend counts={counts} />
             </Panel>
-            <Panel position="bottom-right">
+            {/* 줌 바 옆 노드 표시 정보 플로팅 — 비교 화면엔 인스펙터 섹션이 없어 이 카드가 유일한 조정 지점 */}
+            <Panel position="bottom-right" className="flex items-end gap-2">
+              <NodeDisplayFloat
+                idPrefix="compare"
+                compact
+                displayFields={displayFields}
+                onToggle={(field) => commitDisplayFields(toggleDisplayToggle(displayFields, field))}
+                onSetCategory={(fields, on) =>
+                  commitDisplayFields(setDisplayCategory(displayFields, fields, on))
+                }
+              />
               <ZoomBar />
             </Panel>
           </ReactFlow>
