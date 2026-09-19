@@ -564,7 +564,11 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
                         // 검색 결과는 경량 행이라 chain으로 노드를 되찾아 이동한다
                         void getCategoryChain(c.id).then((chainNodes) => {
                           const node = chainNodes[chainNodes.length - 1];
-                          if (node) navigate(node);
+                          if (!node) return;
+                          // 이동 후엔 검색을 비워 트리/다이어그램이 새 위치로 따라온 모습을 보여준다(패널은 열린 채)
+                          setQuery("");
+                          setDebouncedQuery("");
+                          navigate(node);
                         });
                       }}
                     >
