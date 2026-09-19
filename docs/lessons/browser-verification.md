@@ -15,6 +15,7 @@
 3. **node 스크립트 cwd**: 스크립트는 `frontend/`에서 실행해야 `playwright-core`를 찾는다. `cd backend` 상태로 `node ./x.mjs` 하면 "Cannot find module". 매 실행 전 `cd frontend &&` 확인.
 4. **연결(엣지) 드롭이 매우 flaky**: RF 연결 드롭은 정밀도가 들쭉날쭉 → 여러 번 재시도해야 착지. 패턴: 소스 핸들 박스 중심 mousedown → 중간점 move → 타겟 핸들 move → 잠깐 대기 → up. 의심되면 비펼침 상태 정상연결로 메커니즘 먼저 검증.
 5. **워크트리 세션(`.claude/worktrees/<name>`)의 Bash 제약**: 세션이 워크트리에 격리되면 harness가 "워크트리 밖을 건드릴 수 있다"고 판단하는 명령을 통째로 거부한다 — `cat >> file <<'EOF'` 히어독 append, `cd <루트 체크아웃>`이 섞인 체인, `sed -i`+`git add`처럼 파일 수정과 git을 한 줄에 묶은 것, `&&`가 길게 이어진 복합 명령. 빈 출력이 아니라 **명령 자체가 안 돈다**. 대처: 파일 추가·수정은 Write/Edit 도구로, git·테스트·서버 기동은 **한 줄에 하나씩** 워크트리 안 절대경로로. 루트 체크아웃의 서버(3047/8048 등)와 비교 검증이 필요하면 `cd`하지 말고 `BASE_URL`만 바꿔 워크트리 스크립트를 절대경로로 실행한다. 워크트리엔 `node_modules`·`backend/.venv`가 없으므로 `cp -Rc`(APFS 클론, 심링크 금지 — turbopack이 거부)로 복제해 둔다(2026-09-18).
+6. **CSS transform이 걸린 SVG `<g>`는 `locator.click()`이 못 맞춘다**: Playwright가 잡는 클릭점이 실제 그려진 자리와 어긋나 "svg subtree intercepts pointer events"로 30초 타임아웃. `boundingBox()` 중심을 `page.mouse.click(x, y, { button })`으로 찍으면 된다(탐색 모달 다이어그램, 2026-09-19). 같은 세션 함정: 컨텍스트 메뉴 포털(z1200)을 z1300 모달 위에 띄우면 메뉴 클릭도 모달 svg에 막힌다 — 모달은 z1200(오버레이 z 사다리).
 
 ## 기타
 - 스크린샷은 Read로 직접 볼 수 있다.

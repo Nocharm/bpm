@@ -36,8 +36,9 @@ async function openContext(browser) {
   return ctx;
 }
 
-// 드릴다운 행(L1~L4)은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 조상/자손 오매칭이 없다.
+// 드릴다운 행(하위 열 L1~L4)·형제 열은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 조상/자손 오매칭이 없다.
 const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
+const sibByName = (page, name) => page.locator('[data-id^="framework-sib-"]').filter({ hasText: name });
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -77,25 +78,31 @@ try {
   await page.waitForSelector('[data-id="framework-drill"]', { timeout: 8000 });
   // 이전 실행의 영속 위치(localStorage)가 남아 있으면 브레드크럼 루트로 되돌린다
   await page.locator('[data-id="framework-crumb-root"]').click({ timeout: 1500 }).catch(() => {});
-  // 루트 행은 마운트 후 비동기 fetch로 채워진다 — waitFor로 도착을 기다린다.
-  const rootVisible = await rowByName(page, CHAIN[0]).first().waitFor({ state: "visible", timeout: 8000 })
+  // 루트: 왼쪽 형제 열에 L1 목록(선택 없음), 오른쪽은 안내. 목록은 마운트 후 비동기 fetch — waitFor로 도착을 기다린다.
+  const rootVisible = await sibByName(page, CHAIN[0]).first().waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
-  check("drill root shows the L1 row", rootVisible, CHAIN[0]);
-  const rootMeta = (await rowByName(page, CHAIN[0]).first().textContent()) ?? "";
-  check("L1 row carries L5 and map counts", /L5\s*\d+/.test(rootMeta), rootMeta.trim());
+  check("drill root lists L1 in the sibling column", rootVisible, CHAIN[0]);
+  check("root shows the pick-an-L1 hint on the right", (await page.locator('[data-id="framework-drill-root-hint"]').count()) === 1);
+  const rootMeta = (await sibByName(page, CHAIN[0]).first().textContent()) ?? "";
+  check("sibling entry carries the L5 count", /L5\s*\d+/.test(rootMeta), rootMeta.trim());
 
-  for (let i = 0; i < 4; i += 1) {
+  // L1은 형제 열에서, L2~L4는 오른쪽 하위 열에서 드릴인
+  await sibByName(page, CHAIN[0]).first().click();
+  await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 8000 });
+  for (let i = 1; i < 4; i += 1) {
     await rowByName(page, CHAIN[i]).first().click();
     await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });
   }
+  const rowMeta = (await sibByName(page, CHAIN[3]).first().textContent()) ?? "";
+  check("sibling column shows the current L4 with its L5 count", /L5\s*\d+/.test(rowMeta), rowMeta.trim());
   const crumbText = (await page.locator('[data-id="framework-crumb"]').textContent()) ?? "";
   check("breadcrumb lists ancestors after drilling to L4",
     CHAIN.slice(0, 4).every((c) => crumbText.includes(c)), crumbText.trim());
   const l5Card = page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first();
   const cardVisible = await l5Card.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("L4 level lists the L5 card", cardVisible, CHAIN[4]);
-  const statusText = ((await l5Card.locator('[data-id="framework-l5-status"]').textContent()) ?? "").trim();
-  check("L5 card shows an English canvas status pill", ["Confirmed", "Draft", "No canvas"].includes(statusText), statusText);
+  const statusText = ((await l5Card.locator('[data-id="framework-l5-status"]').getAttribute("title")) ?? "").trim();
+  check("L5 card status dot carries an English canvas label", ["Confirmed", "Draft", "No canvas"].includes(statusText), statusText);
   const noMapCardsLeft = (await page.locator('[data-id="framework-drill"] [data-id="map-card"]').count()) === 0;
   check("left drill list holds no map cards (maps live in the right summary)", noMapCardsLeft);
   const slideName = await page.locator('[data-id="framework-drill-list"]')
@@ -110,9 +117,42 @@ try {
   check("selecting the L5 card lists its maps in the right summary", mapInSummary, MAP_NAME);
   check("selected L5 card is highlighted", (await l5Card.getAttribute("aria-pressed")) === "true");
 
-  // ── 2c) 형제 칩(현재 칩 1개 강조) + 상위 버튼 → 한 레벨 위 ────────────────
-  const currentChips = await page.locator('[data-id^="framework-sib-"][aria-current="true"]').count();
-  check("sibling chip strip marks the current category", currentChips === 1, `current=${currentChips}`);
+  // ── 2c) 형제 열(현재 1개 강조, 클릭=오른쪽만 교체) + 상위 버튼 → 한 레벨 위 ──
+  const currentSibs = await page.locator('[data-id^="framework-sib-"][aria-current="true"]').count();
+  check("sibling column marks the current category", currentSibs === 1, `current=${currentSibs}`);
+
+  // ── 2d) 탐색 모달 — 계단식(현재 경로 펼침·강조) ↔ 다이어그램(상위 체인 L1까지·우클릭 메뉴 3항목) ─
+  await page.locator('[data-id="framework-explorer-open"]').click();
+  const explorer = page.locator('[data-id="framework-explorer-modal"]');
+  const explorerOpen = await explorer.waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+  check("breadcrumb tree icon opens the explorer modal", explorerOpen);
+  await page.locator('[data-id="framework-explorer-mode-tree"]').click();
+  const treeCurrent = await page.locator('[data-id^="framework-explorer-node-"] [data-tree-head].bg-accent-tint')
+    .first().waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  const treeLeafVisible = await page.locator('[data-id^="framework-explorer-go-"]').filter({ hasText: CHAIN[4] }).first()
+    .isVisible().catch(() => false);
+  check("tree mode pre-expands the current chain and highlights the current row", treeCurrent && treeLeafVisible,
+    `current=${treeCurrent} leaf=${treeLeafVisible}`);
+  const treeWidth = (await explorer.boundingBox())?.width ?? 0;
+  await page.locator('[data-id="framework-explorer-mode-diagram"]').click();
+  await page.waitForSelector('[data-id^="framework-diagram-node-"]', { timeout: 8000 });
+  await page.waitForTimeout(700);
+  const diagramWidth = (await explorer.boundingBox())?.width ?? 0;
+  check("modal narrows for the tree and widens for the diagram", treeWidth < 700 && diagramWidth > 1000,
+    `tree=${treeWidth} diagram=${diagramWidth}`);
+  const ancestorCount = await page.locator('[data-id^="framework-diagram-node-"][data-kind="ancestor"]').count();
+  check("diagram stacks the whole ancestor chain (L1..L3) above the L4 center", ancestorCount === 3, `ancestors=${ancestorCount}`);
+  const centerBox = page.locator('[data-id^="framework-diagram-node-"][data-kind="center"]').first();
+  {
+    const b = await centerBox.boundingBox();
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2, { button: "right" });
+  }
+  const menuItems = await page.locator('[data-id="go-to-menu"] button').count();
+  check("right-click on a diagram box opens the 3-item menu", menuItems === 3, `items=${menuItems}`);
+  await page.keyboard.press("Escape");
+  await page.locator('[data-id="framework-explorer-close"]').click();
+  const explorerGone = (await explorer.count()) === 0;
+  check("explorer modal closes", explorerGone);
   await page.locator('[data-id="framework-back"]').click();
   const backTitle = await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[2] })
     .waitFor({ timeout: 8000 }).then(() => true).catch(() => false);

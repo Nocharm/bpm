@@ -692,9 +692,22 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .fw-slide-back {
   animation: fw-slide-back 320ms var(--ease-smooth);
 }
+/* 탐색 모달 다이어그램 — 재중심 시 새 엣지는 페이드 인, 박스는 인라인 transform 전환(컴포넌트) */
+@keyframes fw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fw-fade-in {
+  animation: fw-fade-in 350ms var(--ease-smooth);
+}
 @media (prefers-reduced-motion: reduce) {
   .fw-slide-in,
-  .fw-slide-back {
+  .fw-slide-back,
+  .fw-fade-in {
     animation: none;
   }
 }

@@ -7,8 +7,6 @@ import {
   bumpRecent,
   getCanvasState,
   getSiblingRows,
-  layoutChips,
-  orderChipsByRecency,
   readPersistedDrill,
   resolveCurrentNode,
   writePersistedDrill,
@@ -64,44 +62,11 @@ describe("framework-drill helpers", () => {
     expect(getCanvasState(node(1, 5, { canvas_state: null, linkage_map_id: null }))).toBe("none");
   });
 
-  it("sibling chips exclude L5 nodes and the current node resolves counts from the parent list", () => {
+  it("sibling rows exclude L5 nodes and the current node resolves counts from the parent list", () => {
     const kids = [node(1, 4, { l5_count: 3 }), node(2, 5), node(3, 4)];
     expect(getSiblingRows(kids).map((n) => n.id)).toEqual([1, 3]);
     const chainNode = node(1, 4); // 체인 응답 — 카운트 0
     expect(resolveCurrentNode(chainNode, kids).l5_count).toBe(3);
     expect(resolveCurrentNode(chainNode, undefined)).toBe(chainNode);
-  });
-
-  it("orders chips current-first, then most recently opened, then original order", () => {
-    const sibs = [node(1, 3), node(2, 3), node(3, 3), node(4, 3)];
-    const ordered = orderChipsByRecency(sibs, 3, [4, 3, 1]);
-    expect(ordered.map((s) => s.id)).toEqual([3, 4, 1, 2]);
-    // 방문 기록이 없으면 현재 칩만 앞으로
-    expect(orderChipsByRecency(sibs, 2, []).map((s) => s.id)).toEqual([2, 1, 3, 4]);
-  });
-
-  it("shows every chip in original order when they fit", () => {
-    const sibs = [node(1, 3), node(2, 3), node(3, 3)];
-    const widths = new Map([[1, 50], [2, 50], [3, 50]]);
-    const out = layoutChips(sibs, orderChipsByRecency(sibs, 3, [3, 2]), widths, 200, 28, 6);
-    expect(out.order.map((s) => s.id)).toEqual([1, 2, 3]);
-    expect(out.visibleCount).toBe(3);
-  });
-
-  it("on overflow fills by priority after reserving the more-button width", () => {
-    const sibs = [node(1, 3), node(2, 3), node(3, 3), node(4, 3)];
-    const widths = new Map([[1, 50], [2, 50], [3, 50], [4, 50]]);
-    // 206 필요 > 150 가용 → more(28)+gap(6) 예약 후 116 안에 50+6+50=106 → 우선순위 앞 2개(현재 3, 최근 4)
-    const out = layoutChips(sibs, orderChipsByRecency(sibs, 3, [4, 1]), widths, 150, 28, 6);
-    expect(out.order.map((s) => s.id)).toEqual([3, 4, 1, 2]);
-    expect(out.visibleCount).toBe(2);
-  });
-
-  it("keeps at least the current chip even when nothing fits", () => {
-    const sibs = [node(1, 3), node(2, 3)];
-    const widths = new Map([[1, 80], [2, 80]]);
-    const out = layoutChips(sibs, orderChipsByRecency(sibs, 2, []), widths, 60, 28, 6);
-    expect(out.order[0].id).toBe(2);
-    expect(out.visibleCount).toBe(1);
   });
 });

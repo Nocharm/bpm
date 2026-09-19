@@ -1,5 +1,5 @@
-// 홈 업무 체계 드릴다운 뷰의 순수 헬퍼 — 현재 위치 영속, 형제 칩 노출 계산, L5 카드 상태 라벨.
-// 렌더러(components/maps/framework-drill.tsx)는 얇게 두고 판정은 여기서 테스트한다 (목업 B안 확정 2026-09-18).
+// 홈 업무 체계 드릴다운 뷰의 순수 헬퍼 — 현재 위치·방문 기록 영속, 형제 목록, L5 카드 상태 라벨.
+// 렌더러(components/maps/framework-drill.tsx)는 얇게 두고 판정은 여기서 테스트한다 (목업 v4 확정 2026-09-19).
 
 import type { CategoryNode } from "@/lib/api";
 
@@ -21,7 +21,7 @@ export function getCanvasState(node: Pick<CategoryNode, "canvas_state" | "linkag
   return node.linkage_map_id === null ? "none" : "draft";
 }
 
-// 최근 연 카테고리 id 목록 상한 — 형제 칩 MRU 판정용, 그 이상은 오래된 것부터 버린다.
+// 최근 연 카테고리 id 목록 상한 — 형제 열의 "최근 열어봄" 점 표시용, 그 이상은 오래된 것부터 버린다.
 export const RECENT_CAP = 100;
 
 export interface PersistedDrill {
@@ -62,7 +62,7 @@ export function bumpRecent(recent: number[], id: number): number[] {
   return [id, ...recent.filter((r) => r !== id)].slice(0, RECENT_CAP);
 }
 
-// 형제 칩 후보 — 같은 부모의 level<5 노드만(L5는 드릴인 대상이 아니라 칩이 아닌 카드).
+// 형제 열 후보 — 같은 부모의 level<5 노드만(L5는 드릴인 대상이 아니라 형제 열이 아닌 카드).
 export function getSiblingRows(parentChildren: CategoryNode[]): CategoryNode[] {
   return parentChildren.filter((n) => n.level < 5);
 }
@@ -72,46 +72,3 @@ export function resolveCurrentNode(current: CategoryNode, parentChildren: Catego
   return parentChildren?.find((n) => n.id === current.id) ?? current;
 }
 
-// 형제 칩 우선순위 — 현재 칩, 그다음 최근에 연 순(recent 앞이 최신), 나머지는 원래 순서.
-// 매번 같은 앞쪽 칩만 보이면 스트립이 무의미하다는 사용자 지적(2026-09-19)으로 MRU 기준.
-export function orderChipsByRecency<T extends { id: number }>(
-  siblings: T[],
-  currentId: number | null,
-  recent: number[],
-): T[] {
-  const rank = new Map(recent.map((id, i) => [id, i]));
-  return [...siblings].sort((a, b) => {
-    if (a.id === currentId) return -1;
-    if (b.id === currentId) return 1;
-    const ra = rank.get(a.id) ?? Number.POSITIVE_INFINITY;
-    const rb = rank.get(b.id) ?? Number.POSITIVE_INFINITY;
-    if (ra !== rb) return ra - rb;
-    return siblings.indexOf(a) - siblings.indexOf(b);
-  });
-}
-
-// 스트립 배치 — 전부 들어가면 원래 순서로 전부 노출, 넘치면 "더 보기" 버튼 폭을 뺀 나머지에
-// 우선순위(orderChipsByRecency) 순으로 앞에서부터 채운다(처음 안 들어가는 칩에서 멈춤 — 뒤의 작은 칩을
-// 끌어올리면 최근 순이 깨진다). 현재 칩(우선순위 1위)은 폭이 모자라도 최소 하나로 남긴다.
-export function layoutChips<T extends { id: number }>(
-  siblings: T[],
-  priority: T[],
-  widthById: Map<number, number>,
-  available: number,
-  moreWidth: number,
-  gap: number,
-): { order: T[]; visibleCount: number } {
-  const width = (s: T) => widthById.get(s.id) ?? 0;
-  const total = siblings.reduce((sum, s, i) => sum + width(s) + (i > 0 ? gap : 0), 0);
-  if (total <= available) return { order: siblings, visibleCount: siblings.length };
-  const limit = available - moreWidth - gap;
-  let used = 0;
-  let count = 0;
-  for (const s of priority) {
-    const next = used + width(s) + (count > 0 ? gap : 0);
-    if (next > limit) break;
-    used = next;
-    count += 1;
-  }
-  return { order: priority, visibleCount: Math.max(count, 1) };
-}
