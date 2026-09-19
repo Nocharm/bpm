@@ -200,7 +200,7 @@ export function FrameworkDrill({
       <button
         type="button"
         data-id={`framework-row-${node.id}`}
-        className="flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface py-1.5 pl-2.5 pr-2 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-surface-pearl"
+        className="group flex w-full items-center gap-2 rounded-sm border border-hairline bg-surface py-1.5 pl-2.5 pr-2 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-surface-pearl"
         onClick={() => drillIn(node)}
       >
         <LevelPill level={node.level} size="sm" className="shrink-0" />
@@ -212,9 +212,10 @@ export function FrameworkDrill({
               <span className="truncate">{node.admin.name}</span>
             </span>
           ) : (
+            // 미지정은 점선 점만 상시, 라벨은 행 호버 시에만(밀도 — 사용자 지시 2026-09-19)
             <span data-id="framework-row-admin" data-unset="" className="inline-flex min-w-0 items-center gap-1 text-fine text-ink-muted">
               <span className="h-[10px] w-[10px] shrink-0 rounded-full border border-dashed border-ink-muted" />
-              <span className="truncate">{t("framework.drill.unassigned")}</span>
+              <span className="truncate opacity-0 transition-opacity duration-150 group-hover:opacity-100">{t("framework.drill.unassigned")}</span>
             </span>
           )}
         </span>
@@ -399,7 +400,7 @@ export function FrameworkDrill({
             data-id={`framework-sib-${s.id}`}
             aria-current={on ? "true" : undefined}
             title={s.name}
-            className={`relative flex w-full flex-col gap-0.5 rounded-sm border px-2 py-1.5 pl-2.5 text-left transition-[background-color,border-color,box-shadow] duration-150 ${
+            className={`group relative flex w-full flex-col gap-0.5 rounded-sm border px-2 py-1.5 pl-2.5 text-left transition-[background-color,border-color,box-shadow] duration-150 ${
               on
                 ? "border-accent-tint-border bg-surface font-semibold text-accent shadow-md before:absolute before:bottom-2 before:left-0 before:top-2 before:w-[3px] before:rounded-sm before:bg-accent"
                 : "border-transparent text-ink-secondary hover:border-hairline hover:bg-surface hover:text-ink"
@@ -417,7 +418,7 @@ export function FrameworkDrill({
               ) : (
                 <span data-id="framework-sib-admin" data-unset="" className="inline-flex min-w-0 items-center gap-1 text-ink-muted">
                   <span className="h-[10px] w-[10px] shrink-0 rounded-full border border-dashed border-ink-muted" />
-                  <span className="truncate">{t("framework.drill.unassigned")}</span>
+                  <span className="truncate opacity-0 transition-opacity duration-150 group-hover:opacity-100">{t("framework.drill.unassigned")}</span>
                 </span>
               )}
               {!on && recent.includes(s.id) && (
