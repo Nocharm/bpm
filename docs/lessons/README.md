@@ -8,8 +8,8 @@
 |------|-----------|
 | [canvas-react-flow.md](canvas-react-flow.md) | 인라인 펼침 자식 노드, React Flow 이벤트/렌더/드롭존을 건드릴 때 |
 | [scope-save-and-coordinates.md](scope-save-and-coordinates.md) | 자식 스코프 저장, 좌표(스코프상대↔표시) 변환, buildScope를 건드릴 때 |
-| [browser-verification.md](browser-verification.md) | Playwright로 캔버스 동작을 검증할 때 (dev.db 오염 함정 필독) |
-| [react-ts-patterns.md](react-ts-patterns.md) | useCallback deps/TDZ, ref 미러, 큰 상태 모델 변경 시 |
+| [browser-verification.md](browser-verification.md) | Playwright로 캔버스 동작을 검증할 때 (dev.db 오염 함정 필독, 워크트리 세션 Bash 제약) |
+| [react-ts-patterns.md](react-ts-patterns.md) | useCallback deps/TDZ, ref 미러, 큰 상태 모델 변경, 이펙트 내 setState(rAF/then 콜백), Tailwind display 클래스 충돌 |
 | [settings-and-forms.md](settings-and-forms.md) | 설정/관리자 화면·모달/피커/카드 헤더·소프트삭제 백엔드를 건드릴 때 (비캔버스) |
 
 > 설계 기록은 `docs/design/`(아직 소비될 문서만 유지 — 머지된 스냅샷은 git history), 진행 현황은 `PROGRESS.md` 참조.
