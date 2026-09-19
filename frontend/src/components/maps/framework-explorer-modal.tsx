@@ -8,18 +8,21 @@
 "use client";
 
 import { ChevronDown, ChevronRight, Crosshair, Info, Loader2, Search, X } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
 
 import {
   getCategoryChain,
   getCategorySummary,
+  listAllCategories,
   listCategoryNodes,
-  searchFramework,
+  type CategoryLite,
   type CategoryNode,
   type CategorySummary,
-  type FrameworkSearchResult,
 } from "@/lib/api";
+import { filterByQuery } from "@/lib/search";
+import { Highlight } from "@/components/highlight";
+import { getLevelPillClass, isLevelInverted, LEVEL_FILL_OPACITY, LevelPill } from "@/components/level-pill";
 import { DIAGRAM, fitScale, layoutDiagram, type DiagramLayout, type DiagramNode } from "@/lib/framework-diagram";
 import {
   applyCategoryLoaded,
@@ -42,7 +45,9 @@ const MODE_KEY = "bpm.home.frameworkExplorerMode";
 const VIEW_W = 1180;
 const VIEW_H = 640;
 // 플로팅 패널 폭(px) — 페이지를 다 가리지 않게 다이어그램 1000·계단식 560(뷰박스는 1180 기준, meet 스케일)
-const PANEL_W = { tree: 560, diagram: 1000 } as const;
+const PANEL_W = { tree: 440, diagram: 1000 } as const;
+// 검색 결과 상한 — 초성 한 글자 같은 넓은 질의도 목록이 끝없이 길어지지 않게
+const SEARCH_CAP = 60;
 // 다이어그램 데이터: 부모 id(또는 루트)별 자식 캐시 — 트리 엔진 캐시와 별도(정렬·형태 동일, 갱신 주기 짧음)
 type ParentKey = number | "root";
 
@@ -112,29 +117,41 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
     }
   }
 
-  // ── 검색(두 모드 공용) ──
+  // ── 검색(두 모드 공용) — 전 카테고리를 한 번 받아 클라이언트에서 lib/search(부분일치·초성·비연속 시퀀스)로 걸러
+  // 하이라이트 구간까지 얻는다(사용자 지시 2026-09-19). 결과 행의 왼쪽 레벨 마커는 조상 경로, 호버하면 이름을 보여준다.
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<{ q: string; data: FrameworkSearchResult } | null>(null);
+  const [all, setAll] = useState<CategoryLite[] | null>(null);
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [query]);
-  useEffect(() => {
-    if (debouncedQuery === "") return;
     let active = true;
-    void searchFramework(debouncedQuery)
-      .then((data) => {
-        if (active) setSearchResult({ q: debouncedQuery, data });
+    void listAllCategories()
+      .then((rows) => {
+        if (active) setAll(rows);
       })
       .catch(() => {
-        if (active) setSearchResult({ q: debouncedQuery, data: { categories: [], maps: [] } });
+        if (active) setAll([]);
       });
     return () => {
       active = false;
     };
-  }, [debouncedQuery]);
-  const results = debouncedQuery !== "" && searchResult?.q === debouncedQuery ? searchResult.data : null;
+  }, []);
+  const liteById = useMemo(() => new Map((all ?? []).map((c) => [c.id, c])), [all]);
+  // 조상 체인(루트→부모) — 마커·툴팁용
+  const ancestorsOf = (c: CategoryLite): CategoryLite[] => {
+    const out: CategoryLite[] = [];
+    let cur = c.parent_id === null ? undefined : liteById.get(c.parent_id);
+    while (cur) {
+      out.unshift(cur);
+      cur = cur.parent_id === null ? undefined : liteById.get(cur.parent_id);
+    }
+    return out;
+  };
+  const trimmedQuery = query.trim();
+  const hits = useMemo(
+    () => (all && trimmedQuery !== "" ? filterByQuery(all, trimmedQuery, (c) => [{ field: "name", text: c.name }]).slice(0, SEARCH_CAP) : null),
+    [all, trimmedQuery],
+  );
+  const [markerTip, setMarkerTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const resultsRef = useRef<HTMLUListElement>(null);
 
   // ── 다이어그램 ──
   const [center, setCenter] = useState<CategoryNode | null>(null);
@@ -431,6 +448,10 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
     const info = counted ? (full && n.level === 3 ? `L4 ${n.child_count} · L5 ${n.l5_count}` : `L5 ${n.l5_count}`) : "";
     const tag = p.kind === "ancestor" ? t("framework.explorer.ancestorTag") : `L${n.level}`;
     const tagW = p.kind === "ancestor" ? 28 : 20;
+    // 레벨 태그는 공용 색 사다리(level-pill) — 중심/상위(반전 박스)는 흰 반투명 태그 유지
+    const tagFill = inverted ? "rgba(255,255,255,.2)" : "var(--color-accent)";
+    const tagOpacity = inverted ? 1 : LEVEL_FILL_OPACITY[Math.min(n.level, 5) - 1];
+    const tagText = inverted || isLevelInverted(n.level) ? "var(--color-on-accent)" : "var(--color-accent)";
     const maxChars = info ? (full && n.level === 3 ? 6 : 8) : 12;
     const label = n.name.length > maxChars ? `${n.name.slice(0, maxChars - 1)}…` : n.name;
     return (
@@ -462,8 +483,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
         onMouseLeave={() => setTooltip(null)}
       >
         <rect width={BW} height={BH} rx={6} fill={fill} stroke={stroke} strokeWidth={1} strokeDasharray={n.level === 5 ? "3 2" : undefined} />
-        <rect x={6} y={7} width={tagW} height={14} rx={4} fill={inverted ? "rgba(255,255,255,.2)" : "var(--color-surface-alt)"} />
-        <text x={6 + tagW / 2} y={17.5} textAnchor="middle" fontSize={9} fontWeight={600} fill={inverted ? "var(--color-on-accent)" : "var(--color-ink-tertiary)"}>
+        <rect x={6} y={7} width={tagW} height={14} rx={4} fill={tagFill} fillOpacity={tagOpacity} />
+        <text x={6 + tagW / 2} y={17.5} textAnchor="middle" fontSize={9} fontWeight={600} fill={tagText}>
           {tag}
         </text>
         <text x={12 + tagW} y={18} fontSize={11} fontWeight={inverted ? 600 : 400} fill={textFill}>
@@ -483,7 +504,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
   const ty = view.y + 10;
 
   const roots = tree.childrenByParent.get(ROOT) ?? [];
-  const showSearch = results !== null;
+  const showSearch = hits !== null;
 
   return createPortal(
     // z 1200(모달 단) — 우클릭 GoToMenu(z 1200, 나중에 body에 붙음)가 위에 오도록 1300을 쓰지 않는다(오버레이 z 사다리).
@@ -500,13 +521,15 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
           ...(pos ? { left: pos.left, top: pos.top } : { left: "50%", top: 72, transform: "translateX(-50%)" }),
         }}
       >
+        {/* 헤더 두 줄 — 1줄 제목·모드·닫기, 2줄 검색. 한 줄에 다 두면 계단식 폭(440)에서 검색창이 밀려 사라진다 */}
         <div
           data-id="framework-explorer-handle"
-          className="flex cursor-move select-none items-center gap-3 border-b border-hairline px-4 py-2.5"
+          className="flex cursor-move select-none flex-col gap-2 border-b border-hairline px-4 py-2.5"
           onMouseDown={startPanelDrag}
         >
+          <div className="flex items-center gap-3">
           <span className="shrink-0 text-caption-strong text-ink">{t("framework.explorer.title")}</span>
-          <div data-id="framework-explorer-mode" className="flex w-56 shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5">
+          <div data-id="framework-explorer-mode" className="ml-auto flex w-48 shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5">
             {(["tree", "diagram"] as const).map((m) => (
               <button
                 key={m}
@@ -522,7 +545,17 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
               </button>
             ))}
           </div>
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
+          <button
+            type="button"
+            data-id="framework-explorer-close"
+            aria-label="Close"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+            onClick={onClose}
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
+          </div>
+          <label className="flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
             <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
             <input
               data-id="framework-explorer-search"
@@ -537,47 +570,78 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
               </button>
             )}
           </label>
-          <button
-            type="button"
-            data-id="framework-explorer-close"
-            aria-label="Close"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-            onClick={onClose}
-          >
-            <X size={16} strokeWidth={1.5} />
-          </button>
         </div>
 
         <div className="relative flex min-h-0 flex-1">
           {showSearch ? (
-            <ul data-id="framework-explorer-results" className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-              {results.categories.length === 0 ? (
+            <ul ref={resultsRef} data-id="framework-explorer-results" className="relative flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
+              {hits.length === 0 ? (
                 <li className="px-2 py-6 text-center text-fine text-ink-tertiary">{t("framework.explorer.noResults")}</li>
               ) : (
-                results.categories.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      data-id={`framework-explorer-result-${c.id}`}
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-surface-alt"
-                      onClick={() => {
-                        // 검색 결과는 경량 행이라 chain으로 노드를 되찾아 이동한다
-                        void getCategoryChain(c.id).then((chainNodes) => {
-                          const node = chainNodes[chainNodes.length - 1];
-                          if (!node) return;
-                          // 이동 후엔 검색을 비워 트리/다이어그램이 새 위치로 따라온 모습을 보여준다(패널은 열린 채)
-                          setQuery("");
-                          setDebouncedQuery("");
-                          navigate(node);
-                        });
-                      }}
-                    >
-                      <span className="shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[11px] font-semibold leading-none text-accent">L{c.level}</span>
-                      <span className="min-w-0 truncate text-caption text-ink">{c.name}</span>
-                      {c.path && <span className="ml-auto min-w-0 truncate text-fine text-ink-tertiary">{c.path}</span>}
-                    </button>
-                  </li>
-                ))
+                hits.map(({ item: c, matches }) => {
+                  const ranges = matches.find((m) => m.field === "name")?.ranges ?? [];
+                  const ancestors = ancestorsOf(c);
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        data-id={`framework-explorer-result-${c.id}`}
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-surface-alt"
+                        onClick={() => {
+                          // 검색 결과는 경량 행이라 chain으로 노드를 되찾아 이동한다
+                          void getCategoryChain(c.id).then((chainNodes) => {
+                            const node = chainNodes[chainNodes.length - 1];
+                            if (!node) return;
+                            // 이동 후엔 검색을 비워 트리/다이어그램이 새 위치로 따라온 모습을 보여준다(패널은 열린 채)
+                            setQuery("");
+                            navigate(node);
+                          });
+                        }}
+                      >
+                        {/* 왼쪽 레벨 마커 — 조상 경로(L1…부모)를 색 사다리 칩으로, 호버하면 그 조상 이름 */}
+                        <span data-id="framework-explorer-markers" className="flex shrink-0 items-center gap-0.5">
+                          {ancestors.map((a) => (
+                            <span
+                              key={a.id}
+                              data-id={`framework-explorer-marker-${a.id}`}
+                              data-level={a.level}
+                              className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] px-1 text-[9px] font-semibold leading-none ${getLevelPillClass(a.level)}`}
+                              onMouseEnter={(e) => {
+                                const box = resultsRef.current?.getBoundingClientRect();
+                                const r = e.currentTarget.getBoundingClientRect();
+                                if (!box) return;
+                                // 마커 아래에 띄운다 — 위로 띄우면 첫 행에서 목록 상단(overflow)에 잘린다
+                                setMarkerTip({
+                                  x: r.left - box.left + r.width / 2,
+                                  y: r.bottom - box.top + (resultsRef.current?.scrollTop ?? 0) + 6,
+                                  text: `L${a.level} · ${a.name}${a.level < 5 ? ` · L5 ${a.l5_count}` : ""}`,
+                                });
+                              }}
+                              onMouseLeave={() => setMarkerTip(null)}
+                            >
+                              {a.level}
+                            </span>
+                          ))}
+                        </span>
+                        <LevelPill level={c.level} size="sm" />
+                        <span className="min-w-0 flex-1 truncate text-caption text-ink">
+                          <Highlight text={c.name} ranges={ranges} />
+                        </span>
+                        {c.level < 5 && (
+                          <span className="shrink-0 text-fine text-ink-tertiary">{t("category.summary.l5Count", { n: c.l5_count })}</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+              {markerTip && (
+                <li
+                  className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-fine text-on-accent"
+                  style={{ left: markerTip.x, top: markerTip.y }}
+                >
+                  {markerTip.text}
+                </li>
               )}
             </ul>
           ) : mode === "tree" ? (
@@ -745,7 +809,7 @@ function InfoCard({
           {path}
         </span>
         <div className="flex items-center gap-2">
-          <span className="shrink-0 rounded-full bg-accent-tint px-2 py-0.5 text-fine font-semibold text-accent">L{node.level}</span>
+          <LevelPill level={node.level} />
           <h3 className="min-w-0 truncate text-body-strong text-ink">{node.name}</h3>
         </div>
         <div className="grid grid-cols-3 gap-1.5">

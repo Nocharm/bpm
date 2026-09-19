@@ -5,6 +5,7 @@ import { ChevronRight, Layers } from "lucide-react";
 
 import type { MeDashboardCategory } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { getLevelPillClass } from "@/components/level-pill";
 import { DashboardEmpty, DashboardFoot, DashboardSection } from "@/components/maps/dashboard-section";
 import { SkeletonLine } from "@/components/skeleton";
 
@@ -55,7 +56,7 @@ export function FrameworkCard({ categories, crumb, onOpenLinkage, onBrowse }: Fr
         <>
           {list.slice(0, ROW_CAP).map((c) => (
             <div key={c.category_id} data-id={`home-framework-cat-${c.category_id}`} className="group grid grid-cols-[auto_1fr_auto] items-center gap-2.5 border-t border-divider px-3 py-2 transition-colors duration-150 hover:bg-surface-pearl">
-              <span className="grid h-[26px] w-[26px] place-items-center rounded-[6px] bg-accent-tint text-[11px] font-semibold text-accent-elevated">L{c.level}</span>
+              <span className={`grid h-[26px] w-[26px] place-items-center rounded-[6px] text-[11px] font-semibold ${getLevelPillClass(c.level)}`}>L{c.level}</span>
               <div className="min-w-0">
                 <div className="truncate text-caption-strong text-ink">{c.name}</div>
                 <div className="mt-0.5 flex gap-2.5 text-fine text-ink-tertiary">

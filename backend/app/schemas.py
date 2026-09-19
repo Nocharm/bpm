@@ -840,6 +840,17 @@ class CategoryNodeOut(BaseModel):
     slot_pending_count: int = 0
 
 
+class CategoryLiteOut(BaseModel):
+    """전 카테고리 경량 행 — 탐색 모달의 클라이언트 검색(초성·비연속 매칭·하이라이트)용. 2,300행 ≈ 100KB (2026-09-19)."""
+
+    id: int
+    name: str
+    level: int
+    parent_id: int | None
+    sort_order: int
+    l5_count: int
+
+
 class CategoryPermissionEntry(BaseModel):
     """카테고리 권한자 1행 — 행 존재=권한자(role 없음) (design 2026-08-28 §3)."""
 

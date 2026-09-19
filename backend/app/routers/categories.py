@@ -35,6 +35,7 @@ from app.permissions.access import (
 )
 from app.schemas import (
     CategoryAdminOut,
+    CategoryLiteOut,
     CategoryCreateIn,
     CategoryMapsOut,
     CategoryNodeOut,
@@ -364,6 +365,35 @@ async def list_all_category_permissions(
             for cid, pt, pid in rows
         ]
     )
+
+
+@router.get("/all", response_model=list[CategoryLiteOut])
+async def list_all_categories(
+    session: AsyncSession = Depends(get_session),
+    _user: str = Depends(get_current_user),
+) -> list[CategoryLiteOut]:
+    """전 카테고리 경량 목록(정렬: level, sort_order, code) — 탐색 모달이 한 번 받아 클라이언트에서
+    초성·비연속 글자 검색을 돌린다. 가시성 판정 없음(카테고리는 로그인 전체 열람, /nodes와 동일)."""
+    rows = (
+        await session.execute(
+            select(
+                ProcessCategory.id,
+                ProcessCategory.parent_id,
+                ProcessCategory.code,
+                ProcessCategory.name,
+                ProcessCategory.level,
+                ProcessCategory.sort_order,
+            ).order_by(ProcessCategory.level, ProcessCategory.sort_order, ProcessCategory.code)
+        )
+    ).all()
+    l5_count = _subtree_map_counts(rows, {r.id: 1 for r in rows if r.level == 5})
+    return [
+        CategoryLiteOut(
+            id=r.id, name=r.name, level=r.level, parent_id=r.parent_id,
+            sort_order=r.sort_order, l5_count=l5_count.get(r.id, 0),
+        )
+        for r in rows
+    ]
 
 
 async def _l5_card_meta(session: AsyncSession, l5_rows: Sequence[Row]) -> dict[int, dict]:

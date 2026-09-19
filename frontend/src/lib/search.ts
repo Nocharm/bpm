@@ -67,14 +67,23 @@ function allOccurrences(haystack: string, needle: string): number[] {
 }
 
 // 부분 시퀀스 — query 글자들이 text에 "순서대로"(연속 아님) 등장하면 각 글자 range, 아니면 null.
+// 글자 하나는 원문 글자 또는 그 초성과 맞으면 통과 — "ㅂㅈㅈㅈ"가 공백 낀 "배지 조제"에, "배조계"가 "배지 조제 계획"에
+// 걸린다(업무 체계 탐색 검색, 2026-09-19). 공백은 query에서 뺀다.
 function subsequenceMatch(text: string, term: string): MatchRange[] | null {
-  const t = term.trim().toLowerCase();
+  const t = term.replace(/\s/g, "").toLowerCase();
   if (!t) return null;
   const lower = text.toLowerCase();
+  const initials = extractChosung(text);
   const ranges: MatchRange[] = [];
   let pos = 0;
   for (const ch of t) {
-    const idx = lower.indexOf(ch, pos);
+    let idx = -1;
+    for (let i = pos; i < lower.length; i += 1) {
+      if (lower[i] === ch || initials[i] === ch) {
+        idx = i;
+        break;
+      }
+    }
     if (idx === -1) return null;
     ranges.push({ start: idx, end: idx + 1 });
     pos = idx + 1;

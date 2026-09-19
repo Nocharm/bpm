@@ -19,6 +19,7 @@ import {
   writePersistedDrill,
 } from "@/lib/framework-drill";
 import { useI18n } from "@/lib/i18n";
+import { LevelPill } from "@/components/level-pill";
 import { PersonHoverCard } from "@/components/person-hover-card";
 import { FrameworkExplorerModal } from "@/components/maps/framework-explorer-modal";
 
@@ -471,9 +472,7 @@ export function FrameworkDrill({
         >
           <ChevronLeft size={14} strokeWidth={1.5} />
         </button>
-        {current && (
-          <span className="shrink-0 rounded-full bg-accent-tint px-2 py-0.5 text-fine font-semibold text-accent">L{current.level}</span>
-        )}
+        {current && <LevelPill level={current.level} />}
         <span data-id="framework-drill-title" className="min-w-0 flex-1 truncate text-body-strong text-ink">
           {current ? current.name : t("home.viewFramework")}
         </span>

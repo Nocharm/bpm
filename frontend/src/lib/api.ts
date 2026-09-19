@@ -2891,6 +2891,20 @@ export interface CategoryMaps {
   maps: MapSummary[];
 }
 
+// 전 카테고리 경량 행 — 탐색 모달의 클라이언트 검색(초성·비연속 매칭·하이라이트) (2026-09-19)
+export interface CategoryLite {
+  id: number;
+  name: string;
+  level: number;
+  parent_id: number | null;
+  sort_order: number;
+  l5_count: number;
+}
+
+export function listAllCategories(): Promise<CategoryLite[]> {
+  return request<CategoryLite[]>("/categories/all");
+}
+
 // parentId 생략 시 루트(최상위 레벨) 자식 목록
 export function listCategoryNodes(parentId?: number): Promise<CategoryNode[]> {
   const qs = parentId === undefined ? "" : `?parent_id=${parentId}`;

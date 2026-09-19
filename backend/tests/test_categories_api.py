@@ -331,3 +331,15 @@ def test_framework_transfer_target_not_owned_403(client: TestClient, enforce: No
     act_as("cat.src_owner")  # source owner(경로 의존성 통과) — target은 owner도 grant도 없음
     resp = client.post(f"/api/maps/{sid}/framework-transfer", json={"to_map_id": tid})
     assert resp.status_code == 403
+
+
+def test_all_categories_lists_every_row_with_parent_and_l5_count(client: TestClient) -> None:
+    """GET /categories/all — 탐색 모달 클라이언트 검색용 경량 전 목록(부모 id·서브트리 L5 수 포함, level 순)."""
+    ids = _seed_tree(client)
+    rows = client.get("/api/categories/all").json()
+    by_id = {r["id"]: r for r in rows}
+    assert by_id[ids["A"]]["parent_id"] is None
+    assert by_id[ids["A1"]]["parent_id"] == ids["A"]
+    assert set(by_id[ids["A1"]]) == {"id", "name", "level", "parent_id", "sort_order", "l5_count"}
+    levels = [r["level"] for r in rows]
+    assert levels == sorted(levels)

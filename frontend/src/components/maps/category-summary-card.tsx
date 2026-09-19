@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { LevelPill } from "@/components/level-pill";
 import { SectionHeader } from "@/components/section-header";
 import {
   getCategorySummary,
@@ -286,9 +287,7 @@ export function CategorySummaryCard({
               </span>
             </span>
             <div className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0 rounded-full bg-accent-tint px-2 py-0.5 text-fine font-semibold text-accent">
-                L{summary.level}
-              </span>
+              <LevelPill level={summary.level} />
               <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-ink">{summary.name}</h2>
             </div>
           </div>
@@ -411,9 +410,7 @@ export function CategorySummaryCard({
                       className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors duration-150 hover:bg-surface-pearl"
                       onClick={() => onSelectChild?.(c)}
                     >
-                      <span className="shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[11px] font-semibold leading-none text-accent">
-                        L{c.level}
-                      </span>
+                      <LevelPill level={c.level} size="sm" />
                       <span className="min-w-0 flex-1 truncate text-caption text-ink">{c.name}</span>
                       <span className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary" title={t("category.summary.subtreeMaps")}>
                         <MapIcon size={12} strokeWidth={1.5} />

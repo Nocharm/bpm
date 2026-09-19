@@ -29,6 +29,17 @@ describe("matchTerm", () => {
     // c가 a보다 뒤 → 순서 불일치 → null
     expect(matchTerm("abc", "ca")).toBeNull();
   });
+  it("subsequence accepts chosung per char and skips spaces (업무 체계 탐색 검색)", () => {
+    // 초성 부분일치는 공백 때문에 깨지지만("ㅂㅈ ㅈㅈ" ≠ "ㅂㅈㅈㅈ") 시퀀스는 글자별 초성으로 통과
+    expect(matchTerm("배지 조제", "ㅂㅈㅈㅈ")).toEqual([
+      { start: 0, end: 1 }, { start: 1, end: 2 }, { start: 3, end: 4 }, { start: 4, end: 5 },
+    ]);
+    // 연속 안 되는 글자 + 초성 섞임
+    expect(matchTerm("배지 조제 계획", "배조ㄱ")).toEqual([
+      { start: 0, end: 1 }, { start: 3, end: 4 }, { start: 6, end: 7 },
+    ]);
+    expect(matchTerm("배지 조제", "ㅈㅂ")).toBeNull();
+  });
 });
 
 describe("filterByQuery ordering (정확 > 접두 > 부분 > subsequence)", () => {

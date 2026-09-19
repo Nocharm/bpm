@@ -134,6 +134,15 @@ try {
   check("tree mode pre-expands the current chain and highlights the current row", treeCurrent && treeLeafVisible,
     `current=${treeCurrent} leaf=${treeLeafVisible}`);
   const treeWidth = (await explorer.boundingBox())?.width ?? 0;
+  // 검색 — 초성(공백 무시)·비연속 글자로도 걸리고, 결과 행엔 하이라이트 mark + 조상 레벨 마커
+  await page.locator('[data-id="framework-explorer-search"]').fill("ㄱㅊㅂㅈ");
+  const chosungHit = await page.locator('[data-id^="framework-explorer-result-"]').filter({ hasText: CHAIN[2] }).first()
+    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  const markCount = await page.locator('[data-id="framework-explorer-results"] mark').count();
+  const markerCount = await page.locator('[data-id^="framework-explorer-marker-"]').count();
+  check("chosung search finds the L3 with highlighted chars and ancestor level markers",
+    chosungHit && markCount > 0 && markerCount > 0, `hit=${chosungHit} marks=${markCount} markers=${markerCount}`);
+  await page.locator('[data-id="framework-explorer-search"]').fill("");
   await page.locator('[data-id="framework-explorer-mode-diagram"]').click();
   await page.waitForSelector('[data-id^="framework-diagram-node-"]', { timeout: 8000 });
   await page.waitForTimeout(700);
