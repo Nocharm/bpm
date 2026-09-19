@@ -395,8 +395,19 @@ export function FrameworkDrill({
             onClick={() => switchSibling(s)}
           >
             <span className="min-w-0 truncate text-fine">{s.name}</span>
-            <span className="flex items-center gap-1 text-[10px] font-normal text-ink-tertiary">
-              {t("category.summary.l5Count", { n: s.l5_count })}
+            {/* 두 번째 줄 = 직속 관리자(없으면 점선 플레이스홀더) — L5 수는 정보값이 낮아 뺐다(사용자 지시 2026-09-19) */}
+            <span className="flex min-w-0 items-center gap-1 text-[10px] font-normal text-ink-tertiary">
+              {s.admin ? (
+                <span data-id="framework-sib-admin" className="inline-flex min-w-0 items-center gap-1">
+                  <User size={10} strokeWidth={1.5} className="shrink-0" />
+                  <span className="truncate">{s.admin.name}</span>
+                </span>
+              ) : (
+                <span data-id="framework-sib-admin" data-unset="" className="inline-flex min-w-0 items-center gap-1 text-ink-muted">
+                  <span className="h-[10px] w-[10px] shrink-0 rounded-full border border-dashed border-ink-muted" />
+                  <span className="truncate">{t("framework.drill.unassigned")}</span>
+                </span>
+              )}
               {!on && recent.includes(s.id) && (
                 <span data-id="framework-sib-recent" title={t("framework.drill.recent")} className="h-[5px] w-[5px] rounded-full bg-chart-approved" />
               )}

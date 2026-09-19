@@ -83,8 +83,11 @@ try {
     .then(() => true).catch(() => false);
   check("drill root lists L1 in the sibling column", rootVisible, CHAIN[0]);
   check("root shows the pick-an-L1 hint on the right", (await page.locator('[data-id="framework-drill-root-hint"]').count()) === 1);
+  // 형제 항목 2행 = 직속 관리자(없으면 점선 플레이스홀더 "Unassigned"); L5 수는 표시하지 않는다
+  const rootAdmin = sibByName(page, CHAIN[0]).first().locator('[data-id="framework-sib-admin"]');
   const rootMeta = (await sibByName(page, CHAIN[0]).first().textContent()) ?? "";
-  check("sibling entry carries the L5 count", /L5\s*\d+/.test(rootMeta), rootMeta.trim());
+  check("sibling entry shows the admin or an unassigned placeholder, no L5 count",
+    (await rootAdmin.count()) === 1 && !/L5\s*\d+/.test(rootMeta), rootMeta.trim());
 
   // L1은 형제 열에서, L2~L4는 오른쪽 하위 열에서 드릴인
   await sibByName(page, CHAIN[0]).first().click();
@@ -93,8 +96,9 @@ try {
     await rowByName(page, CHAIN[i]).first().click();
     await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });
   }
-  const rowMeta = (await sibByName(page, CHAIN[3]).first().textContent()) ?? "";
-  check("sibling column shows the current L4 with its L5 count", /L5\s*\d+/.test(rowMeta), rowMeta.trim());
+  const rowAdmin = sibByName(page, CHAIN[3]).first().locator('[data-id="framework-sib-admin"]');
+  check("sibling column shows the current L4 with its admin slot", (await rowAdmin.count()) === 1,
+    ((await sibByName(page, CHAIN[3]).first().textContent()) ?? "").trim());
   const crumbText = (await page.locator('[data-id="framework-crumb"]').textContent()) ?? "";
   check("breadcrumb lists ancestors after drilling to L4",
     CHAIN.slice(0, 4).every((c) => crumbText.includes(c)), crumbText.trim());

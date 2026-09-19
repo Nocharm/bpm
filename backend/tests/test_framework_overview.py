@@ -422,3 +422,13 @@ def test_nodes_l5_card_meta_and_l5_count(client: TestClient, enforce: None) -> N
     row = next(r for r in roots if r["code"] == "NDM-L4")
     assert row["l5_count"] == 3
     assert row["canvas_state"] is None and row["admin"] is None and row["slot_pending_count"] == 0
+
+    # 상위 레벨도 직속 관리자는 채운다(형제 열 표시) — 상속 관리자는 아님(direct_only)
+    act_as(SYSADMIN)
+    res = client.put(f"/api/categories/{parent}/permissions",
+                     json={"permissions": [{"principal_type": "user", "principal_id": "ndm.l4admin"}]})
+    assert res.status_code == 200, res.text
+    act_as("ndm.anyone")
+    row = next(r for r in client.get("/api/categories/nodes").json() if r["code"] == "NDM-L4")
+    assert row["admin"] == {"login_id": "ndm.l4admin", "name": "ndm.l4admin", "level": 4}
+    assert row["canvas_state"] is None

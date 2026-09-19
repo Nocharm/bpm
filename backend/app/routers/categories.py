@@ -396,12 +396,14 @@ async def list_all_categories(
     ]
 
 
-async def _l5_card_meta(session: AsyncSession, l5_rows: Sequence[Row]) -> dict[int, dict]:
-    """홈 드릴다운 L5 카드 메타(canvas_state·admin·slot_pending_count) — 한 부모의 L5 자식만 대상이라
-    직속 관리자 조회는 N+1이어도 무해(_summary_admins 선례). 확정 판정은 요약 subtree_confirm과 같은
-    "확정 스냅샷 존재 여부"(게이트 ready 무관)."""
-    if not l5_rows:
+async def _card_meta(session: AsyncSession, rows: Sequence[Row]) -> dict[int, dict]:
+    """홈 드릴다운 카드 메타 — 직속 관리자(admin)는 전 레벨(형제 열이 L1~L4 관리자를 보여준다,
+    2026-09-19), canvas_state·slot_pending_count는 L5만. 한 부모의 자식만 대상이라 직속 관리자 조회는
+    N+1이어도 무해(_summary_admins 선례). 확정 판정은 요약 subtree_confirm과 같은 "확정 스냅샷 존재
+    여부"(게이트 ready 무관)."""
+    if not rows:
         return {}
+    l5_rows = [r for r in rows if r.level == 5]
     linkage_ids = [r.linkage_map_id for r in l5_rows if r.linkage_map_id is not None]
     confirmed_map_ids: set[int] = set()
     if linkage_ids:
@@ -415,7 +417,7 @@ async def _l5_card_meta(session: AsyncSession, l5_rows: Sequence[Row]) -> dict[i
             ).all()
         )
     login_by_cat: dict[int, str] = {}
-    for r in l5_rows:
+    for r in rows:
         logins = sorted(await get_category_admin_logins(session, r.id, direct_only=True))
         if logins:
             login_by_cat[r.id] = logins[0]
@@ -447,21 +449,22 @@ async def _l5_card_meta(session: AsyncSession, l5_rows: Sequence[Row]) -> dict[i
         ).all()
     )
     meta: dict[int, dict] = {}
-    for r in l5_rows:
+    for r in rows:
         login = login_by_cat.get(r.id)
         meta[r.id] = {
-            "canvas_state": (
-                "none" if r.linkage_map_id is None
-                else "confirmed" if r.linkage_map_id in confirmed_map_ids
-                else "draft"
-            ),
             "admin": (
-                CategoryAdminOut(login_id=login, name=name_by_login.get(login) or login, level=5)
+                CategoryAdminOut(login_id=login, name=name_by_login.get(login) or login, level=r.level)
                 if login is not None
                 else None
             ),
-            "slot_pending_count": pending_by_cat.get(r.id, 0),
         }
+        if r.level == 5:
+            meta[r.id]["canvas_state"] = (
+                "none" if r.linkage_map_id is None
+                else "confirmed" if r.linkage_map_id in confirmed_map_ids
+                else "draft"
+            )
+            meta[r.id]["slot_pending_count"] = pending_by_cat.get(r.id, 0)
     return meta
 
 
@@ -504,7 +507,7 @@ async def list_category_nodes(
 
     admin_ids = await _admin_category_ids(session, user)
     targets = sorted(children_by_parent.get(parent_id, []), key=lambda r: (r.sort_order, r.code))
-    l5_meta = await _l5_card_meta(session, [r for r in targets if r.level == 5])
+    card_meta = await _card_meta(session, targets)
     return [
         CategoryNodeOut(
             id=r.id,
@@ -517,7 +520,7 @@ async def list_category_nodes(
             linkage_map_id=r.linkage_map_id,
             can_edit_linkage=r.id in admin_ids,
             l5_count=l5_count.get(r.id, 0),
-            **l5_meta.get(r.id, {}),
+            **card_meta.get(r.id, {}),
         )
         for r in targets
     ]
