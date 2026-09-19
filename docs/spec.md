@@ -61,9 +61,12 @@ comments       id, version_id(FK), node_id, author, body, resolved, created_at  
 ### 3.4 버전 관리 / 비교
 - 맵 상세에서 버전 목록·생성(기존 버전 복제)·라벨 변경·삭제
 - **비교 화면**: 두 버전을 좌우 나란히 읽기 전용 렌더 (1차). 노드 추가/삭제/변경 하이라이트는 §7 Phase B에서 구현
+- **비교 화면 확장 (2026-09-18)**: 노드 위 속성 칩·조건·입출력 `+N −M` 요약(`lib/io-diff.ts`)과 변경 필드 힌트(`data.diffFieldStatus`), 속성 패널 "모두/변경만" 범위 토글, 실측 크기 기반 재배치. 세 번째 탭 **AI 요약** — FE가 계산한 병합 diff(`CompareDiffPayload`, 노드/엣지 각 200 상한)를 `POST /api/maps/{id}/compare/ai-summary`로 보내 총평·주요 변경·확인 포인트를 받는다(프롬프트 키 `compare_summary_contract`, 계량 `ai_usage_events kind=compare_summary`). `?base=&target=` 딥링크.
+- **승인자 착지 (2026-09-18)**: 내가 결재할 pending 버전이 있으면 에디터가 그 버전으로 착지(`?version=` 우선). 다른 버전에서는 상단 배너 링크 + 승인 탭 워크플로 섹션 덮개(`SectionOverlay`), pending 버전에는 "게시본과 비교" CTA(최신 게시본 ↔ pending 딥링크).
 
 ### 3.5 맵 목록
 - 전체 맵 목록 (이름·설명·버전 수·수정일), 생성/삭제
+- **업무 체계 보기 (2026-09-19)**: L5 포커스 드릴다운(`components/maps/framework-drill.tsx`) — 브레드크럼 + 형제(1):하위(2) 두 열, L5는 캔버스 카드, 소속 맵은 우측 요약(`category-summary-card.tsx`) 담당, 위치는 `bpm.home.frameworkDrill`로 영속. **탐색 플로팅 패널**(`framework-explorer-modal.tsx`, 계단식 트리 ↔ ERD식 다이어그램 `lib/framework-diagram.ts`, 우클릭 GoToMenu, `GET /categories/all` 클라이언트 검색 `lib/search`). `GET /categories/nodes`는 전 레벨 `l5_count`·`admin`, L5 전용 `canvas_state`·`slot_pending_count`를 함께 준다(FE/BE 동시 배포).
 
 ## 4. 인증 — Keycloak (OIDC)
 

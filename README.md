@@ -93,6 +93,8 @@ npx tsc --noEmit -p tsconfig.json; npx vitest run
 
 시드 내용: 센터/담당/팀/파트 조직도 + 직원 ~400명(sysadmin `admin.sys`) + 맵 12개(공개6/비공개6, 버전 v1~v5 승인 워크플로 + 작업본) + 그룹 6. `/login`의 임시 로그인 피커에서 검색해 아무나 접속. 실제 역할(owner/editor/viewer)로 화면을 검증하려면 `DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys`(또는 `backend/.env`)로 백엔드를 띄운다.
 
+업무 체계 드릴다운을 큰 트리로 실측하려면 **규모 시드**를 얹는다(멱등, 맵 없음 — L1 1개 아래 L5 2,000개): `python -m scripts.seed_framework_scale [--l5 N]` (bash: `.venv/bin/python -m scripts.seed_framework_scale` · PowerShell: `.venv\Scripts\python -m scripts.seed_framework_scale`).
+
 
 ## 서버 배포 (docker-compose)
 

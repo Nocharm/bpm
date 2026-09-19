@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-19 — 매뉴얼 6종·AI 챗 기준 매뉴얼·spec·README를 dev 최신으로 동기화 (dev)
+
+- 9월 12일 매뉴얼 갱신(e038d48d) 이후 dev에 쌓인 사용자 표면 변경을 md에 반영: 홈 업무 체계 **L5 포커스 드릴다운 + 탐색 플로팅 패널**(사용 안내 2장 "맵 찾기" 전면 개정), 홈 1클릭 지연 이동의 **섹션 레이어** 안내, **결재자 착지·결재 대기 덮개·게시본과 비교**(사용 안내 3장 인용문 + 맵 편집 7장), 비교 화면 **노드 칩·입출력 요약·모두/변경만 토글·AI 요약 탭·`?base=&target=`**(사용 안내 4장), AI 인터뷰 미리보기 칩·Tab 이동, PNG 선택 해제 캡처, 인터뷰 임포트 대량 파일 UX(관리자 13장). `backend/app/manual.md`(AI "사용법 질문" 근거)도 같은 항목으로 갱신. `docs/spec.md` §3.4·§3.5에 비교 확장·승인자 착지·업무 체계 보기 항목, README 시드 절에 `seed_framework_scale` 추가.
+- `/sync-all` 전수 점검 결과: 의존성·Dockerfile·.dockerignore·compose·.env.example은 코드와 일치(Settings에만 있는 `dev_user`·`org_trim_levels`는 개발 전용/비즈니스 상수로 의도된 미노출). 슬라이드 덱 4종도 같은 델타로 증분 수술(사용자 68→71장: 결재자 착지·AI 요약 탭·업무 체계 탐색 패널 신설, Framework 보기·차이 읽기 재촬영·재작성, 관리자는 임포트 불릿만) + PDF 재출력. 캡처는 워크트리 서버(3047/8048)+OpenAI 호환 스텁으로 실화면 7컷×2언어 — 승인자 덮개는 **활성 임직원(`load_active_approvers`)** 만 승인자로 잡히므로 시드의 admin.kim 대신 bora.hong을 승인자로 세팅해야 했다.
+
 ## 2026-09-19 — 업무 체계 뷰 2열(형제|하위) + 탐색 플로팅 패널(계단식·ERD식 다이어그램) (feat/fw-drill-columns → dev)
 
 - **결과:** 드릴다운 좌측을 형제(1):하위(2) 두 열로(좌:우 컬럼 1:2 유지, 형제 칩 스트립 폐기). 형제 항목·하위 행(L2~L4) 공통 문법 = 앞 레벨 필 · 이름 · 2줄 직속 관리자(없으면 점선 점 상시, "Unassigned" 라벨은 행 호버 시에만) · 우측 직계 하위 수 "L{n+1} k"·맵 수. L5는 275px 컴팩트 카드(상태 점 영어 라벨·관리자·맵 수·열기). 브레드크럼 우측 트리 아이콘 → **탐색 플로팅 패널**(`components/maps/framework-explorer-modal.tsx`, 딤 없음·헤더 드래그·×/Esc만 닫힘·이동해도 열린 채 따라감): [계단식 440px | 다이어그램 1000px] 스프링 전환. 계단식=lazy 트리(현재 경로 미리 펼침, 자손 호버 시 조상 강조). 다이어그램=`lib/framework-diagram.ts` 순수 레이아웃(상위 체인 L1까지 위 가운데 차콜 → 현재 액센트 → 자식 좌/우 → 손자 계단 스택, 직각 버스 엣지 무교차, 테스트 3종), 좌클릭=재중심 애니, 우클릭=GoToMenu(정보 보기·이 업무체계 보기·이 업무 중심으로 그리기), "전체(L1 중심)" 토글. 검색은 `GET /categories/all` 전 행 클라이언트 검색(`lib/search`: 부분·초성·초성 섞인 비연속 시퀀스, 공백 무시) + 하이라이트, 결과 행=레벨 필(호버=조상 경로 툴팁)+이름+L5 수. **레벨 필 색 사다리** 공용 `components/level-pill.tsx`(L1 100%→L5 12%) 전 표면 교체. BE `/categories/nodes`: `l5_count` 전 레벨, `admin` 전 레벨(`_card_meta`), `canvas_state`·`slot_pending_count`는 L5만 — FE/BE 동시 배포.
