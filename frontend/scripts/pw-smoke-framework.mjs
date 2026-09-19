@@ -138,7 +138,7 @@ try {
   await page.waitForSelector('[data-id^="framework-diagram-node-"]', { timeout: 8000 });
   await page.waitForTimeout(700);
   const diagramWidth = (await explorer.boundingBox())?.width ?? 0;
-  check("modal narrows for the tree and widens for the diagram", treeWidth < 700 && diagramWidth > 1000,
+  check("modal narrows for the tree and widens for the diagram", treeWidth < 600 && diagramWidth > 900,
     `tree=${treeWidth} diagram=${diagramWidth}`);
   const ancestorCount = await page.locator('[data-id^="framework-diagram-node-"][data-kind="ancestor"]').count();
   check("diagram stacks the whole ancestor chain (L1..L3) above the L4 center", ancestorCount === 3, `ancestors=${ancestorCount}`);
