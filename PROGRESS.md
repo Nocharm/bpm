@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-19 — 캔버스 우하단 노드 표시 정보 플로팅 카드(에디터·비교) + 라이브러리 드롭 중심 보정 (feat/display-fields-float)
+
+- **결과:** 줌 필 왼쪽 눈 버튼(`NodeDisplayFloat`, `components/node-display-float.tsx`) → 위로 뜨는 카드가 `NodeDisplaySection`을 `flat`(테두리·접기 없음)으로 재사용 — 필드 토글·카테고리/전체 보이기·숨기기 그대로. 에디터는 기존 `displayFields` 상태·핸들러를 그대로 넘겨 인스펙터 섹션과 **구조적으로 동기화**(상태 하나). 비교 화면은 상수였던 표시 필드를 `ComparePane` 상태로 승격(`bpm.compare.nodeDisplayFields` 별도 키, 기본값이 에디터와 달라 분리). 토글 규칙은 `lib/node-actions.ts` `toggleDisplayToggle`/`setDisplayCategory` 순수 함수로(비교 화면이 사용, vitest 3건).
+- **드롭 좌표 검토:** 드롭 링(부채꼴)은 실측 dx=dy=0(인스펙터 열림·줌아웃 두 조건) — 링 좌표 로직 이상 없음. 우측 밀림의 실체는 **라이브러리→캔버스 드롭이 노드 좌상단을 커서에** 두던 것(handleAddNode·섹션 드롭은 중심 보정) → 중심 보정으로 통일(중심 오차 59×20px → 3×3px). `CanvasZoomScale`은 `leading` 슬롯 추가.
+- **함정:** 카드는 바깥 mousedown에 닫히므로 인스펙터 스위치를 누르면 카드가 닫힌다(의도, 재열기). 속성 탭 기본 화면의 섹션 접두는 `properties`(맵 탭은 `inspector`).
+
 ## 2026-09-19 — 매뉴얼 6종·AI 챗 기준 매뉴얼·spec·README를 dev 최신으로 동기화 (dev)
 
 - 9월 12일 매뉴얼 갱신(e038d48d) 이후 dev에 쌓인 사용자 표면 변경을 md에 반영: 홈 업무 체계 **L5 포커스 드릴다운 + 탐색 플로팅 패널**(사용 안내 2장 "맵 찾기" 전면 개정), 홈 1클릭 지연 이동의 **섹션 레이어** 안내, **결재자 착지·결재 대기 덮개·게시본과 비교**(사용 안내 3장 인용문 + 맵 편집 7장), 비교 화면 **노드 칩·입출력 요약·모두/변경만 토글·AI 요약 탭·`?base=&target=`**(사용 안내 4장), AI 인터뷰 미리보기 칩·Tab 이동, PNG 선택 해제 캡처, 인터뷰 임포트 대량 파일 UX(관리자 13장). `backend/app/manual.md`(AI "사용법 질문" 근거)도 같은 항목으로 갱신. `docs/spec.md` §3.4·§3.5에 비교 확장·승인자 착지·업무 체계 보기 항목, README 시드 절에 `seed_framework_scale` 추가.

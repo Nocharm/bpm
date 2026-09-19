@@ -56,6 +56,7 @@ import { GmpNoticePopover } from "@/components/gmp-notice-popover";
 import { IoPeersMenu, type IoPeerItem } from "@/components/io-peers-menu";
 import { NodeDetailsCard } from "@/components/node-details-card";
 import { NewlineHint } from "@/components/newline-hint";
+import { NodeDisplayFloat } from "@/components/node-display-float";
 import { NodeDisplaySection } from "@/components/node-display-section";
 import { NodeMetricsCard } from "@/components/node-metrics-card";
 import { LinkPreviewPanel } from "@/components/link-preview-panel";
@@ -4988,7 +4989,9 @@ function MapEditor({ mapId }: { mapId: number }) {
           return next;
         });
       }
-      const position = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+      // 커서를 노드 중심에 — 좌상단을 커서에 두면 노드가 커서 우하단으로 밀려 보인다(handleAddNode·섹션 드롭과 동일 규칙, 2026-09-19).
+      const point = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+      const position = { x: point.x - NODE_WIDTH / 2, y: point.y - NODE_HEIGHT / 2 };
       if (unregistered) {
         setUnregDrop({ stage: "confirm", linkedMapId, name: mapName, position });
         return;
@@ -10150,7 +10153,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                           `color-mix(in srgb, ${resolveNodeStroke(n.data.color, n.data.nodeType)} 38%, white)`
                         }
                       />
-                      <CanvasZoomScale onFit={fitScopeTopLeft} />
+                      {/* 줌 필 옆 노드 표시 정보 플로팅 — 인스펙터 섹션과 같은 상태·핸들러(동기화) */}
+                      <CanvasZoomScale
+                        onFit={fitScopeTopLeft}
+                        leading={
+                          <NodeDisplayFloat
+                            idPrefix="canvas"
+                            displayFields={displayFields}
+                            onToggle={toggleDisplayField}
+                            onSetCategory={setCategoryDisplayFields}
+                          />
+                        }
+                      />
                     </ReactFlow>
                     {/* 뷰모드 워터마크 — 편집 불가 상태를 배경으로 즉시 인지(점 그리드 대체) / read-only watermark
                         게시=PUBLISHED(액센트), 만료=EXPIRED(회색), 그 외 READ ONLY — 상태 텍스트는 한/영 모두 영어 고정
