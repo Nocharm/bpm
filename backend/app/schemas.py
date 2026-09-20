@@ -2137,19 +2137,41 @@ class CompareDiffField(BaseModel):
 
 class CompareDiffNode(BaseModel):
     ref: str = Field(max_length=16)
-    status: Literal["added", "removed", "changed"]
+    # unchanged = 흐름 문맥용 이웃 노드(변경 노드 상하류) — 보고서가 흐름 영향을 추론할 재료 (2026-09-21)
+    status: Literal["added", "removed", "changed", "unchanged"]
     title: str = Field(max_length=200)
     node_type: str = Field(default="", max_length=30)
     changes: list[CompareDiffField] = Field(default_factory=list, max_length=40)
+    # 추가 노드의 핵심 속성 — 보고서가 "무엇을 누가 어디서 하는 단계"인지 서술하기 위한 재료 (2026-09-20)
+    description: str = Field(default="", max_length=300)
+    assignee_role: str = Field(default="", max_length=100)
+    department: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
 
 
 class CompareDiffEdge(BaseModel):
     ref: str = Field(max_length=16)
-    status: Literal["added", "removed", "changed"]
+    status: Literal["added", "removed", "changed", "unchanged"]
     source: str = Field(max_length=200)  # 노드 제목
     target: str = Field(max_length=200)
     label: str = Field(default="", max_length=200)
     label_before: str = Field(default="", max_length=200)
+
+
+# 버전 파라미터 합계 before/after — FE 요약 탭(sumVersionParam)이 계산한 사실. AI는 해석만 한다.
+class CompareMetric(BaseModel):
+    field: str = Field(max_length=40)
+    base: str = Field(default="", max_length=50)
+    target: str = Field(default="", max_length=50)
+
+
+# 입출력 항목 변경 + 상대 노드(출력이면 소비처, 입력이면 산출처) — 산출물 끊김 판단 재료
+class CompareIoChange(BaseModel):
+    ref: str = Field(max_length=16)
+    side: Literal["input", "output"]
+    text: str = Field(max_length=200)
+    status: Literal["added", "removed"]
+    peers: list[str] = Field(default_factory=list, max_length=10)
 
 
 class CompareDiffTotals(BaseModel):
@@ -2163,11 +2185,14 @@ class CompareDiffTotals(BaseModel):
 
 class CompareDiffPayload(BaseModel):
     nodes: list[CompareDiffNode] = Field(default_factory=list, max_length=200)
-    edges: list[CompareDiffEdge] = Field(default_factory=list, max_length=200)
+    # 문맥 엣지(무변경)까지 실리므로 노드보다 상한이 크다
+    edges: list[CompareDiffEdge] = Field(default_factory=list, max_length=400)
     # 상한 초과로 잘린 개수 — 프롬프트에 "외 N건"으로 알린다
     omitted_nodes: int = Field(default=0, ge=0)
     omitted_edges: int = Field(default=0, ge=0)
     totals: CompareDiffTotals = Field(default_factory=CompareDiffTotals)
+    metrics: list[CompareMetric] = Field(default_factory=list, max_length=8)
+    io_changes: list[CompareIoChange] = Field(default_factory=list, max_length=80)
 
 
 class CompareSummaryRequest(BaseModel):
@@ -2175,21 +2200,71 @@ class CompareSummaryRequest(BaseModel):
     target_version_id: int
     lang: Literal["ko", "en"] = "ko"
     diff: CompareDiffPayload
+    # 캐시 무시 재생성 — "다시 생성" 버튼 전용
+    force: bool = False
 
 
-class CompareSummaryHighlight(BaseModel):
-    kind: Literal["added", "removed", "changed", "flow", "param", "other"] = "other"
-    title: str = Field(max_length=300)
-    detail: str = Field(default="", max_length=1000)
+# 항목 종류 태그 — 프론트가 아이콘·상태색으로 그린다(사용자 결정 2026-09-21, 1안). 모델이 모르는 값을 내면 note로.
+COMPARE_POINT_KINDS: tuple[str, ...] = (
+    "added",
+    "removed",
+    "changed",
+    "increase",
+    "decrease",
+    "flow",
+    "control",
+    "risk",
+    "note",
+)
+
+
+# 근거 ref가 붙는 한 줄 항목 — 요지 절의 항목·영향·미언급 공용
+class CompareSummaryPoint(BaseModel):
+    point: str = Field(max_length=300)
+    kind: str = Field(default="note", max_length=20)
+    refs: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _normalize_kind(cls, value: object) -> str:
+        return value if isinstance(value, str) and value in COMPARE_POINT_KINDS else "note"
+
+
+# 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(프론트가 캔버스 포커스 칩으로 렌더)
+class CompareSummarySection(BaseModel):
+    heading: str = Field(max_length=200)
+    points: list[CompareSummaryPoint] = Field(default_factory=list, max_length=8)
     refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CompareSummaryOut(BaseModel):
-    headline: str = Field(max_length=600)
-    highlights: list[CompareSummaryHighlight] = Field(default_factory=list, max_length=12)
-    impacts: list[str] = Field(default_factory=list, max_length=8)
-    # 서버가 요청 totals를 되돌려 채움 — 모델 출력 아님(집계 카드용)
-    stats: CompareDiffTotals | None = None
+    """비교 AI 보고서 — 결재자에게 올리는 개조식 4블록: 요지(의도별)·흐름 영향·코멘트 대비 미언급·확인 질문 (2026-09-21)."""
+
+    title: str = Field(max_length=300)
+    opening: str = Field(default="", max_length=600)
+    sections: list[CompareSummarySection] = Field(default_factory=list, max_length=8)  # 개정 요지 — 의도별 묶음
+    impacts: list[CompareSummaryPoint] = Field(default_factory=list, max_length=8)  # 흐름·통제·부담 영향
+    unmentioned: list[CompareSummaryPoint] = Field(default_factory=list, max_length=8)  # 제출 코멘트 대비 미언급
+    questions: list[str] = Field(default_factory=list, max_length=5)  # 결재 전 제출자 확인 질문
+    closing: str = Field(default="", max_length=300)
+    # 아래는 서버가 채움 — 모델 출력 아님
+    has_submit_note: bool = False  # 제출 코멘트 유무(없으면 FE가 미언급 대조 생략 안내). 캐시 내용에 포함
+    stats: CompareDiffTotals | None = None  # 요청 totals 에코(근거 집계 줄)
+    generated_at: datetime | None = None  # 캐시 행 생성 시각
+    cached: bool = False  # True면 모델 호출 없이 저장본 반환
+
+
+class SubmitNoteDraftRequest(BaseModel):
+    """제출 시 변경 사유 초안 — 최신 게시본(base, 없으면 None=첫 제출) 대비 초안(target) diff."""
+
+    base_version_id: int | None = None
+    target_version_id: int
+    lang: Literal["ko", "en"] = "ko"
+    diff: CompareDiffPayload
+
+
+class SubmitNoteDraftOut(BaseModel):
+    note: str = Field(max_length=500)  # VersionEvent.note 상한과 동일
 
 
 class AiChatSessionOut(BaseModel):

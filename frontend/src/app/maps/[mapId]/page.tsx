@@ -290,6 +290,8 @@ import {
 import { mergeSubprocessDescription } from "@/lib/subprocess-description";
 import { commitRole, commitSystem, useCatalogs } from "@/lib/catalogs";
 import { useI18n } from "@/lib/i18n";
+import { useMe } from "@/lib/me";
+import { draftSubmitNote } from "@/lib/submit-note-draft";
 import { useDirectoryDepartments, useDirectoryState } from "@/lib/directory";
 import { buildNodeRefCheck } from "@/lib/node-ref-warnings";
 import { useClosingKeys } from "@/lib/use-closing-keys";
@@ -936,7 +938,8 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
 }
 
 function MapEditor({ mapId }: { mapId: number }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const meProfile = useMe(); // AI 활성 서버에서만 제출 코멘트 AI 초안 버튼 (2026-09-21)
   const router = useRouter();
   const [mapName, setMapName] = useState("");
   // getMap 상세만 넣으므로 VersionDetail — 승인 모달의 제출 코멘트가 events를 읽는다.
@@ -12284,6 +12287,13 @@ function MapEditor({ mapId }: { mapId: number }) {
           }
           comment={transitionComment}
           onCommentChange={setTransitionComment}
+          onDraftComment={
+            meProfile?.ai_enabled && versionId != null
+              ? () => draftSubmitNote({ mapId, versionId, versions, lang }).catch((err: unknown) => {
+                  throw new Error(humanizeApiError(err, t));
+                })
+              : undefined
+          }
           onConfirm={() => {
             setSubmitConfirmOpen(false);
             void runTransition((id) => submitVersion(id, bundleValue ?? undefined, transitionComment.trim() || undefined));

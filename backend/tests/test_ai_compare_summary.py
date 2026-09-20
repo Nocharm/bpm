@@ -69,21 +69,45 @@ def _diff_payload() -> dict:
     }
 
 
-def _summary_json() -> str:
+def _summary_json(title: str = "발주 프로세스 v2 변경 보고") -> str:
+    """개조식 보고서 4블록 — 요지(의도별)·흐름 영향·코멘트 대비 미언급·확인 질문."""
     return json.dumps(
         {
-            "headline": "QA 검토 단계가 추가되고 발주 승인 소요시간이 늘었습니다.",
-            "highlights": [
-                {"kind": "added", "title": "QA 검토 신설", "detail": "발주 승인 뒤에 검토 단계 삽입", "refs": ["n1", "e1"]},
-                {"kind": "param", "title": "발주 승인 소요시간 1h → 2h30m", "detail": "", "refs": ["n2"]},
+            "title": title,
+            "opening": "감사 지적 대응을 위한 검토 단계 추가 개정",
+            "sections": [
+                {
+                    "heading": "출고 전 품질 통제 강화",
+                    "points": [
+                        {"point": "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "kind": "added"},
+                        {"point": "승인 결과가 검토를 거쳐 다음 단계로 이어지도록 흐름 연결", "kind": "flow"},
+                    ],
+                    "refs": ["n1", "e1"],
+                },
             ],
-            "impacts": ["리드타임 증가 검토 필요"],
+            "impacts": [
+                {"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "kind": "increase", "refs": ["n2"]}
+            ],
+            # 모델이 모르는 kind를 지어내도 502가 아니라 note로 정규화한다
+            "unmentioned": [{"point": "발주 승인 소요시간 변경은 제출 코멘트에 없음", "kind": "weird", "refs": ["n2"]}],
+            "questions": ["QA 검토 불합격 시 처리 경로?"],
+            "closing": "검토 후 결재 요청",
         }
     )
 
 
-def _post(client: TestClient, map_id: int, base: int, target: int, **extra):
-    body = {"base_version_id": base, "target_version_id": target, "lang": "ko", "diff": _diff_payload(), **extra}
+def _spy_ai(seen: list[list[dict]], content: str | None = None):
+    """호출된 메시지를 기록하는 fake — 호출 횟수(len(seen))가 캐시 히트/미스의 증거."""
+
+    async def _call(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None):
+        seen.append(messages)
+        return ai_client.AiReply(content=content or _summary_json(), prompt_tokens=1, completion_tokens=1)
+
+    return _call
+
+
+def _post(client: TestClient, map_id: int, base: int, target: int, diff: dict | None = None, **extra):
+    body = {"base_version_id": base, "target_version_id": target, "lang": "ko", "diff": diff or _diff_payload(), **extra}
     return client.post(f"/api/maps/{map_id}/compare/ai-summary", json=body)
 
 
@@ -102,13 +126,26 @@ def test_summary_ok_records_usage(client: TestClient, monkeypatch: pytest.Monkey
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["headline"].startswith("QA 검토")
-    assert [h["kind"] for h in body["highlights"]] == ["added", "param"]
-    assert body["highlights"][0]["refs"] == ["n1", "e1"]
-    assert body["impacts"] == ["리드타임 증가 검토 필요"]
+    assert body["title"] == "발주 프로세스 v2 변경 보고"
+    assert body["opening"] == "감사 지적 대응을 위한 검토 단계 추가 개정"
+    assert [s["heading"] for s in body["sections"]] == ["출고 전 품질 통제 강화"]
+    assert body["sections"][0]["points"][0] == {"point": "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "kind": "added", "refs": []}
+    assert body["sections"][0]["points"][1]["kind"] == "flow"
+    assert body["sections"][0]["refs"] == ["n1", "e1"]
+    assert body["impacts"] == [
+        {"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "kind": "increase", "refs": ["n2"]}
+    ]
+    assert body["unmentioned"][0]["refs"] == ["n2"]
+    assert body["unmentioned"][0]["kind"] == "note"  # 미지 kind → note
+    assert body["questions"] == ["QA 검토 불합격 시 처리 경로?"]
+    assert body["closing"] == "검토 후 결재 요청"
+    assert body["has_submit_note"] is False  # 제출 코멘트 없음 → 미언급 대조 근거 없음(FE가 안내)
     # stats는 모델 출력이 아니라 서버가 요청 totals를 되돌려준다
     assert body["stats"]["nodes_added"] == 1
     assert body["stats"]["edges_added"] == 1
+    # 캐시 메타 — 첫 생성은 cached=False + 생성 시각
+    assert body["cached"] is False
+    assert body["generated_at"]
     events = _read_table(client, "ai_usage_events")
     assert len(events) == before + 1
     event = events[-1]
@@ -122,20 +159,130 @@ def test_summary_ok_records_usage(client: TestClient, monkeypatch: pytest.Monkey
 def test_prompt_carries_diff_and_lang(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_ai(monkeypatch)
     seen: list[list[dict]] = []
-
-    async def _spy(messages: list[dict], model: str | None = None, *, reasoning: str | None = None, max_tokens: int | None = None):
-        seen.append(messages)
-        return ai_client.AiReply(content=_summary_json(), prompt_tokens=1, completion_tokens=1)
-
-    monkeypatch.setattr(ai_client, "call_ai", _spy)
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
     map_id, base, target = _map_with_two_versions(client)
     assert _post(client, map_id, base, target, lang="en").status_code == 200
     system = seen[0][0]["content"]
     user = seen[0][-1]["content"]
     assert seen[0][0]["role"] == "system"
     assert "English" in system  # lang=en → 출력 언어 지시
+    assert "명사형" in system  # 개조식(명사형 종결) 문체 계약
     assert "QA 검토" in user and "2.30" in user  # diff 본문 직렬화
     assert "v2" in user  # target 버전 라벨
+
+
+def test_prompt_carries_map_context_and_added_node_attrs(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """보고서 맥락 — 맵 이름·오너 부서·제출 코멘트와 추가 노드의 담당/부서/시스템/설명이 프롬프트에 실린다."""
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    assert client.put(f"/api/maps/{map_id}/approvers", json={"user_ids": ["a"]}).status_code == 200
+    client.post(f"/api/versions/{target}/checkout", json={})  # submit은 점유 전제
+    assert client.post(f"/api/versions/{target}/submit", json={"comment": "감사 지적 대응으로 검토 단계 추가"}).status_code == 200
+    diff = _diff_payload()
+    diff["nodes"][0].update(
+        {"description": "출고 전 품질 서류 확인", "assignee_role": "QA 담당", "department": "품질팀", "system": "LIMS"}
+    )
+
+    resp = _post(client, map_id, base, target, diff=diff)
+
+    assert resp.status_code == 200
+    assert resp.json()["has_submit_note"] is True
+    user = seen[0][-1]["content"]
+    assert f"cmp summary {_seq}" in user  # 맵 이름
+    assert "Owning Anchor Division" in user  # 오너 부서
+    assert "감사 지적 대응으로 검토 단계 추가" in user  # 제출 코멘트
+    assert "품질팀" in user and "LIMS" in user and "QA 담당" in user and "출고 전 품질 서류 확인" in user
+
+
+def test_prompt_carries_flow_context_metrics_and_io(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """흐름 영향 추론 재료 — 무변경 이웃 노드·무변경 엣지·파라미터 합계·입출력 변경(소비처)이 프롬프트에 실린다."""
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    diff = _diff_payload()
+    diff["nodes"].append({"ref": "n3", "status": "unchanged", "title": "출고", "node_type": "process", "changes": []})
+    diff["edges"].append({"ref": "e2", "status": "unchanged", "source": "QA 검토", "target": "출고", "label": ""})
+    diff["metrics"] = [{"field": "duration", "base": "3.00", "target": "4.30"}]
+    diff["io_changes"] = [{"ref": "n2", "side": "output", "text": "발주서", "status": "removed", "peers": ["QA 검토"]}]
+
+    assert _post(client, map_id, base, target, diff=diff).status_code == 200
+
+    user = seen[0][-1]["content"]
+    assert "[n3] unchanged" in user and "출고" in user  # 문맥 노드
+    assert "[e2] unchanged" in user  # 문맥 엣지
+    assert "duration: 3.00 -> 4.30" in user  # 합계
+    assert "발주서" in user and "QA 검토" in user and "removed" in user  # 입출력 변경 + 소비처
+
+
+def test_same_diff_is_served_from_cache_without_model_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    first = _post(client, map_id, base, target).json()
+    usage_after_first = len(_read_table(client, "ai_usage_events"))
+
+    second = _post(client, map_id, base, target)
+
+    assert second.status_code == 200
+    assert len(seen) == 1  # 모델 재호출 없음
+    assert len(_read_table(client, "ai_usage_events")) == usage_after_first  # 계량도 없음
+    body = second.json()
+    assert body["cached"] is True
+    assert body["title"] == first["title"]
+    assert body["generated_at"] == first["generated_at"]
+    assert body["stats"]["nodes_added"] == 1  # stats는 요청 totals 그대로
+
+
+def test_changed_diff_regenerates(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    assert _post(client, map_id, base, target).status_code == 200
+    diff = _diff_payload()
+    diff["nodes"][1]["changes"][0]["after"] = "3.00"  # 초안이 더 편집됨
+
+    resp = _post(client, map_id, base, target, diff=diff)
+
+    assert resp.status_code == 200
+    assert len(seen) == 2
+    assert resp.json()["cached"] is False
+
+
+def test_cache_is_per_language(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    assert _post(client, map_id, base, target, lang="ko").status_code == 200
+
+    assert _post(client, map_id, base, target, lang="en").json()["cached"] is False
+    assert _post(client, map_id, base, target, lang="ko").json()["cached"] is True
+    assert len(seen) == 2
+
+
+def test_force_regenerates_and_replaces_cache(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    assert _post(client, map_id, base, target).status_code == 200
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen, _summary_json(title="다시 쓴 보고")))
+
+    forced = _post(client, map_id, base, target, force=True).json()
+    again = _post(client, map_id, base, target).json()
+
+    assert len(seen) == 2
+    assert forced["cached"] is False and forced["title"] == "다시 쓴 보고"
+    assert again["cached"] is True and again["title"] == "다시 쓴 보고"  # 캐시가 새 결과로 교체됨
 
 
 def test_version_of_other_map_is_404(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

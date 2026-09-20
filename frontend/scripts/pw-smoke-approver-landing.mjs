@@ -72,31 +72,45 @@ try {
   await page.waitForSelector('[data-id="approval-compare-cta"]', { timeout: 15000 });
   check("banner link switches to pending version", true);
 
-  // (4) 비교 딥링크 + AI 요약 탭
-  // networkidle은 AI 요청이 끝날 때까지 기다려 스피너를 놓친다 — DOM 로드 직후 관찰
-  await page.goto(`${BASE}/maps/${MAP_ID}/compare?base=${PUBLISHED_ID}&target=${PENDING_ID}`, { waitUntil: "domcontentloaded" });
+  // (4) 비교 딥링크 + AI 보고서 탭 — 탭을 열 때만 호출(선행 생성 없음, 2026-09-20)
+  const aiCalls = [];
+  page.on("request", (req) => {
+    if (req.url().includes("/compare/ai-summary")) aiCalls.push(req.postDataJSON());
+  });
+  await page.goto(`${BASE}/maps/${MAP_ID}/compare?base=${PUBLISHED_ID}&target=${PENDING_ID}`, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-id="compare-inspector-tab-ai"]', { timeout: 20000 });
   const baseLabel = await page.locator('[data-id="compare-version-base"]').textContent();
   const targetLabel = await page.locator('[data-id="compare-version-target"]').textContent();
   check("deep link picks base/target", /v1/.test(baseLabel ?? "") && /To-Be|Draft/.test(targetLabel ?? ""), `base=${baseLabel} target=${targetLabel}`);
-  const spinnerSeen = await page
-    .waitForSelector('[data-id="compare-ai-tab-spinner"]', { timeout: 8000 })
-    .then(() => true)
-    .catch(() => false);
-  check("AI tab spinner shown while prefetching", spinnerSeen);
-  if (spinnerSeen) await shot(page, "s3-compare-ai-spinner");
+  check("no AI call before the tab is opened", aiCalls.length === 0, `calls=${aiCalls.length}`);
   await page.locator('[data-id="compare-inspector-tab-ai"]').click();
-  await page.waitForSelector('[data-id="compare-ai-headline"], [data-id="compare-ai-error"]', { timeout: 90000 });
-  const gotResult = (await page.locator('[data-id="compare-ai-headline"]').count()) === 1;
-  check("AI summary rendered", gotResult, gotResult ? "" : await page.locator('[data-id="compare-ai-error"]').textContent());
+  await page.waitForSelector('[data-id="compare-ai-title"], [data-id="compare-ai-error"]', { timeout: 90000 });
+  const gotResult = (await page.locator('[data-id="compare-ai-title"]').count()) === 1;
+  check("AI report rendered", gotResult, gotResult ? "" : await page.locator('[data-id="compare-ai-error"]').textContent());
+  check("AI called once on tab open", aiCalls.length === 1, `calls=${aiCalls.length}`);
   if (gotResult) {
-    const hl = await page.locator('[data-id="compare-ai-highlights"] li').count();
-    check("highlights present", hl > 0, `n=${hl}`);
-    if (hl > 0) {
-      await page.locator('[data-id="compare-ai-highlight-0"]').click();
+    const sections = await page.locator('[data-id^="compare-ai-section-"]').count();
+    check("report sections present", sections > 0, `n=${sections}`);
+    // 4블록 — 요지·영향·미언급(코멘트 없으면 안내)·질문. 영향/질문은 모델 판단이라 존재만 느슨히 본다
+    check("purpose block present", (await page.locator('[data-id="compare-ai-purpose"]').count()) === 1);
+    check("unmentioned block present", (await page.locator('[data-id="compare-ai-unmentioned"]').count()) === 1);
+    const impacts = await page.locator('li[data-id^="compare-ai-impact-"]').count();
+    const questions = await page.locator('[data-id="compare-ai-questions"] li').count();
+    check("impacts or questions present", impacts + questions > 0, `impacts=${impacts} questions=${questions}`);
+    const meta = await page.locator('[data-id="compare-ai-meta"]').textContent();
+    check("memo header shows the version pair", /→/.test(meta ?? ""), meta ?? "");
+    const chip = page.locator('[data-id="compare-ai-ref-0-0"]');
+    if ((await chip.count()) > 0) {
+      await chip.click();
       await page.waitForTimeout(600);
-      check("highlight click focuses canvas (no error)", pageErrors.length === 0);
+      check("related chip click focuses canvas (no error)", pageErrors.length === 0);
     }
+    // 같은 diff로 재진입 → 서버 캐시 히트(cached=true)
+    await page.locator('[data-id="compare-inspector-tab-props"]').click();
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator('[data-id="compare-inspector-tab-ai"]').click();
+    const cachedNote = await page.waitForSelector('[data-id="compare-ai-meta"]', { timeout: 30000 }).then((el) => el.textContent());
+    check("second open is served from cache", /저장된 보고서|stored report/.test(cachedNote ?? ""), cachedNote ?? "");
   }
   await shot(page, "s4-compare-ai-summary");
   check("no page errors", pageErrors.length === 0, pageErrors.join(" | "));

@@ -50,6 +50,10 @@ const PROMPT_LABELS: Record<string, { name: MessageKey; hint: MessageKey }> = {
     name: "aiPrompts.name.compare_summary_contract",
     hint: "aiPrompts.hint.compare_summary_contract",
   },
+  submit_note_contract: {
+    name: "aiPrompts.name.submit_note_contract",
+    hint: "aiPrompts.hint.submit_note_contract",
+  },
 };
 
 interface AiPromptsPanelProps {

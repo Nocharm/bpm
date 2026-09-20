@@ -15,6 +15,7 @@ PROMPT_KEYS: tuple[str, ...] = (
     "extract_contract",
     "anti_repeat_nudge",
     "compare_summary_contract",
+    "submit_note_contract",
 )
 
 
@@ -32,6 +33,7 @@ def get_prompt_defaults() -> dict[str, str]:
         "extract_contract": orchestrator._EXTRACT_CONTRACT,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
         "anti_repeat_nudge": orchestrator._ANTI_REPEAT_NUDGE,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
         "compare_summary_contract": compare_summary._CONTRACT,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
+        "submit_note_contract": compare_summary._SUBMIT_NOTE_CONTRACT,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
     }
 
 

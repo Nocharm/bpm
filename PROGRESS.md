@@ -3,6 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-21 — 비교 화면 AI 요약을 결재자 보고서로 재편 + 서버 캐시 + 제출 코멘트 AI 초안 (feat/compare-ai-report → dev 머지)
+
+- **목적:** 대시보드식 요약(총평·kind 칩·집계 칩, 비교 진입마다 선행 호출)을 결재자가 읽는 **개조식(명사형 종결) 보고서**로. 사용자 결정 순서: 중립 보고체 → 명사형 종결 → "팩트 나열은 왼쪽 패널과 같다"는 지적으로 **AI만 할 수 있는 4블록**(의도별 개정 요지·흐름/통제 영향·제출 코멘트 대비 미언급·결재 전 확인 질문)으로 재편 → 항목 종류 태그(1안) → 틴트 칩 아이콘. 긴 대시는 UI 문구·매뉴얼·AI 출력에서 금지(사용자 지시).
+- **입력(FE `compare-summary-payload.ts`):** 변경 노드 + 이웃(hop 거리순, 상한 200) 무변경 문맥 노드, 남긴 노드 사이 모든 엣지(400), 요약 탭과 같은 파라미터 합계(`sumVersionParam`), 입출력 항목 변경과 소비처/산출처(`buildIoDiffSide`, 80), 추가 노드의 설명·역할·부서·시스템. `assignee` 실명은 AI 표면 규칙대로 제거. 서버는 맵 이름·오너 부서·제출자·제출 코멘트(`VersionEvent.note`)를 맥락으로 넣는다.
+- **출력 `CompareSummaryOut`:** `title·opening·sections[{heading,points[{point,kind,refs}],refs}]·impacts[{point,kind,refs}]·unmentioned[…]·questions[]·closing·has_submit_note` + 서버 메타 `stats·generated_at·cached`. `kind` 9종(added/removed/changed/increase/decrease/flow/control/risk/note, 미지 값은 BE `field_validator`가 note로)을 FE `KindIcon`이 Lucide 아이콘+상태색 틴트 칩으로 그린다. 프롬프트 규칙: metrics는 버전 전체 합계(활동 아님)·ref 없음, 통화 전환(원↔달러) 오독 금지, duration 시·분 풀어쓰기.
+- **배선:** `ai_compare_summaries` (맵,base,target,언어)당 1행 — `sha256(diff 정규화 JSON + 언어 + 유효 프롬프트 계약)`이 같으면 모델 호출·계량 없이 `cached=true`, 초안 편집·프롬프트 오버라이드 변경은 자동 재생성, `force`는 교체. FE는 **AI 탭을 열 때만** 호출(선행 생성 폐기). 신규 테이블은 `create_all`이 만든다.
+- **제출 코멘트 AI 초안:** `POST /maps/{id}/compare/submit-note-draft`(editor, 캐시 없음, `kind=submit_note`, 프롬프트 키 `submit_note_contract` 9번째). FE `lib/submit-note-draft.ts`가 제출 버전을 뺀 최신 게시본(없으면 null=첫 제출) 대비 같은 페이로드를 만들고, `SubmitConfirmDialog.onDraftComment`로 에디터 승인 요청·설정>버전 패널 둘 다 AI 활성 서버에서만 "AI 초안" 버튼.
+- **검증:** BE 22건(캐시 히트/미스/언어별/force/맥락/문맥·합계·io/kind 정규화/submit-note 4) 전체 1501, FE payload 9·초안 base 선택 3, 스모크 `pw-smoke-approver-landing.mjs` 22/22(탭 열기 전 호출 0·열 때 1·4블록·새로고침 후 저장본), 실모델(gpt-4o-mini) 캡처. **함정:** `.env`의 OpenAI 실키는 SGLang 전용 `chat_template_kwargs`를 400으로 거부 — 그 필드를 떼는 로컬 프록시(스크래치)로 우회, 운영 SGLang에는 무관. 작은 모델은 ref로 "metrics"를 지어내거나 증감 방향을 틀리기도 함(FE는 모르는 ref를 조용히 생략).
+
 ## 2026-09-19 — 캔버스 우하단 노드 표시 정보 플로팅 카드(에디터·비교) + 라이브러리 드롭 중심 보정 (feat/display-fields-float)
 
 - **결과:** 줌 필 왼쪽 눈 버튼(`NodeDisplayFloat`, `components/node-display-float.tsx`) → 위로 뜨는 카드가 `NodeDisplaySection`을 `flat`(테두리·접기 없음)으로 재사용 — 필드 토글·카테고리/전체 보이기·숨기기 그대로. 에디터는 기존 `displayFields` 상태·핸들러를 그대로 넘겨 인스펙터 섹션과 **구조적으로 동기화**(상태 하나). 비교 화면은 상수였던 표시 필드를 `ComparePane` 상태로 승격(`bpm.compare.nodeDisplayFields` 별도 키, 기본값이 에디터와 달라 분리). 토글 규칙은 `lib/node-actions.ts` `toggleDisplayToggle`/`setDisplayCategory` 순수 함수로(비교 화면이 사용, vitest 3건).
