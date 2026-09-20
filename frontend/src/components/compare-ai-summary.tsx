@@ -1,4 +1,4 @@
-// 비교 화면 AI 보고서 탭 본문 — 결재자에게 올리는 메모 형식(제목·메타·배경·절·영향·마무리, 절의 근거 칩=캔버스 포커스). compare/page.tsx 인스펙터 전용 (2026-09-20).
+// 비교 화면 AI 보고서 탭 본문 — 결재자에게 올리는 개조식 메모(제목·메타·배경·절의 명사형 항목·영향·마무리, 절의 근거 칩=캔버스 포커스). compare/page.tsx 인스펙터 전용 (2026-09-20).
 "use client";
 
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
@@ -126,7 +126,7 @@ export function CompareAiSummary({
         </header>
 
         {opening && (
-          <p data-id="compare-ai-opening" className="break-keep text-caption leading-relaxed text-ink">
+          <p data-id="compare-ai-opening" className="break-keep text-caption text-ink">
             {opening}
           </p>
         )}
@@ -140,7 +140,15 @@ export function CompareAiSummary({
               <h4 className="break-keep text-caption-strong text-ink">
                 {i + 1}. {section.heading}
               </h4>
-              <p className="break-keep text-caption leading-relaxed text-ink">{section.body}</p>
+              {/* 개조식 항목 — 명사형 종결 한 줄씩, 들여쓴 하이픈 불릿 */}
+              <ul className="flex flex-col gap-0.5 pl-1">
+                {section.points.map((point, j) => (
+                  <li key={j} className="flex items-start gap-1.5 break-keep text-caption text-ink">
+                    <span className="shrink-0 text-ink-tertiary">-</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
               {chips.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 pt-0.5">
                   <span className="text-fine text-ink-tertiary">{t("compare.aiRelated")}</span>
@@ -167,8 +175,8 @@ export function CompareAiSummary({
             <h4 className="text-caption-strong text-ink">{t("compare.aiImpacts")}</h4>
             <ul className="flex flex-col gap-1">
               {impacts.map((line, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-caption leading-relaxed text-ink">
-                  <AlertTriangle size={13} strokeWidth={1.5} className="mt-1 shrink-0 text-changed" />
+                <li key={i} className="flex items-start gap-1.5 text-caption text-ink">
+                  <AlertTriangle size={13} strokeWidth={1.5} className="mt-0.5 shrink-0 text-changed" />
                   <span className="break-keep">{line}</span>
                 </li>
               ))}
@@ -177,7 +185,7 @@ export function CompareAiSummary({
         )}
 
         {closing && (
-          <p data-id="compare-ai-closing" className="break-keep text-caption leading-relaxed text-ink-secondary">
+          <p data-id="compare-ai-closing" className="break-keep text-caption text-ink-secondary">
             {closing}
           </p>
         )}

@@ -70,20 +70,21 @@ def _diff_payload() -> dict:
 
 
 def _summary_json(title: str = "발주 프로세스 v2 변경 보고") -> str:
+    """명사형 종결(개조식) 보고서 — 절 본문은 points 목록."""
     return json.dumps(
         {
             "title": title,
-            "opening": "발주 승인 이후 품질 검토를 추가하기 위한 개정입니다.",
+            "opening": "발주 승인 이후 품질 검토 단계 추가를 위한 개정",
             "sections": [
                 {
                     "heading": "QA 검토 단계 신설",
-                    "body": "발주 승인 뒤에 QA 검토 단계가 추가되어 승인 결과가 검토를 거쳐 다음 단계로 전달됩니다.",
+                    "points": ["발주 승인 뒤 QA 검토 단계 추가", "승인 결과가 검토를 거쳐 다음 단계로 전달되도록 흐름 연결"],
                     "refs": ["n1", "e1"],
                 },
-                {"heading": "발주 승인 소요시간 증가", "body": "1시간에서 2시간 30분으로 늘었습니다.", "refs": ["n2"]},
+                {"heading": "발주 승인 소요시간 증가", "points": ["1시간 → 2시간 30분"], "refs": ["n2"]},
             ],
             "impacts": ["리드타임 증가 검토 필요"],
-            "closing": "검토 후 결재 부탁드립니다.",
+            "closing": "검토 후 결재 요청",
         }
     )
 
@@ -119,11 +120,12 @@ def test_summary_ok_records_usage(client: TestClient, monkeypatch: pytest.Monkey
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["title"] == "발주 프로세스 v2 변경 보고"
-    assert body["opening"].startswith("발주 승인 이후")
+    assert body["opening"] == "발주 승인 이후 품질 검토 단계 추가를 위한 개정"
     assert [s["heading"] for s in body["sections"]] == ["QA 검토 단계 신설", "발주 승인 소요시간 증가"]
+    assert body["sections"][0]["points"] == ["발주 승인 뒤 QA 검토 단계 추가", "승인 결과가 검토를 거쳐 다음 단계로 전달되도록 흐름 연결"]
     assert body["sections"][0]["refs"] == ["n1", "e1"]
     assert body["impacts"] == ["리드타임 증가 검토 필요"]
-    assert body["closing"] == "검토 후 결재 부탁드립니다."
+    assert body["closing"] == "검토 후 결재 요청"
     # stats는 모델 출력이 아니라 서버가 요청 totals를 되돌려준다
     assert body["stats"]["nodes_added"] == 1
     assert body["stats"]["edges_added"] == 1
@@ -150,6 +152,7 @@ def test_prompt_carries_diff_and_lang(client: TestClient, monkeypatch: pytest.Mo
     user = seen[0][-1]["content"]
     assert seen[0][0]["role"] == "system"
     assert "English" in system  # lang=en → 출력 언어 지시
+    assert "명사형" in system  # 개조식(명사형 종결) 문체 계약
     assert "QA 검토" in user and "2.30" in user  # diff 본문 직렬화
     assert "v2" in user  # target 버전 라벨
 

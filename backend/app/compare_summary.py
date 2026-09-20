@@ -13,8 +13,8 @@ from app.schemas import CompareDiffPayload
 
 # 기본 계약 — sysadmin이 ai_prompts(compare_summary_contract)로 오버라이드 가능
 _CONTRACT = """당신은 BPM 프로세스맵 변경 보고서를 작성합니다. 게시본(base)과 승인 대기본(target)의 차이를
-결재자가 읽는 업무 보고서로 씁니다. 항목을 나열하는 대시보드가 아니라, 실무자가 상급자에게 변경 내용을
-보고하듯 완결된 문장으로 서술하세요. 반드시 JSON 한 개만 반환하세요(설명 텍스트·코드펜스 금지).
+결재자가 읽는 개조식 업무 보고서로 씁니다. 실무자가 상급자에게 올리는 보고서처럼 핵심만 명사형으로 끊어
+적으세요(서술형 문장 금지). 반드시 JSON 한 개만 반환하세요(설명 텍스트·코드펜스 금지).
 
 [입력]
 - map / base / target: 맵 이름과 오너 부서, 비교 대상 버전 라벨.
@@ -27,25 +27,28 @@ _CONTRACT = """당신은 BPM 프로세스맵 변경 보고서를 작성합니다
 
 [출력]
 {"title": <보고 제목 한 줄. 예: "발주 프로세스 v3 변경 보고">,
- "opening": <배경·목적 1~2문장. 이번 개정이 무엇을 위한 것인지>,
- "sections": [{"heading": <소제목>, "body": <2~4문장 서술 — 무엇이 어떻게 바뀌었고 그 결과 흐름이 어떻게 달라지는지>, "refs": [<ref>...]}],
- "impacts": [<업무 영향·주의점 한 문장>...],
- "closing": <확인·결재를 요청하는 마무리 한 문장>}
+ "opening": <개정 배경·목적 한 줄(명사형). 예: "감사 지적 대응을 위한 검토 단계 추가 개정">,
+ "sections": [{"heading": <소제목(명사형)>, "points": [<항목 1~4개. 각각 명사형 종결 한 줄 — 무엇이 어떻게 바뀌었는지>], "refs": [<ref>...]}],
+ "impacts": [<업무 영향·주의점 한 줄(명사형)>...],
+ "closing": <마무리 한 줄(명사형). 예: "검토 후 결재 요청">}
 
-[문체]
-- 존댓말 보고체("~되었습니다", "~로 변경되었습니다", "~검토가 필요합니다"). 1인칭·화자를 세우지 말 것(제출자를 화자로 쓰지 말 것).
-- 이모지·머리기호·마크다운 금지. 모든 문장은 완결형.
-- 수치는 방향과 크기를 문장 안에 풀어 쓰기. duration은 H.MM 표기로 소수부 2자리가 분(1.30 → "1시간 30분"); cost_krw/usd=회당 비용, headcount=회당 인원, annual_count=연간 건수, fte=FTE.
+[문체 — 개조식]
+- 모든 문자열은 명사형 종결("~ 신설", "~ 삭제", "~로 변경", "~ 검토 필요", "~ 요청"). "~되었습니다"·"~합니다" 같은 서술형 문장 금지.
+- 한 항목 한 줄, 25자 안팎. 관형절을 길게 늘이지 말고 항목을 나누기.
+- 1인칭·화자 없음(제출자를 화자로 쓰지 말 것). 이모지·머리기호·마크다운 금지.
+- 수치는 방향과 크기를 짧게 병기(예: "소요시간 1시간 → 2시간 30분", "연간 건수 120 → 200건").
+- duration 값은 H.MM 표기(소수부 2자리가 분)이므로 반드시 시·분으로 풀어 쓸 것 — 1.30은 "1시간 30분", 0.50은 "50분", 2.00은 "2시간"(원문 "1.30 → 0.50" 그대로 옮기지 말 것). cost_krw/usd=회당 비용, headcount=회당 인원, annual_count=연간 건수, fte=FTE.
+- 추가된 활동은 괄호로 담당·부서·시스템 병기 가능(예: "QA 검토 단계 신설(품질팀·LIMS)").
 
 [규칙]
 - sections는 중요도 순 최대 5개. 관련 변경은 한 절로 묶으세요(단계 신설 + 그 단계로 이어지는 흐름 추가 → 한 절).
 - impacts는 최대 4개. 통제·검토 단계 삭제, GMP 관련 변경, 시스템·부서 이관, 리드타임·비용 증감 같은 실질 영향만. 근거 없는 추측 금지.
-- 변경이 없으면 title에 "변경 없음", opening에 두 버전이 동일하다는 문장, sections·impacts는 빈 배열, closing은 빈 문자열.
+- 변경이 없으면 title에 "변경 없음", opening에 "두 버전 동일", sections·impacts는 빈 배열, closing은 빈 문자열.
 """
 
 _LANG_LINE = {
-    "ko": "출력 언어: 한국어.",
-    "en": "Output language: English. Write every string value in English, in a formal business-memo register.",
+    "ko": "출력 언어: 한국어(명사형 종결 유지).",
+    "en": "Output language: English. Write every string value in English as terse noun-phrase bullet items (no full sentences), like a formal executive memo.",
 }
 
 

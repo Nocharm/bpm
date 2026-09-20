@@ -2544,14 +2544,14 @@ export interface CompareDiffPayload {
   totals: CompareDiffTotals;
 }
 
-// 보고서 한 절 — 소제목 + 서술 문단 + 근거 ref(캔버스 포커스 칩)
+// 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(캔버스 포커스 칩)
 export interface CompareSummarySection {
   heading: string;
-  body: string;
+  points: string[];
   refs: string[];
 }
 
-// 비교 AI 보고서 — 결재자에게 올리는 보고체 서술 (2026-09-20, 대시보드식 headline/highlights 폐기)
+// 비교 AI 보고서 — 결재자에게 올리는 개조식(명사형 종결) 보고서 (2026-09-20, 대시보드식 headline/highlights 폐기)
 export interface CompareSummaryOut {
   title: string;
   opening: string;

@@ -2184,21 +2184,21 @@ class CompareSummaryRequest(BaseModel):
     force: bool = False
 
 
-# 보고서 한 절 — 소제목 + 서술 문단 + 근거 ref(프론트가 캔버스 포커스 칩으로 렌더)
+# 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(프론트가 캔버스 포커스 칩으로 렌더)
 class CompareSummarySection(BaseModel):
     heading: str = Field(max_length=200)
-    body: str = Field(max_length=2000)
+    points: list[str] = Field(default_factory=list, max_length=8)
     refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CompareSummaryOut(BaseModel):
-    """비교 AI 보고서 — 대시보드식 하이라이트가 아니라 결재자에게 올리는 보고체 서술 (2026-09-20)."""
+    """비교 AI 보고서 — 결재자에게 올리는 개조식(명사형 종결) 보고서 (2026-09-20)."""
 
     title: str = Field(max_length=300)
-    opening: str = Field(default="", max_length=1500)
+    opening: str = Field(default="", max_length=600)
     sections: list[CompareSummarySection] = Field(default_factory=list, max_length=8)
     impacts: list[str] = Field(default_factory=list, max_length=8)
-    closing: str = Field(default="", max_length=600)
+    closing: str = Field(default="", max_length=300)
     # 아래는 서버가 채움 — 모델 출력 아님
     stats: CompareDiffTotals | None = None  # 요청 totals 에코(근거 집계 줄)
     generated_at: datetime | None = None  # 캐시 행 생성 시각
