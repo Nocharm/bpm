@@ -21,17 +21,18 @@ import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 
-// kind → 아이콘·색. 신설/삭제/변경은 비교 캔버스 상태색 토큰과 동일, 수치·흐름은 액센트, 통제는 주의색, 위험은 삭제색.
+// kind → 아이콘·틴트 칩. 신설/삭제/변경은 비교 캔버스 상태색 토큰과 동일(틴트 배경 + 진한 획), 수치·흐름은 액센트,
+// 통제는 주의색, 위험은 삭제색. 배경 틴트로 항목 종류가 한눈에 구분되게 (사용자 요청 2026-09-21).
 const KIND_VISUAL: Record<CompareSummaryPointKind, { icon: LucideIcon | null; className: string; label: MessageKey }> = {
-  added: { icon: Plus, className: "text-added", label: "compare.aiKind.added" },
-  removed: { icon: Minus, className: "text-removed", label: "compare.aiKind.removed" },
-  changed: { icon: ArrowRightLeft, className: "text-changed", label: "compare.aiKind.changed" },
-  increase: { icon: ArrowUp, className: "text-accent", label: "compare.aiKind.increase" },
-  decrease: { icon: ArrowDown, className: "text-accent", label: "compare.aiKind.decrease" },
-  flow: { icon: GitBranch, className: "text-accent", label: "compare.aiKind.flow" },
-  control: { icon: ShieldAlert, className: "text-changed", label: "compare.aiKind.control" },
-  risk: { icon: AlertTriangle, className: "text-removed", label: "compare.aiKind.risk" },
-  note: { icon: null, className: "text-ink-tertiary", label: "compare.aiKind.note" },
+  added: { icon: Plus, className: "bg-added/15 text-added", label: "compare.aiKind.added" },
+  removed: { icon: Minus, className: "bg-removed/15 text-removed", label: "compare.aiKind.removed" },
+  changed: { icon: ArrowRightLeft, className: "bg-changed/20 text-changed", label: "compare.aiKind.changed" },
+  increase: { icon: ArrowUp, className: "bg-accent-tint text-accent", label: "compare.aiKind.increase" },
+  decrease: { icon: ArrowDown, className: "bg-accent-tint text-accent", label: "compare.aiKind.decrease" },
+  flow: { icon: GitBranch, className: "bg-accent-tint text-accent", label: "compare.aiKind.flow" },
+  control: { icon: ShieldAlert, className: "bg-changed/20 text-changed", label: "compare.aiKind.control" },
+  risk: { icon: AlertTriangle, className: "bg-removed/15 text-removed", label: "compare.aiKind.risk" },
+  note: { icon: null, className: "bg-surface-alt text-ink-tertiary", label: "compare.aiKind.note" },
 };
 
 function KindIcon({ kind }: { kind: CompareSummaryPointKind }) {
@@ -39,8 +40,12 @@ function KindIcon({ kind }: { kind: CompareSummaryPointKind }) {
   const visual = KIND_VISUAL[kind] ?? KIND_VISUAL.note;
   const Icon = visual.icon;
   return (
-    <span className={`mt-0.5 inline-flex w-3.5 shrink-0 justify-center ${visual.className}`} title={t(visual.label)} data-kind={kind}>
-      {Icon ? <Icon size={13} strokeWidth={1.75} /> : "-"}
+    <span
+      className={`mt-px inline-flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-sm text-fine font-semibold ${visual.className}`}
+      title={t(visual.label)}
+      data-kind={kind}
+    >
+      {Icon ? <Icon size={12} strokeWidth={2.25} /> : "-"}
     </span>
   );
 }
