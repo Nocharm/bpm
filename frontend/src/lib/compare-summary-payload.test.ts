@@ -89,6 +89,57 @@ describe("buildCompareSummaryPayload", () => {
     });
   });
 
+  it("never sends the assignee real name, only the role (AI surface rule 2026-09-12)", () => {
+    const base: VersionGraph = {
+      nodes: [mkNode({ id: "a", title: "A", assignee: "kim.cs", assignee_role: "발주 담당" })],
+      edges: [],
+    };
+    const target: VersionGraph = {
+      nodes: [mkNode({ id: "a2", source_node_id: "a", title: "A", assignee: "park.jh", assignee_role: "결제 담당" })],
+      edges: [],
+    };
+    const merged = buildMergedGraph(base, target);
+
+    const { payload } = buildCompareSummaryPayload(merged);
+
+    expect(payload.nodes[0].changes.map((c) => c.field)).toEqual(["assignee_role"]);
+    expect(JSON.stringify(payload)).not.toContain("park.jh");
+  });
+
+  it("carries description/role/department/system for added nodes only", () => {
+    const base: VersionGraph = { nodes: [mkNode({ id: "a", title: "A" })], edges: [] };
+    const target: VersionGraph = {
+      nodes: [
+        mkNode({ id: "a2", source_node_id: "a", title: "A", department: "품질팀" }),
+        mkNode({
+          id: "d",
+          title: "D",
+          description: "출고 전 품질 서류 확인",
+          assignee_role: "QA 담당",
+          department: "품질팀",
+          system: "LIMS",
+        }),
+      ],
+      edges: [],
+    };
+    const merged = buildMergedGraph(base, target);
+
+    const { payload } = buildCompareSummaryPayload(merged);
+
+    const added = payload.nodes.find((n) => n.status === "added");
+    const changed = payload.nodes.find((n) => n.status === "changed");
+    expect(added).toMatchObject({
+      title: "D",
+      description: "출고 전 품질 서류 확인",
+      assignee_role: "QA 담당",
+      department: "품질팀",
+      system: "LIMS",
+    });
+    // 변경 노드는 before→after(changes)로 이미 드러나므로 속성 스냅샷을 붙이지 않는다
+    expect(changed).toBeDefined();
+    expect(changed).not.toHaveProperty("department");
+  });
+
   it("keeps only wiring changes between nodes present in both versions", () => {
     const { base, target } = buildFixture();
     const merged = buildMergedGraph(base, target);

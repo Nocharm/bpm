@@ -3,6 +3,13 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-20 — 비교 화면 AI 요약을 결재자 보고서로 + 서버 캐시·탭 열 때만 호출 (feat/compare-ai-report)
+
+- **왜:** 기존 탭은 총평·kind 칩·집계 칩을 나열하는 대시보드라 "사람이 상급자에게 보고하는 느낌"이 없었고, 비교 진입마다 선행 호출해 탭을 안 여는 열람자·새로고침·결재자 수만큼 모델을 다시 불렀다.
+- **보고서:** 프롬프트를 보고체 계약으로 교체(`title·opening·sections[heading/body/refs]·impacts·closing`, 존댓말 서술·화자 없음, 사용자 결정: 중립 서술). 서버가 맵 이름·오너 부서·제출자·제출 코멘트(`VersionEvent.note`)를 맥락으로 넣고, FE diff는 추가 노드의 설명·역할·부서·시스템을 동봉(변경 노드는 changes로 충분). `assignee` 실명은 AI 표면 규칙대로 diff에서 제거. 렌더는 메모(제목·메타·배경·번호 절+**관련** 칩=캔버스 포커스·업무 영향·마무리·근거 집계 한 줄), `compare-ai-summary.tsx` 재작성.
+- **배선:** `ai_compare_summaries` (맵,base,target,언어)당 1행 — `sha256(diff 정규화 JSON + 언어 + 유효 프롬프트 계약)`이 같으면 모델 호출·계량 없이 `cached=true` 반환, 초안 편집·프롬프트 오버라이드 변경은 해시가 바뀌어 자동 재생성, `force`(다시 생성)는 교체. FE는 **AI 탭을 열 때만** 호출(선행 생성 폐기, 사용자 결정). 신규 테이블은 `create_all`이 만든다.
+- **검증:** BE 11건(캐시 히트/미스/언어별/force/맥락) + FE payload 6건, 스모크 `pw-smoke-approver-landing.mjs` 19/19(탭 열기 전 호출 0·열 때 1·새로고침 후 저장본). 실모델 확인은 `.env`의 OpenAI가 SGLang 전용 `chat_template_kwargs`를 400으로 거부해 그 필드를 떼는 로컬 프록시(스크래치, 커밋 안 함)로 우회 — 운영 SGLang에는 해당 없음.
+
 ## 2026-09-19 — 캔버스 우하단 노드 표시 정보 플로팅 카드(에디터·비교) + 라이브러리 드롭 중심 보정 (feat/display-fields-float)
 
 - **결과:** 줌 필 왼쪽 눈 버튼(`NodeDisplayFloat`, `components/node-display-float.tsx`) → 위로 뜨는 카드가 `NodeDisplaySection`을 `flat`(테두리·접기 없음)으로 재사용 — 필드 토글·카테고리/전체 보이기·숨기기 그대로. 에디터는 기존 `displayFields` 상태·핸들러를 그대로 넘겨 인스펙터 섹션과 **구조적으로 동기화**(상태 하나). 비교 화면은 상수였던 표시 필드를 `ComparePane` 상태로 승격(`bpm.compare.nodeDisplayFields` 별도 키, 기본값이 에디터와 달라 분리). 토글 규칙은 `lib/node-actions.ts` `toggleDisplayToggle`/`setDisplayCategory` 순수 함수로(비교 화면이 사용, vitest 3건).

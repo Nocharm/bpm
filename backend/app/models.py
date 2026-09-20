@@ -13,6 +13,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -901,6 +902,26 @@ class AiUsageEvent(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     ok: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AiCompareSummary(Base):
+    """비교 AI 보고서 캐시 — (맵, base, target, 언어)당 최신 1행. diff_hash가 같으면 모델을 다시 부르지
+    않는다(초안이 더 편집되면 해시가 바뀌어 재생성). 프롬프트 계약 변경도 해시에 포함 (2026-09-20)."""
+
+    __tablename__ = "ai_compare_summaries"
+    __table_args__ = (
+        UniqueConstraint("map_id", "base_version_id", "target_version_id", "lang", name="uq_ai_compare_summary_pair"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    map_id: Mapped[int] = mapped_column(ForeignKey("process_maps.id", ondelete="CASCADE"), index=True)
+    base_version_id: Mapped[int] = mapped_column(ForeignKey("map_versions.id", ondelete="CASCADE"))
+    target_version_id: Mapped[int] = mapped_column(ForeignKey("map_versions.id", ondelete="CASCADE"))
+    lang: Mapped[str] = mapped_column(String(5))
+    diff_hash: Mapped[str] = mapped_column(String(64))
+    content: Mapped[dict] = mapped_column(JSON)  # CompareSummaryOut(서버 메타 제외)
+    created_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class DashboardPermission(Base):

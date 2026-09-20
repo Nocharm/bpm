@@ -2506,11 +2506,16 @@ export interface CompareDiffField {
 }
 
 export interface CompareDiffNode {
-  ref: string; // n1, n2… — 응답 highlights.refs가 인용
+  ref: string; // n1, n2… — 응답 sections[].refs가 인용
   status: "added" | "removed" | "changed";
   title: string;
   node_type: string;
   changes: CompareDiffField[];
+  // 추가 노드의 핵심 속성(비어 있으면 생략) — 보고서 서술 재료 (2026-09-20)
+  description?: string;
+  assignee_role?: string;
+  department?: string;
+  system?: string;
 }
 
 export interface CompareDiffEdge {
@@ -2539,28 +2544,34 @@ export interface CompareDiffPayload {
   totals: CompareDiffTotals;
 }
 
-export type CompareSummaryKind = "added" | "removed" | "changed" | "flow" | "param" | "other";
-
-export interface CompareSummaryHighlight {
-  kind: CompareSummaryKind;
-  title: string;
-  detail: string;
+// 보고서 한 절 — 소제목 + 서술 문단 + 근거 ref(캔버스 포커스 칩)
+export interface CompareSummarySection {
+  heading: string;
+  body: string;
   refs: string[];
 }
 
+// 비교 AI 보고서 — 결재자에게 올리는 보고체 서술 (2026-09-20, 대시보드식 headline/highlights 폐기)
 export interface CompareSummaryOut {
-  headline: string;
-  highlights: CompareSummaryHighlight[];
+  title: string;
+  opening: string;
+  sections: CompareSummarySection[];
   impacts: string[];
+  closing: string;
   stats: CompareDiffTotals | null; // 서버가 요청 totals를 되돌려 채움
+  generated_at: string | null; // 캐시 행 생성 시각
+  cached: boolean; // true면 모델 호출 없이 저장본
 }
 
+// 서버는 (맵, base, target, 언어)당 결과를 캐시하고 diff 해시가 같으면 모델을 부르지 않는다.
+// force=true는 "다시 생성" 전용 — 캐시를 무시하고 새 결과로 교체.
 export function aiCompareSummary(
   mapId: number,
   baseVersionId: number,
   targetVersionId: number,
   diff: CompareDiffPayload,
   lang: "ko" | "en",
+  force = false,
 ): Promise<CompareSummaryOut> {
   return request<CompareSummaryOut>(`/maps/${mapId}/compare/ai-summary`, {
     method: "POST",
@@ -2569,6 +2580,7 @@ export function aiCompareSummary(
       target_version_id: targetVersionId,
       lang,
       diff,
+      force,
     }),
   });
 }

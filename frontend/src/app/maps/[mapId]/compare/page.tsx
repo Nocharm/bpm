@@ -55,7 +55,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
+import { type CompareAiMeta, type CompareAiRun, CompareAiSummary } from "@/components/compare-ai-summary";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MapFallbackNotes } from "@/components/maps/map-fallback-notes";
 import { NodeDisplayFloat } from "@/components/node-display-float";
@@ -1275,8 +1275,9 @@ function ComparePane({
   const hasChanges = changeItems.length > 0;
 
   // 좌상 카운트 필 + 패널 필터칩 — 노드+엣지를 status별 집계(엣지 추가/삭제 포함, 변경은 노드만).
-  // AI 요약 — 비교 진입(그래프 준비) 시 선행 생성해 탭을 열 때 이미 떠 있게 한다(체감 속도, 2026-09-18).
-  // (base,target) 조합별 결과를 보관해 드롭다운 왕복 시 재호출하지 않는다. 재생성은 헤더 버튼.
+  // AI 보고서 — AI 탭을 열 때만 호출한다(2026-09-20, 선행 생성 폐기: 탭을 안 여는 열람자는 비용 0).
+  // 서버가 (맵,base,target,언어)별로 캐시하므로 같은 내용은 첫 1명만 기다린다. 화면 안에서는
+  // (base,target) 조합별 결과를 보관해 드롭다운 왕복 시 재호출하지 않는다. 재생성(force)은 제목 줄 버튼.
   const aiKey = `${baseId}:${targetId}`;
   const [aiRuns, setAiRuns] = useState<Map<string, CompareAiRun>>(() => new Map());
   const aiRun = aiRuns.get(aiKey);
@@ -1284,26 +1285,31 @@ function ComparePane({
   const aiPayload = useMemo(() => buildCompareSummaryPayload(merged), [merged]);
   const aiNoChanges = !hasCompareChanges(aiPayload.payload.totals);
   const aiSeqRef = useRef(0);
-  const requestAiSummary = useCallback(() => {
-    const key = aiKey;
-    const seq = ++aiSeqRef.current;
-    setAiRuns((prev) => new Map(prev).set(key, { status: "loading" }));
-    void aiCompareSummary(mapId, baseId, targetId, aiPayload.payload, lang)
-      .then((result) => {
-        if (seq !== aiSeqRef.current) return; // 재생성이 겹치면 마지막 요청만 반영
-        setAiRuns((prev) => new Map(prev).set(key, { status: "done", result }));
-      })
-      .catch((err: unknown) => {
-        if (seq !== aiSeqRef.current) return;
-        setAiRuns((prev) => new Map(prev).set(key, { status: "error", error: humanizeApiError(err, t) }));
-      });
-  }, [aiKey, aiPayload, baseId, targetId, mapId, lang, t]);
+  const requestAiSummary = useCallback(
+    (force = false) => {
+      const key = aiKey;
+      const seq = ++aiSeqRef.current;
+      setAiRuns((prev) => new Map(prev).set(key, { status: "loading" }));
+      void aiCompareSummary(mapId, baseId, targetId, aiPayload.payload, lang, force)
+        .then((result) => {
+          if (seq !== aiSeqRef.current) return; // 재생성이 겹치면 마지막 요청만 반영
+          setAiRuns((prev) => new Map(prev).set(key, { status: "done", result }));
+        })
+        .catch((err: unknown) => {
+          if (seq !== aiSeqRef.current) return;
+          setAiRuns((prev) => new Map(prev).set(key, { status: "error", error: humanizeApiError(err, t) }));
+        });
+    },
+    [aiKey, aiPayload, baseId, targetId, mapId, lang, t],
+  );
+  const retryAiSummary = () => requestAiSummary(false);
+  const regenerateAiSummary = () => requestAiSummary(true);
   useEffect(() => {
-    if (aiEnabled !== true || !graphsFresh || aiNoChanges || aiRuns.has(aiKey)) return;
+    if (inspectorTab !== "ai" || aiEnabled !== true || !graphsFresh || aiNoChanges || aiRuns.has(aiKey)) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    requestAiSummary(); // intentional: prefetch the summary as soon as both graphs are in
-  }, [aiEnabled, graphsFresh, aiNoChanges, aiRuns, aiKey, requestAiSummary]);
-  // 하이라이트 refs(n1/e1…) → 캔버스 포커스. 응답이 모르는 ref를 인용하면 무시.
+    requestAiSummary(); // intentional: lazy fetch on first open of the AI tab for this version pair
+  }, [inspectorTab, aiEnabled, graphsFresh, aiNoChanges, aiRuns, aiKey, requestAiSummary]);
+  // 절의 근거 refs(n1/e1…) → 캔버스 포커스. 응답이 모르는 ref를 인용하면 무시.
   const focusAiRef = useCallback(
     (ref: string) => {
       const hit = aiPayload.refs.get(ref);
@@ -1317,6 +1323,27 @@ function ComparePane({
     },
     [aiPayload, merged, focusNode, focusEdge],
   );
+  // ref → 사람이 읽는 라벨(활동 제목 / "출발 → 도착") — 보고서 절 아래 근거 칩 텍스트
+  const resolveAiRef = useCallback(
+    (ref: string): string | null => {
+      const hit = aiPayload.refs.get(ref);
+      if (!hit) return null;
+      const titleOf = (key: string) => merged.nodes.find((n) => n.id === key)?.node.title ?? null;
+      if (hit.kind === "node") return titleOf(hit.id);
+      const edge = merged.edges.find((e) => e.id === hit.id);
+      if (!edge) return null;
+      return `${titleOf(edge.source) ?? "?"} → ${titleOf(edge.target) ?? "?"}`;
+    },
+    [aiPayload, merged],
+  );
+  const versionTitle = (id: number) => {
+    const v = versions.find((x) => x.id === id);
+    if (!v) return "-";
+    const prefix = v.version_number != null ? `v${v.version_number}` : "";
+    // 라벨이 이미 "v1 …"로 시작하면(데모 시드 등) 번호를 겹쳐 붙이지 않는다
+    return prefix && !v.label.startsWith(prefix) ? `${prefix} ${v.label}` : v.label;
+  };
+  const aiMeta: CompareAiMeta = { mapName, baseLabel: versionTitle(baseId), targetLabel: versionTitle(targetId) };
 
   const counts = useMemo(() => {
     const acc = { added: 0, removed: 0, changed: 0 };
@@ -1866,7 +1893,7 @@ function ComparePane({
                   }`}
                 >
                   {tab.label}
-                  {/* 생성 중 프로그레스 링 — 다른 탭에 있어도 AI 요약이 작업 중임을 알린다 */}
+                  {/* 생성 중 프로그레스 링 — 탭을 열어 요청한 뒤 다른 탭으로 옮겨도 작업 중임을 알린다 */}
                   {tab.key === "ai" && aiRun?.status === "loading" && (
                     <Loader2 size={12} strokeWidth={1.6} className="animate-spin text-accent" data-id="compare-ai-tab-spinner" />
                   )}
@@ -1953,9 +1980,11 @@ function ComparePane({
                 run={aiRun}
                 aiEnabled={aiEnabled}
                 noChanges={aiNoChanges}
+                meta={aiMeta}
+                resolveRef={resolveAiRef}
                 onFocusRef={focusAiRef}
-                onRetry={requestAiSummary}
-                onRegenerate={requestAiSummary}
+                onRetry={retryAiSummary}
+                onRegenerate={regenerateAiSummary}
               />
             ) : inspectorTab === "summary" ? (
               // 요약 탭 — 버전 합계 카드(파라미터·구조·시스템·부서/담당자·GMP). 드롭다운 체크로 숨김.

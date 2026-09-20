@@ -33,10 +33,24 @@ from app.checkout import is_checkout_active
 from app.db import get_session
 from app.permissions.deps import require_map_role, require_version_map_role
 from app.manual import get_manual
-from app.models import AiChatMessage, AiChatSession, AiUsageEvent, ManualDoc, MapVersion
+from app.models import (
+    AiChatMessage,
+    AiChatSession,
+    AiCompareSummary,
+    AiUsageEvent,
+    ManualDoc,
+    MapVersion,
+    ProcessMap,
+    VersionEvent,
+)
 from app.prompt_registry import get_prompt_overrides
 from app.routers.graph import _load_graph
-from app.compare_summary import build_compare_summary_messages
+from app.compare_summary import (
+    CompareSummaryContext,
+    build_compare_summary_messages,
+    compute_diff_hash,
+    resolve_contract,
+)
 from app.schemas import (
     AiChatRequest,
     AiModelsOut,
@@ -321,7 +335,11 @@ async def ai_compare_summary(
     user: str = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CompareSummaryOut:
-    """비교 화면 AI 요약 — 게시본 vs 대기본 diff를 결재자용 총평·하이라이트·영향으로 (2026-09-18)."""
+    """비교 화면 AI 보고서 — 게시본 vs 대기본 diff를 결재자에게 올리는 보고체 서술로 (2026-09-20).
+
+    (맵, base, target, 언어)당 캐시 1행 — diff 해시가 같으면 모델을 부르지 않는다. 초안이 더 편집되거나
+    프롬프트 계약이 바뀌면 해시가 달라져 재생성하고, force면 무조건 재생성해 캐시를 교체한다.
+    """
     if not await is_ai_access_enabled(session):
         raise HTTPException(status_code=503, detail="AI is disabled")
     base = await session.get(MapVersion, payload.base_version_id)
@@ -332,12 +350,28 @@ async def ai_compare_summary(
     if target is None or target.map_id != map_id:
         raise HTTPException(status_code=404, detail=f"version {payload.target_version_id} not found")
 
+    overrides = await get_prompt_overrides(session)
+    digest = compute_diff_hash(payload.diff, payload.lang, resolve_contract(overrides))
+    cached = await session.scalar(
+        select(AiCompareSummary).where(
+            AiCompareSummary.map_id == map_id,
+            AiCompareSummary.base_version_id == base.id,
+            AiCompareSummary.target_version_id == target.id,
+            AiCompareSummary.lang == payload.lang,
+        )
+    )
+    if cached is not None and cached.diff_hash == digest and not payload.force:
+        summary = CompareSummaryOut.model_validate(cached.content)
+        summary.stats = payload.diff.totals
+        summary.generated_at = cached.created_at
+        summary.cached = True
+        return summary
+
     messages = build_compare_summary_messages(
         payload.diff,
-        base_label=_version_label(base),
-        target_label=_version_label(target),
+        context=await _load_compare_context(session, map_id, base, target),
         lang=payload.lang,
-        overrides=await get_prompt_overrides(session),
+        overrides=overrides,
     )
     try:
         summary, usage = await _ask_and_validate(messages, None, schema=CompareSummaryOut)
@@ -361,7 +395,16 @@ async def ai_compare_summary(
             await session.rollback()
             logger.warning("AI usage event insert failed (compare summary failure path)")
         raise
-    summary.stats = payload.diff.totals
+    content = summary.model_dump(mode="json", exclude={"stats", "generated_at", "cached"})
+    if cached is None:
+        cached = AiCompareSummary(
+            map_id=map_id, base_version_id=base.id, target_version_id=target.id, lang=payload.lang
+        )
+        session.add(cached)
+    cached.diff_hash = digest
+    cached.content = content
+    cached.created_by = user
+    cached.created_at = now_kst()
     session.add(
         AiUsageEvent(
             login_id=user,
@@ -375,7 +418,35 @@ async def ai_compare_summary(
         )
     )
     await session.commit()
+    await session.refresh(cached)  # DB가 돌려주는 시각 표현으로 통일 — 캐시 히트 응답과 같은 값
+    summary.stats = payload.diff.totals
+    summary.generated_at = cached.created_at
+    summary.cached = False
     return summary
+
+
+async def _load_compare_context(
+    session: AsyncSession, map_id: int, base: MapVersion, target: MapVersion
+) -> CompareSummaryContext:
+    """보고서 맥락 — 맵 이름·오너 부서·제출자 이름·제출 코멘트(가장 최근 submitted 이벤트)."""
+    process_map = await session.get(ProcessMap, map_id)
+    submitted_by = ""
+    if target.submitted_by:
+        submitted_by = await workflow.get_display_name(session, target.submitted_by)
+    submit_note = await session.scalar(
+        select(VersionEvent.note)
+        .where(VersionEvent.version_id == target.id, VersionEvent.event_type == "submitted")
+        .order_by(VersionEvent.created_at.desc(), VersionEvent.id.desc())
+        .limit(1)
+    )
+    return CompareSummaryContext(
+        map_name=process_map.name if process_map is not None else "",
+        owning_department=(process_map.owning_department or "") if process_map is not None else "",
+        base_label=_version_label(base),
+        target_label=_version_label(target),
+        submitted_by=submitted_by,
+        submit_note=submit_note or "",
+    )
 
 
 def _version_label(version: MapVersion) -> str:

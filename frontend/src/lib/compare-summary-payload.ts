@@ -1,7 +1,7 @@
 // 비교 화면 AI 요약 페이로드 — 병합 diff(merge-diff.ts)를 백엔드 CompareDiffPayload로 압축한다 (2026-09-18).
 // 파이썬에 diff 로직을 복제하지 않기 위해 프론트 계산본을 전송. ref(n1/e1…)→캔버스 id 매핑은 하이라이트 클릭 포커스용.
 
-import type { CompareDiffPayload, CompareDiffTotals } from "@/lib/api";
+import type { CompareDiffNode, CompareDiffPayload, CompareDiffTotals } from "@/lib/api";
 import type { MergedEdge, MergedGraph, MergedNode } from "@/lib/merge-diff";
 
 // 백엔드 스키마 상한(nodes/edges 각 200) — 초과분은 개수만 알린다
@@ -54,20 +54,38 @@ export function buildCompareSummaryPayload(
     nodes: nodes.slice(0, cap).map((m, i) => {
       const ref = `n${i + 1}`;
       refs.set(ref, { kind: "node", id: m.id });
-      return {
+      const row: CompareDiffNode = {
         ref,
         status: m.status === "unchanged" ? "changed" : m.status,
         title: m.node.title.slice(0, 200),
         node_type: m.node.node_type,
         changes:
           m.status === "changed"
-            ? m.fieldChanges.slice(0, 40).map((fc) => ({
-                field: fc.field,
-                before: fc.before.slice(0, 500),
-                after: fc.after.slice(0, 500),
-              }))
+            ? m.fieldChanges
+                // AI 표면엔 담당자 실명(assignee) 없음 — 사람 필드는 assignee_role만 (사용자 결정 2026-09-12)
+                .filter((fc) => fc.field !== "assignee")
+                .slice(0, 40)
+                .map((fc) => ({
+                  field: fc.field,
+                  before: fc.before.slice(0, 500),
+                  after: fc.after.slice(0, 500),
+                }))
             : [],
       };
+      // 추가 노드만 핵심 속성 동봉 — 보고서가 "무엇을 누가 어디서 하는 단계"인지 서술할 재료.
+      // 변경 노드는 changes(before→after)가 이미 드러내므로 중복 전송하지 않는다.
+      if (m.status === "added") {
+        const attrs = {
+          description: m.node.description.slice(0, 300),
+          assignee_role: (m.node.assignee_role ?? "").slice(0, 100),
+          department: m.node.department.slice(0, 100),
+          system: m.node.system.slice(0, 100),
+        };
+        for (const [key, value] of Object.entries(attrs)) {
+          if (value) row[key as keyof typeof attrs] = value;
+        }
+      }
+      return row;
     }),
     edges: edges.slice(0, cap).map((e, i) => {
       const ref = `e${i + 1}`;

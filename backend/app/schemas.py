@@ -2141,6 +2141,11 @@ class CompareDiffNode(BaseModel):
     title: str = Field(max_length=200)
     node_type: str = Field(default="", max_length=30)
     changes: list[CompareDiffField] = Field(default_factory=list, max_length=40)
+    # 추가 노드의 핵심 속성 — 보고서가 "무엇을 누가 어디서 하는 단계"인지 서술하기 위한 재료 (2026-09-20)
+    description: str = Field(default="", max_length=300)
+    assignee_role: str = Field(default="", max_length=100)
+    department: str = Field(default="", max_length=100)
+    system: str = Field(default="", max_length=100)
 
 
 class CompareDiffEdge(BaseModel):
@@ -2175,21 +2180,29 @@ class CompareSummaryRequest(BaseModel):
     target_version_id: int
     lang: Literal["ko", "en"] = "ko"
     diff: CompareDiffPayload
+    # 캐시 무시 재생성 — "다시 생성" 버튼 전용
+    force: bool = False
 
 
-class CompareSummaryHighlight(BaseModel):
-    kind: Literal["added", "removed", "changed", "flow", "param", "other"] = "other"
-    title: str = Field(max_length=300)
-    detail: str = Field(default="", max_length=1000)
+# 보고서 한 절 — 소제목 + 서술 문단 + 근거 ref(프론트가 캔버스 포커스 칩으로 렌더)
+class CompareSummarySection(BaseModel):
+    heading: str = Field(max_length=200)
+    body: str = Field(max_length=2000)
     refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CompareSummaryOut(BaseModel):
-    headline: str = Field(max_length=600)
-    highlights: list[CompareSummaryHighlight] = Field(default_factory=list, max_length=12)
+    """비교 AI 보고서 — 대시보드식 하이라이트가 아니라 결재자에게 올리는 보고체 서술 (2026-09-20)."""
+
+    title: str = Field(max_length=300)
+    opening: str = Field(default="", max_length=1500)
+    sections: list[CompareSummarySection] = Field(default_factory=list, max_length=8)
     impacts: list[str] = Field(default_factory=list, max_length=8)
-    # 서버가 요청 totals를 되돌려 채움 — 모델 출력 아님(집계 카드용)
-    stats: CompareDiffTotals | None = None
+    closing: str = Field(default="", max_length=600)
+    # 아래는 서버가 채움 — 모델 출력 아님
+    stats: CompareDiffTotals | None = None  # 요청 totals 에코(근거 집계 줄)
+    generated_at: datetime | None = None  # 캐시 행 생성 시각
+    cached: bool = False  # True면 모델 호출 없이 저장본 반환
 
 
 class AiChatSessionOut(BaseModel):
