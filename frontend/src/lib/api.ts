@@ -2507,7 +2507,7 @@ export interface CompareDiffField {
 
 export interface CompareDiffNode {
   ref: string; // n1, n2… — 응답 sections[].refs가 인용
-  status: "added" | "removed" | "changed";
+  status: "added" | "removed" | "changed" | "unchanged"; // unchanged = 흐름 문맥용 이웃 노드 (2026-09-21)
   title: string;
   node_type: string;
   changes: CompareDiffField[];
@@ -2520,11 +2520,27 @@ export interface CompareDiffNode {
 
 export interface CompareDiffEdge {
   ref: string; // e1, e2…
-  status: "added" | "removed" | "changed";
+  status: "added" | "removed" | "changed" | "unchanged";
   source: string; // 노드 제목
   target: string;
   label: string;
   label_before: string;
+}
+
+// 버전 파라미터 합계 before/after — 요약 탭(sumVersionParam)과 같은 값. AI는 해석만.
+export interface CompareMetric {
+  field: string;
+  base: string;
+  target: string;
+}
+
+// 입출력 항목 변경 + 상대 노드(출력이면 소비처, 입력이면 산출처 제목)
+export interface CompareIoChange {
+  ref: string;
+  side: "input" | "output";
+  text: string;
+  status: "added" | "removed";
+  peers: string[];
 }
 
 export interface CompareDiffTotals {
@@ -2542,6 +2558,8 @@ export interface CompareDiffPayload {
   omitted_nodes: number;
   omitted_edges: number;
   totals: CompareDiffTotals;
+  metrics: CompareMetric[];
+  io_changes: CompareIoChange[];
 }
 
 // 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(캔버스 포커스 칩)
@@ -2551,16 +2569,39 @@ export interface CompareSummarySection {
   refs: string[];
 }
 
-// 비교 AI 보고서 — 결재자에게 올리는 개조식(명사형 종결) 보고서 (2026-09-20, 대시보드식 headline/highlights 폐기)
+// 근거 ref가 붙는 한 줄 항목 — 영향·미언급 변경
+export interface CompareSummaryPoint {
+  point: string;
+  refs: string[];
+}
+
+// 비교 AI 보고서 — 결재자에게 올리는 개조식 4블록: 요지(의도별)·흐름 영향·코멘트 대비 미언급·확인 질문 (2026-09-21)
 export interface CompareSummaryOut {
   title: string;
   opening: string;
-  sections: CompareSummarySection[];
-  impacts: string[];
+  sections: CompareSummarySection[]; // 개정 요지 — 의도별 묶음
+  impacts: CompareSummaryPoint[]; // 흐름·통제·부담 영향
+  unmentioned: CompareSummaryPoint[]; // 제출 코멘트 대비 미언급 변경
+  questions: string[]; // 결재 전 제출자 확인 질문
   closing: string;
+  has_submit_note: boolean; // 제출 코멘트 유무 — false면 미언급 대조 생략 안내
   stats: CompareDiffTotals | null; // 서버가 요청 totals를 되돌려 채움
   generated_at: string | null; // 캐시 행 생성 시각
   cached: boolean; // true면 모델 호출 없이 저장본
+}
+
+// 제출 시 변경 사유 AI 초안 — 최신 게시본(없으면 null=첫 제출) 대비 diff로 개조식 코멘트 2~4줄 (2026-09-21)
+export function aiSubmitNoteDraft(
+  mapId: number,
+  baseVersionId: number | null,
+  targetVersionId: number,
+  diff: CompareDiffPayload,
+  lang: "ko" | "en",
+): Promise<{ note: string }> {
+  return request<{ note: string }>(`/maps/${mapId}/compare/submit-note-draft`, {
+    method: "POST",
+    body: JSON.stringify({ base_version_id: baseVersionId, target_version_id: targetVersionId, lang, diff }),
+  });
 }
 
 // 서버는 (맵, base, target, 언어)당 결과를 캐시하고 diff 해시가 같으면 모델을 부르지 않는다.

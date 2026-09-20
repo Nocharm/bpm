@@ -1282,7 +1282,11 @@ function ComparePane({
   const [aiRuns, setAiRuns] = useState<Map<string, CompareAiRun>>(() => new Map());
   const aiRun = aiRuns.get(aiKey);
   const aiEnabled: boolean | null = me ? me.ai_enabled : null;
-  const aiPayload = useMemo(() => buildCompareSummaryPayload(merged), [merged]);
+  // 양 버전 그래프를 함께 넘겨 파라미터 합계·입출력 변경(소비처)까지 재료로 싣는다 (2026-09-21)
+  const aiPayload = useMemo(
+    () => buildCompareSummaryPayload(merged, { base: baseGraph, target: targetGraph }),
+    [merged, baseGraph, targetGraph],
+  );
   const aiNoChanges = !hasCompareChanges(aiPayload.payload.totals);
   const aiSeqRef = useRef(0);
   const requestAiSummary = useCallback(

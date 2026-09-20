@@ -23,7 +23,9 @@ import {
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
+import { useMe } from "@/lib/me";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
+import { draftSubmitNote } from "@/lib/submit-note-draft";
 import { StatusBadge } from "@/components/status-badge";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
@@ -132,6 +134,7 @@ export function VersionsPublishPanel({
       {versions.map((version) => (
         <VersionRow
           key={version.id}
+          mapId={Number(mapId)}
           versionId={version.id}
           label={version.label}
           versions={versions}
@@ -155,6 +158,7 @@ export function VersionsPublishPanel({
 // ── 버전 행 / Version row ─────────────────────────────────────
 
 interface VersionRowProps {
+  mapId: number; // 제출 코멘트 AI 초안 요청 경로용
   versionId: number;
   label: string;
   versions: VersionSummary[];
@@ -170,6 +174,7 @@ interface VersionRowProps {
 }
 
 function VersionRow({
+  mapId,
   versionId,
   label,
   versions,
@@ -182,7 +187,8 @@ function VersionRow({
   onToast,
   onChanged,
 }: VersionRowProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const me = useMe(); // AI 활성 서버에서만 코멘트 AI 초안 버튼
 
   // 워크플로 상태 — 서버 진실. 액션 후 재조회 / Server-truth workflow state; refetched after each action.
   const [wf, setWf] = useState<WorkflowState | null>(null);
@@ -437,6 +443,13 @@ function VersionRow({
           }
           comment={transitionComment}
           onCommentChange={setTransitionComment}
+          onDraftComment={
+            me?.ai_enabled
+              ? () => draftSubmitNote({ mapId, versionId, versions, lang }).catch((err: unknown) => {
+                  throw new Error(humanizeApiError(err, t));
+                })
+              : undefined
+          }
           onConfirm={() => {
             setSubmitConfirmOpen(false);
             void runAction(() => submitVersion(versionId, bundleValue ?? undefined, transitionComment.trim() || undefined));

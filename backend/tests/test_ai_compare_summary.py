@@ -70,20 +70,21 @@ def _diff_payload() -> dict:
 
 
 def _summary_json(title: str = "발주 프로세스 v2 변경 보고") -> str:
-    """명사형 종결(개조식) 보고서 — 절 본문은 points 목록."""
+    """개조식 보고서 4블록 — 요지(의도별)·흐름 영향·코멘트 대비 미언급·확인 질문."""
     return json.dumps(
         {
             "title": title,
-            "opening": "발주 승인 이후 품질 검토 단계 추가를 위한 개정",
+            "opening": "감사 지적 대응을 위한 검토 단계 추가 개정",
             "sections": [
                 {
-                    "heading": "QA 검토 단계 신설",
-                    "points": ["발주 승인 뒤 QA 검토 단계 추가", "승인 결과가 검토를 거쳐 다음 단계로 전달되도록 흐름 연결"],
+                    "heading": "출고 전 품질 통제 강화",
+                    "points": ["발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "승인 결과가 검토를 거쳐 다음 단계로 이어지도록 흐름 연결"],
                     "refs": ["n1", "e1"],
                 },
-                {"heading": "발주 승인 소요시간 증가", "points": ["1시간 → 2시간 30분"], "refs": ["n2"]},
             ],
-            "impacts": ["리드타임 증가 검토 필요"],
+            "impacts": [{"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "refs": ["n2"]}],
+            "unmentioned": [{"point": "발주 승인 소요시간 변경은 제출 코멘트에 없음", "refs": ["n2"]}],
+            "questions": ["QA 검토 불합격 시 처리 경로?"],
             "closing": "검토 후 결재 요청",
         }
     )
@@ -120,12 +121,15 @@ def test_summary_ok_records_usage(client: TestClient, monkeypatch: pytest.Monkey
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["title"] == "발주 프로세스 v2 변경 보고"
-    assert body["opening"] == "발주 승인 이후 품질 검토 단계 추가를 위한 개정"
-    assert [s["heading"] for s in body["sections"]] == ["QA 검토 단계 신설", "발주 승인 소요시간 증가"]
-    assert body["sections"][0]["points"] == ["발주 승인 뒤 QA 검토 단계 추가", "승인 결과가 검토를 거쳐 다음 단계로 전달되도록 흐름 연결"]
+    assert body["opening"] == "감사 지적 대응을 위한 검토 단계 추가 개정"
+    assert [s["heading"] for s in body["sections"]] == ["출고 전 품질 통제 강화"]
+    assert body["sections"][0]["points"][0] == "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)"
     assert body["sections"][0]["refs"] == ["n1", "e1"]
-    assert body["impacts"] == ["리드타임 증가 검토 필요"]
+    assert body["impacts"] == [{"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "refs": ["n2"]}]
+    assert body["unmentioned"][0]["refs"] == ["n2"]
+    assert body["questions"] == ["QA 검토 불합격 시 처리 경로?"]
     assert body["closing"] == "검토 후 결재 요청"
+    assert body["has_submit_note"] is False  # 제출 코멘트 없음 → 미언급 대조 근거 없음(FE가 안내)
     # stats는 모델 출력이 아니라 서버가 요청 totals를 되돌려준다
     assert body["stats"]["nodes_added"] == 1
     assert body["stats"]["edges_added"] == 1
@@ -173,13 +177,36 @@ def test_prompt_carries_map_context_and_added_node_attrs(
         {"description": "출고 전 품질 서류 확인", "assignee_role": "QA 담당", "department": "품질팀", "system": "LIMS"}
     )
 
-    assert _post(client, map_id, base, target, diff=diff).status_code == 200
+    resp = _post(client, map_id, base, target, diff=diff)
 
+    assert resp.status_code == 200
+    assert resp.json()["has_submit_note"] is True
     user = seen[0][-1]["content"]
     assert f"cmp summary {_seq}" in user  # 맵 이름
     assert "Owning Anchor Division" in user  # 오너 부서
     assert "감사 지적 대응으로 검토 단계 추가" in user  # 제출 코멘트
     assert "품질팀" in user and "LIMS" in user and "QA 담당" in user and "출고 전 품질 서류 확인" in user
+
+
+def test_prompt_carries_flow_context_metrics_and_io(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """흐름 영향 추론 재료 — 무변경 이웃 노드·무변경 엣지·파라미터 합계·입출력 변경(소비처)이 프롬프트에 실린다."""
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    diff = _diff_payload()
+    diff["nodes"].append({"ref": "n3", "status": "unchanged", "title": "출고", "node_type": "process", "changes": []})
+    diff["edges"].append({"ref": "e2", "status": "unchanged", "source": "QA 검토", "target": "출고", "label": ""})
+    diff["metrics"] = [{"field": "duration", "base": "3.00", "target": "4.30"}]
+    diff["io_changes"] = [{"ref": "n2", "side": "output", "text": "발주서", "status": "removed", "peers": ["QA 검토"]}]
+
+    assert _post(client, map_id, base, target, diff=diff).status_code == 200
+
+    user = seen[0][-1]["content"]
+    assert "[n3] unchanged" in user and "출고" in user  # 문맥 노드
+    assert "[e2] unchanged" in user  # 문맥 엣지
+    assert "duration: 3.00 -> 4.30" in user  # 합계
+    assert "발주서" in user and "QA 검토" in user and "removed" in user  # 입출력 변경 + 소비처
 
 
 def test_same_diff_is_served_from_cache_without_model_call(

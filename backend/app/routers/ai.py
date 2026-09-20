@@ -48,6 +48,7 @@ from app.routers.graph import _load_graph
 from app.compare_summary import (
     CompareSummaryContext,
     build_compare_summary_messages,
+    build_submit_note_messages,
     compute_diff_hash,
     resolve_contract,
 )
@@ -58,6 +59,8 @@ from app.schemas import (
     AiTipsOut,
     CompareSummaryOut,
     CompareSummaryRequest,
+    SubmitNoteDraftOut,
+    SubmitNoteDraftRequest,
 )
 from app.settings import settings
 
@@ -367,12 +370,8 @@ async def ai_compare_summary(
         summary.cached = True
         return summary
 
-    messages = build_compare_summary_messages(
-        payload.diff,
-        context=await _load_compare_context(session, map_id, base, target),
-        lang=payload.lang,
-        overrides=overrides,
-    )
+    context = await _load_compare_context(session, map_id, base, target)
+    messages = build_compare_summary_messages(payload.diff, context=context, lang=payload.lang, overrides=overrides)
     try:
         summary, usage = await _ask_and_validate(messages, None, schema=CompareSummaryOut)
     except HTTPException as exc:
@@ -395,6 +394,7 @@ async def ai_compare_summary(
             await session.rollback()
             logger.warning("AI usage event insert failed (compare summary failure path)")
         raise
+    summary.has_submit_note = bool(context.submit_note)  # 캐시 내용에 포함 — 저장본도 같은 안내를 낸다
     content = summary.model_dump(mode="json", exclude={"stats", "generated_at", "cached"})
     if cached is None:
         cached = AiCompareSummary(
@@ -425,10 +425,76 @@ async def ai_compare_summary(
     return summary
 
 
+@router.post(
+    "/maps/{map_id}/compare/submit-note-draft",
+    response_model=SubmitNoteDraftOut,
+    # 제출자(편집자) 전용 — 초안을 쓰는 사람이 코멘트 초안을 받는다. 캐시 없음(버튼 누를 때만 호출).
+    dependencies=[Depends(require_map_role("editor"))],
+)
+async def ai_submit_note_draft(
+    map_id: int,
+    payload: SubmitNoteDraftRequest,
+    user: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SubmitNoteDraftOut:
+    """제출 시 변경 사유 AI 초안 — 최신 게시본 대비 diff로 개조식 코멘트 2~4줄 (2026-09-21)."""
+    if not await is_ai_access_enabled(session):
+        raise HTTPException(status_code=503, detail="AI is disabled")
+    target = await session.get(MapVersion, payload.target_version_id)
+    if target is None or target.map_id != map_id:
+        raise HTTPException(status_code=404, detail=f"version {payload.target_version_id} not found")
+    base: MapVersion | None = None
+    if payload.base_version_id is not None:
+        base = await session.get(MapVersion, payload.base_version_id)
+        if base is None or base.map_id != map_id:
+            raise HTTPException(status_code=404, detail=f"version {payload.base_version_id} not found")
+
+    context = await _load_compare_context(session, map_id, base, target)
+    messages = build_submit_note_messages(
+        payload.diff, context=context, lang=payload.lang, overrides=await get_prompt_overrides(session)
+    )
+    try:
+        draft, usage = await _ask_and_validate(messages, None, schema=SubmitNoteDraftOut)
+    except HTTPException as exc:
+        totals = getattr(exc, "usage_totals", None)
+        try:
+            session.add(
+                AiUsageEvent(
+                    login_id=user,
+                    map_id=map_id,
+                    version_id=target.id,
+                    model="",
+                    kind=None,
+                    prompt_tokens=getattr(totals, "prompt_tokens", None),
+                    completion_tokens=getattr(totals, "completion_tokens", None),
+                    ok=False,
+                )
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답(502)을 바꾸지 않는다
+            await session.rollback()
+            logger.warning("AI usage event insert failed (submit note draft failure path)")
+        raise
+    session.add(
+        AiUsageEvent(
+            login_id=user,
+            map_id=map_id,
+            version_id=target.id,
+            model="",
+            kind="submit_note",
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            ok=True,
+        )
+    )
+    await session.commit()
+    return draft
+
+
 async def _load_compare_context(
-    session: AsyncSession, map_id: int, base: MapVersion, target: MapVersion
+    session: AsyncSession, map_id: int, base: MapVersion | None, target: MapVersion
 ) -> CompareSummaryContext:
-    """보고서 맥락 — 맵 이름·오너 부서·제출자 이름·제출 코멘트(가장 최근 submitted 이벤트)."""
+    """보고서 맥락 — 맵 이름·오너 부서·제출자 이름·제출 코멘트(가장 최근 submitted 이벤트). base None=첫 제출."""
     process_map = await session.get(ProcessMap, map_id)
     submitted_by = ""
     if target.submitted_by:
@@ -442,7 +508,7 @@ async def _load_compare_context(
     return CompareSummaryContext(
         map_name=process_map.name if process_map is not None else "",
         owning_department=(process_map.owning_department or "") if process_map is not None else "",
-        base_label=_version_label(base),
+        base_label=_version_label(base) if base is not None else "",
         target_label=_version_label(target),
         submitted_by=submitted_by,
         submit_note=submit_note or "",

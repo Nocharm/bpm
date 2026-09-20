@@ -1,9 +1,9 @@
-// 비교 화면 AI 보고서 탭 본문 — 결재자에게 올리는 개조식 메모(제목·메타·배경·절의 명사형 항목·영향·마무리, 절의 근거 칩=캔버스 포커스). compare/page.tsx 인스펙터 전용 (2026-09-20).
+// 비교 화면 AI 보고서 탭 본문 — 결재자에게 올리는 개조식 메모 4블록(개정 요지·흐름 영향·코멘트 대비 미언급·확인 질문, 근거 칩=캔버스 포커스). compare/page.tsx 인스펙터 전용 (2026-09-21).
 "use client";
 
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 
-import type { CompareSummaryOut } from "@/lib/api";
+import type { CompareSummaryOut, CompareSummaryPoint } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 
@@ -32,6 +32,76 @@ interface CompareAiSummaryProps {
   onFocusRef: (ref: string) => void;
   onRetry: () => void;
   onRegenerate: () => void;
+}
+
+// 근거 칩 줄 — refs를 라벨로 풀어 캔버스 포커스 버튼으로. 라벨을 못 찾는 ref는 생략.
+function RefChips({
+  refs,
+  idPrefix,
+  resolveRef,
+  onFocusRef,
+  label,
+}: {
+  refs: string[];
+  idPrefix: string;
+  resolveRef: (ref: string) => string | null;
+  onFocusRef: (ref: string) => void;
+  label: string;
+}) {
+  const chips = refs
+    .map((ref) => ({ ref, label: resolveRef(ref) }))
+    .filter((c): c is { ref: string; label: string } => c.label !== null);
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+      <span className="text-fine text-ink-tertiary">{label}</span>
+      {chips.map((chip, j) => (
+        <button
+          key={chip.ref}
+          type="button"
+          data-id={`${idPrefix}-${j}`}
+          title={chip.label}
+          onClick={() => onFocusRef(chip.ref)}
+          className="max-w-[12rem] truncate rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:border-accent hover:text-accent"
+        >
+          {chip.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// 근거 ref가 붙는 항목 목록(영향·미언급) — 항목마다 칩 줄
+function PointList({
+  points,
+  idPrefix,
+  icon,
+  resolveRef,
+  onFocusRef,
+  relatedLabel,
+}: {
+  points: CompareSummaryPoint[];
+  idPrefix: string;
+  icon: React.ReactNode;
+  resolveRef: (ref: string) => string | null;
+  onFocusRef: (ref: string) => void;
+  relatedLabel: string;
+}) {
+  return (
+    <ul className="flex flex-col gap-1">
+      {points.map((item, i) => (
+        <li key={i} data-id={`${idPrefix}-${i}`} className="flex flex-col gap-0.5">
+          <span className="flex items-start gap-1.5 break-keep text-caption text-ink">
+            <span className="mt-0.5 shrink-0">{icon}</span>
+            <span>{item.point}</span>
+          </span>
+          <div className="pl-5">
+            <RefChips refs={item.refs} idPrefix={`${idPrefix}-${i}-ref`} resolveRef={resolveRef} onFocusRef={onFocusRef} label={relatedLabel} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function CompareAiSummary({
@@ -89,7 +159,20 @@ export function CompareAiSummary({
     );
   }
 
-  const { title, opening, sections, impacts, closing, stats, generated_at: generatedAt, cached } = run.result;
+  const {
+    title,
+    opening,
+    sections,
+    impacts,
+    unmentioned,
+    questions,
+    closing,
+    stats,
+    has_submit_note: hasSubmitNote,
+    generated_at: generatedAt,
+    cached,
+  } = run.result;
+  const related = t("compare.aiRelated");
   return (
     <div data-id="compare-ai" className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
       <article data-id="compare-ai-report" className="flex flex-col gap-3">
@@ -131,53 +214,78 @@ export function CompareAiSummary({
           </p>
         )}
 
-        {sections.map((section, i) => {
-          const chips = section.refs
-            .map((ref) => ({ ref, label: resolveRef(ref) }))
-            .filter((c): c is { ref: string; label: string } => c.label !== null);
-          return (
-            <section key={i} data-id={`compare-ai-section-${i}`} className="flex flex-col gap-1">
-              <h4 className="break-keep text-caption-strong text-ink">
-                {i + 1}. {section.heading}
-              </h4>
-              {/* 개조식 항목 — 명사형 종결 한 줄씩, 들여쓴 하이픈 불릿 */}
-              <ul className="flex flex-col gap-0.5 pl-1">
-                {section.points.map((point, j) => (
-                  <li key={j} className="flex items-start gap-1.5 break-keep text-caption text-ink">
-                    <span className="shrink-0 text-ink-tertiary">-</span>
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-              {chips.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                  <span className="text-fine text-ink-tertiary">{t("compare.aiRelated")}</span>
-                  {chips.map((chip, j) => (
-                    <button
-                      key={chip.ref}
-                      type="button"
-                      data-id={`compare-ai-ref-${i}-${j}`}
-                      title={chip.label}
-                      onClick={() => onFocusRef(chip.ref)}
-                      className="max-w-[12rem] truncate rounded-full border border-hairline px-2 py-0.5 text-fine text-ink-secondary hover:border-accent hover:text-accent"
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
+        {/* 1. 개정 요지 — 변경 종류가 아니라 의도별 절 */}
+        {sections.length > 0 && (
+          <section data-id="compare-ai-purpose" className="flex flex-col gap-2">
+            <h4 className="text-caption-strong text-ink">{t("compare.aiPurpose")}</h4>
+            {sections.map((section, i) => (
+              <div key={i} data-id={`compare-ai-section-${i}`} className="flex flex-col gap-1 pl-1">
+                <div className="break-keep text-caption-strong text-ink-secondary">
+                  {i + 1}. {section.heading}
                 </div>
-              )}
-            </section>
-          );
-        })}
+                <ul className="flex flex-col gap-0.5 pl-1">
+                  {section.points.map((point, j) => (
+                    <li key={j} className="flex items-start gap-1.5 break-keep text-caption text-ink">
+                      <span className="shrink-0 text-ink-tertiary">-</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="pl-1">
+                  <RefChips refs={section.refs} idPrefix={`compare-ai-ref-${i}`} resolveRef={resolveRef} onFocusRef={onFocusRef} label={related} />
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
 
+        {/* 2. 흐름·통제 영향 — 전체 그래프·합계·입출력 근거 */}
         {impacts.length > 0 && (
           <section data-id="compare-ai-impacts" className="flex flex-col gap-1">
             <h4 className="text-caption-strong text-ink">{t("compare.aiImpacts")}</h4>
+            <PointList
+              points={impacts}
+              idPrefix="compare-ai-impact"
+              icon={<AlertTriangle size={13} strokeWidth={1.5} className="text-changed" />}
+              resolveRef={resolveRef}
+              onFocusRef={onFocusRef}
+              relatedLabel={related}
+            />
+          </section>
+        )}
+
+        {/* 3. 코멘트 대비 미언급 변경 — 제출 코멘트가 없으면 대조 불가 안내 */}
+        <section data-id="compare-ai-unmentioned" className="flex flex-col gap-1">
+          <h4 className="text-caption-strong text-ink">{t("compare.aiUnmentioned")}</h4>
+          {!hasSubmitNote ? (
+            <p data-id="compare-ai-unmentioned-none" className="pl-1 text-fine text-ink-tertiary">
+              {t("compare.aiUnmentionedNoNote")}
+            </p>
+          ) : unmentioned.length === 0 ? (
+            <p data-id="compare-ai-unmentioned-empty" className="pl-1 text-fine text-ink-tertiary">
+              {t("compare.aiUnmentionedEmpty")}
+            </p>
+          ) : (
+            <PointList
+              points={unmentioned}
+              idPrefix="compare-ai-unmentioned-item"
+              icon={<AlertTriangle size={13} strokeWidth={1.5} className="text-removed" />}
+              resolveRef={resolveRef}
+              onFocusRef={onFocusRef}
+              relatedLabel={related}
+            />
+          )}
+        </section>
+
+        {/* 4. 결재 전 확인 질문 — 제출자에게 되물을 것 */}
+        {questions.length > 0 && (
+          <section data-id="compare-ai-questions" className="flex flex-col gap-1">
+            <h4 className="text-caption-strong text-ink">{t("compare.aiQuestions")}</h4>
             <ul className="flex flex-col gap-1">
-              {impacts.map((line, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-caption text-ink">
-                  <AlertTriangle size={13} strokeWidth={1.5} className="mt-0.5 shrink-0 text-changed" />
-                  <span className="break-keep">{line}</span>
+              {questions.map((q, i) => (
+                <li key={i} className="flex items-start gap-1.5 break-keep text-caption text-ink">
+                  <HelpCircle size={13} strokeWidth={1.5} className="mt-0.5 shrink-0 text-accent" />
+                  <span>{q}</span>
                 </li>
               ))}
             </ul>

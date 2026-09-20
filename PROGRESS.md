@@ -3,6 +3,14 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-21 — AI 보고서를 "AI가 잘하는 일" 4블록으로 재편 + 제출 코멘트 AI 초안 (feat/compare-ai-report 3차)
+
+- **왜:** 개조식으로 바꿔도 변경 종류별 나열이라 왼쪽 변경 패널과 정보량이 같았다(사용자 지적). 시스템이 못 하는 것 — 의도 해석·흐름 영향·코멘트 대비 미언급·되물을 질문 — 만 AI에 맡기고, 그 재료를 실제로 준다.
+- **입력 확장(FE `compare-summary-payload.ts`):** 변경 노드 + 이웃(hop 거리순, 상한 200) 무변경 문맥 노드·남긴 노드 사이 모든 엣지(상한 400)·요약 탭과 같은 파라미터 합계(`sumVersionParam`)·입출력 항목 변경과 소비처/산출처(`buildIoDiffSide`+제목 매칭, 80). totals(근거 집계)는 종전 규칙 유지. `assignee` 실명 필터 유지.
+- **출력 계약 `CompareSummaryOut`:** `sections`=의도별 개정 요지(변경 종류로 묶지 말 것) · `impacts[{point,refs}]`=흐름·통제·부담 · `unmentioned[{point,refs}]`=제출 코멘트 대비 미언급(코멘트 없으면 `has_submit_note=false`로 FE가 "대조 생략" 안내) · `questions[]`=결재 전 제출자 확인 질문. 프롬프트에 metrics는 버전 전체 합계(활동 아님)·ref 없음, 통화 전환(원↔달러) 오독 금지 규칙.
+- **제출 코멘트 AI 초안:** `POST /maps/{id}/compare/submit-note-draft`(editor 게이트, 캐시 없음, `ai_usage_events kind=submit_note`, 프롬프트 키 `submit_note_contract` 9번째) — FE `lib/submit-note-draft.ts`가 제출 버전을 뺀 최신 게시본(번호→id)을 base로 두 그래프를 받아 같은 페이로드를 만든다(게시본 없으면 base null=첫 제출). `SubmitConfirmDialog`에 `onDraftComment` 슬롯 → 에디터 승인 요청·설정>버전 패널 둘 다 AI 활성 서버에서만 "AI 초안" 버튼(결과는 textarea에 덮어써 제출자가 고침).
+- **검증:** BE 22건(+submit-note 4·문맥/합계/io 프롬프트 1) 전체 1501, FE payload 9·초안 base 선택 3, 스모크 22/22(4블록·캐시), 실모델 캡처(요지 3절·영향 4·질문 3), 승인 요청 다이얼로그 초안 캡처.
+
 ## 2026-09-20 — 비교 화면 AI 요약을 결재자 보고서로 + 서버 캐시·탭 열 때만 호출 (feat/compare-ai-report)
 
 - **왜:** 기존 탭은 총평·kind 칩·집계 칩을 나열하는 대시보드라 "사람이 상급자에게 보고하는 느낌"이 없었고, 비교 진입마다 선행 호출해 탭을 안 여는 열람자·새로고침·결재자 수만큼 모델을 다시 불렀다.

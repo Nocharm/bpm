@@ -91,6 +91,12 @@ try {
   if (gotResult) {
     const sections = await page.locator('[data-id^="compare-ai-section-"]').count();
     check("report sections present", sections > 0, `n=${sections}`);
+    // 4블록 — 요지·영향·미언급(코멘트 없으면 안내)·질문. 영향/질문은 모델 판단이라 존재만 느슨히 본다
+    check("purpose block present", (await page.locator('[data-id="compare-ai-purpose"]').count()) === 1);
+    check("unmentioned block present", (await page.locator('[data-id="compare-ai-unmentioned"]').count()) === 1);
+    const impacts = await page.locator('li[data-id^="compare-ai-impact-"]').count();
+    const questions = await page.locator('[data-id="compare-ai-questions"] li').count();
+    check("impacts or questions present", impacts + questions > 0, `impacts=${impacts} questions=${questions}`);
     const meta = await page.locator('[data-id="compare-ai-meta"]').textContent();
     check("memo header shows the version pair", /→/.test(meta ?? ""), meta ?? "");
     const chip = page.locator('[data-id="compare-ai-ref-0-0"]');
