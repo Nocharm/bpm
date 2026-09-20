@@ -78,12 +78,18 @@ def _summary_json(title: str = "발주 프로세스 v2 변경 보고") -> str:
             "sections": [
                 {
                     "heading": "출고 전 품질 통제 강화",
-                    "points": ["발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "승인 결과가 검토를 거쳐 다음 단계로 이어지도록 흐름 연결"],
+                    "points": [
+                        {"point": "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "kind": "added"},
+                        {"point": "승인 결과가 검토를 거쳐 다음 단계로 이어지도록 흐름 연결", "kind": "flow"},
+                    ],
                     "refs": ["n1", "e1"],
                 },
             ],
-            "impacts": [{"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "refs": ["n2"]}],
-            "unmentioned": [{"point": "발주 승인 소요시간 변경은 제출 코멘트에 없음", "refs": ["n2"]}],
+            "impacts": [
+                {"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "kind": "increase", "refs": ["n2"]}
+            ],
+            # 모델이 모르는 kind를 지어내도 502가 아니라 note로 정규화한다
+            "unmentioned": [{"point": "발주 승인 소요시간 변경은 제출 코멘트에 없음", "kind": "weird", "refs": ["n2"]}],
             "questions": ["QA 검토 불합격 시 처리 경로?"],
             "closing": "검토 후 결재 요청",
         }
@@ -123,10 +129,14 @@ def test_summary_ok_records_usage(client: TestClient, monkeypatch: pytest.Monkey
     assert body["title"] == "발주 프로세스 v2 변경 보고"
     assert body["opening"] == "감사 지적 대응을 위한 검토 단계 추가 개정"
     assert [s["heading"] for s in body["sections"]] == ["출고 전 품질 통제 강화"]
-    assert body["sections"][0]["points"][0] == "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)"
+    assert body["sections"][0]["points"][0] == {"point": "발주 승인 뒤 QA 검토 단계 신설(품질팀·LIMS)", "kind": "added", "refs": []}
+    assert body["sections"][0]["points"][1]["kind"] == "flow"
     assert body["sections"][0]["refs"] == ["n1", "e1"]
-    assert body["impacts"] == [{"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "refs": ["n2"]}]
+    assert body["impacts"] == [
+        {"point": "발주 승인 소요시간 1시간 → 2시간 30분, 주 경로 리드타임 증가", "kind": "increase", "refs": ["n2"]}
+    ]
     assert body["unmentioned"][0]["refs"] == ["n2"]
+    assert body["unmentioned"][0]["kind"] == "note"  # 미지 kind → note
     assert body["questions"] == ["QA 검토 불합격 시 처리 경로?"]
     assert body["closing"] == "검토 후 결재 요청"
     assert body["has_submit_note"] is False  # 제출 코멘트 없음 → 미언급 대조 근거 없음(FE가 안내)

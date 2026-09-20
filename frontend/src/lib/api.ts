@@ -2562,16 +2562,29 @@ export interface CompareDiffPayload {
   io_changes: CompareIoChange[];
 }
 
-// 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(캔버스 포커스 칩)
-export interface CompareSummarySection {
-  heading: string;
-  points: string[];
+// 항목 종류 태그 — 아이콘·상태색 매핑 (서버가 미지 값을 note로 정규화)
+export type CompareSummaryPointKind =
+  | "added"
+  | "removed"
+  | "changed"
+  | "increase"
+  | "decrease"
+  | "flow"
+  | "control"
+  | "risk"
+  | "note";
+
+// 근거 ref가 붙는 한 줄 항목 — 요지 절의 항목·영향·미언급 공용
+export interface CompareSummaryPoint {
+  point: string;
+  kind: CompareSummaryPointKind;
   refs: string[];
 }
 
-// 근거 ref가 붙는 한 줄 항목 — 영향·미언급 변경
-export interface CompareSummaryPoint {
-  point: string;
+// 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(캔버스 포커스 칩)
+export interface CompareSummarySection {
+  heading: string;
+  points: CompareSummaryPoint[];
   refs: string[];
 }
 

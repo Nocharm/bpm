@@ -2204,16 +2204,36 @@ class CompareSummaryRequest(BaseModel):
     force: bool = False
 
 
+# 항목 종류 태그 — 프론트가 아이콘·상태색으로 그린다(사용자 결정 2026-09-21, 1안). 모델이 모르는 값을 내면 note로.
+COMPARE_POINT_KINDS: tuple[str, ...] = (
+    "added",
+    "removed",
+    "changed",
+    "increase",
+    "decrease",
+    "flow",
+    "control",
+    "risk",
+    "note",
+)
+
+
+# 근거 ref가 붙는 한 줄 항목 — 요지 절의 항목·영향·미언급 공용
+class CompareSummaryPoint(BaseModel):
+    point: str = Field(max_length=300)
+    kind: str = Field(default="note", max_length=20)
+    refs: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _normalize_kind(cls, value: object) -> str:
+        return value if isinstance(value, str) and value in COMPARE_POINT_KINDS else "note"
+
+
 # 보고서 한 절 — 소제목 + 명사형 종결 항목 목록 + 근거 ref(프론트가 캔버스 포커스 칩으로 렌더)
 class CompareSummarySection(BaseModel):
     heading: str = Field(max_length=200)
-    points: list[str] = Field(default_factory=list, max_length=8)
-    refs: list[str] = Field(default_factory=list, max_length=20)
-
-
-# 근거 ref가 붙는 한 줄 항목 — 영향·미언급 변경
-class CompareSummaryPoint(BaseModel):
-    point: str = Field(max_length=300)
+    points: list[CompareSummaryPoint] = Field(default_factory=list, max_length=8)
     refs: list[str] = Field(default_factory=list, max_length=20)
 
 

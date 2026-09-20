@@ -1,11 +1,49 @@
 // 비교 화면 AI 보고서 탭 본문 — 결재자에게 올리는 개조식 메모 4블록(개정 요지·흐름 영향·코멘트 대비 미언급·확인 질문, 근거 칩=캔버스 포커스). compare/page.tsx 인스펙터 전용 (2026-09-21).
 "use client";
 
-import { AlertTriangle, HelpCircle, Loader2, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowRightLeft,
+  ArrowUp,
+  GitBranch,
+  HelpCircle,
+  Loader2,
+  type LucideIcon,
+  Minus,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 
-import type { CompareSummaryOut, CompareSummaryPoint } from "@/lib/api";
+import type { CompareSummaryOut, CompareSummaryPoint, CompareSummaryPointKind } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import type { MessageKey } from "@/lib/i18n-messages";
+
+// kind → 아이콘·색. 신설/삭제/변경은 비교 캔버스 상태색 토큰과 동일, 수치·흐름은 액센트, 통제는 주의색, 위험은 삭제색.
+const KIND_VISUAL: Record<CompareSummaryPointKind, { icon: LucideIcon | null; className: string; label: MessageKey }> = {
+  added: { icon: Plus, className: "text-added", label: "compare.aiKind.added" },
+  removed: { icon: Minus, className: "text-removed", label: "compare.aiKind.removed" },
+  changed: { icon: ArrowRightLeft, className: "text-changed", label: "compare.aiKind.changed" },
+  increase: { icon: ArrowUp, className: "text-accent", label: "compare.aiKind.increase" },
+  decrease: { icon: ArrowDown, className: "text-accent", label: "compare.aiKind.decrease" },
+  flow: { icon: GitBranch, className: "text-accent", label: "compare.aiKind.flow" },
+  control: { icon: ShieldAlert, className: "text-changed", label: "compare.aiKind.control" },
+  risk: { icon: AlertTriangle, className: "text-removed", label: "compare.aiKind.risk" },
+  note: { icon: null, className: "text-ink-tertiary", label: "compare.aiKind.note" },
+};
+
+function KindIcon({ kind }: { kind: CompareSummaryPointKind }) {
+  const { t } = useI18n();
+  const visual = KIND_VISUAL[kind] ?? KIND_VISUAL.note;
+  const Icon = visual.icon;
+  return (
+    <span className={`mt-0.5 inline-flex w-3.5 shrink-0 justify-center ${visual.className}`} title={t(visual.label)} data-kind={kind}>
+      {Icon ? <Icon size={13} strokeWidth={1.75} /> : "-"}
+    </span>
+  );
+}
 
 export type CompareAiRunStatus = "loading" | "done" | "error";
 
@@ -71,18 +109,16 @@ function RefChips({
   );
 }
 
-// 근거 ref가 붙는 항목 목록(영향·미언급) — 항목마다 칩 줄
+// 종류 아이콘이 붙는 항목 목록(요지 절·영향·미언급) — refs가 있는 항목은 아래 칩 줄
 function PointList({
   points,
   idPrefix,
-  icon,
   resolveRef,
   onFocusRef,
   relatedLabel,
 }: {
   points: CompareSummaryPoint[];
   idPrefix: string;
-  icon: React.ReactNode;
   resolveRef: (ref: string) => string | null;
   onFocusRef: (ref: string) => void;
   relatedLabel: string;
@@ -92,12 +128,14 @@ function PointList({
       {points.map((item, i) => (
         <li key={i} data-id={`${idPrefix}-${i}`} className="flex flex-col gap-0.5">
           <span className="flex items-start gap-1.5 break-keep text-caption text-ink">
-            <span className="mt-0.5 shrink-0">{icon}</span>
+            <KindIcon kind={item.kind} />
             <span>{item.point}</span>
           </span>
-          <div className="pl-5">
-            <RefChips refs={item.refs} idPrefix={`${idPrefix}-${i}-ref`} resolveRef={resolveRef} onFocusRef={onFocusRef} label={relatedLabel} />
-          </div>
+          {item.refs.length > 0 && (
+            <div className="pl-5">
+              <RefChips refs={item.refs} idPrefix={`${idPrefix}-${i}-ref`} resolveRef={resolveRef} onFocusRef={onFocusRef} label={relatedLabel} />
+            </div>
+          )}
         </li>
       ))}
     </ul>
@@ -223,14 +261,15 @@ export function CompareAiSummary({
                 <div className="break-keep text-caption-strong text-ink-secondary">
                   {i + 1}. {section.heading}
                 </div>
-                <ul className="flex flex-col gap-0.5 pl-1">
-                  {section.points.map((point, j) => (
-                    <li key={j} className="flex items-start gap-1.5 break-keep text-caption text-ink">
-                      <span className="shrink-0 text-ink-tertiary">-</span>
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="pl-1">
+                  <PointList
+                    points={section.points}
+                    idPrefix={`compare-ai-section-${i}-point`}
+                    resolveRef={resolveRef}
+                    onFocusRef={onFocusRef}
+                    relatedLabel={related}
+                  />
+                </div>
                 <div className="pl-1">
                   <RefChips refs={section.refs} idPrefix={`compare-ai-ref-${i}`} resolveRef={resolveRef} onFocusRef={onFocusRef} label={related} />
                 </div>
@@ -246,7 +285,6 @@ export function CompareAiSummary({
             <PointList
               points={impacts}
               idPrefix="compare-ai-impact"
-              icon={<AlertTriangle size={13} strokeWidth={1.5} className="text-changed" />}
               resolveRef={resolveRef}
               onFocusRef={onFocusRef}
               relatedLabel={related}
@@ -269,7 +307,6 @@ export function CompareAiSummary({
             <PointList
               points={unmentioned}
               idPrefix="compare-ai-unmentioned-item"
-              icon={<AlertTriangle size={13} strokeWidth={1.5} className="text-removed" />}
               resolveRef={resolveRef}
               onFocusRef={onFocusRef}
               relatedLabel={related}
