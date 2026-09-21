@@ -18,6 +18,8 @@ class PlanCard(BaseModel):
     owner_role: str = Field(default="", max_length=100)
     department: str = Field(default="", max_length=100)
     depends_on: list[str] = []
+    existing_code: str | None = None  # 병합된 기존 L6 맵의 task_id — merge_existing_cards가 채운다
+    mode: Literal["new", "keep", "revise"] = "new"
 
 
 class PlanOut(BaseModel):

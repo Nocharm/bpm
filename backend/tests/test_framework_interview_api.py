@@ -10,12 +10,43 @@ from app import ai_client
 from app import auth as auth_mod
 from app.db import SessionLocal
 from app.framework_interview import runner
+from app.framework_interview.assemble import build_document, load_category_chain
 from app.main import app
 from app.models import AiUsageEvent, FrameworkInterviewSession
 from app.settings import settings
 
 SYSADMIN = "fw.admin"
 HEADERS = {"X-Dev-User": SYSADMIN}
+
+# Task 1의 ROW(test_framework_interview_existing.py)를 3활동으로 축약 — 스냅샷 activity_count 검증용
+EXISTING_ROW = {
+    "l6": "요청 접수", "ownerRole": "담당자", "department": "",
+    "fields": {"start_condition": "요청서 도착", "done_criteria": "접수증 발급"},
+    "actions": [
+        {"seq": 1, "label": "요청 확인", "kind": "action", "name": "요청서 내용 확인", "rule": "양식 A", "system": "ERP"},
+        {"seq": 2, "label": "완결성 판정", "kind": "decision"},
+        {"seq": 3, "label": "접수 등록", "kind": "action"},
+    ],
+    "relations": {"edges": [
+        {"src": 1, "dst": 2, "kind": "seq"},
+        {"src": 2, "dst": 3, "kind": "branch", "gateway": "exclusive", "condition": "완결"},
+    ]},
+}
+
+
+def _import_row(client: TestClient, l5_id: int, row: dict, task_id: str) -> None:
+    """Task 1의 test_framework_interview_existing.py `_import_row`를 복제 — 인터뷰 문서 조립+임포트."""
+    async def _chain() -> list[dict]:
+        async with SessionLocal() as db:
+            return await load_category_chain(db, l5_id)
+    chain = asyncio.run(_chain())
+    l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
+    doc = build_document(chain, l5, [{"taskId": task_id, **row}], None, label="t", session_id=0)
+    res = client.post("/api/categories/import-interview", headers=HEADERS,
+                      json={"files": [{"name": "a.json", "content": doc}], "apply": True})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["applied"] is True and body["files"][0]["ok"] is True, body["files"]
 
 
 def _enable(monkeypatch) -> None:
@@ -310,3 +341,16 @@ def test_pause_resume_roundtrip(client: TestClient, monkeypatch) -> None:
     assert client.post(f"/api/framework-interviews/{sid}/pause", headers=HEADERS).json()["paused"] is True
     assert client.post(f"/api/framework-interviews/{sid}/resume", headers=HEADERS).json()["paused"] is False
     assert kicked == [sid, sid]
+
+
+def test_create_snapshots_existing_l6(client: TestClient, monkeypatch) -> None:
+    """세션 시작 시 L5 아래 기존 L6 맵을 스냅샷 — 계획 단계에서 새/유지/정정 판단 재료 (spec 2026-09-22 §2.2)."""
+    _enable(monkeypatch)
+    l5_id = _make_l5(client, "exs")
+    code = client.get(f"/api/categories/{l5_id}/chain", headers=HEADERS).json()[-1]["code"]
+    _import_row(client, l5_id, EXISTING_ROW, f"{code}-01")
+    res = client.post("/api/framework-interviews", json={"category_id": l5_id, "brief": "b"}, headers=HEADERS)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["existing"] == [{"map_id": body["existing"][0]["map_id"], "code": f"{code}-01", "name": "요청 접수", "activity_count": 3}]
+    assert "row" not in body["existing"][0]

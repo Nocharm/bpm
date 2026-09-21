@@ -158,6 +158,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     # 노드 역할 + SP 지정 역할 — 단일값, 담당자 옆 표시 (design 2026-09-11)
     ("nodes", "assignee_role", "VARCHAR(100) DEFAULT ''"),
     ("process_maps", "sp_assignee_role", "VARCHAR(100)"),
+    # AI L5 캠페인 — 세션 시작 시 기존 L6 스냅샷·계획 카드 모드 (spec 2026-09-22 §2.2)
+    ("framework_interview_sessions", "existing", "JSON"),
+    ("framework_interview_tasks", "mode", "VARCHAR(10) DEFAULT 'new'"),
 ]
 
 # 기존 테이블에 추가된 인덱스 보강 — create_all은 이미 존재하는 테이블의 인덱스를 만들지 않는다.

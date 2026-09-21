@@ -1076,6 +1076,8 @@ class FrameworkInterviewSession(Base):
     label: Mapped[str] = mapped_column(String(100), default="")
     # 첨부 문서 [{name, chars, text}] — brief(사용자 텍스트)와 분리해 개별 삭제 가능(잘못 올린 파일 누적 방지, 2026-09-21)
     attachments: Mapped[list | None] = mapped_column(JSON, default=None)
+    # 세션 시작 시 L5 아래 L6 맵 스냅샷 [{map_id, code, name, summary, activities, row}] (spec 2026-09-22 §2.2)
+    existing: Mapped[list | None] = mapped_column(JSON, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -1110,6 +1112,7 @@ class FrameworkInterviewTask(Base):
     error: Mapped[str | None] = mapped_column(Text, default=None)
     # 실패 카드를 플레이스홀더 행(활동 1개)으로 건너뛴 표시 — 등록 후 사람이 채운다 (2026-09-21)
     placeholder: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String(10), default="new")  # new|keep|revise — 기존 L6 맵 계획 카드 병합 결과
     drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

@@ -24,15 +24,16 @@ from app.framework_interview.contracts import (
     PlanOut, RelationsOut, build_context_text, build_plan_messages, build_relations_messages,
     format_managed_catalog,
 )
+from app.framework_interview.existing import load_existing_l6
 from app.framework_interview.normalize import normalize_plan, normalize_relations
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
 from app.prompt_registry import get_prompt_overrides
 from app.schemas import (
-    FrameworkInterviewAnswersIn, FrameworkInterviewCreateIn, FrameworkInterviewOut, FrameworkInterviewPlanIn,
-    FrameworkInterviewProgressOut, FrameworkInterviewRelationsIn, FrameworkInterviewTaskDetailOut,
-    FrameworkInterviewTaskOut,
+    FrameworkExistingOut, FrameworkInterviewAnswersIn, FrameworkInterviewCreateIn, FrameworkInterviewOut,
+    FrameworkInterviewPlanIn, FrameworkInterviewProgressOut, FrameworkInterviewRelationsIn,
+    FrameworkInterviewTaskDetailOut, FrameworkInterviewTaskOut,
 )
 
 router = APIRouter(
@@ -68,6 +69,9 @@ async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInter
         status=s.status, paused=s.paused, lang=s.lang, brief=s.brief, plan=s.plan,
         attachments=[{"name": a.get("name", ""), "chars": int(a.get("chars") or 0)} for a in s.attachments or []],
         relations=s.relations, label=s.label,
+        existing=[FrameworkExistingOut(
+            map_id=e["map_id"], code=e["code"], name=e["name"], activity_count=len(e.get("activities") or []),
+        ) for e in s.existing or []],
         tasks=[FrameworkInterviewTaskOut.model_validate(t) for t in tasks],
         progress=FrameworkInterviewProgressOut(
             total=len(tasks), drawn=sum(t.status == "drawn" for t in tasks),
@@ -129,6 +133,7 @@ async def create_framework_interview(
     row = FrameworkInterviewSession(
         login_id=user, category_id=payload.category_id, brief=payload.brief.strip(), lang=payload.lang,
         label=f"AI consult {now_kst():%Y-%m-%d}",
+        existing=await load_existing_l6(db, payload.category_id),
     )
     db.add(row)
     await db.commit()

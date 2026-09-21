@@ -2734,6 +2734,8 @@ class FrameworkPlanCardIn(BaseModel):
     owner_role: Annotated[str, StringConstraints(max_length=100)] = ""
     department: Annotated[str, StringConstraints(max_length=100)] = ""
     depends_on: list[str] = []  # 선행 카드 이름
+    existing_code: str | None = None  # 병합된 기존 L6 맵의 task_id
+    mode: Literal["new", "keep", "revise"] = "new"
 
 
 class FrameworkInterviewPlanIn(BaseModel):
@@ -2761,6 +2763,7 @@ class FrameworkInterviewTaskOut(BaseModel):
     issues: list[InterviewIssueOut] = []
     error: str | None = None
     placeholder: bool = False
+    mode: str = "new"
     drawn_at: datetime | None = None
 
 
@@ -2784,6 +2787,15 @@ class FrameworkInterviewProgressOut(BaseModel):
     working: bool  # generating/drawing 중인 task가 있다
 
 
+class FrameworkExistingOut(BaseModel):
+    """세션 시작 스냅샷 요약 — 계획 카드 병합 참고용, 원본 row는 노출하지 않는다."""
+
+    map_id: int
+    code: str
+    name: str
+    activity_count: int
+
+
 class FrameworkInterviewOut(BaseModel):
     id: int
     category_id: int
@@ -2797,6 +2809,7 @@ class FrameworkInterviewOut(BaseModel):
     plan: list | None
     relations: dict | None
     label: str
+    existing: list[FrameworkExistingOut] = []
     tasks: list[FrameworkInterviewTaskOut]
     progress: FrameworkInterviewProgressOut
     created_at: datetime
