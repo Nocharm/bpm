@@ -4,7 +4,7 @@
 // multi-select filter dropdown with leading icons.
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, FilterX } from "lucide-react";
 
 import type { FilterDisplayMode } from "@/lib/filter-display";
 
@@ -27,6 +27,8 @@ export function FilterDropdown({
   dataId,
   display = "full",
   stretch = false,
+  clearable = true,
+  clearLabel = "Clear",
 }: {
   label: string;
   // 버튼 선행 아이콘 / button leading icon.
@@ -39,6 +41,9 @@ export function FilterDropdown({
   display?: FilterDisplayMode;
   // 행을 채우되 내용 폭에 비례해 차등 분배(flex-auto, 사용자 지시 2026-09-21). 내용 좌측·쉐브론 우측 정렬. 측정 복제는 미지정
   stretch?: boolean;
+  // 목록 맨 아래 "이 필 지우기" 항목(선택된 값을 모두 토글 해제). 단일 선택 필(정렬)은 false
+  clearable?: boolean;
+  clearLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -102,6 +107,24 @@ export function FilterDropdown({
               </button>
             );
           })}
+          {/* 이 필 지우기 — 선택이 있을 때만 목록 맨 아래에 아코디언 펼침(accordion-open)으로 등장 (2026-09-21) */}
+          {clearable && count > 0 && (
+            <div className="accordion-open">
+              <div className="mt-1 border-t border-hairline pt-1">
+                <button
+                  type="button"
+                  data-id={dataId ? `${dataId}-clear` : undefined}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-error hover:bg-error/10"
+                  onClick={() => {
+                    for (const v of [...selected]) onToggle(v);
+                  }}
+                >
+                  <FilterX size={13} strokeWidth={1.5} className="shrink-0" />
+                  <span className="flex-1 truncate">{clearLabel}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

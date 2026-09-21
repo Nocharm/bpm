@@ -5,8 +5,9 @@
 // 휠 줌·드래그 팬. 패널 크기는 모드에 따라 전환 — 계단식 440×600 고정, 다이어그램은 기본 1000×600에서 큰 창일수록
 // 폭·높이를 더 쓴다(상한 1600×960, 2026-09-21). 다이어그램 뷰박스는 실측 크기에 비례해 자라고(기본 크기에선 오늘과 같은
 // 배율), 패널이 커진 비율만큼 확대를 허용한다(lib/framework-diagram fitScale maxScale).
-// 플로팅 패널(사용자 지시 2026-09-19): 배경 딤 없이 페이지 위에 떠 있고 헤더 드래그로 옮긴다. 항목을 골라 이동해도 열린 채
-// 남아 현재 위치(centerId)를 따라간다. 닫기는 ×/Esc 외에 바깥 mousedown(두 모드 공통, 2026-09-21) — 여는 버튼(anchorRef)과
+// 플로팅 패널(사용자 지시 2026-09-19): 배경 딤 없이 페이지 위에 떠 있고 헤더 드래그로 옮긴다. "이 업무 체계 보기"로 이동하면
+// 패널이 닫히고 그 항목이 선택된 메인 화면이 남는다(2026-09-21, 종전 "열린 채 따라감" 철회). 닫기는 ×/Esc 외에 바깥
+// mousedown(두 모드 공통, 2026-09-21) — 여는 버튼(anchorRef)과
 // 우클릭 메뉴는 예외. 계단식 펼침/접힘은 useSectionMotion(accordion-open/-close)로 애니메이션한다.
 "use client";
 
@@ -87,7 +88,7 @@ interface FrameworkExplorerModalProps {
   // 현재 드릴 위치(루트면 null) — 트리 미리 펼침·다이어그램 중심
   centerId: number | null;
   onClose: () => void;
-  // 카테고리로 이동(L5면 부모 레벨 + 카드 선택은 호출부 담당) — 패널은 열린 채 따라간다
+  // 카테고리로 이동(L5면 부모 레벨 + 카드 선택은 호출부 담당) — 패널은 닫힌다(navigate가 onClose까지 부른다)
   onNavigate: (node: CategoryNode) => void;
   // 패널을 여는 버튼 — 바깥 mousedown 닫기에서 제외(닫힘 직후 click으로 다시 열리는 토글 충돌 방지)
   anchorRef?: RefObject<HTMLElement | null>;
@@ -319,8 +320,11 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
     setCenter(node);
   };
   // 이동해도 패널은 열린 채 — centerId가 바뀌면 트리·다이어그램이 새 위치를 따라간다
+  // "이 업무 체계 보기"(정보 카드·우클릭 메뉴·상단 버튼·행 Go·검색 결과) — 패널을 닫고 그 항목이 선택된 메인 화면으로
+  // (사용자 지시 2026-09-21; 종전 "열린 채 따라감"은 철회)
   const navigate = (node: CategoryNode) => {
     onNavigate(node);
+    onClose();
   };
 
   // 플로팅 위치 — null이면 가로 중앙·위 72px(폭 전환 중에도 translateX(-50%)로 중앙 유지), 드래그하면 절대 좌표

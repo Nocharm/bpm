@@ -80,7 +80,9 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         icon={<ArrowDownUp size={14} strokeWidth={1.5} />}
         display={display}
         stretch={stretch}
+        clearLabel={t("home.filterClearThis")}
         options={MAP_SORT_KEYS.map((k) => ({ value: k, label: t(SORT_LABEL[k]) }))}
+        clearable={false}
         selected={new Set([props.sortKey])}
         onToggle={(v) => {
           if (v === "updated" || v === "name" || v === "created") props.onSetSort(v);
@@ -97,6 +99,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         icon={<CircleDot size={14} strokeWidth={1.5} />}
         display={display}
         stretch={stretch}
+        clearLabel={t("home.filterClearThis")}
         options={STATUS_ORDER.map((s) => ({
           value: s,
           label: VERSION_STATUS_LABEL_EN[s],
@@ -115,6 +118,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         icon={<ShieldCheck size={14} strokeWidth={1.5} />}
         display={display}
         stretch={stretch}
+        clearLabel={t("home.filterClearThis")}
         options={[
           { value: "owner", label: "Owner", icon: optIcon(Crown) },
           { value: "editor", label: "Editor", icon: optIcon(PencilLine) },
@@ -132,6 +136,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
             icon={<Building2 size={14} strokeWidth={1.5} />}
             display={display}
             stretch={stretch}
+            clearLabel={t("home.filterClearThis")}
             options={[
               { value: "missing", label: t("home.owningMissingOption"), icon: optIcon(TriangleAlert) },
               { value: "stale_refs", label: t("home.staleRefsOption"), icon: optIcon(TriangleAlert) },
@@ -145,6 +150,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
             icon={<Shapes size={14} strokeWidth={1.5} />}
             display={display}
             stretch={stretch}
+            clearLabel={t("home.filterClearThis")}
             options={[
               kindOption("sp", "SP maps", Workflow),
               kindOption("non_sp", "Non-SP maps", CircleSlash2),
