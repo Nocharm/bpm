@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 279개 · 2026-09-21 기준
+총 280개 · 2026-09-21 기준
 
 ## components/
 
@@ -56,6 +56,7 @@
 | `flow-conflict-modal.tsx` | `FlowConflictModal` | 입력이 있는 노드 앞에 다른 노드를 추가할 때 | `app/maps/[mapId]/page.tsx` |
 | `flow-glyphs.tsx` | `InsertGlyph`, `KeepGlyph` | 흐름 조작 의미 아이콘 | `components/edge-action-modal.tsx`, `components/flow-conflict-modal.tsx` |
 | `framework-browse-modal.tsx` | `FrameworkBrowseModal` | 업무체계 탐색 모달 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/framework-peek-pill.tsx` |
+| `framework-cascade-picker.tsx` | `FrameworkCascadePicker` | 업무 체계 계단식 피커 | `components/admin/framework-panel.tsx` |
 | `framework-chip.tsx` | `FrameworkChip` | 에디터 우상단 프레임워크 칩 | `app/maps/[mapId]/page.tsx`, `components/framework-peek-pill.tsx` |
 | `framework-confirm-section.tsx` | `FrameworkConfirmSection` | 연계 캔버스 확정 섹션 | `app/maps/[mapId]/page.tsx` |
 | `framework-connect-dialog.tsx` | `FrameworkConnectDialog` | 플레이스홀더 후차 연결 다이얼로그 (design 2026-08-28 §10.1) | `app/maps/[mapId]/page.tsx` |
@@ -67,7 +68,7 @@
 | `group-box.tsx` | `GroupBox` | 업무 묶음 박스 | `app/maps/[mapId]/page.tsx` |
 | `group-bulk-modal.tsx` | `GroupBulkModal` | 그룹 멤버 일괄 편집 | `app/maps/[mapId]/page.tsx` |
 | `group-title-bar.tsx` | `GroupTitleBar` | 그룹 박스 타이틀바 | `app/maps/[mapId]/page.tsx` |
-| `highlight.tsx` | `Highlight` | 매치 구간 하이라이트 | `components/maps/framework-explorer-modal.tsx`, `components/maps/framework-map-card.tsx`, `components/maps/framework-search-groups.tsx`, `components/maps/map-card.tsx`, `components/permissions/principal-picker.tsx`, `components/search-select.tsx` |
+| `highlight.tsx` | `Highlight` | 매치 구간 하이라이트 | `components/admin/framework-panel.tsx`, `components/framework-cascade-picker.tsx`, `components/maps/framework-explorer-modal.tsx`, `components/maps/framework-map-card.tsx`, `components/maps/framework-search-groups.tsx`, `components/maps/map-card.tsx`, `components/permissions/principal-picker.tsx`, `components/search-select.tsx` |
 | `hover-tip.tsx` | `HoverTip` | 경량 호버 툴팁 | `components/approval-panel.tsx`, `components/process-node.tsx` |
 | `html-view.tsx` | `HtmlView` | 게시된 HTML 매뉴얼 렌더 | `app/manual/page.tsx`, `components/settings/manual-manage-panel.tsx` |
 | `icon-action-button.tsx` | `IconActionButton` | 아이콘 전용 버튼 | `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/groups/group-actions.tsx` |
@@ -80,7 +81,7 @@
 | `io-peers-menu.tsx` | `IoPeersMenu` | 링크 항목의 연결 노드 드롭다운 | `app/maps/[mapId]/page.tsx` |
 | `l5-node-info-panel.tsx` | `L5NodeInfoPanel` | L5 캔버스 우상단 "기타 정보" 플로팅(framework-l5-tag 자리 대체) | `app/maps/[mapId]/page.tsx` |
 | `ldap-login-form.tsx` | `LdapLoginForm` |   | `app/login/page.tsx` |
-| `level-pill.tsx` | `LevelPill` | 업무 체계 레벨 필(L1~L5) | `components/maps/category-summary-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/framework-drill.tsx`, `components/maps/framework-explorer-modal.tsx`, `components/maps/framework-map-card.tsx`, `components/maps/framework-search-groups.tsx`, `components/permissions/framework-access-panel.tsx` |
+| `level-pill.tsx` | `LevelPill` | 업무 체계 레벨 필(L1~L5) | `components/admin/framework-panel.tsx`, `components/framework-cascade-picker.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/framework-drill.tsx`, `components/maps/framework-explorer-modal.tsx`, `components/maps/framework-map-card.tsx`, `components/maps/framework-search-groups.tsx`, `components/permissions/framework-access-panel.tsx` |
 | `library-dept-flyout.tsx` | `LibraryDeptFlyout` | 라이브러리 부서 필터 플라이아웃 | `components/process-library-panel.tsx` |
 | `link-preview-panel.tsx` | `LinkPreviewPanel` | 링크 미리보기 패널 | `app/maps/[mapId]/page.tsx` |
 | `map-inspector-tab.tsx` | `MapInspectorTab` | NEW 인스펙터 맵 탭(좁은 폭) | `app/maps/[mapId]/page.tsx` |
@@ -120,7 +121,7 @@
 | `scope-preview.tsx` | `ScopePreview` | 비활성(조상) 창의 정적 프리뷰 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/map-preview.tsx`, `components/node-summary-modal.tsx`, `components/subprocess-preview-peek.tsx` |
 | `scope-window.tsx` | `ScopeWindow` | 떠있는 스코프 창 | `app/maps/[mapId]/page.tsx` |
 | `search-box.tsx` | `SearchBox` | 공용 검색창 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `app/page.tsx` |
-| `search-select.tsx` | `SearchSelect` | 검색 드롭다운 | `components/admin/framework-panel.tsx`, `components/bpm-attribute-picker.tsx`, `components/dashboard/access-sidebar.tsx`, `components/group-bulk-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/permissions/attribute-tiles.tsx`, `lib/korean-dept.ts` |
+| `search-select.tsx` | `SearchSelect` | 검색 드롭다운 | `components/bpm-attribute-picker.tsx`, `components/dashboard/access-sidebar.tsx`, `components/group-bulk-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/permissions/attribute-tiles.tsx`, `lib/korean-dept.ts` |
 | `section-header.tsx` | `SectionHeader` | 섹션 헤더 | `components/maps/category-summary-card.tsx`, `components/maps/map-detail-description.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-notes-section.tsx` |
 | `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
 | `section-panel.tsx` | `SectionPanel` | 섹션 피커 패널 | `app/maps/[mapId]/page.tsx` |

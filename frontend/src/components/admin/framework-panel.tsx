@@ -22,6 +22,7 @@ import {
   Move as MoveIcon,
   Pencil,
   Plus,
+  Search,
   ShieldCheck,
   Trash2,
   Upload,
@@ -72,9 +73,14 @@ import { InterviewJsonPromptButton } from "@/components/framework-interview/inte
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
+import { FrameworkCascadePicker } from "@/components/framework-cascade-picker";
+import { Highlight } from "@/components/highlight";
+import { LevelPill } from "@/components/level-pill";
 import { PromptDialog } from "@/components/prompt-dialog";
-import { SearchSelect } from "@/components/search-select";
 import { Tooltip } from "@/components/tooltip";
+import { filterByQuery } from "@/lib/search";
+import { getTreeIndentStyle, TREE_INDENT_PADDING_CLASS } from "@/lib/tree-indent";
+import { useSectionMotion } from "@/lib/use-closing-keys";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
 
@@ -167,28 +173,20 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   // AI 컨설턴트 L5 캠페인 진입 — sysadmin 전용(인터뷰 임포트와 같은 게이트). 전 카테고리 경량 목록에서
   // level===5만 골라 SearchSelect 옵션으로 쓴다(트리 state는 펼친 가지만 로드하는 지연 fetch라 전체
   // L5 목록엔 못 쓴다 — /categories/all이 진실).
-  const [consultL5Id, setConsultL5Id] = useState<number | null>(null);
+  // 계단식 피커(framework-cascade-picker)로 고른다 — 기존 L5(모드 existing) 또는 새 L5를 만들 부모 L4(모드 new).
+  const [consultMode, setConsultMode] = useState<"existing" | "new">("existing");
+  const [consultPick, setConsultPick] = useState<CategoryNode | null>(null);
+  const [newL5Name, setNewL5Name] = useState("");
+  const consultL5Id = consultMode === "existing" ? (consultPick?.id ?? null) : null;
   const [consultBusy, setConsultBusy] = useState(false);
   const [activeSessions, setActiveSessions] = useState<FwInterviewSession[]>([]);
+  // 관리 트리 검색용 전 카테고리 경량 목록(sysadmin) — 탐색 모달과 같은 클라이언트 필터
   const [allCategories, setAllCategories] = useState<CategoryLite[]>([]);
   useEffect(() => {
     if (scopeRootIds) return;
     listFrameworkInterviews(true).then(setActiveSessions).catch((err) => console.warn("fw sessions", err));
     listAllCategories().then(setAllCategories).catch((err) => console.warn("fw categories", err));
   }, [scopeRootIds]);
-  const l5Options = useMemo(() => {
-    const byId = new Map(allCategories.map((c) => [c.id, c]));
-    const pathOf = (c: CategoryLite): string => {
-      const parts: string[] = [];
-      for (let cur = c.parent_id !== null ? byId.get(c.parent_id) : undefined; cur; cur = cur.parent_id !== null ? byId.get(cur.parent_id) : undefined) {
-        parts.unshift(cur.name);
-      }
-      return parts.join(" > ");
-    };
-    return allCategories
-      .filter((c) => c.level === 5)
-      .map((c) => ({ value: String(c.id), label: c.name, sub: pathOf(c) }));
-  }, [allCategories]);
   // 외부 AI 프롬프트 버튼용 target — code(L5 상세)는 chain 조회가 필요해 선택 시점에만 지연 로드.
   // fetch 결과를 id와 함께 캐시하고 렌더에서 매칭 — id가 null/변경된 프레임엔 effect가 setState하지
   // 않도록(react-hooks/set-state-in-effect) 값을 파생으로 계산한다.
@@ -213,10 +211,18 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const consultTarget = fetchedTarget?.id === consultL5Id ? fetchedTarget.target : undefined;
 
   async function handleStartConsult() {
-    if (!consultL5Id) return;
+    if (!consultPick) return;
     setConsultBusy(true);
     try {
-      const session = await createFrameworkInterview({ category_id: consultL5Id, lang });
+      let categoryId = consultPick.id;
+      if (consultMode === "new") {
+        // 새 L5를 고른 L4 아래 만들고 그 id로 세션을 연다 — 관리 트리도 그 가지를 새로고침
+        const created = await createCategory({ name: newL5Name.trim(), parent_id: consultPick.id });
+        categoryId = created.id;
+        setOpenIds((prev) => new Set(prev).add(consultPick.id));
+        await refreshTree([consultPick.id]);
+      }
+      const session = await createFrameworkInterview({ category_id: categoryId, lang });
       router.push(`/framework/consult/${session.id}`);
     } catch (err) {
       // 409 = 진행 중 세션 존재 → 목록에서 재개하도록 안내
@@ -392,7 +398,13 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     );
   }
 
+  // 펼침/접힘 모션 — 탐색 모달의 계단식과 같은 accordion(사용자가 연 노드만 open 애니, 검색 자동 펼침은 static)
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
+
   function handleToggle(id: number) {
+    const wasOpen = openIds.has(id);
+    if (wasOpen) closeSection(id);
+    else openSection(id, true);
     setOpenIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -404,6 +416,40 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         setChildrenByParent((prev) => new Map(prev).set(id, nodes));
       });
     }
+  }
+
+  // 관리 트리 검색 — 히트를 누르면 조상 체인을 펼치고 그 행을 잠깐 강조한다(탐색 모달의 결과→이동과 같은 동작)
+  const [treeQuery, setTreeQuery] = useState("");
+  const [flashId, setFlashId] = useState<number | null>(null);
+  const treeHits = useMemo(() => {
+    const q = treeQuery.trim();
+    if (q === "" || allCategories.length === 0) return null;
+    return filterByQuery(allCategories, q, (c) => [{ field: "name", text: c.name }]).slice(0, 60);
+  }, [allCategories, treeQuery]);
+  const liteById = useMemo(() => new Map(allCategories.map((c) => [c.id, c])), [allCategories]);
+  const pathOfLite = (c: CategoryLite): string => {
+    const parts: string[] = [];
+    for (let cur = c.parent_id === null ? undefined : liteById.get(c.parent_id); cur; cur = cur.parent_id === null ? undefined : liteById.get(cur.parent_id)) {
+      parts.unshift(cur.name);
+    }
+    return parts.join(" › ");
+  };
+  async function revealCategory(id: number) {
+    const chain = await getCategoryChain(id);
+    const ancestorIds = chain.slice(0, -1).map((c) => c.id);
+    const missing = ancestorIds.filter((a) => !childrenByParent.has(a));
+    const loaded = await Promise.all(missing.map((a) => listCategoryNodes(a)));
+    setChildrenByParent((prev) => {
+      const next = new Map(prev);
+      missing.forEach((a, i) => next.set(a, loaded[i]));
+      return next;
+    });
+    ancestorIds.forEach((a) => openSection(a, false));
+    setOpenIds((prev) => new Set([...prev, ...ancestorIds]));
+    setTreeQuery("");
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1600);
+    window.setTimeout(() => document.querySelector(`[data-id="framework-admin-node-${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
   }
 
   // 이름 프롬프트 제출 — 먼저 닫고 실패는 토스트로만(더블클릭 재제출 방지, versions-publish-panel.tsx
@@ -497,32 +543,48 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     );
   };
 
+  // 계단식 스타일(탐색 모달과 동일 규칙): data-tree-* 훅 + 가이드 라인 + 레벨 필 + accordion 모션. 행 액션은 그대로.
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const open = openIds.has(node.id);
     const children = childrenByParent.get(node.id);
+    const canExpand = node.level < MAX_CATEGORY_LEVEL;
+    const showKids = (open || closingKeys.has(node.id)) && children !== undefined && children.length > 0;
+    const flashing = flashId === node.id;
     return (
-      <li key={node.id} className="flex flex-col gap-1">
+      <li key={node.id} data-tree-node className="flex flex-col">
         <div
+          data-tree-head
           data-id={`framework-admin-node-${node.id}`}
-          className="group flex items-center gap-1 rounded-sm hover:bg-surface-alt"
+          style={getTreeIndentStyle(depth)}
+          className={`group relative flex items-center gap-1 rounded-sm transition-colors duration-350 ${flashing ? "bg-accent-tint" : "hover:bg-divider"}`}
         >
           <button
             type="button"
-            aria-expanded={open}
+            aria-expanded={canExpand ? open : undefined}
+            aria-label={canExpand ? (open ? "collapse" : "expand") : undefined}
+            disabled={!canExpand}
             onClick={() => handleToggle(node.id)}
-            style={{ paddingLeft: `${depth * 14 + 4}px` }}
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+            className={`inline-flex h-7 w-6 shrink-0 items-center justify-center text-ink-tertiary disabled:opacity-0 ${TREE_INDENT_PADDING_CLASS}`}
           >
-            {open ? (
-              <ChevronDown size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-            ) : (
-              <ChevronRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-            )}
-            <span className="truncate text-fine text-ink">{node.name}</span>
+            <ChevronRight size={12} strokeWidth={1.5} className={`motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${open ? "rotate-90" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => (canExpand ? handleToggle(node.id) : undefined)}
+            className={`flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left ${canExpand ? "" : "cursor-default"}`}
+          >
+            <LevelPill level={node.level} size="sm" />
+            <span data-tree-name="" className="min-w-0 truncate text-fine text-ink-secondary group-hover:text-ink">{node.name}</span>
             <span className="shrink-0 text-fine text-ink-muted">{node.code}</span>
             {renderInlineAdmins(node.id)}
-            {/* 접힌 행에만 — 펼치면 하위 행이 다 보여 롤업 숫자가 중복(count-tag.tsx 계약) */}
-            {!open && <CountTag count={node.map_count} />}
+            {/* 우측 숫자 묶음을 하나의 ml-auto 그룹으로 — CountTag의 ml-auto와 나뉘면 열이 행마다 어긋난다 */}
+            <span className="ml-auto flex shrink-0 items-center gap-2">
+              {node.level < 5 && (
+                <span className="text-fine text-ink-muted">{t("category.summary.l5Count", { n: node.l5_count })}</span>
+              )}
+              {/* 접힌 행에만 — 펼치면 하위 행이 다 보여 롤업 숫자가 중복(count-tag.tsx 계약) */}
+              {!open && <CountTag count={node.map_count} />}
+            </span>
           </button>
           <div className="flex shrink-0 items-center gap-0.5 pr-1">
             {node.level < MAX_CATEGORY_LEVEL && (
@@ -591,17 +653,16 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             )}
           </div>
         </div>
-        {open &&
-          (children === undefined ? (
-            <p
-              style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }}
-              className="text-fine text-ink-tertiary"
-            >
-              {t("common.loading")}
-            </p>
-          ) : children.length > 0 ? (
-            <ul className="flex flex-col gap-1">{children.map((c) => renderNode(c, depth + 1))}</ul>
-          ) : null)}
+        {open && children === undefined && (
+          <p style={getTreeIndentStyle(depth + 1)} className={`text-fine text-ink-tertiary ${TREE_INDENT_PADDING_CLASS}`}>
+            {t("common.loading")}
+          </p>
+        )}
+        {showKids && (
+          <div className={getSectionClass(node.id)}>
+            <ul className="ml-3 flex flex-col border-l border-divider pl-1">{children.map((c) => renderNode(c, depth + 1))}</ul>
+          </div>
+        )}
       </li>
     );
   };
@@ -670,8 +731,49 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <FrameworkOverview />
       ) : (
         <>
-      <div data-id="framework-admin-tree" className="rounded-sm border border-hairline p-2">
-        {rootError ? (
+      <div data-id="framework-admin-tree" className="fw-tree rounded-md border border-hairline p-2">
+        {!scopeRootIds && (
+          <label className="mb-2 flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
+            <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <input
+              data-id="framework-admin-search"
+              value={treeQuery}
+              onChange={(e) => setTreeQuery(e.target.value)}
+              placeholder={t("framework.explorer.search")}
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-muted"
+            />
+            {treeQuery !== "" && (
+              <button type="button" aria-label="clear" className="text-ink-muted hover:text-ink" onClick={() => setTreeQuery("")}>
+                <X size={12} strokeWidth={1.5} />
+              </button>
+            )}
+          </label>
+        )}
+        {treeHits !== null ? (
+          <ul data-id="framework-admin-search-results" className="flex flex-col gap-0.5">
+            {treeHits.length === 0 ? (
+              <li className="px-2 py-6 text-center text-fine text-ink-tertiary">{t("framework.explorer.noResults")}</li>
+            ) : (
+              treeHits.map(({ item: c, matches }) => {
+                const ranges = matches.find((m) => m.field === "name")?.ranges ?? [];
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      data-id={`framework-admin-search-result-${c.id}`}
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-surface-alt"
+                      onClick={() => void revealCategory(c.id)}
+                    >
+                      <LevelPill level={c.level} size="sm" />
+                      <span className="min-w-0 flex-1 truncate text-fine text-ink"><Highlight text={c.name} ranges={ranges} /></span>
+                      <span className="min-w-0 max-w-[50%] truncate text-fine text-ink-tertiary">{pathOfLite(c)}</span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        ) : rootError ? (
           <button
             type="button"
             data-id="framework-admin-root-retry"
@@ -688,7 +790,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {t("home.frameworkEmpty")}
           </div>
         ) : (
-          <ul className="flex flex-col gap-1">{roots.map((r) => renderNode(r, 0))}</ul>
+          <ul className="flex flex-col border-l border-transparent pl-1">{roots.map((r) => renderNode(r, 0))}</ul>
         )}
       </div>
 
@@ -702,25 +804,65 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             <span className="ml-auto"><InterviewJsonPromptButton target={consultTarget} /></span>
           </div>
           <p className="text-fine text-ink-tertiary">{t("fwConsult.startHint")}</p>
-          <div className="flex items-center gap-2">
-            <div className="min-w-64">
-              <SearchSelect
-                value={consultL5Id ? String(consultL5Id) : ""}
-                options={l5Options}
-                emptyLabel={t("fwConsult.pickL5")}
-                placeholder={t("fwConsult.pickL5")}
-                onChange={(v) => setConsultL5Id(v ? Number(v) : null)}
-              />
+          {/* 모드 세그먼트 — 기존 L5 고르기 / 새 L5 만들기(부모 L4 고르고 이름 입력). 홈 뷰 토글과 같은 스타일 */}
+          <div data-id="fw-consult-mode" className="flex shrink-0 items-center gap-0.5 self-start rounded-sm border border-hairline bg-surface p-0.5">
+            {(["existing", "new"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={consultMode === m}
+                data-id={`fw-consult-mode-${m}`}
+                className={`rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                  consultMode === m ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                }`}
+                onClick={() => { setConsultMode(m); setConsultPick(null); }}
+              >
+                {t(m === "existing" ? "fwConsult.modeExisting" : "fwConsult.modeNew")}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(320px,1fr)_minmax(260px,320px)]">
+            <FrameworkCascadePicker
+              key={consultMode}
+              selectedId={consultPick?.id ?? null}
+              onSelect={setConsultPick}
+              selectableLevels={consultMode === "existing" ? [5] : [4]}
+              maxLevel={consultMode === "existing" ? 5 : 4}
+              height={300}
+              dataIdPrefix="fw-consult-picker"
+            />
+            <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface p-3" data-id="fw-consult-pick-summary">
+              <span className="text-fine text-ink-tertiary">{consultMode === "existing" ? t("fwConsult.pickL5") : t("fwConsult.pickParent")}</span>
+              {consultPick ? (
+                <span className="flex items-center gap-2 text-caption text-ink" data-id="fw-consult-pick-name">
+                  <LevelPill level={consultPick.level} size="sm" />
+                  <span className="min-w-0 truncate">{consultPick.name}</span>
+                </span>
+              ) : (
+                <span className="text-caption text-ink-muted" data-id="fw-consult-pick-empty">{t("fwConsult.nothingSelected")}</span>
+              )}
+              {consultMode === "new" && (
+                <label className="flex flex-col gap-1 text-fine text-ink-secondary">
+                  {t("fwConsult.newL5Name")}
+                  <input
+                    data-id="fw-consult-new-name"
+                    className="w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
+                    value={newL5Name}
+                    onChange={(e) => setNewL5Name(e.target.value)}
+                    placeholder={t("fwConsult.newL5Name")}
+                  />
+                </label>
+              )}
+              <button
+                type="button"
+                data-id="fw-consult-start"
+                className="mt-auto self-start rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                disabled={!consultPick || consultBusy || (consultMode === "new" && !newL5Name.trim())}
+                onClick={() => void handleStartConsult()}
+              >
+                {consultMode === "new" ? t("fwConsult.createAndStart") : t("fwConsult.start")}
+              </button>
             </div>
-            <button
-              type="button"
-              data-id="fw-consult-start"
-              className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-              disabled={!consultL5Id || consultBusy}
-              onClick={() => void handleStartConsult()}
-            >
-              {t("fwConsult.start")}
-            </button>
           </div>
           {activeSessions.length > 0 && (
             <ul className="flex flex-col gap-1" data-id="fw-consult-active-list">

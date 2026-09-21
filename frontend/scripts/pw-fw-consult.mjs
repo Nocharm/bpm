@@ -45,9 +45,12 @@ await page.locator('[data-id="fw-consult-entry"]').waitFor();
 check("entry visible", true);
 
 // SearchSelect는 body 포털(fixed) — 트리거 버튼 클릭 → 포털 입력에 고유명 일부 타이핑 → 매치 1건 클릭.
-await page.locator('[data-id="fw-consult-entry"] [data-id="search-select-trigger"]').click();
-await page.locator('[data-id="search-select-menu"] input').fill(l5Name);
-await page.locator('[data-id="search-select-menu"] button', { hasText: l5Name }).first().click();
+// 계단식 피커(framework-cascade-picker): 검색 → 히트 클릭(체인 펼침+선택) → 요약 카드에 이름이 뜬다
+await page.locator('[data-id="fw-consult-picker-search"]').fill(l5Name);
+await page.locator('[data-id^="fw-consult-picker-result-"]').first().click();
+await page.locator('[data-id="fw-consult-pick-name"]', { hasText: l5Name }).waitFor({ timeout: 10000 });
+check("L5 picked through the cascade picker", true);
+await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-start"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/);
 check("session page opened", true, page.url());
