@@ -79,9 +79,9 @@ def test_map_to_row_round_trips_imported_map(client: TestClient) -> None:
         (1, "요청 확인", "action"), (2, "완결성 판정", "decision"), (3, "접수 등록", "action"), (4, "부서 전달", "handoff")]
     assert row["actions"][0]["name"] == "요청서 내용 확인"
     assert row["actions"][0]["rule"] == "양식 A"
-    # 시스템은 왕복하지 않는다 — 임포터가 카탈로그(commit_system)로 정규화해 미등록 값은 Other가 되고
-    # 원문은 node.system_fallback에 남는다. 역변환은 맵에 저장된 값을 그대로 읽는다
-    assert row["actions"][0]["system"] == "Other"
+    # 임포터가 카탈로그(commit_system)로 정규화해 미등록 값은 Other + 원문 메모가 된다 —
+    # 역변환은 메모를 되살려 정정 설문이 'Other'를 되묻지 않게 한다
+    assert row["actions"][0]["system"] == "ERP"
     assert "name" not in row["actions"][2]
     assert row["actions"][2]["variant"] == "exception"
     assert row["actions"][3]["input"] == "접수증" and row["actions"][3]["output"] == "전달 메일"
@@ -130,7 +130,8 @@ def test_map_to_row_pure_shape() -> None:
         Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
         Node(id="a", version_id=1, title="A", node_type="process", sort_order=1, description="이름\n\nRule: r1\nKind: handoff"),
         Node(id="b", version_id=1, title="B", node_type="decision", sort_order=2),
-        Node(id="c", version_id=1, title="C", node_type="process", sort_order=3, color="#c2849a", assignee_role="검토자"),
+        Node(id="c", version_id=1, title="C", node_type="process", sort_order=3, color="#c2849a", assignee_role="검토자",
+             system="Other", system_fallback="SAP"),
         Node(id="e", version_id=1, title="End", node_type="end", sort_order=4),
     ]
     edges = [
@@ -145,9 +146,38 @@ def test_map_to_row_pure_shape() -> None:
     assert [a["kind"] for a in row["actions"]] == ["handoff", "decision", "action"]
     assert row["actions"][0]["name"] == "이름" and row["actions"][0]["rule"] == "r1"
     assert row["actions"][2]["variant"] == "exception"
+    # 카탈로그 미등록 시스템은 Other로 저장된다 — 원문 메모를 되살린다
+    assert row["actions"][2]["system"] == "SAP"
     # 엣지는 (src seq, dst seq) 순으로 정렬돼 나온다
     assert [(e["src"], e["dst"], e["kind"]) for e in row["relations"]["edges"]] == [
         (1, 2, "seq"), (2, 1, "loop"), (2, 3, "branch")]
+
+
+def test_map_to_row_folds_auto_generated_loop_branch_node() -> None:
+    # 어댑터가 self edge를 그리려고 세운 분기 노드(◇)는 행에 되돌리지 않는다 — A→◇→A는 A→A로,
+    # ◇로 이설됐던 A의 원래 진출(◇→B)은 A→B로 접힌다
+    from scripts.consultant_interview import LOOP_BRANCH_NODE_NAME
+
+    nodes = [
+        Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
+        Node(id="a", version_id=1, title="A", node_type="process", sort_order=1),
+        Node(id="r", version_id=1, title=LOOP_BRANCH_NODE_NAME, node_type="decision", sort_order=2),
+        Node(id="b", version_id=1, title="B", node_type="process", sort_order=3),
+        Node(id="e", version_id=1, title="End", node_type="end", sort_order=4),
+    ]
+    edges = [
+        Edge(id="1", version_id=1, source_node_id="s", target_node_id="a"),
+        Edge(id="2", version_id=1, source_node_id="a", target_node_id="r"),
+        Edge(id="3", version_id=1, source_node_id="r", target_node_id="a", label="보완 필요"),
+        Edge(id="4", version_id=1, source_node_id="r", target_node_id="b"),
+        Edge(id="5", version_id=1, source_node_id="b", target_node_id="e"),
+    ]
+    row = map_to_row("맵", None, nodes, edges)
+    assert [(a["seq"], a["label"]) for a in row["actions"]] == [(1, "A"), (2, "B")]
+    assert row["relations"]["edges"] == [
+        {"src": 1, "dst": 1, "kind": "loop", "condition": "보완 필요"},
+        {"src": 1, "dst": 2, "kind": "seq"},
+    ]
 
 
 def test_merge_existing_cards_keeps_every_existing_map_once() -> None:

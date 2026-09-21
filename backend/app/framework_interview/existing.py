@@ -6,7 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import workflow
+from app.app_settings import OTHER_SYSTEM
 from app.models import Edge, MapVersion, Node, ProcessMap
+
+# (source_node_id, target_node_id, label, gateway) — 합성 노드를 접어 넣기 전/후 공용 흐름 표현
+FlowEdge = tuple[str, str, str, str | None]
 
 SUMMARY_MAX = 300
 ACTIVITY_TYPES = {"process", "decision"}
@@ -39,11 +43,42 @@ def _split_description(text: str) -> tuple[str, dict[str, str]]:
     return "\n".join(name_lines).strip(), kv
 
 
+def _resolve_system(node: Node) -> str:
+    """노드 시스템 표시값 — 카탈로그 미등록은 Other로 저장되므로 원문 메모(system_fallback)를 돌려준다.
+    정정 설문이 'Other'를 되묻지 않도록 인터뷰어가 실제로 말한 이름을 되살린다."""
+    system = (node.system or "").strip()
+    fallback = (node.system_fallback or "").strip()
+    if system == OTHER_SYSTEM and fallback:
+        return fallback
+    return system
+
+
+def _route_through_synthetic(flow: list[FlowEdge], synthetic_ids: set[str]) -> list[FlowEdge]:
+    """A→◇→B를 A→B(나가는 엣지의 라벨)로 접는다 — ◇는 어댑터가 self edge를 그리려고 세운 노드라
+    행으로 되돌리면 안 된다. A→◇→A는 A→A로 접혀 원래의 self edge가 복원된다."""
+    routed = [f for f in flow if f[0] not in synthetic_ids and f[1] not in synthetic_ids]
+    for sid in synthetic_ids:
+        sources = [f[0] for f in flow if f[1] == sid and f[0] not in synthetic_ids]
+        outgoing = [f for f in flow if f[0] == sid and f[1] not in synthetic_ids]
+        for source in sources:
+            for _, target, label, gateway in outgoing:
+                routed.append((source, target, label, gateway))
+    return routed
+
+
 def map_to_row(map_name: str, owning_department: str | None, nodes: list[Node], edges: list[Edge]) -> dict:
     """맵 그래프 → 인터뷰 JSON 0.5 rows[] 1건. 순수 함수 — DB도, 게시본 선택도 보지 않는다."""
-    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR  # 지연 import — 스크립트 패키지
+    # 지연 import — 스크립트 패키지
+    from scripts.consultant_interview import EXCEPTION_VARIANT_COLOR, LOOP_BRANCH_NODE_NAME
 
-    activity = sorted((n for n in nodes if n.node_type in ACTIVITY_TYPES), key=lambda n: (n.sort_order, n.id))
+    synthetic = {
+        n.id for n in nodes
+        if n.node_type == "decision" and (n.title or "").strip() == LOOP_BRANCH_NODE_NAME
+    }
+    activity = sorted(
+        (n for n in nodes if n.node_type in ACTIVITY_TYPES and n.id not in synthetic),
+        key=lambda n: (n.sort_order, n.id),
+    )
     seq_of = {n.id: i for i, n in enumerate(activity, start=1)}
     actions: list[dict] = []
     for n in activity:
@@ -62,10 +97,13 @@ def map_to_row(map_name: str, owning_department: str | None, nodes: list[Node], 
                 action[key] = kv[label]
         if kv.get("Variant") == "exception" or (n.color or "").lower() == EXCEPTION_VARIANT_COLOR:
             action["variant"] = "exception"
-        for key in ("input", "output", "system"):
-            value = getattr(n, key) or ""
-            if value.strip():
-                action[key] = value.strip()
+        for key in ("input", "output"):
+            value = (getattr(n, key) or "").strip()
+            if value:
+                action[key] = value
+        system = _resolve_system(n)
+        if system:
+            action["system"] = system
         actions.append(action)
 
     roles = Counter(n.assignee_role for n in activity if (n.assignee_role or "").strip())
@@ -75,21 +113,28 @@ def map_to_row(map_name: str, owning_department: str | None, nodes: list[Node], 
     if activity and (activity[-1].end_condition or "").strip():
         fields["done_criteria"] = activity[-1].end_condition.strip()
 
+    flow: list[FlowEdge] = [
+        (e.source_node_id, e.target_node_id, (e.label or "").strip(), e.gateway) for e in edges
+    ]
+    if synthetic:
+        flow = _route_through_synthetic(flow, synthetic)
+
     rel_edges: list[dict] = []
     by_id = {n.id: n for n in activity}
-    for e in sorted(edges, key=lambda e: (seq_of.get(e.source_node_id, 0), seq_of.get(e.target_node_id, 0))):
-        if e.source_node_id not in seq_of or e.target_node_id not in seq_of:
+    for source, target, label, gateway in sorted(
+        flow, key=lambda f: (seq_of.get(f[0], 0), seq_of.get(f[1], 0))
+    ):
+        if source not in seq_of or target not in seq_of:
             continue
-        src, dst = seq_of[e.source_node_id], seq_of[e.target_node_id]
-        label = (e.label or "").strip()
-        # 엣지 kind는 저장되지 않는다(임포터가 라벨만 남긴다) — 되돌아가면 loop, 판단 노드에서
-        # 갈라지면 branch, 나머지는 seq로 구조에서 복원한다
-        if dst < src:
+        src, dst = seq_of[source], seq_of[target]
+        # 엣지 kind는 저장되지 않는다(임포터가 라벨만 남긴다) — 되돌아가거나 제자리면 loop,
+        # 판단 노드에서 갈라지면 branch, 나머지는 seq로 구조에서 복원한다
+        if dst <= src:
             item = {"src": src, "dst": dst, "kind": "loop"}
             if label:
                 item["condition"] = label
-        elif by_id[e.source_node_id].node_type == "decision":
-            item = {"src": src, "dst": dst, "kind": "branch", "gateway": e.gateway or "exclusive"}
+        elif by_id[source].node_type == "decision":
+            item = {"src": src, "dst": dst, "kind": "branch", "gateway": gateway or "exclusive"}
             if label:
                 item["condition"] = label
         else:
