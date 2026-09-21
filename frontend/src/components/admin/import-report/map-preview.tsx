@@ -39,9 +39,11 @@ interface ImportMapPreviewProps {
   scope?: "map" | "canvas";
   dataId: string;
   onClose: () => void;
+  // true면 우상단 닫기 버튼을 숨긴다 — 항상 펼쳐져 있고 닫을 대상이 없는 임베드(캠페인 연결 단계 등)용.
+  hideClose?: boolean;
 }
 
-export function ImportMapPreview({ source, scope = "map", dataId, onClose }: ImportMapPreviewProps) {
+export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideClose = false }: ImportMapPreviewProps) {
   const { t } = useI18n();
   const graph = useMemo(() => {
     const built = scope === "canvas" ? buildL5PreviewGraph(source) : buildPreviewGraph(source);
@@ -106,15 +108,17 @@ export function ImportMapPreview({ source, scope = "map", dataId, onClose }: Imp
         <button type="button" aria-label={t("framework.report.previewFit")} className={ZOOM_BTN} onClick={() => setZoom(null)}>
           <Maximize2 size={12} strokeWidth={1.5} />
         </button>
-        <button
-          type="button"
-          aria-label={t("framework.report.previewClose")}
-          data-id={`${dataId}-close`}
-          className={ZOOM_BTN}
-          onClick={onClose}
-        >
-          <X size={12} strokeWidth={1.5} />
-        </button>
+        {!hideClose && (
+          <button
+            type="button"
+            aria-label={t("framework.report.previewClose")}
+            data-id={`${dataId}-close`}
+            className={ZOOM_BTN}
+            onClick={onClose}
+          >
+            <X size={12} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
       <span className="pointer-events-none absolute bottom-1 left-1.5 rounded-sm bg-surface/80 px-1 text-fine text-ink-tertiary">
         {t("framework.report.previewHint")}
