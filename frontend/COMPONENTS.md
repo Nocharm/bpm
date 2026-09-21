@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 274개 · 2026-09-21 기준
+총 275개 · 2026-09-21 기준
 
 ## components/
 
@@ -24,7 +24,7 @@
 | `branch-icon.tsx` | `BranchGlyph` | 분기(Yes/No/Other) 아이콘 | `app/maps/[mapId]/page.tsx`, `components/edge-branch-modal.tsx`, `components/edge-select-modal.tsx` |
 | `canvas-zoom-scale.tsx` | `CanvasZoomScale` | 캔버스 줌 컨트롤 pill | `app/maps/[mapId]/page.tsx` |
 | `change-summary-section.tsx` | `ChangeSummaryDisclosure`, `ChangeSummarySection` | 기준 버전 대비 변경 요약 | `app/maps/[mapId]/page.tsx`, `components/framework-confirm-section.tsx` |
-| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `components/admin/ref-group-card.tsx`, `components/framework-confirm-section.tsx`, `components/library-dept-flyout.tsx`, `components/process-library-panel.tsx` |
+| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `components/admin/ref-group-card.tsx`, `components/framework-confirm-section.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/library-dept-flyout.tsx`, `components/process-library-panel.tsx` |
 | `checkout-panel.tsx` | `CheckoutPanel` | 점유권 탭 | `components/approval-panel.tsx` |
 | `clip-body.tsx` | `ClipBody`, `ClipToggle` | 고정 높이 클립 본문 | `components/maps/map-detail-description.tsx`, `components/maps/map-notes-section.tsx` |
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |
@@ -200,9 +200,10 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
+| `answer-review.tsx` | `AnswerReview` | 캠페인 설문 확인 화면 | `components/framework-interview/questionnaire-form.tsx` |
 | `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx` |
 | `plan-editor.tsx` | `PlanEditor` | 캠페인 ① L5 개요 + L6 카드 편집 | `app/framework/consult/[sessionId]/page.tsx` |
-| `questionnaire-form.tsx` | `AnswerStep` | 캠페인 ② L6 설문 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
+| `questionnaire-form.tsx` | `QuestionnaireForm`, `AnswerStep` | 캠페인 ② L6 설문 단계 | `app/framework/consult/[sessionId]/page.tsx` |
 | `register-step.tsx` | `RegisterStep` | 캠페인 ④ 등록 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
 | `relations-step.tsx` | `RelationsStep` | 캠페인 ③ L6 연결 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
 | `task-board.tsx` | `TaskBoard` | 캠페인 L6 카드 보드 | `app/framework/consult/[sessionId]/page.tsx` |

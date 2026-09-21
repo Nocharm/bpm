@@ -15,6 +15,7 @@
 - **리뷰 수정(Task 6+7):** lost-kick 픽스 — `kick()`이 이미 활성인 세션에 도착하면 `_wake` 플래그만 세우고, `process_session` 루프가 DB 컨텍스트 종료 후 그 플래그를 다시 확인해 스텝 도중 걸린 kick을 놓치지 않는다. wedge 픽스 — `_draw_row`/`_generate_questionnaire`가 `drawing`/`generating` 커밋 후 비-`TurnError`로 실패하면 `process_session`의 except가 `recover_stale_tasks(db, session_id=...)`(신규 세션 스코프 인자)로 그 세션만 즉시 되돌린다(재시작 없이도 `retry` 가능). 부수: `run_one_step`의 중복 `settings.ai_enabled` 체크 제거(`is_ai_access_enabled`가 이미 포함), `spawn` 타입힌트, 테스트 4건 추가.
 - **구현(Task 8+9, FE 뷰모델+외부 프롬프트):** `lib/api.ts`에 `FwInterviewSession` 등 타입 9종 + `/framework-interviews/...` 함수 15종, `lib/framework-interview.ts`(설문 검증·제안 채우기·현재 태스크·단계/진행률 파생, 서버 `PREFETCH_READY`와 동기) 신규. `lib/interview-json-prompt.ts`(외부 AI용 0.5 JSON 프롬프트, `consultant_interview.py` 키와 동기) + `InterviewJsonPromptButton`(csv-template-actions.tsx 복사 패턴 재사용, 아직 미배선) + `fwConsult.*` i18n 키 68종(en/ko) 추가.
 - **구현(Task 10, 페이지 골격):** `app/framework/consult/[sessionId]/page.tsx`(좌 보드/우 단계 분할·2초 폴링·드로잉 소요 실측 ETA) + `TaskBoard`(상태 칩·진행률·일시정지/재개·재시도·미리보기)·`PlanEditor`(brief·첨부·AI 제안·카드 CRUD·저장/잠금) 신규, Task 11/12 컴포넌트는 타입만 고정한 스텁. API로 세션 생성→2카드 잠금→러너 기동을 실측(AI_ENABLED=true, AI 미설정이라 태스크는 pending+error 유지, 폴링 대상인 상태는 정상). 브라우저 확장 미연결로 시각 검증은 미수행.
+- **구현(Task 11, 설문·확인 화면):** `questionnaire-form.tsx`(`QuestionnaireForm` 객관식/순서/주관식 문항 렌더 + `AnswerStep` 로드·제안 일괄 채우기·제출)·`answer-review.tsx`(`AnswerReview` 제출 전 확인, 빈 주관식은 제안값+배지) 신규.
 
 ## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
 
