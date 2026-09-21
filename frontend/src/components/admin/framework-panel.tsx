@@ -890,13 +890,20 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           )}
         </div>
         </AdminSection>
+      </div>
+      )}
+      </div>
 
+      {/* 인터뷰 임포트는 그리드 아래 전폭 — 리포트(요약/목록 2단)가 폭을 다 써야 읽힌다(사용자 지적 2026-09-21) */}
+      {!scopeRootIds && (
+      <div className="flex flex-col gap-3" data-id="interview-import-host">
         <AdminSection
           id="import"
           title={t("framework.interviewImportTitle")}
           hint={t("framework.interviewImportHint")}
           icon={<Upload size={16} strokeWidth={1.5} />}
           badge={interviewFiles.length > 0 ? interviewFiles.length : undefined}
+          maxHeight={900}
         >
 
         <input
@@ -975,14 +982,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {t("framework.importDryRun")}
           </button>
         </div>
-        </AdminSection>
-      </div>
-      )}
-      </div>
 
-      {/* 리포트는 그리드 아래 전폭 — 두 열 안에서는 요약/목록 2단이 좁다 */}
-      {!scopeRootIds && (
-      <div className="flex flex-col gap-3" data-id="interview-import-report-host">
         {/* 리포트 영역은 아코디언(0fr→1fr) — 드라이런을 누르면 먼저 열리며 링이 돌고, 결과가 오면 같은 자리에 리포트가 들어온다.
             래퍼는 항상 두어야 첫 열림도 전환된다(file-card 미리보기와 같은 규칙). 닫힘(Cancel)은 내용을 바로 비우므로 즉시 접힌다. */}
         <div
@@ -1022,6 +1022,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             ) : null}
           </div>
         </div>
+        </AdminSection>
       </div>
       )}
         </>
