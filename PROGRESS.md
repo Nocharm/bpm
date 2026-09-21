@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
+
+- **배경:** 조직도·대시보드는 `splitMapsByMode`가 framework 맵을 빼지만 검색 결과(`filteredMaps`)는 빼지 않아 연계 캔버스가 일반 맵 카드(오너·SP·역할 필·담당 부서 누락 경고)로 섞여 나왔고, 클릭하면 MapDetailCard가 "담당 부서 누락"·"업무 체계에 연결" 필을 띄웠다(캔버스엔 무의미).
+- **결과:** `components/maps/framework-map-card.tsx` — 캔버스 타일·이름·확정/초안·"L5 canvas" 라벨, 2줄 L5 필+상위 경로, 호버 시 캔버스 열기. 클릭=결착 카테고리 선택 → 우측(좁은 폭은 인라인)은 업무 체계 뷰와 같은 `CategorySummaryCard` 재사용. BE `list_maps`가 `linkage_category_id/path`를 채운다(역조회 1쿼리, 종전엔 상세만). 후속: 설정 탭 검토·관리 부서 파라미터 검토·부서 뷰 필터 2줄·프레임워크 뷰 검색 디자인·L6 선택 스트립+뒤로가기.
+
 ## 2026-09-21 — 업무 체계 탐색 패널·드릴다운 UX 6종 (dev)
 
 - **탐색 패널:** 다이어그램은 큰 창에서 폭·높이를 더 쓴다(`PANEL_SIZE`: 기본 1000×600 유지, `100vw-280`·`100vh-200`을 따라 1600×960 상한). 뷰박스는 실측 px×(1180/1000)로 비례 확장, `fitScale`이 폭·높이 둘 다 보고 패널이 커진 비율(maxScale)까지 확대 허용. 계단식 펼침/접힘은 `useSectionMotion`(자동 펼침=static, 사용자 펼침=open, 접힘=고스트 후 언마운트)·체브론 회전. 호버 가이드 라인은 그룹 선(border-l) 위로 옮기고(`.fw-tree`, 루트 ul도 투명 border-l로 구조 통일) 경로 밖 형제 li는 0.6 흐림. **바깥 mousedown으로 닫힘**(두 모드, ×/Esc만 닫히던 결정 철회) — 여는 버튼(`anchorRef`)·우클릭 메뉴는 예외.

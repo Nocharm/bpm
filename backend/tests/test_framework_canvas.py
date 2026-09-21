@@ -301,6 +301,10 @@ def test_linkage_map_open_create_seed_and_reconcile(client: TestClient, enforce:
     map_id = created["map_id"]
     detail = client.get(f"/api/maps/{map_id}").json()
     assert detail["mode"] == "framework"
+    # 목록 응답도 결착 L5를 싣는다 — 홈 검색 결과의 L5 카드 → 우측 카테고리 요약 카드 (2026-09-21)
+    listed = next(m for m in client.get("/api/maps").json() if m["id"] == map_id)
+    assert listed["linkage_category_id"] == l5
+    assert listed["linkage_category_path"] == "열기L1/열기L5"
     draft = next(v for v in detail["versions"] if v["status"] == "draft")
     graph = client.get(f"/api/versions/{draft['id']}/graph").json()
     linked = {n["linked_map_id"] for n in graph["nodes"]}

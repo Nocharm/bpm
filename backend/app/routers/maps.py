@@ -250,6 +250,17 @@ async def list_maps(
         if m.id in target_versions
     }
     stale_counts = await ref_audit.count_stale_refs_by_map(session, maps, stale_version_ids)
+    # 연계 캔버스 → 결착 L5 역조회(한 번) — 홈 검색 결과의 L5 카드가 경로를 적고 우측 요약 카드로 잇는다 (2026-09-21)
+    linkage_cat_by_map: dict[int, int] = {
+        map_id: cat_id
+        for map_id, cat_id in (
+            await session.execute(
+                select(ProcessCategory.linkage_map_id, ProcessCategory.id).where(
+                    ProcessCategory.linkage_map_id.is_not(None)
+                )
+            )
+        ).all()
+    }
 
     def _set_card_metrics(m: ProcessMap) -> None:
         """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
@@ -264,6 +275,9 @@ async def list_maps(
         m.owner_name = owner_name.get(owner_login) if owner_login else None
         m.category_path = category_paths.get(m.category_id) if m.category_id else None
         m.stale_ref_count = stale_counts.get(m.id, 0)
+        if m.mode == "framework" and m.id in linkage_cat_by_map:
+            m.linkage_category_id = linkage_cat_by_map[m.id]
+            m.linkage_category_path = category_paths.get(m.linkage_category_id)
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)

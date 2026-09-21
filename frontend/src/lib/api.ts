@@ -98,7 +98,7 @@ export interface MapSummary {
   consultant_code?: string | null;
   // 오너 없이 임포트된 맵 — "Owner unconfirmed" 배지 (spec 2026-09-03 §5)
   consultant_owner_pending?: boolean;
-  // framework 캔버스 전용 — 결착 카테고리(상세 응답에서만 채움) (design 2026-08-28 §8)
+  // framework 캔버스 전용 — 결착 카테고리(상세·목록 응답 모두 채움, 목록은 2026-09-21부터 — 홈 검색 결과 L5 카드) (design 2026-08-28 §8)
   linkage_category_id?: number | null;
   linkage_category_path?: string | null;
   // 확정 버튼 노출 여부 — sysadmin or 직속 L5 관리자만 true(상세 응답에서만 채움) (Track B Task 3)

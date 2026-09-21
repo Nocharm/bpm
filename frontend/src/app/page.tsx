@@ -28,6 +28,7 @@ import { FrameworkDrill } from "@/components/maps/framework-drill";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
 import { HomeFilterPills } from "@/components/maps/home-filter-pills";
+import { FrameworkMapCard } from "@/components/maps/framework-map-card";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
 import { MyDeptFavorites } from "@/components/maps/my-dept-favorites";
@@ -570,7 +571,47 @@ export default function MapListPage() {
     processMap: MapSummary,
     nameRanges: MatchRange[],
     recentAt: number | undefined,
-  ) => (
+  ) => {
+    // L5 연계 캔버스(검색 결과에만 등장) — 오너·SP·역할이 무의미한 일반 카드 대신 L5 카드, 클릭=결착 카테고리 선택
+    // → 우측(좁은 폭은 인라인)은 업무 체계 뷰와 같은 CategorySummaryCard (사용자 지시 2026-09-21)
+    if (processMap.mode === "framework" && processMap.linkage_category_id != null) {
+      const categoryId = processMap.linkage_category_id;
+      const isSelected = selectedCategoryId === categoryId;
+      return (
+        <>
+          <FrameworkMapCard
+            map={processMap}
+            selected={isSelected}
+            nameRanges={nameRanges}
+            onSelect={(id) => {
+              setSelectedCategoryId(id);
+              setSelectedId(null);
+            }}
+          />
+          <div
+            data-id="map-detail-accordion"
+            className={`grid overflow-hidden transition-[grid-template-rows] duration-350 ease-smooth split:hidden ${
+              isSelected ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+            }`}
+          >
+            <div className="min-h-0 overflow-hidden">
+              {isSelected && (
+                <div className="mt-2 rounded-sm border border-hairline bg-surface-alt">
+                  <CategorySummaryCard
+                    categoryId={categoryId}
+                    onOpenCanvas={handleOpenLinkage}
+                    onSelectChild={selectChildCategory}
+                    onSelectMap={selectMap}
+                    filterMap={frameworkFilterMap}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      );
+    }
+    return (
     <>
       <MapCard
         map={processMap}
@@ -604,7 +645,8 @@ export default function MapListPage() {
         </div>
       </div>
     </>
-  );
+    );
+  };
 
   // 리스트 행 — 검색 모드 전용(li로 감싼 렌더 결과).
   // A full-list row for search mode (wraps the shared card+detail in <li>).
