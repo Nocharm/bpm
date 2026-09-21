@@ -34,7 +34,7 @@ export function FilterDropdown({
   dataId?: string;
   // 버튼 표시 단계 — full(아이콘+라벨) / label(라벨만) / icon(아이콘만, title로 라벨 보완). 기본 full(기존 동작 유지).
   display?: FilterDisplayMode;
-  // 행을 균등 분할해 채운다(홈 필터 줄 우측 공백 제거, 2026-09-21). 측정 복제는 자연폭이라 미지정
+  // 행을 채우되 내용 폭에 비례해 차등 분배(flex-auto, 사용자 지시 2026-09-21). 내용 좌측·쉐브론 우측 정렬. 측정 복제는 미지정
   stretch?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -52,14 +52,14 @@ export function FilterDropdown({
   }, [open]);
 
   return (
-    <div ref={rootRef} className={stretch ? "relative min-w-0 flex-1" : "relative shrink-0"}>
+    <div ref={rootRef} className={stretch ? "relative min-w-0 flex-auto" : "relative shrink-0"}>
       <button
         type="button"
         data-id={dataId}
         aria-expanded={open}
         title={label}
         className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2.5 py-1 text-caption transition-colors ${
-          stretch ? "w-full justify-center" : ""
+          stretch ? "w-full" : ""
         } ${
           count > 0
             ? "border-accent-tint-border bg-accent-tint text-accent"
@@ -68,11 +68,13 @@ export function FilterDropdown({
         onClick={() => setOpen((v) => !v)}
       >
         {display !== "label" && icon}
-        {display !== "icon" ? (count > 0 ? `${label} · ${count}` : label) : count > 0 ? `· ${count}` : null}
+        <span className={stretch ? "min-w-0 flex-1 truncate text-left" : ""}>
+          {display !== "icon" ? (count > 0 ? `${label} · ${count}` : label) : count > 0 ? `· ${count}` : null}
+        </span>
         <ChevronDown
           size={14}
           strokeWidth={1.5}
-          className={open ? "rotate-180 transition-transform" : "transition-transform"}
+          className={`shrink-0 ${stretch ? "ml-auto" : ""} ${open ? "rotate-180 transition-transform" : "transition-transform"}`}
         />
       </button>
       {open && (

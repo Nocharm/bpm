@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronDown, FileUp, FilterX, Plus } from "lucide-react";
+import { BookOpen, ChevronDown, FileUp, FilterX, Globe, Layers, Lock, Plus } from "lucide-react";
 
 import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type CategoryNode, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
@@ -28,7 +28,7 @@ import { CategorySummaryCard } from "@/components/maps/category-summary-card";
 import { FrameworkDrill } from "@/components/maps/framework-drill";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
-import { HomeFilterPills } from "@/components/maps/home-filter-pills";
+import { HomeFilterPills, isMapKind } from "@/components/maps/home-filter-pills";
 import { FrameworkSearchGroups } from "@/components/maps/framework-search-groups";
 import { SelectedMapStrip } from "@/components/maps/selected-map-strip";
 import { FrameworkMapCard } from "@/components/maps/framework-map-card";
@@ -82,10 +82,8 @@ export default function MapListPage() {
   const [permFilter, setPermFilter] = useState<Set<string>>(new Set());
   const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
   // SP 지정 여부 필터 — "sp"(지정됨)/"non_sp"(미지정), 비면 전체 (sp_designated_at 기준)
-  const [spFilter, setSpFilter] = useState<Set<string>>(new Set());
-  // 부서 뷰 2줄째 필터(2026-09-21) — L5 캔버스(canvas/non_canvas)·업무 체계 등록(registered/unregistered) + 정렬(단일)
-  const [canvasFilter, setCanvasFilter] = useState<Set<string>>(new Set());
-  const [registeredFilter, setRegisteredFilter] = useState<Set<string>>(new Set());
+  // Type 필(2026-09-21) — SP/Non-SP·L5 캔버스·업무 체계 등록/미등록을 한 그룹(OR)으로
+  const [kindFilter, setKindFilter] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<MapSortKey>(DEFAULT_MAP_SORT);
   // 맵 복사 — CreateMapDialog copy 모드(버전 선택·오너 알림 안내·원본 은퇴). 상세 카드가 detail 통째 전달 (F12 재편).
   const [copyTarget, setCopyTarget] = useState<MapDetail | null>(null);
@@ -131,8 +129,6 @@ export default function MapListPage() {
   const filterRowRef = useRef<HTMLDivElement | null>(null);
   const measureFullRef = useRef<HTMLDivElement | null>(null);
   const measureLabelRef = useRef<HTMLDivElement | null>(null);
-  const measureFullRef2 = useRef<HTMLDivElement | null>(null);
-  const measureLabelRef2 = useRef<HTMLDivElement | null>(null);
   // Clear 버튼(필터 활성 시만 렌더)도 같은 행의 가용폭을 갉아먹는다 — 측정에서 빼지 않으면
   // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
   const clearBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -272,9 +268,7 @@ export default function MapListPage() {
         status?: unknown;
         perm?: unknown;
         owning?: unknown;
-        sp?: unknown;
-        canvas?: unknown;
-        registered?: unknown;
+        kind?: unknown;
         sort?: unknown;
       };
       if (typeof s.q === "string") {
@@ -293,17 +287,7 @@ export default function MapListPage() {
       if (Array.isArray(s.owning)) {
         setOwningFilter(new Set(s.owning.filter((x): x is string => x === "missing" || x === "stale_refs")));
       }
-      if (Array.isArray(s.sp)) {
-        setSpFilter(new Set(s.sp.filter((x): x is string => x === "sp" || x === "non_sp")));
-      }
-      if (Array.isArray(s.canvas)) {
-        setCanvasFilter(new Set(s.canvas.filter((x): x is string => x === "canvas" || x === "non_canvas")));
-      }
-      if (Array.isArray(s.registered)) {
-        setRegisteredFilter(
-          new Set(s.registered.filter((x): x is string => x === "registered" || x === "unregistered")),
-        );
-      }
+      if (Array.isArray(s.kind)) setKindFilter(new Set(s.kind.filter(isMapKind)));
       if (isMapSortKey(s.sort)) setSortKey(s.sort);
     } catch {
       /* 손상된 저장값 무시 */
@@ -318,9 +302,7 @@ export default function MapListPage() {
     permFilter.size > 0 ||
     visFilter !== "all" ||
     owningFilter.size > 0 ||
-    spFilter.size > 0 ||
-    canvasFilter.size > 0 ||
-    registeredFilter.size > 0;
+    kindFilter.size > 0;
 
   // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible) 2종의 자연폭 vs 행 가용폭(Clear 필 폭
   // 차감). i18n/뷰 전환은 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는
@@ -330,17 +312,13 @@ export default function MapListPage() {
     const full = measureFullRef.current;
     const label = measureLabelRef.current;
     if (!row || !full || !label) return;
-    // 2줄째(부서 뷰 전용) 복제 — 두 줄이 같은 단계를 쓰므로 더 넓은 줄의 자연폭이 기준
-    const full2 = measureFullRef2.current;
-    const label2 = measureLabelRef2.current;
     const update = () => {
-      const clear = clearBtnRef.current;
-      // Clear가 뜨면 같은 행의 gap(1.5=6px)만큼 더 먹는다 — 폭+간격을 가용폭에서 미리 뺀다.
-      const available = row.clientWidth - (clear ? clear.offsetWidth + 6 : 0);
+      // 필 줄(2줄)의 가용폭 — 해제 아이콘은 1줄(공개 범위 탭·정렬)에 있어 여기서 빼지 않는다(2026-09-21 재구성)
+      const available = row.clientWidth;
       setFilterMode(
         pickFilterDisplayMode(available, {
-          full: Math.max(full.scrollWidth, full2?.scrollWidth ?? 0),
-          label: Math.max(label.scrollWidth, label2?.scrollWidth ?? 0),
+          full: full.scrollWidth,
+          label: label.scrollWidth,
         }),
       );
     };
@@ -350,8 +328,6 @@ export default function MapListPage() {
     ro.observe(row);
     ro.observe(full);
     ro.observe(label);
-    if (full2) ro.observe(full2);
-    if (label2) ro.observe(label2);
     if (clearBtnRef.current) ro.observe(clearBtnRef.current);
     return () => {
       cancelAnimationFrame(raf);
@@ -381,13 +357,11 @@ export default function MapListPage() {
         status: [...statusFilter],
         perm: [...permFilter],
         owning: [...owningFilter],
-        sp: [...spFilter],
-        canvas: [...canvasFilter],
-        registered: [...registeredFilter],
+        kind: [...kindFilter],
         sort: sortKey,
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, spFilter, canvasFilter, registeredFilter, sortKey]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, kindFilter, sortKey]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -518,22 +492,19 @@ export default function MapListPage() {
           owningFilter.size === 0 ||
           (owningFilter.has("missing") && !m.owning_department) ||
           (owningFilter.has("stale_refs") && (m.stale_ref_count ?? 0) > 0);
-        const spOk =
-          spFilter.size === 0 ||
-          (spFilter.has("sp") && !!m.sp_designated_at) ||
-          (spFilter.has("non_sp") && !m.sp_designated_at);
+        // Type — 그룹 안 OR. 업무 체계 등록 = 슬롯(category_id)이 있거나 캔버스 자체
         const isCanvas = m.mode === "framework";
-        const canvasOk =
-          canvasFilter.size === 0 || (canvasFilter.has("canvas") && isCanvas) || (canvasFilter.has("non_canvas") && !isCanvas);
-        // 업무 체계 등록 — 슬롯(category_id)이 있거나 캔버스 자체
         const registered = isCanvas || m.category_id != null;
-        const registeredOk =
-          registeredFilter.size === 0 ||
-          (registeredFilter.has("registered") && registered) ||
-          (registeredFilter.has("unregistered") && !registered);
-        return visOk && statusOk && permOk && owningOk && spOk && canvasOk && registeredOk;
+        const kindOk =
+          kindFilter.size === 0 ||
+          (kindFilter.has("sp") && !!m.sp_designated_at) ||
+          (kindFilter.has("non_sp") && !m.sp_designated_at) ||
+          (kindFilter.has("canvas") && isCanvas) ||
+          (kindFilter.has("registered") && registered) ||
+          (kindFilter.has("unregistered") && !registered);
+        return visOk && statusOk && permOk && owningOk && kindOk;
       }),
-    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, spFilter, canvasFilter, registeredFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, kindFilter],
   );
   // 정렬은 목록 표면마다 같은 함수 — 조직도·나의 부서·검색 결과·업무 체계 요약 카드(소속 맵)
   const applySort = useCallback(<T extends MapSummary>(list: T[]) => sortMaps(list, sortKey), [sortKey]);
@@ -621,7 +592,7 @@ export default function MapListPage() {
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋). 검색 모드 전용
   // (브라우즈는 즐겨찾기+아코디언이라 별도 증분 렌더 없음).
-  const listKey = `${mapQuery}|${visFilter}|${sortKey}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}|${[...spFilter].sort().join(",")}|${[...canvasFilter].sort().join(",")}|${[...registeredFilter].sort().join(",")}`;
+  const listKey = `${mapQuery}|${visFilter}|${sortKey}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}|${[...kindFilter].sort().join(",")}`;
   const {
     visible: shownSearchHits,
     hasMore: hasMoreSearch,
@@ -800,8 +771,7 @@ export default function MapListPage() {
       return next;
     });
   const pillProps = {
-    visFilter,
-    onSetVis: setVisFilter,
+    homeView,
     statusFilter,
     onToggleStatus: toggleIn(setStatusFilter),
     permFilter,
@@ -810,28 +780,21 @@ export default function MapListPage() {
     onSetSort: setSortKey,
     owningFilter,
     onToggleOwning: toggleIn(setOwningFilter),
-    spFilter,
-    onToggleSp: toggleIn(setSpFilter),
-    canvasFilter,
-    onToggleCanvas: toggleIn(setCanvasFilter),
-    registeredFilter,
-    onToggleRegistered: toggleIn(setRegisteredFilter),
+    kindFilter,
+    onToggleKind: toggleIn(setKindFilter),
   };
   const noop = () => {};
   const measureProps = {
     ...pillProps,
     measureOnly: true,
-    onSetVis: noop,
     onToggleStatus: noop,
     onTogglePerm: noop,
     onSetSort: noop,
     onToggleOwning: noop,
-    onToggleSp: noop,
-    onToggleCanvas: noop,
-    onToggleRegistered: noop,
+    onToggleKind: noop,
   };
 
-  // 필터 해제 — 아이콘 버튼, 부서 뷰는 2줄 우측 끝·업무 체계 뷰(1줄뿐)는 1줄 우측 끝. 정렬은 남긴다
+  // 필터 해제 — 1줄 우측 끝 아이콘 버튼, 활성(필터 1개 이상)일 때만 빨간 계열로 뜬다. 정렬은 남긴다
   const clearButton = hasActiveFilter ? (
     <button
       ref={clearBtnRef}
@@ -839,15 +802,13 @@ export default function MapListPage() {
       data-id="home-filter-clear"
       title={t("home.filterClear")}
       aria-label={t("home.filterClear")}
-      className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-accent-tint-border bg-accent-tint text-accent hover:bg-accent-focus hover:text-on-accent"
+      className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-error/40 bg-error/10 text-error transition-colors hover:bg-error hover:text-on-accent"
       onClick={() => {
         setStatusFilter(new Set());
         setPermFilter(new Set());
         setVisFilter("all");
         setOwningFilter(new Set());
-        setSpFilter(new Set());
-        setCanvasFilter(new Set());
-        setRegisteredFilter(new Set());
+        setKindFilter(new Set());
       }}
     >
       <FilterX size={14} strokeWidth={1.5} />
@@ -985,38 +946,58 @@ export default function MapListPage() {
                 inputRef={searchRef}
                 dataId="home-map-search"
               />
-              {/* 필터 2줄(사용자 지시 2026-09-21) — 1줄: 공개 범위·상태·권한·정렬(두 뷰 공용) + Clear(우측끝),
-                  2줄: 이슈·SP·L5 캔버스·업무 체계 등록(부서 뷰 전용). 표시 단계(full/label/icon)는 두 줄이 공유 —
-                  측정 복제는 줄별 full/label 4종, 더 넓은 줄 기준으로 판정한다. */}
+              {/* 필터 2줄(사용자 지시 2026-09-21, 2차 재구성) — 1줄: 공개 범위 탭 · 정렬 · 해제 아이콘(우측 끝),
+                  2줄: Status · Role · (부서 뷰) Issues · Type — 필은 내용 폭 비례로 행을 채운다. 표시 단계(full/label/icon)는
+                  2줄 필 기준(측정 복제 full/label), 정렬 필도 같은 단계를 따른다. */}
+              <div data-id="home-filter-row" className="flex min-w-0 items-center gap-1.5">
+                <div
+                  data-id="home-visibility-filter"
+                  className="flex min-w-0 flex-1 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
+                >
+                  {(["all", "public", "private"] as const).map((f) => {
+                    // 탭 앞 아이콘 — 맵 카드의 공개(Globe)/비공개(Lock) 표기와 같은 아이콘, 전체는 Layers (2026-09-21)
+                    const TabIcon = f === "all" ? Layers : f === "public" ? Globe : Lock;
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        aria-pressed={visFilter === f}
+                        className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
+                          visFilter === f
+                            ? "bg-accent-tint text-accent"
+                            : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                        }`}
+                        onClick={() => setVisFilter(f)}
+                      >
+                        <TabIcon size={13} strokeWidth={1.5} className="shrink-0" />
+                        <span className="truncate">
+                          {f === "all"
+                            ? t("home.filterAll")
+                            : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <HomeFilterPills {...pillProps} row="top" display={filterMode} />
+                {clearButton}
+              </div>
               <div
-                data-id="home-filter-row"
+                data-id="home-filter-row-2"
                 ref={filterRowRef}
                 data-flash={filterFlash || undefined}
                 onAnimationEnd={() => setFilterFlash(false)}
                 className={`relative flex min-w-0 items-center gap-1.5 ${filterFlash ? "animate-filter-flash" : ""}`}
               >
-                <HomeFilterPills {...pillProps} row="primary" display={filterMode} stretch />
+                <HomeFilterPills {...pillProps} row="main" display={filterMode} stretch />
                 {/* 측정 복제 — 보이지 않게 자연폭만 잰다(absolute라 레이아웃 불참여, dataId 없음) */}
                 <div ref={measureFullRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
-                  <HomeFilterPills {...measureProps} row="primary" display="full" />
+                  <HomeFilterPills {...measureProps} row="main" display="full" />
                 </div>
                 <div ref={measureLabelRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
-                  <HomeFilterPills {...measureProps} row="primary" display="label" />
+                  <HomeFilterPills {...measureProps} row="main" display="label" />
                 </div>
-                {homeView !== "departments" && clearButton}
               </div>
-              {homeView === "departments" && (
-                <div data-id="home-filter-row-2" className="relative flex min-w-0 items-center gap-1.5">
-                  <HomeFilterPills {...pillProps} row="secondary" display={filterMode} stretch />
-                  <div ref={measureFullRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
-                    <HomeFilterPills {...measureProps} row="secondary" display="full" />
-                  </div>
-                  <div ref={measureLabelRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
-                    <HomeFilterPills {...measureProps} row="secondary" display="label" />
-                  </div>
-                  {clearButton}
-                </div>
-              )}
               {isSearching && mapHits.length === 0 ? (
                 /* 검색 결과 없음(두 뷰 공용) */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">

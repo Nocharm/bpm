@@ -43,7 +43,8 @@ export function FrameworkSearchGroups({ hits, renderRow, recentAtById, onOpenCat
             {g.categoryId === null ? (
               <div className="flex items-center gap-1.5 rounded-sm border border-dashed border-hairline px-2.5 py-1.5 text-fine text-ink-tertiary">
                 <Network size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                <span className="font-semibold">{t("home.unregisteredOption")}</span>
+                {/* Type 필과 같은 영어 고정 표기 */}
+                <span className="font-semibold">Not in the framework</span>
                 <span className="ml-auto text-ink-muted">{g.rows.length}</span>
               </div>
             ) : (

@@ -205,17 +205,13 @@ try {
   // ── 4) 필터 — Private 세그먼트 → 우측 소속 맵 숨김 + filtered-out 노트, All 복귀 ─
   await l5Card.click();
   await summaryMapRow.first().waitFor({ state: "visible", timeout: 8000 });
-  // 공개 범위는 다른 필터와 같은 드롭다운 단추(2026-09-21) — 열고 옵션을 고른다
-  await page.locator('[data-id="home-visibility-filter"]').click();
-  await page.locator('[data-id="home-filter-row"] button', { hasText: "Private" }).click();
+  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "Private" }).click();
   const noteVisible = await page.locator('[data-id="category-summary-filtered-note"]').first()
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   const rowHidden = !(await summaryMapRow.first().isVisible().catch(() => false));
   check("Private filter hides public maps in the summary with a filtered-out note", noteVisible && rowHidden,
     `note=${noteVisible} rowHidden=${rowHidden}`);
-  // 같은 옵션을 다시 고르면 전체로 복귀
-  await page.locator('[data-id="home-visibility-filter"]').click();
-  await page.locator('[data-id="home-filter-row"] button', { hasText: "Private" }).click();
+  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "All" }).click();
   const noteGone = (await page.locator('[data-id="category-summary-filtered-note"]').count()) === 0;
   check("All filter clears filtered-out note", noteGone);
 
@@ -248,7 +244,7 @@ try {
   check("Departments toggle renders org accordion (regression)", orgVisible);
 
   // 직접 맵 4개+ 리스트(시드에선 미지정 섹션, 기본 펼침)는 3.5개 높이로 잘리고 Show all 버튼이 뜬다.
-  const clampBtn = page.locator('button[data-id^="org-list-expand-"]').first();
+  const clampBtn = page.locator('button[data-id="org-list-expand-__unassigned__"]');
   const clampShown = await clampBtn.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   const clampLabel = clampShown ? ((await clampBtn.textContent()) ?? "") : "";
   check("dept map list clamps with Show all button", clampShown && clampLabel.includes("Show all"), clampLabel.trim());
@@ -291,7 +287,7 @@ try {
   );
   // 리스트 "전체 펼치기" 상태도 새로고침에 유지 — Growth Center 트리 펼침(bpm.home.tree)과
   // 리스트 확장(bpm.home.deptListExpand) 둘 다 복원돼 버튼이 Collapse로 남아야 한다.
-  const clampAfterReload = page.locator('button[data-id^="org-list-expand-"]').first();
+  const clampAfterReload = page.locator('button[data-id="org-list-expand-__unassigned__"]');
   const persistedLabel = await clampAfterReload.waitFor({ state: "visible", timeout: 8000 })
     .then(async () => (await clampAfterReload.textContent()) ?? "").catch(() => "");
   check("list expand state persists across reload", persistedLabel.includes("Collapse"), persistedLabel.trim());
@@ -307,7 +303,7 @@ try {
   check("sticky box header shows right-side collapse while expanded",
     collapseVisible && stickyPos === "sticky", `visible=${collapseVisible} pos=${stickyPos}`);
   await headerCollapse.click();
-  const reclamped = ((await page.locator('button[data-id^="org-list-expand-"]').first().textContent()) ?? "")
+  const reclamped = ((await page.locator('button[data-id="org-list-expand-__unassigned__"]').textContent()) ?? "")
     .includes("Show all");
   check("header collapse re-clamps the list", reclamped);
   // my-dept 스티키 체크는 제거(2026-08-18) — 구 canonical 샘플(owner=admin.sys·IT팀 오우닝)이
