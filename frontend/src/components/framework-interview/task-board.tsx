@@ -27,9 +27,11 @@ interface TaskBoardProps {
   onResume: () => void;
   onRetry: (taskPk: number) => void;
   onPreview?: (taskPk: number) => void;
+  stalled?: boolean;  // 할 일이 남았는데 러너가 멎은 것으로 보인다 — 재시작 버튼 노출
+  onNudge?: () => void;
 }
 
-export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onPreview }: TaskBoardProps) {
+export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onPreview, stalled, onNudge }: TaskBoardProps) {
   const { t } = useI18n();
   const progress = deriveProgress(session, drawDurationsMs);
   const locked = session.status !== "planning";
@@ -63,6 +65,14 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
             <div className="h-full bg-accent transition-[width] duration-350 ease-smooth" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
           </div>
           {session.paused && <span className="text-fine text-ink-tertiary">{t("fwConsult.paused")}</span>}
+        </div>
+      )}
+      {stalled && onNudge && (
+        <div className="flex items-center gap-2 rounded-md border border-hairline bg-surface-alt px-2.5 py-2 text-fine text-ink-secondary" data-id="fw-consult-stalled">
+          <span className="min-w-0 flex-1">{t("fwConsult.stalled")}</span>
+          <button type="button" data-id="fw-consult-nudge" className="shrink-0 rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine text-ink hover:bg-surface-alt" onClick={onNudge}>
+            {t("fwConsult.nudge")}
+          </button>
         </div>
       )}
       <ol className="flex flex-col gap-1.5" data-id="fw-consult-task-list">

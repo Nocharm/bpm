@@ -28,6 +28,11 @@ const BOARD_WIDTH_KEY = "bpm.fwConsultBoardWidth";
 const BOARD_MIN = 280;
 const BOARD_MAX = 560;
 const POLL_MS = 2000;
+const STALLED_TICKS = 5;  // 폴링 5틱(≈10초) 동안 할 일은 있는데 아무도 안 움직이면 러너가 멎은 것으로 본다
+
+function buildStatusSignature(session: FwInterviewSession): string {
+  return session.tasks.map((task) => `${task.id}:${task.status}`).join(",");
+}
 
 function readBoardWidth(): number {
   if (typeof window === "undefined") return 360;
@@ -49,8 +54,12 @@ export default function FrameworkConsultPage() {
   // 드로잉 소요 실측(ms) — ETA 추정. submitted를 처음 본 시각 → drawn을 처음 본 시각
   const submittedAtRef = useRef<Map<number, number>>(new Map());
   const [drawDurations, setDrawDurations] = useState<number[]>([]);
+  // 러너 정지 감지 — 상태가 안 변한 채 흐른 폴링 틱 수 (I3)
+  const statusSigRef = useRef("");
+  const [stalledTicks, setStalledTicks] = useState(0);
 
   const applySession = useCallback((next: FwInterviewSession) => {
+    statusSigRef.current = buildStatusSignature(next);
     const now = Date.now();
     const durations: number[] = [];
     for (const task of next.tasks) {
@@ -93,6 +102,8 @@ export default function FrameworkConsultPage() {
         .then((next) => {
           if (!alive) return; // 응답이 늦게 와 더 최신 상태를 덮어쓰지 않게
           setError(null);
+          const changed = buildStatusSignature(next) !== statusSigRef.current;
+          setStalledTicks((n) => (changed || next.progress.working || !hasBackgroundWork(next) ? 0 : n + 1));
           applySession(next);
         })
         .catch((err) => { if (alive) setError(getApiErrorDetail(err)); });
@@ -159,6 +170,11 @@ export default function FrameworkConsultPage() {
             onResume={() => void run(() => resumeFrameworkInterview(session.id))}
             onRetry={(taskPk) => void run(() => retryFrameworkTask(session.id, taskPk))}
             onPreview={setPreviewTaskId}
+            stalled={stalledTicks >= STALLED_TICKS && !session.paused}
+            onNudge={() => {
+              setStalledTicks(0);
+              void run(() => resumeFrameworkInterview(session.id));  // resume이 러너를 다시 깨운다
+            }}
           />
         </aside>
         <div
@@ -169,14 +185,18 @@ export default function FrameworkConsultPage() {
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface" data-id="fw-consult-step">
           {step === "plan" && (
             <PlanEditor
-              key={JSON.stringify(session.plan ?? [])}
+              // brief도 key에 넣는다 — 첨부 병합으로 서버 brief가 바뀌면 다시 초기화해야
+              // 편집기의 옛 brief가 저장될 때 병합분을 덮어쓰지 않는다.
+              key={JSON.stringify([session.brief, session.plan ?? []])}
               session={session}
               busy={busy}
-              onBriefChange={() => undefined}
               onAttach={(file) => void run(() => uploadFrameworkInterviewAttachment(session.id, file))}
-              onGenerate={() => void run(() => generateFrameworkPlan(session.id))}
-              onSave={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, false))}
-              onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true))}
+              onGenerate={(cards: FwPlanCard[], brief: string) => void run(async () => {
+                await saveFrameworkPlan(session.id, cards, false, brief);  // 화면의 brief로 제안받는다
+                return generateFrameworkPlan(session.id);
+              })}
+              onSave={(cards: FwPlanCard[], brief: string) => void run(() => saveFrameworkPlan(session.id, cards, false, brief))}
+              onLock={(cards: FwPlanCard[], brief: string) => void run(() => saveFrameworkPlan(session.id, cards, true, brief))}
             />
           )}
           {(step === "answer" || step === "waiting") && (

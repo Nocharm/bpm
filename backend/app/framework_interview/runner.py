@@ -121,7 +121,9 @@ async def _generate_questionnaire(db: AsyncSession, session: FrameworkInterviewS
         task.error = None
         await _record_usage(db, session.login_id, usage, ok=True)
     except TurnError as exc:
-        task.status = "pending"
+        # pending으로 되돌리면 run_one_step이 같은 카드를 다시 집어 루프가 무한히 돈다 —
+        # failed로 멈춰 보드의 재시도 버튼으로 넘긴다(retry_task가 답변 없으면 pending으로 되돌린다).
+        task.status = "failed"
         task.error = str(exc)
         await _record_usage(db, session.login_id, usage, ok=False)
     finally:
@@ -144,6 +146,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     try:
         out = await _ask_json(messages, None, RowOut, reasoning=None)
         row = out.model_dump(by_alias=True, exclude_none=True)
+        row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
         row["department"] = row.get("department") or card.get("department", "")
         chain = await load_category_chain(db, session.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}

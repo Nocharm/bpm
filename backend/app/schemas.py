@@ -2727,6 +2727,7 @@ class FrameworkPlanCardIn(BaseModel):
 class FrameworkInterviewPlanIn(BaseModel):
     cards: list[FrameworkPlanCardIn] = []
     lock: bool = False
+    brief: str | None = None  # None=유지(첨부 병합분을 덮지 않는다), 값=교체
 
 
 class FrameworkInterviewAnswersIn(BaseModel):

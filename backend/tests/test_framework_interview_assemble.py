@@ -4,10 +4,12 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
+from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.framework_interview.assemble import (
-    allocate_task_ids, build_document, load_category_chain, validate_row,
+    allocate_task_ids, build_document, load_category_chain, load_existing_codes, validate_row,
 )
+from app.models import ProcessMap
 from scripts.consultant_interview import convert_interview
 
 HEADERS = {"X-Dev-User": "admin.sys"}
@@ -67,3 +69,19 @@ def test_document_passes_adapter_without_errors(client: TestClient) -> None:
     assert validate_row(chain, l5, rows[0]) == [
         i for i in validate_row(chain, l5, rows[0]) if i["severity"] != "error"
     ]
+
+
+def test_existing_codes_reserve_trashed_maps(client: TestClient) -> None:
+    """휴지통 맵의 코드도 채번에서 비켜간다 — 임포터가 소프트삭제 맵의 코드를 거절하기 때문."""
+    l5_id, l5_code = _make_l5(client, "trash")
+
+    async def _seed_and_load() -> list[str]:
+        async with SessionLocal() as db:
+            db.add(ProcessMap(name="trashed", category_id=l5_id,
+                              consultant_code=f"{l5_code}-03", deleted_at=now_kst()))
+            await db.commit()
+            return await load_existing_codes(db, l5_id)
+
+    codes = asyncio.run(_seed_and_load())
+    assert f"{l5_code}-03" in codes
+    assert allocate_task_ids(l5_code, codes, 1) == [f"{l5_code}-04"]

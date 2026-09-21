@@ -2915,7 +2915,7 @@ export interface FwInterviewSession {
   category_id: number;
   category_code: string;
   category_name: string;
-  status: FwSessionStatus | string;
+  status: FwSessionStatus;
   paused: boolean;
   lang: "ko" | "en";
   brief: string;
@@ -2957,8 +2957,12 @@ export async function uploadFrameworkInterviewAttachment(id: number, file: File)
 export function generateFrameworkPlan(id: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/plan`, { method: "POST" });
 }
-export function saveFrameworkPlan(id: number, cards: FwPlanCard[], lock: boolean): Promise<FwInterviewSession> {
-  return request<FwInterviewSession>(`/framework-interviews/${id}/plan`, { method: "PUT", body: JSON.stringify({ cards, lock }) });
+/** brief 생략 = 서버 값 유지(첨부 병합분을 덮지 않는다). */
+export function saveFrameworkPlan(id: number, cards: FwPlanCard[], lock: boolean, brief?: string): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/plan`, {
+    method: "PUT",
+    body: JSON.stringify(brief === undefined ? { cards, lock } : { cards, lock, brief }),
+  });
 }
 export function getFrameworkInterviewTask(id: number, taskPk: number): Promise<FwInterviewTaskDetail> {
   return request<FwInterviewTaskDetail>(`/framework-interviews/${id}/tasks/${taskPk}`);

@@ -201,12 +201,35 @@ def test_process_session_recovers_wedged_task_on_unexpected_error(client: TestCl
     assert sid not in runner._active
 
 
-def test_questionnaire_turn_error_resets_to_pending(client: TestClient, monkeypatch) -> None:
+def test_questionnaire_turn_error_marks_failed(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     sid = _make_locked_session(client, ["A"])
     queue = _fake_ai_queue(monkeypatch, ["not json", "still not json"])
     assert _step(sid) is True
-    assert _statuses(sid) == ["pending"]
+    assert _statuses(sid) == ["failed"]
     detail = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
     assert detail["error"]
     assert queue == []
+    # 답변 전이라 재시도는 pending으로 — 보드의 재시도 버튼이 큐에 되돌린다
+    client.post(f"/api/framework-interviews/{sid}/tasks/{detail['id']}/retry", headers=HEADERS)
+    assert _statuses(sid) == ["pending"]
+
+
+def test_questionnaire_failure_terminates_loop_without_spin(client: TestClient, monkeypatch) -> None:
+    """설문 생성이 계속 실패해도 러너는 한 번 시도하고 멈춘다(pending 되돌림 = 무한 루프)."""
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    calls = 0
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        nonlocal calls
+        calls += 1
+        return ai_client.AiReply(content="not json", prompt_tokens=10, completion_tokens=5)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    runner._active.discard(sid)
+    runner._wake.discard(sid)
+    asyncio.run(runner.process_session(sid))
+    assert _statuses(sid) == ["failed"]
+    assert calls == 2  # _ask_json 1콜 + 재시도 1콜, 그 뒤로는 다시 집지 않는다
+    assert sid not in runner._active

@@ -15,11 +15,10 @@ const SECONDARY = "inline-flex items-center gap-1.5 rounded-sm border border-hai
 interface PlanEditorProps {
   session: FwInterviewSession;
   busy: boolean;
-  onBriefChange: (brief: string) => void;
   onAttach: (file: File) => void;
-  onGenerate: () => void;
-  onSave: (cards: FwPlanCard[]) => void;
-  onLock: (cards: FwPlanCard[]) => void;
+  onGenerate: (cards: FwPlanCard[], brief: string) => void;
+  onSave: (cards: FwPlanCard[], brief: string) => void;
+  onLock: (cards: FwPlanCard[], brief: string) => void;
 }
 
 const EMPTY: FwPlanCard = { name: "", summary: "", owner_role: "", department: "", depends_on: [] };
@@ -29,6 +28,7 @@ export function PlanEditor({ session, busy, onAttach, onGenerate, onSave, onLock
   // 부모가 session.plan 내용으로 key를 리마운트하므로(page.tsx) 여기서는 마운트 시 1회 초기화만 한다 —
   // 폴링(attach/pause/resume 등)이 만드는 새 session 객체가 편집 중인 카드를 덮어쓰지 않는다.
   const [cards, setCards] = useState<FwPlanCard[]>(() => session.plan ?? []);
+  const [brief, setBrief] = useState(() => session.brief);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function update(i: number, patch: Partial<FwPlanCard>) {
@@ -49,14 +49,14 @@ export function PlanEditor({ session, busy, onAttach, onGenerate, onSave, onLock
     <div className="flex flex-col gap-4 p-4" data-id="fw-consult-plan">
       <div className="flex flex-col gap-1.5">
         <label className="text-caption text-ink-secondary" htmlFor="fw-consult-brief">{t("fwConsult.brief")}</label>
-        <textarea id="fw-consult-brief" data-id="fw-consult-brief" className={`${FIELD} min-h-24`} defaultValue={session.brief} readOnly placeholder={t("fwConsult.briefPlaceholder")} />
+        <textarea id="fw-consult-brief" data-id="fw-consult-brief" className={`${FIELD} min-h-24`} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder={t("fwConsult.briefPlaceholder")} />
         <div className="flex gap-2">
           <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.xlsx,.txt,.md" data-id="fw-consult-attach-input"
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onAttach(f); e.target.value = ""; }} />
           <button type="button" className={SECONDARY} data-id="fw-consult-attach" disabled={busy} onClick={() => fileRef.current?.click()}>
             <Paperclip size={14} strokeWidth={1.5} />{t("fwConsult.attach")}
           </button>
-          <button type="button" className={SECONDARY} data-id="fw-consult-generate-plan" disabled={busy} onClick={onGenerate}>
+          <button type="button" className={SECONDARY} data-id="fw-consult-generate-plan" disabled={busy} onClick={() => onGenerate(cards, brief)}>
             <Sparkles size={14} strokeWidth={1.5} />{cards.length ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
           </button>
         </div>
@@ -84,8 +84,8 @@ export function PlanEditor({ session, busy, onAttach, onGenerate, onSave, onLock
           <Plus size={14} strokeWidth={1.5} />{t("fwConsult.addCard")}
         </button>
         <span className="ml-auto text-fine text-ink-tertiary">{t("fwConsult.lockPlanHint")}</span>
-        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(cards)}>{t("fwConsult.save")}</button>
-        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(cards)}>{t("fwConsult.lockPlan")}</button>
+        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(cards, brief)}>{t("fwConsult.save")}</button>
+        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(cards, brief)}>{t("fwConsult.lockPlan")}</button>
       </div>
     </div>
   );

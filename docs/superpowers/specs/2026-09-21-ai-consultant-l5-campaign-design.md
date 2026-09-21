@@ -116,7 +116,7 @@ class FrameworkInterviewTask(Base):               # framework_interview_tasks (L
 | `l6_row_drafter_contract` | 카드 k·설문 답·카탈로그 | 0.4 `rows[]` 원소(actions·fields·relations) | ② 제출 후 백그라운드 |
 | `l5_relations_contract` | 계획·각 row의 start/end 조건·depends_on | 최상위 `relations{entry, edges}` | ③ |
 
-- 호출은 전부 `ai_client.call_ai` 경유(전역 세마포어·엔드포인트 라우팅·usage 계측 `AiUsageEvent kind="framework_interview"`).
+- 호출은 전부 `ai_client.call_ai` 경유(전역 세마포어·엔드포인트 라우팅·usage 계측 `AiUsageEvent kind="fw_interview"`).
 - JSON 무효 시 1회 재프롬프트 후 실패 처리(`_ask_and_validate` 패턴). 실패 카드는 `failed` + 사유, [다시 시도] 버튼.
 - 드래프터 결과는 즉시 부분 문서로 `convert_interview`에 넣어 그 row의 이슈만 추출해 `issues`에 저장(오류가 있으면 `failed`, 경고는 카드에 표시).
 

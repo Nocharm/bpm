@@ -28,10 +28,9 @@ def allocate_task_ids(category_code: str, existing_codes: list[str], count: int)
 
 
 async def load_existing_codes(db: AsyncSession, category_id: int) -> list[str]:
+    # 휴지통 맵도 포함 — 임포터는 소프트삭제된 맵의 코드도 이미 쓰인 것으로 보고 거절한다.
     rows = await db.scalars(
-        select(ProcessMap.consultant_code).where(
-            ProcessMap.category_id == category_id, ProcessMap.deleted_at.is_(None)
-        )
+        select(ProcessMap.consultant_code).where(ProcessMap.category_id == category_id)
     )
     return [code for code in rows.all() if code]
 

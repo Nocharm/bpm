@@ -142,7 +142,7 @@ L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주�
 규칙
 - 3개 이상 12개 이하. 이미 등록된 L6 이름과 겹치지 않게.
 - name: 동사형 업무명 20자 이내. summary: 한 문장. owner_role: 역할 후보 목록의 표기 우선.
-- department: 부서 후보 목록의 항목만 사용, 모르면 빈 문자열.
+- department: 아는 경우 부서명, 모르면 빈 문자열.
 - depends_on: 선행해야 하는 다른 카드의 name 목록(없으면 빈 배열).
 - 다른 설명 없이 JSON 한 개만: {"cards":[{"name":"","summary":"","owner_role":"","department":"","depends_on":[]}]}"""
 

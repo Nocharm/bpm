@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.app_settings import get_assignee_roles, get_systems, is_ai_access_enabled
+from app.app_settings import get_assignee_roles, is_ai_access_enabled
 from app.auth import require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
@@ -45,9 +45,10 @@ async def _require_ai_enabled(db: AsyncSession) -> None:
         raise HTTPException(status_code=503, detail="AI is disabled")
 
 
-async def _get_owned(db: AsyncSession, session_id: int, user: str) -> FrameworkInterviewSession:
+async def _get_session_row(db: AsyncSession, session_id: int) -> FrameworkInterviewSession:
+    """세션 조회 — sysadmin이면 누구의 세션이든 읽고 이어받는다(login_id는 생성자 기록용)."""
     row = await db.get(FrameworkInterviewSession, session_id)
-    if row is None or row.login_id != user:
+    if row is None:
         raise HTTPException(status_code=404, detail="framework interview not found")
     await db.refresh(row, ["tasks"])
     return row
@@ -100,18 +101,6 @@ async def _ask(messages: list[dict], schema_cls: type[BaseModel], db: AsyncSessi
     return result
 
 
-async def _catalogs(db: AsyncSession) -> tuple[str, str]:
-    return (
-        format_managed_catalog(await get_assignee_roles(db)),
-        format_managed_catalog(await get_systems(db)),
-    )
-
-
-async def _category_path(db: AsyncSession, category_id: int) -> str:
-    chain = await load_category_chain(db, category_id)
-    return " > ".join(c["name"] for c in chain)
-
-
 @router.post("", response_model=FrameworkInterviewOut)
 async def create_framework_interview(
     payload: FrameworkInterviewCreateIn,
@@ -141,10 +130,10 @@ async def create_framework_interview(
 @router.get("", response_model=list[FrameworkInterviewOut])
 async def list_framework_interviews(
     active: int = 0,
-    user: str = Depends(require_sysadmin),
     db: AsyncSession = Depends(get_session),
 ) -> list[FrameworkInterviewOut]:
-    query = select(FrameworkInterviewSession).where(FrameworkInterviewSession.login_id == user)
+    # sysadmin 누구나 모든 세션을 이어받는다 — 담당자가 바뀌어도 진행 중인 캠페인이 묻히지 않게.
+    query = select(FrameworkInterviewSession)
     if active:
         query = query.where(FrameworkInterviewSession.status.notin_(("applied", "abandoned")))
     rows = (await db.scalars(query.order_by(FrameworkInterviewSession.updated_at.desc()))).all()
@@ -159,14 +148,14 @@ async def list_framework_interviews(
 async def get_framework_interview(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    return await _out(db, await _get_owned(db, session_id, user))
+    return await _out(db, await _get_session_row(db, session_id))
 
 
 @router.delete("/{session_id}", status_code=204)
 async def abandon_framework_interview(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> Response:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     row.status = "abandoned"
     row.paused = True
     await db.commit()
@@ -178,7 +167,7 @@ async def upload_framework_attachment(
     session_id: int, file: UploadFile,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     filename = file.filename or "attachment"
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in ALLOWED_EXTENSIONS:
@@ -202,10 +191,10 @@ async def generate_plan(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
     await _require_ai_enabled(db)
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     if row.status != "planning":
         raise HTTPException(status_code=409, detail="plan is locked")
-    role_catalog, _ = await _catalogs(db)
+    role_catalog = format_managed_catalog(await get_assignee_roles(db))
     # 부서 후보 목록(dept_catalog)은 v1 생략 — 맵이 없어 get_eligible_users 기준이 없다
     chain = await load_category_chain(db, row.category_id)
     existing = await db.scalars(select(FrameworkInterviewTask.name).where(FrameworkInterviewTask.session_id == row.id))
@@ -225,9 +214,11 @@ async def save_plan(
     session_id: int, payload: FrameworkInterviewPlanIn,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     if row.status != "planning":
         raise HTTPException(status_code=409, detail="plan is locked")
+    if payload.brief is not None:
+        row.brief = payload.brief.strip()[:BRIEF_MAX]
     cards = [card.model_dump() for card in payload.cards]
     if payload.lock:
         if not cards:
@@ -261,7 +252,7 @@ async def get_task_detail(
     session_id: int, task_pk: int,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewTaskDetailOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     return FrameworkInterviewTaskDetailOut.model_validate(await _get_task(db, row, task_pk))
 
 
@@ -270,7 +261,7 @@ async def submit_answers(
     session_id: int, task_pk: int, payload: FrameworkInterviewAnswersIn,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     task = await _get_task(db, row, task_pk)
     if task.status != "ready" or not task.questionnaire:
         raise HTTPException(status_code=409, detail="questionnaire is not ready")
@@ -290,7 +281,7 @@ async def retry_task(
     session_id: int, task_pk: int,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     task = await _get_task(db, row, task_pk)
     if task.status != "failed":
         raise HTTPException(status_code=409, detail="task is not failed")
@@ -305,7 +296,7 @@ async def retry_task(
 async def pause_session(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     row.paused = True
     await db.commit()
     return await _out(db, row)
@@ -315,7 +306,7 @@ async def pause_session(
 async def resume_session(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     row.paused = False
     await db.commit()
     runner.kick(row.id)
@@ -327,20 +318,28 @@ def _assert_all_drawn(row: FrameworkInterviewSession) -> None:
         raise HTTPException(status_code=409, detail="all tasks must be drawn first")
 
 
+def _has_known_task_ids(row: FrameworkInterviewSession, relations: RelationsOut) -> bool:
+    """entry/edge가 이 세션의 task_id만 가리키는지. 조립기는 미지의 id를 해석할 수 없다."""
+    known = {t.task_id for t in row.tasks}
+    return relations.entry.taskId in known and all(
+        e.src in known and e.dst in known for e in relations.edges
+    )
+
+
 @router.post("/{session_id}/relations", response_model=FrameworkInterviewOut)
 async def generate_relations(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
     await _require_ai_enabled(db)
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     _assert_all_drawn(row)
     rows_by_task = {t.task_id: t.row or {} for t in row.tasks}
     messages = build_relations_messages(
         lang=row.lang, plan=row.plan or [], rows=rows_by_task, overrides=await get_prompt_overrides(db),
     )
     out = await _ask(messages, RelationsOut, db, user)
-    known = set(rows_by_task)
-    if out.entry.taskId not in known or any(e.src not in known or e.dst not in known for e in out.edges):
+    if not _has_known_task_ids(row, out):
+        await db.commit()  # 이미 기록한 ok=True 계량 이벤트는 502로 버리지 않는다
         raise HTTPException(status_code=502, detail="AI relations reference unknown taskId")
     row.relations = out.model_dump(by_alias=True, exclude_none=True)
     row.status = "linking"
@@ -353,12 +352,14 @@ async def confirm_relations(
     session_id: int, payload: FrameworkInterviewRelationsIn,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     _assert_all_drawn(row)
     try:
         relations = RelationsOut.model_validate(payload.relations)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"invalid relations: {exc}") from exc
+    if not _has_known_task_ids(row, relations):
+        raise HTTPException(status_code=422, detail="relations reference unknown taskId")
     row.relations = relations.model_dump(by_alias=True, exclude_none=True)
     await assemble_document(db, row)
     row.status = "ready"
@@ -370,7 +371,7 @@ async def confirm_relations(
 async def get_document(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> dict:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     if row.status not in ("ready", "applied") or not row.assembled:
         raise HTTPException(status_code=409, detail="document is not assembled yet")
     return row.assembled
@@ -380,7 +381,7 @@ async def get_document(
 async def mark_applied(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    row = await _get_owned(db, session_id, user)
+    row = await _get_session_row(db, session_id)
     if row.status != "ready":
         raise HTTPException(status_code=409, detail="session is not ready")
     row.status = "applied"

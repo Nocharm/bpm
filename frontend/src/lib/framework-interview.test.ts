@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FwInterviewSession, FwQuestionnaire } from "./api";
+import type { FwInterviewSession, FwQuestionnaire, FwSessionStatus } from "./api";
 import {
   buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, hasBackgroundWork, validateAnswers,
 } from "./framework-interview";
@@ -13,7 +13,7 @@ const Q: FwQuestionnaire = {
   ],
 };
 
-function session(statuses: string[], status = "plan_locked", paused = false): FwInterviewSession {
+function session(statuses: string[], status: FwSessionStatus = "plan_locked", paused = false): FwInterviewSession {
   return {
     id: 1, category_id: 9, category_code: "c", category_name: "L5", status, paused, lang: "ko", brief: "",
     plan: null, relations: null, label: "", created_at: "", updated_at: "",

@@ -127,6 +127,16 @@ def test_attachment_merges_into_brief(client: TestClient, monkeypatch) -> None:
     assert bad.status_code == 422
 
 
+def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    r = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS,
+                   json={"cards": [], "lock": False, "brief": "매일 라운드"})
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["brief"] == "매일 라운드"
+
+
 def test_create_rejects_non_level5_category(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     parent = None
