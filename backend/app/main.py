@@ -35,6 +35,7 @@ from app.routers import (
     directory,
     employees,
     feedback,
+    framework_interviews,
     graph,
     groups,
     inbox,
@@ -124,6 +125,7 @@ app.include_router(feedback.router)
 app.include_router(notices.router)
 app.include_router(inbox.router)
 app.include_router(interviews.router)
+app.include_router(framework_interviews.router)
 app.include_router(kb.router)
 app.include_router(manual.router)
 app.include_router(dashboard.router)

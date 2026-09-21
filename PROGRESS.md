@@ -10,6 +10,7 @@
 - **플랜:** `docs/superpowers/plans/2026-09-21-ai-consultant-l5-campaign.md` 14태스크(BE 모델→답 검증→계약→조립→API→러너→API B, FE api/뷰모델→외부 프롬프트→페이지·보드·계획→설문·확인→연결·등록→관리자 진입→스모크·매뉴얼). 0.5 계약 결합 표면 3종(어댑터·조립기/프롬프트·외부 프롬프트)은 계약 테스트로 묶는다.
 - **구현(Task 1+3):** `FrameworkInterviewSession`/`FrameworkInterviewTask` ORM 2종 + 스키마 7종 + `app/framework_interview/contracts.py`(응답 스키마 10종·빌더 4종·프롬프트 계약 4종) 추가, `prompt_registry.PROMPT_KEYS` 9→13. 라우터·러너는 아직 없음(다음 태스크).
 - **구현(Task 2+4):** `app/framework_interview/answers.py`(`fill_answers` — 객관식 옵션id 검증·빈 주관식 제안값 자동채움) + `assemble.py`(`allocate_task_ids`·`load_category_chain`·`build_document`·`validate_row`·`assemble_document`) 추가. 조립 문서가 `scripts/consultant_interview.convert_interview` 어댑터를 이슈 0으로 통과함을 테스트로 고정.
+- **구현(Task 5, 라우터 A):** `app/routers/framework_interviews.py`(sysadmin+AI 게이트, 세션 생성/조회/목록/삭제, 첨부 병합, AI 계획 생성·저장/잠금 — 잠금 시 task_id 채번+`runner.kick` 호출) + `app/framework_interview/runner.py` 스텁(Task 6이 구현). 설문/답/관계/조립 엔드포인트(라우터 B)는 Task 7에서 이어붙인다.
 
 ## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
 
