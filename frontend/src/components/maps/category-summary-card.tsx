@@ -17,7 +17,7 @@ import {
   User,
   Workflow,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { LevelPill } from "@/components/level-pill";
 import { SectionHeader } from "@/components/section-header";
@@ -92,20 +92,27 @@ export function CategorySummaryCard({
 }: CategorySummaryCardProps) {
   const { t } = useI18n();
   const [summary, setSummary] = useState<CategorySummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // 에러는 어느 카테고리의 것인지 함께 둔다 — 카테고리가 바뀐 뒤 옛 에러가 새 로딩을 가리지 않게
+  const [error, setError] = useState<{ forId: number; message: string } | null>(null);
   // 목록 — 요약 도착 후 레벨에 따라 한쪽만 채운다. null=미로드(로딩 표시), 실패는 빈 목록으로 두고 조용히 넘어간다
   // (요약이 본문이고 목록은 보조라 재시도 버튼까지는 두지 않는다).
   const [children, setChildren] = useState<CategoryNode[] | null>(null);
   const [maps, setMaps] = useState<CategoryMaps | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // categoryId 변경 시 page.tsx가 key={selectedCategoryId}로 리마운트시켜 초기 state(null)로 되돌린다 —
-  // map-detail-card.tsx와 동일 관례. 이 effect는 fetch만 하고 동기 setState는 하지 않는다(set-state-in-effect 회피).
+  // 카테고리 전환은 리마운트 없이(page.tsx가 key를 주지 않는다) — 이전 요약을 흐리게 남겨 두고 새 요약이 오면
+  // 그 자리에서 되살린다(스피너로 통째 교체하던 깜빡임 제거, 사용자 지시 2026-09-21). stale = 보이는 요약이 다른 카테고리 것.
+  // 이 effect는 fetch만 하고 동기 setState는 하지 않는다(set-state-in-effect 회피) — 목록 리셋도 응답 콜백에서.
+  const stale = summary !== null && summary.id !== categoryId;
   useEffect(() => {
     let active = true;
     void getCategorySummary(categoryId)
       .then((res) => {
         if (!active) return;
         setSummary(res);
+        setChildren(null);
+        setMaps(null);
+        scrollRef.current?.scrollTo({ top: 0 });
         if (res.level === 5) {
           void listCategoryMaps(categoryId)
             .then((m) => {
@@ -125,7 +132,7 @@ export function CategorySummaryCard({
         }
       })
       .catch((err) => {
-        if (active) setError(humanizeApiError(err, t));
+        if (active) setError({ forId: categoryId, message: humanizeApiError(err, t) });
       });
     return () => {
       active = false;
@@ -136,7 +143,7 @@ export function CategorySummaryCard({
     setError(null);
     void getCategorySummary(categoryId)
       .then((res) => setSummary(res))
-      .catch((err) => setError(humanizeApiError(err, t)));
+      .catch((err) => setError({ forId: categoryId, message: humanizeApiError(err, t) }));
   }
 
   // 상대 시각 — 홈 카드와 같은 문구(home.timeAgo.*)
@@ -149,7 +156,7 @@ export function CategorySummaryCard({
     return t("home.timeAgo.days", { n: r.n });
   };
 
-  if (error) {
+  if (error && error.forId === categoryId) {
     return (
       <div className="flex h-full min-h-40 flex-col items-center justify-center p-4">
         <button
@@ -158,7 +165,7 @@ export function CategorySummaryCard({
           className="text-left text-caption text-error hover:underline"
           onClick={handleRetry}
         >
-          {error}
+          {error.message}
         </button>
       </div>
     );
@@ -266,8 +273,23 @@ export function CategorySummaryCard({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div data-id="category-summary-card" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+    <div className="fw-fade-in relative flex h-full min-h-0 flex-col">
+      {/* 전환 중 — 이전 요약은 흐려지고(350ms) 새 요약이 오면 같은 속도로 되살아난다. 우상단 스피너가 로딩을 알린다 */}
+      {stale && (
+        <Loader2
+          data-id="category-summary-switching"
+          size={16}
+          strokeWidth={1.5}
+          className="fw-fade-in absolute right-4 top-4 z-10 animate-spin text-ink-tertiary"
+        />
+      )}
+      <div
+        ref={scrollRef}
+        data-id="category-summary-card"
+        data-stale={stale ? "" : undefined}
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 transition-opacity duration-350 ease-smooth"
+        style={{ opacity: stale ? 0.35 : 1 }}
+      >
         {/* 헤더 — 경로 칩(맵 상세와 동일 문법) + L배지·제목, L5는 캔버스 열기 버튼을 우측 고정 */}
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">

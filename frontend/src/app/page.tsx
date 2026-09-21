@@ -1036,8 +1036,8 @@ export default function MapListPage() {
                   onToast={(m) => showToast(m)}
                 />
               ) : selectedCategoryId !== null ? (
+                // key 없음 — 카테고리 전환은 카드 안에서 크로스페이드(리마운트 스피너 깜빡임 제거, 2026-09-21)
                 <CategorySummaryCard
-                  key={selectedCategoryId}
                   categoryId={selectedCategoryId}
                   onOpenCanvas={handleOpenLinkage}
                   onSelectChild={selectChildCategory}

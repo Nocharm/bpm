@@ -2,13 +2,25 @@
 // 세그먼트 + 검색. 계단식: lazy 트리(lib/framework-tree-state 엔진), 현재 경로 미리 펼침·강조, 행 클릭=이동+닫힘, 자손
 // 호버 시 조상 강조(globals.css data-tree-* 규칙 공용). 다이어그램: lib/framework-diagram 레이아웃(ERD식 직각 엣지, 상위 체인
 // L1까지 위 가운데 차콜, 현재 액센트, 자식 좌/우, 손자 계단 스택). 좌클릭=재중심(전환 애니), 우클릭=메뉴(정보·이동·중심),
-// 휠 줌·드래그 팬. 모달 폭은 모드에 따라 640↔1180px로 전환.
-// 플로팅 패널(사용자 지시 2026-09-19): 배경 딤 없이 페이지 위에 떠 있고 헤더 드래그로 옮긴다. 바깥 클릭으로 닫히지 않고
-// ×/Esc로만 닫힌다. 항목을 골라 이동해도 열린 채 남아 현재 위치(centerId)를 따라간다.
+// 휠 줌·드래그 팬. 패널 크기는 모드에 따라 전환 — 계단식 440×600 고정, 다이어그램은 기본 1000×600에서 큰 창일수록
+// 폭·높이를 더 쓴다(상한 1600×960, 2026-09-21). 다이어그램 뷰박스는 실측 크기에 비례해 자라고(기본 크기에선 오늘과 같은
+// 배율), 패널이 커진 비율만큼 확대를 허용한다(lib/framework-diagram fitScale maxScale).
+// 플로팅 패널(사용자 지시 2026-09-19): 배경 딤 없이 페이지 위에 떠 있고 헤더 드래그로 옮긴다. 항목을 골라 이동해도 열린 채
+// 남아 현재 위치(centerId)를 따라간다. 닫기는 ×/Esc 외에 바깥 mousedown(두 모드 공통, 2026-09-21) — 여는 버튼(anchorRef)과
+// 우클릭 메뉴는 예외. 계단식 펼침/접힘은 useSectionMotion(accordion-open/-close)로 애니메이션한다.
 "use client";
 
-import { ChevronDown, ChevronRight, Crosshair, Info, Loader2, Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type WheelEvent } from "react";
+import { ChevronRight, Crosshair, Info, Loader2, Search, X } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type RefObject,
+  type WheelEvent,
+} from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -36,16 +48,36 @@ import {
 } from "@/lib/framework-tree-state";
 import { useI18n } from "@/lib/i18n";
 import { getTreeIndentStyle, TREE_INDENT_PADDING_CLASS } from "@/lib/tree-indent";
+import { useSectionMotion } from "@/lib/use-closing-keys";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { GoToMenu } from "@/components/maps/go-to-menu";
 
 type Mode = "tree" | "diagram";
 // 마지막 모드 영속 — 다음에 열 때 같은 형태로
 const MODE_KEY = "bpm.home.frameworkExplorerMode";
+// 다이어그램 뷰박스 기본값(사용자 단위) — 실측 전 첫 프레임용. 실측 후엔 패널 px × UNITS_PER_PX
 const VIEW_W = 1180;
 const VIEW_H = 640;
-// 플로팅 패널 폭(px) — 페이지를 다 가리지 않게 다이어그램 1000·계단식 560(뷰박스는 1180 기준, meet 스케일)
+// 플로팅 패널 기본 폭(px) — 페이지를 다 가리지 않게 다이어그램 1000·계단식 440. 다이어그램은 큰 창에서 자란다(아래 PANEL_SIZE)
 const PANEL_W = { tree: 440, diagram: 1000 } as const;
+const DIAGRAM_MAX_W = 1600;
+// 패널 크기(CSS) — 다이어그램은 창 폭-280·높이-200을 따라가되 기본(1000×600) 아래로 줄지 않고 1600×960에서 멈춘다.
+// 1280×800 창에선 기본 그대로, 1920×1080에선 1600×864(사용자 지시 2026-09-21: 기본 크기는 유지, 큰 창만 활용)
+const PANEL_SIZE = {
+  tree: { width: `${PANEL_W.tree}px`, height: "min(600px, 80vh)" },
+  diagram: {
+    width: `min(95vw, clamp(${PANEL_W.diagram}px, 100vw - 280px, ${DIAGRAM_MAX_W}px))`,
+    height: "min(80vh, clamp(600px, 100vh - 200px, 960px))",
+  },
+} as const;
+// 뷰박스 단위/px — 기본 패널(1000px)에 1180 단위를 맞추던 비율. 패널이 커져도 박스 크기는 같고 좌표 공간만 넓어진다
+const UNITS_PER_PX = VIEW_W / PANEL_W.diagram;
+// 드래그해 둔 패널의 가운데를 지키기 위한 PANEL_SIZE.width의 px 미러
+function measurePanelWidth(m: Mode): number {
+  if (m === "tree") return PANEL_W.tree;
+  const w = window.innerWidth;
+  return Math.min(w * 0.95, Math.min(DIAGRAM_MAX_W, Math.max(PANEL_W.diagram, w - 280)));
+}
 // 검색 결과 상한 — 초성 한 글자 같은 넓은 질의도 목록이 끝없이 길어지지 않게
 const SEARCH_CAP = 60;
 // 다이어그램 데이터: 부모 id(또는 루트)별 자식 캐시 — 트리 엔진 캐시와 별도(정렬·형태 동일, 갱신 주기 짧음)
@@ -55,8 +87,10 @@ interface FrameworkExplorerModalProps {
   // 현재 드릴 위치(루트면 null) — 트리 미리 펼침·다이어그램 중심
   centerId: number | null;
   onClose: () => void;
-  // 카테고리로 이동(L5면 부모 레벨 + 카드 선택은 호출부 담당) — 호출부가 닫는다
+  // 카테고리로 이동(L5면 부모 레벨 + 카드 선택은 호출부 담당) — 패널은 열린 채 따라간다
   onNavigate: (node: CategoryNode) => void;
+  // 패널을 여는 버튼 — 바깥 mousedown 닫기에서 제외(닫힘 직후 click으로 다시 열리는 토글 충돌 방지)
+  anchorRef?: RefObject<HTMLElement | null>;
 }
 
 function readMode(): Mode {
@@ -67,12 +101,14 @@ function readMode(): Mode {
   }
 }
 
-export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: FrameworkExplorerModalProps) {
+export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRef }: FrameworkExplorerModalProps) {
   const { t } = useI18n();
   const [mode, setMode] = useState<Mode>(() => readMode());
 
   // ── 계단식 트리 ──
   const [tree, setTree] = useState<FrameworkTreeState>(createInitialState());
+  // 펼침/접힘 모션 — 사용자가 직접 연 노드만 accordion-open, 현재 경로 자동 펼침은 static, 접힘은 고스트 렌더 후 언마운트
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
   const [chainIds, setChainIds] = useState<Set<number>>(new Set());
   // 루트→현재 체인 — 어느 centerId의 것인지 함께 둔다(centerId가 바뀐 직후 옛 체인으로 중심을 맞추는 경합 방지)
   const [chain, setChain] = useState<{ forId: number | null; nodes: CategoryNode[] } | null>(null);
@@ -105,9 +141,11 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
 
   function handleToggle(categoryId: number) {
     if (tree.openIds.has(categoryId)) {
+      closeSection(categoryId);
       setTree((prev) => reduceFrameworkTree(prev, { type: "closed", categoryId }));
       return;
     }
+    openSection(categoryId, true);
     setTree((prev) => reduceFrameworkTree(prev, { type: "opened", categoryId }));
     if (shouldFetchChildren(tree, categoryId)) {
       setTree((prev) => reduceFrameworkTree(prev, { type: "loading_started", categoryId }));
@@ -165,6 +203,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const diagramRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
+  // 다이어그램 영역 실측(px) — 뷰박스·맞춤 배율의 기준. null이면 기본 뷰박스(첫 프레임)
+  const [diagramSize, setDiagramSize] = useState<{ w: number; h: number } | null>(null);
 
   // 중심 동기화 — 체인 말단(L5면 그 부모), 루트면 첫 L1. centerId가 바뀌면(패널을 열어둔 채 이동) 다시 맞추고,
   // 사용자가 박스를 눌러 옮긴 중심은 다음 centerId 변경 전까지 유지한다
@@ -233,6 +273,9 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
   }, [effectiveCenter?.id, full]);
 
   // 체인 응답(상위·재중심한 상위)은 카운트가 0 고정 — 자식 캐시 어딘가에 같은 id가 있으면 그 노드로 바꿔 건수를 살린다
+  // 뷰박스 — 실측 px × 단위 비율. 기본 패널에선 1180×(높이 비례), 큰 창에선 그만큼 넓고 높은 좌표 공간
+  const viewW = diagramSize ? diagramSize.w * UNITS_PER_PX : VIEW_W;
+  const viewH = diagramSize ? diagramSize.h * UNITS_PER_PX : VIEW_H;
   const resolveFromCache = (n: CategoryNode): CategoryNode => {
     for (const list of childrenCache.values()) {
       const hit = list.find((c) => c.id === n.id);
@@ -254,7 +297,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
       const g = childrenCache.get(k.id);
       if (g) grandchildren.set(k.id, g);
     }
-    return layoutDiagram({ ancestors, center: resolveFromCache(effectiveCenter), children: kids, grandchildren }, VIEW_W);
+    return layoutDiagram({ ancestors, center: resolveFromCache(effectiveCenter), children: kids, grandchildren }, viewW);
   })();
 
   // 등장 애니메이션 — 새 박스는 중심 자리에서 시작해 다음 프레임에 제자리로(transform 전환)
@@ -319,6 +362,29 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctxMenu, infoNode, onClose]);
+  // 바깥 mousedown — 패널·여는 버튼 밖을 누르면 닫는다(ModalBackdrop과 같은 mousedown 기준). 우클릭 메뉴가 열려
+  // 있으면 메뉴가 먼저 닫히고(자체 캡처 리스너) 패널은 남는다. 메뉴 안 mousedown은 메뉴가 전파를 끊어 여기 안 온다.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (ctxMenu || panelRef.current?.contains(target) || anchorRef?.current?.contains(target)) return;
+      onClose();
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [ctxMenu, onClose, anchorRef]);
+  // 다이어그램 영역 실측 — 모드/검색 전환으로 다시 마운트될 때마다 관찰을 다시 건다(ResizeObserver 콜백에서만 setState)
+  const diagramMounted = mode === "diagram" && hits === null;
+  useEffect(() => {
+    const el = diagramRef.current;
+    if (!diagramMounted || !el) return;
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 0 && rect.height > 0) setDiagramSize({ w: rect.width, h: rect.height });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [diagramMounted]);
   const pathOf = (node: CategoryNode): string => {
     // 다이어그램 안 노드의 경로 — 상위 체인 + 중심 + (자식) + (손자)
     if (!layout || !effectiveCenter) return node.name;
@@ -360,8 +426,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
 
   const switchMode = (next: Mode) => {
     // 드래그해 둔 패널은 폭이 바뀌어도 가운데를 지킨다(중앙 정렬 상태는 translateX(-50%)가 알아서)
-    const widthOf = (m: Mode) => (m === "tree" ? PANEL_W.tree : PANEL_W.diagram);
-    setPos((p) => (p ? { ...p, left: Math.max(8, p.left + (widthOf(mode) - widthOf(next)) / 2) } : p));
+    setPos((p) => (p ? { ...p, left: Math.max(8, p.left + (measurePanelWidth(mode) - measurePanelWidth(next)) / 2) } : p));
     setMode(next);
     try {
       window.localStorage.setItem(MODE_KEY, next);
@@ -377,6 +442,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
     const loading = tree.loadingIds.has(node.id);
     const current = node.id === centerId;
     const onChain = chainIds.has(node.id);
+    // 접히는 중(고스트) — open은 이미 false, 자식 목록만 accordion-close 재생 동안 남긴다
+    const showKids = (open || closingKeys.has(node.id)) && kids.length > 0;
     return (
       <li key={node.id} data-tree-node data-id={`framework-explorer-node-${node.id}`} className="flex flex-col">
         <div
@@ -394,10 +461,12 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
           >
             {loading ? (
               <Loader2 size={12} strokeWidth={1.5} className="animate-spin" />
-            ) : open ? (
-              <ChevronDown size={12} strokeWidth={1.5} />
             ) : (
-              <ChevronRight size={12} strokeWidth={1.5} />
+              <ChevronRight
+                size={12}
+                strokeWidth={1.5}
+                className={`motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${open ? "rotate-90" : ""}`}
+              />
             )}
           </button>
           <button
@@ -422,8 +491,10 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
             </span>
           </button>
         </div>
-        {open && kids.length > 0 && (
-          <ul className="ml-3 flex flex-col border-l border-divider pl-1">{kids.map((k) => renderTreeNode(k, depth + 1))}</ul>
+        {showKids && (
+          <div className={getSectionClass(node.id)}>
+            <ul className="ml-3 flex flex-col border-l border-divider pl-1">{kids.map((k) => renderTreeNode(k, depth + 1))}</ul>
+          </div>
         )}
       </li>
     );
@@ -499,8 +570,10 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
     );
   };
 
-  const k = layout ? view.k * fitScale(layout, VIEW_H) : 1;
-  const tx = view.x + (VIEW_W - VIEW_W * k) / 2;
+  // 맞춤 배율 — 패널이 기본(1000px)보다 커진 비율까지 확대 허용(기본 크기에선 1 상한 = 종전과 같은 크기)
+  const growth = diagramSize ? Math.max(1, diagramSize.w / PANEL_W.diagram) : 1;
+  const k = layout ? view.k * fitScale(layout, viewH, viewW, growth) : 1;
+  const tx = view.x + (viewW - viewW * k) / 2;
   const ty = view.y + 10;
 
   const roots = tree.childrenByParent.get(ROOT) ?? [];
@@ -514,10 +587,11 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
         ref={panelRef}
         data-id="framework-explorer-modal"
         data-mode={mode}
-        className="pointer-events-auto absolute flex h-[min(600px,80vh)] max-w-[95vw] flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
+        className="pointer-events-auto absolute flex max-w-[95vw] flex-col overflow-hidden rounded-md border border-hairline bg-surface shadow-lg"
         style={{
-          width: mode === "tree" ? PANEL_W.tree : PANEL_W.diagram,
-          transition: "width 450ms var(--ease-spring)",
+          width: PANEL_SIZE[mode].width,
+          height: PANEL_SIZE[mode].height,
+          transition: "width 450ms var(--ease-spring), height 450ms var(--ease-spring)",
           ...(pos ? { left: pos.left, top: pos.top } : { left: "50%", top: 72, transform: "translateX(-50%)" }),
         }}
       >
@@ -640,7 +714,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
               )}
             </ul>
           ) : mode === "tree" ? (
-            <div data-id="framework-explorer-tree" className="flex-1 overflow-y-auto p-3">
+            // fw-tree(globals.css) — 호버 가이드 라인을 그룹 선 위로, 경로 밖 형제는 살짝 흐리게
+            <div data-id="framework-explorer-tree" className="fw-tree flex-1 overflow-y-auto p-3">
               {initFailed ? (
                 <div className="px-2 py-6 text-center text-fine text-error">{t("framework.drill.retry")}</div>
               ) : roots.length === 0 ? (
@@ -649,7 +724,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
                   {t("common.loading")}
                 </div>
               ) : (
-                <ul className="flex flex-col">{roots.map((r) => renderTreeNode(r, 0))}</ul>
+                // 루트도 하위와 같은 border-l+pl-1 구조(투명 선) — 가이드 라인이 모든 깊이에서 같은 자리에 놓인다
+                <ul className="flex flex-col border-l border-transparent pl-1">{roots.map((r) => renderTreeNode(r, 0))}</ul>
               )}
             </div>
           ) : (
@@ -698,7 +774,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate }: Framew
               )}
               {layout ? (
                 <svg
-                  viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+                  viewBox={`0 0 ${viewW} ${viewH}`}
                   preserveAspectRatio="xMidYMin meet"
                   className="block h-full w-full cursor-grab active:cursor-grabbing"
                   onWheel={handleWheel}

@@ -77,4 +77,15 @@ describe("layoutDiagram", () => {
     const small = layoutDiagram({ ancestors: [], center, children: [], grandchildren: new Map() });
     expect(fitScale(small, 640)).toBe(1);
   });
+
+  it("scales up only as far as the panel grew, bounded by both viewport axes", () => {
+    const center = node(1, 3);
+    const small = layoutDiagram({ ancestors: [], center, children: [node(2, 4), node(3, 4)], grandchildren: new Map() });
+    // 기본 패널(maxScale 1)은 확대하지 않는다
+    expect(fitScale(small, 640, 1180)).toBe(1);
+    // 패널이 1.6배 커지면 그만큼 확대 — 단, 폭이 좁으면 폭이 상한
+    expect(fitScale(small, 2000, 3000, 1.6)).toBe(1.6);
+    const contentWidth = 2 * DIAGRAM.DX + DIAGRAM.BW;
+    expect(fitScale(small, 2000, contentWidth + 40, 1.6)).toBeCloseTo(1, 5);
+  });
 });

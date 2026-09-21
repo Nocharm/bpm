@@ -94,7 +94,10 @@ export function layoutDiagram(input: DiagramInput, width = 1180): DiagramLayout 
   return { nodes, links, width, height, cx, cy };
 }
 
-// 화면에 전부 들어오는 배율 — 세로 기준, 확대는 하지 않는다(1 상한)
-export function fitScale(layout: DiagramLayout, viewportHeight: number): number {
-  return Math.min(1, (viewportHeight - 20) / layout.height);
+// 화면에 전부 들어오는 배율 — 세로·가로 모두 기준. 기본은 확대하지 않고(1 상한), 패널이 기본 크기보다
+// 커진 만큼(maxScale) 확대를 허용해 큰 창에서 남는 폭·높이를 다이어그램이 채운다(2026-09-21).
+export function fitScale(layout: DiagramLayout, viewportHeight: number, viewportWidth = Infinity, maxScale = 1): number {
+  const xs = layout.nodes.map((n) => n.x);
+  const contentWidth = xs.length > 0 ? Math.max(...xs) + DIAGRAM.BW - Math.min(...xs) : DIAGRAM.BW;
+  return Math.min(maxScale, (viewportHeight - 20) / layout.height, (viewportWidth - 40) / contentWidth);
 }

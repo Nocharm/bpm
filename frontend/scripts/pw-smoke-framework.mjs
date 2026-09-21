@@ -107,8 +107,9 @@ try {
   check("sibling column shows the current L4 with its admin slot", (await rowAdmin.count()) === 1,
     ((await sibByName(page, CHAIN[3]).first().textContent()) ?? "").trim());
   const crumbText = (await page.locator('[data-id="framework-crumb"]').textContent()) ?? "";
-  check("breadcrumb lists ancestors after drilling to L4",
-    CHAIN.slice(0, 4).every((c) => crumbText.includes(c)), crumbText.trim());
+  // 현재(L4)는 바로 아래 레벨 헤더에 있어 브레드크럼에서 생략(2026-09-21)
+  check("breadcrumb lists ancestors (not the current) after drilling to L4",
+    CHAIN.slice(0, 3).every((c) => crumbText.includes(c)) && !crumbText.includes(CHAIN[3]), crumbText.trim());
   const l5Card = page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first();
   const cardVisible = await l5Card.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   check("L4 level lists the L5 card", cardVisible, CHAIN[4]);

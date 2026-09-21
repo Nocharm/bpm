@@ -56,6 +56,8 @@ export function FrameworkDrill({
   // 최근에 현재 위치였던 카테고리(앞이 최신) — 형제 열의 "최근 열어봄" 점
   const [recent, setRecent] = useState<number[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
+  // 탐색 패널을 여는 버튼 — 패널의 바깥 mousedown 닫기에서 제외(닫힘 직후 click 재오픈 방지)
+  const explorerButtonRef = useRef<HTMLButtonElement>(null);
   const handledRevealSeq = useRef<number | null>(null);
 
   const loadChildren = (key: ParentKey) => {
@@ -436,25 +438,24 @@ export function FrameworkDrill({
       className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto pr-1"
       onKeyDown={handleKeyDown}
     >
-      {/* 브레드크럼 — 루트 라벨 + 조상 버튼, 현재는 굵게. 우측 끝 = 탐색 모달 아이콘 */}
+      {/* 브레드크럼 — 루트 라벨 + 조상 버튼 + 끝 체브론(현재는 바로 아래 레벨 헤더에 있어 생략). 줄바꿈 없이 한 줄,
+          길면 말줄임 — 끝 체브론은 말줄임 컨테이너 밖이라 항상 보인다(사용자 지시 2026-09-21). 우측 끝 = 탐색 모달 아이콘 */}
       <nav data-id="framework-crumb" className="flex min-h-[22px] items-center gap-0.5 px-0.5 text-fine text-ink-tertiary">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
           {path && path.length > 0 ? (
             <>
-              <button
-                type="button"
-                data-id="framework-crumb-root"
-                className="rounded-sm px-1 hover:bg-accent-tint hover:text-accent"
-                onClick={() => goTo(0)}
-              >
-                {t("home.viewFramework")}
-              </button>
-              {path.map((node, i) => (
-                <span key={node.id} className="flex min-w-0 items-center gap-0.5">
-                  <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
-                  {i === path.length - 1 ? (
-                    <span className="max-w-[10rem] truncate px-1 font-semibold text-ink">{node.name}</span>
-                  ) : (
+              <div className="min-w-0 truncate">
+                <button
+                  type="button"
+                  data-id="framework-crumb-root"
+                  className="rounded-sm px-1 align-middle hover:bg-accent-tint hover:text-accent"
+                  onClick={() => goTo(0)}
+                >
+                  {t("home.viewFramework")}
+                </button>
+                {path.slice(0, -1).map((node, i) => (
+                  <span key={node.id} className="inline-flex max-w-full items-center gap-0.5 align-middle">
+                    <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
                     <button
                       type="button"
                       data-id={`framework-crumb-${node.id}`}
@@ -463,15 +464,17 @@ export function FrameworkDrill({
                     >
                       {node.name}
                     </button>
-                  )}
-                </span>
-              ))}
+                  </span>
+                ))}
+              </div>
+              <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />
             </>
           ) : (
             <span className="px-1 font-semibold text-ink">{t("home.viewFramework")}</span>
           )}
         </div>
         <button
+          ref={explorerButtonRef}
           type="button"
           data-id="framework-explorer-open"
           title={t("framework.explorer.open")}
@@ -525,6 +528,7 @@ export function FrameworkDrill({
           centerId={typeof currentKey === "number" ? currentKey : null}
           onClose={() => setExplorerOpen(false)}
           onNavigate={goToCategory}
+          anchorRef={explorerButtonRef}
         />
       )}
     </section>

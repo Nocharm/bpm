@@ -616,6 +616,24 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     transition: none;
   }
 }
+/* 업무 체계 탐색 모달 계단식(.fw-tree) — 행이 border-l(1px)+pl-1(4px) 그룹 선 안에 놓이므로 가이드 라인을
+   들여쓰기 자리 대신 그 그룹 선 위(-4.5px, 2px 선의 중심 = 1px 선의 중심)에 얹어 경로가 한 선으로 읽힌다.
+   경로 밖 형제(호버 행/조상을 품지 않은 li)는 살짝 흐려져 경로가 도드라진다(사용자 지시 2026-09-21). */
+.fw-tree [data-tree-head]::before {
+  left: calc(-0.25rem - 1.5px);
+}
+.fw-tree li[data-tree-node] {
+  transition: opacity var(--tree-tempo) var(--tree-delay-out);
+}
+.fw-tree ul:has([data-tree-head]:hover) > li[data-tree-node]:not(:has([data-tree-head]:hover)) {
+  opacity: 0.6;
+  transition: opacity var(--tree-tempo) var(--tree-delay-in);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fw-tree li[data-tree-node] {
+    transition: none;
+  }
+}
 
 /* 홈 아코디언 펼침(부서·업무 체계) — 드러나는 영역이 0→콘텐츠 높이로 자라며 아래 행을 밀어낸다
    (즉시 등장 "뿅" 방지, 시선이 성장하는 영역을 따라가게). grid 0fr→1fr 트릭이라 높이 측정이 필요 없다.
