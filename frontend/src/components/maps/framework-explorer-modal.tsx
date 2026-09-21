@@ -11,7 +11,7 @@
 // 우클릭 메뉴는 예외. 계단식 펼침/접힘은 useSectionMotion(accordion-open/-close)로 애니메이션한다.
 "use client";
 
-import { ChevronRight, Crosshair, Info, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Crosshair, Info, Loader2, Search, X } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -200,6 +200,9 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const [placed, setPlaced] = useState<Set<number>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: CategoryNode } | null>(null);
+  // 브레드크럼 단계 메뉴(다이어그램 헤더) — 그 단계의 형제 목록(같은 부모의 자식, L1은 루트 목록), 현재 단계 강조.
+  // 고르면 재중심(포커스 이동). 부모 자식 목록이 캐시에 없으면 열 때 받아온다 (사용자 지시 2026-09-21)
+  const [crumbMenu, setCrumbMenu] = useState<{ x: number; y: number; parentKey: ParentKey; currentId: number } | null>(null);
   const [infoNode, setInfoNode] = useState<CategoryNode | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const diagramRef = useRef<HTMLDivElement>(null);
@@ -360,23 +363,42 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
   // Esc — 메뉴·정보 카드가 열려 있으면 그쪽이 먼저 닫힌다(정보 카드는 자체 백드롭 스택)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || ctxMenu || infoNode) return;
+      if (e.key !== "Escape" || ctxMenu || crumbMenu || infoNode) return;
       onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ctxMenu, infoNode, onClose]);
+  }, [ctxMenu, crumbMenu, infoNode, onClose]);
   // 바깥 mousedown — 패널·여는 버튼 밖을 누르면 닫는다(ModalBackdrop과 같은 mousedown 기준). 우클릭 메뉴가 열려
   // 있으면 메뉴가 먼저 닫히고(자체 캡처 리스너) 패널은 남는다. 메뉴 안 mousedown은 메뉴가 전파를 끊어 여기 안 온다.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (ctxMenu || panelRef.current?.contains(target) || anchorRef?.current?.contains(target)) return;
+      if (ctxMenu || crumbMenu || panelRef.current?.contains(target) || anchorRef?.current?.contains(target)) return;
       onClose();
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
-  }, [ctxMenu, onClose, anchorRef]);
+  }, [ctxMenu, crumbMenu, onClose, anchorRef]);
+  // 브레드크럼 — 상위 체인(캐시) + 현재 중심. 단계별 형제 목록의 부모 키: 이전 단계 id, L1은 ROOT
+  const crumbNodes: CategoryNode[] = effectiveCenter
+    ? [...(chainCache.get(effectiveCenter.id) ?? []).map(resolveFromCache), resolveFromCache(effectiveCenter)]
+    : [];
+  const siblingsOf = (parentKey: ParentKey): CategoryNode[] | undefined =>
+    parentKey === ROOT
+      ? (tree.childrenByParent.get(ROOT) ?? childrenCache.get(ROOT))
+      : (childrenCache.get(parentKey) ?? tree.childrenByParent.get(parentKey));
+  const openCrumbMenu = (e: ReactMouseEvent<HTMLButtonElement>, index: number) => {
+    const parentKey: ParentKey = index === 0 ? ROOT : crumbNodes[index - 1].id;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCrumbMenu({ x: rect.left, y: rect.bottom + 4, parentKey, currentId: crumbNodes[index].id });
+    if (typeof parentKey === "number" && siblingsOf(parentKey) === undefined) {
+      const parentId = parentKey;
+      void listCategoryNodes(parentId)
+        .then((nodes) => setChildrenCache((prev) => new Map(prev).set(parentId, nodes)))
+        .catch(() => setCrumbMenu(null));
+    }
+  };
   // 다이어그램 영역 실측 — 모드/검색 전환으로 다시 마운트될 때마다 관찰을 다시 건다(ResizeObserver 콜백에서만 setState)
   const diagramMounted = mode === "diagram" && hits === null;
   useEffect(() => {
@@ -633,21 +655,59 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
             <X size={16} strokeWidth={1.5} />
           </button>
           </div>
-          <label className="flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
-            <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-            <input
-              data-id="framework-explorer-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("framework.explorer.search")}
-              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-muted"
-            />
-            {query !== "" && (
-              <button type="button" aria-label="clear" className="text-ink-muted hover:text-ink" onClick={() => setQuery("")}>
-                <X size={12} strokeWidth={1.5} />
-              </button>
+          {/* 2줄 — 다이어그램 모드는 검색을 좁히고(w-56) 남는 우측에 중심 브레드크럼(각 단계 클릭=형제 메뉴, 끝=현재 중심).
+              계단식은 종전대로 검색이 전체 폭 (사용자 지시 2026-09-21) */}
+          <div className="flex min-w-0 items-center gap-2">
+            <label
+              className={`flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink ${
+                mode === "diagram" ? "w-56 shrink-0" : "flex-1"
+              }`}
+            >
+              <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <input
+                data-id="framework-explorer-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("framework.explorer.search")}
+                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-ink-muted"
+              />
+              {query !== "" && (
+                <button type="button" aria-label="clear" className="text-ink-muted hover:text-ink" onClick={() => setQuery("")}>
+                  <X size={12} strokeWidth={1.5} />
+                </button>
+              )}
+            </label>
+            {mode === "diagram" && crumbNodes.length > 0 && (
+              <nav
+                data-id="framework-explorer-crumb"
+                aria-label="center path"
+                className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-fine text-ink-tertiary"
+              >
+                {crumbNodes.map((node, i) => {
+                  const isLast = i === crumbNodes.length - 1;
+                  return (
+                    <span key={node.id} className="flex min-w-0 items-center gap-0.5">
+                      {i > 0 && <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />}
+                      <button
+                        type="button"
+                        data-id={`framework-explorer-crumb-${node.id}`}
+                        aria-haspopup="menu"
+                        aria-current={isLast ? "location" : undefined}
+                        title={`L${node.level} · ${node.name}`}
+                        className={`inline-flex min-w-0 max-w-[10rem] items-center gap-1 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-accent-tint hover:text-accent ${
+                          isLast ? "font-semibold text-ink" : ""
+                        }`}
+                        onClick={(e) => openCrumbMenu(e, i)}
+                      >
+                        <span className="truncate">{node.name}</span>
+                        <ChevronDown size={10} strokeWidth={1.5} className="shrink-0 opacity-60" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </nav>
             )}
-          </label>
+          </div>
         </div>
 
         <div className="relative flex min-h-0 flex-1">
@@ -829,6 +889,23 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
           )}
         </div>
       </div>
+      {crumbMenu && (
+        <GoToMenu
+          x={crumbMenu.x}
+          y={crumbMenu.y}
+          onClose={() => setCrumbMenu(null)}
+          items={(siblingsOf(crumbMenu.parentKey) ?? []).map((s) => ({
+            label: s.name,
+            active: s.id === crumbMenu.currentId,
+            icon: <LevelPill level={s.level} size="sm" />,
+            onSelect: () => {
+              setCrumbMenu(null);
+              if (s.level < 5) recenter(s);
+              else setInfoNode(s);
+            },
+          }))}
+        />
+      )}
       {ctxMenu && (
         <GoToMenu
           x={ctxMenu.x}
