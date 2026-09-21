@@ -71,19 +71,29 @@ async def _ask(messages: list[dict], schema_cls: type[BaseModel], db: AsyncSessi
     """AI 1콜 + JSON 검증 + usage 계량(map/version 없음 → 0, kind='fw_interview'). 실패는 502."""
     usage: list = []
     token = usage_log.set(usage)
-    ok = True
     try:
-        return await _ask_json(messages, None, schema_cls, reasoning="high")
+        result = await _ask_json(messages, None, schema_cls, reasoning="high")
     except TurnError as exc:
-        ok = False
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    finally:
         usage_log.reset(token)
         prompt_total, completion_total = sum_usage(usage)
-        db.add(AiUsageEvent(
-            login_id=user, map_id=0, version_id=0, model="", kind="fw_interview" if ok else None,
-            ok=ok, prompt_tokens=prompt_total, completion_tokens=completion_total,
-        ))
+        # 실패도 계량 — 이벤트 기록이 502 전파를 막지 않게 별도 커밋·예외 무시 (app/routers/ai.py와 동일 패턴)
+        try:
+            db.add(AiUsageEvent(
+                login_id=user, map_id=0, version_id=0, model="", kind=None,
+                ok=False, prompt_tokens=prompt_total, completion_tokens=completion_total,
+            ))
+            await db.commit()
+        except Exception:  # noqa: BLE001 -- 계량 실패는 원 응답(502)을 바꾸지 않는다
+            await db.rollback()
+            logger.warning("fw interview AI usage event insert failed (failure path)")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    usage_log.reset(token)
+    prompt_total, completion_total = sum_usage(usage)
+    db.add(AiUsageEvent(
+        login_id=user, map_id=0, version_id=0, model="", kind="fw_interview",
+        ok=True, prompt_tokens=prompt_total, completion_tokens=completion_total,
+    ))
+    return result
 
 
 async def _catalogs(db: AsyncSession) -> tuple[str, str]:

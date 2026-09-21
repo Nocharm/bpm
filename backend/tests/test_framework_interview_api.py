@@ -11,7 +11,7 @@ from app import auth as auth_mod
 from app.db import SessionLocal
 from app.framework_interview import runner
 from app.main import app
-from app.models import FrameworkInterviewSession
+from app.models import AiUsageEvent, FrameworkInterviewSession
 from app.settings import settings
 
 SYSADMIN = "fw.admin"
@@ -125,3 +125,41 @@ def test_attachment_merges_into_brief(client: TestClient, monkeypatch) -> None:
     bad = client.post(f"/api/framework-interviews/{sid}/attachments", headers=HEADERS,
                       files={"file": ("x.exe", b"00", "application/octet-stream")})
     assert bad.status_code == 422
+
+
+def test_create_rejects_non_level5_category(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    parent = None
+    node: dict = {}
+    tag = f"fw-{uuid4().hex[:6]}"
+    for level in range(1, 5):  # L4까지만 — 마지막(node)은 레벨 4
+        node = client.post("/api/categories", json={"name": f"{tag}-L{level}", "parent_id": parent},
+                           headers=HEADERS).json()
+        parent = node["id"]
+    r = client.post("/api/framework-interviews", json={"category_id": node["id"]}, headers=HEADERS)
+    assert r.status_code == 422
+
+
+def test_plan_generation_failure_records_single_usage_event(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+
+    async def _boom(messages, model=None, *, reasoning=None, max_tokens=None):
+        raise RuntimeError("gpu down")
+
+    monkeypatch.setattr(ai_client, "call_ai", _boom)
+    r = client.post(f"/api/framework-interviews/{sid}/plan", headers=HEADERS)
+    assert r.status_code == 502
+
+    async def _events() -> list[AiUsageEvent]:
+        async with SessionLocal() as db:
+            return list((await db.scalars(select(AiUsageEvent).where(
+                AiUsageEvent.login_id == SYSADMIN, AiUsageEvent.ok.is_(False),
+            ))).all())
+
+    events = asyncio.run(_events())
+    assert len(events) == 1
+    assert events[0].kind is None
+    assert events[0].ok is False
+    assert events[0].map_id == 0
