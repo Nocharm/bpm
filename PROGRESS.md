@@ -3,10 +3,15 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
+## 2026-09-21 — 부서 뷰의 L5 연계 캔버스 6종: 카드·관리 부서·설정 탭·필터 2줄/정렬·FW 검색 그룹·L6 스트립 (dev)
 
-- **배경:** 조직도·대시보드는 `splitMapsByMode`가 framework 맵을 빼지만 검색 결과(`filteredMaps`)는 빼지 않아 연계 캔버스가 일반 맵 카드(오너·SP·역할 필·담당 부서 누락 경고)로 섞여 나왔고, 클릭하면 MapDetailCard가 "담당 부서 누락"·"업무 체계에 연결" 필을 띄웠다(캔버스엔 무의미).
-- **결과:** `components/maps/framework-map-card.tsx` — 캔버스 타일·이름·확정/초안·"L5 canvas" 라벨, 2줄 L5 필+상위 경로, 호버 시 캔버스 열기. 클릭=결착 카테고리 선택 → 우측(좁은 폭은 인라인)은 업무 체계 뷰와 같은 `CategorySummaryCard` 재사용. BE `list_maps`가 `linkage_category_id/path`를 채운다(역조회 1쿼리, 종전엔 상세만). 후속: 설정 탭 검토·관리 부서 파라미터 검토·부서 뷰 필터 2줄·프레임워크 뷰 검색 디자인·L6 선택 스트립+뒤로가기.
+- **배경:** 조직도·대시보드는 `splitMapsByMode`가 framework 맵을 빼지만 검색 결과는 빼지 않아 연계 캔버스가 일반 맵 카드(오너·SP·역할 필·담당 부서 누락 경고)로 섞였고, 상세 카드·설정 화면도 캔버스에 무의미한 오우닝 부서·"업무 체계에 연결"·협업자 구성을 보였다. 캔버스는 담당 부서가 없어 조직도에 놓을 자리도 없었다.
+- **1 L5 카드:** `framework-map-card.tsx`(캔버스 타일·확정/초안·L5 경로·호버 열기), 클릭=결착 카테고리 선택 → 우측은 업무 체계 뷰와 같은 `CategorySummaryCard`. BE `list_maps`가 `linkage_category_id/path`를 채운다.
+- **5 관리 부서(B안, 사용자 결정):** `ProcessCategory.admin_department`(조직 경로, `_ADDED_COLUMNS`) — 권한(user|group)과 별개 속성, 비면 상위 상속(`resolve_admin_departments` 순수 함수, nodes/chain/summary에 유효값+출처). PATCH는 개명과 같은 서브트리 게이트 + 유효 조직 경로만(422). **캔버스 owning_department는 결착 L5의 유효 관리 부서에서 파생**(`set_committed_value`로 응답에만, 저장 안 함) → 부서 뷰 조직도에 자리가 생긴다. 지정 UI = 설정>Categories 행의 Building2 버튼(`category-dept-modal.tsx`, 오우닝 피커와 같은 PrincipalPicker), 요약 카드 "Managing department" 섹션(상속 출처 표기). A안(부서 principal)은 직속 L5 관리자=확정권이 부서 전원에게 새어 폐기.
+- **2 캔버스 설정:** Details=이름 읽기전용(L5 이름을 따름)+연결 카테고리·관리 부서 블록(오우닝 부서 블록·GMP 필드 카드 제거), Visibility=읽기전용+사유, 협업자 탭→읽기전용 "Who can edit"(`framework-access-panel.tsx`: 경로·관리 부서·체인 관리자, L5 직속=확정 표시, (i)안), 승인자·버전·SP 숨김 유지, **결재 대기 탭에 `can_confirm`·`can_decide_slot` 실값 연결(false 하드코딩 버그)**, Danger에 분리 안내.
+- **3 필터:** 2줄 — 1줄 공개 범위(세그먼트→다른 필과 같은 단추, 단일)·상태·권한·**정렬**(최근 수정/이름/최근 생성, `lib/map-sort.ts`, 조직도·나의 부서·검색·요약 카드 소속 맵 공통), 2줄(부서 뷰 전용) 이슈·SP·L5 캔버스(만/제외)·업무 체계 등록/미등록. Clear는 정렬 제외 하나라도 있으면. 반응형 단계는 두 줄 복제 중 넓은 쪽 기준. 조직도·나의 부서는 캔버스를 일반 맵 아래 점선 "L5 canvases" 스페이서 뒤에 나열(`splitMapsByMode.frameworkMaps`).
+- **4 FW 뷰 검색:** `framework-search-groups.tsx` — 히트를 L5 경로별 그룹(헤더=경로+캔버스 확정/초안 칩+수, 클릭=검색 해제+드릴다운 이동 `revealCategory`), 미등록은 점선 그룹 맨 뒤(`lib/framework-search-groups.ts`).
+- **6 L6 스트립:** 요약 카드에서 맵을 열면 좌측 맨 아래 `selected-map-strip.tsx`(이름·상태·"L5 …에서 열었음", 떠 있는 카드 톤), L5 카드는 선택 유지. ×·"L5로 돌아가기"·브라우저 뒤로가기(popstate) 모두 직전 L5 선택으로 복귀(`mapOrigin` ref 미러). 부수 픽스: `FrameworkDrill` revealRequest가 마운트와 동시에 오면 StrictMode 이중 실행의 첫 실행에서 "처리됨"으로 남아 건너뛰던 문제 — 처리 표시를 완료 시점으로.
 
 ## 2026-09-21 — 업무 체계 탐색 패널·드릴다운 UX 6종 (dev)
 

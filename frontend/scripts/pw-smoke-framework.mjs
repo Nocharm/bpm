@@ -205,13 +205,17 @@ try {
   // ── 4) 필터 — Private 세그먼트 → 우측 소속 맵 숨김 + filtered-out 노트, All 복귀 ─
   await l5Card.click();
   await summaryMapRow.first().waitFor({ state: "visible", timeout: 8000 });
-  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "Private" }).click();
+  // 공개 범위는 다른 필터와 같은 드롭다운 단추(2026-09-21) — 열고 옵션을 고른다
+  await page.locator('[data-id="home-visibility-filter"]').click();
+  await page.locator('[data-id="home-filter-row"] button', { hasText: "Private" }).click();
   const noteVisible = await page.locator('[data-id="category-summary-filtered-note"]').first()
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
   const rowHidden = !(await summaryMapRow.first().isVisible().catch(() => false));
   check("Private filter hides public maps in the summary with a filtered-out note", noteVisible && rowHidden,
     `note=${noteVisible} rowHidden=${rowHidden}`);
-  await page.locator('[data-id="home-visibility-filter"] button', { hasText: "All" }).click();
+  // 같은 옵션을 다시 고르면 전체로 복귀
+  await page.locator('[data-id="home-visibility-filter"]').click();
+  await page.locator('[data-id="home-filter-row"] button', { hasText: "Private" }).click();
   const noteGone = (await page.locator('[data-id="category-summary-filtered-note"]').count()) === 0;
   check("All filter clears filtered-out note", noteGone);
 

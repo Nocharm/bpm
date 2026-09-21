@@ -16,6 +16,7 @@ import { filterByQuery, type MatchRange } from "@/lib/search";
 import { getRecentMaps, partitionByRecency, type RecentMapEntry } from "@/lib/recent-maps";
 import { WORD_FEATURES_ENABLED } from "@/lib/features";
 import { splitMapsByMode } from "@/lib/word-map-home";
+import { DEFAULT_MAP_SORT, isMapSortKey, sortMaps, type MapSortKey } from "@/lib/map-sort";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
@@ -28,6 +29,8 @@ import { FrameworkDrill } from "@/components/maps/framework-drill";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
 import { HomeFilterPills } from "@/components/maps/home-filter-pills";
+import { FrameworkSearchGroups } from "@/components/maps/framework-search-groups";
+import { SelectedMapStrip } from "@/components/maps/selected-map-strip";
 import { FrameworkMapCard } from "@/components/maps/framework-map-card";
 import { MapCard } from "@/components/maps/map-card";
 import { MapDetailCard } from "@/components/maps/map-detail-card";
@@ -80,6 +83,10 @@ export default function MapListPage() {
   const [owningFilter, setOwningFilter] = useState<Set<string>>(new Set());
   // SP 지정 여부 필터 — "sp"(지정됨)/"non_sp"(미지정), 비면 전체 (sp_designated_at 기준)
   const [spFilter, setSpFilter] = useState<Set<string>>(new Set());
+  // 부서 뷰 2줄째 필터(2026-09-21) — L5 캔버스(canvas/non_canvas)·업무 체계 등록(registered/unregistered) + 정렬(단일)
+  const [canvasFilter, setCanvasFilter] = useState<Set<string>>(new Set());
+  const [registeredFilter, setRegisteredFilter] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<MapSortKey>(DEFAULT_MAP_SORT);
   // 맵 복사 — CreateMapDialog copy 모드(버전 선택·오너 알림 안내·원본 은퇴). 상세 카드가 detail 통째 전달 (F12 재편).
   const [copyTarget, setCopyTarget] = useState<MapDetail | null>(null);
   // word 맵 승격 대상 — 지정 시 승격 관문 다이얼로그(CreateMapDialog promote 모드)를 연다 (design 2026-07-24 §6).
@@ -124,6 +131,8 @@ export default function MapListPage() {
   const filterRowRef = useRef<HTMLDivElement | null>(null);
   const measureFullRef = useRef<HTMLDivElement | null>(null);
   const measureLabelRef = useRef<HTMLDivElement | null>(null);
+  const measureFullRef2 = useRef<HTMLDivElement | null>(null);
+  const measureLabelRef2 = useRef<HTMLDivElement | null>(null);
   // Clear 버튼(필터 활성 시만 렌더)도 같은 행의 가용폭을 갉아먹는다 — 측정에서 빼지 않으면
   // Clear가 나타나는 순간 겹치거나 넘칠 수 있다(T9 실측 발견).
   const clearBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -264,6 +273,9 @@ export default function MapListPage() {
         perm?: unknown;
         owning?: unknown;
         sp?: unknown;
+        canvas?: unknown;
+        registered?: unknown;
+        sort?: unknown;
       };
       if (typeof s.q === "string") {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -284,6 +296,15 @@ export default function MapListPage() {
       if (Array.isArray(s.sp)) {
         setSpFilter(new Set(s.sp.filter((x): x is string => x === "sp" || x === "non_sp")));
       }
+      if (Array.isArray(s.canvas)) {
+        setCanvasFilter(new Set(s.canvas.filter((x): x is string => x === "canvas" || x === "non_canvas")));
+      }
+      if (Array.isArray(s.registered)) {
+        setRegisteredFilter(
+          new Set(s.registered.filter((x): x is string => x === "registered" || x === "unregistered")),
+        );
+      }
+      if (isMapSortKey(s.sort)) setSortKey(s.sort);
     } catch {
       /* 손상된 저장값 무시 */
     }
@@ -291,8 +312,15 @@ export default function MapListPage() {
 
   // Clear 필 노출 조건 — JSX(아래)와 effect deps 양쪽이 같은 식을 참조(중복 방지 겸 clearBtnRef
   // mount/unmount 시 effect 재실행 트리거).
+  // 정렬은 필터가 아니라 해제 대상에서 뺀다
   const hasActiveFilter =
-    statusFilter.size > 0 || permFilter.size > 0 || visFilter !== "all" || owningFilter.size > 0 || spFilter.size > 0;
+    statusFilter.size > 0 ||
+    permFilter.size > 0 ||
+    visFilter !== "all" ||
+    owningFilter.size > 0 ||
+    spFilter.size > 0 ||
+    canvasFilter.size > 0 ||
+    registeredFilter.size > 0;
 
   // 필터 필 표시 단계 실측 — 측정 복제(absolute invisible) 2종의 자연폭 vs 행 가용폭(Clear 필 폭
   // 차감). i18n/뷰 전환은 복제가 같은 props로 다시 그려지므로 자동 반영. RO 콜백 내 setState는
@@ -302,14 +330,17 @@ export default function MapListPage() {
     const full = measureFullRef.current;
     const label = measureLabelRef.current;
     if (!row || !full || !label) return;
+    // 2줄째(부서 뷰 전용) 복제 — 두 줄이 같은 단계를 쓰므로 더 넓은 줄의 자연폭이 기준
+    const full2 = measureFullRef2.current;
+    const label2 = measureLabelRef2.current;
     const update = () => {
       const clear = clearBtnRef.current;
       // Clear가 뜨면 같은 행의 gap(1.5=6px)만큼 더 먹는다 — 폭+간격을 가용폭에서 미리 뺀다.
       const available = row.clientWidth - (clear ? clear.offsetWidth + 6 : 0);
       setFilterMode(
         pickFilterDisplayMode(available, {
-          full: full.scrollWidth,
-          label: label.scrollWidth,
+          full: Math.max(full.scrollWidth, full2?.scrollWidth ?? 0),
+          label: Math.max(label.scrollWidth, label2?.scrollWidth ?? 0),
         }),
       );
     };
@@ -319,6 +350,8 @@ export default function MapListPage() {
     ro.observe(row);
     ro.observe(full);
     ro.observe(label);
+    if (full2) ro.observe(full2);
+    if (label2) ro.observe(label2);
     if (clearBtnRef.current) ro.observe(clearBtnRef.current);
     return () => {
       cancelAnimationFrame(raf);
@@ -349,9 +382,12 @@ export default function MapListPage() {
         perm: [...permFilter],
         owning: [...owningFilter],
         sp: [...spFilter],
+        canvas: [...canvasFilter],
+        registered: [...registeredFilter],
+        sort: sortKey,
       }),
     );
-  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, spFilter]);
+  }, [mapQuery, visFilter, statusFilter, permFilter, owningFilter, spFilter, canvasFilter, registeredFilter, sortKey]);
 
   // "/" 단축키 — 입력 중이 아닐 때 검색창 포커스(GitHub식) / focus search on "/" unless already typing.
   useEffect(() => {
@@ -386,10 +422,22 @@ export default function MapListPage() {
       window.history.back(); // 우리가 쌓은 선택 항목만 제거(있음이 보장됨) — 홈에 머무름
     }
   }, [selectedId]);
+  // 업무 체계 요약 카드에서 연 맵의 출처 L5 — 뒤로가기(popstate)·스트립 ×가 그 L5 선택 화면으로 복귀 (2026-09-21).
+  // ref 미러 — popstate 리스너는 1회 구독이라 최신 값을 ref로 읽는다
+  const [mapOrigin, setMapOrigin] = useState<{ id: number; name: string } | null>(null);
+  const mapOriginRef = useRef<{ id: number; name: string } | null>(null);
+  useEffect(() => {
+    mapOriginRef.current = mapOrigin;
+  }, [mapOrigin]);
   useEffect(() => {
     const onPop = () => {
       selPushed.current = false; // 우리 항목이 pop됨
       setSelectedId(null);
+      const origin = mapOriginRef.current;
+      if (origin) {
+        setMapOrigin(null);
+        setSelectedCategoryId(origin.id);
+      }
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -474,10 +522,21 @@ export default function MapListPage() {
           spFilter.size === 0 ||
           (spFilter.has("sp") && !!m.sp_designated_at) ||
           (spFilter.has("non_sp") && !m.sp_designated_at);
-        return visOk && statusOk && permOk && owningOk && spOk;
+        const isCanvas = m.mode === "framework";
+        const canvasOk =
+          canvasFilter.size === 0 || (canvasFilter.has("canvas") && isCanvas) || (canvasFilter.has("non_canvas") && !isCanvas);
+        // 업무 체계 등록 — 슬롯(category_id)이 있거나 캔버스 자체
+        const registered = isCanvas || m.category_id != null;
+        const registeredOk =
+          registeredFilter.size === 0 ||
+          (registeredFilter.has("registered") && registered) ||
+          (registeredFilter.has("unregistered") && !registered);
+        return visOk && statusOk && permOk && owningOk && spOk && canvasOk && registeredOk;
       }),
-    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, spFilter],
+    [visibleMaps, visFilter, statusFilter, permFilter, owningFilter, spFilter, canvasFilter, registeredFilter],
   );
+  // 정렬은 목록 표면마다 같은 함수 — 조직도·나의 부서·검색 결과·업무 체계 요약 카드(소속 맵)
+  const applySort = useCallback(<T extends MapSummary>(list: T[]) => sortMaps(list, sortKey), [sortKey]);
 
   // Framework 뷰 카드 필터 — filteredMaps 술어의 부분집합(가시성·상태·역할만, owning/SP는 부서 뷰 전용).
   // 트리는 lazy 서버 fetch라 filteredMaps를 못 쓰고 술어를 넘겨 로드된 카드에만 적용한다.
@@ -511,7 +570,12 @@ export default function MapListPage() {
   // 검색 모드 정렬 — 최근 접속 매치 상단 고정(최신순) + 나머지 기존 검색 랭킹 /
   // search order: recent-opened matches pinned on top (recency), rest keep search rank.
   const searchPartition = partitionByRecency(mapHits, (h) => h.item.id, recentIds);
-  const orderedHits = [...searchPartition.recent, ...searchPartition.rest];
+  // 정렬을 고르면 검색 랭킹 대신 그 순서(최근 접속 고정은 유지). 기본(최근 수정순)은 랭킹 그대로
+  const restHits =
+    sortKey === DEFAULT_MAP_SORT
+      ? searchPartition.rest
+      : applySort(searchPartition.rest.map((h) => ({ ...h.item, hit: h }))).map((m) => m.hit);
+  const orderedHits = [...searchPartition.recent, ...restHits];
 
   // 브라우즈 좌측 — 나의 부서 즐겨찾기 + 조직도 트리(렌더타임 파생, effect 아님) /
   // browse-mode left column: my-dept favorites + org tree, derived at render (not in an effect).
@@ -523,13 +587,18 @@ export default function MapListPage() {
   }, [me]);
   // 조직도·나의 부서 즐겨찾기는 word 맵 제외(splitMapsByMode) — 검색(filteredMaps 자체)은 word 맵 포함 유지 (design 2026-07-24 §2)
   const orgTree = useMemo(
-    () => buildOrgTree(splitMapsByMode(filteredMaps).processMaps, directory?.departments ?? [], myDeptKeepPaths),
-    [filteredMaps, directory, myDeptKeepPaths],
+    // 조직도·나의 부서는 일반 맵 + 연계 캔버스(관리 부서 파생 owning_department) — 렌더러가 캔버스를 스페이서 뒤로 모은다
+    () => {
+      const { processMaps: generals, frameworkMaps } = splitMapsByMode(filteredMaps);
+      return buildOrgTree(applySort([...generals, ...frameworkMaps]), directory?.departments ?? [], myDeptKeepPaths);
+    },
+    [filteredMaps, directory, myDeptKeepPaths, applySort],
   );
-  const myDeptMaps = useMemo(
-    () => (me?.org_path ? filterMyDeptMaps(splitMapsByMode(filteredMaps).processMaps, me.org_path) : []),
-    [filteredMaps, me],
-  );
+  const myDeptMaps = useMemo(() => {
+    if (!me?.org_path) return [];
+    const { processMaps: generals, frameworkMaps } = splitMapsByMode(filteredMaps);
+    return filterMyDeptMaps(applySort([...generals, ...frameworkMaps]), me.org_path);
+  }, [filteredMaps, me, applySort]);
   // department가 ""(빈 문자열)일 수 있어 ??는 폴백을 건너뛴다 — || 로 org_path 리프까지 폴백
   const myDeptLabel = (me?.department || me?.org_path?.split("/").pop()) ?? "";
   // 대시보드 내 부서 카드용 — 검색·필터 전 전체(위 myDeptMaps는 필터 결과라 목록 섹션 전용)
@@ -552,7 +621,7 @@ export default function MapListPage() {
 
   // 25개씩 증분 렌더 — 맵이 수백 개여도 목록 렌더 부하 없음(검색어·필터 변경 시 리셋). 검색 모드 전용
   // (브라우즈는 즐겨찾기+아코디언이라 별도 증분 렌더 없음).
-  const listKey = `${mapQuery}|${visFilter}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}`;
+  const listKey = `${mapQuery}|${visFilter}|${sortKey}|${[...statusFilter].sort().join(",")}|${[...permFilter].sort().join(",")}|${[...owningFilter].sort().join(",")}|${[...spFilter].sort().join(",")}|${[...canvasFilter].sort().join(",")}|${[...registeredFilter].sort().join(",")}`;
   const {
     visible: shownSearchHits,
     hasMore: hasMoreSearch,
@@ -601,8 +670,9 @@ export default function MapListPage() {
                     categoryId={categoryId}
                     onOpenCanvas={handleOpenLinkage}
                     onSelectChild={selectChildCategory}
-                    onSelectMap={selectMap}
+                    onSelectMap={selectMapFromCategory}
                     filterMap={frameworkFilterMap}
+                    sortMaps={applySort}
                   />
                 </div>
               )}
@@ -667,15 +737,37 @@ export default function MapListPage() {
   const selectMap = (id: number) => {
     setSelectedId(id);
     setSelectedCategoryId(null);
+    setMapOrigin(null);
+  };
+  // 업무 체계 요약 카드의 L6 행 — 출처 L5를 기억해 좌측 스트립·뒤로가기가 그 L5 선택 화면으로 돌아간다 (2026-09-21)
+  const selectMapFromCategory = (id: number, origin: { id: number; name: string }) => {
+    setSelectedId(id);
+    setSelectedCategoryId(null);
+    setMapOrigin(origin);
+  };
+  const returnToOrigin = () => {
+    const origin = mapOriginRef.current;
+    setMapOrigin(null);
+    setSelectedId(null); // selPushed 이펙트가 우리 히스토리 항목을 back()으로 소비한다
+    if (origin) setSelectedCategoryId(origin.id);
   };
   const selectCategory = (node: CategoryNode) => {
     setSelectedCategoryId(node.id);
     setSelectedId(null);
+    setMapOrigin(null);
   };
   // 요약 카드 "직계 하위" 드릴다운 — 선택 + 좌측 드릴다운을 그 부모 레벨로 이동(FrameworkDrill revealRequest). (2026-09-10)
   const selectChildCategory = (node: CategoryNode) => {
     selectCategory(node);
     setRevealRequest((prev) => ({ id: node.id, seq: (prev?.seq ?? 0) + 1 }));
+  };
+  // 업무 체계 뷰 검색 결과 그룹 헤더 — 검색을 걷고 그 L5로 드릴다운 이동(드릴이 다시 마운트되며 revealRequest를 처리)
+  const revealCategory = (categoryId: number) => {
+    setMapQuery("");
+    setSelectedCategoryId(categoryId);
+    setSelectedId(null);
+    setMapOrigin(null);
+    setRevealRequest((prev) => ({ id: categoryId, seq: (prev?.seq ?? 0) + 1 }));
   };
 
   // 연계 캔버스 열기 — 있으면 이동, 없으면 생성(권한자) 후 이동. Framework 트리의 Linkage 버튼과
@@ -695,7 +787,48 @@ export default function MapListPage() {
     if (event.target === event.currentTarget) {
       setSelectedId(null);
       setSelectedCategoryId(null);
+      setMapOrigin(null);
     }
+  };
+
+  // 필터 필 공용 props — 라이브 2줄과 측정 복제 4종이 같은 상태를 본다(복제는 dataId 없음·핸들러 no-op)
+  const toggleIn = (setter: (fn: (prev: Set<string>) => Set<string>) => void) => (v: string) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v);
+      else next.add(v);
+      return next;
+    });
+  const pillProps = {
+    visFilter,
+    onSetVis: setVisFilter,
+    statusFilter,
+    onToggleStatus: toggleIn(setStatusFilter),
+    permFilter,
+    onTogglePerm: toggleIn(setPermFilter),
+    sortKey,
+    onSetSort: setSortKey,
+    owningFilter,
+    onToggleOwning: toggleIn(setOwningFilter),
+    spFilter,
+    onToggleSp: toggleIn(setSpFilter),
+    canvasFilter,
+    onToggleCanvas: toggleIn(setCanvasFilter),
+    registeredFilter,
+    onToggleRegistered: toggleIn(setRegisteredFilter),
+  };
+  const noop = () => {};
+  const measureProps = {
+    ...pillProps,
+    measureOnly: true,
+    onSetVis: noop,
+    onToggleStatus: noop,
+    onTogglePerm: noop,
+    onSetSort: noop,
+    onToggleOwning: noop,
+    onToggleSp: noop,
+    onToggleCanvas: noop,
+    onToggleRegistered: noop,
   };
 
   const renderCard = (processMap: MapSummary) =>
@@ -829,29 +962,9 @@ export default function MapListPage() {
                 inputRef={searchRef}
                 dataId="home-map-search"
               />
-              <div
-                data-id="home-visibility-filter"
-                className="flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5"
-              >
-                {(["all", "public", "private"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    aria-pressed={visFilter === f}
-                    className={`flex-1 rounded-sm px-2.5 py-1 text-caption transition-colors ${
-                      visFilter === f
-                        ? "bg-accent-tint text-accent"
-                        : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                    }`}
-                    onClick={() => setVisFilter(f)}
-                  >
-                    {f === "all"
-                      ? t("home.filterAll")
-                      : t(f === "public" ? "perm.visibilityPublic" : "perm.visibilityPrivate")}
-                  </button>
-                ))}
-              </div>
-              {/* 상태·권한 필터 — 멀티셀렉트 드롭다운(가시성과 AND), Clear는 우측끝 (H1 개정) */}
+              {/* 필터 2줄(사용자 지시 2026-09-21) — 1줄: 공개 범위·상태·권한·정렬(두 뷰 공용) + Clear(우측끝),
+                  2줄: 이슈·SP·L5 캔버스·업무 체계 등록(부서 뷰 전용). 표시 단계(full/label/icon)는 두 줄이 공유 —
+                  측정 복제는 줄별 full/label 4종, 더 넓은 줄 기준으로 판정한다. */}
               <div
                 data-id="home-filter-row"
                 ref={filterRowRef}
@@ -859,84 +972,13 @@ export default function MapListPage() {
                 onAnimationEnd={() => setFilterFlash(false)}
                 className={`relative flex min-w-0 items-center gap-1.5 ${filterFlash ? "animate-filter-flash" : ""}`}
               >
-                <HomeFilterPills
-                  display={filterMode}
-                  homeView={homeView}
-                  statusFilter={statusFilter}
-                  onToggleStatus={(v) =>
-                    setStatusFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                  permFilter={permFilter}
-                  onTogglePerm={(v) =>
-                    setPermFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                  owningFilter={owningFilter}
-                  onToggleOwning={(v) =>
-                    setOwningFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                  spFilter={spFilter}
-                  onToggleSp={(v) =>
-                    setSpFilter((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(v)) next.delete(v);
-                      else next.add(v);
-                      return next;
-                    })
-                  }
-                />
+                <HomeFilterPills {...pillProps} row="primary" display={filterMode} />
                 {/* 측정 복제 — 보이지 않게 자연폭만 잰다(absolute라 레이아웃 불참여, dataId 없음) */}
-                <div
-                  ref={measureFullRef}
-                  aria-hidden
-                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
-                >
-                  <HomeFilterPills
-                    display="full"
-                    measureOnly
-                    homeView={homeView}
-                    statusFilter={statusFilter}
-                    onToggleStatus={() => {}}
-                    permFilter={permFilter}
-                    onTogglePerm={() => {}}
-                    owningFilter={owningFilter}
-                    onToggleOwning={() => {}}
-                    spFilter={spFilter}
-                    onToggleSp={() => {}}
-                  />
+                <div ref={measureFullRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
+                  <HomeFilterPills {...measureProps} row="primary" display="full" />
                 </div>
-                <div
-                  ref={measureLabelRef}
-                  aria-hidden
-                  className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5"
-                >
-                  <HomeFilterPills
-                    display="label"
-                    measureOnly
-                    homeView={homeView}
-                    statusFilter={statusFilter}
-                    onToggleStatus={() => {}}
-                    permFilter={permFilter}
-                    onTogglePerm={() => {}}
-                    owningFilter={owningFilter}
-                    onToggleOwning={() => {}}
-                    spFilter={spFilter}
-                    onToggleSp={() => {}}
-                  />
+                <div ref={measureLabelRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
+                  <HomeFilterPills {...measureProps} row="primary" display="label" />
                 </div>
                 {hasActiveFilter && (
                   <button
@@ -950,17 +992,39 @@ export default function MapListPage() {
                       setVisFilter("all");
                       setOwningFilter(new Set());
                       setSpFilter(new Set());
+                      setCanvasFilter(new Set());
+                      setRegisteredFilter(new Set());
                     }}
                   >
                     {t("home.filterClear")}
                   </button>
                 )}
               </div>
+              {homeView === "departments" && (
+                <div data-id="home-filter-row-2" className="relative flex min-w-0 items-center gap-1.5">
+                  <HomeFilterPills {...pillProps} row="secondary" display={filterMode} />
+                  <div ref={measureFullRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
+                    <HomeFilterPills {...measureProps} row="secondary" display="full" />
+                  </div>
+                  <div ref={measureLabelRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
+                    <HomeFilterPills {...measureProps} row="secondary" display="label" />
+                  </div>
+                </div>
+              )}
               {isSearching && mapHits.length === 0 ? (
                 /* 검색 결과 없음(두 뷰 공용) */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
                   {t("home.empty")}
                 </div>
+              ) : isSearching && homeView === "framework" ? (
+                /* 업무 체계 뷰 검색 — L5 카테고리별 그룹(헤더 클릭=드릴다운 이동), 캔버스 히트는 헤더 칩 (2026-09-21) */
+                <FrameworkSearchGroups
+                  hits={shownSearchHits}
+                  renderRow={renderCardInner}
+                  recentAtById={atById}
+                  onOpenCategory={revealCategory}
+                  sentinel={hasMoreSearch ? <li ref={searchSentinelRef} className="h-px shrink-0" /> : undefined}
+                />
               ) : isSearching ? (
                 /* 검색 모드 — 최근 접속 매치 상단 고정 + 배지, 나머지 검색 랭킹. 빈 공간 클릭=선택 해제 */
                 <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto pr-1">
@@ -977,14 +1041,22 @@ export default function MapListPage() {
                 // Framework 브라우즈(L5 드릴다운) — key=frameworkVersion: 연결/해제/이양 성공 시 강제 리마운트해
                 // 자식 캐시를 무효화(fix round 1 #1). 위치는 영속 id로 복원되므로 리마운트해도 같은 레벨에 머문다.
                 // 맵 필터(frameworkFilterMap)는 좌측이 아니라 우측 요약 카드의 소속 맵 섹션에 적용한다.
-                <FrameworkDrill
-                  key={frameworkVersion}
-                  onOpenLinkage={handleOpenLinkage}
-                  selectedCategoryId={selectedCategoryId}
-                  onSelectCategory={selectCategory}
-                  onClearCategory={() => setSelectedCategoryId(null)}
-                  revealRequest={revealRequest}
-                />
+                <>
+                  <FrameworkDrill
+                    key={frameworkVersion}
+                    onOpenLinkage={handleOpenLinkage}
+                    // 맵을 열어둔 동안에도 출처 L5 카드는 선택 상태를 유지한다
+                    selectedCategoryId={selectedCategoryId ?? mapOrigin?.id ?? null}
+                    onSelectCategory={selectCategory}
+                    onClearCategory={() => setSelectedCategoryId(null)}
+                    revealRequest={revealRequest}
+                  />
+                  {/* 좌측 맨 아래 — 요약 카드에서 연 맵을 댓글처럼 띄운다. ×·"L5로 돌아가기"·브라우저 뒤로가기 모두 복귀 */}
+                  {mapOrigin && effectiveSelected !== null && (() => {
+                    const openedMap = visibleMaps.find((m) => m.id === effectiveSelected);
+                    return openedMap ? <SelectedMapStrip map={openedMap} origin={mapOrigin} onBack={returnToOrigin} /> : null;
+                  })()}
+                </>
               ) : mapHits.length === 0 ? (
                 /* 필터 결과 없음(부서 브라우즈) — 필터가 전량 제외한 경우 */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
@@ -1083,8 +1155,9 @@ export default function MapListPage() {
                   categoryId={selectedCategoryId}
                   onOpenCanvas={handleOpenLinkage}
                   onSelectChild={selectChildCategory}
-                  onSelectMap={selectMap}
+                  onSelectMap={selectMapFromCategory}
                   filterMap={frameworkFilterMap}
+                  sortMaps={applySort}
                 />
               ) : (
                 <HomeDashboard

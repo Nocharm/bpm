@@ -127,11 +127,14 @@ export function FrameworkDrill({
   // 우측 요약 드릴다운 요청 — 대상 노드의 부모 레벨로 이동(선택은 page.tsx가 이미 반영)
   useEffect(() => {
     if (!revealRequest || handledRevealSeq.current === revealRequest.seq) return;
-    handledRevealSeq.current = revealRequest.seq;
     let active = true;
     getCategoryChain(revealRequest.id)
       .then((chain) => {
-        if (active) navigate(chain.slice(0, -1), "in");
+        if (!active) return;
+        // 처리 표시는 완료 시점에 — 마운트와 동시에 온 요청(검색 그룹 헤더 → 드릴 재마운트)이 StrictMode 이중 실행의
+        // 첫 번째(즉시 취소되는) 실행에서 "처리됨"으로 남아 두 번째 실행이 건너뛰던 문제 (2026-09-21)
+        handledRevealSeq.current = revealRequest.seq;
+        navigate(chain.slice(0, -1), "in");
       })
       .catch(() => {
         /* 체인 실패 — 현재 위치 유지(선택 하이라이트만 없음) */

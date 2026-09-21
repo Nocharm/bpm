@@ -1,18 +1,19 @@
 // Word 맵 홈 표현 파생 헬퍼 — 목록 분리·재생성 힌트·stale 앵커 판정.
 // 설계: 2026-07-24-word-map-lifecycle-design.md §2·§5
 
-// 홈 목록 분리 — 조직도/집계는 processMaps만, Word documents 섹션은 wordMaps만 사용한다.
+// 홈 목록 분리 — 집계·대시보드는 processMaps만, Word documents 섹션은 wordMaps, 연계 캔버스(frameworkMaps)는
+// 조직도·나의 부서 목록에서 일반 맵 아래 스페이서 뒤에 나열한다(관리 부서 파생 owning_department, 2026-09-21).
 export function splitMapsByMode<T extends { mode?: string }>(
   maps: T[],
-): { processMaps: T[]; wordMaps: T[] } {
+): { processMaps: T[]; wordMaps: T[]; frameworkMaps: T[] } {
   const processMaps: T[] = [];
   const wordMaps: T[] = [];
+  const frameworkMaps: T[] = [];
   for (const m of maps) {
-    // 연계 캔버스는 홈 목록 제외 — 트리 L5 행으로만 진입 (design 2026-08-28 §9)
-    if (m.mode === "framework") continue;
-    (m.mode === "word" ? wordMaps : processMaps).push(m);
+    if (m.mode === "framework") frameworkMaps.push(m);
+    else (m.mode === "word" ? wordMaps : processMaps).push(m);
   }
-  return { processMaps, wordMaps };
+  return { processMaps, wordMaps, frameworkMaps };
 }
 
 // 재임포트가 마지막 완결 문서 생성보다 새로우면 재생성 필요. 생성 이력이 없으면 힌트 없음.

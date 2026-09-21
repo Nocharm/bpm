@@ -3,7 +3,7 @@
 // 설계: 2026-08-04-home-dept-list-revision-design.md
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Workflow } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { MapSummary } from "@/lib/api";
@@ -76,26 +76,45 @@ export function OrgAccordion(props: OrgAccordionProps) {
   // 카드가 헤더 아래 소속임을 보여주는 유일한 단서라, 상수로 고정해야 모든 depth에서 카드 폭이 동일하다.
   // 3.5개 초과 목록은 ClampedList가 자르고 풀폭 쉐브론 버튼으로 전체 펼침을 토글한다.
   // accordion-open/close — 펼침은 0→콘텐츠 높이 진입, 접힘은 역방향 재생 후 언마운트(globals.css).
-  const renderMapList = (maps: MapSummary[], listKey: string) => (
-    <div className={getSectionClass(listKey)}>
-      <ClampedList
-        count={maps.length}
-        expanded={expandedLists.has(listKey)}
-        onToggle={() => toggleListExpand(listKey)}
-        dataId={`org-list-expand-${listKey}`}
-      >
-        <ul className="flex flex-col gap-2 pl-5 pr-2">
-          {maps.map((m) => (
-            <li key={m.id}>
-              {renderCard
-                ? renderCard(m)
-                : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
-            </li>
-          ))}
-        </ul>
-      </ClampedList>
-    </div>
-  );
+  // L5 연계 캔버스(관리 부서 파생)는 일반 맵 아래 점선 스페이서 뒤에 나열 — 같은 부서 박스 안이지만 성격이 다르다
+  // (사용자 지시 2026-09-21). 카드 자체는 renderCard(page.tsx)가 mode로 분기한다.
+  const renderMapList = (maps: MapSummary[], listKey: string) => {
+    const generals = maps.filter((m) => m.mode !== "framework");
+    const canvases = maps.filter((m) => m.mode === "framework");
+    const renderItem = (m: MapSummary) => (
+      <li key={m.id}>
+        {renderCard
+          ? renderCard(m)
+          : <MapCard map={m} selected={selectedId === m.id} highlighted={highlightId === m.id} onSelect={onSelect} />}
+      </li>
+    );
+    return (
+      <div className={getSectionClass(listKey)}>
+        <ClampedList
+          count={maps.length}
+          expanded={expandedLists.has(listKey)}
+          onToggle={() => toggleListExpand(listKey)}
+          dataId={`org-list-expand-${listKey}`}
+        >
+          <ul className="flex flex-col gap-2 pl-5 pr-2">
+            {generals.map(renderItem)}
+            {canvases.length > 0 && (
+              <li
+                data-id={`org-canvas-divider-${listKey}`}
+                className={`flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-ink-muted ${
+                  generals.length > 0 ? "mt-1 border-t border-dashed border-hairline pt-2.5" : ""
+                }`}
+              >
+                <Workflow size={11} strokeWidth={1.5} className="shrink-0" />
+                {t("home.l5CanvasGroup")}
+              </li>
+            )}
+            {canvases.map(renderItem)}
+          </ul>
+        </ClampedList>
+      </div>
+    );
+  };
 
   const renderNode = (node: OrgNode, depth: number) => {
     const open = openPaths.has(node.path);

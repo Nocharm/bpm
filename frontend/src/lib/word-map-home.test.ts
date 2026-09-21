@@ -18,8 +18,8 @@ describe("splitMapsByMode", () => {
     expect(wordMaps.map((m) => m.id)).toEqual([2]);
   });
 
-  it("excludes framework linkage canvases from both buckets", () => {
-    const { processMaps, wordMaps } = splitMapsByMode([
+  it("routes framework linkage canvases to their own bucket", () => {
+    const { processMaps, wordMaps, frameworkMaps } = splitMapsByMode([
       { id: 1, mode: "normal" },
       { id: 2, mode: "word" },
       { id: 3, mode: "framework" },
@@ -27,6 +27,7 @@ describe("splitMapsByMode", () => {
     ]);
     expect(processMaps.map((m) => m.id)).toEqual([1, 4]);
     expect(wordMaps.map((m) => m.id)).toEqual([2]);
+    expect(frameworkMaps.map((m) => m.id)).toEqual([3]);
   });
 });
 
