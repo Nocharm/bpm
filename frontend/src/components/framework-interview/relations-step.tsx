@@ -93,7 +93,8 @@ export function RelationsStep({ session, busy, onPropose, onConfirm, onPreviewTa
                   <button type="button" className={ICON_BTN} data-id={`fw-consult-relations-preview-${task.id}`} title={t("fwConsult.preview")} onClick={() => onPreviewTask(task.id)}>
                     <Eye size={14} strokeWidth={1.5} />
                   </button>
-                  <button type="button" className={ICON_BTN} data-id={`fw-consult-relations-reopen-${task.id}`} title={`${t("fwConsult.editAnswers")} · ${t("fwConsult.editAnswersHint")}`} disabled={busy} onClick={() => onReopenTask(task.id)}>
+                  {/* 유지 태스크의 reopen은 서버가 정정으로 바꾼다(routers reopen → revise) — 라벨도 그 결과를 말한다 */}
+                  <button type="button" className={ICON_BTN} data-id={`fw-consult-relations-reopen-${task.id}`} aria-label={task.mode === "keep" ? t("fwConsult.revise") : t("fwConsult.editAnswers")} title={task.mode === "keep" ? `${t("fwConsult.revise")} · ${t("fwConsult.reviseHint")}` : `${t("fwConsult.editAnswers")} · ${t("fwConsult.editAnswersHint")}`} disabled={busy} onClick={() => onReopenTask(task.id)}>
                     <PenLine size={14} strokeWidth={1.5} />
                   </button>
                 </li>

@@ -1,5 +1,5 @@
-// AI L5 캠페인 "새 L5" 모드 검증 — 관리자 탭 진입 카드에서 계단식 피커로 L4를 고르고 새 L5 이름을 넣어 세션을 연다.
-// 아울러 관리 트리 검색(히트 클릭=체인 펼침+강조)도 한 번 밟고 캡처한다.
+// AI L5 캠페인 "새 L5" 모드 검증 — 관리 트리 검색으로 L4 행을 고르고(=선택) 우측 상세 패널에서
+// 새 L5 이름을 넣어 세션을 연다. 검색 히트 클릭(체인 펼침+선택)도 같이 밟고 캡처한다.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-fw-consult-new-l5.mjs
 // 전제: backend(AI_ENABLED=true) + frontend 기동(가짜 AI는 세션 생성에는 불필요).
 import { chromium } from "playwright-core";
@@ -33,29 +33,26 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
-await page.locator('[data-id="admin-section-consult"]').waitFor();
-// 섹션은 기본 접힘(2026-09-21) — 닫혀 있으면 헤더를 눌러 연다
-if ((await page.locator('[data-id="admin-section-consult"]').getAttribute("data-open")) !== "true") await page.locator('[data-id="admin-section-toggle-consult"]').click();
-await page.locator('[data-id="fw-consult-picker-search"]').waitFor();
+await page.locator('[data-id="framework-admin-detail"]').waitFor();
+// 선택이 없으면 상세 패널의 액션·AI 버튼이 전부 비활성
+check("create button disabled with no row selected", await page.locator('[data-id="fw-consult-create"]').isDisabled());
+check("rename action disabled with no row selected", await page.locator('[data-id="framework-admin-action-rename"]').isDisabled());
 
-// 관리 트리 검색 → 히트 클릭 → 체인 펼침 + 해당 행 존재
+// 관리 트리 검색 → 히트 클릭 → 체인 펼침 + 그 행이 선택(aria-current)
 await page.locator('[data-id="framework-admin-search"]').fill(l4Name);
 await page.locator(`[data-id="framework-admin-search-result-${l4.id}"]`).click();
-await page.locator(`[data-id="framework-admin-node-${l4.id}"]`).waitFor({ timeout: 10000 });
-check("admin tree search reveals the L4 row", true);
+await page.locator(`[data-id="framework-admin-node-${l4.id}"][aria-current="true"]`).waitFor({ timeout: 10000 });
+check("admin tree search reveals and selects the L4 row", true);
 await page.screenshot({ path: "../docs/qa/screens/framework-admin-tree.png" }).catch(() => undefined);
 
-// 새 L5 모드
-await page.locator('[data-id="fw-consult-mode-new"]').click();
-await page.locator('[data-id="fw-consult-picker-search"]').fill(l4Name);
-await page.locator(`[data-id="fw-consult-picker-result-${l4.id}"]`).click();
-await page.locator('[data-id="fw-consult-pick-name"]', { hasText: l4Name }).waitFor({ timeout: 10000 });
-check("L4 parent picked", true);
+// L4 선택 = 새 L5 줄만 활성, 기존 L5 채우기는 비활성
 const startBtn = page.locator('[data-id="fw-consult-start"]');
-check("start disabled until a name is typed", await startBtn.isDisabled());
+check("fill-existing disabled while an L4 is selected", await startBtn.isDisabled());
+const createBtn = page.locator('[data-id="fw-consult-create"]');
+check("create disabled until a name is typed", await createBtn.isDisabled());
 await page.locator('[data-id="fw-consult-new-name"]').fill(newName);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry-new.png" }).catch(() => undefined);
-await startBtn.click();
+await createBtn.click();
 await page.waitForURL(/\/framework\/consult\/\d+/, { timeout: 20000 });
 const sessionId = Number(page.url().split("/").pop());
 const session = await (await fetch(`${BACKEND}/api/framework-interviews/${sessionId}`, { headers: H })).json();

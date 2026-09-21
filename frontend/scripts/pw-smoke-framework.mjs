@@ -55,7 +55,7 @@ try {
     path.join(SAMPLE_DIR, "calibration-l5.json"),
     path.join(SAMPLE_DIR, "utility-l5.json"),
   ]);
-  await page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+  await page.locator('[data-id="interview-import-file-1"]')
     .waitFor({ state: "visible", timeout: 5000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });

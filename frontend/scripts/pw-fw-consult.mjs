@@ -1,4 +1,5 @@
-// AI L5 캠페인 스모크 — 관리자 탭 진입 → 계획 확정 → 설문 전량 제출 → 카드 드로잉 → 연결 확정 → dry-run 리포트.
+// AI L5 캠페인 스모크 — 관리 트리에서 L5 선택 → 우측 상세 패널 [AI로 L5 채우기] → 계획 확정 →
+// 설문 전량 제출 → 카드 드로잉 → 연결 확정 → dry-run 리포트.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 node scripts/pw-fw-consult.mjs
 // 전제: 가짜 AI(:9999, scratchpad fake-ai.mjs) + backend(AI_ENABLED=true, AI_BASE_URL=그 서버) + frontend 기동.
 // 스크립트가 자체 L1~L5 카테고리 체인을 매 실행 고유 이름으로 만들어 독립 실행(재실행해도 다른 세션).
@@ -32,7 +33,7 @@ async function createL5Chain() {
   return { l5Name: `smoke-L5-${tag}`, l5 };
 }
 
-const { l5Name } = await createL5Chain();
+const { l5Name, l5 } = await createL5Chain();
 check("seed L1..L5 chain", true, l5Name);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
@@ -41,18 +42,15 @@ await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", u
 const page = await ctx.newPage();
 
 await page.goto(`${BASE}/settings?tab=framework`);
-await page.locator('[data-id="admin-section-consult"]').waitFor();
-// 섹션은 기본 접힘(2026-09-21) — 닫혀 있으면 헤더를 눌러 연다
-if ((await page.locator('[data-id="admin-section-consult"]').getAttribute("data-open")) !== "true") await page.locator('[data-id="admin-section-toggle-consult"]').click();
-await page.locator('[data-id="fw-consult-picker-search"]').waitFor();
+await page.locator('[data-id="framework-admin-detail"]').waitFor();
 check("entry visible", true);
 
-// SearchSelect는 body 포털(fixed) — 트리거 버튼 클릭 → 포털 입력에 고유명 일부 타이핑 → 매치 1건 클릭.
-// 계단식 피커(framework-cascade-picker): 검색 → 히트 클릭(체인 펼침+선택) → 요약 카드에 이름이 뜬다
-await page.locator('[data-id="fw-consult-picker-search"]').fill(l5Name);
-await page.locator('[data-id^="fw-consult-picker-result-"]').first().click();
-await page.locator('[data-id="fw-consult-pick-name"]', { hasText: l5Name }).waitFor({ timeout: 10000 });
-check("L5 picked through the cascade picker", true);
+// 진입은 트리 선택이 기준(2026-09-22 설계) — 검색 히트를 누르면 체인이 펼쳐지고 그 행이 선택된다.
+// 선택된 행만 우측 상세 패널의 AI L5 버튼을 살린다.
+await page.locator('[data-id="framework-admin-search"]').fill(l5Name);
+await page.locator(`[data-id="framework-admin-search-result-${l5.id}"]`).click();
+await page.locator(`[data-id="framework-admin-node-${l5.id}"][aria-current="true"]`).waitFor({ timeout: 10000 });
+check("L5 row selected in the admin tree", true);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-start"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/);

@@ -31,17 +31,17 @@ const api = async (p, init = {}) => {
 };
 
 const chip = (page, label, count) =>
-  page.locator('[data-id="interview-import"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
+  page.locator('[data-id="interview-import-host"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
 
 async function runDryRun(page) {
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Categories & import" }).first().click();
-  await page.locator('[data-id="interview-import"]').waitFor({ state: "visible", timeout: 10000 });
+  await page.locator('[data-id="interview-import-pick"]').waitFor({ state: "visible", timeout: 10000 });
   await page.locator('[data-id="interview-import-files"]').setInputFiles([
     path.join(SAMPLE_DIR, "calibration-l5.json"),
     path.join(SAMPLE_DIR, "utility-l5.json"),
   ]);
-  await page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+  await page.locator('[data-id="interview-import-file-1"]')
     .waitFor({ state: "visible", timeout: 5000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 20000 });

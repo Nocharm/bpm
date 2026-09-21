@@ -24,6 +24,13 @@ const check = (name, ok, detail = "") => {
 const adminNode = (page, name) =>
   page.locator('[data-id^="framework-admin-node-"]').filter({ hasText: name }).first();
 
+// 행 액션은 2026-09-22 설계에서 우측 상세 패널로 옮겼다 — 행 이름을 눌러 선택한 뒤 패널 버튼을 누른다.
+async function selectRow(page, catId) {
+  await page.locator(`[data-id="framework-admin-pick-${catId}"]`).click();
+  await page.locator(`[data-id="framework-admin-node-${catId}"][aria-current="true"]`).waitFor({ timeout: 8000 });
+}
+const detailAction = (page, key) => page.locator(`[data-id="framework-admin-action-${key}"]`);
+
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
 
@@ -49,7 +56,7 @@ try {
     path.join(SAMPLE_DIR, "calibration-l5.json"),
     path.join(SAMPLE_DIR, "utility-l5.json"),
   ]);
-  await page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+  await page.locator('[data-id="interview-import-file-1"]')
     .waitFor({ state: "visible", timeout: 5000 });
   await page.locator('[data-id="interview-import-dryrun"]').click();
   await page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });
@@ -70,29 +77,28 @@ try {
     .then(() => true).catch(() => false);
   check("add top-level category", added);
 
-  const row = adminNode(page, "Smoke Cat");
-  await row.hover();
-  const rowId = await row.getAttribute("data-id");
+  const rowId = await adminNode(page, "Smoke Cat").getAttribute("data-id");
   const catId = rowId?.replace("framework-admin-node-", "");
-  await page.locator(`[data-id="framework-admin-rename-${catId}"]`).click();
+  await selectRow(page, catId);
+  await detailAction(page, "rename").click();
   await page.locator('[data-id="prompt-dialog-input"]').fill("Smoke Cat R");
   await page.locator('[data-id="prompt-dialog-confirm"]').click();
   const renamed = await adminNode(page, "Smoke Cat R").waitFor({ state: "visible", timeout: 8000 })
     .then(() => true).catch(() => false);
   check("rename category", renamed);
 
-  await adminNode(page, "Smoke Cat R").hover();
-  await page.locator(`[data-id="framework-admin-delete-${catId}"]`).click();
+  // 이름 변경 후에도 선택 id는 그대로 — 상세 패널은 childrenByParent에서 다시 찾아 갱신된다
+  await selectRow(page, catId);
+  await detailAction(page, "delete").click();
   await page.locator('[data-id="confirm-dialog-confirm"]').click();
   await page.waitForTimeout(800);
   const goneCount = await page.locator('[data-id^="framework-admin-node-"]').filter({ hasText: "Smoke Cat R" }).count();
   check("delete empty category", goneCount === 0, `rows=${goneCount}`);
 
   // ── 4) 연결 맵 있는 카테고리 삭제 거부(409 사유 표시) ───────────────────
-  const leafRow = adminNode(page, "EPCV");
-  await leafRow.hover();
-  const rootId = (await leafRow.getAttribute("data-id"))?.replace("framework-admin-node-", "");
-  await page.locator(`[data-id="framework-admin-delete-${rootId}"]`).click();
+  const rootId = (await adminNode(page, "EPCV").getAttribute("data-id"))?.replace("framework-admin-node-", "");
+  await selectRow(page, rootId);
+  await detailAction(page, "delete").click();
   await page.locator('[data-id="confirm-dialog-confirm"]').click();
   const refused = await page.locator('[data-id="confirm-dialog"]').getByText(/child categories|maps are linked/).first()
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);

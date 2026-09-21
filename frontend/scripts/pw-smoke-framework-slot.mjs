@@ -59,7 +59,7 @@ try {
   await admin.page.locator('[data-id="interview-import-files"]').setInputFiles([
     path.join(SAMPLE_DIR, "calibration-l5.json"), path.join(SAMPLE_DIR, "utility-l5.json"),
   ]);
-  await admin.page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+  await admin.page.locator('[data-id="interview-import-file-1"]')
     .waitFor({ state: "visible", timeout: 5000 });
   await admin.page.locator('[data-id="interview-import-dryrun"]').click();
   await admin.page.waitForSelector('[data-id="interview-import-report"]', { timeout: 15000 });

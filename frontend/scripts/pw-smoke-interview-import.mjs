@@ -23,9 +23,9 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
-// 요약 칩은 renderImportSummary의 "<라벨> <숫자>" 텍스트 스팬 — 인터뷰 섹션 스코프로 매칭
+// 요약 칩은 renderImportSummary의 "<라벨> <숫자>" 텍스트 스팬 — 리포트 호스트 스코프로 매칭
 const chip = (page, label, count) =>
-  page.locator('[data-id="interview-import"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
+  page.locator('[data-id="interview-import-host"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -42,20 +42,20 @@ try {
   // ── 1) 설정 → Framework 탭 → Interview import 섹션 ─────────────────────
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Categories & import" }).first().click();
-  const sectionVisible = await page.locator('[data-id="interview-import"]')
+  const sectionVisible = await page.locator('[data-id="interview-import-pick"]')
     .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
-  check("interview import section visible", sectionVisible);
+  check("interview import entry visible", sectionVisible);
 
-  // ── 2) 다중 파일 선택 → 리스트 2건 ──────────────────────────────────────
+  // ── 2) 다중 파일 선택 → 스트립 필 2건 ───────────────────────────────────
   await page.locator('[data-id="interview-import-files"]').setInputFiles([
     path.join(SAMPLE_DIR, "calibration-l5.json"),
     path.join(SAMPLE_DIR, "utility-l5.json"),
   ]);
-  // handleInterviewFiles가 file.text()를 await하므로 리스트 반영은 비동기 — 두 번째 행을 대기
-  const listOk = await page.locator('[data-id="interview-import-file-list"] > li').nth(1)
+  // handleInterviewFiles가 file.text()를 await하므로 스트립 반영은 비동기 — 두 번째 필을 대기
+  const listOk = await page.locator('[data-id="interview-import-file-1"]')
     .waitFor({ state: "visible", timeout: 5000 }).then(() => true).catch(() => false);
-  const listCount = await page.locator('[data-id="interview-import-file-list"] > li').count();
-  check("two files listed", listOk && listCount === 2, `rows=${listCount}`);
+  const countText = ((await page.locator('[data-id="interview-import-file-count"]').textContent()) ?? "").trim();
+  check("two files listed", listOk && countText.includes("2"), countText);
 
   // ── 3) Dry-run → 파일별 리포트(OK 2)·Created 4·Notes 6·미영속 ───────────
   await page.locator('[data-id="interview-import-dryrun"]').click();
