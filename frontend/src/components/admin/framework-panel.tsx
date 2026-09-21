@@ -8,6 +8,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Check,
@@ -15,6 +17,7 @@ import {
   ChevronRight,
   FolderPlus,
   FolderTree,
+  Headset,
   Loader2,
   Move as MoveIcon,
   Pencil,
@@ -27,27 +30,33 @@ import {
 
 import {
   createCategory,
+  createFrameworkInterview,
   deleteCategory,
   getApiErrorDetail,
   getCategoryChain,
   getDirectory,
   importInterview,
+  listAllCategories,
   listCategoryNodes,
   listAllCategoryPermissions,
   listCategoryPermissions,
+  listFrameworkInterviews,
   listGroups,
   setCategoryPermissions,
   updateCategory,
+  type CategoryLite,
   type CategoryNode,
   type CategoryPermissionEntry,
   type CategoryPermissionRow,
   type DirectoryUser,
+  type FwInterviewSession,
   type Group,
   type InterviewImportResult,
 } from "@/lib/api";
 import { canManageInScope } from "@/lib/framework-admin-scope";
 import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
+import type { InterviewPromptTarget } from "@/lib/interview-json-prompt";
 import {
   buildImportReportView,
   buildInterviewIndex,
@@ -59,10 +68,12 @@ import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
+import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 import { PromptDialog } from "@/components/prompt-dialog";
+import { SearchSelect } from "@/components/search-select";
 import { Tooltip } from "@/components/tooltip";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
@@ -120,6 +131,7 @@ type NamePrompt =
 
 export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const { t, lang } = useI18n();
+  const router = useRouter();
   // Manage(트리+임포트) ↔ Status(배치 현황판) 세그먼트 — 홈 뷰 토글(home-view-toggle) 스타일 복제 (Track C Task 7)
   const [panelView, setPanelView] = useState<"manage" | "status">("manage");
   const [childrenByParent, setChildrenByParent] = useState<Map<number | null, CategoryNode[]>>(
@@ -151,6 +163,69 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const interviewBusy = interviewPhase !== null;
   // 거버넌스 체크 키(`code:field`) — dry-run 결과마다 비우고, 파일 변경 시 리포트와 함께 무효화 (spec 2026-09-03 §6)
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
+
+  // AI 컨설턴트 L5 캠페인 진입 — sysadmin 전용(인터뷰 임포트와 같은 게이트). 전 카테고리 경량 목록에서
+  // level===5만 골라 SearchSelect 옵션으로 쓴다(트리 state는 펼친 가지만 로드하는 지연 fetch라 전체
+  // L5 목록엔 못 쓴다 — /categories/all이 진실).
+  const [consultL5Id, setConsultL5Id] = useState<number | null>(null);
+  const [consultBusy, setConsultBusy] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<FwInterviewSession[]>([]);
+  const [allCategories, setAllCategories] = useState<CategoryLite[]>([]);
+  useEffect(() => {
+    if (scopeRootIds) return;
+    listFrameworkInterviews(true).then(setActiveSessions).catch((err) => console.warn("fw sessions", err));
+    listAllCategories().then(setAllCategories).catch((err) => console.warn("fw categories", err));
+  }, [scopeRootIds]);
+  const l5Options = useMemo(() => {
+    const byId = new Map(allCategories.map((c) => [c.id, c]));
+    const pathOf = (c: CategoryLite): string => {
+      const parts: string[] = [];
+      for (let cur = c.parent_id !== null ? byId.get(c.parent_id) : undefined; cur; cur = cur.parent_id !== null ? byId.get(cur.parent_id) : undefined) {
+        parts.unshift(cur.name);
+      }
+      return parts.join(" > ");
+    };
+    return allCategories
+      .filter((c) => c.level === 5)
+      .map((c) => ({ value: String(c.id), label: c.name, sub: pathOf(c) }));
+  }, [allCategories]);
+  // 외부 AI 프롬프트 버튼용 target — code(L5 상세)는 chain 조회가 필요해 선택 시점에만 지연 로드.
+  // fetch 결과를 id와 함께 캐시하고 렌더에서 매칭 — id가 null/변경된 프레임엔 effect가 setState하지
+  // 않도록(react-hooks/set-state-in-effect) 값을 파생으로 계산한다.
+  const [fetchedTarget, setFetchedTarget] = useState<{ id: number; target: InterviewPromptTarget } | null>(null);
+  useEffect(() => {
+    if (!consultL5Id) return undefined;
+    let active = true;
+    getCategoryChain(consultL5Id)
+      .then((chain) => {
+        if (!active || chain.length === 0) return;
+        const self = chain[chain.length - 1];
+        setFetchedTarget({
+          id: consultL5Id,
+          target: { code: self.code, name: self.name, path: chain.slice(0, -1).map((c) => c.name) },
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [consultL5Id]);
+  const consultTarget = fetchedTarget?.id === consultL5Id ? fetchedTarget.target : undefined;
+
+  async function handleStartConsult() {
+    if (!consultL5Id) return;
+    setConsultBusy(true);
+    try {
+      const session = await createFrameworkInterview({ category_id: consultL5Id, lang });
+      router.push(`/framework/consult/${session.id}`);
+    } catch (err) {
+      // 409 = 진행 중 세션 존재 → 목록에서 재개하도록 안내
+      onToast(getApiErrorDetail(err));
+      listFrameworkInterviews(true).then(setActiveSessions).catch(() => undefined);
+    } finally {
+      setConsultBusy(false);
+    }
+  }
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
@@ -620,6 +695,49 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       {/* 대량 임포트는 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
       {!scopeRootIds && (
       <div className="flex flex-col gap-3 border-t border-hairline pt-4" data-id="interview-import">
+        <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-pearl p-3" data-id="fw-consult-entry">
+          <div className="flex items-center gap-2">
+            <Headset size={16} strokeWidth={1.5} className="text-accent" />
+            <span className="text-caption text-ink">{t("fwConsult.start")}</span>
+            <span className="ml-auto"><InterviewJsonPromptButton target={consultTarget} /></span>
+          </div>
+          <p className="text-fine text-ink-tertiary">{t("fwConsult.startHint")}</p>
+          <div className="flex items-center gap-2">
+            <div className="min-w-64">
+              <SearchSelect
+                value={consultL5Id ? String(consultL5Id) : ""}
+                options={l5Options}
+                emptyLabel={t("fwConsult.pickL5")}
+                placeholder={t("fwConsult.pickL5")}
+                onChange={(v) => setConsultL5Id(v ? Number(v) : null)}
+              />
+            </div>
+            <button
+              type="button"
+              data-id="fw-consult-start"
+              className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
+              disabled={!consultL5Id || consultBusy}
+              onClick={() => void handleStartConsult()}
+            >
+              {t("fwConsult.start")}
+            </button>
+          </div>
+          {activeSessions.length > 0 && (
+            <ul className="flex flex-col gap-1" data-id="fw-consult-active-list">
+              <li className="text-fine text-ink-tertiary">{t("fwConsult.activeSessions")}</li>
+              {activeSessions.map((s) => (
+                <li key={s.id} data-id={`fw-consult-active-${s.id}`} className="flex items-center gap-2 text-caption text-ink">
+                  <span className="truncate">{s.category_name}</span>
+                  <span className="text-fine text-ink-tertiary">{s.progress.drawn}/{s.progress.total}</span>
+                  <Link href={`/framework/consult/${s.id}`} className="ml-auto text-accent hover:underline" data-id={`fw-consult-resume-${s.id}`}>
+                    {t("fwConsult.resume")}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div>
           <h3 className="text-body-strong text-ink">{t("framework.interviewImportTitle")}</h3>
           <p className="pt-1 text-caption text-ink-tertiary">{t("framework.interviewImportHint")}</p>

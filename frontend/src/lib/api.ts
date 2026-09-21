@@ -2870,6 +2870,128 @@ export async function uploadInterviewAttachment(
   return (await response.json()) as InterviewAttachment;
 }
 
+// ── Framework interview (AI L5 campaign, spec 2026-09-21) ──
+
+export type FwQuestionKind = "single" | "multi" | "text" | "ordered";
+export type FwMapsTo = "activities" | "branches" | "roles" | "systems" | "io" | "conditions" | "params";
+export interface FwQuestionOption { id: string; label: string }
+export interface FwQuestion {
+  id: string;
+  kind: FwQuestionKind;
+  maps_to: FwMapsTo;
+  text: string;
+  options: FwQuestionOption[];
+  suggested: string[] | string;
+}
+export interface FwQuestionnaire { questions: FwQuestion[] }
+export type FwAnswerValue = string | string[];
+export interface FwPlanCard {
+  name: string;
+  summary: string;
+  owner_role: string;
+  department: string;
+  depends_on: string[];
+  task_id?: string;
+}
+export type FwTaskStatus = "pending" | "generating" | "ready" | "submitted" | "drawing" | "drawn" | "failed";
+export interface FwInterviewTask {
+  id: number;
+  task_id: string;
+  seq: number;
+  name: string;
+  status: FwTaskStatus;
+  issues: { severity: string; path: string; message: string }[];
+  error: string | null;
+  drawn_at: string | null;
+}
+export interface FwInterviewTaskDetail extends FwInterviewTask {
+  questionnaire: FwQuestionnaire | null;
+  answers: Record<string, { value: FwAnswerValue; auto: boolean }> | null;
+  row: Record<string, unknown> | null;
+}
+export type FwSessionStatus = "planning" | "plan_locked" | "linking" | "ready" | "applied" | "abandoned";
+export interface FwInterviewSession {
+  id: number;
+  category_id: number;
+  category_code: string;
+  category_name: string;
+  status: FwSessionStatus;
+  paused: boolean;
+  lang: "ko" | "en";
+  brief: string;
+  plan: FwPlanCard[] | null;
+  relations: Record<string, unknown> | null;
+  label: string;
+  tasks: FwInterviewTask[];
+  progress: { total: number; drawn: number; failed: number; working: boolean };
+  created_at: string;
+  updated_at: string;
+}
+
+export function createFrameworkInterview(body: { category_id: number; brief?: string; lang?: "ko" | "en" }): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>("/framework-interviews", { method: "POST", body: JSON.stringify(body) });
+}
+export function listFrameworkInterviews(activeOnly = true): Promise<FwInterviewSession[]> {
+  return request<FwInterviewSession[]>(`/framework-interviews${activeOnly ? "?active=1" : ""}`);
+}
+export function getFrameworkInterview(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}`);
+}
+export function abandonFrameworkInterview(id: number): Promise<void> {
+  return request<void>(`/framework-interviews/${id}`, { method: "DELETE" });
+}
+export async function uploadFrameworkInterviewAttachment(id: number, file: File): Promise<FwInterviewSession> {
+  // multipart — request()의 JSON Content-Type을 쓰면 boundary가 깨져 별도 경로 (uploadInterviewAttachment와 동일)
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  else if (devUser) headers["X-Dev-User"] = devUser;
+  const response = await fetch(`/api/framework-interviews/${id}/attachments`, { method: "POST", body: form, headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ApiError(`API POST /framework-interviews/${id}/attachments failed: ${response.status}${detail ? ` - ${detail}` : ""}`, response.status, detail);
+  }
+  return (await response.json()) as FwInterviewSession;
+}
+export function generateFrameworkPlan(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/plan`, { method: "POST" });
+}
+/** brief 생략 = 서버 값 유지(첨부 병합분을 덮지 않는다). */
+export function saveFrameworkPlan(id: number, cards: FwPlanCard[], lock: boolean, brief?: string): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/plan`, {
+    method: "PUT",
+    body: JSON.stringify(brief === undefined ? { cards, lock } : { cards, lock, brief }),
+  });
+}
+export function getFrameworkInterviewTask(id: number, taskPk: number): Promise<FwInterviewTaskDetail> {
+  return request<FwInterviewTaskDetail>(`/framework-interviews/${id}/tasks/${taskPk}`);
+}
+export function submitFrameworkAnswers(id: number, taskPk: number, answers: Record<string, FwAnswerValue>): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/answers`, { method: "POST", body: JSON.stringify({ answers }) });
+}
+export function retryFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/retry`, { method: "POST" });
+}
+export function pauseFrameworkInterview(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/pause`, { method: "POST" });
+}
+export function resumeFrameworkInterview(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/resume`, { method: "POST" });
+}
+export function generateFrameworkRelations(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "POST" });
+}
+export function confirmFrameworkRelations(id: number, relations: Record<string, unknown>): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "PUT", body: JSON.stringify({ relations }) });
+}
+export function getFrameworkInterviewDocument(id: number): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/framework-interviews/${id}/document`);
+}
+export function markFrameworkInterviewApplied(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/mark-applied`, { method: "POST" });
+}
+
 // ── AI 챗 서버 저장 히스토리 (design 2026-07-08) ──────────────
 
 export interface AiChatSessionSummary {

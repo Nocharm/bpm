@@ -24,4 +24,5 @@ ENV DATABASE_URL="" \
     KEYCLOAK_ISSUER=""
 
 EXPOSE 8000
+# 단일 워커 전제 — framework_interview/runner.py의 in-process 러너·_active 집합이 프로세스 로컬이다. --workers 추가 금지.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

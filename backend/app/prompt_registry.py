@@ -16,12 +16,18 @@ PROMPT_KEYS: tuple[str, ...] = (
     "anti_repeat_nudge",
     "compare_summary_contract",
     "submit_note_contract",
+    # AI L5 캠페인 4종 (spec 2026-09-21 §5)
+    "l5_plan_contract",
+    "l6_questionnaire_contract",
+    "l6_row_drafter_contract",
+    "l5_relations_contract",
 )
 
 
 def get_prompt_defaults() -> dict[str, str]:
     """key → 코드 기본 프롬프트. 지연 import — orchestrator가 이 모듈을 import해도 순환 없음."""
     from app import ai_prompt, compare_summary
+    from app.framework_interview import contracts as fw_contracts
     from app.interview import agents, orchestrator
 
     return {
@@ -34,10 +40,14 @@ def get_prompt_defaults() -> dict[str, str]:
         "anti_repeat_nudge": orchestrator._ANTI_REPEAT_NUDGE,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
         "compare_summary_contract": compare_summary._CONTRACT,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
         "submit_note_contract": compare_summary._SUBMIT_NOTE_CONTRACT,  # noqa: SLF001 -- 레지스트리가 기본값의 단일 집결지
+        "l5_plan_contract": fw_contracts.L5_PLAN_CONTRACT,
+        "l6_questionnaire_contract": fw_contracts.L6_QUESTIONNAIRE_CONTRACT,
+        "l6_row_drafter_contract": fw_contracts.L6_ROW_DRAFTER_CONTRACT,
+        "l5_relations_contract": fw_contracts.L5_RELATIONS_CONTRACT,
     }
 
 
 async def get_prompt_overrides(session: AsyncSession) -> dict[str, str]:
-    """DB 오버라이드 전체(≤8행) — 요청/턴당 1회 조회해 빌더에 전달."""
+    """DB 오버라이드 전체(≤13행) — 요청/턴당 1회 조회해 빌더에 전달."""
     rows = (await session.scalars(select(AiPrompt))).all()
     return {row.key: row.content for row in rows if row.key in PROMPT_KEYS}

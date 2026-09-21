@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
+
+- **목적:** AI 컨설턴트가 맵 하나에 묶여 있어(`InterviewSession.map_id`) L5 하나 아래 L6 n개를 한 번에 만들 수 없었다. 산출물을 인터뷰 JSON 0.5로 잡고 기존 `POST /api/categories/import-interview`로 등록하는 "위층 세션"을 추가했다(설계 `docs/superpowers/specs/2026-09-21-ai-consultant-l5-campaign-design.md`, 플랜 `docs/superpowers/plans/…`, main 머지 시 삭제).
+- **결과:** BE `framework_interview_sessions/_tasks` + `app/framework_interview/`(계약 4종·답 검증·조립·러너) + `routers/framework_interviews.py`(sysadmin 전용) · FE `/framework/consult/[sessionId]` 페이지(좌 카드 보드+진행률/ETA/일시정지/재시도, 우 계획→설문→연결→등록)·관리자 Framework 탭 진입/이어하기·외부 AI용 0.5 JSON 프롬프트 복사 · `pw-fw-consult.mjs` 스모크(가짜 AI, 10/10) · 관리자 매뉴얼 절 · CLAUDE.md "0.5 계약 3표면" 규칙. 게이트 backend 1530·ruff, frontend tsc·lint·vitest 1033·catalog.
+- **주요 결정(사용자):** 진입은 관리자 탭 · L6는 채팅 대신 AI 생성 객관식 설문(2열 그리드, 주관식은 [Write my own] 버튼으로만 열고 빈칸=제안값 자동) · 하나씩 제출·되돌리기 없음·제출 즉시 백그라운드 드로잉+다음 설문 prefetch · 등록은 임포트와 동일(게시 직행, 캔버스 draft). 리뷰로 잡은 것: 설문 실패는 `failed`로 종료(무한 루프 방지)·폴링이 미저장 입력을 지우던 이펙트 의존성(내용 해시 key 리마운트)·lost-kick/wedge 복구·brief 실제 입력·정지 안내·sysadmin 전체 접근·휴지통 코드 예약. 러너는 단일 uvicorn 워커 전제(Dockerfile 주석).
+
 ## 2026-09-21 — 부서 뷰의 L5 연계 캔버스 6종: 카드·관리 부서·설정 탭·필터 2줄/정렬·FW 검색 그룹·L6 스트립 (dev)
 
 - **배경:** 조직도·대시보드는 `splitMapsByMode`가 framework 맵을 빼지만 검색 결과는 빼지 않아 연계 캔버스가 일반 맵 카드(오너·SP·역할 필·담당 부서 누락 경고)로 섞였고, 상세 카드·설정 화면도 캔버스에 무의미한 오우닝 부서·"업무 체계에 연결"·협업자 구성을 보였다. 캔버스는 담당 부서가 없어 조직도에 놓을 자리도 없었다.
