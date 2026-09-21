@@ -155,7 +155,7 @@ DELETE /api/framework-interviews/{id}                  abandon
 
 ## 9. 프론트
 
-- 라우트 `frontend/src/app/framework/consult/[sessionId]/page.tsx` (consult 페이지와 같은 좌우 분할, `bpm.fwConsultWidth`).
+- 라우트 `frontend/src/app/framework/consult/[sessionId]/page.tsx` (consult 페이지와 같은 좌우 분할, `bpm.fwConsultBoardWidth`).
 - 컴포넌트 `frontend/src/components/framework-interview/`: `task-board.tsx`(카드+상태 칩+진행률), `plan-editor.tsx`(카드 편집), `questionnaire-form.tsx`(문항 렌더·검증·제안 채우기), `answer-review.tsx`(확인 화면), `relations-step.tsx`(L5 미리보기), `register-step.tsx`(dry-run 리포트·적용·다운로드). 새 컴포넌트는 `COMPONENTS.md` 재생성.
 - 관리자 패널(`admin/framework-panel.tsx`) 인터뷰 임포트 섹션에 버튼 2개 + "진행 중인 세션" 목록.
 - `lib/framework-interview.ts`: 상태 파생(진행률·ETA), 설문 검증(`validateAnswers`, 빈 text → suggested), 폴링 훅.

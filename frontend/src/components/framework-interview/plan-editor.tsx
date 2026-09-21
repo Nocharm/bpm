@@ -2,7 +2,7 @@
 
 // 캠페인 ① L5 개요 + L6 카드 편집 — brief 입력·첨부·AI 제안·카드 추가/삭제/순서·계획 확정(잠금). 페이지 우측 전용.
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Paperclip, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import type { FwInterviewSession, FwPlanCard } from "@/lib/api";
@@ -26,10 +26,10 @@ const EMPTY: FwPlanCard = { name: "", summary: "", owner_role: "", department: "
 
 export function PlanEditor({ session, busy, onAttach, onGenerate, onSave, onLock }: PlanEditorProps) {
   const { t } = useI18n();
-  const [cards, setCards] = useState<FwPlanCard[]>(session.plan ?? []);
+  // 부모가 session.plan 내용으로 key를 리마운트하므로(page.tsx) 여기서는 마운트 시 1회 초기화만 한다 —
+  // 폴링(attach/pause/resume 등)이 만드는 새 session 객체가 편집 중인 카드를 덮어쓰지 않는다.
+  const [cards, setCards] = useState<FwPlanCard[]>(() => session.plan ?? []);
   const fileRef = useRef<HTMLInputElement>(null);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- resync editable draft when the server plan identity changes (save/lock/reload)
-  useEffect(() => { setCards(session.plan ?? []); }, [session.plan]);
 
   function update(i: number, patch: Partial<FwPlanCard>) {
     setCards((prev) => prev.map((c, k) => (k === i ? { ...c, ...patch } : c)));
@@ -84,7 +84,7 @@ export function PlanEditor({ session, busy, onAttach, onGenerate, onSave, onLock
           <Plus size={14} strokeWidth={1.5} />{t("fwConsult.addCard")}
         </button>
         <span className="ml-auto text-fine text-ink-tertiary">{t("fwConsult.lockPlanHint")}</span>
-        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(cards)}>Save</button>
+        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(cards)}>{t("fwConsult.save")}</button>
         <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(cards)}>{t("fwConsult.lockPlan")}</button>
       </div>
     </div>

@@ -67,6 +67,8 @@ export function deriveStep(session: FwInterviewSession): FwStep {
   const current = findCurrentTask(session);
   if (current) return current.status === "ready" ? "answer" : "waiting";
   if (session.tasks.some((t) => t.status === "submitted" || t.status === "drawing")) return "waiting";
+  // 실패한 카드가 있으면 연결로 넘어가지 않는다 — 보드가 재시도를 제안하는 동안은 "준비 중"에 머문다.
+  if (session.tasks.some((t) => t.status === "failed")) return "waiting";
   return "relations";
 }
 

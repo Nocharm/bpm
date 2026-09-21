@@ -124,7 +124,7 @@ RegisterStep.TaskPreviewModal = function TaskPreviewModal({ sessionId, taskPk, o
   }, [sessionId, taskPk]);
   return createPortal(
     <ModalBackdrop onClose={onClose} className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4">
-      <div className="h-[70vh] w-[80vw] rounded-md bg-surface p-3" data-id="fw-consult-task-preview" onClick={(e) => e.stopPropagation()}>
+      <div className="h-[70vh] w-[80vw] rounded-md bg-surface p-3" data-id="fw-consult-task-preview">
         {source && <ImportMapPreview source={source} scope="map" dataId="fw-consult-task-preview-canvas" onClose={onClose} />}
       </div>
     </ModalBackdrop>,

@@ -27,19 +27,22 @@ interface RelationsStepProps {
 export function RelationsStep({ session, busy, onPropose, onConfirm }: RelationsStepProps) {
   const { t } = useI18n();
   const taskIds = useMemo(() => [...session.tasks].sort((a, b) => a.seq - b.seq).map((x) => x.task_id), [session.tasks]);
-  const [relations, setRelations] = useState<Relations>(() => (session.relations as Relations | null) ?? { entry: { taskId: taskIds[0] ?? "", triggerType: "manual", label: "" }, edges: [] });
+  // 부모가 session.relations 내용으로 key를 리마운트하므로(page.tsx) 마운트 시 1회 초기화만 한다 —
+  // 폴링이 만드는 새 session 객체가 편집 중인 엣지를 덮어쓰지 않는다.
+  const [relations, setRelations] = useState<Relations>(() => (session.relations as unknown as Relations | null) ?? { entry: { taskId: taskIds[0] ?? "", triggerType: "manual", label: "" }, edges: [] });
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 태스크 id+상태만의 서명 — session.tasks 배열은 폴링마다 새 참조라 그대로 deps에 두면 매번 재요청한다.
+  const taskSignature = useMemo(() => session.tasks.map((x) => `${x.id}:${x.status}`).join(","), [session.tasks]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- resync draft when the server relations identity changes (AI propose)
-  useEffect(() => { if (session.relations) setRelations(session.relations as unknown as Relations); }, [session.relations]);
   useEffect(() => {
     let alive = true;
     Promise.all(session.tasks.map((x) => getFrameworkInterviewTask(session.id, x.id)))
       .then((details) => { if (alive) setRows(details.map((d) => ({ taskId: d.task_id, ...(d.row ?? {}) }))); })
       .catch((err) => { if (alive) setError(getApiErrorDetail(err)); });
     return () => { alive = false; };
-  }, [session.id, session.tasks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- taskSignature already captures every id+status change in session.tasks
+  }, [session.id, taskSignature]);
 
   const previewSource = useMemo(() => (rows ? { rows, relations } : null), [rows, relations]);
   function updateEdge(i: number, patch: Partial<Edge>) {
@@ -57,9 +60,9 @@ export function RelationsStep({ session, busy, onPropose, onConfirm }: Relations
           {t("fwConsult.confirmRelations")}
         </button>
       </div>
-      {error && <p className="text-caption text-error">{error}</p>}
+      {error && <p className="text-caption text-error" data-id="fw-consult-relations-error">{error}</p>}
       <div className="flex items-center gap-2 text-caption">
-        <span className="text-ink-secondary">Entry</span>
+        <span className="text-ink-secondary">{t("fwConsult.entry")}</span>
         <select className={FIELD} data-id="fw-consult-entry" value={relations.entry.taskId} onChange={(e) => setRelations((p) => ({ ...p, entry: { ...p.entry, taskId: e.target.value } }))}>
           {taskIds.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
@@ -68,21 +71,32 @@ export function RelationsStep({ session, busy, onPropose, onConfirm }: Relations
         </select>
       </div>
       <table className="w-full text-fine" data-id="fw-consult-edges">
-        <thead><tr className="text-ink-tertiary"><th className="text-left">src</th><th className="text-left">dst</th><th className="text-left">kind</th><th className="text-left">gateway</th><th className="text-left">condition</th><th /></tr></thead>
+        <thead>
+          <tr className="text-ink-tertiary">
+            <th className="text-left">{t("fwConsult.edgeSrc")}</th>
+            <th className="text-left">{t("fwConsult.edgeDst")}</th>
+            <th className="text-left">{t("fwConsult.edgeKind")}</th>
+            <th className="text-left">{t("fwConsult.edgeGateway")}</th>
+            <th className="text-left">{t("fwConsult.edgeCondition")}</th>
+            <th />
+          </tr>
+        </thead>
         <tbody>
           {relations.edges.map((e, i) => (
             <tr key={i} data-id={`fw-consult-edge-${i}`}>
-              <td><select className={FIELD} value={e.src} onChange={(ev) => updateEdge(i, { src: ev.target.value })}>{taskIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></td>
-              <td><select className={FIELD} value={e.dst} onChange={(ev) => updateEdge(i, { dst: ev.target.value })}>{taskIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></td>
-              <td><select className={FIELD} value={e.kind} onChange={(ev) => updateEdge(i, { kind: ev.target.value as Edge["kind"] })}>{KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</select></td>
-              <td><select className={FIELD} value={e.gateway ?? ""} onChange={(ev) => updateEdge(i, { gateway: (ev.target.value || null) as Edge["gateway"] })}><option value="">-</option><option value="exclusive">exclusive</option><option value="parallel">parallel</option></select></td>
-              <td><input className={`${FIELD} w-full`} value={e.condition ?? ""} onChange={(ev) => updateEdge(i, { condition: ev.target.value })} /></td>
-              <td><button type="button" className="rounded-sm px-1 text-ink-secondary hover:bg-surface-alt" data-id={`fw-consult-edge-remove-${i}`} onClick={() => setRelations((p) => ({ ...p, edges: p.edges.filter((_, k) => k !== i) }))}>×</button></td>
+              <td><select className={FIELD} data-id={`fw-consult-edge-src-${i}`} value={e.src} onChange={(ev) => updateEdge(i, { src: ev.target.value })}>{taskIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></td>
+              <td><select className={FIELD} data-id={`fw-consult-edge-dst-${i}`} value={e.dst} onChange={(ev) => updateEdge(i, { dst: ev.target.value })}>{taskIds.map((id) => <option key={id} value={id}>{id}</option>)}</select></td>
+              <td><select className={FIELD} data-id={`fw-consult-edge-kind-${i}`} value={e.kind} onChange={(ev) => updateEdge(i, { kind: ev.target.value as Edge["kind"] })}>{KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</select></td>
+              <td><select className={FIELD} data-id={`fw-consult-edge-gateway-${i}`} value={e.gateway ?? ""} onChange={(ev) => updateEdge(i, { gateway: (ev.target.value || null) as Edge["gateway"] })}><option value="">-</option><option value="exclusive">exclusive</option><option value="parallel">parallel</option></select></td>
+              <td><input className={`${FIELD} w-full`} data-id={`fw-consult-edge-condition-${i}`} value={e.condition ?? ""} onChange={(ev) => updateEdge(i, { condition: ev.target.value })} /></td>
+              <td><button type="button" className="rounded-sm px-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.removeEdge")} data-id={`fw-consult-edge-remove-${i}`} onClick={() => setRelations((p) => ({ ...p, edges: p.edges.filter((_, k) => k !== i) }))}>×</button></td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button type="button" className={SECONDARY} data-id="fw-consult-edge-add" onClick={() => setRelations((p) => ({ ...p, edges: [...p.edges, { src: taskIds[0] ?? "", dst: taskIds[1] ?? taskIds[0] ?? "", kind: "seq" }] }))}>+ edge</button>
+      <button type="button" className={SECONDARY} data-id="fw-consult-edge-add" onClick={() => setRelations((p) => ({ ...p, edges: [...p.edges, { src: taskIds[0] ?? "", dst: taskIds[1] ?? taskIds[0] ?? "", kind: "seq" }] }))}>
+        {t("fwConsult.addEdge")}
+      </button>
       {previewSource && (
         <div className="min-h-64 flex-1">
           <ImportMapPreview source={previewSource} scope="canvas" dataId="fw-consult-relations-preview" hideClose onClose={() => undefined} />

@@ -48,6 +48,7 @@ describe("framework-interview view model", () => {
     expect(deriveStep(session(["generating", "pending"]))).toBe("waiting");
     expect(deriveStep(session(["drawn", "drawing"]))).toBe("waiting");
     expect(deriveStep(session(["drawn", "drawn"]))).toBe("relations");
+    expect(deriveStep(session(["drawn", "failed"]))).toBe("waiting");
     expect(deriveStep(session(["drawn"], "ready"))).toBe("register");
     expect(deriveStep(session(["drawn"], "applied"))).toBe("done");
   });

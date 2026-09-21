@@ -59,6 +59,9 @@ export default function FrameworkConsultPage() {
       } else if (task.status === "drawn" && submittedAtRef.current.has(task.id)) {
         durations.push(now - (submittedAtRef.current.get(task.id) ?? now));
         submittedAtRef.current.delete(task.id);
+      } else if ((task.status === "failed" || task.status === "pending") && submittedAtRef.current.has(task.id)) {
+        // 실패했거나(재시도 대기) 초기화된 카드는 소요 측정을 리셋 — 재시도로 다시 submitted가 찍힐 때부터 새로 잰다.
+        submittedAtRef.current.delete(task.id);
       }
     }
     if (durations.length) setDrawDurations((prev) => [...prev, ...durations]);
@@ -79,16 +82,25 @@ export default function FrameworkConsultPage() {
 
   useEffect(() => {
     if (!Number.isFinite(sessionId)) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount, not derived render state
-    void run(() => getFrameworkInterview(sessionId));
-  }, [sessionId, run]);
+    getFrameworkInterview(sessionId).then(applySession).catch((err) => setError(getApiErrorDetail(err)));
+  }, [sessionId, applySession]);
 
   useEffect(() => {
     if (!session || !hasBackgroundWork(session)) return;
+    let alive = true;
     const timer = window.setInterval(() => {
-      getFrameworkInterview(sessionId).then(applySession).catch((err) => setError(getApiErrorDetail(err)));
+      getFrameworkInterview(sessionId)
+        .then((next) => {
+          if (!alive) return; // 응답이 늦게 와 더 최신 상태를 덮어쓰지 않게
+          setError(null);
+          applySession(next);
+        })
+        .catch((err) => { if (alive) setError(getApiErrorDetail(err)); });
     }, POLL_MS);
-    return () => window.clearInterval(timer);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
   }, [session, sessionId, applySession]);
 
   function handleDividerDown(e: React.PointerEvent) {
@@ -125,7 +137,7 @@ export default function FrameworkConsultPage() {
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         <Link href="/settings?tab=framework" className="flex items-center gap-1 text-caption text-ink-tertiary hover:text-ink" data-id="fw-consult-exit">
           <ArrowLeft size={16} strokeWidth={1.5} />
-          Back
+          {t("fwConsult.back")}
         </Link>
         <Headset size={16} strokeWidth={1.5} className="text-accent" />
         <span className="text-body-strong">{session.category_name}</span>
@@ -151,12 +163,13 @@ export default function FrameworkConsultPage() {
         </aside>
         <div
           className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-hairline transition-colors duration-150 hover:bg-accent/40"
-          role="separator" aria-orientation="vertical" aria-label="Resize board" tabIndex={0}
+          role="separator" aria-orientation="vertical" aria-label={t("fwConsult.resizeBoard")} tabIndex={0}
           onPointerDown={handleDividerDown} data-id="fw-consult-divider"
         />
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface" data-id="fw-consult-step">
           {step === "plan" && (
             <PlanEditor
+              key={JSON.stringify(session.plan ?? [])}
               session={session}
               busy={busy}
               onBriefChange={() => undefined}
@@ -178,6 +191,7 @@ export default function FrameworkConsultPage() {
           )}
           {step === "relations" && (
             <RelationsStep
+              key={JSON.stringify(session.relations ?? null)}
               session={session}
               busy={busy}
               onPropose={() => void run(() => generateFrameworkRelations(session.id))}
@@ -201,7 +215,7 @@ export default function FrameworkConsultPage() {
           title={t("fwConsult.abandon")}
           message={t("fwConsult.abandonConfirm")}
           confirmLabel={t("fwConsult.abandon")}
-          cancelLabel="Cancel"
+          cancelLabel={t("fwConsult.cancel")}
           danger
           onClose={() => setConfirmAbandon(false)}
           onConfirm={() => {

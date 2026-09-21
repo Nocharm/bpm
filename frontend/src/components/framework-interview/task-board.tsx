@@ -34,6 +34,7 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
   const progress = deriveProgress(session, drawDurationsMs);
   const locked = session.status !== "planning";
   const tasks = [...session.tasks].sort((a, b) => a.seq - b.seq);
+  const workingTask = tasks.find((x) => x.status === "generating" || x.status === "drawing");
   return (
     <div className="flex flex-col gap-3 p-3">
       {locked && (
@@ -41,6 +42,9 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
           <div className="flex items-center gap-2 text-caption text-ink">
             {progress.working && <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />}
             <span>{t("fwConsult.progress", { done: progress.done, total: progress.total })}</span>
+            {workingTask && (
+              <span className="text-ink-tertiary" data-id="fw-consult-working-on">· {t("fwConsult.workingOn", { name: workingTask.name })}</span>
+            )}
             {progress.etaMs !== null && progress.done < progress.total && (
               <span className="text-ink-tertiary">· {t("fwConsult.eta", { minutes: Math.max(1, Math.round(progress.etaMs / 60000)) })}</span>
             )}
