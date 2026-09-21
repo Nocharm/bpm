@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 281개 · 2026-09-21 기준
+총 280개 · 2026-09-21 기준
 
 ## components/
 
@@ -56,7 +56,7 @@
 | `flow-conflict-modal.tsx` | `FlowConflictModal` | 입력이 있는 노드 앞에 다른 노드를 추가할 때 | `app/maps/[mapId]/page.tsx` |
 | `flow-glyphs.tsx` | `InsertGlyph`, `KeepGlyph` | 흐름 조작 의미 아이콘 | `components/edge-action-modal.tsx`, `components/flow-conflict-modal.tsx` |
 | `framework-browse-modal.tsx` | `FrameworkBrowseModal` | 업무체계 탐색 모달 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/framework-peek-pill.tsx` |
-| `framework-cascade-picker.tsx` | `FrameworkCascadePicker` | 업무 체계 계단식 피커 | `components/admin/framework-panel.tsx` |
+| `framework-cascade-picker.tsx` | `FrameworkCascadePicker` | 업무 체계 계단식 피커 | (미사용) |
 | `framework-chip.tsx` | `FrameworkChip` | 에디터 우상단 프레임워크 칩 | `app/maps/[mapId]/page.tsx`, `components/framework-peek-pill.tsx` |
 | `framework-confirm-section.tsx` | `FrameworkConfirmSection` | 연계 캔버스 확정 섹션 | `app/maps/[mapId]/page.tsx` |
 | `framework-connect-dialog.tsx` | `FrameworkConnectDialog` | 플레이스홀더 후차 연결 다이얼로그 (design 2026-08-28 §10.1) | `app/maps/[mapId]/page.tsx` |
@@ -154,7 +154,6 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
-| `admin-section.tsx` | `AdminSection` | 관리자 패널 아코디언 섹션 | `components/admin/framework-panel.tsx` |
 | `admin-table.tsx` | `TableCard`, `RolePill` | 어드민 콘솔 표 공통 셸 | `components/admin/department-table.tsx`, `components/admin/employee-table.tsx`, `components/admin/framework-overview.tsx`, `components/admin/local-account-table.tsx` |
 | `approval-queue.tsx` | `ApprovalQueue` | 시스템 관리자 승인 큐 | `app/settings/page.tsx` |
 | `batch-runs-panel.tsx` | `BatchRunsPanel` | 배치 작업(DB 백업·HR 동기화) 최근 실행 상태 | `app/settings/page.tsx` |
@@ -254,7 +253,7 @@
 | `dashboard-section.tsx` | `DashboardSection`, `DashboardEmpty`, `DashboardFoot` | 홈 대시보드 섹션 셸 | `components/maps/approvals-card.tsx`, `components/maps/dept-maps-card.tsx`, `components/maps/framework-card.tsx`, `components/maps/my-documents-card.tsx`, `components/maps/recent-events-card.tsx`, `components/maps/recent-opened-list.tsx` |
 | `delete-map-dialog.tsx` | `DeleteMapDialog` | 맵 삭제 확인 | `components/maps/map-detail-card.tsx`, `components/permissions/danger-zone.tsx` |
 | `dept-group-box.tsx` | `DeptGroupBox` | 부서 헤더 행 + 그 부서가 직접 가진 맵 카드를 묶는 박스. | `components/maps/my-dept-favorites.tsx`, `components/maps/org-accordion.tsx` |
-| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/category-dept-modal.tsx`, `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/principal-picker.tsx` |
+| `dept-level-icon.tsx` | `DeptLevelIcon` | 부서 조직 레벨 아이콘 | `components/admin/category-dept-modal.tsx`, `components/admin/framework-panel.tsx`, `components/admin/ref-group-card.tsx`, `components/bpm-attribute-picker.tsx`, `components/dept-pill.tsx`, `components/maps/category-summary-card.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/permissions/attribute-tiles.tsx`, `components/permissions/framework-access-panel.tsx`, `components/permissions/principal-picker.tsx` |
 | `dept-maps-card.tsx` | `DeptMapsCard` | 홈 대시보드 | `components/maps/home-dashboard.tsx` |
 | `dept-sub-maps-modal.tsx` | `DeptSubMapsModal` | 홈 대시보드 내 부서 카드 | `components/maps/dept-maps-card.tsx` |
 | `filter-dropdown.tsx` | `FilterDropdown` | 홈 목록 필터용 멀티셀렉트 드롭다운 | `components/maps/home-filter-pills.tsx` |

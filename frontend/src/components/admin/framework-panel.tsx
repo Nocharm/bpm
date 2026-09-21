@@ -3,8 +3,10 @@
 // 설정 Framework 탭 — 컨설턴트 업무 체계 카테고리 관리 트리(CRUD). 홈의 lib/framework-tree-state.ts는
 // 맵 목록까지 함께 로드하는 브라우징 전용 캐시라 여기(뮤테이션 후 영향받는 노드를 전체 재조회)엔
 // 그대로 맞지 않는다 — brief가 admin 전용 확장을 금지해 이 파일 안에 별도의 단순 상태를 둔다.
-// 인터뷰 임포트 섹션(트리 하단)은 클라이언트 JSON 파싱만 하고, 키/스키마 검증은 서버 어댑터
+// 인터뷰 임포트 섹션(그리드 아래 전폭)은 클라이언트 JSON 파싱만 하고, 키/스키마 검증은 서버 어댑터
 // dry-run(POST /categories/import-interview apply=false)이 진실 — 실제 저장은 apply 확인 후에만.
+// 레이아웃(2026-09-22 설계): 좌 트리 : 우 선택 행 상세 패널(같은 340px). 행 액션 아이콘·인라인
+// 관리자 표시는 상세 패널로 옮겼고, 아코디언 섹션 3종(AdminSection)은 폐기했다.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -15,6 +17,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  FileJson,
   FolderPlus,
   FolderTree,
   Headset,
@@ -55,6 +58,7 @@ import {
   type InterviewImportResult,
 } from "@/lib/api";
 import { canManageInScope } from "@/lib/framework-admin-scope";
+import { CANVAS_STATE_LABEL_EN, getCanvasState } from "@/lib/framework-drill";
 import { parseInterviewFile } from "@/lib/framework-import-parse";
 import { useI18n } from "@/lib/i18n";
 import type { InterviewPromptTarget } from "@/lib/interview-json-prompt";
@@ -68,13 +72,12 @@ import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permiss
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
-import { AdminSection } from "@/components/admin/admin-section";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalIcon, PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
-import { FrameworkCascadePicker } from "@/components/framework-cascade-picker";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { Highlight } from "@/components/highlight";
 import { LevelPill } from "@/components/level-pill";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -85,12 +88,26 @@ import { useSectionMotion } from "@/lib/use-closing-keys";
 
 const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 미만 레벨에서만 자식 추가 허용
 
-const ROW_ICON_BTN =
-  "hidden shrink-0 rounded-sm p-1 text-ink-muted hover:bg-surface-alt group-hover:block";
+// 상세 패널 액션 버튼(아이콘+라벨) — 불가한 액션도 숨기지 않고 비활성 + title로 이유를 남긴다
+const DETAIL_ACTION_BTN =
+  "inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 " +
+  "text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-40";
 
 const IMPORT_FILE_BTN =
-  "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline px-2.5 py-1.5 " +
+  "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline bg-surface px-2.5 py-1.5 " +
   "text-caption text-ink-secondary hover:bg-surface-alt disabled:opacity-50";
+
+// 인터뷰 임포트 스트립 · AI L5 블록의 보조 버튼 — 테두리 없는 컴팩트 액션
+const STRIP_BTN =
+  "shrink-0 rounded-sm px-2 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-40";
+
+// 진행 중 세션 드롭다운 — 토글 버튼 rect 기준 fixed 패널(framework-cascade-picker 드롭다운과 같은 규칙)
+const SESSIONS_GAP = 4;
+const SESSIONS_MARGIN = 8;
+const SESSIONS_MIN_WIDTH = 260;
+
+// 상세 정보 줄의 최대 노출 관리자 수 — 초과분은 +n 배지 툴팁으로
+const DETAIL_ADMIN_MAX = 3;
 
 interface InterviewFileState {
   name: string;
@@ -171,14 +188,13 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   // 거버넌스 체크 키(`code:field`) — dry-run 결과마다 비우고, 파일 변경 시 리포트와 함께 무효화 (spec 2026-09-03 §6)
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
 
-  // AI 컨설턴트 L5 캠페인 진입 — sysadmin 전용(인터뷰 임포트와 같은 게이트). 전 카테고리 경량 목록에서
-  // level===5만 골라 SearchSelect 옵션으로 쓴다(트리 state는 펼친 가지만 로드하는 지연 fetch라 전체
-  // L5 목록엔 못 쓴다 — /categories/all이 진실).
-  // 계단식 피커(framework-cascade-picker)로 고른다 — 기존 L5(모드 existing) 또는 새 L5를 만들 부모 L4(모드 new).
-  const [consultMode, setConsultMode] = useState<"existing" | "new">("existing");
-  const [consultPick, setConsultPick] = useState<CategoryNode | null>(null);
+  // 선택 행 — id만 상태로 두고 노드는 childrenByParent에서 찾는다(이름변경·이동 후 갱신 반영,
+  // 삭제로 트리에서 사라지면 자동으로 선택 해제).
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // AI 컨설턴트 L5 캠페인 진입 — sysadmin 전용(인터뷰 임포트와 같은 게이트). 대상은 트리에서 고른
+  // 행이다: L5면 그 L5를 채우고, L4면 이름을 받아 새 L5를 만든 뒤 시작한다.
   const [newL5Name, setNewL5Name] = useState("");
-  const consultL5Id = consultMode === "existing" ? (consultPick?.id ?? null) : null;
   const [consultBusy, setConsultBusy] = useState(false);
   const [activeSessions, setActiveSessions] = useState<FwInterviewSession[]>([]);
   // 관리 트리 검색용 전 카테고리 경량 목록(sysadmin) — 탐색 모달과 같은 클라이언트 필터
@@ -188,6 +204,17 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     listFrameworkInterviews(true).then(setActiveSessions).catch((err) => console.warn("fw sessions", err));
     listAllCategories().then(setAllCategories).catch((err) => console.warn("fw categories", err));
   }, [scopeRootIds]);
+  // 선택 노드 파생 — 로드된 모든 가지에서 id로 찾는다. 못 찾으면(삭제·접힘 후 재구성) null.
+  const selectedNode = useMemo(() => {
+    if (selectedId === null) return null;
+    for (const list of childrenByParent.values()) {
+      const found = list.find((n) => n.id === selectedId);
+      if (found) return found;
+    }
+    return null;
+  }, [childrenByParent, selectedId]);
+  const consultL5Id = selectedNode?.level === 5 ? selectedNode.id : null;
+
   // 외부 AI 프롬프트 버튼용 target — code(L5 상세)는 chain 조회가 필요해 선택 시점에만 지연 로드.
   // fetch 결과를 id와 함께 캐시하고 렌더에서 매칭 — id가 null/변경된 프레임엔 effect가 setState하지
   // 않도록(react-hooks/set-state-in-effect) 값을 파생으로 계산한다.
@@ -211,17 +238,19 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   }, [consultL5Id]);
   const consultTarget = fetchedTarget?.id === consultL5Id ? fetchedTarget.target : undefined;
 
-  async function handleStartConsult() {
-    if (!consultPick) return;
+  // 캠페인 시작 — mode "new"는 선택한 L4 아래 새 L5를 만들고, "existing"은 선택한 L5를 그대로 쓴다.
+  async function handleStartConsult(mode: "existing" | "new") {
+    const pick = selectedNode;
+    if (!pick) return;
     setConsultBusy(true);
     try {
-      let categoryId = consultPick.id;
-      if (consultMode === "new") {
+      let categoryId = pick.id;
+      if (mode === "new") {
         // 새 L5를 고른 L4 아래 만들고 그 id로 세션을 연다 — 관리 트리도 그 가지를 새로고침
-        const created = await createCategory({ name: newL5Name.trim(), parent_id: consultPick.id });
+        const created = await createCategory({ name: newL5Name.trim(), parent_id: pick.id });
         categoryId = created.id;
-        setOpenIds((prev) => new Set(prev).add(consultPick.id));
-        await refreshTree([consultPick.id]);
+        setOpenIds((prev) => new Set(prev).add(pick.id));
+        await refreshTree([pick.id]);
       }
       const session = await createFrameworkInterview({ category_id: categoryId, lang });
       router.push(`/framework/consult/${session.id}`);
@@ -233,6 +262,40 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       setConsultBusy(false);
     }
   }
+
+  // 진행 중 세션 드롭다운 — 토글 버튼 rect 기준 fixed 포털(바깥 클릭·Esc 닫힘).
+  // 상세 패널은 내부 스크롤이라 인라인 목록을 두면 패널이 잘린다.
+  const sessionsBtnRef = useRef<HTMLButtonElement>(null);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessionsPos, setSessionsPos] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
+  useEffect(() => {
+    if (!sessionsOpen) return undefined;
+    const updatePos = () => {
+      const btn = sessionsBtnRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const top = rect.bottom + SESSIONS_GAP;
+      const width = Math.max(SESSIONS_MIN_WIDTH, rect.width);
+      // 오른쪽으로 넘치면 화면 안으로 당긴다 — 위로 뒤집지 않는다(목록은 위→아래로 읽는다)
+      const left = Math.max(SESSIONS_MARGIN, Math.min(rect.left, window.innerWidth - SESSIONS_MARGIN - width));
+      setSessionsPos({ left, top, width, maxHeight: Math.max(120, window.innerHeight - SESSIONS_MARGIN - top) });
+    };
+    updatePos();
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true);
+    return () => {
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
+  }, [sessionsOpen]);
+  useEffect(() => {
+    if (!sessionsOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSessionsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sessionsOpen]);
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
@@ -448,6 +511,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     ancestorIds.forEach((a) => openSection(a, false));
     setOpenIds((prev) => new Set([...prev, ...ancestorIds]));
     setTreeQuery("");
+    setSelectedId(id);
     setFlashId(id);
     window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1600);
     window.setTimeout(() => document.querySelector(`[data-id="framework-admin-node-${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
@@ -501,9 +565,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     }
   }
 
-  // 코드 옆 인라인 권한자 — 그 카테고리에 직접 붙은 행만(하향 상속은 안내 문구가 담당).
-  // 2명까지 이름 노출, 초과분은 +N 배지 호버 툴팁으로 전체 나열 (2026-09-02 요청)
-  const INLINE_ADMIN_MAX = 2;
+  // 상세 패널 권한자 — 그 카테고리에 직접 붙은 행만(하향 상속은 권한 모달 안내 문구가 담당).
   const permNamesByCategory = useMemo(() => {
     const byId = new Map<number, string[]>();
     for (const row of permRows) {
@@ -521,43 +583,25 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     return byId;
   }, [permRows, permDirUsers, permGroups, lang]);
 
-  const renderInlineAdmins = (categoryId: number): ReactNode => {
-    const names = permNamesByCategory.get(categoryId);
-    if (!names || names.length === 0) return null;
-    const shown = names.slice(0, INLINE_ADMIN_MAX);
-    const rest = names.length - shown.length;
-    return (
-      <span
-        data-id={`framework-admin-inline-${categoryId}`}
-        className="flex min-w-0 shrink items-center gap-1 text-fine text-ink-tertiary"
-      >
-        <ShieldCheck size={11} strokeWidth={1.5} className="shrink-0 text-accent" />
-        <span className="truncate">{shown.join(", ")}</span>
-        {rest > 0 && (
-          <Tooltip label={names.join(", ")}>
-            <span className="shrink-0 rounded-sm border border-hairline bg-surface-alt px-1 text-fine">
-              +{rest}
-            </span>
-          </Tooltip>
-        )}
-      </span>
-    );
-  };
-
-  // 계단식 스타일(탐색 모달과 동일 규칙): data-tree-* 훅 + 가이드 라인 + 레벨 필 + accordion 모션. 행 액션은 그대로.
+  // 계단식 스타일(탐색 모달과 동일 규칙): data-tree-* 훅 + 가이드 라인 + 레벨 필 + accordion 모션.
+  // 행은 선택 전용 — 액션·관리자 표시는 우측 상세 패널이 맡는다(2026-09-22 설계).
   const renderNode = (node: CategoryNode, depth: number): ReactNode => {
     const open = openIds.has(node.id);
     const children = childrenByParent.get(node.id);
     const canExpand = node.level < MAX_CATEGORY_LEVEL;
     const showKids = (open || closingKeys.has(node.id)) && children !== undefined && children.length > 0;
     const flashing = flashId === node.id;
+    const selected = selectedId === node.id;
     return (
       <li key={node.id} data-tree-node className="flex flex-col">
         <div
           data-tree-head
           data-id={`framework-admin-node-${node.id}`}
+          aria-current={selected ? "true" : undefined}
           style={getTreeIndentStyle(depth)}
-          className={`group relative flex items-center gap-1 rounded-sm transition-colors duration-350 ${flashing ? "bg-accent-tint" : "hover:bg-divider"}`}
+          className={`group relative flex items-center gap-1 rounded-sm transition-colors duration-350 ${
+            selected ? "bg-accent-tint" : flashing ? "bg-accent-tint" : "hover:bg-divider"
+          }`}
         >
           <button
             type="button"
@@ -571,13 +615,17 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </button>
           <button
             type="button"
-            onClick={() => (canExpand ? handleToggle(node.id) : undefined)}
-            className={`flex min-w-0 flex-1 items-center gap-2 py-1 pr-1 text-left ${canExpand ? "" : "cursor-default"}`}
+            data-id={`framework-admin-pick-${node.id}`}
+            onClick={() => {
+              setSelectedId(node.id);
+              // 드릴인은 덤 — 이미 펼쳐진 가지를 선택만으로 접어버리면 위치를 잃는다
+              if (canExpand && !open) handleToggle(node.id);
+            }}
+            className="flex min-w-0 flex-1 items-center gap-2 py-1 pr-2 text-left"
           >
             <LevelPill level={node.level} size="sm" />
             <span data-tree-name="" className="min-w-0 truncate text-fine text-ink-secondary group-hover:text-ink">{node.name}</span>
             <span className="shrink-0 text-fine text-ink-muted">{node.code}</span>
-            {renderInlineAdmins(node.id)}
             {/* 우측 숫자 묶음을 하나의 ml-auto 그룹으로 — CountTag의 ml-auto와 나뉘면 열이 행마다 어긋난다 */}
             <span className="ml-auto flex shrink-0 items-center gap-2">
               {/* L5 개수는 L4 행에만 — 상위 롤업은 소음(사용자 지시 2026-09-22) */}
@@ -588,72 +636,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               {!open && <CountTag count={node.map_count} />}
             </span>
           </button>
-          <div className="flex shrink-0 items-center gap-0.5 pr-1">
-            {node.level < MAX_CATEGORY_LEVEL && (
-              <button
-                type="button"
-                data-id={`framework-admin-add-${node.id}`}
-                title={t("framework.adminAddChild")}
-                className={ROW_ICON_BTN}
-                onClick={() => setNamePrompt({ kind: "add-child", parentId: node.id })}
-              >
-                <FolderPlus size={14} strokeWidth={1.5} />
-              </button>
-            )}
-            <button
-              type="button"
-              data-id={`framework-admin-rename-${node.id}`}
-              title={t("framework.adminRename")}
-              className={ROW_ICON_BTN}
-              onClick={() =>
-                setNamePrompt({ kind: "rename", id: node.id, currentName: node.name })
-              }
-            >
-              <Pencil size={14} strokeWidth={1.5} />
-            </button>
-            <button
-              type="button"
-              data-id={`framework-admin-dept-${node.id}`}
-              title={t("framework.adminDept")}
-              className={`${ROW_ICON_BTN} ${node.admin_department ? "text-accent" : ""}`}
-              onClick={() => setDeptNode(node)}
-            >
-              <Building2 size={14} strokeWidth={1.5} />
-            </button>
-            {canManageInScope(node, "perms", scopeRootIds, minSeedLevel) && (
-              <button
-                type="button"
-                data-id={`framework-admin-perms-${node.id}`}
-                title={t("framework.adminPerms")}
-                className={ROW_ICON_BTN}
-                onClick={() => setPermsNode(node)}
-              >
-                <ShieldCheck size={14} strokeWidth={1.5} />
-              </button>
-            )}
-            {canManageInScope(node, "move", scopeRootIds, minSeedLevel) && (
-              <button
-                type="button"
-                data-id={`framework-admin-move-${node.id}`}
-                title={t("framework.adminMove")}
-                className={ROW_ICON_BTN}
-                onClick={() => setMovingNode(node)}
-              >
-                <MoveIcon size={14} strokeWidth={1.5} />
-              </button>
-            )}
-            {canManageInScope(node, "delete", scopeRootIds, minSeedLevel) && (
-              <button
-                type="button"
-                data-id={`framework-admin-delete-${node.id}`}
-                title={t("framework.adminDelete")}
-                className={ROW_ICON_BTN}
-                onClick={() => openDelete(node)}
-              >
-                <Trash2 size={14} strokeWidth={1.5} />
-              </button>
-            )}
-          </div>
         </div>
         {open && children === undefined && (
           <p style={getTreeIndentStyle(depth + 1)} className={`text-fine text-ink-tertiary ${TREE_INDENT_PADDING_CLASS}`}>
@@ -685,6 +667,82 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       interviewResult ? buildImportReportView(interviewResult.rows, interviewIndex, interviewResult.files) : null,
     [interviewResult, interviewIndex],
   );
+
+  // ── 상세 패널 재료 ──
+  const isL4 = selectedNode?.level === 4;
+  const isL5 = selectedNode?.level === 5;
+  // 선택한 L5에 이미 진행 중인 세션이 있으면 새로 만들지 않고 그 세션으로 보낸다(서버는 409)
+  const resumeSession = isL5 ? activeSessions.find((s) => s.category_id === selectedNode.id) : undefined;
+  const detailAdmins = selectedNode ? (permNamesByCategory.get(selectedNode.id) ?? []) : [];
+  const noSelectionReason = t("framework.adminDetailEmpty");
+  const scopeReason = t("framework.adminScopeDenied");
+  // 액션 6종 고정 순서 — 불가해도 렌더하고 title에 이유를 남긴다(숨기면 왜 없는지 알 수 없다)
+  const detailActions: {
+    key: string;
+    icon: ReactNode;
+    label: string;
+    reason?: string;
+    onClick: (node: CategoryNode) => void;
+  }[] = [
+    {
+      key: "add",
+      icon: <FolderPlus size={14} strokeWidth={1.5} />,
+      label: t("framework.adminAddChild"),
+      reason: !selectedNode
+        ? noSelectionReason
+        : selectedNode.level >= MAX_CATEGORY_LEVEL
+          ? t("framework.adminAddMaxDepth")
+          : undefined,
+      onClick: (node) => setNamePrompt({ kind: "add-child", parentId: node.id }),
+    },
+    {
+      key: "rename",
+      icon: <Pencil size={14} strokeWidth={1.5} />,
+      label: t("framework.adminRename"),
+      reason: selectedNode ? undefined : noSelectionReason,
+      onClick: (node) => setNamePrompt({ kind: "rename", id: node.id, currentName: node.name }),
+    },
+    {
+      key: "dept",
+      icon: <Building2 size={14} strokeWidth={1.5} />,
+      label: t("framework.adminDept"),
+      reason: selectedNode ? undefined : noSelectionReason,
+      onClick: (node) => setDeptNode(node),
+    },
+    {
+      key: "perms",
+      icon: <ShieldCheck size={14} strokeWidth={1.5} />,
+      label: t("framework.adminPerms"),
+      reason: !selectedNode
+        ? noSelectionReason
+        : canManageInScope(selectedNode, "perms", scopeRootIds, minSeedLevel)
+          ? undefined
+          : scopeReason,
+      onClick: (node) => setPermsNode(node),
+    },
+    {
+      key: "move",
+      icon: <MoveIcon size={14} strokeWidth={1.5} />,
+      label: t("framework.adminMove"),
+      reason: !selectedNode
+        ? noSelectionReason
+        : canManageInScope(selectedNode, "move", scopeRootIds, minSeedLevel)
+          ? undefined
+          : scopeReason,
+      onClick: (node) => setMovingNode(node),
+    },
+    {
+      key: "delete",
+      icon: <Trash2 size={14} strokeWidth={1.5} />,
+      label: t("framework.adminDelete"),
+      reason: !selectedNode
+        ? noSelectionReason
+        : canManageInScope(selectedNode, "delete", scopeRootIds, minSeedLevel)
+          ? undefined
+          : scopeReason,
+      onClick: (node) => openDelete(node),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-4" data-id="framework-panel">
@@ -733,10 +791,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <FrameworkOverview />
       ) : (
         <>
-      {/* 복수열 — 좌: 카테고리 트리, 우: 아코디언 섹션(캠페인 진입·진행 중 세션·인터뷰 임포트). 리포트는 그리드 아래 전폭 */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)]" data-id="framework-manage-grid">
+      {/* 복수열 — 좌: 카테고리 트리, 우: 선택 행 상세 패널(같은 높이). 임포트 스트립·리포트는 그리드 아래 전폭 */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" data-id="framework-manage-grid">
       {/* 트리는 검색 상자 + 10행(28px)만 보이는 340px 상자 안에서 내부 스크롤 — 더 길 필요 없다는 사용자 지시 2026-09-22 */}
-      <div data-id="framework-admin-tree" className="fw-tree scroll-soft max-h-[340px] self-start overflow-y-auto rounded-md border border-hairline p-2">
+      <div data-id="framework-admin-tree" className="fw-tree scroll-soft h-[340px] overflow-y-auto rounded-md border border-hairline p-2">
         {!scopeRootIds && (
           <label className="mb-2 flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
             <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -799,193 +857,268 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         )}
       </div>
 
-      {/* 대량 임포트·캠페인은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
-      {!scopeRootIds && (
-      <div className="flex flex-col gap-3" data-id="interview-import">
-        <AdminSection
-          id="consult"
-          title={t("fwConsult.start")}
-          hint={t("fwConsult.startHint")}
-          icon={<Headset size={16} strokeWidth={1.5} />}
-          badge={activeSessions.length > 0 ? activeSessions.length : undefined}
-          actions={<InterviewJsonPromptButton target={consultTarget} />}
-          tone="pearl"
-          maxHeight={480}
-        >
-        <div className="flex flex-col gap-2" data-id="fw-consult-entry">
-          {/* 모드 세그먼트 — 기존 L5 고르기 / 새 L5 만들기(부모 L4 고르고 이름 입력). 홈 뷰 토글과 같은 스타일 */}
-          <div data-id="fw-consult-mode" className="flex shrink-0 items-center gap-0.5 self-start rounded-sm border border-hairline bg-surface p-0.5">
-            {(["existing", "new"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={consultMode === m}
-                data-id={`fw-consult-mode-${m}`}
-                className={`rounded-sm px-2.5 py-1 text-caption transition-colors ${
-                  consultMode === m ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-                }`}
-                onClick={() => { setConsultMode(m); setConsultPick(null); }}
-              >
-                {t(m === "existing" ? "fwConsult.modeExisting" : "fwConsult.modeNew")}
-              </button>
-            ))}
+      {/* 우측 상세 패널 — 트리에서 고른 행의 요약·액션. 캠페인·임포트 진입은 sysadmin 전용이라 안에서 한 번 더 게이팅 */}
+      <div
+        data-id="framework-admin-detail"
+        className="scroll-soft flex h-[340px] flex-col gap-3 overflow-y-auto rounded-md border border-hairline bg-surface-pearl p-3"
+      >
+        {selectedNode ? (
+          <div data-id="framework-admin-detail-head" className="flex min-w-0 shrink-0 items-center gap-2">
+            <LevelPill level={selectedNode.level} size="sm" />
+            <span className="min-w-0 truncate text-body-strong text-ink">{selectedNode.name}</span>
+            <span className="shrink-0 text-fine text-ink-tertiary">{selectedNode.code}</span>
           </div>
-          <div className="flex flex-col gap-3">
-            {/* 트리는 검색 상자를 누를 때 드롭다운으로 — 섹션이 트리 높이만큼 길어지지 않는다(사용자 지시 2026-09-22) */}
-            <FrameworkCascadePicker
-              key={consultMode}
-              selectedId={consultPick?.id ?? null}
-              onSelect={setConsultPick}
-              selectableLevels={consultMode === "existing" ? [5] : [4]}
-              maxLevel={consultMode === "existing" ? 5 : 4}
-              variant="dropdown"
-              height={360}
-              dataIdPrefix="fw-consult-picker"
-            />
-            <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface p-3" data-id="fw-consult-pick-summary">
-              <span className="text-fine text-ink-tertiary">{consultMode === "existing" ? t("fwConsult.pickL5") : t("fwConsult.pickParent")}</span>
-              {consultPick ? (
-                <span className="flex items-center gap-2 text-caption text-ink" data-id="fw-consult-pick-name">
-                  <LevelPill level={consultPick.level} size="sm" />
-                  <span className="min-w-0 truncate">{consultPick.name}</span>
-                </span>
+        ) : (
+          <p data-id="framework-admin-detail-empty" className="shrink-0 text-caption text-ink-muted">
+            {t("framework.adminDetailEmpty")}
+          </p>
+        )}
+
+        {selectedNode && (
+          <div
+            data-id="framework-admin-detail-info"
+            className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-fine text-ink-tertiary"
+          >
+            <span>
+              {t("framework.adminInfoMaps")}: <span className="text-ink-secondary">{selectedNode.map_count}</span>
+            </span>
+            {/* L5 롤업은 그 아래 L5가 있을 수 있는 레벨에서만 의미가 있다 */}
+            {selectedNode.level <= 4 && (
+              <span>
+                {t("framework.adminInfoL5")}: <span className="text-ink-secondary">{selectedNode.l5_count}</span>
+              </span>
+            )}
+            <span>
+              {t("framework.adminInfoDept")}:{" "}
+              <span className="text-ink-secondary">
+                {/* 관리 부서는 조직 경로로 저장된다 — 한 줄에 들어가도록 리프만 */}
+                {selectedNode.admin_department ? deptLeaf(selectedNode.admin_department) : t("framework.adminNone")}
+              </span>
+            </span>
+            <span className="flex min-w-0 items-center gap-1">
+              {t("framework.adminInfoAdmins")}:
+              {detailAdmins.length === 0 ? (
+                <span className="text-ink-secondary">{t("framework.adminNone")}</span>
               ) : (
-                <span className="text-caption text-ink-muted" data-id="fw-consult-pick-empty">{t("fwConsult.nothingSelected")}</span>
+                <>
+                  <span className="min-w-0 truncate text-ink-secondary">
+                    {detailAdmins.slice(0, DETAIL_ADMIN_MAX).join(", ")}
+                  </span>
+                  {detailAdmins.length > DETAIL_ADMIN_MAX && (
+                    <Tooltip label={detailAdmins.join(", ")}>
+                      <span className="shrink-0 rounded-sm border border-hairline bg-surface px-1">
+                        +{detailAdmins.length - DETAIL_ADMIN_MAX}
+                      </span>
+                    </Tooltip>
+                  )}
+                </>
               )}
-              {consultMode === "new" && (
-                <label className="flex flex-col gap-1 text-fine text-ink-secondary">
-                  {t("fwConsult.newL5Name")}
-                  <input
-                    data-id="fw-consult-new-name"
-                    className="w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-                    value={newL5Name}
-                    onChange={(e) => setNewL5Name(e.target.value)}
-                    placeholder={t("fwConsult.newL5Name")}
-                  />
-                </label>
-              )}
+            </span>
+            {selectedNode.level === 5 && (
+              <span className="flex items-center gap-1">
+                {t("framework.adminInfoCanvas")}:{" "}
+                {/* 상태 표기는 언어 무관 영어 고정(맵 카드 상태 필과 같은 규칙) */}
+                <span className="text-ink-secondary">{CANVAS_STATE_LABEL_EN[getCanvasState(selectedNode)]}</span>
+                {selectedNode.linkage_map_id !== null && (
+                  <Link
+                    href={`/maps/${selectedNode.linkage_map_id}`}
+                    data-id="framework-admin-open-canvas"
+                    className="text-accent hover:underline"
+                  >
+                    {t("framework.adminOpenCanvas")}
+                  </Link>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div data-id="framework-admin-actions" className="flex shrink-0 flex-wrap gap-1.5">
+          {detailActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              data-id={`framework-admin-action-${action.key}`}
+              className={DETAIL_ACTION_BTN}
+              disabled={action.reason !== undefined}
+              title={action.reason ?? action.label}
+              onClick={() => {
+                if (selectedNode) action.onClick(selectedNode);
+              }}
+            >
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 대량 임포트·캠페인은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
+        {!scopeRootIds && (
+          <div
+            data-id="framework-admin-ai"
+            className="flex shrink-0 flex-col gap-2 rounded-md border border-hairline bg-surface p-2.5"
+          >
+            <div className="flex items-center gap-1.5">
+              <Headset size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
+              <span className="text-caption text-ink">{t("fwConsult.aiBlock")}</span>
+              <span className="ml-auto shrink-0">
+                <InterviewJsonPromptButton target={consultTarget} />
+              </span>
+            </div>
+            {/* 새 L5 — 선택한 L4 아래에 만든다 */}
+            <div className="flex items-center gap-1.5">
+              <input
+                data-id="fw-consult-new-name"
+                className="min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink disabled:opacity-40"
+                value={newL5Name}
+                disabled={!isL4}
+                title={isL4 ? undefined : t("fwConsult.needL4")}
+                placeholder={t("fwConsult.newL5Name")}
+                onChange={(e) => setNewL5Name(e.target.value)}
+              />
               <button
                 type="button"
-                data-id="fw-consult-start"
-                className="mt-auto self-start rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                disabled={!consultPick || consultBusy || (consultMode === "new" && !newL5Name.trim())}
-                onClick={() => void handleStartConsult()}
+                data-id="fw-consult-create"
+                className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                disabled={!isL4 || consultBusy || newL5Name.trim() === ""}
+                title={isL4 ? t("fwConsult.createAndStart") : t("fwConsult.needL4")}
+                onClick={() => void handleStartConsult("new")}
               >
-                {consultMode === "new" ? t("fwConsult.createAndStart") : t("fwConsult.start")}
+                {t("fwConsult.createAndStart")}
               </button>
             </div>
+            {/* 기존 L5 채우기 — 진행 중 세션이 있으면 새로 만들지 않고 그 세션을 잇는다 */}
+            <button
+              type="button"
+              data-id="fw-consult-start"
+              className="self-start rounded-sm border border-hairline bg-surface px-2.5 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+              disabled={!isL5 || consultBusy}
+              title={isL5 ? t("fwConsult.startHint") : t("fwConsult.needL5")}
+              onClick={() => {
+                if (resumeSession) router.push(`/framework/consult/${resumeSession.id}`);
+                else void handleStartConsult("existing");
+              }}
+            >
+              {resumeSession ? t("fwConsult.resume") : t("fwConsult.start")}
+            </button>
+            <button
+              ref={sessionsBtnRef}
+              type="button"
+              data-id="fw-consult-sessions-toggle"
+              aria-expanded={sessionsOpen}
+              className={`inline-flex items-center gap-1 self-start ${STRIP_BTN}`}
+              disabled={activeSessions.length === 0}
+              title={t("fwConsult.sessionsToggle", { n: activeSessions.length })}
+              onClick={() => setSessionsOpen((prev) => !prev)}
+            >
+              {t("fwConsult.sessionsToggle", { n: activeSessions.length })}
+              <ChevronDown
+                size={14}
+                strokeWidth={1.5}
+                className={`motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${sessionsOpen ? "rotate-180" : ""}`}
+              />
+            </button>
           </div>
-          {/* 진행 중 세션은 접힌 아코디언 + 건수만(사용자 지시 2026-09-21) */}
-          {activeSessions.length > 0 && (
-            <AdminSection id="sessions" title={t("fwConsult.activeSessions")} badge={activeSessions.length} maxHeight={240}>
-            <ul className="flex flex-col gap-1" data-id="fw-consult-active-list">
-              {activeSessions.map((s) => (
-                <li key={s.id} data-id={`fw-consult-active-${s.id}`} className="flex items-center gap-2 text-caption text-ink">
-                  <span className="truncate">{s.category_name}</span>
-                  <span className="text-fine text-ink-tertiary">{s.progress.drawn}/{s.progress.total}</span>
-                  <Link href={`/framework/consult/${s.id}`} className="ml-auto text-accent hover:underline" data-id={`fw-consult-resume-${s.id}`}>
-                    {t("fwConsult.resume")}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            </AdminSection>
-          )}
-        </div>
-        </AdminSection>
+        )}
+
+        {/* 임포트 진입 — 버튼이 바로 파일 탐색기를 연다. 고른 파일은 그리드 아래 전폭 스트립에 */}
+        {!scopeRootIds && (
+          <>
+            <input
+              ref={interviewInputRef}
+              type="file"
+              multiple
+              accept=".json,application/json"
+              data-id="interview-import-files"
+              className="hidden"
+              disabled={interviewBusy}
+              onChange={(event) => {
+                void handleInterviewFiles(event.target.files);
+                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
+              }}
+            />
+            <button
+              type="button"
+              data-id="interview-import-pick"
+              disabled={interviewBusy}
+              className={`mt-auto shrink-0 self-start ${IMPORT_FILE_BTN}`}
+              onClick={() => interviewInputRef.current?.click()}
+            >
+              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{t("framework.interviewImportPick")}</span>
+              {interviewFiles.length > 0 && (
+                <span
+                  data-id="interview-import-pick-count"
+                  className="shrink-0 rounded-full bg-accent-tint px-1.5 text-fine text-accent"
+                >
+                  {interviewFiles.length}
+                </span>
+              )}
+            </button>
+          </>
+        )}
       </div>
-      )}
       </div>
 
-      {/* 인터뷰 임포트는 그리드 아래 전폭 — 리포트(요약/목록 2단)가 폭을 다 써야 읽힌다(사용자 지적 2026-09-21) */}
-      {!scopeRootIds && (
-      <div className="flex flex-col gap-3" data-id="interview-import-host">
-        <AdminSection
-          id="import"
-          title={t("framework.interviewImportTitle")}
-          hint={t("framework.interviewImportHint")}
-          icon={<Upload size={16} strokeWidth={1.5} />}
-          badge={interviewFiles.length > 0 ? interviewFiles.length : undefined}
-          maxHeight={720}
+      {/* 고른 파일은 그리드 아래 전폭 스트립에 필로 나열 — 개수·모두 지우기·드라이런이 같은 줄 끝에 (설계 2026-09-22 §1.4) */}
+      {!scopeRootIds && interviewFiles.length > 0 && (
+        <div
+          data-id="interview-import-strip"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-hairline bg-surface p-2"
         >
-
-        <input
-          ref={interviewInputRef}
-          type="file"
-          multiple
-          accept=".json,application/json"
-          data-id="interview-import-files"
-          className="hidden"
-          disabled={interviewBusy}
-          onChange={(event) => {
-            void handleInterviewFiles(event.target.files);
-            event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
-          }}
-        />
-        <div className="flex flex-col gap-1.5">
+          {interviewFiles.map((file, i) => (
+            <span
+              key={`${file.name}-${i}`}
+              data-id={`interview-import-file-${i}`}
+              className={`flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                file.error ? "border-error text-error" : "border-hairline text-ink-secondary"
+              }`}
+            >
+              <FileJson size={14} strokeWidth={1.5} className="shrink-0" />
+              <span className="max-w-[240px] truncate" title={file.error ? `${file.name} - ${file.error}` : file.name}>
+                {file.name}
+              </span>
+              <button
+                type="button"
+                data-id={`interview-import-remove-${i}`}
+                aria-label={t("framework.interviewRemoveFile")}
+                title={t("framework.interviewRemoveFile")}
+                className="shrink-0 rounded-sm p-0.5 text-ink-muted hover:bg-surface-alt"
+                onClick={() => handleRemoveInterviewFile(i)}
+              >
+                <X size={12} strokeWidth={1.5} />
+              </button>
+            </span>
+          ))}
+          <span data-id="interview-import-file-count" className="ml-auto shrink-0 text-fine text-ink-tertiary">
+            {t("framework.interviewFileCount", { count: interviewFiles.length })}
+          </span>
+          {interviewFiles.some((f) => f.error) && (
+            <span className="shrink-0 text-fine text-error">· {interviewFiles.filter((f) => f.error).length} error</span>
+          )}
           <button
             type="button"
-            data-id="interview-import-pick"
+            data-id="interview-import-clear"
             disabled={interviewBusy}
-            className={IMPORT_FILE_BTN}
-            onClick={() => interviewInputRef.current?.click()}
+            className={STRIP_BTN}
+            onClick={handleClearInterviewFiles}
           >
-            <Upload size={14} strokeWidth={1.5} className="shrink-0" />
-            <span className="truncate">{t("framework.interviewImportPick")}</span>
+            {t("framework.interviewClearFiles")}
           </button>
-          {interviewFiles.length > 0 && (
-            <div className="flex flex-col rounded-md border border-hairline" data-id="interview-import-file-box">
-              {/* 파일이 수십 개면 목록이 화면을 다 먹는다 — 건수 헤더 + 8행 높이 내부 스크롤 (30개 워스트 케이스, 2026-09-18) */}
-              <div className="flex items-center gap-2 border-b border-divider bg-surface-alt px-2 py-1 text-fine text-ink-tertiary">
-                <span data-id="interview-import-file-count">{t("framework.interviewFileCount", { count: interviewFiles.length })}</span>
-                {interviewFiles.some((f) => f.error) && (
-                  <span className="text-error">· {interviewFiles.filter((f) => f.error).length} error</span>
-                )}
-                <button
-                  type="button"
-                  data-id="interview-import-clear"
-                  disabled={interviewBusy}
-                  className="ml-auto rounded-sm px-1.5 py-px text-fine text-ink-tertiary hover:bg-surface hover:text-accent disabled:opacity-40"
-                  onClick={handleClearInterviewFiles}
-                >
-                  {t("framework.interviewClearFiles")}
-                </button>
-              </div>
-            <ul className="scroll-soft flex max-h-44 flex-col gap-0.5 overflow-y-auto px-2 py-1" data-id="interview-import-file-list">
-              {interviewFiles.map((file, i) => (
-                <li key={`${file.name}-${i}`} className="flex items-center gap-1.5 text-fine">
-                  <span className={`truncate ${file.error ? "text-error" : "text-ink-secondary"}`}>
-                    {file.name}
-                    {file.error ? ` - ${file.error}` : ""}
-                  </span>
-                  <button
-                    type="button"
-                    data-id={`interview-import-remove-${i}`}
-                    aria-label={t("framework.interviewRemoveFile")}
-                    className="shrink-0 rounded-sm p-0.5 text-ink-muted hover:bg-surface-alt"
-                    onClick={() => handleRemoveInterviewFile(i)}
-                  >
-                    <X size={12} strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="flex gap-2">
           <button
             type="button"
             data-id="interview-import-dryrun"
             disabled={interviewBusy || getInterviewPayloadFiles().length === 0}
-            className="rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40"
+            className="shrink-0 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
             onClick={() => void handleInterviewDryRun()}
           >
             {t("framework.importDryRun")}
           </button>
         </div>
+      )}
 
+      {!scopeRootIds && (
+      <div className="flex flex-col gap-3" data-id="interview-import-host">
         {/* 리포트 영역은 아코디언(0fr→1fr) — 드라이런을 누르면 먼저 열리며 링이 돌고, 결과가 오면 같은 자리에 리포트가 들어온다.
             래퍼는 항상 두어야 첫 열림도 전환된다(file-card 미리보기와 같은 규칙). 닫힘(Cancel)은 내용을 바로 비우므로 즉시 접힌다. */}
         <div
@@ -1025,8 +1158,38 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             ) : null}
           </div>
         </div>
-        </AdminSection>
       </div>
+      )}
+
+      {/* 진행 중 세션 목록 — 상세 패널은 내부 스크롤이라 fixed 포털로 띄운다(바깥 클릭·Esc 닫힘) */}
+      {sessionsOpen && sessionsPos && createPortal(
+        <>
+          <div className="fixed inset-0 z-[1340]" onClick={() => setSessionsOpen(false)} />
+          <div
+            data-id="fw-consult-sessions-panel"
+            className="scroll-soft fixed z-[1350] flex flex-col gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
+            style={{ left: sessionsPos.left, top: sessionsPos.top, width: sessionsPos.width, maxHeight: sessionsPos.maxHeight }}
+          >
+            {activeSessions.map((s) => (
+              <div
+                key={s.id}
+                data-id={`fw-consult-session-${s.id}`}
+                className="flex items-center gap-2 rounded-sm px-1 py-0.5 text-fine text-ink"
+              >
+                <span className="min-w-0 truncate">{s.category_name}</span>
+                <span className="shrink-0 text-ink-tertiary">{s.progress.drawn}/{s.progress.total}</span>
+                <Link
+                  href={`/framework/consult/${s.id}`}
+                  data-id={`fw-consult-resume-${s.id}`}
+                  className="ml-auto shrink-0 text-accent hover:underline"
+                >
+                  {t("fwConsult.resume")}
+                </Link>
+              </div>
+            ))}
+          </div>
+        </>,
+        document.body,
       )}
         </>
       )}
