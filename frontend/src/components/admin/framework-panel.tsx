@@ -734,8 +734,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <>
       {/* 복수열 — 좌: 카테고리 트리, 우: 아코디언 섹션(캠페인 진입·진행 중 세션·인터뷰 임포트). 리포트는 그리드 아래 전폭 */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)]" data-id="framework-manage-grid">
-      {/* 트리는 420px 상자 안에서 내부 스크롤 — L1이 수십 개여도 페이지가 늘어나지 않는다(뷰포트 비율 대신 고정, 사용자 지적 2026-09-22) */}
-      <div data-id="framework-admin-tree" className="fw-tree scroll-soft max-h-[420px] self-start overflow-y-auto rounded-md border border-hairline p-2">
+      {/* 트리는 검색 상자 + 10행(28px)만 보이는 340px 상자 안에서 내부 스크롤 — 더 길 필요 없다는 사용자 지시 2026-09-22 */}
+      <div data-id="framework-admin-tree" className="fw-tree scroll-soft max-h-[340px] self-start overflow-y-auto rounded-md border border-hairline p-2">
         {!scopeRootIds && (
           <label className="mb-2 flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
             <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
