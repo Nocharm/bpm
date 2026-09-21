@@ -268,6 +268,11 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const sessionsBtnRef = useRef<HTMLButtonElement>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionsPos, setSessionsPos] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
+  // 닫을 때 위치도 버린다 — 남겨 두면 다음 열림의 첫 프레임이 옛 rect에 그려진다
+  function closeSessions() {
+    setSessionsOpen(false);
+    setSessionsPos(null);
+  }
   useEffect(() => {
     if (!sessionsOpen) return undefined;
     const updatePos = () => {
@@ -291,7 +296,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   useEffect(() => {
     if (!sessionsOpen) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSessionsOpen(false);
+      if (event.key === "Escape") {
+        setSessionsOpen(false);
+        setSessionsPos(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -941,7 +949,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               data-id={`framework-admin-action-${action.key}`}
               className={DETAIL_ACTION_BTN}
               disabled={action.reason !== undefined}
-              title={action.reason ?? action.label}
+              title={action.reason}
               onClick={() => {
                 if (selectedNode) action.onClick(selectedNode);
               }}
@@ -981,7 +989,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
                 data-id="fw-consult-create"
                 className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 disabled={!isL4 || consultBusy || newL5Name.trim() === ""}
-                title={isL4 ? t("fwConsult.createAndStart") : t("fwConsult.needL4")}
+                title={!isL4 ? t("fwConsult.needL4") : newL5Name.trim() === "" ? t("fwConsult.needName") : undefined}
                 onClick={() => void handleStartConsult("new")}
               >
                 {t("fwConsult.createAndStart")}
@@ -993,7 +1001,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               data-id="fw-consult-start"
               className="self-start rounded-sm border border-hairline bg-surface px-2.5 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
               disabled={!isL5 || consultBusy}
-              title={isL5 ? t("fwConsult.startHint") : t("fwConsult.needL5")}
+              title={!isL5 ? t("fwConsult.needL5") : resumeSession ? t("fwConsult.resumeHint") : t("fwConsult.startHint")}
               onClick={() => {
                 if (resumeSession) router.push(`/framework/consult/${resumeSession.id}`);
                 else void handleStartConsult("existing");
@@ -1009,7 +1017,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               className={`inline-flex items-center gap-1 self-start ${STRIP_BTN}`}
               disabled={activeSessions.length === 0}
               title={t("fwConsult.sessionsToggle", { n: activeSessions.length })}
-              onClick={() => setSessionsOpen((prev) => !prev)}
+              onClick={() => {
+                if (sessionsOpen) closeSessions();
+                else setSessionsOpen(true);
+              }}
             >
               {t("fwConsult.sessionsToggle", { n: activeSessions.length })}
               <ChevronDown
@@ -1108,7 +1119,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           <button
             type="button"
             data-id="interview-import-dryrun"
-            disabled={interviewBusy || getInterviewPayloadFiles().length === 0}
+            disabled={interviewBusy || interviewPayloadFiles.length === 0}
             className="shrink-0 rounded-sm border border-hairline px-2.5 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
             onClick={() => void handleInterviewDryRun()}
           >
@@ -1164,7 +1175,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       {/* 진행 중 세션 목록 — 상세 패널은 내부 스크롤이라 fixed 포털로 띄운다(바깥 클릭·Esc 닫힘) */}
       {sessionsOpen && sessionsPos && createPortal(
         <>
-          <div className="fixed inset-0 z-[1340]" onClick={() => setSessionsOpen(false)} />
+          <div className="fixed inset-0 z-[1340]" onClick={closeSessions} />
           <div
             data-id="fw-consult-sessions-panel"
             className="scroll-soft fixed z-[1350] flex flex-col gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
