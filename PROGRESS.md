@@ -5,6 +5,7 @@
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
+- **진입 피커 드롭다운화 + 섹션 높이 재조정(dev, 09-22):** [AI로 L5 채우기]가 트리 높이만큼 길어진다는 지적 → `FrameworkCascadePicker variant="dropdown"`(검색 상자만 자리, 트리는 상자 클릭/포커스 시 body 포털 fixed 패널 z 1350, 고르면 닫힘·Esc·바깥 클릭 닫힘, 아래 공간 부족 시 패널 축소). consult maxHeight 640→480·import 900→720·트리 70vh→60vh. [인터뷰 임포트]는 접힘/펼침 모두 그리드 아래 전폭(이전 공유 캡처가 옛 배치였음). `pw-fw-admin-layout-shot.mjs`(휴지 상태·드롭다운·임포트 펼침 3장).
 - **Categories & import 복수열+아코디언(dev):** Manage 뷰를 좌 트리 / 우 아코디언 열(`admin-section.tsx`: 헤더 건수 배지·힌트·액션 슬롯·0fr→1fr 전환·localStorage 펼침 기억)로 재구성. 우측은 [AI로 L5 채우기](배지=진행 세션 수, 안에 [진행 중 세션] 접힘 아코디언) + [인터뷰 임포트](배지=파일 수). 모든 섹션 **기본 접힘**, 본문은 `maxHeight`(consult 640·sessions 240·import 900·기본 520) 안에서 내부 스크롤(overflow-hidden), 트리도 70vh 상한 내부 스크롤. [인터뷰 임포트]는 파일 선택·dry run·리포트까지 한 섹션으로 그리드 **아래 전폭**(리포트 2단이 폭을 다 써야 읽힘).
 - **진입 카드 새 L5 모드 + 계단식 UI(dev):** 공용 `framework-cascade-picker.tsx`(탐색 모달의 계단식 규칙: lazy 트리 엔진·가이드 라인·레벨 필·조상 호버·accordion·검색 히트=체인 펼침, "이동" 대신 "선택") 신설. 진입 카드는 [기존 L5 | 새 L5] 세그먼트 — 새 L5는 L4 선택+이름 입력 → `createCategory`→세션 생성. 관리 트리도 같은 계단식 스타일(레벨 필·가이드 라인·accordion 모션·검색→체인 펼침+강조)로 재구성, 행 액션은 유지. 스모크 `pw-fw-consult.mjs` 12/12(피커 경유)·`pw-fw-consult-new-l5.mjs` 4/4.
 - **연결·등록 단계 UX(dev):** 연결 화면을 좌 L5 미리보기(전체 높이) / 우 패널(L6 카드별 미리보기·답 고쳐 다시 그리기, entry·edges 표는 카드 이름으로, 분기/루프 조건은 별도 행)로 재구성. `POST .../tasks/{id}/reopen`(drawn→ready, 설문·답 유지, 세션 plan_locked로) · `POST .../reopen-relations`(ready→linking)로 뒤로 가기. 등록 단계는 진입 즉시 dry run 자동 실행 + [연결 단계로 돌아가기].
