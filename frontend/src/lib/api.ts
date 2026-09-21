@@ -2979,6 +2979,12 @@ export function submitFrameworkAnswers(id: number, taskPk: number, answers: Reco
 export function deleteFrameworkAttachment(id: number, index: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/attachments/${index}`, { method: "DELETE" });
 }
+export function reopenFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/reopen`, { method: "POST" });
+}
+export function reopenFrameworkRelations(id: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/reopen-relations`, { method: "POST" });
+}
 export function skipFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/skip`, { method: "POST" });
 }

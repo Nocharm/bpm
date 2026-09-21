@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { Download } from "lucide-react";
+import { ArrowLeft, Download, Loader2 } from "lucide-react";
 
 import {
   getApiErrorDetail, getFrameworkInterviewDocument, getFrameworkInterviewTask, importInterview, openLinkageMap,
@@ -20,14 +20,20 @@ import { ModalBackdrop } from "@/components/modal-backdrop";
 
 const SECONDARY = "inline-flex items-center gap-1.5 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40";
 
-interface RegisterStepProps { session: FwInterviewSession; busy: boolean; onApplied: () => void }
+interface RegisterStepProps {
+  session: FwInterviewSession;
+  busy: boolean;
+  onApplied: () => void;
+  onBack: () => void;  // 연결 단계로 되돌아가기(관계 편집 유지)
+}
 
-export function RegisterStep({ session, busy, onApplied }: RegisterStepProps) {
+export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepProps) {
   const { t } = useI18n();
   const router = useRouter();
   const [doc, setDoc] = useState<Record<string, unknown> | null>(null);
   const [result, setResult] = useState<InterviewImportResult | null>(null);
-  const [phase, setPhase] = useState<InterviewPhase>(null);
+  // 등록 단계 진입 즉시 dry run이 도는 상태로 시작한다(이펙트 안 동기 setState 회피)
+  const [phase, setPhase] = useState<InterviewPhase>(() => (session.status === "applied" ? null : "dryrun"));
   const [governanceChecked, setGovernanceChecked] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
@@ -36,11 +42,25 @@ export function RegisterStep({ session, busy, onApplied }: RegisterStepProps) {
   const index = useMemo(() => buildInterviewIndex(files), [files]);
   const view = useMemo(() => (result ? buildImportReportView(result.rows, index, result.files) : null), [result, index]);
 
+  // 문서를 받자마자 dry run을 자동으로 돌린다 — 등록 단계에 들어오면 리포트가 바로 보이게(사용자 요청 2026-09-21).
+  // 문서 fetch → dry run 체인을 한 이펙트에 두어 setState는 전부 비동기 콜백 안에서만 일어난다.
   useEffect(() => {
+    if (session.status === "applied") return;
     let alive = true;
-    getFrameworkInterviewDocument(session.id).then((d) => { if (alive) setDoc(d); }).catch((err) => { if (alive) setError(getApiErrorDetail(err)); });
+    getFrameworkInterviewDocument(session.id)
+      .then(async (d) => {
+        if (!alive) return;
+        setDoc(d);
+        const name = `${session.category_code}-ai-consult.json`;
+        const r = await importInterview({ files: [{ name, content: d }], apply: false, label: session.label });
+        if (!alive) return;
+        setResult(r);
+        setGovernanceChecked(new Set(r.governance.filter((g) => g.default_checked).map(governanceKey)));
+      })
+      .catch((err) => { if (alive) setError(getApiErrorDetail(err)); })
+      .finally(() => { if (alive) setPhase(null); });
     return () => { alive = false; };
-  }, [session.id]);
+  }, [session.id, session.status, session.category_code, session.label]);
 
   async function runImport(apply: boolean) {
     if (!doc) return;
@@ -93,8 +113,16 @@ export function RegisterStep({ session, busy, onApplied }: RegisterStepProps) {
   }
   return (
     <div className="flex flex-col gap-3 p-4" data-id="fw-consult-register">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={SECONDARY} data-id="fw-consult-back-relations" disabled={busy || phase === "apply"} onClick={onBack}>
+          <ArrowLeft size={14} strokeWidth={1.5} />{t("fwConsult.backToRelations")}
+        </button>
         <span className="text-body-strong text-ink">{t("fwConsult.stepRegister")}</span>
+        {phase === "dryrun" && (
+          <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary" data-id="fw-consult-dryrun-running">
+            <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />{t("fwConsult.dryRunRunning")}
+          </span>
+        )}
         <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-download" onClick={download} disabled={!doc}><Download size={14} strokeWidth={1.5} />{t("fwConsult.download")}</button>
         <button type="button" className={SECONDARY} data-id="fw-consult-dryrun" disabled={busy || !doc || phase !== null} onClick={() => void runImport(false)}>{t("fwConsult.dryRun")}</button>
       </div>

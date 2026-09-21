@@ -351,6 +351,46 @@ async def skip_task(
     return await _out(db, row)
 
 
+@router.post("/{session_id}/tasks/{task_pk}/reopen", response_model=FrameworkInterviewOut)
+async def reopen_task(
+    session_id: int, task_pk: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """그려진 카드를 다시 연다 — 설문·답은 유지한 채 ready로 되돌려 고쳐 제출하면 다시 그린다 (뒤로 가기, 2026-09-21)."""
+    row = await _get_session_row(db, session_id)
+    task = await _get_task(db, row, task_pk)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
+    if task.status != "drawn":
+        raise HTTPException(status_code=409, detail="only drawn tasks can be reopened")
+    task.status = "ready" if task.questionnaire else "pending"
+    task.row = None
+    task.issues = []
+    task.placeholder = False
+    task.error = None
+    task.drawn_at = None
+    # 연결·조립은 그 카드가 다시 그려진 뒤 다시 해야 한다
+    row.status = "plan_locked"
+    row.assembled = None
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/reopen-relations", response_model=FrameworkInterviewOut)
+async def reopen_relations(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """등록 단계에서 연결 단계로 되돌아간다(관계 편집 유지, 조립 문서는 확정 시 다시 만든다)."""
+    row = await _get_session_row(db, session_id)
+    if row.status != "ready":
+        raise HTTPException(status_code=409, detail="session is not at the register step")
+    row.status = "linking"
+    row.assembled = None
+    await db.commit()
+    return await _out(db, row)
+
+
 @router.post("/{session_id}/pause", response_model=FrameworkInterviewOut)
 async def pause_session(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),

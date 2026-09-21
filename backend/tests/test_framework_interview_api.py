@@ -276,6 +276,24 @@ def test_answers_validation_and_full_flow_to_document(client: TestClient, monkey
     assert dry.status_code == 200, dry.text
     assert dry.json()["files"][0]["ok"] is True
 
+    # 뒤로 가기: 등록 → 연결(문서는 다시 확정해야 나온다), 카드 다시 열기 → 답 고쳐 재제출 → 다시 그려짐
+    back = client.post(f"/api/framework-interviews/{sid}/reopen-relations", headers=HEADERS)
+    assert back.status_code == 200 and back.json()["status"] == "linking"
+    assert client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).status_code == 409
+    reopened = client.post(f"/api/framework-interviews/{sid}/tasks/{t2['id']}/reopen", headers=HEADERS)
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["status"] == "plan_locked"
+    assert reopened.json()["tasks"][1]["status"] == "ready"  # 설문 유지 → 바로 답할 수 있다
+    kept = client.get(f"/api/framework-interviews/{sid}/tasks/{t2['id']}", headers=HEADERS).json()
+    assert kept["questionnaire"] and kept["answers"] and kept["row"] is None
+    assert client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).status_code == 409
+    _fake_ai_queue(monkeypatch, [ROW_JSON])
+    assert client.post(f"/api/framework-interviews/{sid}/tasks/{t2['id']}/answers", json={"answers": full}, headers=HEADERS).status_code == 200
+    _step(sid)
+    assert client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["progress"]["drawn"] == 2
+    again = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS, json={"relations": linked["relations"]})
+    assert again.status_code == 200 and again.json()["status"] == "ready"
+
     applied = client.post(f"/api/framework-interviews/{sid}/mark-applied", headers=HEADERS)
     assert applied.json()["status"] == "applied"
 

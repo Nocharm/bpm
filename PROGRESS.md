@@ -5,6 +5,7 @@
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
+- **연결·등록 단계 UX(dev):** 연결 화면을 좌 L5 미리보기(전체 높이) / 우 패널(L6 카드별 미리보기·답 고쳐 다시 그리기, entry·edges 표는 카드 이름으로, 분기/루프 조건은 별도 행)로 재구성. `POST .../tasks/{id}/reopen`(drawn→ready, 설문·답 유지, 세션 plan_locked로) · `POST .../reopen-relations`(ready→linking)로 뒤로 가기. 등록 단계는 진입 즉시 dry run 자동 실행 + [연결 단계로 돌아가기].
 - **보드 카드 선택(dev):** 준비된(ready) 카드를 눌러 순서와 무관하게 먼저 답하고, 완료 카드는 클릭으로 미리보기(앞 카드가 준비 중이어도 뒤를 진행). 선택 카드가 제출되면 순서상 다음 카드로 복귀. `pw-fw-consult-pick-card.mjs` 3/3.
 - **실모델 피드백 반영(dev):** "AI returned invalid response" 빈발 → `framework_interview/normalize.py`(kind·maps_to 동의어, 라벨 suggested, 문자열 actions, 이름 참조 엣지 등 흡수) + `ai.py` `ask_schema`(최대 3회, pydantic 오류 요약을 되먹여 재요청, 실패 사유를 `task.error`에). 실패 카드는 **플레이스홀더로 건너뛰기**(`POST .../tasks/{id}/skip`, 활동 1개 행·`placeholder` 컬럼)로 세션을 이어간다. 첨부는 brief에 병합하지 않고 `attachments` JSON 목록(개별 삭제 `DELETE .../attachments/{i}`)으로 분리해 잘못 올린 파일이 누적되지 않게. 계획 화면 2단(좌 brief+첨부 | 우 카드), 보드 최소폭 380·진행 헤더 줄바꿈. 신규 컬럼 2개는 `_ADDED_COLUMNS` 등록.
 

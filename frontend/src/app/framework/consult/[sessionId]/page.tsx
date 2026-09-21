@@ -11,7 +11,8 @@ import { ArrowLeft, Headset } from "lucide-react";
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
   getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
-  deleteFrameworkAttachment, resumeFrameworkInterview, retryFrameworkTask, saveFrameworkPlan, skipFrameworkTask,
+  deleteFrameworkAttachment, reopenFrameworkRelations, reopenFrameworkTask, resumeFrameworkInterview, retryFrameworkTask,
+  saveFrameworkPlan, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
   type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
@@ -224,6 +225,11 @@ export default function FrameworkConsultPage() {
               busy={busy}
               onPropose={() => void run(() => generateFrameworkRelations(session.id))}
               onConfirm={(relations) => void run(() => confirmFrameworkRelations(session.id, relations))}
+              onPreviewTask={setPreviewTaskId}
+              onReopenTask={(taskPk) => {
+                setSelectedTaskId(taskPk);  // 다시 연 카드로 바로 이동
+                void run(() => reopenFrameworkTask(session.id, taskPk));
+              }}
             />
           )}
           {(step === "register" || step === "done") && (
@@ -231,6 +237,7 @@ export default function FrameworkConsultPage() {
               session={session}
               busy={busy}
               onApplied={() => void run(() => markFrameworkInterviewApplied(session.id))}
+              onBack={() => void run(() => reopenFrameworkRelations(session.id))}
             />
           )}
         </section>

@@ -41,9 +41,11 @@ interface ImportMapPreviewProps {
   onClose: () => void;
   // true면 우상단 닫기 버튼을 숨긴다 — 항상 펼쳐져 있고 닫을 대상이 없는 임베드(캠페인 연결 단계 등)용.
   hideClose?: boolean;
+  // true면 고정 높이(VIEW_HEIGHT) 대신 부모 높이를 다 쓴다 — 캠페인 연결 단계의 큰 L5 미리보기(2026-09-21).
+  fill?: boolean;
 }
 
-export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideClose = false }: ImportMapPreviewProps) {
+export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideClose = false, fill = false }: ImportMapPreviewProps) {
   const { t } = useI18n();
   const graph = useMemo(() => {
     const built = scope === "canvas" ? buildL5PreviewGraph(source) : buildPreviewGraph(source);
@@ -90,7 +92,7 @@ export function ImportMapPreview({ source, scope = "map", dataId, onClose, hideC
       ref={wrapRef}
       data-id={dataId}
       className="relative overflow-hidden rounded-sm border border-hairline"
-      style={{ height: VIEW_HEIGHT }}
+      style={{ height: fill ? "100%" : VIEW_HEIGHT }}
     >
       <ScopePreview
         fullGraph={graph}
