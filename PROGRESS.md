@@ -5,7 +5,7 @@
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
-- **Categories & import 복수열+아코디언(dev):** Manage 뷰를 좌 트리 / 우 아코디언 열(`admin-section.tsx`: 헤더 건수 배지·힌트·액션 슬롯·0fr→1fr 전환·localStorage 펼침 기억)로 재구성. 우측은 [AI로 L5 채우기](기본 펼침, 배지=진행 세션 수, 안에 [진행 중 세션] 접힘 아코디언) + [인터뷰 임포트](접힘, 배지=파일 수). 임포트 리포트는 그리드 아래 전폭.
+- **Categories & import 복수열+아코디언(dev):** Manage 뷰를 좌 트리 / 우 아코디언 열(`admin-section.tsx`: 헤더 건수 배지·힌트·액션 슬롯·0fr→1fr 전환·localStorage 펼침 기억)로 재구성. 우측은 [AI로 L5 채우기](배지=진행 세션 수, 안에 [진행 중 세션] 접힘 아코디언) + [인터뷰 임포트](배지=파일 수). 모든 섹션 **기본 접힘**, 본문은 `maxHeight`(consult 640·sessions 240·기본 520) 안에서 내부 스크롤(overflow-hidden), 트리도 70vh 상한 내부 스크롤. 임포트 리포트는 그리드 아래 전폭.
 - **진입 카드 새 L5 모드 + 계단식 UI(dev):** 공용 `framework-cascade-picker.tsx`(탐색 모달의 계단식 규칙: lazy 트리 엔진·가이드 라인·레벨 필·조상 호버·accordion·검색 히트=체인 펼침, "이동" 대신 "선택") 신설. 진입 카드는 [기존 L5 | 새 L5] 세그먼트 — 새 L5는 L4 선택+이름 입력 → `createCategory`→세션 생성. 관리 트리도 같은 계단식 스타일(레벨 필·가이드 라인·accordion 모션·검색→체인 펼침+강조)로 재구성, 행 액션은 유지. 스모크 `pw-fw-consult.mjs` 12/12(피커 경유)·`pw-fw-consult-new-l5.mjs` 4/4.
 - **연결·등록 단계 UX(dev):** 연결 화면을 좌 L5 미리보기(전체 높이) / 우 패널(L6 카드별 미리보기·답 고쳐 다시 그리기, entry·edges 표는 카드 이름으로, 분기/루프 조건은 별도 행)로 재구성. `POST .../tasks/{id}/reopen`(drawn→ready, 설문·답 유지, 세션 plan_locked로) · `POST .../reopen-relations`(ready→linking)로 뒤로 가기. 등록 단계는 진입 즉시 dry run 자동 실행 + [연결 단계로 돌아가기].
 - **보드 카드 선택(dev):** 준비된(ready) 카드를 눌러 순서와 무관하게 먼저 답하고, 완료 카드는 클릭으로 미리보기(앞 카드가 준비 중이어도 뒤를 진행). 선택 카드가 제출되면 순서상 다음 카드로 복귀. `pw-fw-consult-pick-card.mjs` 3/3.

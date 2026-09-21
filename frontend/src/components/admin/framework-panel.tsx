@@ -734,7 +734,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <>
       {/* 복수열 — 좌: 카테고리 트리, 우: 아코디언 섹션(캠페인 진입·진행 중 세션·인터뷰 임포트). 리포트는 그리드 아래 전폭 */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)]" data-id="framework-manage-grid">
-      <div data-id="framework-admin-tree" className="fw-tree self-start rounded-md border border-hairline p-2">
+      {/* 트리도 상한 높이 안에서 내부 스크롤 — L1이 수십 개여도 페이지가 늘어나지 않는다 */}
+      <div data-id="framework-admin-tree" className="fw-tree scroll-soft max-h-[70vh] self-start overflow-y-auto rounded-md border border-hairline p-2">
         {!scopeRootIds && (
           <label className="mb-2 flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
             <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -807,8 +808,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           icon={<Headset size={16} strokeWidth={1.5} />}
           badge={activeSessions.length > 0 ? activeSessions.length : undefined}
           actions={<InterviewJsonPromptButton target={consultTarget} />}
-          defaultOpen
           tone="pearl"
+          maxHeight={640}
         >
         <div className="flex flex-col gap-2" data-id="fw-consult-entry">
           {/* 모드 세그먼트 — 기존 L5 고르기 / 새 L5 만들기(부모 L4 고르고 이름 입력). 홈 뷰 토글과 같은 스타일 */}
@@ -873,7 +874,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </div>
           {/* 진행 중 세션은 접힌 아코디언 + 건수만(사용자 지시 2026-09-21) */}
           {activeSessions.length > 0 && (
-            <AdminSection id="sessions" title={t("fwConsult.activeSessions")} badge={activeSessions.length}>
+            <AdminSection id="sessions" title={t("fwConsult.activeSessions")} badge={activeSessions.length} maxHeight={240}>
             <ul className="flex flex-col gap-1" data-id="fw-consult-active-list">
               {activeSessions.map((s) => (
                 <li key={s.id} data-id={`fw-consult-active-${s.id}`} className="flex items-center gap-2 text-caption text-ink">

@@ -41,7 +41,10 @@ await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", u
 const page = await ctx.newPage();
 
 await page.goto(`${BASE}/settings?tab=framework`);
-await page.locator('[data-id="fw-consult-entry"]').waitFor();
+await page.locator('[data-id="admin-section-consult"]').waitFor();
+// 섹션은 기본 접힘(2026-09-21) — 닫혀 있으면 헤더를 눌러 연다
+if ((await page.locator('[data-id="admin-section-consult"]').getAttribute("data-open")) !== "true") await page.locator('[data-id="admin-section-toggle-consult"]').click();
+await page.locator('[data-id="fw-consult-picker-search"]').waitFor();
 check("entry visible", true);
 
 // SearchSelect는 body 포털(fixed) — 트리거 버튼 클릭 → 포털 입력에 고유명 일부 타이핑 → 매치 1건 클릭.

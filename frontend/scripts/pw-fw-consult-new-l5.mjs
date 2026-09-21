@@ -33,7 +33,10 @@ const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
-await page.locator('[data-id="fw-consult-entry"]').waitFor();
+await page.locator('[data-id="admin-section-consult"]').waitFor();
+// 섹션은 기본 접힘(2026-09-21) — 닫혀 있으면 헤더를 눌러 연다
+if ((await page.locator('[data-id="admin-section-consult"]').getAttribute("data-open")) !== "true") await page.locator('[data-id="admin-section-toggle-consult"]').click();
+await page.locator('[data-id="fw-consult-picker-search"]').waitFor();
 
 // 관리 트리 검색 → 히트 클릭 → 체인 펼침 + 해당 행 존재
 await page.locator('[data-id="framework-admin-search"]').fill(l4Name);
