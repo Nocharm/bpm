@@ -1165,3 +1165,43 @@ def test_canvas_content_signature_detects_assignee_role_only_change() -> None:
     base = [_make_node("n1", "")]
     changed = [_make_node("n1", "Reviewer")]
     assert _canvas_content_signature(base, []) != _canvas_content_signature(changed, [])
+
+
+def test_category_admin_department_inherits_and_derives_canvas_owning_dept(
+    client: TestClient, enforce: None
+) -> None:
+    """관리 부서(B안 2026-09-21): L1에 두면 L5까지 상속(출처 표기), 유효 조직 경로만(422), 캔버스의
+    owning_department는 목록·상세 응답에서 파생(저장 안 함), null 전송으로 해제."""
+    l1 = _seed_category(client, "FWC-AD1", "부서L1")
+    l5 = _seed_category(client, "FWC-AD5", "부서L5", level=5, parent_id=l1)
+    act_as(SYSADMIN)
+    assert client.patch(
+        f"/api/categories/{l1}", json={"admin_department": "No Such Dept"}
+    ).status_code == 422
+    patched = client.patch(
+        f"/api/categories/{l1}", json={"admin_department": "Owning Anchor Division"}
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["effective_admin_department"] == "Owning Anchor Division"
+
+    node = next(
+        n for n in client.get(f"/api/categories/nodes?parent_id={l1}").json() if n["id"] == l5
+    )
+    assert node["admin_department"] is None
+    assert node["effective_admin_department"] == "Owning Anchor Division"
+    summary = client.get(f"/api/categories/{l5}/summary").json()
+    assert summary["effective_admin_department"] == "Owning Anchor Division"
+    assert summary["admin_department_source"] == "부서L1"
+    chain = client.get(f"/api/categories/{l5}/chain").json()
+    assert chain[-1]["effective_admin_department"] == "Owning Anchor Division"
+
+    map_id = client.post(f"/api/categories/{l5}/linkage-map").json()["map_id"]
+    listed = next(m for m in client.get("/api/maps").json() if m["id"] == map_id)
+    assert listed["owning_department"] == "Owning Anchor Division"
+    assert (
+        client.get(f"/api/maps/{map_id}").json()["owning_department"] == "Owning Anchor Division"
+    )
+    # 파생일 뿐 저장되지 않는다 — 해제하면 곧바로 사라진다
+    assert client.patch(f"/api/categories/{l1}", json={"admin_department": None}).status_code == 200
+    assert client.get(f"/api/maps/{map_id}").json()["owning_department"] is None
+    assert client.get(f"/api/categories/{l5}/summary").json()["effective_admin_department"] is None

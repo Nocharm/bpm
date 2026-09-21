@@ -7,7 +7,7 @@ import { ArrowLeft, Info } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-import { getMap, getMe, listApprovers, setDevUser } from "@/lib/api";
+import { getMap, getMe, listApprovers, setDevUser, type MapDetail } from "@/lib/api";
 import { setCurrentUser } from "@/lib/current-user";
 import { LOCAL_USERS, storeDevUser } from "@/lib/dev-auth";
 import { useI18n } from "@/lib/i18n";
@@ -17,6 +17,7 @@ import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
 import { ProcessFieldsCard } from "@/components/permissions/process-fields-card";
 import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
+import { FrameworkAccessPanel } from "@/components/permissions/framework-access-panel";
 import { ApproversPanel } from "@/components/permissions/approvers-panel";
 import { VisibilityControl } from "@/components/permissions/visibility-control";
 import { DangerZone } from "@/components/permissions/danger-zone";
@@ -67,22 +68,33 @@ export default function SettingsPage() {
   const [owningDepartment, setOwningDept] = useState<string | null>(null);
   // 역할 로드 완료 여부 — 로드 전 false "No access" 깜빡임 방지 / gate no-access screen until loaded.
   const [roleLoaded, setRoleLoaded] = useState(false);
-  // 맵 모드 — "framework"는 게시/승인자/협업자/SP 지정 탭을 숨긴다 (spec 2026-09-02 §6)
+  // 맵 모드 — "framework"는 게시/승인자/SP 지정 탭을 숨기고 협업자 탭을 읽기전용 "편집 가능자"로 바꾼다 (2026-09-21)
   const [mapMode, setMapMode] = useState<string>("normal");
+  // 캔버스 전용 — 결착 카테고리·결재 대기 탭의 확정/슬롯 결정권(종전엔 false 하드코딩)
+  const [linkage, setLinkage] = useState<{ id: number; path: string | null } | null>(null);
+  const [canConfirm, setCanConfirm] = useState(false);
+  const [canDecideSlot, setCanDecideSlot] = useState(false);
+  const applyDetail = (detail: MapDetail) => {
+    setMapName(detail.name);
+    setServerRole(detail.my_role);
+    setVisibility(detail.visibility);
+    setUnderApproval(detail.versions.some((v) => v.status === "pending" || v.status === "approved"));
+    setOwningDept(detail.owning_department ?? null);
+    setMapMode(detail.mode ?? "normal");
+    setLinkage(
+      detail.linkage_category_id != null
+        ? { id: detail.linkage_category_id, path: detail.linkage_category_path ?? null }
+        : null,
+    );
+    setCanConfirm(detail.can_confirm === true);
+    setCanDecideSlot(detail.can_decide_slot === true);
+  };
 
   // 맵 데이터 재조회 — 결재 승인 후 역할/가시성이 바뀌었을 수 있어 재호출(서버 진실) /
   // Refetch map data; role/visibility may have changed after an approval was applied server-side.
   const refreshMap = useCallback(async () => {
     try {
-      const detail = await getMap(Number(mapIdStr));
-      setMapName(detail.name);
-      setServerRole(detail.my_role);
-      setVisibility(detail.visibility);
-      setUnderApproval(
-        detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
-      );
-      setOwningDept(detail.owning_department ?? null);
-      setMapMode(detail.mode ?? "normal");
+      applyDetail(await getMap(Number(mapIdStr)));
     } catch {
       // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
     }
@@ -94,16 +106,7 @@ export default function SettingsPage() {
       if (active) setRoleLoaded(false);
       try {
         const detail = await getMap(Number(mapIdStr));
-        if (active) {
-          setMapName(detail.name);
-          setServerRole(detail.my_role);
-          setVisibility(detail.visibility);
-          setUnderApproval(
-            detail.versions.some((v) => v.status === "pending" || v.status === "approved"),
-          );
-          setOwningDept(detail.owning_department ?? null);
-          setMapMode(detail.mode ?? "normal");
-        }
+        if (active) applyDetail(detail);
       } catch {
         // 조회 실패(403/네트워크) → 역할 null 유지 → 아래 no-access 화면 / Keep id+null role on failure.
       } finally {
@@ -188,8 +191,10 @@ export default function SettingsPage() {
   // Checkout requests tab: owner or sysadmin only (holder acts via editor approval tab).
   const canDecideCheckout = currentMockUser !== null && isOwner;
 
-  // framework 캔버스 — 게시/승인자/협업자/SP 지정 탭 숨김. 확정은 에디터 승인 탭에서 (spec 2026-09-02 §6)
-  const FRAMEWORK_HIDDEN_TABS = new Set<TabId>(["subprocess", "collaborators", "approvers", "versions"]);
+  // framework 캔버스 — 게시/승인자/SP 지정 탭 숨김. 협업자 탭은 읽기전용 "편집 가능자"(FrameworkAccessPanel)로 대체,
+  // 확정은 에디터 승인 탭 + 여기 결재 대기 탭(can_confirm 실값) (spec 2026-09-02 §6, 2026-09-21)
+  const FRAMEWORK_HIDDEN_TABS = new Set<TabId>(["subprocess", "approvers", "versions"]);
+  const isFramework = mapMode === "framework";
 
   // 현재 유저에 맞게 탭 목록 필터 / Filter tabs for current user.
   const visibleTabs = ALL_TABS.filter(
@@ -339,7 +344,7 @@ export default function SettingsPage() {
                   ?.scrollIntoView({ behavior: "smooth", block: "start" })
               }
             >
-              {t(tab.labelKey)}
+              {tab.id === "collaborators" && isFramework ? t("perm.tabFrameworkAccess") : t(tab.labelKey)}
               {tab.id === "approvals" && approvalsCount > 0 && (
                 <span
                   data-id="settings-approvals-count"
@@ -392,7 +397,7 @@ export default function SettingsPage() {
                   className="flex scroll-mt-6 flex-col gap-3"
                 >
                   <h2 className="border-b border-hairline pb-2 text-body-strong text-ink">
-                    {t(tab.labelKey)}
+                    {tab.id === "collaborators" && isFramework ? t("perm.tabFrameworkAccess") : t(tab.labelKey)}
                   </h2>
                   {tab.id === "details" ? (
                     <>
@@ -410,12 +415,22 @@ export default function SettingsPage() {
                         isOwner={isOwner}
                         onToast={showToast}
                         onChanged={() => void refreshMap()}
+                        framework={
+                          isFramework ? { categoryPath: linkage?.path ?? null, department: owningDepartment } : undefined
+                        }
                       />
                       {/* 인터뷰 승격 필드 검토 편집 — PATCH가 오너 전용 (design 2026-08-19 §5) */}
-                      {isOwner && <ProcessFieldsCard mapId={mapIdStr} onToast={showToast} />}
+                      {/* GMP·조건·소요 등 L6 인터뷰 필드 — 캔버스엔 해당 없음 */}
+                      {isOwner && !isFramework && <ProcessFieldsCard mapId={mapIdStr} onToast={showToast} />}
                     </>
                   ) : tab.id === "subprocess" && isOwner ? (
                     <SubprocessDesignationPanel mapId={mapIdStr} onToast={showToast} />
+                  ) : tab.id === "collaborators" && isFramework ? (
+                    linkage ? (
+                      <FrameworkAccessPanel categoryId={linkage.id} categoryPath={linkage.path} />
+                    ) : (
+                      <p className="py-4 text-caption text-ink-tertiary">{t("home.l5CanvasUnlinked")}</p>
+                    )
                   ) : tab.id === "collaborators" ? (
                     <CollaboratorsPanel
                       mapId={mapIdStr}
@@ -434,12 +449,20 @@ export default function SettingsPage() {
                       onToast={showToast}
                     />
                   ) : tab.id === "visibility" ? (
-                    <VisibilityControl
-                      mapId={mapIdStr}
-                      visibility={visibility}
-                      isOwner={isOwner}
-                      onToast={showToast}
-                    />
+                    <>
+                      {/* 캔버스는 항상 공개 — 읽기전용(isOwner=false)으로 두고 이유를 적는다 (사용자 결정 2026-09-21) */}
+                      {isFramework && (
+                        <p data-id="settings-visibility-framework-note" className="text-caption text-ink-secondary">
+                          {t("perm.framework.visibilityLocked")}
+                        </p>
+                      )}
+                      <VisibilityControl
+                        mapId={mapIdStr}
+                        visibility={visibility}
+                        isOwner={isOwner && !isFramework}
+                        onToast={showToast}
+                      />
+                    </>
                   ) : tab.id === "versions" ? (
                     <VersionsPublishPanel
                       mapId={mapIdStr}
@@ -452,11 +475,18 @@ export default function SettingsPage() {
                     />
                   ) : tab.id === "danger" ? (
                     isOwner ? (
-                      <DangerZone
-                        mapId={mapIdStr}
-                        currentUserId={currentMockUser.id}
-                        onToast={showToast}
-                      />
+                      <>
+                        {isFramework && (
+                          <p data-id="settings-danger-framework-note" className="text-caption text-ink-secondary">
+                            {t("perm.framework.deleteNote")}
+                          </p>
+                        )}
+                        <DangerZone
+                          mapId={mapIdStr}
+                          currentUserId={currentMockUser.id}
+                          onToast={showToast}
+                        />
+                      </>
                     ) : (
                       <p className="py-4 text-caption text-ink-tertiary">
                         {t("perm.dangerReadOnly")}
@@ -467,8 +497,8 @@ export default function SettingsPage() {
                       mapId={mapIdStr}
                       isOwner={isOwner}
                       isApprover={canDecide}
-                      canConfirm={false}
-                      canDecideSlot={false}
+                      canConfirm={canConfirm}
+                      canDecideSlot={canDecideSlot}
                       onCountChange={setApprovalsCount}
                       onDecided={() => void refreshMap()}
                       onToast={(item) => showToast(item.message, item.tone)}

@@ -8,6 +8,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app import ref_audit, workflow
 from app.clock import now as now_kst
@@ -35,7 +36,7 @@ from app.permissions.access import (
     load_my_roles,
 )
 from app.permissions.deps import require_map_role
-from app.routers.categories import build_category_paths
+from app.routers.categories import build_category_paths, resolve_admin_departments
 from app.routers.versions import clone_graph
 from app.schemas import (
     ApprovalRequestOut,
@@ -261,6 +262,15 @@ async def list_maps(
             )
         ).all()
     }
+    # 캔버스의 owning_department는 결착 카테고리의 관리 부서(상위 상속)에서 파생 — 저장하지 않고 응답에만
+    # 싣는다(set_committed_value: dirty 표시 없음 → 뒤따르는 쿼리의 autoflush가 DB에 쓰지 않는다)
+    category_admin_depts = resolve_admin_departments(
+        (
+            await session.execute(
+                select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.admin_department)
+            )
+        ).all()
+    )
 
     def _set_card_metrics(m: ProcessMap) -> None:
         """홈 카드 표시용 파생값 주입 (목록 응답 전용 transient attr)."""
@@ -278,6 +288,9 @@ async def list_maps(
         if m.mode == "framework" and m.id in linkage_cat_by_map:
             m.linkage_category_id = linkage_cat_by_map[m.id]
             m.linkage_category_path = category_paths.get(m.linkage_category_id)
+            set_committed_value(
+                m, "owning_department", category_admin_depts[m.linkage_category_id][0]
+            )
     if is_admin:
         for m in maps:
             m.my_role = "owner"  # sysadmin → 전 맵 owner (effective_role parity)
@@ -767,14 +780,24 @@ async def get_map(
         )
         if linkage_cat_id is not None:
             found_map.linkage_category_id = linkage_cat_id
-            linkage_paths = build_category_paths(
-                (
-                    await session.execute(
-                        select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name)
+            linkage_rows = (
+                await session.execute(
+                    select(
+                        ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.name,
+                        ProcessCategory.admin_department,
                     )
-                ).all()
-            )
+                )
+            ).all()
+            linkage_paths = build_category_paths([(r.id, r.parent_id, r.name) for r in linkage_rows])
             found_map.linkage_category_path = linkage_paths.get(linkage_cat_id)
+            # 관리 부서 파생(목록과 동일 규칙, 저장 안 함)
+            set_committed_value(
+                found_map,
+                "owning_department",
+                resolve_admin_departments(
+                    [(r.id, r.parent_id, r.admin_department) for r in linkage_rows]
+                )[linkage_cat_id][0],
+            )
             # 확정 버튼 노출 — sysadmin or 직속 L5 관리자만 (Track B Task 3)
             found_map.can_confirm = logic.is_sysadmin(user) or await is_direct_l5_admin(
                 session, user, linkage_cat_id

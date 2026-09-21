@@ -113,6 +113,10 @@ class ProcessCategory(Base):
     linkage_map_id: Mapped[int | None] = mapped_column(
         ForeignKey("process_maps.id", ondelete="SET NULL"), default=None
     )
+    # 관리 부서(조직 경로) — 권한(CategoryPermission, user|group)과 별개인 속성. 비어 있으면 상위에서
+    # 상속(라우터가 해석). 연계 캔버스의 owning_department는 여기서 파생(저장 안 함) → 부서 뷰 조직도 자리
+    # (사용자 결정 2026-09-21, B안).
+    admin_department: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

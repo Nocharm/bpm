@@ -4,7 +4,7 @@
 // edit description (editor+); show/assign owning department (owner-gated, spec 2026-07-10).
 
 import { useEffect, useState } from "react";
-import { Building2, LockKeyhole, TriangleAlert } from "lucide-react";
+import { Building2, LockKeyhole, Network, TriangleAlert } from "lucide-react";
 
 import {
   createRenameRequest,
@@ -32,9 +32,11 @@ interface MapDetailsPanelProps {
   onToast: (message: string) => void;
   /** 오우닝 부서 변경 후 부모 갱신(협업자 잠금 행 동기화) */
   onChanged?: () => void;
+  /** 프레임워크 캔버스 — 이름은 L5 카테고리를 따르고(읽기전용) 오우닝 부서 블록은 연결 카테고리·관리 부서로 대체 (2026-09-21) */
+  framework?: { categoryPath: string | null; department: string | null };
 }
 
-export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }: MapDetailsPanelProps) {
+export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged, framework }: MapDetailsPanelProps) {
   const { t, lang } = useI18n();
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -181,9 +183,9 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
           className="min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-3 py-2 text-body text-ink outline-none focus:border-accent disabled:opacity-60"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          disabled={!canEdit || saving || (!isOwner && pendingRename !== null)}
+          disabled={!canEdit || saving || (!isOwner && pendingRename !== null) || framework !== undefined}
         />
-        {canEdit && (
+        {canEdit && !framework && (
           <button
             type="button"
             data-id="settings-map-name-save"
@@ -195,6 +197,11 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
           </button>
         )}
       </div>
+      {framework && (
+        <p data-id="settings-name-follows-category" className="text-fine text-ink-tertiary">
+          {t("perm.framework.nameFollows")}
+        </p>
+      )}
       {pendingRename && (
         <div
           data-id="settings-rename-pending"
@@ -240,6 +247,33 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
         </div>
       )}
 
+      {framework ? (
+        // 캔버스 — 오우닝 부서 대신 연결 카테고리 + 관리 부서(상속 반영, 읽기전용). 지정은 설정 > Categories
+        <div data-id="settings-linked-category" className="flex flex-col gap-1.5">
+          <label className="text-caption text-ink-secondary">{t("perm.framework.linkedCategory")}</label>
+          <div className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+            <Network size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <span className="min-w-0 flex-1 truncate text-body text-ink" title={framework.categoryPath ?? undefined}>
+              {(framework.categoryPath ?? "").split("/").filter(Boolean).join(" › ")}
+            </span>
+          </div>
+          <label className="text-caption text-ink-secondary">{t("category.summary.managingDept")}</label>
+          {framework.department ? (
+            <div className="flex items-center gap-2 rounded-sm border border-hairline px-3 py-2">
+              <Building2 size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="min-w-0 flex-1 truncate text-body text-ink">
+                {formatDeptName(framework.department, lang, koreanByPath)}
+                <span className="ml-1.5 text-fine text-ink-tertiary">{framework.department}</span>
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-sm border border-dashed border-hairline px-3 py-2 text-caption text-ink-muted">
+              <Building2 size={16} strokeWidth={1.5} className="shrink-0" />
+              {t("category.summary.noManagingDept")}
+            </div>
+          )}
+        </div>
+      ) : (
       <div data-id="settings-owning-dept" className="flex flex-col gap-1.5">
         <label className="text-caption text-ink-secondary">{t("perm.owningDept.title")}</label>
         {owningDept ? (
@@ -300,6 +334,7 @@ export function MapDetailsPanel({ mapId, canEdit, isOwner, onToast, onChanged }:
           />
         )}
       </div>
+      )}
     </div>
   );
 }

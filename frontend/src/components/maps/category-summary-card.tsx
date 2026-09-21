@@ -6,6 +6,7 @@
 // (Track C Task 8 → 2026-09-10 목업 A 확정 재구성).
 
 import {
+  Building2,
   ChevronRight,
   CircleCheck,
   FolderTree,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { DeptPill } from "@/components/dept-pill";
 import { LevelPill } from "@/components/level-pill";
 import { SectionHeader } from "@/components/section-header";
 import {
@@ -44,10 +46,13 @@ interface CategorySummaryCardProps {
   // 직계 하위 행 클릭(L1~L4) — 그 카테고리를 선택하고 트리를 펼친다(page.tsx selectChildCategory).
   onSelectChild?: (node: CategoryNode) => void;
   // 소속 맵 행 클릭(L5) — 맵 상세로 전환(page.tsx selectMap).
-  onSelectMap?: (mapId: number) => void;
+  // origin = 이 요약 카드의 카테고리(id·이름) — 업무 체계 뷰의 "선택된 맵" 스트립·뒤로가기 복귀 대상 (2026-09-21)
+  onSelectMap?: (mapId: number, origin: { id: number; name: string }) => void;
   // 좌측 가시성·상태·권한 필터(page.tsx frameworkFilterMap) — 좌측 드릴다운은 L5 카드까지만 보여주므로
   // 맵 필터는 여기 소속 맵 목록에 적용하고, 숨긴 개수를 노트로 밝힌다(2026-09-18). null이면 필터 없음.
   filterMap?: ((map: MapSummary) => boolean) | null;
+  // 좌측 정렬 조건(page.tsx sortKey) — 소속 맵 목록에 같은 정렬을 적용한다(2026-09-21). 없으면 서버 순
+  sortMaps?: ((maps: MapSummary[]) => MapSummary[]) | null;
 }
 
 // 요약 타일 — 아이콘 라벨 + 큰 숫자(또는 짧은 텍스트). 색 톤은 확정 현황 타일이 재사용한다.
@@ -89,6 +94,7 @@ export function CategorySummaryCard({
   onSelectChild,
   onSelectMap,
   filterMap = null,
+  sortMaps = null,
 }: CategorySummaryCardProps) {
   const { t } = useI18n();
   const [summary, setSummary] = useState<CategorySummary | null>(null);
@@ -186,7 +192,8 @@ export function CategorySummaryCard({
   const l5 = summary.l5;
   const subtreeConfirm = summary.subtree_confirm;
   // 좌측 필터는 로드된 행에만 적용 — total 카운트(헤더)는 서버 전체 기준 그대로, 차이는 필터 노트로 설명한다.
-  const shownMaps = maps ? (filterMap ? maps.maps.filter(filterMap) : maps.maps) : [];
+  const filteredRows = maps ? (filterMap ? maps.maps.filter(filterMap) : maps.maps) : [];
+  const shownMaps = sortMaps ? sortMaps(filteredRows) : filteredRows;
   const filteredOut = maps ? maps.maps.length - shownMaps.length : 0;
   const pathSegments = summary.path.split("/").filter(Boolean);
   const canOpenCanvas = !!l5 && (l5.linkage_map_id !== null || l5.can_edit_linkage);
@@ -248,7 +255,7 @@ export function CategorySummaryCard({
           type="button"
           data-id="category-summary-map-row"
           className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors duration-150 hover:bg-surface-pearl"
-          onClick={() => onSelectMap?.(m.id)}
+          onClick={() => onSelectMap?.(m.id, { id: summary.id, name: summary.name })}
         >
           <span className="min-w-0 flex-1 truncate text-caption text-ink">{m.name}</span>
           {m.latest_version_status && tone && (
@@ -372,6 +379,33 @@ export function CategorySummaryCard({
             />
           </div>
         )}
+
+        {/* 관리 부서 — 유효값 필(+상속 출처), 없으면 점선 (B안 2026-09-21). 지정은 설정 > Categories */}
+        <section className="flex flex-col gap-2">
+          <SectionHeader
+            dataId="category-summary-dept-header"
+            title={t("category.summary.managingDept")}
+            icon={Building2}
+            collapsed={false}
+          />
+          {summary.effective_admin_department ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <DeptPill department={summary.effective_admin_department} dataId="category-summary-dept" />
+              {summary.admin_department_source && (
+                <span data-id="category-summary-dept-inherited" className="text-fine text-ink-tertiary">
+                  {t("category.summary.inheritedFrom", { name: summary.admin_department_source })}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span
+              data-id="category-summary-no-dept"
+              className="inline-flex self-start rounded-full border border-dashed border-hairline px-2.5 py-1 text-fine text-ink-muted"
+            >
+              {t("category.summary.noManagingDept")}
+            </span>
+          )}
+        </section>
 
         {/* 관리자 필 목록 — 이름 + L{level} 캡션(권한 상속 기준 레벨) */}
         <section className="flex flex-col gap-2">

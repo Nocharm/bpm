@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  Building2,
   Check,
   ChevronDown,
   ChevronRight,
@@ -56,6 +57,7 @@ import {
 import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permissions-types";
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -130,6 +132,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const [movingNode, setMovingNode] = useState<CategoryNode | null>(null);
   // L5 연계 캔버스 권한자 관리 — 모든 레벨에서 부여 가능(하향 상속) (design 2026-08-28 §3)
   const [permsNode, setPermsNode] = useState<CategoryNode | null>(null);
+  // 관리 부서 지정 모달(B안 2026-09-21) — 권한과 별개 속성, 하위 상속
+  const [deptNode, setDeptNode] = useState<CategoryNode | null>(null);
   const [deletingNode, setDeletingNode] = useState<CategoryNode | null>(null);
   // 트리 행 인라인 권한자 표시 재료 — 권한자 행 일괄 + 표시명 색인(디렉터리/그룹) (2026-09-02 요청)
   const [permRows, setPermRows] = useState<CategoryPermissionRow[]>([]);
@@ -468,6 +472,15 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             >
               <Pencil size={14} strokeWidth={1.5} />
             </button>
+            <button
+              type="button"
+              data-id={`framework-admin-dept-${node.id}`}
+              title={t("framework.adminDept")}
+              className={`${ROW_ICON_BTN} ${node.admin_department ? "text-accent" : ""}`}
+              onClick={() => setDeptNode(node)}
+            >
+              <Building2 size={14} strokeWidth={1.5} />
+            </button>
             {canManageInScope(node, "perms", scopeRootIds, minSeedLevel) && (
               <button
                 type="button"
@@ -756,6 +769,14 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           node={permsNode}
           onClose={() => setPermsNode(null)}
           onSaved={reloadPermRows}
+          onToast={onToast}
+        />
+      )}
+      {deptNode && (
+        <CategoryDeptModal
+          node={deptNode}
+          onClose={() => setDeptNode(null)}
+          onSaved={() => void refreshTree()}
           onToast={onToast}
         />
       )}

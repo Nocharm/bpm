@@ -838,6 +838,9 @@ class CategoryNodeOut(BaseModel):
     canvas_state: str | None = None
     admin: "CategoryAdminOut | None" = None
     slot_pending_count: int = 0
+    # 관리 부서 — 자기 값(편집용)과 상위 상속을 반영한 유효값(표시·캔버스 owning_department 파생) (2026-09-21)
+    admin_department: str | None = None
+    effective_admin_department: str | None = None
 
 
 class CategoryLiteOut(BaseModel):
@@ -990,6 +993,10 @@ class CategorySummaryOut(BaseModel):
     admins: list[CategoryAdminOut] = []
     l5: CategorySummaryL5Out | None = None
     subtree_confirm: CategorySubtreeConfirmOut | None = None
+    # 관리 부서 — 유효값과 그 출처(자기면 None, 상속이면 상위 카테고리 이름) (2026-09-21)
+    admin_department: str | None = None
+    effective_admin_department: str | None = None
+    admin_department_source: str | None = None
 
 
 class CategoryCreateIn(BaseModel):
@@ -1016,6 +1023,11 @@ class CategoryUpdateIn(BaseModel):
     ) = None
     parent_id: int | None = None
     sort_order: int | None = None
+    # 관리 부서(조직 경로) — fields_set으로 미전송/null(해제) 구분. 값은 실제 조직 경로여야 한다(422)
+    admin_department: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
 
 
 class CategoryMapsOut(BaseModel):

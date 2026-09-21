@@ -25,7 +25,7 @@ from app.models import (
     _now,
 )
 from app.framework_confirm import load_confirm_draft
-from app.orgchart import load_dept_index, resolve_org_path
+from app.orgchart import load_dept_index, load_valid_org_prefixes, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
     get_admin_scope,
@@ -111,6 +111,35 @@ def build_category_paths(rows: Sequence[tuple[int, int | None, str]]) -> dict[in
         return path
 
     return {cid: _path(cid) for cid in by_id}
+
+
+def resolve_admin_departments(
+    rows: Sequence[tuple[int, int | None, str | None]],
+) -> dict[int, tuple[str | None, int | None]]:
+    """카테고리 id → (유효 관리 부서, 출처 카테고리 id). rows: 전체 (id, parent_id, admin_department).
+
+    자기 값이 있으면 자기, 없으면 가장 가까운 상위의 값을 상속(출처 id 동봉 — 요약 카드 "상속" 표기).
+    순수 함수 — maps.py가 캔버스 owning_department 파생에 그대로 import한다 (2026-09-21).
+    """
+    by_id = {row[0]: row for row in rows}
+    cache: dict[int, tuple[str | None, int | None]] = {}
+
+    def _resolve(cid: int, stack: set[int]) -> tuple[str | None, int | None]:
+        if cid in cache:
+            return cache[cid]
+        _, parent_id, dept = by_id[cid]
+        if dept:
+            out: tuple[str | None, int | None] = (dept, cid)
+        elif parent_id in by_id and parent_id not in stack:
+            stack.add(cid)
+            out = _resolve(parent_id, stack)
+            stack.discard(cid)
+        else:
+            out = (None, None)  # 루트까지 비었거나 부모 사이클
+        cache[cid] = out
+        return out
+
+    return {cid: _resolve(cid, set()) for cid in by_id}
 
 
 async def _split_visible_maps(
@@ -485,12 +514,14 @@ async def list_category_nodes(
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
                 ProcessCategory.linkage_map_id,
+                ProcessCategory.admin_department,
             )
         )
     ).all()
     children_by_parent: dict[int | None, list] = {}
     for row in rows:
         children_by_parent.setdefault(row.parent_id, []).append(row)
+    admin_depts = resolve_admin_departments([(r.id, r.parent_id, r.admin_department) for r in rows])
 
     own_map_count: dict[int, int] = dict(
         (
@@ -520,6 +551,8 @@ async def list_category_nodes(
             linkage_map_id=r.linkage_map_id,
             can_edit_linkage=r.id in admin_ids,
             l5_count=l5_count.get(r.id, 0),
+            admin_department=r.admin_department,
+            effective_admin_department=admin_depts[r.id][0],
             **card_meta.get(r.id, {}),
         )
         for r in targets
@@ -734,6 +767,7 @@ async def get_category_summary(
             select(
                 ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.level,
                 ProcessCategory.name, ProcessCategory.linkage_map_id,
+                ProcessCategory.admin_department,
             )
         )
     ).all()
@@ -743,6 +777,9 @@ async def get_category_summary(
     category = by_id[category_id]
 
     paths = build_category_paths([(r.id, r.parent_id, r.name) for r in cat_rows])
+    effective_dept, dept_source_id = resolve_admin_departments(
+        [(r.id, r.parent_id, r.admin_department) for r in cat_rows]
+    )[category_id]
 
     children_by_parent: dict[int | None, list[int]] = {}
     for r in cat_rows:
@@ -819,6 +856,13 @@ async def get_category_summary(
         admins=admins,
         l5=l5_out,
         subtree_confirm=subtree_confirm_out,
+        admin_department=category.admin_department,
+        effective_admin_department=effective_dept,
+        admin_department_source=(
+            by_id[dept_source_id].name
+            if dept_source_id is not None and dept_source_id != category_id
+            else None
+        ),
     )
 
 
@@ -1062,6 +1106,7 @@ async def get_category_chain(
                 ProcessCategory.level,
                 ProcessCategory.sort_order,
                 ProcessCategory.linkage_map_id,
+                ProcessCategory.admin_department,
             )
         )
     ).all()
@@ -1071,6 +1116,7 @@ async def get_category_chain(
     children_by_parent: dict[int | None, list] = {}
     for row in rows:
         children_by_parent.setdefault(row.parent_id, []).append(row)
+    admin_depts = resolve_admin_departments([(r.id, r.parent_id, r.admin_department) for r in rows])
 
     chain = []
     cursor: int | None = category_id
@@ -1092,6 +1138,8 @@ async def get_category_chain(
             map_count=0,
             linkage_map_id=r.linkage_map_id,
             can_edit_linkage=r.id in admin_ids,
+            admin_department=r.admin_department,
+            effective_admin_department=admin_depts[r.id][0],
         )
         for r in chain
     ]
@@ -1266,6 +1314,16 @@ async def update_category(
         if category_id not in admin_ids:
             raise HTTPException(status_code=403, detail="outside your delegated subtree")
 
+    if "admin_department" in payload.model_fields_set:
+        # 관리 부서 — 개명과 같은 서브트리 게이트(위). 값은 피커와 같은 유효 조직 경로만(maps 오우닝 부서와 동일 규칙)
+        if payload.admin_department is not None and payload.admin_department not in (
+            await load_valid_org_prefixes(session)
+        ):
+            raise HTTPException(
+                status_code=422, detail=f"unknown department: {payload.admin_department}"
+            )
+        category.admin_department = payload.admin_department
+
     if payload.name is not None:
         category.name = payload.name
         # 캔버스 이름 동기 — 생성 시 자동 명명("{이름} 연계")과 동일 규칙 (design 2026-08-28 §9)
@@ -1378,9 +1436,16 @@ async def update_category(
     await session.refresh(category)
 
     child_count, map_count = await _category_metrics(session, category_id)
+    dept_rows = (
+        await session.execute(
+            select(ProcessCategory.id, ProcessCategory.parent_id, ProcessCategory.admin_department)
+        )
+    ).all()
+    effective_dept = resolve_admin_departments(dept_rows)[category_id][0]
     return CategoryNodeOut(
         id=category.id, code=category.code, name=category.name, level=category.level,
         sort_order=category.sort_order, child_count=child_count, map_count=map_count,
+        admin_department=category.admin_department, effective_admin_department=effective_dept,
     )
 
 

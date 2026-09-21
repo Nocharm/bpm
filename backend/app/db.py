@@ -142,6 +142,8 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("notifications", "payload", "JSON"),
     # Framework L5 연계 캔버스 (design 2026-08-28) — 카테고리↔캔버스 1:1 · 확정 스냅샷 번호
     ("process_categories", "linkage_map_id", "INTEGER"),
+    # 카테고리 관리 부서(조직 경로, 상위 상속) — 캔버스 owning_department 파생 소스 (2026-09-21)
+    ("process_categories", "admin_department", "VARCHAR(200)"),
     ("map_versions", "fw_major", "INTEGER"),
     ("map_versions", "fw_minor", "INTEGER"),
     # 플레이스홀더 출처 L5 — 미등록 SP의 소속 카테고리(임포트 기록·후차 연결) (design §10.1)

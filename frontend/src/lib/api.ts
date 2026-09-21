@@ -2949,6 +2949,9 @@ export interface CategoryNode {
   canvas_state: "none" | "draft" | "confirmed" | null;
   admin: CategorySummaryAdmin | null;
   slot_pending_count: number;
+  // 관리 부서(조직 경로) — 자기 값(편집용)과 상위 상속 반영 유효값. 캔버스 owning_department의 파생 소스 (2026-09-21)
+  admin_department?: string | null;
+  effective_admin_department?: string | null;
 }
 
 export interface CategoryMaps {
@@ -3162,7 +3165,8 @@ export function createCategory(body: {
 // "이동"으로 처리된다(서버 model_fields_set 판정) — 이동 없음이면 키를 아예 넣지 않는다.
 export function updateCategory(
   id: number,
-  body: { name?: string; parent_id?: number | null; sort_order?: number },
+  // admin_department: 문자열=지정, null=해제(키를 보내야 해제로 해석 — fields_set 계약)
+  body: { name?: string; parent_id?: number | null; sort_order?: number; admin_department?: string | null },
 ): Promise<CategoryNode> {
   return request<CategoryNode>(`/categories/${id}`, {
     method: "PATCH",
@@ -3239,6 +3243,10 @@ export interface CategorySummary {
   admins: CategorySummaryAdmin[];
   l5: CategorySummaryL5 | null;
   subtree_confirm: CategorySubtreeConfirm | null;
+  // 관리 부서 — 유효값과 출처(상속이면 상위 카테고리 이름, 자기 값이면 null) (2026-09-21)
+  admin_department?: string | null;
+  effective_admin_department?: string | null;
+  admin_department_source?: string | null;
 }
 
 export function getCategorySummary(categoryId: number): Promise<CategorySummary> {
