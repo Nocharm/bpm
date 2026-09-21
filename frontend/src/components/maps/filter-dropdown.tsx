@@ -13,6 +13,9 @@ interface FilterOption {
   label: string;
   // 옵션별 선행 아이콘(상태 색 점·역할 아이콘 등) / per-option leading icon.
   icon?: ReactNode;
+  // 현재 선택과 배타(교집합 없음)라 고를 수 없는 옵션 — 흐리게 두고 클릭 무시 (Type 필, 2026-09-21)
+  disabled?: boolean;
+  disabledHint?: string;
 }
 
 export function FilterDropdown({
@@ -85,7 +88,12 @@ export function FilterDropdown({
               <button
                 key={o.value}
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                disabled={o.disabled}
+                aria-disabled={o.disabled || undefined}
+                title={o.disabled ? o.disabledHint : undefined}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink ${
+                  o.disabled ? "cursor-not-allowed opacity-40" : "hover:bg-surface-alt"
+                }`}
                 onClick={() => onToggle(o.value)}
               >
                 {o.icon}

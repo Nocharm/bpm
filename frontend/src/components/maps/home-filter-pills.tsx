@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n";
+import { getDisabledKinds, type MapKind } from "@/lib/map-kind";
 import { MAP_SORT_KEYS, type MapSortKey } from "@/lib/map-sort";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import type { FilterDisplayMode } from "@/lib/filter-display";
@@ -34,12 +35,6 @@ const SORT_LABEL: Record<MapSortKey, "home.sortUpdated" | "home.sortName" | "hom
   name: "home.sortName",
   created: "home.sortCreated",
 };
-// Type 필 값 — page.tsx 술어(kindOk)와 세션 저장 가드가 같은 집합을 본다
-export const MAP_KIND_VALUES = ["sp", "non_sp", "canvas", "registered", "unregistered"] as const;
-export type MapKind = (typeof MAP_KIND_VALUES)[number];
-export function isMapKind(value: unknown): value is MapKind {
-  return typeof value === "string" && (MAP_KIND_VALUES as readonly string[]).includes(value);
-}
 
 export interface HomeFilterPillsProps {
   display: FilterDisplayMode;
@@ -66,6 +61,15 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
   const { display, measureOnly, row, stretch, homeView } = props;
   const dataId = (id: string) => (measureOnly ? undefined : id);
   const optIcon = (Icon: typeof Crown) => <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
+  // Type — 현재 선택과 교집합이 없는 옵션은 비활성(lib/map-kind 배타 표)
+  const disabledKinds = getDisabledKinds(props.kindFilter);
+  const kindOption = (value: MapKind, label: string, Icon: typeof Crown) => ({
+    value,
+    label,
+    icon: optIcon(Icon),
+    disabled: disabledKinds.has(value),
+    disabledHint: "No overlap with the current selection",
+  });
 
   if (row === "top") {
     // 정렬 — 단일 선택, 항상 하나가 켜져 있다(기본 최근 수정순). 필터 해제 대상은 아니다
@@ -142,11 +146,11 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
             display={display}
             stretch={stretch}
             options={[
-              { value: "sp", label: "SP maps", icon: optIcon(Workflow) },
-              { value: "non_sp", label: "Non-SP maps", icon: optIcon(CircleSlash2) },
-              { value: "canvas", label: "L5 canvases", icon: optIcon(Workflow) },
-              { value: "registered", label: "In the framework", icon: optIcon(Network) },
-              { value: "unregistered", label: "Not in the framework", icon: optIcon(CircleSlash2) },
+              kindOption("sp", "SP maps", Workflow),
+              kindOption("non_sp", "Non-SP maps", CircleSlash2),
+              kindOption("canvas", "L5 canvases", Workflow),
+              kindOption("registered", "In the framework", Network),
+              kindOption("unregistered", "Not in the framework", CircleSlash2),
             ]}
             selected={props.kindFilter}
             onToggle={props.onToggleKind}

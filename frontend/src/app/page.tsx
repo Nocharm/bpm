@@ -28,7 +28,8 @@ import { CategorySummaryCard } from "@/components/maps/category-summary-card";
 import { FrameworkDrill } from "@/components/maps/framework-drill";
 import { HomeDashboard } from "@/components/maps/home-dashboard";
 import { HomeSkeleton } from "@/components/maps/home-skeleton";
-import { HomeFilterPills, isMapKind } from "@/components/maps/home-filter-pills";
+import { HomeFilterPills } from "@/components/maps/home-filter-pills";
+import { isMapKind } from "@/lib/map-kind";
 import { FrameworkSearchGroups } from "@/components/maps/framework-search-groups";
 import { SelectedMapStrip } from "@/components/maps/selected-map-strip";
 import { FrameworkMapCard } from "@/components/maps/framework-map-card";
@@ -794,26 +795,39 @@ export default function MapListPage() {
     onToggleKind: noop,
   };
 
-  // 필터 해제 — 1줄 우측 끝 아이콘 버튼, 활성(필터 1개 이상)일 때만 빨간 계열로 뜬다. 정렬은 남긴다
-  const clearButton = hasActiveFilter ? (
-    <button
-      ref={clearBtnRef}
-      type="button"
-      data-id="home-filter-clear"
-      title={t("home.filterClear")}
-      aria-label={t("home.filterClear")}
-      className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-error/40 bg-error/10 text-error transition-colors hover:bg-error hover:text-on-accent"
-      onClick={() => {
-        setStatusFilter(new Set());
-        setPermFilter(new Set());
-        setVisFilter("all");
-        setOwningFilter(new Set());
-        setKindFilter(new Set());
-      }}
+  // 필터 해제 — 1줄 우측 끝 아이콘 버튼(활성 시 빨간 계열). 항상 마운트해 두고 슬롯 폭 0→28px·아이콘 슬라이드로
+  // 나타나 기존 필이 왼쪽으로 살짝 밀린다(즉시 등장 방지, 사용자 지시 2026-09-21). 숨김 상태는 행 gap을 음수 마진으로
+  // 상쇄하고 포커스·클릭에서 뺀다. data-id는 활성일 때만 — 검증 스크립트의 "존재 = 활성" 계약 유지. 정렬은 남긴다
+  const clearButton = (
+    <span
+      data-id="home-filter-clear-slot"
+      aria-hidden={!hasActiveFilter}
+      className={`flex shrink-0 items-center overflow-hidden motion-safe:transition-[width,margin-left] motion-safe:duration-350 motion-safe:ease-smooth ${
+        hasActiveFilter ? "ml-0 w-7" : "-ml-1.5 w-0"
+      }`}
     >
-      <FilterX size={14} strokeWidth={1.5} />
-    </button>
-  ) : null;
+      <button
+        ref={clearBtnRef}
+        type="button"
+        data-id={hasActiveFilter ? "home-filter-clear" : undefined}
+        tabIndex={hasActiveFilter ? 0 : -1}
+        title={t("home.filterClear")}
+        aria-label={t("home.filterClear")}
+        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-error/40 bg-error/10 text-error transition-colors hover:bg-error hover:text-on-accent motion-safe:transition-[opacity,transform,background-color,color] motion-safe:duration-350 motion-safe:ease-smooth ${
+          hasActiveFilter ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-2 opacity-0"
+        }`}
+        onClick={() => {
+          setStatusFilter(new Set());
+          setPermFilter(new Set());
+          setVisFilter("all");
+          setOwningFilter(new Set());
+          setKindFilter(new Set());
+        }}
+      >
+        <FilterX size={14} strokeWidth={1.5} />
+      </button>
+    </span>
+  );
 
   const renderCard = (processMap: MapSummary) =>
     renderCardInner(processMap, [], atById.get(processMap.id));
