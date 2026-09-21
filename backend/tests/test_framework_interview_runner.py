@@ -137,8 +137,76 @@ def test_pause_stops_steps_and_recovery_resets_stale(client: TestClient, monkeyp
             s.tasks[0].status = "generating"
             s.tasks[1].status = "drawing"
             await db.commit()
-            assert await runner.recover_stale_tasks(db) == 2
+            assert await runner.recover_stale_tasks(db, session_id=sid) == 2
             await db.commit()
 
     asyncio.run(_stale())
     assert _statuses(sid) == ["pending", "submitted"]
+
+
+def test_kick_while_active_sets_wake_flag() -> None:
+    """이미 활성인 세션에 kick이 도착하면 새 루프를 스폰하지 않고 wake만 세운다."""
+    sid = 424242
+    runner._active.add(sid)
+    try:
+        runner.kick(sid)
+        assert sid in runner._wake
+    finally:
+        runner._active.discard(sid)
+        runner._wake.discard(sid)
+
+
+def test_kick_during_step_keeps_loop_running(monkeypatch) -> None:
+    """스텝 실행 중 도착한 kick은 lost-kick 없이 루프를 한 바퀴 더 돌린다."""
+    sid = 424243
+    calls = 0
+
+    async def _fake_step(db, session_id):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            runner.kick(session_id)  # 스텝 진행 중 도착한 kick — _active라 wake만 세운다
+        return False
+
+    monkeypatch.setattr(runner, "run_one_step", _fake_step)
+    runner._active.discard(sid)
+    runner._wake.discard(sid)
+    asyncio.run(runner.process_session(sid))
+    assert calls == 2
+    assert sid not in runner._active
+    assert sid not in runner._wake
+
+
+def test_process_session_recovers_wedged_task_on_unexpected_error(client: TestClient, monkeypatch) -> None:
+    """드로잉 커밋 직후(비 TurnError) 예외가 새면 drawing이 아니라 submitted로 되돌아가야 한다."""
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    _fake_ai_queue(monkeypatch, [Q_JSON])
+    _step(sid)
+    first = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
+    answers = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "", "q6": ""}
+    client.post(f"/api/framework-interviews/{sid}/tasks/{first['id']}/answers", json={"answers": answers}, headers=HEADERS)
+    assert _statuses(sid) == ["submitted"]
+
+    async def _boom(db, session, task):
+        task.status = "drawing"
+        await db.commit()
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(runner, "_draw_row", _boom)
+    runner._active.discard(sid)
+    runner._wake.discard(sid)
+    asyncio.run(runner.process_session(sid))
+    assert _statuses(sid) == ["submitted"]
+    assert sid not in runner._active
+
+
+def test_questionnaire_turn_error_resets_to_pending(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    queue = _fake_ai_queue(monkeypatch, ["not json", "still not json"])
+    assert _step(sid) is True
+    assert _statuses(sid) == ["pending"]
+    detail = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
+    assert detail["error"]
+    assert queue == []

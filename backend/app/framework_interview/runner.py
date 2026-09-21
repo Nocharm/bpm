@@ -6,6 +6,8 @@
 
 import asyncio
 import logging
+from collections.abc import Coroutine
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +22,6 @@ from app.framework_interview.contracts import (
 from app.interview.orchestrator import TurnError, _ask_json, sum_usage, usage_log  # noqa: PLC2701 -- 재사용
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask
 from app.prompt_registry import get_prompt_overrides
-from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +30,12 @@ LIVE_STATUSES = ("plan_locked", "linking")
 
 _tasks: set[asyncio.Task] = set()
 _active: set[int] = set()
+# kick()이 이미 활성인 세션에 도착하면 여기 표시만 하고 반환 — 루프가 스텝 종료 후
+# _active를 비우기 전에 이 표시를 확인해, DB 커밋 직후 걸린 kick을 놓치지 않는다(lost-kick 방지).
+_wake: set[int] = set()
 
 
-def spawn(coro) -> None:
+def spawn(coro: Coroutine[Any, Any, None]) -> None:
     task = asyncio.get_running_loop().create_task(coro)
     _tasks.add(task)
 
@@ -43,7 +47,8 @@ def spawn(coro) -> None:
 
 
 def kick(session_id: int) -> None:
-    """세션 루프를 깨운다 — 이미 돌고 있으면 무시(루프가 다음 스텝에서 새 작업을 집는다)."""
+    """세션 루프를 깨운다 — 이미 돌고 있으면 wake 플래그만 세워 루프가 한 바퀴 더 돌게 한다."""
+    _wake.add(session_id)
     if session_id in _active:
         return
     spawn(process_session(session_id))
@@ -55,14 +60,20 @@ async def process_session(session_id: int) -> None:
     _active.add(session_id)
     try:
         while True:
+            _wake.discard(session_id)
             async with SessionLocal() as db:
                 try:
                     progressed = await run_one_step(db, session_id)
-                except Exception:  # noqa: BLE001 -- 루프는 죽지 않고 로그만
+                except Exception:  # noqa: BLE001 -- 루프는 죽지 않고 로그만, 대신 걸린 작업은 되돌린다
                     logger.exception("framework interview step failed (session %s)", session_id)
                     await db.rollback()
+                    async with SessionLocal() as recovery_db:
+                        await recover_stale_tasks(recovery_db, session_id)
+                        await recovery_db.commit()
                     return
-            if not progressed:
+            # db 컨텍스트가 닫힌 뒤에야 wake를 다시 본다 — 스텝 도중 도착한 kick이
+            # _active 확인 때문에 무시됐더라도 여기서 잡아 한 바퀴 더 돈다.
+            if not progressed and session_id not in _wake:
                 return
     finally:
         _active.discard(session_id)
@@ -158,7 +169,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
 
 async def run_one_step(db: AsyncSession, session_id: int) -> bool:
     """작업 1개 처리. False = 더 할 일 없음(일시정지·비활성·AI 꺼짐·큐 비움)."""
-    if not settings.ai_enabled or not await is_ai_access_enabled(db):
+    if not await is_ai_access_enabled(db):  # settings.ai_enabled을 포함(app_settings.is_ai_access_enabled)
         return False
     session = await db.get(FrameworkInterviewSession, session_id)
     if session is None or session.paused or session.status not in LIVE_STATUSES:
@@ -177,14 +188,18 @@ async def run_one_step(db: AsyncSession, session_id: int) -> bool:
     return False
 
 
-async def recover_stale_tasks(db: AsyncSession) -> int:
-    """재기동 복구 — 진행 중이던 상태를 큐로 되돌린다(중복 실행 대신 재시도)."""
-    drawing = await db.execute(
-        update(FrameworkInterviewTask).where(FrameworkInterviewTask.status == "drawing").values(status="submitted")
-    )
-    generating = await db.execute(
-        update(FrameworkInterviewTask).where(FrameworkInterviewTask.status == "generating").values(status="pending")
-    )
+async def recover_stale_tasks(db: AsyncSession, session_id: int | None = None) -> int:
+    """진행 중이던 상태를 큐로 되돌린다(중복 실행 대신 재시도).
+
+    session_id 없으면 재기동 전수 복구, 주면 그 세션만(러너 예외 처리에서 wedge 방지로 재사용).
+    """
+    drawing_stmt = update(FrameworkInterviewTask).where(FrameworkInterviewTask.status == "drawing")
+    generating_stmt = update(FrameworkInterviewTask).where(FrameworkInterviewTask.status == "generating")
+    if session_id is not None:
+        drawing_stmt = drawing_stmt.where(FrameworkInterviewTask.session_id == session_id)
+        generating_stmt = generating_stmt.where(FrameworkInterviewTask.session_id == session_id)
+    drawing = await db.execute(drawing_stmt.values(status="submitted"))
+    generating = await db.execute(generating_stmt.values(status="pending"))
     return (drawing.rowcount or 0) + (generating.rowcount or 0)
 
 
