@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 269개 · 2026-09-21 기준
+총 274개 · 2026-09-21 기준
 
 ## components/
 
@@ -30,7 +30,7 @@
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |
 | `compare-ai-summary.tsx` | `CompareAiSummary` | 비교 화면 AI 보고서 탭 본문 | `app/maps/[mapId]/compare/page.tsx` |
 | `compare-field-diff.tsx` | `FieldDiffValues`, `FieldDiffHoverable` | 비교 필드 diff 공용 렌더 | `app/maps/[mapId]/compare/page.tsx`, `components/process-node.tsx` |
-| `confirm-dialog.tsx` | `ConfirmDialog` | 범용 확인 모달 | `app/inbox/page.tsx`, `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/consult/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/admin/framework-panel.tsx`, `components/admin/local-account-table.tsx`, `components/admin/ref-group-card.tsx`, `components/admin/table-viewer.tsx`, `components/ai-chat-panel.tsx`, `components/bpm-attribute-picker.tsx`, `components/feedback-detail-modal.tsx`, `components/framework-browse-modal.tsx`, `components/framework-confirm-section.tsx`, `components/framework-connect-dialog.tsx`, `components/groups/group-actions.tsx`, `components/groups/group-detail.tsx`, `components/interview/interview-panel.tsx`, `components/interview/interview-preview.tsx`, `components/map-inspector-tab.tsx`, `components/map-name-dropdown.tsx`, `components/maps/map-notes-section.tsx`, `components/permissions/create-map-dialog.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/kb-manage-panel.tsx`, `components/settings/manual-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/version/approve-confirm-dialog.tsx`, `components/version/approver-status-lines.tsx`, `components/version/publish-confirm-dialog.tsx`, `components/version/reject-dialog.tsx`, `components/version/submit-confirm-dialog.tsx`, `components/version/version-switch-confirm.tsx`, `components/version/withdraw-confirm-dialog.tsx` |
+| `confirm-dialog.tsx` | `ConfirmDialog` | 범용 확인 모달 | `app/framework/consult/[sessionId]/page.tsx`, `app/inbox/page.tsx`, `app/maps/[mapId]/compare/page.tsx`, `app/maps/[mapId]/consult/page.tsx`, `app/maps/[mapId]/page.tsx`, `components/admin/deleted-groups-panel.tsx`, `components/admin/deleted-maps-panel.tsx`, `components/admin/framework-panel.tsx`, `components/admin/local-account-table.tsx`, `components/admin/ref-group-card.tsx`, `components/admin/table-viewer.tsx`, `components/ai-chat-panel.tsx`, `components/bpm-attribute-picker.tsx`, `components/feedback-detail-modal.tsx`, `components/framework-browse-modal.tsx`, `components/framework-confirm-section.tsx`, `components/framework-connect-dialog.tsx`, `components/groups/group-actions.tsx`, `components/groups/group-detail.tsx`, `components/interview/interview-panel.tsx`, `components/interview/interview-preview.tsx`, `components/map-inspector-tab.tsx`, `components/map-name-dropdown.tsx`, `components/maps/map-notes-section.tsx`, `components/permissions/create-map-dialog.tsx`, `components/permissions/subprocess-designation-panel.tsx`, `components/settings/ai-prompts-panel.tsx`, `components/settings/kb-manage-panel.tsx`, `components/settings/manual-manage-panel.tsx`, `components/subprocess-inspector-card.tsx`, `components/version/approve-confirm-dialog.tsx`, `components/version/approver-status-lines.tsx`, `components/version/publish-confirm-dialog.tsx`, `components/version/reject-dialog.tsx`, `components/version/submit-confirm-dialog.tsx`, `components/version/version-switch-confirm.tsx`, `components/version/withdraw-confirm-dialog.tsx` |
 | `context-menu.tsx` | `ContextMenu`, `EdgeSidesPad` | 마우스 커서 위치에 뜨는 컨텍스트 메뉴 | `app/maps/[mapId]/page.tsx`, `components/library-dept-flyout.tsx`, `components/maps/map-detail-card.tsx`, `components/maps/version-timeline.tsx` |
 | `cost-unit.tsx` | `CostUnitTabs`, `CurrencyPill` | 비용 단위(₩/$) 공용 조각 | `components/maps/map-detail-sp-section.tsx`, `components/node-summary-modal.tsx`, `components/permissions/subprocess-designation-modal.tsx`, `components/subprocess-usage-tab.tsx` |
 | `csv-create-modal.tsx` | `CsvCreateModal` | CSV로 새 맵 만들기 | `app/page.tsx` |
@@ -200,7 +200,12 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
-| `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | (미사용) |
+| `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx` |
+| `plan-editor.tsx` | `PlanEditor` | 캠페인 ① L5 개요 + L6 카드 편집 | `app/framework/consult/[sessionId]/page.tsx` |
+| `questionnaire-form.tsx` | `AnswerStep` | 캠페인 ② L6 설문 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
+| `register-step.tsx` | `RegisterStep` | 캠페인 ④ 등록 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
+| `relations-step.tsx` | `RelationsStep` | 캠페인 ③ L6 연결 단계 스텁 | `app/framework/consult/[sessionId]/page.tsx` |
+| `task-board.tsx` | `TaskBoard` | 캠페인 L6 카드 보드 | `app/framework/consult/[sessionId]/page.tsx` |
 
 ## components/groups/
 
