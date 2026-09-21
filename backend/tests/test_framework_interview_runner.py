@@ -215,6 +215,55 @@ def test_questionnaire_turn_error_marks_failed(client: TestClient, monkeypatch) 
     assert _statuses(sid) == ["pending"]
 
 
+def test_revise_task_feeds_existing_row_to_questionnaire(client: TestClient, monkeypatch) -> None:
+    """정정 태스크의 설문 생성은 세션 스냅샷의 현재 행을 프롬프트에 넣는다 (spec 2026-09-22 §2.5)."""
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    existing_row = {
+        "l6": "A", "ownerRole": "담당자", "department": "", "fields": {},
+        "actions": [{"seq": 1, "label": "요청 확인", "kind": "action"}, {"seq": 2, "label": "접수 등록", "kind": "action"}],
+    }
+
+    async def _mark_revise() -> None:
+        async with SessionLocal() as db:
+            s = await db.get(FrameworkInterviewSession, sid)
+            await db.refresh(s, ["tasks"])
+            task = s.tasks[0]
+            s.existing = [{"map_id": 1, "code": task.task_id, "name": "A", "summary": "",
+                           "activities": ["요청 확인", "접수 등록"], "row": existing_row}]
+            task.mode = "revise"
+            await db.commit()
+
+    asyncio.run(_mark_revise())
+    seen: dict = {}
+    build = runner.build_questionnaire_messages
+
+    def _spy(**kwargs):
+        seen.update(kwargs)
+        return build(**kwargs)
+
+    monkeypatch.setattr(runner, "build_questionnaire_messages", _spy)
+    _fake_ai_queue(monkeypatch, [Q_JSON])
+    assert _step(sid) is True
+    assert seen["existing_row"] == existing_row
+
+
+def test_new_task_gets_no_existing_row(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    seen: dict = {}
+    build = runner.build_questionnaire_messages
+
+    def _spy(**kwargs):
+        seen.update(kwargs)
+        return build(**kwargs)
+
+    monkeypatch.setattr(runner, "build_questionnaire_messages", _spy)
+    _fake_ai_queue(monkeypatch, [Q_JSON])
+    assert _step(sid) is True
+    assert seen["existing_row"] is None
+
+
 def test_questionnaire_failure_terminates_loop_without_spin(client: TestClient, monkeypatch) -> None:
     """설문 생성이 계속 실패해도 러너는 한 번 시도하고 멈춘다(pending 되돌림 = 무한 루프)."""
     _enable(monkeypatch)

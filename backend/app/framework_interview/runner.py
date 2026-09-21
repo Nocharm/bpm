@@ -21,6 +21,7 @@ from app.framework_interview.contracts import (
     QuestionnaireOut, RowOut, build_context_text, build_questionnaire_messages, build_row_messages,
     format_managed_catalog,
 )
+from app.framework_interview.existing import existing_row_of
 from app.framework_interview.normalize import normalize_questionnaire, normalize_row
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask
@@ -97,6 +98,11 @@ def _card_of(session: FrameworkInterviewSession, task: FrameworkInterviewTask) -
     return {"name": task.name}
 
 
+def _existing_row_of_task(session: FrameworkInterviewSession, task: FrameworkInterviewTask) -> dict | None:
+    """정정 태스크만 현재 등록된 행을 프롬프트에 싣는다 — 새 카드는 백지에서 그린다."""
+    return existing_row_of(session.existing, task.task_id) if task.mode == "revise" else None
+
+
 def _neighbors_of(session: FrameworkInterviewSession, card: dict) -> list[dict]:
     names = set(card.get("depends_on") or [])
     me = card.get("name")
@@ -113,7 +119,7 @@ async def _generate_questionnaire(db: AsyncSession, session: FrameworkInterviewS
     messages = build_questionnaire_messages(
         lang=session.lang, category_path=" > ".join(c["name"] for c in chain),
         brief=build_context_text(session.brief, session.attachments),
-        card=card, neighbors=_neighbors_of(session, card),
+        card=card, neighbors=_neighbors_of(session, card), existing_row=_existing_row_of_task(session, task),
         role_catalog=role_catalog, system_catalog=system_catalog, overrides=await get_prompt_overrides(db),
     )
     usage: list = []
@@ -143,6 +149,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     card = _card_of(session, task)
     messages = build_row_messages(
         lang=session.lang, card=card, questionnaire=task.questionnaire or {}, answers=task.answers or {},
+        existing_row=_existing_row_of_task(session, task),
         role_catalog=role_catalog, system_catalog=system_catalog, overrides=await get_prompt_overrides(db),
     )
     usage: list = []

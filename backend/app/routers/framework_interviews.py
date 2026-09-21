@@ -24,7 +24,7 @@ from app.framework_interview.contracts import (
     PlanOut, RelationsOut, build_context_text, build_plan_messages, build_relations_messages,
     format_managed_catalog,
 )
-from app.framework_interview.existing import load_existing_l6
+from app.framework_interview.existing import existing_row_of, load_existing_l6, merge_existing_cards
 from app.framework_interview.normalize import normalize_plan, normalize_relations
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
@@ -231,12 +231,36 @@ async def generate_plan(
         lang=row.lang, category_path=" > ".join(c["name"] for c in chain),
         brief=build_context_text(row.brief, row.attachments),
         existing_names=list(existing.all()), role_catalog=role_catalog,
+        existing_maps=[{k: e[k] for k in ("code", "name", "summary", "activities")} for e in row.existing or []],
         overrides=await get_prompt_overrides(db),
     )
     plan = await _ask(messages, PlanOut, db, user, normalizer=normalize_plan)
-    row.plan = [card.model_dump() for card in plan.cards]
+    row.plan = merge_existing_cards([card.model_dump() for card in plan.cards], row.existing or [])
     await db.commit()
     return await _out(db, row)
+
+
+async def _create_locked_tasks(db: AsyncSession, row: FrameworkInterviewSession, cards: list[dict]) -> None:
+    """잠금 시 카드 → 태스크. 유지 카드는 기존 코드·행을 그대로 물고 drawn으로 태어나 러너를 건너뛴다."""
+    category = await db.get(ProcessCategory, row.category_id)
+    new_count = sum(1 for card in cards if card["mode"] == "new")
+    ids = iter(allocate_task_ids(category.code, await load_existing_codes(db, row.category_id), new_count))
+    has_keep = any(card["mode"] == "keep" for card in cards)
+    chain = await load_category_chain(db, row.category_id) if has_keep else []
+    l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]} if chain else {}
+    for seq, card in enumerate(cards, start=1):
+        task_id = card["existing_code"] if card["mode"] != "new" else next(ids)
+        card["task_id"] = task_id
+        task = FrameworkInterviewTask(
+            session_id=row.id, task_id=task_id, seq=seq, name=card["name"], mode=card["mode"],
+        )
+        if card["mode"] == "keep":
+            existing_row = existing_row_of(row.existing, task_id) or {}
+            task.status = "drawn"
+            task.row = existing_row
+            task.issues = validate_row(chain, l5, {"taskId": task_id, **existing_row})
+            task.drawn_at = now_kst()
+        db.add(task)
 
 
 @router.put("/{session_id}/plan", response_model=FrameworkInterviewOut)
@@ -249,18 +273,15 @@ async def save_plan(
         raise HTTPException(status_code=409, detail="plan is locked")
     if payload.brief is not None:
         row.brief = payload.brief.strip()[:BRIEF_MAX]
-    cards = [card.model_dump() for card in payload.cards]
+    # 기존 맵은 지워도 유지 카드로 되살아난다 — 사용자가 손대지 않은 L6가 계획에서 증발하지 않게
+    cards = merge_existing_cards([card.model_dump() for card in payload.cards], row.existing or [])
     if payload.lock:
         if not cards:
             raise HTTPException(status_code=422, detail="plan needs at least one card")
         names = [c["name"] for c in cards]
         if len(set(names)) != len(names):
             raise HTTPException(status_code=422, detail="duplicate card names")
-        category = await db.get(ProcessCategory, row.category_id)
-        ids = allocate_task_ids(category.code, await load_existing_codes(db, row.category_id), len(cards))
-        for seq, (card, task_id) in enumerate(zip(cards, ids, strict=True), start=1):
-            card["task_id"] = task_id
-            db.add(FrameworkInterviewTask(session_id=row.id, task_id=task_id, seq=seq, name=card["name"]))
+        await _create_locked_tasks(db, row, cards)
         row.status = "plan_locked"
     row.plan = cards
     await db.commit()
@@ -377,6 +398,37 @@ async def reopen_task(
     # 연결·조립은 그 카드가 다시 그려진 뒤 다시 해야 한다
     row.status = "plan_locked"
     row.assembled = None
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/tasks/{task_pk}/revise", response_model=FrameworkInterviewOut)
+async def revise_task(
+    session_id: int, task_pk: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """유지 중인 기존 L6를 정정으로 돌린다 — 설문부터 다시 받아 바뀐 부분만 고쳐 그린다 (spec 2026-09-22 §2.6)."""
+    row = await _get_session_row(db, session_id)
+    task = await _get_task(db, row, task_pk)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
+    if task.mode != "keep" or task.status != "drawn":
+        raise HTTPException(status_code=409, detail="only kept existing tasks can be revised")
+    task.mode = "revise"
+    task.status = "pending"
+    task.questionnaire = None
+    task.answers = None
+    task.error = None
+    # row는 남긴다 — 정정 설문이 도착하기 전에도 현재 내용을 미리보기로 보여준다
+    row.plan = [
+        {**card, "mode": "revise"} if card.get("existing_code") == task.task_id else card
+        for card in row.plan or []
+    ]
+    if row.status in ("ready", "linking"):
+        # 연결·조립은 그 카드가 다시 그려진 뒤 다시 해야 한다(relations 편집분은 유지)
+        row.status = "plan_locked"
+        row.assembled = None
     await db.commit()
     runner.kick(row.id)
     return await _out(db, row)

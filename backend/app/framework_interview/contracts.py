@@ -143,10 +143,13 @@ L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주�
 
 규칙
 - 3개 이상 12개 이하. 이미 등록된 L6 이름과 겹치지 않게.
+- [이미 있는 L6 맵]에 있는 맵은 각각 카드 하나로 이름을 그대로 두고 existing_code에 그 코드를 적는다.
+- 새 카드는 빈 영역만 채우고 기존 맵과 이름이나 역할이 겹치는 카드는 만들지 않는다.
 - name: 동사형 업무명 20자 이내. summary: 한 문장. owner_role: 역할 후보 목록의 표기 우선.
 - department: 아는 경우 부서명, 모르면 빈 문자열.
 - depends_on: 선행해야 하는 다른 카드의 name 목록(없으면 빈 배열).
-- 다른 설명 없이 JSON 한 개만: {"cards":[{"name":"","summary":"","owner_role":"","department":"","depends_on":[]}]}"""
+- 다른 설명 없이 JSON 한 개만:
+{"cards":[{"name":"","summary":"","owner_role":"","department":"","depends_on":[],"existing_code":null}]}"""
 
 L6_QUESTIONNAIRE_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. L6 업무 하나의 흐름을 그리기 위한 설문지를 만드세요.
 답하는 사람은 바쁜 현업입니다. 객관식 위주로, 제안 답을 미리 골라 두세요.
@@ -158,6 +161,8 @@ L6_QUESTIONNAIRE_CONTRACT = """당신은 업무 프로세스 컨설턴트입니�
 - 반드시 kind=ordered, maps_to=activities 문항 1개: 활동 후보 5개 이상 12개 이하, suggested에 제안 순서 전부.
 - 역할 문항의 options는 역할 후보 목록 표기를, 시스템 문항은 시스템 목록 표기를 우선.
 - text 문항의 suggested는 그대로 답으로 써도 되는 완성 문장.
+- [현재 등록된 내용]이 있으면 질문은 무엇을 바꿀지를 묻고 suggested는 현재 값을 그대로 담는다.
+- [현재 등록된 내용]이 있으면 활동 순서 질문의 options는 현재 활동을 모두 포함하고 추가 후보를 뒤에 둔다.
 - 다른 설명 없이 JSON 한 개만:
 {"questions":[{"id":"q1","kind":"ordered","maps_to":"activities","text":"","options":[{"id":"a1","label":""}],"suggested":["a1"]}]}"""
 
@@ -169,6 +174,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
+- [현재 등록된 내용]이 있으면 그것을 바탕으로 답에서 바뀐 부분만 고치고 나머지는 그대로 유지한다.
 - 다른 설명 없이 JSON 한 개만:
 {"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action","input":"","output":"","system":""}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
 
@@ -221,8 +227,31 @@ def _catalog_blocks(role_catalog: str = "", system_catalog: str = "", dept_catal
     return ("\n\n".join(parts) + "\n\n") if parts else ""
 
 
+def render_existing_row(row: dict) -> str:
+    """이미 등록된 L6 행을 프롬프트 블록으로 — 정정은 이 내용을 바탕으로 바뀐 부분만 고친다."""
+    lines: list[str] = []
+    for action in row.get("actions") or []:
+        line = f"{action.get('seq')}. {action.get('label')} ({action.get('kind', 'action')})"
+        if action.get("name"):
+            line += f" · {action['name']}"
+        if action.get("rule"):
+            line += f" · 규칙: {action['rule']}"
+        lines.append(line)
+    for key, value in (row.get("fields") or {}).items():
+        lines.append(f"- {key}: {value}")
+    for edge in (row.get("relations") or {}).get("edges") or []:
+        condition = f" {edge['condition']}" if edge.get("condition") else ""
+        lines.append(f"- {edge.get('src')}→{edge.get('dst')} {edge.get('kind', 'seq')}{condition}")
+    return "\n".join(lines)
+
+
+def _existing_row_block(existing_row: dict | None) -> str:
+    return f"\n\n[현재 등록된 내용]\n{render_existing_row(existing_row)}" if existing_row else ""
+
+
 def build_plan_messages(
     *, lang: str, category_path: str, brief: str, existing_names: list[str],
+    existing_maps: list[dict] = [],  # noqa: B006 -- 읽기 전용 기본값
     role_catalog: str = "", dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
@@ -230,13 +259,22 @@ def build_plan_messages(
     contract = ov.get("l5_plan_contract") or L5_PLAN_CONTRACT
     system = f"{contract}\n\n{_lang_line(lang)}\n\n{_catalog_blocks(role_catalog, '', dept_catalog)}"
     existing = "\n".join(f"- {n}" for n in existing_names) or "- (없음)"
-    user = f"[L5 경로]\n{category_path}\n\n[설명·범위·첨부 요약]\n{brief or '(없음)'}\n\n[이미 등록된 L6]\n{existing}"
+    # 이미 그려진 맵은 이름만이 아니라 코드·활동까지 보여야 AI가 유지 카드를 코드째로 되돌려준다
+    maps = "\n".join(
+        f"- {m.get('code')} · {m.get('name')}: {m.get('summary', '')}"
+        f" (활동: {' → '.join(m.get('activities') or [])})"
+        for m in existing_maps
+    ) or "- (없음)"
+    user = (
+        f"[L5 경로]\n{category_path}\n\n[설명·범위·첨부 요약]\n{brief or '(없음)'}\n\n"
+        f"[이미 등록된 L6]\n{existing}\n\n[이미 있는 L6 맵]\n{maps}"
+    )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
 def build_questionnaire_messages(
     *, lang: str, category_path: str, brief: str, card: dict, neighbors: list[dict],
-    role_catalog: str = "", system_catalog: str = "",
+    role_catalog: str = "", system_catalog: str = "", existing_row: dict | None = None,
     overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     ov = overrides or {}
@@ -247,7 +285,7 @@ def build_questionnaire_messages(
         f"[L5 경로]\n{category_path}\n\n[L5 설명]\n{brief or '(없음)'}\n\n"
         f"[이 L6]\n이름: {card.get('name')}\n요약: {card.get('summary', '')}\n"
         f"역할: {card.get('owner_role', '')}\n부서: {card.get('department', '')}\n\n"
-        f"[이웃 L6(선행/후행)]\n{neighbor_text}"
+        f"[이웃 L6(선행/후행)]\n{neighbor_text}{_existing_row_block(existing_row)}"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -269,14 +307,15 @@ def _render_answers(questionnaire: dict, answers: dict) -> str:
 
 def build_row_messages(
     *, lang: str, card: dict, questionnaire: dict, answers: dict,
-    role_catalog: str = "", system_catalog: str = "",
+    role_catalog: str = "", system_catalog: str = "", existing_row: dict | None = None,
     overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     ov = overrides or {}
     contract = ov.get("l6_row_drafter_contract") or L6_ROW_DRAFTER_CONTRACT
     system = f"{contract}\n\n{_lang_line(lang)}\n\n{_catalog_blocks(role_catalog, system_catalog)}"
     user = (
-        f"[L6]\n이름: {card.get('name')}\n요약: {card.get('summary', '')}\n부서: {card.get('department', '')}\n\n"
+        f"[L6]\n이름: {card.get('name')}\n요약: {card.get('summary', '')}\n부서: {card.get('department', '')}"
+        f"{_existing_row_block(existing_row)}\n\n"
         f"[설문 답]\n{_render_answers(questionnaire, answers)}"
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

@@ -354,3 +354,83 @@ def test_create_snapshots_existing_l6(client: TestClient, monkeypatch) -> None:
     body = res.json()
     assert body["existing"] == [{"map_id": body["existing"][0]["map_id"], "code": f"{code}-01", "name": "요청 접수", "activity_count": 3}]
     assert "row" not in body["existing"][0]
+
+
+def _make_l5_with_existing(client: TestClient, names: list[str]) -> tuple[int, str]:
+    """기존 L6 맵이 names 순서대로 -01..-NN 코드로 등록된 L5를 만든다 (정정 시나리오 셋업)."""
+    l5_id = _make_l5(client, f"fwx-{uuid4().hex[:6]}")
+    code = client.get(f"/api/categories/{l5_id}/chain", headers=HEADERS).json()[-1]["code"]
+    for i, name in enumerate(names, start=1):
+        _import_row(client, l5_id, {**EXISTING_ROW, "l6": name}, f"{code}-{i:02d}")
+    return l5_id, code
+
+
+def _card(name: str, **extra: object) -> dict:
+    return {"name": name, "summary": "", "owner_role": "", "department": "", "depends_on": [], **extra}
+
+
+def test_plan_merge_marks_existing_cards(client: TestClient, monkeypatch) -> None:
+    """저장만 해도 기존 맵이 유지 카드로 되살아난다 — 지워도 되돌아오는 게 병합 규칙 (spec §2.3)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    saved = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS,
+                       json={"cards": [_card("신규")], "lock": False})
+    assert saved.status_code == 200, saved.text
+    plan = saved.json()["plan"]
+    assert [(c["name"], c["mode"], c["existing_code"]) for c in plan] == [
+        ("요청 접수", "keep", f"{code}-01"), ("신규", "new", None),
+    ]
+
+
+def _lock_keep_revise_new(client: TestClient) -> tuple[int, str, list[dict]]:
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수", "검토 승인"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS, json={
+        "cards": [
+            _card("요청 접수", existing_code=f"{code}-01", mode="keep"),
+            _card("검토 승인", existing_code=f"{code}-02", mode="revise"),
+            _card("통보"),
+        ],
+        "lock": True,
+    })
+    assert body.status_code == 200, body.text
+    return sid, code, body.json()["tasks"]
+
+
+def test_lock_creates_keep_task_as_drawn_and_revise_pending(client: TestClient, monkeypatch) -> None:
+    """유지 카드는 기존 행 그대로 drawn, 정정 카드는 설문부터 다시, 새 카드만 채번 (spec §2.4)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    sid, code, tasks = _lock_keep_revise_new(client)
+    assert [(t["task_id"], t["status"], t["mode"]) for t in tasks] == [
+        (f"{code}-01", "drawn", "keep"),
+        (f"{code}-02", "pending", "revise"),
+        (f"{code}-03", "pending", "new"),
+    ]
+    kept = client.get(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}", headers=HEADERS).json()
+    assert [a["label"] for a in kept["row"]["actions"]] == ["요청 확인", "완결성 판정", "접수 등록"]
+    assert all(i["severity"] != "error" for i in kept["issues"])
+    assert kept["drawn_at"]
+
+
+def test_revise_endpoint_reopens_keep_task(client: TestClient, monkeypatch) -> None:
+    """유지 카드를 정정으로 돌리면 설문부터 다시 — 새 카드에는 쓸 수 없다 (spec §2.6)."""
+    _enable(monkeypatch)
+    kicked: list[int] = []
+    monkeypatch.setattr(runner, "kick", lambda session_id: kicked.append(session_id))
+    sid, code, tasks = _lock_keep_revise_new(client)
+    r = client.post(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}/revise", headers=HEADERS)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "plan_locked"
+    assert (body["tasks"][0]["mode"], body["tasks"][0]["status"]) == ("revise", "pending")
+    assert [c["mode"] for c in body["plan"]] == ["revise", "revise", "new"]
+    assert kicked[-1] == sid
+    kept = client.get(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}", headers=HEADERS).json()
+    assert kept["row"] and kept["questionnaire"] is None  # 행은 미리보기용으로 남긴다
+    again = client.post(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}/revise", headers=HEADERS)
+    assert again.status_code == 409  # 이미 정정 중
+    assert client.post(f"/api/framework-interviews/{sid}/tasks/{tasks[2]['id']}/revise",
+                       headers=HEADERS).status_code == 409  # 새 카드는 정정 대상이 아니다

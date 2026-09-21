@@ -5,6 +5,16 @@ from pydantic import ValidationError
 
 from app.framework_interview import contracts as c
 
+EXISTING_ROW = {
+    "l6": "요청 접수", "ownerRole": "담당자", "department": "",
+    "fields": {"start_condition": "요청서 도착"},
+    "actions": [
+        {"seq": 1, "label": "요청 확인", "kind": "action", "name": "요청서 내용 확인", "rule": "양식 A"},
+        {"seq": 2, "label": "완결성 판정", "kind": "decision"},
+    ],
+    "relations": {"edges": [{"src": 1, "dst": 2, "kind": "branch", "condition": "완결"}]},
+}
+
 
 def test_plan_messages_include_catalogs_and_override() -> None:
     msgs = c.build_plan_messages(
@@ -17,6 +27,57 @@ def test_plan_messages_include_catalogs_and_override() -> None:
     assert system.startswith("OVERRIDE")
     assert "- 운전원" in system and "- 유틸리티팀" in system
     assert "기존 L6" in msgs[-1]["content"]
+
+
+def test_plan_messages_list_existing_maps() -> None:
+    """기존 L6 맵 블록 — 계획 AI가 유지 카드를 코드째로 되돌려주게 하는 재료 (spec 2026-09-22 §2.3)."""
+    msgs = c.build_plan_messages(
+        lang="ko", category_path="L5", brief="", existing_names=[],
+        existing_maps=[{"code": "x-01", "name": "접수", "summary": "s", "activities": ["a", "b"]}],
+    )
+    user = msgs[-1]["content"]
+    assert "[이미 있는 L6 맵]" in user
+    assert "- x-01 · 접수: s (활동: a → b)" in user
+    assert "existing_code" in msgs[0]["content"]
+
+    empty = c.build_plan_messages(lang="ko", category_path="L5", brief="", existing_names=[], existing_maps=[])
+    assert "[이미 있는 L6 맵]\n- (없음)" in empty[-1]["content"]
+
+
+def test_existing_row_block_feeds_questionnaire_and_row_messages() -> None:
+    """정정 태스크의 프롬프트에는 현재 등록된 내용이 붙는다 (spec 2026-09-22 §2.5)."""
+    q = c.build_questionnaire_messages(
+        lang="ko", category_path="L5", brief="", card={"name": "요청 접수"}, neighbors=[],
+        existing_row=EXISTING_ROW,
+    )
+    assert "[현재 등록된 내용]" in q[-1]["content"]
+    assert "1. 요청 확인 (action)" in q[-1]["content"]
+    assert "[현재 등록된 내용]" in q[0]["content"]  # 계약 문구도 이 블록을 안다
+
+    row = c.build_row_messages(
+        lang="ko", card={"name": "요청 접수"}, questionnaire={"questions": []}, answers={},
+        existing_row=EXISTING_ROW,
+    )
+    assert "[현재 등록된 내용]" in row[-1]["content"]
+    assert "1. 요청 확인 (action)" in row[-1]["content"]
+    assert "[현재 등록된 내용]" in row[0]["content"]
+
+    plain_q = c.build_questionnaire_messages(
+        lang="ko", category_path="L5", brief="", card={"name": "요청 접수"}, neighbors=[],
+    )
+    plain_row = c.build_row_messages(
+        lang="ko", card={"name": "요청 접수"}, questionnaire={"questions": []}, answers={},
+    )
+    assert "[현재 등록된 내용]" not in plain_q[-1]["content"]
+    assert "[현재 등록된 내용]" not in plain_row[-1]["content"]
+
+
+def test_render_existing_row_lists_actions_fields_and_edges() -> None:
+    text = c.render_existing_row(EXISTING_ROW)
+    assert "1. 요청 확인 (action) · 요청서 내용 확인 · 규칙: 양식 A" in text
+    assert "2. 완결성 판정 (decision)" in text
+    assert "- start_condition: 요청서 도착" in text
+    assert "- 1→2 branch 완결" in text
 
 
 def test_questionnaire_out_requires_activities_ordered() -> None:
