@@ -13,17 +13,21 @@ from app.auth import require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.framework_interview import runner
+from app.framework_interview.answers import fill_answers
 from app.framework_interview.assemble import (
-    allocate_task_ids, load_category_chain, load_existing_codes,
+    allocate_task_ids, assemble_document, load_category_chain, load_existing_codes,
 )
-from app.framework_interview.contracts import PlanOut, build_plan_messages, format_managed_catalog
+from app.framework_interview.contracts import (
+    PlanOut, RelationsOut, build_plan_messages, build_relations_messages, format_managed_catalog,
+)
 from app.interview.orchestrator import TurnError, _ask_json, sum_usage, usage_log  # noqa: PLC2701 -- 재사용
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
 from app.prompt_registry import get_prompt_overrides
 from app.schemas import (
-    FrameworkInterviewCreateIn, FrameworkInterviewOut, FrameworkInterviewPlanIn,
-    FrameworkInterviewProgressOut, FrameworkInterviewTaskOut,
+    FrameworkInterviewAnswersIn, FrameworkInterviewCreateIn, FrameworkInterviewOut, FrameworkInterviewPlanIn,
+    FrameworkInterviewProgressOut, FrameworkInterviewRelationsIn, FrameworkInterviewTaskDetailOut,
+    FrameworkInterviewTaskOut,
 )
 
 router = APIRouter(
@@ -242,4 +246,143 @@ async def save_plan(
     await db.refresh(row, ["tasks"])
     if payload.lock:
         runner.kick(row.id)
+    return await _out(db, row)
+
+
+async def _get_task(db: AsyncSession, session: FrameworkInterviewSession, task_id: int) -> FrameworkInterviewTask:
+    task = next((t for t in session.tasks if t.id == task_id), None)
+    if task is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    return task
+
+
+@router.get("/{session_id}/tasks/{task_pk}", response_model=FrameworkInterviewTaskDetailOut)
+async def get_task_detail(
+    session_id: int, task_pk: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewTaskDetailOut:
+    row = await _get_owned(db, session_id, user)
+    return FrameworkInterviewTaskDetailOut.model_validate(await _get_task(db, row, task_pk))
+
+
+@router.post("/{session_id}/tasks/{task_pk}/answers", response_model=FrameworkInterviewOut)
+async def submit_answers(
+    session_id: int, task_pk: int, payload: FrameworkInterviewAnswersIn,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    task = await _get_task(db, row, task_pk)
+    if task.status != "ready" or not task.questionnaire:
+        raise HTTPException(status_code=409, detail="questionnaire is not ready")
+    filled, missing = fill_answers(task.questionnaire, payload.answers)
+    if missing:
+        raise HTTPException(status_code=422, detail={"detail": "missing answers", "missing": missing})
+    task.answers = filled
+    task.status = "submitted"
+    task.error = None
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/tasks/{task_pk}/retry", response_model=FrameworkInterviewOut)
+async def retry_task(
+    session_id: int, task_pk: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    task = await _get_task(db, row, task_pk)
+    if task.status != "failed":
+        raise HTTPException(status_code=409, detail="task is not failed")
+    task.status = "submitted" if task.answers else "pending"
+    task.error = None
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/pause", response_model=FrameworkInterviewOut)
+async def pause_session(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    row.paused = True
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/resume", response_model=FrameworkInterviewOut)
+async def resume_session(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    row.paused = False
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
+def _assert_all_drawn(row: FrameworkInterviewSession) -> None:
+    if not row.tasks or any(t.status != "drawn" for t in row.tasks):
+        raise HTTPException(status_code=409, detail="all tasks must be drawn first")
+
+
+@router.post("/{session_id}/relations", response_model=FrameworkInterviewOut)
+async def generate_relations(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    await _require_ai_enabled(db)
+    row = await _get_owned(db, session_id, user)
+    _assert_all_drawn(row)
+    rows_by_task = {t.task_id: t.row or {} for t in row.tasks}
+    messages = build_relations_messages(
+        lang=row.lang, plan=row.plan or [], rows=rows_by_task, overrides=await get_prompt_overrides(db),
+    )
+    out = await _ask(messages, RelationsOut, db, user)
+    known = set(rows_by_task)
+    if out.entry.taskId not in known or any(e.src not in known or e.dst not in known for e in out.edges):
+        raise HTTPException(status_code=502, detail="AI relations reference unknown taskId")
+    row.relations = out.model_dump(by_alias=True, exclude_none=True)
+    row.status = "linking"
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.put("/{session_id}/relations", response_model=FrameworkInterviewOut)
+async def confirm_relations(
+    session_id: int, payload: FrameworkInterviewRelationsIn,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    _assert_all_drawn(row)
+    try:
+        relations = RelationsOut.model_validate(payload.relations)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid relations: {exc}") from exc
+    row.relations = relations.model_dump(by_alias=True, exclude_none=True)
+    await assemble_document(db, row)
+    row.status = "ready"
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.get("/{session_id}/document")
+async def get_document(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> dict:
+    row = await _get_owned(db, session_id, user)
+    if row.status not in ("ready", "applied") or not row.assembled:
+        raise HTTPException(status_code=409, detail="document is not assembled yet")
+    return row.assembled
+
+
+@router.post("/{session_id}/mark-applied", response_model=FrameworkInterviewOut)
+async def mark_applied(
+    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_owned(db, session_id, user)
+    if row.status != "ready":
+        raise HTTPException(status_code=409, detail="session is not ready")
+    row.status = "applied"
+    await db.commit()
     return await _out(db, row)

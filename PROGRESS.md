@@ -11,6 +11,7 @@
 - **구현(Task 1+3):** `FrameworkInterviewSession`/`FrameworkInterviewTask` ORM 2종 + 스키마 7종 + `app/framework_interview/contracts.py`(응답 스키마 10종·빌더 4종·프롬프트 계약 4종) 추가, `prompt_registry.PROMPT_KEYS` 9→13. 라우터·러너는 아직 없음(다음 태스크).
 - **구현(Task 2+4):** `app/framework_interview/answers.py`(`fill_answers` — 객관식 옵션id 검증·빈 주관식 제안값 자동채움) + `assemble.py`(`allocate_task_ids`·`load_category_chain`·`build_document`·`validate_row`·`assemble_document`) 추가. 조립 문서가 `scripts/consultant_interview.convert_interview` 어댑터를 이슈 0으로 통과함을 테스트로 고정.
 - **구현(Task 5, 라우터 A):** `app/routers/framework_interviews.py`(sysadmin+AI 게이트, 세션 생성/조회/목록/삭제, 첨부 병합, AI 계획 생성·저장/잠금 — 잠금 시 task_id 채번+`runner.kick` 호출) + `app/framework_interview/runner.py` 스텁(Task 6이 구현). 설문/답/관계/조립 엔드포인트(라우터 B)는 Task 7에서 이어붙인다.
+- **구현(Task 6+7):** `app/framework_interview/runner.py` — 세션당 루프 1개(`kick`→`process_session`), 스텝 우선순위는 제출 카드 드로잉 > 설문 prefetch(`ready` 2장 유지), `recover_stale_tasks`/`resume_live_sessions`를 `main.py` lifespan에 배선. `run_one_step`은 `settings.ai_enabled`/`is_ai_access_enabled` 꺼짐이면 즉시 `False`(테스트 기동 시 `resume_live_sessions`가 AI 콜을 트리거하지 않게 하는 안전장치, 브리프에 없던 추가 가드). 라우터 B — task 상세, 답 제출(`fill_answers` 검증, 422 시 `{missing:[...]}`), 재시도, 일시정지/재개, relations 생성(AI)·확정(검증+`assemble_document`), 문서 조회, mark-applied. `test_framework_interview_runner.py` 신규(4건) + `test_framework_interview_api.py`에 2건 추가, 전체 1523 passed·ruff clean.
 
 ## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
 

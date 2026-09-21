@@ -92,6 +92,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # 설정 화면 부여 sysadmin 캐시 로드 — 기동 시 1회 (설계 §3.1)
     async with SessionLocal() as session:
         await logic.load_granted_sysadmins(session)
+
+        from app.framework_interview import runner as fw_runner  # 지연 import — 순환 방지
+
+        if await fw_runner.recover_stale_tasks(session):
+            await session.commit()
+        await fw_runner.resume_live_sessions(session)
     hr_task: asyncio.Task | None = None
     if settings.hr_enabled and settings.hr_sync_interval_hours > 0:
         hr_task = asyncio.create_task(_run_hr_sync_loop())

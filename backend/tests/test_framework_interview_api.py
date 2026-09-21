@@ -163,3 +163,78 @@ def test_plan_generation_failure_records_single_usage_event(client: TestClient, 
     assert events[0].kind is None
     assert events[0].ok is False
     assert events[0].map_id == 0
+
+
+from tests.test_framework_interview_runner import Q_JSON, ROW_JSON, _step  # noqa: E402
+
+RELATIONS_TMPL = '{"entry":{"taskId":"%s","triggerType":"manual","label":"시작"},"edges":[{"src":"%s","dst":"%s","kind":"seq"}]}'
+
+
+def test_answers_validation_and_full_flow_to_document(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    cards = [{"name": n, "summary": "", "owner_role": "", "department": "", "depends_on": []} for n in ["A", "B"]]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()
+    t1, t2 = body["tasks"]
+
+    early = client.post(f"/api/framework-interviews/{sid}/tasks/{t1['id']}/answers", json={"answers": {}}, headers=HEADERS)
+    assert early.status_code == 409  # questionnaire not ready yet
+
+    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON,
+                                 RELATIONS_TMPL % (t1["task_id"], t1["task_id"], t2["task_id"])])
+    _step(sid)
+    _step(sid)
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
+    assert detail["status"] == "ready" and len(detail["questionnaire"]["questions"]) == 6
+
+    missing = client.post(f"/api/framework-interviews/{sid}/tasks/{t1['id']}/answers",
+                          json={"answers": {"q1": ["a1"], "q3": ["s1"]}}, headers=HEADERS)
+    assert missing.status_code == 422 and missing.json()["detail"]["missing"] == ["q2"]
+
+    full = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "요청서", "q6": ""}
+    for tid in (t1["id"], t2["id"]):
+        r = client.post(f"/api/framework-interviews/{sid}/tasks/{tid}/answers", json={"answers": full}, headers=HEADERS)
+        assert r.status_code == 200, r.text
+    too_early = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS)
+    assert too_early.status_code == 409
+    _step(sid)
+    _step(sid)
+    state = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()
+    assert state["progress"] == {"total": 2, "drawn": 2, "failed": 0, "working": False}
+
+    linked = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).json()
+    assert linked["status"] == "linking" and linked["relations"]["entry"]["taskId"] == t1["task_id"]
+
+    confirmed = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS,
+                           json={"relations": linked["relations"]})
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()["status"] == "ready"
+
+    doc = client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).json()
+    assert doc["schema_version"] == "0.5-bpm-interface-draft"
+    assert [r["taskId"] for r in doc["rows"]] == [t1["task_id"], t2["task_id"]]
+    assert doc["l5"]["nodeCode"] == state["category_code"]
+
+    dry = client.post("/api/categories/import-interview", headers=HEADERS,
+                      json={"files": [{"name": "ai.json", "content": doc}], "apply": False})
+    assert dry.status_code == 200, dry.text
+    assert dry.json()["files"][0]["ok"] is True
+
+    applied = client.post(f"/api/framework-interviews/{sid}/mark-applied", headers=HEADERS)
+    assert applied.json()["status"] == "applied"
+
+
+def test_pause_resume_roundtrip(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    kicked: list[int] = []
+    monkeypatch.setattr(runner, "kick", lambda session_id: kicked.append(session_id))
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS,
+               json={"cards": [{"name": "A", "summary": "", "owner_role": "", "department": "", "depends_on": []}], "lock": True})
+    assert kicked == [sid]
+    assert client.post(f"/api/framework-interviews/{sid}/pause", headers=HEADERS).json()["paused"] is True
+    assert client.post(f"/api/framework-interviews/{sid}/resume", headers=HEADERS).json()["paused"] is False
+    assert kicked == [sid, sid]
