@@ -52,32 +52,40 @@ export function FrameworkSearchGroups({ hits, renderRow, recentAtById, onOpenCat
                 type="button"
                 data-id={`framework-search-group-open-${g.categoryId}`}
                 title={g.path.join(" › ")}
-                className="group flex w-full items-center gap-1.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-accent-tint/40"
+                className="group flex w-full flex-col gap-0.5 rounded-sm border border-hairline bg-surface-alt px-2.5 py-1.5 text-left transition-colors duration-150 hover:border-accent-tint-border hover:bg-accent-tint/40"
                 onClick={() => onOpenCategory(g.categoryId!)}
               >
-                <LevelPill level={Math.min(g.path.length, 5)} size="sm" />
-                <span className="flex min-w-0 flex-1 items-center gap-0.5 truncate text-fine">
-                  {ancestors.map((name, i) => (
-                    <span key={`${i}-${name}`} className="inline-flex min-w-0 items-center gap-0.5 text-ink-tertiary">
-                      {i > 0 && <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />}
-                      <span className="truncate">{name}</span>
+                {/* 1단 — L5 이름(검색 대상)을 먼저, 한 줄 말줄임에 밀리지 않게 (사용자 지시 2026-09-21) */}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <LevelPill level={Math.min(g.path.length, 5)} size="sm" />
+                  <span className="min-w-0 flex-1 truncate text-caption-strong text-ink">{last}</span>
+                  {g.canvas && (
+                    <span
+                      data-id={`framework-search-canvas-${g.canvas.id}`}
+                      title={g.canvas.name}
+                      className={`inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-[3px] text-[11px] font-semibold leading-none ${tone?.pill ?? "bg-ink/5 text-ink-tertiary"}`}
+                    >
+                      <Workflow size={11} strokeWidth={1.7} />
+                      {canvasStatus ? VERSION_STATUS_LABEL_EN[canvasStatus] : t("home.l5Canvas")}
                     </span>
-                  ))}
-                  {ancestors.length > 0 && <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />}
-                  <span className="truncate font-semibold text-ink">{last}</span>
+                  )}
+                  {g.rows.length > 0 && <span className="shrink-0 text-fine text-ink-muted">{g.rows.length}</span>}
+                  <CornerDownRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
                 </span>
-                {g.canvas && (
+                {/* 2단 — 상위 경로 브레드크럼, 말줄임 대신 최대 2줄 줄바꿈 */}
+                {ancestors.length > 0 && (
                   <span
-                    data-id={`framework-search-canvas-${g.canvas.id}`}
-                    title={g.canvas.name}
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-[3px] text-[11px] font-semibold leading-none ${tone?.pill ?? "bg-ink/5 text-ink-tertiary"}`}
+                    data-id="framework-search-group-path"
+                    className="line-clamp-2 break-words pl-0.5 text-fine leading-snug text-ink-tertiary"
                   >
-                    <Workflow size={11} strokeWidth={1.7} />
-                    {canvasStatus ? VERSION_STATUS_LABEL_EN[canvasStatus] : t("home.l5Canvas")}
+                    {ancestors.map((name, i) => (
+                      <span key={`${i}-${name}`}>
+                        {i > 0 && <ChevronRight size={11} strokeWidth={1.5} className="mx-0.5 inline align-[-1px] text-ink-muted" />}
+                        {name}
+                      </span>
+                    ))}
                   </span>
                 )}
-                {g.rows.length > 0 && <span className="shrink-0 text-fine text-ink-muted">{g.rows.length}</span>}
-                <CornerDownRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
             )}
             {g.rows.length > 0 && (
