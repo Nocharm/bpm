@@ -6,8 +6,9 @@
 import { ChevronRight, CornerDownRight, Network, Workflow } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { MapSummary } from "@/lib/api";
+import type { CategoryLite, MapSummary } from "@/lib/api";
 import { groupHitsByCategory } from "@/lib/framework-search-groups";
+import { Highlight } from "@/components/highlight";
 import { useI18n } from "@/lib/i18n";
 import type { MatchRange } from "@/lib/search";
 import { VERSION_STATUS_LABEL_EN, VERSION_STATUS_TONE } from "@/lib/version-status";
@@ -18,21 +19,82 @@ interface Hit {
   matches: { field: string; ranges: MatchRange[] }[];
 }
 
+interface CategoryHit {
+  item: CategoryLite;
+  matches: { field: string; ranges: MatchRange[] }[];
+}
+
 interface FrameworkSearchGroupsProps {
   hits: Hit[];
+  // 카테고리 이름 히트(L1~L5) — 맵 그룹 위 "Categories" 섹션, 클릭=그 카테고리로 드릴다운 이동 (2026-09-21)
+  categoryHits?: CategoryHit[];
+  categoriesById?: CategoryLite[] | null;
   renderRow: (map: MapSummary, nameRanges: MatchRange[], recentAt: number | undefined) => ReactNode;
   recentAtById: Map<number, number>;
-  // 그룹 헤더·캔버스 칩 클릭 — 그 L5를 선택하고 드릴다운을 거기로 옮긴다(page.tsx revealCategory)
+  // 그룹 헤더·캔버스 칩·카테고리 행 클릭 — 그 카테고리를 선택하고 드릴다운을 거기로 옮긴다(page.tsx revealCategory)
   onOpenCategory: (categoryId: number) => void;
   // 증분 렌더 센티널(page.tsx useInfiniteSlice) — 마지막 그룹 아래
   sentinel?: ReactNode;
 }
 
-export function FrameworkSearchGroups({ hits, renderRow, recentAtById, onOpenCategory, sentinel }: FrameworkSearchGroupsProps) {
+export function FrameworkSearchGroups({
+  hits,
+  categoryHits = [],
+  categoriesById = null,
+  renderRow,
+  recentAtById,
+  onOpenCategory,
+  sentinel,
+}: FrameworkSearchGroupsProps) {
   const { t } = useI18n();
   const groups = groupHitsByCategory(hits);
+  // 조상 이름 경로(루트→부모) — 카테고리 행의 2단
+  const liteById = new Map((categoriesById ?? []).map((c) => [c.id, c]));
+  const ancestorNames = (c: CategoryLite): string[] => {
+    const out: string[] = [];
+    let cur = c.parent_id === null ? undefined : liteById.get(c.parent_id);
+    while (cur) {
+      out.unshift(cur.name);
+      cur = cur.parent_id === null ? undefined : liteById.get(cur.parent_id);
+    }
+    return out;
+  };
   return (
     <ul data-id="framework-search-groups" className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto pr-1">
+      {categoryHits.length > 0 && (
+        <li data-id="framework-search-categories" className="flex flex-col gap-1">
+          <span className="px-0.5 text-[10px] font-semibold tracking-wide text-ink-muted">{t("framework.search.categories")}</span>
+          <ul className="flex flex-col divide-y divide-divider rounded-sm border border-hairline bg-surface">
+            {categoryHits.map(({ item: c, matches }) => {
+              const ancestors = ancestorNames(c);
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    data-id={`framework-search-category-${c.id}`}
+                    className="group flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors duration-150 hover:bg-surface-pearl"
+                    onClick={() => onOpenCategory(c.id)}
+                  >
+                    <LevelPill level={c.level} size="sm" />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-caption text-ink">
+                        <Highlight text={c.name} ranges={matches.find((m) => m.field === "name")?.ranges ?? []} />
+                      </span>
+                      {ancestors.length > 0 && (
+                        <span className="truncate text-fine text-ink-tertiary" title={ancestors.join(" › ")}>
+                          {ancestors.join(" › ")}
+                        </span>
+                      )}
+                    </span>
+                    {c.level < 5 && <span className="shrink-0 text-fine text-ink-muted">{t("category.summary.l5Count", { n: c.l5_count })}</span>}
+                    <CornerDownRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </li>
+      )}
       {groups.map((g) => {
         const canvasStatus = g.canvas?.latest_version_status ?? null;
         const tone = canvasStatus ? VERSION_STATUS_TONE[canvasStatus] : null;

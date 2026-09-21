@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, ChevronDown, FileUp, FilterX, Globe, Layers, Lock, Plus } from "lucide-react";
 
-import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type CategoryNode, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
+import { deleteMap, getDirectory, getMe, listAllCategories, listMaps, openLinkageMap, setWordDoc, type CategoryLite, type CategoryNode, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { type CsvImportOutcome } from "@/lib/csv-import";
 import { pickFilterDisplayMode, type FilterDisplayMode } from "@/lib/filter-display";
@@ -524,6 +524,32 @@ export default function MapListPage() {
       }
     : null;
 
+  // 업무 체계 뷰 검색 — 카테고리 이름(L1~L5)도 히트에 넣는다(종전엔 맵·캔버스만, 사용자 지시 2026-09-21). 전 카테고리는
+  // 업무 체계 뷰에서 처음 검색할 때 한 번 받아 캐시(탐색 모달과 같은 /categories/all, 2,300행 ≈ 100KB)
+  const [allCategories, setAllCategories] = useState<CategoryLite[] | null>(null);
+  const wantCategories = homeView === "framework" && mapQuery.trim() !== "";
+  useEffect(() => {
+    if (!wantCategories || allCategories !== null) return;
+    let active = true;
+    void listAllCategories()
+      .then((rows) => {
+        if (active) setAllCategories(rows);
+      })
+      .catch(() => {
+        if (active) setAllCategories([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [wantCategories, allCategories]);
+  const categoryHits = useMemo(
+    () =>
+      wantCategories && allCategories
+        ? filterByQuery(allCategories, mapQuery, (c) => [{ field: "name", text: c.name }]).slice(0, 40)
+        : [],
+    [wantCategories, allCategories, mapQuery],
+  );
+
   // 검색 필터 — 빈 쿼리면 전체 통과 / search filter; empty query returns all.
   const mapHits = useMemo(
     () =>
@@ -1012,8 +1038,8 @@ export default function MapListPage() {
                   <HomeFilterPills {...measureProps} row="main" display="label" />
                 </div>
               </div>
-              {isSearching && mapHits.length === 0 ? (
-                /* 검색 결과 없음(두 뷰 공용) */
+              {isSearching && mapHits.length === 0 && categoryHits.length === 0 ? (
+                /* 검색 결과 없음(두 뷰 공용) — 업무 체계 뷰는 카테고리 히트까지 없을 때 */
                 <div className="flex flex-1 items-center justify-center rounded-sm border border-hairline bg-surface p-4 text-caption text-ink-tertiary">
                   {t("home.empty")}
                 </div>
@@ -1021,6 +1047,8 @@ export default function MapListPage() {
                 /* 업무 체계 뷰 검색 — L5 카테고리별 그룹(헤더 클릭=드릴다운 이동), 캔버스 히트는 헤더 칩 (2026-09-21) */
                 <FrameworkSearchGroups
                   hits={shownSearchHits}
+                  categoryHits={categoryHits}
+                  categoriesById={allCategories}
                   renderRow={renderCardInner}
                   recentAtById={atById}
                   onOpenCategory={revealCategory}

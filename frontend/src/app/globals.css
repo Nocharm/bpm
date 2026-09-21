@@ -752,10 +752,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     background-position: 130% 0;
     opacity: 0;
   }
-  15% {
+  25% {
     opacity: 1;
   }
-  85% {
+  75% {
     opacity: 1;
   }
   100% {
@@ -770,13 +770,19 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   border-radius: inherit;
   padding: 1.5px;
   pointer-events: none;
-  background: linear-gradient(110deg, transparent 38%, var(--color-accent) 50%, transparent 62%);
+  /* 은은하게 — 넓은 띠(30→70%)·액센트 70%·2.6초(사용자 피드백 2026-09-21: 1.2초 진한 띠는 너무 빨리 지나감) */
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    color-mix(in srgb, var(--color-accent) 70%, transparent) 50%,
+    transparent 70%
+  );
   background-size: 260% 100%;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  animation: strip-shimmer 1200ms var(--ease-smooth) 150ms 1 both;
+  animation: strip-shimmer 2600ms ease-in-out 200ms 1 both;
 }
 @media (prefers-reduced-motion: reduce) {
   .strip-shimmer::after {
