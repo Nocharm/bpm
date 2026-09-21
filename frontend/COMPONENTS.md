@@ -120,7 +120,7 @@
 | `scope-preview.tsx` | `ScopePreview` | 비활성(조상) 창의 정적 프리뷰 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/map-preview.tsx`, `components/node-summary-modal.tsx`, `components/subprocess-preview-peek.tsx` |
 | `scope-window.tsx` | `ScopeWindow` | 떠있는 스코프 창 | `app/maps/[mapId]/page.tsx` |
 | `search-box.tsx` | `SearchBox` | 공용 검색창 | `app/inbox/page.tsx`, `app/manual/page.tsx`, `app/notices/page.tsx`, `app/page.tsx` |
-| `search-select.tsx` | `SearchSelect` | 검색 드롭다운 | `components/bpm-attribute-picker.tsx`, `components/dashboard/access-sidebar.tsx`, `components/group-bulk-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/permissions/attribute-tiles.tsx`, `lib/korean-dept.ts` |
+| `search-select.tsx` | `SearchSelect` | 검색 드롭다운 | `components/admin/framework-panel.tsx`, `components/bpm-attribute-picker.tsx`, `components/dashboard/access-sidebar.tsx`, `components/group-bulk-modal.tsx`, `components/maps/framework-assign-modal.tsx`, `components/maps/slot-delete-dialog.tsx`, `components/permissions/attribute-tiles.tsx`, `lib/korean-dept.ts` |
 | `section-header.tsx` | `SectionHeader` | 섹션 헤더 | `components/maps/category-summary-card.tsx`, `components/maps/map-detail-description.tsx`, `components/maps/map-detail-sp-section.tsx`, `components/maps/map-notes-section.tsx` |
 | `section-overlay.tsx` | `SectionOverlay` | 섹션 덮개 | `app/maps/[mapId]/page.tsx`, `components/admin/import-report/interview-import-report.tsx`, `components/nav-pending-scope.tsx` |
 | `section-panel.tsx` | `SectionPanel` | 섹션 피커 패널 | `app/maps/[mapId]/page.tsx` |
@@ -201,7 +201,7 @@
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
 | `answer-review.tsx` | `AnswerReview` | 캠페인 설문 확인 화면 | `components/framework-interview/questionnaire-form.tsx` |
-| `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx` |
+| `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `plan-editor.tsx` | `PlanEditor` | 캠페인 ① L5 개요 + L6 카드 편집 | `app/framework/consult/[sessionId]/page.tsx` |
 | `questionnaire-form.tsx` | `QuestionnaireForm`, `AnswerStep` | 캠페인 ② L6 설문 단계 | `app/framework/consult/[sessionId]/page.tsx` |
 | `register-step.tsx` | `RegisterStep` | 캠페인 ④ 등록 | `app/framework/consult/[sessionId]/page.tsx` |

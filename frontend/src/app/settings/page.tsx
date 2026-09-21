@@ -133,7 +133,13 @@ const CATEGORIES: Category[] = [
 export default function SettingsPage() {
   const { t } = useI18n();
   const user = useSyncExternalStore(subscribeCurrentUser, getCurrentUser, () => null);
-  const [activeTab, setActiveTab] = useState<TabId | null>(null);
+  // Framework 관리자 패널 딥링크(?tab=framework) — 캠페인 페이지 "관리로 돌아가기"류 진입점용.
+  // 화이트리스트 값만 허용, 그 외는 기존처럼 첫 가용 탭 폴백에 맡긴다.
+  const [activeTab, setActiveTab] = useState<TabId | null>(() => {
+    if (typeof window === "undefined") return null;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab === "framework" ? "framework" : null;
+  });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   // 좌측 nav 승인 큐 배지 건수 — sysadmin만. 큐 탭을 열면 ApprovalQueue가 onCountChange로 갱신.
   const [queueCount, setQueueCount] = useState<number | null>(null);
