@@ -3,7 +3,9 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
-## 2026-09-21 — AI 컨설턴트 L5 캠페인 설계 (feat/ai-consultant-l5, 코드 없음)
+## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5)
+
+- **설문 UX(사용자 피드백):** 문항을 2열 그리드(xl, 활동 순서 문항은 전폭)로, 주관식은 기본 "제안값 그대로" 표시 + [Write my own] 버튼으로만 입력창을 연다(입력 안 하는 흐름이 기본, [Use the suggestion]으로 되돌림).
 
 - **배경:** AI 컨설턴트는 맵 하나에 묶여 있고(`InterviewSession.map_id`), 여러 맵을 한 번에 만드는 경로는 sysadmin 전용 인터뷰 JSON 임포트뿐. L5 하나 아래 L6 n개를 AI로 만들어 업무 체계에 등록하려면 "여러 맵을 계획·반복·조립하는 위층"이 없다.
 - **결정:** 관리자 탭 진입(임포트 옆) · L6는 채팅 대신 AI 생성 객관식 설문지(전부 답해야 제출, 빈 주관식은 제안값 자동) · 하나씩 제출·되돌리기 없음·제출 즉시 백그라운드 드로잉+다음 설문 prefetch · 등록은 임포트와 동일(게시 직행, 캔버스 draft) · 외부 AI용 0.5 JSON 프롬프트 복사 버튼. 설계: `docs/superpowers/specs/2026-09-21-ai-consultant-l5-campaign-design.md`.

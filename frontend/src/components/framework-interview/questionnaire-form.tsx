@@ -1,10 +1,10 @@
 "use client";
 
-// 캠페인 ② L6 설문 단계 — 문항 렌더(객관식 위주·제안 선택됨·주관식 플레이스홀더=제안)·제안 일괄 채우기·
+// 캠페인 ② L6 설문 단계 — 문항 렌더(2열 그리드·객관식 위주·제안 선택됨·주관식은 버튼으로 열어 입력)·제안 일괄 채우기·
 // 확인 화면 전환·제출. 제출 후 카드는 잠기고 백그라운드 드로잉으로 넘어간다 (spec 2026-09-21 §2·§4).
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, PenLine, Sparkles } from "lucide-react";
 
 import { getApiErrorDetail, getFrameworkInterviewTask, type FwAnswerValue, type FwInterviewSession, type FwInterviewTask, type FwQuestionnaire } from "@/lib/api";
 import { buildSubmitPayload, fillSuggested, validateAnswers } from "@/lib/framework-interview";
@@ -24,23 +24,60 @@ interface QuestionnaireFormProps {
 
 export function QuestionnaireForm({ questionnaire, answers, missing, onChange }: QuestionnaireFormProps) {
   const { t } = useI18n();
+  // 주관식은 기본이 "제안값 그대로" — 직접 쓰고 싶을 때만 버튼으로 입력창을 연다(입력 안 해도 되는 흐름이 기본, 사용자 결정 2026-09-21).
+  const [openText, setOpenText] = useState<Set<string>>(() => new Set());
   return (
-    <ol className="flex flex-col gap-3" data-id="fw-consult-questions">
+    <ol className="grid grid-cols-1 gap-3 xl:grid-cols-2" data-id="fw-consult-questions">
       {questionnaire.questions.map((q, idx) => {
         const value = answers[q.id];
         const isMissing = missing.includes(q.id);
         const list = Array.isArray(value) ? value : [];
+        const textValue = typeof value === "string" ? value : "";
+        const textOpen = q.kind === "text" && (openText.has(q.id) || textValue !== "");
+        // 활동 순서 문항은 길어서 2열에서도 전폭
+        const span = q.kind === "ordered" ? " xl:col-span-2" : "";
         return (
-          <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 ${isMissing ? "border-error" : "border-hairline"} bg-surface-pearl`}>
+          <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 ${isMissing ? "border-error" : "border-hairline"} bg-surface-pearl${span}`}>
             <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{idx + 1}. </span>{q.text}</p>
-            {q.kind === "text" && (
-              <textarea
-                data-id={`fw-consult-answer-${q.id}`}
-                className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-                value={typeof value === "string" ? value : ""}
-                placeholder={t("fwConsult.textPlaceholder", { suggested: typeof q.suggested === "string" ? q.suggested : "" })}
-                onChange={(e) => onChange(q.id, e.target.value)}
-              />
+            {q.kind === "text" && !textOpen && (
+              <div className="flex items-start gap-2">
+                <p className="min-w-0 flex-1 text-caption text-ink-secondary" data-id={`fw-consult-suggested-${q.id}`}>
+                  <span className="mr-1 rounded-full border border-hairline px-1.5 py-[1px] text-[11px] leading-none text-ink-tertiary">{t("fwConsult.suggestedLabel")}</span>
+                  {typeof q.suggested === "string" ? q.suggested : ""}
+                </p>
+                <button
+                  type="button"
+                  data-id={`fw-consult-write-own-${q.id}`}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => setOpenText((prev) => new Set(prev).add(q.id))}
+                >
+                  <PenLine size={14} strokeWidth={1.5} />
+                  {t("fwConsult.writeOwn")}
+                </button>
+              </div>
+            )}
+            {q.kind === "text" && textOpen && (
+              <div className="flex flex-col gap-1.5">
+                <textarea
+                  data-id={`fw-consult-answer-${q.id}`}
+                  autoFocus
+                  className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
+                  value={textValue}
+                  placeholder={t("fwConsult.textPlaceholder", { suggested: typeof q.suggested === "string" ? q.suggested : "" })}
+                  onChange={(e) => onChange(q.id, e.target.value)}
+                />
+                <button
+                  type="button"
+                  data-id={`fw-consult-use-suggestion-${q.id}`}
+                  className="self-start rounded-sm px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+                  onClick={() => {
+                    onChange(q.id, "");
+                    setOpenText((prev) => { const next = new Set(prev); next.delete(q.id); return next; });
+                  }}
+                >
+                  {t("fwConsult.useSuggestion")}
+                </button>
+              </div>
             )}
             {q.kind === "single" && (
               <div className="flex flex-wrap gap-2">
