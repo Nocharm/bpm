@@ -202,7 +202,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: CategoryNode } | null>(null);
   // 브레드크럼 단계 메뉴(다이어그램 헤더) — 그 단계의 형제 목록(같은 부모의 자식, L1은 루트 목록), 현재 단계 강조.
   // 고르면 재중심(포커스 이동). 부모 자식 목록이 캐시에 없으면 열 때 받아온다 (사용자 지시 2026-09-21)
-  const [crumbMenu, setCrumbMenu] = useState<{ x: number; y: number; parentKey: ParentKey; currentId: number } | null>(null);
+  const [crumbMenu, setCrumbMenu] = useState<{ x: number; y: number; parentKey: ParentKey; currentId: number; index: number } | null>(null);
   const [infoNode, setInfoNode] = useState<CategoryNode | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const diagramRef = useRef<HTMLDivElement>(null);
@@ -316,8 +316,23 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutIds]);
 
-  const recenter = (node: CategoryNode) => {
+  // 새 중심의 상위 체인을 현재 화면 관계에서 미리 산출 — 상위(접두)·중심 자신·자식·손자. 재중심 직후 chainCache에
+  // 넣어 두면 브레드크럼이 [중심]만 그렸다가 체인 응답 뒤 앞 단계가 끼어드는 "통째 갱신"이 사라진다(2026-09-21)
+  const chainFor = (node: CategoryNode): CategoryNode[] | null => {
+    if (!effectiveCenter) return null;
+    const anc = chainCache.get(effectiveCenter.id) ?? [];
+    const idx = anc.findIndex((a) => a.id === node.id);
+    if (idx >= 0) return anc.slice(0, idx);
+    if (node.id === effectiveCenter.id) return anc;
+    const kids = childrenCache.get(effectiveCenter.id) ?? [];
+    if (kids.some((k) => k.id === node.id)) return [...anc, effectiveCenter];
+    const parent = kids.find((k) => (childrenCache.get(k.id) ?? []).some((g) => g.id === node.id));
+    return parent ? [...anc, effectiveCenter, parent] : null;
+  };
+  const recenter = (node: CategoryNode, knownChain?: CategoryNode[] | null) => {
     if (node.level === 5) return;
+    const chain = knownChain ?? chainFor(node);
+    if (chain && !chainCache.has(node.id)) setChainCache((prev) => new Map(prev).set(node.id, chain));
     setFull(false);
     setView({ x: 0, y: 0, k: 1 });
     setCenter(node);
@@ -391,7 +406,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
   const openCrumbMenu = (e: ReactMouseEvent<HTMLButtonElement>, index: number) => {
     const parentKey: ParentKey = index === 0 ? ROOT : crumbNodes[index - 1].id;
     const rect = e.currentTarget.getBoundingClientRect();
-    setCrumbMenu({ x: rect.left, y: rect.bottom + 4, parentKey, currentId: crumbNodes[index].id });
+    setCrumbMenu({ x: rect.left, y: rect.bottom + 4, parentKey, currentId: crumbNodes[index].id, index });
     if (typeof parentKey === "number" && siblingsOf(parentKey) === undefined) {
       const parentId = parentKey;
       void listCategoryNodes(parentId)
@@ -678,15 +693,17 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
               )}
             </label>
             {mode === "diagram" && crumbNodes.length > 0 && (
+              // 우측 정렬 — 깊어질수록 앞 단계가 왼쪽으로 밀리고, 넘치면 왼쪽 끝이 페이드로 잘린다. 단계는 id 키라 바뀐 것만
+              // fw-crumb-in으로 등장한다(재중심 시 상위 체인은 chainFor로 미리 캐시)
               <nav
                 data-id="framework-explorer-crumb"
                 aria-label="center path"
-                className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden text-fine text-ink-tertiary"
+                className="flex min-w-0 flex-1 items-center justify-end gap-0.5 overflow-hidden text-fine text-ink-tertiary [mask-image:linear-gradient(to_right,transparent,black_24px)]"
               >
                 {crumbNodes.map((node, i) => {
                   const isLast = i === crumbNodes.length - 1;
                   return (
-                    <span key={node.id} className="flex min-w-0 items-center gap-0.5">
+                    <span key={node.id} className="fw-crumb-in flex min-w-0 shrink-0 items-center gap-0.5">
                       {i > 0 && <ChevronRight size={11} strokeWidth={1.5} className="shrink-0 text-ink-muted" />}
                       <button
                         type="button"
@@ -900,7 +917,8 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
             icon: <LevelPill level={s.level} size="sm" />,
             onSelect: () => {
               setCrumbMenu(null);
-              if (s.level < 5) recenter(s);
+              // 형제의 상위 체인 = 그 단계 앞의 크럼 — 앞 단계는 그대로 두고 바뀐 단계만 교체된다
+              if (s.level < 5) recenter(s, crumbNodes.slice(0, crumbMenu.index));
               else setInfoNode(s);
             },
           }))}

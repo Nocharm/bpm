@@ -722,10 +722,25 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 .fw-fade-in {
   animation: fw-fade-in 350ms var(--ease-smooth);
 }
+/* 탐색 모달 브레드크럼 단계 — 새로 마운트된 단계만 오른쪽에서 살짝 밀려 들어온다(id 키, 2026-09-21) */
+@keyframes fw-crumb-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fw-crumb-in {
+  animation: fw-crumb-in 280ms var(--ease-smooth);
+}
 @media (prefers-reduced-motion: reduce) {
   .fw-slide-in,
   .fw-slide-back,
-  .fw-fade-in {
+  .fw-fade-in,
+  .fw-crumb-in {
     animation: none;
   }
 }
