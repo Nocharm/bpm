@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
@@ -231,7 +232,9 @@ async def generate_plan(
         lang=row.lang, category_path=" > ".join(c["name"] for c in chain),
         brief=build_context_text(row.brief, row.attachments),
         existing_names=list(existing.all()), role_catalog=role_catalog,
-        existing_maps=[{k: e[k] for k in ("code", "name", "summary", "activities")} for e in row.existing or []],
+        existing_maps=[
+            {k: e.get(k, "") for k in ("code", "name", "summary", "activities")} for e in row.existing or []
+        ],
         overrides=await get_prompt_overrides(db),
     )
     plan = await _ask(messages, PlanOut, db, user, normalizer=normalize_plan)
@@ -278,8 +281,9 @@ async def save_plan(
     if payload.lock:
         if not cards:
             raise HTTPException(status_code=422, detail="plan needs at least one card")
-        names = [c["name"] for c in cards]
-        if len(set(names)) != len(names):
+        # 기존 맵끼리는 이름이 같아도 코드로 구분된다 — 새 카드가 낀 충돌만 막는다
+        clashing = {name for name, count in Counter(c["name"] for c in cards).items() if count > 1}
+        if any(c["name"] in clashing and c["mode"] == "new" for c in cards):
             raise HTTPException(status_code=422, detail="duplicate card names")
         await _create_locked_tasks(db, row, cards)
         row.status = "plan_locked"
@@ -377,6 +381,25 @@ async def skip_task(
     return await _out(db, row)
 
 
+def _switch_to_revise(row: FrameworkInterviewSession, task: FrameworkInterviewTask) -> None:
+    """유지 카드를 정정으로 — 설문·답은 비우고 행·이슈는 남긴다(정정 설문이 오기 전 미리보기용).
+
+    세션이 등록/연결 단계였다면 되돌린다 — 그 카드가 다시 그려진 뒤 다시 이어야 한다(relations 편집분은 유지).
+    """
+    task.mode = "revise"
+    task.status = "pending"
+    task.questionnaire = None
+    task.answers = None
+    task.error = None
+    row.plan = [
+        {**card, "mode": "revise"} if card.get("existing_code") == task.task_id else card
+        for card in row.plan or []
+    ]
+    if row.status in ("ready", "linking"):
+        row.status = "plan_locked"
+        row.assembled = None
+
+
 @router.post("/{session_id}/tasks/{task_pk}/reopen", response_model=FrameworkInterviewOut)
 async def reopen_task(
     session_id: int, task_pk: int,
@@ -387,6 +410,12 @@ async def reopen_task(
     task = await _get_task(db, row, task_pk)
     if row.status == "applied":
         raise HTTPException(status_code=409, detail="session is already applied")
+    if task.mode == "keep":
+        # 유지 카드는 되돌릴 설문·답이 없다 — 다시 열기는 곧 정정 전환이고, 행을 비우면 복구할 길이 없다
+        _switch_to_revise(row, task)
+        await db.commit()
+        runner.kick(row.id)
+        return await _out(db, row)
     if task.status != "drawn":
         raise HTTPException(status_code=409, detail="only drawn tasks can be reopened")
     task.status = "ready" if task.questionnaire else "pending"
@@ -415,20 +444,7 @@ async def revise_task(
         raise HTTPException(status_code=409, detail="session is already applied")
     if task.mode != "keep" or task.status != "drawn":
         raise HTTPException(status_code=409, detail="only kept existing tasks can be revised")
-    task.mode = "revise"
-    task.status = "pending"
-    task.questionnaire = None
-    task.answers = None
-    task.error = None
-    # row는 남긴다 — 정정 설문이 도착하기 전에도 현재 내용을 미리보기로 보여준다
-    row.plan = [
-        {**card, "mode": "revise"} if card.get("existing_code") == task.task_id else card
-        for card in row.plan or []
-    ]
-    if row.status in ("ready", "linking"):
-        # 연결·조립은 그 카드가 다시 그려진 뒤 다시 해야 한다(relations 편집분은 유지)
-        row.status = "plan_locked"
-        row.assembled = None
+    _switch_to_revise(row, task)
     await db.commit()
     runner.kick(row.id)
     return await _out(db, row)

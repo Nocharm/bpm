@@ -384,6 +384,29 @@ def test_plan_merge_marks_existing_cards(client: TestClient, monkeypatch) -> Non
     ]
 
 
+def test_generated_plan_merges_existing_map(client: TestClient, monkeypatch) -> None:
+    """계획 제안도 병합을 거친다 — 프롬프트에 기존 맵을 실어 주고 이름이 겹치면 유지 카드로 (spec §2.3)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    seen: list[list[dict]] = []
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        seen.append(messages)
+        return ai_client.AiReply(content=PLAN_JSON, prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    planned = client.post(f"/api/framework-interviews/{sid}/plan", headers=HEADERS)
+    assert planned.status_code == 200, planned.text
+    user_message = seen[0][-1]["content"]
+    assert "[이미 있는 L6 맵]" in user_message
+    assert f"- {code}-01 · 요청 접수" in user_message
+    assert [(c["name"], c["mode"], c["existing_code"]) for c in planned.json()["plan"]] == [
+        ("요청 접수", "keep", f"{code}-01"), ("검토 승인", "new", None),
+    ]
+
+
 def _lock_keep_revise_new(client: TestClient) -> tuple[int, str, list[dict]]:
     l5_id, code = _make_l5_with_existing(client, ["요청 접수", "검토 승인"])
     sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
@@ -434,3 +457,37 @@ def test_revise_endpoint_reopens_keep_task(client: TestClient, monkeypatch) -> N
     assert again.status_code == 409  # 이미 정정 중
     assert client.post(f"/api/framework-interviews/{sid}/tasks/{tasks[2]['id']}/revise",
                        headers=HEADERS).status_code == 409  # 새 카드는 정정 대상이 아니다
+
+
+def test_reopen_on_keep_task_switches_to_revise(client: TestClient, monkeypatch) -> None:
+    """유지 카드 다시 열기 = 정정 전환 — 되돌릴 설문이 없어 행까지 비우면 복구할 길이 없다."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    sid, code, tasks = _lock_keep_revise_new(client)
+    r = client.post(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}/reopen", headers=HEADERS)
+    assert r.status_code == 200, r.text
+    out = r.json()["tasks"][0]
+    assert (out["mode"], out["status"]) == ("revise", "pending")
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{tasks[0]['id']}", headers=HEADERS).json()
+    assert detail["row"] is not None and detail["issues"] == tasks[0]["issues"]
+    assert [c["mode"] for c in r.json()["plan"]] == ["revise", "revise", "new"]
+
+
+def test_lock_allows_duplicate_names_between_existing_maps(client: TestClient, monkeypatch) -> None:
+    """이름이 같은 기존 맵 둘은 코드로 구분되니 잠금을 막지 않는다. 새 카드가 낀 충돌만 422."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수", "요청 접수"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    locked = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS,
+                        json={"cards": [], "lock": True})
+    assert locked.status_code == 200, locked.text
+    assert [(t["task_id"], t["mode"]) for t in locked.json()["tasks"]] == [
+        (f"{code}-01", "keep"), (f"{code}-02", "keep"),
+    ]
+
+    other = _make_l5(client, f"fwd-{uuid4().hex[:6]}")
+    other_sid = client.post("/api/framework-interviews", json={"category_id": other}, headers=HEADERS).json()["id"]
+    clash = client.put(f"/api/framework-interviews/{other_sid}/plan", headers=HEADERS,
+                       json={"cards": [_card("통보"), _card("통보")], "lock": True})
+    assert clash.status_code == 422

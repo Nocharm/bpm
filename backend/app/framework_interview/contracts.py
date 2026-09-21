@@ -142,7 +142,7 @@ L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주�
 그 아래에 등록할 L6 단위 업무(각각 하나의 프로세스 맵) 목록을 제안하세요.
 
 규칙
-- 3개 이상 12개 이하. 이미 등록된 L6 이름과 겹치지 않게.
+- 3개 이상 12개 이하. 이 세션에서 이미 만든 카드와 이름이 겹치지 않게.
 - [이미 있는 L6 맵]에 있는 맵은 각각 카드 하나로 이름을 그대로 두고 existing_code에 그 코드를 적는다.
 - 새 카드는 빈 영역만 채우고 기존 맵과 이름이나 역할이 겹치는 카드는 만들지 않는다.
 - name: 동사형 업무명 20자 이내. summary: 한 문장. owner_role: 역할 후보 목록의 표기 우선.
@@ -236,6 +236,11 @@ def render_existing_row(row: dict) -> str:
             line += f" · {action['name']}"
         if action.get("rule"):
             line += f" · 규칙: {action['rule']}"
+        for key, label in (("input", "입력"), ("output", "출력"), ("system", "시스템")):
+            if action.get(key):
+                line += f" · {label}: {action[key]}"
+        if action.get("variant") == "exception":  # 역변환이 내는 유일한 variant 값
+            line += " · 예외"
         lines.append(line)
     for key, value in (row.get("fields") or {}).items():
         lines.append(f"- {key}: {value}")
@@ -251,7 +256,7 @@ def _existing_row_block(existing_row: dict | None) -> str:
 
 def build_plan_messages(
     *, lang: str, category_path: str, brief: str, existing_names: list[str],
-    existing_maps: list[dict] = [],  # noqa: B006 -- 읽기 전용 기본값
+    existing_maps: list[dict] | None = None,
     role_catalog: str = "", dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
@@ -263,7 +268,7 @@ def build_plan_messages(
     maps = "\n".join(
         f"- {m.get('code')} · {m.get('name')}: {m.get('summary', '')}"
         f" (활동: {' → '.join(m.get('activities') or [])})"
-        for m in existing_maps
+        for m in existing_maps or []
     ) or "- (없음)"
     user = (
         f"[L5 경로]\n{category_path}\n\n[설명·범위·첨부 요약]\n{brief or '(없음)'}\n\n"
