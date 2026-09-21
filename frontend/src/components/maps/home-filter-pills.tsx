@@ -42,6 +42,8 @@ export interface HomeFilterPillsProps {
   display: FilterDisplayMode;
   // true: dataId 미부여(중복 셀렉터 방지) — 측정 복제용 / true when rendered as an offscreen measurement clone.
   measureOnly?: boolean;
+  // 라이브 줄은 균등 분할로 채운다(측정 복제는 자연폭)
+  stretch?: boolean;
   row: "primary" | "secondary";
   visFilter: VisibilityFilter;
   onSetVis: (v: VisibilityFilter) => void;
@@ -63,7 +65,7 @@ export interface HomeFilterPillsProps {
 
 export function HomeFilterPills(props: HomeFilterPillsProps) {
   const { t } = useI18n();
-  const { display, measureOnly, row } = props;
+  const { display, measureOnly, row, stretch } = props;
   const dataId = (id: string) => (measureOnly ? undefined : id);
   const optIcon = (Icon: typeof Crown) => <Icon size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />;
 
@@ -75,6 +77,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
           dataId={dataId("home-owning-filter")}
           icon={<Building2 size={14} strokeWidth={1.5} />}
           display={display}
+          stretch={stretch}
           options={[
             { value: "missing", label: t("home.owningMissingOption"), icon: optIcon(TriangleAlert) },
             { value: "stale_refs", label: t("home.staleRefsOption"), icon: optIcon(TriangleAlert) },
@@ -87,6 +90,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
           dataId={dataId("home-sp-filter")}
           icon={<Workflow size={14} strokeWidth={1.5} />}
           display={display}
+          stretch={stretch}
           options={[
             { value: "sp", label: t("home.spOption"), icon: optIcon(Workflow) },
             { value: "non_sp", label: t("home.spNonOption"), icon: optIcon(CircleSlash2) },
@@ -99,6 +103,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
           dataId={dataId("home-canvas-filter")}
           icon={<Workflow size={14} strokeWidth={1.5} />}
           display={display}
+          stretch={stretch}
           options={[
             { value: "canvas", label: t("home.canvasOption"), icon: optIcon(Workflow) },
             { value: "non_canvas", label: t("home.canvasNonOption"), icon: optIcon(EyeOff) },
@@ -111,6 +116,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
           dataId={dataId("home-registered-filter")}
           icon={<Network size={14} strokeWidth={1.5} />}
           display={display}
+          stretch={stretch}
           options={[
             { value: "registered", label: t("home.registeredOption"), icon: optIcon(Network) },
             { value: "unregistered", label: t("home.unregisteredOption"), icon: optIcon(CircleSlash2) },
@@ -130,6 +136,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         dataId={dataId("home-visibility-filter")}
         icon={<Globe size={14} strokeWidth={1.5} />}
         display={display}
+          stretch={stretch}
         options={[
           { value: "public", label: t("perm.visibilityPublic"), icon: optIcon(Globe) },
           { value: "private", label: t("perm.visibilityPrivate"), icon: optIcon(Lock) },
@@ -142,6 +149,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         dataId={dataId("home-status-filter")}
         icon={<CircleDot size={14} strokeWidth={1.5} />}
         display={display}
+          stretch={stretch}
         options={STATUS_ORDER.map((s) => ({
           value: s,
           label: t(VERSION_STATUS_LABEL[s]),
@@ -159,6 +167,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         dataId={dataId("home-role-filter")}
         icon={<ShieldCheck size={14} strokeWidth={1.5} />}
         display={display}
+          stretch={stretch}
         options={[
           { value: "owner", label: t("perm.roleOwner"), icon: optIcon(Crown) },
           { value: "editor", label: t("perm.roleEditor"), icon: optIcon(PencilLine) },
@@ -173,6 +182,7 @@ export function HomeFilterPills(props: HomeFilterPillsProps) {
         dataId={dataId("home-sort-filter")}
         icon={<ArrowDownUp size={14} strokeWidth={1.5} />}
         display={display}
+          stretch={stretch}
         options={MAP_SORT_KEYS.map((k) => ({ value: k, label: t(SORT_LABEL[k]) }))}
         selected={new Set([props.sortKey])}
         onToggle={(v) => {

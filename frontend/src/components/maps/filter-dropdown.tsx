@@ -23,6 +23,7 @@ export function FilterDropdown({
   onToggle,
   dataId,
   display = "full",
+  stretch = false,
 }: {
   label: string;
   // 버튼 선행 아이콘 / button leading icon.
@@ -33,6 +34,8 @@ export function FilterDropdown({
   dataId?: string;
   // 버튼 표시 단계 — full(아이콘+라벨) / label(라벨만) / icon(아이콘만, title로 라벨 보완). 기본 full(기존 동작 유지).
   display?: FilterDisplayMode;
+  // 행을 균등 분할해 채운다(홈 필터 줄 우측 공백 제거, 2026-09-21). 측정 복제는 자연폭이라 미지정
+  stretch?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -49,13 +52,15 @@ export function FilterDropdown({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative shrink-0">
+    <div ref={rootRef} className={stretch ? "relative min-w-0 flex-1" : "relative shrink-0"}>
       <button
         type="button"
         data-id={dataId}
         aria-expanded={open}
         title={label}
         className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2.5 py-1 text-caption transition-colors ${
+          stretch ? "w-full justify-center" : ""
+        } ${
           count > 0
             ? "border-accent-tint-border bg-accent-tint text-accent"
             : "border-hairline text-ink-tertiary hover:bg-surface-alt hover:text-ink"

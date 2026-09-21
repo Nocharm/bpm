@@ -11,6 +11,7 @@
 - **2 캔버스 설정:** Details=이름 읽기전용(L5 이름을 따름)+연결 카테고리·관리 부서 블록(오우닝 부서 블록·GMP 필드 카드 제거), Visibility=읽기전용+사유, 협업자 탭→읽기전용 "Who can edit"(`framework-access-panel.tsx`: 경로·관리 부서·체인 관리자, L5 직속=확정 표시, (i)안), 승인자·버전·SP 숨김 유지, **결재 대기 탭에 `can_confirm`·`can_decide_slot` 실값 연결(false 하드코딩 버그)**, Danger에 분리 안내.
 - **3 필터:** 2줄 — 1줄 공개 범위(세그먼트→다른 필과 같은 단추, 단일)·상태·권한·**정렬**(최근 수정/이름/최근 생성, `lib/map-sort.ts`, 조직도·나의 부서·검색·요약 카드 소속 맵 공통), 2줄(부서 뷰 전용) 이슈·SP·L5 캔버스(만/제외)·업무 체계 등록/미등록. Clear는 정렬 제외 하나라도 있으면. 반응형 단계는 두 줄 복제 중 넓은 쪽 기준. 조직도·나의 부서는 캔버스를 일반 맵 아래 점선 "L5 canvases" 스페이서 뒤에 나열(`splitMapsByMode.frameworkMaps`).
 - **4 FW 뷰 검색:** `framework-search-groups.tsx` — 히트를 L5 경로별 그룹(헤더=경로+캔버스 확정/초안 칩+수, 클릭=검색 해제+드릴다운 이동 `revealCategory`), 미등록은 점선 그룹 맨 뒤(`lib/framework-search-groups.ts`).
+- **후속(같은 날):** 필터 줄은 필을 균등 분할(`FilterDropdown stretch`)로 채우고 해제는 FilterX 아이콘 버튼으로 2줄 우측 끝(업무 체계 뷰는 1줄 우측). 목록 `load_my_roles`가 캔버스에도 체인 관리자 파생(editor/viewer)을 적용해 목록=상세 역할 불일치 해소(캔버스 있을 때만 `get_admin_scope`+역조회 각 1회).
 - **6 L6 스트립:** 요약 카드에서 맵을 열면 좌측 맨 아래 `selected-map-strip.tsx`(이름·상태·"L5 …에서 열었음", 떠 있는 카드 톤), L5 카드는 선택 유지. ×·"L5로 돌아가기"·브라우저 뒤로가기(popstate) 모두 직전 L5 선택으로 복귀(`mapOrigin` ref 미러). 부수 픽스: `FrameworkDrill` revealRequest가 마운트와 동시에 오면 StrictMode 이중 실행의 첫 실행에서 "처리됨"으로 남아 건너뛰던 문제 — 처리 표시를 완료 시점으로.
 
 ## 2026-09-21 — 업무 체계 탐색 패널·드릴다운 UX 6종 (dev)

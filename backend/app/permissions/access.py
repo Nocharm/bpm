@@ -265,11 +265,28 @@ async def load_my_roles(
     """맵 목록에 대한 map_id→유효 역할 일괄 판정 — 접근 불가(None) 맵은 키 자체를 뺀다.
 
     권한 행·승인자·그룹을 각 1회만 로드해 메모리에서 logic.effective_role을 돌린다(N+1 회피).
-    홈 목록(list_maps)과 개인 대시보드가 공유하는 경로라 단건 get_effective_role과 달리
-    framework 캔버스의 카테고리 체인 파생은 적용하지 않는다(홈 목록 종전 동작 유지).
+    framework 캔버스는 단건 get_effective_role과 같은 규칙(map_permissions 무시, 결착 카테고리
+    체인 관리자=editor, 그 외 public이면 viewer) — 관리자 집합·캔버스→카테고리 역조회를 각 1회만
+    로드한다(종전엔 파생을 건너뛰어 목록=viewer·상세=editor 불일치, 2026-09-21).
     """
     if logic.is_sysadmin(login_id):
         return {m.id: "owner" for m in maps}  # sysadmin → 전 맵 owner (effective_role parity)
+
+    canvas_ids = [m.id for m in maps if m.mode == "framework"]
+    admin_category_ids: set[int] = set()
+    category_by_canvas: dict[int, int] = {}
+    if canvas_ids:
+        admin_category_ids, _seeds = await get_admin_scope(session, login_id)
+        category_by_canvas = {
+            map_id: cat_id
+            for cat_id, map_id in (
+                await session.execute(
+                    select(ProcessCategory.id, ProcessCategory.linkage_map_id).where(
+                        ProcessCategory.linkage_map_id.in_(canvas_ids)
+                    )
+                )
+            ).all()
+        }
 
     emp = await session.get(Employee, login_id)
     emp_org_path = (
@@ -300,6 +317,13 @@ async def load_my_roles(
 
     roles: dict[int, str] = {}
     for m in maps:
+        if m.mode == "framework":
+            cat_id = category_by_canvas.get(m.id)
+            if cat_id is not None and cat_id in admin_category_ids:
+                roles[m.id] = "editor"
+            elif m.visibility == "public":
+                roles[m.id] = "viewer"
+            continue
         role = logic.effective_role(
             login_id,
             False,  # sysadmin은 위에서 조기 반환

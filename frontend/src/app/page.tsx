@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, ChevronDown, FileUp, Plus } from "lucide-react";
+import { BookOpen, ChevronDown, FileUp, FilterX, Plus } from "lucide-react";
 
 import { deleteMap, getDirectory, getMe, listMaps, openLinkageMap, setWordDoc, type CategoryNode, type Directory, type MapDetail, type MapSummary, type Me } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
@@ -831,6 +831,29 @@ export default function MapListPage() {
     onToggleRegistered: noop,
   };
 
+  // 필터 해제 — 아이콘 버튼, 부서 뷰는 2줄 우측 끝·업무 체계 뷰(1줄뿐)는 1줄 우측 끝. 정렬은 남긴다
+  const clearButton = hasActiveFilter ? (
+    <button
+      ref={clearBtnRef}
+      type="button"
+      data-id="home-filter-clear"
+      title={t("home.filterClear")}
+      aria-label={t("home.filterClear")}
+      className="ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm border border-accent-tint-border bg-accent-tint text-accent hover:bg-accent-focus hover:text-on-accent"
+      onClick={() => {
+        setStatusFilter(new Set());
+        setPermFilter(new Set());
+        setVisFilter("all");
+        setOwningFilter(new Set());
+        setSpFilter(new Set());
+        setCanvasFilter(new Set());
+        setRegisteredFilter(new Set());
+      }}
+    >
+      <FilterX size={14} strokeWidth={1.5} />
+    </button>
+  ) : null;
+
   const renderCard = (processMap: MapSummary) =>
     renderCardInner(processMap, [], atById.get(processMap.id));
 
@@ -972,7 +995,7 @@ export default function MapListPage() {
                 onAnimationEnd={() => setFilterFlash(false)}
                 className={`relative flex min-w-0 items-center gap-1.5 ${filterFlash ? "animate-filter-flash" : ""}`}
               >
-                <HomeFilterPills {...pillProps} row="primary" display={filterMode} />
+                <HomeFilterPills {...pillProps} row="primary" display={filterMode} stretch />
                 {/* 측정 복제 — 보이지 않게 자연폭만 잰다(absolute라 레이아웃 불참여, dataId 없음) */}
                 <div ref={measureFullRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
                   <HomeFilterPills {...measureProps} row="primary" display="full" />
@@ -980,35 +1003,18 @@ export default function MapListPage() {
                 <div ref={measureLabelRef} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
                   <HomeFilterPills {...measureProps} row="primary" display="label" />
                 </div>
-                {hasActiveFilter && (
-                  <button
-                    ref={clearBtnRef}
-                    type="button"
-                    data-id="home-filter-clear"
-                    className="ml-auto text-fine text-accent hover:underline"
-                    onClick={() => {
-                      setStatusFilter(new Set());
-                      setPermFilter(new Set());
-                      setVisFilter("all");
-                      setOwningFilter(new Set());
-                      setSpFilter(new Set());
-                      setCanvasFilter(new Set());
-                      setRegisteredFilter(new Set());
-                    }}
-                  >
-                    {t("home.filterClear")}
-                  </button>
-                )}
+                {homeView !== "departments" && clearButton}
               </div>
               {homeView === "departments" && (
                 <div data-id="home-filter-row-2" className="relative flex min-w-0 items-center gap-1.5">
-                  <HomeFilterPills {...pillProps} row="secondary" display={filterMode} />
+                  <HomeFilterPills {...pillProps} row="secondary" display={filterMode} stretch />
                   <div ref={measureFullRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
                     <HomeFilterPills {...measureProps} row="secondary" display="full" />
                   </div>
                   <div ref={measureLabelRef2} aria-hidden className="pointer-events-none invisible absolute left-0 top-0 flex items-center gap-1.5">
                     <HomeFilterPills {...measureProps} row="secondary" display="label" />
                   </div>
+                  {clearButton}
                 </div>
               )}
               {isSearching && mapHits.length === 0 ? (

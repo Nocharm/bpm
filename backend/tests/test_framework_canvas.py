@@ -160,6 +160,11 @@ def test_framework_role_derivation(client: TestClient, enforce: None) -> None:
     assert ancestor == "editor"
     assert pleb == "viewer"
     assert sysadmin == "owner"
+    # 목록(load_my_roles)도 같은 파생 — 종전엔 체인 파생을 건너뛰어 목록=viewer·상세=editor 불일치 (2026-09-21)
+    for login, expected in (("fwc.direct", "editor"), ("fwc.ancestor", "editor"), ("fwc.pleb", "viewer")):
+        act_as(login)
+        listed = next(m for m in client.get("/api/maps").json() if m["id"] == canvas_id)
+        assert listed["my_role"] == expected, (login, listed["my_role"])
 
 
 def test_resolve_category_admin_ancestor_match(client: TestClient, enforce: None) -> None:
