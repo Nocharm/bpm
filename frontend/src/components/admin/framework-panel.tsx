@@ -580,7 +580,8 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {renderInlineAdmins(node.id)}
             {/* 우측 숫자 묶음을 하나의 ml-auto 그룹으로 — CountTag의 ml-auto와 나뉘면 열이 행마다 어긋난다 */}
             <span className="ml-auto flex shrink-0 items-center gap-2">
-              {node.level < 5 && (
+              {/* L5 개수는 L4 행에만 — 상위 롤업은 소음(사용자 지시 2026-09-22) */}
+              {node.level === 4 && (
                 <span className="text-fine text-ink-muted">{t("category.summary.l5Count", { n: node.l5_count })}</span>
               )}
               {/* 접힌 행에만 — 펼치면 하위 행이 다 보여 롤업 숫자가 중복(count-tag.tsx 계약) */}

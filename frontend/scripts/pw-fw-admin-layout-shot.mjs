@@ -33,6 +33,19 @@ await page.keyboard.press("Escape");
 const panelGone = (await page.locator('[data-id="fw-consult-picker-panel"]').count()) === 0;
 console.log(`${panelGone ? "PASS" : "FAIL"} Escape closes the dropdown`);
 
+// 검색으로 L5 하나를 골라 드롭다운이 닫힌 뒤의 섹션 모습(요약 카드에 선택)을 찍는다
+const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
+const all = await (await fetch(`${BACKEND}/api/categories/all`, { headers: { "X-Dev-User": ADMIN } })).json();
+const l5 = all.find((c) => c.level === 5);
+if (l5) {
+  await page.locator('[data-id="fw-consult-picker-search"]').fill(l5.name);
+  await page.locator(`[data-id="fw-consult-picker-result-${l5.id}"]`).click();
+  await page.locator('[data-id="fw-consult-pick-name"]', { hasText: l5.name }).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: "../docs/qa/screens/framework-admin-consult-open.png" });
+  console.log("PASS consult open with an L5 picked (dropdown closed)");
+}
+
 await page.locator('[data-id="admin-section-toggle-import"]').click();
 await page.locator('[data-id="interview-import-pick"]').waitFor();
 await page.waitForTimeout(400);

@@ -215,7 +215,7 @@ export function FrameworkCascadePicker({
             >
               {node.name}
             </span>
-            {node.level < 5 && (
+            {node.level === 4 && (
               <span className="ml-auto shrink-0 text-fine text-ink-muted">{t("category.summary.l5Count", { n: node.l5_count })}</span>
             )}
             {canPick && (
