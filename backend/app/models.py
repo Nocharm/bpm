@@ -1074,6 +1074,8 @@ class FrameworkInterviewSession(Base):
     relations: Mapped[dict | None] = mapped_column(JSON, default=None)  # 최상위 relations
     assembled: Mapped[dict | None] = mapped_column(JSON, default=None)  # 마지막 조립 0.5 문서
     label: Mapped[str] = mapped_column(String(100), default="")
+    # 첨부 문서 [{name, chars, text}] — brief(사용자 텍스트)와 분리해 개별 삭제 가능(잘못 올린 파일 누적 방지, 2026-09-21)
+    attachments: Mapped[list | None] = mapped_column(JSON, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now
@@ -1106,6 +1108,8 @@ class FrameworkInterviewTask(Base):
     row: Mapped[dict | None] = mapped_column(JSON, default=None)
     issues: Mapped[list] = mapped_column(JSON, default=list)  # AdapterIssue dicts
     error: Mapped[str | None] = mapped_column(Text, default=None)
+    # 실패 카드를 플레이스홀더 행(활동 1개)으로 건너뛴 표시 — 등록 후 사람이 채운다 (2026-09-21)
+    placeholder: Mapped[bool] = mapped_column(Boolean, default=False)
     drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

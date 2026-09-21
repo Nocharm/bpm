@@ -111,7 +111,7 @@ def test_submitted_task_is_drawn_before_prefetch(client: TestClient, monkeypatch
 def test_invalid_row_marks_failed_and_retry_requeues(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     sid = _make_locked_session(client, ["A"])
-    _fake_ai_queue(monkeypatch, [Q_JSON, "not json", "still not json"])
+    _fake_ai_queue(monkeypatch, [Q_JSON, "not json", "still not json", "and again not json"])
     _step(sid)
     first = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
     client.post(f"/api/framework-interviews/{sid}/tasks/{first['id']}/answers",
@@ -204,7 +204,7 @@ def test_process_session_recovers_wedged_task_on_unexpected_error(client: TestCl
 def test_questionnaire_turn_error_marks_failed(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     sid = _make_locked_session(client, ["A"])
-    queue = _fake_ai_queue(monkeypatch, ["not json", "still not json"])
+    queue = _fake_ai_queue(monkeypatch, ["not json", "still not json", "and again not json"])
     assert _step(sid) is True
     assert _statuses(sid) == ["failed"]
     detail = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
@@ -231,5 +231,5 @@ def test_questionnaire_failure_terminates_loop_without_spin(client: TestClient, 
     runner._wake.discard(sid)
     asyncio.run(runner.process_session(sid))
     assert _statuses(sid) == ["failed"]
-    assert calls == 2  # _ask_json 1콜 + 재시도 1콜, 그 뒤로는 다시 집지 않는다
+    assert calls == 3  # ask_schema 최대 3회(오류 되먹임 재시도), 그 뒤로는 다시 집지 않는다
     assert sid not in runner._active

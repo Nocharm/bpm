@@ -5,6 +5,8 @@
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
+- **실모델 피드백 반영(dev):** "AI returned invalid response" 빈발 → `framework_interview/normalize.py`(kind·maps_to 동의어, 라벨 suggested, 문자열 actions, 이름 참조 엣지 등 흡수) + `ai.py` `ask_schema`(최대 3회, pydantic 오류 요약을 되먹여 재요청, 실패 사유를 `task.error`에). 실패 카드는 **플레이스홀더로 건너뛰기**(`POST .../tasks/{id}/skip`, 활동 1개 행·`placeholder` 컬럼)로 세션을 이어간다. 첨부는 brief에 병합하지 않고 `attachments` JSON 목록(개별 삭제 `DELETE .../attachments/{i}`)으로 분리해 잘못 올린 파일이 누적되지 않게. 계획 화면 2단(좌 brief+첨부 | 우 카드), 보드 최소폭 380·진행 헤더 줄바꿈. 신규 컬럼 2개는 `_ADDED_COLUMNS` 등록.
+
 - **목적:** AI 컨설턴트가 맵 하나에 묶여 있어(`InterviewSession.map_id`) L5 하나 아래 L6 n개를 한 번에 만들 수 없었다. 산출물을 인터뷰 JSON 0.5로 잡고 기존 `POST /api/categories/import-interview`로 등록하는 "위층 세션"을 추가했다(설계 `docs/superpowers/specs/2026-09-21-ai-consultant-l5-campaign-design.md`, 플랜 `docs/superpowers/plans/…`, main 머지 시 삭제).
 - **결과:** BE `framework_interview_sessions/_tasks` + `app/framework_interview/`(계약 4종·답 검증·조립·러너) + `routers/framework_interviews.py`(sysadmin 전용) · FE `/framework/consult/[sessionId]` 페이지(좌 카드 보드+진행률/ETA/일시정지/재시도, 우 계획→설문→연결→등록)·관리자 Framework 탭 진입/이어하기·외부 AI용 0.5 JSON 프롬프트 복사 · `pw-fw-consult.mjs` 스모크(가짜 AI, 10/10) · 관리자 매뉴얼 절 · CLAUDE.md "0.5 계약 3표면" 규칙. 게이트 backend 1530·ruff, frontend tsc·lint·vitest 1033·catalog.
 - **주요 결정(사용자):** 진입은 관리자 탭 · L6는 채팅 대신 AI 생성 객관식 설문(2열 그리드, 주관식은 [Write my own] 버튼으로만 열고 빈칸=제안값 자동) · 하나씩 제출·되돌리기 없음·제출 즉시 백그라운드 드로잉+다음 설문 prefetch · 등록은 임포트와 동일(게시 직행, 캔버스 draft). 리뷰로 잡은 것: 설문 실패는 `failed`로 종료(무한 루프 방지)·폴링이 미저장 입력을 지우던 이펙트 의존성(내용 해시 key 리마운트)·lost-kick/wedge 복구·brief 실제 입력·정지 안내·sysadmin 전체 접근·휴지통 코드 예약. 러너는 단일 uvicorn 워커 전제(Dockerfile 주석).

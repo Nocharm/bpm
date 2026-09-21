@@ -15,9 +15,9 @@ const Q: FwQuestionnaire = {
 
 function session(statuses: string[], status: FwSessionStatus = "plan_locked", paused = false): FwInterviewSession {
   return {
-    id: 1, category_id: 9, category_code: "c", category_name: "L5", status, paused, lang: "ko", brief: "",
+    id: 1, category_id: 9, category_code: "c", category_name: "L5", status, paused, lang: "ko", brief: "", attachments: [],
     plan: null, relations: null, label: "", created_at: "", updated_at: "",
-    tasks: statuses.map((s, i) => ({ id: i + 1, task_id: `c-0${i + 1}`, seq: i + 1, name: `T${i + 1}`, status: s as never, issues: [], error: null, drawn_at: null })),
+    tasks: statuses.map((s, i) => ({ id: i + 1, task_id: `c-0${i + 1}`, seq: i + 1, name: `T${i + 1}`, status: s as never, issues: [], error: null, placeholder: false, drawn_at: null })),
     progress: { total: statuses.length, drawn: statuses.filter((s) => s === "drawn").length, failed: 0, working: statuses.some((s) => s === "drawing" || s === "generating") },
   };
 }

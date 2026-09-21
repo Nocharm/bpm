@@ -11,8 +11,9 @@ import { ArrowLeft, Headset } from "lucide-react";
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
   getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
-  resumeFrameworkInterview, retryFrameworkTask, saveFrameworkPlan, submitFrameworkAnswers,
-  uploadFrameworkInterviewAttachment, type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
+  deleteFrameworkAttachment, resumeFrameworkInterview, retryFrameworkTask, saveFrameworkPlan, skipFrameworkTask,
+  submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
+  type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
 import { deriveStep, findCurrentTask, hasBackgroundWork } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
@@ -25,8 +26,8 @@ import { RelationsStep } from "@/components/framework-interview/relations-step";
 import { TaskBoard } from "@/components/framework-interview/task-board";
 
 const BOARD_WIDTH_KEY = "bpm.fwConsultBoardWidth";
-const BOARD_MIN = 280;
-const BOARD_MAX = 560;
+const BOARD_MIN = 380;  // 진행 헤더(진행률·ETA·일시정지)가 한/영 모두 한 줄에 들어가는 하한
+const BOARD_MAX = 640;
 const POLL_MS = 2000;
 const STALLED_TICKS = 5;  // 폴링 5틱(≈10초) 동안 할 일은 있는데 아무도 안 움직이면 러너가 멎은 것으로 본다
 
@@ -37,7 +38,7 @@ function buildStatusSignature(session: FwInterviewSession): string {
 function readBoardWidth(): number {
   if (typeof window === "undefined") return 360;
   const stored = Number(window.localStorage.getItem(BOARD_WIDTH_KEY));
-  return Number.isFinite(stored) && stored >= BOARD_MIN && stored <= BOARD_MAX ? stored : 360;
+  return Number.isFinite(stored) && stored >= BOARD_MIN && stored <= BOARD_MAX ? stored : 420;
 }
 
 export default function FrameworkConsultPage() {
@@ -169,6 +170,7 @@ export default function FrameworkConsultPage() {
             onPause={() => void run(() => pauseFrameworkInterview(session.id))}
             onResume={() => void run(() => resumeFrameworkInterview(session.id))}
             onRetry={(taskPk) => void run(() => retryFrameworkTask(session.id, taskPk))}
+            onSkip={(taskPk) => void run(() => skipFrameworkTask(session.id, taskPk))}
             onPreview={setPreviewTaskId}
             stalled={stalledTicks >= STALLED_TICKS && !session.paused}
             onNudge={() => {
@@ -185,12 +187,13 @@ export default function FrameworkConsultPage() {
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface" data-id="fw-consult-step">
           {step === "plan" && (
             <PlanEditor
-              // brief도 key에 넣는다 — 첨부 병합으로 서버 brief가 바뀌면 다시 초기화해야
-              // 편집기의 옛 brief가 저장될 때 병합분을 덮어쓰지 않는다.
-              key={JSON.stringify([session.brief, session.plan ?? []])}
+              // 첨부는 이제 brief와 분리된 목록(props로 그대로 표시)이라 plan 내용만 key로 삼는다 —
+              // 첨부 업로드/삭제가 편집 중인 brief·카드를 지우지 않는다.
+              key={JSON.stringify(session.plan ?? [])}
               session={session}
               busy={busy}
               onAttach={(file) => void run(() => uploadFrameworkInterviewAttachment(session.id, file))}
+              onRemoveAttachment={(index) => void run(() => deleteFrameworkAttachment(session.id, index))}
               onGenerate={(cards: FwPlanCard[], brief: string) => void run(async () => {
                 await saveFrameworkPlan(session.id, cards, false, brief);  // 화면의 brief로 제안받는다
                 return generateFrameworkPlan(session.id);

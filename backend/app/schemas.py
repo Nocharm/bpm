@@ -2760,6 +2760,7 @@ class FrameworkInterviewTaskOut(BaseModel):
     status: str
     issues: list[InterviewIssueOut] = []
     error: str | None = None
+    placeholder: bool = False
     drawn_at: datetime | None = None
 
 
@@ -2767,6 +2768,13 @@ class FrameworkInterviewTaskDetailOut(FrameworkInterviewTaskOut):
     questionnaire: dict | None = None
     answers: dict | None = None
     row: dict | None = None
+
+
+class FrameworkAttachmentOut(BaseModel):
+    """첨부 요약 — 본문(text)은 폴링 페이로드에서 뺀다."""
+
+    name: str
+    chars: int
 
 
 class FrameworkInterviewProgressOut(BaseModel):
@@ -2785,6 +2793,7 @@ class FrameworkInterviewOut(BaseModel):
     paused: bool
     lang: str
     brief: str
+    attachments: list[FrameworkAttachmentOut] = []
     plan: list | None
     relations: dict | None
     label: str

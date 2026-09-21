@@ -37,7 +37,7 @@ class Question(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     kind: QuestionKind
     maps_to: MapsTo
-    text: str = Field(min_length=1, max_length=400)
+    text: str = Field(min_length=1, max_length=600)
     options: list[QuestionOption] = []
     suggested: list[str] | str = []
 
@@ -58,7 +58,7 @@ class Question(BaseModel):
 
 
 class QuestionnaireOut(BaseModel):
-    questions: list[Question] = Field(min_length=6, max_length=12)
+    questions: list[Question] = Field(min_length=3, max_length=15)  # 실모델 편차 흡수(요청은 6~12)
 
     @model_validator(mode="after")
     def _check_activities(self) -> "QuestionnaireOut":
@@ -180,6 +180,18 @@ L5_RELATIONS_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 
 
 # ── 빌더 ──
+
+CONTEXT_MAX_CHARS = 40_000  # brief + 첨부 합산 프롬프트 예산(문자)
+
+
+def build_context_text(brief: str, attachments: list[dict] | None) -> str:
+    """사용자 brief + 첨부 파싱 텍스트를 프롬프트용 한 덩어리로. 첨부는 이름 머리말을 붙여 출처를 남긴다."""
+    parts = [brief.strip()] if brief and brief.strip() else []
+    for item in attachments or []:
+        text = str(item.get("text") or "").strip()
+        if text:
+            parts.append(f"[첨부 {item.get('name', '')}]\n{text}")
+    return "\n\n".join(parts)[:CONTEXT_MAX_CHARS]
 
 
 def format_managed_catalog(entries: list[dict[str, object]], limit: int = 120) -> str:

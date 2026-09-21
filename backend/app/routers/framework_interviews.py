@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from pydantic import BaseModel
@@ -13,14 +15,17 @@ from app.auth import require_sysadmin
 from app.clock import now as now_kst
 from app.db import get_session
 from app.framework_interview import runner
+from app.framework_interview.ai import ask_schema
 from app.framework_interview.answers import fill_answers
 from app.framework_interview.assemble import (
-    allocate_task_ids, assemble_document, load_category_chain, load_existing_codes,
+    allocate_task_ids, assemble_document, load_category_chain, load_existing_codes, validate_row,
 )
 from app.framework_interview.contracts import (
-    PlanOut, RelationsOut, build_plan_messages, build_relations_messages, format_managed_catalog,
+    PlanOut, RelationsOut, build_context_text, build_plan_messages, build_relations_messages,
+    format_managed_catalog,
 )
-from app.interview.orchestrator import TurnError, _ask_json, sum_usage, usage_log  # noqa: PLC2701 -- 재사용
+from app.framework_interview.normalize import normalize_plan, normalize_relations
+from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
 from app.prompt_registry import get_prompt_overrides
@@ -61,6 +66,7 @@ async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInter
         id=s.id, category_id=s.category_id,
         category_code=category.code if category else "", category_name=category.name if category else "",
         status=s.status, paused=s.paused, lang=s.lang, brief=s.brief, plan=s.plan,
+        attachments=[{"name": a.get("name", ""), "chars": int(a.get("chars") or 0)} for a in s.attachments or []],
         relations=s.relations, label=s.label,
         tasks=[FrameworkInterviewTaskOut.model_validate(t) for t in tasks],
         progress=FrameworkInterviewProgressOut(
@@ -72,12 +78,15 @@ async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInter
     )
 
 
-async def _ask(messages: list[dict], schema_cls: type[BaseModel], db: AsyncSession, user: str) -> BaseModel:
-    """AI 1콜 + JSON 검증 + usage 계량(map/version 없음 → 0, kind='fw_interview'). 실패는 502."""
+async def _ask(
+    messages: list[dict], schema_cls: type[BaseModel], db: AsyncSession, user: str,
+    normalizer: Callable[[Any], Any] | None = None,
+) -> BaseModel:
+    """AI 호출(최대 3회, 검증 오류 되먹임) + usage 계량(map/version 없음 → 0, kind='fw_interview'). 실패는 502."""
     usage: list = []
     token = usage_log.set(usage)
     try:
-        result = await _ask_json(messages, None, schema_cls, reasoning="high")
+        result = await ask_schema(messages, schema_cls, normalizer=normalizer, reasoning="high")
     except TurnError as exc:
         usage_log.reset(token)
         prompt_total, completion_total = sum_usage(usage)
@@ -180,8 +189,23 @@ async def upload_framework_attachment(
             text = await asyncio.to_thread(parse_attachment, filename, data)
         except ParseError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    merged = f"{row.brief}\n\n[첨부 {filename}]\n{text}".strip()
-    row.brief = merged[:BRIEF_MAX]
+    # brief(사용자 텍스트)에 섞지 않고 첨부 목록에 담는다 — 잘못 올린 파일은 개별 삭제로 되돌린다
+    row.attachments = [*(row.attachments or []), {"name": filename, "chars": len(text), "text": text[:BRIEF_MAX]}]
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.delete("/{session_id}/attachments/{index}", response_model=FrameworkInterviewOut)
+async def delete_framework_attachment(
+    session_id: int, index: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    row = await _get_session_row(db, session_id)
+    items = list(row.attachments or [])
+    if index < 0 or index >= len(items):
+        raise HTTPException(status_code=404, detail="attachment not found")
+    del items[index]
+    row.attachments = items
     await db.commit()
     return await _out(db, row)
 
@@ -199,11 +223,12 @@ async def generate_plan(
     chain = await load_category_chain(db, row.category_id)
     existing = await db.scalars(select(FrameworkInterviewTask.name).where(FrameworkInterviewTask.session_id == row.id))
     messages = build_plan_messages(
-        lang=row.lang, category_path=" > ".join(c["name"] for c in chain), brief=row.brief,
+        lang=row.lang, category_path=" > ".join(c["name"] for c in chain),
+        brief=build_context_text(row.brief, row.attachments),
         existing_names=list(existing.all()), role_catalog=role_catalog,
         overrides=await get_prompt_overrides(db),
     )
-    plan = await _ask(messages, PlanOut, db, user)
+    plan = await _ask(messages, PlanOut, db, user, normalizer=normalize_plan)
     row.plan = [card.model_dump() for card in plan.cards]
     await db.commit()
     return await _out(db, row)
@@ -292,6 +317,40 @@ async def retry_task(
     return await _out(db, row)
 
 
+@router.post("/{session_id}/tasks/{task_pk}/skip", response_model=FrameworkInterviewOut)
+async def skip_task(
+    session_id: int, task_pk: int,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """실패 카드를 플레이스홀더 행(활동 1개)으로 대체해 진행 — 계속 실패해도 세션을 포기하지 않게 한다."""
+    row = await _get_session_row(db, session_id)
+    task = await _get_task(db, row, task_pk)
+    if task.status != "failed":
+        raise HTTPException(status_code=409, detail="only failed tasks can be skipped")
+    card = next((c for c in row.plan or [] if c.get("task_id") == task.task_id), {})
+    placeholder_row = {
+        "l6": task.name,
+        "ownerRole": str(card.get("owner_role") or "")[:100],
+        "department": str(card.get("department") or "")[:100],
+        "fields": {},
+        "actions": [{"seq": 1, "label": task.name[:200], "kind": "action"}],
+    }
+    chain = await load_category_chain(db, row.category_id)
+    l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
+    issues = validate_row(chain, l5, {"taskId": task.task_id, **placeholder_row})
+    issues.append({"severity": "warning", "path": f"rows[{task.seq - 1}]",
+                   "message": "placeholder row (skipped after AI failure) - draw the activities by hand"})
+    task.row = placeholder_row
+    task.issues = issues
+    task.placeholder = True
+    task.status = "drawn"
+    task.error = None
+    task.drawn_at = now_kst()
+    await db.commit()
+    runner.kick(row.id)
+    return await _out(db, row)
+
+
 @router.post("/{session_id}/pause", response_model=FrameworkInterviewOut)
 async def pause_session(
     session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
@@ -337,10 +396,9 @@ async def generate_relations(
     messages = build_relations_messages(
         lang=row.lang, plan=row.plan or [], rows=rows_by_task, overrides=await get_prompt_overrides(db),
     )
-    out = await _ask(messages, RelationsOut, db, user)
-    if not _has_known_task_ids(row, out):
-        await db.commit()  # 이미 기록한 ok=True 계량 이벤트는 502로 버리지 않는다
-        raise HTTPException(status_code=502, detail="AI relations reference unknown taskId")
+    known = {t.task_id: t.name for t in sorted(row.tasks, key=lambda t: t.seq)}
+    # 미지의 taskId·이름 참조는 정규화가 해석하거나 버린다 — 502 대신 부분 결과를 편집 표로 넘긴다
+    out = await _ask(messages, RelationsOut, db, user, normalizer=lambda raw: normalize_relations(raw, known))
     row.relations = out.model_dump(by_alias=True, exclude_none=True)
     row.status = "linking"
     await db.commit()

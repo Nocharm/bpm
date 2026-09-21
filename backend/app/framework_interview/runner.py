@@ -15,11 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.app_settings import get_assignee_roles, get_systems, is_ai_access_enabled
 from app.clock import now as now_kst
 from app.db import SessionLocal
+from app.framework_interview.ai import ask_schema
 from app.framework_interview.assemble import load_category_chain, validate_row
 from app.framework_interview.contracts import (
-    QuestionnaireOut, RowOut, build_questionnaire_messages, build_row_messages, format_managed_catalog,
+    QuestionnaireOut, RowOut, build_context_text, build_questionnaire_messages, build_row_messages,
+    format_managed_catalog,
 )
-from app.interview.orchestrator import TurnError, _ask_json, sum_usage, usage_log  # noqa: PLC2701 -- 재사용
+from app.framework_interview.normalize import normalize_questionnaire, normalize_row
+from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask
 from app.prompt_registry import get_prompt_overrides
 
@@ -108,14 +111,15 @@ async def _generate_questionnaire(db: AsyncSession, session: FrameworkInterviewS
     chain = await load_category_chain(db, session.category_id)
     card = _card_of(session, task)
     messages = build_questionnaire_messages(
-        lang=session.lang, category_path=" > ".join(c["name"] for c in chain), brief=session.brief,
+        lang=session.lang, category_path=" > ".join(c["name"] for c in chain),
+        brief=build_context_text(session.brief, session.attachments),
         card=card, neighbors=_neighbors_of(session, card),
         role_catalog=role_catalog, system_catalog=system_catalog, overrides=await get_prompt_overrides(db),
     )
     usage: list = []
     token = usage_log.set(usage)
     try:
-        out = await _ask_json(messages, None, QuestionnaireOut, reasoning="high")
+        out = await ask_schema(messages, QuestionnaireOut, normalizer=normalize_questionnaire, reasoning="high")
         task.questionnaire = out.model_dump()
         task.status = "ready"
         task.error = None
@@ -144,7 +148,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     usage: list = []
     token = usage_log.set(usage)
     try:
-        out = await _ask_json(messages, None, RowOut, reasoning=None)
+        out = await ask_schema(messages, RowOut, normalizer=normalize_row, reasoning=None)
         row = out.model_dump(by_alias=True, exclude_none=True)
         row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
         row["department"] = row.get("department") or card.get("department", "")

@@ -2,7 +2,7 @@
 
 // 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·완료 카드 미리보기. 페이지 좌측 전용.
 
-import { Loader2, Pause, Play, RotateCcw, Eye } from "lucide-react";
+import { Eye, Loader2, Pause, Play, RotateCcw, SkipForward } from "lucide-react";
 
 import type { FwInterviewSession, FwTaskStatus } from "@/lib/api";
 import { deriveProgress } from "@/lib/framework-interview";
@@ -26,12 +26,13 @@ interface TaskBoardProps {
   onPause: () => void;
   onResume: () => void;
   onRetry: (taskPk: number) => void;
+  onSkip?: (taskPk: number) => void;  // 실패 카드를 플레이스홀더 행으로 건너뛰기
   onPreview?: (taskPk: number) => void;
   stalled?: boolean;  // 할 일이 남았는데 러너가 멎은 것으로 보인다 — 재시작 버튼 노출
   onNudge?: () => void;
 }
 
-export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onPreview, stalled, onNudge }: TaskBoardProps) {
+export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onSkip, onPreview, stalled, onNudge }: TaskBoardProps) {
   const { t } = useI18n();
   const progress = deriveProgress(session, drawDurationsMs);
   const locked = session.status !== "planning";
@@ -41,7 +42,7 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
     <div className="flex flex-col gap-3 p-3">
       {locked && (
         <div className="flex flex-col gap-1.5 rounded-md border border-hairline bg-surface p-2.5" data-id="fw-consult-progress">
-          <div className="flex items-center gap-2 text-caption text-ink">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink">
             {progress.working && <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />}
             <span>{t("fwConsult.progress", { done: progress.done, total: progress.total })}</span>
             {workingTask && (
@@ -96,6 +97,16 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
                 <button type="button" data-id={`fw-consult-task-retry-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.retry")} onClick={() => onRetry(task.id)}>
                   <RotateCcw size={14} strokeWidth={1.5} />
                 </button>
+              )}
+              {task.status === "failed" && onSkip && (
+                <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={`${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={() => onSkip(task.id)}>
+                  <SkipForward size={14} strokeWidth={1.5} />
+                </button>
+              )}
+              {task.status === "drawn" && task.placeholder && (
+                <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary" data-id={`fw-consult-task-placeholder-${task.id}`}>
+                  {t("fwConsult.placeholder")}
+                </span>
               )}
               {task.status === "drawn" && onPreview && (
                 <button type="button" data-id={`fw-consult-task-preview-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.preview")} onClick={() => onPreview(task.id)}>

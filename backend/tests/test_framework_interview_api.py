@@ -114,17 +114,59 @@ def test_create_plan_lock_flow(client: TestClient, monkeypatch) -> None:
     assert client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["status"] == "abandoned"
 
 
-def test_attachment_merges_into_brief(client: TestClient, monkeypatch) -> None:
+def test_attachment_is_listed_separately_and_removable(client: TestClient, monkeypatch) -> None:
+    """첨부는 brief에 섞이지 않고 목록으로 남아 개별 삭제된다 — 잘못 올린 파일이 누적되지 않게 (2026-09-21)."""
     _enable(monkeypatch)
     l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
     sid = client.post("/api/framework-interviews", json={"category_id": l5, "brief": "기본"}, headers=HEADERS).json()["id"]
     r = client.post(f"/api/framework-interviews/{sid}/attachments", headers=HEADERS,
                     files={"file": ("memo.txt", b"purified water round", "text/plain")})
     assert r.status_code == 200, r.text
-    assert "purified water round" in r.json()["brief"]
+    body = r.json()
+    assert body["brief"] == "기본"
+    assert body["attachments"] == [{"name": "memo.txt", "chars": len("purified water round")}]
     bad = client.post(f"/api/framework-interviews/{sid}/attachments", headers=HEADERS,
                       files={"file": ("x.exe", b"00", "application/octet-stream")})
     assert bad.status_code == 422
+    # 계획 프롬프트는 brief + 첨부 본문을 함께 받는다
+    seen: list[list[dict]] = []
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        seen.append(messages)
+        return ai_client.AiReply(content=PLAN_JSON, prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    assert client.post(f"/api/framework-interviews/{sid}/plan", headers=HEADERS).status_code == 200
+    assert "purified water round" in seen[0][-1]["content"] and "기본" in seen[0][-1]["content"]
+    gone = client.delete(f"/api/framework-interviews/{sid}/attachments/0", headers=HEADERS)
+    assert gone.status_code == 200 and gone.json()["attachments"] == []
+    assert client.delete(f"/api/framework-interviews/{sid}/attachments/0", headers=HEADERS).status_code == 404
+
+
+def test_skip_failed_task_with_placeholder(client: TestClient, monkeypatch) -> None:
+    """실패 카드는 플레이스홀더 행으로 건너뛰어 세션을 이어간다 — 포기 대신 등록 후 수작업 (2026-09-21)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS, json={
+        "cards": [{"name": "요청 접수", "summary": "", "owner_role": "담당자", "department": "", "depends_on": []}],
+        "lock": True,
+    }).json()
+    task = body["tasks"][0]
+    early = client.post(f"/api/framework-interviews/{sid}/tasks/{task['id']}/skip", headers=HEADERS)
+    assert early.status_code == 409  # pending은 건너뛸 수 없다
+    _fake_ai_queue(monkeypatch, ["not json", "still not json", "and again not json"])
+    _step(sid)
+    assert client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]["status"] == "failed"
+    skipped = client.post(f"/api/framework-interviews/{sid}/tasks/{task['id']}/skip", headers=HEADERS)
+    assert skipped.status_code == 200, skipped.text
+    out = skipped.json()["tasks"][0]
+    assert out["status"] == "drawn" and out["placeholder"] is True
+    assert any("placeholder" in i["message"] for i in out["issues"])
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{task['id']}", headers=HEADERS).json()
+    assert detail["row"]["actions"] == [{"seq": 1, "label": "요청 접수", "kind": "action"}]
+    assert detail["row"]["ownerRole"] == "담당자"
 
 
 def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:
@@ -155,6 +197,14 @@ def test_plan_generation_failure_records_single_usage_event(client: TestClient, 
     l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
     sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
 
+    async def _events() -> list[AiUsageEvent]:
+        async with SessionLocal() as db:
+            return list((await db.scalars(select(AiUsageEvent).where(
+                AiUsageEvent.login_id == SYSADMIN, AiUsageEvent.ok.is_(False),
+            ).order_by(AiUsageEvent.id))).all())
+
+    before = len(asyncio.run(_events()))  # 앞선 테스트(설문 실패 등)가 남긴 실패 계량과 분리
+
     async def _boom(messages, model=None, *, reasoning=None, max_tokens=None):
         raise RuntimeError("gpu down")
 
@@ -162,13 +212,7 @@ def test_plan_generation_failure_records_single_usage_event(client: TestClient, 
     r = client.post(f"/api/framework-interviews/{sid}/plan", headers=HEADERS)
     assert r.status_code == 502
 
-    async def _events() -> list[AiUsageEvent]:
-        async with SessionLocal() as db:
-            return list((await db.scalars(select(AiUsageEvent).where(
-                AiUsageEvent.login_id == SYSADMIN, AiUsageEvent.ok.is_(False),
-            ))).all())
-
-    events = asyncio.run(_events())
+    events = asyncio.run(_events())[before:]
     assert len(events) == 1
     assert events[0].kind is None
     assert events[0].ok is False

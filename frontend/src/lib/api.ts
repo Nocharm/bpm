@@ -2902,7 +2902,12 @@ export interface FwInterviewTask {
   status: FwTaskStatus;
   issues: { severity: string; path: string; message: string }[];
   error: string | null;
+  placeholder: boolean;  // 실패 카드를 플레이스홀더 행으로 건너뛴 표시
   drawn_at: string | null;
+}
+export interface FwAttachment {
+  name: string;
+  chars: number;
 }
 export interface FwInterviewTaskDetail extends FwInterviewTask {
   questionnaire: FwQuestionnaire | null;
@@ -2919,6 +2924,7 @@ export interface FwInterviewSession {
   paused: boolean;
   lang: "ko" | "en";
   brief: string;
+  attachments: FwAttachment[];
   plan: FwPlanCard[] | null;
   relations: Record<string, unknown> | null;
   label: string;
@@ -2969,6 +2975,12 @@ export function getFrameworkInterviewTask(id: number, taskPk: number): Promise<F
 }
 export function submitFrameworkAnswers(id: number, taskPk: number, answers: Record<string, FwAnswerValue>): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/answers`, { method: "POST", body: JSON.stringify({ answers }) });
+}
+export function deleteFrameworkAttachment(id: number, index: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/attachments/${index}`, { method: "DELETE" });
+}
+export function skipFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/skip`, { method: "POST" });
 }
 export function retryFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/retry`, { method: "POST" });
