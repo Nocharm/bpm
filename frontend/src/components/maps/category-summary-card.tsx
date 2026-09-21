@@ -21,6 +21,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { DeptPill } from "@/components/dept-pill";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { LevelPill } from "@/components/level-pill";
 import { SectionHeader } from "@/components/section-header";
 import {
@@ -390,7 +391,7 @@ export function CategorySummaryCard({
           />
           {summary.effective_admin_department ? (
             <div className="flex flex-wrap items-center gap-2">
-              <DeptPill department={summary.effective_admin_department} dataId="category-summary-dept" />
+              <DeptPill department={deptLeaf(summary.effective_admin_department)} dataId="category-summary-dept" />
               {summary.admin_department_source && (
                 <span data-id="category-summary-dept-inherited" className="text-fine text-ink-tertiary">
                   {t("category.summary.inheritedFrom", { name: summary.admin_department_source })}

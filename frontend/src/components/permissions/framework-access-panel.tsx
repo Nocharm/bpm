@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { getCategorySummary, type CategorySummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { DeptPill } from "@/components/dept-pill";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { LevelPill } from "@/components/level-pill";
 
 interface FrameworkAccessPanelProps {
@@ -57,7 +58,7 @@ export function FrameworkAccessPanel({ categoryId, categoryPath }: FrameworkAcce
         <div className="flex min-h-[30px] items-center gap-2">
           {dept ? (
             <>
-              <DeptPill department={dept} dataId="settings-framework-dept" />
+              <DeptPill department={deptLeaf(dept)} dataId="settings-framework-dept" />
               {summary?.admin_department_source && (
                 <span className="text-fine text-ink-tertiary">
                   {t("category.summary.inheritedFrom", { name: summary.admin_department_source })}

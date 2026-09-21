@@ -13,6 +13,8 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { deriveDeptKoreanKeywords } from "@/lib/korean-dept";
 import { DeptPill } from "@/components/dept-pill";
+// DeptPill은 리프명 원문을 받는다(경로를 주면 고아 판정) — 관리 부서는 조직 경로로 저장되므로 리프만 넘긴다
+import { deptLeaf } from "@/components/maps/dept-level-icon";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { PrincipalPicker, type PrincipalOption } from "@/components/permissions/principal-picker";
 
@@ -69,7 +71,9 @@ export function CategoryDeptModal({ node, onClose, onSaved, onToast }: CategoryD
   return createPortal(
     <ModalBackdrop
       onClose={onClose}
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
+      // z 1200(모달 단) — PrincipalPicker 드롭다운은 body 포털 z 1250이라 호스트 모달이 1300이면 목록이 블러 뒤에 묻힌다
+      // (오버레이 z 사다리, 권한자 모달과 동일)
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4 backdrop-blur-sm"
     >
       <div
         data-id="framework-dept-modal"
@@ -102,7 +106,7 @@ export function CategoryDeptModal({ node, onClose, onSaved, onToast }: CategoryD
         <div data-id="framework-dept-current" className="flex min-h-[30px] items-center gap-2">
           {own ? (
             <>
-              <DeptPill department={own} dataId="framework-dept-own" />
+              <DeptPill department={deptLeaf(own)} dataId="framework-dept-own" />
               <button
                 type="button"
                 data-id="framework-dept-clear"
@@ -114,7 +118,7 @@ export function CategoryDeptModal({ node, onClose, onSaved, onToast }: CategoryD
             </>
           ) : inherited ? (
             <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-              <DeptPill department={inherited} dataId="framework-dept-inherited" />
+              <DeptPill department={deptLeaf(inherited)} dataId="framework-dept-inherited" />
               {t("framework.adminDeptInherited")}
             </span>
           ) : (
