@@ -1,6 +1,6 @@
 "use client";
 
-// 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·완료 카드 미리보기. 페이지 좌측 전용.
+// 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·건너뛰기, ready 카드 클릭=먼저 답하기·완료 카드 클릭=미리보기. 페이지 좌측 전용.
 
 import { Eye, Loader2, Pause, Play, RotateCcw, SkipForward } from "lucide-react";
 
@@ -28,11 +28,12 @@ interface TaskBoardProps {
   onRetry: (taskPk: number) => void;
   onSkip?: (taskPk: number) => void;  // 실패 카드를 플레이스홀더 행으로 건너뛰기
   onPreview?: (taskPk: number) => void;
+  onSelect?: (taskPk: number) => void;  // ready 카드를 눌러 순서와 무관하게 먼저 답한다
   stalled?: boolean;  // 할 일이 남았는데 러너가 멎은 것으로 보인다 — 재시작 버튼 노출
   onNudge?: () => void;
 }
 
-export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onSkip, onPreview, stalled, onNudge }: TaskBoardProps) {
+export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onSkip, onPreview, onSelect, stalled, onNudge }: TaskBoardProps) {
   const { t } = useI18n();
   const progress = deriveProgress(session, drawDurationsMs);
   const locked = session.status !== "planning";
@@ -80,12 +81,23 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
         {tasks.map((task) => {
           const tone = STATUS_TONE[task.status];
           const isCurrent = task.id === currentTaskId;
+          // ready = 먼저 답하기, drawn = 미리보기. 그 외 상태는 클릭 대상이 아니다(준비 중·제출됨).
+          const activate = task.status === "ready" && onSelect
+            ? () => onSelect(task.id)
+            : task.status === "drawn" && onPreview
+              ? () => onPreview(task.id)
+              : null;
           return (
             <li
               key={task.id}
               data-id={`fw-consult-task-${task.id}`}
               data-status={task.status}
-              className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${isCurrent ? "border-accent bg-surface" : "border-hairline bg-surface"}`}
+              role={activate ? "button" : undefined}
+              tabIndex={activate ? 0 : undefined}
+              title={activate ? (task.status === "ready" ? t("fwConsult.openCard") : t("fwConsult.preview")) : undefined}
+              onClick={activate ?? undefined}
+              onKeyDown={activate ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } } : undefined}
+              className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${isCurrent ? "border-accent bg-surface" : "border-hairline bg-surface"} ${activate ? "cursor-pointer hover:bg-surface-alt" : ""}`}
             >
               <span className="w-5 text-fine text-ink-tertiary tabular-nums">{task.seq}</span>
               <span className="min-w-0 flex-1 truncate text-caption text-ink">{task.name}</span>
@@ -94,12 +106,12 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
                 {t(tone.key)}
               </span>
               {task.status === "failed" && (
-                <button type="button" data-id={`fw-consult-task-retry-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.retry")} onClick={() => onRetry(task.id)}>
+                <button type="button" data-id={`fw-consult-task-retry-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.retry")} onClick={(e) => { e.stopPropagation(); onRetry(task.id); }}>
                   <RotateCcw size={14} strokeWidth={1.5} />
                 </button>
               )}
               {task.status === "failed" && onSkip && (
-                <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={`${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={() => onSkip(task.id)}>
+                <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={`${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={(e) => { e.stopPropagation(); onSkip(task.id); }}>
                   <SkipForward size={14} strokeWidth={1.5} />
                 </button>
               )}
@@ -109,7 +121,7 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
                 </span>
               )}
               {task.status === "drawn" && onPreview && (
-                <button type="button" data-id={`fw-consult-task-preview-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.preview")} onClick={() => onPreview(task.id)}>
+                <button type="button" data-id={`fw-consult-task-preview-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.preview")} onClick={(e) => { e.stopPropagation(); onPreview(task.id); }}>
                   <Eye size={14} strokeWidth={1.5} />
                 </button>
               )}

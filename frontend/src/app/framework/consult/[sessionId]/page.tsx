@@ -52,6 +52,8 @@ export default function FrameworkConsultPage() {
   const [boardWidth, setBoardWidth] = useState(readBoardWidth);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [previewTaskId, setPreviewTaskId] = useState<number | null>(null);
+  // 보드에서 고른 카드 — 준비된(ready) 카드는 순서와 무관하게 먼저 답할 수 있다(앞 카드가 준비 중이어도 막히지 않게, 사용자 요청 2026-09-21)
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   // 드로잉 소요 실측(ms) — ETA 추정. submitted를 처음 본 시각 → drawn을 처음 본 시각
   const submittedAtRef = useRef<Map<number, number>>(new Map());
   const [drawDurations, setDrawDurations] = useState<number[]>([]);
@@ -137,8 +139,10 @@ export default function FrameworkConsultPage() {
     );
   }
 
-  const step = deriveStep(session);
-  const current = findCurrentTask(session);
+  // 선택한 카드가 아직 ready면 그 카드를, 아니면(제출됨 등) 순서상 다음 카드를 현재로 삼는다
+  const selectedReady = session.tasks.find((x) => x.id === selectedTaskId && x.status === "ready") ?? null;
+  const step = selectedReady ? "answer" : deriveStep(session);
+  const current = selectedReady ?? findCurrentTask(session);
   const stepLabel = {
     plan: t("fwConsult.stepPlan"), answer: t("fwConsult.stepAnswer"), waiting: t("fwConsult.stepWaiting"),
     relations: t("fwConsult.stepRelations"), register: t("fwConsult.stepRegister"), done: t("fwConsult.stepDone"),
@@ -172,6 +176,7 @@ export default function FrameworkConsultPage() {
             onRetry={(taskPk) => void run(() => retryFrameworkTask(session.id, taskPk))}
             onSkip={(taskPk) => void run(() => skipFrameworkTask(session.id, taskPk))}
             onPreview={setPreviewTaskId}
+            onSelect={setSelectedTaskId}
             stalled={stalledTicks >= STALLED_TICKS && !session.paused}
             onNudge={() => {
               setStalledTicks(0);

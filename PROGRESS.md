@@ -5,6 +5,7 @@
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
+- **보드 카드 선택(dev):** 준비된(ready) 카드를 눌러 순서와 무관하게 먼저 답하고, 완료 카드는 클릭으로 미리보기(앞 카드가 준비 중이어도 뒤를 진행). 선택 카드가 제출되면 순서상 다음 카드로 복귀. `pw-fw-consult-pick-card.mjs` 3/3.
 - **실모델 피드백 반영(dev):** "AI returned invalid response" 빈발 → `framework_interview/normalize.py`(kind·maps_to 동의어, 라벨 suggested, 문자열 actions, 이름 참조 엣지 등 흡수) + `ai.py` `ask_schema`(최대 3회, pydantic 오류 요약을 되먹여 재요청, 실패 사유를 `task.error`에). 실패 카드는 **플레이스홀더로 건너뛰기**(`POST .../tasks/{id}/skip`, 활동 1개 행·`placeholder` 컬럼)로 세션을 이어간다. 첨부는 brief에 병합하지 않고 `attachments` JSON 목록(개별 삭제 `DELETE .../attachments/{i}`)으로 분리해 잘못 올린 파일이 누적되지 않게. 계획 화면 2단(좌 brief+첨부 | 우 카드), 보드 최소폭 380·진행 헤더 줄바꿈. 신규 컬럼 2개는 `_ADDED_COLUMNS` 등록.
 
 - **목적:** AI 컨설턴트가 맵 하나에 묶여 있어(`InterviewSession.map_id`) L5 하나 아래 L6 n개를 한 번에 만들 수 없었다. 산출물을 인터뷰 JSON 0.5로 잡고 기존 `POST /api/categories/import-interview`로 등록하는 "위층 세션"을 추가했다(설계 `docs/superpowers/specs/2026-09-21-ai-consultant-l5-campaign-design.md`, 플랜 `docs/superpowers/plans/…`, main 머지 시 삭제).
