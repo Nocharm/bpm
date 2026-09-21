@@ -68,6 +68,7 @@ import type { Department, User as MockUser, UserGroup } from "@/lib/mock/permiss
 import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
+import { AdminSection } from "@/components/admin/admin-section";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
@@ -731,7 +732,9 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         <FrameworkOverview />
       ) : (
         <>
-      <div data-id="framework-admin-tree" className="fw-tree rounded-md border border-hairline p-2">
+      {/* 복수열 — 좌: 카테고리 트리, 우: 아코디언 섹션(캠페인 진입·진행 중 세션·인터뷰 임포트). 리포트는 그리드 아래 전폭 */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(380px,2fr)]" data-id="framework-manage-grid">
+      <div data-id="framework-admin-tree" className="fw-tree self-start rounded-md border border-hairline p-2">
         {!scopeRootIds && (
           <label className="mb-2 flex min-w-0 items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-1.5 text-caption text-ink">
             <Search size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
@@ -794,16 +797,20 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         )}
       </div>
 
-      {/* 대량 임포트는 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
+      {/* 대량 임포트·캠페인은 sysadmin 전용 — 위임 스코프는 자기 서브트리 밖의 카테고리를 만들 수 있어 배제 */}
       {!scopeRootIds && (
-      <div className="flex flex-col gap-3 border-t border-hairline pt-4" data-id="interview-import">
-        <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface-pearl p-3" data-id="fw-consult-entry">
-          <div className="flex items-center gap-2">
-            <Headset size={16} strokeWidth={1.5} className="text-accent" />
-            <span className="text-caption text-ink">{t("fwConsult.start")}</span>
-            <span className="ml-auto"><InterviewJsonPromptButton target={consultTarget} /></span>
-          </div>
-          <p className="text-fine text-ink-tertiary">{t("fwConsult.startHint")}</p>
+      <div className="flex flex-col gap-3" data-id="interview-import">
+        <AdminSection
+          id="consult"
+          title={t("fwConsult.start")}
+          hint={t("fwConsult.startHint")}
+          icon={<Headset size={16} strokeWidth={1.5} />}
+          badge={activeSessions.length > 0 ? activeSessions.length : undefined}
+          actions={<InterviewJsonPromptButton target={consultTarget} />}
+          defaultOpen
+          tone="pearl"
+        >
+        <div className="flex flex-col gap-2" data-id="fw-consult-entry">
           {/* 모드 세그먼트 — 기존 L5 고르기 / 새 L5 만들기(부모 L4 고르고 이름 입력). 홈 뷰 토글과 같은 스타일 */}
           <div data-id="fw-consult-mode" className="flex shrink-0 items-center gap-0.5 self-start rounded-sm border border-hairline bg-surface p-0.5">
             {(["existing", "new"] as const).map((m) => (
@@ -821,14 +828,14 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(320px,1fr)_minmax(260px,320px)]">
+          <div className="flex flex-col gap-3">
             <FrameworkCascadePicker
               key={consultMode}
               selectedId={consultPick?.id ?? null}
               onSelect={setConsultPick}
               selectableLevels={consultMode === "existing" ? [5] : [4]}
               maxLevel={consultMode === "existing" ? 5 : 4}
-              height={300}
+              height={280}
               dataIdPrefix="fw-consult-picker"
             />
             <div className="flex flex-col gap-2 rounded-md border border-hairline bg-surface p-3" data-id="fw-consult-pick-summary">
@@ -864,9 +871,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               </button>
             </div>
           </div>
+          {/* 진행 중 세션은 접힌 아코디언 + 건수만(사용자 지시 2026-09-21) */}
           {activeSessions.length > 0 && (
+            <AdminSection id="sessions" title={t("fwConsult.activeSessions")} badge={activeSessions.length}>
             <ul className="flex flex-col gap-1" data-id="fw-consult-active-list">
-              <li className="text-fine text-ink-tertiary">{t("fwConsult.activeSessions")}</li>
               {activeSessions.map((s) => (
                 <li key={s.id} data-id={`fw-consult-active-${s.id}`} className="flex items-center gap-2 text-caption text-ink">
                   <span className="truncate">{s.category_name}</span>
@@ -877,13 +885,18 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
                 </li>
               ))}
             </ul>
+            </AdminSection>
           )}
         </div>
+        </AdminSection>
 
-        <div>
-          <h3 className="text-body-strong text-ink">{t("framework.interviewImportTitle")}</h3>
-          <p className="pt-1 text-caption text-ink-tertiary">{t("framework.interviewImportHint")}</p>
-        </div>
+        <AdminSection
+          id="import"
+          title={t("framework.interviewImportTitle")}
+          hint={t("framework.interviewImportHint")}
+          icon={<Upload size={16} strokeWidth={1.5} />}
+          badge={interviewFiles.length > 0 ? interviewFiles.length : undefined}
+        >
 
         <input
           ref={interviewInputRef}
@@ -961,7 +974,14 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             {t("framework.importDryRun")}
           </button>
         </div>
+        </AdminSection>
+      </div>
+      )}
+      </div>
 
+      {/* 리포트는 그리드 아래 전폭 — 두 열 안에서는 요약/목록 2단이 좁다 */}
+      {!scopeRootIds && (
+      <div className="flex flex-col gap-3" data-id="interview-import-report-host">
         {/* 리포트 영역은 아코디언(0fr→1fr) — 드라이런을 누르면 먼저 열리며 링이 돌고, 결과가 오면 같은 자리에 리포트가 들어온다.
             래퍼는 항상 두어야 첫 열림도 전환된다(file-card 미리보기와 같은 규칙). 닫힘(Cancel)은 내용을 바로 비우므로 즉시 접힌다. */}
         <div

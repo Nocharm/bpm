@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 280개 · 2026-09-21 기준
+총 281개 · 2026-09-21 기준
 
 ## components/
 
@@ -154,6 +154,7 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
+| `admin-section.tsx` | `AdminSection` | 관리자 패널 아코디언 섹션 | `components/admin/framework-panel.tsx` |
 | `admin-table.tsx` | `TableCard`, `RolePill` | 어드민 콘솔 표 공통 셸 | `components/admin/department-table.tsx`, `components/admin/employee-table.tsx`, `components/admin/framework-overview.tsx`, `components/admin/local-account-table.tsx` |
 | `approval-queue.tsx` | `ApprovalQueue` | 시스템 관리자 승인 큐 | `app/settings/page.tsx` |
 | `batch-runs-panel.tsx` | `BatchRunsPanel` | 배치 작업(DB 백업·HR 동기화) 최근 실행 상태 | `app/settings/page.tsx` |
