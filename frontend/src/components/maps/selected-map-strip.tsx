@@ -1,9 +1,9 @@
 // 업무 체계 뷰 좌측 맨 아래의 "선택된 맵" 스트립 — 우측 L5 요약에서 L6 맵을 눌러 맵 상세로 넘어갔을 때, 드릴다운은 그대로
-// 두고 어느 맵을 보고 있는지 댓글처럼 띄운다(임시 모달 톤: 떠 있는 카드, 사용자 지시 2026-09-21). × 또는 "L5로 돌아가기"와
-// 브라우저 뒤로가기가 모두 직전 L5 선택 화면으로 복귀한다(page.tsx returnToOrigin).
+// 두고 어느 맵을 보고 있는지 댓글처럼 띄운다(임시 모달 톤: 떠 있는 카드, 사용자 지시 2026-09-21). "L5로 돌아가기"와
+// 브라우저 뒤로가기가 직전 L5 선택 화면으로 복귀한다(page.tsx returnToOrigin). 등장 시 테두리 액센트 쉬머 1회(strip-shimmer).
 "use client";
 
-import { ArrowLeft, Map as MapIcon, X } from "lucide-react";
+import { ArrowLeft, Map as MapIcon } from "lucide-react";
 
 import type { MapSummary } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -24,7 +24,8 @@ export function SelectedMapStrip({ map, origin, onBack }: SelectedMapStripProps)
     <div
       data-id="selected-map-strip"
       role="status"
-      className="fw-slide-in mt-2 flex shrink-0 items-center gap-2 rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
+      // strip-shimmer(globals.css) — 마운트 시 테두리를 따라 액센트 쉬머 1회
+      className="fw-slide-in strip-shimmer relative mt-2 flex shrink-0 items-center gap-2 rounded-md border border-accent-tint-border bg-surface px-2.5 py-2 shadow-lg"
     >
       <span className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-sm bg-accent-tint text-accent">
         <MapIcon size={14} strokeWidth={1.5} />
@@ -43,6 +44,7 @@ export function SelectedMapStrip({ map, origin, onBack }: SelectedMapStripProps)
         </span>
         <span className="truncate text-fine text-ink-tertiary">{t("home.selectedMapFrom", { name: origin.name })}</span>
       </span>
+      {/* ×는 "L5로 돌아가기"와 같은 동작이라 뺐다(사용자 지시 2026-09-21) */}
       <button
         type="button"
         data-id="selected-map-strip-back"
@@ -51,16 +53,6 @@ export function SelectedMapStrip({ map, origin, onBack }: SelectedMapStripProps)
       >
         <ArrowLeft size={12} strokeWidth={1.5} />
         {t("home.selectedMapBack")}
-      </button>
-      <button
-        type="button"
-        data-id="selected-map-strip-close"
-        aria-label={t("summary.close")}
-        title={t("summary.close")}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-ink"
-        onClick={onBack}
-      >
-        <X size={14} strokeWidth={1.5} />
       </button>
     </div>
   );

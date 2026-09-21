@@ -729,6 +729,46 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     animation: none;
   }
 }
+/* 선택 맵 스트립(업무 체계 뷰 좌측 하단) — 마운트 시 테두리를 따라 액센트 하이라이트가 한 번 지나간다(사용자 지시
+   2026-09-21). 오버레이(::after)를 mask-composite로 테두리 두께만 남기고 그라데이션 배경을 가로로 흘린 뒤 사라진다.
+   호스트에 position:relative + border-radius가 있어야 한다(inherit). */
+@keyframes strip-shimmer {
+  0% {
+    background-position: 130% 0;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -130% 0;
+    opacity: 0;
+  }
+}
+.strip-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 38%, var(--color-accent) 50%, transparent 62%);
+  background-size: 260% 100%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: strip-shimmer 1200ms var(--ease-smooth) 150ms 1 both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .strip-shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+}
 
 /* 홈 아코디언 접힘 — 펼침의 역방향(콘텐츠 높이→0). forwards로 0fr을 유지한 채 잠깐 뒤 실제
    언마운트가 따라온다(컴포넌트의 closing 상태가 애니메이션 후 커밋). 시선이 줄어드는 영역을 따라간다. */
