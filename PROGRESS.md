@@ -8,6 +8,7 @@
 - **배경:** AI 컨설턴트는 맵 하나에 묶여 있고(`InterviewSession.map_id`), 여러 맵을 한 번에 만드는 경로는 sysadmin 전용 인터뷰 JSON 임포트뿐. L5 하나 아래 L6 n개를 AI로 만들어 업무 체계에 등록하려면 "여러 맵을 계획·반복·조립하는 위층"이 없다.
 - **결정:** 관리자 탭 진입(임포트 옆) · L6는 채팅 대신 AI 생성 객관식 설문지(전부 답해야 제출, 빈 주관식은 제안값 자동) · 하나씩 제출·되돌리기 없음·제출 즉시 백그라운드 드로잉+다음 설문 prefetch · 등록은 임포트와 동일(게시 직행, 캔버스 draft) · 외부 AI용 0.5 JSON 프롬프트 복사 버튼. 설계: `docs/superpowers/specs/2026-09-21-ai-consultant-l5-campaign-design.md`.
 - **플랜:** `docs/superpowers/plans/2026-09-21-ai-consultant-l5-campaign.md` 14태스크(BE 모델→답 검증→계약→조립→API→러너→API B, FE api/뷰모델→외부 프롬프트→페이지·보드·계획→설문·확인→연결·등록→관리자 진입→스모크·매뉴얼). 0.5 계약 결합 표면 3종(어댑터·조립기/프롬프트·외부 프롬프트)은 계약 테스트로 묶는다.
+- **구현(Task 1+3):** `FrameworkInterviewSession`/`FrameworkInterviewTask` ORM 2종 + 스키마 7종 + `app/framework_interview/contracts.py`(응답 스키마 10종·빌더 4종·프롬프트 계약 4종) 추가, `prompt_registry.PROMPT_KEYS` 9→13. 라우터·러너는 아직 없음(다음 태스크).
 
 ## 2026-09-21 — 홈 검색 결과의 L5 연계 캔버스 카드 (dev, 라운드 1/6)
 

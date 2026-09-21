@@ -1050,6 +1050,64 @@ class InterviewAttachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class FrameworkInterviewSession(Base):
+    """AI L5 캠페인 세션 — L5 하나 아래 L6 n개를 설문·드로잉·조립하는 위층 (spec 2026-09-21 §3)."""
+
+    __tablename__ = "framework_interview_sessions"
+    __table_args__ = (Index("ix_fw_interview_sessions_category", "category_id", "status"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    login_id: Mapped[str] = mapped_column(String(100), index=True)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("process_categories.id", ondelete="CASCADE")
+    )
+    # planning|plan_locked|linking|ready|applied|abandoned — 설문 진행 상태는 tasks에서 파생
+    status: Mapped[str] = mapped_column(String(20), default="planning")
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    lang: Mapped[str] = mapped_column(String(5), default="ko")
+    brief: Mapped[str] = mapped_column(Text, default="")  # 목적/범위 + 첨부 파싱 텍스트
+    plan: Mapped[list | None] = mapped_column(JSON, default=None)  # 잠금 전/후 L6 카드 목록
+    relations: Mapped[dict | None] = mapped_column(JSON, default=None)  # 최상위 relations
+    assembled: Mapped[dict | None] = mapped_column(JSON, default=None)  # 마지막 조립 0.5 문서
+    label: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+    tasks: Mapped[list["FrameworkInterviewTask"]] = relationship(
+        cascade="all, delete-orphan", order_by="FrameworkInterviewTask.seq"
+    )
+
+
+class FrameworkInterviewTask(Base):
+    """캠페인의 L6 1건 — 설문지·답·드로잉 결과(rows[] 원소)를 들고 상태 기계를 돈다."""
+
+    __tablename__ = "framework_interview_tasks"
+    __table_args__ = (
+        UniqueConstraint("session_id", "task_id", name="uq_fw_interview_tasks_session_task"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("framework_interview_sessions.id", ondelete="CASCADE"), index=True
+    )
+    task_id: Mapped[str] = mapped_column(String(200))  # rows[].taskId = consultant_code
+    seq: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(200))
+    # pending|generating|ready|submitted|drawing|drawn|failed
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    questionnaire: Mapped[dict | None] = mapped_column(JSON, default=None)
+    answers: Mapped[dict | None] = mapped_column(JSON, default=None)
+    row: Mapped[dict | None] = mapped_column(JSON, default=None)
+    issues: Mapped[list] = mapped_column(JSON, default=list)  # AdapterIssue dicts
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+    drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+
 class KbDocument(Base):
     """지식기반 라이브러리 문서 — sysadmin 업로드 원장, 원문(parsed_text)만 보존 (design 2026-07-23 §5)."""
 

@@ -2705,3 +2705,77 @@ class LocalAccountOut(BaseModel):
     active: bool
     created_by: str = Field(serialization_alias="createdBy")
     updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+# ── Framework interview (AI L5 campaign, spec 2026-09-21) ──
+
+
+class FrameworkInterviewCreateIn(BaseModel):
+    category_id: int
+    brief: str = ""
+    lang: Literal["ko", "en"] = "ko"
+
+
+class FrameworkPlanCardIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    summary: str = ""
+    owner_role: Annotated[str, StringConstraints(max_length=100)] = ""
+    department: Annotated[str, StringConstraints(max_length=100)] = ""
+    depends_on: list[str] = []  # 선행 카드 이름
+
+
+class FrameworkInterviewPlanIn(BaseModel):
+    cards: list[FrameworkPlanCardIn] = []
+    lock: bool = False
+
+
+class FrameworkInterviewAnswersIn(BaseModel):
+    answers: dict[str, Any]
+
+
+class FrameworkInterviewRelationsIn(BaseModel):
+    relations: dict[str, Any]
+
+
+class FrameworkInterviewTaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    task_id: str
+    seq: int
+    name: str
+    status: str
+    issues: list[InterviewIssueOut] = []
+    error: str | None = None
+    drawn_at: datetime | None = None
+
+
+class FrameworkInterviewTaskDetailOut(FrameworkInterviewTaskOut):
+    questionnaire: dict | None = None
+    answers: dict | None = None
+    row: dict | None = None
+
+
+class FrameworkInterviewProgressOut(BaseModel):
+    total: int
+    drawn: int
+    failed: int
+    working: bool  # generating/drawing 중인 task가 있다
+
+
+class FrameworkInterviewOut(BaseModel):
+    id: int
+    category_id: int
+    category_code: str
+    category_name: str
+    status: str
+    paused: bool
+    lang: str
+    brief: str
+    plan: list | None
+    relations: dict | None
+    label: str
+    tasks: list[FrameworkInterviewTaskOut]
+    progress: FrameworkInterviewProgressOut
+    created_at: datetime
+    updated_at: datetime
