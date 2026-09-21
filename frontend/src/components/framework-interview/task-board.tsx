@@ -1,10 +1,11 @@
 "use client";
 
 // 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·건너뛰기, ready 카드 클릭=먼저 답하기·완료 카드 클릭=미리보기. 페이지 좌측 전용.
+// 기존 L6에서 온 카드(mode=keep)는 러너가 건드리지 않는다 — [정정]으로 설문을 다시 받아야 다시 그린다.
 
-import { Eye, Loader2, Pause, Play, RotateCcw, SkipForward } from "lucide-react";
+import { Eye, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward } from "lucide-react";
 
-import type { FwInterviewSession, FwTaskStatus } from "@/lib/api";
+import type { FwInterviewSession, FwInterviewTask, FwTaskStatus } from "@/lib/api";
 import { deriveProgress } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
@@ -27,13 +28,14 @@ interface TaskBoardProps {
   onResume: () => void;
   onRetry: (taskPk: number) => void;
   onSkip?: (taskPk: number) => void;  // 실패 카드를 플레이스홀더 행으로 건너뛰기
+  onRevise?: (task: FwInterviewTask) => void;  // 유지 중인 기존 L6를 정정으로 돌리기
   onPreview?: (taskPk: number) => void;
   onSelect?: (taskPk: number) => void;  // ready 카드를 눌러 순서와 무관하게 먼저 답한다
   stalled?: boolean;  // 할 일이 남았는데 러너가 멎은 것으로 보인다 — 재시작 버튼 노출
   onNudge?: () => void;
 }
 
-export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onSkip, onPreview, onSelect, stalled, onNudge }: TaskBoardProps) {
+export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, onResume, onRetry, onSkip, onRevise, onPreview, onSelect, stalled, onNudge }: TaskBoardProps) {
   const { t } = useI18n();
   const progress = deriveProgress(session, drawDurationsMs);
   const locked = session.status !== "planning";
@@ -113,6 +115,17 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
               {task.status === "failed" && onSkip && (
                 <button type="button" data-id={`fw-consult-task-skip-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={`${t("fwConsult.skip")} · ${t("fwConsult.skipHint")}`} onClick={(e) => { e.stopPropagation(); onSkip(task.id); }}>
                   <SkipForward size={14} strokeWidth={1.5} />
+                </button>
+              )}
+              {task.mode !== "new" && (
+                <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary" data-id={`fw-consult-task-mode-${task.id}`}>
+                  {t(task.mode === "keep" ? "fwConsult.existing" : "fwConsult.revise")}
+                </span>
+              )}
+              {task.mode === "keep" && onRevise && (
+                <button type="button" data-id={`fw-consult-revise-${task.id}`} className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.reviseHint")} onClick={(e) => { e.stopPropagation(); onRevise(task); }}>
+                  <PencilLine size={14} strokeWidth={1.5} />
+                  {t("fwConsult.revise")}
                 </button>
               )}
               {task.status === "drawn" && task.placeholder && (

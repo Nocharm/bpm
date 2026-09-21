@@ -2885,6 +2885,8 @@ export interface FwQuestion {
 }
 export interface FwQuestionnaire { questions: FwQuestion[] }
 export type FwAnswerValue = string | string[];
+/** 기존 L6 맵과의 관계 — keep은 손대지 않고, revise는 설문을 다시 받아 다시 그린다. */
+export type FwCardMode = "new" | "keep" | "revise";
 export interface FwPlanCard {
   name: string;
   summary: string;
@@ -2892,6 +2894,8 @@ export interface FwPlanCard {
   department: string;
   depends_on: string[];
   task_id?: string;
+  existing_code?: string | null;  // 병합된 기존 L6 맵의 코드(서버 merge_existing_cards가 채운다)
+  mode?: FwCardMode;
 }
 export type FwTaskStatus = "pending" | "generating" | "ready" | "submitted" | "drawing" | "drawn" | "failed";
 export interface FwInterviewTask {
@@ -2903,7 +2907,15 @@ export interface FwInterviewTask {
   issues: { severity: string; path: string; message: string }[];
   error: string | null;
   placeholder: boolean;  // 실패 카드를 플레이스홀더 행으로 건너뛴 표시
+  mode: FwCardMode;
   drawn_at: string | null;
+}
+/** 세션 시작 시 읽어둔 기존 L6 맵 요약 — 원본 row는 서버에만 있다. */
+export interface FwExisting {
+  map_id: number;
+  code: string;
+  name: string;
+  activity_count: number;
 }
 export interface FwAttachment {
   name: string;
@@ -2928,6 +2940,7 @@ export interface FwInterviewSession {
   plan: FwPlanCard[] | null;
   relations: Record<string, unknown> | null;
   label: string;
+  existing: FwExisting[];
   tasks: FwInterviewTask[];
   progress: { total: number; drawn: number; failed: number; working: boolean };
   created_at: string;
@@ -2984,6 +2997,10 @@ export function reopenFrameworkTask(id: number, taskPk: number): Promise<FwInter
 }
 export function reopenFrameworkRelations(id: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/reopen-relations`, { method: "POST" });
+}
+/** 기존 L6를 유지 대신 정정으로 돌린다 — 설문이 다시 만들어지고 러너가 다시 그린다. */
+export function reviseFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/revise`, { method: "POST" });
 }
 export function skipFrameworkTask(id: number, taskPk: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/skip`, { method: "POST" });

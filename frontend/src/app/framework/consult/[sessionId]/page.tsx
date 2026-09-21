@@ -12,7 +12,7 @@ import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
   getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
   deleteFrameworkAttachment, reopenFrameworkRelations, reopenFrameworkTask, resumeFrameworkInterview, retryFrameworkTask,
-  saveFrameworkPlan, skipFrameworkTask,
+  reviseFrameworkTask, saveFrameworkPlan, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
   type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
@@ -160,7 +160,7 @@ export default function FrameworkConsultPage() {
         <span className="text-body-strong">{session.category_name}</span>
         <span className="text-caption text-ink-muted">· {t("fwConsult.title")}</span>
         <span className="ml-auto text-caption text-ink-secondary" data-id="fw-consult-step-label">{stepLabel}</span>
-        <InterviewJsonPromptButton target={{ code: session.category_code, name: session.category_name, path: [] }} />
+        <InterviewJsonPromptButton target={{ code: session.category_code, name: session.category_name, path: [], existingL6: session.existing }} />
         <button type="button" data-id="fw-consult-abandon" className="rounded-sm px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt" onClick={() => setConfirmAbandon(true)}>
           {t("fwConsult.abandon")}
         </button>
@@ -176,6 +176,7 @@ export default function FrameworkConsultPage() {
             onResume={() => void run(() => resumeFrameworkInterview(session.id))}
             onRetry={(taskPk) => void run(() => retryFrameworkTask(session.id, taskPk))}
             onSkip={(taskPk) => void run(() => skipFrameworkTask(session.id, taskPk))}
+            onRevise={(task) => void run(() => reviseFrameworkTask(session.id, task.id))}
             onPreview={setPreviewTaskId}
             onSelect={setSelectedTaskId}
             stalled={stalledTicks >= STALLED_TICKS && !session.paused}

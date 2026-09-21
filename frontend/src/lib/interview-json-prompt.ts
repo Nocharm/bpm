@@ -6,6 +6,7 @@ export interface InterviewPromptTarget {
   code: string; // L5 nodeCode (process_categories.code)
   name: string;
   path: string[]; // L1..L4 이름
+  existingL6?: { code: string; name: string }[]; // 이미 등록된 L6 — 같은 taskId면 임포트가 갱신한다
 }
 
 const SKELETON = {
@@ -47,6 +48,16 @@ const SKELETON = {
 export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): string {
   const pathLine = target ? [...target.path, target.name].join(" > ") : "(L5 경로를 여기에 적으세요)";
   const codeLine = target ? target.code : "(L5 코드를 여기에 적으세요)";
+  const existing = target?.existingL6 ?? [];
+  // 이미 등록된 L6는 taskId가 곧 갱신 키다 — 손댈 것만 rows에 담게 해 무변경 행의 재작성을 막는다.
+  const existingBlock = existing.length
+    ? [
+        "[이미 있는 L6]",
+        ...existing.map((row) => `- ${row.code} · ${row.name}`),
+        "- 규칙: 같은 taskId로 rows에 넣으면 갱신되고 빼면 그대로 둔다.",
+        "",
+      ]
+    : [];
   return [
     "당신은 업무 프로세스 컨설턴트입니다. 아래 L5 업무에 대해 첨부 문서(규정, 지침, 절차서, 인터뷰 메모)를 읽고,",
     "그 아래 L6 단위 업무들과 각 L6의 활동 흐름을 인터뷰 결과 JSON 한 개로 작성하세요.",
@@ -60,6 +71,7 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "- framework.categories는 L1부터 L5까지 코드, 이름, level, parent(상위 코드 또는 null).",
     "- l5.nodeCode는 위 L5 코드, l5.label은 L5 이름.",
     "",
+    ...existingBlock,
     "[rows 규칙, L6 하나가 rows 원소 하나]",
     "- taskId는 'L5코드-01', 'L5코드-02'처럼 유일하게. l6는 동사형 업무명.",
     "- owner는 null(실명 금지). ownerRole은 역할명. department는 부서명 또는 null.",
