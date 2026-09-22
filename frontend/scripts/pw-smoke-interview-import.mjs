@@ -17,6 +17,10 @@ const SAMPLE_DIR = path.resolve(
   "../../docs/samples/consultant-interview-sample",
 );
 
+// 인터뷰 샘플(calibration-l5.json) 고정값 — pw-smoke-framework.mjs와 동일 소스
+const CHAIN = ["EPCV", "Facility", "계측 보전", "Calibration 기획 및 운영", "Calibration 수행 및 결과 보고"];
+const MAP_NAME = "교정 준비";
+
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
@@ -26,6 +30,10 @@ const check = (name, ok, detail = "") => {
 // 요약 칩은 renderImportSummary의 "<라벨> <숫자>" 텍스트 스팬 — 리포트 호스트 스코프로 매칭
 const chip = (page, label, count) =>
   page.locator('[data-id="interview-import-host"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
+
+// 홈 드릴다운 행(하위 열 L1~L4)·형제 열은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 오매칭이 없다
+const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
+const sibByName = (page, name) => page.locator('[data-id^="framework-sib-"]').filter({ hasText: name });
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
@@ -156,22 +164,26 @@ try {
   const ownerRowGone = await page.locator(`[data-id="import-governance-row-${govCode}-owner"]`).count();
   check("owner diff gone after apply (now equal)", ownerRowGone === 0, `rows=${ownerRowGone}`);
 
-  // ── 5) 홈 Framework 뷰 — 카테고리 체인·맵 노출(첫 펼침 캐스케이드) ───────
+  // ── 5) 홈 업무 체계 뷰 — L5 드릴다운으로 카테고리 체인·소속 맵 노출 ───────
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 10000 });
-  await page.locator('[data-id="framework-node"] button').filter({ hasText: "EPCV" }).first().click();
-  const mapVisible = await page
-    .locator('[data-id="framework-tree"] [data-id="map-card-name"]', { hasText: "교정 준비" })
-    .first().waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
-  check("imported map visible under framework tree", mapVisible);
-  // 오너 없이 임포트된 맵(유틸리티 샘플)은 "Owner unconfirmed" 필 — 교정 준비는 위에서 오너가 배정됐다
-  const pendingPills = await page.locator('[data-id="framework-tree"] [data-id="map-card-owner"][data-pending="true"]').count();
-  check("owner-unconfirmed pill shown on pending maps", pendingPills > 0, `pills=${pendingPills}`);
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 10000 });
+  // L1은 형제 열에서, L2~L4는 오른쪽 하위 열에서 드릴인(L5는 카드)
+  await sibByName(page, CHAIN[0]).first().click();
+  await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 10000 });
+  for (let i = 1; i < 4; i += 1) {
+    await rowByName(page, CHAIN[i]).first().click();
+    await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 10000 });
+  }
+  await page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first().click();
+  // 소속 맵은 좌측 목록이 아니라 우측 요약 카드가 담당한다(2026-09-19 드릴다운 재구성)
+  const summaryRow = page.locator('[data-id="category-summary-map-row"]', { hasText: MAP_NAME });
+  const mapVisible = await summaryRow.first()
+    .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
+  check("imported map visible in the L5 summary", mapVisible);
 
   // ── 6) 맵 상세 — [Interview] 설명 + Notes 섹션(예외·VOC) ────────────────
-  await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" })
-    .first().click();
+  await summaryRow.first().click();
   await page.waitForSelector('[data-id="map-detail-description"]:visible', { timeout: 10000 });
   // 승격(2026-08-19) 후 [Interview]는 Owner role만 — Start condition 등은 고유 필드로 이동
   const descText = (await page.locator('[data-id="map-detail-description"]:visible').first().textContent()) ?? "";
@@ -192,6 +204,14 @@ try {
   check("exception title rendered", notesText.includes("현장 수기 기록"));
   // 종류 배지는 i18n 라벨("Exception") — 대소문자 무시
   check("exception kind badge rendered", /exception/i.test(notesText));
+
+  // ── 7) 오너 미확정 필 — 오너 없이 임포트된 맵(유틸리티 샘플)은 "Owner unconfirmed".
+  // 드릴다운의 소속 맵은 우측 요약의 텍스트 행이라 오너 필이 없다 → 같은 필을 그리는 검색 결과 카드에서 센다.
+  await page.locator('[data-id="home-map-search"]').fill("교정");
+  await page.locator('[data-id="map-card-name"]').first()
+    .waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
+  const pendingPills = await page.locator('[data-id="map-card-owner"][data-pending="true"]').count();
+  check("owner-unconfirmed pill shown on pending maps", pendingPills > 0, `pills=${pendingPills}`);
 
   const errFree = consoleErrors.length === 0;
   check("no page errors", errFree, errFree ? "" : consoleErrors.join(" | "));

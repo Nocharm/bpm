@@ -15,6 +15,10 @@ const SAMPLE_DIR = path.resolve(
   "../../docs/samples/consultant-interview-sample",
 );
 
+// 인터뷰 샘플(calibration-l5.json) 고정값 — pw-smoke-framework.mjs와 동일 소스
+const CHAIN = ["EPCV", "Facility", "계측 보전", "Calibration 기획 및 운영", "Calibration 수행 및 결과 보고"];
+const MAP_NAME = "교정 준비";
+
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
@@ -32,6 +36,17 @@ const api = async (p, init = {}) => {
 
 const chip = (page, label, count) =>
   page.locator('[data-id="interview-import-host"]').getByText(new RegExp(`${label}\\s*${count}`)).first();
+
+// 홈 드릴다운 행(하위 열 L1~L4)·형제 열은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 오매칭이 없다
+const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
+const sibByName = (page, name) => page.locator('[data-id^="framework-sib-"]').filter({ hasText: name });
+
+// 인스펙터 IO "+" — IO 연결 배선이 붙은 표면에선 메뉴가 열린다(없으면 바로 한 행 추가)
+async function addIoRow(page, side) {
+  await page.locator(`[data-id="inspector-detail-${side}-add"]`).click();
+  await page.locator(`[data-id="inspector-detail-${side}-add-new"]`)
+    .click({ timeout: 3000 }).catch(() => {});
+}
 
 async function runDryRun(page) {
   await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
@@ -90,10 +105,11 @@ try {
     .reduce((max, v) => (max === null || v.id > max ? v.id : max), null);
   const calGraph = await api(`/versions/${publishedId}/graph`);
   const a01 = calGraph.nodes.find((n) => n.title === "작업지시 확인");
-  // dataForm은 유일한 산출물의 자료 형식(output_forms)으로 착지 — 노드 레벨 data_form 폐기 (2026-09-03)
+  // dataForm은 유일한 산출물의 자료 형식(output_forms)으로 착지 — 노드 레벨 data_form 폐기 (2026-09-03).
+  // 시스템은 카탈로그 커밋(2026-09-14) — 목록에 없는 "EAM"은 Other로 착지하고 원문은 폴백에 남는다.
   check("[3] node landing: input/output/output_forms/system_fallback",
     a01?.input === "그 주 작업지시" && a01?.output === "대상 계측기와 측정 범위"
-      && a01?.output_forms === "structured" && a01?.data_form === undefined && a01?.system === "EAM" && a01?.system_fallback === "EAM");
+      && a01?.output_forms === "structured" && a01?.data_form === undefined && a01?.system === "Other" && a01?.system_fallback === "EAM");
   const descOk = a01?.description.includes("Quote:")
     && !/Input:|Output:|System:|Data form:/.test(a01?.description ?? "");
   check("[4] node description KV shrunk (Quote only)", descOk, (a01?.description ?? "").slice(0, 60));
@@ -127,12 +143,21 @@ try {
   check("[18] gmp select saves via PATCH", afterGmp.sp_gmp === "direct");
 
   // ── [6][18b] 홈 상세 카드 — 조건/터치타임 행 + GMP 배지 ─────────────────
+  // 홈은 L5 포커스 드릴다운(2026-09-19) — L1은 형제 열, L2~L4는 하위 열, L5는 카드,
+  // 소속 맵은 우측 요약 카드(category-summary-map-row)에서 연다.
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 10000 });
-  await page.locator('[data-id="framework-node"] > button').filter({ hasText: "EPCV" }).first().click();
-  await page.locator('[data-id="framework-tree"] [data-id="map-card"]', { hasText: "교정 준비" })
-    .first().click();
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 10000 });
+  await sibByName(page, CHAIN[0]).first().click();
+  await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 10000 });
+  for (let i = 1; i < 4; i += 1) {
+    await rowByName(page, CHAIN[i]).first().click();
+    await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 10000 });
+  }
+  await page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first().click();
+  const summaryRow = page.locator('[data-id="category-summary-map-row"]', { hasText: MAP_NAME });
+  await summaryRow.first().waitFor({ state: "visible", timeout: 10000 });
+  await summaryRow.first().click();
   await page.waitForSelector('[data-id="map-detail-sp-section"]:visible', { timeout: 10000 });
   const ioText = (await page.locator('[data-id="map-detail-sp-section"]:visible').first().textContent()) ?? "";
   check("[6] detail card rows: conditions + touch time",
@@ -145,9 +170,10 @@ try {
   // 노트는 기본 접힘 아코디언(2026-08-20) — 행 단언 전에 펼침
   await page.locator('[data-id="map-notes-section"]:visible [data-id="map-notes-toggle"]').first()
     .click({ timeout: 10000 }).catch(() => {});
-  await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').first()
+  // 행은 li만 센다 — 노트 CRUD(9f8bcfea) 이후 행마다 map-note-edit-/map-note-delete- 버튼이 붙어 접두 매칭이 3배로 부푼다
+  await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').first()
     .waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
-  const noteRows = await page.locator('[data-id="map-notes-section"]:visible [data-id^="map-note-"]').count();
+  const noteRows = await page.locator('[data-id="map-notes-section"]:visible li[data-id^="map-note-"]').count();
   const notesText = (await page.locator('[data-id="map-notes-section"]:visible').first().textContent()) ?? "";
   // 0.5 샘플 기준 7행 — flow 3 + exception 1 + task_note 1 + voc 2 (교정 준비 맵)
   check("[7] notes rows include task_note (7 rows)",
@@ -203,11 +229,11 @@ try {
   await page.goto(`${BASE}/maps/${newMap.id}`, { waitUntil: "networkidle" });
   await page.locator(".react-flow__node", { hasText: "작업 단계" }).first().click();
   await page.locator('[data-id="inspector-details"]').waitFor({ state: "visible", timeout: 10000 });
-  // [11] IO add 2건
-  await page.locator('[data-id="inspector-detail-input-add"]').click();
+  // [11] IO add 2건 — "+"는 메뉴(새로 추가·다른 노드에서 불러오기)를 연다(io-linking) → 새 항목을 고른다
+  await addIoRow(page, "input");
   await page.locator('[data-id="inspector-detail-input-row-0"]').fill("작업지시");
   await page.keyboard.press("Enter");
-  await page.locator('[data-id="inspector-detail-input-add"]').click();
+  await addIoRow(page, "input");
   await page.locator('[data-id="inspector-detail-input-row-1"]').fill("표준기 목록");
   await page.keyboard.press("Enter");
   // 항목별 데이터 폼 — 첫 항목에만 지정. 피커 전환(행 호버 아이콘→자동완성 Enter 선택, 2026-08-20)
@@ -255,7 +281,9 @@ try {
   await page.waitForTimeout(2600);
   g = await api(`/versions/${draftId}/graph`);
   node = g.nodes.find((n) => n.id === "fp-node-1");
-  check("[15] fallback Apply → system set", node?.system === "EAM(스모크 원문)", JSON.stringify(node?.system));
+  // 카탈로그 커밋(2026-09-14) — 목록에 없는 원문은 system=Other로 커밋되고 원문은 폴백에 남는다
+  check("[15] fallback Apply → system set", node?.system === "Other" && node?.system_fallback === "EAM(스모크 원문)",
+    JSON.stringify([node?.system, node?.system_fallback]));
 
   // ── [16] SP 노드 — Details read-only 상속 ────────────────────────────────
   let spChecked = false;
@@ -287,7 +315,8 @@ try {
 
   // ── [20][21] 거버넌스 — gmp 선정 보존·폴백은 전달분이 진실 ────────────────
   await runDryRun(page);
-  const stillUnchanged = await chip(page, "Unchanged", 4).waitFor({ state: "visible", timeout: 15000 })
+  // 0.5 샘플 기준 9맵([2]와 같은 수) — 구 샘플(4맵) 잔재였다
+  const stillUnchanged = await chip(page, "Unchanged", 9).waitFor({ state: "visible", timeout: 15000 })
     .then(() => true).catch(() => false);
   const gmpKept = (await api(`/maps/${calMap.id}`)).sp_gmp === "direct";
   check("[20] gmp selection survives re-dry-run as Unchanged", stillUnchanged && gmpKept);

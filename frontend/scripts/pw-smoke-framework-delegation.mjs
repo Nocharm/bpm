@@ -25,12 +25,33 @@ const SAMPLE_DIR = path.resolve(
 const L1 = "EPCV";
 const L2 = "Facility"; // 위임 대상 seed(=권한 부여 카테고리) 겸 서브트리 확정 요약 검증 대상
 const L5_LEAF = "Calibration 수행 및 결과 보고"; // calibration-l5.json의 리프
+// 홈 드릴다운은 한 레벨씩 내려간다 — L1..L4를 거쳐야 L5 카드가 나온다
+const CHAIN = [L1, L2, "계측 보전", "Calibration 기획 및 운영", L5_LEAF];
 
 const results = [];
 const check = (name, ok, detail = "") => {
   results.push({ name, ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
+
+// 홈 드릴다운 행(하위 열 L1~L4)·형제 열은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 오매칭이 없다
+const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
+const sibByName = (page, name) => page.locator('[data-id^="framework-sib-"]').filter({ hasText: name });
+
+// 레벨 배지 — 요약 카드 헤더의 첫 LevelPill(data-level). 헤더 경로 칩도 같은 틴트 배경이라
+// 클래스로는 못 가른다(2026-09-09 헤더 재구성).
+const levelBadgeText = (page) =>
+  page.locator('[data-id="category-summary-card"] [data-level]').first().innerText().catch(() => "");
+
+// 요약 카드는 리마운트 없이 크로스페이드(2026-09-21) — 전환 중엔 직전 카테고리 내용이 남는다.
+// 배지가 목표 레벨이 될 때까지 기다려 stale 판독을 막는다.
+async function waitForSummaryLevel(page, level) {
+  for (let i = 0; i < 40; i += 1) {
+    if ((await levelBadgeText(page)) === `L${level}`) return true;
+    await page.waitForTimeout(200);
+  }
+  return false;
+}
 
 // 서버 직접 호출 — X-Dev-User로 신원 지정(devLogin 없이도 dev 모드 인증 통과, admin.sys는
 // BPM_SYSADMINS로 실제 sysadmin이어야 임명 게이트를 통과한다: DEV_ENFORCE_PERMISSIONS=true 전제).
@@ -55,7 +76,7 @@ try {
   await ctx.addInitScript((user) => {
     window.localStorage.setItem("bpm.devUser", user);
     window.localStorage.setItem("bpm.lang", "en");
-    window.localStorage.removeItem("bpm.framework.tree");
+    window.localStorage.removeItem("bpm.home.frameworkDrill"); // 드릴다운 위치 영속 초기화
   }, ADMIN);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
@@ -88,12 +109,17 @@ try {
   await overviewRows.first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
   const rowCount = await overviewRows.count();
   check("status board renders L5 rows", rowCount >= 2, `rows=${rowCount}`);
+  // 상태 셀은 Ready/Blocked 또는 캔버스 미보유 시 "No canvas" — 세 단어 중 하나가 행마다 있어야 한다
   const statusPillCount = await page.locator('[data-id="framework-overview"] td', {
-    hasText: /Ready|Blocked/,
+    hasText: /Ready|Blocked|No canvas/,
   }).count();
-  check("status board shows Ready/Blocked pill per row", statusPillCount >= rowCount, `pills=${statusPillCount}`);
+  check("status board shows a status pill per row", statusPillCount >= rowCount, `pills=${statusPillCount}`);
+  // Open은 캔버스가 있는 행에만 — 인터뷰 샘플 0.5 시드엔 캔버스 없는 L5도 섞여 있다
+  const noCanvasRows = await page.locator('[data-id="framework-overview"] td', { hasText: "No canvas" }).count();
   const openLinkCount = await page.locator('[data-id^="framework-overview-open-"]').count();
-  check("status board shows Open action for linked canvases", openLinkCount >= rowCount, `open=${openLinkCount}`);
+  check("status board shows Open action for linked canvases",
+    openLinkCount > 0 && openLinkCount === rowCount - noCanvasRows,
+    `open=${openLinkCount} rows=${rowCount} noCanvas=${noCanvasRows}`);
   await shot(page, "settings-status-board");
 
   // Status → Manage 역전환도 확인(브리프 "Manage↔Status 전환")
@@ -126,55 +152,55 @@ try {
     check("delegate /me reflects category_admin_root_ids", delegateScoped, JSON.stringify(me.body?.category_admin_root_ids));
   }
 
-  // ── 3) 홈 Framework 뷰 — L5 행 선택 → 요약 카드(게이트 필·Open canvas) ────────
+  // ── 3) 홈 업무 체계 뷰 — L5 카드 선택 → 요약 카드(게이트 필·Open canvas) ──────
+  // L5 포커스 드릴다운(2026-09-19) — L1은 형제 열, L2~L4는 하위 열에서 드릴인, L5는 카드(클릭=선택)
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
-  const rootBtn = page.locator('[data-id="framework-node"] button').filter({ hasText: L1 });
-  await rootBtn.first().waitFor({ state: "visible", timeout: 8000 });
-  await rootBtn.first().click(); // 캐스케이드 — 맵 있는 가지가 L5까지 자동 펼침
-
-  // 레벨 배지 — 헤더 전용 span(bg-accent-tint)으로 특정한다. 위임 권한자를 지정한 뒤로는
-  // 관리자 필(§7의 admins pill)도 같은 "L{level}" 텍스트를 낼 수 있어(예: Facility에 심은
-  // 권한자는 자기 seed 레벨 "L2" 필을 달고 나온다) 순수 텍스트 매칭은 카드에 따라 모호해진다.
-  const levelBadgeText = (page) =>
-    page.locator('[data-id="category-summary-card"] span.bg-accent-tint').innerText().catch(() => "");
-
-  const l5Btn = page.locator('[data-id="framework-node"] button').filter({ hasText: L5_LEAF });
-  await l5Btn.first().waitFor({ state: "visible", timeout: 12000 });
-  await l5Btn.first().click(); // 펼침 토글 + onSelectCategory(선택)
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 8000 });
+  await sibByName(page, CHAIN[0]).first().waitFor({ state: "visible", timeout: 8000 });
+  await sibByName(page, CHAIN[0]).first().click();
+  await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 8000 });
+  for (let i = 1; i < 4; i += 1) {
+    await rowByName(page, CHAIN[i]).first().click();
+    await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });
+  }
+  const l5Card = page.locator('[data-id^="framework-l5-"]').filter({ hasText: L5_LEAF }).first();
+  await l5Card.waitFor({ state: "visible", timeout: 12000 });
+  await l5Card.click(); // 카드 클릭 = onSelectCategory(선택)
   const l5CardVisible = await page.locator('[data-id="category-summary-card"]')
     .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-  const l5Badge = (await levelBadgeText(page)) === "L5";
-  const canvasSection = await page.locator('[data-id="category-summary-card"]').getByText("Linked canvas")
+  const l5Badge = await waitForSummaryLevel(page, 5);
+  // 연계 캔버스 섹션은 L5 요약에만 있는 카드 — 헤더 문구 대신 data-id로 잡는다
+  const canvasSection = await page.locator('[data-id="category-summary-canvas"]')
     .isVisible().catch(() => false);
   const gatePill = await page.locator('[data-id="category-summary-card"]').getByText(/Ready|Blocked|No canvas/)
     .first().isVisible().catch(() => false);
-  check("L5 category row selects summary card with canvas section + gate pill",
+  check("L5 category card selects summary card with canvas section + gate pill",
     l5CardVisible && l5Badge && canvasSection && gatePill,
     `card=${l5CardVisible} L5=${l5Badge} canvas=${canvasSection} gate=${gatePill}`);
   await shot(page, "home-summary-card-l5");
 
-  // ── 4) 맵 카드 선택 — 요약 카드와 배타 (L2 토글 전에 먼저 확인 — Facility 재클릭은
-  // 이미 열린 가지를 접어 L5의 맵 박스를 DOM에서 없애버린다: Facility가 두 L3 갈래의
-  // 공통 부모라 접으면 방금 확인한 맵 카드까지 함께 사라진다) ────────────────────
-  const mapCard = page.locator('[data-id="map-card"]').first();
-  const mapCardFound = await mapCard.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-  if (mapCardFound) {
-    await mapCard.click();
+  // ── 4) 소속 맵 선택 — 요약 카드와 배타. 맵 목록은 좌측 트리가 아니라 요약 카드의
+  // 소속 맵 행(2026-09-19 드릴다운 재구성)이고, 고르면 우측이 맵 상세로 바뀐다 ──────
+  const mapRow = page.locator('[data-id="category-summary-map-row"]').first();
+  const mapRowFound = await mapRow.waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
+  if (mapRowFound) {
+    await mapRow.click();
+    const detailVisible = await page.locator('[data-id="map-detail-category"]:visible').first()
+      .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
     const summaryGoneAfterMap = (await page.locator('[data-id="category-summary-card"]').count()) === 0;
-    check("selecting a map card clears the category summary card (exclusive)", summaryGoneAfterMap);
+    check("selecting a map clears the category summary card (exclusive)",
+      detailVisible && summaryGoneAfterMap, `detail=${detailVisible} summaryGone=${summaryGoneAfterMap}`);
     await shot(page, "home-map-selected-exclusive");
   } else {
-    check("selecting a map card clears the category summary card (exclusive)", false, "no map card visible under expanded L5/L2 branch");
+    check("selecting a map clears the category summary card (exclusive)", false, "no map row in the L5 summary");
   }
 
-  // ── 5) L2(상위) 행 선택 → 서브트리 확정 3필 (카드는 key={categoryId} 리마운트라
-  // 클릭 직후엔 로딩 상태 — 배지 판독 전 반드시 카드 재등장을 기다린다) ────────────
-  const l2Btn = page.locator('[data-id="framework-node"] button').filter({ hasText: L2 });
-  await l2Btn.first().click();
+  // ── 5) L2(상위) 카테고리 선택 → 서브트리 확정 3필. 브레드크럼으로 Facility(L2)까지
+  // 올라간다(조상 버튼 = goTo + 선택) ─────────────────────────────────────────────
+  await page.locator(`[data-id="framework-crumb-${facilityId}"]`).click();
   await page.locator('[data-id="category-summary-card"]').waitFor({ state: "visible", timeout: 8000 });
-  const l2Badge = (await levelBadgeText(page)) === "L2";
+  const l2Badge = await waitForSummaryLevel(page, 2);
   const subtreeSection = await page.locator('[data-id="category-summary-card"]').getByText("Subtree confirmation")
     .isVisible().catch(() => false);
   const noOpenCanvasBtn = await page.locator('[data-id="category-summary-open-canvas"]').count();

@@ -10179,6 +10179,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                              과거(superseded) 스냅샷은 회색 톤 + 최신 확정 라벨 안내 (룰 재정립 2026-09-02).
                              차콜 캔버스에선 옆 텍스트 워터마크와 동일 조건으로 text-canvas 톤 전환(저시인성 방지). */
                           <span
+                            data-id="editor-confirm-stamp"
                             className={`flex -rotate-[24deg] select-none flex-col items-center rounded-md border-[6px] px-10 py-4 tracking-widest opacity-[0.14] ${
                               index === 0 && l5Charcoal
                                 ? "border-canvas text-canvas"

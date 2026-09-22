@@ -1,4 +1,4 @@
-// L5 연계 캔버스 스모크 — 트리 L5 행 Linkage 버튼→캔버스 생성·소속 L6 시드(Start 없음)→
+// L5 연계 캔버스 스모크 — 홈 드릴다운 L5 카드 Linkage 버튼→캔버스 생성·소속 L6 시드(Start 없음)→
 // FrameworkChip(캔버스 소스)→S 단축키 트리 피커→확정 게이트 체크리스트(통과/위반)→확정(v1.0) 반영.
 // 확정 요청 워크플로(kind=fw_confirm)는 BE 10케이스가 커버 — 여기는 게이트 체크리스트·버튼 상태 중심(task-9 결정).
 // 시드는 pw-smoke-framework.mjs와 동일(인터뷰 샘플 웹 임포트, 멱등).
@@ -28,6 +28,10 @@ const check = (name, ok, detail = "") => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`);
 };
 
+// 홈 드릴다운 행(하위 열 L1~L4)·형제 열은 이름 텍스트로 고른다 — 한 레벨만 렌더되므로 오매칭이 없다
+const rowByName = (page, name) => page.locator('[data-id^="framework-row-"]').filter({ hasText: name });
+const sibByName = (page, name) => page.locator('[data-id^="framework-sib-"]').filter({ hasText: name });
+
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const consoleErrors = [];
 let shotIndex = 0;
@@ -39,8 +43,8 @@ try {
   await ctx.addInitScript((user) => {
     window.localStorage.setItem("bpm.devUser", user);
     window.localStorage.setItem("bpm.lang", "en");
-    // 트리 펼침 영속이 이전 실행에 남으면 캐스케이드 단언이 헷갈린다 — 매 실행 초기화
-    window.localStorage.removeItem("bpm.framework.tree");
+    // 드릴다운 위치 영속이 이전 실행에 남으면 루트부터의 드릴 단언이 헷갈린다 — 매 실행 초기화
+    window.localStorage.removeItem("bpm.home.frameworkDrill");
   }, ADMIN);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
@@ -81,21 +85,24 @@ try {
     .then(() => true).catch(() => false);
   check("seeded via interview web import", seeded);
 
-  // ── 1) 홈 Framework 뷰 — 캐스케이드 후 L5 행에 Linkage 버튼(호버 노출) ──────
+  // ── 1) 홈 업무 체계 뷰 — L5 카드 안의 Linkage 버튼(캔버스 만들기) ──────────
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.locator('[data-id="home-view-toggle"] button', { hasText: "Framework" }).click();
-  await page.waitForSelector('[data-id="framework-tree"]', { timeout: 8000 });
-  // 헤더는 boxed(틴트 박스) 시 li 직계가 아니다 — 버튼 data-id로 직접 잡고 그룹 행에 hover
-  const rootBtn = page.locator('[data-id="framework-node"] button').filter({ hasText: CHAIN[0] });
-  await rootBtn.first().waitFor({ state: "visible", timeout: 8000 });
-  await rootBtn.first().click(); // 캐스케이드 — 맵 있는 가지가 L5까지 자동 펼침
-  const linkageBtn = page.locator('[data-id^="framework-linkage-"]').first();
-  await linkageBtn.waitFor({ state: "attached", timeout: 12000 });
-  const groupRow = linkageBtn.locator("xpath=ancestor::div[contains(@class,'group')][1]");
-  await groupRow.hover(); // 버튼은 hidden group-hover:block — 그룹 행 hover로 노출
+  await page.waitForSelector('[data-id="framework-drill"]', { timeout: 8000 });
+  // L5 포커스 드릴다운(2026-09-19) — L1은 형제 열, L2~L4는 하위 열에서 드릴인, L5는 컴팩트 카드.
+  // Linkage 버튼은 호버 게이팅 없이 카드 안에 상시 렌더된다(can_edit_linkage 또는 캔버스 보유 시).
+  await sibByName(page, CHAIN[0]).first().click();
+  await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[0] }).waitFor({ timeout: 8000 });
+  for (let i = 1; i < 4; i += 1) {
+    await rowByName(page, CHAIN[i]).first().click();
+    await page.locator('[data-id="framework-drill-title"]', { hasText: CHAIN[i] }).waitFor({ timeout: 8000 });
+  }
+  const l5Card = page.locator('[data-id^="framework-l5-"]').filter({ hasText: CHAIN[4] }).first();
+  await l5Card.waitFor({ state: "visible", timeout: 12000 });
+  const linkageBtn = l5Card.locator('[data-id^="framework-linkage-"]').first();
   const btnVisible = await linkageBtn.isVisible().catch(() => false);
-  check("L5 row shows linkage button on hover (can_edit_linkage)", btnVisible);
-  await shot(page, "tree-l5-linkage-button");
+  check("L5 card shows the linkage button (can_edit_linkage)", btnVisible);
+  await shot(page, "drill-l5-linkage-button");
 
   // ── 2) 클릭 → 캔버스 생성·이동 — 소속 L6 subprocess 노드 시드, Start/End 없음 ──
   await linkageBtn.evaluate((el) => el.click()); // JS 클릭 — hover 해제 타이밍 무관
@@ -222,7 +229,26 @@ try {
   const confirmBtnDisabledResolved = await page.locator('[data-id="framework-confirm-button"]').isDisabled();
   check("confirm button state restored to baseline", confirmBtnDisabledResolved === confirmBtnDisabledBaseline);
 
-  // ── 5) 확정 — v1.0 스냅샷 생성(앱 프록시 경유 API) 후 재로드로 반영 확인 ────
+  // ── 5) 확정 — 인터뷰 샘플 0.5 시드 캔버스엔 미등록 L6 플레이스홀더가 1건 있어 게이트가 막는다.
+  // §4c와 같은 방식(그래프 PUT)으로 그 노드와 연결 엣지를 걷어내 결정적으로 통과 상태를 만든 뒤 확정한다.
+  const seedPlaceholderIds = originalGraph.nodes
+    .filter((n) => n.node_type === "subprocess" && n.linked_map_id === null)
+    .map((n) => n.id);
+  const putCleaned = await callApi(`/versions/${draftVersion.id}/graph`, {
+    method: "PUT",
+    body: JSON.stringify({
+      ...originalGraph,
+      nodes: originalGraph.nodes.filter((n) => !seedPlaceholderIds.includes(n.id)),
+      edges: originalGraph.edges.filter(
+        (e) => !seedPlaceholderIds.includes(e.source_node_id) && !seedPlaceholderIds.includes(e.target_node_id),
+      ),
+    }),
+  });
+  const readinessClean = (await callApi(`/maps/${mapId}/confirm-readiness`)).body;
+  check("draft passes all gates once the seed placeholder is removed",
+    putCleaned.status === 200 && readinessClean.ready === true,
+    `put=${putCleaned.status} failures=${JSON.stringify(readinessClean.failures)}`);
+
   const confirm1 = await callApi(`/maps/${mapId}/framework-confirm`, {
     method: "POST",
     body: JSON.stringify({ major: false }),
@@ -238,10 +264,9 @@ try {
   })).status;
   check("no-change reconfirm is rejected (409)", confirm2 === 409, `status=${confirm2}`);
 
-  const detail = await page.evaluate(async (id) => {
-    const res = await fetch(`/api/maps/${id}`);
-    return res.json();
-  }, mapId);
+  // 헤더 없는 raw fetch는 settings.dev_user로 떨어져 framework draft가 응답에서 걸러진다(draft=체인 권한자
+  // 전용, 2026-09-06 룰) — 브라우저 세션과 같은 신원으로 부르는 callApi를 쓴다
+  const detail = (await callApi(`/maps/${mapId}`)).body;
   const statuses = (detail.versions ?? []).map((v) => v.status);
   check("live draft stays editable next to confirmed snapshot",
     statuses.includes("draft") && statuses.includes("confirmed"), statuses.join(","));
@@ -257,10 +282,12 @@ try {
   // 스냅샷 버전으로 전환해 확정 워터마크 확인 — 버전 드롭다운 대신 URL 파라미터로 직행
   await page.goto(`${BASE}/maps/${mapId}?version=${confirm1.body.version.id}`, { waitUntil: "networkidle" });
   await page.waitForSelector(".react-flow__node", { timeout: 15000 });
-  // getByText는 페이지 전역에서 대소문자 구분 없이 매칭될 여지가 있어, 워터마크 span(uppercase 클래스) 텍스트로 특정
-  const stamp = await page.locator('span.uppercase', { hasText: "CONFIRMED" }).first()
-    .waitFor({ state: "visible", timeout: 8000 }).then(() => true).catch(() => false);
-  check("confirmed snapshot shows CONFIRMED stamp watermark", stamp);
+  // 확정 스탬프는 도장 모티프 span — 상태 라벨("Confirmed")과 버전 라벨을 한 줄에 담는다
+  const stampEl = page.locator('[data-id="editor-confirm-stamp"]').first();
+  const stampText = await stampEl.waitFor({ state: "visible", timeout: 8000 })
+    .then(() => stampEl.innerText()).catch(() => "");
+  check("confirmed snapshot shows the Confirmed stamp watermark",
+    stampText.includes("Confirmed") && stampText.includes("v1.0"), stampText.replace(/\s+/g, " ").trim());
   await shot(page, "confirmed-stamp-watermark");
 
   check("no page errors", consoleErrors.length === 0, consoleErrors.join(" | "));
