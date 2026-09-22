@@ -160,7 +160,7 @@ export default function FrameworkConsultPage() {
         <span className="text-body-strong">{session.category_name}</span>
         <span className="text-caption text-ink-muted">· {t("fwConsult.title")}</span>
         <span className="ml-auto text-caption text-ink-secondary" data-id="fw-consult-step-label">{stepLabel}</span>
-        <InterviewJsonPromptButton target={{ code: session.category_code, name: session.category_name, path: [], existingL6: session.existing }} />
+        <InterviewJsonPromptButton target={{ code: session.category_code, name: session.category_name, path: [], existingL6: session.existing.filter((e) => !e.frozen) }} />
         <button type="button" data-id="fw-consult-abandon" className="rounded-sm px-2 py-1 text-caption text-ink-secondary hover:bg-surface-alt" onClick={() => setConfirmAbandon(true)}>
           {t("fwConsult.abandon")}
         </button>
