@@ -1,13 +1,16 @@
 """기존 L6 맵 → 인터뷰 행 역변환 + 계획 카드 병합 (spec 2026-09-22 §2.1·§2.3)."""
 
 import asyncio
+import json
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.app_settings import SYSTEMS_KEY
 from app.db import SessionLocal
 from app.framework_interview.assemble import build_document, load_category_chain, validate_row
 from app.framework_interview.existing import existing_row_of, load_existing_l6, map_to_row, merge_existing_cards
-from app.models import Edge, MapVersion, Node, ProcessMap
+from app.models import AppSetting, Edge, MapVersion, Node, ProcessMap
 
 HEADERS = {"X-Dev-User": "admin.sys"}
 
@@ -39,7 +42,8 @@ def _make_l5(client: TestClient, tag: str) -> int:
     return node["id"]
 
 
-def _import_row(client: TestClient, l5_id: int, row: dict, task_id: str) -> None:
+def _import_row(client: TestClient, l5_id: int, row: dict, task_id: str) -> dict:
+    """행 1건을 인터뷰 문서로 감싸 임포트하고 리포트를 돌려준다(재임포트 action 검증용)."""
     async def _chain() -> list[dict]:
         async with SessionLocal() as db:
             return await load_category_chain(db, l5_id)
@@ -51,6 +55,12 @@ def _import_row(client: TestClient, l5_id: int, row: dict, task_id: str) -> None
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["applied"] is True and body["files"][0]["ok"] is True, body["files"]
+    return body
+
+
+def _action_of(report: dict, code: str) -> str:
+    """리포트에서 그 맵의 결과 행 — warning 행은 결과가 아니라 주석이라 건너뛴다."""
+    return next(r["action"] for r in report["rows"] if r["code"] == code and r["action"] != "warning")
 
 
 def test_map_to_row_round_trips_imported_map(client: TestClient) -> None:
@@ -201,3 +211,153 @@ def test_merge_existing_cards_keeps_every_existing_map_once() -> None:
     merged2 = merge_existing_cards([{"name": "신규", "summary": "", "owner_role": "", "department": "", "depends_on": []}], existing)
     assert [c["name"] for c in merged2] == ["접수", "검토", "신규"]
     assert merged2[0]["mode"] == "keep" and merged2[0]["summary"] == "s1"
+
+
+FULL_FIELDS_ROW = {
+    "l6": "품질 점검", "ownerRole": "담당자", "department": "",
+    "fields": {
+        "start_condition": "점검 요청 접수", "done_criteria": "점검 보고서 발행",
+        "input_data": "점검 요청서", "output_data": "점검 보고서",
+        "systems": "LIMS",
+        "total_time_min": 90, "touch_time_min": 45,
+        "total_time": "반나절", "touch_time": "45분 내외",
+        "frequency": "주 2회", "headcount": 2, "annual_count": 120, "fte": 0.5,
+        "gmp": "GMP 대상", "artifact_role": "품질 기록",
+    },
+    "actions": [
+        {"seq": 1, "label": "요청 확인", "kind": "action"},
+        {"seq": 2, "label": "점검 수행", "kind": "action"},
+    ],
+    "relations": {"edges": [{"src": 1, "dst": 2, "kind": "seq"}]},
+}
+
+
+def _l5_code(client: TestClient, l5_id: int) -> str:
+    return client.get(f"/api/categories/{l5_id}/chain", headers=HEADERS).json()[-1]["code"]
+
+
+def _load_existing(l5_id: int) -> list[dict]:
+    async def _run() -> list[dict]:
+        async with SessionLocal() as db:
+            return await load_existing_l6(db, l5_id)
+    return asyncio.run(_run())
+
+
+def _load_map(code: str) -> ProcessMap:
+    async def _run() -> ProcessMap:
+        async with SessionLocal() as db:
+            return (await db.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+    return asyncio.run(_run())
+
+
+def test_keep_row_carries_every_map_field(client: TestClient) -> None:
+    """유지 행은 맵 컬럼에 흩어진 fields를 전부 싣는다 — 빠지면 재임포트가 sp_* 를 지운다 (review 2026-09-22 #1)."""
+    l5_id = _make_l5(client, "exfull")
+    task_id = f"{_l5_code(client, l5_id)}-01"
+    _import_row(client, l5_id, FULL_FIELDS_ROW, task_id)
+
+    row = _load_existing(l5_id)[0]["row"]
+    assert row["fields"] == {
+        "start_condition": "점검 요청 접수", "done_criteria": "점검 보고서 발행",
+        "input_data": "점검 요청서", "output_data": "점검 보고서",
+        # 카탈로그 미등록 → Other + 원문 메모로 저장되므로 메모를 되살린다
+        "systems": "LIMS",
+        "total_time_min": 90, "touch_time_min": 45,
+        "total_time": "반나절", "touch_time": "45분 내외",
+        "frequency": "주 2회", "headcount": "2", "annual_count": "120", "fte": "0.5",
+        "gmp": "GMP 대상", "artifact_role": "품질 기록",
+    }
+
+    # 유지 행을 그대로 다시 넣으면 무변경이어야 한다(그래프·맵 필드 양쪽)
+    report = _import_row(client, l5_id, row, task_id)
+    assert _action_of(report, task_id) == "unchanged", report["rows"]
+    m = _load_map(task_id)
+    assert (m.sp_input, m.sp_output, m.sp_duration, m.sp_touch_time) == (
+        "점검 요청서", "점검 보고서", "1.30", "0.45")
+    assert (m.sp_headcount, m.sp_annual_count, m.sp_fte) == ("2", "120", "0.5")
+    assert (m.sp_system, m.sp_system_fallback) == ("Other", "LIMS")
+    assert (m.sp_total_time_fallback, m.sp_touch_time_fallback) == ("반나절", "45분 내외")
+    assert (m.sp_frequency_fallback, m.sp_gmp_fallback) == ("주 2회", "GMP 대상")
+
+
+def _set_system_catalog(entries: list[dict] | None) -> None:
+    """시스템 카탈로그 행을 세우거나 지운다 — 테스트 DB는 세션 스코프라 쓴 뒤 반드시 되돌린다."""
+    async def _run() -> None:
+        async with SessionLocal() as db:
+            row = await db.get(AppSetting, SYSTEMS_KEY)
+            if entries is None:
+                if row is not None:
+                    await db.delete(row)
+            elif row is None:
+                db.add(AppSetting(key=SYSTEMS_KEY, value=json.dumps(entries)))
+            else:
+                row.value = json.dumps(entries)
+            await db.commit()
+    asyncio.run(_run())
+
+
+def test_keep_row_returns_the_alias_the_catalog_normalized_away(client: TestClient) -> None:
+    """별칭 전달분은 별칭 원문으로 되돌린다 — 정식 표기를 돌려주면 폴백이 덮여 무변경이 '변경'이 된다 (review #5)."""
+    _set_system_catalog([{"value": "SAP ERP", "aliases": ["SAP"]}])
+    try:
+        l5_id = _make_l5(client, "exalias")
+        task_id = f"{_l5_code(client, l5_id)}-01"
+        aliased = {**ROW, "fields": {**ROW["fields"], "systems": "SAP"},
+                   "actions": [{"seq": 1, "label": "전표 입력", "kind": "action", "system": "SAP"}],
+                   "relations": {"edges": []}}
+        _import_row(client, l5_id, aliased, task_id)
+
+        # 노드(그래프 서명)와 맵 지정값(sp_system_fallback) 양쪽이 같은 규칙을 따른다
+        row = _load_existing(l5_id)[0]["row"]
+        assert row["actions"][0]["system"] == "SAP"
+        assert row["fields"]["systems"] == "SAP"
+        assert (_load_map(task_id).sp_system, _load_map(task_id).sp_system_fallback) == ("SAP ERP", "SAP")
+        assert _action_of(_import_row(client, l5_id, row, task_id), task_id) == "unchanged"
+    finally:
+        _set_system_catalog(None)
+
+
+def _seed_map_with_subprocess(l5_id: int, code: str) -> None:
+    async def _run() -> None:
+        async with SessionLocal() as db:
+            m = ProcessMap(name="링크 보유 맵", category_id=l5_id, consultant_code=code)
+            db.add(m)
+            await db.flush()
+            version = MapVersion(map_id=m.id, label="v1", status="published")
+            db.add(version)
+            await db.flush()
+            db.add_all([
+                Node(id=f"{code}-a", version_id=version.id, title="활동", node_type="process", sort_order=1),
+                Node(id=f"{code}-sp", version_id=version.id, title="하위 맵", node_type="subprocess", sort_order=2),
+            ])
+            await db.commit()
+    asyncio.run(_run())
+
+
+def test_load_existing_freezes_maps_with_subprocess_nodes(client: TestClient) -> None:
+    """하위 맵 링크가 있는 캔버스는 역변환이 링크를 떨어뜨린다 — 행 없이 동결해 재게시 대상에서 뺀다 (review #3)."""
+    l5_id = _make_l5(client, "exfrozen")
+    _seed_map_with_subprocess(l5_id, "exfrozen-01")
+
+    item = _load_existing(l5_id)[0]
+    assert item["frozen"] is True
+    assert item["row"] is None and item["activities"] == []
+    assert item["name"] == "링크 보유 맵"
+    assert existing_row_of([item], "exfrozen-01") is None
+
+
+def test_merge_existing_cards_drops_frozen_maps() -> None:
+    """동결 맵은 카드를 만들지도, AI가 만든 중복 카드를 남기지도 않는다 (review #3)."""
+    existing = [
+        {"map_id": 1, "code": "x-01", "name": "접수", "summary": "s1", "activities": ["a"], "row": {}},
+        {"map_id": 2, "code": "x-09", "name": "링크 보유", "summary": "s9", "activities": [],
+         "row": None, "frozen": True},
+    ]
+    cards = [
+        {"name": "링크 보유", "summary": "", "owner_role": "", "department": "", "depends_on": []},
+        {"name": "다른 이름", "summary": "", "owner_role": "", "department": "", "depends_on": [],
+         "existing_code": "x-09"},
+        {"name": "신규", "summary": "", "owner_role": "", "department": "", "depends_on": []},
+    ]
+    merged = merge_existing_cards(cards, existing)
+    assert [(c["name"], c["mode"]) for c in merged] == [("접수", "keep"), ("신규", "new")]

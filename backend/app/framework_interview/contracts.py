@@ -138,6 +138,9 @@ class RelationsOut(BaseModel):
 
 # ── 계약 문구 (관리자 오버라이드 가능) ──
 
+# 동결 맵 꼬리표 — 캔버스에 하위 맵 링크가 있어 역변환할 수 없는 L6 (existing.load_existing_l6)
+FROZEN_MAP_NOTE = "(캔버스에 하위 맵 링크가 있어 편집 불가, 카드를 만들지 않는다)"
+
 L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주어진 L5 업무(카테고리 경로)와 설명을 읽고,
 그 아래에 등록할 L6 단위 업무(각각 하나의 프로세스 맵) 목록을 제안하세요.
 
@@ -265,11 +268,13 @@ def build_plan_messages(
     system = f"{contract}\n\n{_lang_line(lang)}\n\n{_catalog_blocks(role_catalog, '', dept_catalog)}"
     existing = "\n".join(f"- {n}" for n in existing_names) or "- (없음)"
     # 이미 그려진 맵은 이름만이 아니라 코드·활동까지 보여야 AI가 유지 카드를 코드째로 되돌려준다
-    maps = "\n".join(
-        f"- {m.get('code')} · {m.get('name')}: {m.get('summary', '')}"
-        f" (활동: {' → '.join(m.get('activities') or [])})"
-        for m in existing_maps or []
-    ) or "- (없음)"
+    map_lines = []
+    for m in existing_maps or []:
+        line = f"- {m.get('code')} · {m.get('name')}: {m.get('summary', '')}"
+        # 동결 맵은 활동을 싣지 않는다(역변환하지 않았다) — 대신 카드를 만들지 말라고 못 박는다
+        map_lines.append(f"{line} {FROZEN_MAP_NOTE}" if m.get("frozen") else
+                         f"{line} (활동: {' → '.join(m.get('activities') or [])})")
+    maps = "\n".join(map_lines) or "- (없음)"
     user = (
         f"[L5 경로]\n{category_path}\n\n[설명·범위·첨부 요약]\n{brief or '(없음)'}\n\n"
         f"[이미 등록된 L6]\n{existing}\n\n[이미 있는 L6 맵]\n{maps}"

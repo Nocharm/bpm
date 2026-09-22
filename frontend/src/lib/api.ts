@@ -2916,6 +2916,7 @@ export interface FwExisting {
   code: string;
   name: string;
   activity_count: number;
+  frozen?: boolean;  // 캔버스에 하위 맵 링크가 있어 카드도 재게시도 없는 맵(서버 load_existing_l6)
 }
 export interface FwAttachment {
   name: string;

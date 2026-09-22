@@ -10,10 +10,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
-from app.models import FrameworkInterviewSession, ProcessCategory, ProcessMap
+from app.framework_interview.existing import load_existing_l6
+from app.models import FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory, ProcessMap
 
 SCHEMA_VERSION = "0.5-bpm-interface-draft"
 LABEL_SOURCE = "ai-assisted"
+# 유지 태스크의 맵이 사라졌을 때 붙는 이슈 — 재조립해도 한 건만 남도록 문구로 식별한다
+KEEP_GONE_MESSAGE = (
+    "existing map is gone or no longer convertible - row dropped from the document"
+    " (기존 맵이 사라졌거나 변환 불가라 문서에서 제외)"
+)
 
 
 def allocate_task_ids(category_code: str, existing_codes: list[str], count: int) -> list[str]:
@@ -78,14 +84,46 @@ def validate_row(chain: list[dict], l5: dict, row: dict) -> list[dict]:
     return [asdict(issue) for issue in result.issues if issue.path.startswith("rows[") or issue.path == "$"]
 
 
+async def _refresh_keep_rows(
+    db: AsyncSession, session: FrameworkInterviewSession, chain: list[dict], l5: dict,
+) -> set[int]:
+    """유지 태스크의 행을 조립 직전 현재 맵에서 다시 읽는다 — 잠금 시점 스냅샷은 그 사이 낡는다.
+
+    반환: 맵이 사라져 문서에서 빼야 할 태스크 pk 집합(행은 미리보기용으로 남겨 둔다).
+    """
+    keep = [t for t in session.tasks if t.mode == "keep" and t.status == "drawn"]
+    if not keep:
+        return set()
+    current = {item["code"]: item for item in await load_existing_l6(db, session.category_id)}
+    dropped: set[int] = set()
+    for task in keep:
+        row = (current.get(task.task_id) or {}).get("row")
+        if not row:
+            dropped.add(task.id)
+            # 재조립해도 경고가 겹쳐 쌓이지 않게 같은 문구를 먼저 걷어낸다
+            kept = [i for i in (task.issues or []) if i.get("message") != KEEP_GONE_MESSAGE]
+            task.issues = [*kept, {
+                "severity": "warning", "path": f"rows[{task.seq - 1}]", "message": KEEP_GONE_MESSAGE,
+            }]
+            continue
+        task.row = row
+        task.issues = validate_row(chain, l5, {"taskId": task.task_id, **row})
+    return dropped
+
+
+def _document_rows(tasks: list[FrameworkInterviewTask], dropped: set[int]) -> list[dict]:
+    return [
+        {"taskId": task.task_id, **task.row}
+        for task in sorted(tasks, key=lambda t: t.seq)
+        if task.status == "drawn" and task.row and task.id not in dropped
+    ]
+
+
 async def assemble_document(db: AsyncSession, session: FrameworkInterviewSession) -> dict:
     chain = await load_category_chain(db, session.category_id)
     l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
-    rows = [
-        {"taskId": task.task_id, **task.row}
-        for task in sorted(session.tasks, key=lambda t: t.seq)
-        if task.status == "drawn" and task.row
-    ]
+    dropped = await _refresh_keep_rows(db, session, chain, l5)
+    rows = _document_rows(list(session.tasks), dropped)
     doc = build_document(chain, l5, rows, session.relations, label=session.label, session_id=session.id)
     session.assembled = doc
     return doc

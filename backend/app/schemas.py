@@ -2794,6 +2794,8 @@ class FrameworkExistingOut(BaseModel):
     code: str
     name: str
     activity_count: int
+    # 캔버스에 하위 맵 링크가 있어 행으로 되돌릴 수 없는 맵 — 카드도, 재게시도 없다
+    frozen: bool = False
 
 
 class FrameworkInterviewOut(BaseModel):

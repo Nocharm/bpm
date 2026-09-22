@@ -8,11 +8,12 @@ from sqlalchemy import select
 
 from app import ai_client
 from app import auth as auth_mod
+from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.framework_interview import runner
 from app.framework_interview.assemble import build_document, load_category_chain
 from app.main import app
-from app.models import AiUsageEvent, FrameworkInterviewSession
+from app.models import AiUsageEvent, FrameworkInterviewSession, MapVersion, Node, ProcessMap
 from app.settings import settings
 
 SYSADMIN = "fw.admin"
@@ -352,7 +353,8 @@ def test_create_snapshots_existing_l6(client: TestClient, monkeypatch) -> None:
     res = client.post("/api/framework-interviews", json={"category_id": l5_id, "brief": "b"}, headers=HEADERS)
     assert res.status_code == 200, res.text
     body = res.json()
-    assert body["existing"] == [{"map_id": body["existing"][0]["map_id"], "code": f"{code}-01", "name": "요청 접수", "activity_count": 3}]
+    assert body["existing"] == [{"map_id": body["existing"][0]["map_id"], "code": f"{code}-01",
+                                 "name": "요청 접수", "activity_count": 3, "frozen": False}]
     assert "row" not in body["existing"][0]
 
 
@@ -491,3 +493,51 @@ def test_lock_allows_duplicate_names_between_existing_maps(client: TestClient, m
     clash = client.put(f"/api/framework-interviews/{other_sid}/plan", headers=HEADERS,
                        json={"cards": [_card("통보"), _card("통보")], "lock": True})
     assert clash.status_code == 422
+
+
+def test_assembly_refreshes_keep_rows_from_the_live_map(client: TestClient, monkeypatch) -> None:
+    """유지 행은 잠금 시점 스냅샷 — 조립 직전에 현재 맵에서 다시 읽지 않으면 낡은 행이 재게시된다 (review 2026-09-22 #2)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    locked = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS,
+                        json={"cards": [], "lock": True})
+    assert locked.status_code == 200, locked.text
+    task = locked.json()["tasks"][0]
+    assert (task["task_id"], task["status"], task["mode"]) == (f"{code}-01", "drawn", "keep")
+
+    async def _rename_first_activity() -> None:
+        async with SessionLocal() as db:
+            m = (await db.scalars(select(ProcessMap).where(ProcessMap.consultant_code == f"{code}-01"))).one()
+            version = (await db.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+                .order_by(MapVersion.id.desc()))).first()
+            node = (await db.scalars(
+                select(Node).where(Node.version_id == version.id, Node.title == "요청 확인"))).one()
+            node.title = "요청 접수 확인"
+            await db.commit()
+    asyncio.run(_rename_first_activity())
+
+    relations = {"entry": {"taskId": f"{code}-01", "triggerType": "manual"}, "edges": []}
+    confirmed = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS,
+                           json={"relations": relations})
+    assert confirmed.status_code == 200, confirmed.text
+    doc = client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).json()
+    assert [a["label"] for a in doc["rows"][0]["actions"]] == ["요청 접수 확인", "완결성 판정", "접수 등록"]
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{task['id']}", headers=HEADERS).json()
+    assert detail["row"]["actions"][0]["label"] == "요청 접수 확인"
+
+    # 맵이 휴지통으로 가면 그 행은 문서에서 빠지고 태스크에 경고가 붙는다
+    async def _trash() -> None:
+        async with SessionLocal() as db:
+            m = (await db.scalars(select(ProcessMap).where(ProcessMap.consultant_code == f"{code}-01"))).one()
+            m.deleted_at = now_kst()
+            await db.commit()
+    asyncio.run(_trash())
+    again = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS,
+                       json={"relations": relations})
+    assert again.status_code == 200, again.text
+    assert client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).json()["rows"] == []
+    gone = client.get(f"/api/framework-interviews/{sid}/tasks/{task['id']}", headers=HEADERS).json()
+    assert any(i["severity"] == "warning" and "dropped" in i["message"] for i in gone["issues"])

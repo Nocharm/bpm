@@ -72,6 +72,7 @@ async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInter
         relations=s.relations, label=s.label,
         existing=[FrameworkExistingOut(
             map_id=e["map_id"], code=e["code"], name=e["name"], activity_count=len(e.get("activities") or []),
+            frozen=bool(e.get("frozen")),
         ) for e in s.existing or []],
         tasks=[FrameworkInterviewTaskOut.model_validate(t) for t in tasks],
         progress=FrameworkInterviewProgressOut(
@@ -233,7 +234,9 @@ async def generate_plan(
         brief=build_context_text(row.brief, row.attachments),
         existing_names=list(existing.all()), role_catalog=role_catalog,
         existing_maps=[
-            {k: e.get(k, "") for k in ("code", "name", "summary", "activities")} for e in row.existing or []
+            {**{k: e.get(k, "") for k in ("code", "name", "summary", "activities")},
+             "frozen": bool(e.get("frozen"))}
+            for e in row.existing or []
         ],
         overrides=await get_prompt_overrides(db),
     )
@@ -245,6 +248,12 @@ async def generate_plan(
 
 async def _create_locked_tasks(db: AsyncSession, row: FrameworkInterviewSession, cards: list[dict]) -> None:
     """잠금 시 카드 → 태스크. 유지 카드는 기존 코드·행을 그대로 물고 drawn으로 태어나 러너를 건너뛴다."""
+    # 병합이 이미 버리지만, 동결 맵 코드가 카드로 새어 들어오면 행 없는 태스크가 태어난다
+    frozen_codes = {e["code"] for e in (row.existing or []) if e.get("frozen")}
+    for card in cards:
+        if card.get("existing_code") in frozen_codes:
+            raise HTTPException(
+                status_code=422, detail=f"existing map {card['existing_code']} is frozen (has subprocess links)")
     category = await db.get(ProcessCategory, row.category_id)
     new_count = sum(1 for card in cards if card["mode"] == "new")
     ids = iter(allocate_task_ids(category.code, await load_existing_codes(db, row.category_id), new_count))

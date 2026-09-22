@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { FwInterviewSession, FwQuestionnaire, FwSessionStatus } from "./api";
 import {
-  buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, hasBackgroundWork, validateAnswers,
+  buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, hasBackgroundWork,
+  hasBlockingDuplicate, validateAnswers,
 } from "./framework-interview";
 
 const Q: FwQuestionnaire = {
@@ -64,5 +65,13 @@ describe("framework-interview view model", () => {
     expect(hasBackgroundWork(session(["ready", "ready", "pending"]))).toBe(false);
     expect(hasBackgroundWork(session(["ready", "pending"]))).toBe(true);
     expect(hasBackgroundWork(session(["pending"], "plan_locked", true))).toBe(false);
+  });
+
+  // 서버 save_plan은 새 카드가 낀 충돌만 422로 막는다 — 잠금 버튼도 같은 규칙이어야 한다
+  it("hasBlockingDuplicate only fires when a card without existing_code joins the clash", () => {
+    expect(hasBlockingDuplicate([{ name: "접수", existing_code: "c-01" }, { name: "접수", existing_code: "c-02" }])).toBe(false);
+    expect(hasBlockingDuplicate([{ name: "접수", existing_code: "c-01" }, { name: " 접수 " }])).toBe(true);
+    expect(hasBlockingDuplicate([{ name: "접수" }, { name: "검토" }])).toBe(false);
+    expect(hasBlockingDuplicate([{ name: "접수", existing_code: null }, { name: "접수", existing_code: null }])).toBe(true);
   });
 });

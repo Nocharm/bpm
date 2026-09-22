@@ -1,6 +1,6 @@
 // AI L5 캠페인 뷰 모델 — 설문 검증·제안 채우기·진행률/ETA·현재 단계 파생. 페이지와 보드가 공유 (spec 2026-09-21 §9).
 
-import type { FwAnswerValue, FwInterviewSession, FwInterviewTask, FwQuestionnaire } from "./api";
+import type { FwAnswerValue, FwInterviewSession, FwInterviewTask, FwPlanCard, FwQuestionnaire } from "./api";
 
 export type FwStep = "plan" | "answer" | "waiting" | "relations" | "register" | "done";
 
@@ -44,6 +44,19 @@ export function buildSubmitPayload(q: FwQuestionnaire, answers: Record<string, F
     out[question.id] = value ?? (question.kind === "text" ? "" : question.kind === "single" ? "" : []);
   }
   return out;
+}
+
+/**
+ * 잠금을 막는 이름 중복인지 — 서버 `save_plan` 규칙과 동치.
+ * 기존 맵끼리는 이름이 같아도 코드로 구분되므로, 충돌에 `existing_code` 없는 카드가 껴야 막는다.
+ */
+export function hasBlockingDuplicate(cards: Pick<FwPlanCard, "name" | "existing_code">[]): boolean {
+  const counts = new Map<string, number>();
+  for (const card of cards) {
+    const name = card.name.trim();
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return cards.some((card) => (counts.get(card.name.trim()) ?? 0) > 1 && !card.existing_code);
 }
 
 export function findCurrentTask(session: FwInterviewSession): FwInterviewTask | null {

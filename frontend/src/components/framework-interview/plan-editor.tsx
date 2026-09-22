@@ -8,6 +8,7 @@ import { useRef, useState } from "react";
 import { ArrowDown, ArrowUp, FileText, Paperclip, Plus, Sparkles, Trash2, X } from "lucide-react";
 
 import type { FwCardMode, FwInterviewSession, FwPlanCard } from "@/lib/api";
+import { hasBlockingDuplicate } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
 
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink";
@@ -48,7 +49,7 @@ export function PlanEditor({ session, busy, onAttach, onRemoveAttachment, onGene
       return next;
     });
   }
-  const canLock = cards.length > 0 && cards.every((c) => c.name.trim()) && new Set(cards.map((c) => c.name.trim())).size === cards.length;
+  const canLock = cards.length > 0 && cards.every((c) => c.name.trim()) && !hasBlockingDuplicate(cards);
 
   return (
     <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[minmax(320px,2fr)_3fr]" data-id="fw-consult-plan">
