@@ -163,7 +163,8 @@ try {
   await page.waitForSelector('[data-id^="framework-diagram-node-"]', { timeout: 8000 });
   await page.waitForTimeout(700);
   const diagramWidth = (await explorer.boundingBox())?.width ?? 0;
-  check("modal narrows for the tree and widens for the diagram", treeWidth < 600 && diagramWidth > 900,
+  // 패널 폭은 창 비례(2026-09-21 PANEL_SIZE)라 절대값 대신 상대 비교 — 트리 모드가 다이어그램 모드보다 좁으면 된다
+  check("modal narrows for the tree and widens for the diagram", treeWidth < diagramWidth - 150 && diagramWidth > 900,
     `tree=${treeWidth} diagram=${diagramWidth}`);
   const ancestorCount = await page.locator('[data-id^="framework-diagram-node-"][data-kind="ancestor"]').count();
   check("diagram stacks the whole ancestor chain (L1..L3) above the L4 center", ancestorCount === 3, `ancestors=${ancestorCount}`);
