@@ -2874,11 +2874,13 @@ export async function uploadInterviewAttachment(
 
 export type FwQuestionKind = "single" | "multi" | "text" | "ordered";
 export type FwMapsTo = "activities" | "branches" | "roles" | "systems" | "io" | "conditions" | "params";
+export type FwQuestionSection = "basic" | "activities" | "exceptions" | "io";
 export interface FwQuestionOption { id: string; label: string }
 export interface FwQuestion {
   id: string;
   kind: FwQuestionKind;
   maps_to: FwMapsTo;
+  section: FwQuestionSection;
   text: string;
   options: FwQuestionOption[];
   suggested: string[] | string;

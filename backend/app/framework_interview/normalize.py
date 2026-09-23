@@ -15,6 +15,8 @@ KIND_SYNONYMS = {
     "free": "text", "open": "text", "textarea": "text", "string": "text", "input": "text", "essay": "text",
 }
 MAPS_TO = {"activities", "branches", "roles", "systems", "io", "conditions", "params"}
+SECTIONS = {"basic", "activities", "exceptions", "io"}
+SECTION_BY_MAPS_TO = {"activities": "activities", "branches": "exceptions", "io": "io"}
 MAPS_TO_SYNONYMS = {
     "activity": "activities", "steps": "activities", "tasks": "activities", "actions": "activities",
     "branch": "branches", "exceptions": "branches", "decision": "branches", "decisions": "branches",
@@ -135,7 +137,9 @@ def normalize_questionnaire(raw: Any) -> dict:
         if not text:
             continue
         qid = _unique_id(_text(item.get("id")) or f"q{idx}", seen_q)
-        out.append({"id": qid, "kind": kind, "maps_to": maps_to, "text": text[:600], "options": options, "suggested": suggested})
+        section = _lower(item.get("section"))
+        section = section if section in SECTIONS else SECTION_BY_MAPS_TO.get(maps_to, "basic")
+        out.append({"id": qid, "kind": kind, "maps_to": maps_to, "section": section, "text": text[:600], "options": options, "suggested": suggested})
     # activities 순서 문항이 없으면 activities로 표시된 객관식을 ordered로 승격(없으면 검증이 잡는다)
     if not any(q["kind"] == "ordered" and q["maps_to"] == "activities" for q in out):
         for q in out:

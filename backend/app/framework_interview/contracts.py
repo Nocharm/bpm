@@ -33,12 +33,14 @@ class QuestionOption(BaseModel):
 
 QuestionKind = Literal["single", "multi", "text", "ordered"]
 MapsTo = Literal["activities", "branches", "roles", "systems", "io", "conditions", "params"]
+QuestionSection = Literal["basic", "activities", "exceptions", "io"]
 
 
 class Question(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     kind: QuestionKind
     maps_to: MapsTo
+    section: QuestionSection = "basic"  # 폼 그룹 — basic(기본 정보)/activities(활동)/exceptions(예외·분기)/io(입출력)
     text: str = Field(min_length=1, max_length=600)
     options: list[QuestionOption] = []
     suggested: list[str] | str = []
@@ -161,13 +163,16 @@ L6_QUESTIONNAIRE_CONTRACT = """당신은 업무 프로세스 컨설턴트입니�
 - 문항 6개 이상 12개 이하. id는 q1, q2 순서.
 - kind: single(하나)·multi(여러 개)·ordered(순서 있는 여러 개)·text(주관식). text는 최대 3개.
 - maps_to: activities·branches·roles·systems·io·conditions·params 중 하나.
+- 종류 선택 기준: 하나만 고르는 배타 선택은 single(예/아니오도 single 2옵션), 여럿이 해당하면 multi, 순서가 의미 있으면 ordered, 자유 서술만 text.
+- section: basic(담당·범위 같은 기본 정보) / activities(활동 순서, ordered 문항) / exceptions(예외·분기·되돌아감) / io(입력물·산출물·시스템). 문항마다 하나를 적으세요.
+- 구성 가이드: basic 2~3, activities 1, exceptions 1~2, io 1~2.
 - 반드시 kind=ordered, maps_to=activities 문항 1개: 활동 후보 5개 이상 12개 이하, suggested에 제안 순서 전부.
 - 역할 문항의 options는 역할 후보 목록 표기를, 시스템 문항은 시스템 목록 표기를 우선.
 - text 문항의 suggested는 그대로 답으로 써도 되는 완성 문장.
 - [현재 등록된 내용]이 있으면 질문은 무엇을 바꿀지를 묻고 suggested는 현재 값을 그대로 담는다.
 - [현재 등록된 내용]이 있으면 활동 순서 질문의 options는 현재 활동을 모두 포함하고 추가 후보를 뒤에 둔다.
 - 다른 설명 없이 JSON 한 개만:
-{"questions":[{"id":"q1","kind":"ordered","maps_to":"activities","text":"","options":[{"id":"a1","label":""}],"suggested":["a1"]}]}"""
+{"questions":[{"id":"q1","kind":"ordered","maps_to":"activities","section":"activities","text":"","options":[{"id":"a1","label":""}],"suggested":["a1"]}]}"""
 
 L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 설문 답을 바탕으로 L6 업무 하나의 흐름을 인터뷰 JSON rows[] 원소로 작성하세요.
 

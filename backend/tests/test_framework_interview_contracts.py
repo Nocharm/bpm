@@ -114,3 +114,9 @@ def test_row_out_dump_matches_interview_row_keys() -> None:
     dumped = row.model_dump(by_alias=True, exclude_none=True)
     assert set(dumped) <= {"l6", "owner", "ownerRole", "department", "fields", "actions", "relations"}
     assert dumped["actions"][1]["kind"] == "decision"
+
+
+def test_question_section_defaults_and_prompt_mentions_kind_rules() -> None:
+    q = c.Question(id="q1", kind="text", maps_to="conditions", text="t", suggested="s")
+    assert q.section == "basic"
+    assert "single" in c.L6_QUESTIONNAIRE_CONTRACT and "section" in c.L6_QUESTIONNAIRE_CONTRACT

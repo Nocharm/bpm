@@ -5,6 +5,7 @@
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ④ 캠페인 엔진
 
+- **질문 섹션·종류 선택 지시(dev, 09-23, B12):** `Question.section`(basic/activities/exceptions/io, 기본 basic) 추가 — `normalize_questionnaire`가 명시값 존중·미지값은 basic·누락은 maps_to(activities→activities, branches→exceptions, io→io)로 채운다. `L6_QUESTIONNAIRE_CONTRACT`에 종류 선택 기준(single/multi/ordered/text)과 section 구성 가이드(basic 2~3·activities 1·exceptions 1~2·io 1~2) 추가. FE `FwQuestion.section` 필수 필드.
 - **플랜 ④a/④b(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s4a-engine-backend.md`(질문 섹션·IO 배열·러너 병렬·세션 canvas 컬럼+relations 왕복+코멘트 재제안·피드백 엔드포인트·가짜 AI 라우팅) · `…-s4b-engine-frontend.md`(canvas↔flow 순수 헬퍼·FeedbackChat·RelationsCanvas+자동 제안·TaskPanel 전 행 클릭+설문 섹션·스모크/매뉴얼). 파악 결과 IO 자동 링크(`link_matching_io`)와 전역 AI 세마포어(`ai_max_concurrency`)는 이미 있어 B8은 계약 배열화, B13은 세션당 잡 병렬화만 남는다.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ③ 캠페인 UX

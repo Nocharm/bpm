@@ -8,9 +8,9 @@ import {
 
 const Q: FwQuestionnaire = {
   questions: [
-    { id: "q1", kind: "ordered", maps_to: "activities", text: "활동", options: [{ id: "a", label: "접수" }, { id: "b", label: "검토" }], suggested: ["a", "b"] },
-    { id: "q2", kind: "single", maps_to: "roles", text: "역할", options: [{ id: "r1", label: "담당자" }, { id: "r2", label: "관리자" }], suggested: ["r1"] },
-    { id: "q3", kind: "text", maps_to: "conditions", text: "시작", options: [], suggested: "요청서 도착" },
+    { id: "q1", kind: "ordered", maps_to: "activities", section: "activities", text: "활동", options: [{ id: "a", label: "접수" }, { id: "b", label: "검토" }], suggested: ["a", "b"] },
+    { id: "q2", kind: "single", maps_to: "roles", section: "basic", text: "역할", options: [{ id: "r1", label: "담당자" }, { id: "r2", label: "관리자" }], suggested: ["r1"] },
+    { id: "q3", kind: "text", maps_to: "conditions", section: "basic", text: "시작", options: [], suggested: "요청서 도착" },
   ],
 };
 

@@ -95,3 +95,14 @@ def test_ask_schema_gives_up_with_reason(monkeypatch) -> None:
         assert "invalid response" in str(exc) and "invalid JSON" in str(exc)
     else:
         raise AssertionError("expected TurnError")
+
+
+def test_normalize_questionnaire_fills_section_from_maps_to() -> None:
+    raw = {"questions": [
+        {"id": "q1", "kind": "ordered", "maps_to": "activities", "text": "활동", "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}], "suggested": ["a"]},
+        {"id": "q2", "kind": "single", "maps_to": "roles", "text": "역할", "options": [{"id": "r", "label": "R"}, {"id": "s", "label": "S"}], "suggested": ["r"], "section": "weird"},
+        {"id": "q3", "kind": "text", "maps_to": "io", "text": "입력", "options": [], "suggested": "x", "section": "exceptions"},
+    ]}
+    out = normalize_questionnaire(raw)
+    sections = {q["id"]: q["section"] for q in out["questions"]}
+    assert sections == {"q1": "activities", "q2": "basic", "q3": "exceptions"}  # 명시 값은 존중, 미지 값은 basic, 누락은 maps_to로
