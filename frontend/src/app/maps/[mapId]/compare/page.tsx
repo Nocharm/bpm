@@ -92,6 +92,7 @@ import { useMe } from "@/lib/me";
 import { buildIoDiff } from "@/lib/io-diff";
 import { classifyFieldDiff } from "@/lib/compare-field-diff";
 import { pickInitialCompareVersions } from "@/lib/compare-initial";
+import { useResizableWidth } from "@/lib/use-resizable-width";
 import {
   FIELD_DIFF_LABEL_CLASS,
   FIELD_DIFF_ROW_CLASS,
@@ -797,6 +798,8 @@ function ComparePane({
   // 좌(변경 패널)·우(속성 인스펙터) 접힘 + 제목 드롭다운 — 에디터 헤더와 동일 위치의 토글.
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  // 인스펙터 폭 — 디바이더 드래그, 240~520, localStorage 기억 (2026-09-23)
+  const inspector = useResizableWidth({ storageKey: "bpm.compareInspectorWidth", min: 240, max: 520, fallback: 288, edge: "right" });
   const [titleMenuOpen, setTitleMenuOpen] = useState(false);
   // 인스펙터 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계). 요약 카드별 펼침/숨김 + 항목 드롭다운.
   const [inspectorTab, setInspectorTab] = useState<"props" | "summary" | "ai">("props");
@@ -1873,8 +1876,15 @@ function ComparePane({
           </NodeActionsContext.Provider>
         </div>
         {inspectorOpen && (
+          <>
+            <div
+              className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-hairline transition-colors duration-150 hover:bg-accent/40"
+              role="separator" aria-orientation="vertical" aria-label={t("compare.resizeInspector")} tabIndex={0}
+              onPointerDown={inspector.onPointerDown} data-id="compare-inspector-divider"
+            />
           <aside
-            className="flex w-72 shrink-0 flex-col border-l border-hairline bg-surface"
+            className="flex shrink-0 flex-col border-l border-hairline bg-surface"
+            style={{ width: inspector.width }}
             data-id="compare-inspector"
           >
             {/* 탭 — 속성(선택 대상) / 요약(버전 파라미터 합계) */}
@@ -2457,6 +2467,7 @@ function ComparePane({
               );
             })()}
           </aside>
+          </>
         )}
       </div>
     </div>

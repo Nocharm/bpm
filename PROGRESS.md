@@ -7,6 +7,7 @@
 
 - **diff 변경 톤 분리(dev, 09-23):** 비교 화면의 변경 하이라이트가 경고용 `--color-changed`(앰버 #9a6b00)를 써서 decision 기본 stroke(#c7a062)와 구분이 안 됐다 → `@theme`에 `--color-diff-changed`(틸 #0f766e) 신설, `ProcessNode` diff 맵과 compare 페이지의 diff 의미 클래스 14곳만 교체(버전 상태 점 `pending`은 경고 톤 유지). 소스 회귀 가드 `process-node.diff-token.test.ts`.
 - **초기 base≠target(dev, 09-23):** 게시본이 곧 최신 버전이면 진입 시 base와 target이 같은 버전으로 렌더되던 문제 → `lib/compare-initial.ts` `pickInitialCompareVersions`(base=마지막 게시본/확정본, target=그것을 뺀 최신, 딥링크 우선, 버전 1개면 동일 허용)로 빼고 vitest 6건으로 고정.
+- **인스펙터 폭 드래그(dev, 09-23):** 우측 인스펙터 `w-72` 고정 → 공용 훅 `lib/use-resizable-width.ts`(`readStoredWidth` 클램프 + pointer 드래그, `edge: right`면 화면 오른쪽 끝 기준) 240~520px, `bpm.compareInspectorWidth`. 캠페인 연결 패널(스프린트 ④)이 같은 훅을 쓴다.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 설계
 
