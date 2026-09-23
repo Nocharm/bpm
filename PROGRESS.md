@@ -11,6 +11,7 @@
 - **미리보기 분기 마름모(dev, 09-23):** `scope-preview.tsx`가 전 타입을 `rect rx=8`로 그려 decision이 색(앰버)만 달랐다 → `buildDiamondPoints`(박스 내접 4꼭짓점)로 decision만 `polygon`. 공용이라 피크·요약 모달·임포트 리포트·캠페인 미리보기가 같이 바뀐다(실캔버스와 일치).
 - **플랜 카드 투명화·FLIP·좌측 brief(dev, 09-23):** planning 단계에 죽어 있던 좌측 보드 자리에 `PlanBriefPanel`(brief·첨부·AI 제안, plan-editor에서 분리)을 두고 우측은 카드 전폭. 카드는 기본 테두리·인풋 배경 투명(값만 텍스트처럼), hover/focus-within에서 편집 모양·순서/삭제 열이 드러난다. 순서 이동은 `useFlipOrder`(li `data-flip-key`=FE 전용 `clientId`, `lib/plan-cards.ts`가 부여/제거/스왑/순서키), 삭제는 `accordion-close` 240ms 뒤 제거, 추가는 `accordion-open`. brief는 page 상태(`briefDraft`), 카드는 편집기가 ref로 미러해 좌측 AI 제안이 화면의 카드·brief로 제안받는다.
 - **주관식 AI 제안 타이핑(dev, 09-23):** 주관식이 제안값을 배지로 상시 노출하고 "직접 입력" 버튼으로 열던 흐름 → 기본 빈 textarea + [AI 제안](`AiButton inline`)이 미리 받아 둔 제안값을 25ms/글자(총 1.2s 캡, `lib/typewriter.ts` 스케줄러+훅, reduced-motion 즉시)로 채우고, blur로 확정(텍스트 뷰), hover 연필로 재편집. 빈칸 제출은 그대로 허용(서버 제안값 적용). 구 키 `writeOwn/useSuggestion/suggestedLabel/textPlaceholder` 제거.
+- **스모크(dev, 09-23):** `pw-fw-consult-ux.mjs` 15/15(좌측 brief 패널·AiButton 클래스·카드 테두리 투명→hover hairline·FLIP transform+키 동행·추가 open/삭제 close 애니·주관식 빈칸→타이핑 중간값→확정 뷰→hover 연필→재편집·L6 미리보기 polygon), 기존 `pw-fw-consult.mjs` 12/12·`pw-fw-consult-existing.mjs` 10/10·`pw-fw-consult-pick-card.mjs` 3/3·`pw-fw-consult-plan-shot.mjs` green. 캡처 `fw-consult-plan-cards`·`fw-consult-answer-typing`·`fw-consult-relations-diamond`. 함정: `[data-id^=…-preview-]` 접두 매칭이 래퍼 `-preview-wrap`을 먼저 잡는다·프리뷰 안 `svg`는 줌 아이콘까지 잡혀 strict 위반.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ② 관리 패널 진입
 
