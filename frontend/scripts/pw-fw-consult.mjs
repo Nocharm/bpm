@@ -52,7 +52,7 @@ await page.locator(`[data-id="framework-admin-search-result-${l5.id}"]`).click()
 await page.locator(`[data-id="framework-admin-node-${l5.id}"][aria-current="true"]`).waitFor({ timeout: 10000 });
 check("L5 row selected in the admin tree", true);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry.png" }).catch(() => undefined);
-await page.locator('[data-id="fw-consult-start"]').click();
+await page.locator('[data-id="fw-level-start"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/);
 check("session page opened", true, page.url());
 

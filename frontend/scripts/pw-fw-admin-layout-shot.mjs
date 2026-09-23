@@ -55,7 +55,7 @@ const restDisabled = await Promise.all(
   ACTIONS.map((key) => page.locator(`[data-id="framework-admin-action-${key}"]`).isDisabled()),
 );
 check("rest: every detail action is disabled", restDisabled.every(Boolean), restDisabled.join(","));
-check("rest: fill-existing disabled", await page.locator('[data-id="fw-consult-start"]').isDisabled());
+check("rest: level actions show the empty hint", await page.locator('[data-id="fw-level-empty"]').isVisible());
 await page.screenshot({ path: "../docs/qa/screens/framework-admin-rest.png" });
 
 // ── 2) L5 선택 — 검색 히트 클릭으로 체인 펼침 + 선택 ────────────────────────
@@ -66,7 +66,8 @@ await page.locator('[data-id="framework-admin-detail-info"]').waitFor();
 check("selected: detail head + info row rendered", true);
 check("selected: rename action enabled", !(await page.locator('[data-id="framework-admin-action-rename"]').isDisabled()));
 check("selected: add child disabled at L5 (max depth)", await page.locator('[data-id="framework-admin-action-add"]').isDisabled());
-check("selected: fill-existing enabled", !(await page.locator('[data-id="fw-consult-start"]').isDisabled()));
+// 시드된 L5는 이전 스모크가 연 세션이 붙어 있을 수 있다 — 그러면 "이어서" 타일이 대신 뜬다
+check("selected: L5 shows the work-with-AI or resume tile", (await page.locator('[data-id="fw-level-start"], [data-id="fw-level-resume"]').count()) === 1);
 await page.waitForTimeout(400);
 await page.screenshot({ path: "../docs/qa/screens/framework-admin-selected.png" });
 

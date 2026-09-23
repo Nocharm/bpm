@@ -85,7 +85,7 @@ await page.locator('[data-id="framework-admin-search"]').fill(l5.name);
 await page.locator(`[data-id="framework-admin-search-result-${l5.id}"]`).click();
 await page.locator(`[data-id="framework-admin-node-${l5.id}"][aria-current="true"]`).waitFor({ timeout: 15000 });
 check("L5 with existing maps selected", true);
-await page.locator('[data-id="fw-consult-start"]').click();
+await page.locator('[data-id="fw-level-start"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/, { timeout: 20000 });
 const sessionId = Number(page.url().split("/").pop());
 

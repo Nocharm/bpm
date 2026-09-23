@@ -253,12 +253,13 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     }
   }
 
-  // 선택 노드가 L1~3이면 자식을 미리 받아 둔다 — 상세 패널의 하위 타일(FwLevelActions)이 트리 펼침과
-  // 무관하게 보여야 한다. 트리 펼침(handleToggle)과 같은 Map에 넣으므로 이중 로드는 없고,
-  // "로딩 중"은 별도 상태 없이 Map에 아직 없음으로 파생한다(effect 안 동기 setState 회피).
+  // 선택 노드가 L1~4면 자식을 미리 받아 둔다 — L1~3은 상세 패널의 하위 타일(FwLevelActions)이 트리 펼침과
+  // 무관하게 보여야 하고, L4는 새 L5 이름 모달의 형제 중복 검사가 자식 목록을 본다.
+  // 트리 펼침(handleToggle)과 같은 Map에 넣으므로 이중 로드는 없고, "로딩 중"은 별도 상태 없이
+  // Map에 아직 없음으로 파생한다(effect 안 동기 setState 회피).
   const selectedLevel = selectedNode?.level ?? null;
   useEffect(() => {
-    if (selectedId === null || selectedLevel === null || selectedLevel > 3) return undefined;
+    if (selectedId === null || selectedLevel === null || selectedLevel > 4) return undefined;
     if (childrenByParent.has(selectedId)) return undefined;
     let active = true;
     listCategoryNodes(selectedId)
@@ -951,10 +952,18 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               sessions={activeSessions}
               busy={consultBusy}
               onPick={(node) => {
-                // 좌측 트리와 싱크 — 선택 이동 + 그 노드 펼침 + 행으로 스크롤(검색 히트와 같은 동작)
+                // 좌측 트리와 싱크 — 선택 이동 + 부모(현재 선택)와 그 노드 펼침 + 행으로 스크롤(검색 히트와 같은 동작).
+                // 자식 행은 부모가 펼쳐져야 렌더되므로 부모를 먼저 연다.
+                const parentId = selectedNode?.id ?? null;
                 setSelectedId(node.id);
+                if (parentId !== null) openSection(parentId, false);
                 openSection(node.id, false);
-                setOpenIds((prev) => new Set(prev).add(node.id));
+                setOpenIds((prev) => {
+                  const next = new Set(prev);
+                  if (parentId !== null) next.add(parentId);
+                  next.add(node.id);
+                  return next;
+                });
                 window.setTimeout(() => document.querySelector(`[data-id="framework-admin-node-${node.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
               }}
               onCreateL5={() => {

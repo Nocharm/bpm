@@ -34,8 +34,8 @@ await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", u
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
 await page.locator('[data-id="framework-admin-detail"]').waitFor();
-// 선택이 없으면 상세 패널의 액션·AI 버튼이 전부 비활성
-check("create button disabled with no row selected", await page.locator('[data-id="fw-consult-create"]').isDisabled());
+// 선택이 없으면 상세 패널의 액션은 비활성이고 레벨 타일 자리는 안내 문구만
+check("level actions show the empty hint with no row selected", await page.locator('[data-id="fw-level-empty"]').isVisible());
 check("rename action disabled with no row selected", await page.locator('[data-id="framework-admin-action-rename"]').isDisabled());
 
 // 관리 트리 검색 → 히트 클릭 → 체인 펼침 + 그 행이 선택(aria-current)
@@ -45,14 +45,16 @@ await page.locator(`[data-id="framework-admin-node-${l4.id}"][aria-current="true
 check("admin tree search reveals and selects the L4 row", true);
 await page.screenshot({ path: "../docs/qa/screens/framework-admin-tree.png" }).catch(() => undefined);
 
-// L4 선택 = 새 L5 줄만 활성, 기존 L5 채우기는 비활성
-const startBtn = page.locator('[data-id="fw-consult-start"]');
-check("fill-existing disabled while an L4 is selected", await startBtn.isDisabled());
-const createBtn = page.locator('[data-id="fw-consult-create"]');
-check("create disabled until a name is typed", await createBtn.isDisabled());
-await page.locator('[data-id="fw-consult-new-name"]').fill(newName);
+// L4 선택 = "L5 만들고 AI로 시작" 타일만 보이고, L5용 AI로 작업 타일은 없다
+const createTile = page.locator('[data-id="fw-level-create-l5"]');
+await createTile.waitFor({ timeout: 10000 });
+check("work-with-AI tile absent while an L4 is selected", (await page.locator('[data-id="fw-level-start"]').count()) === 0);
+await createTile.click();
+const confirmBtn = page.locator('[data-id="prompt-dialog-confirm"]');
+check("confirm disabled until a name is typed", await confirmBtn.isDisabled());
+await page.locator('[data-id="prompt-dialog-input"]').fill(newName);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry-new.png" }).catch(() => undefined);
-await createBtn.click();
+await confirmBtn.click();
 await page.waitForURL(/\/framework\/consult\/\d+/, { timeout: 20000 });
 const sessionId = Number(page.url().split("/").pop());
 const session = await (await fetch(`${BACKEND}/api/framework-interviews/${sessionId}`, { headers: H })).json();
