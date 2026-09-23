@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ① 비교·L5 캔버스
+
+- **diff 변경 톤 분리(dev, 09-23):** 비교 화면의 변경 하이라이트가 경고용 `--color-changed`(앰버 #9a6b00)를 써서 decision 기본 stroke(#c7a062)와 구분이 안 됐다 → `@theme`에 `--color-diff-changed`(틸 #0f766e) 신설, `ProcessNode` diff 맵과 compare 페이지의 diff 의미 클래스 14곳만 교체(버전 상태 점 `pending`은 경고 톤 유지). 소스 회귀 가드 `process-node.diff-token.test.ts`.
+
 ## 2026-09-23 — AI L5 캠페인 2라운드 설계
 
 - **설계 확정(dev, 09-23):** 사용자 요청 17건(관리 패널 진입·캠페인 UX/엔진·비교 화면·L5 드롭존)을 4스프린트로 분해한 스펙 `docs/superpowers/specs/2026-09-23-ai-l5-campaign-round2-design.md`. 핵심 결정: 연결 단계는 ReactFlow+ProcessNode 경량 캔버스(에디터 임베드 아님)로 L5 맵을 직접 편집하고 세션 `canvas` 컬럼이 편집 진실·확정 시 relations 역산, 자연어 피드백은 `POST /feedback` 한 경로(scope relations|task), IO는 배열화+L6 내부 링크만, 질문은 종류 지시 강화+섹션 그룹(kind 추가 없음), 러너는 전역 세마포어 병렬. 코드 변경 없음.

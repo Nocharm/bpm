@@ -54,6 +54,8 @@
   --color-added: #16794f;
   --color-removed: #cc3300;
   --color-changed: #9a6b00;
+  /* 비교 diff "변경" 전용 — 경고용 --color-changed(앰버)가 decision 기본 stroke(#c7a062)와 겹쳐 분리 (2026-09-23) */
+  --color-diff-changed: #0f766e;
   /* 분포 막대·상태 점 채움 — 텍스트용 시맨틱(added/changed/error)은 어둡고 탁해 조각으로 깔면 칙칙하다(사용자 피드백 2026-09-11).
      같은 의미를 밝고 채도 높은 채움색으로 — 흰 바탕 위 8px 점·막대 전용, 텍스트에 쓰지 않는다. */
   --color-chart-draft: #c9c5dc;

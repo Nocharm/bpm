@@ -478,7 +478,7 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
         : e.status === "removed"
           ? "var(--color-removed)"
           : e.status === "changed"
-            ? "var(--color-changed)"
+            ? "var(--color-diff-changed)"
             : "var(--color-border-strong)";
     return {
       id: e.id,
@@ -495,7 +495,7 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
           : e.status === "removed"
             ? { stroke: "var(--color-removed)", strokeWidth: 2, strokeDasharray: "6 3" }
             : e.status === "changed"
-              ? { stroke: "var(--color-changed)", strokeWidth: 2 }
+              ? { stroke: "var(--color-diff-changed)", strokeWidth: 2 }
               : undefined,
     };
   });
@@ -638,7 +638,7 @@ function DiffLegend({ counts }: { counts: { added: number; removed: number; chan
         <span className="font-semibold text-ink">{counts.removed}</span>
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="h-3 w-3 rounded-[3px] border-2 border-changed" /> {t("compare.legendChanged")}
+        <span className="h-3 w-3 rounded-[3px] border-2 border-diff-changed" /> {t("compare.legendChanged")}
         <span className="font-semibold text-ink">{counts.changed}</span>
       </span>
     </div>
@@ -686,7 +686,7 @@ function SummaryCard({
             {subLabel && <span className="text-ink-tertiary"> · {subLabel}</span>}
           </span>
           {delta && (
-            <span className="ml-auto shrink-0 rounded-full bg-changed/10 px-1.5 text-fine font-semibold text-changed">
+            <span className="ml-auto shrink-0 rounded-full bg-diff-changed/10 px-1.5 text-fine font-semibold text-diff-changed">
               {delta}
             </span>
           )}
@@ -1247,7 +1247,7 @@ function ComparePane({
   const badgeClass: Record<MergedNodeStatus, string> = {
     added: "bg-added/10 text-added",
     removed: "bg-removed/10 text-removed",
-    changed: "bg-changed/10 text-changed",
+    changed: "bg-diff-changed/10 text-diff-changed",
     unchanged: "",
   };
   const badgeLabel: Record<MergedNodeStatus, string> = {
@@ -1260,7 +1260,7 @@ function ComparePane({
   const iconBg: Record<MergedNodeStatus, string> = {
     added: "bg-added",
     removed: "bg-removed",
-    changed: "bg-changed",
+    changed: "bg-diff-changed",
     unchanged: "",
   };
   const statusIcon = (status: MergedNodeStatus) =>
@@ -1695,7 +1695,7 @@ function ComparePane({
                     { key: "all", label: t("compare.filterAll"), count: changeItems.length, dot: "" },
                     { key: "added", label: "", count: counts.added, dot: "bg-added" },
                     { key: "removed", label: "", count: counts.removed, dot: "bg-removed" },
-                    { key: "changed", label: "", count: counts.changed, dot: "bg-changed" },
+                    { key: "changed", label: "", count: counts.changed, dot: "bg-diff-changed" },
                   ] as const
                 ).map((chip) => (
                   <button
@@ -1943,7 +1943,7 @@ function ComparePane({
                   >
                     <SlidersHorizontal size={12} strokeWidth={1.5} />
                     {hiddenSumCount > 0 && (
-                      <span className="font-semibold text-changed">(-{hiddenSumCount})</span>
+                      <span className="font-semibold text-diff-changed">(-{hiddenSumCount})</span>
                     )}
                     <ChevronDown size={11} strokeWidth={1.5} className="text-ink-tertiary" />
                   </button>
@@ -2033,7 +2033,7 @@ function ComparePane({
                                     {displayFieldValue(field, row.base) || t("summary.none")}
                                   </span>
                                   <span className="text-ink-tertiary">→</span>
-                                  <span className="font-semibold text-changed">
+                                  <span className="font-semibold text-diff-changed">
                                     {displayFieldValue(field, row.target) || t("summary.none")}
                                   </span>
                                 </span>
@@ -2079,7 +2079,7 @@ function ComparePane({
                               {tn}
                             </span>
                             {rowDelta && (
-                              <span className="rounded-full bg-changed/10 px-1 text-fine font-semibold text-changed">
+                              <span className="rounded-full bg-diff-changed/10 px-1 text-fine font-semibold text-diff-changed">
                                 {rowDelta}
                               </span>
                             )}
@@ -2223,7 +2223,7 @@ function ComparePane({
                                 {tn}
                               </span>
                               {rowDelta && (
-                                <span className="rounded-full bg-changed/10 px-1 text-fine font-semibold text-changed">
+                                <span className="rounded-full bg-diff-changed/10 px-1 text-fine font-semibold text-diff-changed">
                                   {rowDelta}
                                 </span>
                               )}
@@ -2270,7 +2270,7 @@ function ComparePane({
                           {selectedEdge.labelChange.before || t("summary.none")}
                         </span>
                         <span className="mx-1 text-ink-tertiary">→</span>
-                        <span className="font-semibold text-changed">
+                        <span className="font-semibold text-diff-changed">
                           {selectedEdge.labelChange.after || t("summary.none")}
                         </span>
                       </>
@@ -2388,7 +2388,7 @@ function ComparePane({
                               {displayFieldValue(key, change.before) || t("summary.none")}
                             </span>
                             <span className="mx-1 text-ink-tertiary">→</span>
-                            <span className="font-semibold text-changed">
+                            <span className="font-semibold text-diff-changed">
                               {displayFieldValue(key, change.after) || t("summary.none")}
                             </span>
                           </>
@@ -2433,7 +2433,7 @@ function ComparePane({
                         <div key={key}>
                           <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG[key])}</div>
                           {change ? (
-                            <div className="rounded-sm border border-changed/30 bg-changed/10 px-2 py-1.5 text-caption">
+                            <div className="rounded-sm border border-diff-changed/30 bg-diff-changed/10 px-2 py-1.5 text-caption">
                               <div className="whitespace-pre-wrap text-ink-muted line-through">
                                 {change.before || t("summary.none")}
                               </div>

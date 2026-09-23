@@ -764,7 +764,7 @@ type DiffStatus = "added" | "removed" | "changed";
 const DIFF_COLOR: Record<DiffStatus, string> = {
   added: "var(--color-added)",
   removed: "var(--color-removed)",
-  changed: "var(--color-changed)",
+  changed: "var(--color-diff-changed)",
 };
 const DIFF_BADGE_KEY: Record<DiffStatus, MessageKey> = {
   added: "compare.legendAdded",
@@ -774,7 +774,7 @@ const DIFF_BADGE_KEY: Record<DiffStatus, MessageKey> = {
 const DIFF_BADGE_BG: Record<DiffStatus, string> = {
   added: "bg-added",
   removed: "bg-removed",
-  changed: "bg-changed",
+  changed: "bg-diff-changed",
 };
 
 // diff 노드 스타일 — diff색 테두리(삭제=점선)+연한 틴트 fill. --nc는 호버 강조 링용.
@@ -1548,6 +1548,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       }`}
       style={style}
       title={data.diffNote}
+      data-diff-status={diff}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
