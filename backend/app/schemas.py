@@ -2749,7 +2749,20 @@ class FrameworkInterviewAnswersIn(BaseModel):
 
 
 class FrameworkInterviewRelationsIn(BaseModel):
-    relations: dict[str, Any]
+    """확정 입력 — canvas가 오면 접어서 relations를 만든다. 둘 다 없으면 422."""
+
+    relations: dict[str, Any] | None = None
+    canvas: dict[str, Any] | None = None
+
+
+class FrameworkInterviewCanvasIn(BaseModel):
+    canvas: dict[str, Any]
+
+
+class FrameworkInterviewRelationsGenerateIn(BaseModel):
+    """재제안 요청 — comment가 있으면 직전 제안 + 피드백을 프롬프트에 싣는다."""
+
+    comment: Annotated[str, StringConstraints(max_length=2000)] = ""
 
 
 class FrameworkInterviewTaskOut(BaseModel):
@@ -2811,6 +2824,8 @@ class FrameworkInterviewOut(BaseModel):
     attachments: list[FrameworkAttachmentOut] = []
     plan: list | None
     relations: dict | None
+    canvas: dict | None = None  # 편집용 연결 캔버스 {nodes, edges}
+    feedback_log: list = []  # [{scope, task_pk, message, at}]
     label: str
     existing: list[FrameworkExistingOut] = []
     tasks: list[FrameworkInterviewTaskOut]

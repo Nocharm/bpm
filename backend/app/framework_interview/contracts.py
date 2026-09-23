@@ -4,6 +4,7 @@
 키 이름은 인터뷰 JSON 0.4/0.5 계약(scripts/consultant_interview.py)과 같다 — 어댑터가 바뀌면 여기도 같이.
 """
 
+import json
 from collections.abc import Mapping
 from typing import Any, Literal
 
@@ -345,7 +346,9 @@ def build_row_messages(
 def build_relations_messages(
     *, lang: str, plan: list[dict], rows: dict[str, dict],
     overrides: Mapping[str, str] | None = None,
+    comment: str = "", previous: dict | None = None,
 ) -> list[dict]:
+    """L6 흐름 제안 프롬프트. comment가 있으면 직전 제안 + 사용자 피드백을 덧붙여 재제안을 받는다."""
     ov = overrides or {}
     contract = ov.get("l5_relations_contract") or L5_RELATIONS_CONTRACT
     system = f"{contract}\n\n{_lang_line(lang)}"
@@ -359,4 +362,7 @@ def build_relations_messages(
             f"시작조건={fields.get('start_condition', '')} 완료기준={fields.get('done_criteria', '')}"
         )
     user = "[L6 목록]\n" + "\n".join(lines)
+    if comment:
+        prior = json.dumps(previous, ensure_ascii=False) if previous else "(없음)"
+        user += f"\n\n[직전 제안]\n{prior}\n\n[사용자 피드백]\n{comment}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

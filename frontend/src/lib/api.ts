@@ -2929,6 +2929,31 @@ export interface FwInterviewTaskDetail extends FwInterviewTask {
   answers: Record<string, { value: FwAnswerValue; auto: boolean }> | null;
   row: Record<string, unknown> | null;
 }
+/** 세션 연결 캔버스 — relations의 편집 진실(서버 `app/framework_interview/canvas.py`). */
+export interface FwCanvasNode {
+  id: string;  // subprocess=task_id · 분기=__branch__{task_id} · __start__/__end__
+  node_type: "subprocess" | "decision" | "start" | "end";
+  title: string;
+  task_id: string | null;
+  pos_x: number;
+  pos_y: number;
+}
+export interface FwCanvasEdge {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  label: string;
+}
+export interface FwCanvas {
+  nodes: FwCanvasNode[];
+  edges: FwCanvasEdge[];
+}
+export interface FwFeedbackEntry {
+  scope: string;
+  task_pk: number | null;
+  message: string;
+  at: string;
+}
 export type FwSessionStatus = "planning" | "plan_locked" | "linking" | "ready" | "applied" | "abandoned";
 export interface FwInterviewSession {
   id: number;
@@ -2943,6 +2968,8 @@ export interface FwInterviewSession {
   attachments: FwAttachment[];
   plan: FwPlanCard[] | null;
   relations: Record<string, unknown> | null;
+  canvas: FwCanvas | null;
+  feedback_log: FwFeedbackEntry[];
   label: string;
   existing: FwExisting[];
   tasks: FwInterviewTask[];

@@ -21,6 +21,9 @@ from app.framework_interview.answers import fill_answers
 from app.framework_interview.assemble import (
     allocate_task_ids, assemble_document, load_category_chain, load_existing_codes, validate_row,
 )
+from app.framework_interview.canvas import (
+    collapse_canvas_to_relations, expand_relations_to_canvas, validate_canvas,
+)
 from app.framework_interview.contracts import (
     PlanOut, RelationsOut, build_context_text, build_plan_messages, build_relations_messages,
     format_managed_catalog,
@@ -32,9 +35,10 @@ from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, Pars
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
 from app.prompt_registry import get_prompt_overrides
 from app.schemas import (
-    FrameworkExistingOut, FrameworkInterviewAnswersIn, FrameworkInterviewCreateIn, FrameworkInterviewOut,
-    FrameworkInterviewPlanIn, FrameworkInterviewProgressOut, FrameworkInterviewRelationsIn,
-    FrameworkInterviewTaskDetailOut, FrameworkInterviewTaskOut,
+    FrameworkExistingOut, FrameworkInterviewAnswersIn, FrameworkInterviewCanvasIn,
+    FrameworkInterviewCreateIn, FrameworkInterviewOut, FrameworkInterviewPlanIn,
+    FrameworkInterviewProgressOut, FrameworkInterviewRelationsGenerateIn,
+    FrameworkInterviewRelationsIn, FrameworkInterviewTaskDetailOut, FrameworkInterviewTaskOut,
 )
 
 router = APIRouter(
@@ -81,7 +85,7 @@ async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInter
         category_code=category.code if category else "", category_name=category.name if category else "",
         status=s.status, paused=s.paused, lang=s.lang, brief=s.brief, plan=s.plan,
         attachments=[{"name": a.get("name", ""), "chars": int(a.get("chars") or 0)} for a in s.attachments or []],
-        relations=s.relations, label=s.label,
+        relations=s.relations, canvas=s.canvas, feedback_log=s.feedback_log or [], label=s.label,
         existing=[FrameworkExistingOut(
             map_id=e["map_id"], code=e["code"], name=e["name"], activity_count=len(e.get("activities") or []),
             frozen=bool(e.get("frozen")),
@@ -519,22 +523,47 @@ def _has_known_task_ids(row: FrameworkInterviewSession, relations: RelationsOut)
     )
 
 
+def _ordered_tasks(row: FrameworkInterviewSession) -> list[tuple[str, str]]:
+    """캔버스 전개용 [(task_id, name)] — seq 순."""
+    return [(t.task_id, t.name) for t in sorted(row.tasks, key=lambda t: t.seq)]
+
+
 @router.post("/{session_id}/relations", response_model=FrameworkInterviewOut)
 async def generate_relations(
-    session_id: int, user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+    session_id: int, payload: FrameworkInterviewRelationsGenerateIn | None = None,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
     await _require_ai_enabled(db)
     row = await _get_session_row(db, session_id)
     _assert_all_drawn(row)
+    comment = (payload.comment if payload else "").strip()
     rows_by_task = {t.task_id: t.row or {} for t in row.tasks}
     messages = build_relations_messages(
         lang=row.lang, plan=row.plan or [], rows=rows_by_task, overrides=await get_prompt_overrides(db),
+        comment=comment, previous=row.relations if comment else None,
     )
     known = {t.task_id: t.name for t in sorted(row.tasks, key=lambda t: t.seq)}
     # 미지의 taskId·이름 참조는 정규화가 해석하거나 버린다 — 502 대신 부분 결과를 편집 표로 넘긴다
     out = await _ask(messages, RelationsOut, db, user, normalizer=lambda raw: normalize_relations(raw, known))
     row.relations = out.model_dump(by_alias=True, exclude_none=True)
+    row.canvas = expand_relations_to_canvas(row.relations, _ordered_tasks(row))
     row.status = "linking"
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.put("/{session_id}/canvas", response_model=FrameworkInterviewOut)
+async def save_canvas(
+    session_id: int, payload: FrameworkInterviewCanvasIn,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """편집 중 캔버스 저장 — 형태만 검증하고 relations는 건드리지 않는다(확정에서 접는다)."""
+    row = await _get_session_row(db, session_id)
+    _assert_all_drawn(row)
+    errors = validate_canvas(payload.canvas, {t.task_id for t in row.tasks})
+    if errors:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+    row.canvas = payload.canvas
     await db.commit()
     return await _out(db, row)
 
@@ -546,13 +575,24 @@ async def confirm_relations(
 ) -> FrameworkInterviewOut:
     row = await _get_session_row(db, session_id)
     _assert_all_drawn(row)
+    known_ids = {t.task_id for t in row.tasks}
+    raw_relations = payload.relations
+    if payload.canvas is not None:
+        errors = validate_canvas(payload.canvas, known_ids)
+        if errors:
+            raise HTTPException(status_code=422, detail={"errors": errors})
+        raw_relations = collapse_canvas_to_relations(payload.canvas, known_ids)
+    if raw_relations is None:
+        raise HTTPException(status_code=422, detail="relations or canvas is required")
     try:
-        relations = RelationsOut.model_validate(payload.relations)
+        relations = RelationsOut.model_validate(raw_relations)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"invalid relations: {exc}") from exc
     if not _has_known_task_ids(row, relations):
         raise HTTPException(status_code=422, detail="relations reference unknown taskId")
     row.relations = relations.model_dump(by_alias=True, exclude_none=True)
+    if payload.canvas is not None:
+        row.canvas = payload.canvas
     await assemble_document(db, row)
     row.status = "ready"
     await db.commit()

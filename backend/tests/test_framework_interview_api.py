@@ -347,6 +347,63 @@ def test_answers_validation_and_full_flow_to_document(client: TestClient, monkey
     assert applied.json()["status"] == "applied"
 
 
+def test_relations_flow_fills_canvas_and_confirms_from_canvas(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    cards = [{"name": n, "summary": "", "owner_role": "", "department": "", "depends_on": []} for n in ["A", "B"]]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()
+    t1, t2 = body["tasks"]
+    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON,
+                                 RELATIONS_TMPL % (t1["task_id"], t1["task_id"], t2["task_id"]),
+                                 RELATIONS_TMPL % (t2["task_id"], t2["task_id"], t1["task_id"])])
+    _step(sid)
+    _step(sid)
+    full = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "요청서", "q6": ""}
+    for tid in (t1["id"], t2["id"]):
+        client.post(f"/api/framework-interviews/{sid}/tasks/{tid}/answers", json={"answers": full}, headers=HEADERS)
+    _step(sid)
+    _step(sid)
+    proposed = client.post(f"/api/framework-interviews/{sid}/relations", json={}, headers=HEADERS).json()
+    assert proposed["canvas"] is not None
+    assert {n["id"] for n in proposed["canvas"]["nodes"]} >= {t1["task_id"], t2["task_id"], "__start__", "__end__"}
+    # 코멘트로 다시 제안 — 프롬프트에 피드백 블록이 들어간다(가짜 큐는 두 번째 relations를 준다)
+    again = client.post(f"/api/framework-interviews/{sid}/relations", json={"comment": "B가 먼저"}, headers=HEADERS).json()
+    assert again["relations"]["entry"]["taskId"] == t2["task_id"]
+    # 캔버스 편집 저장 → 확정은 캔버스로
+    canvas = again["canvas"]
+    canvas["edges"] = [e for e in canvas["edges"] if e["target_node_id"] != "__end__"] + [
+        {"id": "x", "source_node_id": t1["task_id"], "target_node_id": "__end__", "label": ""}
+    ]
+    saved = client.put(f"/api/framework-interviews/{sid}/canvas", json={"canvas": canvas}, headers=HEADERS)
+    assert saved.status_code == 200, saved.text
+    bad = client.put(f"/api/framework-interviews/{sid}/canvas", headers=HEADERS, json={"canvas": {
+        "nodes": [], "edges": [{"id": "e", "source_node_id": "a", "target_node_id": "b", "label": ""}],
+    }})
+    assert bad.status_code == 422
+    confirmed = client.put(f"/api/framework-interviews/{sid}/relations", json={"canvas": canvas}, headers=HEADERS).json()
+    assert confirmed["status"] == "ready"
+    assert {(e["src"], e["dst"]) for e in confirmed["relations"]["edges"]} == {(t2["task_id"], t1["task_id"])}
+
+
+def test_relations_re_proposal_carries_previous_and_comment_into_the_prompt(
+    client: TestClient, monkeypatch,
+) -> None:
+    """코멘트 재제안 프롬프트에 직전 제안 + 사용자 피드백 블록이 실린다."""
+    from app.framework_interview.contracts import build_relations_messages
+
+    plain = build_relations_messages(lang="ko", plan=[], rows={})
+    assert "[직전 제안]" not in plain[1]["content"]
+    with_comment = build_relations_messages(
+        lang="ko", plan=[], rows={}, comment="B가 먼저",
+        previous={"entry": {"taskId": "x"}, "edges": []},
+    )
+    assert "[직전 제안]" in with_comment[1]["content"]
+    assert '"taskId": "x"' in with_comment[1]["content"]
+    assert with_comment[1]["content"].endswith("[사용자 피드백]\nB가 먼저")
+
+
 def test_pause_resume_roundtrip(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     kicked: list[int] = []

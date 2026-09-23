@@ -1072,6 +1072,11 @@ class FrameworkInterviewSession(Base):
     brief: Mapped[str] = mapped_column(Text, default="")  # 목적/범위 + 첨부 파싱 텍스트
     plan: Mapped[list | None] = mapped_column(JSON, default=None)  # 잠금 전/후 L6 카드 목록
     relations: Mapped[dict | None] = mapped_column(JSON, default=None)  # 최상위 relations
+    # 편집용 연결 캔버스 {nodes, edges} — relations의 편집 진실, 확정 시 relations로 접어 넣는다
+    # (framework_interview/canvas.py, spec 2026-09-23 §4.2)
+    canvas: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # 사용자 피드백 로그 [{scope, task_pk, message, at}] — 재제안 코멘트 이력
+    feedback_log: Mapped[list | None] = mapped_column(JSON, default=None)
     assembled: Mapped[dict | None] = mapped_column(JSON, default=None)  # 마지막 조립 0.5 문서
     label: Mapped[str] = mapped_column(String(100), default="")
     # 첨부 문서 [{name, chars, text}] — brief(사용자 텍스트)와 분리해 개별 삭제 가능(잘못 올린 파일 누적 방지, 2026-09-21)

@@ -160,6 +160,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_assignee_role", "VARCHAR(100)"),
     # AI L5 캠페인 — 세션 시작 시 기존 L6 스냅샷·계획 카드 모드 (spec 2026-09-22 §2.2)
     ("framework_interview_sessions", "existing", "JSON"),
+    # 편집용 연결 캔버스 + 재제안 피드백 로그 (spec 2026-09-23 §4.2)
+    ("framework_interview_sessions", "canvas", "JSON"),
+    ("framework_interview_sessions", "feedback_log", "JSON"),
     ("framework_interview_tasks", "mode", "VARCHAR(10) DEFAULT 'new'"),
 ]
 
