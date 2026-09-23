@@ -1247,6 +1247,18 @@ async def create_category(
     if level > MAX_CATEGORY_LEVEL:
         raise HTTPException(status_code=422, detail="max depth is 5")
 
+    # 같은 부모 아래 같은 이름은 관리 트리에서 구분이 안 된다 — trim 정확 일치로 막는다 (2026-09-23).
+    # 루트(부모 없음)는 code 네임스페이스로 구분되는 임포트 시드가 같은 이름을 쓰므로 제외.
+    name = payload.name.strip()
+    if payload.parent_id is not None:
+        dup_name = await session.scalar(
+            select(ProcessCategory.id).where(
+                ProcessCategory.parent_id == payload.parent_id, ProcessCategory.name == name,
+            )
+        )
+        if dup_name is not None:
+            raise HTTPException(status_code=409, detail=f"name '{name}' already exists under this parent")
+
     code = payload.code
     if code is not None:
         dup = await session.scalar(select(ProcessCategory.id).where(ProcessCategory.code == code))
@@ -1271,7 +1283,7 @@ async def create_category(
     sort_order = (max_sort + 1) if max_sort is not None else 0
 
     category = ProcessCategory(
-        code=code, name=payload.name, level=level, parent_id=payload.parent_id,
+        code=code, name=name, level=level, parent_id=payload.parent_id,
         sort_order=sort_order,
     )
     session.add(category)

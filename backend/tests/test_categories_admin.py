@@ -75,6 +75,23 @@ def test_create_depth_and_dup_code(client: TestClient) -> None:
     assert dup.status_code == 409
 
 
+def test_create_rejects_duplicate_name_under_same_parent(client: TestClient) -> None:
+    root = client.post("/api/categories", json={"name": "ADM Dup Root", "code": "ADM-DUPNAME-ROOT"}).json()
+    first = client.post("/api/categories", json={"name": "Same", "parent_id": root["id"]})
+    assert first.status_code == 201
+    # trim 후 정확 일치 — 공백만 다른 이름도 같은 이름
+    second = client.post("/api/categories", json={"name": " Same ", "parent_id": root["id"]})
+    assert second.status_code == 409
+    assert "already exists under this parent" in second.json()["detail"]
+    # 대소문자는 구분, 다른 부모 아래 같은 이름은 허용
+    cased = client.post("/api/categories", json={"name": "same", "parent_id": root["id"]})
+    assert cased.status_code == 201
+    other = client.post("/api/categories", json={"name": "ADM Dup Other", "code": "ADM-DUPNAME-OTHER"}).json()
+    allowed = client.post("/api/categories", json={"name": "Same", "parent_id": other["id"]})
+    assert allowed.status_code == 201
+    assert allowed.json()["name"] == "Same"
+
+
 def test_rename_and_reorder(client: TestClient) -> None:
     node = client.post(
         "/api/categories", json={"name": "ADM Rename Me", "code": "ADM-RENAME"}

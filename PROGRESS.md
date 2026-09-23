@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ② 관리 패널 진입
+
+- **같은 부모 아래 이름 중복 409(dev, 09-23):** `create_category`가 code 중복만 막아 L4 아래 같은 이름의 L5가 겹쳐 만들어졌다 → 부모가 있는 생성에 한해 trim 정확 일치(대소문자 구분) 409. 루트는 code 네임스페이스로 구분되는 임포트 시드가 같은 이름을 쓰므로 제외(`_seed_deleg_tree` 등 기존 테스트 전제).
+- **세션 `category_path_ids`(dev, 09-23):** `FrameworkInterviewOut`에 root→self 조상 id 체인을 실어 관리 패널 타일이 서브트리 진행 세션 수를 클라이언트에서 집계한다. FE `FwInterviewSession` 타입 동기.
+
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ① 비교·L5 캔버스
 
 - **diff 변경 톤 분리(dev, 09-23):** 비교 화면의 변경 하이라이트가 경고용 `--color-changed`(앰버 #9a6b00)를 써서 decision 기본 stroke(#c7a062)와 구분이 안 됐다 → `@theme`에 `--color-diff-changed`(틸 #0f766e) 신설, `ProcessNode` diff 맵과 compare 페이지의 diff 의미 클래스 14곳 + 필드 diff pill(`compare-field-diff.tsx`)·노드 필드 틴트/하위 변경 배지(`ProcessNode`)·AI 요약 kind 틴트만 교체(버전 상태 점 `pending`·stale anchor 등 경고 의미는 그대로). 소스 회귀 가드 `process-node.diff-token.test.ts`. 스모크 `pw-compare-inspector.mjs` 8/8(초기 base≠target·폭 드래그/클램프/기억·변경 노드 테두리 rgb(15,118,110)·L5 드롭존 링), 캡처 `compare-inspector-resized.png`·`l5-dropzone-dark.png`. 훅은 잡은 지점 오프셋을 고정해 드래그 시작 시 폭이 튀지 않는다.
