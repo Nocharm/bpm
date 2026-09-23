@@ -32,7 +32,8 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    // isComposing 가드 — IME(한글/일본어/중국어) 조합 중 Enter로 확정하면 전송되면 안 된다
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       handleSend();
     }
