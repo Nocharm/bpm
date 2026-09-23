@@ -62,9 +62,14 @@ describe("framework-interview view model", () => {
 
   it("hasBackgroundWork is true while a task is generating or drawing, or something is queued", () => {
     expect(hasBackgroundWork(session(["submitted"]))).toBe(true);
-    expect(hasBackgroundWork(session(["ready", "ready", "pending"]))).toBe(false);
+    expect(hasBackgroundWork(session(["ready", "ready", "pending"]))).toBe(true);
     expect(hasBackgroundWork(session(["ready", "pending"]))).toBe(true);
     expect(hasBackgroundWork(session(["pending"], "plan_locked", true))).toBe(false);
+  });
+
+  it("hasBackgroundWork is true while any task is pending, regardless of ready count", () => {
+    expect(hasBackgroundWork(session(["ready", "ready", "pending"]))).toBe(true);
+    expect(hasBackgroundWork(session(["ready", "drawn"]))).toBe(false);
   });
 
   // 서버 save_plan은 새 카드가 낀 충돌만 422로 막는다 — 잠금 버튼도 같은 규칙이어야 한다

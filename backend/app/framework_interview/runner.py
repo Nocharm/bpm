@@ -1,7 +1,9 @@
-"""캠페인 백그라운드 러너 — 세션당 루프 1개, 한 스텝 = AI 1콜 (spec 2026-09-21 §6).
+"""캠페인 백그라운드 러너 — 세션당 루프 1개, 한 바퀴 = 실행 가능한 잡 전부 병렬 (spec 2026-09-21 §6).
 
-우선순위: 제출된 카드 드로잉 > 설문 prefetch(ready 2장 유지). 일시정지·비활성 세션이면 즉시 종료.
-단일 uvicorn 워커 전제(kb/indexing.spawn 패턴). 재기동 시 drawing→submitted, generating→pending 복구.
+잡 순서: 제출된 카드 드로잉 먼저, 설문 생성 다음(ready 장수 제한 없음 — 전부 미리 받는다).
+동시 실행은 settings.fw_consult_concurrency로 제한하고, 전역 상한은 ai_client의 ai_max_concurrency가 맡는다.
+일시정지·비활성 세션이면 즉시 종료. 단일 uvicorn 워커 전제(kb/indexing.spawn 패턴).
+재기동 시 drawing→submitted, generating→pending 복구.
 """
 
 import asyncio
@@ -26,10 +28,10 @@ from app.framework_interview.normalize import normalize_questionnaire, normalize
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask
 from app.prompt_registry import get_prompt_overrides
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
-PREFETCH_READY = 2  # 현재 답변 중 1장 + 다음 1장
 LIVE_STATUSES = ("plan_locked", "linking")
 
 _tasks: set[asyncio.Task] = set()
@@ -67,7 +69,7 @@ async def process_session(session_id: int) -> None:
             _wake.discard(session_id)
             async with SessionLocal() as db:
                 try:
-                    progressed = await run_one_step(db, session_id)
+                    progressed = await run_jobs(db, session_id)
                 except Exception:  # noqa: BLE001 -- 루프는 죽지 않고 로그만, 대신 걸린 작업은 되돌린다
                     logger.exception("framework interview step failed (session %s)", session_id)
                     await db.rollback()
@@ -131,7 +133,7 @@ async def _generate_questionnaire(db: AsyncSession, session: FrameworkInterviewS
         task.error = None
         await _record_usage(db, session.login_id, usage, ok=True)
     except TurnError as exc:
-        # pending으로 되돌리면 run_one_step이 같은 카드를 다시 집어 루프가 무한히 돈다 —
+        # pending으로 되돌리면 run_jobs가 같은 카드를 다시 집어 루프가 무한히 돈다 —
         # failed로 멈춰 보드의 재시도 버튼으로 넘긴다(retry_task가 답변 없으면 pending으로 되돌린다).
         task.status = "failed"
         task.error = str(exc)
@@ -181,25 +183,49 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     await db.commit()
 
 
-async def run_one_step(db: AsyncSession, session_id: int) -> bool:
-    """작업 1개 처리. False = 더 할 일 없음(일시정지·비활성·AI 꺼짐·큐 비움)."""
+def collect_jobs(tasks: list[FrameworkInterviewTask]) -> list[tuple[str, FrameworkInterviewTask]]:
+    """드로잉(submitted) 먼저, 설문 생성(pending) 다음 — 둘 다 seq 순. ready 장수 제한은 없다(전부 미리 받는다)."""
+    ordered = sorted(tasks, key=lambda t: t.seq)
+    return ([("draw", t) for t in ordered if t.status == "submitted"]
+            + [("generate", t) for t in ordered if t.status == "pending"])
+
+
+async def _run_job(sem: asyncio.Semaphore, kind: str, session_id: int, task_id: int) -> None:
+    """잡 하나를 자기 DB 세션에서 — 동시 커밋이 서로의 flush에 끼어들지 않게 세션을 공유하지 않는다."""
+    async with sem, SessionLocal() as db:
+        # 대기 중에 일시정지·종료·AI 차단이 걸렸을 수 있으니 시작 직전 다시 본다.
+        if not await is_ai_access_enabled(db):
+            return
+        session = await db.get(FrameworkInterviewSession, session_id)
+        if session is None or session.paused or session.status not in LIVE_STATUSES:
+            return
+        task = await db.get(FrameworkInterviewTask, task_id)
+        if task is None:
+            return
+        if kind == "draw":
+            await _draw_row(db, session, task)
+        else:
+            await _generate_questionnaire(db, session, task)
+
+
+async def run_jobs(db: AsyncSession, session_id: int) -> bool:
+    """실행 가능한 잡 전부를 세마포어 안에서 병렬로. False = 할 일 없음(일시정지·비활성·AI 꺼짐·큐 비움).
+
+    세마포어는 호출마다 새로 만든다 — 세션당 루프는 하나(`_active` 가드)고 gather가 끝난 뒤에야
+    반환하므로 세션 단위 상한과 동치이며, 모듈 전역 캐시(이벤트 루프 바인딩·미회수 항목)를 피한다.
+    """
     if not await is_ai_access_enabled(db):  # settings.ai_enabled을 포함(app_settings.is_ai_access_enabled)
         return False
     session = await db.get(FrameworkInterviewSession, session_id)
     if session is None or session.paused or session.status not in LIVE_STATUSES:
         return False
     await db.refresh(session, ["tasks"])
-    tasks = sorted(session.tasks, key=lambda t: t.seq)
-    submitted = next((t for t in tasks if t.status == "submitted"), None)
-    if submitted is not None:
-        await _draw_row(db, session, submitted)
-        return True
-    ready_count = sum(t.status == "ready" for t in tasks)
-    pending = next((t for t in tasks if t.status == "pending"), None)
-    if pending is not None and ready_count < PREFETCH_READY:
-        await _generate_questionnaire(db, session, pending)
-        return True
-    return False
+    jobs = collect_jobs(list(session.tasks))
+    if not jobs:
+        return False
+    sem = asyncio.Semaphore(max(1, settings.fw_consult_concurrency))
+    await asyncio.gather(*(_run_job(sem, kind, session_id, task.id) for kind, task in jobs))
+    return True
 
 
 async def recover_stale_tasks(db: AsyncSession, session_id: int | None = None) -> int:

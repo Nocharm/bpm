@@ -65,6 +65,8 @@ class Settings(BaseSettings):
 
     # AI 부하 가드 — 백엔드 전체 동시 AI 호출 상한(인터뷰·챗 공용)
     ai_max_concurrency: int = 4
+    # 캠페인 러너 세션당 동시 AI 잡 수 — 전역 상한은 ai_max_concurrency
+    fw_consult_concurrency: int = 3
     # 인터뷰 선택지 병렬 생성 개수(구조 결정 지점에서만)
     interview_choice_count: int = 2
     # 인터뷰 컨텍스트 주입 문자 예산(첨부 발췌 등)

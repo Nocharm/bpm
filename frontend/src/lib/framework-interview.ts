@@ -4,8 +4,6 @@ import type { FwAnswerValue, FwInterviewSession, FwInterviewTask, FwPlanCard, Fw
 
 export type FwStep = "plan" | "answer" | "waiting" | "relations" | "register" | "done";
 
-const PREFETCH_READY = 2; // 서버 runner.PREFETCH_READY와 동기
-
 function isChoice(kind: string): boolean {
   return kind === "single" || kind === "multi" || kind === "ordered";
 }
@@ -67,10 +65,10 @@ export function findCurrentTask(session: FwInterviewSession): FwInterviewTask | 
 export function hasBackgroundWork(session: FwInterviewSession): boolean {
   if (session.paused) return false;
   if (session.status !== "plan_locked" && session.status !== "linking") return false;
-  const statuses = session.tasks.map((t) => t.status);
-  if (statuses.some((s) => s === "generating" || s === "drawing" || s === "submitted")) return true;
-  const ready = statuses.filter((s) => s === "ready").length;
-  return statuses.includes("pending") && ready < PREFETCH_READY;
+  // 러너가 실행 가능한 잡을 전부 병렬로 집으므로 대기 중인 카드가 하나라도 있으면 진행 중이다
+  return session.tasks.some(
+    (t) => t.status === "pending" || t.status === "generating" || t.status === "submitted" || t.status === "drawing",
+  );
 }
 
 export function deriveStep(session: FwInterviewSession): FwStep {

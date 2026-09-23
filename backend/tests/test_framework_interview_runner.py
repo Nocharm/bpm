@@ -1,4 +1,4 @@
-"""러너 — 제출 카드 드로잉 우선, 설문 prefetch 2장, 일시정지, 재기동 복구 (spec §6)."""
+"""러너 — 실행 가능한 잡 전부 병렬(세션당 상한), 일시정지, 재기동 복구 (spec §6)."""
 
 import asyncio
 from uuid import uuid4
@@ -45,6 +45,19 @@ def _fake_ai_queue(monkeypatch, contents: list[str]) -> list[str]:
     return queue
 
 
+def _fake_ai_router(monkeypatch, routes: dict[str, str]) -> None:
+    """시스템 프롬프트 마커로 응답을 고른다 — 병렬 run_jobs는 소비 순서가 비결정적이라 위치 큐를 못 쓴다."""
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        system = str(messages[0].get("content", ""))
+        for marker, content in routes.items():
+            if marker in system:
+                return ai_client.AiReply(content=content, prompt_tokens=10, completion_tokens=5)
+        raise AssertionError(f"no route matched the system prompt: {system[:120]!r}")
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+
+
 def _make_locked_session(client: TestClient, names: list[str]) -> int:
     parent = None
     node: dict = {}
@@ -69,39 +82,69 @@ def _statuses(sid: int) -> list[str]:
     return asyncio.run(_load())
 
 
+async def _run_jobs_once(sid: int) -> bool:
+    async with SessionLocal() as db:
+        return await runner.run_jobs(db, sid)
+
+
 def _step(sid: int) -> bool:
-    async def _run() -> bool:
-        async with SessionLocal() as db:
-            return await runner.run_one_step(db, sid)
-
-    return asyncio.run(_run())
+    return asyncio.run(_run_jobs_once(sid))
 
 
-def test_prefetch_two_questionnaires_then_idle(client: TestClient, monkeypatch) -> None:
+def test_all_pending_questionnaires_ready_in_one_pass(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
-    sid = _make_locked_session(client, ["A", "B", "C"])
-    queue = _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON])
+    sid = _make_locked_session(client, ["A", "B", "C", "D"])
+    queue = _fake_ai_queue(monkeypatch, [Q_JSON] * 4)
     assert _step(sid) is True
-    assert _statuses(sid) == ["ready", "pending", "pending"]
-    assert _step(sid) is True
-    assert _statuses(sid) == ["ready", "ready", "pending"]
-    assert _step(sid) is False  # prefetch cap reached, nothing submitted
+    assert _statuses(sid) == ["ready"] * 4
+    assert _step(sid) is False  # 큐가 비었다
     assert queue == []
 
 
-def test_submitted_task_is_drawn_before_prefetch(client: TestClient, monkeypatch) -> None:
+def test_all_pending_questionnaires_generate_in_parallel_under_cap(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
-    sid = _make_locked_session(client, ["A", "B", "C"])
-    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON])
-    _step(sid)
-    _step(sid)
+    monkeypatch.setattr(settings, "fw_consult_concurrency", 2)
+    sid = _make_locked_session(client, ["A", "B", "C", "D"])
+    active = {"now": 0, "peak": 0}
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        active["now"] += 1
+        active["peak"] = max(active["peak"], active["now"])
+        await asyncio.sleep(0.05)
+        active["now"] -= 1
+        return ai_client.AiReply(content=Q_JSON, prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    assert asyncio.run(_run_jobs_once(sid)) is True
+    statuses = [t["status"] for t in client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"]]
+    assert statuses == ["ready"] * 4  # PREFETCH 2장 제한 없이 전부 준비
+    assert active["peak"] == 2  # 세션 세마포어 상한
+
+
+def test_submitted_draw_and_pending_generate_run_together(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A", "B"])
+    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON])
+    assert _step(sid) is True
     first = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
     answers = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "", "q6": ""}
     r = client.post(f"/api/framework-interviews/{sid}/tasks/{first['id']}/answers", json={"answers": answers}, headers=HEADERS)
     assert r.status_code == 200, r.text
-    assert _statuses(sid)[0] == "submitted"
+
+    # 카드 2를 큐로 되돌려(retry/reopen과 같은 상태) 카드 1 = submitted, 카드 2 = pending을 만든다
+    async def _requeue() -> None:
+        async with SessionLocal() as db:
+            s = await db.get(FrameworkInterviewSession, sid)
+            await db.refresh(s, ["tasks"])
+            sorted(s.tasks, key=lambda t: t.seq)[1].status = "pending"
+            await db.commit()
+
+    asyncio.run(_requeue())
+    assert _statuses(sid) == ["submitted", "pending"]
+    # 한 번의 run_jobs가 드로잉·설문 생성을 함께 돌린다
+    _fake_ai_router(monkeypatch, {"설문지": Q_JSON, "rows[] 원소": ROW_JSON})
     assert _step(sid) is True
-    assert _statuses(sid) == ["drawn", "ready", "pending"]
+    assert _statuses(sid) == ["drawn", "ready"]
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{first['id']}", headers=HEADERS).json()
     assert detail["row"]["actions"][0]["label"] == "요청 확인"
     assert detail["answers"]["q4"] == {"value": "요청서 도착", "auto": True}
@@ -168,7 +211,7 @@ def test_kick_during_step_keeps_loop_running(monkeypatch) -> None:
             runner.kick(session_id)  # 스텝 진행 중 도착한 kick — _active라 wake만 세운다
         return False
 
-    monkeypatch.setattr(runner, "run_one_step", _fake_step)
+    monkeypatch.setattr(runner, "run_jobs", _fake_step)
     runner._active.discard(sid)
     runner._wake.discard(sid)
     asyncio.run(runner.process_session(sid))
