@@ -16,6 +16,11 @@ describe("diff changed token", () => {
     expect(src).toContain('changed: "bg-diff-changed"');
     expect(src).not.toContain('changed: "var(--color-changed)"');
   });
+  it("field diff pills (change list, inspector) use the diff token only", () => {
+    const src = read("./compare-field-diff.tsx");
+    expect(src).not.toMatch(/(?<![a-z-])(?:bg|text|border)-changed(?![a-z-])/);
+    expect(src).toContain("text-diff-changed");
+  });
   it("compare page keeps the warning token only for the pending version dot", () => {
     const src = read("../app/maps/[mapId]/compare/page.tsx");
     const warningUses = src.match(/(?<![a-z-])(?:bg|text|border)-changed(?![a-z-])|var\(--color-changed\)/g) ?? [];

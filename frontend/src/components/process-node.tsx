@@ -802,13 +802,13 @@ function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffSt
 }
 
 // 필 배경은 노드 fill과 동일한 불투명 틴트 — 뒤로 지나는 엣지(우회 아크)가 비쳐 변경 내용을 가리지 않게.
-const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-changed) 12%, white)";
+const CHANGED_PILL_BG = "color-mix(in srgb, var(--color-diff-changed) 12%, white)";
 
 // 비교뷰 변경 힌트 — 바뀐 필드의 아이콘 색·배경 틴트(added/removed/changed 상태색). 에디터(diffFieldStatus 없음)는 무색.
 const DIFF_TINT: Record<FieldDiffStatus, { icon: string; bg: string }> = {
   added: { icon: "text-added", bg: "bg-added/10" },
   removed: { icon: "text-removed", bg: "bg-removed/10" },
-  changed: { icon: "text-changed", bg: "bg-changed/10" },
+  changed: { icon: "text-diff-changed", bg: "bg-diff-changed/10" },
 };
 function getDiffTint(data: AppNode["data"], ...fields: string[]): { icon: string; bg: string } | null {
   for (const field of fields) {
@@ -899,7 +899,7 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
       ))}
       {extra > 0 && (
         <span
-          className="rounded-xs border border-changed/30 px-1.5 py-0.5 text-[11px] font-medium text-changed"
+          className="rounded-xs border border-diff-changed/30 px-1.5 py-0.5 text-[11px] font-medium text-diff-changed"
           style={{ backgroundColor: CHANGED_PILL_BG }}
         >
           {t("compare.moreFields", { n: extra })}
@@ -952,7 +952,7 @@ function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: 
   const { t } = useI18n();
   return (
     <span
-      className={`absolute ${className} rounded-full bg-changed px-1 text-[10px] leading-4 text-white`}
+      className={`absolute ${className} rounded-full bg-diff-changed px-1 text-[10px] leading-4 text-white`}
       title={t("node.childChangedTitle")}
     >
       <Zap size={10} strokeWidth={1.5} />

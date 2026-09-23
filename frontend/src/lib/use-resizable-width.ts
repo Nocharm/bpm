@@ -26,8 +26,10 @@ export function useResizableWidth({ storageKey, min, max, fallback, edge }: Resi
   const onPointerDown = useCallback(
     (event: React.PointerEvent) => {
       event.preventDefault();
-      const measure = (clientX: number) =>
-        Math.min(max, Math.max(min, edge === "right" ? window.innerWidth - clientX : clientX));
+      const raw = (clientX: number) => (edge === "right" ? window.innerWidth - clientX : clientX);
+      // 잡은 지점(디바이더 폭만큼 패널 가장자리에서 떨어져 있다)과 현재 폭의 차를 고정 — 잡는 순간 폭이 튀지 않는다
+      const grabOffset = width - raw(event.clientX);
+      const measure = (clientX: number) => Math.min(max, Math.max(min, raw(clientX) + grabOffset));
       const onMove = (ev: PointerEvent) => setWidth(measure(ev.clientX));
       const finish = (ev: PointerEvent) => {
         window.localStorage.setItem(storageKey, String(measure(ev.clientX)));
@@ -39,7 +41,7 @@ export function useResizableWidth({ storageKey, min, max, fallback, edge }: Resi
       window.addEventListener("pointerup", finish);
       window.addEventListener("pointercancel", finish);
     },
-    [storageKey, min, max, edge],
+    [storageKey, min, max, edge, width],
   );
   return { width, onPointerDown };
 }

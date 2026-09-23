@@ -26,7 +26,7 @@ import type { MessageKey } from "@/lib/i18n-messages";
 const KIND_VISUAL: Record<CompareSummaryPointKind, { icon: LucideIcon | null; className: string; label: MessageKey }> = {
   added: { icon: Plus, className: "bg-added/15 text-added", label: "compare.aiKind.added" },
   removed: { icon: Minus, className: "bg-removed/15 text-removed", label: "compare.aiKind.removed" },
-  changed: { icon: ArrowRightLeft, className: "bg-changed/20 text-changed", label: "compare.aiKind.changed" },
+  changed: { icon: ArrowRightLeft, className: "bg-diff-changed/20 text-diff-changed", label: "compare.aiKind.changed" },
   increase: { icon: ArrowUp, className: "bg-accent-tint text-accent", label: "compare.aiKind.increase" },
   decrease: { icon: ArrowDown, className: "bg-accent-tint text-accent", label: "compare.aiKind.decrease" },
   flow: { icon: GitBranch, className: "bg-accent-tint text-accent", label: "compare.aiKind.flow" },

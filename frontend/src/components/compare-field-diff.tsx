@@ -21,19 +21,19 @@ export interface FieldDiffRowData {
 export const FIELD_DIFF_ROW_CLASS: Record<FieldDiffStatus, string> = {
   added: "border-added/30 bg-added/10 hover:bg-added/20",
   removed: "border-removed/30 bg-removed/10 hover:bg-removed/20",
-  changed: "border-changed/30 bg-changed/10 hover:bg-changed/20",
+  changed: "border-diff-changed/30 bg-diff-changed/10 hover:bg-diff-changed/20",
 };
 
 export const FIELD_DIFF_BORDER_CLASS: Record<FieldDiffStatus, string> = {
   added: "border-added/30",
   removed: "border-removed/30",
-  changed: "border-changed/30",
+  changed: "border-diff-changed/30",
 };
 
 export const FIELD_DIFF_LABEL_CLASS: Record<FieldDiffStatus, string> = {
   added: "text-added",
   removed: "text-removed",
-  changed: "text-changed",
+  changed: "text-diff-changed",
 };
 
 // 캔버스 필 불투명 배경 — 뒤로 지나는 엣지가 비치지 않게 (기존 CHANGED_PILL_BG 패턴의 상태별 확장).
