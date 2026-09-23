@@ -1,8 +1,10 @@
 """러너 — 실행 가능한 잡 전부 병렬(세션당 상한), 일시정지, 재기동 복구 (spec §6)."""
 
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import ai_client
@@ -91,6 +93,19 @@ def _step(sid: int) -> bool:
     return asyncio.run(_run_jobs_once(sid))
 
 
+def test_collect_jobs_orders_draws_first_then_generates_by_seq() -> None:
+    """제출 카드 드로잉이 설문 생성보다 먼저, 같은 종류끼리는 seq 순. ready·drawn·failed는 잡이 아니다."""
+    tasks = [
+        SimpleNamespace(status="pending", seq=4), SimpleNamespace(status="submitted", seq=5),
+        SimpleNamespace(status="pending", seq=1), SimpleNamespace(status="ready", seq=2),
+        SimpleNamespace(status="submitted", seq=3), SimpleNamespace(status="drawn", seq=6),
+        SimpleNamespace(status="failed", seq=7),
+    ]
+    assert [(kind, t.seq) for kind, t in runner.collect_jobs(tasks)] == [
+        ("draw", 3), ("draw", 5), ("generate", 1), ("generate", 4),
+    ]
+
+
 def test_all_pending_questionnaires_ready_in_one_pass(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     sid = _make_locked_session(client, ["A", "B", "C", "D"])
@@ -119,6 +134,52 @@ def test_all_pending_questionnaires_generate_in_parallel_under_cap(client: TestC
     statuses = [t["status"] for t in client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"]]
     assert statuses == ["ready"] * 4  # PREFETCH 2장 제한 없이 전부 준비
     assert active["peak"] == 2  # 세션 세마포어 상한
+
+
+def test_sibling_job_finishes_before_the_first_error_surfaces(client: TestClient, monkeypatch) -> None:
+    """비 TurnError가 나도 형제 잡은 끝까지 간다 — 즉시 전파하면 복구가 진행 중인 행을 되돌려 중복 실행된다."""
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A", "B"])
+    _fake_ai_queue(monkeypatch, [Q_JSON])
+    generate = runner._generate_questionnaire
+    order: list[str] = []
+
+    async def _maybe_boom(db, session, task):
+        if task.seq == 1:
+            order.append("boom")
+            raise RuntimeError("boom")  # 예: 동시 커밋 중 sqlite OperationalError
+        await asyncio.sleep(0.05)
+        await generate(db, session, task)
+        order.append("done")
+
+    monkeypatch.setattr(runner, "_generate_questionnaire", _maybe_boom)
+    with pytest.raises(RuntimeError, match="boom"):
+        asyncio.run(_run_jobs_once(sid))
+    assert order == ["boom", "done"]  # 예외는 형제가 가라앉은 뒤에 나온다
+    assert _statuses(sid) == ["pending", "ready"]  # 형제는 완주(되돌려지지 않음)
+
+
+def test_queued_job_skips_a_task_whose_status_moved(client: TestClient, monkeypatch) -> None:
+    """세마포어를 기다리는 동안 API가 상태를 바꾼 태스크는 그 잡이 건너뛴다(중복 AI 호출 방지)."""
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    calls = 0
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        nonlocal calls
+        calls += 1
+        return ai_client.AiReply(content=Q_JSON, prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    task_id = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]["id"]
+
+    # 큐에 들어갈 때는 submitted였지만 실행 시점엔 pending(reopen/retry) — 드로잉 잡은 버려야 한다
+    async def _run_stale_draw() -> None:
+        await runner._run_job(asyncio.Semaphore(1), "draw", sid, task_id)
+
+    asyncio.run(_run_stale_draw())
+    assert calls == 0
+    assert _statuses(sid) == ["pending"]
 
 
 def test_submitted_draw_and_pending_generate_run_together(client: TestClient, monkeypatch) -> None:

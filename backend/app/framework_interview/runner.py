@@ -202,6 +202,10 @@ async def _run_job(sem: asyncio.Semaphore, kind: str, session_id: int, task_id: 
         task = await db.get(FrameworkInterviewTask, task_id)
         if task is None:
             return
+        # 세마포어를 기다리는 동안 API가 태스크를 건드렸을 수 있다(재시도·되돌리기·건너뛰기) —
+        # 큐에 들어갔을 때의 상태가 아니면 그 잡은 버린다.
+        if task.status != ("submitted" if kind == "draw" else "pending"):
+            return
         if kind == "draw":
             await _draw_row(db, session, task)
         else:
@@ -213,6 +217,10 @@ async def run_jobs(db: AsyncSession, session_id: int) -> bool:
 
     세마포어는 호출마다 새로 만든다 — 세션당 루프는 하나(`_active` 가드)고 gather가 끝난 뒤에야
     반환하므로 세션 단위 상한과 동치이며, 모듈 전역 캐시(이벤트 루프 바인딩·미회수 항목)를 피한다.
+
+    예외는 전부 가라앉은 뒤에 되던진다 — 즉시 전파하면 형제 잡이 그대로 도는 채로
+    `process_session`의 `recover_stale_tasks`가 그 행을 pending/submitted로 되돌려
+    다음 kick이 같은 잡을 중복 실행한다(AI 중복 호출·설문 덮어쓰기).
     """
     if not await is_ai_access_enabled(db):  # settings.ai_enabled을 포함(app_settings.is_ai_access_enabled)
         return False
@@ -224,7 +232,12 @@ async def run_jobs(db: AsyncSession, session_id: int) -> bool:
     if not jobs:
         return False
     sem = asyncio.Semaphore(max(1, settings.fw_consult_concurrency))
-    await asyncio.gather(*(_run_job(sem, kind, session_id, task.id) for kind, task in jobs))
+    results = await asyncio.gather(
+        *(_run_job(sem, kind, session_id, task.id) for kind, task in jobs), return_exceptions=True
+    )
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
     return True
 
 
