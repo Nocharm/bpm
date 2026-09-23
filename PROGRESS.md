@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-23 — AI L5 캠페인 2라운드 설계
+
+- **설계 확정(dev, 09-23):** 사용자 요청 17건(관리 패널 진입·캠페인 UX/엔진·비교 화면·L5 드롭존)을 4스프린트로 분해한 스펙 `docs/superpowers/specs/2026-09-23-ai-l5-campaign-round2-design.md`. 핵심 결정: 연결 단계는 ReactFlow+ProcessNode 경량 캔버스(에디터 임베드 아님)로 L5 맵을 직접 편집하고 세션 `canvas` 컬럼이 편집 진실·확정 시 relations 역산, 자연어 피드백은 `POST /feedback` 한 경로(scope relations|task), IO는 배열화+L6 내부 링크만, 질문은 종류 지시 강화+섹션 그룹(kind 추가 없음), 러너는 전역 세마포어 병렬. 코드 변경 없음.
+
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
 - **낡은 스모크 4종 이식(dev, 09-22):** 구 홈 트리 id(`framework-tree`/`framework-node`)에서 죽던 interview-import·field-promotion·framework-canvas·framework-delegation을 L5 드릴다운 id(형제 열·하위 행·L5 카드·요약 맵 행)로 옮기고, 그 사이 바뀐 계약(IO "+" 메뉴·시스템 카탈로그 Other·노트 li 카운트·시드 플레이스홀더 게이트·framework draft 열람 신원)에 맞춰 단언을 갱신 — 26/26·25/25·25/25·18/18, 앱 변경은 확정 워터마크 `data-id="editor-confirm-stamp"` 하나뿐.
