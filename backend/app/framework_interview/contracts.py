@@ -139,6 +139,37 @@ class RelationsOut(BaseModel):
     edges: list[RelationsEdge] = []
 
 
+class CanvasNodeOut(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    node_type: Literal["subprocess", "decision", "start", "end"]
+    title: str = Field(default="", max_length=200)
+    task_id: str | None = None
+    pos_x: float = 0  # 피드백 응답은 좌표를 0으로 둔다 — 라우터가 relayout_canvas로 다시 배치한다
+    pos_y: float = 0
+
+
+class CanvasEdgeOut(BaseModel):
+    id: str = Field(default="", max_length=180)
+    source_node_id: str
+    target_node_id: str
+    label: str = Field(default="", max_length=200)
+    gateway: Literal["exclusive", "parallel"] | None = None
+
+
+class CanvasOut(BaseModel):
+    """연계 캔버스 응답 — 저장 형태(canvas.py)와 같은 필드."""
+
+    nodes: list[CanvasNodeOut] = Field(min_length=1)
+    edges: list[CanvasEdgeOut] = []
+
+    def to_canvas(self) -> dict:
+        """저장 정본 형태 — task_id는 null로 남기고 gateway는 값이 없으면 뺀다(canvas.py 계약)."""
+        return {
+            "nodes": [n.model_dump() for n in self.nodes],
+            "edges": [e.model_dump(exclude_none=True) for e in self.edges],
+        }
+
+
 # ── 계약 문구 (관리자 오버라이드 가능) ──
 
 # 동결 맵 꼬리표 — 캔버스에 하위 맵 링크가 있어 역변환할 수 없는 L6 (existing.load_existing_l6)
@@ -195,6 +226,26 @@ L5_RELATIONS_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 - edges: src/dst는 taskId. 순차는 kind=seq, 갈림은 kind=branch + gateway=exclusive + condition, 되돌아감은 kind=loop.
 - 모든 L6가 최소 한 번은 등장해야 하고, 각 카드의 depends_on과 시작/종료 조건을 존중하세요.
 - 다른 설명 없이 JSON 한 개만: {"entry":{"taskId":"","triggerType":"manual","label":""},"edges":[{"src":"","dst":"","kind":"seq"}]}"""
+
+CANVAS_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 아래 L5 연계 캔버스(노드·엣지)를 사용자 피드백대로 고치세요.
+
+규칙
+- 노드 id와 task_id는 바꾸지 말 것. [L6 카드]에 없는 task_id는 만들지 말 것.
+- 새 분기 노드 id는 `__branch__` 접두, node_type은 decision, task_id는 null.
+- start/end는 유지(id는 __start__·__end__ 그대로).
+- 엣지 label은 갈림·되돌아감의 조건 한 줄(없으면 빈 문자열), gateway는 필요할 때만 exclusive·parallel.
+- 좌표는 0으로 두어도 됨(서버가 다시 배치).
+- 다른 설명 없이 같은 형식의 JSON 한 개만:
+{"nodes":[{"id":"__start__","node_type":"start","title":"Start","task_id":null,"pos_x":0,"pos_y":0}],"edges":[{"id":"e1","source_node_id":"__start__","target_node_id":"","label":""}]}"""
+
+ROW_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 아래 rows[] 원소를 사용자 피드백대로 고치세요.
+
+규칙
+- 키 집합·seq 규칙은 유지: actions의 seq는 1부터 중복 없이, relations.edges의 src/dst는 actions의 seq 정수.
+- 피드백이 가리키지 않은 부분은 그대로 두세요.
+- owner는 넣지 마세요(실명 금지). input/output은 항목 배열.
+- 다른 설명 없이 JSON 한 개만:
+{"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action"}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
 
 
 # ── 빌더 ──
@@ -365,4 +416,29 @@ def build_relations_messages(
     if comment:
         prior = json.dumps(previous, ensure_ascii=False) if previous else "(없음)"
         user += f"\n\n[직전 제안]\n{prior}\n\n[사용자 피드백]\n{comment}"
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_canvas_feedback_messages(
+    *, lang: str, canvas: dict, tasks: list[tuple[str, str]], message: str,
+    overrides: Mapping[str, str] | None = None,
+) -> list[dict]:
+    """캔버스 자연어 수정 프롬프트 — 현재 캔버스 전문을 싣고 피드백대로 고친 같은 형태를 받는다."""
+    contract = (overrides or {}).get("l5_canvas_feedback_contract") or CANVAS_FEEDBACK_CONTRACT
+    system = f"{contract}\n\n{_lang_line(lang)}"
+    task_lines = "\n".join(f"- {tid}: {name}" for tid, name in tasks)
+    user = (
+        f"[L6 카드]\n{task_lines}\n\n[현재 캔버스]\n{json.dumps(canvas, ensure_ascii=False)}\n\n"
+        f"[사용자 피드백]\n{message}"
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def build_row_feedback_messages(
+    *, lang: str, row: dict, message: str, overrides: Mapping[str, str] | None = None,
+) -> list[dict]:
+    """행 자연어 수정 프롬프트 — 현재 행 전문을 싣는다(설문 답이 아니라 행 자체를 고친다)."""
+    contract = (overrides or {}).get("l6_row_feedback_contract") or ROW_FEEDBACK_CONTRACT
+    system = f"{contract}\n\n{_lang_line(lang)}"
+    user = f"[현재 행]\n{json.dumps(row, ensure_ascii=False)}\n\n[사용자 피드백]\n{message}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

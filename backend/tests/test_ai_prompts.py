@@ -16,7 +16,7 @@ NON_SYSADMIN = "user.lee"
 def test_prompt_defaults_cover_all_keys() -> None:
     defaults = get_prompt_defaults()
     assert set(defaults) == set(PROMPT_KEYS)
-    assert len(PROMPT_KEYS) == 13
+    assert len(PROMPT_KEYS) == 15
     # 전 항목이 비어있지 않은 실제 프롬프트 문자열
     assert all(isinstance(value, str) and value.strip() for value in defaults.values())
 

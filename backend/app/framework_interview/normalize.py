@@ -8,6 +8,8 @@ contracts.py 스키마가 요구하는 모양으로 맞춘 뒤 검증한다. 의
 import re
 from typing import Any
 
+from app.framework_interview.canvas import BRANCH_PREFIX, END_ID, START_ID
+
 QUESTION_KINDS = {"single", "multi", "text", "ordered"}
 KIND_SYNONYMS = {
     "radio": "single", "choice": "single", "select": "single", "single_choice": "single", "one": "single",
@@ -283,6 +285,86 @@ def normalize_row(raw: Any) -> dict:
     if edges:
         out["relations"] = {"edges": edges}
     return out
+
+
+def normalize_canvas(raw: Any, base: dict, known: set[str]) -> dict:
+    """AI가 고쳐 보낸 캔버스 → 저장 가능한 형태. base(직전 캔버스)가 노드·좌표의 기준이다.
+
+    모델은 id·task_id를 바꾸지 못한다: base에 있던 노드는 종류·task_id·좌표를 base 값으로 되돌리고,
+    빠뜨린 subprocess/start/end는 base에서 보충한다. 새 노드는 `__branch__` 접두 분기 노드만 받고
+    엣지는 양 끝이 남은 노드일 때만 살린다(쌍은 유일).
+    """
+    body = _first_dict(raw, "nodes")
+    base_nodes = [n for n in (base.get("nodes") or []) if isinstance(n, dict)]
+    base_by_id = {str(n.get("id")): n for n in base_nodes}
+
+    def _from_base(origin: dict, title: str = "") -> dict | None:
+        """base 노드 → 캔버스 노드. 세션에 없는 task_id를 든 subprocess는 버린다(낡은 캔버스)."""
+        node_type = str(origin.get("node_type") or "subprocess")
+        task_id = _text(origin.get("task_id")) or None
+        if node_type == "subprocess" and task_id not in known:
+            return None
+        return {"id": str(origin.get("id")), "node_type": node_type,
+                "title": (title or _text(origin.get("title")))[:200],
+                "task_id": task_id if node_type == "subprocess" else None,
+                "pos_x": float(origin.get("pos_x") or 0.0), "pos_y": float(origin.get("pos_y") or 0.0)}
+
+    nodes: list[dict] = []
+    kept: set[str] = set()
+    for item in body.get("nodes") if isinstance(body.get("nodes"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        node_id = _text(item.get("id"))
+        if not node_id or node_id in kept:
+            continue
+        origin = base_by_id.get(node_id)
+        title = _text(item.get("title") or item.get("label"))
+        if origin is not None:
+            node = _from_base(origin, title)
+        elif node_id.startswith(BRANCH_PREFIX):
+            # 새 노드는 분기만 받는다 — 새 L6는 계획 단계에서만 태어난다
+            node = {"id": node_id, "node_type": "decision", "title": title[:200], "task_id": None,
+                    "pos_x": 0.0, "pos_y": 0.0}
+        else:
+            node = None
+        if node is None:
+            continue
+        kept.add(node_id)
+        nodes.append(node)
+    for origin in base_nodes:  # 빠뜨린 필수 노드 보충 — 카드 하나가 캔버스에서 증발하면 안 된다
+        if str(origin.get("id")) in kept or str(origin.get("node_type")) not in ("subprocess", "start", "end"):
+            continue
+        node = _from_base(origin)
+        if node is None:
+            continue
+        kept.add(node["id"])
+        nodes.append(node)
+    for node_id, node_type, title in ((START_ID, "start", "Start"), (END_ID, "end", "End")):
+        if node_id not in kept:  # base에도 없던 경우 — 캔버스는 항상 시작·끝을 갖는다
+            kept.add(node_id)
+            nodes.append({"id": node_id, "node_type": node_type, "title": title,
+                          "task_id": None, "pos_x": 0.0, "pos_y": 0.0})
+
+    edges: list[dict] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for item in body.get("edges") if isinstance(body.get("edges"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        source = _text(item.get("source_node_id") or item.get("source") or item.get("src"))
+        target = _text(item.get("target_node_id") or item.get("target") or item.get("dst"))
+        if source not in kept or target not in kept or (source, target) in seen_pairs:
+            continue
+        seen_pairs.add((source, target))
+        edge: dict[str, Any] = {
+            "id": _text(item.get("id")) or f"{source}>{target}",
+            "source_node_id": source, "target_node_id": target,
+            "label": _text(item.get("label") or item.get("condition")),
+        }
+        gateway = _lower(item.get("gateway"))
+        if gateway in GATEWAYS:
+            edge["gateway"] = gateway
+        edges.append(edge)
+    return {"nodes": nodes, "edges": edges}
 
 
 def normalize_relations(raw: Any, known: dict[str, str]) -> dict:

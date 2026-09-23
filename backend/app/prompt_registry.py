@@ -16,11 +16,13 @@ PROMPT_KEYS: tuple[str, ...] = (
     "anti_repeat_nudge",
     "compare_summary_contract",
     "submit_note_contract",
-    # AI L5 캠페인 4종 (spec 2026-09-21 §5)
+    # AI L5 캠페인 6종 (spec 2026-09-21 §5 + 자연어 피드백 2종)
     "l5_plan_contract",
     "l6_questionnaire_contract",
     "l6_row_drafter_contract",
     "l5_relations_contract",
+    "l5_canvas_feedback_contract",
+    "l6_row_feedback_contract",
 )
 
 
@@ -44,10 +46,12 @@ def get_prompt_defaults() -> dict[str, str]:
         "l6_questionnaire_contract": fw_contracts.L6_QUESTIONNAIRE_CONTRACT,
         "l6_row_drafter_contract": fw_contracts.L6_ROW_DRAFTER_CONTRACT,
         "l5_relations_contract": fw_contracts.L5_RELATIONS_CONTRACT,
+        "l5_canvas_feedback_contract": fw_contracts.CANVAS_FEEDBACK_CONTRACT,
+        "l6_row_feedback_contract": fw_contracts.ROW_FEEDBACK_CONTRACT,
     }
 
 
 async def get_prompt_overrides(session: AsyncSession) -> dict[str, str]:
-    """DB 오버라이드 전체(≤13행) — 요청/턴당 1회 조회해 빌더에 전달."""
+    """DB 오버라이드 전체(≤15행) — 요청/턴당 1회 조회해 빌더에 전달."""
     rows = (await session.scalars(select(AiPrompt))).all()
     return {row.key: row.content for row in rows if row.key in PROMPT_KEYS}

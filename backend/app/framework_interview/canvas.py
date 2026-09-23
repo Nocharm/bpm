@@ -37,14 +37,46 @@ def _node(node_id: str, node_type: str, title: str, task_id: str | None) -> dict
             "pos_x": 0.0, "pos_y": 0.0}
 
 
+def _apply_layout(
+    nodes: list[dict], pairs: list[tuple[str, str]],
+    labeled: list[tuple[str, str, str]], back: set[tuple[str, str]],
+) -> None:
+    """LR 배치를 제자리 적용 — nodes의 pos_x/pos_y를 채운다(expand·relayout 공통 경로)."""
+    from scripts.consultant_layout import LayoutNode, layout_flow  # 지연 import — 스크립트 패키지
+
+    placed = [
+        LayoutNode(id=str(n["id"]), node_type=str(n.get("node_type") or "subprocess")) for n in nodes
+    ]
+    layout_flow(placed, pairs, primary_end_id=END_ID, back_pairs=back, labeled=labeled)
+    pos = {p.id: (float(p.x), float(p.y)) for p in placed}
+    for node in nodes:
+        node["pos_x"], node["pos_y"] = pos[str(node["id"])]
+
+
+def relayout_canvas(canvas: dict) -> dict:
+    """노드·엣지는 그대로, LR 배치만 다시 돌린 새 캔버스. 좌표 없이 온 제안(AI 피드백)에 자리를 준다.
+
+    kind가 없으므로 되돌아가는 엣지는 노드 목록 순서로 가린다 — 목록 순서를 거스르는 엣지를
+    rank에 넣으면 사이클로 떨어져 배치가 무너진다(layout_flow back_pairs 주석).
+    """
+    nodes = [dict(n) for n in canvas.get("nodes") or [] if isinstance(n, dict)]
+    edges = [dict(e) for e in canvas.get("edges") or [] if isinstance(e, dict)]
+    if not nodes:
+        return {"nodes": nodes, "edges": edges}
+    order = {str(n.get("id")): i for i, n in enumerate(nodes)}
+    pairs = [(str(e.get("source_node_id") or ""), str(e.get("target_node_id") or "")) for e in edges]
+    back = {(s, d) for s, d in pairs if s in order and d in order and order[d] <= order[s]}
+    labeled = [(s, d, str(e.get("label") or "")) for (s, d), e in zip(pairs, edges, strict=True)]
+    _apply_layout(nodes, pairs, labeled, back)
+    return {"nodes": nodes, "edges": edges}
+
+
 def expand_relations_to_canvas(relations: dict, tasks: list[tuple[str, str]]) -> dict:
     """relations → 편집용 캔버스 그래프. tasks=[(task_id, name)] seq 순.
 
     분기 노드 삽입 규칙·start/end 보강 규칙은 FE 미리보기(`lib/interview-preview.ts` buildL5PreviewGraph)와
     같아야 한다 — 두 표면이 같은 그림을 보여야 하므로 한쪽을 고치면 다른 쪽도 옮긴다.
     """
-    from scripts.consultant_layout import LayoutNode, layout_flow  # 지연 import — 스크립트 패키지
-
     names = dict(tasks)
     order = [task_id for task_id, _ in tasks]
 
@@ -115,14 +147,10 @@ def expand_relations_to_canvas(relations: dict, tasks: list[tuple[str, str]]) ->
             nodes.append(_node(branch_id, "decision", f"{names[task_id]} 결과", None))
     nodes.append(_node(END_ID, "end", "End", None))
 
-    placed = [LayoutNode(id=n["id"], node_type=n["node_type"]) for n in nodes]
-    layout_flow(
-        placed, [(e.source, e.target) for e in flow], primary_end_id=END_ID,
-        back_pairs=back, labeled=[(e.source, e.target, e.label) for e in flow],
+    _apply_layout(
+        nodes, [(e.source, e.target) for e in flow],
+        [(e.source, e.target, e.label) for e in flow], back,
     )
-    pos = {p.id: (float(p.x), float(p.y)) for p in placed}
-    for node in nodes:
-        node["pos_x"], node["pos_y"] = pos[node["id"]]
 
     edges: list[dict] = []
     for e in flow:

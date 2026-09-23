@@ -22,23 +22,25 @@ from app.framework_interview.assemble import (
     allocate_task_ids, assemble_document, load_category_chain, load_existing_codes, validate_row,
 )
 from app.framework_interview.canvas import (
-    collapse_canvas_to_relations, expand_relations_to_canvas, validate_canvas,
+    collapse_canvas_to_relations, expand_relations_to_canvas, relayout_canvas, validate_canvas,
 )
 from app.framework_interview.contracts import (
-    PlanOut, RelationsOut, build_context_text, build_plan_messages, build_relations_messages,
+    CanvasOut, PlanOut, RelationsOut, RowOut, build_canvas_feedback_messages, build_context_text,
+    build_plan_messages, build_relations_messages, build_row_feedback_messages,
     format_managed_catalog,
 )
 from app.framework_interview.existing import existing_row_of, load_existing_l6, merge_existing_cards
-from app.framework_interview.normalize import normalize_plan, normalize_relations
+from app.framework_interview.normalize import normalize_canvas, normalize_plan, normalize_relations, normalize_row
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
 from app.prompt_registry import get_prompt_overrides
 from app.schemas import (
     FrameworkExistingOut, FrameworkInterviewAnswersIn, FrameworkInterviewCanvasIn,
-    FrameworkInterviewCreateIn, FrameworkInterviewOut, FrameworkInterviewPlanIn,
-    FrameworkInterviewProgressOut, FrameworkInterviewRelationsGenerateIn,
-    FrameworkInterviewRelationsIn, FrameworkInterviewTaskDetailOut, FrameworkInterviewTaskOut,
+    FrameworkInterviewCreateIn, FrameworkInterviewFeedbackIn, FrameworkInterviewOut,
+    FrameworkInterviewPlanIn, FrameworkInterviewProgressOut,
+    FrameworkInterviewRelationsGenerateIn, FrameworkInterviewRelationsIn,
+    FrameworkInterviewTaskDetailOut, FrameworkInterviewTaskOut,
 )
 
 router = APIRouter(
@@ -602,6 +604,63 @@ async def confirm_relations(
     )
     await assemble_document(db, row)
     row.status = "ready"
+    await db.commit()
+    return await _out(db, row)
+
+
+@router.post("/{session_id}/feedback", response_model=FrameworkInterviewOut)
+async def feedback_session(
+    session_id: int, payload: FrameworkInterviewFeedbackIn,
+    user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
+) -> FrameworkInterviewOut:
+    """자연어 피드백으로 캔버스 또는 그려진 카드의 행을 고친다 (2026-09-23 라운드2)."""
+    await _require_ai_enabled(db)
+    row = await _get_session_row(db, session_id)
+    tasks = sorted(row.tasks, key=lambda t: t.seq)
+    if payload.scope == "relations":
+        if row.status != "linking" or not row.canvas:
+            raise HTTPException(status_code=409, detail="relations feedback needs a proposed canvas")
+        known = {t.task_id for t in tasks}
+        base = row.canvas
+        messages = build_canvas_feedback_messages(
+            lang=row.lang, canvas=base, tasks=[(t.task_id, t.name) for t in tasks],
+            message=payload.message, overrides=await get_prompt_overrides(db),
+        )
+        out = await _ask(messages, CanvasOut, db, user, normalizer=lambda raw: normalize_canvas(raw, base, known))
+        canvas = out.to_canvas()
+        errors = validate_canvas(canvas, known)
+        if errors:
+            # 두 scope가 같은 모양으로 실패한다 — 행 경로의 오류 이슈 목록과 같은 문자열 배열
+            raise HTTPException(status_code=422, detail=errors)
+        # 모델은 좌표를 0으로 둔다(계약) — 저장 전에 LR 배치를 다시 돌려 자리를 준다
+        row.canvas = relayout_canvas(canvas)
+    else:
+        if payload.task_pk is None:
+            raise HTTPException(status_code=422, detail="task_pk required")
+        task = await _get_task(db, row, payload.task_pk)
+        if task.status != "drawn" or not task.row:
+            raise HTTPException(status_code=409, detail="only drawn tasks take feedback")
+        messages = build_row_feedback_messages(
+            lang=row.lang, row=task.row, message=payload.message,
+            overrides=await get_prompt_overrides(db),
+        )
+        out = await _ask(messages, RowOut, db, user, normalizer=normalize_row)
+        new_row = out.model_dump(by_alias=True, exclude_none=True)
+        new_row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
+        chain = await load_category_chain(db, row.category_id)
+        l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
+        issues = validate_row(chain, l5, {"taskId": task.task_id, **new_row})
+        if any(i["severity"] == "error" for i in issues):
+            raise HTTPException(status_code=422, detail=[i["message"] for i in issues if i["severity"] == "error"])
+        task.row, task.issues, task.drawn_at = new_row, issues, now_kst()
+        if row.status == "ready":
+            # 행이 바뀌면 조립본이 낡는다 — reopen-relations와 같이 연결 단계로 되돌린다
+            row.status = "linking"
+            row.assembled = None
+    log = list(row.feedback_log or [])
+    log.append({"scope": payload.scope, "task_pk": payload.task_pk,
+                "message": payload.message, "at": now_kst().isoformat()})
+    row.feedback_log = log[-10:]  # 최근 10건만 — 세션 페이로드가 무한히 자라지 않게
     await db.commit()
     return await _out(db, row)
 

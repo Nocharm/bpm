@@ -3053,6 +3053,10 @@ export function generateFrameworkRelations(id: number): Promise<FwInterviewSessi
 export function confirmFrameworkRelations(id: number, relations: Record<string, unknown>): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "PUT", body: JSON.stringify({ relations }) });
 }
+/** 자연어 피드백 — scope=relations는 캔버스를, scope=task는 그려진 카드의 행을 AI가 고친다. */
+export function sendFrameworkFeedback(id: number, body: { scope: "relations" | "task"; task_pk?: number; message: string }): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/feedback`, { method: "POST", body: JSON.stringify(body) });
+}
 export function getFrameworkInterviewDocument(id: number): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>(`/framework-interviews/${id}/document`);
 }

@@ -122,3 +122,34 @@ def test_question_section_defaults_and_prompt_mentions_kind_rules() -> None:
     q = c.Question(id="q1", kind="text", maps_to="conditions", text="t", suggested="s")
     assert q.section == "basic"
     assert "single" in c.L6_QUESTIONNAIRE_CONTRACT and "section" in c.L6_QUESTIONNAIRE_CONTRACT
+
+
+def test_feedback_builders_carry_the_user_message_and_honour_overrides() -> None:
+    """두 피드백 프롬프트 모두 현재 상태 + [사용자 피드백] 블록을 싣는다 — 모델이 무엇을 고칠지 알 수 있게."""
+    canvas = {"nodes": [{"id": "x-01", "node_type": "subprocess", "title": "접수", "task_id": "x-01"}], "edges": []}
+    canvas_msgs = c.build_canvas_feedback_messages(
+        lang="ko", canvas=canvas, tasks=[("x-01", "접수")], message="B를 먼저",
+        overrides={"l5_canvas_feedback_contract": "OVERRIDE"},
+    )
+    assert canvas_msgs[0]["content"].startswith("OVERRIDE")
+    assert "[L6 카드]\n- x-01: 접수" in canvas_msgs[-1]["content"]
+    assert '"task_id": "x-01"' in canvas_msgs[-1]["content"]
+    assert canvas_msgs[-1]["content"].endswith("[사용자 피드백]\nB를 먼저")
+
+    row_msgs = c.build_row_feedback_messages(
+        lang="ko", row=EXISTING_ROW, message="이름 고쳐",
+        overrides={"l6_row_feedback_contract": "OVERRIDE"},
+    )
+    assert row_msgs[0]["content"].startswith("OVERRIDE")
+    assert "[현재 행]" in row_msgs[-1]["content"] and "요청 확인" in row_msgs[-1]["content"]
+    assert row_msgs[-1]["content"].endswith("[사용자 피드백]\n이름 고쳐")
+
+
+def test_registry_exposes_the_feedback_contracts() -> None:
+    """관리자 오버라이드 화면이 두 계약을 편집할 수 있어야 한다."""
+    from app.prompt_registry import PROMPT_KEYS, get_prompt_defaults
+
+    defaults = get_prompt_defaults()
+    for key in ("l5_canvas_feedback_contract", "l6_row_feedback_contract"):
+        assert key in PROMPT_KEYS
+        assert defaults[key]

@@ -415,6 +415,51 @@ def test_relations_re_proposal_carries_previous_and_comment_into_the_prompt(
     assert with_comment[1]["content"].endswith("[사용자 피드백]\nB가 먼저")
 
 
+CANVAS_FEEDBACK_TMPL = '{"nodes":[{"id":"__start__","node_type":"start","title":"Start","task_id":null,"pos_x":0,"pos_y":0},' \
+    '{"id":"%s","node_type":"subprocess","title":"A","task_id":"%s","pos_x":0,"pos_y":0},{"id":"%s","node_type":"subprocess","title":"B","task_id":"%s","pos_x":0,"pos_y":0},' \
+    '{"id":"__end__","node_type":"end","title":"End","task_id":null,"pos_x":0,"pos_y":0}],' \
+    '"edges":[{"id":"e0","source_node_id":"__start__","target_node_id":"%s","label":""},{"id":"e1","source_node_id":"%s","target_node_id":"%s","label":""},{"id":"e2","source_node_id":"%s","target_node_id":"__end__","label":""}]}'
+
+
+def test_feedback_relations_rewrites_canvas_and_task_redraws_row(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    cards = [{"name": n, "summary": "", "owner_role": "", "department": "", "depends_on": []} for n in ["A", "B"]]
+    t1, t2 = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()["tasks"]
+    a, b = t1["task_id"], t2["task_id"]
+    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON, RELATIONS_TMPL % (a, a, b),
+                                 CANVAS_FEEDBACK_TMPL % (b, b, a, a, b, b, a, a),   # B → A 로 뒤집은 캔버스
+                                 ROW_JSON.replace("요청 접수", "요청 접수(수정)")])
+    _step(sid)
+    _step(sid)
+    full = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "요청서", "q6": ""}
+    for tid in (t1["id"], t2["id"]):
+        client.post(f"/api/framework-interviews/{sid}/tasks/{tid}/answers", json={"answers": full}, headers=HEADERS)
+    _step(sid)
+    _step(sid)
+    client.post(f"/api/framework-interviews/{sid}/relations", json={}, headers=HEADERS)
+
+    fb = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "relations", "message": "B를 먼저"}, headers=HEADERS)
+    assert fb.status_code == 200, fb.text
+    edges = {(e["source_node_id"], e["target_node_id"]) for e in fb.json()["canvas"]["edges"]}
+    assert (b, a) in edges and ("__start__", b) in edges
+    assert all("gateway" not in e for e in fb.json()["canvas"]["edges"])  # 값 없는 gateway는 빼고 저장
+    # 모델이 0으로 보낸 좌표는 서버가 다시 배치한다(rank별 x가 벌어진다)
+    assert len({n["pos_x"] for n in fb.json()["canvas"]["nodes"]}) == 4
+    assert fb.json()["feedback_log"][-1]["scope"] == "relations"
+
+    fb2 = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
+    assert fb2.status_code == 200, fb2.text
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
+    assert detail["row"]["l6"] == "요청 접수(수정)" and detail["status"] == "drawn"
+    assert len(fb2.json()["feedback_log"]) == 2
+
+    bad = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "message": "x"}, headers=HEADERS)
+    assert bad.status_code == 422
+
+
 def test_pause_resume_roundtrip(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     kicked: list[int] = []

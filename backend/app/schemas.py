@@ -2765,6 +2765,14 @@ class FrameworkInterviewRelationsGenerateIn(BaseModel):
     comment: Annotated[str, StringConstraints(max_length=2000)] = ""
 
 
+class FrameworkInterviewFeedbackIn(BaseModel):
+    """자연어 피드백 — scope=relations는 캔버스를, scope=task는 그려진 카드의 행을 고친다."""
+
+    scope: Literal["relations", "task"]
+    task_pk: int | None = None  # scope=task 필수
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
 class FrameworkInterviewTaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
