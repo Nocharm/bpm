@@ -10377,6 +10377,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                 (zone === "front" && dropTarget.frontBlocked) ||
                 (zone === "back" && dropTarget.backBlocked) ||
                 (zone === "swap" && dropTarget.swapBlocked);
+              // L5 하늘 프레임 위에서는 회색 기반색이 묻힌다 — 밝은 캔버스색·하늘 액센트로 바꾼다 (2026-09-23)
+              const zoneNeutral = isFrameworkMap ? "var(--color-canvas)" : "var(--color-ink-tertiary)";
+              const zoneAccent = isFrameworkMap ? "var(--color-accent-sky)" : "var(--color-accent)";
               return (
                 <div className="pointer-events-none absolute inset-0 z-[1100]">
                   <svg className="zone-fan absolute inset-0 h-full w-full overflow-visible">
@@ -10386,8 +10389,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                         key={`d${i}`}
                         d={sector(axis, DHALF, ri, ro)}
                         style={{
-                          fill: "color-mix(in srgb, var(--color-ink-tertiary) 4%, transparent)",
-                          stroke: "color-mix(in srgb, var(--color-ink-tertiary) 36%, transparent)",
+                          fill: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 10 : 4}%, transparent)`,
+                          stroke: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 45 : 36}%, transparent)`,
                           strokeWidth: 1.5,
                           strokeDasharray: "4 4",
                           strokeLinejoin: "round",
@@ -10400,19 +10403,19 @@ function MapEditor({ mapId }: { mapId: number }) {
                       const blocked = blockedOf(zone);
                       const style = blocked
                         ? {
-                            fill: "color-mix(in srgb, var(--color-ink-tertiary) 7%, transparent)",
-                            stroke: "color-mix(in srgb, var(--color-ink-tertiary) 25%, transparent)",
+                            fill: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 14 : 7}%, transparent)`,
+                            stroke: `color-mix(in srgb, ${zoneNeutral} ${isFrameworkMap ? 35 : 25}%, transparent)`,
                             strokeWidth: 1.5,
                           }
                         : active
                           ? {
-                              fill: "color-mix(in srgb, var(--color-accent) 34%, transparent)",
-                              stroke: "var(--color-accent)",
+                              fill: `color-mix(in srgb, ${zoneAccent} 34%, transparent)`,
+                              stroke: zoneAccent,
                               strokeWidth: 2.5,
                             }
                           : {
-                              fill: "color-mix(in srgb, var(--color-accent) 18%, transparent)",
-                              stroke: "color-mix(in srgb, var(--color-accent) 32%, transparent)",
+                              fill: `color-mix(in srgb, ${zoneAccent} ${isFrameworkMap ? 24 : 18}%, transparent)`,
+                              stroke: `color-mix(in srgb, ${zoneAccent} ${isFrameworkMap ? 55 : 32}%, transparent)`,
                               strokeWidth: 1.5,
                             };
                       return (
