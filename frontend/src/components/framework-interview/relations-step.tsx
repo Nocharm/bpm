@@ -46,12 +46,14 @@ export function RelationsStep({
   const saveTimerRef = useRef<number | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
   const proposedRef = useRef(false);
-  // session.canvas 도착 감시용 미러 — 오버레이 해제 판정은 타이머 콜백에서만 한다(effect 안 setState 금지)
+  // 오버레이 해제 판정용 미러 — 판정은 타이머 콜백에서만 한다(effect 안 setState 금지)
   const canvasArrivedRef = useRef(session.canvas !== null);
+  const busyRef = useRef(busy);
 
   useEffect(() => {
     canvasArrivedRef.current = session.canvas !== null;
-  }, [session.canvas]);
+    busyRef.current = busy;
+  }, [session.canvas, busy]);
 
   // 진입 즉시 자동 제안 — relations·canvas가 모두 비었을 때만 1회. StrictMode 이중 마운트는 ref로 막는다.
   // effect 본문에서 setState를 하지 않으려고 rAF 콜백으로 미룬다(react-hooks/set-state-in-effect).
@@ -70,12 +72,13 @@ export function RelationsStep({
     if (overlayTimerRef.current !== null) window.clearTimeout(overlayTimerRef.current);
   }, []);
 
-  // 오버레이는 최소 1.5초 유지하고, 그 뒤 session.canvas가 도착했을 때 걷는다(미도착이면 300ms마다 재확인)
+  // 오버레이는 최소 1.5초 유지하고, 그 뒤 session.canvas가 도착하면 걷는다(미도착이면 300ms마다 재확인).
+  // 호출이 끝났는데도(busy 해제) 캔버스가 없으면 실패한 것이니 걷는다 — 아니면 에러를 덮은 채 영구히 남는다.
   function beginOverlay() {
     setOverlay(true);
     if (overlayTimerRef.current !== null) window.clearTimeout(overlayTimerRef.current);
     const tick = () => {
-      if (canvasArrivedRef.current) {
+      if (canvasArrivedRef.current || !busyRef.current) {
         overlayTimerRef.current = null;
         setOverlay(false);
       } else {
