@@ -15,12 +15,12 @@ const PLAN = {
 };
 const QUESTIONNAIRE = {
   questions: [
-    { id: "q1", kind: "ordered", maps_to: "activities", text: "활동 순서", options: [{ id: "a1", label: "요청 확인" }, { id: "a2", label: "완결성 판정" }, { id: "a3", label: "접수 등록" }], suggested: ["a1", "a2", "a3"] },
-    { id: "q2", kind: "single", maps_to: "roles", text: "담당 역할", options: [{ id: "r1", label: "담당자" }, { id: "r2", label: "관리자" }], suggested: ["r1"] },
-    { id: "q3", kind: "multi", maps_to: "systems", text: "사용 시스템", options: [{ id: "s1", label: "ERP" }, { id: "s2", label: "메일" }], suggested: ["s1"] },
-    { id: "q4", kind: "text", maps_to: "conditions", text: "시작 조건", options: [], suggested: "요청서 도착" },
-    { id: "q5", kind: "text", maps_to: "io", text: "입력물", options: [], suggested: "요청서" },
-    { id: "q6", kind: "text", maps_to: "io", text: "산출물", options: [], suggested: "접수증" },
+    { id: "q1", kind: "ordered", maps_to: "activities", section: "activities", text: "활동 순서", options: [{ id: "a1", label: "요청 확인" }, { id: "a2", label: "완결성 판정" }, { id: "a3", label: "접수 등록" }], suggested: ["a1", "a2", "a3"] },
+    { id: "q2", kind: "single", maps_to: "roles", section: "basic", text: "담당 역할", options: [{ id: "r1", label: "담당자" }, { id: "r2", label: "관리자" }], suggested: ["r1"] },
+    { id: "q3", kind: "multi", maps_to: "systems", section: "basic", text: "사용 시스템", options: [{ id: "s1", label: "ERP" }, { id: "s2", label: "메일" }], suggested: ["s1"] },
+    { id: "q4", kind: "text", maps_to: "conditions", section: "exceptions", text: "시작 조건", options: [], suggested: "요청서 도착" },
+    { id: "q5", kind: "text", maps_to: "io", section: "io", text: "입력물", options: [], suggested: "요청서" },
+    { id: "q6", kind: "text", maps_to: "io", section: "io", text: "산출물", options: [], suggested: "접수증" },
   ],
 };
 
@@ -44,9 +44,9 @@ function rowFor(userText) {
   return {
     l6: name, ownerRole: "담당자", department: "", fields: { start_condition: "요청서 도착", done_criteria: "접수증 발급" },
     actions: [
-      { seq: 1, label: "요청 확인", kind: "action", input: "요청서", output: "확인 메모" },
+      { seq: 1, label: "요청 확인", kind: "action", input: ["요청서"], output: ["확인 메모"] },
       { seq: 2, label: "완결성 판정", kind: "decision" },
-      { seq: 3, label: "접수 등록", kind: "action", input: "확인 메모", output: "접수증", system: "ERP" },
+      { seq: 3, label: "접수 등록", kind: "action", input: ["확인 메모"], output: ["접수증"], system: "ERP" },
     ],
     relations: { edges: [{ src: 1, dst: 2, kind: "seq" }, { src: 2, dst: 3, kind: "branch", gateway: "exclusive", condition: "완결" }] },
   };
@@ -59,11 +59,44 @@ function relationsFor(userText) {
   return { entry: { taskId: ids[0] ?? "", triggerType: "manual", label: "시작" }, edges };
 }
 
+// [현재 캔버스]\n{...} 블록을 파싱해 첫 subprocess→subprocess 엣지의 방향을 뒤집는다(피드백 반영 흉내)
+function canvasFeedbackFor(userText) {
+  const match = /\[현재 캔버스\]\n([\s\S]*?)\n\n\[사용자 피드백\]/.exec(userText);
+  const canvas = match ? JSON.parse(match[1]) : { nodes: [], edges: [] };
+  const nodeType = new Map((canvas.nodes ?? []).map((n) => [n.id, n.node_type]));
+  const edges = (canvas.edges ?? []).map((e) => ({ ...e }));
+  const flip = edges.find((e) => nodeType.get(e.source_node_id) === "subprocess" && nodeType.get(e.target_node_id) === "subprocess");
+  if (flip) {
+    const src = flip.source_node_id;
+    flip.source_node_id = flip.target_node_id;
+    flip.target_node_id = src;
+  }
+  return {
+    nodes: (canvas.nodes ?? []).map((n) => ({ id: n.id, node_type: n.node_type, title: n.title, task_id: n.task_id, pos_x: n.pos_x, pos_y: n.pos_y })),
+    edges: edges.map((e) => {
+      const out = { id: e.id, source_node_id: e.source_node_id, target_node_id: e.target_node_id, label: e.label ?? "" };
+      if (e.gateway) out.gateway = e.gateway;
+      return out;
+    }),
+  };
+}
+
+// [현재 행]\n{...} 블록을 파싱해 l6에 "(수정)"을 붙인다(피드백 반영 흉내)
+function rowFeedbackFor(userText) {
+  const match = /\[현재 행\]\n([\s\S]*?)\n\n\[사용자 피드백\]/.exec(userText);
+  const row = match ? JSON.parse(match[1]) : rowFor("");
+  return { ...row, l6: `${row.l6 ?? ""}(수정)` };
+}
+
 function route(messages) {
   const system = messages.find((m) => m.role === "system")?.content ?? "";
   const user = messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
   if (system.includes("L6 단위 업무")) return planFor(user);
   if (system.includes("설문지를 만드세요")) return QUESTIONNAIRE;
+  // 피드백 계약(연계 캔버스(노드·엣지)를 사용자 피드백대로 / rows[] 원소를 사용자 피드백대로)은
+  // 기존 relationsFor/rowFor 마커의 부분 문자열을 포함하므로 먼저 검사한다.
+  if (system.includes("연계 캔버스(노드·엣지)를 사용자 피드백대로")) return canvasFeedbackFor(user);
+  if (system.includes("rows[] 원소를 사용자 피드백대로")) return rowFeedbackFor(user);
   if (system.includes("rows[] 원소")) return rowFor(user);
   if (system.includes("연계 캔버스")) return relationsFor(user);
   return {};
