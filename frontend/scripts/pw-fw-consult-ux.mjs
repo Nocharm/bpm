@@ -1,4 +1,4 @@
-// AI L5 캠페인 2라운드 UX 스모크 — 좌측 brief 패널·AiButton 쉬머 클래스·투명 카드(hover에서 테두리)·FLIP 순서 이동·
+// AI L5 캠페인 2라운드 UX 스모크 — 좌측 brief 패널·AiButton 쉬머 클래스·3열 계획(읽기전용 행 클릭→상세 편집·Alt+↑ FLIP·핸들 드래그)·
 // 카드 추가/삭제 접힘·주관식 [AI 제안] 타이핑→blur 확정→hover 연필·연결 미리보기 분기 마름모(polygon).
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-fw-consult-ux.mjs
 // 전제: 가짜 AI(scripts/fake-ai-server.mjs, :9999) + backend(AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1 AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend 기동.
@@ -42,20 +42,20 @@ check("generate button is an AiButton (shimmer class)", (await generate.getAttri
 await generate.click();
 await page.locator('[data-id="fw-consult-plan-card-1"]').waitFor({ timeout: 20000 });
 
-// 카드는 조용할 때 테두리 투명, hover 시 hairline
-const cardBox = page.locator('[data-id="fw-consult-plan-card-0"] > div');
-const quiet = await cardBox.evaluate((el) => getComputedStyle(el).borderColor);
-check("plan card border is transparent at rest", /rgba\(.*,\s*0\)$/.test(quiet) || quiet === "transparent", quiet);
-await cardBox.hover();
-await page.waitForTimeout(200);
-const hovered = await cardBox.evaluate((el) => getComputedStyle(el).borderColor);
-check("plan card border appears on hover", hovered !== quiet, hovered);
+// 카드는 읽기전용 행(3열 구성, 2026-09-24) — 클릭하면 우측 상세 열에서 편집한다
+await page.locator('[data-id="fw-consult-plan-row-1"]').click();
+const rowTitle = (await page.locator('[data-id="fw-consult-plan-title-1"]').innerText()).trim();
+const detailName = await page.locator('[data-id="fw-consult-plan-detail"] [data-id="fw-consult-plan-name"]').inputValue();
+check("clicking a row opens it in the detail pane", rowTitle === detailName, `${rowTitle} / ${detailName}`);
+check("selected row is highlighted", (await page.locator('[data-id="fw-consult-plan-row-1"]').getAttribute("aria-pressed")) === "true");
+await page.locator('[data-id="fw-consult-plan-detail"] [data-id="fw-consult-plan-name"]').fill(`${detailName} 편집`);
+check("detail edits show on the read-only row", (await page.locator('[data-id="fw-consult-plan-title-1"]').innerText()).trim() === `${detailName} 편집`);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-plan-cards.png" });
 
-// FLIP — 2번 카드를 위로: 키가 카드와 함께 움직이고 이동한 카드에 transform이 걸린다(rAF 전 동기 측정)
+// FLIP — 선택한 2번 카드를 Alt+↑로 위로: 키가 카드와 함께 움직이고 이동한 카드에 transform이 걸린다(rAF 전 동기 측정)
 const keysBefore = await page.$$eval('[data-id="fw-consult-plan-cards"] > li', (els) => els.map((e) => e.dataset.flipKey));
-await page.locator('[data-id="fw-consult-plan-card-1"]').hover();
-await page.locator('[data-id="fw-consult-plan-up-1"]').click();
+await page.locator('[data-id="fw-consult-plan-row-1"]').focus();
+await page.locator('[data-id="fw-consult-plan-row-1"]').press("Alt+ArrowUp");
 const flipped = await page.evaluate(() => {
   const items = [...document.querySelectorAll('[data-id="fw-consult-plan-cards"] > li')];
   return items.some((li) => li instanceof HTMLElement && (li.style.transform.startsWith("translateY(") || li.style.transition.includes("transform")));
@@ -64,11 +64,22 @@ check("reorder applies a FLIP transform/transition", flipped);
 const keysAfter = await page.$$eval('[data-id="fw-consult-plan-cards"] > li', (els) => els.map((e) => e.dataset.flipKey));
 check("card keys travel with the cards", keysAfter[0] === keysBefore[1] && keysAfter[1] === keysBefore[0], `${keysBefore} -> ${keysAfter}`);
 
-// 추가 → 3장, 삭제 → 접힘 뒤 2장
+// 드래그 — 1번 핸들을 2번 행 아래로 끌면 순서가 되돌아온다
+await page.waitForTimeout(450);
+const handle = await page.locator('[data-id="fw-consult-plan-handle-0"]').boundingBox();
+const below = await page.locator('[data-id="fw-consult-plan-card-1"]').boundingBox();
+await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+await page.mouse.down();
+await page.mouse.move(handle.x + handle.width / 2, below.y + below.height - 2, { steps: 8 });
+await page.mouse.up();
+const keysDragged = await page.$$eval('[data-id="fw-consult-plan-cards"] > li', (els) => els.map((e) => e.dataset.flipKey));
+check("dragging the handle reorders the cards", keysDragged[0] === keysAfter[1] && keysDragged[1] === keysAfter[0], `${keysAfter} -> ${keysDragged}`);
+
+// 추가 → 3장 + 새 카드가 선택됨, 삭제(상세 열) → 접힘 뒤 2장
 await page.locator('[data-id="fw-consult-plan-add"]').click();
 check("add appends a card with the open animation", (await page.locator('[data-id="fw-consult-plan-card-2"].accordion-open').count()) === 1);
-await page.locator('[data-id="fw-consult-plan-card-2"]').hover();
-await page.locator('[data-id="fw-consult-plan-remove-2"]').click();
+check("added card is selected in the detail pane", (await page.locator('[data-id="fw-consult-plan-row-2"]').getAttribute("aria-pressed")) === "true");
+await page.locator('[data-id="fw-consult-plan-remove"]').click();
 check("remove starts the close animation", (await page.locator('[data-id="fw-consult-plan-card-2"].accordion-close').count()) === 1);
 await page.waitForTimeout(400);
 check("removed card is gone after the close animation", (await page.locator('[data-id="fw-consult-plan-cards"] > li').count()) === 2);

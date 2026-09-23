@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { orderKeyOf, stripClientIds, swapCards, withClientIds } from "./plan-cards";
+import { moveCard, orderKeyOf, stripClientIds, swapCards, withClientIds } from "./plan-cards";
 
 const card = (name: string) => ({ name, summary: "", owner_role: "", department: "", depends_on: [], mode: "new" as const, existing_code: null });
 
@@ -23,5 +23,12 @@ describe("plan cards", () => {
     const keyed = withClientIds([card("A"), card("B")]);
     expect(orderKeyOf(keyed)).toBe(orderKeyOf([...keyed]));
     expect(orderKeyOf(swapCards(keyed, 0, 1))).not.toBe(orderKeyOf(keyed));
+  });
+  it("moveCard lifts an item to the target slot and shifts the rest", () => {
+    const keyed = withClientIds([card("A"), card("B"), card("C"), card("D")]);
+    expect(moveCard(keyed, 0, 2).map((c) => c.name)).toEqual(["B", "C", "A", "D"]);
+    expect(moveCard(keyed, 3, 1).map((c) => c.name)).toEqual(["A", "D", "B", "C"]);
+    expect(moveCard(keyed, 1, 1)).toBe(keyed);
+    expect(moveCard(keyed, 0, 4)).toBe(keyed);
   });
 });

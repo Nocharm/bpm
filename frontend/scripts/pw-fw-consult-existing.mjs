@@ -97,10 +97,13 @@ await page.locator('[data-id="fw-consult-generate-plan"]').click();
 await page.locator('[data-id="fw-consult-plan-card-1"]').waitFor({ timeout: 30000 });
 const existingChips = await page.locator('[data-id^="fw-consult-plan-existing-"]').count();
 check("both plan cards carry the existing chip", existingChips === 2, `chips=${existingChips}`);
-check("existing cards cannot be removed", await page.locator('[data-id="fw-consult-plan-remove-0"]').isDisabled());
+// 상세 열(3열)에서 확인 — 삭제는 기존 카드에서 비활성, 모드 세그먼트는 선택한 카드의 것
+await page.locator('[data-id="fw-consult-plan-row-0"]').click();
+check("existing cards cannot be removed", await page.locator('[data-id="fw-consult-plan-remove"]').isDisabled());
 
 // 2번 카드만 정정으로 전환 — 1번은 유지
-await page.locator('[data-id="fw-consult-plan-mode-1-revise"]').click();
+await page.locator('[data-id="fw-consult-plan-row-1"]').click();
+await page.locator('[data-id="fw-consult-plan-mode-revise"]').click();
 await page.waitForTimeout(200);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-existing.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-plan-lock"]').click();

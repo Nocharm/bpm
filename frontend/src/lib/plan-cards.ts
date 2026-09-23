@@ -28,6 +28,15 @@ export function swapCards(cards: KeyedCard[], i: number, delta: 1 | -1): KeyedCa
   return next;
 }
 
+// 드래그 이동 — from 항목을 뽑아 to 자리에 끼운다(사이 항목은 한 칸씩 밀림). 범위 밖·제자리는 같은 참조
+export function moveCard(cards: KeyedCard[], from: number, to: number): KeyedCard[] {
+  if (from === to || from < 0 || to < 0 || from >= cards.length || to >= cards.length) return cards;
+  const next = [...cards];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 export function orderKeyOf(cards: KeyedCard[]): string {
   return cards.map((card) => card.clientId).join("|");
 }
