@@ -94,7 +94,7 @@ def test_map_to_row_round_trips_imported_map(client: TestClient) -> None:
     assert row["actions"][0]["system"] == "ERP"
     assert "name" not in row["actions"][2]
     assert row["actions"][2]["variant"] == "exception"
-    assert row["actions"][3]["input"] == "접수증" and row["actions"][3]["output"] == "전달 메일"
+    assert row["actions"][3]["input"] == ["접수증"] and row["actions"][3]["output"] == ["전달 메일"]
     kinds = {(e["src"], e["dst"]): e["kind"] for e in row["relations"]["edges"]}
     assert kinds[(1, 2)] == "seq" and kinds[(2, 3)] == "branch" and kinds[(2, 1)] == "loop" and kinds[(3, 4)] == "seq"
     branch = next(e for e in row["relations"]["edges"] if (e["src"], e["dst"]) == (2, 3))
@@ -161,6 +161,22 @@ def test_map_to_row_pure_shape() -> None:
     # 엣지는 (src seq, dst seq) 순으로 정렬돼 나온다
     assert [(e["src"], e["dst"], e["kind"]) for e in row["relations"]["edges"]] == [
         (1, 2, "seq"), (2, 1, "loop"), (2, 3, "branch")]
+
+
+def test_map_to_row_returns_io_as_lists() -> None:
+    nodes = [
+        Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
+        Node(id="a", version_id=1, title="A", node_type="process", sort_order=1,
+             input="요청서\n첨부", output="접수증"),
+        Node(id="e", version_id=1, title="End", node_type="end", sort_order=2),
+    ]
+    edges = [
+        Edge(id="1", version_id=1, source_node_id="s", target_node_id="a"),
+        Edge(id="2", version_id=1, source_node_id="a", target_node_id="e"),
+    ]
+    row = map_to_row("맵", None, nodes, edges)
+    assert row["actions"][0]["input"] == ["요청서", "첨부"]
+    assert row["actions"][0]["output"] == ["접수증"]
 
 
 def test_map_to_row_folds_auto_generated_loop_branch_node() -> None:

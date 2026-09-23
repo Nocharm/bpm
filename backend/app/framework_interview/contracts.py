@@ -81,8 +81,8 @@ class RowAction(BaseModel):
     kind: Literal["action", "handoff", "decision"] = "action"
     variant: str | None = None  # normal|exception
     rule: str | None = None
-    input: str | None = None
-    output: str | None = None
+    input: list[str] | str | None = None  # IO는 배열이 정본 — 정규화가 항상 list[str]로 맞춘다 (2026-09-23)
+    output: list[str] | str | None = None
     system: str | None = None
 
 
@@ -182,9 +182,10 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
+- input/output은 항목 배열입니다. 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 캔버스에서 자동으로 이어집니다.
 - [현재 등록된 내용]이 있으면 그것을 바탕으로 답에서 바뀐 부분만 고치고 나머지는 그대로 유지한다.
 - 다른 설명 없이 JSON 한 개만:
-{"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action","input":"","output":"","system":""}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
+{"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action","input":[],"output":[],"system":""}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
 
 L5_RELATIONS_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 한 L5 아래 L6 업무들의 흐름(연계 캔버스)을 정하세요.
 

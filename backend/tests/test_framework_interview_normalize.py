@@ -106,3 +106,15 @@ def test_normalize_questionnaire_fills_section_from_maps_to() -> None:
     out = normalize_questionnaire(raw)
     sections = {q["id"]: q["section"] for q in out["questions"]}
     assert sections == {"q1": "activities", "q2": "basic", "q3": "exceptions"}  # 명시 값은 존중, 미지 값은 basic, 누락은 maps_to로
+
+
+def test_normalize_row_splits_io_into_lists() -> None:
+    raw = {"l6": "x", "actions": [
+        {"seq": 1, "label": "A", "input": "요청서, 첨부 / 요청서", "output": ["확인 메모", " "]},
+        {"seq": 2, "label": "B", "input": ["확인 메모"], "output": ""},
+    ]}
+    out = normalize_row(raw)
+    assert out["actions"][0]["input"] == ["요청서", "첨부"]
+    assert out["actions"][0]["output"] == ["확인 메모"]
+    assert out["actions"][1]["input"] == ["확인 메모"]
+    assert "output" not in out["actions"][1]

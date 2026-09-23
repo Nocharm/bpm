@@ -135,9 +135,9 @@ def map_to_row(
         if kv.get("Variant") == "exception" or (n.color or "").lower() == EXCEPTION_VARIANT_COLOR:
             action["variant"] = "exception"
         for key in ("input", "output"):
-            value = (getattr(n, key) or "").strip()
-            if value:
-                action[key] = value
+            items = [line.strip() for line in (getattr(n, key) or "").split("\n") if line.strip()]
+            if items:
+                action[key] = items
         system = resolve_system(n)
         if system:
             action["system"] = system

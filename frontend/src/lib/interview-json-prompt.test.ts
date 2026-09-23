@@ -22,6 +22,12 @@ describe("external AI prompt for interview JSON 0.5", () => {
     expect(buildInterviewJsonPromptText()).toContain("nodeCode");
   });
 
+  it("shows input/output as arrays in the skeleton", () => {
+    const text = buildInterviewJsonPromptText(undefined);
+    expect(text).toMatch(/"input":\s*\[\]/);
+    expect(text).toMatch(/"output":\s*\[\]/);
+  });
+
   it("lists the existing L6 maps and how to update or keep them", () => {
     const text = buildInterviewJsonPromptText({
       code: "19-01",

@@ -27,8 +27,8 @@ const SKELETON = {
         systems: "", total_time: "", frequency: "", headcount: null, fte: null, gmp: "",
       },
       actions: [
-        { seq: 1, label: "활동명", name: "한 문장 설명", kind: "action", variant: "normal", rule: null, input: "", output: "", system: "" },
-        { seq: 2, label: "판정", name: "", kind: "decision", variant: "normal", rule: "판단 기준", input: null, output: null, system: null },
+        { seq: 1, label: "활동명", name: "한 문장 설명", kind: "action", variant: "normal", rule: null, input: [], output: [], system: "" },
+        { seq: 2, label: "판정", name: "", kind: "decision", variant: "normal", rule: "판단 기준", input: [], output: [], system: null },
       ],
       relations: {
         edges: [
@@ -77,6 +77,7 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "- owner는 null(실명 금지). ownerRole은 역할명. department는 부서명 또는 null.",
     "- fields: start_condition, input_data, output_data, done_criteria, systems, total_time, frequency, headcount, fte, gmp 중 아는 것만.",
     "- actions: seq는 1부터, label은 동사형 20자 이내, kind는 action, handoff, decision 중 하나. variant는 normal 또는 exception.",
+    "- input/output은 문자열 배열입니다(한 항목 = 한 줄). 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 자동으로 이어집니다.",
     "- relations.edges의 src/dst는 actions의 seq 정수. kind는 seq, branch, loop, bypass. 분기는 gateway exclusive 또는 parallel과 condition.",
     "- 모든 활동이 이어지도록 edges를 채우세요. 비우면 순번 순서로 자동 연결됩니다.",
     "",

@@ -5,6 +5,7 @@ contracts.py 스키마가 요구하는 모양으로 맞춘 뒤 검증한다. 의
 알 수 없는 값은 안전한 기본값으로, 해석 불가 항목은 버린다.
 """
 
+import re
 from typing import Any
 
 QUESTION_KINDS = {"single", "multi", "text", "ordered"}
@@ -56,6 +57,22 @@ def _text(value: Any) -> str:
 
 def _lower(value: Any) -> str:
     return _text(value).lower().replace("-", "_").replace(" ", "_")
+
+
+_IO_SPLIT = re.compile(r"[,\n/·]")
+
+
+def _io_list(value: Any) -> list[str]:
+    """str 또는 list → 항목 리스트(trim, 빈 값·중복 제거, 순서 유지). IO는 배열이 정본이다 (2026-09-23)."""
+    items = value if isinstance(value, list) else _IO_SPLIT.split(str(value)) if value is not None else []
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        text = _text(item)
+        if text and text not in seen:
+            seen.add(text)
+            out.append(text)
+    return out
 
 
 def _first_dict(raw: Any, list_key: str) -> dict:
@@ -206,10 +223,14 @@ def normalize_row(raw: Any) -> dict:
         if kind not in ACTION_KINDS:
             kind = "action"
         action: dict[str, Any] = {"seq": seq, "label": label, "kind": kind}
-        for key in ("name", "rule", "input", "output", "system"):
+        for key in ("name", "rule", "system"):
             value = _text(item.get(key))
             if value:
                 action[key] = value
+        for key in ("input", "output"):
+            io_value = _io_list(item.get(key))
+            if io_value:
+                action[key] = io_value
         variant = _lower(item.get("variant"))
         if variant in ("normal", "exception"):
             action["variant"] = variant
