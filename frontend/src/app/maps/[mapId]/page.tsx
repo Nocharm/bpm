@@ -10441,15 +10441,18 @@ function MapEditor({ mapId }: { mapId: number }) {
                   {zones.map(({ zone, axis, Icon, label }) => {
                     const active = dropTarget.zone === zone;
                     const blocked = blockedOf(zone);
+                    // L5 하늘 프레임에선 라벨이 어두운 하늘과 밝은 노드 양쪽 위에 놓인다 — 보라 글자는 하늘에 묻히고
+                    // 흰 글자는 노드에 묻히므로 잉크색 반투명 알약 위의 밝은 글자로 고정한다(둘 다 읽힘, 2026-09-23)
                     const tone = blocked
-                      ? "text-ink-tertiary opacity-40"
+                      ? (isFrameworkMap ? "text-canvas opacity-40" : "text-ink-tertiary opacity-40")
                       : active
-                        ? "text-accent"
-                        : "text-accent/80";
+                        ? (isFrameworkMap ? "text-accent-sky" : "text-accent")
+                        : (isFrameworkMap ? "text-canvas" : "text-accent/80");
+                    const pill = isFrameworkMap ? "rounded-md bg-ink/70 px-1.5 py-1" : "";
                     return (
                       <div
                         key={`l${zone}`}
-                        className={`zone-pop absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 ${tone}`}
+                        className={`zone-pop absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5 ${pill} ${tone}`}
                         style={{ left: cx + rm * Math.cos(axis), top: cy + rm * Math.sin(axis) }}
                       >
                         <Icon size={18} strokeWidth={1.5} />

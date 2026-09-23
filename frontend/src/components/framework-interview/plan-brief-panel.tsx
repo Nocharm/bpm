@@ -62,7 +62,8 @@ export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAtta
           </ul>
         )}
       </div>
-      <AiButton data-id="fw-consult-generate-plan" disabled={busy} onClick={onGenerate}>
+      {/* 전폭 버튼은 과하다(사용자 피드백 2026-09-23) — 다른 primary 버튼과 같은 크기로 우측 정렬 */}
+      <AiButton data-id="fw-consult-generate-plan" className="self-end" disabled={busy} onClick={onGenerate}>
         {hasCards ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
       </AiButton>
     </section>

@@ -4,7 +4,7 @@
 // 빈칸에서 [AI 제안]이 타이핑으로 채우고 blur로 확정). 상태별 카드 패널(task-panel)이 ready 카드에서 쓴다
 // (spec 2026-09-21 §2·§4, 2026-09-23 §3 B10·§4.3 B12).
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ArrowDown, ArrowUp, PenLine } from "lucide-react";
 
 import type { FwAnswerValue, FwQuestionnaire } from "@/lib/api";
@@ -41,14 +41,17 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
               const span = q.kind === "ordered" && section !== "activities" ? " xl:col-span-2" : "";
               return (
                 <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 ${isMissing ? "border-error" : "border-hairline"} bg-surface-pearl${span}`}>
-                  <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</p>
-                  {q.kind === "text" && (
+                  {q.kind === "text" ? (
+                    // 주관식은 제목 줄 우측에 글자형 [AI 제안]/연필을 얹고 편집 박스가 전폭을 쓴다
                     <TextAnswer
                       qid={q.id}
+                      title={<><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</>}
                       value={textValue}
                       suggested={typeof q.suggested === "string" ? q.suggested : ""}
                       onChange={(v) => onChange(q.id, v)}
                     />
+                  ) : (
+                    <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</p>
                   )}
                   {q.kind === "single" && (
                     <div className="flex flex-wrap gap-2">
@@ -104,56 +107,60 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
   );
 }
 
-// 주관식 한 칸 — 빈 textarea에서 시작, [AI 제안]이 제안값을 타이핑으로 채우고, blur로 확정(텍스트 뷰), hover 연필로 재편집.
+// 주관식 한 칸 — 제목 줄 우측에 글자형 [AI 제안](편집 중)/연필(확정 후, hover에 노출), 그 아래 전폭 textarea.
+// 빈 textarea에서 시작, [AI 제안]이 제안값을 타이핑으로 채우고, blur로 확정(텍스트 뷰), 연필로 재편집.
 // 빈칸 제출은 여전히 허용(서버가 제안값 적용) — 여기서는 보여주지 않을 뿐이다.
-function TextAnswer({ qid, value, suggested, onChange }: { qid: string; value: string; suggested: string; onChange: (v: string) => void }) {
+function TextAnswer({ qid, title, value, suggested, onChange }: { qid: string; title: ReactNode; value: string; suggested: string; onChange: (v: string) => void }) {
   const { t } = useI18n();
   const { typeInto } = useTypewriter();
   const [editing, setEditing] = useState(() => value === "");
   const [typing, setTyping] = useState(false);
   const committed = !editing && value !== "";
   return (
-    <div className="group flex items-start gap-2">
+    <div className="group flex flex-col gap-1.5">
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1 text-caption text-ink">{title}</p>
+        {committed ? (
+          <button
+            type="button"
+            data-id={`fw-consult-edit-answer-${qid}`}
+            title={t("fwConsult.editAnswer")}
+            aria-label={t("fwConsult.editAnswer")}
+            className="shrink-0 rounded-sm p-0.5 text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
+            onClick={() => setEditing(true)}
+          >
+            <PenLine size={14} strokeWidth={1.5} />
+          </button>
+        ) : (
+          <AiButton
+            variant="text"
+            data-id={`fw-consult-ai-suggest-${qid}`}
+            disabled={typing || suggested === ""}
+            className="shrink-0"
+            onClick={() => {
+              setTyping(true);
+              typeInto(suggested, onChange, () => {
+                setTyping(false);
+                setEditing(false);
+              });
+            }}
+          >
+            {t("fwConsult.aiSuggest")}
+          </AiButton>
+        )}
+      </div>
       {committed ? (
-        <p className="min-w-0 flex-1 whitespace-pre-wrap text-caption text-ink" data-id={`fw-consult-answer-view-${qid}`}>{value}</p>
+        <p className="whitespace-pre-wrap text-caption text-ink" data-id={`fw-consult-answer-view-${qid}`}>{value}</p>
       ) : (
         <textarea
           data-id={`fw-consult-answer-${qid}`}
           autoFocus={editing && value !== ""}
           readOnly={typing}
-          className="min-h-16 w-full min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
+          className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={() => { if (value.trim() !== "") setEditing(false); }}
         />
-      )}
-      {committed ? (
-        <button
-          type="button"
-          data-id={`fw-consult-edit-answer-${qid}`}
-          title={t("fwConsult.editAnswer")}
-          aria-label={t("fwConsult.editAnswer")}
-          className="shrink-0 rounded-sm p-1 text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
-          onClick={() => setEditing(true)}
-        >
-          <PenLine size={14} strokeWidth={1.5} />
-        </button>
-      ) : (
-        <AiButton
-          variant="inline"
-          data-id={`fw-consult-ai-suggest-${qid}`}
-          disabled={typing || suggested === ""}
-          className="shrink-0"
-          onClick={() => {
-            setTyping(true);
-            typeInto(suggested, onChange, () => {
-              setTyping(false);
-              setEditing(false);
-            });
-          }}
-        >
-          {t("fwConsult.aiSuggest")}
-        </AiButton>
       )}
     </div>
   );

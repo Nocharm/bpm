@@ -114,8 +114,8 @@ await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 60000 
 await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__edge').first().waitFor({ state: "attached", timeout: 30000 });
 
 // ③ 분기 노드 마름모 — 행 미리보기(scope=map)에는 decision이 있으므로 카드 미리보기 모달에서 본다.
-// 접두 매칭은 캔버스 툴바도 잡지 않게 카드 목록 안으로 좁힌다.
-const previewBtn = page.locator('[data-id="fw-consult-relations-cards"] [data-id^="fw-consult-relations-preview-"]').first();
+// 미리보기는 좌측 보드 행의 눈 버튼(연결 단계 우측 카드 목록은 보드와 중복이라 제거됨, 2026-09-23).
+const previewBtn = page.locator('[data-id="fw-consult-task-list"] [data-id^="fw-consult-task-preview-"]').first();
 await previewBtn.click();
 // 줌 버튼 아이콘도 svg라 프리뷰 페인 안으로 좁힌다
 const previewSvg = page.locator('[data-id="fw-consult-task-preview-canvas"] [data-id="scope-preview-pane"] > svg');

@@ -11,9 +11,15 @@ describe("buildAiButtonClass", () => {
       expect(cls).toContain("text-on-accent");
     }
   });
-  it("tile is a full-width row, inline is compact", () => {
+  it("tile is a full-width row; inline and primary share one size", () => {
     expect(buildAiButtonClass("tile")).toContain("h-14 w-full");
-    expect(buildAiButtonClass("inline")).toContain("text-fine");
-    expect(buildAiButtonClass("primary")).toContain("text-caption");
+    expect(buildAiButtonClass("inline")).toContain("px-3 py-1.5 text-caption");
+    expect(buildAiButtonClass("primary")).toContain("px-3 py-1.5 text-caption");
+  });
+  it("text variant is a bare accent link without gradient or shimmer", () => {
+    const cls = buildAiButtonClass("text");
+    expect(cls).toContain("text-accent");
+    expect(cls).not.toContain("ai-shimmer");
+    expect(cls).not.toContain("linear-gradient");
   });
 });

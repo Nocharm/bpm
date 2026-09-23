@@ -214,8 +214,13 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
   return (
     <div ref={wrapRef} className={`relative min-h-0 flex-1 overflow-hidden bg-canvas ${WRAP_CLASS}`} data-id="fw-consult-relations-canvas">
       {/* Turbopack이 dev에서 .react-flow__* 규칙을 purge해 raw <style>로 둔다(lessons canvas §5).
-          이 캔버스 래퍼로 한정 — 같은 단계의 카드 미리보기 모달이 또 다른 RF 인스턴스를 띄운다. */}
-      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}`}</style>
+          이 캔버스 래퍼로 한정 — 같은 단계의 카드 미리보기 모달이 또 다른 RF 인스턴스를 띄운다.
+          핸들·호버 강조는 에디터(maps/[mapId]/page.tsx raw style)와 같은 토큰 — RF 기본 파란 원형 핸들이 서비스 룩과 어긋난다. */}
+      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}
+.${WRAP_CLASS} .react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}
+.${WRAP_CLASS} .react-flow__node:hover .react-flow__handle{opacity:1}
+.${WRAP_CLASS} .react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}
+.${WRAP_CLASS} .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}`}</style>
       <div className={`h-full w-full ${busy ? "pointer-events-none opacity-60" : ""}`}>
         <ReactFlow
           nodes={nodes}

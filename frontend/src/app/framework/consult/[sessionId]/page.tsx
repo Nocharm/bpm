@@ -11,7 +11,7 @@ import { ArrowLeft, Headset, Loader2 } from "lucide-react";
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
   getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
-  deleteFrameworkAttachment, reopenFrameworkRelations, reopenFrameworkTask, resumeFrameworkInterview, retryFrameworkTask,
+  deleteFrameworkAttachment, reopenFrameworkRelations, resumeFrameworkInterview, retryFrameworkTask,
   reviseFrameworkTask, saveFrameworkCanvas, saveFrameworkPlan, sendFrameworkFeedback, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
   type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
@@ -276,11 +276,6 @@ export default function FrameworkConsultPage() {
               onSaveCanvas={(canvas) => void saveFrameworkCanvas(session.id, canvas).catch((err) => setError(getApiErrorDetail(err)))}
               onConfirm={(canvas) => void run(() => confirmFrameworkRelations(session.id, { canvas }))}
               onFeedback={(message) => void run(() => sendFrameworkFeedback(session.id, { scope: "relations", message }))}
-              onPreviewTask={setPreviewTaskId}
-              onReopenTask={(taskPk) => {
-                setSelectedTaskId(taskPk);  // 다시 연 카드로 바로 이동
-                void run(() => reopenFrameworkTask(session.id, taskPk));
-              }}
             />
           </div>
           )}

@@ -1,10 +1,11 @@
 "use client";
 
-// 캠페인 ③ L6 연결 — 진입하면 AI가 흐름을 먼저 제안하고(오버레이 링), 좌 편집 캔버스 / 우 L6 카드 목록 + 피드백 채팅.
+// 캠페인 ③ L6 연결 — 진입하면 AI가 흐름을 먼저 제안하고(오버레이 링), 좌 편집 캔버스 / 우 피드백 채팅.
+// L6 카드 목록은 좌측 보드가 이미 보여주므로(미리보기·답 수정 버튼 포함) 여기서는 반복하지 않는다(사용자 피드백 2026-09-23).
 // 캔버스 편집은 300ms 디바운스로 PUT /canvas, 확정하면 등록 단계로 간다.
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, Loader2, PenLine } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import type { FwCanvas, FwInterviewSession } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -14,7 +15,6 @@ import { FeedbackChat } from "@/components/framework-interview/feedback-chat";
 import { RelationsCanvas } from "@/components/framework-interview/relations-canvas";
 
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
-const ICON_BTN = "rounded-sm p-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40";
 const SAVE_DEBOUNCE_MS = 300;
 // 제안 오버레이 최소 노출 — 캔버스가 도착하면 부모가 key로 이 컴포넌트를 리마운트해 링이 바로 걷히므로,
 // 이 하한이 실제로 묶는 건 캔버스가 끝내 오지 않는 경우(실패·무변경 응답)의 해제 판정 시점이다.
@@ -28,12 +28,10 @@ interface RelationsStepProps {
   onSaveCanvas: (canvas: FwCanvas) => void;
   onConfirm: (canvas: FwCanvas) => void;
   onFeedback: (message: string) => void;
-  onPreviewTask: (taskPk: number) => void;
-  onReopenTask: (taskPk: number) => void;  // 답 고쳐 다시 그리기 — 카드가 ready로 돌아가고 설문 단계로 복귀
 }
 
 export function RelationsStep({
-  session, busy, onPropose, onSaveCanvas, onConfirm, onFeedback, onPreviewTask, onReopenTask,
+  session, busy, onPropose, onSaveCanvas, onConfirm, onFeedback,
 }: RelationsStepProps) {
   const { t } = useI18n();
   const tasks = [...session.tasks].sort((a, b) => a.seq - b.seq);
@@ -161,27 +159,6 @@ export function RelationsStep({
           style={{ width: panel.width }}
           data-id="fw-consult-relations-panel"
         >
-          <section className="flex flex-col gap-1.5">
-            <span className="text-caption text-ink">{t("fwConsult.l6Cards")}</span>
-            <ol className="flex flex-col gap-1" data-id="fw-consult-relations-cards">
-              {tasks.map((task) => (
-                <li key={task.id} data-id={`fw-consult-relations-card-${task.id}`} className="flex items-center gap-2 rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink">
-                  <span className="w-5 shrink-0 text-fine text-ink-tertiary tabular-nums">{task.seq}</span>
-                  <span className="min-w-0 flex-1 truncate">{task.name}</span>
-                  {task.placeholder && (
-                    <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary">{t("fwConsult.placeholder")}</span>
-                  )}
-                  <button type="button" className={ICON_BTN} data-id={`fw-consult-relations-preview-${task.id}`} title={t("fwConsult.preview")} onClick={() => onPreviewTask(task.id)}>
-                    <Eye size={14} strokeWidth={1.5} />
-                  </button>
-                  {/* 유지 태스크의 reopen은 서버가 정정으로 바꾼다(routers reopen → revise) — 라벨도 그 결과를 말한다 */}
-                  <button type="button" className={ICON_BTN} data-id={`fw-consult-relations-reopen-${task.id}`} aria-label={task.mode === "keep" ? t("fwConsult.revise") : t("fwConsult.editAnswers")} title={task.mode === "keep" ? `${t("fwConsult.revise")} · ${t("fwConsult.reviseHint")}` : `${t("fwConsult.editAnswers")} · ${t("fwConsult.editAnswersHint")}`} disabled={busy} onClick={() => onReopenTask(task.id)}>
-                    <PenLine size={14} strokeWidth={1.5} />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </section>
           <FeedbackChat
             log={session.feedback_log}
             scope="relations"
