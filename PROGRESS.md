@@ -6,6 +6,7 @@
 ## 2026-09-23 — AI L5 캠페인 2라운드 설계
 
 - **설계 확정(dev, 09-23):** 사용자 요청 17건(관리 패널 진입·캠페인 UX/엔진·비교 화면·L5 드롭존)을 4스프린트로 분해한 스펙 `docs/superpowers/specs/2026-09-23-ai-l5-campaign-round2-design.md`. 핵심 결정: 연결 단계는 ReactFlow+ProcessNode 경량 캔버스(에디터 임베드 아님)로 L5 맵을 직접 편집하고 세션 `canvas` 컬럼이 편집 진실·확정 시 relations 역산, 자연어 피드백은 `POST /feedback` 한 경로(scope relations|task), IO는 배열화+L6 내부 링크만, 질문은 종류 지시 강화+섹션 그룹(kind 추가 없음), 러너는 전역 세마포어 병렬. 코드 변경 없음.
+- **구현 플랜 ①②(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s1-compare-l5.md`(diff 전용 토큰·초기 base≠target 순수 함수·공용 `useResizableWidth`·L5 드롭존 색 분기·스모크) · `…-s2-admin-panel.md`(같은 부모 이름 409·세션 `category_path_ids`·`FwLevelActions` 타일·임포트 섹션 분리·구 스모크 6종 이식). ③ UX·④ 엔진 플랜은 ①②의 산출물(AiButton·useResizableWidth)에 기대므로 착수 시점에 같은 스펙에서 뽑는다.
 
 ## 2026-09-21 — AI 컨설턴트 L5 캠페인 (feat/ai-consultant-l5 → dev 머지)
 
