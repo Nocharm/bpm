@@ -346,6 +346,14 @@ def test_answers_validation_and_full_flow_to_document(client: TestClient, monkey
     applied = client.post(f"/api/framework-interviews/{sid}/mark-applied", headers=HEADERS)
     assert applied.json()["status"] == "applied"
 
+    # applied 세션은 편집 엔드포인트를 전부 잠근다 — reopen_task/revise_task와 같은 메시지 (2026-09-23 라운드2)
+    assert client.post(f"/api/framework-interviews/{sid}/feedback", headers=HEADERS,
+                       json={"scope": "relations", "message": "손 좀 봐줘"}).status_code == 409
+    assert client.put(f"/api/framework-interviews/{sid}/canvas", headers=HEADERS,
+                      json={"canvas": {"nodes": [], "edges": []}}).status_code == 409
+    assert client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).status_code == 409
+    assert client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS, json={}).status_code == 409
+
 
 def test_relations_flow_fills_canvas_and_confirms_from_canvas(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)

@@ -3047,11 +3047,17 @@ export function pauseFrameworkInterview(id: number): Promise<FwInterviewSession>
 export function resumeFrameworkInterview(id: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/resume`, { method: "POST" });
 }
-export function generateFrameworkRelations(id: number): Promise<FwInterviewSession> {
-  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "POST" });
+/** comment가 있으면 프롬프트에 직전 제안+피드백을 실어 재제안한다. */
+export function generateFrameworkRelations(id: number, comment = ""): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "POST", body: JSON.stringify({ comment }) });
 }
-export function confirmFrameworkRelations(id: number, relations: Record<string, unknown>): Promise<FwInterviewSession> {
-  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "PUT", body: JSON.stringify({ relations }) });
+/** 확정 — canvas를 보내면 서버가 접어 relations를 만든다. */
+export function confirmFrameworkRelations(id: number, body: { canvas: FwCanvas } | { relations: Record<string, unknown> }): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/relations`, { method: "PUT", body: JSON.stringify(body) });
+}
+/** 편집 중 캔버스 저장 — relations는 건드리지 않는다(확정에서 접는다). */
+export function saveFrameworkCanvas(id: number, canvas: FwCanvas): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/canvas`, { method: "PUT", body: JSON.stringify({ canvas }) });
 }
 /** 자연어 피드백 — scope=relations는 캔버스를, scope=task는 그려진 카드의 행을 AI가 고친다. */
 export function sendFrameworkFeedback(id: number, body: { scope: "relations" | "task"; task_pk?: number; message: string }): Promise<FwInterviewSession> {

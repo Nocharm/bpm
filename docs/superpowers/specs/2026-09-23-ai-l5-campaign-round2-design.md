@@ -95,7 +95,7 @@
 - `relations`는 유지 — 등록(0.5 조립)의 진실. canvas는 편집 진실이고 확정 시 relations로 역산한다.
 
 ### 4.2 canvas ↔ relations (`backend/app/framework_interview/canvas.py` 신설)
-- `expand_relations_to_canvas(relations, tasks) -> canvas`: 기존 `expand_linkage_branches` 규칙(팬아웃≥2이고 전부 parallel이 아니면 분기 노드 삽입)과 동일 + `consultant_layout` LR 배치. FE `buildL5PreviewGraph`와 모양이 같아야 한다(파이썬 동치본, 테스트로 고정).
+- `expand_relations_to_canvas(relations, tasks) -> canvas`: 기존 `expand_linkage_branches` 규칙(팬아웃≥2이고 전부 parallel이 아니면 분기 노드 삽입)과 동일 + `consultant_layout` LR 배치. 분기 규칙의 진실은 `scripts/import_consultant.expand_linkage_branches`(파이썬 동치본)이고, FE 미리보기와는 start/end 보강 규칙만 같다.
 - `collapse_canvas_to_relations(canvas) -> relations`: 분기 노드 D에 대해 들어오는 X마다 D의 나가는 엣지(D→Y, 라벨 L)를 `X→Y kind=branch gateway=exclusive condition=L`로. 분기 노드가 연쇄(D1→D2)면 D2를 D1의 각 진입에 대해 재귀 전개. subprocess→subprocess 직접 엣지는 `seq`, dst.seq < src.seq면 `loop`. entry = start에서 나가는 첫 subprocess(없으면 seq 1). 왕복 `collapse(expand(r)) == r`을 테스트로 고정(분기 노드 이름은 손실 허용).
 - 확정 `PUT /relations`는 body를 `{relations} | {canvas}` 둘 다 받고, canvas면 서버가 collapse 후 저장. FE는 항상 canvas를 보낸다.
 
@@ -105,7 +105,7 @@
 | POST | `/framework-interviews/{id}/relations` | body `{comment?: string}` 추가. AI 결과 relations → canvas도 expand해 저장. comment가 있으면 프롬프트에 `[직전 제안]` + `[사용자 피드백]` 블록 |
 | PUT | `/framework-interviews/{id}/canvas` | 편집 저장(검증: task_id 전부 세션 카드, 노드 id 유일). relations는 건드리지 않음 |
 | PUT | `/framework-interviews/{id}/relations` | `{canvas}` 수용 → collapse |
-| POST | `/framework-interviews/{id}/feedback` | `{scope:"relations", message}` → 현재 canvas+message로 `CanvasOut` 요청, 결과 canvas 저장·응답. `{scope:"task", task_pk, message}` → 현재 row+message로 `RowOut` 재요청 후 `submitted`로 돌려 재드로잉(기존 revise 파이프). 둘 다 `feedback_log` append |
+| POST | `/framework-interviews/{id}/feedback` | `{scope:"relations", message}` → 현재 canvas+message로 `CanvasOut` 요청, 결과 canvas 저장·응답. `{scope:"task", task_pk, message}` → 현재 row+message로 `RowOut` 재요청, 검증 후 그 자리에서 task의 row/issues/drawn_at을 갱신(상태는 `drawn` 유지, 검증 오류면 422, 세션이 `ready`였으면 `linking`으로 되돌림). 둘 다 `feedback_log` append |
 | GET | `/framework-interviews?active=true` | `category_path_ids` 추가 |
 
 - 프롬프트 계약 추가(`contracts.py`): `CANVAS_FEEDBACK_CONTRACT`(입력: 노드 목록·엣지 목록·피드백 / 출력: 같은 형식 canvas JSON, 노드 id 보존·task_id 변경 금지), `ROW_FEEDBACK_CONTRACT`(입력: row+피드백 / 출력: RowOut). 둘 다 `ai_prompts` 오버라이드 키 등록.
@@ -142,7 +142,7 @@
 | drawn | `AnswerReview` + `ImportMapPreview`(scope=map) + `FeedbackChat`(scope=task) |
 | failed | 에러 + 재시도/건너뛰기 |
 - 보드 `<li>`는 전 상태 `role=button`. `selectedTaskId`는 어떤 상태든 유지; `deriveStep`은 선택이 없을 때만 자동 진행.
-- task 피드백 전송 후 카드가 `submitted`로 돌아가며 보드 배지가 바뀐다(폴링).
+- task 피드백 전송 후 행이 즉시 갱신되고(상태는 drawn 유지) 패널의 미리보기가 새 행을 보여준다.
 
 ## 5. i18n · 문서 · 카탈로그
 - 신규 문구는 ko/en 동시(`i18n-messages`), 긴 대시 금지.

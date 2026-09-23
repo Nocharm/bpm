@@ -538,6 +538,8 @@ async def generate_relations(
 ) -> FrameworkInterviewOut:
     await _require_ai_enabled(db)
     row = await _get_session_row(db, session_id)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
     _assert_all_drawn(row)
     comment = (payload.comment if payload else "").strip()
     rows_by_task = {t.task_id: t.row or {} for t in row.tasks}
@@ -562,6 +564,8 @@ async def save_canvas(
 ) -> FrameworkInterviewOut:
     """편집 중 캔버스 저장 — 형태만 검증하고 relations는 건드리지 않는다(확정에서 접는다)."""
     row = await _get_session_row(db, session_id)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
     _assert_all_drawn(row)
     errors = validate_canvas(payload.canvas, {t.task_id for t in row.tasks})
     if errors:
@@ -581,6 +585,8 @@ async def confirm_relations(
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
     row = await _get_session_row(db, session_id)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
     _assert_all_drawn(row)
     known_ids = {t.task_id for t in row.tasks}
     raw_relations = payload.relations
@@ -617,6 +623,8 @@ async def feedback_session(
     """자연어 피드백으로 캔버스 또는 그려진 카드의 행을 고친다 (2026-09-23 라운드2)."""
     await _require_ai_enabled(db)
     row = await _get_session_row(db, session_id)
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
     tasks = sorted(row.tasks, key=lambda t: t.seq)
     if payload.scope == "relations":
         if row.status != "linking" or not row.canvas:

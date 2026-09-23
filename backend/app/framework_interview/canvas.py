@@ -74,8 +74,11 @@ def relayout_canvas(canvas: dict) -> dict:
 def expand_relations_to_canvas(relations: dict, tasks: list[tuple[str, str]]) -> dict:
     """relations → 편집용 캔버스 그래프. tasks=[(task_id, name)] seq 순.
 
-    분기 노드 삽입 규칙·start/end 보강 규칙은 FE 미리보기(`lib/interview-preview.ts` buildL5PreviewGraph)와
-    같아야 한다 — 두 표면이 같은 그림을 보여야 하므로 한쪽을 고치면 다른 쪽도 옮긴다.
+    분기 노드 삽입 규칙의 진실은 `scripts/import_consultant.expand_linkage_branches`(파이썬 동치본) — 팬아웃≥2가
+    전부 parallel이 아니면, 또는 자기 반복 하나만 있어도(lone self-loop) 항상 분기 노드를 세운다(id는 `__branch__{id}`).
+    FE 미리보기(`lib/interview-preview.ts` buildL5PreviewGraph)는 start/end 보강 규칙만 이 함수와 같다 — 분기
+    규칙까지 같다고 가정하지 않는다. seq 엣지는 gateway를 들지 않는다 — 분기 노드 없는 직결에 gateway가 실려
+    있으면(전부 parallel 팬아웃) 설계상 kind=branch로 접힌다(`collapse_canvas_to_relations`).
     """
     names = dict(tasks)
     order = [task_id for task_id, _ in tasks]
@@ -300,6 +303,9 @@ def validate_canvas(canvas: dict, known_task_ids: set[str]) -> list[str]:
             task_ids.add(task_id)
         if node.get("node_type") == "subprocess" and not task_id:
             errors.append(f"subprocess node has no task id: {node_id}")
+        node_type = node.get("node_type")
+        if node_type not in ("subprocess", "decision", "start", "end"):
+            errors.append(f"node {node_id} has an unknown node_type: {node_type!r}")
         for axis in ("pos_x", "pos_y"):
             value = node.get(axis)  # 누락은 허용(0으로 읽는다), 숫자 아닌 값은 배치를 깨뜨린다
             if value is not None and (isinstance(value, bool) or not isinstance(value, int | float)):

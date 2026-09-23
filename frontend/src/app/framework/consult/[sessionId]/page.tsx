@@ -242,7 +242,7 @@ export default function FrameworkConsultPage() {
               session={session}
               busy={busy}
               onPropose={() => void run(() => generateFrameworkRelations(session.id))}
-              onConfirm={(relations) => void run(() => confirmFrameworkRelations(session.id, relations))}
+              onConfirm={(relations) => void run(() => confirmFrameworkRelations(session.id, { relations }))}
               onPreviewTask={setPreviewTaskId}
               onReopenTask={(taskPk) => {
                 setSelectedTaskId(taskPk);  // 다시 연 카드로 바로 이동

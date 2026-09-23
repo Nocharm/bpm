@@ -66,7 +66,12 @@ _IO_SPLIT = re.compile(r"[,\n/·]")
 
 def _io_list(value: Any) -> list[str]:
     """str 또는 list → 항목 리스트(trim, 빈 값·중복 제거, 순서 유지). IO는 배열이 정본이다 (2026-09-23)."""
-    items = value if isinstance(value, list) else _IO_SPLIT.split(str(value)) if value is not None else []
+    if isinstance(value, list):
+        items = value
+    elif value is None:
+        items = []
+    else:
+        items = _IO_SPLIT.split(str(value))
     seen: set[str] = set()
     out: list[str] = []
     for item in items:

@@ -120,6 +120,14 @@ def test_validate_canvas_reports_shape_errors() -> None:
     assert "subprocess node has no task id: t1" in errors
 
 
+def test_validate_canvas_rejects_unknown_node_type() -> None:
+    bad = {"nodes": [
+        {"id": "a", "node_type": "process", "title": "a", "task_id": None, "pos_x": 0, "pos_y": 0},
+    ], "edges": []}
+    errors = validate_canvas(bad, set())
+    assert "node a has an unknown node_type: 'process'" in errors
+
+
 def test_validate_canvas_rejects_shared_task_id_and_non_numeric_position() -> None:
     bad = {"nodes": [
         {"id": "a", "node_type": "subprocess", "title": "a", "task_id": "t1", "pos_x": 0, "pos_y": 0},
