@@ -1410,7 +1410,7 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
               <span className="truncate">{t("subprocess.undesignatedBanner")}</span>
             </div>
           )
-        ) : data.linkedMapId == null ? (
+        ) : data.linkedMapId == null && data.hideLinkBanner !== true ? (
           spPlaceholder && onConnectPlaceholder ? (
             // 후차 연결 CTA — 배너 자체가 진입점(연계 캔버스 편집 모드 전용) (design §10.1, 2026-08-29)
             <button

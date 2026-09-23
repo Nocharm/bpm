@@ -116,19 +116,25 @@ await page.waitForFunction(
 );
 check("context menu added a branch node", true, `${nodeCount + 1} nodes`);
 
-// ③ 엣지 클릭 → 라벨 저장. 경로 중간점을 실좌표로 환산하고(bbox 중심은 곡선 밖일 수 있다)
-// elementFromPoint로 그 점이 정말 엣지인 엣지를 고른다 — 노드가 덮은 중간점은 클릭이 노드로 간다.
-const point = await page.evaluate(() => {
-  const paths = [...document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__edge-interaction')];
-  for (const path of paths) {
-    const pt = path.getPointAtLength(path.getTotalLength() / 2);
-    const m = path.getScreenCTM();
-    const x = pt.x * m.a + pt.y * m.c + m.e;
-    const y = pt.x * m.b + pt.y * m.d + m.f;
-    if (document.elementFromPoint(x, y) === path) return { x, y };
-  }
-  return null;
-});
+// 엣지 클릭 지점 — 경로 중간점을 실좌표로 환산하고(bbox 중심은 곡선 밖일 수 있다) elementFromPoint로
+// 그 점이 정말 그 엣지인 엣지를 고른다. 노드나 엣지 라벨이 덮은 중간점은 클릭이 거기로 간다.
+function findEdgePoint() {
+  return page.evaluate(() => {
+    const paths = [...document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__edge-interaction')];
+    for (const path of paths) {
+      const pt = path.getPointAtLength(path.getTotalLength() / 2);
+      const m = path.getScreenCTM();
+      const x = pt.x * m.a + pt.y * m.c + m.e;
+      const y = pt.x * m.b + pt.y * m.d + m.f;
+      if (document.elementFromPoint(x, y) === path) return { x, y };
+    }
+    return null;
+  });
+}
+const countEdges = () => canvas.locator(".react-flow__edge").count();
+
+// ③ 엣지 클릭 → 라벨 저장
+const point = await findEdgePoint();
 check("found a clickable edge midpoint", point !== null);
 await page.mouse.click(point.x, point.y);
 const labelInput = page.locator('[data-id="fw-relations-edge-label"]');
@@ -138,11 +144,40 @@ await labelInput.press("Enter");
 await canvas.locator("text", { hasText: "승인" }).first().waitFor({ timeout: 10000 });
 check("edge label saved on the canvas", true);
 
-// ④ 디바운스(300ms) PUT /canvas 도달
+// ④ 엣지 선택 → Delete → 삭제 + 저장. 클릭은 라벨 팝오버도 열므로 Escape로 팝오버만 닫고
+// (RF 선택은 유지) Delete를 누른다 — 입력에 포커스가 있으면 RF가 키를 무시한다.
+await page.waitForTimeout(600);
+const edgesBefore = await countEdges();
+const putsBefore = canvasPuts.length;
+const delPoint = await findEdgePoint();
+await page.mouse.click(delPoint.x, delPoint.y);
+await labelInput.waitFor({ timeout: 5000 });
+await labelInput.press("Escape");
+await page.keyboard.press("Delete");
+const edgeDeleted = await page
+  .waitForFunction(
+    (want) => document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__edge').length === want,
+    edgesBefore - 1,
+    { timeout: 10000 },
+  )
+  .then(() => true)
+  .catch(() => false);
+check("Delete removes the selected edge", edgeDeleted, `${edgesBefore} -> ${await countEdges()}`);
 await page.waitForTimeout(1200);
+check("edge delete was saved (PUT /canvas 200)", canvasPuts.length > putsBefore && canvasPuts.every((s) => s === 200), canvasPuts.join(","));
+
+// ⑤ 노드는 삭제 불가 — L6 카드가 캔버스에서 사라지면 서버 캔버스와 어긋난다
+const nodesBefore = await canvas.locator(".react-flow__node").count();
+await canvas.locator(`.react-flow__node[data-id="${subId}"]`).click();
+await page.keyboard.press("Delete");
+await page.waitForTimeout(600);
+const nodesAfter = await canvas.locator(".react-flow__node").count();
+check("Delete leaves subprocess nodes alone", nodesAfter === nodesBefore, `${nodesBefore} -> ${nodesAfter}`);
+
+// ⑥ 디바운스(300ms) PUT /canvas 전부 200
 check("PUT /canvas returned 200", canvasPuts.length > 0 && canvasPuts.every((s) => s === 200), canvasPuts.join(","));
 
-// ⑤ 확정 → 등록
+// ⑦ 확정 → 등록
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor({ timeout: 20000 });
 check("register step reached", true);

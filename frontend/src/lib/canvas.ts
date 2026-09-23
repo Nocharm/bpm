@@ -157,6 +157,9 @@ export type NodeData = {
   spOriginPath?: string | null;
   // 비교 화면 전용 — 엣지가 4변 핸들(t-/s-)로 재매핑되므로 subprocess도 NodeHandles를 렌더해야 함 (F1)
   sideHandles?: boolean;
+  // 캠페인 연결 캔버스 전용 옵트인 — 아직 맵이 없는 L6 카드를 그리는 표면이라 "링크 미지정" 배너를 끈다.
+  // 기본(미전달)은 기존 동작 유지 — 에디터·비교·미리보기는 배너가 실제 조치 신호다.
+  hideLinkBanner?: boolean;
 };
 
 export type AppNode = Node<NodeData>;

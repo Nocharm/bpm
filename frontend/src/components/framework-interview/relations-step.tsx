@@ -16,7 +16,8 @@ import { RelationsCanvas } from "@/components/framework-interview/relations-canv
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
 const ICON_BTN = "rounded-sm p-1 text-ink-secondary hover:bg-surface-alt disabled:opacity-40";
 const SAVE_DEBOUNCE_MS = 300;
-// 제안 오버레이 최소 노출 — 가짜/빠른 응답에도 링이 한 번은 보이게(사용자가 무슨 일이 일어났는지 알게)
+// 제안 오버레이 최소 노출 — 캔버스가 도착하면 부모가 key로 이 컴포넌트를 리마운트해 링이 바로 걷히므로,
+// 이 하한이 실제로 묶는 건 캔버스가 끝내 오지 않는 경우(실패·무변경 응답)의 해제 판정 시점이다.
 const OVERLAY_MIN_MS = 1500;
 const EMPTY_CANVAS: FwCanvas = { nodes: [], edges: [] };
 

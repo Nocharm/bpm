@@ -4,11 +4,13 @@
 
 import { useRef, useState } from "react";
 import {
+  applyEdgeChanges,
   applyNodeChanges,
   Background,
   BackgroundVariant,
   type Connection,
   type Edge,
+  type EdgeChange,
   type NodeChange,
   type NodeTypes,
   Panel,
@@ -42,12 +44,20 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 // 임포트 리포트 미리보기 툴바와 같은 칩(map-preview ZOOM_BTN) — 캔버스 위에 얹는 작은 액션
 const TOOL_BTN =
   "inline-flex h-5 w-5 items-center justify-center rounded-sm border border-hairline bg-surface/90 text-ink-secondary hover:bg-accent-tint hover:text-accent disabled:opacity-40";
+const WRAP_CLASS = "bpm-fw-relations-flow";
+const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1.2 };
 
 // 캔버스 엣지엔 핸들 개념이 없다 — 표시 단계에서 4변 핸들(sideHandles) + 우→좌로 못 박아 LR 흐름을 고정한다.
+// deletable=false — L6 카드는 캔버스에 늘 남아야 하고 분기 마름모는 컨텍스트 메뉴로만 걷는다. Delete가
+// 노드까지 지우면 deleteElements가 연결 엣지를 먼저 떼어내 서버엔 고아 노드가, 화면엔 없는 노드가 남는다.
 function buildFlow(canvas: FwCanvas): { nodes: AppNode[]; edges: Edge[] } {
   const { nodes, edges } = canvasToFlow(canvas);
   return {
-    nodes: nodes.map((node) => ({ ...node, data: { ...node.data, sideHandles: true } })),
+    nodes: nodes.map((node) => ({
+      ...node,
+      deletable: false,
+      data: { ...node.data, sideHandles: true, hideLinkBanner: true },
+    })),
     edges: edges.map((edge) => ({ ...edge, sourceHandle: "s-right", targetHandle: "t-left" })),
   };
 }
@@ -105,6 +115,12 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
     setNodes((nds) => applyNodeChanges(changes, nds));
   }
 
+  // 제어형 edges는 onEdgesChange 없이는 select 변경이 버려진다 — 그러면 어떤 엣지도 selected가 안 되고
+  // Delete 경로(선택 엣지 수집)가 영원히 비어 onEdgesDelete가 불리지 않는다.
+  function handleEdgesChange(changes: EdgeChange<Edge>[]) {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }
+
   // 드롭 시점에만 좌표를 커밋 — 되돌리기 스냅샷은 남기지 않는다(구조 변경·자동 정렬 전용)
   function handleNodeDragStop(_event: unknown, _node: AppNode, dragged: AppNode[]) {
     let next = readCanvas();
@@ -147,7 +163,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
     let next = base;
     for (const node of laid.nodes) next = moveNode(next, node.id, node.position.x, node.position.y);
     commit(base, next);
-    window.requestAnimationFrame(() => void fitView({ padding: 0.2 }));
+    window.requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
   }
 
   function handleUndo() {
@@ -191,9 +207,10 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
   }
 
   return (
-    <div ref={wrapRef} className="relative min-h-0 flex-1 overflow-hidden bg-canvas" data-id="fw-consult-relations-canvas">
-      {/* Turbopack이 dev에서 .react-flow__* 규칙을 purge해 raw <style>로 둔다(lessons canvas §5) */}
-      <style>{`.react-flow__node{z-index:2 !important}`}</style>
+    <div ref={wrapRef} className={`relative min-h-0 flex-1 overflow-hidden bg-canvas ${WRAP_CLASS}`} data-id="fw-consult-relations-canvas">
+      {/* Turbopack이 dev에서 .react-flow__* 규칙을 purge해 raw <style>로 둔다(lessons canvas §5).
+          이 캔버스 래퍼로 한정 — 같은 단계의 카드 미리보기 모달이 또 다른 RF 인스턴스를 띄운다. */}
+      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}`}</style>
       <div className={`h-full w-full ${busy ? "pointer-events-none opacity-60" : ""}`}>
         <ReactFlow
           nodes={nodes}
@@ -203,13 +220,17 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
           nodesDraggable
           elementsSelectable
           onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
           onNodeDragStop={handleNodeDragStop}
           onConnect={handleConnect}
           onEdgesDelete={handleEdgesDelete}
           onEdgeClick={handleEdgeClick}
           onNodeContextMenu={handleNodeContextMenu}
           fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={0.2}
+          // 우하단 어트리뷰션 마크 숨김(공식 proOptions) — 에디터와 동일
+          proOptions={{ hideAttribution: true }}
           /* 에디터와 동일한 휠/팬 맵핑 — 휠=팬, Ctrl/⌘+휠=줌 */
           panOnDrag
           panOnScroll
@@ -247,7 +268,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
               data-id="fw-relations-fit"
               title={t("fwConsult.canvasFit")}
               aria-label={t("fwConsult.canvasFit")}
-              onClick={() => void fitView({ padding: 0.2 })}
+              onClick={() => void fitView(FIT_VIEW_OPTIONS)}
             >
               <Maximize2 size={12} strokeWidth={1.5} />
             </button>
