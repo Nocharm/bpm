@@ -73,6 +73,8 @@ import { CountTag } from "@/components/maps/count-tag";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
+import { FwLevelActions } from "@/components/admin/fw-level-actions";
+import { findDuplicateSibling } from "@/lib/fw-level-actions";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -100,11 +102,6 @@ const IMPORT_FILE_BTN =
 // 인터뷰 임포트 스트립 · AI L5 블록의 보조 버튼 — 테두리 없는 컴팩트 액션
 const STRIP_BTN =
   "shrink-0 rounded-sm px-2 py-1 text-fine text-ink-tertiary hover:bg-surface-alt hover:text-accent disabled:opacity-40";
-
-// 진행 중 세션 드롭다운 — 토글 버튼 rect 기준 fixed 패널(framework-cascade-picker 드롭다운과 같은 규칙)
-const SESSIONS_GAP = 4;
-const SESSIONS_MARGIN = 8;
-const SESSIONS_MIN_WIDTH = 260;
 
 // 상세 정보 줄의 최대 노출 관리자 수 — 초과분은 +n 배지 툴팁으로
 const DETAIL_ADMIN_MAX = 3;
@@ -151,6 +148,8 @@ function formatAdminName(found: DirectoryUser | undefined, fallback: string, lan
 type NamePrompt =
   | { kind: "add-root" }
   | { kind: "add-child"; parentId: number }
+  // L4 타일에서 새 L5 — 만든 뒤 바로 AI 캠페인 세션을 연다
+  | { kind: "add-l5"; parentId: number }
   | { kind: "rename"; id: number; currentName: string };
 
 export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
@@ -193,9 +192,10 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // AI 컨설턴트 L5 캠페인 진입 — sysadmin 전용(인터뷰 임포트와 같은 게이트). 대상은 트리에서 고른
-  // 행이다: L5면 그 L5를 채우고, L4면 이름을 받아 새 L5를 만든 뒤 시작한다.
-  const [newL5Name, setNewL5Name] = useState("");
+  // 행이다: L5면 그 L5를 채우고, L4면 이름 모달로 새 L5를 만든 뒤 시작한다(FwLevelActions 타일).
   const [consultBusy, setConsultBusy] = useState(false);
+  // 이름 모달의 현재 입력 — 형제 이름 중복을 즉시 판정해 모달 안 error로 돌려준다
+  const [nameDraft, setNameDraft] = useState("");
   const [activeSessions, setActiveSessions] = useState<FwInterviewSession[]>([]);
   // 관리 트리 검색용 전 카테고리 경량 목록(sysadmin) — 탐색 모달과 같은 클라이언트 필터
   const [allCategories, setAllCategories] = useState<CategoryLite[]>([]);
@@ -238,21 +238,11 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   }, [consultL5Id]);
   const consultTarget = fetchedTarget?.id === consultL5Id ? fetchedTarget.target : undefined;
 
-  // 캠페인 시작 — mode "new"는 선택한 L4 아래 새 L5를 만들고, "existing"은 선택한 L5를 그대로 쓴다.
-  async function handleStartConsult(mode: "existing" | "new") {
-    const pick = selectedNode;
-    if (!pick) return;
+  // 캠페인 시작 — 선택한 L5로 세션을 연다. 새 L5 생성은 handleNameSubmit(add-l5)이 맡는다.
+  async function handleStartConsult(l5Id: number) {
     setConsultBusy(true);
     try {
-      let categoryId = pick.id;
-      if (mode === "new") {
-        // 새 L5를 고른 L4 아래 만들고 그 id로 세션을 연다 — 관리 트리도 그 가지를 새로고침
-        const created = await createCategory({ name: newL5Name.trim(), parent_id: pick.id });
-        categoryId = created.id;
-        setOpenIds((prev) => new Set(prev).add(pick.id));
-        await refreshTree([pick.id]);
-      }
-      const session = await createFrameworkInterview({ category_id: categoryId, lang });
+      const session = await createFrameworkInterview({ category_id: l5Id, lang });
       router.push(`/framework/consult/${session.id}`);
     } catch (err) {
       // 409 = 진행 중 세션 존재 → 목록에서 재개하도록 안내
@@ -263,47 +253,24 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     }
   }
 
-  // 진행 중 세션 드롭다운 — 토글 버튼 rect 기준 fixed 포털(바깥 클릭·Esc 닫힘).
-  // 상세 패널은 내부 스크롤이라 인라인 목록을 두면 패널이 잘린다.
-  const sessionsBtnRef = useRef<HTMLButtonElement>(null);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [sessionsPos, setSessionsPos] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
-  // 닫을 때 위치도 버린다 — 남겨 두면 다음 열림의 첫 프레임이 옛 rect에 그려진다
-  function closeSessions() {
-    setSessionsOpen(false);
-    setSessionsPos(null);
-  }
+  // 선택 노드가 L1~3이면 자식을 미리 받아 둔다 — 상세 패널의 하위 타일(FwLevelActions)이 트리 펼침과
+  // 무관하게 보여야 한다. 트리 펼침(handleToggle)과 같은 Map에 넣으므로 이중 로드는 없고,
+  // "로딩 중"은 별도 상태 없이 Map에 아직 없음으로 파생한다(effect 안 동기 setState 회피).
+  const selectedLevel = selectedNode?.level ?? null;
   useEffect(() => {
-    if (!sessionsOpen) return undefined;
-    const updatePos = () => {
-      const btn = sessionsBtnRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      const top = rect.bottom + SESSIONS_GAP;
-      const width = Math.max(SESSIONS_MIN_WIDTH, rect.width);
-      // 오른쪽으로 넘치면 화면 안으로 당긴다 — 위로 뒤집지 않는다(목록은 위→아래로 읽는다)
-      const left = Math.max(SESSIONS_MARGIN, Math.min(rect.left, window.innerWidth - SESSIONS_MARGIN - width));
-      setSessionsPos({ left, top, width, maxHeight: Math.max(120, window.innerHeight - SESSIONS_MARGIN - top) });
-    };
-    updatePos();
-    window.addEventListener("resize", updatePos);
-    window.addEventListener("scroll", updatePos, true);
+    if (selectedId === null || selectedLevel === null || selectedLevel > 3) return undefined;
+    if (childrenByParent.has(selectedId)) return undefined;
+    let active = true;
+    listCategoryNodes(selectedId)
+      .then((nodes) => {
+        if (active) setChildrenByParent((prev) => new Map(prev).set(selectedId, nodes));
+      })
+      .catch((err: unknown) => onToast(getApiErrorDetail(err)));
     return () => {
-      window.removeEventListener("resize", updatePos);
-      window.removeEventListener("scroll", updatePos, true);
+      active = false;
     };
-  }, [sessionsOpen]);
-  useEffect(() => {
-    if (!sessionsOpen) return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSessionsOpen(false);
-        setSessionsPos(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sessionsOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedId·selectedLevel만 본다: Map 참조를 deps에 두면 로드 완료마다 재실행
+  }, [selectedId, selectedLevel]);
 
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
@@ -538,6 +505,15 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           await createCategory({ name, parent_id: prompt.parentId });
           setOpenIds((prev) => new Set(prev).add(prompt.parentId));
           await refreshTree([prompt.parentId]);
+        } else if (prompt.kind === "add-l5") {
+          // 새 L5를 고른 L4 아래 만들고 그 id로 캠페인 세션을 연다 — 관리 트리도 그 가지를 새로고침
+          setConsultBusy(true);
+          const created = await createCategory({ name, parent_id: prompt.parentId });
+          setOpenIds((prev) => new Set(prev).add(prompt.parentId));
+          await refreshTree([prompt.parentId]);
+          const session = await createFrameworkInterview({ category_id: created.id, lang });
+          router.push(`/framework/consult/${session.id}`);
+          return;
         } else {
           await updateCategory(prompt.id, { name });
           await refreshTree();
@@ -547,6 +523,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         );
       } catch (err) {
         onToast(getApiErrorDetail(err));
+        setConsultBusy(false);
       }
     })();
   }
@@ -677,10 +654,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
   );
 
   // ── 상세 패널 재료 ──
-  const isL4 = selectedNode?.level === 4;
-  const isL5 = selectedNode?.level === 5;
-  // 선택한 L5에 이미 진행 중인 세션이 있으면 새로 만들지 않고 그 세션으로 보낸다(서버는 409)
-  const resumeSession = isL5 ? activeSessions.find((s) => s.category_id === selectedNode.id) : undefined;
   const detailAdmins = selectedNode ? (permNamesByCategory.get(selectedNode.id) ?? []) : [];
   const noSelectionReason = t("framework.adminDetailEmpty");
   const scopeReason = t("framework.adminScopeDenied");
@@ -973,62 +946,29 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
                 <InterviewJsonPromptButton target={consultTarget} />
               </span>
             </div>
-            {/* 새 L5 — 선택한 L4 아래에 만든다 */}
-            <div className="flex items-center gap-1.5">
-              <input
-                data-id="fw-consult-new-name"
-                className="min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink disabled:opacity-40"
-                value={newL5Name}
-                disabled={!isL4}
-                title={isL4 ? undefined : t("fwConsult.needL4")}
-                placeholder={t("fwConsult.newL5Name")}
-                onChange={(e) => setNewL5Name(e.target.value)}
-              />
-              <button
-                type="button"
-                data-id="fw-consult-create"
-                className="shrink-0 rounded-sm bg-accent px-2.5 py-1 text-fine text-on-accent hover:bg-accent-focus disabled:opacity-40"
-                disabled={!isL4 || consultBusy || newL5Name.trim() === ""}
-                title={!isL4 ? t("fwConsult.needL4") : newL5Name.trim() === "" ? t("fwConsult.needName") : undefined}
-                onClick={() => void handleStartConsult("new")}
-              >
-                {t("fwConsult.createAndStart")}
-              </button>
-            </div>
-            {/* 기존 L5 채우기 — 진행 중 세션이 있으면 새로 만들지 않고 그 세션을 잇는다 */}
-            <button
-              type="button"
-              data-id="fw-consult-start"
-              className="self-start rounded-sm border border-hairline bg-surface px-2.5 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
-              disabled={!isL5 || consultBusy}
-              title={!isL5 ? t("fwConsult.needL5") : resumeSession ? t("fwConsult.resumeHint") : t("fwConsult.startHint")}
-              onClick={() => {
-                if (resumeSession) router.push(`/framework/consult/${resumeSession.id}`);
-                else void handleStartConsult("existing");
+            {/* 선택 레벨에 따라 배타적으로 바뀐다 — L1~3 하위 타일 드릴 / L4 새 L5 / L5 AI로 작업·이어서 */}
+            <FwLevelActions
+              selectedNode={selectedNode}
+              childNodes={selectedNode ? childrenByParent.get(selectedNode.id) : undefined}
+              childrenLoading={selectedNode !== null && selectedNode.level <= 3 && !childrenByParent.has(selectedNode.id)}
+              sessions={activeSessions}
+              busy={consultBusy}
+              onPick={(node) => {
+                // 좌측 트리와 싱크 — 선택 이동 + 그 노드 펼침 + 행으로 스크롤(검색 히트와 같은 동작)
+                setSelectedId(node.id);
+                openSection(node.id, false);
+                setOpenIds((prev) => new Set(prev).add(node.id));
+                window.setTimeout(() => document.querySelector(`[data-id="framework-admin-node-${node.id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50);
               }}
-            >
-              {resumeSession ? t("fwConsult.resume") : t("fwConsult.start")}
-            </button>
-            <button
-              ref={sessionsBtnRef}
-              type="button"
-              data-id="fw-consult-sessions-toggle"
-              aria-expanded={sessionsOpen}
-              className={`inline-flex items-center gap-1 self-start ${STRIP_BTN}`}
-              disabled={activeSessions.length === 0}
-              title={t("fwConsult.sessionsToggle", { n: activeSessions.length })}
-              onClick={() => {
-                if (sessionsOpen) closeSessions();
-                else setSessionsOpen(true);
+              onCreateL5={() => {
+                if (selectedNode) {
+                  setNameDraft("");
+                  setNamePrompt({ kind: "add-l5", parentId: selectedNode.id });
+                }
               }}
-            >
-              {t("fwConsult.sessionsToggle", { n: activeSessions.length })}
-              <ChevronDown
-                size={14}
-                strokeWidth={1.5}
-                className={`motion-safe:transition-transform motion-safe:duration-150 ease-smooth ${sessionsOpen ? "rotate-180" : ""}`}
-              />
-            </button>
+              onStart={(id) => void handleStartConsult(id)}
+              onResume={(sessionId) => router.push(`/framework/consult/${sessionId}`)}
+            />
           </div>
         )}
 
@@ -1172,36 +1112,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       </div>
       )}
 
-      {/* 진행 중 세션 목록 — 상세 패널은 내부 스크롤이라 fixed 포털로 띄운다(바깥 클릭·Esc 닫힘) */}
-      {sessionsOpen && sessionsPos && createPortal(
-        <>
-          <div className="fixed inset-0 z-[1340]" onClick={closeSessions} />
-          <div
-            data-id="fw-consult-sessions-panel"
-            className="scroll-soft fixed z-[1350] flex flex-col gap-1 overflow-y-auto rounded-md border border-hairline bg-surface p-2 shadow-lg"
-            style={{ left: sessionsPos.left, top: sessionsPos.top, width: sessionsPos.width, maxHeight: sessionsPos.maxHeight }}
-          >
-            {activeSessions.map((s) => (
-              <div
-                key={s.id}
-                data-id={`fw-consult-session-${s.id}`}
-                className="flex items-center gap-2 rounded-sm px-1 py-0.5 text-fine text-ink"
-              >
-                <span className="min-w-0 truncate">{s.category_name}</span>
-                <span className="shrink-0 text-ink-tertiary">{s.progress.drawn}/{s.progress.total}</span>
-                <Link
-                  href={`/framework/consult/${s.id}`}
-                  data-id={`fw-consult-resume-${s.id}`}
-                  className="ml-auto shrink-0 text-accent hover:underline"
-                >
-                  {t("fwConsult.resume")}
-                </Link>
-              </div>
-            ))}
-          </div>
-        </>,
-        document.body,
-      )}
         </>
       )}
 
@@ -1212,14 +1122,26 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               ? t("framework.adminAddRootTitle")
               : namePrompt.kind === "add-child"
                 ? t("framework.adminAddChildTitle")
-                : t("framework.adminRenameTitle")
+                : namePrompt.kind === "add-l5"
+                  ? t("fwConsult.newL5Name")
+                  : t("framework.adminRenameTitle")
           }
           defaultValue={namePrompt.kind === "rename" ? namePrompt.currentName : ""}
           placeholder={t("framework.adminNamePlaceholder")}
           confirmLabel={t("common.confirm")}
           cancelLabel={t("common.cancel")}
+          // 새 L5는 형제 이름 중복을 모달 안에서 바로 막는다(서버 409의 선제 가드)
+          error={
+            namePrompt.kind === "add-l5" && findDuplicateSibling(childrenByParent.get(namePrompt.parentId) ?? [], nameDraft)
+              ? t("fwLevel.duplicateName")
+              : null
+          }
+          onChange={setNameDraft}
           onConfirm={(value) => handleNameSubmit(namePrompt, value)}
-          onClose={() => setNamePrompt(null)}
+          onClose={() => {
+            setNamePrompt(null);
+            setNameDraft("");
+          }}
         />
       )}
 

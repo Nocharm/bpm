@@ -20,6 +20,8 @@ interface PromptDialogProps {
   multiline?: boolean;
   /** 제출 실패 안내(예: 이름 중복) — 표시되면 모달 유지 */
   error?: string | null;
+  /** 입력 변화를 밖에 알린다 — 호출부가 즉시 검증(이름 중복 등)해 error를 되돌려 줄 때 */
+  onChange?: (value: string) => void;
   onConfirm: (value: string) => void;
   onClose: () => void;
 }
@@ -33,10 +35,15 @@ export function PromptDialog({
   cancelLabel,
   multiline = false,
   error,
+  onChange,
   onConfirm,
   onClose,
 }: PromptDialogProps) {
   const [value, setValue] = useState(defaultValue);
+  const update = (next: string) => {
+    setValue(next);
+    onChange?.(next);
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -48,7 +55,8 @@ export function PromptDialog({
 
   const submit = () => {
     const trimmed = value.trim();
-    if (trimmed) onConfirm(trimmed);
+    // error가 떠 있으면 Enter로도 못 넘긴다 — 확인 버튼 disabled와 같은 규칙
+    if (trimmed && !error) onConfirm(trimmed);
   };
 
   return createPortal(
@@ -71,7 +79,7 @@ export function PromptDialog({
             className="min-h-20 rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
             value={value}
             placeholder={placeholder}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => update(event.target.value)}
           />
         ) : (
           <input
@@ -80,7 +88,7 @@ export function PromptDialog({
             className="rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink"
             value={value}
             placeholder={placeholder}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => update(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") submit();
             }}
@@ -99,7 +107,7 @@ export function PromptDialog({
           <button
             type="button"
             data-id="prompt-dialog-confirm"
-            disabled={!value.trim()}
+            disabled={!value.trim() || Boolean(error)}
             className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={submit}
           >
