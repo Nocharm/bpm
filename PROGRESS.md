@@ -9,6 +9,7 @@
 - **가짜 AI 서버(dev, 09-23):** `frontend/scripts/fake-ai-server.mjs` — OpenAI 호환 `/v1/chat/completions`, system 프롬프트의 계약 마커("L6 단위 업무"/"설문지를 만드세요"/"rows[] 원소"/"연계 캔버스")로 계획·설문·행·관계를 라우팅, 행은 `[L6] 이름:`을 되읽어 카드명과 맞추고 관계는 `taskId=` 순서로 seq 연결. 이전엔 세션 scratchpad에만 있던 전제라 스모크가 재현 불가였다. backend는 `AI_API_TOKEN=fake` 필수(빈 토큰이면 `Bearer ` 헤더로 502). `pw-fw-consult.mjs` 12/12·`pw-fw-consult-existing.mjs` 완주.
 - **AiButton(dev, 09-23):** `components/ai-button.tsx` — 액센트 그라데이션(`accent`→`accent-focus`) + hover 시 4s 반복 빛띠(`.ai-shimmer::after`, reduced-motion 시 없음), variant primary/tile/inline. 관리 패널 AI 타일(`AI_TILE` 상수 폐기)·계획 생성/재생성·제안 채우기·관계 제안이 채택. `buildAiButtonClass` vitest.
 - **미리보기 분기 마름모(dev, 09-23):** `scope-preview.tsx`가 전 타입을 `rect rx=8`로 그려 decision이 색(앰버)만 달랐다 → `buildDiamondPoints`(박스 내접 4꼭짓점)로 decision만 `polygon`. 공용이라 피크·요약 모달·임포트 리포트·캠페인 미리보기가 같이 바뀐다(실캔버스와 일치).
+- **플랜 카드 투명화·FLIP·좌측 brief(dev, 09-23):** planning 단계에 죽어 있던 좌측 보드 자리에 `PlanBriefPanel`(brief·첨부·AI 제안, plan-editor에서 분리)을 두고 우측은 카드 전폭. 카드는 기본 테두리·인풋 배경 투명(값만 텍스트처럼), hover/focus-within에서 편집 모양·순서/삭제 열이 드러난다. 순서 이동은 `useFlipOrder`(li `data-flip-key`=FE 전용 `clientId`, `lib/plan-cards.ts`가 부여/제거/스왑/순서키), 삭제는 `accordion-close` 240ms 뒤 제거, 추가는 `accordion-open`. brief는 page 상태(`briefDraft`), 카드는 편집기가 ref로 미러해 좌측 AI 제안이 화면의 카드·brief로 제안받는다.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ② 관리 패널 진입
 

@@ -21,6 +21,7 @@ import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AnswerStep } from "@/components/framework-interview/questionnaire-form";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
+import { PlanBriefPanel } from "@/components/framework-interview/plan-brief-panel";
 import { PlanEditor } from "@/components/framework-interview/plan-editor";
 import { RegisterStep } from "@/components/framework-interview/register-step";
 import { RelationsStep } from "@/components/framework-interview/relations-step";
@@ -61,6 +62,11 @@ export default function FrameworkConsultPage() {
   // 러너 정지 감지 — 상태가 안 변한 채 흐른 폴링 틱 수 (I3)
   const statusSigRef = useRef("");
   const [stalledTicks, setStalledTicks] = useState(0);
+  // planning 단계 — brief는 좌측 패널, 카드는 우측 편집기에 있어 둘을 페이지가 잇는다.
+  // brief는 사용자가 건드리기 전까지 서버값(null=미편집), 카드는 편집기가 미러해 주는 ref(렌더에서 읽지 않는다).
+  const [briefDraft, setBriefDraft] = useState<string | null>(null);
+  const planCardsRef = useRef<FwPlanCard[]>([]);
+  const handleCardsChange = useCallback((cards: FwPlanCard[]) => { planCardsRef.current = cards; }, []);
 
   const applySession = useCallback((next: FwInterviewSession) => {
     statusSigRef.current = buildStatusSignature(next);
@@ -168,6 +174,21 @@ export default function FrameworkConsultPage() {
       {error && <div className="border-b border-hairline bg-surface-pearl px-3 py-1.5 text-caption text-error" data-id="fw-consult-error">{error}</div>}
       <div className="flex min-h-0 flex-1">
         <aside className="flex shrink-0 flex-col overflow-y-auto bg-surface-pearl" style={{ width: boardWidth }} data-id="fw-consult-board">
+          {step === "plan" ? (
+            <PlanBriefPanel
+              brief={briefDraft ?? session.brief}
+              onBriefChange={setBriefDraft}
+              attachments={session.attachments}
+              busy={busy}
+              hasCards={(session.plan?.length ?? 0) > 0}
+              onAttach={(file) => void run(() => uploadFrameworkInterviewAttachment(session.id, file))}
+              onRemoveAttachment={(index) => void run(() => deleteFrameworkAttachment(session.id, index))}
+              onGenerate={() => void run(async () => {
+                await saveFrameworkPlan(session.id, planCardsRef.current, false, briefDraft ?? session.brief);  // 화면의 brief·카드로 제안받는다
+                return generateFrameworkPlan(session.id);
+              })}
+            />
+          ) : (
           <TaskBoard
             session={session}
             currentTaskId={current?.id ?? null}
@@ -185,6 +206,7 @@ export default function FrameworkConsultPage() {
               void run(() => resumeFrameworkInterview(session.id));  // resume이 러너를 다시 깨운다
             }}
           />
+          )}
         </aside>
         <div
           className="flex w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-hairline transition-colors duration-150 hover:bg-accent/40"
@@ -194,19 +216,14 @@ export default function FrameworkConsultPage() {
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-surface" data-id="fw-consult-step">
           {step === "plan" && (
             <PlanEditor
-              // 첨부는 이제 brief와 분리된 목록(props로 그대로 표시)이라 plan 내용만 key로 삼는다 —
-              // 첨부 업로드/삭제가 편집 중인 brief·카드를 지우지 않는다.
+              // 첨부·brief는 좌측 패널(props로 그대로 표시)이라 plan 내용만 key로 삼는다 —
+              // 첨부 업로드/삭제가 편집 중인 카드를 지우지 않는다.
               key={JSON.stringify(session.plan ?? [])}
               session={session}
               busy={busy}
-              onAttach={(file) => void run(() => uploadFrameworkInterviewAttachment(session.id, file))}
-              onRemoveAttachment={(index) => void run(() => deleteFrameworkAttachment(session.id, index))}
-              onGenerate={(cards: FwPlanCard[], brief: string) => void run(async () => {
-                await saveFrameworkPlan(session.id, cards, false, brief);  // 화면의 brief로 제안받는다
-                return generateFrameworkPlan(session.id);
-              })}
-              onSave={(cards: FwPlanCard[], brief: string) => void run(() => saveFrameworkPlan(session.id, cards, false, brief))}
-              onLock={(cards: FwPlanCard[], brief: string) => void run(() => saveFrameworkPlan(session.id, cards, true, brief))}
+              onCardsChange={handleCardsChange}
+              onSave={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, false, briefDraft ?? session.brief))}
+              onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true, briefDraft ?? session.brief))}
             />
           )}
           {(step === "answer" || step === "waiting") && (
