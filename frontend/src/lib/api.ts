@@ -2956,6 +2956,7 @@ export interface FwFeedbackEntry {
   task_pk: number | null;
   message: string;
   at: string;
+  kind?: "user" | "system";  // system = 서버가 남긴 이력(다시 제안 등). 없으면 사용자 메시지
 }
 export type FwSessionStatus = "planning" | "plan_locked" | "linking" | "ready" | "applied" | "abandoned";
 export interface FwInterviewSession {

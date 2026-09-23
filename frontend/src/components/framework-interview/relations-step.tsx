@@ -11,6 +11,7 @@ import type { FwCanvas, FwInterviewSession, FwPlanCard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { WindowGeom } from "@/lib/window-store";
 import { AiButton } from "@/components/ai-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FeedbackChat } from "@/components/framework-interview/feedback-chat";
 import { RelationsCanvas } from "@/components/framework-interview/relations-canvas";
 import { ScopeWindow } from "@/components/scope-window";
@@ -64,7 +65,7 @@ export function RelationsStep({
   // 부모가 session.canvas 내용으로 key를 리마운트하므로(page.tsx) 마운트 시 1회 초기화만 한다 —
   // 디바운스 저장은 session을 갱신하지 않아 편집 중 캔버스가 스스로 되감기지 않는다.
   const [canvas, setCanvas] = useState<FwCanvas>(() => session.canvas ?? EMPTY_CANVAS);
-  const [comment, setComment] = useState("");
+  const [confirmRepropose, setConfirmRepropose] = useState(false);
   const [draft, setDraft] = useState("");
   const [overlay, setOverlay] = useState(false);
   // 채팅 창 기하 — 저장값이 없으면 캔버스 크기를 잰 뒤(bounds) 기본 기하로 시작한다
@@ -134,8 +135,15 @@ export function RelationsStep({
     }, SAVE_DEBOUNCE_MS);
   }
 
-  function handlePropose() {
-    onPropose(comment);
+  // 다시 제안 = 리셋(손편집 포함 캔버스를 버리고 카드 기준으로 처음부터). 캔버스가 이미 있으면 확인을 한 번 묻는다.
+  // 부분 수정은 채팅 한 게이트로(사용자 결정 2026-09-24).
+  function handleProposeClick() {
+    if (session.canvas !== null) setConfirmRepropose(true);
+    else propose();
+  }
+  function propose() {
+    setConfirmRepropose(false);
+    onPropose("");
     beginOverlay();
   }
 
@@ -167,14 +175,7 @@ export function RelationsStep({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-body-strong text-ink">{t("fwConsult.stepRelations")}</span>
         <span className="text-fine text-ink-tertiary">{t("fwConsult.relationsHint")}</span>
-        <input
-          className="ml-auto w-56 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink outline-none focus:border-accent"
-          data-id="fw-consult-propose-comment"
-          value={comment}
-          placeholder={t("fwConsult.proposeComment")}
-          onChange={(event) => setComment(event.target.value)}
-        />
-        <AiButton data-id="fw-consult-propose-relations" disabled={busy} onClick={handlePropose}>
+        <AiButton data-id="fw-consult-propose-relations" className="ml-auto" disabled={busy} onClick={handleProposeClick}>
           {t("fwConsult.proposeRelations")}
         </AiButton>
         <button
@@ -238,6 +239,18 @@ export function RelationsStep({
         )}
       </div>
 
+      {confirmRepropose && (
+        <ConfirmDialog
+          dialogId="fw-consult-repropose-confirm"
+          title={t("fwConsult.reproposeTitle")}
+          message={t("fwConsult.reproposeMessage")}
+          confirmLabel={t("fwConsult.proposeRelations")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={propose}
+          onClose={() => setConfirmRepropose(false)}
+        />
+      )}
       {overlay && (
         <div
           className="absolute inset-0 z-[3] flex items-center justify-center gap-2 bg-surface/70 text-caption text-ink-secondary"

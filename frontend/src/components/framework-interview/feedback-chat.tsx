@@ -50,6 +50,12 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
       <div className={`flex flex-col gap-1.5 ${fill ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
         {entries.length === 0 && <div className="text-fine text-ink-tertiary">{t("fwConsult.feedbackEmpty")}</div>}
         {entries.map((entry, i) => (
+          entry.kind === "system" ? (
+            // 서버 이력(다시 제안 등) — 말풍선이 아니라 가운데 한 줄로, 두 경로의 이력이 한 곳에 보이게
+            <div key={i} data-id={`fw-feedback-entry-${i}`} data-kind="system" className="text-center text-fine text-ink-tertiary">
+              {entry.message} · {formatKst(entry.at).split(" ")[1] ?? ""}
+            </div>
+          ) : (
           <div
             key={i}
             data-id={`fw-feedback-entry-${i}`}
@@ -58,6 +64,7 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
             <div className="mb-0.5 text-ink-tertiary">{formatKst(entry.at).split(" ")[1] ?? ""}</div>
             <MarkdownView source={entry.message} className="text-fine" />
           </div>
+          )
         ))}
       </div>
       {locked ? (

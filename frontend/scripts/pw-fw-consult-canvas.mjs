@@ -132,6 +132,14 @@ const nodeCount = await canvas.locator(".react-flow__node").count();
 check("auto proposal drew the canvas", nodeCount >= 4, `${nodeCount} nodes`);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations-canvas.png" });
 
+// [다시 제안]은 리셋이라 캔버스가 있으면 확인을 먼저 묻는다 — 취소하면 캔버스는 그대로(부분 수정은 채팅 한 게이트)
+await page.locator('[data-id="fw-consult-propose-relations"]').click();
+const reproposeAsked = await page.locator('[data-id="fw-consult-repropose-confirm"]').waitFor({ timeout: 3000 }).then(() => true).catch(() => false);
+check("propose again asks for confirmation when a canvas exists", reproposeAsked);
+await page.locator('[data-id="confirm-dialog-cancel"]').click();
+check("cancelling keeps the canvas", (await canvas.locator(".react-flow__node").count()) === nodeCount);
+check("the memo box next to the propose button is gone", (await page.locator('[data-id="fw-consult-propose-comment"]').count()) === 0);
+
 // ① 피드백 → 가짜 AI가 첫 subprocess→subprocess 엣지를 뒤집는다.
 // 분기 노드를 끼우기 전에 확인한다 — 분기가 들어가면 그 직결 엣지가 사라져 뒤집을 대상이 없다.
 const beforeEdges = (await readCanvas(sessionId)).edges.map((e) => `${e.source_node_id}>${e.target_node_id}`);

@@ -285,8 +285,8 @@ def test_answers_validation_and_full_flow_to_document(client: TestClient, monkey
     early = client.post(f"/api/framework-interviews/{sid}/tasks/{t1['id']}/answers", json={"answers": {}}, headers=HEADERS)
     assert early.status_code == 409  # questionnaire not ready yet
 
-    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON,
-                                 RELATIONS_TMPL % (t1["task_id"], t1["task_id"], t2["task_id"])])
+    relations_json = RELATIONS_TMPL % (t1["task_id"], t1["task_id"], t2["task_id"])
+    _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON, relations_json, relations_json])  # 두 번째는 다시 제안
     _step(sid)
     _step(sid)
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
@@ -309,6 +309,11 @@ def test_answers_validation_and_full_flow_to_document(client: TestClient, monkey
 
     linked = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).json()
     assert linked["status"] == "linking" and linked["relations"]["entry"]["taskId"] == t1["task_id"]
+    assert linked["feedback_log"] == []  # 첫 제안은 리셋이 아니라 이력을 남기지 않는다
+    # 다시 제안 = 캔버스 리셋 — 채팅 이력에 system 항목 한 줄
+    again = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).json()
+    system_entries = [e for e in again["feedback_log"] if e.get("kind") == "system"]
+    assert len(system_entries) == 1 and system_entries[0]["scope"] == "relations" and system_entries[0]["task_pk"] is None
 
     confirmed = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS,
                            json={"relations": linked["relations"]})

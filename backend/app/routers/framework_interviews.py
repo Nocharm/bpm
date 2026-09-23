@@ -550,9 +550,15 @@ async def generate_relations(
     known = {t.task_id: t.name for t in sorted(row.tasks, key=lambda t: t.seq)}
     # 미지의 taskId·이름 참조는 정규화가 해석하거나 버린다 — 502 대신 부분 결과를 편집 표로 넘긴다
     out = await _ask(messages, RelationsOut, db, user, normalizer=lambda raw: normalize_relations(raw, known))
+    reproposed = row.canvas is not None  # 이미 캔버스가 있었다면 리셋 — 채팅 이력에 한 줄 남겨 두 경로가 한 곳에 보이게
     row.relations = out.model_dump(by_alias=True, exclude_none=True)
     row.canvas = expand_relations_to_canvas(row.relations, _ordered_tasks(row))
     row.status = "linking"
+    if reproposed:
+        log = list(row.feedback_log or [])
+        log.append({"scope": "relations", "task_pk": None, "kind": "system", "at": now_kst().isoformat(),
+                    "message": "처음부터 다시 제안" if row.lang == "ko" else "Proposed again from scratch"})
+        row.feedback_log = log[-10:]
     await db.commit()
     return await _out(db, row)
 
