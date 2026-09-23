@@ -234,6 +234,7 @@ CANVAS_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니�
 - 새 분기 노드 id는 `__branch__` 접두, node_type은 decision, task_id는 null.
 - start/end는 유지(id는 __start__·__end__ 그대로).
 - 엣지 label은 갈림·되돌아감의 조건 한 줄(없으면 빈 문자열), gateway는 필요할 때만 exclusive·parallel.
+- 이미 있는 엣지의 gateway는 피드백이 바꾸라고 하지 않으면 그대로 다시 적으세요.
 - 좌표는 0으로 두어도 됨(서버가 다시 배치).
 - 다른 설명 없이 같은 형식의 JSON 한 개만:
 {"nodes":[{"id":"__start__","node_type":"start","title":"Start","task_id":null,"pos_x":0,"pos_y":0}],"edges":[{"id":"e1","source_node_id":"__start__","target_node_id":"","label":""}]}"""

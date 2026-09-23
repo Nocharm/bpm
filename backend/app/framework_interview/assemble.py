@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clock import now as now_kst
+from app.framework_interview.contracts import RowOut
 from app.framework_interview.existing import load_existing_l6
 from app.models import FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory, ProcessMap
 
@@ -73,6 +74,17 @@ def build_document(
     if relations:
         doc["relations"] = relations
     return doc
+
+
+def finalize_row_output(out: RowOut, card: dict) -> dict:
+    """RowOut → 저장용 rows[] 원소. 드로잉(runner)과 피드백 라우트가 같이 쓰는 마감 규칙.
+
+    한쪽만 부서를 메우면 피드백 한 번에 부서가 조용히 지워진다(어댑터는 부서를 요구하지 않는다).
+    """
+    row = out.model_dump(by_alias=True, exclude_none=True)
+    row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
+    row["department"] = row.get("department") or str(card.get("department") or "")
+    return row
 
 
 def validate_row(chain: list[dict], l5: dict, row: dict) -> list[dict]:

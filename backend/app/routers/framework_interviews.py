@@ -19,7 +19,8 @@ from app.framework_interview import runner
 from app.framework_interview.ai import ask_schema
 from app.framework_interview.answers import fill_answers
 from app.framework_interview.assemble import (
-    allocate_task_ids, assemble_document, load_category_chain, load_existing_codes, validate_row,
+    allocate_task_ids, assemble_document, finalize_row_output, load_category_chain,
+    load_existing_codes, validate_row,
 )
 from app.framework_interview.canvas import (
     collapse_canvas_to_relations, expand_relations_to_canvas, relayout_canvas, validate_canvas,
@@ -630,10 +631,12 @@ async def feedback_session(
         canvas = out.to_canvas()
         errors = validate_canvas(canvas, known)
         if errors:
-            # 두 scope가 같은 모양으로 실패한다 — 행 경로의 오류 이슈 목록과 같은 문자열 배열
-            raise HTTPException(status_code=422, detail=errors)
-        # 모델은 좌표를 0으로 둔다(계약) — 저장 전에 LR 배치를 다시 돌려 자리를 준다
-        row.canvas = relayout_canvas(canvas)
+            await db.commit()  # 청구된 AI 호출은 422로 끝나도 계량을 남긴다(_ask가 담아 둔 이벤트)
+            raise HTTPException(status_code=422, detail={"errors": errors})
+        # 노드 구성이 그대로면(엣지·이름만 고친 피드백) 잡아 둔 배치를 지키고, 추가·삭제가 있을 때만 다시 배치한다
+        if {n["id"] for n in canvas["nodes"]} != {str(n.get("id")) for n in base.get("nodes") or []}:
+            canvas = relayout_canvas(canvas)
+        row.canvas = canvas
     else:
         if payload.task_pk is None:
             raise HTTPException(status_code=422, detail="task_pk required")
@@ -645,13 +648,15 @@ async def feedback_session(
             overrides=await get_prompt_overrides(db),
         )
         out = await _ask(messages, RowOut, db, user, normalizer=normalize_row)
-        new_row = out.model_dump(by_alias=True, exclude_none=True)
-        new_row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
+        card = next((c for c in row.plan or [] if c.get("task_id") == task.task_id), {})
+        new_row = finalize_row_output(out, card)
         chain = await load_category_chain(db, row.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
         issues = validate_row(chain, l5, {"taskId": task.task_id, **new_row})
         if any(i["severity"] == "error" for i in issues):
-            raise HTTPException(status_code=422, detail=[i["message"] for i in issues if i["severity"] == "error"])
+            await db.commit()  # 청구된 AI 호출은 422로 끝나도 계량을 남긴다(_ask가 담아 둔 이벤트)
+            raise HTTPException(status_code=422, detail={
+                "errors": [i["message"] for i in issues if i["severity"] == "error"]})
         task.row, task.issues, task.drawn_at = new_row, issues, now_kst()
         if row.status == "ready":
             # 행이 바뀌면 조립본이 낡는다 — reopen-relations와 같이 연결 단계로 되돌린다

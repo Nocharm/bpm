@@ -426,7 +426,9 @@ def test_feedback_relations_rewrites_canvas_and_task_redraws_row(client: TestCli
     monkeypatch.setattr(runner, "kick", lambda session_id: None)
     l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
     sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
-    cards = [{"name": n, "summary": "", "owner_role": "", "department": "", "depends_on": []} for n in ["A", "B"]]
+    # A 카드에만 부서를 둔다 — AI가 빈 부서를 돌려줘도 피드백이 그 값을 지우지 않는지 본다
+    cards = [{"name": n, "summary": "", "owner_role": "", "department": d, "depends_on": []}
+             for n, d in (("A", "품질팀"), ("B", ""))]
     t1, t2 = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()["tasks"]
     a, b = t1["task_id"], t2["task_id"]
     _fake_ai_queue(monkeypatch, [Q_JSON, Q_JSON, ROW_JSON, ROW_JSON, RELATIONS_TMPL % (a, a, b),
@@ -439,25 +441,36 @@ def test_feedback_relations_rewrites_canvas_and_task_redraws_row(client: TestCli
         client.post(f"/api/framework-interviews/{sid}/tasks/{tid}/answers", json={"answers": full}, headers=HEADERS)
     _step(sid)
     _step(sid)
-    client.post(f"/api/framework-interviews/{sid}/relations", json={}, headers=HEADERS)
+    proposed = client.post(f"/api/framework-interviews/{sid}/relations", json={}, headers=HEADERS).json()
+    base_pos = {n["id"]: (n["pos_x"], n["pos_y"]) for n in proposed["canvas"]["nodes"]}
 
     fb = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "relations", "message": "B를 먼저"}, headers=HEADERS)
     assert fb.status_code == 200, fb.text
     edges = {(e["source_node_id"], e["target_node_id"]) for e in fb.json()["canvas"]["edges"]}
     assert (b, a) in edges and ("__start__", b) in edges
     assert all("gateway" not in e for e in fb.json()["canvas"]["edges"])  # 값 없는 gateway는 빼고 저장
-    # 모델이 0으로 보낸 좌표는 서버가 다시 배치한다(rank별 x가 벌어진다)
-    assert len({n["pos_x"] for n in fb.json()["canvas"]["nodes"]}) == 4
+    # 노드 구성이 그대로면 배치는 건드리지 않는다(모델이 0으로 보낸 좌표는 base 값으로 되돌아간다)
+    assert {n["id"]: (n["pos_x"], n["pos_y"]) for n in fb.json()["canvas"]["nodes"]} == base_pos
     assert fb.json()["feedback_log"][-1]["scope"] == "relations"
 
     fb2 = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
     assert fb2.status_code == 200, fb2.text
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
     assert detail["row"]["l6"] == "요청 접수(수정)" and detail["status"] == "drawn"
+    assert detail["row"]["department"] == "품질팀"  # AI가 빈 부서를 줘도 카드 값이 남는다
     assert len(fb2.json()["feedback_log"]) == 2
 
     bad = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "message": "x"}, headers=HEADERS)
     assert bad.status_code == 422
+
+    # 기록은 최근 10건만 — 세션 페이로드가 무한히 자라지 않게(앞선 2건은 밀려난다)
+    _fake_ai_queue(monkeypatch, [CANVAS_FEEDBACK_TMPL % (b, b, a, a, b, b, a, a)] * 11)
+    for i in range(11):
+        more = client.post(f"/api/framework-interviews/{sid}/feedback",
+                           json={"scope": "relations", "message": f"f{i}"}, headers=HEADERS)
+        assert more.status_code == 200, more.text
+    log = more.json()["feedback_log"]
+    assert [e["message"] for e in log] == [f"f{i}" for i in range(1, 11)]
 
 
 def test_pause_resume_roundtrip(client: TestClient, monkeypatch) -> None:

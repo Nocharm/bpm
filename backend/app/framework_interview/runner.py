@@ -18,7 +18,7 @@ from app.app_settings import get_assignee_roles, get_systems, is_ai_access_enabl
 from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.framework_interview.ai import ask_schema
-from app.framework_interview.assemble import load_category_chain, validate_row
+from app.framework_interview.assemble import finalize_row_output, load_category_chain, validate_row
 from app.framework_interview.contracts import (
     QuestionnaireOut, RowOut, build_context_text, build_questionnaire_messages, build_row_messages,
     format_managed_catalog,
@@ -158,9 +158,7 @@ async def _draw_row(db: AsyncSession, session: FrameworkInterviewSession, task: 
     token = usage_log.set(usage)
     try:
         out = await ask_schema(messages, RowOut, normalizer=normalize_row, reasoning=None)
-        row = out.model_dump(by_alias=True, exclude_none=True)
-        row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
-        row["department"] = row.get("department") or card.get("department", "")
+        row = finalize_row_output(out, card)
         chain = await load_category_chain(db, session.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
         issues = validate_row(chain, l5, {"taskId": task.task_id, **row})

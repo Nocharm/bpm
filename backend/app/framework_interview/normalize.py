@@ -83,7 +83,7 @@ def _first_dict(raw: Any, list_key: str) -> dict:
         return {list_key: raw}
     if not isinstance(raw, dict):
         return {}
-    for wrapper in ("data", "result", "response", "output"):
+    for wrapper in ("data", "result", "response", "output", "canvas"):
         inner = raw.get(wrapper)
         if isinstance(inner, dict) and list_key in inner:
             return inner
@@ -292,7 +292,7 @@ def normalize_canvas(raw: Any, base: dict, known: set[str]) -> dict:
 
     모델은 id·task_id를 바꾸지 못한다: base에 있던 노드는 종류·task_id·좌표를 base 값으로 되돌리고,
     빠뜨린 subprocess/start/end는 base에서 보충한다. 새 노드는 `__branch__` 접두 분기 노드만 받고
-    엣지는 양 끝이 남은 노드일 때만 살린다(쌍은 유일).
+    엣지는 양 끝이 남은 노드일 때만 살린다(쌍은 유일). 같은 쌍의 gateway를 모델이 빠뜨리면 base 값을 잇는다.
     """
     body = _first_dict(raw, "nodes")
     base_nodes = [n for n in (base.get("nodes") or []) if isinstance(n, dict)]
@@ -345,6 +345,10 @@ def normalize_canvas(raw: Any, base: dict, known: set[str]) -> dict:
             nodes.append({"id": node_id, "node_type": node_type, "title": title,
                           "task_id": None, "pos_x": 0.0, "pos_y": 0.0})
 
+    base_edges = {
+        (str(e.get("source_node_id") or ""), str(e.get("target_node_id") or "")): e
+        for e in (base.get("edges") or []) if isinstance(e, dict)
+    }
     edges: list[dict] = []
     seen_pairs: set[tuple[str, str]] = set()
     for item in body.get("edges") if isinstance(body.get("edges"), list) else []:
@@ -361,6 +365,10 @@ def normalize_canvas(raw: Any, base: dict, known: set[str]) -> dict:
             "label": _text(item.get("label") or item.get("condition")),
         }
         gateway = _lower(item.get("gateway"))
+        if gateway not in GATEWAYS:
+            # 모델이 안 실어 보낸 gateway는 base 값을 이어받는다 — 전부 parallel인 팬아웃은 분기 노드 없이
+            # 직결로 펴지므로, 라벨만 고치는 피드백에 표시가 빠지면 확정 게이트 6(plain_fanout 예외)이 무너진다
+            gateway = _lower((base_edges.get((source, target)) or {}).get("gateway"))
         if gateway in GATEWAYS:
             edge["gateway"] = gateway
         edges.append(edge)
