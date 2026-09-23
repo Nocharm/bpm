@@ -54,6 +54,8 @@ await page.waitForFunction(() => document.querySelector('[data-id="fw-consult-ta
 const stayed = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
 check("selected card stays open after submit", stayed.includes("결과 통보"), stayed.trim());
 await page.locator('[data-id="fw-consult-task-close"]').click();
+// 닫기 후 패널이 다시 붙을 때까지 기다린다 — 리마운트 중에 읽으면 빈 문자열이 잡힌다
+await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().waitFor({ timeout: 10000 });
 const backTo = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
 check("close falls back to the first ready card", backTo.includes("요청 접수"), backTo.trim());
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-pick-card.png" });

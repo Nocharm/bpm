@@ -18,12 +18,17 @@ export const SECTION_LABEL_KEYS: Record<FwQuestionSection, MessageKey> = {
   io: "fwConsult.sectionIo",
 };
 
-/** 문항을 섹션별로 묶는다 — 순서는 SECTION_ORDER, 문항이 없는 섹션은 생략. */
+/**
+ * 문항을 섹션별로 묶는다 — 순서는 SECTION_ORDER, 문항이 없는 섹션은 생략.
+ * 목록에 없거나 빠진 section은 basic으로 떨어뜨린다(서버 `normalize_questionnaire`의 기본값과 동치) —
+ * 그냥 걸러내면 그 문항이 화면에서 조용히 사라져 답 없이 제출된다.
+ */
 export function groupQuestionsBySection(
   questions: FwQuestion[],
 ): { section: FwQuestionSection; questions: FwQuestion[] }[] {
+  const sectionOf = (q: FwQuestion): FwQuestionSection => (SECTION_ORDER.includes(q.section) ? q.section : "basic");
   return SECTION_ORDER
-    .map((section) => ({ section, questions: questions.filter((q) => q.section === section) }))
+    .map((section) => ({ section, questions: questions.filter((q) => sectionOf(q) === section) }))
     .filter((group) => group.questions.length > 0);
 }
 

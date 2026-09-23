@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FwInterviewSession, FwQuestionnaire, FwQuestionSection, FwSessionStatus } from "./api";
+import type { FwInterviewSession, FwQuestion, FwQuestionnaire, FwQuestionSection, FwSessionStatus } from "./api";
 import {
   buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, groupQuestionsBySection,
   hasBackgroundWork, hasBlockingDuplicate, validateAnswers,
@@ -43,6 +43,13 @@ describe("framework-interview view model", () => {
     const groups = groupQuestionsBySection([q("a", "io"), q("b", "basic"), q("c", "activities"), q("d", "basic")]);
     expect(groups.map((g) => g.section)).toEqual(["basic", "activities", "io"]);
     expect(groups[0].questions.map((x) => x.id)).toEqual(["b", "d"]);
+  });
+
+  it("groupQuestionsBySection drops an unknown or missing section into basic", () => {
+    const q = (id: string, section: unknown) => ({ id, kind: "text" as const, maps_to: "conditions" as const, text: id, options: [], suggested: "", section }) as FwQuestion;
+    const groups = groupQuestionsBySection([q("a", "io"), q("b", "weird"), q("c", undefined)]);
+    expect(groups.map((g) => g.section)).toEqual(["basic", "io"]);
+    expect(groups[0].questions.map((x) => x.id)).toEqual(["b", "c"]);
   });
 
   it("findCurrentTask picks the lowest seq that is not yet submitted", () => {

@@ -97,7 +97,12 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
               tabIndex={0}
               title={title}
               onClick={activate}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } }}
+              // 행 안의 버튼(재시도·건너뛰기·정정·미리보기)에서 올라온 키는 무시 — 그 버튼의 Enter가 행 선택까지
+              // 일으키거나 Space가 preventDefault로 삼켜지지 않게 한다(click은 버튼이 stopPropagation).
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+              }}
               className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 hover:bg-surface-alt ${isCurrent ? "border-accent bg-surface" : "border-hairline bg-surface"}`}
             >
               <span className="w-5 text-fine text-ink-tertiary tabular-nums">{task.seq}</span>

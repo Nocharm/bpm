@@ -3,7 +3,7 @@
 // 캠페인 L6 카드 패널 — 보드의 어느 행을 눌러도 그 카드를 상태별로 연다: 준비 중 링 · 설문 폼 · 제출 답+드로잉 링 ·
 // 완성 행(답+흐름 미리보기+피드백 채팅) · 실패 재시도/건너뛰기. [닫기]는 자동 흐름으로 돌아간다 (spec 2026-09-23 §4.3 B9).
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, RotateCcw, SkipForward, X } from "lucide-react";
 
 import {
@@ -29,7 +29,9 @@ interface TaskPanelProps {
   onFeedback: (taskPk: number, message: string) => void;
   onRetry: (taskPk: number) => void;
   onSkip: (taskPk: number) => void;
-  onClose: () => void;  // 선택 해제 → 자동 흐름(deriveStep)으로 복귀
+  // 보드에서 고른 카드일 때만 온다 — 선택 해제 → 자동 흐름(deriveStep)으로 복귀.
+  // 자동 흐름이 띄운 패널엔 풀 선택이 없어(닫아도 그 자리) 닫기 버튼 자체를 내지 않는다.
+  onClose?: () => void;
 }
 
 export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, onSkip, onClose }: TaskPanelProps) {
@@ -63,7 +65,12 @@ export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, 
   const submittedAnswers: Record<string, FwAnswerValue> = detail?.answers
     ? Object.fromEntries(Object.entries(detail.answers).map(([qid, entry]) => [qid, entry.value]))
     : {};
-  const previewSource = detail?.row ? { taskId: task.task_id, ...detail.row } : null;
+  // 미리보기 source는 참조 동일성을 지켜야 한다 — ImportMapPreview가 source로 메모하고 그래프가 바뀔 때
+  // Start 노드로 스크롤을 되돌리므로, 매 렌더 새 객체면 2초 폴링마다 사용자가 잡은 화면이 튄다.
+  const previewSource = useMemo(
+    () => (detail?.row ? { taskId: task.task_id, ...detail.row } : null),
+    [detail, task.task_id],
+  );
   const answering = task.status === "ready" && questionnaire !== null;
 
   function handleReview() {
@@ -93,16 +100,18 @@ export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, 
             {t("fwConsult.fillAll")}
           </AiButton>
         )}
-        <button
-          type="button"
-          data-id="fw-consult-task-close"
-          title={t("fwConsult.panelClose")}
-          aria-label={t("fwConsult.panelClose")}
-          className="shrink-0 rounded-sm p-1 text-ink-secondary hover:bg-surface-alt"
-          onClick={onClose}
-        >
-          <X size={16} strokeWidth={1.5} />
-        </button>
+        {onClose && (
+          <button
+            type="button"
+            data-id="fw-consult-task-close"
+            title={t("fwConsult.panelClose")}
+            aria-label={t("fwConsult.panelClose")}
+            className="shrink-0 rounded-sm p-1 text-ink-secondary hover:bg-surface-alt"
+            onClick={onClose}
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
 
       {(task.status === "pending" || task.status === "generating") && (
@@ -143,7 +152,8 @@ export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, 
 
       {(task.status === "submitted" || task.status === "drawing") && (
         <div className="flex flex-col gap-3" data-id="fw-consult-task-submitted">
-          {questionnaire && <AnswerReview questionnaire={questionnaire} answers={submittedAnswers} />}
+          {/* 답은 상세가 도착한 뒤에만 — 빈 answers로 그리면 제출 직후 한 틱 동안 "제안 적용" 배지만 번쩍인다 */}
+          {questionnaire && detail?.answers && <AnswerReview questionnaire={questionnaire} answers={submittedAnswers} />}
           <div className="flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface-pearl px-3 py-3" data-id="fw-consult-task-drawing">
             <Loader2 size={16} strokeWidth={1.5} className="animate-spin text-accent" />
             <span className="text-caption text-ink-secondary">{t("fwConsult.panelDrawing")}</span>
@@ -153,8 +163,9 @@ export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, 
 
       {task.status === "drawn" && (
         <div className="flex flex-col gap-3" data-id="fw-consult-task-drawn">
+          {/* 임베드라 항상 펼쳐져 있다 — hideClose라 onClose는 호출되지 않는다(필수 prop이라 no-op) */}
           {previewSource && (
-            <ImportMapPreview source={previewSource} scope="map" dataId="fw-consult-task-panel-canvas" onClose={onClose} hideClose />
+            <ImportMapPreview source={previewSource} scope="map" dataId="fw-consult-task-panel-canvas" onClose={() => undefined} hideClose />
           )}
           {questionnaire && <AnswerReview questionnaire={questionnaire} answers={submittedAnswers} />}
           <FeedbackChat

@@ -252,7 +252,8 @@ export default function FrameworkConsultPage() {
                 void run(() => sendFrameworkFeedback(session.id, { scope: "task", task_pk: taskPk, message }))}
               onRetry={(taskPk: number) => void run(() => retryFrameworkTask(session.id, taskPk))}
               onSkip={(taskPk: number) => void run(() => skipFrameworkTask(session.id, taskPk))}
-              onClose={() => setSelectedTaskId(null)}
+              // 보드에서 고른 카드에만 닫기 — 자동 흐름이 띄운 패널은 풀 선택이 없어 닫아도 그 자리다
+              onClose={selectedTask ? () => setSelectedTaskId(null) : undefined}
             />
           )}
           {!panelTask && (step === "answer" || step === "waiting") && (
