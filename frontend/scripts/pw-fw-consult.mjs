@@ -85,11 +85,11 @@ while (await page.locator('[data-id="fw-consult-questions"]').isVisible().catch(
 
 await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 60000 });
 check("relations step reached", true);
-await page.locator('[data-id="fw-consult-propose-relations"]').click();
-await page.locator('[data-id="fw-consult-edge-0"]').waitFor({ timeout: 20000 });
+// 연결 단계는 진입 즉시 자동 제안 — 버튼을 누르지 않고 캔버스 엣지가 그려지길 기다린다
+// 수평 엣지는 bbox 높이가 0이라 visible 판정이 안 된다 — attached로 기다린다
+await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__edge').first().waitFor({ state: "attached", timeout: 30000 });
 check("relations proposed", true);
-await page.locator('[data-id="fw-consult-relations-preview"] svg').first().waitFor({ timeout: 20000 });
-check("L5 preview rendered", true);
+check("canvas nodes rendered", (await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__node').count()) >= 4);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor();

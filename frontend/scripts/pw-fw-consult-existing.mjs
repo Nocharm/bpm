@@ -127,8 +127,9 @@ check("revise task drawn after one questionnaire", true);
 
 // 연결 → 등록
 await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 60000 });
-await page.locator('[data-id="fw-consult-propose-relations"]').click();
-await page.locator('[data-id="fw-consult-edge-0"]').waitFor({ timeout: 30000 });
+// 연결 단계는 진입 즉시 자동 제안 — 캔버스 엣지가 그려지길 기다린다
+// 수평 엣지는 bbox 높이가 0이라 visible 판정이 안 된다 — attached로 기다린다
+await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__edge').first().waitFor({ state: "attached", timeout: 30000 });
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor({ timeout: 20000 });
 await page.locator('[data-id="fw-consult-dryrun"]').click();

@@ -12,7 +12,7 @@ import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
   getApiErrorDetail, getFrameworkInterview, markFrameworkInterviewApplied, pauseFrameworkInterview,
   deleteFrameworkAttachment, reopenFrameworkRelations, reopenFrameworkTask, resumeFrameworkInterview, retryFrameworkTask,
-  reviseFrameworkTask, saveFrameworkPlan, skipFrameworkTask,
+  reviseFrameworkTask, saveFrameworkCanvas, saveFrameworkPlan, sendFrameworkFeedback, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
   type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
@@ -238,11 +238,15 @@ export default function FrameworkConsultPage() {
           )}
           {step === "relations" && (
             <RelationsStep
-              key={JSON.stringify(session.relations ?? null)}
+              // 캔버스 내용이 바뀔 때만 리마운트 — 자동 제안·피드백 결과를 편집 상태에 반영한다.
+              // 디바운스 저장(onSaveCanvas)은 session을 갱신하지 않아 편집 중엔 리마운트가 없다.
+              key={JSON.stringify(session.canvas ?? session.relations ?? null)}
               session={session}
               busy={busy}
-              onPropose={() => void run(() => generateFrameworkRelations(session.id))}
-              onConfirm={(relations) => void run(() => confirmFrameworkRelations(session.id, { relations }))}
+              onPropose={(comment) => void run(() => generateFrameworkRelations(session.id, comment))}
+              onSaveCanvas={(canvas) => void saveFrameworkCanvas(session.id, canvas).catch((err) => setError(getApiErrorDetail(err)))}
+              onConfirm={(canvas) => void run(() => confirmFrameworkRelations(session.id, { canvas }))}
+              onFeedback={(message) => void run(() => sendFrameworkFeedback(session.id, { scope: "relations", message }))}
               onPreviewTask={setPreviewTaskId}
               onReopenTask={(taskPk) => {
                 setSelectedTaskId(taskPk);  // 다시 연 카드로 바로 이동
