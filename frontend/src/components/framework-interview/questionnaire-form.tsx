@@ -1,7 +1,7 @@
 "use client";
 
-// 캠페인 ② L6 설문 단계 — 문항 렌더(2열 그리드·객관식 위주·제안 선택됨·주관식은 버튼으로 열어 입력)·제안 일괄 채우기·
-// 확인 화면 전환·제출. 제출 후 카드는 잠기고 백그라운드 드로잉으로 넘어간다 (spec 2026-09-21 §2·§4).
+// 캠페인 ② L6 설문 단계 — 문항 렌더(2열 그리드·객관식 위주·제안 선택됨·주관식은 빈칸에서 [AI 제안]이 타이핑으로 채우고 blur로 확정)·
+// 제안 일괄 채우기·확인 화면 전환·제출. 제출 후 카드는 잠기고 백그라운드 드로잉으로 넘어간다 (spec 2026-09-21 §2·§4, 2026-09-23 §3 B10).
 
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Loader2, PenLine } from "lucide-react";
@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, Loader2, PenLine } from "lucide-react";
 import { getApiErrorDetail, getFrameworkInterviewTask, type FwAnswerValue, type FwInterviewSession, type FwInterviewTask, type FwQuestionnaire } from "@/lib/api";
 import { buildSubmitPayload, fillSuggested, validateAnswers } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
+import { useTypewriter } from "@/lib/typewriter";
 import { AiButton } from "@/components/ai-button";
 import { CheckInput } from "@/components/check-input";
 import { AnswerReview } from "@/components/framework-interview/answer-review";
@@ -25,8 +26,6 @@ interface QuestionnaireFormProps {
 
 export function QuestionnaireForm({ questionnaire, answers, missing, onChange }: QuestionnaireFormProps) {
   const { t } = useI18n();
-  // 주관식은 기본이 "제안값 그대로" — 직접 쓰고 싶을 때만 버튼으로 입력창을 연다(입력 안 해도 되는 흐름이 기본, 사용자 결정 2026-09-21).
-  const [openText, setOpenText] = useState<Set<string>>(() => new Set());
   return (
     <ol className="grid grid-cols-1 gap-3 xl:grid-cols-2" data-id="fw-consult-questions">
       {questionnaire.questions.map((q, idx) => {
@@ -34,51 +33,18 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
         const isMissing = missing.includes(q.id);
         const list = Array.isArray(value) ? value : [];
         const textValue = typeof value === "string" ? value : "";
-        const textOpen = q.kind === "text" && (openText.has(q.id) || textValue !== "");
         // 활동 순서 문항은 길어서 2열에서도 전폭
         const span = q.kind === "ordered" ? " xl:col-span-2" : "";
         return (
           <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 ${isMissing ? "border-error" : "border-hairline"} bg-surface-pearl${span}`}>
             <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{idx + 1}. </span>{q.text}</p>
-            {q.kind === "text" && !textOpen && (
-              <div className="flex items-start gap-2">
-                <p className="min-w-0 flex-1 text-caption text-ink-secondary" data-id={`fw-consult-suggested-${q.id}`}>
-                  <span className="mr-1 rounded-full border border-hairline px-1.5 py-[1px] text-[11px] leading-none text-ink-tertiary">{t("fwConsult.suggestedLabel")}</span>
-                  {typeof q.suggested === "string" ? q.suggested : ""}
-                </p>
-                <button
-                  type="button"
-                  data-id={`fw-consult-write-own-${q.id}`}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
-                  onClick={() => setOpenText((prev) => new Set(prev).add(q.id))}
-                >
-                  <PenLine size={14} strokeWidth={1.5} />
-                  {t("fwConsult.writeOwn")}
-                </button>
-              </div>
-            )}
-            {q.kind === "text" && textOpen && (
-              <div className="flex flex-col gap-1.5">
-                <textarea
-                  data-id={`fw-consult-answer-${q.id}`}
-                  autoFocus
-                  className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
-                  value={textValue}
-                  placeholder={t("fwConsult.textPlaceholder", { suggested: typeof q.suggested === "string" ? q.suggested : "" })}
-                  onChange={(e) => onChange(q.id, e.target.value)}
-                />
-                <button
-                  type="button"
-                  data-id={`fw-consult-use-suggestion-${q.id}`}
-                  className="self-start rounded-sm px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
-                  onClick={() => {
-                    onChange(q.id, "");
-                    setOpenText((prev) => { const next = new Set(prev); next.delete(q.id); return next; });
-                  }}
-                >
-                  {t("fwConsult.useSuggestion")}
-                </button>
-              </div>
+            {q.kind === "text" && (
+              <TextAnswer
+                qid={q.id}
+                value={textValue}
+                suggested={typeof q.suggested === "string" ? q.suggested : ""}
+                onChange={(v) => onChange(q.id, v)}
+              />
             )}
             {q.kind === "single" && (
               <div className="flex flex-wrap gap-2">
@@ -128,6 +94,61 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
         );
       })}
     </ol>
+  );
+}
+
+// 주관식 한 칸 — 빈 textarea에서 시작, [AI 제안]이 제안값을 타이핑으로 채우고, blur로 확정(텍스트 뷰), hover 연필로 재편집.
+// 빈칸 제출은 여전히 허용(서버가 제안값 적용) — 여기서는 보여주지 않을 뿐이다.
+function TextAnswer({ qid, value, suggested, onChange }: { qid: string; value: string; suggested: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
+  const { typeInto } = useTypewriter();
+  const [editing, setEditing] = useState(() => value === "");
+  const [typing, setTyping] = useState(false);
+  const committed = !editing && value !== "";
+  return (
+    <div className="group flex items-start gap-2">
+      {committed ? (
+        <p className="min-w-0 flex-1 whitespace-pre-wrap text-caption text-ink" data-id={`fw-consult-answer-view-${qid}`}>{value}</p>
+      ) : (
+        <textarea
+          data-id={`fw-consult-answer-${qid}`}
+          autoFocus={editing && value !== ""}
+          readOnly={typing}
+          className="min-h-16 w-full min-w-0 flex-1 rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => { if (value.trim() !== "") setEditing(false); }}
+        />
+      )}
+      {committed ? (
+        <button
+          type="button"
+          data-id={`fw-consult-edit-answer-${qid}`}
+          title={t("fwConsult.editAnswer")}
+          aria-label={t("fwConsult.editAnswer")}
+          className="shrink-0 rounded-sm p-1 text-ink-secondary opacity-0 transition-opacity duration-150 hover:bg-surface-alt focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={() => setEditing(true)}
+        >
+          <PenLine size={14} strokeWidth={1.5} />
+        </button>
+      ) : (
+        <AiButton
+          variant="inline"
+          data-id={`fw-consult-ai-suggest-${qid}`}
+          disabled={typing || suggested === ""}
+          className="shrink-0"
+          onClick={() => {
+            setTyping(true);
+            typeInto(suggested, onChange, () => {
+              setTyping(false);
+              setEditing(false);
+            });
+          }}
+        >
+          {t("fwConsult.aiSuggest")}
+        </AiButton>
+      )}
+    </div>
   );
 }
 
