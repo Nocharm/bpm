@@ -9,6 +9,7 @@
 - **세션 `category_path_ids`(dev, 09-23):** `FrameworkInterviewOut`에 root→self 조상 id 체인을 실어 관리 패널 타일이 서브트리 진행 세션 수를 클라이언트에서 집계한다. FE `FwInterviewSession` 타입 동기.
 - **레벨 타일 순수 계산(dev, 09-23):** `lib/fw-level-actions.ts` — 서브트리 세션 수(`countSessionsUnder`, path_ids 포함 여부)·형제 이름 중복(`findDuplicateSibling`, trim 정확 일치)·L5의 진행 세션(`findSessionFor`). vitest 3건.
 - **레벨별 타일 액션(dev, 09-23):** 상세 패널 AI L5 블록(이름 인풋+생성·시작·세션 드롭다운이 상시 렌더, 레벨 안 맞으면 disabled)을 `components/admin/fw-level-actions.tsx`로 교체 — L1~3 선택 시 하위 노드를 2열 타일(LevelPill+이름+서브트리 진행 세션 배지, 2행 반 넘으면 페이드+"+N")로 보여 클릭하면 선택 이동·트리 펼침·스크롤(좌우 싱크), L4는 "L5 만들고 AI로 시작" 타일 → `PromptDialog`(형제 이름 중복이면 인라인 error·확인 비활성·Enter 차단, `onChange` prop 신설), L5는 진행 세션 유무로 "AI로 작업"/"AI 세션 이어서(진행률)". 세션 드롭다운 포털·`SESSIONS_*`·`isL4/isL5/resumeSession` 제거. 선택 L1~3의 자식은 effect가 트리와 같은 Map에 미리 받는다(로딩은 Map 부재로 파생). AI 타일은 `AI_TILE` 그라데이션 상수(스프린트 ③ AiButton으로 교체 예정).
+- **인터뷰 JSON 섹션 분리(dev, 09-23):** 상세 패널 하단 [인터뷰 임포트] 버튼을 독립 카드 `interview-import-section`(제목 줄 + [파일 선택(outline)] [외부 AI 프롬프트 복사(accent tint)] 한 행)으로. `InterviewJsonPromptButton`에 `tone`·`onCopied` prop을 더해 복사 성공 시 라벨 전환과 함께 토스트를 띄운다(캠페인 헤더는 outline 그대로).
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ① 비교·L5 캔버스
 

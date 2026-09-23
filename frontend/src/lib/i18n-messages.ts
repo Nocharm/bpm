@@ -2506,6 +2506,8 @@ const en = {
   "framework.interviewLinkage": "Linkage canvas",
   // ── AI consultant L5 campaign (spec 2026-09-21) ──
   "fwConsult.copyPrompt": "Copy external AI prompt",
+  "fwConsult.promptCopiedToast": "External AI prompt copied to clipboard",
+  "framework.interviewSectionTitle": "Interview JSON",
   "fwConsult.copyPromptHint": "Paste into an external AI with your documents. It returns interview JSON 0.5 for this L5.",
   "fwConsult.promptCopied": "Copied",
   "fwConsult.promptCopyFailed": "Copy failed",
@@ -5308,6 +5310,8 @@ const ko: Record<MessageKey, string> = {
   "framework.interviewLinkage": "연계 캔버스",
   // ── AI 컨설턴트 L5 캠페인 (spec 2026-09-21) ──
   "fwConsult.copyPrompt": "외부 AI 프롬프트 복사",
+  "fwConsult.promptCopiedToast": "외부 AI 프롬프트를 클립보드에 복사했습니다",
+  "framework.interviewSectionTitle": "인터뷰 JSON",
   "fwConsult.copyPromptHint": "문서와 함께 외부 AI에 붙여넣으세요. 이 L5용 인터뷰 JSON 0.5를 돌려줍니다.",
   "fwConsult.promptCopied": "복사됨",
   "fwConsult.promptCopyFailed": "복사 실패",

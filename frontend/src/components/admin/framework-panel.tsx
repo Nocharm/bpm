@@ -942,9 +942,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
             <div className="flex items-center gap-1.5">
               <Headset size={14} strokeWidth={1.5} className="shrink-0 text-accent" />
               <span className="text-caption text-ink">{t("fwConsult.aiBlock")}</span>
-              <span className="ml-auto shrink-0">
-                <InterviewJsonPromptButton target={consultTarget} />
-              </span>
             </div>
             {/* 선택 레벨에 따라 배타적으로 바뀐다 — L1~3 하위 타일 드릴 / L4 새 L5 / L5 AI로 작업·이어서 */}
             <FwLevelActions
@@ -972,41 +969,56 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </div>
         )}
 
-        {/* 임포트 진입 — 버튼이 바로 파일 탐색기를 연다. 고른 파일은 그리드 아래 전폭 스트립에 */}
+        {/* 인터뷰 JSON — AI 블록과 분리된 섹션. 파일 선택은 바로 파일 탐색기를 열고(고른 파일은 그리드 아래
+            전폭 스트립에), 외부 AI 프롬프트 복사는 같은 행에서 액센트 틴트로 톤을 달리한다 */}
         {!scopeRootIds && (
-          <>
-            <input
-              ref={interviewInputRef}
-              type="file"
-              multiple
-              accept=".json,application/json"
-              data-id="interview-import-files"
-              className="hidden"
-              disabled={interviewBusy}
-              onChange={(event) => {
-                void handleInterviewFiles(event.target.files);
-                event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
-              }}
-            />
-            <button
-              type="button"
-              data-id="interview-import-pick"
-              disabled={interviewBusy}
-              className={`mt-auto shrink-0 self-start ${IMPORT_FILE_BTN}`}
-              onClick={() => interviewInputRef.current?.click()}
-            >
-              <Upload size={14} strokeWidth={1.5} className="shrink-0" />
-              <span className="truncate">{t("framework.interviewImportPick")}</span>
-              {interviewFiles.length > 0 && (
-                <span
-                  data-id="interview-import-pick-count"
-                  className="shrink-0 rounded-full bg-accent-tint px-1.5 text-fine text-accent"
-                >
-                  {interviewFiles.length}
-                </span>
-              )}
-            </button>
-          </>
+          <div
+            data-id="interview-import-section"
+            className="mt-auto flex shrink-0 flex-col gap-2 rounded-md border border-hairline bg-surface p-2.5"
+          >
+            <div className="flex items-center gap-1.5">
+              <FileJson size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="text-caption text-ink">{t("framework.interviewSectionTitle")}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input
+                ref={interviewInputRef}
+                type="file"
+                multiple
+                accept=".json,application/json"
+                data-id="interview-import-files"
+                className="hidden"
+                disabled={interviewBusy}
+                onChange={(event) => {
+                  void handleInterviewFiles(event.target.files);
+                  event.target.value = ""; // 같은 파일 재선택 시에도 onChange가 다시 발화하도록
+                }}
+              />
+              <button
+                type="button"
+                data-id="interview-import-pick"
+                disabled={interviewBusy}
+                className={IMPORT_FILE_BTN}
+                onClick={() => interviewInputRef.current?.click()}
+              >
+                <Upload size={14} strokeWidth={1.5} className="shrink-0" />
+                <span className="truncate">{t("framework.interviewImportPick")}</span>
+                {interviewFiles.length > 0 && (
+                  <span
+                    data-id="interview-import-pick-count"
+                    className="shrink-0 rounded-full bg-accent-tint px-1.5 text-fine text-accent"
+                  >
+                    {interviewFiles.length}
+                  </span>
+                )}
+              </button>
+              <InterviewJsonPromptButton
+                target={consultTarget}
+                tone="tint"
+                onCopied={() => onToast(t("fwConsult.promptCopiedToast"))}
+              />
+            </div>
+          </div>
         )}
       </div>
       </div>
