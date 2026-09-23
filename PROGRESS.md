@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ③ 캠페인 UX
+
+- **플랜 ③(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s3-campaign-ux.md` — Task 0 저장소 안 가짜 AI 서버(`scripts/fake-ai-server.mjs`, system 프롬프트 계약 마커로 계획/설문/행/관계 라우팅, backend 테스트 캔드 JSON 동형) · AiButton 쉬머 · 미리보기 마름모 · 플랜 카드 투명화+`useFlipOrder` FLIP+좌측 brief 패널 · 주관식 AI 제안 타이핑(`lib/typewriter.ts`) · 스모크.
+
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ② 관리 패널 진입
 
 - **같은 부모 아래 이름 중복 409(dev, 09-23):** `create_category`가 code 중복만 막아 L4 아래 같은 이름의 L5가 겹쳐 만들어졌다 → 부모가 있는 생성에 한해 trim 정확 일치(대소문자 구분) 409. 루트는 code 네임스페이스로 구분되는 임포트 시드가 같은 이름을 쓰므로 제외(`_seed_deleg_tree` 등 기존 테스트 전제).
