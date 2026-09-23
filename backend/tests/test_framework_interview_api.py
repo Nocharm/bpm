@@ -385,6 +385,17 @@ def test_relations_flow_fills_canvas_and_confirms_from_canvas(client: TestClient
     confirmed = client.put(f"/api/framework-interviews/{sid}/relations", json={"canvas": canvas}, headers=HEADERS).json()
     assert confirmed["status"] == "ready"
     assert {(e["src"], e["dst"]) for e in confirmed["relations"]["edges"]} == {(t2["task_id"], t1["task_id"])}
+    # 확정 뒤 캔버스를 고치면 조립본이 낡는다 → 연결 단계로 되돌아간다
+    reopened = client.put(f"/api/framework-interviews/{sid}/canvas", json={"canvas": canvas}, headers=HEADERS).json()
+    assert reopened["status"] == "linking"
+    assert client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).status_code == 409
+    # relations만 보내는 표 편집 경로도 캔버스를 다시 전개한다 — 둘이 어긋난 채 남지 않는다
+    table = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS, json={"relations": {
+        "entry": {"taskId": t1["task_id"], "triggerType": "manual"},
+        "edges": [{"src": t1["task_id"], "dst": t2["task_id"], "kind": "seq"}],
+    }}).json()
+    pairs = {(e["source_node_id"], e["target_node_id"]) for e in table["canvas"]["edges"]}
+    assert (t1["task_id"], t2["task_id"]) in pairs
 
 
 def test_relations_re_proposal_carries_previous_and_comment_into_the_prompt(

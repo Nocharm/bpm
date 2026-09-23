@@ -2943,6 +2943,8 @@ export interface FwCanvasEdge {
   source_node_id: string;
   target_node_id: string;
   label: string;
+  // 분기 노드 없이 직결로 펴진 팬아웃의 표시 — 확정 게이트 6(plain_fanout 예외)이 읽는다
+  gateway?: "exclusive" | "parallel";
 }
 export interface FwCanvas {
   nodes: FwCanvasNode[];

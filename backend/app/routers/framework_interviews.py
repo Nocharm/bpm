@@ -564,6 +564,10 @@ async def save_canvas(
     if errors:
         raise HTTPException(status_code=422, detail={"errors": errors})
     row.canvas = payload.canvas
+    if row.status == "ready":
+        # 확정 후 캔버스를 고치면 조립본이 낡는다 — reopen-relations와 같이 연결 단계로 되돌린다
+        row.status = "linking"
+        row.assembled = None
     await db.commit()
     return await _out(db, row)
 
@@ -591,8 +595,11 @@ async def confirm_relations(
     if not _has_known_task_ids(row, relations):
         raise HTTPException(status_code=422, detail="relations reference unknown taskId")
     row.relations = relations.model_dump(by_alias=True, exclude_none=True)
-    if payload.canvas is not None:
-        row.canvas = payload.canvas
+    # relations만 온 경로(표 편집)도 캔버스를 다시 전개한다 — _out이 relations와 어긋난 캔버스를 내주면 안 된다
+    row.canvas = (
+        payload.canvas if payload.canvas is not None
+        else expand_relations_to_canvas(row.relations, _ordered_tasks(row))
+    )
     await assemble_document(db, row)
     row.status = "ready"
     await db.commit()
