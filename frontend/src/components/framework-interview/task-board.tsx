@@ -1,6 +1,6 @@
 "use client";
 
-// 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·건너뛰기, ready 카드 클릭=먼저 답하기·완료 카드 클릭=미리보기. 페이지 좌측 전용.
+// 캠페인 L6 카드 보드 — 상태 칩·진행률·ETA·일시정지/재개·재시도·건너뛰기, 어느 상태의 행이든 클릭=그 카드 패널 열기. 페이지 좌측 전용.
 // 기존 L6에서 온 카드(mode=keep)는 러너가 건드리지 않는다 — [정정]으로 설문을 다시 받아야 다시 그린다.
 
 import { Eye, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward } from "lucide-react";
@@ -30,7 +30,7 @@ interface TaskBoardProps {
   onSkip?: (taskPk: number) => void;  // 실패 카드를 플레이스홀더 행으로 건너뛰기
   onRevise?: (task: FwInterviewTask) => void;  // 유지 중인 기존 L6를 정정으로 돌리기
   onPreview?: (taskPk: number) => void;
-  onSelect?: (taskPk: number) => void;  // ready 카드를 눌러 순서와 무관하게 먼저 답한다
+  onSelect: (taskPk: number) => void;  // 어느 상태의 행이든 눌러 그 카드 패널을 연다(ready면 먼저 답하기)
   stalled?: boolean;  // 할 일이 남았는데 러너가 멎은 것으로 보인다 — 재시작 버튼 노출
   onNudge?: () => void;
 }
@@ -83,23 +83,22 @@ export function TaskBoard({ session, currentTaskId, drawDurationsMs, onPause, on
         {tasks.map((task) => {
           const tone = STATUS_TONE[task.status];
           const isCurrent = task.id === currentTaskId;
-          // ready = 먼저 답하기, drawn = 미리보기. 그 외 상태는 클릭 대상이 아니다(준비 중·제출됨).
-          const activate = task.status === "ready" && onSelect
-            ? () => onSelect(task.id)
-            : task.status === "drawn" && onPreview
-              ? () => onPreview(task.id)
-              : null;
+          // 모든 행이 카드 패널을 연다 — ready는 먼저 답하기, 그 외는 상태별 뷰(준비 중·제출 답·완성 행·실패)
+          const activate = () => onSelect(task.id);
+          const title = task.status === "ready" ? t("fwConsult.openCard")
+            : task.status === "drawn" ? t("fwConsult.preview")
+              : t("fwConsult.openCardHint");
           return (
             <li
               key={task.id}
               data-id={`fw-consult-task-${task.id}`}
               data-status={task.status}
-              role={activate ? "button" : undefined}
-              tabIndex={activate ? 0 : undefined}
-              title={activate ? (task.status === "ready" ? t("fwConsult.openCard") : t("fwConsult.preview")) : undefined}
-              onClick={activate ?? undefined}
-              onKeyDown={activate ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } } : undefined}
-              className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${isCurrent ? "border-accent bg-surface" : "border-hairline bg-surface"} ${activate ? "cursor-pointer hover:bg-surface-alt" : ""}`}
+              role="button"
+              tabIndex={0}
+              title={title}
+              onClick={activate}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } }}
+              className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 hover:bg-surface-alt ${isCurrent ? "border-accent bg-surface" : "border-hairline bg-surface"}`}
             >
               <span className="w-5 text-fine text-ink-tertiary tabular-nums">{task.seq}</span>
               <span className="min-w-0 flex-1 truncate text-caption text-ink">{task.name}</span>

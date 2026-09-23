@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { FwInterviewSession, FwQuestionnaire, FwSessionStatus } from "./api";
+import type { FwInterviewSession, FwQuestionnaire, FwQuestionSection, FwSessionStatus } from "./api";
 import {
-  buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, hasBackgroundWork,
-  hasBlockingDuplicate, validateAnswers,
+  buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, groupQuestionsBySection,
+  hasBackgroundWork, hasBlockingDuplicate, validateAnswers,
 } from "./framework-interview";
 
 const Q: FwQuestionnaire = {
@@ -36,6 +36,13 @@ describe("framework-interview view model", () => {
 
   it("buildSubmitPayload sends blank text so the server applies the suggestion", () => {
     expect(buildSubmitPayload(Q, { q1: ["b"], q2: "r2" })).toEqual({ q1: ["b"], q2: "r2", q3: "" });
+  });
+
+  it("groupQuestionsBySection orders basic→activities→exceptions→io and drops empty sections", () => {
+    const q = (id: string, section: FwQuestionSection) => ({ id, kind: "text" as const, maps_to: "conditions" as const, text: id, options: [], suggested: "", section });
+    const groups = groupQuestionsBySection([q("a", "io"), q("b", "basic"), q("c", "activities"), q("d", "basic")]);
+    expect(groups.map((g) => g.section)).toEqual(["basic", "activities", "io"]);
+    expect(groups[0].questions.map((x) => x.id)).toEqual(["b", "d"]);
   });
 
   it("findCurrentTask picks the lowest seq that is not yet submitted", () => {

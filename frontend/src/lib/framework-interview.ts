@@ -1,8 +1,31 @@
 // AI L5 캠페인 뷰 모델 — 설문 검증·제안 채우기·진행률/ETA·현재 단계 파생. 페이지와 보드가 공유 (spec 2026-09-21 §9).
 
-import type { FwAnswerValue, FwInterviewSession, FwInterviewTask, FwPlanCard, FwQuestionnaire } from "./api";
+import type {
+  FwAnswerValue, FwInterviewSession, FwInterviewTask, FwPlanCard, FwQuestion, FwQuestionnaire, FwQuestionSection,
+} from "./api";
+import type { MessageKey } from "./i18n-messages";
 
 export type FwStep = "plan" | "answer" | "waiting" | "relations" | "register" | "done";
+
+// 설문 섹션 표시 순서 — 서버 문항 생성(framework_interview/contracts.py)과 같은 읽는 순서
+const SECTION_ORDER: FwQuestionSection[] = ["basic", "activities", "exceptions", "io"];
+
+/** 섹션 헤더 문구 — 설문 폼과 확인 화면이 같은 라벨을 쓴다. */
+export const SECTION_LABEL_KEYS: Record<FwQuestionSection, MessageKey> = {
+  basic: "fwConsult.sectionBasic",
+  activities: "fwConsult.sectionActivities",
+  exceptions: "fwConsult.sectionExceptions",
+  io: "fwConsult.sectionIo",
+};
+
+/** 문항을 섹션별로 묶는다 — 순서는 SECTION_ORDER, 문항이 없는 섹션은 생략. */
+export function groupQuestionsBySection(
+  questions: FwQuestion[],
+): { section: FwQuestionSection; questions: FwQuestion[] }[] {
+  return SECTION_ORDER
+    .map((section) => ({ section, questions: questions.filter((q) => q.section === section) }))
+    .filter((group) => group.questions.length > 0);
+}
 
 function isChoice(kind: string): boolean {
   return kind === "single" || kind === "multi" || kind === "ordered";

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Headset } from "lucide-react";
+import { ArrowLeft, Headset, Loader2 } from "lucide-react";
 
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
@@ -16,16 +16,16 @@ import {
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
   type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
-import { deriveStep, findCurrentTask, hasBackgroundWork } from "@/lib/framework-interview";
+import { deriveStep, findCurrentTask, hasBackgroundWork, type FwStep } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { AnswerStep } from "@/components/framework-interview/questionnaire-form";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { PlanBriefPanel } from "@/components/framework-interview/plan-brief-panel";
 import { PlanEditor } from "@/components/framework-interview/plan-editor";
 import { RegisterStep } from "@/components/framework-interview/register-step";
 import { RelationsStep } from "@/components/framework-interview/relations-step";
 import { TaskBoard } from "@/components/framework-interview/task-board";
+import { TaskPanel } from "@/components/framework-interview/task-panel";
 
 const BOARD_WIDTH_KEY = "bpm.fwConsultBoardWidth";
 const BOARD_MIN = 380;  // 진행 헤더(진행률·ETA·일시정지)가 한/영 모두 한 줄에 들어가는 하한
@@ -54,8 +54,12 @@ export default function FrameworkConsultPage() {
   const [boardWidth, setBoardWidth] = useState(readBoardWidth);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
   const [previewTaskId, setPreviewTaskId] = useState<number | null>(null);
-  // 보드에서 고른 카드 — 준비된(ready) 카드는 순서와 무관하게 먼저 답할 수 있다(앞 카드가 준비 중이어도 막히지 않게, 사용자 요청 2026-09-21)
+  // 보드에서 고른 카드 — 상태와 무관하게 그 카드 패널을 우측에 띄운다(ready면 순서와 무관하게 먼저 답한다,
+  // 사용자 요청 2026-09-21 · 2026-09-23 §4.3 B9). 닫으면 자동 흐름(deriveStep)으로 돌아간다.
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  // 단계 전환 감지용 미러 — 연결/등록 단계로 넘어가는 순간 선택을 풀어 사용자가 새 단계에 착지하게 한다.
+  // 렌더에서 읽지 않고 applySession(이벤트 콜백) 안에서만 읽고 쓴다.
+  const flowStepRef = useRef<FwStep | null>(null);
   // 드로잉 소요 실측(ms) — ETA 추정. submitted를 처음 본 시각 → drawn을 처음 본 시각
   const submittedAtRef = useRef<Map<number, number>>(new Map());
   const [drawDurations, setDrawDurations] = useState<number[]>([]);
@@ -84,6 +88,13 @@ export default function FrameworkConsultPage() {
       }
     }
     if (durations.length) setDrawDurations((prev) => [...prev, ...durations]);
+    // 연결·등록 단계로 넘어가는 전환에서만 선택을 푼다 — 그 단계에 머무는 동안의 보드 클릭은 살려둔다
+    const nextStep = deriveStep(next);
+    const prevStep = flowStepRef.current;
+    flowStepRef.current = nextStep;
+    if (prevStep !== null && prevStep !== nextStep && (nextStep === "relations" || nextStep === "register")) {
+      setSelectedTaskId(null);
+    }
     setSession(next);
   }, []);
 
@@ -146,10 +157,13 @@ export default function FrameworkConsultPage() {
     );
   }
 
-  // 선택한 카드가 아직 ready면 그 카드를, 아니면(제출됨 등) 순서상 다음 카드를 현재로 삼는다
-  const selectedReady = session.tasks.find((x) => x.id === selectedTaskId && x.status === "ready") ?? null;
-  const step = selectedReady ? "answer" : deriveStep(session);
-  const current = selectedReady ?? findCurrentTask(session);
+  // 고른 카드는 상태와 무관하게 우측 패널이 된다. 선택이 없으면 자동 흐름 — 답할 카드가 있으면 그 카드.
+  const selectedTask = selectedTaskId === null ? null : session.tasks.find((x) => x.id === selectedTaskId) ?? null;
+  const flowStep = deriveStep(session);
+  const current = selectedTask ?? findCurrentTask(session);
+  // 라벨은 흐름 기준 — ready 카드를 먼저 골랐을 때만 설문 단계로 바꿔 부른다
+  const step = selectedTask?.status === "ready" ? "answer" : flowStep;
+  const panelTask = selectedTask ?? (step === "answer" || step === "waiting" ? current : null);
   const stepLabel = {
     plan: t("fwConsult.stepPlan"), answer: t("fwConsult.stepAnswer"), waiting: t("fwConsult.stepWaiting"),
     relations: t("fwConsult.stepRelations"), register: t("fwConsult.stepRegister"), done: t("fwConsult.stepDone"),
@@ -226,17 +240,28 @@ export default function FrameworkConsultPage() {
               onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true, briefDraft ?? session.brief))}
             />
           )}
-          {(step === "answer" || step === "waiting") && (
-            <AnswerStep
-              key={current?.id ?? "none"}
+          {panelTask && (
+            <TaskPanel
+              key={panelTask.id}
               session={session}
-              task={current}
+              task={panelTask}
               busy={busy}
               onSubmit={(taskPk: number, answers: Record<string, FwAnswerValue>) =>
                 void run(() => submitFrameworkAnswers(session.id, taskPk, answers))}
+              onFeedback={(taskPk: number, message: string) =>
+                void run(() => sendFrameworkFeedback(session.id, { scope: "task", task_pk: taskPk, message }))}
+              onRetry={(taskPk: number) => void run(() => retryFrameworkTask(session.id, taskPk))}
+              onSkip={(taskPk: number) => void run(() => skipFrameworkTask(session.id, taskPk))}
+              onClose={() => setSelectedTaskId(null)}
             />
           )}
-          {step === "relations" && (
+          {!panelTask && (step === "answer" || step === "waiting") && (
+            <div className="flex min-h-44 flex-1 flex-col items-center justify-center gap-2" data-id="fw-consult-task-waiting">
+              <Loader2 size={20} strokeWidth={1.5} className="animate-spin text-accent" />
+              <span className="text-caption text-ink-secondary">{t("fwConsult.waitingDrawing")}</span>
+            </div>
+          )}
+          {!selectedTask && step === "relations" && (
             <RelationsStep
               // 캔버스 내용이 바뀔 때만 리마운트 — 자동 제안·피드백 결과를 편집 상태에 반영한다.
               // 디바운스 저장(onSaveCanvas)은 session을 갱신하지 않아 편집 중엔 리마운트가 없다.
@@ -254,7 +279,7 @@ export default function FrameworkConsultPage() {
               }}
             />
           )}
-          {(step === "register" || step === "done") && (
+          {!selectedTask && (step === "register" || step === "done") && (
             <RegisterStep
               session={session}
               busy={busy}

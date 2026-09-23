@@ -43,14 +43,19 @@ await page.waitForFunction(() => document.querySelectorAll('[data-id="fw-consult
 check("two cards ready (prefetch)", true);
 await second.click();
 await page.locator('[data-id="fw-consult-answer"]').waitFor({ timeout: 10000 });
-const heading = (await page.locator('[data-id="fw-consult-answer"] .text-body-strong').first().textContent()) ?? "";
+// 카드 이름은 패널 머리줄(task-panel) — 설문 본문 바깥이다
+const heading = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent()) ?? "";
 check("second card answered first", heading.includes("결과 통보"), heading.trim());
 await page.locator('[data-id="fw-consult-fill-all"]').click();
 await page.locator('[data-id="fw-consult-review"]').click();
 await page.locator('[data-id="fw-consult-submit"]').click();
 await page.waitForFunction(() => document.querySelector('[data-id="fw-consult-task-list"] li:nth-child(2)')?.getAttribute("data-status") !== "ready", null, { timeout: 10000 });
-const backTo = (await page.locator('[data-id="fw-consult-answer"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
-check("falls back to the first ready card after submit", backTo.includes("요청 접수"), backTo.trim());
+// 고른 카드는 제출 뒤에도 열려 있다(제출 답 + 드로잉 링) — 자동 흐름 복귀는 [닫기]가 한다(2026-09-23 §4.3 B9)
+const stayed = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
+check("selected card stays open after submit", stayed.includes("결과 통보"), stayed.trim());
+await page.locator('[data-id="fw-consult-task-close"]').click();
+const backTo = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
+check("close falls back to the first ready card", backTo.includes("요청 접수"), backTo.trim());
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-pick-card.png" });
 await browser.close();
 const failed = results.filter((ok) => !ok).length;

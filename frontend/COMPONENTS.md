@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 285개 · 2026-09-23 기준
+총 286개 · 2026-09-23 기준
 
 ## components/
 
@@ -12,7 +12,7 @@
 |------|----------|------|--------|
 | `activity-digest.tsx` | `ActivityDigest` | 미선택 우측 공용 다이제스트 | `app/inbox/page.tsx`, `app/notices/page.tsx` |
 | `add-node-menu.tsx` | `AddNodeMenu` | 좌측 사이드바 +노드 메뉴 | `components/editor-toolbar.tsx` |
-| `ai-button.tsx` | `AiButton` | AI 액션 버튼 | `components/admin/fw-level-actions.tsx`, `components/framework-interview/feedback-chat.tsx`, `components/framework-interview/plan-brief-panel.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/framework-interview/relations-step.tsx` |
+| `ai-button.tsx` | `AiButton` | AI 액션 버튼 | `components/admin/fw-level-actions.tsx`, `components/framework-interview/feedback-chat.tsx`, `components/framework-interview/plan-brief-panel.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/framework-interview/relations-step.tsx`, `components/framework-interview/task-panel.tsx` |
 | `ai-chat-cards.tsx` | `AnalysisCard`, `WalkthroughCard`, `ProposalSummaryCard` | AI 챗 메시지 부착 카드 | `components/ai-chat-panel.tsx` |
 | `ai-chat-panel.tsx` | `AiChatPanel` | 에디터 AI 채팅 패널 | `app/maps/[mapId]/page.tsx` |
 | `approval-panel.tsx` | `ApprovalPanel` | R5c 승인 탭 | `app/maps/[mapId]/page.tsx` |
@@ -184,7 +184,7 @@
 | `file-card.tsx` | `ImportMapRow`, `ImportFileCard` | 우측 L5 파일 카드 | `components/admin/import-report/interview-import-report.tsx` |
 | `governance-section.tsx` | `GovernanceSection` | 거버넌스 확인 | `components/admin/import-report/interview-import-report.tsx` |
 | `interview-import-report.tsx` | `InterviewImportReport` | 인터뷰 임포트 dry-run 리포트(2열, A안) | `components/admin/framework-panel.tsx`, `components/framework-interview/register-step.tsx` |
-| `map-preview.tsx` | `ImportMapPreview` | 임포트 리포트 미리보기 | `components/admin/import-report/file-card.tsx`, `components/framework-interview/register-step.tsx` |
+| `map-preview.tsx` | `ImportMapPreview` | 임포트 리포트 미리보기 | `components/admin/import-report/file-card.tsx`, `components/framework-interview/register-step.tsx`, `components/framework-interview/task-panel.tsx` |
 | `person-pill.tsx` | `PersonPill` | 임포트 리포트의 사용자 필 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/governance-section.tsx` |
 | `report-bits.tsx` | `ExternalStatePill`, `KeyCard`, `KeyIcon` | 임포트 리포트 공용 조각 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/file-card.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |
 | `report-section.tsx` | `ReportSection` | 2열 임포트 리포트의 섹션 셸 | `components/admin/import-report/admins-section.tsx`, `components/admin/import-report/attention-section.tsx`, `components/admin/import-report/external-section.tsx`, `components/admin/import-report/governance-section.tsx`, `components/admin/import-report/interview-import-report.tsx` |
@@ -204,16 +204,17 @@
 
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
-| `answer-review.tsx` | `AnswerReview` | 캠페인 설문 확인 화면 | `components/framework-interview/questionnaire-form.tsx` |
-| `feedback-chat.tsx` | `FeedbackChat` | 피드백 채팅 | `components/framework-interview/relations-step.tsx` |
+| `answer-review.tsx` | `AnswerReview` | 캠페인 설문 확인 화면 | `components/framework-interview/task-panel.tsx` |
+| `feedback-chat.tsx` | `FeedbackChat` | 피드백 채팅 | `components/framework-interview/relations-step.tsx`, `components/framework-interview/task-panel.tsx` |
 | `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `plan-brief-panel.tsx` | `PlanBriefPanel` | 캠페인 ① 좌측 brief+첨부 패널 | `app/framework/consult/[sessionId]/page.tsx` |
 | `plan-editor.tsx` | `PlanEditor` | 캠페인 ① L6 카드 편집 | `app/framework/consult/[sessionId]/page.tsx` |
-| `questionnaire-form.tsx` | `QuestionnaireForm`, `AnswerStep` | 캠페인 ② L6 설문 단계 | `app/framework/consult/[sessionId]/page.tsx` |
+| `questionnaire-form.tsx` | `QuestionnaireForm` | 캠페인 ② L6 설문 폼 | `components/framework-interview/task-panel.tsx` |
 | `register-step.tsx` | `RegisterStep` | 캠페인 ④ 등록 | `app/framework/consult/[sessionId]/page.tsx` |
 | `relations-canvas.tsx` | `RelationsCanvas` | 캠페인 ③ 연결 캔버스 | `components/framework-interview/relations-step.tsx` |
 | `relations-step.tsx` | `RelationsStep` | 캠페인 ③ L6 연결 | `app/framework/consult/[sessionId]/page.tsx` |
 | `task-board.tsx` | `TaskBoard` | 캠페인 L6 카드 보드 | `app/framework/consult/[sessionId]/page.tsx` |
+| `task-panel.tsx` | `TaskPanel` | 캠페인 L6 카드 패널 | `app/framework/consult/[sessionId]/page.tsx` |
 
 ## components/groups/
 
