@@ -7,6 +7,7 @@
 
 - **같은 부모 아래 이름 중복 409(dev, 09-23):** `create_category`가 code 중복만 막아 L4 아래 같은 이름의 L5가 겹쳐 만들어졌다 → 부모가 있는 생성에 한해 trim 정확 일치(대소문자 구분) 409. 루트는 code 네임스페이스로 구분되는 임포트 시드가 같은 이름을 쓰므로 제외(`_seed_deleg_tree` 등 기존 테스트 전제).
 - **세션 `category_path_ids`(dev, 09-23):** `FrameworkInterviewOut`에 root→self 조상 id 체인을 실어 관리 패널 타일이 서브트리 진행 세션 수를 클라이언트에서 집계한다. FE `FwInterviewSession` 타입 동기.
+- **레벨 타일 순수 계산(dev, 09-23):** `lib/fw-level-actions.ts` — 서브트리 세션 수(`countSessionsUnder`, path_ids 포함 여부)·형제 이름 중복(`findDuplicateSibling`, trim 정확 일치)·L5의 진행 세션(`findSessionFor`). vitest 3건.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ① 비교·L5 캔버스
 
