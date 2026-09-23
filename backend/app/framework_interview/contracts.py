@@ -245,9 +245,14 @@ def render_existing_row(row: dict) -> str:
             line += f" · {action['name']}"
         if action.get("rule"):
             line += f" · 규칙: {action['rule']}"
-        for key, label in (("input", "입력"), ("output", "출력"), ("system", "시스템")):
-            if action.get(key):
-                line += f" · {label}: {action[key]}"
+        for key, label in (("input", "입력"), ("output", "출력")):
+            value = action.get(key)
+            if value:
+                # IO는 배열이 정본(0.5) — 하위호환으로 문자열도 그대로 받아들인다
+                text = ", ".join(value) if isinstance(value, list) else str(value)
+                line += f" · {label}: {text}"
+        if action.get("system"):
+            line += f" · 시스템: {action['system']}"
         if action.get("variant") == "exception":  # 역변환이 내는 유일한 variant 값
             line += " · 예외"
         lines.append(line)

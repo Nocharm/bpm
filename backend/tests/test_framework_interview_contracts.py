@@ -10,7 +10,7 @@ EXISTING_ROW = {
     "fields": {"start_condition": "요청서 도착"},
     "actions": [
         {"seq": 1, "label": "요청 확인", "kind": "action", "name": "요청서 내용 확인", "rule": "양식 A",
-         "input": "요청서", "output": "접수증", "system": "ERP"},
+         "input": ["요청서", "첨부"], "output": ["접수증"], "system": "ERP"},
         {"seq": 2, "label": "완결성 판정", "kind": "decision", "variant": "exception"},
     ],
     "relations": {"edges": [{"src": 1, "dst": 2, "kind": "branch", "condition": "완결"}]},
@@ -76,7 +76,9 @@ def test_existing_row_block_feeds_questionnaire_and_row_messages() -> None:
 def test_render_existing_row_lists_actions_fields_and_edges() -> None:
     text = c.render_existing_row(EXISTING_ROW)
     # 입출력·시스템·예외 표시가 빠지면 정정 설문이 이미 답한 것을 되묻는다
-    assert "1. 요청 확인 (action) · 요청서 내용 확인 · 규칙: 양식 A · 입력: 요청서 · 출력: 접수증 · 시스템: ERP" in text
+    # input/output은 list[str](0.5 배열 계약) — join된 텍스트만 있고 파이썬 리스트 표기(대괄호·따옴표)가 새면 안 된다
+    assert "1. 요청 확인 (action) · 요청서 내용 확인 · 규칙: 양식 A · 입력: 요청서, 첨부 · 출력: 접수증 · 시스템: ERP" in text
+    assert "[" not in text and "'" not in text
     assert "2. 완결성 판정 (decision) · 예외" in text
     assert "- start_condition: 요청서 도착" in text
     assert "- 1→2 branch 완결" in text
