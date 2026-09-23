@@ -7,6 +7,7 @@
 
 - **플랜 ③(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s3-campaign-ux.md` — Task 0 저장소 안 가짜 AI 서버(`scripts/fake-ai-server.mjs`, system 프롬프트 계약 마커로 계획/설문/행/관계 라우팅, backend 테스트 캔드 JSON 동형) · AiButton 쉬머 · 미리보기 마름모 · 플랜 카드 투명화+`useFlipOrder` FLIP+좌측 brief 패널 · 주관식 AI 제안 타이핑(`lib/typewriter.ts`) · 스모크.
 - **가짜 AI 서버(dev, 09-23):** `frontend/scripts/fake-ai-server.mjs` — OpenAI 호환 `/v1/chat/completions`, system 프롬프트의 계약 마커("L6 단위 업무"/"설문지를 만드세요"/"rows[] 원소"/"연계 캔버스")로 계획·설문·행·관계를 라우팅, 행은 `[L6] 이름:`을 되읽어 카드명과 맞추고 관계는 `taskId=` 순서로 seq 연결. 이전엔 세션 scratchpad에만 있던 전제라 스모크가 재현 불가였다. backend는 `AI_API_TOKEN=fake` 필수(빈 토큰이면 `Bearer ` 헤더로 502). `pw-fw-consult.mjs` 12/12·`pw-fw-consult-existing.mjs` 완주.
+- **AiButton(dev, 09-23):** `components/ai-button.tsx` — 액센트 그라데이션(`accent`→`accent-focus`) + hover 시 4s 반복 빛띠(`.ai-shimmer::after`, reduced-motion 시 없음), variant primary/tile/inline. 관리 패널 AI 타일(`AI_TILE` 상수 폐기)·계획 생성/재생성·제안 채우기·관계 제안이 채택. `buildAiButtonClass` vitest.
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ② 관리 패널 진입
 

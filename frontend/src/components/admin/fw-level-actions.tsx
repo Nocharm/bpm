@@ -7,6 +7,7 @@ import { Headset, Play, Sparkles } from "lucide-react";
 import type { CategoryNode, FwInterviewSession } from "@/lib/api";
 import { countSessionsUnder, findSessionFor } from "@/lib/fw-level-actions";
 import { useI18n } from "@/lib/i18n";
+import { AiButton } from "@/components/ai-button";
 import { LevelPill } from "@/components/level-pill";
 
 const TILE_ROWS_VISIBLE = 2.5; // 2열 타일 2행 반까지만 보이고 나머지는 페이드+"+N"
@@ -16,9 +17,6 @@ const LIST_MAX_HEIGHT = Math.round(TILE_HEIGHT_PX * TILE_ROWS_VISIBLE + TILE_GAP
 
 const TILE =
   "flex h-14 min-w-0 items-center gap-2 rounded-md border border-hairline bg-surface px-2.5 text-left hover:bg-surface-alt disabled:opacity-40";
-// AI 액션 타일 — 스프린트 ③ AiButton으로 교체 예정(그라데이션만, 쉬머 없음)
-const AI_TILE =
-  "flex h-14 w-full items-center gap-2 rounded-md px-3 text-left text-on-accent hover:brightness-105 disabled:opacity-40 [background:linear-gradient(135deg,var(--color-accent),var(--color-accent-focus))]";
 
 interface FwLevelActionsProps {
   selectedNode: CategoryNode | null;
@@ -101,17 +99,16 @@ export function FwLevelActions({
   if (level === 4) {
     return (
       <div data-id="fw-level-actions" className="flex flex-col gap-1.5">
-        <button
-          type="button"
+        <AiButton
+          variant="tile"
           data-id="fw-level-create-l5"
-          className={AI_TILE}
           disabled={busy}
           title={t("fwLevel.createL5Hint")}
           onClick={onCreateL5}
+          icon={<Sparkles size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <Sparkles size={16} strokeWidth={1.5} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.createL5")}</span>
-        </button>
+        </AiButton>
       </div>
     );
   }
@@ -120,30 +117,28 @@ export function FwLevelActions({
   return (
     <div data-id="fw-level-actions" className="flex flex-col gap-1.5">
       {session ? (
-        <button
-          type="button"
+        <AiButton
+          variant="tile"
           data-id="fw-level-resume"
-          className={AI_TILE}
           disabled={busy}
           onClick={() => onResume(session.id)}
+          icon={<Play size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <Play size={16} strokeWidth={1.5} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.resume")}</span>
           <span className="shrink-0 text-fine opacity-80">
             {session.progress.drawn}/{session.progress.total}
           </span>
-        </button>
+        </AiButton>
       ) : (
-        <button
-          type="button"
+        <AiButton
+          variant="tile"
           data-id="fw-level-start"
-          className={AI_TILE}
           disabled={busy}
           onClick={() => onStart(selectedNode.id)}
+          icon={<Headset size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <Headset size={16} strokeWidth={1.5} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.start")}</span>
-        </button>
+        </AiButton>
       )}
     </div>
   );

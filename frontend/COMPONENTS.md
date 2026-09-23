@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 281개 · 2026-09-23 기준
+총 282개 · 2026-09-23 기준
 
 ## components/
 
@@ -12,6 +12,7 @@
 |------|----------|------|--------|
 | `activity-digest.tsx` | `ActivityDigest` | 미선택 우측 공용 다이제스트 | `app/inbox/page.tsx`, `app/notices/page.tsx` |
 | `add-node-menu.tsx` | `AddNodeMenu` | 좌측 사이드바 +노드 메뉴 | `components/editor-toolbar.tsx` |
+| `ai-button.tsx` | `AiButton` | AI 액션 버튼 | `components/admin/fw-level-actions.tsx`, `components/framework-interview/plan-editor.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/framework-interview/relations-step.tsx` |
 | `ai-chat-cards.tsx` | `AnalysisCard`, `WalkthroughCard`, `ProposalSummaryCard` | AI 챗 메시지 부착 카드 | `components/ai-chat-panel.tsx` |
 | `ai-chat-panel.tsx` | `AiChatPanel` | 에디터 AI 채팅 패널 | `app/maps/[mapId]/page.tsx` |
 | `approval-panel.tsx` | `ApprovalPanel` | R5c 승인 탭 | `app/maps/[mapId]/page.tsx` |

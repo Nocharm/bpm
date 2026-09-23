@@ -5,11 +5,12 @@
 // 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다 — 저장 시 서버 병합이 되살리기 때문.
 
 import { useRef, useState } from "react";
-import { ArrowDown, ArrowUp, FileText, Paperclip, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Paperclip, Plus, Trash2, X } from "lucide-react";
 
 import type { FwCardMode, FwInterviewSession, FwPlanCard } from "@/lib/api";
 import { hasBlockingDuplicate } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
+import { AiButton } from "@/components/ai-button";
 
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink";
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
@@ -87,9 +88,9 @@ export function PlanEditor({ session, busy, onAttach, onRemoveAttachment, onGene
             </ul>
           )}
         </div>
-        <button type="button" className={SECONDARY} data-id="fw-consult-generate-plan" disabled={busy} onClick={() => onGenerate(cards, brief)}>
-          <Sparkles size={14} strokeWidth={1.5} />{cards.length ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
-        </button>
+        <AiButton data-id="fw-consult-generate-plan" disabled={busy} onClick={() => onGenerate(cards, brief)}>
+          {cards.length ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
+        </AiButton>
       </section>
 
       {/* 우: L6 카드 목록 + 저장/확정 */}

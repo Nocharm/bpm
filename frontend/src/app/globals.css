@@ -792,6 +792,33 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     opacity: 0;
   }
 }
+/* AI 액션 버튼(components/ai-button.tsx) — 액센트 그라데이션 위를 hover 동안 느린 빛띠가 훑는다(4s 반복).
+   배경은 컴포넌트가 준다. 호스트에 position:relative + overflow:hidden. */
+@keyframes ai-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+.ai-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 0%, color-mix(in srgb, white 35%, transparent) 50%, transparent 100%);
+  transform: translateX(-120%);
+}
+.ai-shimmer:hover::after {
+  animation: ai-shimmer 4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-shimmer:hover::after {
+    animation: none;
+  }
+}
 
 /* 홈 아코디언 접힘 — 펼침의 역방향(콘텐츠 높이→0). forwards로 0fr을 유지한 채 잠깐 뒤 실제
    언마운트가 따라온다(컴포넌트의 closing 상태가 애니메이션 후 커밋). 시선이 줄어드는 영역을 따라간다. */

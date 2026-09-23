@@ -4,10 +4,11 @@
 // 확정 전에 카드로 되돌아갈 수 있고, 확정하면 등록 단계로 간다.
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, PenLine, Sparkles } from "lucide-react";
+import { Eye, PenLine } from "lucide-react";
 
 import { getApiErrorDetail, getFrameworkInterviewTask, type FwInterviewSession } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { AiButton } from "@/components/ai-button";
 import { ImportMapPreview } from "@/components/admin/import-report/map-preview";
 
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
@@ -61,9 +62,9 @@ export function RelationsStep({ session, busy, onPropose, onConfirm, onPreviewTa
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-body-strong text-ink">{t("fwConsult.stepRelations")}</span>
         <span className="text-fine text-ink-tertiary">{t("fwConsult.relationsHint")}</span>
-        <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-propose-relations" disabled={busy} onClick={onPropose}>
-          <Sparkles size={14} strokeWidth={1.5} />{t("fwConsult.proposeRelations")}
-        </button>
+        <AiButton className="ml-auto" data-id="fw-consult-propose-relations" disabled={busy} onClick={onPropose}>
+          {t("fwConsult.proposeRelations")}
+        </AiButton>
         <button type="button" className={PRIMARY} data-id="fw-consult-confirm-relations" disabled={busy || !relations.entry.taskId} onClick={() => onConfirm(relations as unknown as Record<string, unknown>)}>
           {t("fwConsult.confirmRelations")}
         </button>

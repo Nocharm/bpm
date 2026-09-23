@@ -4,11 +4,12 @@
 // 확인 화면 전환·제출. 제출 후 카드는 잠기고 백그라운드 드로잉으로 넘어간다 (spec 2026-09-21 §2·§4).
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Loader2, PenLine, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, PenLine } from "lucide-react";
 
 import { getApiErrorDetail, getFrameworkInterviewTask, type FwAnswerValue, type FwInterviewSession, type FwInterviewTask, type FwQuestionnaire } from "@/lib/api";
 import { buildSubmitPayload, fillSuggested, validateAnswers } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
+import { AiButton } from "@/components/ai-button";
 import { CheckInput } from "@/components/check-input";
 import { AnswerReview } from "@/components/framework-interview/answer-review";
 
@@ -193,9 +194,9 @@ export function AnswerStep({ session, task, busy, onSubmit }: AnswerStepProps) {
       <div className="flex items-center gap-2">
         <span className="text-body-strong text-ink">{task.seq}. {task.name}</span>
         {!reviewing && (
-          <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-fill-all" onClick={() => setAnswers(fillSuggested(questionnaire))}>
-            <Sparkles size={14} strokeWidth={1.5} />{t("fwConsult.fillAll")}
-          </button>
+          <AiButton variant="inline" className="ml-auto" data-id="fw-consult-fill-all" onClick={() => setAnswers(fillSuggested(questionnaire))}>
+            {t("fwConsult.fillAll")}
+          </AiButton>
         )}
       </div>
       {reviewing ? (
