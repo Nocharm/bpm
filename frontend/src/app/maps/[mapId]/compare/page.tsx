@@ -91,6 +91,7 @@ import { buildCompareSummaryPayload, hasCompareChanges } from "@/lib/compare-sum
 import { useMe } from "@/lib/me";
 import { buildIoDiff } from "@/lib/io-diff";
 import { classifyFieldDiff } from "@/lib/compare-field-diff";
+import { pickInitialCompareVersions } from "@/lib/compare-initial";
 import {
   FIELD_DIFF_LABEL_CLASS,
   FIELD_DIFF_ROW_CLASS,
@@ -2514,20 +2515,14 @@ export default function ComparePage() {
           linkageCategoryId: detail.linkage_category_id ?? null,
           linkageCategoryPath: detail.linkage_category_path ?? null,
         });
-        // base=게시본(일반) 또는 최신 확정 스냅샷(framework) 우선 — 없으면 최초 버전.
-        const isFw = detail.mode === "framework";
-        const baseCandidates = detail.versions.filter((version) =>
-          isFw ? version.status === "confirmed" : version.status === "published",
+        // base=게시본(일반)/최신 확정 스냅샷(framework), target=그것을 뺀 최신 — 딥링크 ?base=&target=는 우선 (lib/compare-initial).
+        const picked = pickInitialCompareVersions(
+          detail.versions,
+          detail.mode === "framework",
+          new URLSearchParams(window.location.search),
         );
-        const base = baseCandidates.length > 0 ? baseCandidates[baseCandidates.length - 1] : detail.versions[0];
-        // 딥링크 ?base=&target= — 승인 탭 "게시본과 비교"가 게시본 vs 대기본으로 진입 (2026-09-18). 모르는 id는 기본값.
-        const search = new URLSearchParams(window.location.search);
-        const pick = (key: string): number | null => {
-          const id = Number(search.get(key));
-          return id && detail.versions.some((v) => v.id === id) ? id : null;
-        };
-        setBaseId(pick("base") ?? base.id);
-        setTargetId(pick("target") ?? detail.versions[detail.versions.length - 1].id);
+        setBaseId(picked.baseId);
+        setTargetId(picked.targetId);
       } catch (err) {
         if (active) applyLoadError(err, t, setAccessDenied, setLoadError);
       }
