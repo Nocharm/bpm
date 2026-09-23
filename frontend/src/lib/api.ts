@@ -2931,6 +2931,7 @@ export type FwSessionStatus = "planning" | "plan_locked" | "linking" | "ready" |
 export interface FwInterviewSession {
   id: number;
   category_id: number;
+  category_path_ids: number[];  // root→self 조상 id 체인(자기 포함) — 관리 패널 타일의 서브트리 세션 배지
   category_code: string;
   category_name: string;
   status: FwSessionStatus;

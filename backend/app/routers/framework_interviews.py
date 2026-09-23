@@ -61,11 +61,23 @@ async def _get_session_row(db: AsyncSession, session_id: int) -> FrameworkInterv
     return row
 
 
+async def _category_path_ids(db: AsyncSession, category_id: int) -> list[int]:
+    """root→self id 체인 — 부모 포인터를 따라 올라간다(카테고리 깊이 최대 5)."""
+    ids: list[int] = []
+    current = await db.get(ProcessCategory, category_id)
+    while current is not None:
+        ids.append(current.id)
+        current = await db.get(ProcessCategory, current.parent_id) if current.parent_id else None
+    ids.reverse()
+    return ids
+
+
 async def _out(db: AsyncSession, s: FrameworkInterviewSession) -> FrameworkInterviewOut:
     category = await db.get(ProcessCategory, s.category_id)
+    path_ids = await _category_path_ids(db, s.category_id)
     tasks = sorted(s.tasks, key=lambda t: t.seq)
     return FrameworkInterviewOut(
-        id=s.id, category_id=s.category_id,
+        id=s.id, category_id=s.category_id, category_path_ids=path_ids,
         category_code=category.code if category else "", category_name=category.name if category else "",
         status=s.status, paused=s.paused, lang=s.lang, brief=s.brief, plan=s.plan,
         attachments=[{"name": a.get("name", ""), "chars": int(a.get("chars") or 0)} for a in s.attachments or []],

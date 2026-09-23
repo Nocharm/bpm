@@ -74,6 +74,23 @@ def _make_l5(client: TestClient, tag: str) -> int:
     return node["id"]
 
 
+def test_session_out_carries_category_path_ids(client: TestClient, monkeypatch) -> None:
+    _enable(monkeypatch)
+    ids: list[int] = []
+    parent = None
+    for level in range(1, 6):
+        node = client.post("/api/categories", json={"name": f"pathids-L{level}", "parent_id": parent},
+                           headers=HEADERS).json()
+        ids.append(node["id"])
+        parent = node["id"]
+    res = client.post("/api/framework-interviews", json={"category_id": ids[-1], "lang": "ko"}, headers=HEADERS)
+    assert res.status_code == 200, res.text
+    assert res.json()["category_path_ids"] == ids
+    listed = client.get("/api/framework-interviews?active=1", headers=HEADERS).json()
+    mine = next(s for s in listed if s["id"] == res.json()["id"])
+    assert mine["category_path_ids"] == ids
+
+
 def _fake_ai_queue(monkeypatch, contents: list[str]) -> None:
     queue = list(contents)
 

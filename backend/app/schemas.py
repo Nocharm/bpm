@@ -2801,6 +2801,7 @@ class FrameworkExistingOut(BaseModel):
 class FrameworkInterviewOut(BaseModel):
     id: int
     category_id: int
+    category_path_ids: list[int] = []  # root→self 조상 id 체인(자기 포함) — 관리 패널 타일의 서브트리 세션 배지용
     category_code: str
     category_name: str
     status: str
