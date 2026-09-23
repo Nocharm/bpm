@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷) + git history로 아카이브한다.
 
+## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ④ 캠페인 엔진
+
+- **플랜 ④a/④b(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s4a-engine-backend.md`(질문 섹션·IO 배열·러너 병렬·세션 canvas 컬럼+relations 왕복+코멘트 재제안·피드백 엔드포인트·가짜 AI 라우팅) · `…-s4b-engine-frontend.md`(canvas↔flow 순수 헬퍼·FeedbackChat·RelationsCanvas+자동 제안·TaskPanel 전 행 클릭+설문 섹션·스모크/매뉴얼). 파악 결과 IO 자동 링크(`link_matching_io`)와 전역 AI 세마포어(`ai_max_concurrency`)는 이미 있어 B8은 계약 배열화, B13은 세션당 잡 병렬화만 남는다.
+
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ③ 캠페인 UX
 
 - **플랜 ③(dev, 09-23):** `docs/superpowers/plans/2026-09-23-ai-l5-round2-s3-campaign-ux.md` — Task 0 저장소 안 가짜 AI 서버(`scripts/fake-ai-server.mjs`, system 프롬프트 계약 마커로 계획/설문/행/관계 라우팅, backend 테스트 캔드 JSON 동형) · AiButton 쉬머 · 미리보기 마름모 · 플랜 카드 투명화+`useFlipOrder` FLIP+좌측 brief 패널 · 주관식 AI 제안 타이핑(`lib/typewriter.ts`) · 스모크.
