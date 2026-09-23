@@ -1,11 +1,13 @@
 "use client";
 
-// 피드백 채팅 — 관계 캔버스(relations-step)와 그려진 카드(task-board 미리보기)가 공유하는 로그+작성창.
+// 피드백 채팅 — 관계 캔버스(relations-step 플로팅 창)와 그려진 카드(task-panel)가 공유하는 로그+작성창.
+// 로그 항목은 MarkdownView로 그린다(에디터 AI 채팅과 같은 뷰어). fill이면 창을 꽉 채우고 로그만 스크롤한다.
 
 import { Loader2 } from "lucide-react";
 import type { KeyboardEvent } from "react";
 
 import { AiButton } from "@/components/ai-button";
+import { MarkdownView } from "@/components/markdown-view";
 import type { FwFeedbackEntry } from "@/lib/api";
 import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
@@ -21,9 +23,10 @@ interface FeedbackChatProps {
   placeholder: string;
   locked?: boolean;  // 등록이 끝난 세션 — 로그만 남기고 작성창은 걷는다(서버가 409로 막는다)
   lockedNote?: string;
+  fill?: boolean;  // 플로팅 창 안 — 제목은 창 헤더가 맡고, 로그가 남은 높이를 채워 스크롤한다
 }
 
-export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, onSend, placeholder, locked, lockedNote }: FeedbackChatProps) {
+export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, onSend, placeholder, locked, lockedNote, fill }: FeedbackChatProps) {
   const { t } = useI18n();
   const entries = log.filter((entry) => entry.scope === scope && (scope !== "task" || entry.task_pk === taskPk));
 
@@ -42,9 +45,9 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
   }
 
   return (
-    <div className="flex flex-col gap-2" data-id="fw-feedback-chat">
-      <div className="text-caption-strong text-ink">{t("fwConsult.feedbackTitle")}</div>
-      <div className="flex flex-col gap-1.5">
+    <div className={`flex flex-col gap-2 ${fill ? "h-full min-h-0 p-3" : ""}`} data-id="fw-feedback-chat">
+      {!fill && <div className="text-caption-strong text-ink">{t("fwConsult.feedbackTitle")}</div>}
+      <div className={`flex flex-col gap-1.5 ${fill ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
         {entries.length === 0 && <div className="text-fine text-ink-tertiary">{t("fwConsult.feedbackEmpty")}</div>}
         {entries.map((entry, i) => (
           <div
@@ -53,14 +56,14 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
             className="rounded-sm border border-hairline bg-surface-pearl px-2 py-1.5 text-fine text-ink"
           >
             <div className="mb-0.5 text-ink-tertiary">{formatKst(entry.at).split(" ")[1] ?? ""}</div>
-            <div>{entry.message}</div>
+            <MarkdownView source={entry.message} className="text-fine" />
           </div>
         ))}
       </div>
       {locked ? (
         <div className="text-fine text-ink-tertiary" data-id="fw-feedback-locked">{lockedNote}</div>
       ) : (
-      <div className="flex items-end gap-1.5">
+      <div className="flex shrink-0 items-end gap-1.5">
         <textarea
           data-id="fw-feedback-input"
           value={draft}

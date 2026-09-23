@@ -24,9 +24,10 @@ import { AtSign, Copy, GitBranch, LayoutTemplate, Maximize2, Trash2, Undo2 } fro
 
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
-import type { FwCanvas } from "@/lib/api";
+import type { FwCanvas, FwPlanCard } from "@/lib/api";
 import type { AppNode } from "@/lib/canvas";
 import { copyText } from "@/lib/clipboard";
+import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { autoLayoutFlow } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -51,16 +52,26 @@ const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1.2 };
 // deletable=false — L6 카드는 캔버스에 늘 남아야 하고 분기 마름모는 컨텍스트 메뉴로만 걷는다. Delete가
 // 노드까지 지우면 deleteElements가 연결 엣지를 먼저 떼어내 서버엔 고아 노드가, 화면엔 없는 노드가 남는다.
 // 라벨은 L6 카드 이름(taskNames)이 캔버스 title보다 우선 — 카드를 고쳐 부르면 노드도 새 이름으로 보인다.
-function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>): { nodes: AppNode[]; edges: Edge[] } {
+// 카드의 요약·역할·부서는 L5 맵의 L6 노드가 SP 지정값으로 보여주는 자리(sp*)에 넣어 같은 룩으로 읽힌다 —
+// 등록 전이라 링크 맵이 없으니 그 외 파라미터(Σ 등)는 비어 있다.
+function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>, taskCards: Map<string, FwPlanCard>): { nodes: AppNode[]; edges: Edge[] } {
   const { nodes, edges } = canvasToFlow(canvas);
-  const titleById = new Map(canvas.nodes.map((node) => [node.id, node.task_id ? taskNames.get(node.task_id) : undefined]));
+  const taskIdByNode = new Map(canvas.nodes.map((node) => [node.id, node.task_id]));
   return {
     nodes: nodes.map((node) => {
-      const name = titleById.get(node.id);
+      const taskId = taskIdByNode.get(node.id);
+      const name = taskId ? taskNames.get(taskId) : undefined;
+      const card = taskId ? taskCards.get(taskId) : undefined;
       return {
         ...node,
         deletable: false,
-        data: { ...node.data, ...(name ? { label: name } : {}), sideHandles: true, hideLinkBanner: true },
+        data: {
+          ...node.data,
+          ...(name ? { label: name } : {}),
+          ...(card ? { description: card.summary, spAssigneeRole: card.owner_role || null, spDepartment: card.department || null } : {}),
+          sideHandles: true,
+          hideLinkBanner: true,
+        },
       };
     }),
     edges: edges.map((edge) => ({ ...edge, sourceHandle: "s-right", targetHandle: "t-left" })),
@@ -70,6 +81,7 @@ function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>): { nodes: A
 interface RelationsCanvasProps {
   canvas: FwCanvas;
   taskNames: Map<string, string>;  // task_id → L6 카드 이름(캔버스 title보다 우선)
+  taskCards: Map<string, FwPlanCard>;  // task_id → 계획 카드(요약·역할·부서를 노드에 표시)
   onChange: (next: FwCanvas) => void;  // 부모가 300ms 디바운스로 PUT /canvas
   onMention: (taskId: string, name: string) => void;
   busy: boolean;
@@ -84,13 +96,13 @@ export function RelationsCanvas(props: RelationsCanvasProps) {
   );
 }
 
-function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: RelationsCanvasProps) {
+function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy }: RelationsCanvasProps) {
   const { t } = useI18n();
   const { fitView } = useReactFlow();
   // RF 상태가 편집 중 진실 — 드래그는 여기에만 쌓이고, 구조 변경은 flowToCanvas로 캔버스를 만들어 되돌려 받는다.
   // 부모는 session.canvas가 바뀔 때만 이 서브트리를 리마운트하므로 초기화 1회로 충분하다.
-  const [nodes, setNodes] = useState<AppNode[]>(() => buildFlow(canvas, taskNames).nodes);
-  const [edges, setEdges] = useState<Edge[]>(() => buildFlow(canvas, taskNames).edges);
+  const [nodes, setNodes] = useState<AppNode[]>(() => buildFlow(canvas, taskNames, taskCards).nodes);
+  const [edges, setEdges] = useState<Edge[]>(() => buildFlow(canvas, taskNames, taskCards).edges);
   const [undoSnapshot, setUndoSnapshot] = useState<FwCanvas | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [labelEdit, setLabelEdit] = useState<{ edgeId: string; x: number; y: number; value: string } | null>(null);
@@ -104,7 +116,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
   }
 
   function commit(prev: FwCanvas, next: FwCanvas) {
-    const flow = buildFlow(next, taskNames);
+    const flow = buildFlow(next, taskNames, taskCards);
     // 실측(measured) 이월 — 노드 객체를 통째로 갈면 한 프레임 동안 엣지가 엉뚱한 자리에 붙는다
     const measured = new Map(nodes.map((node) => [node.id, node.measured]));
     setNodes(flow.nodes.map((node) => {
@@ -173,7 +185,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
 
   function handleUndo() {
     if (!undoSnapshot) return;
-    const flow = buildFlow(undoSnapshot, taskNames);
+    const flow = buildFlow(undoSnapshot, taskNames, taskCards);
     setNodes(flow.nodes);
     setEdges(flow.edges);
     setUndoSnapshot(null);
@@ -215,12 +227,8 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
     <div ref={wrapRef} className={`relative min-h-0 flex-1 overflow-hidden bg-canvas ${WRAP_CLASS}`} data-id="fw-consult-relations-canvas">
       {/* Turbopack이 dev에서 .react-flow__* 규칙을 purge해 raw <style>로 둔다(lessons canvas §5).
           이 캔버스 래퍼로 한정 — 같은 단계의 카드 미리보기 모달이 또 다른 RF 인스턴스를 띄운다.
-          핸들·호버 강조는 에디터(maps/[mapId]/page.tsx raw style)와 같은 토큰 — RF 기본 파란 원형 핸들이 서비스 룩과 어긋난다. */}
-      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}
-.${WRAP_CLASS} .react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}
-.${WRAP_CLASS} .react-flow__node:hover .react-flow__handle{opacity:1}
-.${WRAP_CLASS} .react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}
-.${WRAP_CLASS} .react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}`}</style>
+          핸들·호버 강조는 에디터와 같은 단일 소스(lib/flow-handle-style.ts) — RF 기본 파란 원형 핸들이 서비스 룩과 어긋난다. */}
+      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}${buildFlowHandleStyle(`.${WRAP_CLASS}`)}`}</style>
       <div className={`h-full w-full ${busy ? "pointer-events-none opacity-60" : ""}`}>
         <ReactFlow
           nodes={nodes}

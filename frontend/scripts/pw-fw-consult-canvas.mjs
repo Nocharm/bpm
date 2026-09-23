@@ -219,12 +219,13 @@ check("no stale PUT /canvas fired while the card panel was open", canvasPuts.len
 // 숨었다 돌아온 ReactFlow가 화면을 그대로 유지하는지(뷰포트 변환 동일) + L6 카드 이름이 노드 라벨에 실렸는지
 const viewportAfterSelect = await readViewport();
 check("hidden canvas keeps its viewport", viewportAfterSelect === viewportBeforeSelect, `${viewportBeforeSelect} -> ${viewportAfterSelect}`);
-const boardNames = await page.locator('[data-id="fw-consult-task-list"] li').evaluateAll((els) => els.map((el) => el.textContent ?? ""));
+// 노드 텍스트는 이름 뒤에 카드의 역할·부서가 이어진다(L5 맵 L6 노드와 같은 룩) — 이름으로 시작하는지만 본다
+const cardNames = (await (await fetch(`${BACKEND}/api/framework-interviews/${sessionId}`, { headers: { "X-Dev-User": ADMIN } })).json()).tasks.map((task) => task.name);
 const nodeLabels = await canvas.locator(".react-flow__node").evaluateAll((els) => els.map((el) => (el.textContent ?? "").trim()));
 const subLabels = nodeLabels.filter((label) => label && !["Start", "End"].includes(label) && !label.endsWith("결과"));
 check(
   "subprocess nodes are labelled with the L6 card names",
-  subLabels.length > 0 && subLabels.every((label) => boardNames.some((name) => name.includes(label))),
+  subLabels.length > 0 && subLabels.every((label) => cardNames.some((name) => label.startsWith(name))),
   subLabels.join(" | "),
 );
 const serverCanvas = await readCanvas(sessionId);

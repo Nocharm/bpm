@@ -264,6 +264,7 @@ import { buildCsvFromGraph } from "@/lib/csv-export";
 import { formatKst } from "@/lib/datetime";
 import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
+import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { matchesQuery } from "@/lib/hangul";
 import { genId } from "@/lib/id";
 import {
@@ -9086,7 +9087,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     <NodeActionsContext.Provider value={nodeActions}>
       {/* 인라인 펼침/접힘 슬라이드 — 런타임 클래스(.react-flow__node) 대상 규칙은 Turbopack(dev)이 purge하므로
           globals.css 대신 raw <style>로 주입해 dev·prod 모두 적용되게 한다(ease-in-out = 느림→빠름→느림). */}
-      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}.react-flow__handle{width:11px;height:11px;border-radius:3px;background:color-mix(in srgb,var(--color-ink-tertiary) 20%,transparent);border:1px solid color-mix(in srgb,var(--color-ink-tertiary) 50%,transparent);opacity:0;transition:opacity 120ms var(--ease-smooth),background 120ms var(--ease-smooth),border-color 120ms var(--ease-smooth)}.react-flow__node:hover .react-flow__handle{opacity:1}.react-flow__handle:hover{opacity:1;background:color-mix(in srgb,var(--color-ink-tertiary) 42%,transparent);border-color:var(--color-ink-secondary)}.react-flow__node:hover .bpm-node-emph{box-shadow:0 0 0 3px color-mix(in srgb,var(--nc) 42%,transparent)}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
+      <style>{`.bpm-expand-anim .react-flow__node{transition:transform 350ms cubic-bezier(0.65,0,0.35,1)}@media(prefers-reduced-motion:reduce){.bpm-expand-anim .react-flow__node{transition:none}}@keyframes bpm-node-flash{0%{opacity:1}45%{opacity:.25}100%{opacity:1}}.react-flow__node.bpm-node-flash{animation:bpm-node-flash 450ms ease-in-out}@media(prefers-reduced-motion:reduce){.react-flow__node.bpm-node-flash{animation:none}}${buildFlowHandleStyle()}.react-flow__node.bpm-node-ctrl-copy{opacity:.5;outline:1.5px dashed var(--color-divider);outline-offset:-1.5px}.react-flow__node.io-node-highlight{outline:2px solid var(--color-accent);outline-offset:3px;border-radius:8px}`}</style>
       <div className="flex h-full flex-col">
       <header className="flex items-center gap-2 border-b border-hairline bg-surface px-3 py-2">
         {/* 좌: 사이드바 토글 · 맵네임 드롭다운(검색·최근 맵·새 맵) · 브레드크럼 구분자 · 버전 pill */}
