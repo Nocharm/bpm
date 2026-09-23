@@ -88,7 +88,9 @@ export function addBranchAfter(canvas: FwCanvas, nodeId: string): FwCanvas {
   const branchNode: FwCanvasNode = {
     id: branchId,
     node_type: "decision",
-    title: "분기",
+    // 서버 조립기와 같은 표기(backend/app/framework_interview/canvas.py `f"{name} 결과"`) —
+    // 손으로 끼운 분기와 AI가 그린 분기가 캔버스에서 같은 이름 규칙을 따른다.
+    title: `${sourceNode.title} 결과`,
     task_id: null,
     pos_x: sourceNode.pos_x + 220,
     pos_y: sourceNode.pos_y,

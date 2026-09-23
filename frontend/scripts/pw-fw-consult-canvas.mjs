@@ -12,6 +12,12 @@ const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
+// 남은 검사를 밟을 수 없을 때(선행 조건 실패) — 지금까지의 결과를 요약하고 실패로 끝낸다
+const summarize = () => {
+  const failed = results.filter((r) => !r.ok);
+  console.log(`\n${results.length - failed.length}/${results.length} passed`);
+  return failed.length;
+};
 
 async function createL5Chain() {
   const tag = Date.now().toString(36);
@@ -54,6 +60,11 @@ const page = await ctx.newPage();
 const canvasPuts = [];
 page.on("response", (res) => {
   if (res.request().method() === "PUT" && res.url().includes("/canvas")) canvasPuts.push(res.status());
+});
+// 등록 단계 드라이런 재실행 감시 — 보드 카드를 열고 닫는 동안 다시 돌면 거버넌스 선택이 초기화된다
+const importPosts = [];
+page.on("request", (req) => {
+  if (req.method() === "POST" && req.url().includes("/categories/import-interview")) importPosts.push(req.url());
 });
 
 await page.goto(`${BASE}/settings?tab=framework`);
@@ -137,12 +148,15 @@ const subId = nodeIds.find((id) => id && !id.startsWith("__"));
 await canvas.locator(`.react-flow__node[data-id="${subId}"]`).click({ button: "right" });
 await page.locator('[data-id="context-menu"]').waitFor({ timeout: 5000 });
 await page.locator('[data-id="context-menu"] button').filter({ hasText: "뒤에 분기 추가" }).click();
-await page.waitForFunction(
-  (want) => document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__node').length === want,
-  nodeCount + 1,
-  { timeout: 10000 },
-);
-check("context menu added a branch node", true, `${nodeCount + 1} nodes`);
+const branchAdded = await page
+  .waitForFunction(
+    (want) => document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__node').length === want,
+    nodeCount + 1,
+    { timeout: 10000 },
+  )
+  .then(() => true)
+  .catch(() => false);
+check("context menu added a branch node", branchAdded, `${await canvas.locator(".react-flow__node").count()} nodes`);
 
 // 엣지 클릭 지점 — 경로 중간점을 실좌표로 환산하고(bbox 중심은 곡선 밖일 수 있다) elementFromPoint로
 // 그 점이 정말 그 엣지인 엣지를 고른다. 노드나 엣지 라벨이 덮은 중간점은 클릭이 거기로 간다.
@@ -164,13 +178,61 @@ const countEdges = () => canvas.locator(".react-flow__edge").count();
 // ③ 엣지 클릭 → 라벨 저장
 const point = await findEdgePoint();
 check("found a clickable edge midpoint", point !== null);
+if (point === null) {
+  await browser.close();
+  process.exit(summarize() ? 1 : 0);
+}
 await page.mouse.click(point.x, point.y);
 const labelInput = page.locator('[data-id="fw-relations-edge-label"]');
 await labelInput.waitFor({ timeout: 5000 });
 await labelInput.fill("승인");
 await labelInput.press("Enter");
-await canvas.locator("text", { hasText: "승인" }).first().waitFor({ timeout: 10000 });
-check("edge label saved on the canvas", true);
+const labelShown = await canvas
+  .locator("text", { hasText: "승인" })
+  .first()
+  .waitFor({ timeout: 10000 })
+  .then(() => true)
+  .catch(() => false);
+check("edge label saved on the canvas", labelShown);
+
+// ③-b 보드 카드를 열고 닫아도 편집 중인 캔버스가 살아 있다 — 연결 단계는 언마운트되지 않고 숨기만 한다.
+// (리마운트하면 디바운스 저장 대기분·분기·라벨이 낡은 session.canvas로 되감긴다)
+await page.waitForTimeout(700);  // 라벨 저장 디바운스(300ms) PUT까지 흘려보낸다
+const readViewport = () => canvas.locator(".react-flow__viewport").evaluate((el) => el.style.transform);
+const nodesBeforeSelect = await canvas.locator(".react-flow__node").count();
+const viewportBeforeSelect = await readViewport();
+const putsBeforeSelect = canvasPuts.length;
+await page.locator(`[data-id="fw-consult-task-${firstTask.id}"]`).click();
+await page.locator('[data-id="fw-consult-task-panel"]').waitFor({ timeout: 10000 });
+const relationsHidden = await page.locator('[data-id="fw-consult-relations-host"]').isHidden();
+check("board row hides (not unmounts) the relations step", relationsHidden);
+await page.locator('[data-id="fw-consult-task-close"]').click();
+await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 10000 });
+const nodesAfterSelect = await canvas.locator(".react-flow__node").count();
+const labelKept = await canvas.locator("text", { hasText: "승인" }).count();
+check(
+  "canvas edits survive opening and closing a board card",
+  nodesAfterSelect === nodesBeforeSelect && labelKept > 0,
+  `${nodesBeforeSelect} -> ${nodesAfterSelect} nodes, label x${labelKept}`,
+);
+check("no stale PUT /canvas fired while the card panel was open", canvasPuts.length === putsBeforeSelect, `${putsBeforeSelect} -> ${canvasPuts.length}`);
+// 숨었다 돌아온 ReactFlow가 화면을 그대로 유지하는지(뷰포트 변환 동일) + L6 카드 이름이 노드 라벨에 실렸는지
+const viewportAfterSelect = await readViewport();
+check("hidden canvas keeps its viewport", viewportAfterSelect === viewportBeforeSelect, `${viewportBeforeSelect} -> ${viewportAfterSelect}`);
+const boardNames = await page.locator('[data-id="fw-consult-task-list"] li').evaluateAll((els) => els.map((el) => el.textContent ?? ""));
+const nodeLabels = await canvas.locator(".react-flow__node").evaluateAll((els) => els.map((el) => (el.textContent ?? "").trim()));
+const subLabels = nodeLabels.filter((label) => label && !["Start", "End"].includes(label) && !label.endsWith("결과"));
+check(
+  "subprocess nodes are labelled with the L6 card names",
+  subLabels.length > 0 && subLabels.every((label) => boardNames.some((name) => name.includes(label))),
+  subLabels.join(" | "),
+);
+const serverCanvas = await readCanvas(sessionId);
+check(
+  "server canvas still holds the branch and the label",
+  serverCanvas.nodes.length === nodesBeforeSelect && serverCanvas.edges.some((e) => e.label === "승인"),
+  `${serverCanvas.nodes.length} nodes`,
+);
 
 // ④ 엣지 선택 → Delete → 삭제 + 저장. 클릭은 라벨 팝오버도 열므로 Escape로 팝오버만 닫고
 // (RF 선택은 유지) Delete를 누른다 — 입력에 포커스가 있으면 RF가 키를 무시한다.
@@ -178,6 +240,11 @@ await page.waitForTimeout(600);
 const edgesBefore = await countEdges();
 const putsBefore = canvasPuts.length;
 const delPoint = await findEdgePoint();
+check("found a clickable edge midpoint for delete", delPoint !== null);
+if (delPoint === null) {
+  await browser.close();
+  process.exit(summarize() ? 1 : 0);
+}
 await page.mouse.click(delPoint.x, delPoint.y);
 await labelInput.waitFor({ timeout: 5000 });
 await labelInput.press("Escape");
@@ -210,14 +277,31 @@ await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor({ timeout: 20000 });
 check("register step reached", true);
 
+// 자동 드라이런이 끝난 리포트에 사용자 상태(검색어)를 하나 남긴다 — 카드 패널을 닫은 뒤 그대로인지 본다
+await page.locator('[data-id="interview-import-report"]').waitFor({ timeout: 40000 });
+const reportSearch = page.locator('[data-id="interview-report-search"]');
+await reportSearch.fill("keep-me");
+const importPostsBefore = importPosts.length;
+
 // ⑧ 등록 리포트를 보는 중에도 보드는 살아있다 — 완료 카드를 클릭하면 미리보기+피드백 채팅 패널이 열린다
 await page.locator(`[data-id="fw-consult-task-${firstTask.id}"]`).click();
 await page.locator('[data-id="fw-consult-task-panel"][data-status="drawn"]').waitFor({ timeout: 10000 });
+const registerHidden = await page.locator('[data-id="fw-consult-register-host"]').isHidden();
+check("board row hides (not unmounts) the register step", registerHidden);
 await page.locator('[data-id="fw-consult-task-panel-canvas"]').waitFor({ timeout: 15000 });
 const feedbackChatShown = await page.locator('[data-id="fw-feedback-chat"]').isVisible();
 check("done board card opens preview + feedback chat after registration", feedbackChatShown);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-canvas-feedback.png" });
 
+// ⑧-b 카드 패널을 닫으면 등록 리포트가 그대로 돌아온다 — 드라이런 재실행 없음, 리포트 상태 유지
+await page.locator('[data-id="fw-consult-task-close"]').click();
+await page.locator('[data-id="fw-consult-register"]').waitFor({ timeout: 10000 });
+check("dry run did not re-run while the card panel was open", importPosts.length === importPostsBefore, `${importPostsBefore} -> ${importPosts.length}`);
+check("register report state survived the card panel", (await reportSearch.inputValue()) === "keep-me", await reportSearch.inputValue());
+
+// ⑨ 카드 피드백(수정) — 행이 바뀌면 조립본이 낡아 서버가 연결 단계로 되돌린다(status linking)
+await page.locator(`[data-id="fw-consult-task-${firstTask.id}"]`).click();
+await page.locator('[data-id="fw-consult-task-panel"][data-status="drawn"]').waitFor({ timeout: 10000 });
 const beforeTask = await readTask(sessionId, firstTask.id);
 await page.locator('[data-id="fw-feedback-input"]').fill("이름 고쳐");
 await page.locator('[data-id="fw-feedback-send"]').click();
@@ -230,6 +314,4 @@ check(
 );
 
 await browser.close();
-const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} passed`);
-process.exit(failed.length ? 1 : 0);
+process.exit(summarize() ? 1 : 0);

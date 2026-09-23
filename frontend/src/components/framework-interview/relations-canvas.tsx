@@ -50,14 +50,19 @@ const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1.2 };
 // 캔버스 엣지엔 핸들 개념이 없다 — 표시 단계에서 4변 핸들(sideHandles) + 우→좌로 못 박아 LR 흐름을 고정한다.
 // deletable=false — L6 카드는 캔버스에 늘 남아야 하고 분기 마름모는 컨텍스트 메뉴로만 걷는다. Delete가
 // 노드까지 지우면 deleteElements가 연결 엣지를 먼저 떼어내 서버엔 고아 노드가, 화면엔 없는 노드가 남는다.
-function buildFlow(canvas: FwCanvas): { nodes: AppNode[]; edges: Edge[] } {
+// 라벨은 L6 카드 이름(taskNames)이 캔버스 title보다 우선 — 카드를 고쳐 부르면 노드도 새 이름으로 보인다.
+function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>): { nodes: AppNode[]; edges: Edge[] } {
   const { nodes, edges } = canvasToFlow(canvas);
+  const titleById = new Map(canvas.nodes.map((node) => [node.id, node.task_id ? taskNames.get(node.task_id) : undefined]));
   return {
-    nodes: nodes.map((node) => ({
-      ...node,
-      deletable: false,
-      data: { ...node.data, sideHandles: true, hideLinkBanner: true },
-    })),
+    nodes: nodes.map((node) => {
+      const name = titleById.get(node.id);
+      return {
+        ...node,
+        deletable: false,
+        data: { ...node.data, ...(name ? { label: name } : {}), sideHandles: true, hideLinkBanner: true },
+      };
+    }),
     edges: edges.map((edge) => ({ ...edge, sourceHandle: "s-right", targetHandle: "t-left" })),
   };
 }
@@ -84,8 +89,8 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
   const { fitView } = useReactFlow();
   // RF 상태가 편집 중 진실 — 드래그는 여기에만 쌓이고, 구조 변경은 flowToCanvas로 캔버스를 만들어 되돌려 받는다.
   // 부모는 session.canvas가 바뀔 때만 이 서브트리를 리마운트하므로 초기화 1회로 충분하다.
-  const [nodes, setNodes] = useState<AppNode[]>(() => buildFlow(canvas).nodes);
-  const [edges, setEdges] = useState<Edge[]>(() => buildFlow(canvas).edges);
+  const [nodes, setNodes] = useState<AppNode[]>(() => buildFlow(canvas, taskNames).nodes);
+  const [edges, setEdges] = useState<Edge[]>(() => buildFlow(canvas, taskNames).edges);
   const [undoSnapshot, setUndoSnapshot] = useState<FwCanvas | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [labelEdit, setLabelEdit] = useState<{ edgeId: string; x: number; y: number; value: string } | null>(null);
@@ -99,7 +104,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
   }
 
   function commit(prev: FwCanvas, next: FwCanvas) {
-    const flow = buildFlow(next);
+    const flow = buildFlow(next, taskNames);
     // 실측(measured) 이월 — 노드 객체를 통째로 갈면 한 프레임 동안 엣지가 엉뚱한 자리에 붙는다
     const measured = new Map(nodes.map((node) => [node.id, node.measured]));
     setNodes(flow.nodes.map((node) => {
@@ -168,7 +173,7 @@ function RelationsFlow({ canvas, taskNames, onChange, onMention, busy }: Relatio
 
   function handleUndo() {
     if (!undoSnapshot) return;
-    const flow = buildFlow(undoSnapshot);
+    const flow = buildFlow(undoSnapshot, taskNames);
     setNodes(flow.nodes);
     setEdges(flow.edges);
     setUndoSnapshot(null);

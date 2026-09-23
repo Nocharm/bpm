@@ -262,7 +262,10 @@ export default function FrameworkConsultPage() {
               <span className="text-caption text-ink-secondary">{t("fwConsult.waitingDrawing")}</span>
             </div>
           )}
-          {!selectedTask && step === "relations" && (
+          {/* 보드 카드를 고르면 숨기기만 한다 — 언마운트하면 편집 중인 캔버스(디바운스 저장 대기분)와
+              등록 단계의 드라이런 결과·거버넌스 선택이 버려지고, 닫을 때 낡은 session으로 되감긴다. */}
+          {step === "relations" && (
+          <div className={selectedTask ? "hidden" : "flex min-h-0 flex-1 flex-col"} data-id="fw-consult-relations-host">
             <RelationsStep
               // 캔버스 내용이 바뀔 때만 리마운트 — 자동 제안·피드백 결과를 편집 상태에 반영한다.
               // 디바운스 저장(onSaveCanvas)은 session을 갱신하지 않아 편집 중엔 리마운트가 없다.
@@ -279,14 +282,17 @@ export default function FrameworkConsultPage() {
                 void run(() => reopenFrameworkTask(session.id, taskPk));
               }}
             />
+          </div>
           )}
-          {!selectedTask && (step === "register" || step === "done") && (
+          {(step === "register" || step === "done") && (
+          <div className={selectedTask ? "hidden" : "flex flex-col"} data-id="fw-consult-register-host">
             <RegisterStep
               session={session}
               busy={busy}
               onApplied={() => void run(() => markFrameworkInterviewApplied(session.id))}
               onBack={() => void run(() => reopenFrameworkRelations(session.id))}
             />
+          </div>
           )}
         </section>
       </div>

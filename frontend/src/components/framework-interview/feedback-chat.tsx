@@ -19,9 +19,11 @@ interface FeedbackChatProps {
   onDraftChange: (v: string) => void; // 우클릭 "피드백에 언급"이 밖에서 텍스트를 끼워 넣을 수 있게 제어형
   onSend: (message: string) => void;
   placeholder: string;
+  locked?: boolean;  // 등록이 끝난 세션 — 로그만 남기고 작성창은 걷는다(서버가 409로 막는다)
+  lockedNote?: string;
 }
 
-export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, onSend, placeholder }: FeedbackChatProps) {
+export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, onSend, placeholder, locked, lockedNote }: FeedbackChatProps) {
   const { t } = useI18n();
   const entries = log.filter((entry) => entry.scope === scope && (scope !== "task" || entry.task_pk === taskPk));
 
@@ -55,6 +57,9 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
           </div>
         ))}
       </div>
+      {locked ? (
+        <div className="text-fine text-ink-tertiary" data-id="fw-feedback-locked">{lockedNote}</div>
+      ) : (
       <div className="flex items-end gap-1.5">
         <textarea
           data-id="fw-feedback-input"
@@ -75,6 +80,7 @@ export function FeedbackChat({ log, scope, taskPk, busy, draft, onDraftChange, o
           {t("fwConsult.feedbackSend")}
         </AiButton>
       </div>
+      )}
     </div>
   );
 }

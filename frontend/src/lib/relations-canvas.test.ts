@@ -28,6 +28,8 @@ describe("relations canvas", () => {
     const withBranch = addBranchAfter(base, "t1");
     const branch = withBranch.nodes.find((n) => n.node_type === "decision");
     expect(branch?.id).toBe("__branch__t1");
+    // 서버 조립기와 같은 표기 규칙(`{앞 단계 이름} 결과`)
+    expect(branch?.title).toBe("접수 결과");
     expect(withBranch.edges.some((e) => e.source_node_id === "t1" && e.target_node_id === "__branch__t1")).toBe(true);
     expect(withBranch.edges.some((e) => e.source_node_id === "__branch__t1" && e.target_node_id === "t2")).toBe(true);
     expect(removeBranch(withBranch, "__branch__t1")).toEqual(base);

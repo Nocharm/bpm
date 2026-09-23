@@ -177,6 +177,9 @@ export function TaskPanel({ session, task, busy, onSubmit, onFeedback, onRetry, 
             onDraftChange={setDraft}
             onSend={handleFeedback}
             placeholder={t("fwConsult.feedbackTaskPlaceholder")}
+            // 등록(apply)이 끝난 세션은 서버가 카드 수정을 409로 막는다 — 작성창을 걷어 이유를 먼저 말한다
+            locked={session.status === "applied"}
+            lockedNote={t("fwConsult.feedbackLocked")}
           />
         </div>
       )}
