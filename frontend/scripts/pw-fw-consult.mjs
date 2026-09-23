@@ -1,7 +1,7 @@
 // AI L5 캠페인 스모크 — 관리 트리에서 L5 선택 → 우측 상세 패널 [AI로 L5 채우기] → 계획 확정 →
 // 설문 전량 제출 → 카드 드로잉 → 연결 확정 → dry-run 리포트.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 node scripts/pw-fw-consult.mjs
-// 전제: 가짜 AI(:9999, scratchpad fake-ai.mjs) + backend(AI_ENABLED=true, AI_BASE_URL=그 서버) + frontend 기동.
+// 전제: 가짜 AI(scripts/fake-ai-server.mjs, :9999) + backend(AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1 AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend 기동.
 // 스크립트가 자체 L1~L5 카테고리 체인을 매 실행 고유 이름으로 만들어 독립 실행(재실행해도 다른 세션).
 // docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
 import { chromium } from "playwright-core";

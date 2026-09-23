@@ -4,7 +4,7 @@
 // 캠페인 시작 → 계획 제안(기존 칩 2장) → 2번 카드 정정 전환 → 잠금(유지 태스크는 즉시 drawn) →
 // 설문 1장 제출 → 연결 확정 → 등록 dry run 리포트에서 변경없음 1·갱신 1.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-fw-consult-existing.mjs
-// 전제: 가짜 AI(:9999, scratchpad fake-ai.mjs) + backend(AI_ENABLED=true, AI_BASE_URL=그 서버) + frontend 기동.
+// 전제: 가짜 AI(scripts/fake-ai-server.mjs, :9999) + backend(AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1 AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend 기동.
 // 맵 이름을 가짜 AI 계획 카드 이름과 같게 두어 서버 병합이 두 카드를 모두 keep으로 찍게 한다.
 import { chromium } from "playwright-core";
 
