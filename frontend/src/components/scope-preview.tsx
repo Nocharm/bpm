@@ -9,6 +9,13 @@ import type { VersionGraph } from "@/lib/api";
 import { resolveNodeStroke } from "@/components/process-node";
 import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
 
+// 분기 노드는 실캔버스처럼 마름모 — 박스에 내접하는 네 꼭짓점(상·우·하·좌) (2026-09-23)
+export function buildDiamondPoints(x: number, y: number, w: number, h: number): string {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  return `${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}`;
+}
+
 export function ScopePreview({
   fullGraph,
   scopeParentId,
@@ -84,6 +91,7 @@ export function ScopePreview({
     const size = nodeSizeOf(type);
     return {
       id: node.id,
+      type,
       x: node.pos_x,
       y: node.pos_y,
       w: size.w,
@@ -177,25 +185,33 @@ export function ScopePreview({
             />
           );
         })}
-        {boxes.map((box) => (
+        {boxes.map((box) => {
+          const shapeClass = interactive
+            ? "cursor-pointer [transition:all_.15s] hover:[stroke-width:3px] hover:[filter:brightness(0.92)]"
+            : undefined;
+          const shapeStyle = { fill: `color-mix(in srgb, ${box.color} 18%, white)`, stroke: box.color };
+          return (
           <g key={box.id}>
-            <rect
-              x={box.x}
-              y={box.y}
-              width={box.w}
-              height={box.h}
-              rx={8}
-              strokeWidth={1.5}
-              className={
-                interactive
-                  ? "cursor-pointer [transition:all_.15s] hover:[stroke-width:3px] hover:[filter:brightness(0.92)]"
-                  : undefined
-              }
-              style={{
-                fill: `color-mix(in srgb, ${box.color} 18%, white)`,
-                stroke: box.color,
-              }}
-            />
+            {box.type === "decision" ? (
+              <polygon
+                points={buildDiamondPoints(box.x, box.y, box.w, box.h)}
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                className={shapeClass}
+                style={shapeStyle}
+              />
+            ) : (
+              <rect
+                x={box.x}
+                y={box.y}
+                width={box.w}
+                height={box.h}
+                rx={8}
+                strokeWidth={1.5}
+                className={shapeClass}
+                style={shapeStyle}
+              />
+            )}
             <text
               x={box.cx}
               y={box.cy}
@@ -207,7 +223,8 @@ export function ScopePreview({
               {box.title}
             </text>
           </g>
-        ))}
+          );
+        })}
       </svg>
     </div>
   );
