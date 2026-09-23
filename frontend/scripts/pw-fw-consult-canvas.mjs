@@ -1,5 +1,6 @@
 // AI L5 캠페인 연결 캔버스 스모크 — 진입 즉시 자동 제안(오버레이 링) → 편집 캔버스(우클릭 분기 추가·엣지 라벨·PUT /canvas)
-// → 피드백으로 엣지 뒤집기 → 확정 → 등록.
+// → 피드백으로 엣지 뒤집기 → 확정 → 등록. 보드 전 행 클릭(대기 카드→준비 중 패널, 완료 카드→미리보기+채팅)과
+// 설문 섹션 헤더·카드 피드백(수정) 반영까지 같은 세션에서 훑는다.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-fw-consult-canvas.mjs
 // 전제: 가짜 AI(scripts/fake-ai-server.mjs, :9999) + backend(AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1 AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend 기동.
 // docs/lessons/browser-verification.md 준수(시스템 Chrome·playwright-core, node는 frontend/ cwd).
@@ -37,6 +38,11 @@ async function readCanvas(sessionId) {
   return session.canvas ?? { nodes: [], edges: [] };
 }
 
+async function readTask(sessionId, taskPk) {
+  const res = await fetch(`${BACKEND}/api/framework-interviews/${sessionId}/tasks/${taskPk}`, { headers: { "X-Dev-User": ADMIN } });
+  return res.json();
+}
+
 const { l5Name, l5 } = await createL5Chain();
 check("seed L1..L5 chain", true, l5Name);
 
@@ -59,13 +65,35 @@ await page.waitForURL(/\/framework\/consult\/\d+/);
 const sessionId = Number(/consult\/(\d+)/.exec(page.url())[1]);
 check("session page opened", Number.isFinite(sessionId), String(sessionId));
 
+// 러너를 미리 멈춰 둔다 — 가짜 AI는 즉답이라 잠금 직후 카드가 곧바로 ready로 가서 대기 상태를 볼 틈이 없다.
+await fetch(`${BACKEND}/api/framework-interviews/${sessionId}/pause`, { method: "POST", headers: { "X-Dev-User": ADMIN } });
 await page.locator('[data-id="fw-consult-generate-plan"]').click();
 await page.locator('[data-id="fw-consult-plan-card-0"]').waitFor({ timeout: 20000 });
 await page.locator('[data-id="fw-consult-plan-lock"]').click();
-await page.locator('[data-id="fw-consult-task-list"] li').first().waitFor();
+await page.locator('[data-id="fw-consult-task-list"] li').first().waitFor({ timeout: 20000 });
 
+const { tasks: lockedTasks } = await (await fetch(`${BACKEND}/api/framework-interviews/${sessionId}`, { headers: { "X-Dev-User": ADMIN } })).json();
+const [firstTask, secondTask] = [...lockedTasks].sort((a, b) => a.seq - b.seq);
+check("plan locked into at least 2 cards", Boolean(firstTask) && Boolean(secondTask), lockedTasks.map((x) => `${x.seq}:${x.status}`).join(" "));
+
+// 대기 중인 두 번째 행 클릭 → 준비 중 패널(러너가 아직 멈춰 있어 pending으로 붙잡힌다)
+await page.locator(`[data-id="fw-consult-task-${secondTask.id}"]`).click();
+await page.locator('[data-id="fw-consult-task-panel"]').waitFor({ timeout: 10000 });
+const waitingShown = await page.locator('[data-id="fw-consult-task-waiting"]').isVisible();
+check("pending board row opens the waiting panel", waitingShown);
+
+// 닫기 → 자동 흐름(첫 카드)으로 복귀 후 러너 재개
+await page.locator('[data-id="fw-consult-task-close"]').click();
+await page.locator('[data-id="fw-consult-pause-toggle"]').click();
+
+let sectionChecked = false;
 async function answerOneCard() {
   await page.locator('[data-id="fw-consult-questions"]').waitFor({ timeout: 20000 });
+  if (!sectionChecked) {
+    sectionChecked = true;
+    const basicSection = await page.locator('[data-id="fw-consult-section-basic"]').count();
+    check("questionnaire shows the basic-info section header", basicSection > 0);
+  }
   await page.locator('[data-id="fw-consult-fill-all"]').click();
   await page.locator('[data-id="fw-consult-review"]').click();
   await page.locator('[data-id="fw-consult-submit"]').click();
@@ -73,17 +101,17 @@ async function answerOneCard() {
 
 await answerOneCard();
 await page.locator('[data-id="fw-consult-task-list"] li[data-status="drawn"]').first().waitFor({ timeout: 30000 });
+// 제안 오버레이는 연결 단계가 마운트되는 순간의 과도 상태(최소 1.5초, RelationsStep OVERLAY_MIN_MS) —
+// 마지막 카드가 그려지자마자 나타났다 걷힐 수 있으니, 마지막 제출 전에 미리 폴링(waitForFunction)을 걸어 둔다.
+const overlayPromise = page
+  .waitForFunction(() => document.querySelector('[data-id="fw-consult-relations-proposing"]') !== null, null, { timeout: 90000 })
+  .then(() => true)
+  .catch(() => false);
 while (await page.locator('[data-id="fw-consult-questions"]').isVisible().catch(() => false)) {
   await answerOneCard();
   await page.waitForTimeout(500);
 }
-// 제안 오버레이는 연결 단계가 마운트되는 순간의 과도 상태 — Playwright 액션은 페이지당 직렬화되므로
-// 동시 대기 대신, 마지막 카드가 그려지기 전에 페이지 안 폴링(waitForFunction)을 걸어 등장을 잡는다.
-const overlaySeen = await page
-  .waitForFunction(() => document.querySelector('[data-id="fw-consult-relations-proposing"]') !== null, null, { timeout: 90000 })
-  .then(() => true)
-  .catch(() => false);
-check("proposing overlay shown on entry", overlaySeen);
+check("proposing overlay shown on entry", await overlayPromise);
 
 await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 60000 });
 const canvas = page.locator('[data-id="fw-consult-relations-canvas"]');
@@ -181,6 +209,25 @@ check("PUT /canvas returned 200", canvasPuts.length > 0 && canvasPuts.every((s) 
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor({ timeout: 20000 });
 check("register step reached", true);
+
+// ⑧ 등록 리포트를 보는 중에도 보드는 살아있다 — 완료 카드를 클릭하면 미리보기+피드백 채팅 패널이 열린다
+await page.locator(`[data-id="fw-consult-task-${firstTask.id}"]`).click();
+await page.locator('[data-id="fw-consult-task-panel"][data-status="drawn"]').waitFor({ timeout: 10000 });
+await page.locator('[data-id="fw-consult-task-panel-canvas"]').waitFor({ timeout: 15000 });
+const feedbackChatShown = await page.locator('[data-id="fw-feedback-chat"]').isVisible();
+check("done board card opens preview + feedback chat after registration", feedbackChatShown);
+await page.screenshot({ path: "../docs/qa/screens/fw-consult-canvas-feedback.png" });
+
+const beforeTask = await readTask(sessionId, firstTask.id);
+await page.locator('[data-id="fw-feedback-input"]').fill("이름 고쳐");
+await page.locator('[data-id="fw-feedback-send"]').click();
+await page.locator('[data-id="fw-feedback-entry-0"]').waitFor({ timeout: 30000 });
+const afterTask = await readTask(sessionId, firstTask.id);
+check(
+  "task feedback rewrote the row with a (수정) suffix",
+  String(afterTask.row?.l6 ?? "").endsWith("(수정)"),
+  `${beforeTask.row?.l6 ?? ""} -> ${afterTask.row?.l6 ?? ""}`,
+);
 
 await browser.close();
 const failed = results.filter((r) => !r.ok);
