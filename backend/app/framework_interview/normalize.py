@@ -163,7 +163,8 @@ def normalize_questionnaire(raw: Any) -> dict:
         qid = _unique_id(_text(item.get("id")) or f"q{idx}", seen_q)
         section = _lower(item.get("section"))
         section = section if section in SECTIONS else SECTION_BY_MAPS_TO.get(maps_to, "basic")
-        out.append({"id": qid, "kind": kind, "maps_to": maps_to, "section": section, "text": text[:600], "options": options, "suggested": suggested})
+        why = _text(item.get("why") or item.get("reason") or item.get("rationale"))[:300]
+        out.append({"id": qid, "kind": kind, "maps_to": maps_to, "section": section, "why": why, "text": text[:600], "options": options, "suggested": suggested})
     # activities 순서 문항이 없으면 activities로 표시된 객관식을 ordered로 승격(없으면 검증이 잡는다)
     if not any(q["kind"] == "ordered" and q["maps_to"] == "activities" for q in out):
         for q in out:

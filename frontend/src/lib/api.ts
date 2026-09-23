@@ -2881,6 +2881,7 @@ export interface FwQuestion {
   kind: FwQuestionKind;
   maps_to: FwMapsTo;
   section: FwQuestionSection;
+  why?: string;  // 왜 이 질문이 필요한지(자료에서 빠진 것) 한 줄. 서버 normalize가 빈 문자열로 채운다
   text: string;
   options: FwQuestionOption[];
   suggested: string[] | string;

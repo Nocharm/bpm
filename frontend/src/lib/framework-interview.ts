@@ -8,7 +8,8 @@ import type { MessageKey } from "./i18n-messages";
 export type FwStep = "plan" | "answer" | "waiting" | "relations" | "register" | "done";
 
 // 설문 섹션 표시 순서 — 서버 문항 생성(framework_interview/contracts.py)과 같은 읽는 순서
-const SECTION_ORDER: FwQuestionSection[] = ["basic", "activities", "exceptions", "io"];
+// 판단·예외·분기가 설문의 주 목적이라 맨 위(사용자 결정 2026-09-24), 자료에서 못 읽은 기본 정보·입출력은 뒤로
+const SECTION_ORDER: FwQuestionSection[] = ["exceptions", "activities", "basic", "io"];
 
 /** 섹션 헤더 문구 — 설문 폼과 확인 화면이 같은 라벨을 쓴다. */
 export const SECTION_LABEL_KEYS: Record<FwQuestionSection, MessageKey> = {

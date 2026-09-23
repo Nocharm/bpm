@@ -204,3 +204,13 @@ def test_finalize_row_output_drops_owner_and_fills_department_from_the_card() ->
     row = finalize_row_output(out, {"department": "품질팀"})
     assert "owner" not in row and row["department"] == "품질팀"
     assert finalize_row_output(out, {})["department"] == ""
+
+
+def test_normalize_questionnaire_keeps_why_and_accepts_synonyms() -> None:
+    out = normalize_questionnaire({"questions": [
+        {"id": "q1", "kind": "ordered", "maps_to": "activities", "text": "순서", "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}], "suggested": ["a", "b"], "why": "첨부 SOP에 순서가 없음"},
+        {"id": "q2", "kind": "single", "maps_to": "branches", "text": "반려 시", "options": [{"id": "r", "label": "재접수"}, {"id": "s", "label": "종료"}], "suggested": ["r"], "reason": "반려 경로 미기재"},
+        {"id": "q3", "kind": "text", "maps_to": "io", "text": "입력", "options": [], "suggested": "x"},
+    ]})
+    whys = {q["id"]: q["why"] for q in out["questions"]}
+    assert whys == {"q1": "첨부 SOP에 순서가 없음", "q2": "반려 경로 미기재", "q3": ""}

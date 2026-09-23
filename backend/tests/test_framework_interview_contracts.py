@@ -153,3 +153,12 @@ def test_registry_exposes_the_feedback_contracts() -> None:
     for key in ("l5_canvas_feedback_contract", "l6_row_feedback_contract"):
         assert key in PROMPT_KEYS
         assert defaults[key]
+
+
+def test_questionnaire_contract_targets_ambiguity_and_asks_for_why() -> None:
+    # 설문의 초점은 값 채우기가 아니라 절차의 애매한 지점 확정(사용자 결정 2026-09-24) — 문항마다 why 근거
+    text = c.L6_QUESTIONNAIRE_CONTRACT
+    assert "애매한 지점" in text and "why" in text
+    assert "exceptions 3~5" in text
+    assert "—" not in text  # AI 프롬프트에 긴 대시 금지
+    assert c.Question(id="q1", kind="text", maps_to="conditions", text="t", suggested="s").why == ""

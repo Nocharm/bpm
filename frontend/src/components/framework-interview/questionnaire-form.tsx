@@ -46,12 +46,16 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
                     <TextAnswer
                       qid={q.id}
                       title={<><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</>}
+                      why={q.why}
                       value={textValue}
                       suggested={typeof q.suggested === "string" ? q.suggested : ""}
                       onChange={(v) => onChange(q.id, v)}
                     />
                   ) : (
-                    <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</p>
+                    <>
+                      <p className="text-caption text-ink"><span className="text-ink-tertiary tabular-nums">{numbers.get(q.id)}. </span>{q.text}</p>
+                      {q.why && <QuestionWhy qid={q.id} why={q.why} />}
+                    </>
                   )}
                   {q.kind === "single" && (
                     <div className="flex flex-wrap gap-2">
@@ -107,10 +111,15 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
   );
 }
 
+// 질문 근거 한 줄 — AI가 왜 이걸 묻는지(자료에서 빠진 것). 현업이 "왜 이걸 묻지"를 바로 알게 문항 바로 아래 작게.
+function QuestionWhy({ qid, why }: { qid: string; why: string }) {
+  return <p className="text-fine text-ink-tertiary" data-id={`fw-consult-question-why-${qid}`}>{why}</p>;
+}
+
 // 주관식 한 칸 — 제목 줄 우측에 글자형 [AI 제안](편집 중)/연필(확정 후, hover에 노출), 그 아래 전폭 textarea.
 // 빈 textarea에서 시작, [AI 제안]이 제안값을 타이핑으로 채우고, blur로 확정(텍스트 뷰), 연필로 재편집.
 // 빈칸 제출은 여전히 허용(서버가 제안값 적용) — 여기서는 보여주지 않을 뿐이다.
-function TextAnswer({ qid, title, value, suggested, onChange }: { qid: string; title: ReactNode; value: string; suggested: string; onChange: (v: string) => void }) {
+function TextAnswer({ qid, title, why, value, suggested, onChange }: { qid: string; title: ReactNode; why?: string; value: string; suggested: string; onChange: (v: string) => void }) {
   const { t } = useI18n();
   const { typeInto } = useTypewriter();
   const [editing, setEditing] = useState(() => value === "");
@@ -119,7 +128,10 @@ function TextAnswer({ qid, title, value, suggested, onChange }: { qid: string; t
   return (
     <div className="group flex flex-col gap-1.5">
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-caption text-ink">{title}</p>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="text-caption text-ink">{title}</p>
+          {why && <QuestionWhy qid={qid} why={why} />}
+        </div>
         {committed ? (
           <button
             type="button"

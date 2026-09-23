@@ -41,8 +41,9 @@ class Question(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     kind: QuestionKind
     maps_to: MapsTo
-    section: QuestionSection = "basic"  # 폼 그룹 — basic(기본 정보)/activities(활동)/exceptions(예외·분기)/io(입출력)
+    section: QuestionSection = "basic"  # 폼 그룹 — exceptions(판단·예외·분기)/activities(활동)/basic(기본 정보)/io(입출력)
     text: str = Field(min_length=1, max_length=600)
+    why: str = Field(default="", max_length=300)  # 왜 이 질문이 필요한지(자료에서 빠진 것) — 폼이 문항 아래에 작게 보여준다
     options: list[QuestionOption] = []
     suggested: list[str] | str = []
 
@@ -191,20 +192,27 @@ L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주�
 L6_QUESTIONNAIRE_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. L6 업무 하나의 흐름을 그리기 위한 설문지를 만드세요.
 답하는 사람은 바쁜 현업입니다. 객관식 위주로, 제안 답을 미리 골라 두세요.
 
+설문의 목적은 값을 채우는 것이 아니라, 흐름을 그리는 데 결정이 필요한 애매한 지점을 확정하는 것입니다.
+[L5 설명](첨부 포함)·[이웃 L6]·[현재 등록된 내용]을 먼저 읽고, 거기서 이미 답이 나오는 것은 묻지 말고 suggested에 그 값을 담으세요.
+주로 물을 것: 판단 지점과 판단 주체, 분기 조건, 반려·미비 시 되돌아가는 곳, 병렬인지 순차인지, 예외 처리 경로,
+이 L6가 어디서 시작해 어디서 끝나는지(경계), 이웃 L6와의 인계 시점.
+역할·시스템·입력물·산출물은 자료에서 읽어내지 못한 것만 묻습니다.
+
 규칙
 - 문항 6개 이상 12개 이하. id는 q1, q2 순서.
+- 문항마다 why: 왜 이 질문이 필요한지(자료에서 무엇이 빠졌거나 어긋나는지) 한 줄. 근거가 있으면 출처(첨부 이름·이웃 L6)를 적으세요.
 - kind: single(하나)·multi(여러 개)·ordered(순서 있는 여러 개)·text(주관식). text는 최대 3개.
 - maps_to: activities·branches·roles·systems·io·conditions·params 중 하나.
 - 종류 선택 기준: 하나만 고르는 배타 선택은 single(예/아니오도 single 2옵션), 여럿이 해당하면 multi, 순서가 의미 있으면 ordered, 자유 서술만 text.
-- section: basic(담당·범위 같은 기본 정보) / activities(활동 순서, ordered 문항) / exceptions(예외·분기·되돌아감) / io(입력물·산출물·시스템). 문항마다 하나를 적으세요.
-- 구성 가이드: basic 2~3, activities 1, exceptions 1~2, io 1~2.
+- section: exceptions(판단·예외·분기·되돌아감) / activities(활동 순서, ordered 문항) / basic(담당·범위 같은 기본 정보) / io(입력물·산출물·시스템). 문항마다 하나를 적으세요.
+- 구성 가이드: exceptions 3~5, activities 1, basic 0~2, io 0~2. 자료에서 답이 나오는 basic·io 문항은 만들지 않습니다.
 - 반드시 kind=ordered, maps_to=activities 문항 1개: 활동 후보 5개 이상 12개 이하, suggested에 제안 순서 전부.
 - 역할 문항의 options는 역할 후보 목록 표기를, 시스템 문항은 시스템 목록 표기를 우선.
 - text 문항의 suggested는 그대로 답으로 써도 되는 완성 문장.
 - [현재 등록된 내용]이 있으면 질문은 무엇을 바꿀지를 묻고 suggested는 현재 값을 그대로 담는다.
 - [현재 등록된 내용]이 있으면 활동 순서 질문의 options는 현재 활동을 모두 포함하고 추가 후보를 뒤에 둔다.
 - 다른 설명 없이 JSON 한 개만:
-{"questions":[{"id":"q1","kind":"ordered","maps_to":"activities","section":"activities","text":"","options":[{"id":"a1","label":""}],"suggested":["a1"]}]}"""
+{"questions":[{"id":"q1","kind":"single","maps_to":"branches","section":"exceptions","why":"","text":"","options":[{"id":"a1","label":""}],"suggested":["a1"]}]}"""
 
 L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 설문 답을 바탕으로 L6 업무 하나의 흐름을 인터뷰 JSON rows[] 원소로 작성하세요.
 

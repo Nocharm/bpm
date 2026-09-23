@@ -38,11 +38,11 @@ describe("framework-interview view model", () => {
     expect(buildSubmitPayload(Q, { q1: ["b"], q2: "r2" })).toEqual({ q1: ["b"], q2: "r2", q3: "" });
   });
 
-  it("groupQuestionsBySection orders basic→activities→exceptions→io and drops empty sections", () => {
+  it("groupQuestionsBySection orders exceptions→activities→basic→io and drops empty sections", () => {
     const q = (id: string, section: FwQuestionSection) => ({ id, kind: "text" as const, maps_to: "conditions" as const, text: id, options: [], suggested: "", section });
     const groups = groupQuestionsBySection([q("a", "io"), q("b", "basic"), q("c", "activities"), q("d", "basic")]);
-    expect(groups.map((g) => g.section)).toEqual(["basic", "activities", "io"]);
-    expect(groups[0].questions.map((x) => x.id)).toEqual(["b", "d"]);
+    expect(groups.map((g) => g.section)).toEqual(["activities", "basic", "io"]);
+    expect(groups[1].questions.map((x) => x.id)).toEqual(["b", "d"]);
   });
 
   it("groupQuestionsBySection drops an unknown or missing section into basic", () => {
