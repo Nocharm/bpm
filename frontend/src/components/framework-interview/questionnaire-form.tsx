@@ -1,7 +1,7 @@
 "use client";
 
-// 캠페인 ② L6 설문 폼 — 섹션(기본·활동·예외·입출력)별 문항 렌더(2열 그리드·객관식 위주·제안 선택됨·주관식은
-// 빈칸에서 [AI 제안]이 타이핑으로 채우고 blur로 확정). 상태별 카드 패널(task-panel)이 ready 카드에서 쓴다
+// 캠페인 ② L6 설문 폼 — 섹션(판단·예외·분기·활동·기본·입출력)별 문항 렌더(2열 그리드·객관식 위주·제안 선택됨·주관식은
+// 빈칸에서 [AI 제안]이 타이핑으로 채우고 blur로 확정). 오래 머무는 화면이라 hover 응답을 종류별로 둔다(문항 카드·알약·체크 행·화살표·확정 뷰·textarea). 상태별 카드 패널(task-panel)이 ready 카드에서 쓴다
 // (spec 2026-09-21 §2·§4, 2026-09-23 §3 B10·§4.3 B12).
 
 import { type ReactNode, useState } from "react";
@@ -40,7 +40,7 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
               // 활동 순서 문항은 2열 섹션에서만 전폭 — 1열 섹션에 col-span을 주면 암시적 열이 생겨 레이아웃이 깨진다
               const span = q.kind === "ordered" && section !== "activities" ? " xl:col-span-2" : "";
               return (
-                <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 ${isMissing ? "border-error" : "border-hairline"} bg-surface-pearl${span}`}>
+                <li key={q.id} data-id={`fw-consult-question-${q.id}`} className={`flex flex-col gap-1.5 rounded-md border p-3 transition-[background-color,border-color,box-shadow] duration-150 hover:bg-surface hover:shadow-sm ${isMissing ? "border-error" : "border-hairline hover:border-border-strong"} bg-surface-pearl${span}`}>
                   {q.kind === "text" ? (
                     // 주관식은 제목 줄 우측에 글자형 [AI 제안]/연필을 얹고 편집 박스가 전폭을 쓴다
                     <TextAnswer
@@ -61,7 +61,7 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
                     <div className="flex flex-wrap gap-2">
                       {q.options.map((o) => (
                         // 라디오는 label 안쪽(sr-only)이라 형제 peer가 아니라 has()로 키보드 포커스만 링 표시(check-input.tsx의 peer 패턴 동치).
-                        <label key={o.id} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-sm border px-2 py-1 text-caption has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-1 ${value === o.id ? "border-accent bg-accent-tint text-accent" : "border-hairline bg-surface text-ink"}`}>
+                        <label key={o.id} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-sm border px-2 py-1 text-caption has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-1 transition-colors duration-150 ${value === o.id ? "border-accent bg-accent-tint text-accent hover:bg-accent-tint-border/60" : "border-hairline bg-surface text-ink hover:border-border-strong hover:bg-surface-alt"}`}>
                           <input type="radio" name={q.id} className="sr-only" checked={value === o.id} data-id={`fw-consult-answer-${q.id}-${o.id}`} onChange={() => onChange(q.id, o.id)} />
                           {o.label}
                         </label>
@@ -75,22 +75,29 @@ export function QuestionnaireForm({ questionnaire, answers, missing, onChange }:
                         const checked = list.includes(o.id);
                         const pos = list.indexOf(o.id);
                         return (
-                          <li key={o.id} className="flex items-center gap-2">
+                          // 행 전체가 hover 대상이고 글자를 눌러도 토글된다 — 체크박스만 겨냥하지 않아도 되게(설문 체류 편의)
+                          <li key={o.id} className="-mx-1.5 flex items-center gap-2 rounded-sm px-1.5 py-0.5 transition-colors duration-150 hover:bg-surface-alt">
                             <CheckInput
                               checked={checked}
                               data-id={`fw-consult-answer-${q.id}-${o.id}`}
                               aria-label={o.label}
                               onChange={() => onChange(q.id, checked ? list.filter((v) => v !== o.id) : [...list, o.id])}
                             />
-                            <span className={`text-caption ${checked ? "text-ink" : "text-ink-secondary"}`}>{o.label}</span>
+                            <span
+                              className={`min-w-0 flex-1 cursor-pointer text-caption ${checked ? "text-ink" : "text-ink-secondary"}`}
+                              data-id={`fw-consult-answer-label-${q.id}-${o.id}`}
+                              onClick={() => onChange(q.id, checked ? list.filter((v) => v !== o.id) : [...list, o.id])}
+                            >
+                              {o.label}
+                            </span>
                             {q.kind === "ordered" && checked && (
                               <span className="ml-auto flex items-center gap-0.5">
                                 <span className="text-fine text-ink-tertiary tabular-nums">{pos + 1}</span>
-                                <button type="button" className="rounded-sm p-0.5 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.moveUp")} data-id={`fw-consult-answer-up-${q.id}-${o.id}`} disabled={pos === 0}
+                                <button type="button" className="rounded-sm p-0.5 text-ink-tertiary transition-colors duration-150 hover:bg-accent-tint hover:text-accent disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary" title={t("fwConsult.moveUp")} data-id={`fw-consult-answer-up-${q.id}-${o.id}`} disabled={pos === 0}
                                   onClick={() => { const next = [...list]; [next[pos - 1], next[pos]] = [next[pos], next[pos - 1]]; onChange(q.id, next); }}>
                                   <ArrowUp size={14} strokeWidth={1.5} />
                                 </button>
-                                <button type="button" className="rounded-sm p-0.5 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.moveDown")} data-id={`fw-consult-answer-down-${q.id}-${o.id}`} disabled={pos === list.length - 1}
+                                <button type="button" className="rounded-sm p-0.5 text-ink-tertiary transition-colors duration-150 hover:bg-accent-tint hover:text-accent disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-ink-tertiary" title={t("fwConsult.moveDown")} data-id={`fw-consult-answer-down-${q.id}-${o.id}`} disabled={pos === list.length - 1}
                                   onClick={() => { const next = [...list]; [next[pos + 1], next[pos]] = [next[pos], next[pos + 1]]; onChange(q.id, next); }}>
                                   <ArrowDown size={14} strokeWidth={1.5} />
                                 </button>
@@ -162,13 +169,21 @@ function TextAnswer({ qid, title, why, value, suggested, onChange }: { qid: stri
         )}
       </div>
       {committed ? (
-        <p className="whitespace-pre-wrap text-caption text-ink" data-id={`fw-consult-answer-view-${qid}`}>{value}</p>
+        // 확정 뷰도 눌러서 다시 열 수 있다(연필과 같은 동작) — hover 배경으로 눌릴 수 있음을 보인다
+        <p
+          className="-mx-1.5 cursor-text whitespace-pre-wrap rounded-sm px-1.5 py-1 text-caption text-ink transition-colors duration-150 hover:bg-surface-alt"
+          data-id={`fw-consult-answer-view-${qid}`}
+          title={t("fwConsult.editAnswer")}
+          onClick={() => setEditing(true)}
+        >
+          {value}
+        </p>
       ) : (
         <textarea
           data-id={`fw-consult-answer-${qid}`}
           autoFocus={editing && value !== ""}
           readOnly={typing}
-          className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink"
+          className="min-h-16 w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none transition-[border-color,box-shadow] duration-150 hover:border-border-strong focus:border-accent focus:ring-2 focus:ring-accent/20"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={() => { if (value.trim() !== "") setEditing(false); }}

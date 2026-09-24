@@ -5,6 +5,7 @@
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ④ 캠페인 엔진
 
+- **설문 hover 응답(dev, 09-24):** 오래 머무는 화면이라 종류별 hover를 채움. 문항 카드(테두리 진해짐·surface·그림자), 라디오 알약(미선택 테두리·배경, 선택은 틴트 진하게), 체크/순서 행(행 배경 + 글자 클릭으로 토글), 순서 화살표(액센트 틴트), 확정된 주관식 뷰(배경 + 클릭으로 재편집), textarea(hover 테두리·focus 액센트 링).
 - **워스트 케이스 캡처(dev, 09-24):** 가짜 AI `FAKE_AI_WORST=1` 모드(문항 12·선택지 12·긴 근거, 행 12활동+분기 2+루프, 연결 분기·루프) + `pw-fw-consult-worst.mjs`(카드 12장 단계 6/동시 4/선행 3을 API로 심고 계획·드래그 중·설문·보드·연결+채팅 8건·카드 패널+피드백 5건·등록 12맵을 `docs/qa/screens/worst/`에 캡처). 발견: 타일 드래그 중 글자 선택 → 목록에 `select-none`. 12노드 연결 캔버스는 fitView가 작아지는 것이 한계(가로 일렬 배치).
 - **계획 타일 마감 2건(dev, 09-24):** 그립 아이콘을 타일 우측 상단으로(왼쪽 여백을 잡아두지 않게, 본문 패딩 pl-2.5/pr-6) · 행 끝 `+`와 점선 "새 단계" 버튼은 그 행에 hover했을 때만 페이드인(`group/stage` + `group-hover/stage:opacity-100`, 포커스 시 노출).
 - **계획 화면 = 단계 행(dev, 09-24, 시안 확정 후 구현):** 가운데 열을 `depends_on`에서 계산한 단계(행, 위→아래 = 순서 · 같은 행 = 동시 진행)로 그린다(`lib/plan-cards` computeStages/groupByStage/moveCardToStage/reorderWithinStage/renameDependency + 테스트). 200px 타일 전체가 드래그(4px 임계, 고스트·행 하이라이트·삽입 바), 다른 행 = 선행 갱신, 같은 행 = 순서, 점선 새 단계 행; 선택 타일에서 Alt+↑/↓·←/→. 그립은 hover에서만. 모션: FLIP을 2D로(`use-flip-order` translate x,y), 추가 `.plan-tile-in`·삭제 `.plan-tile-out`·단계 이동 `.plan-tile-settle` 링. 상세 열에 선행 카드 칩(제거·SearchSelect 추가, 이름 변경 시 참조 추종). 분기는 연결 단계에서(계획엔 순서·동시까지만).

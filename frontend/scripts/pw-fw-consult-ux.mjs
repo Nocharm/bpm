@@ -101,6 +101,7 @@ await page.locator('[data-id="fw-consult-ai-suggest-q4"]').click();
 await page.waitForTimeout(120);
 const partial = await q4.inputValue();
 check("AI suggestion types progressively", partial.length > 0 && partial.length < "요청서 도착".length, JSON.stringify(partial));
+await page.locator('[data-id="fw-consult-answer-label-q3-s2"]').hover();  // 체크 행 hover 상태를 캡처에 담는다
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-answer-typing.png" });
 const view = page.locator('[data-id="fw-consult-answer-view-q4"]');
 await view.waitFor({ timeout: 3000 });
