@@ -5,6 +5,7 @@
 
 ## 2026-09-23 — AI L5 캠페인 2라운드 스프린트 ④ 캠페인 엔진
 
+- **워스트 케이스 캡처(dev, 09-24):** 가짜 AI `FAKE_AI_WORST=1` 모드(문항 12·선택지 12·긴 근거, 행 12활동+분기 2+루프, 연결 분기·루프) + `pw-fw-consult-worst.mjs`(카드 12장 단계 6/동시 4/선행 3을 API로 심고 계획·드래그 중·설문·보드·연결+채팅 8건·카드 패널+피드백 5건·등록 12맵을 `docs/qa/screens/worst/`에 캡처). 발견: 타일 드래그 중 글자 선택 → 목록에 `select-none`. 12노드 연결 캔버스는 fitView가 작아지는 것이 한계(가로 일렬 배치).
 - **계획 타일 마감 2건(dev, 09-24):** 그립 아이콘을 타일 우측 상단으로(왼쪽 여백을 잡아두지 않게, 본문 패딩 pl-2.5/pr-6) · 행 끝 `+`와 점선 "새 단계" 버튼은 그 행에 hover했을 때만 페이드인(`group/stage` + `group-hover/stage:opacity-100`, 포커스 시 노출).
 - **계획 화면 = 단계 행(dev, 09-24, 시안 확정 후 구현):** 가운데 열을 `depends_on`에서 계산한 단계(행, 위→아래 = 순서 · 같은 행 = 동시 진행)로 그린다(`lib/plan-cards` computeStages/groupByStage/moveCardToStage/reorderWithinStage/renameDependency + 테스트). 200px 타일 전체가 드래그(4px 임계, 고스트·행 하이라이트·삽입 바), 다른 행 = 선행 갱신, 같은 행 = 순서, 점선 새 단계 행; 선택 타일에서 Alt+↑/↓·←/→. 그립은 hover에서만. 모션: FLIP을 2D로(`use-flip-order` translate x,y), 추가 `.plan-tile-in`·삭제 `.plan-tile-out`·단계 이동 `.plan-tile-settle` 링. 상세 열에 선행 카드 칩(제거·SearchSelect 추가, 이름 변경 시 참조 추종). 분기는 연결 단계에서(계획엔 순서·동시까지만).
 - **연결 화면 AI 게이트 정리(dev, 09-24):** 자연어 수정은 채팅 한 게이트(현재 캔버스 기준 증분, "처음부터" 요청도 노드 id 유지로 프롬프트에 허용). 상단 [다시 제안]은 리셋 전용으로 메모 입력칸을 없애고, 캔버스가 있으면 ConfirmDialog로 "손편집 포함 덮임"을 묻는다. 서버는 리셋 재제안일 때 `feedback_log`에 `kind: "system"` 항목("처음부터 다시 제안")을 남겨 두 경로 이력이 채팅 한 곳에 보인다(첫 자동 제안은 기록 없음).

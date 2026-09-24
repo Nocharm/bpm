@@ -294,7 +294,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
             {session.existing.length > 0 && <span data-id="fw-consult-existing-note">{t("fwConsult.existingNote", { n: session.existing.length })}</span>}
             <span className="ml-auto text-ink-tertiary">{t("fwConsult.stageHint")}</span>
           </div>
-          <div ref={listRef} className="flex flex-col" data-id="fw-consult-plan-cards">
+          {/* select-none: 타일을 끌 때 포인터가 지나는 글자가 선택되지 않게(워스트 케이스 캡처에서 확인) */}
+          <div ref={listRef} className="flex select-none flex-col" data-id="fw-consult-plan-cards">
             {groups.map((group, stage) => {
               const isTarget = drag !== null && drag.stage === stage;
               const startIndex = stageStarts[stage];
