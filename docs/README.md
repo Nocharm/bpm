@@ -30,11 +30,11 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-- [`design/2026-09-12-catalog-alias-node-swap-design.md`](design/2026-09-12-catalog-alias-node-swap-design.md) — 카탈로그 별칭(정식 표기 치환·CSV 2열·탭 편집) + 노드 담당자/시스템 줄 휴식↔활성 페이드 전환(1초 상수) + 노드 내 칩 흑백 (**dev 구현 완료**).
-- [`design/2026-09-11-assignee-role-catalog-design.md`](design/2026-09-11-assignee-role-catalog-design.md) — 노드 역할(assignee_role) 단일값 칸 + 재사용 자동완성 엔진(`SuggestInput`·`/catalogs`) + 시스템 정규화(자유값→`Other`+폴백) + 설정 Catalogs 탭(CSV 임포트) (**dev 구현 완료**(CSV/AI 노출 후속)).
 - [`design/2026-09-01-interview-import-v04-result.md`](design/2026-09-01-interview-import-v04-result.md) — 인터뷰 JSON 0.4 임포트 최종 결과·확장 계획·한계·후속 점검(핸드오프).
+- [`design/2026-08-24-data-surface-parity-design.md`](design/2026-08-24-data-surface-parity-design.md) — 검토값 CSV 왕복·Excel 컬럼 확장 **미구현 이관 트랙**.
+- [`design/2026-08-08-governance-ux-design.md`](design/2026-08-08-governance-ux-design.md) — 거버넌스 UX 확장 A/B/C **미구현 트랙**.
 
-아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·핸드오프). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
+아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·핸드오프) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`). AI L5 캠페인 스펙 3종은 [`superpowers/specs/`](superpowers/specs/)에 코드 주석 provenance로 유지.
 
 ## 릴리스 공지 ([`notices/`](notices/))
 - [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md) · [2026-08-19](notices/2026-08-19-release.md) · [2026-08-25](notices/2026-08-25-release.md) · [2026-09-12](notices/2026-09-12-release.md)

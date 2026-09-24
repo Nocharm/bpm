@@ -2,7 +2,7 @@
 
 // 관리 목록(카탈로그) — 역할·시스템 자동완성 옵션의 단일 소스 + 시스템 정규화 순수 함수.
 // 모듈 캐시(세션당 1회 fetch, lib/directory.ts 패턴). 관리자 저장 후 invalidateCatalogs()로 재조회.
-// 설계: docs/design/2026-09-11-assignee-role-catalog-design.md §3.2·§4.2
+// 설계: 2026-09-11-assignee-role-catalog-design.md §3.2·§4.2
 
 import { useEffect, useState } from "react";
 

@@ -1,6 +1,6 @@
 """인터뷰 결과 JSON(0.4-bpm-interface-draft) → canonical 변환 어댑터 — DB 무관 순수 함수.
 
-설계: docs/design/2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
+설계: 2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
 docs/design/2026-08-18-interview-import-design.md §2·§3(원설계). 한 파일 = L5 1건.
 구조 치명 오류는 error issue + 빈 maps로 반환하고 예외를 던지지 않는다 — 파일별 독립
 처리(다중 파일 일괄 임포트에서 한 파일의 오류가 다른 파일을 죽이지 않는다).

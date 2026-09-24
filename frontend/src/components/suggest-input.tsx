@@ -6,7 +6,7 @@
 // 일치 없으면 입력값 그대로 확정(allowFree). 드롭다운은 body 포털 fixed z-[1400] — 타일 팝오버(1350) 위,
 // DataFormPicker와 같은 층. row=인스펙터 행(우측 정렬 w-32) / field=팝오버·폼 전폭.
 // 별칭(aliases)으로도 검색되고, 값·별칭 정확 일치 시 정식 표기(value)로 치환해 커밋한다.
-// 설계: docs/design/2026-09-11-assignee-role-catalog-design.md §3.2, docs/design/2026-09-12-catalog-alias-node-swap-design.md §2
+// 설계: 2026-09-11-assignee-role-catalog-design.md §3.2, 2026-09-12-catalog-alias-node-swap-design.md §2
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

@@ -1,6 +1,6 @@
 """임포트 가로 자동정렬 + IO 자동 연결 — 순수 함수 단위(DB 없이).
 
-설계: docs/design/2026-09-01-interview-import-v04-design.md §6·§7.
+설계: 2026-09-01-interview-import-v04-design.md §6·§7.
 정렬은 `frontend/src/lib/flow-layout.ts`(autoLayoutFlow, LR)와 동치 이중 구현 —
 한쪽을 고치면 이 테스트와 `flow-layout.test.ts`를 같이 옮긴다.
 """

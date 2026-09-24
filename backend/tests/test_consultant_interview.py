@@ -1,6 +1,6 @@
 """인터뷰 결과 JSON 어댑터 — 키 검증·canonical 변환·흐름 그래프·노트 추출.
 
-설계: docs/design/2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
+설계: 2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
 2026-08-18-interview-import-design.md §2·§3. 픽스처는 손타이핑 스키마
 (0.4-bpm-interface-draft) 기반 합성 데이터 — 실전달물 키 차이는 dry-run 리포트로 흡수한다.
 """

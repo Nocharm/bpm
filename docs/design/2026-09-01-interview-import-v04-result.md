@@ -1,8 +1,8 @@
 # 인터뷰 JSON 0.4 임포트 — 최종 결과 · 확장 계획 · 한계
 
-2026-09-01 작업 결과. dev `11288e80` → `63d2257c` (7커밋). **main 미머지.**
+2026-09-01 작업 결과. dev `11288e80` → `63d2257c` (7커밋). main 머지 완료(2026-09-24).
 
-- 규칙·결정 근거: [2026-09-01-interview-import-v04-design.md](2026-09-01-interview-import-v04-design.md)
+- 규칙·결정 근거: `2026-09-01-interview-import-v04-design.md`(폐기, git history)
 - 필드 전수 대조표: [`docs/qa/interview-import-field-map.md`](../qa/interview-import-field-map.md)
 
 ---

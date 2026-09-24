@@ -6,11 +6,10 @@
 
 ## 유지 중 (아직 소비될 문서)
 
-- [카탈로그 별칭 + 노드 표시 전환(휴식=역할/활성=담당자)](2026-09-12-catalog-alias-node-swap-design.md) — 항목 `{value, aliases}` 객체화·별칭→정식 표기 치환·SuggestInput 별칭 검색·Catalogs 탭 별칭 편집·CSV 2열, 노드 호버/선택 1초 뒤 페이드 전환(`NODE_ALT_DELAY_MS`)·노드 내 칩 흑백. **dev 구현 완료.**
-- [노드 역할(assignee_role) + 관리 목록 엔진(역할·시스템 카탈로그)](2026-09-11-assignee-role-catalog-design.md) — 담당자 옆 단일값 역할 칸, `SuggestInput`+`/catalogs` 재사용 자동완성, 시스템 자유값→`Other`+폴백 정규화, 설정 Catalogs 탭(CSV 임포트). **dev 구현 완료**(CSV/AI 노출 후속).
-- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — 스키마·엔진(§5) 설계 원본. canonical(§4)은 외부 전달 양식에서 **내부 IR로 강등**(2026-08-18) — 파일 로더·CLI·웹 canonical 임포트는 제거됨.
-- [인터뷰 JSON 0.4 임포트 — 최종 결과·확장 계획·한계](2026-09-01-interview-import-v04-result.md) — 이번 트랙의 **핸드오프 문서**(확정 계약·검증 수치·한계·후속 점검). 규칙 근거는 아래 설계 스냅샷.
-- [인터뷰 JSON 0.4 임포트 설계](2026-09-01-interview-import-v04-design.md) — 흐름 그래프(relations) 수용·L5 연계 캔버스 시드/분기 노드·가로 자동정렬·IO 자동 연결·편집용 draft. **dev 구현 완료, main 미머지.**
-- [컨설턴트 인터뷰 결과 JSON 임포트(Phase 3 어댑터)](2026-08-18-interview-import-design.md) — 인터뷰 JSON→canonical 어댑터·다중 파일 웹 임포트·키 검증 dry-run·`map_notes` 테이블. **1차 구현 dev 머지 완료** — 실파일 dry-run 대조 대기.
+- [컨설턴트 전사 프로세스 체계(7단계) 수용](2026-08-08-consultant-hierarchy-design.md) — 스키마·엔진(§5) 설계 원본(`models.py`·임포트 엔진이 주석으로 참조). canonical(§4)은 외부 전달 양식에서 **내부 IR로 강등**(2026-08-18) — 파일 로더·CLI·웹 canonical 임포트는 제거됨.
+- [컨설턴트 인터뷰 결과 JSON 임포트(Phase 3 어댑터)](2026-08-18-interview-import-design.md) — 인터뷰 JSON→canonical 어댑터·다중 파일 웹 임포트·키 검증 dry-run·`map_notes` 테이블. 어댑터 계약의 원설계(`consultant_interview.py`·테스트가 주석으로 참조). 현행 계약은 `docs/samples/interview-json-0.5.md`.
+- [인터뷰 JSON 0.4 임포트 — 최종 결과·확장 계획·한계](2026-09-01-interview-import-v04-result.md) — 0.4 트랙 **핸드오프 문서**(확정 계약·검증 수치·한계·후속 점검). 설계 스냅샷 `2026-09-01-interview-import-v04-design.md`는 main 머지로 폐기(git history).
 - [데이터 표면 패리티 — CSV 왕복·Excel·JSON 임포트 점검](2026-08-24-data-surface-parity-design.md) — 검토값(gmp·항목별 폼) CSV 왕복 확장·Excel 컬럼 확장. **미구현 이관 트랙**(system_fallback 처리 미결). §3 임포트 점검은 완료 — 실파일 dry-run만 잔여.
 - [거버넌스 UX 확장 A/B/C](2026-08-08-governance-ux-design.md) — 설계 승인·**미구현** 트랙. 이양 후 오너 대량 발생 전 구현 목표.
+
+폐기(2026-09-24, main 머지 완료): `2026-09-11-assignee-role-catalog-design.md` · `2026-09-12-catalog-alias-node-swap-design.md`(계약은 CLAUDE.md 카탈로그 커밋 규칙으로 흡수) · `2026-09-01-interview-import-v04-design.md`(0.5 계약 3표면으로 흡수). AI L5 캠페인 스펙 3종은 `docs/superpowers/specs/`에 코드 주석 provenance로 유지.
