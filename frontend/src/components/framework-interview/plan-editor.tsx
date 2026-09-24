@@ -4,7 +4,7 @@
 // 단계는 depends_on에서 계산한다(lib/plan-cards groupByStage). 타일 전체를 끌어 다른 행(단계 이동 = 선행 갱신)·같은 행 안(표시 순서)·
 // 점선 새 단계 행으로 옮기고, 선택 타일에서 Alt+↑/↓(단계)·Alt+←/→(순서)로도 옮긴다. 분기·조건은 여기서 잡지 않는다(연결 단계).
 // 모션: 자리 이동은 FLIP(useFlipOrder 2D), 추가 .plan-tile-in, 삭제 .plan-tile-out, 단계가 바뀐 타일은 .plan-tile-settle 링.
-// 그립 아이콘은 hover에서만. 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
+// 그립 아이콘은 hover에서만 우측 상단에(왼쪽 여백을 잡아두지 않게). 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
 // brief·첨부·AI 제안은 1열 PlanBriefPanel(page.tsx가 이어 준다). 시안 확정 2026-09-24.
 
 import { useEffect, useRef, useState } from "react";
@@ -24,11 +24,12 @@ const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 tex
 const LABEL = "text-fine text-ink-tertiary";
 const TILE_WIDTH = 200;
 const TILE =
-  "group relative flex w-[200px] cursor-grab flex-col gap-px rounded-md border py-2 pl-7 pr-2.5 text-left shadow-sm outline-none " +
+  "group relative flex w-[200px] cursor-grab flex-col gap-px rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
   "transition-[background-color,border-color,opacity] duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
 const TILE_QUIET = "border-hairline bg-surface hover:bg-surface-pearl";
 const TILE_SELECTED = "border-accent bg-accent-tint";
-const ADD_TILE = "flex items-center justify-center rounded-md border border-dashed border-hairline bg-surface-pearl text-fine text-ink-tertiary hover:border-accent hover:text-accent";
+// 추가 버튼은 그 행에 마우스가 올라왔을 때만 페이드인 — 빈 자리가 늘 점선으로 채워져 있지 않게(사용자 요청 2026-09-24)
+const ADD_TILE = "flex items-center justify-center rounded-md border border-dashed border-hairline bg-surface-pearl text-fine text-ink-tertiary hover:border-accent hover:text-accent opacity-0 transition-opacity duration-150 group-hover/stage:opacity-100 focus-visible:opacity-100";
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
 const SECONDARY = "inline-flex items-center gap-1.5 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40";
 const SEGMENT = "flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5";  // 홈 뷰 토글과 같은 세그먼트
@@ -259,8 +260,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
           onPointerDown={(event) => handleTilePointerDown(event, card.clientId)}
           onKeyDown={(event) => handleTileKeyDown(event, card, flatIndex)}
         >
-          {/* 그립은 hover에서만 — 타일 전체가 잡히므로 손잡이는 힌트일 뿐 */}
-          <span className="absolute left-1.5 top-2 text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden="true">
+          {/* 그립은 hover에서만, 우측 상단 — 타일 전체가 잡히므로 손잡이는 힌트일 뿐이라 왼쪽 여백을 차지하지 않는다 */}
+          <span className="absolute right-1.5 top-2 text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden="true">
             <GripVertical size={14} strokeWidth={1.5} />
           </span>
           <span className="flex min-w-0 items-center gap-1.5">
@@ -302,7 +303,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
                   key={`stage-${stage}`}
                   data-stage={stage}
                   data-id={`fw-consult-plan-stage-${stage}`}
-                  className={`flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${isTarget ? "bg-accent-tint/50" : ""}`}
+                  className={`group/stage flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${isTarget ? "bg-accent-tint/50" : ""}`}
                 >
                   <div className={`flex w-16 shrink-0 flex-col items-end border-r-2 pr-3 pt-0.5 ${selectedStage === stage ? "border-accent" : "border-hairline"}`}>
                     <span className={`text-tagline leading-none tabular-nums ${selectedStage === stage ? "text-accent" : "text-border-strong"}`}>{stage + 1}</span>
@@ -327,7 +328,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
             <div
               data-stage={groups.length}
               data-id={`fw-consult-plan-stage-${groups.length}`}
-              className={`flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${drag !== null && drag.stage === groups.length ? "bg-accent-tint/50" : ""}`}
+              className={`group/stage flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${drag !== null && drag.stage === groups.length ? "bg-accent-tint/50" : ""}`}
             >
               <div className="flex w-16 shrink-0 flex-col items-end border-r-2 border-dashed border-hairline pr-3 pt-0.5">
                 <span className="text-tagline leading-none tabular-nums text-hairline">{groups.length + 1}</span>
