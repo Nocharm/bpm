@@ -16,7 +16,7 @@ export interface InvariantAction {
 
 function actionClass(variant: InvariantAction["variant"]): string {
   if (variant === "accent") {
-    return "rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90";
+    return "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:opacity-90";
   }
   if (variant === "danger") {
     return "rounded-sm bg-error px-3 py-1.5 text-caption text-surface hover:opacity-90";

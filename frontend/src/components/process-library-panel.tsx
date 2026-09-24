@@ -709,7 +709,7 @@ export function ProcessLibraryPanel({
           <button
             type="button"
             data-id="library-new-map"
-            className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-caption font-medium text-accent hover:bg-surface-alt"
+            className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-caption font-semibold text-accent hover:bg-surface-alt"
             onClick={() => setShowCreate(true)}
           >
             <Plus size={16} strokeWidth={1.5} className="shrink-0" />

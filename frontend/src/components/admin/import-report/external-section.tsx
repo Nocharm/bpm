@@ -87,7 +87,7 @@ export function ExternalSection({
                 data-id={`interview-external-filter-${state}`}
                 aria-pressed={pressed}
                 title={t("framework.report.externalFilterTip")}
-                className={`${PILL_BASE} cursor-pointer tabular-nums transition-[opacity,box-shadow] duration-150 ${
+                className={`${PILL_BASE} tabular-nums transition-[opacity,box-shadow] duration-150 ${
                   EXTERNAL_STATE_TONE[state]
                 } ${pressed ? "font-semibold ring-2 ring-accent/35" : filtering ? "opacity-45" : "hover:ring-2 hover:ring-accent/20"}`}
                 onClick={() => onToggleFilter(state)}

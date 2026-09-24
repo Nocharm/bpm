@@ -138,7 +138,7 @@ export function FrameworkChip({
         {/* 리프 카테고리명(접힘) ↔ Framework 라벨(펼침) 크로스페이드 — save-checklist와 동일 */}
         <span className="relative min-w-0 flex-1 text-left">
           <span
-            className={`block truncate text-fine font-medium text-ink-secondary transition-opacity duration-350 ease-smooth ${
+            className={`block truncate text-fine font-semibold text-ink-secondary transition-opacity duration-350 ease-smooth ${
               open ? "opacity-0" : "opacity-100"
             }`}
           >

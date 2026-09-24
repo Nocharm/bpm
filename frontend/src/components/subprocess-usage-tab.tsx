@@ -165,7 +165,7 @@ export function SubprocessUsageTab({
         </div>
         <div className="flex flex-col">
           <MetaRow label={t("inspector.spUsageVersion")}>
-            <span className="truncate text-fine font-medium text-ink">{versionText}</span>
+            <span className="truncate text-fine font-semibold text-ink">{versionText}</span>
           </MetaRow>
           <MetaRow label={t("inspector.spUsageDesignatedAt")}>
             <span className="text-fine text-ink">

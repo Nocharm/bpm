@@ -68,7 +68,7 @@ export function LdapLoginForm({ onSuccess }: LdapLoginFormProps) {
         disabled={busy || !loginId || !password}
         className="flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-accent text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
       >
-        <Lock size={16} strokeWidth={1.7} />
+        <Lock size={16} strokeWidth={1.5} />
         {t("login.signIn")}
       </button>
     </form>

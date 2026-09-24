@@ -106,7 +106,7 @@ export function EditorToolbar({
                 <button
                   key={dir}
                   type="button"
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-caption font-medium text-ink hover:bg-surface-alt"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-caption font-semibold text-ink hover:bg-surface-alt"
                   onClick={() => {
                     setLayoutOpen(false);
                     onAutoLayout(dir);

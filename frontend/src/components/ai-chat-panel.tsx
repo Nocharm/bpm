@@ -435,7 +435,7 @@ export function AiChatPanel({
             }
             className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-alt"
           >
-            <Minus size={13} strokeWidth={1.8} />
+            <Minus size={13} strokeWidth={1.5} />
           </button>
           <span className="px-1 text-fine text-ink-secondary">T</span>
           <button
@@ -447,7 +447,7 @@ export function AiChatPanel({
             }
             className="px-1.5 py-0.5 text-ink-secondary hover:bg-surface-alt"
           >
-            <Plus size={13} strokeWidth={1.8} />
+            <Plus size={13} strokeWidth={1.5} />
           </button>
         </div>
         {listOpen && (
@@ -467,7 +467,7 @@ export function AiChatPanel({
                 <Plus size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <span className="min-w-0 flex-1 truncate text-left">{t("ai.clearChat")}</span>
                 {activeSessionId === null && (
-                  <Check size={13} strokeWidth={1.7} className="shrink-0 text-accent" />
+                  <Check size={13} strokeWidth={1.5} className="shrink-0 text-accent" />
                 )}
               </button>
               {mapSessions.length === 0 && (
@@ -496,7 +496,7 @@ export function AiChatPanel({
                     {item.id === activeSessionId && (
                       <Check
                         size={13}
-                        strokeWidth={1.7}
+                        strokeWidth={1.5}
                         className="pointer-events-none absolute inset-0 m-auto text-accent opacity-100 transition-opacity duration-150 group-hover:opacity-0"
                       />
                     )}
@@ -602,11 +602,11 @@ export function AiChatPanel({
           {loadingOlder && (
             <li data-id="ai-loading-older" className="flex flex-col items-center gap-1.5 py-2">
               <span className="flex items-center gap-1.5 text-fine text-ink-tertiary">
-                <Loader2 size={14} strokeWidth={1.6} className="animate-spin text-accent" />
+                <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />
                 {t("ai.loadingOlder")}
               </span>
               <span className="flex items-center gap-1.5 rounded-sm bg-accent-tint px-2 py-1 text-fine text-accent">
-                <Lightbulb size={12} strokeWidth={1.6} className="shrink-0" />
+                <Lightbulb size={12} strokeWidth={1.5} className="shrink-0" />
                 {tips.length > 0
                   ? tips[tipIndex % tips.length]
                   : t(TIP_KEYS[tipIndex % TIP_KEYS.length])}
@@ -688,7 +688,7 @@ export function AiChatPanel({
           <div className="mt-3 max-w-[80%] overflow-hidden rounded-sm border border-accent-tint-border bg-surface shadow-md">
             <div className="flex items-center gap-2 border-b border-accent-tint-border bg-accent-tint px-2.5 py-1.5">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-on-accent">
-                <Sparkles size={12} strokeWidth={1.8} />
+                <Sparkles size={12} strokeWidth={1.5} />
               </span>
               <span className="text-caption-strong text-accent">{t("ai.previewTitle")}</span>
             </div>
@@ -700,7 +700,7 @@ export function AiChatPanel({
                   onClick={onCommitPreview}
                   className="flex flex-1 items-center justify-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
                 >
-                  <Check size={14} strokeWidth={1.8} />
+                  <Check size={14} strokeWidth={1.5} />
                   {t("ai.previewAdd")}
                 </button>
                 <button
@@ -839,7 +839,7 @@ export function AiChatPanel({
             disabled={!aiEnabled || busy || input.trim().length === 0 || isForeign}
             aria-label={t("ai.send")}
           >
-            <ArrowUp size={16} strokeWidth={1.8} />
+            <ArrowUp size={16} strokeWidth={1.5} />
           </button>
         </div>
         {/* 단축키 힌트 — keycap (인터뷰 입력과 동일: Enter 전송 / Shift+Enter 줄바꿈) */}

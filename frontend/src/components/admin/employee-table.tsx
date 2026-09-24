@@ -20,6 +20,7 @@ import { useI18n } from "@/lib/i18n";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
 import { ExportCsvButton } from "./export-csv-button";
+import { CheckInput } from "@/components/check-input";
 
 /** 노출 직책 카드 — EDW distinct 직책(available_positions) 중 부서장 표기로 쓸 항목(exposed_positions) 체크·저장.
  *  exposed에는 있는데 available엔 없는 항목(수집 전 기본값 4종)도 목록에 얹어 체크 유지. */
@@ -93,12 +94,7 @@ function ExposedPositionsCard() {
                 key={p}
                 className="flex cursor-pointer items-center gap-1.5 text-caption text-ink-secondary"
               >
-                <input
-                  type="checkbox"
-                  checked={draft.has(p)}
-                  onChange={() => toggle(p)}
-                  className="h-3.5 w-3.5"
-                />
+                <CheckInput checked={draft.has(p)} onChange={() => toggle(p)} />
                 {p}
               </label>
             ))}
@@ -111,7 +107,7 @@ function ExposedPositionsCard() {
           data-id="exposed-positions-save"
           onClick={() => void onSave()}
           disabled={busy || !settings}
-          className="ml-auto rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+          className="ml-auto rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
         >
           {t("admin.exposedPositionsSave")}
         </button>
@@ -188,7 +184,7 @@ export function EmployeeTable() {
           />
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
             onClick={() => void onSync()}
             disabled={busy}
           >

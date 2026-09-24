@@ -68,7 +68,7 @@ export function DeptPill({ department, dataId, label, variant = "pill", subLabel
         tabIndex={interactive ? 0 : undefined}
         data-id={dataId}
         data-orphan={isOrphan ? "true" : undefined}
-        title={isOrphan ? `${department} — ${t("orphan.dept")}` : koreanName ? `${path} (${koreanName})` : path}
+        title={isOrphan ? `${department} · ${t("orphan.dept")}` : koreanName ? `${path} (${koreanName})` : path}
         // min-w-0 — 좁은 행(인스펙터)에서 말단 이름이 말줄임되며 카드 밖으로 안 나간다. 호버=보더 액센트+틴트 진해짐+그림자.
         // group/dept — 보조 줄(subLabel)을 필 호버에만 드러내는 트리거(무명 group은 바깥 타일 호버에 섞인다)
         className={`group/dept inline-flex min-w-0 max-w-full gap-1 border font-semibold transition-[background-color,border-color,box-shadow] duration-150 ${

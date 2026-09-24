@@ -14,6 +14,7 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { DateRangeCalendar } from "@/components/notices/date-range-calendar";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { CheckInput } from "@/components/check-input";
 
 // ISO(KST) 경계 — 시작=자정, 종료=하루 끝
 function toStartIso(date: string): string {
@@ -158,12 +159,7 @@ export function NoticeEditModal({
                 {t("noticeEdit.fieldPeriod")}
               </span>
               <label className="flex items-center gap-1.5 text-fine text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={unlimited}
-                  onChange={(event) => setUnlimited(event.target.checked)}
-                  className="accent-[var(--color-accent)]"
-                />
+                <CheckInput checked={unlimited} onChange={() => setUnlimited((v) => !v)} />
                 {t("noticeEdit.unlimited")}
               </label>
             </div>
@@ -208,12 +204,7 @@ export function NoticeEditModal({
           {/* 전체 알림 — 신규 등록 시만 */}
           {!notice && (
             <label className="flex items-center gap-2 text-caption text-ink-secondary">
-              <input
-                type="checkbox"
-                checked={notifyAll}
-                onChange={(event) => setNotifyAll(event.target.checked)}
-                className="accent-[var(--color-accent)]"
-              />
+              <CheckInput checked={notifyAll} onChange={() => setNotifyAll((v) => !v)} />
               {t("noticeEdit.notifyAll")}
             </label>
           )}

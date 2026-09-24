@@ -249,7 +249,7 @@ export function MapCard({
           <span
             data-id="map-card-sp"
             title={t("home.spBadgeTip")}
-            className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-accent-tint text-accent"
+            className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs bg-accent-tint text-accent"
           >
             <Workflow size={11} strokeWidth={2.2} />
           </span>
@@ -275,7 +275,7 @@ export function MapCard({
               role === "owner"
                 ? "bg-accent font-semibold text-surface"
                 : role === "editor"
-                  ? "border border-accent font-medium text-accent"
+                  ? "border border-accent font-semibold text-accent"
                   : "border border-hairline text-ink-tertiary"
             }`}
           >
@@ -370,7 +370,7 @@ export function MapCard({
               e.preventDefault();
               toggleNav(openHref, t("home.dash.openingMap", { name: map.name }));
             }}
-            className={`inline-flex shrink-0 items-center gap-0.5 rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,translate] duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:translate-x-0 focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 ${
+            className={`inline-flex shrink-0 items-center gap-0.5 rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-semibold transition-[opacity,translate] duration-150 ease-smooth hover:border-accent hover:text-accent focus-visible:pointer-events-auto focus-visible:translate-x-0 focus-visible:opacity-100 group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100 ${
               openPending ? "pointer-events-auto translate-x-0 border-accent text-accent opacity-100" : "pointer-events-none translate-x-1 border-hairline text-ink-secondary opacity-0"
             }`}
           >

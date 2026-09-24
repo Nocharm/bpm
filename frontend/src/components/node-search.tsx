@@ -97,7 +97,7 @@ export function NodeSearch<R extends NodeSearchResult>({
                 }}
                 onMouseEnter={() => onActiveIndexChange(index)}
               >
-                <span className="font-medium text-ink">{result.node.title}</span>
+                <span className="font-semibold text-ink">{result.node.title}</span>
                 <span className="ml-2 text-fine text-ink-tertiary">{result.path}</span>
               </button>
             </li>

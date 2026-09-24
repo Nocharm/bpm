@@ -20,13 +20,13 @@ const ROW_CAP = 6;
 
 // 이벤트 유형 → 행 끝 아이콘 칩(색·아이콘)·문장 키. 목록 밖 유형은 중립 칩 + 원문 유형.
 const EVENT_STYLE: Record<string, { chip: string; icon: ReactNode; key: MessageKey }> = {
-  created: { chip: "border-hairline bg-surface-alt text-ink-secondary", icon: <Plus size={11} strokeWidth={1.8} />, key: "home.dash.event.created" },
-  submitted: { chip: "border-accent-tint-border bg-accent-tint text-accent", icon: <Send size={11} strokeWidth={1.8} />, key: "home.dash.event.submitted" },
-  approved: { chip: "border-added/40 bg-added/10 text-added", icon: <Check size={11} strokeWidth={1.8} />, key: "home.dash.event.approved" },
-  rejected: { chip: "border-error/40 bg-error/10 text-error", icon: <X size={11} strokeWidth={1.8} />, key: "home.dash.event.rejected" },
-  published: { chip: "border-added/40 bg-added/10 text-added", icon: <Upload size={11} strokeWidth={1.8} />, key: "home.dash.event.published" },
-  confirmed: { chip: "border-accent-tint-border bg-accent-tint text-accent", icon: <BadgeCheck size={11} strokeWidth={1.8} />, key: "home.dash.event.confirmed" },
-  expired: { chip: "border-hairline bg-surface-alt text-ink-muted", icon: <TimerOff size={11} strokeWidth={1.8} />, key: "home.dash.event.expired" },
+  created: { chip: "border-hairline bg-surface-alt text-ink-secondary", icon: <Plus size={11} strokeWidth={1.5} />, key: "home.dash.event.created" },
+  submitted: { chip: "border-accent-tint-border bg-accent-tint text-accent", icon: <Send size={11} strokeWidth={1.5} />, key: "home.dash.event.submitted" },
+  approved: { chip: "border-added/40 bg-added/10 text-added", icon: <Check size={11} strokeWidth={1.5} />, key: "home.dash.event.approved" },
+  rejected: { chip: "border-error/40 bg-error/10 text-error", icon: <X size={11} strokeWidth={1.5} />, key: "home.dash.event.rejected" },
+  published: { chip: "border-added/40 bg-added/10 text-added", icon: <Upload size={11} strokeWidth={1.5} />, key: "home.dash.event.published" },
+  confirmed: { chip: "border-accent-tint-border bg-accent-tint text-accent", icon: <BadgeCheck size={11} strokeWidth={1.5} />, key: "home.dash.event.confirmed" },
+  expired: { chip: "border-hairline bg-surface-alt text-ink-muted", icon: <TimerOff size={11} strokeWidth={1.5} />, key: "home.dash.event.expired" },
 };
 const UNKNOWN_CHIP = "border-hairline bg-surface text-ink-tertiary";
 
@@ -104,13 +104,13 @@ export function RecentEventsCard({ events, onSelect }: RecentEventsCardProps) {
                     <span className="shrink-0">· {e.event_type}</span>
                   </>
                 )}
-                {e.note && <span className="min-w-0 truncate text-ink-tertiary">— “{e.note}”</span>}
+                {e.note && <span className="min-w-0 truncate text-ink-tertiary">“{e.note}”</span>}
               </span>
               <span className="text-[11px] text-ink-tertiary">{ago(e.created_at)}</span>
               {/* 이벤트 종류 — 행 끝 아이콘 칩(사용자 지시 2026-09-11: 액션 아이콘은 내용 끝단) */}
               <Tooltip label={e.event_type}>
-                <span data-id="dashboard-event-icon" className={`inline-grid h-[18px] w-[18px] place-items-center rounded-[5px] border ${style?.chip ?? UNKNOWN_CHIP}`}>
-                  {style?.icon ?? <GitCommit size={11} strokeWidth={1.8} />}
+                <span data-id="dashboard-event-icon" className={`inline-grid h-[18px] w-[18px] place-items-center rounded-xs border ${style?.chip ?? UNKNOWN_CHIP}`}>
+                  {style?.icon ?? <GitCommit size={11} strokeWidth={1.5} />}
                 </span>
               </Tooltip>
             </HoverLinkedRow>

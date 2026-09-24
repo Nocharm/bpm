@@ -587,7 +587,7 @@ export function GroupBulkModal({
             )}
             <button
               type="button"
-              className="w-full rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              className="w-full rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus"
               onClick={onClose}
             >
               {t("bulk.confirm")}
@@ -1104,7 +1104,7 @@ export function GroupBulkModal({
 
               <button
                 type="button"
-                className="mt-1 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                className="mt-1 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 disabled={
                   (action === "set" &&
                     mode === "people" &&

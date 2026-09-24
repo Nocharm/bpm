@@ -63,7 +63,7 @@ export function AssigneePills({ assignee, dataIdPrefix, onRemove, drifted = [], 
               user
                 ? `${user.name}${user.korean_name ? ` (${user.korean_name})` : ""} · ${user.department}`
                 : isOrphan
-                  ? `${name} — ${t("orphan.assignee")}`
+                  ? `${name} · ${t("orphan.assignee")}`
                   : name
             }
             // 인물 필은 중립 톤(surface-alt) — 액센트 톤인 부서 필과 한눈에 구분 (사용자 피드백 2026-09-03).

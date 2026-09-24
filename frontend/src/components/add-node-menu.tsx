@@ -52,7 +52,7 @@ export function AddNodeMenu({ onAdd, onOpenLibrary }: AddNodeMenuProps) {
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-tint px-2.5 py-1.5 text-caption font-medium text-accent hover:bg-accent-tint/70"
+        className="inline-flex items-center gap-1 rounded-sm border border-accent/40 bg-accent-tint px-2.5 py-1.5 text-caption font-semibold text-accent hover:bg-accent-tint/70"
         onClick={() => setOpen((v) => !v)}
       >
         <Plus size={16} strokeWidth={1.5} />
@@ -68,7 +68,7 @@ export function AddNodeMenu({ onAdd, onOpenLibrary }: AddNodeMenuProps) {
                 <button
                   key={shape.type}
                   type="button"
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-caption font-medium text-ink hover:bg-surface-alt"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-caption font-semibold text-ink hover:bg-surface-alt"
                   onClick={() => {
                     setOpen(false);
                     onAdd(shape.type);
@@ -90,7 +90,7 @@ export function AddNodeMenu({ onAdd, onOpenLibrary }: AddNodeMenuProps) {
             >
               <Network size={16} strokeWidth={1.5} className="mt-0.5 text-ink" />
               <span className="flex flex-col">
-                <span className="text-caption font-medium text-ink">{t("nodeType.subprocess")}</span>
+                <span className="text-caption font-semibold text-ink">{t("nodeType.subprocess")}</span>
                 <span className="text-fine text-accent">{t("addNode.subprocessHint")}</span>
               </span>
             </button>

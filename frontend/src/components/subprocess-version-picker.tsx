@@ -98,7 +98,7 @@ export function SubprocessVersionPicker({
         <button
           type="button"
           disabled={readOnly}
-          className="rounded-sm border border-accent/40 bg-accent-tint px-3 py-1.5 text-caption font-medium text-accent hover:bg-accent-tint/70 disabled:opacity-40"
+          className="rounded-sm border border-accent/40 bg-accent-tint px-3 py-1.5 text-caption font-semibold text-accent hover:bg-accent-tint/70 disabled:opacity-40"
           onClick={onUpdate}
         >
           {t("subprocess.update")}

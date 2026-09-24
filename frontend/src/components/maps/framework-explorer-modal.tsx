@@ -561,7 +561,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
     const tag = p.kind === "ancestor" ? t("framework.explorer.ancestorTag") : `L${n.level}`;
     const tagW = p.kind === "ancestor" ? 28 : 20;
     // 레벨 태그는 공용 색 사다리(level-pill) — 중심/상위(반전 박스)는 흰 반투명 태그 유지
-    const tagFill = inverted ? "rgba(255,255,255,.2)" : "var(--color-accent)";
+    const tagFill = inverted ? "color-mix(in srgb, var(--color-surface) 20%, transparent)" : "var(--color-accent)";
     const tagOpacity = inverted ? 1 : LEVEL_FILL_OPACITY[Math.min(n.level, 5) - 1];
     const tagText = inverted || isLevelInverted(n.level) ? "var(--color-on-accent)" : "var(--color-accent)";
     const maxChars = info ? (full && n.level === 3 ? 6 : 8) : 12;
@@ -603,7 +603,7 @@ export function FrameworkExplorerModal({ centerId, onClose, onNavigate, anchorRe
           {label}
         </text>
         {info && (
-          <text x={BW - 6} y={18} textAnchor="end" fontSize={9} fill={inverted ? "rgba(255,255,255,.8)" : "var(--color-ink-tertiary)"}>
+          <text x={BW - 6} y={18} textAnchor="end" fontSize={9} fill={inverted ? "color-mix(in srgb, var(--color-surface) 80%, transparent)" : "var(--color-ink-tertiary)"}>
             {info}
           </text>
         )}

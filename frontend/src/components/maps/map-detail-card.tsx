@@ -125,7 +125,7 @@ function MemberIcon({ perm, isMe }: { perm: MapPermission; isMe: boolean }) {
           className="inline-flex shrink-0 flex-col items-center text-accent"
         >
           <Hand size={20} strokeWidth={2} />
-          <span className="text-[9px] font-bold leading-none">ME</span>
+          <span className="text-[9px] font-semibold leading-none">ME</span>
         </span>
       );
     }

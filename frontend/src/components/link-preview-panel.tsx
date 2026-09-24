@@ -133,7 +133,6 @@ export function LinkPreviewPanel({
               style={{
                 background:
                   "linear-gradient(90deg, color-mix(in srgb, var(--color-accent) 65%, white), var(--color-accent))",
-                boxShadow: "0 0 8px color-mix(in srgb, var(--color-accent) 45%, transparent)",
                 animation: "lp-bar 2.4s ease-out forwards",
               }}
             />

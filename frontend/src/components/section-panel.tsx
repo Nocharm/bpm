@@ -149,7 +149,7 @@ export function SectionPanel({ sections, docName, onReimport, onClose, staleCoun
             <p className="text-fine text-ink/40">Import a Word document to list its sections here.</p>
             <button
               type="button"
-              className="rounded-sm border border-hairline px-2 py-1 text-caption font-medium text-accent hover:bg-surface-alt"
+              className="rounded-sm border border-hairline px-2 py-1 text-caption font-semibold text-accent hover:bg-surface-alt"
               onClick={onReimport}
             >
               Import a Word document

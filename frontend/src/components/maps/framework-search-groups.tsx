@@ -127,7 +127,7 @@ export function FrameworkSearchGroups({
                       title={g.canvas.name}
                       className={`inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-[3px] text-[11px] font-semibold leading-none ${tone?.pill ?? "bg-ink/5 text-ink-tertiary"}`}
                     >
-                      <Workflow size={11} strokeWidth={1.7} />
+                      <Workflow size={11} strokeWidth={1.5} />
                       {canvasStatus ? VERSION_STATUS_LABEL_EN[canvasStatus] : t("home.l5Canvas")}
                     </span>
                   )}

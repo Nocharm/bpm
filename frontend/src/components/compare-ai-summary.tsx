@@ -176,7 +176,7 @@ export function CompareAiSummary({
   if (!run || run.status === "loading" || aiEnabled === null) {
     return (
       <div data-id="compare-ai-loading" className="flex items-center gap-2 p-3 text-caption text-ink-secondary">
-        <Loader2 size={14} strokeWidth={1.6} className="animate-spin text-accent" />
+        <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />
         {t("compare.aiGenerating")}
       </div>
     );

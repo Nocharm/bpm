@@ -135,7 +135,7 @@ export function VisibilityControl({ mapId, visibility, isOwner, onToast }: Visib
             <button
               type="button"
               data-id="visibility-apply"
-              className="rounded-sm bg-accent px-3 py-1 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              className="rounded-sm bg-accent px-3 py-1 text-caption font-semibold text-on-accent hover:bg-accent-focus"
               onClick={() => void handleApply()}
             >
               {t("perm.visibilityApply")}

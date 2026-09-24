@@ -6,6 +6,7 @@
 ## 2026-09-24 — 릴리스 후 정리: md 문서·프론트 디자인 통일성·매뉴얼 (dev)
 
 - **md 문서 정리**: main 머지 완료된 설계 스냅샷 3종(assignee-role·catalog-alias·interview-v04 설계)과 구현 플랜 3종 폐기(계약은 CLAUDE.md·0.5 계약 3표면으로 이미 흡수) — 코드 주석은 `docs/design/` 접두만 떼고 파일명 유지. PROGRESS는 2026-09-12 이전 793줄을 아카이브로 이동(헤더 무손실 검증), 인덱스 2종(`docs/README.md`·`design/README.md`) 상태 문구 갱신. 링크 검사 74파일: 남은 깨진 링크는 아카이브 원문 7건뿐(원문 보존 정책).
+- **프론트 디자인 통일성 감사·수정**(`rules/frontend/design.md` 기준 15항목 그렙 감사): 사용자 문구 긴 대시 8곳(i18n 4·JSX 4)과 ★ 글리프 제거, 굵기 500(`font-medium` 68곳)→600·700 3곳→600(캔버스 노드 제목만 500 유지 — `lib/canvas.ts` measureText 미러 `"500 14px"`와 한 쌍), 네이티브 체크박스 10곳→공용 `CheckInput`(캔버스 IO 행 12px 2곳은 밀도 예외로 유지), `text-white`/`bg-white` 14곳→`text-on-accent`/`bg-surface`, 로딩바 글로우 제거, 스와치 폴백 hex·ERD rgba→토큰, `rounded-[5px]`→`rounded-xs`·`rounded-2xl`→`rounded-lg`, `strokeWidth` 1.6~1.8 65곳→1.5. 통과: 다크모드 0·아이콘 라이브러리 Lucide 단일·섀도 유틸 전부 토큰. **남긴 판단**: Lucide 크기 실태는 14(444)·12(316)·16(242)로 규칙(16 고정)과 어긋남 → 규칙을 사다리(12 인라인/14 컨트롤/16 기본/28 빈 상태)로 고칠지 결정 필요, 레거시 1000/1001 드롭다운 18곳은 모달 안에서 가려지므로 포털화 후속, `process-node.tsx`의 `text-xs`/`text-[10~11px]` 33곳은 줄높이가 노드 높이에 얽혀 별도 스윕. z 사다리에 실사용 단(1000·1100·1250·1340) 문서화.
 
 ## 2026-09-24 — dev → main 릴리스 (2026-09-19 이후 dev 135커밋 요약)
 

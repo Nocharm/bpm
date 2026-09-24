@@ -211,7 +211,7 @@ export function AiChatSettingsPanel({ onToast }: AiChatSettingsPanelProps) {
       {/* 기능 팁 관리 — 이전 기록 로딩 중 채팅에 노출되는 FAQ성 팁 (한 줄당 1개) */}
       <div className="mt-8">
         <h3 className="flex items-center gap-1.5 text-caption-strong text-ink">
-          <Lightbulb size={15} strokeWidth={1.6} className="text-accent" />
+          <Lightbulb size={15} strokeWidth={1.5} className="text-accent" />
           {t("aiLog.tipsTitle")}
         </h3>
         <p className="mt-1 text-fine text-ink-tertiary">{t("aiLog.tipsDesc")}</p>

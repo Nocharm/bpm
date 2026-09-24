@@ -163,7 +163,7 @@ export function ScopeWindow({
             </div>
           )}
           {titleSlot ?? (
-            <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[60%] truncate rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-medium text-ink-secondary shadow-sm">
+            <span className="pointer-events-none absolute left-2 top-2 z-10 max-w-[60%] truncate rounded-sm border border-hairline bg-surface px-2 py-0.5 text-fine font-semibold text-ink-secondary shadow-sm">
               {title}
             </span>
           )}
@@ -195,7 +195,7 @@ export function ScopeWindow({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       >
-        {headerLeft ?? <span className="flex-1 truncate font-medium">{title}</span>}
+        {headerLeft ?? <span className="flex-1 truncate font-semibold">{title}</span>}
         {headerActions}
         <IconTip label={t("window.minimize")}>
           <button
@@ -209,7 +209,7 @@ export function ScopeWindow({
               toggleMin();
             }}
           >
-            <Minimize2 size={15} strokeWidth={1.6} />
+            <Minimize2 size={15} strokeWidth={1.5} />
           </button>
         </IconTip>
         {canMaximize && (

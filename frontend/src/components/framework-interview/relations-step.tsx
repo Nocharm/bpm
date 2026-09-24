@@ -209,7 +209,7 @@ export function RelationsStep({
             style={{ zIndex: CHAT_WINDOW_Z }}
             onClick={() => updateChatGeom({ ...geom, minimized: false })}
           >
-            <MessageSquare size={20} strokeWidth={1.6} />
+            <MessageSquare size={20} strokeWidth={1.5} />
           </button>
         ) : (
           <ScopeWindow

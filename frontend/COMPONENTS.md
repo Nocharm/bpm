@@ -25,7 +25,7 @@
 | `branch-icon.tsx` | `BranchGlyph` | 분기(Yes/No/Other) 아이콘 | `app/maps/[mapId]/page.tsx`, `components/edge-branch-modal.tsx`, `components/edge-select-modal.tsx` |
 | `canvas-zoom-scale.tsx` | `CanvasZoomScale` | 캔버스 줌 컨트롤 pill | `app/maps/[mapId]/page.tsx` |
 | `change-summary-section.tsx` | `ChangeSummaryDisclosure`, `ChangeSummarySection` | 기준 버전 대비 변경 요약 | `app/maps/[mapId]/page.tsx`, `components/framework-confirm-section.tsx` |
-| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `components/admin/ref-group-card.tsx`, `components/framework-confirm-section.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/library-dept-flyout.tsx`, `components/process-library-panel.tsx` |
+| `check-input.tsx` | `CheckInput` | 앱 공통 체크박스 | `app/maps/[mapId]/compare/page.tsx`, `components/admin/employee-table.tsx`, `components/admin/local-account-table.tsx`, `components/admin/notification-purge-modal.tsx`, `components/admin/ref-group-card.tsx`, `components/feedback-notes-flyout.tsx`, `components/framework-confirm-section.tsx`, `components/framework-interview/questionnaire-form.tsx`, `components/library-dept-flyout.tsx`, `components/notices/notice-edit-modal.tsx`, `components/permissions/create-map-dialog.tsx`, `components/process-library-panel.tsx` |
 | `checkout-panel.tsx` | `CheckoutPanel` | 점유권 탭 | `components/approval-panel.tsx` |
 | `clip-body.tsx` | `ClipBody`, `ClipToggle` | 고정 높이 클립 본문 | `components/maps/map-detail-description.tsx`, `components/maps/map-notes-section.tsx` |
 | `comment-section.tsx` | `CommentSection` | 노드 코멘트 스레드 | `app/maps/[mapId]/page.tsx` |

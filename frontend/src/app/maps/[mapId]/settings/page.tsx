@@ -381,7 +381,7 @@ export default function SettingsPage() {
               data-id="settings-readonly-notice"
               className="mb-4 flex items-center gap-2 rounded-sm border border-notice-border bg-notice px-3 py-2 text-caption text-changed"
             >
-              <Info size={14} strokeWidth={1.7} className="shrink-0" />
+              <Info size={14} strokeWidth={1.5} className="shrink-0" />
               {t("perm.readOnly")}
             </div>
           )}

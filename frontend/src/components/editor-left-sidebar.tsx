@@ -357,7 +357,7 @@ export function EditorLeftSidebar({
                       style={morePos ? { left: morePos.left, top: morePos.top } : undefined}
                     >
                       <div className="mb-2 flex items-center justify-between">
-                        <span className="font-medium text-ink">{t("outlineNav.more")}</span>
+                        <span className="font-semibold text-ink">{t("outlineNav.more")}</span>
                         <button
                           type="button"
                           onClick={() => setMoreOpen(false)}

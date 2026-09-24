@@ -87,7 +87,7 @@ export function VisibilityBundlePicker({ current, value, onChange }: VisibilityB
                   <OptIcon size={14} strokeWidth={1.5} className="shrink-0" />
                   {label(v)}
                   {v === current && (
-                    <span className="ml-auto shrink-0 rounded-full bg-accent-tint px-1.5 py-px text-fine font-medium text-accent">
+                    <span className="ml-auto shrink-0 rounded-full bg-accent-tint px-1.5 py-px text-fine font-semibold text-accent">
                       Current
                     </span>
                   )}

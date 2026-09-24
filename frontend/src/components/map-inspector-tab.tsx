@@ -130,7 +130,7 @@ export function MapInspectorTab({ mapId, readOnly }: MapInspectorTabProps) {
           )}
         </div>
         <div className="grid grid-cols-4 gap-1.5">
-          <div className="col-span-3 flex items-center justify-center gap-1.5 rounded-sm border border-accent bg-accent-tint px-2 py-1.5 text-caption font-medium text-accent">
+          <div className="col-span-3 flex items-center justify-center gap-1.5 rounded-sm border border-accent bg-accent-tint px-2 py-1.5 text-caption font-semibold text-accent">
             <CurrentIcon size={14} strokeWidth={1.5} />
             {t(visibilityLabelKey(visibility))}
           </div>

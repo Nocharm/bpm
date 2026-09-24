@@ -21,6 +21,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { useI18n } from "@/lib/i18n";
 import { TimePills } from "@/components/time-pills";
 import { UserPill } from "@/components/user-pill";
+import { CheckInput } from "@/components/check-input";
 
 const PANEL_WIDTH = 380;
 const VIEWPORT_MARGIN = 12;
@@ -148,11 +149,10 @@ export function FeedbackNotesFlyout({
         <span className="text-caption-strong text-ink-secondary">{t("feedback.notes.title")}</span>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 text-fine text-ink-tertiary">
-            <input
-              type="checkbox"
+            <CheckInput
               checked={showArchived}
               data-id="feedback-notes-show-archived"
-              onChange={(event) => setShowArchived(event.target.checked)}
+              onChange={() => setShowArchived((v) => !v)}
             />
             {t("feedback.notes.showArchived")}
           </label>

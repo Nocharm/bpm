@@ -74,7 +74,7 @@ export function MapTitleChecklist({
   if (items.length === 0) {
     return (
       <span
-        className={`${chipBase} max-w-[60%] truncate px-2 py-0.5 text-fine font-medium text-ink-secondary`}
+        className={`${chipBase} max-w-[60%] truncate px-2 py-0.5 text-fine font-semibold text-ink-secondary`}
       >
         {mapTitle}
       </span>
@@ -101,7 +101,7 @@ export function MapTitleChecklist({
         {/* 제목(접힘) ↔ 저장 조건 라벨(펼침) 크로스페이드 */}
         <span className="relative min-w-0 flex-1 text-left">
           <span
-            className={`block truncate text-fine font-medium text-ink-secondary transition-opacity duration-350 ease-smooth ${
+            className={`block truncate text-fine font-semibold text-ink-secondary transition-opacity duration-350 ease-smooth ${
               open ? "opacity-0" : "opacity-100"
             }`}
           >

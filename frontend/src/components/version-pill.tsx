@@ -65,7 +65,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
     >
       <button
         type="button"
-        className={`inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint font-medium text-accent hover:bg-accent-tint/70 ${
+        className={`inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-tint font-semibold text-accent hover:bg-accent-tint/70 ${
           compact ? "px-2 py-0.5 text-fine" : "px-2.5 py-1 text-caption"
         }`}
         onClick={() => setOpen((v) => !v)}
@@ -104,7 +104,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
                     <CornerDownRight size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                     <span className="flex min-w-0 flex-1 items-baseline gap-1 truncate">
                       <span className="shrink-0 text-ink-tertiary">{formatVersionMarker(version, versions)}</span>
-                      <span className="truncate font-medium text-ink">{version.label}</span>
+                      <span className="truncate font-semibold text-ink">{version.label}</span>
                     </span>
                     <span
                       className={`shrink-0 rounded-sm border px-1 py-0.5 ${VERSION_STATUS_STYLE[version.status]}`}
@@ -133,7 +133,7 @@ export function VersionPill({ versions, versionId, isEditing, onSwitch, compact 
                   <span className="shrink-0 text-fine text-ink-tertiary">
                     {formatVersionMarker(version, versions)}
                   </span>
-                  <span className="truncate font-medium text-ink">{version.label}</span>
+                  <span className="truncate font-semibold text-ink">{version.label}</span>
                 </span>
                 <span
                   className={`rounded-sm border px-1.5 py-0.5 text-fine ${VERSION_STATUS_STYLE[version.status]}`}

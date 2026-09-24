@@ -11,8 +11,8 @@ export function AuthLoadingScreen() {
   return (
     <div className="flex flex-1 items-center justify-center bg-surface-pearl">
       <div data-id="auth-loading" className="animate-item-in flex flex-col items-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-tint">
-          <Workflow size={28} strokeWidth={1.7} className="text-accent" />
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-accent-tint">
+          <Workflow size={28} strokeWidth={1.5} className="text-accent" />
         </div>
         <div className="flex items-center gap-2">
           <Loader2 size={16} strokeWidth={1.5} className="animate-spin text-ink-tertiary" />

@@ -210,7 +210,7 @@ export function InspectorPanel({
               // 폭 부족 시 비선택 탭이 먼저 줄고(말줄임) 선택 탭 라벨은 지키지 않는다 (사용자 결정 2026-08-20)
               className={`flex items-center gap-1 rounded-sm px-2 py-1.5 text-caption transition-colors disabled:opacity-40 disabled:hover:bg-transparent ${
                 active
-                  ? "shrink-0 bg-accent-tint font-medium text-accent"
+                  ? "shrink-0 bg-accent-tint font-semibold text-accent"
                   : "min-w-0 text-ink-secondary hover:bg-surface-alt"
               }`}
               onClick={() => setInternalTab(key)}
@@ -288,7 +288,7 @@ export function InspectorPanel({
           {canCompare ? (
             <Link
               href={`/maps/${mapId}/compare`}
-              className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+              className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
             >
               <GitCompare size={16} strokeWidth={1.5} />
               {t("inspector.compareVersions")}
@@ -298,7 +298,7 @@ export function InspectorPanel({
               type="button"
               disabled
               title={t("inspector.compareNeedsPublished")}
-              className="flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-sm bg-surface-alt px-3 py-2 text-caption font-medium text-ink-tertiary"
+              className="flex w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-sm bg-surface-alt px-3 py-2 text-caption font-semibold text-ink-tertiary"
             >
               <GitCompare size={16} strokeWidth={1.5} />
               {t("inspector.compareVersions")}
@@ -336,7 +336,7 @@ function PropertiesEmpty({
       {/* 빈상태 — 맵 타이틀 + 버전(전환 가능). 아이콘은 앱 대표 아이콘(로그인 화면) */}
       <div className="flex flex-col items-center gap-2 pt-2 text-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-md bg-accent-tint text-accent">
-          <Workflow size={24} strokeWidth={1.6} />
+          <Workflow size={24} strokeWidth={1.5} />
         </span>
         {mapVersionMarker && (
           <span className="text-fine text-ink-tertiary">{mapVersionMarker}</span>
@@ -350,7 +350,7 @@ function PropertiesEmpty({
         <div className="flex flex-col gap-1.5">
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-sm border border-accent/40 bg-accent-tint px-3 py-2 text-caption font-medium text-accent hover:bg-accent-tint/70"
+            className="flex w-full items-center gap-2 rounded-sm border border-accent/40 bg-accent-tint px-3 py-2 text-caption font-semibold text-accent hover:bg-accent-tint/70"
             onClick={onAddNode}
           >
             <Plus size={16} strokeWidth={1.5} />
@@ -441,7 +441,7 @@ function SummaryRow({
         <Icon size={14} strokeWidth={1.5} className="text-ink-tertiary" />
         {label}
       </span>
-      <span className={muted ? "text-ink-tertiary" : "font-medium text-ink"}>{value}</span>
+      <span className={muted ? "text-ink-tertiary" : "font-semibold text-ink"}>{value}</span>
     </div>
   );
 }

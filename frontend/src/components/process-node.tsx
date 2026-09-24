@@ -794,7 +794,7 @@ function DiffBadge({ status, className = "-top-2.5 left-2.5" }: { status: DiffSt
   const { t } = useI18n();
   return (
     <span
-      className={`absolute z-10 rounded-full px-1.5 text-[11px] font-semibold leading-5 text-white opacity-70 ${DIFF_BADGE_BG[status]} ${className}`}
+      className={`absolute z-10 rounded-full px-1.5 text-[11px] font-semibold leading-5 text-on-accent opacity-70 ${DIFF_BADGE_BG[status]} ${className}`}
     >
       {t(DIFF_BADGE_KEY[status])}
     </span>
@@ -899,7 +899,7 @@ function DiffFieldPills({ fields }: { fields: NonNullable<AppNode["data"]["diffF
       ))}
       {extra > 0 && (
         <span
-          className="rounded-xs border border-diff-changed/30 px-1.5 py-0.5 text-[11px] font-medium text-diff-changed"
+          className="rounded-xs border border-diff-changed/30 px-1.5 py-0.5 text-[11px] font-semibold text-diff-changed"
           style={{ backgroundColor: CHANGED_PILL_BG }}
         >
           {t("compare.moreFields", { n: extra })}
@@ -921,7 +921,7 @@ function UnresolvedCommentBadge({
   const { t } = useI18n();
   return (
     <span
-      className={`absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-white`}
+      className={`absolute ${className} rounded-full bg-removed px-1 text-[10px] leading-4 text-on-accent`}
       title={t("node.unresolvedAria", { n: count })}
     >
       <span className="inline-flex items-center gap-0.5">
@@ -952,7 +952,7 @@ function DescendantChangeBadge({ className = "-right-2 -top-2" }: { className?: 
   const { t } = useI18n();
   return (
     <span
-      className={`absolute ${className} rounded-full bg-diff-changed px-1 text-[10px] leading-4 text-white`}
+      className={`absolute ${className} rounded-full bg-diff-changed px-1 text-[10px] leading-4 text-on-accent`}
       title={t("node.childChangedTitle")}
     >
       <Zap size={10} strokeWidth={1.5} />
@@ -999,7 +999,7 @@ function NodeWarningBadge({
           )}
           <span className="min-w-0">
             <b className="font-semibold text-ink">{w.value}</b>
-            {` — ${t(WARNING_REASON[w.kind])}`}
+            {` · ${t(WARNING_REASON[w.kind])}`}
             {w.personDept ? ` (${w.personDept})` : ""}
           </span>
         </span>

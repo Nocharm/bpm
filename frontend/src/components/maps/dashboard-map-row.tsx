@@ -56,7 +56,7 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
         <span
           data-id="dashboard-map-sp"
           title={t("home.spBadgeTip")}
-          className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-accent-tint text-accent"
+          className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs bg-accent-tint text-accent"
         >
           <Workflow size={11} strokeWidth={2.2} />
         </span>
@@ -77,7 +77,7 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
             e.preventDefault();
             toggle(href, t("home.dash.openingMap", { name: map.name }));
           }}
-          className={`inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-medium transition-[opacity,border-color,color] duration-150 ease-smooth delay-0 hover:border-accent hover:text-accent group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-300 ${
+          className={`inline-flex min-w-0 items-center gap-0.5 overflow-hidden rounded-[6px] border bg-surface px-2 py-[3px] text-fine font-semibold transition-[opacity,border-color,color] duration-150 ease-smooth delay-0 hover:border-accent hover:text-accent group-hover:pointer-events-auto group-hover:opacity-100 group-hover:delay-300 ${
             navigating ? "pointer-events-auto border-accent text-accent opacity-100" : "pointer-events-none border-hairline text-ink-secondary opacity-0"
           }`}
         >

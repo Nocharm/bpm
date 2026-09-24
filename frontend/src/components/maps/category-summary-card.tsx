@@ -84,7 +84,7 @@ function StatTile({
         {icon}
         <span className="truncate">{label}</span>
       </div>
-      <div className="stat-value text-[22px] font-bold leading-none tracking-tight">{value}</div>
+      <div className="stat-value text-[22px] font-semibold leading-none tracking-tight">{value}</div>
     </div>
   );
 }
@@ -268,7 +268,7 @@ export function CategorySummaryCard({
           {m.sp_designated_at && (
             <span
               title={t("home.spBadgeTip")}
-              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-accent-tint text-accent"
+              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs bg-accent-tint text-accent"
             >
               <Workflow size={11} strokeWidth={2.2} />
             </span>
@@ -318,7 +318,7 @@ export function CategorySummaryCard({
             </span>
             <div className="flex min-w-0 items-center gap-2">
               <LevelPill level={summary.level} />
-              <h2 className="min-w-0 truncate text-[20px] font-bold leading-tight text-ink">{summary.name}</h2>
+              <h2 className="min-w-0 truncate text-[20px] font-semibold leading-tight text-ink">{summary.name}</h2>
             </div>
           </div>
           {/* 캔버스 존재 시 전원, 미존재 시 권한자만 — 트리 Linkage 버튼과 동일 규칙(node.can_edit_linkage) */}

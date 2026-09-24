@@ -312,7 +312,7 @@ export function FrameworkDrill({
                 title={t("framework.drill.pending", { n: node.slot_pending_count })}
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-warn/10 px-1 py-0.5 font-semibold text-warn"
               >
-                <Hourglass size={10} strokeWidth={1.7} />
+                <Hourglass size={10} strokeWidth={1.5} />
                 {node.slot_pending_count}
               </span>
             )}

@@ -32,7 +32,7 @@ export function AnalysisCard({
   return (
     <div data-id="ai-analysis-card" className="mt-2 flex flex-col gap-2">
       <span className="flex items-center gap-1.5 px-0.5 text-caption-strong text-ink">
-        <Search size={14} strokeWidth={1.6} className="text-accent" />
+        <Search size={14} strokeWidth={1.5} className="text-accent" />
         {t("ai.analysisTitle")}
         <span className="rounded-full bg-surface-alt px-1.5 text-fine text-ink-tertiary">
           {findings.length}
@@ -59,9 +59,9 @@ export function AnalysisCard({
           >
             <span className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${iconTone}`}>
               {sev === "high" ? (
-                <AlertTriangle size={14} strokeWidth={1.7} />
+                <AlertTriangle size={14} strokeWidth={1.5} />
               ) : (
-                <Info size={14} strokeWidth={1.7} />
+                <Info size={14} strokeWidth={1.5} />
               )}
             </span>
             <span className="min-w-0 flex-1">
@@ -78,7 +78,7 @@ export function AnalysisCard({
               <span className="mt-1 block text-fine leading-relaxed text-ink">{finding.message}</span>
               {finding.suggestion && (
                 <span className="mt-1.5 flex items-start gap-1.5 rounded-xs bg-accent-tint px-2 py-1 text-fine text-accent">
-                  <Lightbulb size={13} strokeWidth={1.6} className="mt-px shrink-0" />
+                  <Lightbulb size={13} strokeWidth={1.5} className="mt-px shrink-0" />
                   <span>{finding.suggestion}</span>
                 </span>
               )}
@@ -138,7 +138,7 @@ export function WalkthroughCard({
       <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
         <span className="flex items-center gap-1.5 text-caption-strong text-ink">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
-            <Route size={13} strokeWidth={1.7} />
+            <Route size={13} strokeWidth={1.5} />
           </span>
           {t("ai.walkthrough")}
         </span>
@@ -241,7 +241,7 @@ export function ProposalSummaryCard({
       <div className="flex items-center justify-between border-b border-hairline bg-surface-alt px-2.5 py-1.5">
         <span className="flex items-center gap-1.5 text-caption-strong text-ink">
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-tint text-accent">
-            <Sparkles size={13} strokeWidth={1.7} />
+            <Sparkles size={13} strokeWidth={1.5} />
           </span>
           {t(kind === "graph" ? "ai.proposalGraphTitle" : "ai.proposalOpsTitle")}
         </span>
@@ -264,7 +264,7 @@ export function ProposalSummaryCard({
               onClick={preview.onCommit}
               className="flex flex-1 items-center justify-center gap-1 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus"
             >
-              <Check size={14} strokeWidth={1.8} />
+              <Check size={14} strokeWidth={1.5} />
               {t("ai.previewAdd")}
             </button>
             <button

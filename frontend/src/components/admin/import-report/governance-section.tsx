@@ -162,7 +162,7 @@ function KeepReplaceMenu({
                   >
                     <Icon size={12} strokeWidth={1.5} className={value ? "text-changed" : "text-ink-tertiary"} />
                     <span className="flex-1 truncate">{label}</span>
-                    {active && <Check size={12} strokeWidth={1.7} className="shrink-0 text-accent" />}
+                    {active && <Check size={12} strokeWidth={1.5} className="shrink-0 text-accent" />}
                   </button>
                 );
               })}

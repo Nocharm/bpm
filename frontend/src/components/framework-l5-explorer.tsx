@@ -190,7 +190,7 @@ export function FrameworkL5Explorer({
         {/* 접힘=현재 L5명 ↔ 펼침=Framework 라벨 크로스페이드 — FrameworkChip과 동일 패턴 */}
         <span className="relative min-w-0 flex-1 text-left">
           <span
-            className={`block truncate text-fine font-medium text-ink-secondary transition-opacity duration-350 ease-smooth ${
+            className={`block truncate text-fine font-semibold text-ink-secondary transition-opacity duration-350 ease-smooth ${
               open ? "opacity-0" : "opacity-100"
             }`}
           >

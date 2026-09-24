@@ -103,7 +103,7 @@ export function FilterDropdown({
               >
                 {o.icon}
                 <span className="flex-1 truncate">{o.label}</span>
-                {on && <Check size={14} strokeWidth={1.7} className="shrink-0 text-accent" />}
+                {on && <Check size={14} strokeWidth={1.5} className="shrink-0 text-accent" />}
               </button>
             );
           })}

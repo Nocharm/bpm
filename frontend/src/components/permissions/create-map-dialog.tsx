@@ -50,6 +50,7 @@ import { PrincipalPicker, PrincipalIcon } from "@/components/permissions/princip
 import type { PrincipalOption } from "@/components/permissions/principal-picker";
 import { RolePopover } from "@/components/permissions/role-popover";
 import type { WordCreateOutcome } from "@/components/word-create-modal";
+import { CheckInput } from "@/components/check-input";
 
 // 실 active 그룹을 피커 prop(UserGroup) 형식으로 변환 — principalId = 문자열 그룹 id /
 // Adapt real active groups to the picker's UserGroup shape (principalId = string group id).
@@ -856,12 +857,11 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                 retire ? "border-changed/40 bg-changed/10" : "border-hairline hover:bg-surface-alt"
               }`}
             >
-              <input
-                type="checkbox"
+              <CheckInput
                 data-id="copy-retire-checkbox"
-                className="mt-0.5 accent-[var(--color-accent)]"
+                className="mt-0.5"
                 checked={retire}
-                onChange={(e) => toggleRetire(e.target.checked)}
+                onChange={() => toggleRetire(!retire)}
                 disabled={submitting}
               />
               <Trash2
@@ -1007,12 +1007,10 @@ export function CreateMapDialog({ onClose, onCreated, csv, word, initialName, on
                     </ul>
                     {/* 확인 체크 — 아코디언 최하단, 라인들과 위계 구분 (B4) */}
                     <label className="mt-1 flex cursor-pointer items-center gap-2 border-t border-divider pt-2">
-                      <input
-                        type="checkbox"
+                      <CheckInput
                         data-id="copy-retire-sp-confirm"
-                        className="accent-[var(--color-accent)]"
                         checked={spConfirm}
-                        onChange={(e) => setSpConfirm(e.target.checked)}
+                        onChange={() => setSpConfirm((v) => !v)}
                         disabled={submitting}
                       />
                       <span className="text-caption-strong text-ink">

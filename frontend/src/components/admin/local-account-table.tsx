@@ -21,6 +21,7 @@ import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { SkeletonRows } from "@/components/permissions/loading-skeleton";
 import { ADMIN_HEAD_ROW, ADMIN_ROW, ADMIN_TD, ADMIN_TH, RolePill, TableCard } from "./admin-table";
+import { CheckInput } from "@/components/check-input";
 
 const INPUT_CLASS =
   "rounded-sm border border-hairline bg-surface px-2 py-1.5 text-caption text-ink outline-none focus:border-accent";
@@ -211,11 +212,9 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
             className={`${INPUT_CLASS} w-36`}
           />
           <label className="flex items-center gap-1.5 text-caption text-ink-secondary">
-            <input
-              type="checkbox"
+            <CheckInput
               checked={form.isSysadmin}
-              onChange={(e) => setForm((f) => ({ ...f, isSysadmin: e.target.checked }))}
-              className="h-3.5 w-3.5"
+              onChange={() => setForm((f) => ({ ...f, isSysadmin: !f.isSysadmin }))}
             />
             {t("localAccount.sysadmin")}
           </label>
@@ -224,7 +223,7 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
             data-id="local-account-create"
             onClick={() => void handleCreate()}
             disabled={createBusy || !form.loginId.trim() || !form.name.trim() || !form.password}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
           >
             {createBusy && <Loader2 size={14} strokeWidth={1.5} className="animate-spin" />}
             {t("localAccount.create")}
@@ -268,13 +267,11 @@ export function LocalAccountTable({ onToast }: LocalAccountTableProps) {
                 </td>
                 <td className={ADMIN_TD}>
                   <label className="flex items-center gap-1.5 text-caption text-ink-secondary">
-                    <input
-                      type="checkbox"
+                    <CheckInput
                       data-id={`local-account-sysadmin-${row.loginId}`}
                       checked={row.isSysadmin || row.envSysadmin}
                       disabled={row.envSysadmin}
                       onChange={() => void handleToggleSysadmin(row)}
-                      className="h-3.5 w-3.5"
                     />
                     {row.envSysadmin ? t("localAccount.setByEnvironment") : t("localAccount.sysadmin")}
                   </label>

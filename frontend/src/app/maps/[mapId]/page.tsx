@@ -9123,7 +9123,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             data-id="editor-readonly-badge"
             className="inline-flex items-center gap-1.5 rounded-sm bg-surface-alt px-2 py-1 text-fine font-semibold text-ink-secondary"
           >
-            <Lock size={13} strokeWidth={1.7} />
+            <Lock size={13} strokeWidth={1.5} />
             {t("editor.viewOnly")}
           </span>
         )}
@@ -9181,7 +9181,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               data-id="editor-save-pill-saved"
               className="inline-flex items-center gap-1 rounded-full border border-added/40 bg-added/10 px-2 py-0.5 text-fine text-added"
             >
-              <Check size={12} strokeWidth={1.7} />
+              <Check size={12} strokeWidth={1.5} />
               {t("editor.saved")}
             </span>
           )}
@@ -9190,7 +9190,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               data-id="editor-save-pill-error"
               className="inline-flex items-center gap-1 rounded-full border border-error/40 bg-error/10 px-2 py-0.5 text-fine text-error"
             >
-              <AlertTriangle size={12} strokeWidth={1.7} />
+              <AlertTriangle size={12} strokeWidth={1.5} />
               {t("editor.saveFailedPill")}
             </span>
           )}
@@ -9343,7 +9343,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {t("consultOnboard.dismiss")}
                       </button>
                       <button
-                        className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine font-medium text-on-accent hover:bg-accent-focus"
+                        className="inline-flex items-center gap-1 rounded-sm bg-accent px-2.5 py-1 text-fine font-semibold text-on-accent hover:bg-accent-focus"
                         onClick={() => {
                           dismissConsultOnboard();
                           router.push(`/maps/${mapId}/consult?version=${versionId}`);
@@ -9360,11 +9360,11 @@ function MapEditor({ mapId }: { mapId: number }) {
             );
           })()}
           <button
-            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
           >
-            {readOnly && <Lock size={14} strokeWidth={1.7} />}
+            {readOnly && <Lock size={14} strokeWidth={1.5} />}
             {t("editor.save")}
           </button>
           <span className="mx-0.5 h-5 w-px bg-divider" />
@@ -9388,7 +9388,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           data-id="editor-save-error-banner"
           className="flex items-center gap-2 border-b border-error/40 bg-error/10 px-4 py-1.5 text-caption text-error"
         >
-          <AlertTriangle size={14} strokeWidth={1.7} className="shrink-0" />
+          <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0" />
           <span className="shrink-0 font-semibold">{t("editor.saveFailedPill")}</span>
           <span className="min-w-0">
             {saveErrorDetail} - {t("editor.saveRetryHint")}
@@ -9403,7 +9403,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           data-id="editor-readonly-notice"
           className={`flex items-center gap-2 border-b px-4 py-1.5 text-caption ${NOTICE_TONE_CLASS[editorNotice.tone]}`}
         >
-          <editorNotice.icon size={14} strokeWidth={1.7} className="shrink-0" />
+          <editorNotice.icon size={14} strokeWidth={1.5} className="shrink-0" />
           <span className="shrink-0 font-semibold">{editorNotice.title}</span>
           <span className="min-w-0">{editorNotice.desc}</span>
           {/* 내 결재 대기 버전 링크 — 다른 버전을 열었을 때만. 승인 탭 오버레이와 같은 판정 (2026-09-18) */}
@@ -9425,7 +9425,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             className="ml-auto shrink-0 rounded-sm p-0.5 hover:bg-ink/5"
             onClick={() => setDismissedNoticeKey(editorNoticeKey)}
           >
-            <X size={14} strokeWidth={1.7} />
+            <X size={14} strokeWidth={1.5} />
           </button>
         </div>
       )}
@@ -9653,7 +9653,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           data-id="framework-l5-tag"
                           title={t(l5Charcoal ? "framework.bgToLight" : "framework.bgToCharcoal")}
                           onClick={toggleL5CanvasBg}
-                          className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-medium text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
+                          className={`absolute right-5 top-5 z-10 flex select-none items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine font-semibold text-ink-secondary shadow-sm backdrop-blur-sm transition-colors duration-150 ${
                             // 프레임 상시 유지라 위치 고정(20px) — 라이트/차콜 전환에도 버튼이 안 움직임
                             l5Charcoal ? "bg-surface/85 hover:bg-surface" : "bg-surface/40 hover:bg-surface/70"
                           }`}
@@ -10315,7 +10315,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
               }}
             >
-              <Sparkles size={20} strokeWidth={1.7} />
+              <Sparkles size={20} strokeWidth={1.5} />
             </button>
           )}
           {menu && (
@@ -10692,7 +10692,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               headerLeft={
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-accent text-on-accent">
-                    <Sparkles size={18} strokeWidth={1.6} />
+                    <Sparkles size={18} strokeWidth={1.5} />
                   </span>
                   <div className="min-w-0 flex-1 leading-tight">
                     {aiTitleEditing ? (
@@ -10724,7 +10724,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                             }}
                             className="rounded-xs p-0.5 text-ink-tertiary hover:bg-surface-pearl hover:text-accent"
                           >
-                            <Pencil size={14} strokeWidth={1.6} />
+                            <Pencil size={14} strokeWidth={1.5} />
                           </button>
                         </IconTip>
                       </div>
@@ -10915,7 +10915,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                                     ? "border-transparent ring-2 ring-accent"
                                     : "border-hairline hover:ring-2 hover:ring-accent-tint-border"
                                 }`}
-                                style={{ backgroundColor: preset || "#ffffff" }}
+                                style={{ backgroundColor: preset || "var(--color-surface)" }}
                                 disabled={readOnly}
                                 onClick={() => updateSelectedData({ color: preset })}
                               />
@@ -11294,11 +11294,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
-                        <span className="min-w-0 flex-1 truncate font-medium">
+                        <span className="min-w-0 flex-1 truncate font-semibold">
                           {nodes.find((node) => node.id === selectedEdge.source)?.data.label || "-"}
                         </span>
                         <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        <span className="min-w-0 flex-1 truncate text-right font-medium">
+                        <span className="min-w-0 flex-1 truncate text-right font-semibold">
                           {nodes.find((node) => node.id === selectedEdge.target)?.data.label || "-"}
                         </span>
                       </div>
@@ -11441,11 +11441,11 @@ function MapEditor({ mapId }: { mapId: number }) {
                         </button>
                       </div>
                       <div className="flex items-center gap-1.5 rounded-sm border border-hairline px-2 py-1.5 text-caption text-ink">
-                        <span className="min-w-0 flex-1 truncate font-medium">
+                        <span className="min-w-0 flex-1 truncate font-semibold">
                           {fullGraph?.nodes.find((n) => n.id === selectedChildEdge.source)?.title || "-"}
                         </span>
                         <ArrowRight size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                        <span className="min-w-0 flex-1 truncate text-right font-medium">
+                        <span className="min-w-0 flex-1 truncate text-right font-semibold">
                           {fullGraph?.nodes.find((n) => n.id === selectedChildEdge.target)?.title || "-"}
                         </span>
                       </div>
@@ -11751,7 +11751,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         type="button"
                         data-id="export-png"
                         onClick={() => void handleExportPng()}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <Download size={16} strokeWidth={1.5} />
                         {t("inspector.exportPng")}
@@ -11760,7 +11760,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         type="button"
                         data-id="export-excel"
                         onClick={() => setExcelExportOpen(true)}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <FileSpreadsheet size={16} strokeWidth={1.5} />
                         {t("inspector.exportExcel")}
@@ -11769,7 +11769,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                         type="button"
                         data-id="export-csv"
                         onClick={handleExportCsv}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <FileDown size={16} strokeWidth={1.5} />
                         {t("inspector.exportCsv")}
@@ -11781,7 +11781,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           type="button"
                           data-id="inspector-generate-complete-doc"
                           onClick={() => completeDocPickerRef.current?.click()}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-medium text-on-accent hover:bg-accent-focus"
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                           title="Pick the original SOP .docx - injects section bookmarks and appends the flowchart page."
                         >
                           <FileText size={16} strokeWidth={1.5} />
@@ -11791,7 +11791,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                           type="button"
                           data-id="inspector-export-word"
                           onClick={handleExportWord}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-medium text-ink-secondary hover:bg-surface-alt"
+                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-semibold text-ink-secondary hover:bg-surface-alt"
                         >
                           <FileText size={16} strokeWidth={1.5} />
                           {t("inspector.exportWord")}
@@ -12597,7 +12597,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               <button
                 type="button"
                 data-id="csv-import-continue"
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:opacity-90 disabled:opacity-50"
                 disabled={!csvOutcome?.graph || csvOutcome.errors.length > 0}
                 onClick={enterCsvPreview}
               >

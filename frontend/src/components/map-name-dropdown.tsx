@@ -105,7 +105,7 @@ export function MapNameDropdown({
     <div ref={containerRef} className="relative shrink-0">
       <button
         type="button"
-        className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
+        className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-semibold text-ink hover:bg-surface-alt"
         onClick={() => setOpen((v) => !v)}
         title={t("editor.mapMenu")}
       >
@@ -172,7 +172,7 @@ export function MapNameDropdown({
                 );
                 const text = (
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-caption font-medium text-ink">{m.name}</span>
+                    <span className="block truncate text-caption font-semibold text-ink">{m.name}</span>
                     <span className="block truncate text-fine text-ink-tertiary">{subtitle}</span>
                   </span>
                 );
@@ -257,7 +257,7 @@ export function MapNameDropdown({
               {/* 새 맵 — 홈으로 나가지 않고 생성 모달을 띄움 */}
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption font-medium text-accent hover:bg-surface-alt"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption font-semibold text-accent hover:bg-surface-alt"
                 onClick={() => {
                   closeAll();
                   setShowCreate(true);

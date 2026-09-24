@@ -75,7 +75,7 @@ export function DevLoginModal({
             className="flex h-[26px] w-[26px] items-center justify-center rounded-sm text-ink-tertiary hover:bg-surface-alt"
             onClick={onClose}
           >
-            <X size={15} strokeWidth={1.6} />
+            <X size={15} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -105,7 +105,7 @@ export function DevLoginModal({
                 className="flex items-center gap-2 rounded-sm border border-hairline bg-surface px-2.5 py-2 text-left hover:border-accent hover:bg-accent-tint"
                 onClick={() => onPick(user.id)}
               >
-                <UserRound size={16} strokeWidth={1.6} className="shrink-0 text-ink-tertiary" />
+                <UserRound size={16} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-caption text-ink">
                     {user.name} <span className="text-fine text-ink-muted">({user.id})</span>

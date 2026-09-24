@@ -101,7 +101,7 @@ export function SubmitConfirmDialog({
               className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-accent-tint hover:text-accent disabled:cursor-default disabled:opacity-60"
             >
               {drafting ? (
-                <Loader2 size={12} strokeWidth={1.6} className="animate-spin text-accent" />
+                <Loader2 size={12} strokeWidth={1.5} className="animate-spin text-accent" />
               ) : (
                 <Sparkles size={12} strokeWidth={1.5} className="text-accent" />
               )}

@@ -298,7 +298,7 @@ export function GroupsPanel() {
         </div>
         <button
           type="button"
-          className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus"
+          className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus"
           onClick={openDialog}
         >
           {t("perm.group.createBtn")}
@@ -518,7 +518,7 @@ export function GroupsPanel() {
               </button>
               <button
                 type="button"
-                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-40"
+                className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-40"
                 onClick={() => void handleSubmit()}
                 disabled={submitDisabled}
               >

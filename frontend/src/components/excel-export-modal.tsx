@@ -175,7 +175,7 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
             type="button"
             data-id="excel-export-download"
             disabled={active.status !== "ready" || downloading}
-            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-medium text-on-accent hover:bg-accent-focus disabled:opacity-50"
+            className="rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:opacity-50"
             onClick={() => void handleDownload()}
           >
             {t("export.download")}

@@ -63,7 +63,7 @@ export function GroupTitleBar({
       {!readOnly && (
         <button
           type="button"
-          className="cursor-grab text-white/70 hover:text-white active:cursor-grabbing"
+          className="cursor-grab text-on-accent/70 hover:text-on-accent active:cursor-grabbing"
           title={t("group.move")}
           aria-label={t("group.move")}
           onPointerDown={(event) => onMoveStart(id, event)}
@@ -74,7 +74,7 @@ export function GroupTitleBar({
       {/* 색 점 — 색상 팔레트 토글(colored pill 위라 밝은 점) */}
       <button
         type="button"
-        className="h-2.5 w-2.5 shrink-0 rounded-full bg-white/85 ring-1 ring-white/40 disabled:opacity-70"
+        className="h-2.5 w-2.5 shrink-0 rounded-full bg-surface/85 ring-1 ring-surface/40 disabled:opacity-70"
         title={t("group.color")}
         aria-label={t("group.color")}
         disabled={readOnly}
@@ -84,7 +84,7 @@ export function GroupTitleBar({
         <input
           autoFocus
           defaultValue={label}
-          className="w-24 rounded-xs border border-white/40 bg-white/95 px-1 text-fine text-ink"
+          className="w-24 rounded-xs border border-surface/40 bg-surface/95 px-1 text-fine text-ink"
           placeholder={t("group.untitled")}
           onBlur={(event) => {
             onRename(id, event.target.value);
@@ -102,7 +102,7 @@ export function GroupTitleBar({
         />
       ) : (
         <span
-          className="cursor-text truncate text-fine font-medium text-white"
+          className="cursor-text truncate text-fine font-semibold text-on-accent"
           title={t("group.rename")}
           onDoubleClick={() => !readOnly && setEditing(true)}
         >
@@ -112,7 +112,7 @@ export function GroupTitleBar({
       {!readOnly && onBulkEdit && (
         <button
           type="button"
-          className="shrink-0 text-white/70 hover:text-white"
+          className="shrink-0 text-on-accent/70 hover:text-on-accent"
           title={t("group.bulkEdit")}
           aria-label={t("group.bulkEdit")}
           onClick={() => onBulkEdit(id)}

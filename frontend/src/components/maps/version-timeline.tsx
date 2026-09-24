@@ -32,15 +32,15 @@ const EVENT_LABEL: Record<string, MessageKey> = {
 
 // 이벤트 칩/단계 아이콘 / icon per event type.
 function EventIcon({ type }: { type: string }) {
-  if (type === "created") return <Plus size={12} strokeWidth={1.7} />;
-  if (type === "submitted") return <Send size={12} strokeWidth={1.7} />;
-  if (type === "approved") return <Check size={12} strokeWidth={1.7} />;
-  if (type === "rejected") return <X size={12} strokeWidth={1.7} />;
-  if (type === "published") return <Upload size={12} strokeWidth={1.7} />;
-  if (type === "confirmed") return <BadgeCheck size={12} strokeWidth={1.7} />;
-  if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.7} />;
-  if (type === "external_linked") return <Link2 size={12} strokeWidth={1.7} />;
-  return <GitCommit size={12} strokeWidth={1.7} />;
+  if (type === "created") return <Plus size={12} strokeWidth={1.5} />;
+  if (type === "submitted") return <Send size={12} strokeWidth={1.5} />;
+  if (type === "approved") return <Check size={12} strokeWidth={1.5} />;
+  if (type === "rejected") return <X size={12} strokeWidth={1.5} />;
+  if (type === "published") return <Upload size={12} strokeWidth={1.5} />;
+  if (type === "confirmed") return <BadgeCheck size={12} strokeWidth={1.5} />;
+  if (type === "withdrawn") return <Undo2 size={12} strokeWidth={1.5} />;
+  if (type === "external_linked") return <Link2 size={12} strokeWidth={1.5} />;
+  return <GitCommit size={12} strokeWidth={1.5} />;
 }
 
 // 이벤트 칩/단계 필 색 — 생성=중립 · 승인요청=accent · 승인/게시=green · 반려=red · 담당자확정=액센트 틴트(게시 green과 구분).

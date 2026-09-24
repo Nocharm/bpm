@@ -14,6 +14,7 @@ import { humanizeApiError } from "@/lib/api-errors";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { ModalBackdrop } from "@/components/modal-backdrop";
+import { CheckInput } from "@/components/check-input";
 
 const keyOf = (g: NotificationPurgeGroup) => `${g.type}::${g.message}`;
 
@@ -123,12 +124,7 @@ export function NotificationPurgeModal({
               return (
                 <li key={key} className="border-b border-divider last:border-0">
                   <label className="flex cursor-pointer items-start gap-2 px-3 py-2 hover:bg-surface-alt">
-                    <input
-                      type="checkbox"
-                      checked={checked.has(key)}
-                      onChange={() => toggle(key)}
-                      className="mt-0.5"
-                    />
+                    <CheckInput checked={checked.has(key)} onChange={() => toggle(key)} className="mt-0.5" />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-caption text-ink">{g.message}</span>
                       <span className="text-fine text-ink-tertiary">

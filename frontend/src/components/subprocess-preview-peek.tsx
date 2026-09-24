@@ -513,7 +513,7 @@ export function SubprocessPreviewPeek({
                 setMockMenu(false);
                 setTab("node");
               }}
-              className={`flex-1 rounded-sm px-2 py-1 text-fine font-medium ${
+              className={`flex-1 rounded-sm px-2 py-1 text-fine font-semibold ${
                 tab === "node" ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
             >
@@ -526,7 +526,7 @@ export function SubprocessPreviewPeek({
                 setMockMenu(false);
                 setTab("detail");
               }}
-              className={`flex-1 rounded-sm px-2 py-1 text-fine font-medium ${
+              className={`flex-1 rounded-sm px-2 py-1 text-fine font-semibold ${
                 tab === "detail" ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
             >
@@ -618,7 +618,7 @@ export function SubprocessPreviewPeek({
                   <div ref={mockInnerRef}>
                   <div className="flex items-start gap-1.5">
                     <Workflow size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" style={{ color: mockStroke }} />
-                    <span className="min-w-0 break-words text-fine font-medium text-ink">{name}</span>
+                    <span className="min-w-0 break-words text-fine font-semibold text-ink">{name}</span>
                   </div>
                   {/* GMP 필 — 캔버스 GmpPill 미러(분류된 경우만, 신호등 배지) */}
                   {showMockGmp && mockGmpLabel && (
@@ -1008,7 +1008,7 @@ export function SubprocessPreviewPeek({
               disabled={addDisabledReason !== null}
               title={addDisabledReason ?? ctaLabel}
               onClick={onAdd}
-              className={`flex w-full items-center justify-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-medium shadow-md ${
+              className={`flex w-full items-center justify-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-fine font-semibold shadow-md ${
                 addDisabledReason !== null
                   ? "cursor-not-allowed border-hairline bg-surface/85 text-ink-tertiary"
                   : "border-accent bg-accent text-on-accent hover:bg-accent-focus"
@@ -1031,7 +1031,7 @@ export function SubprocessPreviewPeek({
               data-id="library-peek-open-map"
               title={t("library.peekOpenNamedMap", { name })}
               onClick={onOpenMap}
-              className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline bg-surface/90 px-2.5 py-1.5 text-fine font-medium text-ink-secondary shadow-md hover:bg-surface-alt hover:text-accent"
+              className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline bg-surface/90 px-2.5 py-1.5 text-fine font-semibold text-ink-secondary shadow-md hover:bg-surface-alt hover:text-accent"
             >
               <ExternalLink size={14} strokeWidth={1.5} className="shrink-0" />
               <span className="truncate">{t("library.peekOpenMap")}</span>

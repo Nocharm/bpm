@@ -140,9 +140,9 @@ export default function LoginPage() {
         <div data-id="login-card" className="w-80 rounded-md border border-hairline bg-surface p-6 shadow-lg">
           <div
             data-id="login-brand"
-            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-tint"
+            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-accent-tint"
           >
-            <Workflow size={28} strokeWidth={1.7} className="text-accent" />
+            <Workflow size={28} strokeWidth={1.5} className="text-accent" />
           </div>
           <p className="mb-1 text-body-strong text-ink">{t("login.title")}</p>
           <p className="mb-4 text-caption text-ink-muted">{t("login.subtitle")}</p>
@@ -154,7 +154,7 @@ export default function LoginPage() {
               className="flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-accent text-caption font-semibold text-on-accent hover:bg-accent-focus"
               onClick={() => void onKeycloak()}
             >
-              <Lock size={16} strokeWidth={1.7} />
+              <Lock size={16} strokeWidth={1.5} />
               {t("login.keycloak")}
             </button>
           )}
@@ -168,7 +168,7 @@ export default function LoginPage() {
               className="flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-accent text-caption font-semibold text-on-accent hover:bg-accent-focus"
               onClick={() => setPicking(true)}
             >
-              <LogIn size={16} strokeWidth={1.7} />
+              <LogIn size={16} strokeWidth={1.5} />
               {t("login.dev")}
             </button>
           )}
@@ -186,7 +186,7 @@ export default function LoginPage() {
               className="flex h-9 w-full items-center justify-center gap-2 rounded-sm border border-hairline bg-surface text-caption font-semibold text-ink hover:bg-surface-alt"
               onClick={() => void onSsoSignoutAll()}
             >
-              <LogOut size={16} strokeWidth={1.7} className="text-ink-tertiary" />
+              <LogOut size={16} strokeWidth={1.5} className="text-ink-tertiary" />
               {t("login.ssoSignoutAll")}
             </button>
           </div>

@@ -118,6 +118,7 @@ import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status
 import { exportFramedPng } from "@/lib/export";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
+import { CheckInput } from "@/components/check-input";
 import { useInfiniteSlice } from "@/lib/use-infinite-slice";
 import {
   NodeActionsContext,
@@ -143,7 +144,7 @@ function ViewOnlyPill({ label }: { label: string }) {
   return (
     <div className="flex justify-end" data-id="compare-inspector-viewonly">
       <span className="inline-flex items-center gap-1 rounded-sm bg-surface-alt px-2 py-0.5 text-fine font-semibold text-ink-secondary">
-        <Lock size={12} strokeWidth={1.7} />
+        <Lock size={12} strokeWidth={1.5} />
         {label}
       </span>
     </div>
@@ -604,7 +605,7 @@ function VersionSelect({
                     />
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-ink">{version.label}</span>
+                    <span className="block truncate font-semibold text-ink">{version.label}</span>
                     {/* 변경날(마지막 수정, KST) — 이름 아랫줄 좌정렬·축소 폰트(피드백 2026-08-28) */}
                     <span className="block text-[10px] leading-tight text-ink-tertiary">
                       {formatKstShort(version.updated_at)}
@@ -1580,7 +1581,7 @@ function ComparePane({
           <button
             type="button"
             onClick={() => setTitleMenuOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-medium text-ink hover:bg-surface-alt"
+            className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption font-semibold text-ink hover:bg-surface-alt"
           >
             <span className="max-w-[16rem] truncate">{mapName}</span>
             <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
@@ -1910,7 +1911,7 @@ function ComparePane({
                   {tab.label}
                   {/* 생성 중 프로그레스 링 — 탭을 열어 요청한 뒤 다른 탭으로 옮겨도 작업 중임을 알린다 */}
                   {tab.key === "ai" && aiRun?.status === "loading" && (
-                    <Loader2 size={12} strokeWidth={1.6} className="animate-spin text-accent" data-id="compare-ai-tab-spinner" />
+                    <Loader2 size={12} strokeWidth={1.5} className="animate-spin text-accent" data-id="compare-ai-tab-spinner" />
                   )}
                 </button>
               ))}
@@ -1967,10 +1968,8 @@ function ComparePane({
                             key={item.key}
                             className="flex cursor-pointer items-center gap-2 px-3 py-1 text-caption text-ink hover:bg-surface-alt"
                           >
-                            <input
-                              type="checkbox"
+                            <CheckInput
                               data-id={`compare-sum-toggle-${item.key}`}
-                              className="h-3.5 w-3.5 accent-[var(--color-accent)]"
                               checked={!hiddenSums.has(item.key)}
                               onChange={() =>
                                 setHiddenSums((prev) => {
@@ -2362,7 +2361,7 @@ function ComparePane({
                   <InspectorRow label={t(FIELD_MSG.color)}>
                     {selectedNode.node.color ? (
                       <span
-                        className="inline-block h-5 w-5 rounded-[5px] border align-middle"
+                        className="inline-block h-5 w-5 rounded-xs border align-middle"
                         style={{
                           backgroundColor: `color-mix(in srgb, ${selectedNode.node.color} 18%, white)`,
                           borderColor: selectedNode.node.color,
