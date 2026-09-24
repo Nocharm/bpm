@@ -1156,3 +1156,24 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 @media (prefers-reduced-motion: reduce) {
   .bpm-io-pulse, .bpm-io-pulse input { animation: none; }
 }
+
+/* 계획 화면 단계 타일 — 추가는 커지며 나타나고, 삭제는 줄어들며 사라지고, 단계가 바뀐 타일은 액센트 링이 한 번 번진다.
+   가로 타일이라 accordion(grid-template-rows)이 아니라 scale로 (plan-editor.tsx). */
+@keyframes plan-tile-in {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes plan-tile-out {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0.92); opacity: 0; }
+}
+@keyframes plan-tile-settle {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-accent) 0%, transparent); }
+}
+.plan-tile-in { animation: plan-tile-in 300ms var(--ease-smooth); }
+.plan-tile-out { animation: plan-tile-out 240ms var(--ease-smooth) forwards; }
+.plan-tile-settle { animation: plan-tile-settle 600ms var(--ease-smooth); }
+@media (prefers-reduced-motion: reduce) {
+  .plan-tile-in, .plan-tile-out, .plan-tile-settle { animation: none; }
+}
