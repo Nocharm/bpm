@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-28 — PI팀 회의 자료: 컨설팅 산출물 원천 운영 방식 협의 (docs/pi-meeting-prep)
+
+- PI팀이 "컨설턴트 도구가 원천, BPM은 뷰어"로 선회한 상황에 대비해 `docs/notices/2026-09-28-pi-meeting-prep.md` 작성 — 초기 계획(spec §6) 대비 진척·현재 범위·장단점·계약 이후 관리·운영 시나리오 3안(추천 C: 계약 중 병행, 종료 시 마지막 재전달로 이양). 근거는 2026-08-09 컨설팅사 메일의 "임포트=부트스트랩, 수명주기=BPM 거버넌스" 합의. 기준 커밋 dev b6a309a4(main 동기화 완료). 확정 후 브랜치 삭제 예정.
+
 ## 2026-09-24 — 릴리스 후 정리: md 문서·프론트 디자인 통일성·매뉴얼 (dev)
 
 - **md 문서 정리**: main 머지 완료된 설계 스냅샷 3종(assignee-role·catalog-alias·interview-v04 설계)과 구현 플랜 3종 폐기(계약은 CLAUDE.md·0.5 계약 3표면으로 이미 흡수) — 코드 주석은 `docs/design/` 접두만 떼고 파일명 유지. PROGRESS는 2026-09-12 이전 793줄을 아카이브로 이동(헤더 무손실 검증), 인덱스 2종(`docs/README.md`·`design/README.md`) 상태 문구 갱신. 링크 검사 74파일: 남은 깨진 링크는 아카이브 원문 7건뿐(원문 보존 정책).

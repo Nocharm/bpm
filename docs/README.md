@@ -39,6 +39,7 @@
 ## 릴리스 공지 ([`notices/`](notices/))
 - [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md) · [2026-08-19](notices/2026-08-19-release.md) · [2026-08-25](notices/2026-08-25-release.md) · [2026-09-12](notices/2026-09-12-release.md)
 - [`notices/2026-08-09-consultant-delivery-interface-mail.md`](notices/2026-08-09-consultant-delivery-interface-mail.md) — 컨설팅사 발송용 메일 초안(수용 방향 + 전달 데이터 인터페이스(안)).
+- [`notices/2026-09-28-pi-meeting-prep.md`](notices/2026-09-28-pi-meeting-prep.md) — PI팀 회의 자료(진척도·범위·장단점·계약 이후 관리·원천 운영 시나리오 3안). 확정 후 브랜치 정리 예정.
 
 ## 샘플 데이터 ([`samples/`](samples/))
 CSV 임포트 샘플 3종(procurement·recruitment·incident-change).
