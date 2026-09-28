@@ -223,6 +223,28 @@ def test_skip_failed_task_with_placeholder(client: TestClient, monkeypatch) -> N
     assert again["status"] == "pending" and again["placeholder"] is False and again["issues"] == []
 
 
+def test_skip_ready_task_from_questionnaire(client: TestClient, monkeypatch) -> None:
+    """설문 답변 단계에서도 플레이스홀더로 건너뛸 수 있다 — 설문·드로잉 생략, 답은 비운다 (사용자 요청 2026-09-29)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", headers=HEADERS, json={
+        "cards": [{"name": "요청 접수", "summary": "", "owner_role": "담당자", "department": "", "depends_on": []}],
+        "lock": True,
+    }).json()
+    task = body["tasks"][0]
+    _fake_ai_queue(monkeypatch, [Q_JSON])
+    _step(sid)
+    assert client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]["status"] == "ready"
+    skipped = client.post(f"/api/framework-interviews/{sid}/tasks/{task['id']}/skip", headers=HEADERS)
+    assert skipped.status_code == 200, skipped.text
+    out = skipped.json()["tasks"][0]
+    assert out["status"] == "drawn" and out["placeholder"] is True
+    detail = client.get(f"/api/framework-interviews/{sid}/tasks/{task['id']}", headers=HEADERS).json()
+    assert detail["answers"] is None and detail["row"]["actions"][0]["label"] == "요청 접수"
+
+
 def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")

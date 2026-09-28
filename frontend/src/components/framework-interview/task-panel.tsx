@@ -15,6 +15,7 @@ import { buildSubmitPayload, fillAllSuggested, fillSuggested, validateAnswers } 
 import { useI18n } from "@/lib/i18n";
 import { formatElapsedSeconds, useNowTick } from "@/lib/use-now-tick";
 import { AiButton } from "@/components/ai-button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ImportMapPreview } from "@/components/admin/import-report/map-preview";
 import { ANSWER_NOTE_KEY, AnswerReview } from "@/components/framework-interview/answer-review";
 import { FeedbackChat } from "@/components/framework-interview/feedback-chat";
@@ -46,6 +47,8 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
   const [comments, setComments] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  // 설문 단계에서 플레이스홀더로 건너뛰기 확인 — 입력 중인 답이 버려지므로 한 번 묻는다(등록 전까지 되돌릴 수 있다)
+  const [confirmSkip, setConfirmSkip] = useState(false);
   const working = task.status === "submitted" || task.status === "drawing";
   const now = useNowTick(working && workingSince !== null);
   const [missing, setMissing] = useState<string[]>([]);
@@ -111,9 +114,16 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-body-strong text-ink">{task.seq}. {task.name}</span>
         {answering && !reviewing && (
-          <AiButton variant="inline" data-id="fw-consult-fill-all" onClick={() => setAnswers(fillAllSuggested(questionnaire))}>
-            {t("fwConsult.fillAll")}
-          </AiButton>
+          <>
+            {/* 이 단계는 지금 자세히 그릴 필요가 없을 때 — 설문·드로잉을 건너뛰고 활동 1개짜리 임시 행으로 등록(사용자 요청 2026-09-29) */}
+            <button type="button" className={SECONDARY} data-id="fw-consult-skip-now" disabled={busy} title={t("fwConsult.skipNowHint")} onClick={() => setConfirmSkip(true)}>
+              <SkipForward size={14} strokeWidth={1.5} />
+              {t("fwConsult.skipNow")}
+            </button>
+            <AiButton variant="inline" data-id="fw-consult-fill-all" onClick={() => setAnswers(fillAllSuggested(questionnaire))}>
+              {t("fwConsult.fillAll")}
+            </AiButton>
+          </>
         )}
         {onClose && (
           <button
@@ -220,6 +230,18 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
             lockedNote={t("fwConsult.feedbackLocked")}
           />
         </div>
+      )}
+
+      {confirmSkip && (
+        <ConfirmDialog
+          dialogId="fw-consult-skip-now-confirm"
+          title={t("fwConsult.skipNow")}
+          message={t("fwConsult.skipNowConfirm")}
+          confirmLabel={t("fwConsult.skipNow")}
+          cancelLabel={t("common.cancel")}
+          onConfirm={() => { setConfirmSkip(false); onSkip(task.id); }}
+          onClose={() => setConfirmSkip(false)}
+        />
       )}
 
       {task.status === "failed" && (

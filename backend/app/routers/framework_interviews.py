@@ -395,11 +395,14 @@ async def skip_task(
     session_id: int, task_pk: int,
     user: str = Depends(require_sysadmin), db: AsyncSession = Depends(get_session),
 ) -> FrameworkInterviewOut:
-    """실패 카드를 플레이스홀더 행(활동 1개)으로 대체해 진행 — 계속 실패해도 세션을 포기하지 않게 한다."""
+    """실패 카드, 또는 설문 답변 단계(ready)의 카드를 플레이스홀더 행(활동 1개)으로 대체해 진행 —
+    계속 실패해도, 지금은 자세히 그릴 필요가 없어도 세션을 포기하지 않게 한다. 등록 전까지 retry로 되돌릴 수 있다."""
     row = await _get_session_row(db, session_id)
     task = await _get_task(db, row, task_pk)
-    if task.status != "failed":
-        raise HTTPException(status_code=409, detail="only failed tasks can be skipped")
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
+    if task.status not in ("failed", "ready"):
+        raise HTTPException(status_code=409, detail="only failed or ready tasks can be skipped")
     card = next((c for c in row.plan or [] if c.get("task_id") == task.task_id), {})
     placeholder_row = {
         "l6": task.name,
@@ -418,6 +421,7 @@ async def skip_task(
     task.placeholder = True
     task.status = "drawn"
     task.error = None
+    task.answers = None  # 설문 단계에서 건너뛴 카드는 답이 없다 — 되돌리면 설문부터 다시
     task.drawn_at = now_kst()
     await db.commit()
     runner.kick(row.id)
