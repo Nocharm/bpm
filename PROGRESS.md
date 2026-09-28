@@ -14,6 +14,9 @@
 - **미리보기 순환 표현·연결 단계 계획 정합**: 공용 `ScopePreview` 엣지에 화살표를 달고, 역행 엣지(타겟이 왼쪽)는 두 노드 위로 도는 직각 점선 경로(`buildPreviewEdgePath`)로 그린다(중심 직선은 앞 노드를 가로질러 순환이 안 보였다). L5 미리보기도 Start/End 폴백 동일. 연결 제안은 정규화 뒤 `align_relations_to_plan`으로 계획의 선행 쌍을 엣지로 보강하고 진입점을 첫 단계 카드로, 뒤 단계→앞 단계 엣지는 loop로 맞춘다(피드백 재제안은 제외). 가짜 AI 기본 행에 3→1 loop를 넣어 스모크가 순환 경로를 밟는다.
 - **관리 트리 자동 드릴인**: 자식이 하나뿐인 노드를 펼치면(루트가 하나뿐일 때 포함) 그 사슬이 갈래가 나올 때까지 static 모션으로 이어 열린다(`drillSingleChain`, 스모크 `pw-fw-tree-autodrill.mjs`).
 - 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과. 확인용 캡처 스크립트(polish-shots·plan-shot·design-audit)는 사용 후 정리.
+## 2026-09-28 — PI팀 회의 자료: 컨설팅 산출물 원천 운영 방식 협의 (docs/pi-meeting-prep)
+
+- PI팀이 "컨설턴트 도구가 원천, BPM은 뷰어"로 선회한 상황에 대비해 `docs/notices/2026-09-28-pi-meeting-prep.md` 작성 — 초기 계획(spec §6) 대비 진척·현재 범위·장단점·계약 이후 관리·운영 시나리오 3안(추천 C: 계약 중 병행, 종료 시 마지막 재전달로 이양). 근거는 2026-08-09 컨설팅사 메일의 "임포트=부트스트랩, 수명주기=BPM 거버넌스" 합의. 기준 커밋 dev b6a309a4(main 동기화 완료). 브랜치는 삭제하지 않고 dev에 머지(사용자 결정 2026-09-28).
 
 ## 2026-09-24 — 릴리스 후 정리: md 문서·프론트 디자인 통일성·매뉴얼 (dev)
 
