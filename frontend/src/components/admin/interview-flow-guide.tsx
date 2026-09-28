@@ -27,7 +27,7 @@ export function InterviewFlowGuide() {
                 {index + 1}
               </span>
             </span>
-            <span className="text-fine leading-4 text-ink-secondary">{t(step.key)}</span>
+            <span className="break-keep text-fine leading-4 text-ink-secondary">{t(step.key)}</span>
           </div>
           {index < STEPS.length - 1 && (
             <span className="mt-3.5 flex shrink-0 items-center text-ink-muted" aria-hidden="true">

@@ -1013,13 +1013,14 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           data-id="interview-import-section"
           className="flex flex-col gap-3 rounded-md border border-hairline bg-surface p-3 xl:flex-row xl:items-center xl:gap-6"
         >
-          <div className="flex min-w-0 flex-col gap-2 xl:w-80 xl:shrink-0">
+          {/* 좌측 폭은 두 버튼(파일 선택·프롬프트 복사)이 한 줄에 들어가는 만큼(한/영 모두) — 2줄로 꺾이지 않게(사용자 요청 2026-09-28) */}
+          <div className="flex min-w-0 flex-col gap-2 xl:w-[31rem] xl:shrink-0">
             <div className="flex items-center gap-1.5">
               <FileJson size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
               <span className="text-caption text-ink">{t("framework.interviewSectionTitle")}</span>
             </div>
             <span className="text-fine text-ink-tertiary">{t("fwConsult.copyPromptHint")}</span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 xl:flex-nowrap">
               <input
                 ref={interviewInputRef}
                 type="file"
