@@ -1,6 +1,7 @@
 "use client";
 
 // 인터뷰 JSON 왕복 안내 그림 — 프롬프트 복사 → 외부 AI → JSON 파일 → 여기서 드라이런·등록, 아이콘 4단계. 관리 패널 인터뷰 JSON 스트립 우측 전용(2026-09-28).
+// 톤은 무채(surface-alt 원판·ink 아이콘·hairline 번호) — 안내 그림이 스트립의 실제 버튼(액센트)보다 눈에 띄지 않게(사용자 피드백 2026-09-28).
 
 import { Bot, ChevronRight, ClipboardCopy, FileJson, Upload, type LucideIcon } from "lucide-react";
 
@@ -21,9 +22,9 @@ export function InterviewFlowGuide() {
       {STEPS.map((step, index) => (
         <li key={step.key} className="flex min-w-0 flex-1 items-start gap-1">
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-accent-tint text-accent">
+            <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-surface-alt text-ink-secondary">
               <step.icon size={16} strokeWidth={1.5} />
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-semibold leading-none text-on-accent tabular-nums">
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-hairline bg-surface text-[10px] font-semibold leading-none text-ink-tertiary tabular-nums">
                 {index + 1}
               </span>
             </span>
@@ -31,7 +32,7 @@ export function InterviewFlowGuide() {
           </div>
           {index < STEPS.length - 1 && (
             <span className="mt-3.5 flex shrink-0 items-center text-ink-muted" aria-hidden="true">
-              <span className="h-px w-3 border-t border-dashed border-border-strong" />
+              <span className="h-px w-3 border-t border-dashed border-hairline" />
               <ChevronRight size={12} strokeWidth={1.5} />
             </span>
           )}
