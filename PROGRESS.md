@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-28 — 홈 대시보드 맵 호버 연동 표식 교체 (feat/linked-hover-effect)
+
+- 연동 강조를 배경(alt)에서 좌측 2px 액센트 바(inset box-shadow)로 교체하고 마우스가 올라간 행 자신은 표식에서 제외 — 호버 배경(pearl)과 같은 계열이라 어느 행에 마우스가 있는지 구분되지 않아 오류처럼 보였다(사용자 선택: 액센트 바, 대안 이름 색·점선 링·링크 아이콘은 기각). 6개 섹션(최근 열람·내 부서·내 문서·결재 대기·최근 변경·점유 목록)이 `dashboard-hover.tsx` 상수 하나를 공유해 일괄 적용. 검증 `pw-shot-home-linked-hover.mjs`(admin.sys, 7/7).
+
 ## 2026-09-28 — AI L5 캠페인 폴리시 라운드 (feat/fw-consult-polish → dev)
 
 - **계획 화면 단계 모델 교체**: 단계를 `depends_on` 역산이 아니라 카드의 명시적 `stage`(`lib/plan-cards.ts`)로 둔다. 드래그는 그 카드만 옮기고 선행은 "직전 행의 비어 있지 않은 부분집합" 불변식(`normalizeDependencies`)으로 저장해 재로드 시 같은 행으로 복원. 빈 행은 420ms 뒤 접혀 아래 행이 한 단계씩 당겨지고(FLIP), 선행 연결은 SVG 점선 곡선+호버 무리 강조, 선행 편집은 타일 우클릭 메뉴(공용 `ContextMenu`에 `check` 항목 타입 추가, 클릭해도 유지)로만. 상세 열 선행은 읽기 전용, 부서는 디렉터리 목록 SearchSelect, 카드 전환 페이드. 첨부 복수 파일(순차 업로드), 브리프 플레이스홀더에 항목+예시.

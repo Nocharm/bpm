@@ -16,20 +16,23 @@ export function HoverMapProvider({ children }: { children: ReactNode }) {
   return <HoverMapContext.Provider value={{ hovered, setHovered }}>{children}</HoverMapContext.Provider>;
 }
 
-// 행이 붙일 핸들러·강조 여부 — 강조는 다른 행이 같은 맵을 가리킬 때도 켜진다(자기 행은 :hover가 이미 담당)
+// 행이 붙일 핸들러·표식 여부 — 표식은 다른 행이 같은 맵을 가리킬 때만 켜진다. 마우스가 올라간 행 자신은 :hover 배경이
+// 담당하므로 제외한다(자기 행에도 표식이 붙으면 포인터 위치와 헷갈린다, 사용자 지시 2026-09-28).
 export function useHoverMap(mapId: number): {
   linked: boolean;
   handlers: { onMouseEnter: () => void; onMouseLeave: () => void };
 } {
   const { hovered, setHovered } = useContext(HoverMapContext);
+  const [self, setSelf] = useState(false);
   return {
-    linked: hovered === mapId,
+    linked: hovered === mapId && !self,
     handlers: {
-      onMouseEnter: () => setHovered(mapId),
-      onMouseLeave: () => setHovered(null),
+      onMouseEnter: () => { setSelf(true); setHovered(mapId); },
+      onMouseLeave: () => { setSelf(false); setHovered(null); },
     },
   };
 }
 
-// 연동 강조 클래스 — 행의 :hover(pearl)보다 한 단계 진한 톤(실측: pearl은 흰 바탕에서 거의 안 보였다)
-export const HOVER_LINKED_CLASS = "bg-surface-alt";
+// 연동 표식 클래스 — 배경 대신 좌측 2px 액센트 바(inset box-shadow, 레이아웃 무변화). 배경 톤(alt)은 호버 배경(pearl)과
+// 같은 계열이라 어느 행에 마우스가 있는지 구분되지 않았다(사용자 지시 2026-09-28).
+export const HOVER_LINKED_CLASS = "shadow-[inset_2px_0_0_var(--color-accent)]";

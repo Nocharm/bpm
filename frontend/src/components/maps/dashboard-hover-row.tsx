@@ -34,7 +34,7 @@ export function HoverLinkedRow({ mapId, onClick, pendingLabel, className, dataId
       {...extraData}
       onClick={(e) => { e.stopPropagation(); toggleAction(key, onClick, pendingLabel); }}
       {...handlers}
-      className={`${className} transition-colors duration-150 hover:bg-surface-pearl ${
+      className={`${className} transition-[color,background-color,box-shadow] duration-150 hover:bg-surface-pearl ${
         selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
       }`}
     >

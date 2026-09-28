@@ -35,7 +35,7 @@ export function DashboardMapRow({ map, meta, onSelect }: DashboardMapRowProps) {
       data-map-id={map.id}
       data-linked={linked || undefined}
       data-selecting={selecting || undefined}
-      className={`group flex cursor-pointer items-center gap-2 border-t border-divider px-3 py-1.5 transition-colors duration-150 hover:bg-surface-pearl ${
+      className={`group flex cursor-pointer items-center gap-2 border-t border-divider px-3 py-1.5 transition-[color,background-color,box-shadow] duration-150 hover:bg-surface-pearl ${
         selecting ? "bg-accent-tint/40" : linked ? HOVER_LINKED_CLASS : ""
       }`}
     >
