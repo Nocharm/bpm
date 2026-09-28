@@ -183,14 +183,14 @@ function findEdgePoint() {
 }
 const countEdges = () => canvas.locator(".react-flow__edge").count();
 
-// ③ 엣지 클릭 → 라벨 저장
+// ③ 엣지 더블클릭 → 라벨 저장 (단일 클릭은 선택만 — Delete/Backspace가 먹게, 2026-09-28)
 const point = await findEdgePoint();
 check("found a clickable edge midpoint", point !== null);
 if (point === null) {
   await browser.close();
   process.exit(summarize() ? 1 : 0);
 }
-await page.mouse.click(point.x, point.y);
+await page.mouse.dblclick(point.x, point.y);
 const labelInput = page.locator('[data-id="fw-relations-edge-label"]');
 await labelInput.waitFor({ timeout: 5000 });
 await labelInput.fill("승인");
@@ -243,8 +243,7 @@ check(
   `${serverCanvas.nodes.length} nodes`,
 );
 
-// ④ 엣지 선택 → Delete → 삭제 + 저장. 클릭은 라벨 팝오버도 열므로 Escape로 팝오버만 닫고
-// (RF 선택은 유지) Delete를 누른다 — 입력에 포커스가 있으면 RF가 키를 무시한다.
+// ④ 엣지 클릭(선택만) → Delete → 삭제 + 저장. 라벨 입력은 더블클릭에만 열리므로 포커스를 뺏지 않는다.
 await page.waitForTimeout(600);
 const edgesBefore = await countEdges();
 const putsBefore = canvasPuts.length;
@@ -255,8 +254,7 @@ if (delPoint === null) {
   process.exit(summarize() ? 1 : 0);
 }
 await page.mouse.click(delPoint.x, delPoint.y);
-await labelInput.waitFor({ timeout: 5000 });
-await labelInput.press("Escape");
+check("single click does not open the label input", (await labelInput.count()) === 0);
 await page.keyboard.press("Delete");
 const edgeDeleted = await page
   .waitForFunction(
@@ -269,6 +267,26 @@ const edgeDeleted = await page
 check("Delete removes the selected edge", edgeDeleted, `${edgesBefore} -> ${await countEdges()}`);
 await page.waitForTimeout(1200);
 check("edge delete was saved (PUT /canvas 200)", canvasPuts.length > putsBefore && canvasPuts.every((s) => s === 200), canvasPuts.join(","));
+
+// ④-b 엣지 우클릭 → 메뉴 [엣지 삭제]
+await page.waitForTimeout(400);
+const menuPoint = await findEdgePoint();
+check("found an edge midpoint for the context menu", menuPoint !== null);
+if (menuPoint !== null) {
+  const edgesBeforeMenu = await countEdges();
+  await page.mouse.click(menuPoint.x, menuPoint.y, { button: "right" });
+  await page.locator('[data-id="context-menu"]').waitFor({ timeout: 5000 });
+  await page.locator('[data-id="context-menu"] button').filter({ hasText: "엣지 삭제" }).click();
+  const menuDeleted = await page
+    .waitForFunction(
+      (want) => document.querySelectorAll('[data-id="fw-consult-relations-canvas"] .react-flow__edge').length === want,
+      edgesBeforeMenu - 1,
+      { timeout: 10000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  check("edge context menu deletes the edge", menuDeleted, `${edgesBeforeMenu} -> ${await countEdges()}`);
+}
 
 // ⑤ 노드는 삭제 불가 — L6 카드가 캔버스에서 사라지면 서버 캔버스와 어긋난다
 const nodesBefore = await canvas.locator(".react-flow__node").count();

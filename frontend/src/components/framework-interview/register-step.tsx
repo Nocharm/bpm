@@ -1,24 +1,23 @@
 "use client";
 
 // 캠페인 ④ 등록 — 조립된 0.5 문서를 기존 인터뷰 임포트(dry-run→apply)로 넣고 리포트 UI를 재사용. JSON 다운로드·완료 안내.
-// TaskPreviewModal: 완료 카드 미리보기(ImportMapPreview scope=map).
+// 등록이 끝나면 리포트를 남긴 채 반투명 레이어 + 가운데 완료 카드(아이콘·문구·버튼)를 띄운다 — 화면이 갑자기 비지 않게(사용자 요청 2026-09-28).
+// 리포트가 없는 채로 들어오면(새로고침 뒤) 완료 카드만 가운데 놓는다.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, CircleCheck, Download, ExternalLink, Loader2 } from "lucide-react";
 
 import {
-  getApiErrorDetail, getFrameworkInterviewDocument, getFrameworkInterviewTask, importInterview, openLinkageMap,
+  getApiErrorDetail, getFrameworkInterviewDocument, importInterview, openLinkageMap,
   type FwInterviewSession, type InterviewImportResult,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { buildImportReportView, buildInterviewIndex, governanceKey, parseGovernanceKey } from "@/lib/interview-report";
-import { ImportMapPreview } from "@/components/admin/import-report/map-preview";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
-import { ModalBackdrop } from "@/components/modal-backdrop";
 
 const SECONDARY = "inline-flex items-center gap-1.5 rounded-sm border border-hairline px-3 py-1.5 text-caption text-ink hover:bg-surface-alt disabled:opacity-40";
+const PRIMARY = "inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
 
 interface RegisterStepProps {
   session: FwInterviewSession;
@@ -99,22 +98,41 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
     }
   }
 
-  if (session.status === "applied") {
+  const applied = session.status === "applied";
+  const doneCard = (
+    <div className="fw-fade-in flex w-[min(28rem,90%)] flex-col items-center gap-3 rounded-md border border-hairline bg-surface p-6 text-center shadow-lg" data-id="fw-consult-done">
+      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-tint text-accent">
+        <CircleCheck size={24} strokeWidth={1.5} />
+      </span>
+      <span className="text-body-strong text-ink">{t("fwConsult.doneTitle")}</span>
+      <p className="text-caption text-ink-secondary">{t("fwConsult.done")}</p>
+      {error && <p className="text-caption text-error" data-id="fw-consult-done-error">{error}</p>}
+      <div className="flex flex-wrap justify-center gap-2">
+        <button type="button" className={PRIMARY} data-id="fw-consult-open-canvas" disabled={opening} onClick={() => void openCanvas()}>
+          {opening ? <Loader2 size={14} strokeWidth={1.5} className="animate-spin" /> : <ExternalLink size={14} strokeWidth={1.5} />}
+          {t("fwConsult.openCanvas")}
+        </button>
+        <button type="button" className={SECONDARY} data-id="fw-consult-download" onClick={download} disabled={!doc}><Download size={14} strokeWidth={1.5} />{t("fwConsult.download")}</button>
+      </div>
+    </div>
+  );
+  if (applied && !(result && view)) {
     return (
-      <div className="flex flex-col gap-3 p-4" data-id="fw-consult-done">
-        <p className="text-caption text-ink">{t("fwConsult.done")}</p>
-        {error && <p className="text-caption text-error" data-id="fw-consult-done-error">{error}</p>}
-        <div className="flex gap-2">
-          <button type="button" className={SECONDARY} data-id="fw-consult-open-canvas" disabled={opening} onClick={() => void openCanvas()}>{t("fwConsult.openCanvas")}</button>
-          <button type="button" className={SECONDARY} data-id="fw-consult-download" onClick={download} disabled={!doc}><Download size={14} strokeWidth={1.5} />{t("fwConsult.download")}</button>
-        </div>
+      <div className="flex min-h-[60vh] flex-1 items-center justify-center p-4" data-id="fw-consult-done-host">
+        {doneCard}
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-3 p-4" data-id="fw-consult-register">
+    <div className="relative flex flex-col gap-3 p-4" data-id="fw-consult-register">
+      {applied && (
+        // 리포트 위 반투명 흰 레이어(리포트의 sticky 툴바 z-3보다 위) — 방금 확인한 드라이런 결과가 뒤에 남아 있어 완료가 "그 결과가 들어갔다"로 읽힌다
+        <div className="absolute inset-0 z-[10] flex items-start justify-center bg-surface/75 pt-16 backdrop-blur-[1px]" data-id="fw-consult-done-overlay">
+          {doneCard}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={SECONDARY} data-id="fw-consult-back-relations" disabled={busy || phase === "apply"} onClick={onBack}>
+        <button type="button" className={SECONDARY} data-id="fw-consult-back-relations" disabled={busy || phase === "apply" || applied} onClick={onBack}>
           <ArrowLeft size={14} strokeWidth={1.5} />{t("fwConsult.backToRelations")}
         </button>
         <span className="text-body-strong text-ink">{t("fwConsult.stepRegister")}</span>
@@ -123,8 +141,8 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
             <Loader2 size={14} strokeWidth={1.5} className="animate-spin text-accent" />{t("fwConsult.dryRunRunning")}
           </span>
         )}
-        <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-download" onClick={download} disabled={!doc}><Download size={14} strokeWidth={1.5} />{t("fwConsult.download")}</button>
-        <button type="button" className={SECONDARY} data-id="fw-consult-dryrun" disabled={busy || !doc || phase !== null} onClick={() => void runImport(false)}>{t("fwConsult.dryRun")}</button>
+        {!applied && <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-download" onClick={download} disabled={!doc}><Download size={14} strokeWidth={1.5} />{t("fwConsult.download")}</button>}
+        {!applied && <button type="button" className={SECONDARY} data-id="fw-consult-dryrun" disabled={busy || !doc || phase !== null} onClick={() => void runImport(false)}>{t("fwConsult.dryRun")}</button>}
       </div>
       {error && <p className="text-caption text-error" data-id="fw-consult-register-error">{error}</p>}
       {result && view && (
@@ -142,20 +160,3 @@ export function RegisterStep({ session, busy, onApplied, onBack }: RegisterStepP
     </div>
   );
 }
-
-RegisterStep.TaskPreviewModal = function TaskPreviewModal({ sessionId, taskPk, onClose }: { sessionId: number; taskPk: number; onClose: () => void }) {
-  const [source, setSource] = useState<Record<string, unknown> | null>(null);
-  useEffect(() => {
-    let alive = true;
-    getFrameworkInterviewTask(sessionId, taskPk).then((d) => { if (alive) setSource({ taskId: d.task_id, ...(d.row ?? {}) }); }).catch(() => undefined);
-    return () => { alive = false; };
-  }, [sessionId, taskPk]);
-  return createPortal(
-    <ModalBackdrop onClose={onClose} className="fixed inset-0 z-[1200] flex items-center justify-center bg-ink/20 px-4">
-      <div className="h-[70vh] w-[80vw] rounded-md bg-surface p-3" data-id="fw-consult-task-preview">
-        {source && <ImportMapPreview source={source} scope="map" dataId="fw-consult-task-preview-canvas" onClose={onClose} />}
-      </div>
-    </ModalBackdrop>,
-    document.body,
-  );
-};

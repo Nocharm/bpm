@@ -12,7 +12,7 @@ describe("buildAiButtonClass", () => {
     }
   });
   it("tile is a full-width row; inline and primary share one size", () => {
-    expect(buildAiButtonClass("tile")).toContain("h-14 w-full");
+    expect(buildAiButtonClass("tile")).toContain("h-9 w-full");
     expect(buildAiButtonClass("inline")).toContain("px-3 py-1.5 text-caption");
     expect(buildAiButtonClass("primary")).toContain("px-3 py-1.5 text-caption");
   });

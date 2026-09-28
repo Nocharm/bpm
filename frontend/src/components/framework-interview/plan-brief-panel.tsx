@@ -1,7 +1,8 @@
 "use client";
 
 // 캠페인 ① 좌측 brief+첨부 패널 — planning 단계에 페이지 좌측 보드 자리를 쓴다(잠금 후엔 TaskBoard). PlanEditor와 짝 (spec 2026-09-23 §3 B7).
-// 첨부는 brief와 분리된 목록으로 개별 삭제한다(잘못 올린 파일 누적 방지).
+// 첨부는 brief와 분리된 목록으로 개별 삭제한다(잘못 올린 파일 누적 방지). 파일 선택은 복수(사용자 요청 2026-09-28).
+// 플레이스홀더는 무엇을 적을지 항목과 예시 문장을 함께 보여 준다(placeholder 한 줄로는 부족하다는 피드백).
 
 import { useRef } from "react";
 import { FileText, Paperclip, X } from "lucide-react";
@@ -18,7 +19,7 @@ interface PlanBriefPanelProps {
   onBriefChange: (value: string) => void;
   attachments: FwAttachment[];
   busy: boolean;
-  onAttach: (file: File) => void;
+  onAttach: (files: File[]) => void;  // 한 번에 여러 파일(순차 업로드는 페이지가 맡는다)
   onRemoveAttachment: (index: number) => void;
   onGenerate: () => void;
   // 카드가 있으면 "다시 제안" 라벨
@@ -38,8 +39,8 @@ export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAtta
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <span className="text-caption text-ink">{t("fwConsult.attachments")}</span>
-          <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.xlsx,.txt,.md" data-id="fw-consult-attach-input"
-                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onAttach(f); e.target.value = ""; }} />
+          <input ref={fileRef} type="file" multiple className="hidden" accept=".pdf,.docx,.xlsx,.txt,.md" data-id="fw-consult-attach-input"
+                 onChange={(e) => { const files = [...(e.target.files ?? [])]; if (files.length) onAttach(files); e.target.value = ""; }} />
           <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-attach" disabled={busy} onClick={() => fileRef.current?.click()}>
             <Paperclip size={14} strokeWidth={1.5} />{t("fwConsult.attach")}
           </button>

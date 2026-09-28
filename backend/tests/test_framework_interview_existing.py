@@ -229,6 +229,33 @@ def test_merge_existing_cards_keeps_every_existing_map_once() -> None:
     assert merged2[0]["mode"] == "keep" and merged2[0]["summary"] == "s1"
 
 
+def test_merge_existing_cards_inherits_previous_predecessors() -> None:
+    """AI가 기존 카드의 depends_on을 비우거나 카드를 빠뜨려도 직전 계획의 선행을 승계한다 (2026-09-28)."""
+    existing = [
+        {"map_id": 1, "code": "x-01", "name": "접수", "summary": "s1", "activities": ["a"], "row": {}},
+        {"map_id": 2, "code": "x-02", "name": "검토", "summary": "s2", "activities": ["b"], "row": {}},
+    ]
+    previous = [
+        {"name": "접수", "depends_on": [], "existing_code": "x-01", "mode": "keep"},
+        {"name": "검토", "depends_on": ["접수"], "existing_code": "x-02", "mode": "keep"},
+    ]
+    cards = [
+        {"name": "접수", "summary": "", "owner_role": "", "department": "", "depends_on": [], "existing_code": "x-01"},
+        {"name": "신규", "summary": "", "owner_role": "", "department": "", "depends_on": ["접수"]},
+    ]
+    merged = merge_existing_cards(cards, existing, previous=previous)
+    by_name = {c["name"]: c for c in merged}
+    assert by_name["검토"]["depends_on"] == ["접수"]  # 빠진 카드: 승계
+    assert by_name["접수"]["depends_on"] == []
+    # AI가 선행을 직접 채웠으면 그 값이 이긴다
+    cards2 = [{"name": "검토", "summary": "", "owner_role": "", "department": "", "depends_on": ["신규"], "existing_code": "x-02"},
+              {"name": "신규", "summary": "", "owner_role": "", "department": "", "depends_on": []}]
+    assert {c["name"]: c["depends_on"] for c in merge_existing_cards(cards2, existing, previous=previous)}["검토"] == ["신규"]
+    # 시드(빈 카드 목록)도 같은 함수 — 세션 생성 시 유지 카드가 미리 깔린다
+    seeded = merge_existing_cards([], existing)
+    assert [(c["name"], c["mode"], c["depends_on"]) for c in seeded] == [("접수", "keep", []), ("검토", "keep", [])]
+
+
 FULL_FIELDS_ROW = {
     "l6": "품질 점검", "ownerRole": "담당자", "department": "",
     "fields": {

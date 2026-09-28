@@ -1,6 +1,9 @@
 "use client";
 
-// 캠페인 ③ 연결 캔버스 — FwCanvas를 ReactFlow로 직접 편집(핸들 드래그로 엣지, 엣지 클릭으로 라벨, 우클릭으로 분기 추가/제거). relations-step 전용.
+// 캠페인 ③ 연결 캔버스 — FwCanvas를 ReactFlow로 직접 편집(핸들 드래그로 엣지, 엣지 클릭=선택·더블클릭=라벨·우클릭=라벨/삭제,
+// Delete/Backspace로 엣지 삭제, 노드 우클릭으로 분기 추가/제거). relations-step 전용.
+// 분기 노드가 아닌 노드는 나가는 엣지가 하나뿐이다(서버 collapse 규칙) — 이미 있는 노드에서 새로 끌면 기존 엣지를 붉게 표시하고
+// 확인을 받은 뒤 교체한다(사용자 결정 2026-09-28).
 
 import { useRef, useState } from "react";
 import {
@@ -20,8 +23,9 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { AtSign, Copy, GitBranch, LayoutTemplate, Maximize2, Trash2, Undo2 } from "lucide-react";
+import { AtSign, Copy, GitBranch, LayoutTemplate, Maximize2, PenLine, Trash2, Undo2 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
 import type { FwCanvas, FwPlanCard } from "@/lib/api";
@@ -46,7 +50,22 @@ const nodeTypes: NodeTypes = { process: ProcessNode };
 const TOOL_BTN =
   "inline-flex h-5 w-5 items-center justify-center rounded-sm border border-hairline bg-surface/90 text-ink-secondary hover:bg-accent-tint hover:text-accent disabled:opacity-40";
 const WRAP_CLASS = "bpm-fw-relations-flow";
+const REPLACING_CLASS = "fw-edge-replacing";  // 교체 확인 중인 기존 엣지 — 붉은 점선
 const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1.2 };
+
+// 선택 엣지는 액센트, 교체 대기 엣지는 error 점선 — RF 기본 선택 스타일이 서비스 룩과 어긋난다
+function buildEdgeStateStyle(scope: string): string {
+  return (
+    `${scope} .react-flow__edge.selected .react-flow__edge-path{stroke:var(--color-accent) !important;stroke-width:2 !important}` +
+    `${scope} .react-flow__edge.${REPLACING_CLASS} .react-flow__edge-path{stroke:var(--color-error) !important;stroke-width:2 !important;stroke-dasharray:6 4}`
+  );
+}
+
+interface PendingConnect {
+  source: string;
+  target: string;
+  replaceEdgeId: string;  // 같은 노드에서 이미 나가는 엣지 — 확인 후 지우고 새 엣지를 잇는다
+}
 
 // 캔버스 엣지엔 핸들 개념이 없다 — 표시 단계에서 4변 핸들(sideHandles) + 우→좌로 못 박아 LR 흐름을 고정한다.
 // deletable=false — L6 카드는 캔버스에 늘 남아야 하고 분기 마름모는 컨텍스트 메뉴로만 걷는다. Delete가
@@ -104,8 +123,10 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
   const [nodes, setNodes] = useState<AppNode[]>(() => buildFlow(canvas, taskNames, taskCards).nodes);
   const [edges, setEdges] = useState<Edge[]>(() => buildFlow(canvas, taskNames, taskCards).edges);
   const [undoSnapshot, setUndoSnapshot] = useState<FwCanvas | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  // 엣지 메뉴는 캔버스 기준 좌표(localX/Y)도 들고 있다 — 메뉴 항목(렌더 중 생성)이 ref 없이 라벨 입력 위치를 정하게
+  const [menu, setMenu] = useState<{ x: number; y: number; nodeId?: string; edgeId?: string; localX?: number; localY?: number } | null>(null);
   const [labelEdit, setLabelEdit] = useState<{ edgeId: string; x: number; y: number; value: string } | null>(null);
+  const [pendingConnect, setPendingConnect] = useState<PendingConnect | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // Escape 취소 — 입력이 사라지며 뒤늦게 blur가 오면 취소한 값이 저장돼 버린다
   const cancelledRef = useRef(false);
@@ -148,7 +169,23 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
   function handleConnect(connection: Connection) {
     if (!connection.source || !connection.target || connection.source === connection.target) return;
     const base = readCanvas();
+    const sourceNode = base.nodes.find((node) => node.id === connection.source);
+    const duplicate = base.edges.some((edge) => edge.source_node_id === connection.source && edge.target_node_id === connection.target);
+    if (duplicate) return;
+    // 분기(decision) 노드만 여러 갈래로 나간다 — 그 외 노드의 두 번째 나가는 엣지는 기존 것을 교체한다(확인 게이트)
+    const outgoing = base.edges.find((edge) => edge.source_node_id === connection.source);
+    if (outgoing && sourceNode?.node_type !== "decision") {
+      setPendingConnect({ source: connection.source, target: connection.target, replaceEdgeId: outgoing.id });
+      return;
+    }
     commit(base, connectNodes(base, connection.source, connection.target));
+  }
+
+  function confirmReplace() {
+    if (!pendingConnect) return;
+    const base = readCanvas();
+    commit(base, connectNodes(removeEdge(base, pendingConnect.replaceEdgeId), pendingConnect.source, pendingConnect.target));
+    setPendingConnect(null);
   }
 
   function handleEdgesDelete(deleted: Edge[]) {
@@ -156,15 +193,31 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
     commit(base, deleted.reduce((acc, edge) => removeEdge(acc, edge.id), base));
   }
 
-  function handleEdgeClick(event: React.MouseEvent, edge: Edge) {
+  function deleteEdge(edgeId: string) {
+    const base = readCanvas();
+    commit(base, removeEdge(base, edgeId));
+  }
+
+  // 더블클릭·우클릭 메뉴에서 라벨 편집 — 단일 클릭은 선택만(Delete/Backspace가 먹게 입력창이 포커스를 뺏지 않는다).
+  // 취소 플래그는 입력이 포커스를 받을 때 내린다(onFocus) — 메뉴 항목이 ref를 만지지 않게.
+  function startLabelEdit(edge: Edge, x: number, y: number) {
+    setLabelEdit({ edgeId: edge.id, x, y, value: typeof edge.label === "string" ? edge.label : "" });
+  }
+
+  function toLocal(clientX: number, clientY: number): { x: number; y: number } {
     const rect = wrapRef.current?.getBoundingClientRect();
-    cancelledRef.current = false;
-    setLabelEdit({
-      edgeId: edge.id,
-      x: event.clientX - (rect?.left ?? 0),
-      y: event.clientY - (rect?.top ?? 0),
-      value: typeof edge.label === "string" ? edge.label : "",
-    });
+    return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
+  }
+
+  function handleEdgeDoubleClick(event: React.MouseEvent, edge: Edge) {
+    const local = toLocal(event.clientX, event.clientY);
+    startLabelEdit(edge, local.x, local.y);
+  }
+
+  function handleEdgeContextMenu(event: React.MouseEvent, edge: Edge) {
+    event.preventDefault();
+    const local = toLocal(event.clientX, event.clientY);
+    setMenu({ x: event.clientX, y: event.clientY, edgeId: edge.id, localX: local.x, localY: local.y });
   }
 
   function saveLabel() {
@@ -195,6 +248,18 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
   function handleNodeContextMenu(event: React.MouseEvent, node: AppNode) {
     event.preventDefault();
     setMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+  }
+
+  function buildEdgeMenuItems(edgeId: string): ContextMenuItem[] {
+    const edge = edges.find((x) => x.id === edgeId);
+    if (!edge) return [];
+    const label = typeof edge.label === "string" && edge.label ? edge.label : t("fwConsult.edgeLabel");
+    return [
+      { title: label },
+      { label: t("fwConsult.menuEditLabel"), icon: PenLine, onSelect: () => startLabelEdit(edge, menu?.localX ?? 0, menu?.localY ?? 0) },
+      { divider: true },
+      { label: t("fwConsult.menuDeleteEdge"), icon: Trash2, danger: true, onSelect: () => deleteEdge(edgeId) },
+    ];
   }
 
   function buildMenuItems(nodeId: string): ContextMenuItem[] {
@@ -228,11 +293,12 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
       {/* Turbopack이 dev에서 .react-flow__* 규칙을 purge해 raw <style>로 둔다(lessons canvas §5).
           이 캔버스 래퍼로 한정 — 같은 단계의 카드 미리보기 모달이 또 다른 RF 인스턴스를 띄운다.
           핸들·호버 강조는 에디터와 같은 단일 소스(lib/flow-handle-style.ts) — RF 기본 파란 원형 핸들이 서비스 룩과 어긋난다. */}
-      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}${buildFlowHandleStyle(`.${WRAP_CLASS}`)}`}</style>
+      <style>{`.${WRAP_CLASS} .react-flow__node{z-index:2 !important}${buildFlowHandleStyle(`.${WRAP_CLASS}`)}${buildEdgeStateStyle(`.${WRAP_CLASS}`)}`}</style>
       <div className={`h-full w-full ${busy ? "pointer-events-none opacity-60" : ""}`}>
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          // 교체 확인 중인 엣지는 className으로 붉게 — 사용자가 무엇이 지워질지 보고 결정한다
+          edges={pendingConnect ? edges.map((edge) => (edge.id === pendingConnect.replaceEdgeId ? { ...edge, className: REPLACING_CLASS } : edge)) : edges}
           nodeTypes={nodeTypes}
           nodesConnectable
           nodesDraggable
@@ -242,7 +308,8 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
           onNodeDragStop={handleNodeDragStop}
           onConnect={handleConnect}
           onEdgesDelete={handleEdgesDelete}
-          onEdgeClick={handleEdgeClick}
+          onEdgeDoubleClick={handleEdgeDoubleClick}
+          onEdgeContextMenu={handleEdgeContextMenu}
           onNodeContextMenu={handleNodeContextMenu}
           fitView
           fitViewOptions={FIT_VIEW_OPTIONS}
@@ -255,7 +322,7 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
           panOnScrollMode={PanOnScrollMode.Free}
           zoomOnScroll={false}
           zoomActivationKeyCode={["Control", "Meta"]}
-          deleteKeyCode="Delete"
+          deleteKeyCode={["Delete", "Backspace"]}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1.8} color="var(--color-canvas-dot)" />
           <Panel position="top-right" className="flex gap-1">
@@ -302,6 +369,7 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
           style={{ left: labelEdit.x, top: labelEdit.y }}
           placeholder={t("fwConsult.edgeLabel")}
           value={labelEdit.value}
+          onFocus={() => { cancelledRef.current = false; }}
           onChange={(event) => setLabelEdit({ ...labelEdit, value: event.target.value })}
           onBlur={saveLabel}
           onKeyDown={(event) => {
@@ -316,7 +384,26 @@ function RelationsFlow({ canvas, taskNames, taskCards, onChange, onMention, busy
           }}
         />
       )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={buildMenuItems(menu.nodeId)} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menu.edgeId !== undefined ? buildEdgeMenuItems(menu.edgeId) : buildMenuItems(menu.nodeId ?? "")}
+          onClose={() => setMenu(null)}
+        />
+      )}
+      {pendingConnect && (
+        <ConfirmDialog
+          dialogId="fw-relations-replace-edge"
+          title={t("fwConsult.replaceEdgeTitle")}
+          message={t("fwConsult.replaceEdgeMessage")}
+          confirmLabel={t("fwConsult.replaceEdgeConfirm")}
+          cancelLabel={t("common.cancel")}
+          danger
+          onConfirm={confirmReplace}
+          onClose={() => setPendingConnect(null)}
+        />
+      )}
     </div>
   );
 }

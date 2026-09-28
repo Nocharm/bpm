@@ -16,7 +16,8 @@ const BASE = `ai-shimmer relative inline-flex items-center gap-1.5 overflow-hidd
 const TEXT_BASE = "inline-flex items-center gap-1 text-fine text-accent hover:text-accent-focus hover:underline disabled:opacity-40";
 const VARIANT: Record<AiButtonVariant, string> = {
   primary: "rounded-sm px-3 py-1.5 text-caption",
-  tile: "h-14 w-full rounded-md px-3 text-left",
+  // 관리 패널 타일 — 컴팩트 한 줄(h-9). 호버는 밝기에 더해 그림자 리프트(사용자 피드백 2026-09-28: 과하게 크고 호버가 미비)
+  tile: "h-9 w-full rounded-md px-2.5 text-left transition-[filter,box-shadow] duration-150 hover:shadow-md",
   inline: "rounded-sm px-3 py-1.5 text-caption",
   text: "",
 };

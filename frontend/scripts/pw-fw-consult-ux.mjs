@@ -98,7 +98,10 @@ await page.locator('[data-id="fw-consult-questions"]').waitFor({ timeout: 30000 
 const q4 = page.locator('[data-id="fw-consult-answer-q4"]');
 check("free-text answer starts empty", (await q4.inputValue()) === "");
 await page.locator('[data-id="fw-consult-ai-suggest-q4"]').click();
-await page.waitForTimeout(120);
+// 링 1.5초(SUGGEST_RING_MS) 동안은 비어 있고, 그 뒤 타이핑이 시작된다
+await page.waitForTimeout(300);
+check("AI suggestion shows a thinking ring before typing", (await page.locator('[data-id="fw-consult-ai-suggest-q4"][data-thinking]').count()) === 1 && (await q4.inputValue()) === "");
+await page.waitForTimeout(1500 - 300 + 120);
 const partial = await q4.inputValue();
 check("AI suggestion types progressively", partial.length > 0 && partial.length < "요청서 도착".length, JSON.stringify(partial));
 await page.locator('[data-id="fw-consult-answer-label-q3-s2"]').hover();  // 체크 행 hover 상태를 캡처에 담는다
@@ -131,15 +134,18 @@ await page.locator('[data-id="fw-consult-relations"]').waitFor({ timeout: 60000 
 // 수평 엣지는 bbox 높이가 0이라 visible 판정이 안 된다 — attached로 기다린다
 await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__edge').first().waitFor({ state: "attached", timeout: 30000 });
 
-// ③ 분기 노드 마름모 — 행 미리보기(scope=map)에는 decision이 있으므로 카드 미리보기 모달에서 본다.
-// 미리보기는 좌측 보드 행의 눈 버튼(연결 단계 우측 카드 목록은 보드와 중복이라 제거됨, 2026-09-23).
-const previewBtn = page.locator('[data-id="fw-consult-task-list"] [data-id^="fw-consult-task-preview-"]').first();
-await previewBtn.click();
+// ③ 분기 노드 마름모 — 행 미리보기(scope=map)에는 decision이 있으므로 완성 카드 패널(보드 행 클릭)에서 본다.
+// 눈 버튼·미리보기 모달은 제거됨(패널 안에 펼쳐진다, 2026-09-28). 다 보면 보드 하단 타일로 연결 단계로 돌아온다.
+await page.locator('[data-id="fw-consult-task-list"] li[data-status="drawn"]').first().click();
 // 줌 버튼 아이콘도 svg라 프리뷰 페인 안으로 좁힌다
-const previewSvg = page.locator('[data-id="fw-consult-task-preview-canvas"] [data-id="scope-preview-pane"] > svg');
+const previewSvg = page.locator('[data-id="fw-consult-task-panel-canvas"] [data-id="scope-preview-pane"] > svg');
 await previewSvg.waitFor({ timeout: 15000 });
-check("L6 preview draws the decision node as a diamond", (await previewSvg.locator("polygon").count()) >= 1);
+check("L6 panel draws the decision node as a diamond", (await previewSvg.locator("polygon").count()) >= 1);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations-diamond.png" });
+const returnTile = page.locator('[data-id="fw-consult-return-flow"]');
+check("board offers a tile back to the connections step while a card is open", await returnTile.isVisible());
+await returnTile.click();
+check("the return tile brings the connections step back", await page.locator('[data-id="fw-consult-relations"]').isVisible());
 
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length}`);

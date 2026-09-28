@@ -75,6 +75,7 @@ import { CategoryDeptModal } from "@/components/admin/category-dept-modal";
 import { FrameworkOverview } from "@/components/admin/framework-overview";
 import { FwLevelActions } from "@/components/admin/fw-level-actions";
 import { findDuplicateSibling } from "@/lib/fw-level-actions";
+import { InterviewFlowGuide } from "@/components/admin/interview-flow-guide";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { InterviewImportReport, type InterviewPhase } from "@/components/admin/import-report/interview-import-report";
 import { ModalBackdrop } from "@/components/modal-backdrop";
@@ -93,7 +94,7 @@ const MAX_CATEGORY_LEVEL = 5; // backend MAX_CATEGORY_LEVEL과 동기 — 이 �
 // 상세 패널 액션 버튼(아이콘+라벨) — 불가한 액션도 숨기지 않고 비활성 + title로 이유를 남긴다
 const DETAIL_ACTION_BTN =
   "inline-flex items-center gap-1 rounded-sm border border-hairline bg-surface px-2 py-1 " +
-  "text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-40";
+  "text-fine text-ink-secondary transition-colors duration-150 hover:border-border-strong hover:bg-surface-alt hover:text-ink disabled:opacity-40";
 
 const IMPORT_FILE_BTN =
   "inline-flex items-center gap-1.5 truncate rounded-sm border border-hairline bg-surface px-2.5 py-1.5 " +
@@ -978,17 +979,22 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
           </div>
         )}
 
-        {/* 인터뷰 JSON — AI 블록과 분리된 섹션. 파일 선택은 바로 파일 탐색기를 열고(고른 파일은 그리드 아래
-            전폭 스트립에), 외부 AI 프롬프트 복사는 같은 행에서 액센트 틴트로 톤을 달리한다 */}
-        {!scopeRootIds && (
-          <div
-            data-id="interview-import-section"
-            className="mt-auto flex shrink-0 flex-col gap-2 rounded-md border border-hairline bg-surface p-2.5"
-          >
+      </div>
+      </div>
+
+      {/* 인터뷰 JSON — 트리 아래 전폭 스트립: 좌 = 파일 선택·외부 AI 프롬프트 복사, 우 = 아이콘 4단계 안내(외부 AI 왕복을 한눈에, 사용자 요청 2026-09-28).
+          파일 선택은 바로 파일 탐색기를 열고(고른 파일은 바로 아래 필 스트립에), 프롬프트 복사는 액센트 틴트로 톤을 달리한다 */}
+      {!scopeRootIds && (
+        <div
+          data-id="interview-import-section"
+          className="flex flex-col gap-3 rounded-md border border-hairline bg-surface p-3 xl:flex-row xl:items-center xl:gap-6"
+        >
+          <div className="flex min-w-0 flex-col gap-2 xl:w-80 xl:shrink-0">
             <div className="flex items-center gap-1.5">
               <FileJson size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
               <span className="text-caption text-ink">{t("framework.interviewSectionTitle")}</span>
             </div>
+            <span className="text-fine text-ink-tertiary">{t("fwConsult.copyPromptHint")}</span>
             <div className="flex flex-wrap items-center gap-1.5">
               <input
                 ref={interviewInputRef}
@@ -1028,9 +1034,11 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
               />
             </div>
           </div>
-        )}
-      </div>
-      </div>
+          <div className="hidden min-w-0 flex-1 border-l border-hairline pl-6 xl:flex">
+            <InterviewFlowGuide />
+          </div>
+        </div>
+      )}
 
       {/* 고른 파일은 그리드 아래 전폭 스트립에 필로 나열 — 개수·모두 지우기·드라이런이 같은 줄 끝에 (설계 2026-09-22 §1.4) */}
       {!scopeRootIds && interviewFiles.length > 0 && (

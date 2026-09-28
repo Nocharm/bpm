@@ -53,7 +53,8 @@ export default function FrameworkConsultPage() {
   const [error, setError] = useState<string | null>(null);
   const [boardWidth, setBoardWidth] = useState(readBoardWidth);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
-  const [previewTaskId, setPreviewTaskId] = useState<number | null>(null);
+  // 카드별 백그라운드 작업 시작 시각(ms) — 보드·패널의 "작업 중 n초". 상태가 대기/완료로 돌아오면 지운다
+  const [workingSince, setWorkingSince] = useState<Record<number, number>>({});
   // 보드에서 고른 카드 — 상태와 무관하게 그 카드 패널을 우측에 띄운다(ready면 순서와 무관하게 먼저 답한다,
   // 사용자 요청 2026-09-21 · 2026-09-23 §4.3 B9). 닫으면 자동 흐름(deriveStep)으로 돌아간다.
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -76,6 +77,20 @@ export default function FrameworkConsultPage() {
     statusSigRef.current = buildStatusSignature(next);
     const now = Date.now();
     const durations: number[] = [];
+    setWorkingSince((prev) => {
+      let changed = false;
+      const out: Record<number, number> = {};
+      for (const task of next.tasks) {
+        const active = task.status === "generating" || task.status === "submitted" || task.status === "drawing";
+        if (active) {
+          out[task.id] = prev[task.id] ?? now;
+          if (prev[task.id] === undefined) changed = true;
+        } else if (prev[task.id] !== undefined) {
+          changed = true;
+        }
+      }
+      return changed ? out : prev;
+    });
     for (const task of next.tasks) {
       if (task.status === "submitted" || task.status === "drawing") {
         if (!submittedAtRef.current.has(task.id)) submittedAtRef.current.set(task.id, now);
@@ -195,7 +210,12 @@ export default function FrameworkConsultPage() {
               attachments={session.attachments}
               busy={busy}
               hasCards={(session.plan?.length ?? 0) > 0}
-              onAttach={(file) => void run(() => uploadFrameworkInterviewAttachment(session.id, file))}
+              onAttach={(files) => void run(async () => {
+                // 단건 엔드포인트를 순서대로 — 마지막 응답이 전체 첨부 목록을 담는다
+                let next = session;
+                for (const file of files) next = await uploadFrameworkInterviewAttachment(session.id, file);
+                return next;
+              })}
               onRemoveAttachment={(index) => void run(() => deleteFrameworkAttachment(session.id, index))}
               onGenerate={() => void run(async () => {
                 await saveFrameworkPlan(session.id, planCardsRef.current, false, briefDraft ?? session.brief);  // 화면의 brief·카드로 제안받는다
@@ -207,13 +227,16 @@ export default function FrameworkConsultPage() {
             session={session}
             currentTaskId={current?.id ?? null}
             drawDurationsMs={drawDurations}
+            workingSince={workingSince}
             onPause={() => void run(() => pauseFrameworkInterview(session.id))}
             onResume={() => void run(() => resumeFrameworkInterview(session.id))}
             onRetry={(taskPk) => void run(() => retryFrameworkTask(session.id, taskPk))}
             onSkip={(taskPk) => void run(() => skipFrameworkTask(session.id, taskPk))}
             onRevise={(task) => void run(() => reviseFrameworkTask(session.id, task.id))}
-            onPreview={setPreviewTaskId}
             onSelect={setSelectedTaskId}
+            // 연결·등록 단계에서 보드 카드를 보는 중이면 맨 아래 타일로 그 단계로 돌아간다
+            returnStep={selectedTask && (flowStep === "relations" || flowStep === "register" || flowStep === "done") ? flowStep : null}
+            onReturnToFlow={() => setSelectedTaskId(null)}
             stalled={stalledTicks >= STALLED_TICKS && !session.paused}
             onNudge={() => {
               setStalledTicks(0);
@@ -246,8 +269,9 @@ export default function FrameworkConsultPage() {
               session={session}
               task={panelTask}
               busy={busy}
-              onSubmit={(taskPk: number, answers: Record<string, FwAnswerValue>) =>
-                void run(() => submitFrameworkAnswers(session.id, taskPk, answers))}
+              workingSince={workingSince[panelTask.id] ?? null}
+              onSubmit={(taskPk: number, answers: Record<string, FwAnswerValue>, comments: Record<string, string>, note: string) =>
+                void run(() => submitFrameworkAnswers(session.id, taskPk, answers, comments, note))}
               onFeedback={(taskPk: number, message: string) =>
                 void run(() => sendFrameworkFeedback(session.id, { scope: "task", task_pk: taskPk, message }))}
               onRetry={(taskPk: number) => void run(() => retryFrameworkTask(session.id, taskPk))}
@@ -291,9 +315,6 @@ export default function FrameworkConsultPage() {
           )}
         </section>
       </div>
-      {previewTaskId !== null && (
-        <RegisterStep.TaskPreviewModal sessionId={session.id} taskPk={previewTaskId} onClose={() => setPreviewTaskId(null)} />
-      )}
       {confirmAbandon && (
         <ConfirmDialog
           title={t("fwConsult.abandon")}

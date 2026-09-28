@@ -2746,6 +2746,8 @@ class FrameworkInterviewPlanIn(BaseModel):
 
 class FrameworkInterviewAnswersIn(BaseModel):
     answers: dict[str, Any]
+    comments: dict[str, str] = {}  # 문항 id → 보충 코멘트(선택)
+    note: str = ""  # 제출 코멘트(선택) — 행 작성 프롬프트에 그대로 실린다
 
 
 class FrameworkInterviewRelationsIn(BaseModel):

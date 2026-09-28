@@ -3,6 +3,14 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-28 — AI L5 캠페인 폴리시 라운드 (feat/fw-consult-polish → dev)
+
+- **계획 화면 단계 모델 교체**: 단계를 `depends_on` 역산이 아니라 카드의 명시적 `stage`(`lib/plan-cards.ts`)로 둔다. 드래그는 그 카드만 옮기고 선행은 "직전 행의 비어 있지 않은 부분집합" 불변식(`normalizeDependencies`)으로 저장해 재로드 시 같은 행으로 복원. 빈 행은 420ms 뒤 접혀 아래 행이 한 단계씩 당겨지고(FLIP), 선행 연결은 SVG 점선 곡선+호버 무리 강조, 선행 편집은 타일 우클릭 메뉴(공용 `ContextMenu`에 `check` 항목 타입 추가, 클릭해도 유지)로만. 상세 열 선행은 읽기 전용, 부서는 디렉터리 목록 SearchSelect, 카드 전환 페이드. 첨부 복수 파일(순차 업로드), 브리프 플레이스홀더에 항목+예시.
+- **설문/보드**: 빈 주관식 = 미답변(서버 `fill_answers` 제안값 자동 적용 폐기, `auto` 배지 제거), single 문항 복수 답 허용, 문항 코멘트+제출 코멘트(`comments`/`note` → answers `{comment}`·예약 키 `_note`, 행 작성 프롬프트에 실림). [AI 제안]은 1.5초 링 뒤 타이핑, [전부 제안값으로]는 주관식까지. 활동 순서 목록 FLIP. 보드 눈 아이콘·미리보기 모달 제거(패널이 담당), 작업 중 경과 초(`lib/use-now-tick.ts`), 연결·등록 단계에서 카드를 보는 중이면 보드 하단 "흐름으로 돌아가기" 타일.
+- **연결 캔버스**: 엣지 클릭=선택(Delete/Backspace 삭제), 더블클릭=라벨, 우클릭 메뉴(라벨 편집·삭제). 분기 노드가 아닌 노드의 두 번째 나가는 엣지는 기존 엣지를 붉은 점선으로 표시하고 확인 후 교체(사용자 결정). 등록 완료는 리포트 위 반투명 레이어+완료 카드.
+- **관리 패널**: 하위 타일 컴팩트(h-9)+내부 스크롤+1/2/3열 세그먼트(localStorage), AI 타일 컴팩트+호버 리프트, 인터뷰 JSON 섹션을 트리 아래 전폭 스트립으로(우측 아이콘 4단계 안내 `interview-flow-guide.tsx`). 기존 L6가 있는 L5는 세션 생성 시 유지 카드를 plan에 시드하고, 재제안 시 AI가 비운 기존 카드 선행은 직전 plan에서 승계(`merge_existing_cards(previous=)`); 플랜 프롬프트에 역할≠부서·기존 카드 depends_on 규칙, `normalize_plan`은 역할==부서면 역할 비움.
+- 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과, 캡처 `pw-fw-consult-polish-shots.mjs`.
+
 ## 2026-09-24 — 릴리스 후 정리: md 문서·프론트 디자인 통일성·매뉴얼 (dev)
 
 - **md 문서 정리**: main 머지 완료된 설계 스냅샷 3종(assignee-role·catalog-alias·interview-v04 설계)과 구현 플랜 3종 폐기(계약은 CLAUDE.md·0.5 계약 3표면으로 이미 흡수) — 코드 주석은 `docs/design/` 접두만 떼고 파일명 유지. PROGRESS는 2026-09-12 이전 793줄을 아카이브로 이동(헤더 무손실 검증), 인덱스 2종(`docs/README.md`·`design/README.md`) 상태 문구 갱신. 링크 검사 74파일: 남은 깨진 링크는 아카이브 원문 7건뿐(원문 보존 정책).

@@ -151,10 +151,13 @@ async def create_framework_interview(
     ))).first()
     if active is not None:
         raise HTTPException(status_code=409, detail=f"active session {active.id} exists for this category")
+    existing = await load_existing_l6(db, payload.category_id)
     row = FrameworkInterviewSession(
         login_id=user, category_id=payload.category_id, brief=payload.brief.strip(), lang=payload.lang,
         label=f"AI consult {now_kst():%Y-%m-%d}",
-        existing=await load_existing_l6(db, payload.category_id),
+        existing=existing,
+        # 기존 L6가 있으면 유지 카드를 미리 깔아 계획 화면에 타일이 바로 보이게(사용자 지적 2026-09-28)
+        plan=merge_existing_cards([], existing) if existing else None,
     )
     db.add(row)
     await db.commit()
@@ -260,7 +263,8 @@ async def generate_plan(
         overrides=await get_prompt_overrides(db),
     )
     plan = await _ask(messages, PlanOut, db, user, normalizer=normalize_plan)
-    row.plan = merge_existing_cards([card.model_dump() for card in plan.cards], row.existing or [])
+    # AI가 기존 카드의 선행을 비워 보내면 직전 계획의 선행을 승계 — 제안할 때마다 기존 맵이 1단계로 몰리지 않게
+    row.plan = merge_existing_cards([card.model_dump() for card in plan.cards], row.existing or [], previous=row.plan)
     await db.commit()
     return await _out(db, row)
 
@@ -348,7 +352,7 @@ async def submit_answers(
     task = await _get_task(db, row, task_pk)
     if task.status != "ready" or not task.questionnaire:
         raise HTTPException(status_code=409, detail="questionnaire is not ready")
-    filled, missing = fill_answers(task.questionnaire, payload.answers)
+    filled, missing = fill_answers(task.questionnaire, payload.answers, payload.comments, payload.note)
     if missing:
         raise HTTPException(status_code=422, detail={"detail": "missing answers", "missing": missing})
     task.answers = filled

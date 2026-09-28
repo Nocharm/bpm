@@ -190,11 +190,15 @@ def normalize_plan(raw: Any) -> dict:
             continue
         seen.add(name)
         depends = item.get("depends_on") or item.get("dependsOn") or item.get("after") or []
+        owner_role = _text(item.get("owner_role") or item.get("ownerRole") or item.get("role"))[:100]
+        department = _text(item.get("department") or item.get("dept"))[:100]
+        if owner_role and owner_role.casefold() == department.casefold():
+            owner_role = ""  # 역할은 사람의 역할이지 부서명이 아니다 — 부서를 그대로 베낀 역할은 비워 사용자가 채우게
         cards.append({
             "name": name,
             "summary": _text(item.get("summary") or item.get("description")),
-            "owner_role": _text(item.get("owner_role") or item.get("ownerRole") or item.get("role"))[:100],
-            "department": _text(item.get("department") or item.get("dept"))[:100],
+            "owner_role": owner_role,
+            "department": department,
             "depends_on": [_text(d) for d in (depends if isinstance(depends, list) else [depends]) if _text(d)],
         })
     return {"cards": cards[:40]}
