@@ -10,7 +10,7 @@
 - **연결 캔버스**: 엣지 클릭=선택(Delete/Backspace 삭제), 더블클릭=라벨, 우클릭 메뉴(라벨 편집·삭제). 분기 노드가 아닌 노드의 두 번째 나가는 엣지는 기존 엣지를 붉은 점선으로 표시하고 확인 후 교체(사용자 결정). 등록 완료는 리포트 위 반투명 레이어+완료 카드.
 - **관리 패널**: 하위 타일 컴팩트(h-9)+내부 스크롤+1/2/3열 세그먼트(localStorage), AI 타일 컴팩트+호버 리프트, 인터뷰 JSON 섹션을 트리 아래 전폭 스트립으로(우측 아이콘 4단계 안내 `interview-flow-guide.tsx`). 기존 L6가 있는 L5는 세션 생성 시 유지 카드를 plan에 시드하고, 재제안 시 AI가 비운 기존 카드 선행은 직전 plan에서 승계(`merge_existing_cards(previous=)`); 플랜 프롬프트에 역할≠부서·기존 카드 depends_on 규칙, `normalize_plan`은 역할==부서면 역할 비움.
 - **관리 트리 자동 드릴인**: 자식이 하나뿐인 노드를 펼치면(루트가 하나뿐일 때 포함) 그 사슬이 갈래가 나올 때까지 static 모션으로 이어 열린다(`drillSingleChain`, 스모크 `pw-fw-tree-autodrill.mjs`).
-- 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과, 캡처 `pw-fw-consult-polish-shots.mjs`.
+- 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과. 확인용 캡처 스크립트(polish-shots·plan-shot·design-audit)는 사용 후 정리.
 
 ## 2026-09-24 — 릴리스 후 정리: md 문서·프론트 디자인 통일성·매뉴얼 (dev)
 
