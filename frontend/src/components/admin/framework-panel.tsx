@@ -274,6 +274,30 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedId·selectedLevel만 본다: Map 참조를 deps에 두면 로드 완료마다 재실행
   }, [selectedId, selectedLevel]);
 
+  // 펼침/접힘 모션 — 탐색 모달의 계단식과 같은 accordion(사용자가 연 노드만 open 애니, 검색 자동 펼침은 static)
+  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
+  // (루트 로드 effect가 자동 펼침에 openSection을 쓰므로 그보다 먼저 선언)
+
+  // 자식이 하나뿐인 노드는 그 자식까지 자동으로 펼친다(한 갈래 사슬을 클릭 하나로 내려가게, 사용자 요청 2026-09-28).
+  // 첫 노드의 자식도 여기서 받는다(펼침 시 로드와 같은 Map). 자동 펼침은 static 모션(검색 자동 펼침과 같은 규칙). L5(자식 0)에서 멈춘다.
+  async function drillSingleChain(id: number, known: Map<number | null, CategoryNode[]>): Promise<void> {
+    let current = id;
+    for (let depth = 0; depth < MAX_CATEGORY_LEVEL; depth += 1) {
+      const parentId = current;
+      let children = known.get(parentId);
+      if (!children) {
+        const loaded = await listCategoryNodes(parentId);
+        children = loaded;
+        setChildrenByParent((prev) => (prev.has(parentId) ? prev : new Map(prev).set(parentId, loaded)));
+      }
+      if (children.length !== 1 || children[0].child_count === 0) return;
+      const only = children[0];
+      openSection(only.id, false);
+      setOpenIds((prev) => new Set(prev).add(only.id));
+      current = only.id;
+    }
+  }
+
   // 펼침 집합 ref 미러 — refreshTree가 effect deps 없이 최신 openIds를 읽기 위함(react-ts-patterns.md #2).
   const openIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
@@ -287,6 +311,12 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
         if (active) {
           setChildrenByParent((prev) => new Map(prev).set(null, nodes));
           setRootLoading(false);
+          // 루트가 하나뿐이면 그 사슬을 자동으로 펼친다(하위도 하나뿐이면 계속)
+          if (nodes.length === 1 && nodes[0].child_count > 0) {
+            openSection(nodes[0].id, false);
+            setOpenIds((prev) => new Set(prev).add(nodes[0].id));
+            void drillSingleChain(nodes[0].id, new Map([[null, nodes]])).catch((err: unknown) => onToast(getApiErrorDetail(err)));
+          }
         }
       })
       .catch(() => {
@@ -298,6 +328,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 루트 1회 로드: 자동 펼침 헬퍼(drillSingleChain·openSection)는 매 렌더 새 함수라 deps에 두면 재로드가 반복된다
   }, [scopeRootIds]);
 
   // 인라인 권한자 로드 — 실패해도 트리 자체는 정상(표시만 생략).
@@ -439,9 +470,6 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
     );
   }
 
-  // 펼침/접힘 모션 — 탐색 모달의 계단식과 같은 accordion(사용자가 연 노드만 open 애니, 검색 자동 펼침은 static)
-  const { closingKeys, getSectionClass, openSection, closeSection } = useSectionMotion<number>();
-
   function handleToggle(id: number) {
     const wasOpen = openIds.has(id);
     if (wasOpen) closeSection(id);
@@ -452,11 +480,7 @@ export function FrameworkPanel({ onToast, scopeRootIds }: FrameworkPanelProps) {
       else next.add(id);
       return next;
     });
-    if (!childrenByParent.has(id)) {
-      void listCategoryNodes(id).then((nodes) => {
-        setChildrenByParent((prev) => new Map(prev).set(id, nodes));
-      });
-    }
+    if (!wasOpen) void drillSingleChain(id, childrenByParent).catch((err: unknown) => onToast(getApiErrorDetail(err)));
   }
 
   // 관리 트리 검색 — 히트를 누르면 조상 체인을 펼치고 그 행을 잠깐 강조한다(탐색 모달의 결과→이동과 같은 동작)
