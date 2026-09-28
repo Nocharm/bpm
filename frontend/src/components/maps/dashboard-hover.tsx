@@ -35,4 +35,6 @@ export function useHoverMap(mapId: number): {
 
 // 연동 표식 클래스 — 배경 대신 좌측 2px 액센트 바(inset box-shadow, 레이아웃 무변화). 배경 톤(alt)은 호버 배경(pearl)과
 // 같은 계열이라 어느 행에 마우스가 있는지 구분되지 않았다(사용자 지시 2026-09-28).
-export const HOVER_LINKED_CLASS = "shadow-[inset_2px_0_0_var(--color-accent)]";
+// 켜질 때만 500ms 지연 — 스쳐 가는 호버에는 안 떠서 시선을 끌지 않고, 다른 섹션에서 찾으려고 머무를 때만 뜬다. 지연 클래스는
+// linked일 때만 붙으므로 꺼질 땐 즉시 사라진다. 열기 버튼의 의도 판정(300ms)보다 한 단계 뒤(사용자 지시 2026-09-28).
+export const HOVER_LINKED_CLASS = "shadow-[inset_2px_0_0_var(--color-accent)] delay-500";

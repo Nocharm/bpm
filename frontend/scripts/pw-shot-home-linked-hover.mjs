@@ -50,11 +50,24 @@ for (let i = 0; i < n; i++) {
 check("some other-section row is linked on hover", best.linked > 0);
 if (best.i >= 0) {
   const row = recentRows.nth(best.i);
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(400);
   await row.hover();
-  await page.waitForTimeout(300);
+  // 표식은 500ms 지연 후 150ms로 페이드인 — 200ms 시점엔 아직 없고 900ms엔 있어야 한다
+  await page.waitForTimeout(200);
+  const hasBar = (s) => /rgb\(106, 65, 255\).*inset/.test(s);
+  const early = await page.locator("[data-linked]").first().evaluate((el) => getComputedStyle(el).boxShadow);
+  check("accent bar not yet visible at 200ms (delay)", !hasBar(early));
+  await page.waitForTimeout(700);
   check("hovered row itself is NOT marked linked", (await row.getAttribute("data-linked")) === null);
   const shadow = await page.locator("[data-linked]").first().evaluate((el) => getComputedStyle(el).boxShadow);
-  check(`linked row has inset accent bar (${shadow})`, /inset/.test(shadow) && shadow !== "none");
+  check(`linked row has inset accent bar after delay (${shadow})`, hasBar(shadow));
+  // 떠날 땐 지연 없이 즉시 꺼진다(200ms면 150ms 페이드아웃이 끝난다)
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(200);
+  check("no linked rows right after leaving", (await page.locator("[data-linked]").count()) === 0);
+  await row.hover();
+  await page.waitForTimeout(900);
   const bg = await row.evaluate((el) => getComputedStyle(el).backgroundColor);
   console.log(`hovered row bg=${bg}`);
   await dash.screenshot({ path: `${OUT}/home-linked-hover.png` });
@@ -69,7 +82,7 @@ if (await other.count()) {
   await page.waitForTimeout(200);
   const target = page.locator(`[data-map-id="${mapId}"]`).last();
   await target.hover();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(900);
   const back = await page.locator(`[data-id="home-recent"] [data-map-id="${mapId}"][data-linked]`).count();
   check("reverse: recent row marked when other-section row hovered", back > 0);
   await dash.screenshot({ path: `${OUT}/home-linked-hover-reverse.png` });
