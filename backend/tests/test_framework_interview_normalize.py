@@ -7,7 +7,7 @@ from app.framework_interview.ai import ask_schema
 from app.framework_interview.contracts import PlanOut, QuestionnaireOut, RelationsOut, RowOut
 from app.framework_interview.assemble import finalize_row_output
 from app.framework_interview.normalize import (
-    normalize_canvas, normalize_plan, normalize_questionnaire, normalize_relations, normalize_row,
+    align_relations_to_plan, normalize_canvas, normalize_plan, normalize_questionnaire, normalize_relations, normalize_row,
 )
 from app.interview.orchestrator import TurnError
 
@@ -60,6 +60,31 @@ def test_relations_resolve_names_and_drop_unknown() -> None:
     assert out["edges"] == [{"src": "c-01", "dst": "c-02", "kind": "seq"}]
     fallback = normalize_relations({"edges": []}, known)
     assert fallback["entry"]["taskId"] == "c-01"
+
+
+def test_align_relations_to_plan_enforces_predecessors_entry_and_loops() -> None:
+    """계획의 선행 쌍은 엣지로 보강, 진입점은 첫 단계 카드, 뒤→앞 엣지는 loop (2026-09-28)."""
+    plan = [
+        {"name": "접수", "task_id": "t1", "depends_on": []},
+        {"name": "검토", "task_id": "t2", "depends_on": ["접수"]},
+        {"name": "증빙", "task_id": "t3", "depends_on": ["접수"]},
+        {"name": "통보", "task_id": "t4", "depends_on": ["검토", "증빙"]},
+    ]
+    proposed = {
+        "entry": {"taskId": "t4", "triggerType": "manual", "label": ""},
+        "edges": [
+            {"src": "t1", "dst": "t2", "kind": "seq"},
+            {"src": "t4", "dst": "t1", "kind": "seq", "gateway": "exclusive", "condition": "반려"},
+        ],
+    }
+    out = align_relations_to_plan(proposed, plan)
+    assert out["entry"]["taskId"] == "t1"
+    pairs = {(e["src"], e["dst"]): e for e in out["edges"]}
+    assert set(pairs) == {("t1", "t2"), ("t4", "t1"), ("t1", "t3"), ("t2", "t4"), ("t3", "t4")}
+    assert pairs[("t4", "t1")]["kind"] == "loop" and "gateway" not in pairs[("t4", "t1")]
+    assert pairs[("t4", "t1")]["condition"] == "반려"  # 라벨은 남긴다
+    # task_id 없는 계획(잠금 전)은 손대지 않는다
+    assert align_relations_to_plan(proposed, [{"name": "x", "depends_on": []}]) == proposed
 
 
 def test_plan_accepts_titles_and_dedupes() -> None:

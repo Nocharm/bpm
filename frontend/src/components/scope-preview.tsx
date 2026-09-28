@@ -2,12 +2,54 @@
 
 // 비활성(조상) 창의 정적 프리뷰 — ReactFlow 없이 SVG로 노드 박스+엣지선을 그려
 // viewBox로 창 크기에 자동 맞춤. 라이브 인스턴스 N개의 부하를 피하는 경량 렌더(시각 전용).
+// 엣지는 화살표로 방향을 보이고, 흐름을 거슬러 되돌아가는 엣지(타겟이 왼쪽)는 노드 위로 돌아가는 직각 경로로 그린다 —
+// 중심점 직선이면 앞 노드들을 가로질러 순환이 안 보였다(사용자 지적 2026-09-28).
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { VersionGraph } from "@/lib/api";
 import { resolveNodeStroke } from "@/components/process-node";
 import { nodeSizeOf, normalizeNodeType } from "@/lib/canvas";
+import { buildRoundedOrthPath } from "@/lib/edge-detour";
+
+const ARROW_MARKER_ID = "scope-preview-arrow";
+const BACK_EDGE_MIN_DX = 40;   // 타겟 중심이 소스보다 이만큼 왼쪽이면 역행(flow-layout isBackEdge와 같은 문턱)
+const BACK_EDGE_CLEARANCE = 24; // 역행 경로가 두 노드 위로 띄우는 높이
+
+export interface PreviewBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+}
+
+// 중심→중심 직선이 타겟 박스 테두리와 만나는 점 — 화살촉이 박스 밑에 묻히지 않게 거기서 끊는다
+function clipToBox(from: { cx: number; cy: number }, target: PreviewBox): { x: number; y: number } {
+  const dx = target.cx - from.cx;
+  const dy = target.cy - from.cy;
+  const kx = dx !== 0 ? target.w / 2 / Math.abs(dx) : Infinity;
+  const ky = dy !== 0 ? target.h / 2 / Math.abs(dy) : Infinity;
+  const k = Math.min(kx, ky, 1);
+  return { x: target.cx - dx * k, y: target.cy - dy * k };
+}
+
+/** 프리뷰 엣지 경로 — 앞으로 가는 엣지는 직선(타겟 테두리에서 끝), 역행 엣지는 소스 위→두 노드 위 통로→타겟 위로 도는 직각 경로. */
+export function buildPreviewEdgePath(source: PreviewBox, target: PreviewBox): { d: string; back: boolean } {
+  if (target.cx < source.cx - BACK_EDGE_MIN_DX) {
+    const yTop = Math.min(source.y, target.y) - BACK_EDGE_CLEARANCE;
+    const [d] = buildRoundedOrthPath([
+      { x: source.cx, y: source.y },
+      { x: source.cx, y: yTop },
+      { x: target.cx, y: yTop },
+      { x: target.cx, y: target.y },
+    ]);
+    return { d, back: true };
+  }
+  const end = clipToBox(source, target);
+  return { d: `M ${source.cx},${source.cy} L ${end.x},${end.y}`, back: false };
+}
 
 // 분기 노드는 실캔버스처럼 마름모 — 박스에 내접하는 네 꼭짓점(상·우·하·좌) (2026-09-23)
 export function buildDiamondPoints(x: number, y: number, w: number, h: number): string {
@@ -109,7 +151,7 @@ export function ScopePreview({
     (edge) => ids.has(edge.source_node_id) && ids.has(edge.target_node_id),
   );
 
-  const pad = 40;
+  const pad = 40;  // 역행 경로 통로(BACK_EDGE_CLEARANCE)보다 넉넉해 위로 도는 선이 잘리지 않는다
   const minX = Math.min(...boxes.map((box) => box.x)) - pad;
   const minY = Math.min(...boxes.map((box) => box.y)) - pad;
   const maxX = Math.max(...boxes.map((box) => box.x + box.w)) + pad;
@@ -167,20 +209,27 @@ export function ScopePreview({
         viewBox={viewBox}
         preserveAspectRatio="xMidYMid meet"
       >
+        <defs>
+          <marker id={ARROW_MARKER_ID} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L8,4 L0,8 z" style={{ fill: "var(--color-border-strong)" }} />
+          </marker>
+        </defs>
         {edges.map((edge) => {
           const source = centerById.get(edge.source_node_id);
           const target = centerById.get(edge.target_node_id);
           if (!source || !target) {
             return null;
           }
+          const { d, back } = buildPreviewEdgePath(source, target);
           return (
-            <line
+            <path
               key={edge.id}
-              x1={source.cx}
-              y1={source.cy}
-              x2={target.cx}
-              y2={target.cy}
+              d={d}
+              fill="none"
               strokeWidth={1.5}
+              strokeDasharray={back ? "4 3" : undefined}
+              markerEnd={`url(#${ARROW_MARKER_ID})`}
+              data-back={back || undefined}
               style={{ stroke: "var(--color-border-strong)" }}
             />
           );

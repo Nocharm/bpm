@@ -185,6 +185,23 @@ def test_loop_and_bypass_kinds_are_kept() -> None:
     assert by_pair[("a01", "a04")] == "bypass"
 
 
+def test_backward_edge_is_reclassified_as_loop() -> None:
+    """뒤 활동 → 앞 활동은 kind가 seq/branch여도 loop — 그래야 Start가 첫 활동에 붙는다 (2026-09-28)."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"].extend([
+        _edge(4, 1, kind="seq", condition="미비 시 처음부터"),
+        _edge(3, 2, kind="branch", gateway="exclusive", condition="보완"),
+    ])
+    result = convert_interview(data)
+    m = result.maps[0]
+    by_pair = {(e.source, e.target): e.kind for e in m.edges}
+    assert by_pair[("a04", "a01")] == "loop"
+    assert by_pair[("a03", "a02")] == "loop"
+    # 택일 분기 승격은 원래 kind 기준이라 그대로 일어난다
+    assert next(n for n in m.nodes if n.code == "a03").type == "decision"
+    assert any("backward edge a04→a01" in i.message for i in result.issues)
+
+
 def test_duplicate_seq_is_file_error() -> None:
     """0.4에서 seq는 relations 참조키 — 중복이면 어느 노드인지 결정 불가."""
     data = _interview()

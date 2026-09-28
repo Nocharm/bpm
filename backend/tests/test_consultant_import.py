@@ -70,6 +70,22 @@ def test_build_graph_rows_chain_and_ids() -> None:
     assert xs[start_id] < xs[n1] < xs[n2] < xs[end_id]
 
 
+def test_build_graph_rows_all_cycle_falls_back_to_first_and_last_seq() -> None:
+    """모든 노드가 순환에 묶여 진입·출구 후보가 없으면 첫 seq에 Start, 끝 seq에 End를 붙인다 (2026-09-28)."""
+    from scripts.import_consultant import build_graph_rows, make_node_id
+
+    cmap = _canonical_map(edges=[
+        {"from": "N1", "to": "N2", "label": "", "kind": "seq"},
+        {"from": "N2", "to": "N1", "label": "재수행", "kind": "seq"},
+    ])
+    nodes, edges, _ = build_graph_rows(cmap, link_targets={})
+    by_id = {n.id: n for n in nodes}
+    pairs = {(by_id[e.source_node_id].source_node_id, by_id[e.target_node_id].source_node_id) for e in edges}
+    n1, n2 = make_node_id("L6-01", "N1"), make_node_id("L6-01", "N2")
+    start_id, end_id = make_node_id("L6-01", "__start__"), make_node_id("L6-01", "__end__")
+    assert (start_id, n1) in pairs and (n2, end_id) in pairs
+
+
 def test_build_graph_rows_link_node_seeds_params() -> None:
     from scripts.consultant_canonical import CanonicalParams
     from scripts.import_consultant import build_graph_rows, make_node_id

@@ -11,8 +11,9 @@ describe("buildAiButtonClass", () => {
       expect(cls).toContain("text-on-accent");
     }
   });
-  it("tile is a full-width row; inline and primary share one size", () => {
-    expect(buildAiButtonClass("tile")).toContain("h-9 w-full");
+  it("tile is a compact content-width row; inline and primary share one size", () => {
+    expect(buildAiButtonClass("tile")).toContain("h-9 ");
+    expect(buildAiButtonClass("tile")).not.toContain("w-full");
     expect(buildAiButtonClass("inline")).toContain("px-3 py-1.5 text-caption");
     expect(buildAiButtonClass("primary")).toContain("px-3 py-1.5 text-caption");
   });

@@ -207,11 +207,14 @@ def build_graph_rows(
     has_in = {dst for _, dst, _, kind in flow if kind != "loop"}
     has_out = {src for src, _, _, _ in flow}
     start, end = "__start__", "__end__"
-    for code in l7_codes:
-        if code not in has_in:
-            flow.append((start, code, "", "seq"))
-        if code not in has_out:
-            flow.append((code, end, "", "seq"))
+    # 진입·출구 후보가 하나도 없으면(모든 노드가 순환에 묶임) 첫 seq·끝 seq를 각각 진입·출구로 삼는다 —
+    # Start가 어디에도 안 붙어 흐름이 붕 뜨는 것보다 낫다(FE interview-preview 동치)
+    heads = [code for code in l7_codes if code not in has_in] or l7_codes[:1]
+    tails = [code for code in l7_codes if code not in has_out] or l7_codes[-1:]
+    for code in heads:
+        flow.append((start, code, "", "seq"))
+    for code in tails:
+        flow.append((code, end, "", "seq"))
 
     # 연계 노드 — after_node 뒤(생략 시 최대 seq 노드 뒤) 병렬 분기, End 배선 불변 (design §4)
     link_rows: list[tuple[str, str, int, CanonicalParams]] = []  # (가상코드, 부착원점, map_id, params)

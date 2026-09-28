@@ -422,18 +422,25 @@ def _build_flow_edges(
             # 엣지·승격 대신 post-pass 합성 대기 — 라벨은 ◇→A 루프백 엣지가 들고 간다
             self_specs.append((src_node, label))
         else:
+            # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
+            # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2). 역행 재분류보다 먼저(원래 kind 기준)
+            if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
+                src_node.type = "decision"
+                issues.append(AdapterIssue(
+                    "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) - 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
+            # 뒤 활동 → 앞 활동(seq 역행)은 되돌아가는 연결이다 — 모델이 seq/branch로 적어도 loop로 본다. 그대로 두면
+            # 앞 활동에 in-edge가 생겨 Start가 그 활동에 안 붙고 흐름이 붕 뜬다(실사용 지적 2026-09-28). FE interview-preview 동치.
+            if kind != "loop" and dst_node.seq < src_node.seq:
+                issues.append(AdapterIssue(
+                    "warning", epath,
+                    f"backward edge {src_node.code}→{dst_node.code} treated as loop (앞 활동으로 되돌아가는 연결 - 재수행으로 처리)"))
+                kind = "loop"
             edges.append(CanonicalEdge.model_validate({
                 "from": src_node.code,
                 "to": dst_node.code,
                 "label": label,
                 "kind": kind,
             }))
-            # 택일 분기만 decision(마름모)으로 승격 — parallel은 병행 팬아웃이라 다중 out-edge로
-            # 이미 표현되고, 마름모로 그리면 택일로 오독된다 (design 2026-09-01 §2)
-            if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
-                src_node.type = "decision"
-                issues.append(AdapterIssue(
-                    "warning", epath, f"{src_node.code} promoted to decision (exclusive branch edge) - 택일 분기가 있어 판단(마름모) 노드로 자동 변환"))
         quote = _clean(raw.get("quote"))
         if quote:
             notes.append(InterviewNote(

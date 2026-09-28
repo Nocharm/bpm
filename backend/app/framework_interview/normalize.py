@@ -385,6 +385,72 @@ def normalize_canvas(raw: Any, base: dict, known: set[str]) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
+def _plan_stages(plan: list[dict]) -> dict[str, int]:
+    """taskId → 단계(선행 깊이). FE lib/plan-cards computeStages와 같은 규칙(순환은 방문 중 카드를 선행으로 치지 않는다)."""
+    by_name = {}
+    for card in plan:
+        name = _text(card.get("name"))
+        if name and name not in by_name and card.get("task_id"):
+            by_name[name] = card
+    stages: dict[str, int] = {}
+    visiting: set[str] = set()
+
+    def stage_of(card: dict) -> int:
+        tid = str(card.get("task_id"))
+        if tid in stages:
+            return stages[tid]
+        if tid in visiting:
+            return 0
+        visiting.add(tid)
+        depth = 0
+        for dep in card.get("depends_on") or []:
+            target = by_name.get(_text(dep))
+            if target is None or target is card:
+                continue
+            depth = max(depth, stage_of(target) + 1)
+        visiting.discard(tid)
+        stages[tid] = depth
+        return depth
+
+    for card in plan:
+        if card.get("task_id"):
+            stage_of(card)
+    return stages
+
+
+def align_relations_to_plan(relations: dict, plan: list[dict]) -> dict:
+    """AI 흐름 제안을 계획(카드 선행)에 맞춘다 — 계획 화면에서 고친 순서가 연결 단계에 그대로 오게(사용자 지적 2026-09-28).
+
+    - 카드가 선행으로 둔 쌍(선행 → 카드)은 반드시 엣지로 있게 보강한다(kind seq).
+    - 뒤 단계 → 앞 단계 엣지는 loop가 아니면 loop로 본다(계획 순서를 거스르는 연결은 되돌아감).
+    - 진입점은 첫 단계 카드 중 하나여야 한다 — 아니면 첫 단계의 첫 카드로 바꾼다.
+    """
+    stages = _plan_stages(plan)
+    if not stages:
+        return relations
+    by_name = {_text(card.get("name")): str(card.get("task_id")) for card in plan if card.get("task_id")}
+    edges = [dict(edge) for edge in relations.get("edges") or []]
+    present = {(edge["src"], edge["dst"]) for edge in edges}
+    for card in plan:
+        tid = str(card.get("task_id") or "")
+        if not tid:
+            continue
+        for dep in card.get("depends_on") or []:
+            src = by_name.get(_text(dep))
+            if src and src != tid and (src, tid) not in present:
+                edges.append({"src": src, "dst": tid, "kind": "seq"})
+                present.add((src, tid))
+    for edge in edges:
+        if edge.get("kind") != "loop" and stages.get(edge["dst"], 0) < stages.get(edge["src"], 0):
+            edge["kind"] = "loop"
+            edge.pop("gateway", None)
+    first_stage = [str(card["task_id"]) for card in plan if card.get("task_id") and stages.get(str(card["task_id"])) == 0]
+    entry = dict(relations.get("entry") or {})
+    if first_stage and entry.get("taskId") not in first_stage:
+        entry["taskId"] = first_stage[0]
+    return {**relations, "entry": entry, "edges": edges}
+
+
 def normalize_relations(raw: Any, known: dict[str, str]) -> dict:
     """known = {taskId: 이름}. 끝점은 taskId 우선, 이름으로도 해석하며 미해석 엣지는 버린다."""
     body = _first_dict(raw, "edges")

@@ -130,7 +130,7 @@ export function FwLevelActions({
 
   if (level === 4) {
     return (
-      <div data-id="fw-level-actions" className="flex flex-col gap-1.5">
+      <div data-id="fw-level-actions" className="flex flex-wrap items-center gap-1.5">
         <AiButton
           variant="tile"
           data-id="fw-level-create-l5"
@@ -139,7 +139,7 @@ export function FwLevelActions({
           onClick={onCreateL5}
           icon={<Sparkles size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.createL5")}</span>
+          <span className="min-w-0 truncate text-caption">{t("fwLevel.createL5")}</span>
         </AiButton>
       </div>
     );
@@ -147,7 +147,7 @@ export function FwLevelActions({
 
   const session = findSessionFor(sessions, selectedNode.id);
   return (
-    <div data-id="fw-level-actions" className="flex flex-col gap-1.5">
+    <div data-id="fw-level-actions" className="flex flex-wrap items-center gap-1.5">
       {session ? (
         <AiButton
           variant="tile"
@@ -156,8 +156,8 @@ export function FwLevelActions({
           onClick={() => onResume(session.id)}
           icon={<Play size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.resume")}</span>
-          <span className="shrink-0 text-fine opacity-80">
+          <span className="min-w-0 truncate text-caption">{t("fwLevel.resume")}</span>
+          <span className="shrink-0 rounded-full bg-surface/25 px-1.5 text-fine tabular-nums">
             {session.progress.drawn}/{session.progress.total}
           </span>
         </AiButton>
@@ -169,7 +169,7 @@ export function FwLevelActions({
           onClick={() => onStart(selectedNode.id)}
           icon={<Headset size={16} strokeWidth={1.5} className="shrink-0" />}
         >
-          <span className="min-w-0 flex-1 truncate text-caption">{t("fwLevel.start")}</span>
+          <span className="min-w-0 truncate text-caption">{t("fwLevel.start")}</span>
         </AiButton>
       )}
     </div>

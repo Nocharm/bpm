@@ -47,6 +47,31 @@ describe("buildPreviewGraph", () => {
     expect(graph?.edges.find((e) => e.target_node_id === "a03")?.label).toBe("fail");
   });
 
+  it("treats a backward edge as a loop so Start still lands on the first activity", () => {
+    const graph = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: {
+        edges: [
+          { src: 1, dst: 2, kind: "seq" },
+          { src: 2, dst: 3, kind: "seq" },
+          { src: 3, dst: 1, kind: "seq", condition: "미비 시 처음부터" },
+        ],
+      },
+    });
+
+    expect(pairsOf(graph!)).toContain("__start__>a01");
+    expect(pairsOf(graph!)).toContain("a03>a01");
+  });
+
+  it("falls back to the first and last activity when every node sits in a cycle", () => {
+    const graph = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B")],
+      relations: { edges: [{ src: 1, dst: 2, kind: "loop" }, { src: 2, dst: 1, kind: "loop" }] },
+    });
+
+    expect(pairsOf(graph!)).toEqual(["a01>a02", "a02>a01", "__start__>a01", "__start__>a02", "a02>__end__"]);
+  });
+
   it("keeps a parallel fan-out source as a process node", () => {
     const graph = buildPreviewGraph({
       actions: [action(1, "A"), action(2, "B"), action(3, "C")],

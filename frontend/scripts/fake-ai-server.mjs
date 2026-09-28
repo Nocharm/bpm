@@ -96,7 +96,8 @@ function rowFor(userText) {
       { seq: 2, label: "완결성 판정", kind: "decision" },
       { seq: 3, label: "접수 등록", kind: "action", input: ["확인 메모"], output: ["접수증"], system: "ERP" },
     ],
-    relations: { edges: [{ src: 1, dst: 2, kind: "seq" }, { src: 2, dst: 3, kind: "branch", gateway: "exclusive", condition: "완결" }] },
+    // 3→1 되돌아감: 미리보기·임포트의 순환 표현(위로 도는 점선 화살표)과 Start/End 배선을 스모크가 밟는다(2026-09-28)
+    relations: { edges: [{ src: 1, dst: 2, kind: "seq" }, { src: 2, dst: 3, kind: "branch", gateway: "exclusive", condition: "완결" }, { src: 3, dst: 1, kind: "loop", condition: "재확인 필요" }] },
   };
 }
 

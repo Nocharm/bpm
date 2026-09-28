@@ -223,6 +223,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - actions: 활동 문항의 선택 순서를 seq 1부터. label은 동사형 20자 이내, kind는 action·handoff·decision.
 - 분기 답이 있으면 판단 activity에 kind=decision을 주고 relations.edges에 kind=branch, gateway=exclusive, condition을 적으세요.
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
+- 첫 활동(seq 1)은 흐름의 시작이다: 앞으로 가는 연결만 받고, 뒤 활동에서 앞 활동으로 되돌아가는 연결(반려·보완·재수행)은 반드시 kind=loop로 적는다.
 - fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
 - 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.

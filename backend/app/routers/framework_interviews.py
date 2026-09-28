@@ -31,7 +31,9 @@ from app.framework_interview.contracts import (
     format_managed_catalog,
 )
 from app.framework_interview.existing import existing_row_of, load_existing_l6, merge_existing_cards
-from app.framework_interview.normalize import normalize_canvas, normalize_plan, normalize_relations, normalize_row
+from app.framework_interview.normalize import (
+    align_relations_to_plan, normalize_canvas, normalize_plan, normalize_relations, normalize_row,
+)
 from app.interview.orchestrator import TurnError, sum_usage, usage_log
 from app.interview.parsing import ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, ParseError, parse_attachment
 from app.models import AiUsageEvent, FrameworkInterviewSession, FrameworkInterviewTask, ProcessCategory
@@ -555,7 +557,10 @@ async def generate_relations(
     # 미지의 taskId·이름 참조는 정규화가 해석하거나 버린다 — 502 대신 부분 결과를 편집 표로 넘긴다
     out = await _ask(messages, RelationsOut, db, user, normalizer=lambda raw: normalize_relations(raw, known))
     reproposed = row.canvas is not None  # 이미 캔버스가 있었다면 리셋 — 채팅 이력에 한 줄 남겨 두 경로가 한 곳에 보이게
-    row.relations = out.model_dump(by_alias=True, exclude_none=True)
+    proposed = out.model_dump(by_alias=True, exclude_none=True)
+    # 계획 화면의 선행 관계가 연결 단계의 뼈대다 — 모델이 무시한 선행 쌍은 보강하고 진입점은 첫 단계로.
+    # 피드백 재제안(comment)은 채팅이 단일 게이트라 손대지 않는다
+    row.relations = proposed if comment else align_relations_to_plan(proposed, row.plan or [])
     row.canvas = expand_relations_to_canvas(row.relations, _ordered_tasks(row))
     row.status = "linking"
     if reproposed:

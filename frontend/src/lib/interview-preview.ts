@@ -81,8 +81,10 @@ function buildFlowEdges(
       selfSpecs.push({ node: src, label });
       continue;
     }
-    edges.push({ from: src.code, to: dst.code, label, kind });
     if (kind === "branch" && asText(edge.gateway) !== "parallel") src.type = "decision";
+    // 뒤 활동 → 앞 활동(seq 역행)은 되돌아가는 연결 — seq/branch로 와도 loop로 본다(backend _build_flow_edges 동치).
+    // 그대로 두면 앞 활동에 in-edge가 생겨 Start가 안 붙는다
+    edges.push({ from: src.code, to: dst.code, label, kind: kind !== "loop" && dst.seq < src.seq ? "loop" : kind });
   }
   const loopNodes: { anchor: string; node: PreviewNode }[] = [];
   for (const { node, label } of selfSpecs) {
@@ -160,14 +162,15 @@ export function buildPreviewGraph(row: unknown): VersionGraph | null {
       if (loop.anchor === node.code) withLoops.push(loop.node);
     }
   }
-  // Start/End 보강 — loop은 Start 판정에서 제외(되돌아오는 진입은 진입이 아님), End 판정엔 포함
+  // Start/End 보강 — loop은 Start 판정에서 제외(되돌아오는 진입은 진입이 아님), End 판정엔 포함.
+  // 후보가 하나도 없으면(전부 순환) 첫·끝 seq에 붙인다(backend import_consultant 동치)
   const hasIn = new Set(flowEdges.filter((e) => e.kind !== "loop").map((e) => e.to));
   const hasOut = new Set(flowEdges.map((e) => e.from));
   const flow: PreviewEdge[] = [...flowEdges];
-  for (const node of withLoops) {
-    if (!hasIn.has(node.code)) flow.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
-    if (!hasOut.has(node.code)) flow.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
-  }
+  const heads = withLoops.filter((node) => !hasIn.has(node.code));
+  const tails = withLoops.filter((node) => !hasOut.has(node.code));
+  for (const node of heads.length > 0 ? heads : withLoops.slice(0, 1)) flow.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
+  for (const node of tails.length > 0 ? tails : withLoops.slice(-1)) flow.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
   const nodes: FlatNode[] = [
     makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
     ...withLoops.map((node, i) => makeFlatNode(node.code, node.name, node.type, node.color, i + 1)),
@@ -298,14 +301,14 @@ export function buildL5PreviewGraph(file: unknown): VersionGraph | null {
     }
   }
 
-  // Start/End 보강 — L6와 같은 규칙(loop 진입은 진입으로 치지 않는다)
+  // Start/End 보강 — L6와 같은 규칙(loop 진입은 진입으로 치지 않고, 후보가 없으면 첫·끝 노드)
   const hasIn = new Set(flow.filter((e) => e.kind !== "loop").map((e) => e.to));
   const hasOut = new Set(flow.map((e) => e.from));
   const full: PreviewEdge[] = [...flow];
-  for (const node of withBranches) {
-    if (!hasIn.has(node.code)) full.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
-    if (!hasOut.has(node.code)) full.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
-  }
+  const heads = withBranches.filter((node) => !hasIn.has(node.code));
+  const tails = withBranches.filter((node) => !hasOut.has(node.code));
+  for (const node of heads.length > 0 ? heads : withBranches.slice(0, 1)) full.push({ from: PREVIEW_START_ID, to: node.code, label: "", kind: "seq" });
+  for (const node of tails.length > 0 ? tails : withBranches.slice(-1)) full.push({ from: node.code, to: PREVIEW_END_ID, label: "", kind: "seq" });
   const nodes: FlatNode[] = [
     makeFlatNode(PREVIEW_START_ID, "Start", "start", "", 0),
     ...withBranches.map((node, i) => makeFlatNode(node.code, node.name, node.type, "", i + 1)),
