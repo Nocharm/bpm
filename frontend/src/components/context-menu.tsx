@@ -2,7 +2,7 @@
 
 // 마우스 커서 위치에 뜨는 컨텍스트 메뉴 — 캔버스/노드/엣지 우클릭 공용 (spec §7 Phase A).
 
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { HandleSide } from "@/lib/canvas";
@@ -35,6 +35,8 @@ export type ContextMenuItem =
       onPickSource: (side: HandleSide) => void;
       onPickTarget: (side: HandleSide) => void;
     }
+  // 체크 항목 — 골라도 메뉴가 닫히지 않는다(복수 선택용, 예: 계획 타일의 선행 카드 플라이아웃)
+  | { check: true; label: string; checked: boolean; disabled?: boolean; onToggle: () => void }
   | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string; submenu: ContextMenuItem[]; disabled?: boolean }
   | { divider?: false; label: string; icon?: LucideIcon; accel?: string; shortcut?: string | string[]; danger?: boolean; disabled?: boolean; onSelect: () => void };
 
@@ -214,6 +216,26 @@ function MenuList({
             onClose={onClose}
             keyboardOpen={kbSub === index}
           />
+        ) : "check" in item ? (
+          <button
+            key={`check-${item.label}`}
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={item.checked}
+            disabled={item.disabled}
+            data-id={`context-menu-check-${item.label}`}
+            className={`flex h-8 w-full items-center gap-2 whitespace-nowrap px-3 ${
+              item.disabled ? "cursor-not-allowed text-ink-tertiary opacity-45" : "text-ink hover:bg-surface-alt"
+            }`}
+            onClick={item.onToggle}
+          >
+            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-xs border transition-colors duration-150 ${
+              item.checked ? "border-accent bg-accent text-on-accent" : "border-hairline bg-surface"
+            }`}>
+              {item.checked && <Check size={12} strokeWidth={2} />}
+            </span>
+            <span className="truncate">{item.label}</span>
+          </button>
         ) : (
           <button
             key={item.label}

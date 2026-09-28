@@ -62,17 +62,19 @@ await page.locator('[data-id="fw-consult-plan-lock"]').click();
 await page.locator('[data-id="fw-consult-task-list"] li').first().waitFor();
 check("plan locked -> tasks", (await page.locator('[data-id="fw-consult-task-list"] li').count()) >= 2);
 
+// [전부 제안값으로]는 주관식도 채운다 — 검토 화면에 미답변 표시가 하나도 없어야 한다(빈 주관식은 미답변으로 제출, 2026-09-28)
 async function answerOneCard() {
   await page.locator('[data-id="fw-consult-questions"]').waitFor({ timeout: 20000 });
   await page.locator('[data-id="fw-consult-fill-all"]').click();
   await page.locator('[data-id="fw-consult-review"]').click();
-  const autoCount = await page.locator('[data-id^="fw-consult-auto-"]').count();
+  await page.locator('[data-id="fw-consult-review-list"]').waitFor({ timeout: 10000 });
+  const unansweredCount = await page.locator('[data-id^="fw-consult-unanswered-"]').count();
   await page.locator('[data-id="fw-consult-submit"]').click();
-  return autoCount;
+  return unansweredCount;
 }
 
-const firstAutoCount = await answerOneCard();
-check("review shows auto badge", firstAutoCount > 0);
+const firstUnanswered = await answerOneCard();
+check("fill-all leaves no unanswered text question", firstUnanswered === 0, String(firstUnanswered));
 await page.locator('[data-id="fw-consult-task-list"] li[data-status="drawn"]').first().waitFor({ timeout: 30000 });
 check("first card drawn", true);
 await page.screenshot({ path: "../docs/qa/screens/fw-consult-board.png" }).catch(() => undefined);

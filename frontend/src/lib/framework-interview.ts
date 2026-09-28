@@ -37,15 +37,15 @@ function isChoice(kind: string): boolean {
   return kind === "single" || kind === "multi" || kind === "ordered";
 }
 
-/** 누락 문항 id — 객관식은 값 필수·옵션 id만, 주관식 빈칸은 허용(서버가 제안값 적용). */
+/** 누락 문항 id — 객관식은 값 필수·옵션 id만(single은 문자열 또는 복수 선택 배열), 주관식 빈칸은 허용(미답변으로 제출). */
 export function validateAnswers(q: FwQuestionnaire, answers: Record<string, FwAnswerValue | undefined>): string[] {
   const missing: string[] = [];
   for (const question of q.questions) {
     if (!isChoice(question.kind)) continue;
     const allowed = new Set(question.options.map((o) => o.id));
     const value = answers[question.id];
-    if (question.kind === "single") {
-      if (typeof value !== "string" || !allowed.has(value)) missing.push(question.id);
+    if (question.kind === "single" && typeof value === "string") {
+      if (!allowed.has(value)) missing.push(question.id);
     } else if (!Array.isArray(value) || value.length === 0 || value.some((v) => !allowed.has(v))) {
       missing.push(question.id);
     }
@@ -53,13 +53,22 @@ export function validateAnswers(q: FwQuestionnaire, answers: Record<string, FwAn
   return missing;
 }
 
-/** 초기값 = 제안 답. 주관식은 빈칸(플레이스홀더가 제안을 보여준다). */
+/** 초기값 = 객관식 제안 답. 주관식은 빈칸 — 빈칸은 미답변이지 제안값이 아니다(사용자 결정 2026-09-28). */
 export function fillSuggested(q: FwQuestionnaire): Record<string, FwAnswerValue> {
   const out: Record<string, FwAnswerValue> = {};
   for (const question of q.questions) {
     if (question.kind === "text") out[question.id] = "";
     else if (question.kind === "single") out[question.id] = Array.isArray(question.suggested) ? (question.suggested[0] ?? "") : "";
     else out[question.id] = Array.isArray(question.suggested) ? [...question.suggested] : [];
+  }
+  return out;
+}
+
+/** [전부 제안값으로] — 객관식에 더해 주관식도 제안 문장으로 채운다. */
+export function fillAllSuggested(q: FwQuestionnaire): Record<string, FwAnswerValue> {
+  const out = fillSuggested(q);
+  for (const question of q.questions) {
+    if (question.kind === "text") out[question.id] = typeof question.suggested === "string" ? question.suggested : "";
   }
   return out;
 }

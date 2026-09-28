@@ -2927,7 +2927,8 @@ export interface FwAttachment {
 }
 export interface FwInterviewTaskDetail extends FwInterviewTask {
   questionnaire: FwQuestionnaire | null;
-  answers: Record<string, { value: FwAnswerValue; auto: boolean }> | null;
+  // 제출 답 {value, auto, comment?}. 예약 키 "_note"(서버 answers.NOTE_KEY)는 제출 코멘트 {value}
+  answers: Record<string, { value: FwAnswerValue; auto: boolean; comment?: string }> | null;
   row: Record<string, unknown> | null;
 }
 /** 세션 연결 캔버스 — relations의 편집 진실(서버 `app/framework_interview/canvas.py`). */
@@ -3021,8 +3022,12 @@ export function saveFrameworkPlan(id: number, cards: FwPlanCard[], lock: boolean
 export function getFrameworkInterviewTask(id: number, taskPk: number): Promise<FwInterviewTaskDetail> {
   return request<FwInterviewTaskDetail>(`/framework-interviews/${id}/tasks/${taskPk}`);
 }
-export function submitFrameworkAnswers(id: number, taskPk: number, answers: Record<string, FwAnswerValue>): Promise<FwInterviewSession> {
-  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/answers`, { method: "POST", body: JSON.stringify({ answers }) });
+export function submitFrameworkAnswers(
+  id: number, taskPk: number, answers: Record<string, FwAnswerValue>, comments: Record<string, string> = {}, note = "",
+): Promise<FwInterviewSession> {
+  return request<FwInterviewSession>(`/framework-interviews/${id}/tasks/${taskPk}/answers`, {
+    method: "POST", body: JSON.stringify({ answers, comments, note }),
+  });
 }
 export function deleteFrameworkAttachment(id: number, index: number): Promise<FwInterviewSession> {
   return request<FwInterviewSession>(`/framework-interviews/${id}/attachments/${index}`, { method: "DELETE" });

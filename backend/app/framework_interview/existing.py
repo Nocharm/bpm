@@ -316,12 +316,15 @@ def existing_row_of(existing: list[dict] | None, code: str) -> dict | None:
     return None
 
 
-def merge_existing_cards(cards: list[dict], existing: list[dict]) -> list[dict]:
+def merge_existing_cards(cards: list[dict], existing: list[dict], previous: list[dict] | None = None) -> list[dict]:
     """기존 맵마다 카드 정확히 1개 — 코드·이름 일치 카드에 existing_code/mode를 찍고, 없으면 앞에 만든다.
 
     동결 맵(하위 맵 링크 보유)은 카드를 만들지 않고, AI가 그 코드나 이름으로 낸 카드도 버린다 —
     같은 맵을 새 카드로 다시 그려 중복 등록하는 것을 막는다.
+    previous(직전 계획)가 있으면 기존 카드의 빈 depends_on을 거기서 승계한다 — AI 재제안이 사용자가 배치한
+    선행을 지우고 기존 맵을 전부 첫 단계로 몰지 않게(2026-09-28).
     """
+    inherited = {c.get("existing_code"): list(c.get("depends_on") or []) for c in previous or [] if c.get("existing_code")}
     frozen_codes = {e["code"] for e in existing if e.get("frozen")}
     frozen_names = {e["name"].strip() for e in existing if e.get("frozen")}
     live = [e for e in existing if not e.get("frozen")]
@@ -345,10 +348,13 @@ def merge_existing_cards(cards: list[dict], existing: list[dict]) -> list[dict]:
             seen.add(match["code"])
             card["existing_code"] = match["code"]
             card["mode"] = "revise" if card.get("mode") == "revise" else "keep"
+            if not card.get("depends_on"):
+                card["depends_on"] = inherited.get(match["code"], [])
         merged.append(card)
     missing = [
         {"name": e["name"], "summary": e["summary"], "owner_role": e["row"].get("ownerRole", ""),
-         "department": e["row"].get("department", ""), "depends_on": [], "existing_code": e["code"], "mode": "keep"}
+         "department": e["row"].get("department", ""), "depends_on": inherited.get(e["code"], []),
+         "existing_code": e["code"], "mode": "keep"}
         for e in live if e["code"] not in seen
     ]
     return missing + merged

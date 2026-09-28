@@ -1,23 +1,27 @@
 "use client";
 
 // 캠페인 ① L6 카드 계획 — 3열 중 2·3열: 단계 행(위→아래 = 선행 순서, 같은 행 = 동시 진행) | 선택 카드 상세.
-// 단계는 depends_on에서 계산한다(lib/plan-cards groupByStage). 타일 전체를 끌어 다른 행(단계 이동 = 선행 갱신)·같은 행 안(표시 순서)·
+// 단계는 카드의 명시적 stage(lib/plan-cards)다. 타일 전체를 끌어 다른 행(그 카드만 이동, 선행은 직전 행 전부로)·같은 행 안(표시 순서)·
 // 점선 새 단계 행으로 옮기고, 선택 타일에서 Alt+↑/↓(단계)·Alt+←/→(순서)로도 옮긴다. 분기·조건은 여기서 잡지 않는다(연결 단계).
-// 모션: 자리 이동은 FLIP(useFlipOrder 2D), 추가 .plan-tile-in, 삭제 .plan-tile-out, 단계가 바뀐 타일은 .plan-tile-settle 링.
-// 그립 아이콘은 hover에서만 우측 상단에(왼쪽 여백을 잡아두지 않게). 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
+// 선행 카드 편집은 타일 우클릭 메뉴(직전 행 체크, 복수)로만 — 상세 열의 선행은 읽기 전용(사용자 결정 2026-09-28).
+// 모션: 자리 이동은 FLIP(useFlipOrder 2D), 추가 .plan-tile-in, 삭제 .plan-tile-out, 단계가 바뀐 타일은 .plan-tile-settle 링,
+// 행이 비면 STAGE_HOLD_MS 동안 빈 행을 남긴 뒤 접어 아래 행들이 한 단계 당겨진다. 선행 연결은 SVG 점선 곡선(타일 실측, FLIP 중엔 rAF로 따라감).
+// 그립 아이콘은 hover에서만 우측 상단에. 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
 // brief·첨부·AI 제안은 1열 PlanBriefPanel(page.tsx가 이어 준다). 시안 확정 2026-09-24.
 
-import { useEffect, useRef, useState } from "react";
-import { GripVertical, Plus, Trash2, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { GripVertical, Link2, Plus, Trash2 } from "lucide-react";
 
-import type { FwCardMode, FwInterviewSession, FwPlanCard } from "@/lib/api";
+import { getDirectory, type FwCardMode, type FwInterviewSession, type FwPlanCard } from "@/lib/api";
 import { hasBlockingDuplicate } from "@/lib/framework-interview";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
 import {
-  groupByStage, moveCardToStage, renameDependency, reorderWithinStage, stripClientIds, withClientIds, type KeyedCard,
+  addCardAtStage, groupByStage, hasEmptyStage, listDependencyLinks, moveCardToStage, renameDependency, reorderWithinStage,
+  setPredecessors, settleCards, sortByStage, stripClientIds, withClientIds, type KeyedCard,
 } from "@/lib/plan-cards";
 import { useFlipOrder } from "@/lib/use-flip-order";
+import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { SearchSelect } from "@/components/search-select";
 
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none focus:border-accent";
@@ -25,9 +29,11 @@ const LABEL = "text-fine text-ink-tertiary";
 const TILE_WIDTH = 200;
 const TILE =
   "group relative flex w-[200px] cursor-grab flex-col gap-px rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
-  "transition-[background-color,border-color,opacity] duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
+  "transition-[background-color,border-color,opacity,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
 const TILE_QUIET = "border-hairline bg-surface hover:bg-surface-pearl";
 const TILE_SELECTED = "border-accent bg-accent-tint";
+// 호버한 타일과 선행/후행으로 이어진 타일 — 선택보다 옅은 톤으로 "같이 움직이는 무리"를 보인다
+const TILE_LINKED = "border-accent/40 bg-accent-tint/40";
 // 추가 버튼은 그 행에 마우스가 올라왔을 때만 페이드인 — 빈 자리가 늘 점선으로 채워져 있지 않게(사용자 요청 2026-09-24)
 const ADD_TILE = "flex items-center justify-center rounded-md border border-dashed border-hairline bg-surface-pearl text-fine text-ink-tertiary hover:border-accent hover:text-accent opacity-0 transition-opacity duration-150 group-hover/stage:opacity-100 focus-visible:opacity-100";
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
@@ -35,9 +41,10 @@ const SECONDARY = "inline-flex items-center gap-1.5 rounded-sm border border-hai
 const SEGMENT = "flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5";  // 홈 뷰 토글과 같은 세그먼트
 const DETAIL_WIDTH = 320;
 const DRAG_THRESHOLD_PX = 4;  // 이보다 덜 움직이면 클릭(선택)
-const OUT_MS = 240;     // globals.css .plan-tile-out
 const IN_MS = 300;      // .plan-tile-in
 const SETTLE_MS = 600;  // .plan-tile-settle
+const STAGE_HOLD_MS = 420;   // 빈 행을 남겨 두는 시간 — 타일 정렬(FLIP 380ms)이 끝난 뒤 한 단계 당긴다(사용자 요청 2026-09-28)
+const CONNECTOR_FOLLOW_MS = 480;  // FLIP 전환 동안 연결선이 타일을 따라가는 rAF 창
 
 interface PlanEditorProps {
   session: FwInterviewSession;
@@ -56,11 +63,33 @@ interface DragState {
   index: number;         // 그 행 안 삽입 위치
 }
 
+interface Connector {
+  key: string;
+  from: string;
+  to: string;
+  d: string;
+}
+
 const EMPTY: FwPlanCard = { name: "", summary: "", owner_role: "", department: "", depends_on: [], mode: "new", existing_code: null };
 const CARD_MODES: FwCardMode[] = ["keep", "revise"];
 
 function buildStageKey(groups: KeyedCard[][]): string {
   return groups.map((group) => group.map((card) => card.clientId).join(",")).join("|");
+}
+
+// 전송본 — 빈 단계를 접고 선행 불변식을 맞춘 뒤 단계 순으로(서버 seq가 단계를 따르게), 키는 벗긴다
+function toPayload(cards: KeyedCard[]): FwPlanCard[] {
+  return stripClientIds(sortByStage(settleCards(cards)));
+}
+
+// 선행 타일 아래 중앙 → 후행 타일 위 중앙, 세로 방향 3차 베지어. 좌표는 목록 컨테이너 기준(transform 포함 실측이라 FLIP 중에도 맞는다)
+function buildConnectorPath(from: DOMRect, to: DOMRect, origin: DOMRect): string {
+  const x1 = from.left + from.width / 2 - origin.left;
+  const y1 = from.bottom - origin.top;
+  const x2 = to.left + to.width / 2 - origin.left;
+  const y2 = to.top - origin.top;
+  const bend = Math.max(14, (y2 - y1) / 2);
+  return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${(y1 + bend).toFixed(1)}, ${x2.toFixed(1)} ${(y2 - bend).toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
 }
 
 export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: PlanEditorProps) {
@@ -73,29 +102,94 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
   const [addedId, setAddedId] = useState<string | null>(null);
   const [settledId, setSettledId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; clientId: string } | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  // 부서 후보 — 서비스에 등록된 부서(디렉터리) 리프명. 못 받으면 null로 남아 자유 입력 칸이 그대로 쓰인다
+  const [departments, setDepartments] = useState<string[] | null>(null);
+  // 빈 행 접기 요청 카운터 — effect가 STAGE_HOLD_MS 뒤에 접는다(요청이 겹치면 타이머를 다시 잰다). ref 타이머를 쓰지 않는 건
+  // 우클릭 메뉴 항목(렌더 중 생성)이 삭제 핸들러를 참조하기 때문(react-hooks/refs).
+  const [collapseTick, setCollapseTick] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   // 포인터 제스처 스냅샷 — 클릭/드래그 판정과 고스트 오프셋. 렌더에서 읽지 않는다
   const gestureRef = useRef<{ clientId: string; startX: number; startY: number; offsetX: number; offsetY: number; dragging: boolean } | null>(null);
   const timersRef = useRef<number[]>([]);
+  const followRef = useRef<number | null>(null);
 
   const groups = groupByStage(cards);
   const flat = groups.flat();
-  useFlipOrder(listRef, buildStageKey(groups));
+  const stageKey = buildStageKey(groups);
+  const links = listDependencyLinks(cards);
+  const linksKey = links.map((link) => `${link.from}>${link.to}`).join(",");
+  useFlipOrder(listRef, stageKey);
 
   useEffect(() => {
-    onCardsChange(stripClientIds(cards));
+    onCardsChange(toPayload(cards));
   }, [cards, onCardsChange]);
 
-  useEffect(() => () => { for (const id of timersRef.current) window.clearTimeout(id); }, []);
+  useEffect(() => {
+    getDirectory()
+      .then((directory) => {
+        const names = [...new Set(directory.departments.map((dept) => dept.name.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        setDepartments(names);
+      })
+      .catch(() => setDepartments(null));  // 목록이 없으면 자유 입력으로 남긴다(선택 사항인 보조 목록)
+  }, []);
+
+  useEffect(() => () => {
+    for (const id of timersRef.current) window.clearTimeout(id);
+    if (followRef.current !== null) window.cancelAnimationFrame(followRef.current);
+  }, []);
+
+  // 연결선 실측 — 단계·선행이 바뀔 때 다시 재고, FLIP이 타일을 미끄러뜨리는 동안 rAF로 따라간다.
+  useLayoutEffect(() => {
+    const root = listRef.current;
+    if (!root) return;
+    const measure = () => {
+      const origin = root.getBoundingClientRect();
+      const rects = new Map<string, DOMRect>();
+      for (const el of root.querySelectorAll<HTMLElement>("[data-flip-key]")) rects.set(el.dataset.flipKey ?? "", el.getBoundingClientRect());
+      setConnectors(links.flatMap((link) => {
+        const from = rects.get(link.from);
+        const to = rects.get(link.to);
+        return from && to ? [{ key: `${link.from}>${link.to}`, from: link.from, to: link.to, d: buildConnectorPath(from, to, origin) }] : [];
+      }));
+    };
+    // 첫 실측도 rAF 안에서 — effect 본문의 동기 setState를 피한다(react-hooks/set-state-in-effect)
+    const started = performance.now();
+    const follow = () => {
+      measure();
+      followRef.current = performance.now() - started < CONNECTOR_FOLLOW_MS ? window.requestAnimationFrame(follow) : null;
+    };
+    if (followRef.current !== null) window.cancelAnimationFrame(followRef.current);
+    followRef.current = window.requestAnimationFrame(follow);
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => {
+      observer.disconnect();
+      if (followRef.current !== null) { window.cancelAnimationFrame(followRef.current); followRef.current = null; }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- links는 매 렌더 새 배열이라 그 내용 키(linksKey)와 단계 키로만 다시 잰다
+  }, [stageKey, linksKey, closingIds]);
 
   function later(ms: number, fn: () => void) {
     timersRef.current.push(window.setTimeout(fn, ms));
   }
 
+  // 빈 행이 생기면 잠시 남겼다가 접는다 — 타일이 먼저 자리를 잡고, 그 뒤 아래 행들이 한 단계 당겨진다
+  useEffect(() => {
+    if (collapseTick === 0) return;
+    const id = window.setTimeout(() => setCards((prev) => (hasEmptyStage(prev) ? settleCards(prev) : prev)), STAGE_HOLD_MS);
+    return () => window.clearTimeout(id);
+  }, [collapseTick]);
+  function scheduleCollapse() {
+    setCollapseTick((n) => n + 1);
+  }
+
   // 선택이 없으면 첫 카드 — 상세 열이 비어 있지 않게. 삭제로 선택이 사라져도 같은 규칙으로 돌아온다.
   const selected = cards.find((c) => c.clientId === selectedId) ?? flat[0] ?? null;
-  const selectedStage = selected ? groups.findIndex((group) => group.includes(selected)) : -1;
-  const stageOf = (clientId: string) => groups.findIndex((group) => group.some((card) => card.clientId === clientId));
+  const selectedStage = selected ? selected.stage : -1;
+  const stageOf = (clientId: string) => cards.find((card) => card.clientId === clientId)?.stage ?? -1;
 
   function update(clientId: string, patch: Partial<FwPlanCard>) {
     setCards((prev) => prev.map((c) => (c.clientId === clientId ? { ...c, ...patch } : c)));
@@ -117,24 +211,36 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
       return index === undefined ? moved : reorderWithinStage(moved, clientId, index);
     });
     settle(clientId);
+    scheduleCollapse();
   }
   function add(stage: number) {
     const clientId = genId();
-    setCards((prev) => {
-      const prevGroups = groupByStage(prev);
-      const before = stage > 0 ? (prevGroups[stage - 1] ?? []).map((c) => c.name.trim()).filter(Boolean) : [];
-      return [...prev, { ...EMPTY, clientId, depends_on: before }];
-    });
+    setCards((prev) => addCardAtStage(prev, EMPTY, clientId, stage));
     setSelectedId(clientId);
     setAddedId(clientId);
     later(IN_MS, () => setAddedId((cur) => (cur === clientId ? null : cur)));
   }
+  // 삭제는 .plan-tile-out이 끝난 뒤(animationend) 목록에서 뺀다 — 타이머 ref를 잡지 않아 우클릭 메뉴(렌더 중 생성)가 참조해도 된다.
+  // 모션 축소 환경은 animation: none이라 animationend가 오지 않으니 바로 뺀다.
   function remove(clientId: string) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finishRemove(clientId);
+      return;
+    }
     setClosingIds((prev) => new Set(prev).add(clientId));
-    later(OUT_MS, () => {
-      setCards((prev) => prev.filter((c) => c.clientId !== clientId));
-      setClosingIds((prev) => { const next = new Set(prev); next.delete(clientId); return next; });
-      setSelectedId((cur) => (cur === clientId ? null : cur));
+  }
+  function finishRemove(clientId: string) {
+    setCards((prev) => prev.filter((c) => c.clientId !== clientId));
+    setClosingIds((prev) => { const next = new Set(prev); next.delete(clientId); return next; });
+    setSelectedId((cur) => (cur === clientId ? null : cur));
+    scheduleCollapse();
+  }
+  function togglePredecessor(clientId: string, name: string) {
+    setCards((prev) => {
+      const me = prev.find((c) => c.clientId === clientId);
+      if (!me) return prev;
+      const has = me.depends_on.includes(name);
+      return setPredecessors(prev, clientId, has ? me.depends_on.filter((d) => d !== name) : [...me.depends_on, name]);
     });
   }
 
@@ -150,6 +256,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
         if (Math.abs(ev.clientX - g.startX) + Math.abs(ev.clientY - g.startY) < DRAG_THRESHOLD_PX) return;
         g.dragging = true;
         setSelectedId(g.clientId);
+        setHoverId(null);
       }
       setDrag({ clientId: g.clientId, x: ev.clientX - g.offsetX, y: ev.clientY - g.offsetY, ...locateDrop(ev.clientX, ev.clientY, g.clientId) });
     };
@@ -202,7 +309,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
   // 키보드: ↑/↓ 선택 이동(표시 순), Alt+↑/↓ 단계 이동, Alt+←/→ 같은 행 안 순서, Enter/Space 선택
   function handleTileKeyDown(event: React.KeyboardEvent, card: KeyedCard, flatIndex: number) {
     if (event.target !== event.currentTarget) return;
-    const stage = stageOf(card.clientId);
+    const stage = card.stage;
     if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
       event.preventDefault();
       const next = stage + (event.key === "ArrowUp" ? -1 : 1);
@@ -227,13 +334,64 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
     listRef.current?.querySelector<HTMLElement>(`[data-flip-key="${clientId}"] [role="button"]`)?.focus();
   }
 
+  function handleTileContextMenu(event: React.MouseEvent, clientId: string) {
+    event.preventDefault();
+    setSelectedId(clientId);
+    setMenu({ x: event.clientX, y: event.clientY, clientId });
+  }
+
+  // 우클릭 메뉴 — 선행 카드(직전 행 체크, 복수·마지막 하나는 해제 불가) + 삭제
+  function buildTileMenu(clientId: string): ContextMenuItem[] {
+    const card = cards.find((c) => c.clientId === clientId);
+    if (!card) return [];
+    const items: ContextMenuItem[] = [{ title: card.name.trim() || t("fwConsult.cardNameEmpty") }];
+    const previous = card.stage > 0 ? (groups[card.stage - 1] ?? []).filter((c) => c.name.trim()) : [];
+    if (card.stage === 0) {
+      items.push({ note: t("fwConsult.menuFirstStage") });
+    } else {
+      items.push({
+        label: t("fwConsult.dependsOn"),
+        icon: Link2,
+        disabled: previous.length === 0,
+        submenu: previous.map((prev) => {
+          const name = prev.name.trim();
+          const checked = card.depends_on.includes(name);
+          return {
+            check: true as const,
+            label: name,
+            checked,
+            disabled: checked && card.depends_on.length === 1,
+            onToggle: () => togglePredecessor(clientId, name),
+          };
+        }),
+      });
+    }
+    items.push({ divider: true });
+    items.push({
+      label: t("fwConsult.removeCard"),
+      icon: Trash2,
+      danger: true,
+      disabled: Boolean(card.existing_code) || closingIds.has(clientId),
+      onSelect: () => remove(clientId),
+    });
+    return items;
+  }
+
   const canLock = cards.length > 0 && cards.every((c) => c.name.trim()) && !hasBlockingDuplicate(cards);
   const selectedExisting = Boolean(selected?.existing_code);
   const dragCard = drag ? cards.find((c) => c.clientId === drag.clientId) ?? null : null;
-  const dependencyOptions = selected
-    ? cards.filter((c) => c.clientId !== selected.clientId && c.name.trim() && !selected.depends_on.includes(c.name.trim()))
-      .map((c) => ({ value: c.clientId, label: c.name.trim() }))
-    : [];
+  // 호버 무리 — 호버한 타일과 직접 이어진 선행·후행
+  const linkedIds = new Set<string>();
+  if (hoverId !== null) {
+    for (const link of links) {
+      if (link.from === hoverId) linkedIds.add(link.to);
+      if (link.to === hoverId) linkedIds.add(link.from);
+    }
+  }
+  const departmentOptions = departments === null
+    ? null
+    : [...(selected?.department.trim() && !departments.includes(selected.department.trim()) ? [selected.department.trim()] : []), ...departments]
+      .map((name) => ({ value: name, label: name }));
 
   function renderStageLabel(stage: number, group: KeyedCard[]): string {
     const parts: string[] = [];
@@ -248,16 +406,27 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
     const isExisting = Boolean(card.existing_code);
     const isSelected = selected?.clientId === card.clientId;
     const isDragging = drag?.clientId === card.clientId;
+    const isLinked = !isSelected && linkedIds.has(card.clientId);
     const motion = closingIds.has(card.clientId) ? "plan-tile-out" : addedId === card.clientId ? "plan-tile-in" : settledId === card.clientId ? "plan-tile-settle" : "";
     return (
-      <div key={card.clientId} data-flip-key={card.clientId} data-id={`fw-consult-plan-card-${flatIndex}`} className={`${motion} ${isDragging ? "opacity-30" : ""}`}>
+      <div
+        key={card.clientId}
+        data-flip-key={card.clientId}
+        data-id={`fw-consult-plan-card-${flatIndex}`}
+        className={`${motion} ${isDragging ? "opacity-30" : ""}`}
+        onAnimationEnd={(event) => { if (event.animationName === "plan-tile-out" && closingIds.has(card.clientId)) finishRemove(card.clientId); }}
+      >
         <div
           role="button"
           tabIndex={0}
           aria-pressed={isSelected}
           data-id={`fw-consult-plan-row-${flatIndex}`}
-          className={`${TILE} ${isSelected ? TILE_SELECTED : TILE_QUIET}`}
+          data-linked={isLinked || undefined}
+          className={`${TILE} ${isSelected ? TILE_SELECTED : isLinked ? TILE_LINKED : TILE_QUIET}`}
           onPointerDown={(event) => handleTilePointerDown(event, card.clientId)}
+          onPointerEnter={() => { if (!drag) setHoverId(card.clientId); }}
+          onPointerLeave={() => setHoverId((cur) => (cur === card.clientId ? null : cur))}
+          onContextMenu={(event) => handleTileContextMenu(event, card.clientId)}
           onKeyDown={(event) => handleTileKeyDown(event, card, flatIndex)}
         >
           {/* 그립은 hover에서만, 우측 상단 — 타일 전체가 잡히므로 손잡이는 힌트일 뿐이라 왼쪽 여백을 차지하지 않는다 */}
@@ -294,8 +463,27 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
             {session.existing.length > 0 && <span data-id="fw-consult-existing-note">{t("fwConsult.existingNote", { n: session.existing.length })}</span>}
             <span className="ml-auto text-ink-tertiary">{t("fwConsult.stageHint")}</span>
           </div>
-          {/* select-none: 타일을 끌 때 포인터가 지나는 글자가 선택되지 않게(워스트 케이스 캡처에서 확인) */}
-          <div ref={listRef} className="flex select-none flex-col" data-id="fw-consult-plan-cards">
+          {/* select-none: 타일을 끌 때 포인터가 지나는 글자가 선택되지 않게(워스트 케이스 캡처에서 확인). relative: 연결선 SVG의 기준 */}
+          <div ref={listRef} className="relative flex select-none flex-col" data-id="fw-consult-plan-cards">
+            {/* 선행 연결선 — 타일 아래에 깔리는 점선 곡선. 호버 무리에 닿은 선은 액센트 */}
+            <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true" data-id="fw-consult-plan-links">
+              {connectors.map((link) => {
+                const lit = hoverId !== null && (link.from === hoverId || link.to === hoverId);
+                return (
+                  <path
+                    key={link.key}
+                    d={link.d}
+                    fill="none"
+                    stroke={lit ? "var(--color-accent)" : "var(--color-border-strong)"}
+                    strokeWidth={lit ? 1.5 : 1}
+                    strokeDasharray="4 4"
+                    strokeLinecap="round"
+                    className="transition-[stroke,stroke-width] duration-150"
+                    data-id={`fw-consult-plan-link-${link.from}-${link.to}`}
+                  />
+                );
+              })}
+            </svg>
             {groups.map((group, stage) => {
               const isTarget = drag !== null && drag.stage === stage;
               const startIndex = stageStarts[stage];
@@ -304,7 +492,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
                   key={`stage-${stage}`}
                   data-stage={stage}
                   data-id={`fw-consult-plan-stage-${stage}`}
-                  className={`group/stage flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${isTarget ? "bg-accent-tint/50" : ""}`}
+                  data-empty={group.length === 0 || undefined}
+                  className={`group/stage relative flex items-stretch rounded-md py-3 transition-colors duration-150 ${isTarget ? "bg-accent-tint/50" : ""}`}
                 >
                   <div className={`flex w-16 shrink-0 flex-col items-end border-r-2 pr-3 pt-0.5 ${selectedStage === stage ? "border-accent" : "border-hairline"}`}>
                     <span className={`text-tagline leading-none tabular-nums ${selectedStage === stage ? "text-accent" : "text-border-strong"}`}>{stage + 1}</span>
@@ -318,7 +507,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
                       </div>
                     ))}
                     {isTarget && drag !== null && drag.index >= group.filter((c) => c.clientId !== drag.clientId).length && <span className="w-0.5 rounded-full bg-accent" aria-hidden="true" />}
-                    <button type="button" className={`${ADD_TILE} w-8 self-stretch`} data-id={`fw-consult-plan-add-stage-${stage}`} title={t("fwConsult.addCardHere")} aria-label={t("fwConsult.addCardHere")} onClick={() => add(stage)}>
+                    <button type="button" className={`${ADD_TILE} w-8 min-h-8 self-stretch`} data-id={`fw-consult-plan-add-stage-${stage}`} title={t("fwConsult.addCardHere")} aria-label={t("fwConsult.addCardHere")} onClick={() => add(stage)}>
                       <Plus size={14} strokeWidth={1.5} />
                     </button>
                   </div>
@@ -329,7 +518,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
             <div
               data-stage={groups.length}
               data-id={`fw-consult-plan-stage-${groups.length}`}
-              className={`group/stage flex items-stretch rounded-md py-1.5 transition-colors duration-150 ${drag !== null && drag.stage === groups.length ? "bg-accent-tint/50" : ""}`}
+              className={`group/stage relative flex items-stretch rounded-md py-3 transition-colors duration-150 ${drag !== null && drag.stage === groups.length ? "bg-accent-tint/50" : ""}`}
             >
               <div className="flex w-16 shrink-0 flex-col items-end border-r-2 border-dashed border-hairline pr-3 pt-0.5">
                 <span className="text-tagline leading-none tabular-nums text-hairline">{groups.length + 1}</span>
@@ -343,10 +532,10 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
           </div>
         </div>
 
-        {/* 3열: 선택 카드 상세 */}
-        <aside className="flex shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-hairline bg-surface-pearl p-3" style={{ width: DETAIL_WIDTH }} data-id="fw-consult-plan-detail">
+        {/* 3열: 선택 카드 상세 — 카드가 바뀌면 key로 다시 마운트해 페이드인 */}
+        <aside className="flex shrink-0 flex-col overflow-y-auto border-l border-hairline bg-surface-pearl" style={{ width: DETAIL_WIDTH }} data-id="fw-consult-plan-detail">
           {selected ? (
-            <>
+            <div key={selected.clientId} className="fw-fade-in flex min-h-full flex-col gap-2.5 p-3" data-id="fw-consult-plan-detail-body">
               <div className="flex items-center gap-2">
                 <span className="text-body-strong text-ink">{t("fwConsult.cardDetail")}</span>
                 <span className="text-fine text-ink-tertiary tabular-nums">#{flat.indexOf(selected) + 1} · {selectedStage + 1}</span>
@@ -382,41 +571,38 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex min-w-0 flex-col gap-1">
                   <span className={LABEL}>{t("fwConsult.cardRole")}</span>
-                  <input className={FIELD} data-id="fw-consult-plan-role" value={selected.owner_role} placeholder={t("fwConsult.cardRole")} onChange={(e) => update(selected.clientId, { owner_role: e.target.value })} />
+                  <input className={FIELD} data-id="fw-consult-plan-role" value={selected.owner_role} placeholder={t("fwConsult.cardRolePlaceholder")} onChange={(e) => update(selected.clientId, { owner_role: e.target.value })} />
                 </label>
-                <label className="flex min-w-0 flex-col gap-1">
+                <div className="flex min-w-0 flex-col gap-1">
                   <span className={LABEL}>{t("fwConsult.cardDept")}</span>
-                  <input className={FIELD} data-id="fw-consult-plan-dept" value={selected.department} placeholder={t("fwConsult.cardDept")} onChange={(e) => update(selected.clientId, { department: e.target.value })} />
-                </label>
+                  {/* 부서는 서비스에 수집된 목록에서 고른다 — AI 제안값(자유 텍스트)은 목록 맨 앞에 후보로 남는다 */}
+                  {departmentOptions ? (
+                    <div data-id="fw-consult-plan-dept">
+                      <SearchSelect
+                        value={selected.department.trim()}
+                        options={departmentOptions}
+                        emptyLabel={t("fwConsult.deptNone")}
+                        placeholder={t("fwConsult.cardDept")}
+                        onChange={(value) => update(selected.clientId, { department: value })}
+                      />
+                    </div>
+                  ) : (
+                    <input className={FIELD} data-id="fw-consult-plan-dept" value={selected.department} placeholder={t("fwConsult.cardDept")} onChange={(e) => update(selected.clientId, { department: e.target.value })} />
+                  )}
+                </div>
               </div>
-              {/* 선행 카드 — 단계 계산의 근거. 칩 제거·추가가 곧 단계 이동이다 */}
+              {/* 선행 카드 — 읽기 전용. 바꾸는 길은 타일 우클릭 메뉴와 드래그 하나뿐(편집 경로가 둘이면 서로 꼬인다) */}
               <div className="flex flex-col gap-1">
                 <span className={LABEL}>{t("fwConsult.dependsOn")}</span>
                 <div className="flex flex-wrap items-center gap-1" data-id="fw-consult-plan-deps">
+                  {selected.depends_on.length === 0 && <span className="text-fine text-ink-muted" data-id="fw-consult-plan-deps-none">{t("fwConsult.depsNone")}</span>}
                   {selected.depends_on.map((dep) => (
                     <span key={dep} className="inline-flex items-center gap-1 rounded-sm bg-surface-alt px-1.5 py-0.5 text-fine text-ink" data-id={`fw-consult-plan-dep-${dep}`}>
                       {dep}
-                      <button type="button" className="rounded-xs text-ink-tertiary hover:text-error" aria-label={`${t("fwConsult.removeCard")} ${dep}`} onClick={() => { update(selected.clientId, { depends_on: selected.depends_on.filter((d) => d !== dep) }); settle(selected.clientId); }}>
-                        <X size={12} strokeWidth={1.5} />
-                      </button>
                     </span>
                   ))}
-                  {dependencyOptions.length > 0 && (
-                    <SearchSelect
-                      value=""
-                      options={dependencyOptions}
-                      emptyLabel={t("fwConsult.addDependency")}
-                      placeholder={t("fwConsult.cardName")}
-                      fitContent
-                      onChange={(clientId) => {
-                        const target = cards.find((c) => c.clientId === clientId);
-                        if (!target) return;
-                        update(selected.clientId, { depends_on: [...selected.depends_on, target.name.trim()] });
-                        settle(selected.clientId);
-                      }}
-                    />
-                  )}
                 </div>
+                <span className="text-fine text-ink-tertiary">{t("fwConsult.depsReadOnly")}</span>
               </div>
               <button
                 type="button"
@@ -428,9 +614,9 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
               >
                 <Trash2 size={14} strokeWidth={1.5} />{t("fwConsult.removeCard")}
               </button>
-            </>
+            </div>
           ) : (
-            <p className="text-caption text-ink-tertiary" data-id="fw-consult-plan-empty">{t("fwConsult.selectCardHint")}</p>
+            <p className="p-3 text-caption text-ink-tertiary" data-id="fw-consult-plan-empty">{t("fwConsult.selectCardHint")}</p>
           )}
         </aside>
       </div>
@@ -438,8 +624,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
       <div className="flex flex-wrap items-center gap-2 border-t border-hairline px-4 py-2.5">
         <span className="text-fine text-ink-tertiary">{t("fwConsult.dragToReorder")}</span>
         <span className="ml-auto text-fine text-ink-tertiary">{t("fwConsult.lockPlanHint")}</span>
-        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(stripClientIds(cards))}>{t("fwConsult.save")}</button>
-        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(stripClientIds(cards))}>{t("fwConsult.lockPlan")}</button>
+        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(toPayload(cards))}>{t("fwConsult.save")}</button>
+        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(toPayload(cards))}>{t("fwConsult.lockPlan")}</button>
       </div>
 
       {/* 드래그 고스트 — 포인터를 따라오는 타일 사본(원본은 제자리에서 흐려진다) */}
@@ -449,6 +635,7 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
           {(dragCard.owner_role || dragCard.department) && <div className="truncate text-fine text-ink-secondary">{[dragCard.owner_role, dragCard.department].filter(Boolean).join(" · ")}</div>}
         </div>
       )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={buildTileMenu(menu.clientId)} onClose={() => setMenu(null)} />}
     </section>
   );
 }

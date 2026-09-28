@@ -208,7 +208,7 @@ def test_submitted_draw_and_pending_generate_run_together(client: TestClient, mo
     assert _statuses(sid) == ["drawn", "ready"]
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{first['id']}", headers=HEADERS).json()
     assert detail["row"]["actions"][0]["label"] == "요청 확인"
-    assert detail["answers"]["q4"] == {"value": "요청서 도착", "auto": True}
+    assert detail["answers"]["q4"] == {"value": "", "auto": False}  # 빈 주관식은 미답변으로 남는다(2026-09-28)
     assert all(i["severity"] != "error" for i in detail["issues"])
 
 

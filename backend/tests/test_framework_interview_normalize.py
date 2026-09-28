@@ -69,6 +69,15 @@ def test_plan_accepts_titles_and_dedupes() -> None:
     assert out["cards"][0]["owner_role"] == "담당자"
 
 
+def test_plan_blanks_role_that_copies_the_department() -> None:
+    """역할이 부서명과 같으면 역할을 비운다 — 역할은 사람의 롤(사용자 지적 2026-09-28)."""
+    out = normalize_plan({"cards": [
+        {"name": "투자 검토", "owner_role": "재무팀", "department": "재무팀"},
+        {"name": "발주", "owner_role": "구매 담당자", "department": "구매팀"},
+    ]})
+    assert [c["owner_role"] for c in out["cards"]] == ["", "구매 담당자"]
+
+
 def test_ask_schema_feeds_back_validation_errors(monkeypatch) -> None:
     replies = ['```json\n{"cards": []}\n```', '{"cards": [{"name": "A"}]}']
     seen: list[list[dict]] = []

@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.framework_interview.answers import NOTE_KEY
+
 # ── 응답 스키마 ──
 
 
@@ -184,8 +186,9 @@ L5_PLAN_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 주�
 - [이미 있는 L6 맵]에 있는 맵은 각각 카드 하나로 이름을 그대로 두고 existing_code에 그 코드를 적는다.
 - 새 카드는 빈 영역만 채우고 기존 맵과 이름이나 역할이 겹치는 카드는 만들지 않는다.
 - name: 동사형 업무명 20자 이내. summary: 한 문장. owner_role: 역할 후보 목록의 표기 우선.
+- owner_role은 사람의 역할(예: 투자 담당자, 구매 담당자, 팀장, 검토자)이다. 부서명을 그대로 적지 말 것 — 부서와 같은 값이면 무효.
 - department: 아는 경우 부서명, 모르면 빈 문자열.
-- depends_on: 선행해야 하는 다른 카드의 name 목록(없으면 빈 배열).
+- depends_on: 선행해야 하는 다른 카드의 name 목록(없으면 빈 배열). 기존 맵 카드도 흐름상 위치에 맞게 depends_on을 채운다(첫 단계에 몰지 말 것).
 - 다른 설명 없이 JSON 한 개만:
 {"cards":[{"name":"","summary":"","owner_role":"","department":"","depends_on":[],"existing_code":null}]}"""
 
@@ -222,6 +225,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
+- 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.
 - input/output은 항목 배열입니다. 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 캔버스에서 자동으로 이어집니다.
 - [현재 등록된 내용]이 있으면 그것을 바탕으로 답에서 바뀐 부분만 고치고 나머지는 그대로 유지한다.
 - 다른 설명 없이 JSON 한 개만:
@@ -381,10 +385,19 @@ def _render_answers(questionnaire: dict, answers: dict) -> str:
         value = got.get("value")
         labels = {o.get("id"): o.get("label") for o in q.get("options") or []}
         if isinstance(value, list):
-            shown = " → ".join(str(labels.get(v, v)) for v in value)
+            joiner = " → " if q.get("kind") == "ordered" else ", "
+            shown = joiner.join(str(labels.get(v, v)) for v in value)
         else:
             shown = str(labels.get(value, value)) if value is not None else ""
+        if not shown:
+            shown = "(미답변)"
+        comment = got.get("comment")
+        if isinstance(comment, str) and comment.strip():
+            shown = f"{shown} (코멘트: {comment.strip()})"
         lines.append(f"- ({q.get('maps_to')}) {q.get('text')}: {shown}")
+    note = (answers.get(NOTE_KEY) or {}).get("value") if isinstance(answers.get(NOTE_KEY), dict) else None
+    if isinstance(note, str) and note.strip():
+        lines.append(f"\n[제출 코멘트]\n{note.strip()}")
     return "\n".join(lines)
 
 

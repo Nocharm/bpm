@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FwInterviewSession, FwQuestion, FwQuestionnaire, FwQuestionSection, FwSessionStatus } from "./api";
 import {
-  buildSubmitPayload, deriveProgress, deriveStep, fillSuggested, findCurrentTask, groupQuestionsBySection,
+  buildSubmitPayload, deriveProgress, deriveStep, fillAllSuggested, fillSuggested, findCurrentTask, groupQuestionsBySection,
   hasBackgroundWork, hasBlockingDuplicate, validateAnswers,
 } from "./framework-interview";
 
@@ -28,10 +28,15 @@ describe("framework-interview view model", () => {
     expect(validateAnswers(Q, { q1: ["a", "b"], q3: "" })).toEqual(["q2"]);
     expect(validateAnswers(Q, { q1: ["a"], q2: "r1" })).toEqual([]);
     expect(validateAnswers(Q, { q1: [], q2: "zzz" })).toEqual(["q1", "q2"]);
+    // single도 복수 선택(배열)을 받는다 — 빈 배열·모르는 id는 누락
+    expect(validateAnswers(Q, { q1: ["a"], q2: ["r1", "r2"] })).toEqual([]);
+    expect(validateAnswers(Q, { q1: ["a"], q2: [] })).toEqual(["q2"]);
+    expect(validateAnswers(Q, { q1: ["a"], q2: ["zzz"] })).toEqual(["q2"]);
   });
 
   it("fillSuggested pre-selects every suggestion and leaves text blank", () => {
     expect(fillSuggested(Q)).toEqual({ q1: ["a", "b"], q2: "r1", q3: "" });
+    expect(fillAllSuggested(Q)).toEqual({ q1: ["a", "b"], q2: "r1", q3: "요청서 도착" });
   });
 
   it("buildSubmitPayload sends blank text so the server applies the suggestion", () => {
