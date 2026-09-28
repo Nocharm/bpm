@@ -5,7 +5,7 @@
 // 플레이스홀더는 무엇을 적을지 항목과 예시 문장을 함께 보여 준다(placeholder 한 줄로는 부족하다는 피드백).
 
 import { useRef } from "react";
-import { FileText, Paperclip, X } from "lucide-react";
+import { FileText, Loader2, Paperclip, X } from "lucide-react";
 
 import type { FwAttachment } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -24,9 +24,11 @@ interface PlanBriefPanelProps {
   onGenerate: () => void;
   // 카드가 있으면 "다시 제안" 라벨
   hasCards: boolean;
+  // 제안 호출 중 — 버튼 아이콘이 링으로 바뀐다(카드 열의 오버레이와 한 쌍)
+  proposing?: boolean;
 }
 
-export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAttach, onRemoveAttachment, onGenerate, hasCards }: PlanBriefPanelProps) {
+export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAttach, onRemoveAttachment, onGenerate, hasCards, proposing = false }: PlanBriefPanelProps) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   return (
@@ -64,8 +66,15 @@ export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAtta
         )}
       </div>
       {/* 전폭 버튼은 과하다(사용자 피드백 2026-09-23) — 다른 primary 버튼과 같은 크기로 우측 정렬 */}
-      <AiButton data-id="fw-consult-generate-plan" className="self-end" disabled={busy} onClick={onGenerate}>
-        {hasCards ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
+      <AiButton
+        data-id="fw-consult-generate-plan"
+        className="self-end"
+        disabled={busy}
+        data-proposing={proposing || undefined}
+        icon={proposing ? <Loader2 size={14} strokeWidth={1.5} className="shrink-0 animate-spin" /> : undefined}
+        onClick={onGenerate}
+      >
+        {proposing ? t("fwConsult.proposingPlan") : hasCards ? t("fwConsult.regeneratePlan") : t("fwConsult.generatePlan")}
       </AiButton>
     </section>
   );

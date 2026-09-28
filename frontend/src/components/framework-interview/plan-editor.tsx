@@ -4,13 +4,15 @@
 // 단계는 카드의 명시적 stage(lib/plan-cards)다. 타일 전체를 끌어 다른 행(그 카드만 이동, 선행은 직전 행 전부로)·같은 행 안(표시 순서)·
 // 점선 새 단계 행으로 옮기고, 선택 타일에서 Alt+↑/↓(단계)·Alt+←/→(순서)로도 옮긴다. 분기·조건은 여기서 잡지 않는다(연결 단계).
 // 선행 카드 편집은 타일 우클릭 메뉴(직전 행 체크, 복수)로만 — 상세 열의 선행은 읽기 전용(사용자 결정 2026-09-28).
-// 모션: 자리 이동은 FLIP(useFlipOrder 2D), 추가 .plan-tile-in, 삭제 .plan-tile-out, 단계가 바뀐 타일은 .plan-tile-settle 링,
+// 삭제는 즉시 지우지 않고 "삭제 예정"(붉은 타일)으로 두었다가 저장·확정 때 뺀다(복구 가능). 기존 유지(keep) 타일은 비활성 룩 + 드래그 불가(선택·정정 전환만).
+// 선택한 타일의 행은 위아래 여백이 넓어져 상하 연결선이 잘 보인다. AI 제안 중엔 카드 열 위에 링 오버레이(사용자 요청 2026-09-28).
+// 모션: 자리 이동은 FLIP(useFlipOrder 2D), 추가 .plan-tile-in, 단계가 바뀐 타일은 .plan-tile-settle 링,
 // 행이 비면 STAGE_HOLD_MS 동안 빈 행을 남긴 뒤 접어 아래 행들이 한 단계 당겨진다. 선행 연결은 SVG 점선 곡선(타일 실측, FLIP 중엔 rAF로 따라감).
 // 그립 아이콘은 hover에서만 우측 상단에. 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
 // brief·첨부·AI 제안은 1열 PlanBriefPanel(page.tsx가 이어 준다). 시안 확정 2026-09-24.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { GripVertical, Link2, Plus, Trash2 } from "lucide-react";
+import { GripVertical, Link2, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
 
 import { getDirectory, type FwCardMode, type FwInterviewSession, type FwPlanCard } from "@/lib/api";
 import { hasBlockingDuplicate } from "@/lib/framework-interview";
@@ -28,12 +30,19 @@ const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 tex
 const LABEL = "text-fine text-ink-tertiary";
 const TILE_WIDTH = 200;
 const TILE =
-  "group relative flex w-[200px] cursor-grab flex-col gap-px rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
+  "group relative flex w-[200px] flex-col gap-px rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
   "transition-[background-color,border-color,opacity,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
 const TILE_QUIET = "border-hairline bg-surface hover:bg-surface-pearl";
 const TILE_SELECTED = "border-accent bg-accent-tint";
 // 호버한 타일과 선행/후행으로 이어진 타일 — 선택보다 옅은 톤으로 "같이 움직이는 무리"를 보인다
 const TILE_LINKED = "border-accent/40 bg-accent-tint/40";
+// 기존 유지 타일 — 비활성 룩(점선·흐림). 선택하면 정정으로 바꿀 수 있어 클릭은 살린다
+const TILE_KEPT = "border-dashed border-hairline bg-surface-alt/60 opacity-70";
+// 삭제 예정 타일 — 붉은 테두리·옅은 붉은 바탕, 제목 취소선. 복구 버튼이 그립 자리에 온다
+const TILE_REMOVED = "border-error/60 bg-error/5";
+const MODE_CHIP_KEEP = "shrink-0 rounded-full border border-border-strong bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
+const MODE_CHIP_REVISE = "shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-accent";
+const REMOVED_CHIP = "shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-error";
 // 추가 버튼은 그 행에 마우스가 올라왔을 때만 페이드인 — 빈 자리가 늘 점선으로 채워져 있지 않게(사용자 요청 2026-09-24)
 const ADD_TILE = "flex items-center justify-center rounded-md border border-dashed border-hairline bg-surface-pearl text-fine text-ink-tertiary hover:border-accent hover:text-accent opacity-0 transition-opacity duration-150 group-hover/stage:opacity-100 focus-visible:opacity-100";
 const PRIMARY = "rounded-sm bg-accent px-3 py-1.5 text-caption text-on-accent hover:bg-accent-focus disabled:opacity-40";
@@ -44,11 +53,13 @@ const DRAG_THRESHOLD_PX = 4;  // 이보다 덜 움직이면 클릭(선택)
 const IN_MS = 300;      // .plan-tile-in
 const SETTLE_MS = 600;  // .plan-tile-settle
 const STAGE_HOLD_MS = 420;   // 빈 행을 남겨 두는 시간 — 타일 정렬(FLIP 380ms)이 끝난 뒤 한 단계 당긴다(사용자 요청 2026-09-28)
-const CONNECTOR_FOLLOW_MS = 480;  // FLIP 전환 동안 연결선이 타일을 따라가는 rAF 창
+const CONNECTOR_FOLLOW_FRAMES = 30;  // FLIP·행 여백 전환(≤380ms) 동안 연결선이 타일을 따라가는 rAF 프레임 수(60fps 기준 약 500ms)
 
 interface PlanEditorProps {
   session: FwInterviewSession;
   busy: boolean;
+  // AI 카드 제안 호출 중 — 카드 열 위에 링 오버레이
+  proposing?: boolean;
   // 현재 카드(키 제거본)를 부모에 미러 — 좌측 brief 패널의 AI 제안이 화면의 카드로 제안받는다
   onCardsChange: (cards: FwPlanCard[]) => void;
   onSave: (cards: FwPlanCard[]) => void;
@@ -92,13 +103,14 @@ function buildConnectorPath(from: DOMRect, to: DOMRect, origin: DOMRect): string
   return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${(y1 + bend).toFixed(1)}, ${x2.toFixed(1)} ${(y2 - bend).toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
 }
 
-export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: PlanEditorProps) {
+export function PlanEditor({ session, busy, proposing = false, onCardsChange, onSave, onLock }: PlanEditorProps) {
   const { t } = useI18n();
   // 부모가 session.plan 내용으로 key를 리마운트하므로(page.tsx) 여기서는 마운트 시 1회 초기화만 한다 —
   // 폴링(pause/resume 등)이 만드는 새 session 객체가 편집 중인 카드를 덮어쓰지 않는다.
   const [cards, setCards] = useState<KeyedCard[]>(() => withClientIds(session.plan ?? []));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [closingIds, setClosingIds] = useState<Set<string>>(() => new Set());
+  // 삭제 예정 카드 — 화면엔 붉게 남고 전송본에서만 빠진다. 복구하면 그대로 돌아온다
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
   const [addedId, setAddedId] = useState<string | null>(null);
   const [settledId, setSettledId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -119,13 +131,14 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
   const groups = groupByStage(cards);
   const flat = groups.flat();
   const stageKey = buildStageKey(groups);
-  const links = listDependencyLinks(cards);
+  const activeCards = cards.filter((card) => !removedIds.has(card.clientId));
+  const links = listDependencyLinks(activeCards);
   const linksKey = links.map((link) => `${link.from}>${link.to}`).join(",");
   useFlipOrder(listRef, stageKey);
 
   useEffect(() => {
-    onCardsChange(toPayload(cards));
-  }, [cards, onCardsChange]);
+    onCardsChange(toPayload(cards.filter((card) => !removedIds.has(card.clientId))));
+  }, [cards, removedIds, onCardsChange]);
 
   useEffect(() => {
     getDirectory()
@@ -155,11 +168,12 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
         return from && to ? [{ key: `${link.from}>${link.to}`, from: link.from, to: link.to, d: buildConnectorPath(from, to, origin) }] : [];
       }));
     };
-    // 첫 실측도 rAF 안에서 — effect 본문의 동기 setState를 피한다(react-hooks/set-state-in-effect)
-    const started = performance.now();
+    // 첫 실측도 rAF 안에서 — effect 본문의 동기 setState를 피한다(react-hooks/set-state-in-effect). 프레임 수로 끊어 effect 본문에 시계를 두지 않는다
+    let frames = 0;
     const follow = () => {
       measure();
-      followRef.current = performance.now() - started < CONNECTOR_FOLLOW_MS ? window.requestAnimationFrame(follow) : null;
+      frames += 1;
+      followRef.current = frames < CONNECTOR_FOLLOW_FRAMES ? window.requestAnimationFrame(follow) : null;
     };
     if (followRef.current !== null) window.cancelAnimationFrame(followRef.current);
     followRef.current = window.requestAnimationFrame(follow);
@@ -169,8 +183,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
       observer.disconnect();
       if (followRef.current !== null) { window.cancelAnimationFrame(followRef.current); followRef.current = null; }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- links는 매 렌더 새 배열이라 그 내용 키(linksKey)와 단계 키로만 다시 잰다
-  }, [stageKey, linksKey, closingIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- links는 매 렌더 새 배열이라 그 내용 키(linksKey)와 단계 키로만 다시 잰다. 선택이 바뀌면 행 여백이 늘어 다시 잰다
+  }, [stageKey, linksKey, selectedId]);
 
   function later(ms: number, fn: () => void) {
     timersRef.current.push(window.setTimeout(fn, ms));
@@ -220,20 +234,14 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
     setAddedId(clientId);
     later(IN_MS, () => setAddedId((cur) => (cur === clientId ? null : cur)));
   }
-  // 삭제는 .plan-tile-out이 끝난 뒤(animationend) 목록에서 뺀다 — 타이머 ref를 잡지 않아 우클릭 메뉴(렌더 중 생성)가 참조해도 된다.
-  // 모션 축소 환경은 animation: none이라 animationend가 오지 않으니 바로 뺀다.
-  function remove(clientId: string) {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      finishRemove(clientId);
-      return;
-    }
-    setClosingIds((prev) => new Set(prev).add(clientId));
-  }
-  function finishRemove(clientId: string) {
-    setCards((prev) => prev.filter((c) => c.clientId !== clientId));
-    setClosingIds((prev) => { const next = new Set(prev); next.delete(clientId); return next; });
-    setSelectedId((cur) => (cur === clientId ? null : cur));
-    scheduleCollapse();
+  // 삭제 = 삭제 예정 표시(복구 가능). 목록에서 실제로 빠지는 건 저장·확정 전송본에서다(사용자 요청 2026-09-28)
+  function toggleRemoved(clientId: string) {
+    setRemovedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
   }
   function togglePredecessor(clientId: string, name: string) {
     setCards((prev) => {
@@ -244,9 +252,19 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
     });
   }
 
-  // ── 타일 드래그: 4px 넘게 움직이면 드래그(고스트가 따라오고 행이 하이라이트), 아니면 클릭 = 선택
+  function isDraggable(card: KeyedCard): boolean {
+    return (card.mode ?? "new") !== "keep" && !removedIds.has(card.clientId);
+  }
+
+  // ── 타일 드래그: 4px 넘게 움직이면 드래그(고스트가 따라오고 행이 하이라이트), 아니면 클릭 = 선택.
+  // 기존 유지·삭제 예정 타일은 선택만 된다
   function handleTilePointerDown(event: React.PointerEvent<HTMLDivElement>, clientId: string) {
     if (event.button !== 0) return;
+    const card = cards.find((c) => c.clientId === clientId);
+    if (card && !isDraggable(card)) {
+      setSelectedId(clientId);
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     gestureRef.current = { clientId, startX: event.clientX, startY: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, dragging: false };
     const onMove = (ev: PointerEvent) => {
@@ -367,18 +385,20 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
       });
     }
     items.push({ divider: true });
+    const removed = removedIds.has(clientId);
     items.push({
-      label: t("fwConsult.removeCard"),
-      icon: Trash2,
-      danger: true,
-      disabled: Boolean(card.existing_code) || closingIds.has(clientId),
-      onSelect: () => remove(clientId),
+      label: removed ? t("fwConsult.restoreCard") : t("fwConsult.removeCard"),
+      icon: removed ? Undo2 : Trash2,
+      danger: !removed,
+      disabled: Boolean(card.existing_code),
+      onSelect: () => toggleRemoved(clientId),
     });
     return items;
   }
 
-  const canLock = cards.length > 0 && cards.every((c) => c.name.trim()) && !hasBlockingDuplicate(cards);
+  const canLock = activeCards.length > 0 && activeCards.every((c) => c.name.trim()) && !hasBlockingDuplicate(activeCards);
   const selectedExisting = Boolean(selected?.existing_code);
+  const selectedRemoved = selected !== null && removedIds.has(selected.clientId);
   const dragCard = drag ? cards.find((c) => c.clientId === drag.clientId) ?? null : null;
   // 호버 무리 — 호버한 타일과 직접 이어진 선행·후행
   const linkedIds = new Set<string>();
@@ -404,17 +424,23 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
 
   function renderTile(card: KeyedCard, flatIndex: number) {
     const isExisting = Boolean(card.existing_code);
+    const isKept = isExisting && (card.mode ?? "keep") === "keep";
+    const isRemoved = removedIds.has(card.clientId);
     const isSelected = selected?.clientId === card.clientId;
     const isDragging = drag?.clientId === card.clientId;
     const isLinked = !isSelected && linkedIds.has(card.clientId);
-    const motion = closingIds.has(card.clientId) ? "plan-tile-out" : addedId === card.clientId ? "plan-tile-in" : settledId === card.clientId ? "plan-tile-settle" : "";
+    const motion = addedId === card.clientId ? "plan-tile-in" : settledId === card.clientId ? "plan-tile-settle" : "";
+    // 룩 우선순위: 삭제 예정 > 선택 > 호버 무리 > 기존 유지 > 기본. 삭제 예정이 선택되면 붉은 테두리에 액센트 링만 더한다
+    const look = isRemoved
+      ? `${TILE_REMOVED} ${isSelected ? "ring-2 ring-accent/40" : ""}`
+      : isSelected ? TILE_SELECTED : isLinked ? TILE_LINKED : isKept ? TILE_KEPT : TILE_QUIET;
+    const cursor = isDraggable(card) ? "cursor-grab" : "cursor-pointer";
     return (
       <div
         key={card.clientId}
         data-flip-key={card.clientId}
         data-id={`fw-consult-plan-card-${flatIndex}`}
         className={`${motion} ${isDragging ? "opacity-30" : ""}`}
-        onAnimationEnd={(event) => { if (event.animationName === "plan-tile-out" && closingIds.has(card.clientId)) finishRemove(card.clientId); }}
       >
         <div
           role="button"
@@ -422,24 +448,44 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
           aria-pressed={isSelected}
           data-id={`fw-consult-plan-row-${flatIndex}`}
           data-linked={isLinked || undefined}
-          className={`${TILE} ${isSelected ? TILE_SELECTED : isLinked ? TILE_LINKED : TILE_QUIET}`}
+          data-kept={isKept || undefined}
+          data-removed={isRemoved || undefined}
+          className={`${TILE} ${cursor} ${look}`}
           onPointerDown={(event) => handleTilePointerDown(event, card.clientId)}
           onPointerEnter={() => { if (!drag) setHoverId(card.clientId); }}
           onPointerLeave={() => setHoverId((cur) => (cur === card.clientId ? null : cur))}
           onContextMenu={(event) => handleTileContextMenu(event, card.clientId)}
           onKeyDown={(event) => handleTileKeyDown(event, card, flatIndex)}
         >
-          {/* 그립은 hover에서만, 우측 상단 — 타일 전체가 잡히므로 손잡이는 힌트일 뿐이라 왼쪽 여백을 차지하지 않는다 */}
-          <span className="absolute right-1.5 top-2 text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden="true">
-            <GripVertical size={14} strokeWidth={1.5} />
-          </span>
+          {isRemoved ? (
+            // 복구 — 그립 자리. 클릭이 타일 선택으로 번지지 않게 pointerdown을 막는다
+            <button
+              type="button"
+              data-id={`fw-consult-plan-restore-${flatIndex}`}
+              title={t("fwConsult.restoreCard")}
+              aria-label={t("fwConsult.restoreCard")}
+              className="absolute right-1.5 top-1.5 rounded-sm p-0.5 text-error transition-colors duration-150 hover:bg-error/10"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => { event.stopPropagation(); toggleRemoved(card.clientId); }}
+            >
+              <Undo2 size={14} strokeWidth={1.5} />
+            </button>
+          ) : isDraggable(card) && (
+            // 그립은 hover에서만, 우측 상단 — 타일 전체가 잡히므로 손잡이는 힌트일 뿐이라 왼쪽 여백을 차지하지 않는다
+            <span className="absolute right-1.5 top-2 text-ink-tertiary opacity-0 transition-opacity duration-150 group-hover:opacity-100" aria-hidden="true">
+              <GripVertical size={14} strokeWidth={1.5} />
+            </span>
+          )}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className={`min-w-0 truncate text-caption-strong ${card.name.trim() ? "text-ink" : "text-ink-muted"}`} data-id={`fw-consult-plan-title-${flatIndex}`}>
+            <span className={`min-w-0 truncate text-caption-strong ${isRemoved ? "text-ink-tertiary line-through" : card.name.trim() ? "text-ink" : "text-ink-muted"}`} data-id={`fw-consult-plan-title-${flatIndex}`}>
               {card.name.trim() || t("fwConsult.cardNameEmpty")}
             </span>
-            {isExisting && (
-              <span className="shrink-0 rounded-sm bg-surface-alt px-1 py-px text-[10px] leading-4 text-ink-secondary" data-id={`fw-consult-plan-existing-${flatIndex}`} title={card.existing_code ?? undefined}>
-                {t("fwConsult.existing")} · {t((card.mode ?? "keep") === "revise" ? "fwConsult.revise" : "fwConsult.keep")}
+            {isRemoved && (
+              <span className={REMOVED_CHIP} data-id={`fw-consult-plan-removed-${flatIndex}`}>{t("fwConsult.pendingRemoval")}</span>
+            )}
+            {isExisting && !isRemoved && (
+              <span className={isKept ? MODE_CHIP_KEEP : MODE_CHIP_REVISE} data-id={`fw-consult-plan-existing-${flatIndex}`} title={card.existing_code ?? undefined}>
+                {t("fwConsult.existing")} · {t(isKept ? "fwConsult.keep" : "fwConsult.revise")}
               </span>
             )}
           </span>
@@ -457,8 +503,14 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-id="fw-consult-plan">
       <div className="flex min-h-0 flex-1">
-        {/* 2열: 단계 행 */}
-        <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-2">
+        {/* 2열: 단계 행 — relative: AI 제안 중 링 오버레이의 기준 */}
+        <div className="relative flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pt-3 pb-2">
+          {proposing && (
+            <div className="absolute inset-0 z-[3] flex items-center justify-center gap-2 bg-surface/70 text-caption text-ink-secondary" data-id="fw-consult-plan-proposing">
+              <Loader2 size={16} strokeWidth={1.5} className="animate-spin text-accent" />
+              {t("fwConsult.proposingPlan")}
+            </div>
+          )}
           <div className="flex items-center gap-2 rounded-md border border-hairline bg-surface-pearl px-2.5 py-1.5 text-fine text-ink-secondary">
             {session.existing.length > 0 && <span data-id="fw-consult-existing-note">{t("fwConsult.existingNote", { n: session.existing.length })}</span>}
             <span className="ml-auto text-ink-tertiary">{t("fwConsult.stageHint")}</span>
@@ -493,7 +545,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
                   data-stage={stage}
                   data-id={`fw-consult-plan-stage-${stage}`}
                   data-empty={group.length === 0 || undefined}
-                  className={`group/stage relative flex items-stretch rounded-md py-3 transition-colors duration-150 ${isTarget ? "bg-accent-tint/50" : ""}`}
+                  // 선택한 타일의 행은 위아래 여백을 늘려 상하 연결선이 드러나게(여백 전환은 부드럽게, 연결선은 rAF로 따라온다)
+                  className={`group/stage relative flex items-stretch rounded-md transition-[padding,background-color] duration-350 ease-smooth ${selectedStage === stage ? "py-6" : "py-3"} ${isTarget ? "bg-accent-tint/50" : ""}`}
                 >
                   <div className={`flex w-16 shrink-0 flex-col items-end border-r-2 pr-3 pt-0.5 ${selectedStage === stage ? "border-accent" : "border-hairline"}`}>
                     <span className={`text-tagline leading-none tabular-nums ${selectedStage === stage ? "text-accent" : "text-border-strong"}`}>{stage + 1}</span>
@@ -604,15 +657,17 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
                 </div>
                 <span className="text-fine text-ink-tertiary">{t("fwConsult.depsReadOnly")}</span>
               </div>
+              {selectedRemoved && <span className="text-fine text-error" data-id="fw-consult-plan-detail-removed">{t("fwConsult.pendingRemovalHint")}</span>}
               <button
                 type="button"
-                className={`${SECONDARY} mt-auto self-start text-error`}
+                className={`${SECONDARY} mt-auto self-start ${selectedRemoved ? "" : "text-error"}`}
                 data-id="fw-consult-plan-remove"
-                title={selectedExisting ? t("fwConsult.existingKept") : t("fwConsult.removeCard")}
-                disabled={selectedExisting || closingIds.has(selected.clientId)}
-                onClick={() => remove(selected.clientId)}
+                title={selectedExisting ? t("fwConsult.existingKept") : selectedRemoved ? t("fwConsult.restoreCard") : t("fwConsult.removeCard")}
+                disabled={selectedExisting}
+                onClick={() => toggleRemoved(selected.clientId)}
               >
-                <Trash2 size={14} strokeWidth={1.5} />{t("fwConsult.removeCard")}
+                {selectedRemoved ? <Undo2 size={14} strokeWidth={1.5} /> : <Trash2 size={14} strokeWidth={1.5} />}
+                {selectedRemoved ? t("fwConsult.restoreCard") : t("fwConsult.removeCard")}
               </button>
             </div>
           ) : (
@@ -624,8 +679,8 @@ export function PlanEditor({ session, busy, onCardsChange, onSave, onLock }: Pla
       <div className="flex flex-wrap items-center gap-2 border-t border-hairline px-4 py-2.5">
         <span className="text-fine text-ink-tertiary">{t("fwConsult.dragToReorder")}</span>
         <span className="ml-auto text-fine text-ink-tertiary">{t("fwConsult.lockPlanHint")}</span>
-        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(toPayload(cards))}>{t("fwConsult.save")}</button>
-        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(toPayload(cards))}>{t("fwConsult.lockPlan")}</button>
+        <button type="button" className={SECONDARY} data-id="fw-consult-plan-save" disabled={busy} onClick={() => onSave(toPayload(activeCards))}>{t("fwConsult.save")}</button>
+        <button type="button" className={PRIMARY} data-id="fw-consult-plan-lock" disabled={busy || !canLock} onClick={() => onLock(toPayload(activeCards))}>{t("fwConsult.lockPlan")}</button>
       </div>
 
       {/* 드래그 고스트 — 포인터를 따라오는 타일 사본(원본은 제자리에서 흐려진다) */}

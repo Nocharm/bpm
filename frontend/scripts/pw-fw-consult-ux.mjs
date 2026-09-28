@@ -85,10 +85,16 @@ await page.locator('[data-id="fw-consult-plan-add"]').click();
 check("add appends a card with the enter animation", (await page.locator('[data-id="fw-consult-plan-card-2"].plan-tile-in').count()) === 1);
 check("added card is selected in the detail pane", (await page.locator('[data-id="fw-consult-plan-row-2"]').getAttribute("aria-pressed")) === "true");
 check("added card opens a third stage", (await tiles(2).count()) === 1);
+// 삭제는 "삭제 예정"(붉은 타일, 복구 가능)으로 남고 저장·확정 전송본에서만 빠진다(2026-09-28)
 await page.locator('[data-id="fw-consult-plan-remove"]').click();
-check("remove starts the exit animation", (await page.locator('[data-id="fw-consult-plan-card-2"].plan-tile-out').count()) === 1);
-await page.waitForTimeout(400);
-check("removed card is gone after the exit animation", (await page.locator('[data-id="fw-consult-plan-cards"] [data-flip-key]').count()) === 2);
+check("remove marks the tile as pending removal", (await page.locator('[data-id="fw-consult-plan-row-2"][data-removed]').count()) === 1);
+check("pending-removal tile stays on the board", (await page.locator('[data-id="fw-consult-plan-cards"] [data-flip-key]').count()) === 3);
+await page.locator('[data-id="fw-consult-plan-restore-2"]').click();
+check("restore brings the tile back", (await page.locator('[data-id="fw-consult-plan-row-2"][data-removed]').count()) === 0);
+await page.locator('[data-id="fw-consult-plan-remove"]').click();
+await page.locator('[data-id="fw-consult-plan-save"]').click();
+await page.locator('[data-id="fw-consult-plan-cards"] [data-flip-key]').nth(2).waitFor({ state: "detached", timeout: 10000 }).catch(() => undefined);
+check("saving drops the pending-removal card", (await page.locator('[data-id="fw-consult-plan-cards"] [data-flip-key]').count()) === 2);
 
 // 잠금 → 첫 카드 설문
 await page.locator('[data-id="fw-consult-plan-lock"]').click();

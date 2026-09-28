@@ -53,6 +53,8 @@ export default function FrameworkConsultPage() {
   const [error, setError] = useState<string | null>(null);
   const [boardWidth, setBoardWidth] = useState(readBoardWidth);
   const [confirmAbandon, setConfirmAbandon] = useState(false);
+  // AI 카드 제안 호출 중 — busy(모든 호출)와 달리 제안에만 켜져 카드 열 오버레이·버튼 링을 띄운다
+  const [proposing, setProposing] = useState(false);
   // 카드별 백그라운드 작업 시작 시각(ms) — 보드·패널의 "작업 중 n초". 상태가 대기/완료로 돌아오면 지운다
   const [workingSince, setWorkingSince] = useState<Record<number, number>>({});
   // 보드에서 고른 카드 — 상태와 무관하게 그 카드 패널을 우측에 띄운다(ready면 순서와 무관하게 먼저 답한다,
@@ -217,10 +219,14 @@ export default function FrameworkConsultPage() {
                 return next;
               })}
               onRemoveAttachment={(index) => void run(() => deleteFrameworkAttachment(session.id, index))}
-              onGenerate={() => void run(async () => {
-                await saveFrameworkPlan(session.id, planCardsRef.current, false, briefDraft ?? session.brief);  // 화면의 brief·카드로 제안받는다
-                return generateFrameworkPlan(session.id);
-              })}
+              proposing={proposing}
+              onGenerate={() => {
+                setProposing(true);
+                void run(async () => {
+                  await saveFrameworkPlan(session.id, planCardsRef.current, false, briefDraft ?? session.brief);  // 화면의 brief·카드로 제안받는다
+                  return generateFrameworkPlan(session.id);
+                }).finally(() => setProposing(false));
+              }}
             />
           ) : (
           <TaskBoard
@@ -258,6 +264,7 @@ export default function FrameworkConsultPage() {
               key={JSON.stringify(session.plan ?? [])}
               session={session}
               busy={busy}
+              proposing={proposing}
               onCardsChange={handleCardsChange}
               onSave={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, false, briefDraft ?? session.brief))}
               onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true, briefDraft ?? session.brief))}

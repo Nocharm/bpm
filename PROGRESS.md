@@ -9,6 +9,7 @@
 - **설문/보드**: 빈 주관식 = 미답변(서버 `fill_answers` 제안값 자동 적용 폐기, `auto` 배지 제거), single 문항 복수 답 허용, 문항 코멘트+제출 코멘트(`comments`/`note` → answers `{comment}`·예약 키 `_note`, 행 작성 프롬프트에 실림). [AI 제안]은 1.5초 링 뒤 타이핑, [전부 제안값으로]는 주관식까지. 활동 순서 목록 FLIP. 보드 눈 아이콘·미리보기 모달 제거(패널이 담당), 작업 중 경과 초(`lib/use-now-tick.ts`), 연결·등록 단계에서 카드를 보는 중이면 보드 하단 "흐름으로 돌아가기" 타일.
 - **연결 캔버스**: 엣지 클릭=선택(Delete/Backspace 삭제), 더블클릭=라벨, 우클릭 메뉴(라벨 편집·삭제). 분기 노드가 아닌 노드의 두 번째 나가는 엣지는 기존 엣지를 붉은 점선으로 표시하고 확인 후 교체(사용자 결정). 등록 완료는 리포트 위 반투명 레이어+완료 카드.
 - **관리 패널**: 하위 타일 컴팩트(h-9)+내부 스크롤+1/2/3열 세그먼트(localStorage), AI 타일 컴팩트+호버 리프트, 인터뷰 JSON 섹션을 트리 아래 전폭 스트립으로(우측 아이콘 4단계 안내 `interview-flow-guide.tsx`). 기존 L6가 있는 L5는 세션 생성 시 유지 카드를 plan에 시드하고, 재제안 시 AI가 비운 기존 카드 선행은 직전 plan에서 승계(`merge_existing_cards(previous=)`); 플랜 프롬프트에 역할≠부서·기존 카드 depends_on 규칙, `normalize_plan`은 역할==부서면 역할 비움.
+- **계획 화면 후속 4종**: AI 카드 제안 중 카드 열 링 오버레이+버튼 링(`proposing`, busy와 분리) · 기존 유지 타일은 점선·흐림 비활성 룩(선택·정정 전환만, 드래그 불가)과 유지/정정 필 강조 · 선택한 타일의 행은 위아래 여백 확장(py-3→py-6, 연결선 rAF 추종) · 삭제는 "삭제 예정"(붉은 타일·취소선·복구 아이콘·인스펙터/우클릭 복구)으로 남고 저장·확정 전송본에서만 빠진다(`removedIds`, `.plan-tile-out` 폐기).
 - **관리 트리 자동 드릴인**: 자식이 하나뿐인 노드를 펼치면(루트가 하나뿐일 때 포함) 그 사슬이 갈래가 나올 때까지 static 모션으로 이어 열린다(`drillSingleChain`, 스모크 `pw-fw-tree-autodrill.mjs`).
 - 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과. 확인용 캡처 스크립트(polish-shots·plan-shot·design-audit)는 사용 후 정리.
 
