@@ -189,6 +189,18 @@ export function TaskPanel({ session, task, busy, workingSince = null, onSubmit, 
 
       {task.status === "drawn" && (
         <div className="flex flex-col gap-3" data-id="fw-consult-task-drawn">
+          {/* 플레이스홀더 안내 + 다시 그리기 — AI 실패로 건너뛴 카드는 등록 전까지 AI에게 다시 맡길 수 있다(2026-09-28) */}
+          {task.placeholder && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-hairline bg-surface-pearl px-3 py-2" data-id="fw-consult-task-placeholder-note">
+              <span className="min-w-0 flex-1 text-caption text-ink-secondary">{t("fwConsult.placeholderNote")}</span>
+              {session.status !== "applied" && (
+                <button type="button" className={SECONDARY} data-id="fw-consult-task-panel-redraw" disabled={busy} onClick={() => onRetry(task.id)}>
+                  <RotateCcw size={14} strokeWidth={1.5} />
+                  {t("fwConsult.redrawPlaceholder")}
+                </button>
+              )}
+            </div>
+          )}
           {/* 임베드라 항상 펼쳐져 있다 — hideClose라 onClose는 호출되지 않는다(필수 prop이라 no-op) */}
           {previewSource && (
             <ImportMapPreview source={previewSource} scope="map" dataId="fw-consult-task-panel-canvas" onClose={() => undefined} hideClose />

@@ -103,6 +103,21 @@ def test_plan_blanks_role_that_copies_the_department() -> None:
     assert [c["owner_role"] for c in out["cards"]] == ["", "구매 담당자"]
 
 
+def test_ask_schema_retries_empty_reply_without_thinking(monkeypatch) -> None:
+    """빈 응답(사고가 예산을 다 씀)은 되먹이지 않고 같은 메시지로 사고를 끄고 다시 부른다 (2026-09-28)."""
+    replies = ["", '{"cards": [{"name": "A"}]}']
+    calls: list[tuple[int, object]] = []
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        calls.append((len(messages), reasoning))
+        return ai_client.AiReply(content=replies.pop(0), prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    out = asyncio.run(ask_schema([{"role": "user", "content": "go"}], PlanOut, normalizer=normalize_plan, reasoning="high"))
+    assert [c["name"] for c in out.model_dump()["cards"]] == ["A"]
+    assert calls == [(1, "high"), (1, "none")]  # 두 번째 호출은 메시지 그대로, 사고만 끔
+
+
 def test_ask_schema_feeds_back_validation_errors(monkeypatch) -> None:
     replies = ['```json\n{"cards": []}\n```', '{"cards": [{"name": "A"}]}']
     seen: list[list[dict]] = []

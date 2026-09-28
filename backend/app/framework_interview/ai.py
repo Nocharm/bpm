@@ -2,6 +2,10 @@
 
 orchestrator._ask_json은 "JSON만 다시" 한 줄로 1회 재시도라 스키마 편차(kind 표기·필드 누락)를
 못 고쳤다. 여기서는 pydantic 오류 요약을 사용자 메시지로 붙여 모델이 무엇을 고칠지 알게 한다.
+
+빈 응답은 형식 오류가 아니다 — 사고(thinking)가 max_tokens를 다 써 content가 ""로 오는 경우라
+("invalid JSON: Expecting value (line 1)"로 보이던 실사용 실패 2026-09-28) 오류를 되먹여도 같은 일이 반복된다.
+그때는 같은 메시지로 사고를 끄고(reasoning="none") 다시 부른다.
 """
 
 import json
@@ -33,9 +37,14 @@ def summarize_validation_error(exc: Exception) -> str:
     return f"- $: {exc}"
 
 
+EMPTY_REPLY_MESSAGE = "empty reply (thinking budget exhausted)"
+
+
 def parse_json_object(text: str) -> Any:
-    """펜스·설명을 벗기고 JSON을 파싱. 실패는 ValueError."""
+    """펜스·설명을 벗기고 JSON을 파싱. 실패는 ValueError. 빈 본문은 EMPTY_REPLY_MESSAGE로 따로 알린다."""
     body = extract_json(text)
+    if not body.strip():
+        raise ValueError(EMPTY_REPLY_MESSAGE)
     try:
         return json.loads(body)
     except json.JSONDecodeError as exc:
@@ -72,6 +81,10 @@ async def ask_schema(
                 "framework interview AI invalid (attempt %d/%d, %s): %s | raw=%.500s",
                 attempt + 1, attempts, schema_cls.__name__, last_error.replace("\n", " "), reply.content,
             )
+            if isinstance(exc, ValueError) and str(exc) == EMPTY_REPLY_MESSAGE:
+                # 빈 응답엔 되먹일 게 없다 — 같은 메시지로 사고를 끄고 다시(이미 껐으면 그대로 한 번 더)
+                reasoning = "none"
+                continue
             if attempt < attempts - 1:
                 messages = [
                     *messages,

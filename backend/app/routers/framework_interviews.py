@@ -372,8 +372,17 @@ async def retry_task(
 ) -> FrameworkInterviewOut:
     row = await _get_session_row(db, session_id)
     task = await _get_task(db, row, task_pk)
-    if task.status != "failed":
+    if row.status == "applied":
+        raise HTTPException(status_code=409, detail="session is already applied")
+    is_placeholder = task.status == "drawn" and bool(task.placeholder)
+    if task.status != "failed" and not is_placeholder:
         raise HTTPException(status_code=409, detail="task is not failed")
+    if is_placeholder:
+        # 플레이스홀더로 넘어간 카드를 AI에게 다시 그리게 — 제출 답이 있으니 드로잉부터(사용자 요청 2026-09-28)
+        task.placeholder = False
+        task.row = None
+        task.issues = []
+        task.drawn_at = None
     task.status = "submitted" if task.answers else "pending"
     task.error = None
     await db.commit()

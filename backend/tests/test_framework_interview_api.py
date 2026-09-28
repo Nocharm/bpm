@@ -216,6 +216,11 @@ def test_skip_failed_task_with_placeholder(client: TestClient, monkeypatch) -> N
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{task['id']}", headers=HEADERS).json()
     assert detail["row"]["actions"] == [{"seq": 1, "label": "요청 접수", "kind": "action"}]
     assert detail["row"]["ownerRole"] == "담당자"
+    # 플레이스홀더는 다시 시도할 수 있다 — 답이 없으니 설문부터(pending), 플레이스홀더 표시는 걷힌다 (2026-09-28)
+    retried = client.post(f"/api/framework-interviews/{sid}/tasks/{task['id']}/retry", headers=HEADERS)
+    assert retried.status_code == 200, retried.text
+    again = retried.json()["tasks"][0]
+    assert again["status"] == "pending" and again["placeholder"] is False and again["issues"] == []
 
 
 def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:

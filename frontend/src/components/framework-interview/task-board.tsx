@@ -154,9 +154,17 @@ export function TaskBoard({
                 </button>
               )}
               {task.status === "drawn" && task.placeholder && (
-                <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary" data-id={`fw-consult-task-placeholder-${task.id}`}>
-                  {t("fwConsult.placeholder")}
-                </span>
+                <>
+                  <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary" data-id={`fw-consult-task-placeholder-${task.id}`}>
+                    {t("fwConsult.placeholder")}
+                  </span>
+                  {/* 플레이스홀더도 다시 그릴 수 있다 — 세션이 등록되기 전까지(2026-09-28) */}
+                  {session.status !== "applied" && (
+                    <button type="button" data-id={`fw-consult-task-redraw-${task.id}`} className="rounded-sm p-1 text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.redrawPlaceholder")} onClick={(e) => { e.stopPropagation(); onRetry(task.id); }}>
+                      <RotateCcw size={14} strokeWidth={1.5} />
+                    </button>
+                  )}
+                </>
               )}
             </li>
           );
