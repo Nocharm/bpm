@@ -27,6 +27,8 @@ import {
 import { useFlipOrder } from "@/lib/use-flip-order";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { CardModeChip } from "@/components/framework-interview/card-mode-chip";
+import { ExternalL6Modal } from "@/components/framework-interview/external-l6-modal";
+import type { PeekAddPayload } from "@/components/subprocess-preview-peek";
 import { getExternalL5ColorByCode } from "@/lib/canvas";
 import { SearchSelect } from "@/components/search-select";
 
@@ -76,6 +78,8 @@ interface PlanEditorProps {
   busy: boolean;
   // page가 좌측 체계 피커의 추가 동작을 이 편집기로 보낼 수 있게 — 렌더마다 최신 핸들러를 ref에 써 둔다
   addExternalRef?: React.MutableRefObject<((request: ExternalAddRequest) => void) | null>;
+  // 보드 빈 영역 우클릭 "외부 L6 추가" — 좌측 [외부 L6] 탭이 목적·첨부 위에 묻혀 잘 안 보인다(사용자 요청 2026-09-29)
+  onOpenExternalFinder?: () => void;
   // AI 카드 제안 호출 중 — 카드 열 위에 링 오버레이
   proposing?: boolean;
   // 현재 카드(키 제거본)를 부모에 미러 — 좌측 brief 패널의 AI 제안이 화면의 카드로 제안받는다
@@ -121,7 +125,7 @@ function buildConnectorPath(from: DOMRect, to: DOMRect, origin: DOMRect): string
   return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${(y1 + bend).toFixed(1)}, ${x2.toFixed(1)} ${(y2 - bend).toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
 }
 
-export function PlanEditor({ session, busy, proposing = false, addExternalRef, onCardsChange, onSave, onLock }: PlanEditorProps) {
+export function PlanEditor({ session, busy, proposing = false, addExternalRef, onOpenExternalFinder, onCardsChange, onSave, onLock }: PlanEditorProps) {
   const { t } = useI18n();
   // 부모가 session.plan 내용으로 key를 리마운트하므로(page.tsx) 여기서는 마운트 시 1회 초기화만 한다 —
   // 폴링(pause/resume 등)이 만드는 새 session 객체가 편집 중인 카드를 덮어쓰지 않는다.
@@ -132,7 +136,10 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
   const [addedId, setAddedId] = useState<string | null>(null);
   const [settledId, setSettledId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; clientId: string } | null>(null);
+  // 우클릭 메뉴 — clientId가 있으면 타일 메뉴, null이면 보드 빈 영역 메뉴
+  const [menu, setMenu] = useState<{ x: number; y: number; clientId: string | null } | null>(null);
+  // 외부 L6로 전환할 타일 — 체계 피커 모달이 열린다
+  const [switchId, setSwitchId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [connectors, setConnectors] = useState<Connector[]>([]);
   // 체계 피커에서 끌어온 행이 올라간 단계(외부 참조 드롭 하이라이트)
@@ -297,6 +304,25 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
   useEffect(() => {
     if (addExternalRef) addExternalRef.current = addExternal;
   });
+  // 타일 → 외부 참조 전환 — 자리(단계·순서)와 선행은 그대로, 이름·모드·external만 바뀐다. 같은 L5·같은 맵은 addExternal과 같은 이유로 거른다
+  function switchToExternal(clientId: string, payload: PeekAddPayload) {
+    if (payload.categoryId === undefined) return;
+    const { categoryId, linkedMapId: mapId, name } = payload;
+    void (async () => {
+      if (cards.some((c) => c.clientId !== clientId && c.external?.map_id === mapId)) return;
+      const chain = await getCategoryChain(categoryId);
+      const l5 = chain[chain.length - 1];
+      if (!l5 || l5.id === session.category_id) return;
+      setCards((prev) => prev.map((c) => (c.clientId === clientId ? {
+        ...c, name, summary: "", owner_role: "", department: "", mode: "external" as const, existing_code: null,
+        external: { ref_id: `ext-${clientId}`, l5_code: l5.code, l5_label: l5.name, l6: name, map_id: mapId },
+      } : c)));
+      setSwitchId(null);
+      setSelectedId(clientId);
+      setAddedId(clientId);
+      later(IN_MS, () => setAddedId((cur) => (cur === clientId ? null : cur)));
+    })();
+  }
 
   // 체계 피커 행 드롭 — 놓은 단계에 외부 타일. 미등록(미지정) 맵도 소속 L5가 있으면 받는다
   function handleExternalDragOver(event: React.DragEvent) {
@@ -429,8 +455,21 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
 
   function handleTileContextMenu(event: React.MouseEvent, clientId: string) {
     event.preventDefault();
+    event.stopPropagation();  // 보드 빈 영역 메뉴로 번지지 않게
     setSelectedId(clientId);
     setMenu({ x: event.clientX, y: event.clientY, clientId });
+  }
+  // 보드 빈 영역(행 여백·+ 버튼) 우클릭 — 외부 L6 찾기로 가는 지름길
+  function handleBoardContextMenu(event: React.MouseEvent) {
+    if (!onOpenExternalFinder) return;
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, clientId: null });
+  }
+  function buildBoardMenu(): ContextMenuItem[] {
+    return [
+      { title: t("fwConsult.leftExternal"), icon: ExternalLink },
+      { label: t("fwConsult.menuAddExternal"), icon: Plus, onSelect: () => onOpenExternalFinder?.() },
+    ];
   }
 
   // 우클릭 메뉴 — 선행 카드(직전 행 체크, 복수·마지막 하나는 해제 불가) + 삭제
@@ -461,6 +500,10 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
     }
     items.push({ divider: true });
     const removed = removedIds.has(clientId);
+    // 새 카드(+로 만든 이름 없는 타일 등)만 외부 L6로 바꿀 수 있다 — 기존 L6(keep/revise)와 이미 외부인 타일은 대상이 아니다
+    if (!card.existing_code && card.mode !== "external" && !removed) {
+      items.push({ label: t("fwConsult.menuSwitchExternal"), icon: ExternalLink, onSelect: () => setSwitchId(clientId) });
+    }
     items.push({
       label: removed ? t("fwConsult.restoreCard") : t("fwConsult.removeCard"),
       icon: removed ? Undo2 : Trash2,
@@ -474,6 +517,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
   const canLock = activeCards.length > 0 && activeCards.every((c) => c.name.trim()) && !hasBlockingDuplicate(activeCards);
   const selectedExisting = Boolean(selected?.existing_code);
   const selectedExternal = selected?.mode === "external" && Boolean(selected.external);
+  const switchCard = switchId === null ? null : cards.find((c) => c.clientId === switchId) ?? null;
   const selectedRemoved = selected !== null && removedIds.has(selected.clientId);
   const dragCard = drag ? cards.find((c) => c.clientId === drag.clientId) ?? null : null;
   // 호버 무리 — 호버한 타일과 직접 이어진 선행·후행
@@ -611,6 +655,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
             onDragOver={handleExternalDragOver}
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExtDrop(null); }}
             onDrop={handleExternalDrop}
+            onContextMenu={handleBoardContextMenu}
           >
             {/* 선행 연결선 — 타일 아래에 깔리는 점선 곡선. 호버 무리에 닿은 선은 액센트 */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true" data-id="fw-consult-plan-links">
@@ -808,7 +853,19 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
           {(dragCard.owner_role || dragCard.department) && <div className="truncate text-fine text-ink-secondary">{[dragCard.owner_role, dragCard.department].filter(Boolean).join(" · ")}</div>}
         </div>
       )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={buildTileMenu(menu.clientId)} onClose={() => setMenu(null)} />}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.clientId === null ? buildBoardMenu() : buildTileMenu(menu.clientId)} onClose={() => setMenu(null)} />}
+      {switchCard && (
+        <ExternalL6Modal
+          tileName={switchCard.name.trim() || t("fwConsult.cardNameEmpty")}
+          linkageCategoryId={session.category_id}
+          linkedMapIds={new Set([
+            ...session.existing.map((e) => e.map_id),
+            ...cards.flatMap((c) => (c.external?.map_id !== null && c.external?.map_id !== undefined ? [c.external.map_id] : [])),
+          ])}
+          onPick={(payload) => switchToExternal(switchCard.clientId, payload)}
+          onClose={() => setSwitchId(null)}
+        />
+      )}
     </section>
   );
 }

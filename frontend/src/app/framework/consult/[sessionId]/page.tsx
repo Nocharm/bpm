@@ -340,6 +340,7 @@ export default function FrameworkConsultPage() {
               busy={busy}
               proposing={proposing}
               addExternalRef={addExternalRef}
+              onOpenExternalFinder={() => setLeftTab("external")}
               onCardsChange={handleCardsChange}
               onSave={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, false, briefDraft ?? session.brief))}
               onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true, briefDraft ?? session.brief))}
