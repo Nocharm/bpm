@@ -128,6 +128,8 @@ function renderEdge(
               fontSize: labelStyle?.fontSize,
               background: labelBgStyle?.fill,
               border: labelBgStyle?.stroke ? `1px solid ${labelBgStyle.stroke}` : undefined,
+              // 선택 라벨 링 — 선의 글로우와 짝(lib/canvas highlightEdgeLabel)
+              boxShadow: labelBgStyle?.boxShadow,
               borderRadius: labelBgBorderRadius,
               padding: `${padY}px ${padX}px`,
             }}

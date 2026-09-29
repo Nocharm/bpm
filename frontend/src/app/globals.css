@@ -871,6 +871,11 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 }
 
 /* 엣지 — 기본선 border-strong, 선택 시 바이올렛 accent. 점선 marching 애니메이션은 React Flow `animated` 기본 제공 */
+.react-flow {
+  /* React Flow 기본 CSS의 `.react-flow__edge.selectable.selected` 규칙(특이도 4)이 아래 선택 규칙(3)을
+     이겨 선택 선이 회색(#555)으로 그려지던 문제 — RF가 읽는 변수로 선택색을 넘겨 바이올렛을 복구(2026-09-29) */
+  --xy-edge-stroke-selected: var(--color-edge-selected);
+}
 .react-flow__edge-path {
   stroke: var(--color-border-strong);
   stroke-width: 1.5;

@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-29 — 엣지 라벨 하이라이트·선택 선 색 복구 (dev)
+
+- **라벨 알약도 선과 같이 강조** — 선의 선택색·F14 in/out 색은 `<path>`에만 걸리고 라벨(`EdgeLabelRenderer` HTML 포털)은 정적 알약 스타일이라 빠져 있었다. `lib/canvas` `highlightEdgeLabel`(선택=edge-selected+2px 링 / in=teal / out=orange, 글자·테두리=선 색, 배경 12% 틴트)을 `applyFlowHighlight` 안에서 태워 메인·펼침 자식·게이트웨이 공용. Yes/No 파스텔은 선과 같은 규칙으로 강조 중엔 흐름 색이 우선.
+- **선택 엣지 선이 회색(#555)이던 문제 복구** — globals의 바이올렛 규칙을 React Flow 기본 CSS의 같은 특이도 규칙이 순서상 이겨 글로우만 바이올렛이었다. RF가 읽는 `--xy-edge-stroke-selected`로 선택색을 넘겨 해결. 펼침 자식 엣지 클릭 선택은 이미 동작 중(2026-09-02)이라 변경 없음. 스모크 `pw-verify-edge-label-highlight.mjs` 16/16.
+
 ## 2026-09-29 — L5 캠페인 외부 L6 픽스·지름길·채팅 칩 통일 (dev)
 
 - **채팅 수정 시 외부 L6 증발 픽스** — `feedback_session`(relations)만 태스크로만 known을 만들어 외부 참조 노드를 정규화가 "세션에 없는 카드"로 버렸다(첫 제안엔 있다가 한 번 고치면 사라지는 실사고). 다른 네 경로와 같은 `_known_task_names`로 통일하고 프롬프트 [L6 카드]에도 relations 제안과 같은 소속 L5 표시를 단다. 회귀 테스트는 픽스 전 코드에서 실패 확인.

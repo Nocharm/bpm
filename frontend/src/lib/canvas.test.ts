@@ -17,6 +17,7 @@ import {
   makeCopyLabel,
   normalizeNodeType,
   removeOutgoingEdges,
+  highlightEdgeLabel,
   styleEdgeLabelPill,
   swapNodeEdges,
   terminalDisplayLabel,
@@ -414,5 +415,38 @@ describe("styleEdgeLabelPill", () => {
     } as Edge);
     expect(styled.style?.strokeDasharray).toBe("6 3");
     expect(styled.style?.stroke).toBe("var(--color-branch-yes)");
+  });
+});
+
+describe("highlightEdgeLabel", () => {
+  const labeled = () =>
+    styleEdgeLabelPill({ id: "e1", source: "a", target: "b", label: "custom" } as Edge);
+  it("라벨 없는 엣지는 그대로 통과", () => {
+    const edge = { id: "e1", source: "a", target: "b" } as Edge;
+    expect(highlightEdgeLabel(edge, "selected")).toBe(edge);
+  });
+  it("선택: 글자·테두리 edge-selected, 12% 틴트 배경, 링", () => {
+    const out = highlightEdgeLabel(labeled(), "selected");
+    expect(out.labelStyle).toMatchObject({ fill: "var(--color-edge-selected)", fontSize: 11 });
+    expect(out.labelBgStyle).toMatchObject({
+      fill: "color-mix(in srgb, var(--color-edge-selected) 12%, white)",
+      stroke: "var(--color-edge-selected)",
+    });
+    expect(out.labelBgStyle?.boxShadow).toContain("var(--color-edge-selected)");
+  });
+  it("in/out: 선 색과 같은 색으로 글자·테두리·틴트, 링 없음", () => {
+    const inn = highlightEdgeLabel(labeled(), "in");
+    expect(inn.labelStyle?.fill).toBe("var(--color-edge-in)");
+    expect(inn.labelBgStyle?.stroke).toBe("var(--color-edge-in)");
+    expect(inn.labelBgStyle?.boxShadow).toBeUndefined();
+    const out = highlightEdgeLabel(labeled(), "out");
+    expect(out.labelStyle?.fill).toBe("var(--color-edge-out)");
+    expect(out.labelBgStyle?.fill).toBe("color-mix(in srgb, var(--color-edge-out) 12%, white)");
+  });
+  it("Yes/No 파스텔 라벨도 하이라이트 색이 덮는다(선과 동일 규칙)", () => {
+    const yes = styleEdgeLabelPill({ id: "e1", source: "a", target: "b", label: "Yes" } as Edge);
+    const out = highlightEdgeLabel(yes, "out");
+    expect(out.labelBgStyle?.stroke).toBe("var(--color-edge-out)");
+    expect(out.style?.stroke).toBe("var(--color-branch-yes)"); // 선 색은 호출자(applyFlowHighlight) 담당
   });
 });

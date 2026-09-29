@@ -164,6 +164,7 @@ import {
   branchKindOf,
   canSwapTypes,
   isCopyableNodeType,
+  highlightEdgeLabel,
   styleEdgeLabelPill,
   makeCopyLabel,
   sideFromHandleId,
@@ -7691,7 +7692,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       : new Set<string>();
     // 즉시 이웃(in/out) + F14 확장 경로(전방/후방) 하이라이트 — 메인·자식·게이트웨이·표시 끝 공용.
     // 후방 우선(edge-in). liftDim: 강조 시 반투명(자식 dim·게이트웨이)을 해제해 또렷하게.
+    // 라벨 알약도 선과 같은 색으로 강조(highlightEdgeLabel) — 선택 라벨은 CSS 선택색과 짝(2026-09-29).
     const applyFlowHighlight = (edge: Edge, liftDim = false): Edge => {
+      // 엣지 선택 시 selectedId는 비어 흐름 강조와 겹치지 않는다 — 선택 라벨이 우선.
+      if (edge.id === selectedEdgeId) {
+        return highlightEdgeLabel(edge, "selected");
+      }
       if (!selectedId) {
         return edge;
       }
@@ -7705,11 +7711,14 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (!stroke) {
         return edge;
       }
-      return {
-        ...edge,
-        style: { ...edge.style, stroke, strokeWidth: 2.5, ...(liftDim ? { opacity: 1 } : {}) },
-        markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
-      };
+      return highlightEdgeLabel(
+        {
+          ...edge,
+          style: { ...edge.style, stroke, strokeWidth: 2.5, ...(liftDim ? { opacity: 1 } : {}) },
+          markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+        },
+        isBackward ? "in" : "out",
+      );
     };
     // Ctrl+드래그 중엔 끌리는 노드의 엣지를 원위치 고스트(ctrl-ghost:id)로 앵커 — 엣지가 원본 자리에 남고
     // 반투명 사본만 커서를 따라간다(원본은 제자리 유지). ghostIds가 없으면 항등 변환.

@@ -659,6 +659,38 @@ export function styleEdgeLabelPill(edge: Edge): Edge {
   };
 }
 
+// 라벨 강조 종류 — 선의 선택색(edge-selected)·F14 흐름색(in/out)과 짝. 우선순위는 호출자가 정한다(선택 > in > out).
+export type EdgeLabelHighlight = "selected" | "in" | "out";
+
+const EDGE_LABEL_HIGHLIGHT_COLOR: Record<EdgeLabelHighlight, string> = {
+  selected: "var(--color-edge-selected)",
+  in: "var(--color-edge-in)",
+  out: "var(--color-edge-out)",
+};
+
+/**
+ * 라벨 알약을 선 하이라이트와 같은 색으로 강조 — 글자·테두리 = 선 색, 배경 12% 틴트.
+ * 선택은 선의 글로우와 짝인 2px 연한 링을 더한다. 선(stroke)은 건드리지 않는다(applyFlowHighlight·CSS 담당).
+ * Yes/No 파스텔도 덮는다 — 선이 그러하듯 강조 중엔 흐름 색이 우선(사용자 승인 2026-09-29).
+ */
+export function highlightEdgeLabel(edge: Edge, kind: EdgeLabelHighlight): Edge {
+  if (!edge.label) {
+    return edge;
+  }
+  const color = EDGE_LABEL_HIGHLIGHT_COLOR[kind];
+  return {
+    ...edge,
+    labelStyle: { ...EDGE_LABEL_STYLE, fill: color },
+    labelBgStyle: {
+      fill: `color-mix(in srgb, ${color} 12%, white)`,
+      stroke: color,
+      ...(kind === "selected"
+        ? { boxShadow: `0 0 0 2px color-mix(in srgb, ${color} 22%, transparent)` }
+        : {}),
+    },
+  };
+}
+
 // 엣지 핸들이 붙는 노드 변 — 엣지의 source/target 각각에 적용(2026-06-17)
 export type HandleSide = "left" | "right" | "top" | "bottom";
 
