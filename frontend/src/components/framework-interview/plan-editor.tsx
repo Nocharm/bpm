@@ -31,8 +31,9 @@ import { SearchSelect } from "@/components/search-select";
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none focus:border-accent";
 const LABEL = "text-fine text-ink-tertiary";
 const TILE_WIDTH = 200;
+// 높이 고정(68px = 제목 20 + 보조 2줄 16×2 + 상하 여백 16) — 요약·역할이 비어도 타일 높이가 같아 행이 들쭉날쭉하지 않다(사용자 요청 2026-09-29)
 const TILE =
-  "group relative flex w-[200px] flex-col gap-px rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
+  "group relative flex h-[68px] w-[200px] flex-col gap-px overflow-hidden rounded-md border py-2 pl-2.5 pr-6 text-left shadow-sm outline-none " +
   "transition-[background-color,border-color,opacity,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1";
 const TILE_QUIET = "border-hairline bg-surface hover:bg-surface-pearl";
 const TILE_SELECTED = "border-accent bg-accent-tint";
@@ -42,9 +43,13 @@ const TILE_LINKED = "border-accent/40 bg-accent-tint/40";
 const TILE_KEPT = "border-dashed border-hairline bg-surface-alt/60 opacity-70";
 // 삭제 예정 타일 — 붉은 테두리·옅은 붉은 바탕, 제목 취소선. 복구 버튼이 그립 자리에 온다
 const TILE_REMOVED = "border-error/60 bg-error/5";
-// 외부 참조 타일 — 점선 테두리(연계 캔버스의 외부 L6·플레이스홀더 룩과 같은 언어)
-const TILE_EXTERNAL = "border-dashed border-border-strong bg-surface-alt/50 hover:bg-surface-alt";
-const EXTERNAL_CHIP = "shrink-0 rounded-full border border-border-strong bg-surface px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
+// 외부 참조 타일 — 업무 체계(L5 하늘) 남색 톤의 점선 타일. 기존 유지(회색 점선)·일반(흰색)과 한눈에 갈린다(사용자 요청 2026-09-29)
+const EXTERNAL_TONE = "var(--color-canvas-l5-sky)";
+const TILE_EXTERNAL =
+  "border-dashed border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_55%,white)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_8%,white)] " +
+  "hover:bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_14%,white)]";
+const EXTERNAL_CHIP =
+  "shrink-0 rounded-full border border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_55%,white)] bg-surface px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-[var(--color-canvas-l5-sky)]";
 const LIBRARY_MIME = "application/bpm-process";  // 체계 피커(framework-tree-picker) 행 드래그 규약
 const MODE_CHIP_KEEP = "shrink-0 rounded-full border border-border-strong bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
 const MODE_CHIP_REVISE = "shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-accent";
@@ -565,17 +570,17 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
               <span className={EXTERNAL_CHIP} data-id={`fw-consult-plan-external-${flatIndex}`}>{t("fwConsult.externalChip")}</span>
             )}
           </span>
-          {isExternal && card.external && (
+          {/* 보조 2줄은 비어도 자리를 지킨다(높이 고정). 외부 타일은 첫 줄이 소속 L5 배지 */}
+          {isExternal && card.external ? (
             // 소속 L5 배지 — 연계 캔버스의 외부 L6 출처 배지와 같은 정보(이름). L6 미지정이면 이름 자체가 그것을 말한다
-            <span className="flex min-w-0 items-center gap-1 text-fine text-ink-secondary" data-id={`fw-consult-plan-external-origin-${flatIndex}`}>
-              <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <span className="flex min-h-4 min-w-0 items-center gap-1 text-fine" style={{ color: EXTERNAL_TONE }} data-id={`fw-consult-plan-external-origin-${flatIndex}`}>
+              <ExternalLink size={12} strokeWidth={1.5} className="shrink-0" />
               <span className="min-w-0 truncate">{card.external.l5_label || card.external.l5_code}</span>
             </span>
+          ) : (
+            <span className="min-h-4 truncate text-fine text-ink-secondary">{[card.owner_role, card.department].filter(Boolean).join(" · ") || "\u00A0"}</span>
           )}
-          {(card.owner_role || card.department) && (
-            <span className="truncate text-fine text-ink-secondary">{[card.owner_role, card.department].filter(Boolean).join(" · ")}</span>
-          )}
-          {card.summary && <span className="truncate text-fine text-ink-tertiary">{card.summary}</span>}
+          <span className="min-h-4 truncate text-fine text-ink-tertiary">{isExternal ? "\u00A0" : card.summary || "\u00A0"}</span>
         </div>
       </div>
     );
