@@ -1,16 +1,17 @@
 "use client";
 
 // 캠페인 ③ L6 연결 — 진입하면 AI가 흐름을 먼저 제안하고(오버레이 링), 편집 캔버스가 화면을 다 쓴다.
-// 피드백 채팅은 에디터 AI 채팅과 같은 ScopeWindow(끌기·크기 조절·최소화→우하단 칩)로 캔버스 위에 뜬다(사용자 요청 2026-09-24).
+// 피드백 채팅은 에디터 AI 채팅과 같은 ScopeWindow(끌기·크기 조절)로 캔버스 위에 뜨고, 최소화 칩도 에디터와 같은 AiChatMinButton이다(사용자 요청 2026-09-24·29).
 // L6 카드 목록은 좌측 보드가 이미 보여주므로 여기서는 반복하지 않는다. 캔버스 편집은 300ms 디바운스로 PUT /canvas.
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, MessageSquare } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import type { FwCanvas, FwInterviewSession, FwPlanCard } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { WindowGeom } from "@/lib/window-store";
 import { AiButton } from "@/components/ai-button";
+import { AiChatMinButton, type MinButtonPos } from "@/components/ai-chat-min-button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FeedbackChat } from "@/components/framework-interview/feedback-chat";
 import { RelationsCanvas } from "@/components/framework-interview/relations-canvas";
@@ -71,6 +72,8 @@ export function RelationsStep({
   // 채팅 창 기하 — 저장값이 없으면 캔버스 크기를 잰 뒤(bounds) 기본 기하로 시작한다
   const [chatGeom, setChatGeom] = useState<WindowGeom | null>(() => (typeof window === "undefined" ? null : readChatGeom()));
   const [bounds, setBounds] = useState({ w: 960, h: 640 });
+  // 최소화 칩 위치(캔버스 좌표) — 에디터 aiMinPos와 같은 기본값·비영속
+  const [minPos, setMinPos] = useState<MinButtonPos>({ x: 16, y: 16 });
   const canvasHostRef = useRef<HTMLDivElement>(null);
   const saveTimerRef = useRef<number | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
@@ -200,17 +203,21 @@ export function RelationsStep({
           onMention={handleMention}
         />
         {geom.minimized ? (
-          <button
-            type="button"
-            data-id="fw-consult-chat-restore"
+          // 에디터 AI 도우미와 같은 최소화 칩 — 끌어서 옮기고, 제자리 클릭이면 그 자리에서 창이 펴진다
+          <AiChatMinButton
+            pos={minPos}
+            bounds={bounds}
             title={t("fwConsult.feedbackTitle")}
-            aria-label={t("fwConsult.feedbackTitle")}
-            className="absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-md border border-accent-tint-border bg-gradient-to-br from-surface to-accent-tint text-accent opacity-80 shadow-md transition hover:opacity-100 hover:shadow-lg"
-            style={{ zIndex: CHAT_WINDOW_Z }}
-            onClick={() => updateChatGeom({ ...geom, minimized: false })}
-          >
-            <MessageSquare size={20} strokeWidth={1.5} />
-          </button>
+            zIndex={CHAT_WINDOW_Z}
+            dataId="fw-consult-chat-restore"
+            onMove={setMinPos}
+            onRestore={(pos) => updateChatGeom({
+              ...geom,
+              x: Math.min(Math.max(pos.x, 0), Math.max(0, bounds.w - geom.w)),
+              y: Math.min(Math.max(pos.y, 0), Math.max(0, bounds.h - geom.h)),
+              minimized: false,
+            })}
+          />
         ) : (
           <ScopeWindow
             title={t("fwConsult.feedbackTitle")}

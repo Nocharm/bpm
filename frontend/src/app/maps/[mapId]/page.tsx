@@ -31,6 +31,7 @@ import { ScopeWindow } from "@/components/scope-window";
 import { loadWindowGeoms, saveWindowGeoms, type WindowGeom } from "@/lib/window-store";
 import { recordRecentMap } from "@/lib/recent-maps";
 
+import { AiChatMinButton } from "@/components/ai-chat-min-button";
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import { FrameworkBrowseModal } from "@/components/framework-browse-modal";
 import { FrameworkChip } from "@/components/framework-chip";
@@ -1285,11 +1286,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const previewRef = useRef<"ai" | "csv" | null>(null);
   // Import 탭 라벨용 원산지 — 프리뷰 상태 슬롯(previewSource="csv")은 CSV/AI graph가 공유한다
   const [importOrigin, setImportOrigin] = useState<"csv" | "ai" | null>(null);
-  // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그
+  // 최소화 시 플로팅 스파클 버튼 위치(캔버스 좌표) — 화면 어디든 드래그(AiChatMinButton)
   const [aiMinPos, setAiMinPos] = useState({ x: 16, y: 16 });
-  const aiMinDragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(
-    null,
-  );
   // AI 헤더 — 답변 키워드 자동 타이틀(수동 편집 시 고정) + 채팅 폰트 상대 배율
   const [aiTitle, setAiTitle] = useState("");
   const [aiTitleEditing, setAiTitleEditing] = useState(false);
@@ -10273,50 +10271,23 @@ function MapEditor({ mapId }: { mapId: number }) {
           />
           {/* 최소화된 AI 창 — 정사각 스파클 아이콘, 화면 어디든 드래그. 클릭 시 복원 (R10d5) */}
           {aiOpen && windowGeom[AI_WINDOW_KEY]?.minimized && (
-            <button
-              type="button"
+            <AiChatMinButton
+              pos={aiMinPos}
+              bounds={bounds}
               title={t("ai.title")}
-              aria-label={t("ai.title")}
-              className="absolute z-[1095] flex h-11 w-11 touch-none items-center justify-center rounded-md border border-accent-tint-border bg-gradient-to-br from-surface to-accent-tint text-accent opacity-70 shadow-md transition hover:opacity-100 hover:shadow-lg"
-              style={{ left: aiMinPos.x, top: aiMinPos.y }}
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                aiMinDragRef.current = {
-                  px: event.clientX,
-                  py: event.clientY,
-                  x: aiMinPos.x,
-                  y: aiMinPos.y,
-                  moved: false,
-                };
-              }}
-              onPointerMove={(event) => {
-                const drag = aiMinDragRef.current;
-                if (!drag) return;
-                if (Math.abs(event.clientX - drag.px) + Math.abs(event.clientY - drag.py) > 4) {
-                  drag.moved = true;
-                }
-                setAiMinPos({
-                  x: Math.min(Math.max(drag.x + (event.clientX - drag.px), 0), Math.max(0, bounds.w - 44)),
-                  y: Math.min(Math.max(drag.y + (event.clientY - drag.py), 0), Math.max(0, bounds.h - 44)),
+              zIndex={1095}
+              dataId="ai-chat-restore"
+              onMove={setAiMinPos}
+              // 제자리 클릭이면 창 복원 — 버튼 위치에서 펴지되 캔버스 안에 들어오게 클램프
+              onRestore={(pos) => {
+                setWindowGeom((map) => {
+                  const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
+                  const x = Math.min(Math.max(pos.x, 0), Math.max(0, bounds.w - base.w));
+                  const y = Math.min(Math.max(pos.y, 0), Math.max(0, bounds.h - base.h));
+                  return { ...map, [AI_WINDOW_KEY]: { ...base, x, y, minimized: false } };
                 });
               }}
-              onPointerUp={(event) => {
-                const drag = aiMinDragRef.current;
-                aiMinDragRef.current = null;
-                event.currentTarget.releasePointerCapture(event.pointerId);
-                // 드래그가 아니면(제자리 클릭) 창 복원 — 버튼 위치에서 펴지되 캔버스 안에 들어오게 클램프
-                if (drag && !drag.moved) {
-                  setWindowGeom((map) => {
-                    const base = map[AI_WINDOW_KEY] ?? aiDefaultGeom(bounds);
-                    const x = Math.min(Math.max(aiMinPos.x, 0), Math.max(0, bounds.w - base.w));
-                    const y = Math.min(Math.max(aiMinPos.y, 0), Math.max(0, bounds.h - base.h));
-                    return { ...map, [AI_WINDOW_KEY]: { ...base, x, y, minimized: false } };
-                  });
-                }
-              }}
-            >
-              <Sparkles size={20} strokeWidth={1.5} />
-            </button>
+            />
           )}
           {menu && (
             <ContextMenu
