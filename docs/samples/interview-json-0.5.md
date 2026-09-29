@@ -2,7 +2,7 @@
 
 컨설턴트 전달용. 0.4(흐름 그래프)와의 델타만 다룬다 — 나머지 키는 0.4와 동일하며 `docs/qa/interview-import-field-map.md`가 착지를 설명한다.
 설계: `2026-09-07-interview-external-refs-design.md`(폐기 — git history).
-`actions[].input`/`output`은 문자열 배열이다(한 항목 = 한 줄) — 앞 활동의 output 항목을 다음 활동 input에 같은 표기로 다시 쓰면 캔버스에서 IO가 자동으로 연결된다.
+`actions[].input`/`output`은 문자열 배열이다(한 항목 = 한 줄) — 앞 활동의 output 항목을 다음 활동 input에 같은 표기로 다시 쓰면 캔버스에서 IO가 자동으로 연결된다. 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이라 같은 활동의 양쪽에 같은 항목을 적지 않는다(어댑터가 warning으로 잡는다). L6 전체의 입력물·산출물은 `fields.input_data`/`output_data`에 두고, 활동에는 첫 활동 input·마지막 활동 output으로만 넣는다.
 
 ## 1. 왜 필요한가
 

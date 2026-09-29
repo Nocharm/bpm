@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-29 — L6 활동별 IO 규칙·동일 IO 경고 (dev)
+
+- **원인** — AI 컨설턴트 L6 행에서 같은 활동의 input/output이 같거나 L6 전체 입력물·산출물이 전 활동에 복사되는 현상은 코드 버그가 아니라 프롬프트 빈틈: 설문은 IO를 L6 단위(입력물·산출물 주관식)로만 묻고, 행 작성 계약엔 "앞 output을 다음 input에 다시 쓰면 이어진다"는 체인 힌트만 있어 활동별 IO 의미가 없었다(정정·기존 L5 학습이 `[현재 등록된 내용]`으로 되먹임). 정규화·조립·어댑터는 값을 옮기기만 한다(로컬 가짜 AI 582 액션 중 0건).
+- **조치** — 행 작성·행 피드백 계약(+외부 AI 프롬프트 `interview-json-prompt.ts`·`docs/samples/interview-json-0.5.md`)에 활동별 IO 규칙 추가: input=받는 것/output=만드는 것, 같은 활동 양쪽에 같은 항목 금지, L6 전체 IO는 `fields.input_data/output_data`+첫 활동 input·마지막 활동 output만. 어댑터 `_build_nodes`가 같은 활동의 동일 IO를 warning으로 리포트(값은 그대로 착지, handoff는 그대로 넘기는 활동이라 제외 — 샘플 calibration-l5 "결과 인계").
+
 ## 2026-09-29 — 엣지 라벨 하이라이트·선택 선 색 복구 (dev)
 
 - **라벨 알약도 선과 같이 강조** — 선의 선택색·F14 in/out 색은 `<path>`에만 걸리고 라벨(`EdgeLabelRenderer` HTML 포털)은 정적 알약 스타일이라 빠져 있었다. `lib/canvas` `highlightEdgeLabel`(선택=edge-selected+2px 링 / in=teal / out=orange, 글자·테두리=선 색, 배경 12% 틴트)을 `applyFlowHighlight` 안에서 태워 메인·펼침 자식·게이트웨이 공용. Yes/No 파스텔은 선과 같은 규칙으로 강조 중엔 흐름 색이 우선.

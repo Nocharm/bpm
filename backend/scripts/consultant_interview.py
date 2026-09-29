@@ -311,6 +311,15 @@ def _build_nodes(
         # 예외 variant는 흐름 분기 대신 색으로만 분리 — 분기 자체는 relations 엣지가 그린다
         variant = _clean(action.get("variant"))
         output = _join_multi(action.get("output"))
+        input_text = _join_multi(action.get("input"))
+        # 같은 활동의 input과 output이 같은 집합이면 모델이 L6 단위 IO를 뭉뚱그린 신호 — 값은 그대로
+        # 착지시키되 리포트에 드러낸다(순서·공백 무관, 실사고 2026-09-29). handoff는 받은 것을 그대로
+        # 넘기는 활동이라 같은 게 정상(샘플 calibration-l5 "결과 인계").
+        if kind != "handoff" and input_text and set(input_text.split("\n")) == set(output.split("\n")):
+            issues.append(AdapterIssue(
+                "warning", apath,
+                "input equals output - same items on both sides of one action (입력물과 산출물이 같음 - 활동 단위로 나눠 적어야 함)",
+            ))
         # dataForm은 산출물의 자료 형식 — 전달물은 산출물이 항상 하나라 첫 줄의 폼으로 착지
         # (노드 레벨 data_form 폐기, 사용자 결정 2026-09-03). 산출물이 없으면 폼도 버린다
         data_form = _truncate(_clean(action.get("dataForm")), 50, apath, "dataForm", issues)
@@ -323,7 +332,7 @@ def _build_nodes(
             # input/output은 고유 필드로 승격, system 원문은 폴백에 이중 기록
             # (라이브러리화 전 표시 무회귀 — design 2026-08-19 §4.1). str 외에 list가 오면
             # 개행 join — IO 복수 시맨틱과 일치.
-            input=_join_multi(action.get("input")),
+            input=input_text,
             output=output,
             output_forms=data_form if output else "",
             # 폴백은 100자 컷 전 원문 기준 — 대표(system)와 상한이 달라 별도 절단

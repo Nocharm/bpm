@@ -155,6 +155,16 @@ def test_registry_exposes_the_feedback_contracts() -> None:
         assert defaults[key]
 
 
+def test_row_contracts_state_per_action_io_rules() -> None:
+    # 활동별 IO 의미 규칙이 없으면 모델이 L6 단위 입력물·산출물을 전 활동에 복사하거나 같은 활동의
+    # input/output에 같은 항목을 적는다(실사고 2026-09-29). 작성·피드백 계약 모두 규칙을 싣는다.
+    for text in (c.L6_ROW_DRAFTER_CONTRACT, c.ROW_FEEDBACK_CONTRACT):
+        assert "input은 그 활동이 받는 것" in text and "output은 그 활동이 만들어 내는 것" in text
+        assert "같은 활동의 input과 output에 같은 항목" in text
+        assert "—" not in text  # AI 프롬프트에 긴 대시 금지
+    assert "fields.input_data" in c.L6_ROW_DRAFTER_CONTRACT and "마지막 활동" in c.L6_ROW_DRAFTER_CONTRACT
+
+
 def test_questionnaire_contract_targets_ambiguity_and_asks_for_why() -> None:
     # 설문의 초점은 값 채우기가 아니라 절차의 애매한 지점 확정(사용자 결정 2026-09-24) — 문항마다 why 근거
     text = c.L6_QUESTIONNAIRE_CONTRACT

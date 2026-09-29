@@ -228,6 +228,8 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
 - 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.
 - input/output은 항목 배열입니다. 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 캔버스에서 자동으로 이어집니다.
+- 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이다. 같은 활동의 input과 output에 같은 항목을 적지 말 것.
+- 설문의 입력물·산출물 답은 L6 전체의 것이다: fields.input_data와 fields.output_data에 적고, 활동에는 첫 활동의 input과 마지막 활동의 output으로만 넣는다. 중간 활동에는 그 활동이 실제로 만든 것만 적고, 만든 것이 없으면 빈 배열로 둔다.
 - [현재 등록된 내용]이 있으면 그것을 바탕으로 답에서 바뀐 부분만 고치고 나머지는 그대로 유지한다.
 - 다른 설명 없이 JSON 한 개만:
 {"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action","input":[],"output":[],"system":""}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
@@ -260,6 +262,7 @@ ROW_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 - 키 집합·seq 규칙은 유지: actions의 seq는 1부터 중복 없이, relations.edges의 src/dst는 actions의 seq 정수.
 - 피드백이 가리키지 않은 부분은 그대로 두세요.
 - owner는 넣지 마세요(실명 금지). input/output은 항목 배열.
+- 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이다. 같은 활동의 input과 output에 같은 항목을 적지 말 것.
 - 다른 설명 없이 JSON 한 개만:
 {"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action"}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
 

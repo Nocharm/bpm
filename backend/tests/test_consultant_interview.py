@@ -340,6 +340,33 @@ def test_unknown_key_warning_with_path() -> None:
     assert hits
 
 
+def test_action_with_identical_input_and_output_warns() -> None:
+    # 모델이 IO를 뭉뚱그려 같은 활동의 input/output에 같은 항목을 적으면 리포트에 드러낸다 (2026-09-29)
+    data = _interview()
+    data["rows"][0]["actions"][0]["input"] = ["요청서", "규격서"]
+    data["rows"][0]["actions"][0]["output"] = ["규격서", "요청서 "]  # 순서·공백 무관하게 같은 집합
+    res = convert_interview(data)
+    assert not res.has_error()
+    hits = [i for i in res.issues
+            if i.severity == "warning" and i.path == "rows[0].actions[0]" and "input equals output" in i.message]
+    assert len(hits) == 1
+    # 값은 그대로 착지한다 — 경고는 표시용이지 소거가 아니다
+    node = next(n for n in res.maps[0].nodes if n.code == "a01")
+    assert node.input == "요청서\n규격서" and node.output == "규격서\n요청서"
+
+
+def test_action_with_different_or_empty_io_does_not_warn() -> None:
+    data = _interview()
+    data["rows"][0]["actions"][0]["input"] = ["요청서"]
+    data["rows"][0]["actions"][0]["output"] = ["검토 메모"]
+    data["rows"][0]["actions"][1]["input"] = None
+    data["rows"][0]["actions"][1]["output"] = None
+    # handoff는 받은 것을 그대로 넘기는 활동 — 같은 항목이 정상
+    data["rows"][0]["actions"][2].update({"kind": "handoff", "input": ["기록지"], "output": ["기록지"]})
+    res = convert_interview(data)
+    assert not any("input equals output" in i.message for i in res.issues)
+
+
 def test_missing_l5_node_code_is_file_error() -> None:
     data = _interview()
     data["l5"]["nodeCode"] = "99-99"
