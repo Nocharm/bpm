@@ -16,7 +16,7 @@ import {
 import { formatKstShort } from "@/lib/datetime";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
-const ACCEPT = ".pdf,.docx,.xlsx,.txt,.md";
+const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.txt,.md";
 
 const OUTLINE_BTN =
   "inline-flex items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 " +
@@ -82,7 +82,7 @@ export function KbManagePanel({ onToast }: { onToast: (message: string) => void 
           <h2 className="text-body-strong text-ink">Knowledge base library</h2>
           <p className="text-caption text-ink-muted">
             Organization documents the AI consultant can cite during interviews. Supported: pdf,
-            docx, xlsx, txt, md (max 20MB).
+            docx, pptx, xlsx, txt, md (max 20MB).
           </p>
         </div>
         <button className={OUTLINE_BTN} onClick={() => void refresh()} data-id="kb-refresh">

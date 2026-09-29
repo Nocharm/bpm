@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-29 — 첨부 문서 pptx 허용 (dev)
+
+- 첨부 허용 포맷에 `.pptx` 추가 — 2026-07-23 최초 파싱 구현 때 5종(pdf/docx/xlsx/txt/md)으로 시작한 뒤 배제 결정 없이 굳어 있었고, 사내 보고 자료가 PPT 중심이라 컨설턴트 첨부 실효성이 컸다. 백엔드 `parsing.py` 단일 계약(`ALLOWED_EXTENSIONS`+`_parse_pptx`: 슬라이드 순서·텍스트 프레임·표·발표자 노트, `python-pptx==1.0.2`)에 얹고 FE 3표면(맵 인터뷰·L5 계획 단계·설정 KB) accept·안내 문구를 맞췄다. 구 `.ppt`/`.doc`/`.xls` 바이너리는 라이브러리가 못 읽어 계속 제외.
+
 ## 2026-09-28 — 홈 대시보드 맵 호버 연동 표식 교체 (feat/linked-hover-effect)
 
 - 연동 강조를 배경(alt)에서 좌측 2px 액센트 바(inset box-shadow)로 교체하고 마우스가 올라간 행 자신은 표식에서 제외 — 호버 배경(pearl)과 같은 계열이라 어느 행에 마우스가 있는지 구분되지 않아 오류처럼 보였다(사용자 선택: 액센트 바, 대안 이름 색·점선 링·링크 아이콘은 기각). 6개 섹션(최근 열람·내 부서·내 문서·결재 대기·최근 변경·점유 목록)이 `dashboard-hover.tsx` 상수 하나를 공유해 일괄 적용. 검증 `pw-shot-home-linked-hover.mjs`(admin.sys, 7/7).

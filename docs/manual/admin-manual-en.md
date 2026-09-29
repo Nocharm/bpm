@@ -287,7 +287,7 @@ The viewer builds its table of contents from `##` and `###` headings, so structu
 
 ### Knowledge Base (Settings → Content → Knowledge base)
 
-A library of **organization documents the AI consultant can cite during interviews**. Upload SOPs and guides to ground its answers. Supported formats are pdf, docx, xlsx, txt, and md (max 20 MB per file); add files with **Upload** and reload the list with **Refresh**. The knowledge base works only when both `AI_ENABLED` and the embedding server `EMBED_URL` (section 14) are set.
+A library of **organization documents the AI consultant can cite during interviews**. Upload SOPs and guides to ground its answers. Supported formats are pdf, docx, pptx, xlsx, txt, and md (max 20 MB per file); add files with **Upload** and reload the list with **Refresh**. The knowledge base works only when both `AI_ENABLED` and the embedding server `EMBED_URL` (section 14) are set.
 
 ### AI Prompts (Settings → Content → AI prompts)
 

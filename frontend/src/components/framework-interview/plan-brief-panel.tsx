@@ -41,7 +41,7 @@ export function PlanBriefPanel({ brief, onBriefChange, attachments, busy, onAtta
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <span className="text-caption text-ink">{t("fwConsult.attachments")}</span>
-          <input ref={fileRef} type="file" multiple className="hidden" accept=".pdf,.docx,.xlsx,.txt,.md" data-id="fw-consult-attach-input"
+          <input ref={fileRef} type="file" multiple className="hidden" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md" data-id="fw-consult-attach-input"
                  onChange={(e) => { const files = [...(e.target.files ?? [])]; if (files.length) onAttach(files); e.target.value = ""; }} />
           <button type="button" className={`${SECONDARY} ml-auto`} data-id="fw-consult-attach" disabled={busy} onClick={() => fileRef.current?.click()}>
             <Paperclip size={14} strokeWidth={1.5} />{t("fwConsult.attach")}

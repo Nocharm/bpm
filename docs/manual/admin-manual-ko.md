@@ -287,7 +287,7 @@ PUT /api/manual
 
 ### 지식기반 (설정 → 콘텐츠 → Knowledge base)
 
-**AI 컨설턴트(인터뷰)가 인용할 조직 문서**를 올리는 라이브러리입니다. SOP·가이드 등을 업로드하면 인터뷰 답변의 근거로 활용됩니다. 지원 형식은 pdf·docx·xlsx·txt·md(파일당 최대 20MB)이며, **Upload**로 추가하고 **Refresh**로 목록을 갱신합니다. 지식기반은 `AI_ENABLED`와 임베딩 서버 `EMBED_URL`(14장)이 모두 설정된 경우에만 동작합니다.
+**AI 컨설턴트(인터뷰)가 인용할 조직 문서**를 올리는 라이브러리입니다. SOP·가이드 등을 업로드하면 인터뷰 답변의 근거로 활용됩니다. 지원 형식은 pdf·docx·pptx·xlsx·txt·md(파일당 최대 20MB)이며, **Upload**로 추가하고 **Refresh**로 목록을 갱신합니다. 지식기반은 `AI_ENABLED`와 임베딩 서버 `EMBED_URL`(14장)이 모두 설정된 경우에만 동작합니다.
 
 ### AI 프롬프트 (설정 → 콘텐츠 → AI prompts)
 

@@ -1,10 +1,12 @@
-"""첨부 파싱 — docx/xlsx 실물 왕복, txt 인코딩 폴백, 예산 클리핑."""
+"""첨부 파싱 — docx/pptx/xlsx 실물 왕복, txt 인코딩 폴백, 예산 클리핑."""
 
 import io
 
 import pytest
 from docx import Document
 from openpyxl import Workbook
+from pptx import Presentation
+from pptx.util import Inches
 
 from app.interview.parsing import (
     ALLOWED_EXTENSIONS,
@@ -39,6 +41,40 @@ def test_parse_docx_extracts_paragraphs() -> None:
     assert "요청서 작성" in text
 
 
+def _pptx_bytes(slides: list[list[str]], table: list[list[str]] | None = None, notes: str = "") -> bytes:
+    prs = Presentation()
+    blank = prs.slide_layouts[6]
+    for texts in slides:
+        slide = prs.slides.add_slide(blank)
+        for i, text in enumerate(texts):
+            box = slide.shapes.add_textbox(Inches(1), Inches(1 + i), Inches(4), Inches(0.8))
+            box.text_frame.text = text
+        if table:
+            shape = slide.shapes.add_table(len(table), len(table[0]), Inches(1), Inches(4), Inches(4), Inches(1))
+            for r, row in enumerate(table):
+                for c, val in enumerate(row):
+                    shape.table.cell(r, c).text = val
+        if notes:
+            slide.notes_slide.notes_text_frame.text = notes
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def test_parse_pptx_extracts_slides_tables_and_notes() -> None:
+    data = _pptx_bytes([["구매 프로세스 개요", "1. 요청 접수"], ["2. 승인"]], table=[["단계", "담당"], ["검토", "구매팀"]], notes="발표자 메모")
+    text = parse_attachment("deck.pptx", data)
+    assert "--- slide 1 ---" in text and "--- slide 2 ---" in text
+    assert text.index("요청 접수") < text.index("2. 승인")
+    assert "단계\t담당" in text
+    assert "[notes] 발표자 메모" in text
+
+
+def test_parse_corrupt_pptx_raises_parse_error() -> None:
+    with pytest.raises(ParseError):
+        parse_attachment("broken.pptx", b"not a zip")
+
+
 def test_parse_xlsx_extracts_cells_tab_separated() -> None:
     text = parse_attachment("list.xlsx", _xlsx_bytes([["단계", "담당"], ["접수", "구매팀"]]))
     assert "단계\t담당" in text
@@ -61,7 +97,7 @@ def test_parse_corrupt_docx_raises_parse_error() -> None:
 
 
 def test_allowed_extensions() -> None:
-    assert ALLOWED_EXTENSIONS == {".pdf", ".docx", ".xlsx", ".txt", ".md"}
+    assert ALLOWED_EXTENSIONS == {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md"}
 
 
 def test_clip_to_budget_headers_and_even_cut() -> None:

@@ -41,7 +41,7 @@ const SCROLL_DOWN_AT = 160; // 바닥에서 이만큼(px) 이상 올라가면 �
 const TIP_KEYS = ["ai.tip1", "ai.tip2", "ai.tip3", "ai.tip4", "ai.tip5"] as const;
 
 // 첨부 칩 확장자 아이콘 — 색은 토큰만(브랜드색 대응: 시트=added, 프레젠테이션·PDF=changed, 문서=accent).
-// 현재 업로드 가능 포맷(pdf/docx/xlsx/txt/md) 외 확장자도 표시용으로 미리 매핑.
+// 현재 업로드 가능 포맷(pdf/docx/pptx/xlsx/txt/md) 외 확장자도 표시용으로 미리 매핑.
 const ATTACH_ICONS: Array<{ exts: string[]; icon: LucideIcon; cls: string }> = [
   { exts: ["xlsx", "xlsm", "xls", "csv"], icon: FileSpreadsheet, cls: "text-added" },
   { exts: ["ppt", "pptx"], icon: FileChartPie, cls: "text-changed" },
@@ -59,7 +59,7 @@ function getAttachmentIcon(filename: string): { icon: LucideIcon; cls: string } 
 }
 
 // 업로드 가능 판정 — 백엔드 계약과 동일(parsing.ALLOWED_EXTENSIONS / MAX_ATTACHMENT_BYTES)
-const ALLOWED_EXTS = new Set(["pdf", "docx", "xlsx", "txt", "md"]);
+const ALLOWED_EXTS = new Set(["pdf", "docx", "pptx", "xlsx", "txt", "md"]);
 const MAX_ATTACH_BYTES = 20 * 1024 * 1024;
 const COLLAPSED_CHIPS = 5; // 접힘 시 노출 첨부 칩 수(대략 두 줄)
 const REVIEW_LIST_CAP = 8; // 리뷰 모달 섹션당 표시 상한 — 초과분은 "+N more" 요약 행
@@ -918,7 +918,7 @@ export function InterviewPanel({
                 </div>
                 <ul className="flex w-full flex-col gap-1 rounded-sm bg-surface-alt p-2 text-left">
                   {[
-                    { icon: FileText, text: "Formats: PDF, DOCX, XLSX, TXT, MD" },
+                    { icon: FileText, text: "Formats: PDF, DOCX, PPTX, XLSX, TXT, MD" },
                     { icon: HardDrive, text: "Max size: 20MB per file" },
                     { icon: FolderOpen, text: "Multiple files or a whole folder at once" },
                   ].map((line) => (
@@ -998,7 +998,7 @@ export function InterviewPanel({
       <input
         ref={fileRef}
         type="file"
-        accept=".pdf,.docx,.xlsx,.txt,.md"
+        accept=".pdf,.docx,.pptx,.xlsx,.txt,.md"
         multiple
         className="hidden"
         onChange={(e) => {

@@ -1,9 +1,9 @@
-"""첨부 문서 파싱 — PDF/DOCX/XLSX/TXT/MD → 텍스트, 컨텍스트 예산 클리핑 (design 2026-07-23)."""
+"""첨부 문서 파싱 — PDF/DOCX/PPTX/XLSX/TXT/MD → 텍스트, 컨텍스트 예산 클리핑 (design 2026-07-23)."""
 
 import io
 from pathlib import PurePosixPath
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".txt", ".md"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md"}
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 업로드 상한 20MB
 
 
@@ -26,6 +26,27 @@ def _parse_docx(data: bytes) -> str:
     for table in doc.tables:
         for row in table.rows:
             parts.append("\t".join(cell.text.strip() for cell in row.cells))
+    return "\n".join(parts)
+
+
+def _parse_pptx(data: bytes) -> str:
+    """슬라이드 순서대로 텍스트 프레임·표를 모은다 — 도형 순서는 z-order라 흐름도형은 뒤섞일 수 있다."""
+    from pptx import Presentation
+
+    prs = Presentation(io.BytesIO(data))
+    parts: list[str] = []
+    for index, slide in enumerate(prs.slides, start=1):
+        parts.append(f"--- slide {index} ---")
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                parts.extend(p.text for p in shape.text_frame.paragraphs if p.text.strip())
+            if shape.has_table:
+                for row in shape.table.rows:
+                    parts.append("\t".join(cell.text.strip() for cell in row.cells))
+        if slide.has_notes_slide and slide.notes_slide.notes_text_frame is not None:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                parts.append(f"[notes] {notes}")
     return "\n".join(parts)
 
 
@@ -59,6 +80,8 @@ def parse_attachment(filename: str, data: bytes) -> str:
             return _parse_pdf(data)
         if ext == ".docx":
             return _parse_docx(data)
+        if ext == ".pptx":
+            return _parse_pptx(data)
         if ext == ".xlsx":
             return _parse_xlsx(data)
         return _parse_text(data)
