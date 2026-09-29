@@ -16,7 +16,7 @@ NON_SYSADMIN = "user.lee"
 def test_prompt_defaults_cover_all_keys() -> None:
     defaults = get_prompt_defaults()
     assert set(defaults) == set(PROMPT_KEYS)
-    assert len(PROMPT_KEYS) == 15
+    assert len(PROMPT_KEYS) == 13
     # 전 항목이 비어있지 않은 실제 프롬프트 문자열
     assert all(isinstance(value, str) and value.strip() for value in defaults.values())
 
@@ -99,12 +99,6 @@ def test_overrides_reach_prompt_builders() -> None:
         "scope", "ko", {}, "", "", [], "hi", overrides={"interviewer_contract": "CUSTOM-INT"}
     )
     assert interviewer[0]["content"].startswith("CUSTOM-INT")
-
-    word = build_interviewer_messages(
-        "scope", "ko", {}, "", "", [], "hi", mode="word",
-        overrides={"interviewer_word_addendum": "\nCUSTOM-ADDENDUM"},
-    )
-    assert "CUSTOM-ADDENDUM" in word[0]["content"]
 
     drafter = build_drafter_messages(
         "activities", "ko", {}, None, "", "표준", overrides={"drafter_contract": "CUSTOM-DRAFT"}

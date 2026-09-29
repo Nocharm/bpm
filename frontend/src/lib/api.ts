@@ -1,7 +1,5 @@
 // 백엔드 REST 클라이언트. /api는 nginx(운영) 또는 next.config rewrites(로컬)가 backend로 프록시.
 
-import type { SectionEntry } from "./word-import";
-
 export type VersionStatus =
   | "draft"
   | "pending"
@@ -85,13 +83,8 @@ export interface MapSummary {
   owning_department?: string | null;
   // 낡은 부서·담당자 참조 수 — 홈 배지·Issues 필터 (design 2026-09-09)
   stale_ref_count?: number;
-  // Word 맵 모드 & 임포트 카탈로그 — 목록 응답(MapOut)에도 포함되어 홈 분리(processMaps/wordMaps)에 필요 (design 2026-07-24 §2)
+  // 맵 모드 — normal | framework(L5 연계 캔버스). 홈 분리(lib/map-mode)에 필요
   mode?: string;
-  doc_name?: string;
-  doc_sections?: SectionEntry[];
-  // 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 (design 2026-07-24 §5)
-  doc_imported_at?: string | null;
-  doc_generated_at?: string | null;
   // 컨설턴트 업무 체계 카테고리 연결 — null=미연결(레거시). category_path는 응답 시 서버가 조립(비영속) (Phase 2)
   category_id?: number | null;
   category_path?: string | null;
@@ -167,8 +160,6 @@ export interface GraphNode {
   // 참조 링크 — 노드당 1개, 빈 값 허용 (CSV import design 2026-07-06)
   url?: string;
   url_label?: string;
-  // Word 맵 섹션 노드(node_type==="section")의 문서 내부 앵커 (design 2026-07-18)
-  section_anchor?: string;
   pos_x: number;
   pos_y: number;
   sort_order: number;
@@ -392,7 +383,6 @@ export function createMap(
   description: string,
   visibility: MapSummary["visibility"],
   owningDepartment: string,
-  word?: { docName: string; sections: SectionEntry[] },
 ): Promise<MapDetail> {
   return request<MapDetail>("/maps", {
     method: "POST",
@@ -401,7 +391,6 @@ export function createMap(
       description,
       visibility,
       owning_department: owningDepartment,
-      ...(word ? { mode: "word", doc_name: word.docName, doc_sections: word.sections } : {}),
     }),
   });
 }
@@ -409,12 +398,10 @@ export function createMap(
 // 맵 복사 — 새 맵의 초기 draft에 그래프 복제, 원본 오너 알림 (F12 재편)
 // versionId: 원본 버전 선택(상태 무관) — 미지정이면 최신 게시본. 게시 이력 없는 맵은 409.
 // retireSource: 오너 전용 — 원본을 "(Pending deletion)" rename 후 휴지통행 + 승인자·editor+ 알림
-// convertToNormal: word 맵 승격 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
 export function copyMap(
   mapId: number,
   name?: string,
   opts?: {
-    convertToNormal?: boolean;
     owningDepartment?: string;
     versionId?: number;
     visibility?: "public" | "private";
@@ -425,7 +412,6 @@ export function copyMap(
     method: "POST",
     body: JSON.stringify({
       ...(name ? { name } : {}),
-      ...(opts?.convertToNormal ? { convert_to_normal: true } : {}),
       ...(opts?.owningDepartment ? { owning_department: opts.owningDepartment } : {}),
       ...(opts?.versionId ? { version_id: opts.versionId } : {}),
       ...(opts?.visibility ? { visibility: opts.visibility } : {}),
@@ -459,22 +445,6 @@ export function updateMap(
     method: "PATCH",
     body: JSON.stringify(patch),
   });
-}
-
-// Word 맵 문서 재임포트 — 카탈로그(doc_name + 섹션 목록) 교체. (design 2026-07-18, 엔드포인트 A3)
-export function setWordDoc(
-  mapId: number,
-  body: { doc_name: string; sections: SectionEntry[] },
-): Promise<MapDetail> {
-  return request<MapDetail>(`/maps/${mapId}/word-doc`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
-// 완결 문서 생성 성공 기록 — 서버는 doc_generated_at만 스탬프 (design 2026-07-24 §5)
-export function markWordDocGenerated(mapId: number): Promise<MapSummary> {
-  return request<MapSummary>(`/maps/${mapId}/word-doc/generated`, { method: "POST" });
 }
 
 // 이름 변경 요청 — editor는 즉시 적용 대신 pending ApprovalRequest(owner 승인 필요). owner/sysadmin은 updateMap 직접 사용.
@@ -2390,8 +2360,6 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
-  // section_anchor는 단순 passthrough — AI가 비우면 mergeNode(csv-import.ts)의 pick이 기존값을 보존
-  section_anchor?: string | null;
 }
 
 export interface AiNode {
@@ -2694,8 +2662,6 @@ export interface InterviewState {
   version_id: number;
   status: string; // active | completed | abandoned
   current_stage: string;
-  // 인터뷰 모드 — normal | word (design 2026-07-26 §2)
-  mode?: string;
   // 확정 facts — 아웃라인 패널(수집된 정보) 렌더용 (speed redesign)
   facts?: Record<string, Record<string, unknown>>;
   lang: string;

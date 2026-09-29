@@ -56,11 +56,10 @@ interface FieldItem {
 /**
  * 충돌 기반 오프셋 필드 — 행(저장 Y 오름차순)을 위에서부터 처리하며, 각 행의 필요 밀림량
  * (X 구간이 겹치는 위쪽 푸셔의 dispBottom + min(savedGap, MIN_GAP) − top)의 max를 행 전체에
- * 부여한다. 밀리거나 커진 노드는 다시 푸셔가 되어 아래 행으로 연쇄한다. section은 제외.
+ * 부여한다. 밀리거나 커진 노드는 다시 푸셔가 되어 아래 행으로 연쇄한다.
  */
 export function buildHeightShiftField(nodes: AppNode[]): HeightShiftField {
   const items: FieldItem[] = nodes
-    .filter((node) => node.data.nodeType !== "section")
     .map((node) => {
       const baseH = nodeSizeOf(node.data.nodeType).h;
       const dispH = getDisplayHeight(node);

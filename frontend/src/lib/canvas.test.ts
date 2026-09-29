@@ -342,8 +342,7 @@ describe("isCopyableNodeType", () => {
 });
 
 describe("normalizeNodeType (persisted node_type → live nodeType)", () => {
-  it("recognizes section like subprocess (no fallback to process)", () => {
-    expect(normalizeNodeType("section")).toBe("section");
+  it("recognizes subprocess (no fallback to process)", () => {
     expect(normalizeNodeType("subprocess")).toBe("subprocess");
   });
 
@@ -366,9 +365,9 @@ describe("makeCopyLabel", () => {
 });
 
 describe("buildNodeData", () => {
-  it("섹션 노드는 label=번호·nodeType=section·section_anchor를 갖고 기본필드가 모두 채워진다", () => {
-    const d = buildNodeData("section", "6.1", { section_anchor: "_Toc9" });
-    expect(d).toMatchObject({ label: "6.1", nodeType: "section", section_anchor: "_Toc9" });
+  it("extra로 특화 필드를 덮어쓰고 기본필드가 모두 채워진다", () => {
+    const d = buildNodeData("process", "6.1", { url: "https://x" });
+    expect(d).toMatchObject({ label: "6.1", nodeType: "process", url: "https://x" });
     // 기본 파라미터 필드가 빠지지 않았는지(노드-속성 체크리스트) — 백엔드 소거 방지
     expect(d).toMatchObject({
       description: "", color: "", assignee: "", department: "", system: "",
@@ -376,11 +375,10 @@ describe("buildNodeData", () => {
       groupIds: [], hasChildren: false,
     });
   });
-  it("일반 노드는 section_anchor 없이 생성된다", () => {
+  it("일반 노드는 label·nodeType이 그대로 생성된다", () => {
     const d = buildNodeData("process", "Step");
     expect(d.nodeType).toBe("process");
     expect(d.label).toBe("Step");
-    expect(d.section_anchor).toBeUndefined();
   });
 });
 

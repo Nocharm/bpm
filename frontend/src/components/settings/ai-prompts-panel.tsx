@@ -30,14 +30,6 @@ const PROMPT_LABELS: Record<string, { name: MessageKey; hint: MessageKey }> = {
     name: "aiPrompts.name.drafter_contract",
     hint: "aiPrompts.hint.drafter_contract",
   },
-  interviewer_word_addendum: {
-    name: "aiPrompts.name.interviewer_word_addendum",
-    hint: "aiPrompts.hint.interviewer_word_addendum",
-  },
-  drafter_word_addendum: {
-    name: "aiPrompts.name.drafter_word_addendum",
-    hint: "aiPrompts.hint.drafter_word_addendum",
-  },
   extract_contract: {
     name: "aiPrompts.name.extract_contract",
     hint: "aiPrompts.hint.extract_contract",

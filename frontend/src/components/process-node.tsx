@@ -744,7 +744,6 @@ const DEFAULT_COLORS: Record<ProcessNodeType, string> = {
   start: "#84a07c", // sage
   end: "#c2849a", // rose
   subprocess: "#7c6adc", // violet
-  section: "#909098", // stone
 };
 
 // data.color 우선, 없으면 타입별 기본 stroke — 미니맵 등에서 실제 노드 색 재사용.
@@ -1596,15 +1595,6 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
       {commentCount > 0 && <UnresolvedCommentBadge count={commentCount} />}
       {data.url && <UrlBadge url={data.url} />}
       <NodeWarningBadge data={data} />
-      {data.staleAnchor && (
-        <span
-          title="Section no longer exists in the imported document"
-          className="absolute -right-1.5 -top-1.5 rounded-full bg-surface text-changed"
-          data-id="node-stale-anchor-badge"
-        >
-          <AlertTriangle size={16} strokeWidth={1.5} />
-        </span>
-      )}
       {showCopyBadge && <CopyDragBadge />}
       {/* 좌/우 핸들 = 제목 라인 높이(py-2 8px + text-sm 줄높이 20의 절반 = 18px).
           터미널(알약)은 단일 라인 중앙 정렬이라 기본 50% 유지 */}

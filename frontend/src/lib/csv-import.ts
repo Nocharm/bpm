@@ -77,7 +77,7 @@ const HEADER_COLUMNS = [
   "name", "description", "assignee", "role", "department", "system", "duration", "touch_time",
   "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
   "input", "input_flags", "output", "start_condition", "end_condition",
-  "url", "url_label", "section_anchor", "next",
+  "url", "url_label", "next",
 ] as const;
 type HeaderColumn = (typeof HEADER_COLUMNS)[number];
 
@@ -102,7 +102,6 @@ const MAX_LEN: Record<
   fte: 50,
   url: 500,
   url_label: 100,
-  section_anchor: 200, // backend models.py Node.section_anchor String(200) 미러
 };
 
 // 십진 파라미터 컬럼(duration·touch_time 제외 — 별도 H.MM 검증) — 에러 문구는 사람이 읽는 라벨로.
@@ -212,7 +211,6 @@ const NODE_DEFAULTS = {
   gmp: "",  // CSV/AI 표면 제외 — 검토값, 병합은 기존값 보존 (design 2026-08-20)
   url: "",
   url_label: "",
-  section_anchor: "",
   pos_x: 0,
   pos_y: 0,
   group_ids: [] as string[],
@@ -306,7 +304,6 @@ const mergeNode = (
   // 통화 전환은 편도 pick이 아니라 반대쪽을 함께 비우는 병합 — resolveCostFields(finding: 한쪽만
   // pick하면 기존 반대쪽 통화값이 안 지워져 두 통화가 동시에 채워진 채로 저장 시도돼 422 루프에 빠진다)
   const cost = resolveCostFields(allowed.cost_krw ?? "", allowed.cost_usd ?? "", existing.cost_krw ?? "", existing.cost_usd ?? "");
-  const mergedSectionAnchor = pick(next.section_anchor ?? "", existing.section_anchor ?? "");
   const mergedSystem = resolveSystemFields(next.system, existing.system, existing.system_fallback ?? "", catalogs);
   return {
     node: {
@@ -317,10 +314,7 @@ const mergeNode = (
           ? existing.node_type
           : next.node_type === "start" || next.node_type === "end"
             ? next.node_type
-            // 앵커가 살아남으면 섹션 유지 — 서버 _sanitize_word_graph 승격 규칙의 FE 미러(AI가 타입을 process로 에코해도 링크 보존)
-            : mergedSectionAnchor !== ""
-              ? "section"
-              : next.node_type,
+            : next.node_type,
       // 기존 링크 우선, 없으면 후보의 링크 채택(P2 유사 SP 수락 스레딩)
       linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
@@ -355,7 +349,6 @@ const mergeNode = (
             : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
-      section_anchor: mergedSectionAnchor,
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
@@ -544,7 +537,6 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     end_condition: cellOf(r, "end_condition"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
-    section_anchor: cellOf(r, "section_anchor"),
     nextRaw: cellOf(r, "next"),
     line: r.line,
   }));
@@ -561,7 +553,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       continue;
     }
     names.add(row.name);
-    for (const col of ["name", "role", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label", "section_anchor"] as const) {
+    for (const col of ["name", "role", "system", "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte", "url", "url_label"] as const) {
       if (row[col].length > MAX_LEN[col]) {
         errors.push({ line: row.line, message: `${col} exceeds ${MAX_LEN[col]} characters` });
       }
@@ -710,7 +702,6 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         end_condition: row.end_condition,
         url: row.url,
         url_label: row.url_label,
-        section_anchor: row.section_anchor,
         sort_order: i + 1,
       }, catalogs);
       // 셀이 제공됐다면(전 줄 무효·전 줄 required 포함) 병합 결과에 확정 반영 — 전량 무효가 ""로
@@ -987,7 +978,6 @@ export function buildGraphFromAiProposal(
       end_condition: attr?.end_condition ?? "",
       url: attr?.url ?? "",
       url_label: attr?.url_label ?? "",
-      section_anchor: attr?.section_anchor ?? "",
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,

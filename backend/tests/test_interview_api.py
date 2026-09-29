@@ -39,40 +39,6 @@ def test_state_out_smoke() -> None:
     assert state.current_stage == "scope"
 
 
-def test_create_on_word_map_sets_word_mode(client: TestClient, monkeypatch) -> None:
-    """word 맵에서 세션 생성 시 mode='word' + word 인사말 (design 2026-07-26 §2)."""
-    _enable_ai(monkeypatch)
-    m = client.post(
-        "/api/maps",
-        json={
-            "name": f"iv-word-{uuid4().hex[:8]}",
-            "owning_department": "Owning Anchor Division",
-            "mode": "word",
-            "doc_name": "sop.docx",
-            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
-        },
-    ).json()
-    version_id = m["versions"][0]["id"]
-    state = client.post(
-        f"/api/maps/{m['id']}/interviews", json={"version_id": version_id}
-    ).json()
-    assert state["mode"] == "word"
-    assert state["current_stage"] == "scope"
-    assert "순서도" in state["messages"][0]["content"]
-
-
-def test_create_on_normal_map_keeps_normal_mode(client: TestClient, monkeypatch) -> None:
-    _enable_ai(monkeypatch)
-    m = client.post(
-        "/api/maps",
-        json={"name": f"iv-n-{uuid4().hex[:8]}", "owning_department": "Owning Anchor Division"},
-    ).json()
-    state = client.post(
-        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
-    ).json()
-    assert state["mode"] == "normal"
-
-
 # === API Tests ===
 
 _iv_seq = 0
@@ -933,31 +899,12 @@ def test_draw_options_include_tone_lint(client: TestClient, monkeypatch) -> None
 
 
 def test_greeting_offers_fast_track_option(client: TestClient, monkeypatch) -> None:
-    """normal 모드 인사말에 패스트트랙 보기 — word는 제외 (design 2026-07-29 §2)."""
+    """인사말에 패스트트랙 보기 (design 2026-07-29 §2)."""
     _enable_ai(monkeypatch)
     state = _iv_session(client)
     greeting = state["messages"][0]
     assert "문서로 바로 그리기" in (greeting["payload"] or {}).get("options", [])
     client.delete(f"/api/interviews/{state['id']}")
-
-
-def test_word_greeting_has_no_fast_track_option(client: TestClient, monkeypatch) -> None:
-    _enable_ai(monkeypatch)
-    m = client.post(
-        "/api/maps",
-        json={
-            "name": f"iv-word-ft-{uuid4().hex[:8]}",
-            "owning_department": "Owning Anchor Division",
-            "mode": "word",
-            "doc_name": "sop.docx",
-            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
-        },
-    ).json()
-    state = client.post(
-        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
-    ).json()
-    options = (state["messages"][0]["payload"] or {}).get("options", [])
-    assert "문서로 바로 그리기" not in options
 
 
 def test_fast_forward_jumps_to_review_and_signals_draw(client: TestClient, monkeypatch) -> None:
@@ -1007,27 +954,12 @@ def test_fast_forward_preserves_collected_facts(client: TestClient, monkeypatch)
 
 
 def test_fast_forward_guards(client: TestClient, monkeypatch) -> None:
-    """word 모드 400 · review에서 400."""
+    """review에서 400."""
     _enable_ai(monkeypatch)
-    m = client.post(
-        "/api/maps",
-        json={
-            "name": f"iv-word-ff-{uuid4().hex[:8]}",
-            "owning_department": "Owning Anchor Division",
-            "mode": "word", "doc_name": "sop.docx",
-            "doc_sections": [{"anchor": "_Toc1", "title": "재고", "number": "1", "level": 1}],
-        },
-    ).json()
-    word_state = client.post(
-        f"/api/maps/{m['id']}/interviews", json={"version_id": m["versions"][0]["id"]}
-    ).json()
-    assert client.post(f"/api/interviews/{word_state['id']}/fast-forward").status_code == 400
-
     state = _iv_session(client)
     client.post(f"/api/interviews/{state['id']}/fast-forward")
     assert client.post(f"/api/interviews/{state['id']}/fast-forward").status_code == 400  # 이미 review
     client.delete(f"/api/interviews/{state['id']}")
-    client.delete(f"/api/interviews/{word_state['id']}")
 
 
 _DRAW_DUP = json.dumps({

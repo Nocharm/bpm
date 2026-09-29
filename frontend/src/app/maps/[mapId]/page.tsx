@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FileText, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -103,8 +103,6 @@ import { makeOptimisticRef } from "@/lib/framework-connect";
 import { deriveSlotState, isRecentHandover } from "@/lib/framework-slot-state";
 import { hasSlotHistory, L5NodeInfoPanel, type L5NodeInfo } from "@/components/l5-node-info-panel";
 import { FrameworkTreePicker } from "@/components/framework-tree-picker";
-import { SectionPanel } from "@/components/section-panel";
-import { WordCreateModal } from "@/components/word-create-modal";
 import { GroupBox } from "@/components/group-box";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { PromptDialog } from "@/components/prompt-dialog";
@@ -219,7 +217,6 @@ import {
   openLinkageMap,
   listComments,
   listLibraryProcesses,
-  markWordDocGenerated,
   publishVersion,
   rejectVersion,
   renameVersion,
@@ -227,7 +224,6 @@ import {
   requestCheckout,
   withdrawCheckoutRequest,
   saveGraph,
-  setWordDoc,
   submitVersion,
   transferCheckout,
   updateComment,
@@ -257,9 +253,6 @@ import {
 } from "@/lib/api";
 import { humanizeApiError, isCanvasRepointedError, PERMISSION_PENDING_DETAIL_PREFIX } from "@/lib/api-errors";
 import { exportCanvasPng } from "@/lib/export";
-import { exportCanvasWord } from "@/lib/word-export";
-import { getStaleSectionNodeIds } from "@/lib/word-map-home";
-import type { SectionEntry } from "@/lib/word-import";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
@@ -348,14 +341,6 @@ const GROUP_TITLE_GAP = 26; // 박스 상단에 타이틀바를 얹을 추가 �
 const EXTENT_MARGIN = 600; // 우/하단 패닝·노드 여백 — 콘텐츠 성장 여유
 const EXTENT_TOPLEFT_MARGIN = 120; // 좌/상단 여백 — 작게(좌상단 고정: 위/왼쪽으로 콘텐츠가 가운데로 밀리지 않게)
 const MIN_ZOOM = 0.2; // 최소 줌 — translateExtent 우하단 확장(pane/MIN_ZOOM)이 이 값과 일치해야 줌아웃 centering 방지
-// Word 산출물 도형 크기 — 전 노드·분기 통일(사용자 요구: 1.5cm×3cm). 캔버스 px 기준(word-export layout이 ×9525로 EMU 변환).
-// 3cm≈113.4px(가로) · 1.5cm≈56.7px(세로). 정확 수치·엣지 라우팅은 시각 검토로 튜닝 예정(design §7, F1 수동 확인).
-const WORD_SHAPE_W = 1080000 / 9525; // 3cm(너비) 정확값 — ×9525(EMU_PER_PX)=1,080,000 EMU
-const WORD_SHAPE_H = 540000 / 9525; // 1.5cm(높이) — 540,000 EMU
-// Word 산출물 1페이지 가용영역(A4·여백 2.5cm 제외 = word-export PAGE_*_EMU) − 내보내기 패딩(2×20px).
-// 캔버스에 이 크기의 경계를 그려, 노드가 이 안이면 산출물이 1페이지에 들어감을 알린다(크기 감각).
-const WORD_PAGE_W_PX = 5760720 / 9525 - 40; // ≈ 565px
-const WORD_PAGE_H_PX = 8892540 / 9525 - 40; // ≈ 894px
 // 엣지 라벨(분기 Yes/No/기타 등) — 디자인 토큰으로 알약 스타일(서피스 배경 + hairline 테두리 + ink 텍스트)
 const INLINE_GATEWAY_OPACITY = 0.55; // 인라인 펼침 게이트웨이(A→Start, End→후속) — 연결을 또렷이
 // 불러오기 실행 결과별 안내 토스트 — 어떤 소유권 판정이 났는지 알려준다 (io-linking §2)
@@ -737,7 +722,6 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       gmp: node.gmp ?? "",
       url: node.url ?? "",
       urlLabel: node.url_label ?? "",
-      section_anchor: node.section_anchor ?? "",
       groupIds: node.group_ids ?? [],
       hasChildren: node.has_children ?? false,
       scopeId,
@@ -842,8 +826,6 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     // 링크 — 재생성 시 모델이 에코한 url 보존 (ai_prompt 계약 규칙 ⑦)
     url: attr?.url ?? "",
     url_label: attr?.url_label ?? "",
-    // 문서 섹션 앵커 — word 맵 제안 스레딩(AI 변환 2곳 대칭 — csv-import buildGraphFromAiProposal과 동일)
-    section_anchor: attr?.section_anchor ?? "",
     pos_x: 0,
     pos_y: 0,
     sort_order: 0,
@@ -900,7 +882,6 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
       gmp: node.data.gmp ?? "",
       url: node.data.url ?? "",
       url_label: node.data.urlLabel ?? "",
-      section_anchor: node.data.section_anchor ?? "",
       pos_x: node.position.x,
       pos_y: node.position.y,
       sort_order: index,
@@ -1035,16 +1016,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // 좌측 사이드바 접힘 / 우측 인스펙터 열림·폭(로컬 영속, 220~480 clamp)
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  // Word 맵 전용 — 섹션 패널 열림 + 맵의 문서 모드/카탈로그(임포트 시 채워짐, design 2026-07-18)
-  const [sectionsOpen, setSectionsOpen] = useState(false);
-  const [wordReimportOpen, setWordReimportOpen] = useState(false);
   const [mapMode, setMapMode] = useState<string>("normal");
   // 승인요청 모달의 가시성 동봉 옵션이 반대값을 계산하려면 현재 가시성이 필요 — getMap 로드 시 채움.
   const [mapVisibility, setMapVisibility] = useState<"public" | "private">("private");
-  const [docName, setDocName] = useState<string>("");
-  const [docSections, setDocSections] = useState<SectionEntry[]>([]);
-  const completeDocPickerRef = useRef<HTMLInputElement>(null); // 완결 문서 생성 — 원본 .docx 재선택 파일 입력
-  const isWordMap = mapMode === "word";
   // L5 연계 캔버스 — subprocess-only 팔레트·라이브 draft 우선·트리 피커 (design 2026-08-28)
   const isFrameworkMap = mapMode === "framework";
   // L5 캔버스 배경 — 기본 차콜("L5 화면" 즉시 인지 + 파스텔 노드 대비), 우상단 L5 태그로 토글.
@@ -1064,18 +1038,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     setL5CanvasBg(next);
   };
   const [frameworkPickerOpen, setFrameworkPickerOpen] = useState(false);
-  // stale 앵커 — 재임포트 후 카탈로그에서 사라진 앵커를 참조하는 섹션 노드 (design 2026-07-24 §5)
-  const staleAnchorIds = useMemo(() => {
-    if (!isWordMap) return new Set<string>();
-    return getStaleSectionNodeIds(
-      nodes.map((n) => ({
-        id: n.id,
-        nodeType: n.data.nodeType,
-        sectionAnchor: n.data.section_anchor,
-      })),
-      docSections,
-    );
-  }, [isWordMap, nodes, docSections]);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   // 서버·클라이언트 첫 렌더 모두 320으로 결정적 — localStorage 복원은 마운트 후 effect에서 (hydration mismatch 방지)
   const [inspectorWidth, setInspectorWidth] = useState(360);
@@ -2707,8 +2669,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         setCanDecideSlot(me.is_sysadmin || (detail.can_decide_slot ?? false));
         setMapMode(detail.mode ?? "normal");
         setMapVisibility(detail.visibility);
-        setDocName(detail.doc_name ?? "");
-        setDocSections(detail.doc_sections ?? []);
         setVersions(detail.versions);
         setUsername(me.username);
         setAiEnabled(me.ai_enabled);
@@ -5006,49 +4966,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [readOnly, reactFlow, createLinkNodeAt, setUnregDrop, toSavedPoint, isFrameworkMap, setOptimisticRefs],
   );
 
-  // Word 맵 섹션 패널에서 섹션을 캔버스로 드롭 — label=섹션 번호, section_anchor=문서 내부 앵커(읽기전용 링크 대상).
-  const handleSectionDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      if (readOnly) return;
-      const anchor = e.dataTransfer.getData("application/bpm-section");
-      if (!anchor) return;
-      const number = e.dataTransfer.getData("application/bpm-section-number");
-      const title = e.dataTransfer.getData("application/bpm-section-title");
-      // 라벨 = "번호 제목" — 내보내기 시 첫 공백토큰(번호)만 앵커 링크, 제목은 plain (design §8)
-      const label = [number, title].filter(Boolean).join(" ");
-      pushHistory();
-      const id = genId();
-      const point = toSavedPoint(reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
-      const position = findFreeSpot(point.x - NODE_WIDTH / 2, point.y - NODE_HEIGHT / 2);
-      setNodes((current) => [
-        ...current.map((node) => (node.selected ? { ...node, selected: false } : node)),
-        {
-          id,
-          type: "process",
-          position,
-          selected: true,
-          className: "bpm-node-flash",
-          data: buildNodeData("section", label, { section_anchor: anchor }),
-        },
-      ]);
-      setSelectedId(id);
-      setSelectedEdgeId(null);
-      scheduleAutoSave();
-      flashNode(id);
-    },
-    [
-      readOnly,
-      reactFlow,
-      findFreeSpot,
-      pushHistory,
-      setNodes,
-      scheduleAutoSave,
-      flashNode,
-      toSavedPoint,
-    ],
-  );
-
   // 현재 맵에 이미 링크된 서브프로세스 대상 맵 id 집합 — 라이브러리 패널 비활성화 + 재추가 차단에 공용.
   const linkedMapIds = useMemo(
     () =>
@@ -6124,97 +6041,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     [buildExportFileName],
   );
 
-  // Word 내보내기/완결문서 생성 공용 — 캔버스 노드·엣지를 export 모델로(word맵은 고정크기+섹션앵커).
-  const buildWordExportModel = () => {
-    const exportNodes = nodesRef.current.map((node) => {
-      const size = isWordMap
-        ? { w: WORD_SHAPE_W, h: WORD_SHAPE_H }
-        : nodeSizeOf(node.data.nodeType);
-      return {
-        id: node.id,
-        title: node.data.label,
-        nodeType: node.data.nodeType,
-        x: node.position.x,
-        y: node.position.y,
-        w: size.w,
-        h: size.h,
-        url: node.data.url,
-        urlLabel: node.data.urlLabel,
-        sectionAnchor: node.data.section_anchor,
-      };
-    });
-    const nodeById = new Map(exportNodes.map((n) => [n.id, n]));
-    const exportEdges = edgesRef.current.map((edge) => {
-      let sourceSide = sideFromHandleId(edge.sourceHandle, "right");
-      let targetSide = sideFromHandleId(edge.targetHandle, "left");
-      // Word 맵: 캔버스 핸들이 폴백(right/left)으로 어긋나는 문제 회피 — 노드 상대 위치로 변을 유도해
-      // 실제 레이아웃(위/아래·좌/우)과 연결 변을 일치시킨다. 일반 맵은 기존 핸들 기반 유지.
-      const s = nodeById.get(edge.source);
-      const t = nodeById.get(edge.target);
-      if (isWordMap && s && t) {
-        const dx = t.x + t.w / 2 - (s.x + s.w / 2);
-        const dy = t.y + t.h / 2 - (s.y + s.h / 2);
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          sourceSide = dx >= 0 ? "right" : "left";
-          targetSide = dx >= 0 ? "left" : "right";
-        } else {
-          sourceSide = dy >= 0 ? "bottom" : "top";
-          targetSide = dy >= 0 ? "top" : "bottom";
-        }
-      }
-      return {
-        sourceId: edge.source,
-        targetId: edge.target,
-        label: typeof edge.label === "string" && edge.label ? edge.label : undefined,
-        sourceSide,
-        targetSide,
-      };
-    });
-    return { exportNodes, exportEdges };
-  };
-
-  const wordDocFileName = (suffix: string) => {
-    const versionLabel = versions.find((version) => version.id === versionId)?.label ?? "";
-    const sanitize = (text: string) => text.replace(/[^\w가-힣.-]+/g, "-");
-    const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-    return `${sanitize(mapName)}_${sanitize(versionLabel)}${suffix}_${stamp}.docx`;
-  };
-
-  const handleExportWord = () => {
-    try {
-      const { exportNodes, exportEdges } = buildWordExportModel();
-      // word 맵은 fit-to-page 끔 → 도형 정확히 1.5×3cm(스프레드 시 페이지 초과 가능).
-      exportCanvasWord(exportNodes, exportEdges, wordDocFileName(""), !isWordMap);
-    } catch (err) {
-      setStatus(humanizeApiError(err, t));
-    }
-  };
-
-  // 완결 문서 생성 — 사용자가 원본 .docx 선택 → 사본에 합성 책갈피 주입 + 끝에 순서도 페이지 → 다운로드.
-  const handleCompleteDocPicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // 같은 파일 재선택 허용
-    if (!file) return;
-    try {
-      const originalDocx = new Uint8Array(await file.arrayBuffer());
-      const { exportNodes, exportEdges } = buildWordExportModel();
-      const { generateCompleteWordDoc } = await import("@/lib/word-doc-generator");
-      const blob = await generateCompleteWordDoc(originalDocx, exportNodes, exportEdges);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = wordDocFileName("_complete");
-      link.click();
-      URL.revokeObjectURL(url);
-      // 생성 성공 기록 — 실패해도 다운로드는 이미 완료라 흐름을 막지 않는다 (design 2026-07-24 §5)
-      void markWordDocGenerated(mapId).catch((err) =>
-        console.warn("word-doc generated stamp failed", err),
-      );
-    } catch (err) {
-      setStatus(humanizeApiError(err, t));
-    }
-  };
-
   // ── 컨텍스트 메뉴 ─────────────────────────────────────
 
   const openMenu = useCallback(
@@ -6377,21 +6203,12 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       // 서브프로세스 라이브러리 열기 — 툴바 버튼·전역 S 단축키와 동일하게 읽기전용에서도 동작(조회 전용 진입점).
       const libraryItem: ContextMenuItem = {
-        label: isWordMap
-          ? "Add section"
-          : isFrameworkMap
-            ? t("framework.pickerOpen")
-            : t("library.open"),
+        label: isFrameworkMap ? t("framework.pickerOpen") : t("library.open"),
         icon: Network,
         // accel 필수 — 전역 S 핸들러는 메뉴 열림 중 무시(!menu)라, 우클릭 후 S는 메뉴 가속기가 처리
         accel: "s",
         shortcut: "S",
-        onSelect: () =>
-          isWordMap
-            ? setSectionsOpen(true)
-            : isFrameworkMap
-              ? setFrameworkPickerOpen(true)
-              : setLibraryOpen(true),
+        onSelect: () => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true)),
       };
       if (readOnly) {
         return [moreItem, { divider: true }, libraryItem];
@@ -6709,7 +6526,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     recolorGroup,
     applyAutoLayout,
     reactFlow,
-    isWordMap,
     promptOpenLinkedMap,
     t,
   ]);
@@ -7588,14 +7404,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           data: ghost.data,
         }))
       : [];
-    let result: AppNode[] = [...mapped, ...ancestorContextNodes, ...ghostNodes];
-    // stale 앵커 배지 — 재임포트로 사라진 앵커를 참조하는 섹션 노드에 표시 플래그 주입 (design 2026-07-24 §5)
-    if (staleAnchorIds.size > 0) {
-      result = result.map((n) =>
-        staleAnchorIds.has(n.id) ? { ...n, data: { ...n.data, staleAnchor: true } } : n,
-      );
-    }
-    return result;
+    return [...mapped, ...ancestorContextNodes, ...ghostNodes];
   }, [
     nodes,
     childNodes,
@@ -7607,7 +7416,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     injectSubEnds,
     ctrlDragActive,
     ctrlDragGhosts,
-    staleAnchorIds,
     ioHighlight,
     gmpPreview,
     renderYOffsets,
@@ -8747,13 +8555,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         event.code === "KeyS" &&
         !menu
       ) {
-        fire(() =>
-          isWordMap
-            ? setSectionsOpen(true)
-            : isFrameworkMap
-              ? setFrameworkPickerOpen(true)
-              : setLibraryOpen(true),
-        );
+        fire(() => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true)));
         return;
       }
       // Ctrl 조합 — 그룹 생성 / PNG 내보내기 / 노드 복사·붙여넣기 (undo/redo·검색은 별도 핸들러)
@@ -8831,7 +8633,6 @@ function MapEditor({ mapId }: { mapId: number }) {
     handleExportPng,
     handleCopy,
     handlePaste,
-    isWordMap,
     isFrameworkMap,
   ]);
 
@@ -9228,7 +9029,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           <span className="mx-0.5 h-5 w-px bg-divider" />
           <button
             className={topIconBtn}
-            onClick={() => (isWordMap ? setSectionsOpen((open) => !open) : isFrameworkMap ? setFrameworkPickerOpen((open) => !open) : setLibraryOpen((open) => !open))}
+            onClick={() => (isFrameworkMap ? setFrameworkPickerOpen((open) => !open) : setLibraryOpen((open) => !open))}
             title={t("library.toggle")}
             aria-label={t("library.toggle")}
           >
@@ -9441,7 +9242,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       {!readOnly && (
         <EditorToolbar
           onAddNode={(type) => handleAddNode(null, type)}
-          onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
+          onOpenLibrary={() => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
           onAutoLayout={(dir) => {
             // 선택 노드 2개 이상이면 그 부분만 자동정렬, 아니면 전체 (컨텍스트 메뉴와 동일)
             const ids = new Set(
@@ -9513,15 +9314,6 @@ function MapEditor({ mapId }: { mapId: number }) {
             onFocusLinkedNode={focusLinkedNode}
           />
         )}
-        {sectionsOpen && (
-          <SectionPanel
-            sections={docSections}
-            docName={docName}
-            onReimport={() => setWordReimportOpen(true)}
-            onClose={() => setSectionsOpen(false)}
-            staleCount={staleAnchorIds.size}
-          />
-        )}
         {frameworkPickerOpen && (
           <FrameworkTreePicker
             currentMapId={mapId}
@@ -9560,36 +9352,12 @@ function MapEditor({ mapId }: { mapId: number }) {
             onClose={() => setConnectTarget(null)}
           />
         )}
-        {wordReimportOpen && (
-          <WordCreateModal
-            onClose={() => setWordReimportOpen(false)}
-            onContinue={(outcome) => {
-              setWordReimportOpen(false);
-              void (async () => {
-                try {
-                  const updated = await setWordDoc(mapId, {
-                    doc_name: outcome.docName,
-                    sections: outcome.sections,
-                  });
-                  setDocName(updated.doc_name ?? "");
-                  setDocSections(updated.doc_sections ?? []);
-                  showToast("Sections re-imported");
-                } catch {
-                  showToast("Re-import failed");
-                }
-              })();
-            }}
-          />
-        )}
         <div
           ref={canvasContainerRef}
           // select-none — 박스선택 드래그가 노드 라벨·아웃라인 텍스트를 파랗게 선택하는 UI 오류 방지(입력창은 globals에서 예외)
           className={`relative flex-1 select-none overflow-hidden ${isFrameworkMap ? "bg-surface" : "bg-canvas"}`}
           onDragOver={(e) => {
-            if (
-              e.dataTransfer.types.includes("application/bpm-process") ||
-              e.dataTransfer.types.includes("application/bpm-section")
-            ) {
+            if (e.dataTransfer.types.includes("application/bpm-process")) {
               e.preventDefault();
               e.dataTransfer.dropEffect = "copy";
             }
@@ -9597,8 +9365,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           onDrop={(e) => {
             if (e.dataTransfer.types.includes("application/bpm-process")) {
               void handleLibraryDrop(e);
-            } else if (e.dataTransfer.types.includes("application/bpm-section")) {
-              void handleSectionDrop(e);
             }
           }}
         >
@@ -10125,37 +9891,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                           size={1.8}
                           color="var(--color-canvas-dot)"
                         />
-                      )}
-                      {/* Word 맵 1페이지 경계 — 크기 감각용(노드가 이 안이면 산출물 1페이지). ViewportPortal=flow 좌표(팬/줌 정합). */}
-                      {isWordMap && (
-                        <ViewportPortal>
-                          <div
-                            data-id="word-page-boundary"
-                            style={{
-                              position: "absolute",
-                              left: 0,
-                              top: 0,
-                              width: WORD_PAGE_W_PX,
-                              height: WORD_PAGE_H_PX,
-                              border: "1.5px dashed var(--color-accent)",
-                              borderRadius: 2,
-                              pointerEvents: "none",
-                            }}
-                          >
-                            <span
-                              style={{
-                                position: "absolute",
-                                top: 3,
-                                left: 5,
-                                fontSize: 11,
-                                color: "var(--color-accent)",
-                                opacity: 0.65,
-                              }}
-                            >
-                              1 page
-                            </span>
-                          </div>
-                        </ViewportPortal>
                       )}
                       {/* 미니맵 — 줌아웃으로 통째로 채워지면 페이드 아웃(줌인 복귀). 패널 자체에 opacity를 줘
                           z-index(패널 레이어)를 보존 → 노드/캔버스 위·클릭(시점 이동) 유효. 뷰포트 채움 오버레이 포함. */}
@@ -11755,36 +11490,6 @@ function MapEditor({ mapId }: { mapId: number }) {
                         {t("inspector.exportCsv")}
                       </button>
                     </div>
-                    {isWordMap && (
-                      <>
-                        <button
-                          type="button"
-                          data-id="inspector-generate-complete-doc"
-                          onClick={() => completeDocPickerRef.current?.click()}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
-                          title="Pick the original SOP .docx - injects section bookmarks and appends the flowchart page."
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          Generate complete document
-                        </button>
-                        <button
-                          type="button"
-                          data-id="inspector-export-word"
-                          onClick={handleExportWord}
-                          className="flex w-full items-center justify-center gap-1.5 rounded-sm border border-hairline px-3 py-2 text-caption font-semibold text-ink-secondary hover:bg-surface-alt"
-                        >
-                          <FileText size={16} strokeWidth={1.5} />
-                          {t("inspector.exportWord")}
-                        </button>
-                        <input
-                          ref={completeDocPickerRef}
-                          type="file"
-                          accept=".docx"
-                          className="hidden"
-                          onChange={handleCompleteDocPicked}
-                        />
-                      </>
-                    )}
                   </div>
                 }
                 approvalSlot={
@@ -12081,7 +11786,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                 }
                 readOnly={readOnly}
                 onAddNode={() => handleAddNode(null, "process")}
-                onOpenLibrary={() => (isWordMap ? setSectionsOpen(true) : isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
+                onOpenLibrary={() => (isFrameworkMap ? setFrameworkPickerOpen(true) : setLibraryOpen(true))}
                 onAutoArrange={() => applyNodesTransform((current) => layoutWithDagre(current, edgesRef.current))}
                 nodeCount={nodes.length}
                 edgeCount={edges.length}

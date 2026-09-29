@@ -291,34 +291,6 @@ describe("url_label column", () => {
   });
 });
 
-// section_anchor — Word 맵 섹션 노드의 문서 내부 앵커. url과 같은 pick 병합 규칙(빈 값=보존),
-// url_label과 달리 연쇄 소거는 없는 단순 passthrough (design 2026-07-18 Task C1).
-describe("section_anchor column", () => {
-  it("carries section_anchor onto the node from the CSV column", () => {
-    const out = buildGraphFromCsv(
-      "Name,System,Duration,Section_Anchor,Next\nA,,,doc_sec_1,\n",
-    );
-    expect(out.errors).toEqual([]);
-    const a = out.graph?.nodes.find((n) => n.title === "A");
-    expect(a?.section_anchor).toBe("doc_sec_1");
-  });
-
-  it("merge: empty cell keeps the existing section_anchor (pick semantics)", () => {
-    const base = baseGraph();
-    base.nodes[1] = { ...base.nodes[1], section_anchor: "old_anchor" };
-    const o = mergeOf("Name,Section_Anchor\nReview request,\n", base);
-    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
-    expect(node.section_anchor).toBe("old_anchor");
-  });
-
-  it("merge: non-empty cell overwrites the existing section_anchor", () => {
-    const base = baseGraph();
-    base.nodes[1] = { ...base.nodes[1], section_anchor: "old_anchor" };
-    const o = mergeOf("Name,Section_Anchor\nReview request,new_anchor\n", base);
-    const node = o.graph!.nodes.find((n) => n.id === "a1")!;
-    expect(node.section_anchor).toBe("new_anchor");
-  });
-});
 
 // ── 설명 · 담당자(login_id) · 부서 컬럼 ──────────────────────────
 
@@ -1109,37 +1081,6 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(node?.linked_map_id).toBe(7);
   });
 
-  it("threads attributes.section_anchor into generated nodes (word map drafter)", () => {
-    const outcome = buildGraphFromAiProposal({
-      nodes: [
-        aiNode("s", "Start", "start"),
-        aiNode("a", "1 재고", "section", { section_anchor: "_Toc1" }),
-        aiNode("e", "End", "end"),
-      ],
-      edges: [
-        { source: "s", target: "a", label: "" },
-        { source: "a", target: "e", label: "" },
-      ],
-      groups: [],
-    });
-    const section = outcome.graph?.nodes.find((n) => n.title === "1 재고");
-    expect(section?.node_type).toBe("section");
-    expect(section?.section_anchor).toBe("_Toc1");
-  });
-
-  // finding 1(important) — 기존 section 노드를 AI가 process로 에코해도(속성 없이) 앵커가
-  // 살아남는 한 섹션을 유지해야 한다. 안 그러면 word-export.ts의 "section && anchor" 조건이
-  // 깨져 문서 링크가 조용히 사라진다.
-  it("제목 매칭된 기존 section 노드는 AI가 process로 에코해도 앵커가 살아있으면 섹션을 유지한다 (finding 1)", () => {
-    const existing = baseNode("n1", "1 재고", { node_type: "section", section_anchor: "_Toc1" });
-    const outcome = buildGraphFromAiProposal(
-      { nodes: [aiNode("a", "1 재고", "process")], edges: [], groups: [] },
-      { base: base([existing]) },
-    );
-    const node = outcome.graph?.nodes.find((n) => n.id === "n1");
-    expect(node?.node_type).toBe("section");
-    expect(node?.section_anchor).toBe("_Toc1");
-  });
 });
 
 describe("승격 필드 컬럼 (design 2026-08-19)", () => {

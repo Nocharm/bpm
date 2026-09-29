@@ -19,7 +19,6 @@ from app.interview.engine import get_stage, next_stage_key
 from app.interview.locks import interview_lock
 from app.interview.orchestrator import (
     TurnError,
-    demote_notice_text,
     extract_attachment_facts,
     generate_proposals,
     merge_params_table,
@@ -96,11 +95,6 @@ _GREETING = {
     "en": "Hello, I'm your process consultant. I'll ask a few questions to build the process map together. First, what is this process called and what is its purpose? Feel free to attach reference documents.",
 }
 
-_GREETING_WORD = {
-    "ko": "안녕하세요! 이 Word 맵의 SOP 문서를 순서도로 옮겨 드릴게요. 문서 전체를 그릴까요, 특정 섹션 범위만 그릴까요? 원본 .docx를 첨부해 주시면 본문까지 반영해 더 정확하게 제안할 수 있습니다.",
-    "en": "Hi! I'll turn this Word map's SOP document into a flowchart. Should I draw the whole document or one section subtree? Attach the original .docx and I can ground the draft in the body text.",
-}
-
 # 기존 데이터가 있는 맵의 오프닝 — 매번 같은 백지 인사 대신 파악한 내용을 먼저 제시 (실사용 피드백 2026-07-27)
 _EXISTING_GREETING = {
     "ko": (
@@ -123,11 +117,6 @@ _EXISTING_GREETING_OPTIONS = {
 # 패스트트랙 진입 보기 — FE lib/interview.ts FAST_TRACK_START_LABELS와 글자 단위 동일 (design 2026-07-29)
 _FAST_TRACK_OPTION = {"ko": "문서로 바로 그리기", "en": "Draw from a document"}
 
-_EXISTING_NOTE_WORD = {
-    "ko": "\n\n기존에 그려진 노드 {n}개도 파악해 두었습니다 - 문서 기준으로 이어서 다듬을 수 있어요.",
-    "en": "\n\nI've also reviewed the {n} existing nodes - we can refine them against the document.",
-}
-
 # 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키(담당자 실명은 AI 표면 제외, 역할만)
 _SEED_ATTRS = (
     "assignee_role", "department", "system",
@@ -137,7 +126,7 @@ _SEED_ATTRS = (
 # AI 계약(AI_NODE_TYPES) 밖 타입은 process로 강등. subprocess는 링크가 있으면 유지(P2 —
 # 오케스트레이터 _sanitize_subprocess가 이전 작업본 기준으로 에코를 보정), 플레이스홀더(무링크)는
 # process 강등(제목 유지 → apply 병합이 원본 보존). note는 흐름이 아니라 시드 제외.
-_SEED_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
+_SEED_TYPES = {"start", "process", "decision", "end", "subprocess"}
 
 
 def _seed_working_graph(graph) -> dict | None:
@@ -147,8 +136,6 @@ def _seed_working_graph(graph) -> dict | None:
         if n.node_type == "note":
             continue
         attributes = {k: v for k in _SEED_ATTRS if (v := getattr(n, k))}
-        if n.section_anchor:
-            attributes["section_anchor"] = n.section_anchor
         node_type = n.node_type if n.node_type in _SEED_TYPES else "process"
         if node_type == "subprocess" and not n.linked_map_id:
             node_type = "process"
@@ -242,7 +229,6 @@ async def _state_out(session: AsyncSession, interview: InterviewSession) -> Inte
         status=interview.status,
         current_stage=interview.current_stage,
         lang=interview.lang,
-        mode=interview.mode,
         facts=interview.facts or {},
         working_graph=interview.working_graph,
         messages=sorted(interview.messages, key=lambda m: m.seq),
@@ -268,8 +254,6 @@ async def _dept_catalog(session: AsyncSession, interview: InterviewSession) -> s
 
     인터뷰어가 목록 밖 부서명을 지어내지 않도록 프롬프트에 주입 (실사용 피드백 2026-07-28).
     """
-    if interview.mode != "normal":
-        return ""
     eligible = await get_eligible_users(session, interview.map_id)
     departments = sorted({e.department for e in eligible if e.department})
     return "\n".join(f"- {d}" for d in departments[:_DEPT_CATALOG_MAX])
@@ -294,8 +278,6 @@ def _format_managed_catalog(entries: list[dict[str, object]]) -> str:
 
 async def _managed_catalogs(session: AsyncSession, interview: InterviewSession) -> tuple[str, str]:
     """(역할 후보 목록, 시스템 목록) — roles 스테이지 options 후보이자 정식 표기 힌트 (design 2026-09-12)."""
-    if interview.mode != "normal":
-        return "", ""
     return (
         _format_managed_catalog(await get_assignee_roles(session)),
         _format_managed_catalog(await get_systems(session)),
@@ -317,7 +299,7 @@ async def _kb_reference_block(
     """top-k 검색 → [지식기반 참조] 블록(출처 표기). 반환 (블록, 임베딩 실패 여부)."""
     if not embed_client.is_embed_enabled():
         return "", False
-    stage = get_stage(interview.current_stage, interview.mode)
+    stage = get_stage(interview.current_stage)
     goal = stage.goal_ko if interview.lang == "ko" else stage.goal_en
     query = " ".join(part for part in (map_name, goal, user_text) if part).strip()
     try:
@@ -453,7 +435,6 @@ async def create_or_resume_interview(
         raise HTTPException(status_code=409, detail="version is not editable")
 
     found_map = await session.get(ProcessMap, map_id)
-    interview_mode = "word" if found_map is not None and found_map.mode == "word" else "normal"
 
     # 기존 draft 내용을 작업본으로 시드 — 프리뷰가 처음부터 현재 맵을 보여주고,
     # 드래프터도 백지가 아닌 기존 구조 위에서 시작한다 (실사용 피드백 2026-07-27)
@@ -465,20 +446,16 @@ async def create_or_resume_interview(
         version_id=payload.version_id,
         login_id=user,
         lang=payload.lang,
-        mode=interview_mode,
         facts={},
         working_graph=seed,
         base_graph_updated_at=version.updated_at,
     )
     session.add(interview)
     await session.flush()  # id 채번 — 메시지 FK
-    greeting_src = _GREETING_WORD if interview_mode == "word" else _GREETING
-    content = greeting_src.get(payload.lang, greeting_src["ko"])
+    content = _GREETING.get(payload.lang, _GREETING["ko"])
     fast_track = _FAST_TRACK_OPTION.get(payload.lang, _FAST_TRACK_OPTION["ko"])
-    greeting_payload: dict | None = (
-        {"options": [fast_track]} if interview_mode == "normal" else None
-    )
-    if has_existing and seed is not None and interview_mode == "normal":
+    greeting_payload: dict | None = {"options": [fast_track]}
+    if has_existing and seed is not None:
         # 기존 데이터 인지형 오프닝 — 파악한 내용 요약 + 보완/재정리 선택지
         template = _EXISTING_GREETING.get(payload.lang, _EXISTING_GREETING["ko"])
         content = template.format(
@@ -491,12 +468,6 @@ async def create_or_resume_interview(
                 fast_track,
             ]
         }
-    elif has_existing and seed is not None and interview_mode == "word":
-        note = _EXISTING_NOTE_WORD.get(payload.lang, _EXISTING_NOTE_WORD["ko"])
-        existing_count = sum(
-            1 for n in seed["nodes"] if n.get("node_type") not in ("start", "end")
-        )
-        content += note.format(n=existing_count)
     session.add(
         InterviewMessage(
             session_id=interview.id, seq=1, role="consultant", kind="question",
@@ -555,7 +526,7 @@ async def post_turn(
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
-    if payload.type == "skip" and next_stage_key(interview.current_stage, interview.mode) is None:
+    if payload.type == "skip" and next_stage_key(interview.current_stage) is None:
         raise HTTPException(status_code=400, detail="cannot skip the final stage")
 
     # rollback 후 만료 대비 스칼라 선캡처
@@ -572,16 +543,13 @@ async def post_turn(
         session, interview, found_map.name if found_map else "", payload.content or ""
     )
     context_text = await _context_text(interview) + kb_block
-    doc_sections: list[dict] | None = None
-    if interview.mode == "word":
-        doc_sections = list(found_map.doc_sections) if found_map else []
     usage: list[tuple[int | None, int | None]] = []
     usage_token = usage_log.set(usage)
     role_catalog, system_catalog = await _managed_catalogs(session, interview)
     try:
         result = await run_turn(
             session, interview, payload, graph_summary, context_text,
-            doc_sections=doc_sections, dept_catalog=await _dept_catalog(session, interview),
+            dept_catalog=await _dept_catalog(session, interview),
             overrides=await get_prompt_overrides(session),
             role_catalog=role_catalog, system_catalog=system_catalog,
         )
@@ -615,7 +583,7 @@ async def post_turn(
 
     try:
         # 유사 SP 제안 — 작업본이 갱신되는 유일 시점(수락 턴)에서만 (speed redesign 이동)
-        if interview.mode == "normal" and payload.type == "choice":
+        if payload.type == "choice":
             await _maybe_sp_suggestion(session, interview, user)
         # 임베딩 서버 다운 알림 — 세션당 1회만(반복 스팸 방지), 인터뷰는 계속 (design §9)
         if kb_failed and not _has_kb_degrade_notice(interview):
@@ -669,14 +637,11 @@ async def draw_interview_proposals(
         session, interview, found_map.name if found_map else "", ""
     )
     context_text = await _context_text(interview) + kb_block
-    doc_sections: list[dict] | None = None
-    if interview.mode == "word":
-        doc_sections = list(found_map.doc_sections) if found_map else []
     usage: list[tuple[int | None, int | None]] = []
     usage_token = usage_log.set(usage)
     try:
-        choices, demoted = await generate_proposals(
-            interview, context_text, doc_sections=doc_sections, variants=payload.variants,
+        choices = await generate_proposals(
+            interview, context_text, variants=payload.variants,
             overrides=await get_prompt_overrides(session),
         )
     except TurnError as exc:
@@ -709,11 +674,6 @@ async def draw_interview_proposals(
             session_id=interview.id, seq=seq, role="consultant", kind="choices",
             content=_DRAW_CHOICES_TEXT.get(interview.lang, _DRAW_CHOICES_TEXT["ko"]),
             payload=choices, stage=interview.current_stage,
-        ))
-    if demoted:
-        session.add(InterviewMessage(
-            session_id=interview.id, seq=seq + 1, role="consultant", kind="notice",
-            content=demote_notice_text(interview.lang, demoted), stage=interview.current_stage,
         ))
     prompt_total, completion_total = sum_usage(usage)
     session.add(AiUsageEvent(
@@ -856,8 +816,6 @@ async def fast_forward_interview(
     interview = await _get_owned_interview(session, interview_id, user)
     if interview.status != "active":
         raise HTTPException(status_code=409, detail="interview is not active")
-    if interview.mode == "word":
-        raise HTTPException(status_code=400, detail="fast-forward is not available for word maps")
     if interview.current_stage == "review":
         raise HTTPException(status_code=400, detail="already at review")
 
@@ -871,7 +829,7 @@ async def fast_forward_interview(
     session.add(message)
     interview.messages.append(message)
     while interview.current_stage != "review":
-        stage = get_stage(interview.current_stage, interview.mode)
+        stage = get_stage(interview.current_stage)
         stage_facts = dict(interview.facts.get(interview.current_stage) or {})
         for name in stage.required_facts:
             if not stage_facts.get(name):
@@ -882,7 +840,7 @@ async def fast_forward_interview(
             facts=interview.facts, working_graph=interview.working_graph,
             message_seq=seq,
         ))
-        next_key = next_stage_key(interview.current_stage, interview.mode)
+        next_key = next_stage_key(interview.current_stage)
         if next_key is None:
             break
         interview.current_stage = next_key

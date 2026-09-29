@@ -8,7 +8,6 @@ import Link from "next/link";
 import { Fragment, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowUpRight,
   Building2,
   Copy,
   Crown,
@@ -87,7 +86,6 @@ import {
   type StagedOp,
 } from "@/lib/permission-staging";
 import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
-import { formatDocStamp, needsRegenerate } from "@/lib/word-map-home";
 
 // 역할 정렬 순위 — 허용 인원 행을 owner→editor→viewer 클러스터로 (batch2 ④)
 const ROLE_ORDER: Record<string, number> = { owner: 0, editor: 1, viewer: 2 };
@@ -166,8 +164,6 @@ interface MapDetailCardProps {
   onDelete?: (mapId: number) => void;
   // 맵 복사 — 홈이 복사 모달(CreateMapDialog copy 모드)을 연다. detail 통째 전달(버전·역할·오우닝 부서).
   onCopy?: (detail: MapDetail) => void;
-  // word 맵 승격 진입 — 홈이 승격 다이얼로그를 처리(design 2026-07-24 §6). 없으면 버튼 미노출.
-  onPromote?: (mapId: number, name: string) => void;
   // 일부 섹션만 렌더 — 에디터 맵 탭=멤버 카드, 활동 탭=버전 타임라인 재사용 / render only members or versions.
   only?: "members" | "versions";
   // 값이 바뀌면 재조회 — 승인 단계 진행 시 버전 기록 실시간 갱신용 / bump to refetch (live version record).
@@ -189,7 +185,6 @@ export function MapDetailCard({
   showFooter = true,
   onDelete,
   onCopy,
-  onPromote,
   only,
   reloadKey,
   onGoToVersion,
@@ -914,23 +909,6 @@ export function MapDetailCard({
         </div>
       </div>
 
-      {/* word 맵 문서 메타 — 문서명·섹션 수·재임포트/생성 타임스탬프·재생성 힌트 (design 2026-07-24 §2) */}
-      {detail.mode === "word" && (
-        <div data-id="word-doc-meta" className="flex flex-col gap-0.5">
-          <p className="truncate text-fine text-ink-tertiary">
-            {detail.doc_name || "(no document)"} · {detail.doc_sections?.length ?? 0} sections
-          </p>
-          {formatDocStamp(detail.doc_imported_at) && (
-            <p className="text-fine text-ink-tertiary">Imported {formatDocStamp(detail.doc_imported_at)}</p>
-          )}
-          {formatDocStamp(detail.doc_generated_at) && (
-            <p className="text-fine text-ink-tertiary">Generated {formatDocStamp(detail.doc_generated_at)}</p>
-          )}
-          {needsRegenerate(detail) && (
-            <p className="text-fine text-changed">Re-imported after last generation - regenerate the document.</p>
-          )}
-        </div>
-      )}
 
       {/* 상단 3:2 — 설명 | 노트(카드형). 두 섹션이 같은 접힘 높이로 클립(넘치면 페이드·펼치기), 폭 <40rem이면
           세로 쌓임. 그 아래 서브프로세스 정보(SP 지정값 + 원문 메모 타일) — 비SP 맵이면 렌더되지 않는다
@@ -1475,17 +1453,6 @@ export function MapDetailCard({
                 </button>
               </Tooltip>
             ))}
-          {detail.mode === "word" && onPromote && (
-            <button
-              type="button"
-              data-id="map-detail-promote"
-              className="flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink hover:bg-surface"
-              onClick={() => onPromote(detail.id, detail.name)}
-            >
-              <ArrowUpRight size={14} strokeWidth={1.5} />
-              Convert to process map
-            </button>
-          )}
         </div>
         {isOwner && onDelete && (
           <button

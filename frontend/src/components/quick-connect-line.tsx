@@ -33,7 +33,7 @@ export function canQuickConnect(
   overType: ProcessNodeType | undefined,
   reverse: boolean,
 ): boolean {
-  if (!overType || overType === "section") return false;
+  if (!overType) return false;
   if (reverse) {
     return overType !== "subprocess" && !violatesTerminalRule(overType, fromType);
   }

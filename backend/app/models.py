@@ -177,11 +177,13 @@ class ProcessMap(Base):
     sp_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
-    # Word 맵 모드 & 임포트 카탈로그 (design 2026-07-18)
+    # 맵 모드 — normal | framework(L5 연계 캔버스)
     mode: Mapped[str] = mapped_column(String(20), default="normal")
+    # [폐기 컬럼] Word 맵 모드(2026-07-18)는 2026-09-29에 제거됐다. create_all로 만들어진 DB에선 NOT NULL·
+    # DDL 기본값 없음이라 모델에서 빼면 INSERT가 깨진다(운영 리셋 불가, 마이그레이션 도구 없음) —
+    # 드랍은 별도 마이그레이션 시점까지 보류하고 매핑만 남긴다. 코드 어디서도 읽거나 쓰지 않는다.
     doc_name: Mapped[str] = mapped_column(String(300), default="")
     doc_sections: Mapped[list] = mapped_column(JSON, default=list)
-    # 개정 라이프사이클 타임스탬프 — 재임포트/완결 문서 생성 시각 (design 2026-07-24 §5)
     doc_imported_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
@@ -375,7 +377,7 @@ class Node(Base):
     url: Mapped[str] = mapped_column(String(500), default="")
     # 참조 링크 표시 라벨 — url 있을 때만 의미(스키마 validator가 함께 소거) (url-label design 2026-07-07)
     url_label: Mapped[str] = mapped_column(String(100), default="")
-    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드(node_type="section")의 주 링크 (design 2026-07-18)
+    # [폐기 컬럼] Word 맵 섹션 앵커 — ProcessMap.doc_name과 같은 이유로 매핑만 유지(2026-09-29)
     section_anchor: Mapped[str] = mapped_column(String(200), default="")
     # 복제 계보 루트(원본 노드 ID) — 버전 간 diff 매칭용, 복제 시 서버가 기록 (spec §7 Phase B)
     source_node_id: Mapped[str | None] = mapped_column(String(50), default=None)
@@ -969,7 +971,7 @@ class InterviewSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")  # active|completed|abandoned
     current_stage: Mapped[str] = mapped_column(String(20), default="scope")
     lang: Mapped[str] = mapped_column(String(5), default="ko")  # ko|en — 생성 시 고정
-    # 인터뷰 모드 — normal(7스테이지) | word(문서→순서도 변환 3스테이지) (design 2026-07-26 §2)
+    # [폐기 컬럼] 인터뷰 word 모드 — ProcessMap.doc_name과 같은 이유로 매핑만 유지(2026-09-29), 항상 normal
     mode: Mapped[str] = mapped_column(String(20), default="normal")
     facts: Mapped[dict] = mapped_column(JSON, default=dict)  # 스테이지 키별 수집 항목
     # 작업본 그래프 — AiProposal graph 서브셋 {nodes,edges,groups} (키 기반, 좌표 없음)

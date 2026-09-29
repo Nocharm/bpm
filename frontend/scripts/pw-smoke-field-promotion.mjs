@@ -208,7 +208,7 @@ try {
     assignee: "", department: "", system: "", duration: "", cost_krw: "", cost_usd: "",
     headcount: "", annual_count: "", fte: "", touch_time: "", input: "", output: "",
     start_condition: "", end_condition: "", system_fallback: "EAM(스모크 원문)",
-    url: "", url_label: "", section_anchor: "", pos_x: 380, pos_y: 220, sort_order: 1,
+    url: "", url_label: "", pos_x: 380, pos_y: 220, sort_order: 1,
     group_ids: [], linked_map_id: null, follow_latest: true, linked_version_id: null,
     is_primary_end: false,
   };

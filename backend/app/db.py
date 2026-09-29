@@ -68,16 +68,14 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
     # sp_description은 2026-08-31에 폐기(맵 description으로 일원화) — 보강 대상에서 제외한다.
     # 기존 DB의 컬럼은 nullable이라 남아 있어도 INSERT를 깨지 않는다(드랍은 별도 정리 시점에).
-    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드의 주 링크 (design 2026-07-18)
+    # [폐기 컬럼] Word 맵 모드(2026-09-29 제거) — 모델이 매핑을 유지하므로(models.py ProcessMap 주석)
+    # 컬럼이 없는 DB엔 계속 보강해야 INSERT가 깨지지 않는다. mode는 framework 캔버스가 계속 쓴다.
     ("nodes", "section_anchor", "VARCHAR(200) DEFAULT ''"),
-    # Word 맵 모드 & 임포트 카탈로그 — mode="word"만 doc_name·doc_sections 사용 (design 2026-07-18)
     ("process_maps", "mode", "VARCHAR(20) DEFAULT 'normal'"),
     ("process_maps", "doc_name", "VARCHAR(300) DEFAULT ''"),
     ("process_maps", "doc_sections", "JSON"),
-    # Word 맵 개정 타임스탬프 — 재임포트·완결 문서 생성 시각 (design 2026-07-24 §5)
     ("process_maps", "doc_imported_at", "TIMESTAMP"),
     ("process_maps", "doc_generated_at", "TIMESTAMP"),
-    # 인터뷰 word 변환 모드 — interview_sessions는 개발서버에 기존재라 자동 ALTER 필요 (design 2026-07-26 §2)
     ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'normal'"),
     # AI L5 캠페인 — 첨부 분리·플레이스홀더 건너뛰기 (2026-09-21, dev 서버에 테이블 기존재 대비)
     ("framework_interview_sessions", "attachments", "JSON"),

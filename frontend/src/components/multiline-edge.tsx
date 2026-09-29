@@ -50,8 +50,7 @@ function getObstacles(nodes: AppNode[]): EdgeObstacle[] {
     for (const node of nodes) {
       const w = node.measured?.width ?? 0;
       const h = node.measured?.height ?? 0;
-      // section(Word 맵 영역 박스)은 장애물로 치지 않는다 — 배경 성격이라 전 엣지가 우회하게 됨
-      if (node.hidden || node.data.nodeType === "section" || w <= 0 || h <= 0) continue;
+      if (node.hidden || w <= 0 || h <= 0) continue;
       list.push(toEdgeObstacle(node.id, { x: node.position.x, y: node.position.y, w, h }));
     }
     obstacleSrc = nodes;

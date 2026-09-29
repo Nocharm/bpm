@@ -451,7 +451,6 @@ async def replace_graph(
             existing.gmp = node.gmp
             existing.url = node.url
             existing.url_label = node.url_label
-            existing.section_anchor = node.section_anchor
             existing.pos_x = node.pos_x
             existing.pos_y = node.pos_y
             existing.sort_order = node.sort_order

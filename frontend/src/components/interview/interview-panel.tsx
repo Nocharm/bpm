@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { getAiTips, type InterviewState } from "@/lib/api";
-import { choiceOptionsOf, stageIndex, stagesForMode } from "@/lib/interview";
+import { INTERVIEW_STAGES, choiceOptionsOf, stageIndex } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog, type ConfirmLine } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
@@ -344,8 +344,8 @@ export function InterviewPanel({
   const tipText =
     tips.length > 0 ? tips[live.length % tipCount] : t(TIP_KEYS[live.length % tipCount]);
 
-  const stages = stagesForMode(interview.mode);
-  const stageIdx = stageIndex(interview.current_stage, interview.mode);
+  const stages = INTERVIEW_STAGES;
+  const stageIdx = stageIndex(interview.current_stage);
   const stageLabel = stages[stageIdx]?.label ?? interview.current_stage;
 
   // 컨설턴트 아바타 — 메시지 런 헤더·typing dots 공용

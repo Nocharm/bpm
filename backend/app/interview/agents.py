@@ -46,11 +46,6 @@ CHOICE_VARIANT_HINTS: dict[str, list[str]] = {
         "예외 명시 - 반려/보류/재작업 루프를 엣지로 모두 표현",
         "해피패스 우선 - 분기 최소화, 예외는 별도 노드 없이 라벨로",
     ],
-    # word 변환 모드 draft 스테이지용 (speed redesign — draw multi가 word에서도 동작)
-    "draft": [
-        "문서 구조 충실 - 섹션 순서 그대로, 문서 섹션 노드 위주로 구성",
-        "요약 재구성 - 상위 섹션 수준으로 압축, 흐름 가독성 우선",
-    ],
 }
 
 # 세션 언어가 기본값이되, 사용자가 다른 언어로 말하면 그 언어를 따른다 (실사용 피드백 2026-07-27)
@@ -61,23 +56,6 @@ _LANG_LINE = {
         "another language (e.g. Korean), mirror it and reply in that language instead."
     ),
 }
-
-# 카탈로그 프롬프트 상한 — 초대형 SOP도 프롬프트를 깨지 않게 (300줄 ≈ 대형 문서 전체 수준)
-_CATALOG_MAX_LINES = 300
-
-
-def format_section_catalog(doc_sections: list[dict], language: str | None) -> str:
-    """word 맵 섹션 카탈로그 → 프롬프트 블록. language 확정 시 그 트리만(양쪽 있을 때)."""
-    rows = doc_sections
-    if language:
-        filtered = [s for s in rows if (s.get("language") or "") == language]
-        if filtered:
-            rows = filtered
-    lines = [
-        f"- {s['anchor']} | {s.get('number', '')} {s.get('title', '')} (level {s.get('level', 1)})".strip()
-        for s in rows[:_CATALOG_MAX_LINES]
-    ]
-    return "\n".join(lines)
 
 _INTERVIEWER_CONTRACT = """당신은 프로세스 컨설턴트입니다. 현업 담당자를 인터뷰해 프로세스 맵을 함께 만듭니다.
 조직 표준: 노드 제목은 '명사+동사'(예: '요청서 작성'), 활동 10개 내외(7~13) 세분도, 한 질문에 한 주제만.
@@ -130,29 +108,6 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
    유지할 노드는 {"key":"<키>"}만 쓰세요(다른 필드 생략 - 시스템이 기존 내용을 복원합니다).
    수정하거나 새로 만드는 노드만 전체 필드를 작성하고, 목록에서 뺀 키는 삭제로 처리됩니다."""
 
-_INTERVIEWER_WORD_ADDENDUM = """
-[Word 맵 변환 모드]
-당신은 이 SOP 문서를 순서도로 변환하는 컨설턴트입니다. 문서가 사실의 원천입니다 - 백지 질문 대신
-[문서 섹션 카탈로그]에서 추론한 구체 제안으로 확인만 받으세요.
-- scope: 그릴 범위(전체/특정 섹션 서브트리)를 확정해 facts_patch {"draw_scope": <범위>}로 저장.
-  카탈로그에 두 언어(ko/en)가 섞여 있으면 어느 트리로 그릴지 확인해 {"language": "ko"|"en"}도 저장
-  (한 언어뿐이면 묻지 말고 그 언어로 저장). 원본 .docx 첨부를 한 번 권유하되 강요하지 마세요.
-  범위가 매우 크면 1페이지에 들어가도록 상위 섹션 수준 요약이나 서브트리 분할을 제안하세요.
-- draft: 초안을 제안하고 교정을 반영하세요. 사용자가 초안에 동의하면 {"draft_confirmed": "yes"}.
-- review: 문서 링크 커버리지("노드 N개 중 M개가 문서 섹션 링크 보유")를 요약하고 승인을 확인,
-  승인 시 {"approved": "yes"}.
-- [문서 섹션 카탈로그]가 비어 있으면 맵의 문서 재임포트(에디터 섹션 패널)를 한 번 안내하고,
-  일반 노드만으로 진행 가능함을 알리세요."""
-
-_DRAFTER_WORD_ADDENDUM = """
-[Word 맵 변환 모드 - 추가 규칙]
-7. 문서 섹션에 대응하는 활동은 node_type="section"으로 만들고 attributes.section_anchor에
-   [문서 섹션 카탈로그]의 앵커 값을 그대로 넣으세요. 카탈로그에 없는 앵커는 금지.
-8. 문서에 없는 중간 단계·분기는 일반 process/decision으로 두세요(section 아님).
-9. 섹션 노드 제목은 시스템이 카탈로그 기준 "번호 제목"으로 재구성합니다 - 제목은 대략만.
-10. 1페이지에 들어가도록 노드 수 약 12개 이내 - 범위가 크면 상위 섹션 수준으로 요약."""
-
-
 def _facts_block(facts: dict) -> str:
     return json.dumps(facts, ensure_ascii=False)
 
@@ -195,21 +150,15 @@ def build_interviewer_messages(
     context_text: str,
     history: list[dict],
     user_input: str,
-    mode: str = "normal",
-    section_catalog: str = "",
     dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
     role_catalog: str = "",
     system_catalog: str = "",
 ) -> list[dict]:
-    stage = get_stage(stage_key, mode)
+    stage = get_stage(stage_key)
     goal = stage.goal_ko if lang == "ko" else stage.goal_en
     ov = overrides or {}
-    contract = (ov.get("interviewer_contract") or _INTERVIEWER_CONTRACT) + (
-        (ov.get("interviewer_word_addendum") or _INTERVIEWER_WORD_ADDENDUM)
-        if mode == "word" else ""
-    )
-    catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
+    contract = ov.get("interviewer_contract") or _INTERVIEWER_CONTRACT
     dept_block = (
         f"[부서 후보 목록 - department 값은 이 목록의 항목만 사용]\n{dept_catalog}\n\n"
         if dept_catalog else ""
@@ -226,7 +175,6 @@ def build_interviewer_messages(
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
         f"{_context_block(context_text)}"
-        f"{catalog_block}"
         f"{dept_block}"
         f"{role_block}"
         f"{system_block}"
@@ -266,21 +214,15 @@ def build_drafter_messages(
     working_graph: dict | None,
     context_text: str,
     variant_hint: str,
-    mode: str = "normal",
-    section_catalog: str = "",
     history: list[dict] | None = None,
     overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     current = format_graph_compact(working_graph)
     ov = overrides or {}
-    contract = (ov.get("drafter_contract") or _DRAFTER_CONTRACT) + (
-        (ov.get("drafter_word_addendum") or _DRAFTER_WORD_ADDENDUM) if mode == "word" else ""
-    )
-    catalog_block = f"[문서 섹션 카탈로그]\n{section_catalog}\n\n" if section_catalog else ""
+    contract = ov.get("drafter_contract") or _DRAFTER_CONTRACT
     system = (
         f"{contract}\n{_LANG_LINE.get(lang, _LANG_LINE['ko'])}\n\n"
         f"{_context_block(context_text)}"
-        f"{catalog_block}"
         f"[확정 facts]\n{_facts_block(facts)}\n\n"
         f"[현재 작업본]\n{current}\n\n"
         f"{_drafter_history_block(history)}"

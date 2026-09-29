@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-30 — Word 맵 모드·Word 내보내기 제거 (chore/remove-word → dev)
+
+- **왜** — 2026-07-11~26에 만든 Word 묶음(SOP `.docx` 섹션 임포트·`section` 노드·홈 Word 문서 섹션·빠른 생성·승격 복사·인터뷰 word 3스테이지·완결 문서 생성·도형 순서도 내보내기)은 `WORD_FEATURES_ENABLED=false`로 7/27부터 홈에서 가려져 있었고, Word 내보내기 버튼도 word 맵 안에서만 보여 사실상 죽은 코드였다(운영 DB에 word 맵·section 노드 없음, 사용자 확인). FE 파일 12개+스모크 3개 삭제, BE는 `/word-doc` 엔드포인트 2개·`convert_to_normal`·`WORD_STAGES`·word 애든덤 프롬프트 키 2개(`PROMPT_KEYS` 13)·`_sanitize_word_graph`·`AI_NODE_TYPES`의 `section` 제거, `fflate` 의존성 제거. 홈 목록 분리는 `lib/map-mode.ts`(`splitMapsByMode` process/framework)로 이동.
+- **DB 컬럼은 모델에 "폐기 컬럼"으로 남김** — `doc_name`·`doc_sections`·`doc_imported_at`·`doc_generated_at`·`nodes.section_anchor`·`interview_sessions.mode`는 create_all로 생긴 DB에서 NOT NULL·DDL 기본값 없음이라 모델에서 빼는 순간 INSERT가 깨진다(로컬 스모크에서 `POST /maps` 500으로 적발). 마이그레이션 도구가 없고 운영 리셋 불가라 매핑만 유지하고 코드 어디서도 읽지 않는다. 드랍은 별도 마이그레이션 시점의 후속.
+- 검증: pytest 1590·ruff / vitest 1039·tsc·lint·카탈로그 clean, 스모크 `pw-smoke-no-word.mjs`(8/8)·`pw-verify-library-open.mjs`(8/8). 매뉴얼 §9 내보내기·README·AI 챗 매뉴얼에서 Word 행 제거.
+
 ## 2026-09-29 — L6 활동별 IO 규칙·동일 IO 경고 (dev)
 
 - **원인** — AI 컨설턴트 L6 행에서 같은 활동의 input/output이 같거나 L6 전체 입력물·산출물이 전 활동에 복사되는 현상은 코드 버그가 아니라 프롬프트 빈틈: 설문은 IO를 L6 단위(입력물·산출물 주관식)로만 묻고, 행 작성 계약엔 "앞 output을 다음 input에 다시 쓰면 이어진다"는 체인 힌트만 있어 활동별 IO 의미가 없었다(정정·기존 L5 학습이 `[현재 등록된 내용]`으로 되먹임). 정규화·조립·어댑터는 값을 옮기기만 한다(로컬 가짜 AI 582 액션 중 0건).

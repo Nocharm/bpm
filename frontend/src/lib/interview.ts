@@ -18,21 +18,8 @@ export const INTERVIEW_STAGES = [
   { key: "review", label: "Review" },
 ] as const;
 
-// 백엔드 engine.WORD_STAGES와 키·순서 동기 — word 변환 모드 3단계 (design 2026-07-26 §3)
-export const WORD_INTERVIEW_STAGES = [
-  { key: "scope", label: "Scope" },
-  { key: "draft", label: "Draft" },
-  { key: "review", label: "Review" },
-] as const;
-
-export function stagesForMode(
-  mode: string | undefined,
-): readonly { readonly key: string; readonly label: string }[] {
-  return mode === "word" ? WORD_INTERVIEW_STAGES : INTERVIEW_STAGES;
-}
-
-export function stageIndex(key: string, mode?: string): number {
-  return stagesForMode(mode).findIndex((s) => s.key === key);
+export function stageIndex(key: string): number {
+  return INTERVIEW_STAGES.findIndex((s) => s.key === key);
 }
 
 // ---------- facts 아웃라인 (speed redesign §6 — AI 0콜, 매 턴 즉시 반응) ----------
@@ -57,11 +44,10 @@ function outlineValueText(value: unknown): string {
 // facts를 스테이지 순서로 평탄화 — 확정 항목만, 값은 1줄 요약
 export function deriveOutline(
   facts: Record<string, Record<string, unknown>> | null | undefined,
-  mode?: string,
 ): OutlineEntry[] {
   if (!facts) return [];
   const entries: OutlineEntry[] = [];
-  for (const stage of stagesForMode(mode)) {
+  for (const stage of INTERVIEW_STAGES) {
     const stageFacts = facts[stage.key];
     if (!stageFacts) continue;
     const items = Object.entries(stageFacts)

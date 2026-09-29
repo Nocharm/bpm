@@ -226,7 +226,7 @@ Flowchart proposals from the AI assistant merge the same way, **by name**, prese
 
 ---
 
-## 9. Export (PNG · Excel · CSV · Word)
+## 9. Export (PNG · Excel · CSV)
 
 Save the current map to a file from the export button in the right inspector (or the right-click menu).
 
@@ -235,7 +235,6 @@ Save the current map to a file from the export button in the right inspector (or
 | **PNG** | The current canvas as a 2× resolution image (every connector renders as a solid black line). Drawn on the canvas background (dot grid) with a **map info card** at the bottom (map name, owning department, owner, version, published date, framework path). Screen state such as the selection ring, I/O details, and flow highlight is left out of the capture (the selection is restored afterwards). `Ctrl+Shift+E`. |
 | **Excel** | **Choose one of two formats**: ① **Process Map** (structured): a node table (assignee, department, system, per-run metrics) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
 | **CSV** | The same 21-column table as import (Role column included). You can round-trip by editing an exported CSV and importing it again. On nodes whose system is **Other**, the System cell carries the source note, so re-importing brings back the same Other + note. |
-| **Word** | A `.docx` document with a shape-based flowchart. Node links (URL) are included as hyperlinks. Use **Download Word**. |
 
 > CSV export warns about, and skips, structure a table can't represent: end nodes other than the primary end, edges into an End node, duplicate node titles, and titles or labels containing `;` / `:`. Excel is cut at a 2,000-row cap and marked as truncated.
 

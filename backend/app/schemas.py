@@ -21,15 +21,6 @@ def _assert_single_currency(krw: str, usd: str) -> None:
         raise ValueError("cost_krw and cost_usd are mutually exclusive - fill only one")
 
 
-class SectionEntryIn(BaseModel):
-    # Word 문서 카탈로그 1건 — read-only 파서가 뽑은 북마크 (design 2026-07-18)
-    anchor: str = Field(max_length=200)
-    title: str = Field(default="", max_length=500)
-    number: str = Field(default="", max_length=50)
-    level: int = 0
-    language: str = Field(default="", max_length=8)  # 이중언어 문서 필터용 "ko"|"en"|""
-
-
 class MapCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
@@ -37,16 +28,6 @@ class MapCreate(BaseModel):
     visibility: Literal["private", "public"] = "private"
     # 오우닝 부서(필수) — known org_path 검증은 라우터에서 (spec 2026-07-10)
     owning_department: str = Field(min_length=1, max_length=200)
-    # Word 맵 모드 & 임포트 카탈로그 — 생성 시 문서 링크를 함께 실을 수 있다 (design 2026-07-18)
-    mode: Literal["normal", "word"] = "normal"
-    doc_name: str = Field(default="", max_length=300)
-    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
-
-
-class WordDocIn(BaseModel):
-    # 재임포트 페이로드 — 맵의 doc_name·doc_sections을 통째로 교체 (design 2026-07-18)
-    doc_name: str = Field(default="", max_length=300)
-    sections: list[SectionEntryIn] = Field(default_factory=list)
 
 
 class MapCopy(BaseModel):
@@ -58,9 +39,7 @@ class MapCopy(BaseModel):
     visibility: Literal["private", "public"] = "private"
     # 원본 은퇴 — 오너 전용: 원본을 "(Pending deletion)" rename 후 휴지통으로, 승인자·editor+ 알림
     retire_source: bool = False
-    # Word 맵 → 일반 맵 승격 복사 — mode/doc 소거 + 섹션 노드 일괄 process 변환 (design 2026-07-24 §6)
-    convert_to_normal: bool = False
-    # 승격 관문에서 지정한 오우닝 부서 — 없으면 원본 상속
+    # 복사본 오우닝 부서 — 없으면 원본 상속
     owning_department: str | None = None
 
 
@@ -753,13 +732,8 @@ class MapOut(BaseModel):
     owning_department: str | None = None
     # 낡은 부서·담당자 참조 수(게시본/드래프트 노드 + SP 지정값) — 홈 카드 배지·Issues 필터 (design 2026-09-09)
     stale_ref_count: int = 0
-    # Word 맵 모드 & 임포트 카탈로그 — mode="word"인 맵만 doc_name·doc_sections 사용 (design 2026-07-18)
+    # 맵 모드 — normal | framework(L5 연계 캔버스, design 2026-08-28)
     mode: str = "normal"
-    doc_name: str = ""
-    doc_sections: list[SectionEntryIn] = Field(default_factory=list)
-    # 개정 라이프사이클 타임스탬프 — 홈 word 행·상세 카드 표시용 (design 2026-07-24 §5)
-    doc_imported_at: datetime | None = None
-    doc_generated_at: datetime | None = None
     # 컨설턴트 체계 소속 — category_id 존재가 소속 판정, consultant_code는 임포트 출처 (design 2026-08-08)
     category_id: int | None = None
     # "L1이름/.../연결노드이름" 조인 — 트랜지언트(DB 컬럼 아님), 응답 시점에 라우터가 계산해 주입
@@ -803,13 +777,6 @@ class MapOut(BaseModel):
         if value is None or value == "":
             return value
         return normalize_duration(value)
-
-    @field_validator("doc_sections", mode="before")
-    @classmethod
-    def _coerce_doc_sections(cls, value: object) -> object:
-        # doc_sections DDL엔 DEFAULT가 없어(JSON) 기존 행은 ALTER 후 NULL — from_attributes 로드 시
-        # None → [] 보정(NodeIn._coerce_group_ids와 동일 결정, design 2026-07-18)
-        return [] if value is None else value
 
 
 class MapDetailOut(MapOut):
@@ -1304,8 +1271,6 @@ class NodeIn(BaseModel):
     url: str = Field(default="", max_length=500)
     # URL 표시 라벨 — url이 비면 아래 validator가 함께 소거(캐스케이드 삭제를 서버 경계에서 보장)
     url_label: str = Field(default="", max_length=100)
-    # 문서 내부 섹션 앵커 — Word 맵 섹션 노드 (design 2026-07-18)
-    section_anchor: str = Field(default="", max_length=200)
     pos_x: float = 0.0
     pos_y: float = 0.0
     sort_order: int = 0
@@ -2030,9 +1995,8 @@ class EligibleAssigneesOut(BaseModel):
     dept_infos: dict[str, DeptInfoValueOut] = {}
 
 
-# "section"은 word 맵 변환 모드 드래프터 출력 — 앵커 실존 검증은 orchestrator._sanitize_word_graph (design 2026-07-26 §4)
 # subprocess는 P2 유사 SP 수락으로 작업본에 존재할 수 있어 에코 허용 — 환각은 orchestrator가 강등
-AI_NODE_TYPES = {"start", "process", "decision", "end", "section", "subprocess"}
+AI_NODE_TYPES = {"start", "process", "decision", "end", "subprocess"}
 
 
 class CatalogEntryIn(BaseModel):
@@ -2354,9 +2318,6 @@ class AiNodeAttributes(BaseModel):
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
     url_label: str | None = Field(default=None, max_length=100)
-    # 문서 섹션 앵커 — word 맵 드래프터/제안 passthrough. 실존 검증은 orchestrator
-    # _sanitize_word_graph에서 (design 2026-07-26 §4)
-    section_anchor: str | None = Field(default=None, max_length=200)
 
     @field_validator("duration", "touch_time", mode="after")
     @classmethod
@@ -2647,7 +2608,6 @@ class InterviewStateOut(BaseModel):
     status: str
     current_stage: str
     lang: str
-    mode: str = "normal"
     # 확정 facts — 프론트 아웃라인 패널(수집된 정보) 렌더용 (speed redesign §6)
     facts: dict = Field(default_factory=dict)
     working_graph: dict | None = None

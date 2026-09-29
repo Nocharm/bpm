@@ -124,16 +124,6 @@ describe("buildHeightShiftField - 충돌 기반 오프셋", () => {
     expect(field.offsets.get("b")).toBe(100);
   });
 
-  it("section은 밀지도 밀리지도 않음", () => {
-    const field = buildHeightShiftField([
-      makeNode("s", 0, 0, { type: "section", measuredH: 400 }),
-      makeNode("a", 0, 100),
-      makeNode("g", 300, 0, { measuredH: 152 }),
-      makeNode("t", 300, 60, { type: "section" }),
-    ]);
-    expect(field.offsets.get("a")).toBeUndefined();
-    expect(field.offsets.get("t")).toBeUndefined();
-  });
 });
 
 describe("invertDisplayY - 열 단위 역변환", () => {

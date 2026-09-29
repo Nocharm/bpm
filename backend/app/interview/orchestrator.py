@@ -21,7 +21,6 @@ from app.interview.agents import (
     build_drafter_messages,
     build_interviewer_messages,
     extract_json,
-    format_section_catalog,
 )
 from app.models import (
     AiUsageEvent,
@@ -73,7 +72,7 @@ class TurnResult:
 
 def _draw_due(pre_stage: str, interview: InterviewSession, out: InterviewerOut) -> str | None:
     transitioned = interview.current_stage != pre_stage
-    if transitioned and engine.get_stage(pre_stage, interview.mode).choice_stage:
+    if transitioned and engine.get_stage(pre_stage).choice_stage:
         return "multi"
     if transitioned and interview.current_stage == "review":
         # review 진입은 그리지 않는다 — 수집된 params 표가 있으면 확정 모달 신호만 (2026-07-28)
@@ -182,41 +181,10 @@ def _graph_from_proposal(proposal: AiProposal) -> dict:
     }
 
 
-_DEMOTE_NOTICE = {
-    "ko": "{n}개 활동은 문서 섹션을 찾지 못해 일반 노드로 추가했습니다.",
-    "en": "{n} activities could not be matched to a document section and were added as plain nodes.",
-}
-
-
-def _sanitize_word_graph(graph: dict, doc_sections: list[dict]) -> tuple[dict, int]:
-    """word 드래프터 출력 정합 — 실존 앵커만 섹션 유지(라벨 '번호 제목' 재구성), 무효는 process 강등.
-
-    프롬프트만으론 앵커 환각을 못 막는다 — 죽은 링크가 문서에 박히는 것을 서버가 차단 (design 2026-07-26 §4).
-    """
-    by_anchor = {s.get("anchor"): s for s in doc_sections if s.get("anchor")}
-    demoted = 0
-    nodes = []
-    for raw in graph.get("nodes", []):
-        node = dict(raw)
-        anchor = ((node.get("attributes") or {}).get("section_anchor") or "").strip()
-        if node.get("node_type") == "section" or anchor:
-            sec = by_anchor.get(anchor)
-            if sec is None:
-                demoted += 1
-                node["node_type"] = "process"
-                node["attributes"] = {**(node.get("attributes") or {}), "section_anchor": ""}
-            else:
-                node["node_type"] = "section"
-                node["title"] = f"{sec.get('number', '')} {sec.get('title', '')}".strip()[:200]
-                node["attributes"] = {**(node.get("attributes") or {}), "section_anchor": anchor}
-        nodes.append(node)
-    return {**graph, "nodes": nodes}, demoted
-
-
 def _sanitize_subprocess(graph: dict, prev: dict | None) -> dict:
     """AI 출력의 subprocess는 이전 작업본에 실존하는 링크만 유지 — 환각은 process 강등.
 
-    링크 대상(linked_map_id)은 AI 응답이 아닌 이전 작업본이 단일 진실원 (word 앵커 사니타이즈와 동형).
+    링크 대상(linked_map_id)은 AI 응답이 아닌 이전 작업본이 단일 진실원 .
     매칭은 **키 우선**(델타 키가 안정 식별자 — 라벨 언어 변경 등 리네임에도 링크 보존, hardening T7),
     키 미스는 제목 폴백(키가 새로 발급된 재생성 노드 대비).
     """
@@ -297,13 +265,6 @@ def _sanitize_start_end(graph: dict, prev: dict | None) -> dict:
             if root:
                 edges = [*edges, {"source": prev_start.get("key"), "target": root, "label": ""}]
     return {**graph, "nodes": nodes, "edges": edges}
-
-
-def _word_catalog_text(interview: InterviewSession, doc_sections: list[dict] | None) -> str:
-    if interview.mode != "word" or not doc_sections:
-        return ""
-    language = (interview.facts.get("scope") or {}).get("language") or None
-    return format_section_catalog(doc_sections, language)
 
 
 def _graph_signature(graph: dict | None, include_content: bool = False) -> tuple:
@@ -428,11 +389,6 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
     return proposal.model_copy(update={"nodes": resolved_nodes, "edges": edges, "groups": groups})
 
 
-def demote_notice_text(lang: str, n: int) -> str:
-    """word 앵커 강등 노티스 문구 — draw 라우트가 사용."""
-    return _DEMOTE_NOTICE.get(lang, _DEMOTE_NOTICE["ko"]).format(n=n)
-
-
 def _recent_choice_stage(interview: InterviewSession) -> str:
     """가장 최근 완료(체크포인트)된 구조 스테이지 — multi 변형 힌트 선택 기준."""
     # 패스트트랙 직후엔 세분도(activities)가 결정 축 — 일괄 체크포인트 순서상 branches가
@@ -444,19 +400,19 @@ def _recent_choice_stage(interview: InterviewSession) -> str:
     if last_user is not None and last_user.kind == "fast_forward":
         return "activities"
     for cp in sorted(interview.checkpoints, key=lambda c: c.id or 0, reverse=True):
-        if engine.get_stage(cp.stage, interview.mode).choice_stage:
+        if engine.get_stage(cp.stage).choice_stage:
             return cp.stage
-    return "draft" if interview.mode == "word" else "activities"
+    return "activities"
 
 
 async def generate_proposals(
     interview: InterviewSession, context_text: str, model: str | None = None,
-    doc_sections: list[dict] | None = None, variants: str = "single",
+    variants: str = "single",
     overrides: Mapping[str, str] | None = None,
-) -> tuple[dict | None, int]:
+) -> dict | None:
     """draw 이벤트용 제안 생성 — multi=변형 힌트 병렬, single=표준 1안 (speed redesign §4).
 
-    반환 (pending_choices 형태 dict 또는 전멸 필터 시 None, word 강등 수 합).
+    반환 pending_choices 형태 dict 또는 전멸 필터 시 None.
     작업본은 건드리지 않는다 — 반영은 수락(choice 턴) 시점.
     """
     if variants == "multi":
@@ -473,7 +429,6 @@ async def generate_proposals(
             build_drafter_messages(
                 interview.current_stage, interview.lang, interview.facts,
                 interview.working_graph, context_text, hints[i % len(hints)],
-                mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
                 history=history, overrides=overrides,
             ),
             model, AiProposal,
@@ -486,7 +441,6 @@ async def generate_proposals(
     # (hardening T9). next_seq는 이 draw의 choices 메시지가 받을 seq라 draw 간 단조 증가.
     draw_tag = next_seq(interview)
     options: list[dict] = []
-    demoted_total = 0
     for i, result in enumerate(results):
         if isinstance(result, BaseException) or result.kind != "graph":
             logger.warning("interview proposal %d failed: %s", i, result)
@@ -500,17 +454,14 @@ async def generate_proposals(
             logger.warning("interview proposal %d empty after delta expansion", i)
             continue
         graph = _sanitize_subprocess(_graph_from_proposal(expanded), interview.working_graph)
-        if interview.mode == "word" and doc_sections:
-            graph, demoted = _sanitize_word_graph(graph, doc_sections)
-            demoted_total += demoted
         graph = _sanitize_start_end(graph, interview.working_graph)
         options.append({
             "id": f"opt-{draw_tag}-{i + 1}",
             "title": hints[i % len(hints)].split("-")[0].strip(),
             "summary": result.message,
             "graph": graph,
-            # 결정적 톤 린트 — word는 문서 제목("번호 제목" 재구성)이라 톤 규칙 비적용 (T19)
-            "lint": lint.lint_graph(graph, interview.lang) if interview.mode == "normal" else [],
+            # 결정적 톤 린트 (T19)
+            "lint": lint.lint_graph(graph, interview.lang),
         })
     if not options:
         raise TurnError("AI failed to generate proposals")
@@ -528,7 +479,7 @@ async def generate_proposals(
         seen.add(structural_sig)
         distinct.append(option)
     if not distinct:
-        return None, demoted_total  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내
+        return None  # 전부 현재 작업본과 동일 — 라우터가 노티스로 안내
     # 현재 작업본도 항상 1안으로 — "그대로 유지"를 클릭 한 번으로 골라 재드로 루프를 끊는 탈출구
     # (실사용 피드백 2026-07-28). 시드(start/end)뿐인 백지엔 비교 의미가 없어 생략.
     current_nodes = (interview.working_graph or {}).get("nodes") or []
@@ -540,7 +491,7 @@ async def generate_proposals(
             "graph": interview.working_graph,
             "same_as_current": True,
         })
-    return {"options": distinct}, demoted_total
+    return {"options": distinct}
 
 
 # ---------- 첨부 정보 추출 (백그라운드 1콜 — 업로드 시점에 최대한 수집, 2026-07-28) ----------
@@ -656,7 +607,7 @@ _UNKNOWN_VALUE = {"ko": "미정", "en": "TBD"}
 
 async def _run_skip_turn(
     db, interview: InterviewSession, graph_summary: str, context_text: str, model: str | None,
-    doc_sections: list[dict] | None = None, dept_catalog: str = "",
+    dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
     role_catalog: str = "", system_catalog: str = "",
 ) -> TurnResult:
@@ -666,11 +617,11 @@ async def _run_skip_turn(
     인터뷰어 1콜만 — 그리기는 draw 이벤트로 분리 (speed redesign §3).
     """
     pre_stage = interview.current_stage
-    next_key = engine.next_stage_key(interview.current_stage, interview.mode)
+    next_key = engine.next_stage_key(interview.current_stage)
     if next_key is None:
         raise TurnError("cannot skip the final stage")
 
-    stage = engine.get_stage(interview.current_stage, interview.mode)
+    stage = engine.get_stage(interview.current_stage)
     unknown = _UNKNOWN_VALUE.get(interview.lang, _UNKNOWN_VALUE["ko"])
     stage_facts = dict(interview.facts.get(interview.current_stage) or {})
     for name in stage.required_facts:
@@ -694,7 +645,6 @@ async def _run_skip_turn(
             interview.current_stage, interview.lang, interview.facts,
             graph_summary, context_text, _history_tail(interview)[:-1],
             "[사용자가 다음 단계로 넘어가기를 선택했습니다. 새 단계의 첫 제안이나 질문을 하세요.]",
-            mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
             dept_catalog=dept_catalog, overrides=overrides,
             role_catalog=role_catalog, system_catalog=system_catalog,
         ),
@@ -715,7 +665,6 @@ async def run_turn(
     graph_summary: str,
     context_text: str,
     model: str | None = None,
-    doc_sections: list[dict] | None = None,
     dept_catalog: str = "",
     overrides: Mapping[str, str] | None = None,
     role_catalog: str = "",
@@ -724,7 +673,7 @@ async def run_turn(
     """일반 턴 = 인터뷰어 1콜 — 그리기·선택지·톤 검수는 draw 이벤트로 분리 (speed redesign §3)."""
     if turn.type == "skip":
         return await _run_skip_turn(
-            db, interview, graph_summary, context_text, model, doc_sections, dept_catalog,
+            db, interview, graph_summary, context_text, model, dept_catalog,
             overrides=overrides, role_catalog=role_catalog, system_catalog=system_catalog,
         )
 
@@ -752,7 +701,7 @@ async def run_turn(
         # 수락 = 이 스테이지의 구조 결정 확정 — choice 스테이지의 필수 facts를 수락안에서
         # 결정적으로 스탬프해 같은 턴에 전이시킨다. 안 하면 인터뷰어가 "이대로 확정할까요?"를
         # 재질문하고, 그 답변 턴의 전이가 재드로를 유발해 채팅-맵 싱크가 깨진다 (2026-07-30).
-        stage = engine.get_stage(interview.current_stage, interview.mode)
+        stage = engine.get_stage(interview.current_stage)
         if stage.choice_stage:
             stage_facts = dict(interview.facts.get(interview.current_stage) or {})
             for name in stage.required_facts:
@@ -777,7 +726,6 @@ async def run_turn(
     interviewer_messages = build_interviewer_messages(
         interview.current_stage, interview.lang, interview.facts,
         graph_summary, context_text, _history_tail(interview)[:-1], user_input,
-        mode=interview.mode, section_catalog=_word_catalog_text(interview, doc_sections),
         dept_catalog=dept_catalog, overrides=overrides,
         role_catalog=role_catalog, system_catalog=system_catalog,
     )
@@ -805,9 +753,9 @@ async def run_turn(
     # 스테이지 완료 — 다음 단계가 있을 때만 체크포인트+전이.
     # review(마지막)에서는 반복 실행하지 않는다 — 매 턴 stage_complete를 주는 모델이
     # 같은 자리에서 체크포인트를 스팸하는 것을 차단 (실사용 회귀 2026-07-23).
-    next_key = engine.next_stage_key(interview.current_stage, interview.mode)
+    next_key = engine.next_stage_key(interview.current_stage)
     is_complete = out.stage_complete or engine.is_stage_complete(
-        interview.current_stage, interview.facts, interview.mode
+        interview.current_stage, interview.facts
     )
     checkpointed = False
     if is_complete and next_key is not None:

@@ -66,7 +66,6 @@ from app.schemas import (
     SubprocessUsageOut,
     SubprocessUsedByOut,
     VersionOut,
-    WordDocIn,
 )
 from app.subprocess import validate_confirm_readiness
 from app.version_events import record_version_event
@@ -326,9 +325,6 @@ async def create_map(
         owner_id=user,
         visibility=payload.visibility,  # 생성자가 고른 초기 공개 범위(기본 private)
         owning_department=payload.owning_department,
-        mode=payload.mode,
-        doc_name=payload.doc_name,
-        doc_sections=[s.model_dump() for s in payload.doc_sections],
     )
     new_map.versions.append(MapVersion(label="As-Is"))
     session.add(new_map)
@@ -377,9 +373,8 @@ async def copy_map(
 ) -> ProcessMap:
     """맵 복사 — 새 맵의 초기 draft에 그래프 복제, 원본 오너 알림 (request #12 재편).
 
-    게시(published/expired) 이력 1회 이상인 맵만 복사 가능 — Word 승격(convert)은 예외로
-    기존 승인본 기준 유지. version_id 지정 시 그 버전(상태 무관)을 원본으로, 미지정이면
-    최신 게시본. retire_source(오너 전용)는 원본을 "(Pending deletion)" rename 후
+    게시(published/expired) 이력 1회 이상인 맵만 복사 가능. version_id 지정 시 그 버전(상태
+    무관)을 원본으로, 미지정이면 최신 게시본. retire_source(오너 전용)는 원본을 "(Pending deletion)" rename 후
     휴지통으로 보내고 승인자·editor+ 협업자에게 알린다.
     """
     source_map = await session.get(ProcessMap, map_id)
@@ -391,28 +386,22 @@ async def copy_map(
             status_code=422, detail="framework linkage canvas cannot be copied"
         )
     original_name = source_map.name
-    convert = payload.convert_to_normal
     # 게시 이력 게이트 — 프론트 버튼 비활성과 동일 판정(status 기준: version_number는
     # pre-ALTER 게시본이 NULL일 수 있어 부적합)
-    if not convert:
-        has_publish = await session.scalar(
-            select(MapVersion.id)
-            .where(
-                MapVersion.map_id == map_id,
-                MapVersion.status.in_([workflow.PUBLISHED, workflow.EXPIRED]),
-            )
-            .limit(1)
+    has_publish = await session.scalar(
+        select(MapVersion.id)
+        .where(
+            MapVersion.map_id == map_id,
+            MapVersion.status.in_([workflow.PUBLISHED, workflow.EXPIRED]),
         )
-        if has_publish is None:
-            raise HTTPException(status_code=409, detail="map has never been published")
+        .limit(1)
+    )
+    if has_publish is None:
+        raise HTTPException(status_code=409, detail="map has never been published")
     # 원본 버전 1개 — 그래프 즉시 클론을 위해 nodes/edges/groups eager-load
     version_query = select(MapVersion).where(MapVersion.map_id == map_id)
     if payload.version_id is not None:
         version_query = version_query.where(MapVersion.id == payload.version_id)
-    elif convert:
-        version_query = version_query.where(
-            MapVersion.status.in_([workflow.APPROVED, workflow.PUBLISHED])
-        )
     else:
         version_query = version_query.where(
             MapVersion.status.in_([workflow.PUBLISHED, workflow.EXPIRED])
@@ -476,11 +465,7 @@ async def copy_map(
         owner_id=user,
         visibility=payload.visibility,
         owning_department=payload.owning_department or source_map.owning_department,
-        # Word 맵 복사는 mode·문서 카탈로그도 함께 상속 — 승격(convert)은 일반 맵으로 소거 (design 2026-07-24 §6)
-        mode="normal" if convert else source_map.mode,
-        doc_name="" if convert else source_map.doc_name,
-        # or [] — pre-ALTER 운영 행은 doc_sections NULL(DDL DEFAULT 없음, db.py _ADDED_COLUMNS)
-        doc_sections=[] if convert else list(source_map.doc_sections or []),
+        mode=source_map.mode,
     )
     new_version = MapVersion(label="As-Is")
     new_map.versions.append(new_version)
@@ -490,13 +475,6 @@ async def copy_map(
         # 이양 계보 기록 — 은퇴 맵을 가리키는 SP 노드의 교체 추천이 이 체인을 따른다 (2026-08-30)
         source_map.retired_to_map_id = new_map.id
     await clone_graph(session, source_version, new_version.id)
-    if convert:
-        # 승격: 섹션 노드 → 일반 process 노드 일괄 변환(앵커 소거·url은 유지) (design 2026-07-24 §6)
-        for node in await session.scalars(
-            select(Node).where(Node.version_id == new_version.id, Node.node_type == "section")
-        ):
-            node.node_type = "process"
-            node.section_anchor = ""
     record_version_event(session, new_version.id, "created", user)
     session.add(
         MapPermission(
@@ -1281,56 +1259,6 @@ async def withdraw_sp_designation_request(
         raise HTTPException(status_code=403, detail="only the requester can withdraw")
     req.status = "withdrawn"
     await session.commit()
-
-
-@router.put(
-    "/{map_id}/word-doc",
-    response_model=MapDetailOut,
-    dependencies=[Depends(require_map_role("editor"))],
-)
-async def set_word_doc(
-    map_id: int,
-    payload: WordDocIn,
-    session: AsyncSession = Depends(get_session),
-    user: str = Depends(get_current_user),
-) -> ProcessMap:
-    """Word 맵 재임포트 — doc_name·doc_sections을 통째로 교체한다 (design 2026-07-18)."""
-    found_map = await session.get(
-        ProcessMap,
-        map_id,
-        options=[selectinload(ProcessMap.versions).selectinload(MapVersion.events)],
-    )
-    if found_map is None or found_map.deleted_at is not None:
-        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    found_map.doc_name = payload.doc_name
-    found_map.doc_sections = [s.model_dump() for s in payload.sections]
-    found_map.doc_imported_at = _now()
-    await session.commit()
-    await session.refresh(found_map, attribute_names=["versions"])
-    for version in found_map.versions:
-        await session.refresh(version, attribute_names=["events"])
-    found_map.my_role = await get_effective_role(session, user, map_id)
-    return found_map
-
-
-@router.post(
-    "/{map_id}/word-doc/generated",
-    response_model=MapOut,
-    dependencies=[Depends(require_map_role("editor"))],
-)
-async def mark_word_doc_generated(
-    map_id: int,
-    session: AsyncSession = Depends(get_session),
-    user: str = Depends(get_current_user),
-) -> ProcessMap:
-    """완결 문서 생성 성공 기록 — 생성은 클라이언트 전용이라 서버는 시각만 스탬프 (design 2026-07-24 §5)."""
-    found_map = await session.get(ProcessMap, map_id)
-    if found_map is None or found_map.deleted_at is not None:
-        raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    found_map.doc_generated_at = _now()
-    await session.commit()
-    found_map.my_role = await get_effective_role(session, user, map_id)
-    return found_map
 
 
 @router.put(

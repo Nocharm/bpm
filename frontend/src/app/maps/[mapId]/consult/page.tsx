@@ -33,8 +33,8 @@ import {
   choiceOptionsOf,
   deriveOutline,
   deriveParamsEditorRows,
+  INTERVIEW_STAGES,
   stageIndex,
-  stagesForMode,
 } from "@/lib/interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -498,7 +498,7 @@ export default function ConsultPage() {
     );
   }
 
-  const stageIdx = interview ? stageIndex(interview.current_stage, interview.mode) : 0;
+  const stageIdx = interview ? stageIndex(interview.current_stage) : 0;
   const live = interview ? interview.messages.filter((m) => !m.superseded) : [];
   const choices = interview?.status === "active" ? choiceOptionsOf(live) : null;
   const paramsRows = deriveParamsEditorRows(interview?.working_graph, interview?.facts);
@@ -519,10 +519,10 @@ export default function ConsultPage() {
         <span className="text-caption text-ink-muted">- Consultant</span>
         {/* 진행바 옆 현재 스테이지 라벨 — 무명 인디케이터 해소 (P1 #6) */}
         <span className="ml-auto text-caption text-ink-secondary" data-id="consult-stage-label">
-          {stagesForMode(interview?.mode)[stageIdx]?.label ?? ""}
+          {INTERVIEW_STAGES[stageIdx]?.label ?? ""}
         </span>
         <ol className="flex items-center gap-1" data-id="consult-progress">
-          {stagesForMode(interview?.mode).map((stage, i) => (
+          {INTERVIEW_STAGES.map((stage, i) => (
             <li
               key={stage.key}
               title={stage.label}
@@ -632,7 +632,7 @@ export default function ConsultPage() {
       ) : null}
       {drawConfirmOpen && interview ? (
         <DrawConfirmDialog
-          summary={buildDrawSummary(deriveOutline(interview.facts, interview.mode))}
+          summary={buildDrawSummary(deriveOutline(interview.facts))}
           onConfirm={() => void confirmManualDraw()}
           onClose={cancelManualDraw}
         />

@@ -14,7 +14,7 @@ import {
   acceptSpSuggestion, completeInterview, getApiErrorDetail, getGraph, postInterviewRevert,
   saveGraph, type ChoiceOption, type InterviewState, type WorkingGraph,
 } from "@/lib/api";
-import { addedNodeKeys, getGraphSignature, layoutWorkingGraph, stagesForMode, highlightConnectedEdges } from "@/lib/interview";
+import { INTERVIEW_STAGES, addedNodeKeys, getGraphSignature, layoutWorkingGraph, highlightConnectedEdges } from "@/lib/interview";
 import { PARAM_FIELDS, formatParamValue } from "@/lib/params";
 import { buildGraphFromAiProposal } from "@/lib/csv-import";
 import { useCatalogs } from "@/lib/catalogs";
@@ -431,7 +431,7 @@ export function InterviewPreview({
     ? checkpointsNewestFirst.find((c) => c.stage === previewStage) ?? null
     : null;
   const previewLabel = previewCp
-    ? stagesForMode(interview?.mode).find((s) => s.key === previewCp.stage)?.label ?? previewCp.stage
+    ? INTERVIEW_STAGES.find((s) => s.key === previewCp.stage)?.label ?? previewCp.stage
     : "";
   // 프리뷰 중엔 체크포인트 스냅샷 > 낙관적 수락 그래프 > 서버 작업본 순
   const displayGraph = previewCp ? previewCp.working_graph : optimisticGraph ?? graph;
@@ -502,7 +502,7 @@ export function InterviewPreview({
               <div className="absolute left-3 top-3 z-10 flex w-44 flex-col gap-1.5" data-id="iv-checkpoints">
                 {visibleCheckpoints.map((cp, i) => {
                   const label =
-                    stagesForMode(interview?.mode).find((s) => s.key === cp.stage)?.label ?? cp.stage;
+                    INTERVIEW_STAGES.find((s) => s.key === cp.stage)?.label ?? cp.stage;
                   const active = cp.stage === previewStage;
                   return (
                     <button
@@ -620,7 +620,7 @@ export function InterviewPreview({
               );
             })()}
             {/* facts 아웃라인 — 매 턴 즉시 갱신되는 수집 정보(AI 0콜, speed redesign §6) */}
-            <InterviewOutline facts={interview?.facts} mode={interview?.mode} />
+            <InterviewOutline facts={interview?.facts} />
             {/* 유사 SP 제안 카드 — 수락 시 구간을 서브프로세스 링크로 치환 (design §7 P2) */}
             {spMessage && spData?.map_id && !spDismissed.has(spMessage.id) &&
             interview?.status === "active" ? (

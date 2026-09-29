@@ -10,12 +10,11 @@ import { deriveOutline, deriveSequencePreview } from "@/lib/interview";
 
 interface InterviewOutlineProps {
   facts: Record<string, Record<string, unknown>> | null | undefined;
-  mode?: string;
 }
 
-export function InterviewOutline({ facts, mode }: InterviewOutlineProps) {
+export function InterviewOutline({ facts }: InterviewOutlineProps) {
   const [open, setOpen] = useState(true);
-  const outline = deriveOutline(facts, mode);
+  const outline = deriveOutline(facts);
   const sequence = deriveSequencePreview(facts);
   if (outline.length === 0) return null;
 
