@@ -171,6 +171,7 @@ You can link a map that is **not yet designated** as a placeholder first, and so
 - **Node search**: press `/` and type; Korean chosung (initial consonants) matching is supported. Matches jump to and highlight the node.
 - **Outline**: the left rail shows the whole process as a tree; click an entry to focus that node.
 - **Flow highlight**: select a node, then press `]` to grow the highlighted path forward and `[` to shrink it (or extend backward).
+- **Connector highlight**: a selected connector turns violet, and in flow highlight incoming connectors read teal and outgoing ones orange; the **label pill on the connector takes the same color** (Yes/No labels included).
 - **Walk the flow**: `Tab` / `Shift+Tab` move focus to the next / previous node along the flow and re-center the view.
 - **Comments**: each node has a comment thread; `Ctrl+Enter` sends. Read-only users can still leave comments.
 

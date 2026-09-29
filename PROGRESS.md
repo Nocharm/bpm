@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-30 — 정리 라운드: 메모리·md 문서·매뉴얼 5차 (main)
+
+- **md 정리**: main 머지 완료된 AI L5 캠페인 스펙 3종(`docs/superpowers/specs/`, 코드 주석은 파일명만 유지)과 0.4 결과 핸드오프(`design/2026-09-01-interview-import-v04-result.md`. 불변식은 qa 필드맵·lessons에 흡수 완료, 실서버 점검 4항목은 git history)·템플릿 잔재 `.claude/commands/setup-from-template.md` 폐기. PROGRESS는 09-28 폴리시 라운드 항목을 4줄로 압축하고 09-24 릴리스 이전 항목(09-14~09-18)을 아카이브로 이동.
+- **매뉴얼 5차(md 6종+AI 챗 매뉴얼)**: 09-24 이후 매뉴얼 동반 갱신이 빠진 커밋 델타 반영 — 계획 보드 우클릭 외부 L6 지름길·타일 전환, 삭제 예정 복구, 유지 타일 비활성, 채팅 최소화 스파클 칩, 관리 트리 단일 자식 자동 펼침, 활동별 IO 동일 경고, 엣지 라벨 강조·선택 선 보라, 홈 연동 액센트 바 0.5초. 슬라이드 덱 4종은 09-19 3차 그대로(4·5차 델타 미반영, 신규 캡처 필요).
+
 ## 2026-09-30 — Word 맵 모드·Word 내보내기 제거 (chore/remove-word → dev)
 
 - **왜** — 2026-07-11~26에 만든 Word 묶음(SOP `.docx` 섹션 임포트·`section` 노드·홈 Word 문서 섹션·빠른 생성·승격 복사·인터뷰 word 3스테이지·완결 문서 생성·도형 순서도 내보내기)은 `WORD_FEATURES_ENABLED=false`로 7/27부터 홈에서 가려져 있었고, Word 내보내기 버튼도 word 맵 안에서만 보여 사실상 죽은 코드였다(운영 DB에 word 맵·section 노드 없음, 사용자 확인). FE 파일 12개+스모크 3개 삭제, BE는 `/word-doc` 엔드포인트 2개·`convert_to_normal`·`WORD_STAGES`·word 애든덤 프롬프트 키 2개(`PROMPT_KEYS` 13)·`_sanitize_word_graph`·`AI_NODE_TYPES`의 `section` 제거, `fflate` 의존성 제거. 홈 목록 분리는 `lib/map-mode.ts`(`splitMapsByMode` process/framework)로 이동.
@@ -36,17 +41,11 @@
 
 ## 2026-09-28 — AI L5 캠페인 폴리시 라운드 (feat/fw-consult-polish → dev)
 
-- **계획 화면 단계 모델 교체**: 단계를 `depends_on` 역산이 아니라 카드의 명시적 `stage`(`lib/plan-cards.ts`)로 둔다. 드래그는 그 카드만 옮기고 선행은 "직전 행의 비어 있지 않은 부분집합" 불변식(`normalizeDependencies`)으로 저장해 재로드 시 같은 행으로 복원. 빈 행은 420ms 뒤 접혀 아래 행이 한 단계씩 당겨지고(FLIP), 선행 연결은 SVG 점선 곡선+호버 무리 강조, 선행 편집은 타일 우클릭 메뉴(공용 `ContextMenu`에 `check` 항목 타입 추가, 클릭해도 유지)로만. 상세 열 선행은 읽기 전용, 부서는 디렉터리 목록 SearchSelect, 카드 전환 페이드. 첨부 복수 파일(순차 업로드), 브리프 플레이스홀더에 항목+예시.
-- **설문/보드**: 빈 주관식 = 미답변(서버 `fill_answers` 제안값 자동 적용 폐기, `auto` 배지 제거), single 문항 복수 답 허용, 문항 코멘트+제출 코멘트(`comments`/`note` → answers `{comment}`·예약 키 `_note`, 행 작성 프롬프트에 실림). [AI 제안]은 1.5초 링 뒤 타이핑, [전부 제안값으로]는 주관식까지. 활동 순서 목록 FLIP. 보드 눈 아이콘·미리보기 모달 제거(패널이 담당), 작업 중 경과 초(`lib/use-now-tick.ts`), 연결·등록 단계에서 카드를 보는 중이면 보드 하단 "흐름으로 돌아가기" 타일.
-- **연결 캔버스**: 엣지 클릭=선택(Delete/Backspace 삭제), 더블클릭=라벨, 우클릭 메뉴(라벨 편집·삭제). 분기 노드가 아닌 노드의 두 번째 나가는 엣지는 기존 엣지를 붉은 점선으로 표시하고 확인 후 교체(사용자 결정). 등록 완료는 리포트 위 반투명 레이어+완료 카드.
-- **관리 패널**: 하위 타일 컴팩트(h-9)+내부 스크롤+1/2/3열 세그먼트(localStorage), AI 타일 컴팩트+호버 리프트, 인터뷰 JSON 섹션을 트리 아래 전폭 스트립으로(우측 아이콘 4단계 안내 `interview-flow-guide.tsx`). 기존 L6가 있는 L5는 세션 생성 시 유지 카드를 plan에 시드하고, 재제안 시 AI가 비운 기존 카드 선행은 직전 plan에서 승계(`merge_existing_cards(previous=)`); 플랜 프롬프트에 역할≠부서·기존 카드 depends_on 규칙, `normalize_plan`은 역할==부서면 역할 비움.
-- **계획 화면 후속 4종**: AI 카드 제안 중 카드 열 링 오버레이+버튼 링(`proposing`, busy와 분리) · 기존 유지 타일은 점선·흐림 비활성 룩(선택·정정 전환만, 드래그 불가)과 유지/정정 필 강조 · 선택한 타일의 행은 위아래 여백 확장(py-3→py-6, 연결선 rAF 추종) · 삭제는 "삭제 예정"(붉은 타일·취소선·복구 아이콘·인스펙터/우클릭 복구)으로 남고 저장·확정 전송본에서만 빠진다(`removedIds`, `.plan-tile-out` 폐기).
-- **L6 Start 배선 픽스**: AI가 되돌아가는 연결(뒤 활동→앞 활동)을 seq/branch로 적으면 첫 활동에 in-edge가 생겨 Start가 안 붙던 문제. 어댑터 `_build_flow_edges`가 seq 역행 엣지를 loop로 재분류(판단 승격은 원래 kind로 먼저)하고, 엔진 `build_graph_rows`·FE `interview-preview`는 진입/출구 후보가 없으면 첫/끝 seq에 Start/End를 붙인다. 행 작성 프롬프트에 "되돌아가는 연결은 kind=loop" 규칙 추가. 관리 패널 L4/L5 AI 타일은 전폭 대신 내용 폭.
-- **미리보기 순환 표현·연결 단계 계획 정합**: 공용 `ScopePreview` 엣지에 화살표를 달고, 역행 엣지(타겟이 왼쪽)는 두 노드 위로 도는 직각 점선 경로(`buildPreviewEdgePath`)로 그린다(중심 직선은 앞 노드를 가로질러 순환이 안 보였다). L5 미리보기도 Start/End 폴백 동일. 연결 제안은 정규화 뒤 `align_relations_to_plan`으로 계획의 선행 쌍을 엣지로 보강하고 진입점을 첫 단계 카드로, 뒤 단계→앞 단계 엣지는 loop로 맞춘다(피드백 재제안은 제외). 가짜 AI 기본 행에 3→1 loop를 넣어 스모크가 순환 경로를 밟는다.
-- **L6 드로잉 빈 응답 실패·플레이스홀더 재시도**: 실사용의 "AI returned invalid response: invalid JSON: Expecting value (line 1)"는 사고(thinking)가 `AI_MAX_TOKENS`를 다 써 content가 빈 문자열로 온 경우였다. `ask_schema`는 빈 응답을 형식 오류와 구분해(`EMPTY_REPLY_MESSAGE`) 되먹이지 않고 같은 메시지로 사고를 끄고(`reasoning="none"`) 재시도하며, 행 드로잉은 처음부터 사고 없이 부른다(답을 옮겨 적는 작업이라 사고 기여가 작고 출력이 길다). 플레이스홀더로 건너뛴 카드는 등록 전까지 `retry`로 다시 그릴 수 있다(보드 행·패널의 "AI로 다시 그리기", 답이 있으면 드로잉부터). 설문 답변 단계(ready)에서도 패널 상단 "플레이스홀더(임시)로 생성"으로 설문·드로잉을 건너뛸 수 있다(확인 다이얼로그, 답은 비움, `skip`이 ready 허용).
-- **외부 참조 타일(2026-09-29)**: 계획 단계 좌측 열을 [목적·첨부 | 외부 L6] 세그먼트로 스왑. 외부 L6는 연계 캔버스의 "Framework L6" 패널(`FrameworkTreePicker`) 재사용(이 L5의 기존 L6·이미 추가한 맵은 링크됨으로 차단, 피크 "타일로 추가"·행 드래그→단계 행 드롭), 아래에 "L5만 참조" 계단식 피커. 카드 계약 `mode="external"` + `external{ref_id,l5_code,l5_label,l6,map_id}`(`FrameworkExternalRefIn`, 상호 필수 validator). 잠금 시 태스크 없이 `task_id=ref_id`, `_known_task_names`가 캔버스 전개·relations 정규화·검증·확정의 단일 소스, 진입점은 내부 카드 강제(`align_relations_to_plan`·`_has_known_task_ids`), 조립 시 `externalTasks`(`assemble.external_tasks_of`)로 0.5 어댑터에 넘긴다(이름 일치 자동 연결/플레이스홀더). 타일은 점선+외부 칩+소속 L5 배지, 인스펙터는 출처만(선행·삭제만 가능), 보드는 "외부 참조 n건" 요약, 연결 캔버스 노드는 `spOriginPath`로 외부 룩. 체계 피커의 서브트리 맵 수는 펼친 행에서 숨겨 가장 깊은 접힌 행에만(사용자 요청). 스모크 `pw-fw-consult-external.mjs`(14). 후속: 계획 타일 높이 68px 고정(보조 2줄은 비어도 자리 유지), 외부 타일은 L5 하늘 남색(`--color-canvas-l5-sky` color-mix) 점선 톤으로 기존 유지(회색 점선)와 구분. 상태 칩은 공용 `CardModeChip`(`card-mode-chip.tsx`) 한 곳에서 톤을 정한다: 기존·유지=중립 회색, 기존·정정=변경 앰버(`--color-changed` color-mix), 외부=L5 하늘 남색. 계획 타일과 보드 행이 같은 칩을 쓴다(사용자 요청 2026-09-29, 톤은 토큰만). 외부 타일은 소속 L5별 파스텔 색 — 남색 점선은 비활성처럼 읽혀 폐기(사용자 피드백). 연계 캔버스 외부 L6 팔레트(`COLOR_PRESETS` 8톤)를 L5 코드 FNV-1a 해시로 고르는 `getExternalL5ColorByCode`(`lib/canvas.ts`, 곱셈 31 해시는 mod 8이 교대합으로 퇴화해 겹침) 한 곳을 타일 `--ext-tone`·외부 칩 `color`·연결 캔버스 노드 `color`(`spOriginPath` 예외 경로)가 같이 본다. 선택·선행 무리 상태에서도 같은 색 안에서만 진해진다(`TILE_EXTERNAL_LINKED`/`_SELECTED`).
-- **관리 트리 자동 드릴인**: 자식이 하나뿐인 노드를 펼치면(루트가 하나뿐일 때 포함) 그 사슬이 갈래가 나올 때까지 static 모션으로 이어 열린다(`drillSingleChain`, 스모크 `pw-fw-tree-autodrill.mjs`).
-- 검증: vitest 1092·pytest 1596·tsc/lint/ruff clean, 스모크 pw-fw-consult(12)·ux(28)·canvas(34)·existing(10)·task-panel(11)·pick-card(4)·new-l5(6)·level-actions(10) 전부 통과. 확인용 캡처 스크립트(polish-shots·plan-shot·design-audit)는 사용 후 정리.
+- **계획 단계 모델 교체**: 단계를 카드의 명시적 `stage`(`lib/plan-cards.ts`)로, 선행은 "직전 행의 비어 있지 않은 부분집합" 불변식(`normalizeDependencies`)으로 저장. 선행 편집은 타일 우클릭 체크 메뉴, 선행 연결선 SVG 점선, 삭제는 "삭제 예정"으로 남겨 복구 가능(`removedIds`), 기존 유지 타일은 점선·흐림 비활성. 설문은 빈 주관식=미답변(서버 자동채움 폐기), single 복수 답·문항/제출 코멘트, ready 단계 "플레이스홀더(임시)로 생성" 건너뛰기+`retry` 재드로잉.
+- **연결 캔버스·미리보기**: 엣지 클릭 선택/더블클릭 라벨/우클릭 메뉴, 비분기 노드의 두 번째 나가는 엣지는 확인 후 교체. 어댑터 `_build_flow_edges`가 seq 역행 엣지를 loop로 재분류하고 Start/End 폴백을 붙여 L6 Start 미배선 픽스, `ScopePreview`는 역행 엣지를 위로 도는 직각 점선(`buildPreviewEdgePath`)로, 연결 제안은 `align_relations_to_plan`으로 계획 선행 쌍을 보강.
+- **외부 참조 타일(2026-09-29)**: 계획 좌측 [목적·첨부 | 외부 L6] 세그먼트, 카드 `mode="external"`+`external{ref_id,l5_code,…}`, `_known_task_names` 단일 소스로 캔버스·relations·검증·확정 관통, 조립 시 `externalTasks`. 타일 색은 소속 L5 코드 FNV-1a 해시(`getExternalL5ColorByCode`, 남색 점선은 비활성처럼 읽혀 폐기), 상태 칩은 공용 `CardModeChip`(유지=회색·정정=앰버·외부=L5색).
+- **그 외**: 빈 AI 응답(사고가 토큰 소진)은 `EMPTY_REPLY_MESSAGE`로 구분해 사고 끄고 재시도, 행 드로잉은 사고 없이 호출. 관리 트리 자식 하나뿐인 사슬 자동 드릴인(`drillSingleChain`), 관리 패널 타일 컴팩트·인터뷰 JSON 전폭 스트립. 검증: vitest 1092·pytest 1596·스모크 8종 통과.
+
 ## 2026-09-28 — PI팀 회의 자료: 컨설팅 범위 맵의 시스템 오너 협의 (docs/pi-meeting-prep → dev)
 
 - PI팀이 "컨설턴트 도구가 원본, BPM은 뷰어"로 선회한 상황에 대비해 `docs/notices/2026-09-28-pi-meeting-prep.md` 작성·머지. 검토 후 구도 재정리(사용자 결정 2026-09-28): 프로세스맵은 한 서비스에서만 관리하고 병행·주기 재전달·미러링은 제외, 선택지는 **안 1 Agent 존속(PI팀이 시스템 오너, BPM은 종료 또는 동결)** / **안 2 종료 시 완성본 1회 이양(BPM 원본)** 둘. 안 2의 성립 조건으로 식별 키(맵=`taskId`, 단계=순번이라 삽입 시 비교가 삭제+추가로 갈림) 절 추가. 부록 수치는 9/24 기준 그대로(중요 수치 아님, 사용자 결정).
@@ -65,47 +64,5 @@
 - **비교 화면(feat/compare-ai-report·display-fields-float → dev, 2라운드 ①):** AI 요약을 결재자 개조식 보고서 4블록(`CompareSummaryOut` kind 9종, `ai_compare_summaries` diff 해시 캐시, AI 탭 열 때만 호출) + 제출 코멘트 AI 초안(`/compare/submit-note-draft`, 프롬프트 키 `submit_note_contract` 9번째) · 우하단 노드 표시 정보 플로팅 카드(`node-display-float.tsx`, 비교 키 `bpm.compare.nodeDisplayFields`) + 라이브러리 드롭 중심 보정 · diff 전용 토큰 `--color-diff-changed` · 초기 base≠target(`lib/compare-initial.ts`) · 인스펙터 폭 드래그(`lib/use-resizable-width.ts`) · L5 하늘 캔버스 드롭존 밝은 기반색. 함정: `.env` OpenAI 실키는 `chat_template_kwargs`로 400(운영 SGLang 무관).
 - **문서·검증:** 매뉴얼 6종·AI 챗 매뉴얼·슬라이드 덱 4종(71장) dev 최신 동기화(`/sync-all` 일치), 낡은 스모크 4종을 드릴다운 id로 이식, lessons에 Tailwind display 이중 지정·이펙트 내 setState·워크트리 복합 Bash 함정 기록. 릴리스 게이트: backend pytest 1593·ruff, frontend vitest 1086(94파일)·tsc·lint green, 컴포넌트 카탈로그는 stale이라 재생성.
 
-## 2026-09-18 — 승인자 착지·결재 대기 안내·게시본 vs 대기본 비교 딥링크·비교 화면 AI 요약 탭 (feat/approval-landing-compare-ai)
-
-- 승인자가 맵을 열면 내가 결재할 pending 버전(승인자 목록에 있고 미결재)으로 착지(`?version=`은 여전히 우선). 다른 버전을 열었을 땐 상단 상태 배너에 "내 결재 대기 버전 열기" 링크, 승인 탭엔 `SectionOverlay` 흰 덮개+"해당 버전으로 이동" 버튼 — 이 탭은 열린 버전 기준이라 오판을 막는다. 판정은 버전별 워크플로 캐시(`wsById`, 진입 조회+현재 버전 조회 미러)로 하므로 결재 직후에도 최신. draft/pending은 공존하지 않아 착지 분기는 `else`.
-- pending 버전을 여는 모든 사용자에게 승인 워크플로와 확정 변경 기준 사이에 "게시본과 비교" 버튼 — 비교 화면 `?base=<최신 게시본>&target=<pending>` 딥링크(비교 페이지가 쿼리를 처음 읽게 됨, 모르는 id는 기본값).
-- 비교 화면 세 번째 탭 **AI 요약**: 프론트가 계산한 병합 diff를 `CompareDiffPayload`(노드/엣지 각 200 상한, ref n1/e1)로 `POST /api/maps/{id}/compare/ai-summary`에 보내고(파이썬에 diff 복제 안 함, viewer 게이트·두 버전 맵 소속 검증) 총평·주요 변경(kind 칩, 클릭=캔버스 포커스)·확인 포인트·집계 칩으로 렌더. 비교 진입 시 그래프가 준비되면 **선행 생성**하고 탭 라벨에 스피너, (base,target) 조합별 결과 보관, 재생성은 총평 카드 우상단. 프롬프트 키 `compare_summary_contract`(관리자 오버라이드 8번째), 계량 `ai_usage_events kind=compare_summary`. `_ask_and_validate`는 `schema` 인자로 일반화.
-- 후속(09-19) 문구 축약: 덮개=제목 "Awaiting your approval / 내 결재 대기" + 라벨 한 줄 + "Open that version / 그 버전 열기", 배너 링크 "Awaiting your approval: {label} / 내 결재 대기: {label}". 최소 높이 min-h-36.
-- 후속(09-19): 결재 대기 덮개는 승인 탭 전체가 아니라 **승인 워크플로 섹션만** 덮는다(사용자 지시) — 덮인 동안 섹션은 펼침 유지 + `min-h-44`로 문구·버튼 높이 확보(게시본의 워크플로 본문은 낮음). 결재 대기 목록·비교 CTA·SP 카드는 그대로 조작 가능.
-- 후속: 비교 좌측 변경 목록의 항목별 상태 필(Added/Removed/Changed 틴트)은 왼쪽 아이콘 사각과 중복이라 제거 — 제목 한 줄로(사용자 지시). 속성 탭·엣지 인스펙터의 상태 필은 그대로.
-- 검증: backend 1489 green·ruff, vitest 1004(+4)·tsc·eslint, Playwright `pw-smoke-approver-landing.mjs` 16/16(맵 32, 승인자 bora.hong). AI 응답은 로컬 OpenAI 호환 스텁으로 렌더만 확인 — 실제 모델(GLM/SGLang) 대상 프롬프트 품질은 서버 배포 후 확인 필요. 함정: 승인자가 뷰어 역할이면 배너 제목이 "Viewer access"라 버전 판정은 pending 전용 비교 CTA로; `networkidle` 대기는 AI 요청이 끝나야 풀려 스피너를 못 본다.
-
-## 2026-09-18 — 비교 화면 워스트케이스 개선 4종: 엣지 라벨 줄바꿈·속성 범위 토글·전 파라미터 표시·실측 배치 (main)
-
-- 65노드·78변경 워스트케이스(스크래치 시드, 저장소 미포함)로 비교 화면을 실측한 뒤 사용자 지적 4건 반영. ① 비교 엣지 라벨에 에디터와 같은 `EDGE_LABEL_MAX_WIDTH`(160) + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게. ② 속성 탭에 "모두 / 변경만" 범위 토글(기본 변경만) — 변경 노드는 바뀐 필드만(제목·설명·타입·색 포함), 추가·삭제·무변경 노드는 토글 비활성+전체 표시. ③ 비교 노드 표시 필드를 AI 프리뷰와 같은 역할·부서·시스템·파라미터 칩으로(값 있는 것만, 전후는 기존 diff 필). `buildAppNodes`에 `touch_time` 누락 보강.
-- ④ 자동정렬 검토: 비교 화면은 `COMPARE_RENDER_H`(process 38) 고정 상수로 백본 정렬·핸들 중심을 계산했고, 공용 `layoutWithDagre`는 `nodeSizeOf` 고정 박스로 배치해 속성 줄이 켜지면 같은 열 이웃과 겹칠 수 있었다. `layoutWithDagre`가 `node.measured`를 우선하도록 바꾸고(에디터 자동정렬도 실측 박스 사용), 비교·프리뷰 모두 RF `dimensions` 변경에서 실측을 모아 1회 재배치 후 fitView. 상수표는 측정 전 폴백으로만 남긴다. 단위 테스트: 실측 300px 노드가 nodesep(120)만큼 띄워지는지.
-- 후속(같은 날): 비교 엣지 라벨 최대폭은 비교 전용 120(`COMPARE_EDGE_LABEL_MAX_WIDTH`, 에디터 160 유지 — 비교는 ranksep 120이라 더 좁게). 속성 탭은 변경 노드가 아니면(추가·삭제·변경 없음) 본문 전체를 톤다운(opacity)하고 상태 워터마크("추가/삭제/변경 없음", 스크롤 고정)를 덮어 값 비교 대상이 아님을 드러낸다. 입출력·조건 섹션은 "모두" 모드에선 비어도 구분선 섹션으로 남겨 "어디 있나"를 답하고(없으면 None 한 줄), "변경만"에선 바뀐 것이 있을 때만. 읽기전용 필은 탭 줄에서 본문 최상단(제목 위, 엣지·빈 상태 포함)으로 이동 — 탭 줄은 범위 토글에 양보.
-- 후속 2: 노드 위 표시에 입출력·시작/종료 조건도 포함(비교·AI 프리뷰 공통, 값 있는 것만) — 처음엔 노드 높이 때문에 뺐으나 실측 재배치가 높이를 흡수하므로 켠다. 비교 `buildAppNodes`·프리뷰 `layoutWorkingGraph`에 input/output/(forms)/start·end_condition 전달. 프리뷰 스모크 픽스처에 IO·조건 추가(15/15).
-- 후속 3: 비교 노드의 입출력은 패널 대신 **"입출력 +N −M" 한 줄**(항목 추가/삭제 없으면 생략) + 호버 시 입력·출력을 한 툴팁에 항목별 +/−로 펼침(`lib/io-diff.ts` 다중집합 diff, `NodeIoDiffSummary`, 조건 줄 아래·body 포털 z1400). AI 프리뷰는 패널 그대로. 그리고 **변경 필드 힌트** — 바뀐 필드의 파라미터 칩·속성 줄·조건 줄에 상태색(added/changed/removed) 아이콘 + 배경 틴트(`data.diffFieldStatus`, 담당자 줄은 실명·역할 중 하나만 바뀌어도). 에디터는 상태가 없어 무색. 함정: 조건 줄이 `NodeIoDetails` 안에 있어 컴포넌트째 갈아끼우면 조건이 사라진다 → 요약은 그 안에서 IO 변만 대체.
-- 후속 4: 입출력 요약 줄에 호버 이펙트(액센트 틴트 배경+글자색, 150ms) 추가, 그 줄에선 노드 래퍼의 네이티브 `title` 툴팁("변경: 시스템")을 `title=""`로 억제해 통합 툴팁과 겹치지 않게.
-- 주의: `tsc`가 dev 서버 산출물 `.next/dev/types`를 포함해 에디터 `page.tsx`의 기존 `toAppEdges` named export를 Next 페이지 계약 위반으로 잡는다(이번 변경과 무관, dev 서버 기동 후에만 발생).
-
-## 2026-09-18 — AI 컨설턴트 프리뷰 노드 속성 표시 + Tab 이동, PNG 내보내기 선택 해제 (main)
-
-- 프리뷰가 노드 라벨만 보여 수집된 파라미터를 한눈에 못 본다는 피드백 — 원인은 `layoutWorkingGraph`가 AI `attributes`를 노드 data로 안 옮기고 전부 빈값으로 채운 것(파라미터 칩 토글은 이미 ON). 역할·부서·시스템·회당 7필드를 data에 싣고 프리뷰 표시 필드를 인스펙터 카드와 같은 범위(`assignee`·`department`·`system`·`params`)로 확장. IO·조건·URL은 노드 높이를 키워 제외(카드에서 확인). 선택지 카드 썸네일도 같은 컨텍스트라 함께 표시된다.
-- 프리뷰 Tab/Shift+Tab — 에디터와 같은 `getNext/PrevNodeAlongFlow`로 흐름상 다음/이전 노드에 포커스(+클릭과 같은 카메라 센터·1.1 줌). 채팅 입력 포커스 중엔 가로채지 않음.
-- 에디터 PNG 내보내기가 선택 링·IO 상세·흐름 강조까지 찍히던 것 — 선택은 React 상태가 그리므로 캡처 전에 `selectedId`/노드 `selected`를 비우고 두 프레임 뒤 캡처, finally에서 원래 선택 복원. 실측: 캡처 시점 `.selected` 0개·액센트 픽셀 0·캡처 후 선택 1개 복원(`scripts/pw-smoke-preview-tab-export.mjs`, 14/14).
-
-## 2026-09-18 — 지연 실행 안내를 섹션 레이어로 + 인터뷰 임포트 30파일 워스트 케이스 UX (main)
-
-- 홈 대시보드 1클릭 지연 실행(0.6초)의 안내가 **아이콘 자리 링 치환**이라 눈에 안 띈다는 피드백 — `useDelayedNav`가 가장 가까운 스코프(`DelayedNavScopeContext`)에 `{label, cancel}`을 보고하고, 섹션(`DashboardSection`·점유 목록·프로필·이동 타일 한 칸)이 반투명 레이어(`SectionOverlay`, 임포트 완료와 같은 톤) 가운데에 링 + "Going to Inbox / Selecting {맵}" + "클릭하면 취소"를 띄운다(레이어 클릭 = 취소). 타일은 **한 칸 단위**(묶음 아님, 사용자 지시)라 컴팩트 변형. 섹션 밖 맵 카드는 기존 동작 유지. 헤더 더보기·하단 링크아웃은 `SectionLink`(onClick | href+pendingLabel)로 스코프 안에서 훅을 돌린다.
-- 인터뷰 임포트: 적용 완료 문구를 푸터에서 본문 레이어 가운데로 이동, 적용 중/재드라이런 중도 같은 레이어(스피너). 파일 목록은 건수 헤더 + 8행 내부 스크롤 + Clear all. 드라이런은 리포트 영역이 아코디언(0fr→1fr)으로 먼저 열리며 링 → 결과가 같은 자리에. 리포트 본문은 `100vh-11rem` 상한에 **좌/우 열 독립 스크롤**(스티키 대신 — 오른쪽을 내려도 요약이 남는다), 우측 스티키 툴바(건수·검색·정렬 Order/Name/Issues/Maps), 카드 10개 윈도 + 바닥 센티널 IntersectionObserver(limit마다 재관찰해야 짧은 카드에서도 이어짐), 좌측 포커스가 윈도 밖이면 노출·스크롤. 실측 함정: 높이 상한에 걸리면 열의 flex 자식이 눌려 요약 카드가 잘린다 → `[&>*]:shrink-0`.
-- 검증: 30개 변형 JSON 드라이런 실측 19/19, 기존 인터뷰 임포트 스모크의 적용 음영/Apply 비활성/Cancel 도달 통과. 로컬 3000/8000은 db-viewer가 점유 중이라 BPM은 3047/8048로 따로 띄웠고, `~/package.json` 때문에 turbopack root가 홈으로 잡혀 `next dev`가 수분 걸려 `--webpack`으로 우회(메모리 기록).
-
-## 2026-09-14 — 맵 카드 최근 열람 배지: 호버 시 펼쳐지는 폭 (main)
-
-- 최근 열람 맵 카드가 두 문구(수정시각·최근 접속)를 같은 그리드 셀에 겹쳐 두느라 **평소에도 넓은 쪽 폭을 잡고 있어 오너 이름 필이 미리 줄어 보였다.** 평소엔 수정시각 칩만 자리를 차지하고 호버 시 최근 접속 필이 폭을 늘리며 들어오도록 전환(max-width 애니, 상한은 최장 문구보다 조금 크게). 영문 `home.recentBadge`는 "Recently opened" → "Opened"로 단축(한글 "최근 접속"과 길이 균형). 1차 시도(두 칸을 각각 max-width로 접고 펴기)는 전환 중간 합계가 최종보다 커져(피크 147px > 최종 127px) 이름이 줄었다 늘어나는 튐을 만들었다 — 필을 absolute로 빼고 **실측 두 값 사이의 단일 width 전환**으로 교체. 실측: 배지 56/84px → 127/128px(ko/en), 전환 샘플 단조 증가·오버슈트 0, 넓은 폭에선 이름 불변(98px), 좁은 폭에서만 호버 중 말줄임.
-
-## 2026-09-14 — db-viewer 공유 브리지 상시 합류 + 배포 문서 정리 (dev)
-
-- db-viewer가 서버에 `dbv-shared`(`10.203.0.0/24`)를 띄우고 backend를 상시 합류시켜 둔 상태라, 2026-09-11에 되돌렸던 compose 합류를 **공유 방식으로 다시 넣었다** — db 서비스가 `default` + `dbv`(external, `DBV_NETWORK` 기본 `dbv-shared`)에 붙고 별칭은 `DBV_DB_ALIAS`(운영 `bpm-db` · 9910 `bpm9910-db`). 스택마다 별칭을 갈라야 공유 네트워크에서 엉뚱한 DB에 붙는 사고를 막는다. 되돌린 이유였던 "운영 미연결 + external 선행 요구"는 네트워크가 이미 서버에 있어 해소 — 대신 `up` 전제조건이 되었으므로 deploy §0·§5, setup-once A9에 명시.
-- 서버에서 사람이 해야 하는 나머지(네트워크 확인·볼륨 점검·`up -d db`·`dbviewer_ro` 발급과 민감 테이블 REVOKE·db-viewer `/admin` 등록)는 [`docs/deploy/db-viewer-readonly.md`](docs/deploy/db-viewer-readonly.md)로 복원. db-viewer 저장소의 `connect-sources.md`가 방식·정책 총괄이고 이 문서는 BPM 스택 부분만 담는다.
-- 문서 정리: 런칭 이후 운영 리셋이 금지라 `docs/deploy/db-seed.md`를 폐기(스키마 자동 보강 설명은 deploy §3으로 흡수, 시드 실행은 setup-once A8·README에 유지). main 머지 완료된 설계 스냅샷·구현 플랜 17건(superpowers plans 9·specs 6·ref-audit 설계·해소된 7/17 핸드오프)과 낡은 `qa/dev-vs-main-checklist.md` 삭제 — 코드 주석은 경로 접두만 떼고 파일명 유지.
-
-## 2026-09-12 이전
-- 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-09-24·09-02·08-12 이동분 포함) + git history.
+## 2026-09-18 이전
+- 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-09-30·09-24·09-02·08-12 이동분 포함) + git history.

@@ -2,6 +2,50 @@
 
 > 루트 `PROGRESS.md`는 최근 요약 + 이 파일 포인터. 여기엔 2026-07-20 시점까지의 전체 상세 이력이 보존돼 있다(더 오래된 요약은 하단 compact 섹션, 원문은 git history).
 
+## ── 2026-09-30 이동분 (PROGRESS 경량화 — 원문 그대로) ──
+
+## 2026-09-18 — 승인자 착지·결재 대기 안내·게시본 vs 대기본 비교 딥링크·비교 화면 AI 요약 탭 (feat/approval-landing-compare-ai)
+
+- 승인자가 맵을 열면 내가 결재할 pending 버전(승인자 목록에 있고 미결재)으로 착지(`?version=`은 여전히 우선). 다른 버전을 열었을 땐 상단 상태 배너에 "내 결재 대기 버전 열기" 링크, 승인 탭엔 `SectionOverlay` 흰 덮개+"해당 버전으로 이동" 버튼 — 이 탭은 열린 버전 기준이라 오판을 막는다. 판정은 버전별 워크플로 캐시(`wsById`, 진입 조회+현재 버전 조회 미러)로 하므로 결재 직후에도 최신. draft/pending은 공존하지 않아 착지 분기는 `else`.
+- pending 버전을 여는 모든 사용자에게 승인 워크플로와 확정 변경 기준 사이에 "게시본과 비교" 버튼 — 비교 화면 `?base=<최신 게시본>&target=<pending>` 딥링크(비교 페이지가 쿼리를 처음 읽게 됨, 모르는 id는 기본값).
+- 비교 화면 세 번째 탭 **AI 요약**: 프론트가 계산한 병합 diff를 `CompareDiffPayload`(노드/엣지 각 200 상한, ref n1/e1)로 `POST /api/maps/{id}/compare/ai-summary`에 보내고(파이썬에 diff 복제 안 함, viewer 게이트·두 버전 맵 소속 검증) 총평·주요 변경(kind 칩, 클릭=캔버스 포커스)·확인 포인트·집계 칩으로 렌더. 비교 진입 시 그래프가 준비되면 **선행 생성**하고 탭 라벨에 스피너, (base,target) 조합별 결과 보관, 재생성은 총평 카드 우상단. 프롬프트 키 `compare_summary_contract`(관리자 오버라이드 8번째), 계량 `ai_usage_events kind=compare_summary`. `_ask_and_validate`는 `schema` 인자로 일반화.
+- 후속(09-19) 문구 축약: 덮개=제목 "Awaiting your approval / 내 결재 대기" + 라벨 한 줄 + "Open that version / 그 버전 열기", 배너 링크 "Awaiting your approval: {label} / 내 결재 대기: {label}". 최소 높이 min-h-36.
+- 후속(09-19): 결재 대기 덮개는 승인 탭 전체가 아니라 **승인 워크플로 섹션만** 덮는다(사용자 지시) — 덮인 동안 섹션은 펼침 유지 + `min-h-44`로 문구·버튼 높이 확보(게시본의 워크플로 본문은 낮음). 결재 대기 목록·비교 CTA·SP 카드는 그대로 조작 가능.
+- 후속: 비교 좌측 변경 목록의 항목별 상태 필(Added/Removed/Changed 틴트)은 왼쪽 아이콘 사각과 중복이라 제거 — 제목 한 줄로(사용자 지시). 속성 탭·엣지 인스펙터의 상태 필은 그대로.
+- 검증: backend 1489 green·ruff, vitest 1004(+4)·tsc·eslint, Playwright `pw-smoke-approver-landing.mjs` 16/16(맵 32, 승인자 bora.hong). AI 응답은 로컬 OpenAI 호환 스텁으로 렌더만 확인 — 실제 모델(GLM/SGLang) 대상 프롬프트 품질은 서버 배포 후 확인 필요. 함정: 승인자가 뷰어 역할이면 배너 제목이 "Viewer access"라 버전 판정은 pending 전용 비교 CTA로; `networkidle` 대기는 AI 요청이 끝나야 풀려 스피너를 못 본다.
+
+## 2026-09-18 — 비교 화면 워스트케이스 개선 4종: 엣지 라벨 줄바꿈·속성 범위 토글·전 파라미터 표시·실측 배치 (main)
+
+- 65노드·78변경 워스트케이스(스크래치 시드, 저장소 미포함)로 비교 화면을 실측한 뒤 사용자 지적 4건 반영. ① 비교 엣지 라벨에 에디터와 같은 `EDGE_LABEL_MAX_WIDTH`(160) + 자동 줄바꿈 — 수평 연결에서 긴 라벨이 이웃 노드를 덮거나 잘리지 않게. ② 속성 탭에 "모두 / 변경만" 범위 토글(기본 변경만) — 변경 노드는 바뀐 필드만(제목·설명·타입·색 포함), 추가·삭제·무변경 노드는 토글 비활성+전체 표시. ③ 비교 노드 표시 필드를 AI 프리뷰와 같은 역할·부서·시스템·파라미터 칩으로(값 있는 것만, 전후는 기존 diff 필). `buildAppNodes`에 `touch_time` 누락 보강.
+- ④ 자동정렬 검토: 비교 화면은 `COMPARE_RENDER_H`(process 38) 고정 상수로 백본 정렬·핸들 중심을 계산했고, 공용 `layoutWithDagre`는 `nodeSizeOf` 고정 박스로 배치해 속성 줄이 켜지면 같은 열 이웃과 겹칠 수 있었다. `layoutWithDagre`가 `node.measured`를 우선하도록 바꾸고(에디터 자동정렬도 실측 박스 사용), 비교·프리뷰 모두 RF `dimensions` 변경에서 실측을 모아 1회 재배치 후 fitView. 상수표는 측정 전 폴백으로만 남긴다. 단위 테스트: 실측 300px 노드가 nodesep(120)만큼 띄워지는지.
+- 후속(같은 날): 비교 엣지 라벨 최대폭은 비교 전용 120(`COMPARE_EDGE_LABEL_MAX_WIDTH`, 에디터 160 유지 — 비교는 ranksep 120이라 더 좁게). 속성 탭은 변경 노드가 아니면(추가·삭제·변경 없음) 본문 전체를 톤다운(opacity)하고 상태 워터마크("추가/삭제/변경 없음", 스크롤 고정)를 덮어 값 비교 대상이 아님을 드러낸다. 입출력·조건 섹션은 "모두" 모드에선 비어도 구분선 섹션으로 남겨 "어디 있나"를 답하고(없으면 None 한 줄), "변경만"에선 바뀐 것이 있을 때만. 읽기전용 필은 탭 줄에서 본문 최상단(제목 위, 엣지·빈 상태 포함)으로 이동 — 탭 줄은 범위 토글에 양보.
+- 후속 2: 노드 위 표시에 입출력·시작/종료 조건도 포함(비교·AI 프리뷰 공통, 값 있는 것만) — 처음엔 노드 높이 때문에 뺐으나 실측 재배치가 높이를 흡수하므로 켠다. 비교 `buildAppNodes`·프리뷰 `layoutWorkingGraph`에 input/output/(forms)/start·end_condition 전달. 프리뷰 스모크 픽스처에 IO·조건 추가(15/15).
+- 후속 3: 비교 노드의 입출력은 패널 대신 **"입출력 +N −M" 한 줄**(항목 추가/삭제 없으면 생략) + 호버 시 입력·출력을 한 툴팁에 항목별 +/−로 펼침(`lib/io-diff.ts` 다중집합 diff, `NodeIoDiffSummary`, 조건 줄 아래·body 포털 z1400). AI 프리뷰는 패널 그대로. 그리고 **변경 필드 힌트** — 바뀐 필드의 파라미터 칩·속성 줄·조건 줄에 상태색(added/changed/removed) 아이콘 + 배경 틴트(`data.diffFieldStatus`, 담당자 줄은 실명·역할 중 하나만 바뀌어도). 에디터는 상태가 없어 무색. 함정: 조건 줄이 `NodeIoDetails` 안에 있어 컴포넌트째 갈아끼우면 조건이 사라진다 → 요약은 그 안에서 IO 변만 대체.
+- 후속 4: 입출력 요약 줄에 호버 이펙트(액센트 틴트 배경+글자색, 150ms) 추가, 그 줄에선 노드 래퍼의 네이티브 `title` 툴팁("변경: 시스템")을 `title=""`로 억제해 통합 툴팁과 겹치지 않게.
+- 주의: `tsc`가 dev 서버 산출물 `.next/dev/types`를 포함해 에디터 `page.tsx`의 기존 `toAppEdges` named export를 Next 페이지 계약 위반으로 잡는다(이번 변경과 무관, dev 서버 기동 후에만 발생).
+
+## 2026-09-18 — AI 컨설턴트 프리뷰 노드 속성 표시 + Tab 이동, PNG 내보내기 선택 해제 (main)
+
+- 프리뷰가 노드 라벨만 보여 수집된 파라미터를 한눈에 못 본다는 피드백 — 원인은 `layoutWorkingGraph`가 AI `attributes`를 노드 data로 안 옮기고 전부 빈값으로 채운 것(파라미터 칩 토글은 이미 ON). 역할·부서·시스템·회당 7필드를 data에 싣고 프리뷰 표시 필드를 인스펙터 카드와 같은 범위(`assignee`·`department`·`system`·`params`)로 확장. IO·조건·URL은 노드 높이를 키워 제외(카드에서 확인). 선택지 카드 썸네일도 같은 컨텍스트라 함께 표시된다.
+- 프리뷰 Tab/Shift+Tab — 에디터와 같은 `getNext/PrevNodeAlongFlow`로 흐름상 다음/이전 노드에 포커스(+클릭과 같은 카메라 센터·1.1 줌). 채팅 입력 포커스 중엔 가로채지 않음.
+- 에디터 PNG 내보내기가 선택 링·IO 상세·흐름 강조까지 찍히던 것 — 선택은 React 상태가 그리므로 캡처 전에 `selectedId`/노드 `selected`를 비우고 두 프레임 뒤 캡처, finally에서 원래 선택 복원. 실측: 캡처 시점 `.selected` 0개·액센트 픽셀 0·캡처 후 선택 1개 복원(`scripts/pw-smoke-preview-tab-export.mjs`, 14/14).
+
+## 2026-09-18 — 지연 실행 안내를 섹션 레이어로 + 인터뷰 임포트 30파일 워스트 케이스 UX (main)
+
+- 홈 대시보드 1클릭 지연 실행(0.6초)의 안내가 **아이콘 자리 링 치환**이라 눈에 안 띈다는 피드백 — `useDelayedNav`가 가장 가까운 스코프(`DelayedNavScopeContext`)에 `{label, cancel}`을 보고하고, 섹션(`DashboardSection`·점유 목록·프로필·이동 타일 한 칸)이 반투명 레이어(`SectionOverlay`, 임포트 완료와 같은 톤) 가운데에 링 + "Going to Inbox / Selecting {맵}" + "클릭하면 취소"를 띄운다(레이어 클릭 = 취소). 타일은 **한 칸 단위**(묶음 아님, 사용자 지시)라 컴팩트 변형. 섹션 밖 맵 카드는 기존 동작 유지. 헤더 더보기·하단 링크아웃은 `SectionLink`(onClick | href+pendingLabel)로 스코프 안에서 훅을 돌린다.
+- 인터뷰 임포트: 적용 완료 문구를 푸터에서 본문 레이어 가운데로 이동, 적용 중/재드라이런 중도 같은 레이어(스피너). 파일 목록은 건수 헤더 + 8행 내부 스크롤 + Clear all. 드라이런은 리포트 영역이 아코디언(0fr→1fr)으로 먼저 열리며 링 → 결과가 같은 자리에. 리포트 본문은 `100vh-11rem` 상한에 **좌/우 열 독립 스크롤**(스티키 대신 — 오른쪽을 내려도 요약이 남는다), 우측 스티키 툴바(건수·검색·정렬 Order/Name/Issues/Maps), 카드 10개 윈도 + 바닥 센티널 IntersectionObserver(limit마다 재관찰해야 짧은 카드에서도 이어짐), 좌측 포커스가 윈도 밖이면 노출·스크롤. 실측 함정: 높이 상한에 걸리면 열의 flex 자식이 눌려 요약 카드가 잘린다 → `[&>*]:shrink-0`.
+- 검증: 30개 변형 JSON 드라이런 실측 19/19, 기존 인터뷰 임포트 스모크의 적용 음영/Apply 비활성/Cancel 도달 통과. 로컬 3000/8000은 db-viewer가 점유 중이라 BPM은 3047/8048로 따로 띄웠고, `~/package.json` 때문에 turbopack root가 홈으로 잡혀 `next dev`가 수분 걸려 `--webpack`으로 우회(메모리 기록).
+
+## 2026-09-14 — 맵 카드 최근 열람 배지: 호버 시 펼쳐지는 폭 (main)
+
+- 최근 열람 맵 카드가 두 문구(수정시각·최근 접속)를 같은 그리드 셀에 겹쳐 두느라 **평소에도 넓은 쪽 폭을 잡고 있어 오너 이름 필이 미리 줄어 보였다.** 평소엔 수정시각 칩만 자리를 차지하고 호버 시 최근 접속 필이 폭을 늘리며 들어오도록 전환(max-width 애니, 상한은 최장 문구보다 조금 크게). 영문 `home.recentBadge`는 "Recently opened" → "Opened"로 단축(한글 "최근 접속"과 길이 균형). 1차 시도(두 칸을 각각 max-width로 접고 펴기)는 전환 중간 합계가 최종보다 커져(피크 147px > 최종 127px) 이름이 줄었다 늘어나는 튐을 만들었다 — 필을 absolute로 빼고 **실측 두 값 사이의 단일 width 전환**으로 교체. 실측: 배지 56/84px → 127/128px(ko/en), 전환 샘플 단조 증가·오버슈트 0, 넓은 폭에선 이름 불변(98px), 좁은 폭에서만 호버 중 말줄임.
+
+## 2026-09-14 — db-viewer 공유 브리지 상시 합류 + 배포 문서 정리 (dev)
+
+- db-viewer가 서버에 `dbv-shared`(`10.203.0.0/24`)를 띄우고 backend를 상시 합류시켜 둔 상태라, 2026-09-11에 되돌렸던 compose 합류를 **공유 방식으로 다시 넣었다** — db 서비스가 `default` + `dbv`(external, `DBV_NETWORK` 기본 `dbv-shared`)에 붙고 별칭은 `DBV_DB_ALIAS`(운영 `bpm-db` · 9910 `bpm9910-db`). 스택마다 별칭을 갈라야 공유 네트워크에서 엉뚱한 DB에 붙는 사고를 막는다. 되돌린 이유였던 "운영 미연결 + external 선행 요구"는 네트워크가 이미 서버에 있어 해소 — 대신 `up` 전제조건이 되었으므로 deploy §0·§5, setup-once A9에 명시.
+- 서버에서 사람이 해야 하는 나머지(네트워크 확인·볼륨 점검·`up -d db`·`dbviewer_ro` 발급과 민감 테이블 REVOKE·db-viewer `/admin` 등록)는 [`docs/deploy/db-viewer-readonly.md`](docs/deploy/db-viewer-readonly.md)로 복원. db-viewer 저장소의 `connect-sources.md`가 방식·정책 총괄이고 이 문서는 BPM 스택 부분만 담는다.
+- 문서 정리: 런칭 이후 운영 리셋이 금지라 `docs/deploy/db-seed.md`를 폐기(스키마 자동 보강 설명은 deploy §3으로 흡수, 시드 실행은 setup-once A8·README에 유지). main 머지 완료된 설계 스냅샷·구현 플랜 17건(superpowers plans 9·specs 6·ref-audit 설계·해소된 7/17 핸드오프)과 낡은 `qa/dev-vs-main-checklist.md` 삭제 — 코드 주석은 경로 접두만 떼고 파일명 유지.
+
 ## ── 2026-09-24 이동분 (PROGRESS 경량화 — 원문 그대로) ──
 
 ## 2026-09-12 — 9월 1차 공지 초안 + 매뉴얼 6종·AI 챗 매뉴얼·슬라이드 최신화 (dev)
