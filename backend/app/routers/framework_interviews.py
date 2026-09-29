@@ -575,6 +575,18 @@ def _ordered_tasks(row: FrameworkInterviewSession) -> list[tuple[str, str]]:
     return list(_known_task_names(row).items())
 
 
+def _feedback_task_lines(row: FrameworkInterviewSession) -> list[tuple[str, str]]:
+    """캔버스 피드백 프롬프트의 [L6 카드] — 외부 참조는 relations 제안 프롬프트와 같은 소속 L5 표시를 단다."""
+    origin = {}
+    for card in _external_cards(row):
+        external = card.get("external") if isinstance(card.get("external"), dict) else {}
+        origin[str(card["task_id"])] = external.get("l5_label") or external.get("l5_code") or ""
+    return [
+        (task_id, f"{name} (외부 L6, 소속 L5={origin[task_id]})" if task_id in origin else name)
+        for task_id, name in _ordered_tasks(row)
+    ]
+
+
 @router.post("/{session_id}/relations", response_model=FrameworkInterviewOut)
 async def generate_relations(
     session_id: int, payload: FrameworkInterviewRelationsGenerateIn | None = None,
@@ -678,14 +690,14 @@ async def feedback_session(
     row = await _get_session_row(db, session_id)
     if row.status == "applied":
         raise HTTPException(status_code=409, detail="session is already applied")
-    tasks = sorted(row.tasks, key=lambda t: t.seq)
     if payload.scope == "relations":
         if row.status != "linking" or not row.canvas:
             raise HTTPException(status_code=409, detail="relations feedback needs a proposed canvas")
-        known = {t.task_id for t in tasks}
+        # 외부 참조(다른 L5의 L6)도 known에 있어야 한다 — 정규화가 모르는 task_id의 노드를 낡은 캔버스로 보고 버린다(2026-09-29 실사고)
+        known = set(_known_task_names(row))
         base = row.canvas
         messages = build_canvas_feedback_messages(
-            lang=row.lang, canvas=base, tasks=[(t.task_id, t.name) for t in tasks],
+            lang=row.lang, canvas=base, tasks=_feedback_task_lines(row),
             message=payload.message, overrides=await get_prompt_overrides(db),
         )
         out = await _ask(messages, CanvasOut, db, user, normalizer=lambda raw: normalize_canvas(raw, base, known))

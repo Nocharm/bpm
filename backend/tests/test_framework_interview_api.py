@@ -1,6 +1,7 @@
 """Framework interview session API — sysadmin AI campaign over one L5 (spec 2026-09-21)."""
 
 import asyncio
+import json
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -281,6 +282,44 @@ def test_external_cards_join_the_flow_without_tasks(client: TestClient, monkeypa
     assert doc["externalTasks"] == [{"refId": "ext-oos", "l5": {"nodeCode": "20-02-01-01-01", "label": "시험 일탈"}, "l6": "OOS 접수"}]
     assert [r["taskId"] for r in doc["rows"]] == [t1["task_id"]]
     assert any(e["src"] == "ext-oos" for e in doc["relations"]["edges"])
+
+
+def test_relations_feedback_keeps_external_nodes(client: TestClient, monkeypatch) -> None:
+    """채팅 수정(feedback relations)도 외부 참조를 known으로 안다 — 첫 제안엔 있던 외부 노드가 한 번 고치면 증발하던 실사고 (2026-09-29)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    ext = {"name": "OOS 접수", "summary": "", "owner_role": "", "department": "", "depends_on": [], "mode": "external",
+           "external": {"ref_id": "ext-oos", "l5_code": "20-02-01-01-01", "l5_label": "시험 일탈", "l6": "OOS 접수", "map_id": None}}
+    cards = [ext, {"name": "A", "summary": "", "owner_role": "", "department": "", "depends_on": ["OOS 접수"]}]
+    body = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()
+    t1 = body["tasks"][0]
+    _fake_ai_queue(monkeypatch, [Q_JSON, ROW_JSON,
+                                 '{"entry":{"taskId":"%s","triggerType":"manual","label":""},'
+                                 '"edges":[{"src":"ext-oos","dst":"%s","kind":"seq"}]}' % (t1["task_id"], t1["task_id"])])
+    _step(sid)
+    full = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "요청서", "q6": ""}
+    client.post(f"/api/framework-interviews/{sid}/tasks/{t1['id']}/answers", json={"answers": full}, headers=HEADERS)
+    _step(sid)
+    proposed = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS).json()["canvas"]
+    ext_node = next(n for n in proposed["nodes"] if n["task_id"] == "ext-oos")
+    assert any(e["source_node_id"] == ext_node["id"] for e in proposed["edges"])
+
+    # 가짜 AI는 받은 캔버스를 그대로 돌려준다(엣지 라벨만 손질) — 프롬프트도 잡아 둔다
+    seen: list[list[dict]] = []
+
+    async def _echo(messages, model=None, *, reasoning=None, max_tokens=None):
+        seen.append(messages)
+        return ai_client.AiReply(content=json.dumps(proposed, ensure_ascii=False), prompt_tokens=10, completion_tokens=5)
+
+    monkeypatch.setattr(ai_client, "call_ai", _echo)
+    fb = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "relations", "message": "라벨만 다듬어"}, headers=HEADERS)
+    assert fb.status_code == 200, fb.text
+    canvas = fb.json()["canvas"]
+    assert any(n["task_id"] == "ext-oos" for n in canvas["nodes"])  # 외부 노드가 살아남는다
+    assert any(e["source_node_id"] == ext_node["id"] for e in canvas["edges"])
+    assert "OOS 접수 (외부 L6, 소속 L5=시험 일탈)" in seen[0][1]["content"]  # 프롬프트의 [L6 카드]에도 외부 표시
 
 
 def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:
