@@ -369,8 +369,9 @@ export function FrameworkTreePicker({
           >
             {node.name}
           </span>
-          {node.map_count > 0 && (
-            <span className={`ml-auto shrink-0 pr-1 text-fine ${isCurrentL5 ? "text-accent" : "text-ink-muted"}`}>
+          {/* 서브트리 맵 수는 펼치지 않은 행에만 — 펼친 조상마다 같은 수가 겹쳐 보이지 않게, 펼친 가지의 가장 깊은 행이 숫자를 든다(사용자 요청 2026-09-29) */}
+          {node.map_count > 0 && !open && (
+            <span className={`ml-auto shrink-0 pr-1 text-fine ${isCurrentL5 ? "text-accent" : "text-ink-muted"}`} data-id={`framework-picker-count-${node.id}`}>
               {node.map_count}
             </span>
           )}

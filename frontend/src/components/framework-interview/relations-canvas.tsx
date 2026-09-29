@@ -88,6 +88,8 @@ function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>, taskCards: 
           ...node.data,
           ...(name ? { label: name } : {}),
           ...(card ? { description: card.summary, spAssigneeRole: card.owner_role || null, spDepartment: card.department || null } : {}),
+          // 외부 참조 카드는 연계 캔버스의 외부 L6 룩(출처 L5 배지·외부 스타일)으로 — 등록 후 플레이스홀더/링크가 되는 자리(2026-09-29)
+          ...(card?.mode === "external" && card.external ? { spOriginPath: card.external.l5_label || card.external.l5_code } : {}),
           sideHandles: true,
           hideLinkBanner: true,
         },

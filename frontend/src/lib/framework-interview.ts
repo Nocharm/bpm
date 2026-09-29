@@ -86,13 +86,15 @@ export function buildSubmitPayload(q: FwQuestionnaire, answers: Record<string, F
  * 잠금을 막는 이름 중복인지 — 서버 `save_plan` 규칙과 동치.
  * 기존 맵끼리는 이름이 같아도 코드로 구분되므로, 충돌에 `existing_code` 없는 카드가 껴야 막는다.
  */
-export function hasBlockingDuplicate(cards: Pick<FwPlanCard, "name" | "existing_code">[]): boolean {
+export function hasBlockingDuplicate(cards: Pick<FwPlanCard, "name" | "existing_code" | "mode">[]): boolean {
   const counts = new Map<string, number>();
-  for (const card of cards) {
+  // 외부 참조 타일은 다른 L5의 업무라 이름이 겹쳐도 충돌이 아니다(서버 save_plan과 동치, 2026-09-29)
+  const own = cards.filter((card) => card.mode !== "external");
+  for (const card of own) {
     const name = card.name.trim();
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
-  return cards.some((card) => (counts.get(card.name.trim()) ?? 0) > 1 && !card.existing_code);
+  return own.some((card) => (counts.get(card.name.trim()) ?? 0) > 1 && !card.existing_code);
 }
 
 export function findCurrentTask(session: FwInterviewSession): FwInterviewTask | null {

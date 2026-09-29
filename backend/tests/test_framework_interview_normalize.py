@@ -87,6 +87,19 @@ def test_align_relations_to_plan_enforces_predecessors_entry_and_loops() -> None
     assert align_relations_to_plan(proposed, [{"name": "x", "depends_on": []}]) == proposed
 
 
+def test_align_relations_to_plan_never_picks_an_external_entry() -> None:
+    """외부 참조(다른 L5의 L6)가 첫 단계에 있어도 진입점은 내부 카드 (2026-09-29)."""
+    plan = [
+        {"name": "타 L5 접수", "task_id": "ext-1", "depends_on": [], "mode": "external",
+         "external": {"ref_id": "ext-1", "l5_code": "20-01", "l5_label": "타 L5", "l6": "타 L5 접수", "map_id": None}},
+        {"name": "검토", "task_id": "t2", "depends_on": ["타 L5 접수"]},
+    ]
+    proposed = {"entry": {"taskId": "ext-1", "triggerType": "manual", "label": ""}, "edges": []}
+    out = align_relations_to_plan(proposed, plan)
+    assert out["entry"]["taskId"] == "t2"
+    assert out["edges"] == [{"src": "ext-1", "dst": "t2", "kind": "seq"}]
+
+
 def test_plan_accepts_titles_and_dedupes() -> None:
     out = normalize_plan({"items": [{"title": "요청 접수", "role": "담당자"}, "검토 승인", {"name": "요청 접수"}]})
     PlanOut.model_validate(out)

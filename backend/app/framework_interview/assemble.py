@@ -61,7 +61,7 @@ async def load_category_chain(db: AsyncSession, category_id: int) -> list[dict]:
 
 def build_document(
     chain: list[dict], l5: dict, rows: list[dict], relations: dict | None,
-    *, label: str, session_id: int,
+    *, label: str, session_id: int, external_tasks: list[dict] | None = None,
 ) -> dict:
     doc: dict = {
         "_readme": [f"AI campaign session {session_id} · {now_kst():%Y-%m-%d %H:%M} · {label}"],
@@ -73,7 +73,25 @@ def build_document(
     }
     if relations:
         doc["relations"] = relations
+    if external_tasks:
+        doc["externalTasks"] = external_tasks
     return doc
+
+
+def external_tasks_of(plan: list[dict] | None) -> list[dict]:
+    """계획의 외부 참조 카드 → 0.5 externalTasks[] (refId·l5.nodeCode/label·l6). 어댑터가 같은 L5의 이름 일치 맵에
+    자동 연결하거나 출처 L5 배지가 붙은 플레이스홀더로 세운다 (docs/samples/interview-json-0.5.md §2)."""
+    out: list[dict] = []
+    for card in plan or []:
+        ext = card.get("external") if card.get("mode") == "external" else None
+        if not isinstance(ext, dict) or not card.get("task_id"):
+            continue
+        out.append({
+            "refId": str(card["task_id"]),
+            "l5": {"nodeCode": str(ext.get("l5_code") or ""), "label": str(ext.get("l5_label") or "")},
+            "l6": ext.get("l6") or None,
+        })
+    return out
 
 
 def finalize_row_output(out: RowOut, card: dict) -> dict:
@@ -136,6 +154,7 @@ async def assemble_document(db: AsyncSession, session: FrameworkInterviewSession
     l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
     dropped = await _refresh_keep_rows(db, session, chain, l5)
     rows = _document_rows(list(session.tasks), dropped)
-    doc = build_document(chain, l5, rows, session.relations, label=session.label, session_id=session.id)
+    doc = build_document(chain, l5, rows, session.relations, label=session.label, session_id=session.id,
+                         external_tasks=external_tasks_of(session.plan))
     session.assembled = doc
     return doc

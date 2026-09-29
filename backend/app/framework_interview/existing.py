@@ -334,6 +334,9 @@ def merge_existing_cards(cards: list[dict], existing: list[dict], previous: list
     seen: set[str] = set()
     for raw in cards:
         card = dict(raw)
+        if card.get("mode") == "external":
+            merged.append(card)  # 외부 참조 타일은 기존 맵과 무관 — 이름 매칭 없이 그대로
+            continue
         code = card.get("existing_code")
         name = (card.get("name") or "").strip()
         if (code and code in frozen_codes) or (name and name in frozen_names):

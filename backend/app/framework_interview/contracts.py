@@ -238,6 +238,7 @@ L5_RELATIONS_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 - entry.taskId: 가장 먼저 시작되는 L6의 taskId. triggerType은 manual·timer·message·condition.
 - edges: src/dst는 taskId. 순차는 kind=seq, 갈림은 kind=branch + gateway=exclusive + condition, 되돌아감은 kind=loop.
 - 모든 L6가 최소 한 번은 등장해야 하고, 각 카드의 depends_on과 시작/종료 조건을 존중하세요.
+- "(외부 L6 ...)" 표시가 붙은 항목은 다른 L5의 업무다. entry가 될 수 없고, 앞뒤 이웃이나 분기 대상으로만 잇는다.
 - 다른 설명 없이 JSON 한 개만: {"entry":{"taskId":"","triggerType":"manual","label":""},"edges":[{"src":"","dst":"","kind":"seq"}]}"""
 
 CANVAS_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 아래 L5 연계 캔버스(노드·엣지)를 사용자 피드백대로 고치세요.
@@ -432,8 +433,10 @@ def build_relations_messages(
         task_id = card.get("task_id")
         row = rows.get(task_id, {}) if task_id else {}
         fields = row.get("fields") or {}
+        external = card.get("external") if card.get("mode") == "external" else None
+        marker = f" (외부 L6, 소속 L5={external.get('l5_label') or external.get('l5_code')})" if isinstance(external, dict) else ""
         lines.append(
-            f"- taskId={task_id} 이름={card.get('name')} 선행={card.get('depends_on') or []} "
+            f"- taskId={task_id} 이름={card.get('name')}{marker} 선행={card.get('depends_on') or []} "
             f"시작조건={fields.get('start_condition', '')} 완료기준={fields.get('done_criteria', '')}"
         )
     user = "[L6 목록]\n" + "\n".join(lines)

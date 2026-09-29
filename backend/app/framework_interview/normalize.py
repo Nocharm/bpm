@@ -444,7 +444,13 @@ def align_relations_to_plan(relations: dict, plan: list[dict]) -> dict:
         if edge.get("kind") != "loop" and stages.get(edge["dst"], 0) < stages.get(edge["src"], 0):
             edge["kind"] = "loop"
             edge.pop("gateway", None)
-    first_stage = [str(card["task_id"]) for card in plan if card.get("task_id") and stages.get(str(card["task_id"])) == 0]
+    # 진입점은 내부 카드(태스크) 중 가장 앞 단계 — 외부 참조(다른 L5의 L6)는 시작이 될 수 없다
+    internal = [card for card in plan if card.get("task_id") and card.get("mode") != "external"]
+    if internal:
+        lowest = min(stages.get(str(card["task_id"]), 0) for card in internal)
+        first_stage = [str(card["task_id"]) for card in internal if stages.get(str(card["task_id"]), 0) == lowest]
+    else:
+        first_stage = []
     entry = dict(relations.get("entry") or {})
     if first_stage and entry.get("taskId") not in first_stage:
         entry["taskId"] = first_stage[0]

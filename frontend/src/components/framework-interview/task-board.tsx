@@ -5,7 +5,7 @@
 // 미리보기 눈 아이콘은 없다 — 완성 카드의 흐름은 패널 안에 펼쳐진다(2026-09-28). 연결·등록 단계에서 다른 카드를 보는 중이면
 // 맨 아래에 "흐름으로 돌아가기" 타일을 둔다(닫기 × 하나로는 길을 잃는다는 피드백).
 
-import { ArrowRightToLine, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward } from "lucide-react";
+import { ArrowRightToLine, ExternalLink, Loader2, Pause, PencilLine, Play, RotateCcw, SkipForward } from "lucide-react";
 
 import type { FwInterviewSession, FwInterviewTask, FwTaskStatus } from "@/lib/api";
 import { deriveProgress, type FwStep } from "@/lib/framework-interview";
@@ -54,6 +54,8 @@ export function TaskBoard({
   const locked = session.status !== "planning";
   const tasks = [...session.tasks].sort((a, b) => a.seq - b.seq);
   const workingTask = tasks.find((x) => x.status === "generating" || x.status === "drawing");
+  // 외부 참조 타일은 태스크가 아니라 행이 없다 — 연결 캔버스에만 노드로 있으니 개수만 알린다(2026-09-29)
+  const externalCount = (session.plan ?? []).filter((card) => card.mode === "external").length;
   const workingStart = workingTask ? workingSince[workingTask.id] ?? null : null;
   const now = useNowTick(workingStart !== null);
   const returnLabel = returnStep === "relations" ? t("fwConsult.returnToRelations") : returnStep ? t("fwConsult.returnToRegister") : null;
@@ -170,6 +172,12 @@ export function TaskBoard({
           );
         })}
       </ol>
+      {locked && externalCount > 0 && (
+        <div className="flex items-center gap-1.5 px-1 text-fine text-ink-tertiary" data-id="fw-consult-external-count">
+          <ExternalLink size={12} strokeWidth={1.5} />
+          {t("fwConsult.externalCount", { n: externalCount })}
+        </div>
+      )}
       {tasks.some((x) => x.error) && (
         <ul className="flex flex-col gap-1 text-fine text-error" data-id="fw-consult-task-errors">
           {tasks.filter((x) => x.error).map((x) => <li key={x.id}>{x.seq}. {x.error}</li>)}

@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Headset, Loader2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileText, Headset, Loader2 } from "lucide-react";
 
 import {
   abandonFrameworkInterview, confirmFrameworkRelations, generateFrameworkPlan, generateFrameworkRelations,
@@ -14,14 +14,16 @@ import {
   deleteFrameworkAttachment, reopenFrameworkRelations, resumeFrameworkInterview, retryFrameworkTask,
   reviseFrameworkTask, saveFrameworkCanvas, saveFrameworkPlan, sendFrameworkFeedback, skipFrameworkTask,
   submitFrameworkAnswers, uploadFrameworkInterviewAttachment,
-  type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
+  type CategoryNode, type FwAnswerValue, type FwInterviewSession, type FwPlanCard,
 } from "@/lib/api";
 import { deriveStep, findCurrentTask, hasBackgroundWork, type FwStep } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InterviewJsonPromptButton } from "@/components/framework-interview/interview-json-prompt-button";
 import { PlanBriefPanel } from "@/components/framework-interview/plan-brief-panel";
-import { PlanEditor } from "@/components/framework-interview/plan-editor";
+import { FrameworkCascadePicker } from "@/components/framework-cascade-picker";
+import { FrameworkTreePicker } from "@/components/framework-tree-picker";
+import { PlanEditor, type ExternalAddRequest } from "@/components/framework-interview/plan-editor";
 import { RegisterStep } from "@/components/framework-interview/register-step";
 import { RelationsStep } from "@/components/framework-interview/relations-step";
 import { TaskBoard } from "@/components/framework-interview/task-board";
@@ -31,6 +33,8 @@ const BOARD_WIDTH_KEY = "bpm.fwConsultBoardWidth";
 const BOARD_MIN = 380;  // 진행 헤더(진행률·ETA·일시정지)가 한/영 모두 한 줄에 들어가는 하한
 const BOARD_MAX = 640;
 const POLL_MS = 2000;
+const LEFT_SEGMENT = "flex shrink-0 items-center gap-0.5 rounded-sm border border-hairline bg-surface p-0.5";  // 계획 편집기 모드 세그먼트와 동일
+const LEFT_SEGMENT_BTN = "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-fine transition-colors";
 const STALLED_TICKS = 5;  // 폴링 5틱(≈10초) 동안 할 일은 있는데 아무도 안 움직이면 러너가 멎은 것으로 본다
 
 function buildStatusSignature(session: FwInterviewSession): string {
@@ -73,7 +77,18 @@ export default function FrameworkConsultPage() {
   // brief는 사용자가 건드리기 전까지 서버값(null=미편집), 카드는 편집기가 미러해 주는 ref(렌더에서 읽지 않는다).
   const [briefDraft, setBriefDraft] = useState<string | null>(null);
   const planCardsRef = useRef<FwPlanCard[]>([]);
-  const handleCardsChange = useCallback((cards: FwPlanCard[]) => { planCardsRef.current = cards; }, []);
+  // 좌측 열 스왑 — 목적·첨부 | 외부 L6 찾기(체계 피커). 외부 타일 추가는 편집기가 ref에 걸어 둔 핸들러로(2026-09-29)
+  const [leftTab, setLeftTab] = useState<"brief" | "external">("brief");
+  const [externalMapIds, setExternalMapIds] = useState<Set<number>>(() => new Set());
+  const [externalL5, setExternalL5] = useState<CategoryNode | null>(null);
+  const addExternalRef = useRef<((request: ExternalAddRequest) => void) | null>(null);
+  const handleCardsChange = useCallback((cards: FwPlanCard[]) => {
+    planCardsRef.current = cards;
+    setExternalMapIds((prev) => {
+      const next = new Set(cards.flatMap((card) => (card.mode === "external" && card.external?.map_id !== null && card.external?.map_id !== undefined ? [card.external.map_id] : [])));
+      return next.size === prev.size && [...next].every((id) => prev.has(id)) ? prev : next;
+    });
+  }, []);
 
   const applySession = useCallback((next: FwInterviewSession) => {
     statusSigRef.current = buildStatusSignature(next);
@@ -205,7 +220,66 @@ export default function FrameworkConsultPage() {
       {error && <div className="border-b border-hairline bg-surface-pearl px-3 py-1.5 text-caption text-error" data-id="fw-consult-error">{error}</div>}
       <div className="flex min-h-0 flex-1">
         <aside className="flex shrink-0 flex-col overflow-y-auto bg-surface-pearl" style={{ width: boardWidth }} data-id="fw-consult-board">
-          {step === "plan" ? (
+          {step === "plan" && (
+            <div className="flex items-center gap-2 border-b border-hairline px-3 py-2">
+              <div className={LEFT_SEGMENT} data-id="fw-consult-left-tabs">
+                {(["brief", "external"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    data-id={`fw-consult-left-tab-${tab}`}
+                    aria-pressed={leftTab === tab}
+                    className={`${LEFT_SEGMENT_BTN} ${leftTab === tab ? "bg-accent-tint text-accent" : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"}`}
+                    onClick={() => setLeftTab(tab)}
+                  >
+                    {tab === "brief" ? <FileText size={12} strokeWidth={1.5} /> : <ExternalLink size={12} strokeWidth={1.5} />}
+                    {t(tab === "brief" ? "fwConsult.leftBrief" : "fwConsult.leftExternal")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {step === "plan" && leftTab === "external" ? (
+            <div className="flex min-h-0 flex-1 flex-col" data-id="fw-consult-external-finder">
+              <p className="px-3 pt-2 text-fine text-ink-tertiary">{t("fwConsult.externalHint")}</p>
+              {/* 체계 피커 재사용 — 이 L5의 기존 L6(existing)와 이미 추가한 외부 맵은 링크됨으로 막힌다. 피크 "추가"는 편집기 핸들러로 */}
+              <FrameworkTreePicker
+                currentMapId={0}
+                linkedMapIds={new Set([...session.existing.map((e) => e.map_id), ...externalMapIds])}
+                readOnly={false}
+                nodeDisplayFields={[]}
+                linkageCategoryId={session.category_id}
+                hideHeader
+                className="flex min-h-0 flex-1 flex-col"
+                ctaLabelKey="fwConsult.externalAddL5"
+                onClose={() => setLeftTab("brief")}
+                onPeekAdd={(payload) => {
+                  if (payload.categoryId === undefined) return;
+                  addExternalRef.current?.({ kind: "map", mapId: payload.linkedMapId, name: payload.name, categoryId: payload.categoryId });
+                }}
+                onPeekOpenMap={(mapId) => window.open(`/maps/${mapId}`, "_blank", "noopener")}
+                onFocusLinkedNode={() => undefined}
+              />
+              {/* L5만 아는 참조 — 그 L5의 L6 이름은 비워 두고(L6 미지정) 등록 시 플레이스홀더로 세운다 */}
+              <div className="flex flex-col gap-1.5 border-t border-hairline p-3" data-id="fw-consult-external-l5">
+                <span className="text-fine text-ink-tertiary">{t("fwConsult.externalL5Only")}</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="min-w-0 flex-1">
+                    <FrameworkCascadePicker selectedId={externalL5?.id ?? null} onSelect={setExternalL5} variant="dropdown" dataIdPrefix="fw-consult-ext-l5" />
+                  </div>
+                  <button
+                    type="button"
+                    data-id="fw-consult-external-add-l5"
+                    className="shrink-0 rounded-sm border border-hairline bg-surface px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-40"
+                    disabled={externalL5 === null || externalL5.id === session.category_id}
+                    onClick={() => { if (externalL5) { addExternalRef.current?.({ kind: "l5", category: externalL5 }); setExternalL5(null); } }}
+                  >
+                    {t("fwConsult.externalAddL5")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : step === "plan" ? (
             <PlanBriefPanel
               brief={briefDraft ?? session.brief}
               onBriefChange={setBriefDraft}
@@ -265,6 +339,7 @@ export default function FrameworkConsultPage() {
               session={session}
               busy={busy}
               proposing={proposing}
+              addExternalRef={addExternalRef}
               onCardsChange={handleCardsChange}
               onSave={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, false, briefDraft ?? session.brief))}
               onLock={(cards: FwPlanCard[]) => void run(() => saveFrameworkPlan(session.id, cards, true, briefDraft ?? session.brief))}

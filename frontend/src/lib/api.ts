@@ -2889,7 +2889,15 @@ export interface FwQuestion {
 export interface FwQuestionnaire { questions: FwQuestion[] }
 export type FwAnswerValue = string | string[];
 /** 기존 L6 맵과의 관계 — keep은 손대지 않고, revise는 설문을 다시 받아 다시 그린다. */
-export type FwCardMode = "new" | "keep" | "revise";
+export type FwCardMode = "new" | "keep" | "revise" | "external";
+/** 외부 참조 타일의 대상 — 다른 L5의 기존 L6(map_id·l6) 또는 L5만 아는 플레이스홀더(l6=null). 0.5 externalTasks로 나간다(2026-09-29). */
+export interface FwExternalRef {
+  ref_id: string;
+  l5_code: string;
+  l5_label: string;
+  l6: string | null;
+  map_id: number | null;
+}
 export interface FwPlanCard {
   name: string;
   summary: string;
@@ -2899,6 +2907,7 @@ export interface FwPlanCard {
   task_id?: string;
   existing_code?: string | null;  // 병합된 기존 L6 맵의 코드(서버 merge_existing_cards가 채운다)
   mode?: FwCardMode;
+  external?: FwExternalRef | null;  // mode=external일 때만
 }
 export type FwTaskStatus = "pending" | "generating" | "ready" | "submitted" | "drawing" | "drawn" | "failed";
 export interface FwInterviewTask {

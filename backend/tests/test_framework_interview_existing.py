@@ -229,6 +229,16 @@ def test_merge_existing_cards_keeps_every_existing_map_once() -> None:
     assert merged2[0]["mode"] == "keep" and merged2[0]["summary"] == "s1"
 
 
+def test_merge_existing_cards_passes_external_cards_through() -> None:
+    """외부 참조 카드는 기존 맵 매칭·모드 재판정 없이 그대로 남는다 (2026-09-29)."""
+    existing = [{"map_id": 1, "code": "x-01", "name": "접수", "summary": "s1", "activities": ["a"], "row": {}}]
+    ext = {"name": "접수", "summary": "", "owner_role": "", "department": "", "depends_on": [], "mode": "external",
+           "external": {"ref_id": "ext-1", "l5_code": "20-01", "l5_label": "타 L5", "l6": "접수", "map_id": 9}}
+    merged = merge_existing_cards([ext], existing)
+    assert [(c["name"], c["mode"]) for c in merged] == [("접수", "keep"), ("접수", "external")]
+    assert merged[1]["external"]["ref_id"] == "ext-1"
+
+
 def test_merge_existing_cards_inherits_previous_predecessors() -> None:
     """AI가 기존 카드의 depends_on을 비우거나 카드를 빠뜨려도 직전 계획의 선행을 승계한다 (2026-09-28)."""
     existing = [

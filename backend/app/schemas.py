@@ -2728,6 +2728,17 @@ class FrameworkInterviewCreateIn(BaseModel):
     lang: Literal["ko", "en"] = "ko"
 
 
+class FrameworkExternalRefIn(BaseModel):
+    """외부 참조 카드의 대상 — 다른 L5의 기존 L6(map_id·l6) 또는 L5만 아는 플레이스홀더(l6=None).
+    인터뷰 JSON 0.5 externalTasks[]로 나간다(refId=ref_id, l5.nodeCode=l5_code) (2026-09-29)."""
+
+    ref_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    l5_code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    l5_label: Annotated[str, StringConstraints(max_length=200)] = ""
+    l6: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    map_id: int | None = None
+
+
 class FrameworkPlanCardIn(BaseModel):
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     summary: str = ""
@@ -2735,7 +2746,15 @@ class FrameworkPlanCardIn(BaseModel):
     department: Annotated[str, StringConstraints(max_length=100)] = ""
     depends_on: list[str] = []  # 선행 카드 이름
     existing_code: str | None = None  # 병합된 기존 L6 맵의 task_id
-    mode: Literal["new", "keep", "revise"] = "new"
+    # external = 다른 L5의 L6/L5 참조 타일 — 태스크(설문·드로잉) 없이 흐름에만 참여한다
+    mode: Literal["new", "keep", "revise", "external"] = "new"
+    external: FrameworkExternalRefIn | None = None
+
+    @model_validator(mode="after")
+    def _check_external(self) -> "FrameworkPlanCardIn":
+        if (self.mode == "external") != (self.external is not None):
+            raise ValueError("external cards need an external reference, and only they may carry one")
+        return self
 
 
 class FrameworkInterviewPlanIn(BaseModel):

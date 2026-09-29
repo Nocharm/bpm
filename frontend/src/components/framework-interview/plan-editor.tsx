@@ -10,11 +10,13 @@
 // 행이 비면 STAGE_HOLD_MS 동안 빈 행을 남긴 뒤 접어 아래 행들이 한 단계 당겨진다. 선행 연결은 SVG 점선 곡선(타일 실측, FLIP 중엔 rAF로 따라감).
 // 그립 아이콘은 hover에서만 우측 상단에. 기존 L6 맵에서 병합된 카드(existing_code)는 유지/정정만 고르고 삭제는 막는다(서버 병합이 되살린다).
 // brief·첨부·AI 제안은 1열 PlanBriefPanel(page.tsx가 이어 준다). 시안 확정 2026-09-24.
+// 외부 참조 타일(2026-09-29): 다른 L5의 L6(체계 피커에서 드래그/피크 추가) 또는 L5만 아는 플레이스홀더. 점선 타일에 소속 L5 배지,
+// 설문·드로잉 없이 선행 관계와 연결 캔버스에만 참여한다. 추가 경로는 page가 넘기는 addExternalRef(피크·L5 지정)와 이 목록으로의 드롭.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { GripVertical, Link2, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
+import { ExternalLink, GripVertical, Link2, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
 
-import { getDirectory, type FwCardMode, type FwInterviewSession, type FwPlanCard } from "@/lib/api";
+import { getCategoryChain, getDirectory, type CategoryNode, type FwCardMode, type FwInterviewSession, type FwPlanCard } from "@/lib/api";
 import { hasBlockingDuplicate } from "@/lib/framework-interview";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
@@ -40,6 +42,10 @@ const TILE_LINKED = "border-accent/40 bg-accent-tint/40";
 const TILE_KEPT = "border-dashed border-hairline bg-surface-alt/60 opacity-70";
 // 삭제 예정 타일 — 붉은 테두리·옅은 붉은 바탕, 제목 취소선. 복구 버튼이 그립 자리에 온다
 const TILE_REMOVED = "border-error/60 bg-error/5";
+// 외부 참조 타일 — 점선 테두리(연계 캔버스의 외부 L6·플레이스홀더 룩과 같은 언어)
+const TILE_EXTERNAL = "border-dashed border-border-strong bg-surface-alt/50 hover:bg-surface-alt";
+const EXTERNAL_CHIP = "shrink-0 rounded-full border border-border-strong bg-surface px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
+const LIBRARY_MIME = "application/bpm-process";  // 체계 피커(framework-tree-picker) 행 드래그 규약
 const MODE_CHIP_KEEP = "shrink-0 rounded-full border border-border-strong bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
 const MODE_CHIP_REVISE = "shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-accent";
 const REMOVED_CHIP = "shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-error";
@@ -55,9 +61,16 @@ const SETTLE_MS = 600;  // .plan-tile-settle
 const STAGE_HOLD_MS = 420;   // 빈 행을 남겨 두는 시간 — 타일 정렬(FLIP 380ms)이 끝난 뒤 한 단계 당긴다(사용자 요청 2026-09-28)
 const CONNECTOR_FOLLOW_FRAMES = 30;  // FLIP·행 여백 전환(≤380ms) 동안 연결선이 타일을 따라가는 rAF 프레임 수(60fps 기준 약 500ms)
 
+/** 외부 참조 추가 요청 — 체계 피커의 행 드롭·피크 "추가"(map) 또는 L5만 지정(l5). page가 addExternalRef로 넘긴다. */
+export type ExternalAddRequest =
+  | { kind: "map"; mapId: number; name: string; categoryId: number; stage?: number; index?: number }
+  | { kind: "l5"; category: CategoryNode };
+
 interface PlanEditorProps {
   session: FwInterviewSession;
   busy: boolean;
+  // page가 좌측 체계 피커의 추가 동작을 이 편집기로 보낼 수 있게 — 렌더마다 최신 핸들러를 ref에 써 둔다
+  addExternalRef?: React.MutableRefObject<((request: ExternalAddRequest) => void) | null>;
   // AI 카드 제안 호출 중 — 카드 열 위에 링 오버레이
   proposing?: boolean;
   // 현재 카드(키 제거본)를 부모에 미러 — 좌측 brief 패널의 AI 제안이 화면의 카드로 제안받는다
@@ -103,7 +116,7 @@ function buildConnectorPath(from: DOMRect, to: DOMRect, origin: DOMRect): string
   return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${x1.toFixed(1)} ${(y1 + bend).toFixed(1)}, ${x2.toFixed(1)} ${(y2 - bend).toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
 }
 
-export function PlanEditor({ session, busy, proposing = false, onCardsChange, onSave, onLock }: PlanEditorProps) {
+export function PlanEditor({ session, busy, proposing = false, addExternalRef, onCardsChange, onSave, onLock }: PlanEditorProps) {
   const { t } = useI18n();
   // 부모가 session.plan 내용으로 key를 리마운트하므로(page.tsx) 여기서는 마운트 시 1회 초기화만 한다 —
   // 폴링(pause/resume 등)이 만드는 새 session 객체가 편집 중인 카드를 덮어쓰지 않는다.
@@ -117,6 +130,8 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
   const [menu, setMenu] = useState<{ x: number; y: number; clientId: string } | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  // 체계 피커에서 끌어온 행이 올라간 단계(외부 참조 드롭 하이라이트)
+  const [extDrop, setExtDrop] = useState<{ stage: number; index: number } | null>(null);
   // 부서 후보 — 서비스에 등록된 부서(디렉터리) 리프명. 못 받으면 null로 남아 자유 입력 칸이 그대로 쓰인다
   const [departments, setDepartments] = useState<string[] | null>(null);
   // 빈 행 접기 요청 카운터 — effect가 STAGE_HOLD_MS 뒤에 접는다(요청이 겹치면 타이머를 다시 잰다). ref 타이머를 쓰지 않는 건
@@ -243,6 +258,61 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
       return next;
     });
   }
+  // ── 외부 참조 타일 추가 — 다른 L5의 L6는 소속 L5 체인을 받아 코드·이름을 박고, L5만 지정은 "(L6 미지정) L5명"으로
+  function addExternal(request: ExternalAddRequest) {
+    void (async () => {
+      const clientId = genId();
+      if (request.kind === "map") {
+        if (cards.some((c) => c.external?.map_id === request.mapId)) return;  // 같은 맵은 한 번만
+        const chain = await getCategoryChain(request.categoryId);
+        const l5 = chain[chain.length - 1];
+        if (!l5 || l5.id === session.category_id) return;  // 이 L5의 L6는 기존 카드로 이미 있다
+        const card: FwPlanCard = {
+          ...EMPTY, name: request.name, mode: "external",
+          external: { ref_id: `ext-${clientId}`, l5_code: l5.code, l5_label: l5.name, l6: request.name, map_id: request.mapId },
+        };
+        setCards((prev) => {
+          const stage = request.stage ?? groupByStage(prev).length;
+          const added = addCardAtStage(prev, card, clientId, stage);
+          return request.index === undefined ? added : reorderWithinStage(added, clientId, request.index);
+        });
+      } else {
+        if (request.category.id === session.category_id) return;
+        const card: FwPlanCard = {
+          ...EMPTY, name: t("fwConsult.externalL6Unspecified", { l5: request.category.name }), mode: "external",
+          external: { ref_id: `ext-${clientId}`, l5_code: request.category.code, l5_label: request.category.name, l6: null, map_id: null },
+        };
+        setCards((prev) => addCardAtStage(prev, card, clientId, groupByStage(prev).length));
+      }
+      setSelectedId(clientId);
+      setAddedId(clientId);
+      later(IN_MS, () => setAddedId((cur) => (cur === clientId ? null : cur)));
+    })();
+  }
+  useEffect(() => {
+    if (addExternalRef) addExternalRef.current = addExternal;
+  });
+
+  // 체계 피커 행 드롭 — 놓은 단계에 외부 타일. 미등록(미지정) 맵도 소속 L5가 있으면 받는다
+  function handleExternalDragOver(event: React.DragEvent) {
+    if (!event.dataTransfer.types.includes(LIBRARY_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    const target = locateDrop(event.clientX, event.clientY, "");
+    setExtDrop(target.stage === null ? null : { stage: target.stage, index: target.index });
+  }
+  function handleExternalDrop(event: React.DragEvent) {
+    if (!event.dataTransfer.types.includes(LIBRARY_MIME)) return;
+    event.preventDefault();
+    setExtDrop(null);
+    const mapId = Number(event.dataTransfer.getData(LIBRARY_MIME));
+    const categoryId = Number(event.dataTransfer.getData("application/bpm-process-category"));
+    const name = event.dataTransfer.getData("application/bpm-process-name");
+    if (!Number.isFinite(mapId) || !Number.isFinite(categoryId) || categoryId <= 0 || !name) return;
+    const target = locateDrop(event.clientX, event.clientY, "");
+    addExternal({ kind: "map", mapId, name, categoryId, stage: target.stage ?? undefined, index: target.stage === null ? undefined : target.index });
+  }
+
   function togglePredecessor(clientId: string, name: string) {
     setCards((prev) => {
       const me = prev.find((c) => c.clientId === clientId);
@@ -398,6 +468,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
 
   const canLock = activeCards.length > 0 && activeCards.every((c) => c.name.trim()) && !hasBlockingDuplicate(activeCards);
   const selectedExisting = Boolean(selected?.existing_code);
+  const selectedExternal = selected?.mode === "external" && Boolean(selected.external);
   const selectedRemoved = selected !== null && removedIds.has(selected.clientId);
   const dragCard = drag ? cards.find((c) => c.clientId === drag.clientId) ?? null : null;
   // 호버 무리 — 호버한 타일과 직접 이어진 선행·후행
@@ -425,6 +496,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
   function renderTile(card: KeyedCard, flatIndex: number) {
     const isExisting = Boolean(card.existing_code);
     const isKept = isExisting && (card.mode ?? "keep") === "keep";
+    const isExternal = card.mode === "external";
     const isRemoved = removedIds.has(card.clientId);
     const isSelected = selected?.clientId === card.clientId;
     const isDragging = drag?.clientId === card.clientId;
@@ -433,7 +505,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
     // 룩 우선순위: 삭제 예정 > 선택 > 호버 무리 > 기존 유지 > 기본. 삭제 예정이 선택되면 붉은 테두리에 액센트 링만 더한다
     const look = isRemoved
       ? `${TILE_REMOVED} ${isSelected ? "ring-2 ring-accent/40" : ""}`
-      : isSelected ? TILE_SELECTED : isLinked ? TILE_LINKED : isKept ? TILE_KEPT : TILE_QUIET;
+      : isSelected ? `${TILE_SELECTED} ${isExternal ? "border-dashed" : ""}` : isLinked ? TILE_LINKED : isKept ? TILE_KEPT : isExternal ? TILE_EXTERNAL : TILE_QUIET;
     const cursor = isDraggable(card) ? "cursor-grab" : "cursor-pointer";
     return (
       <div
@@ -449,6 +521,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
           data-id={`fw-consult-plan-row-${flatIndex}`}
           data-linked={isLinked || undefined}
           data-kept={isKept || undefined}
+          data-external={isExternal || undefined}
           data-removed={isRemoved || undefined}
           className={`${TILE} ${cursor} ${look}`}
           onPointerDown={(event) => handleTilePointerDown(event, card.clientId)}
@@ -488,7 +561,17 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
                 {t("fwConsult.existing")} · {t(isKept ? "fwConsult.keep" : "fwConsult.revise")}
               </span>
             )}
+            {isExternal && !isRemoved && (
+              <span className={EXTERNAL_CHIP} data-id={`fw-consult-plan-external-${flatIndex}`}>{t("fwConsult.externalChip")}</span>
+            )}
           </span>
+          {isExternal && card.external && (
+            // 소속 L5 배지 — 연계 캔버스의 외부 L6 출처 배지와 같은 정보(이름). L6 미지정이면 이름 자체가 그것을 말한다
+            <span className="flex min-w-0 items-center gap-1 text-fine text-ink-secondary" data-id={`fw-consult-plan-external-origin-${flatIndex}`}>
+              <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+              <span className="min-w-0 truncate">{card.external.l5_label || card.external.l5_code}</span>
+            </span>
+          )}
           {(card.owner_role || card.department) && (
             <span className="truncate text-fine text-ink-secondary">{[card.owner_role, card.department].filter(Boolean).join(" · ")}</span>
           )}
@@ -516,7 +599,14 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
             <span className="ml-auto text-ink-tertiary">{t("fwConsult.stageHint")}</span>
           </div>
           {/* select-none: 타일을 끌 때 포인터가 지나는 글자가 선택되지 않게(워스트 케이스 캡처에서 확인). relative: 연결선 SVG의 기준 */}
-          <div ref={listRef} className="relative flex select-none flex-col" data-id="fw-consult-plan-cards">
+          <div
+            ref={listRef}
+            className="relative flex select-none flex-col"
+            data-id="fw-consult-plan-cards"
+            onDragOver={handleExternalDragOver}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExtDrop(null); }}
+            onDrop={handleExternalDrop}
+          >
             {/* 선행 연결선 — 타일 아래에 깔리는 점선 곡선. 호버 무리에 닿은 선은 액센트 */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true" data-id="fw-consult-plan-links">
               {connectors.map((link) => {
@@ -537,7 +627,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
               })}
             </svg>
             {groups.map((group, stage) => {
-              const isTarget = drag !== null && drag.stage === stage;
+              const isTarget = (drag !== null && drag.stage === stage) || extDrop?.stage === stage;
               const startIndex = stageStarts[stage];
               return (
                 <div
@@ -571,7 +661,7 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
             <div
               data-stage={groups.length}
               data-id={`fw-consult-plan-stage-${groups.length}`}
-              className={`group/stage relative flex items-stretch rounded-md py-3 transition-colors duration-150 ${drag !== null && drag.stage === groups.length ? "bg-accent-tint/50" : ""}`}
+              className={`group/stage relative flex items-stretch rounded-md py-3 transition-colors duration-150 ${(drag !== null && drag.stage === groups.length) || extDrop?.stage === groups.length ? "bg-accent-tint/50" : ""}`}
             >
               <div className="flex w-16 shrink-0 flex-col items-end border-r-2 border-dashed border-hairline pr-3 pt-0.5">
                 <span className="text-tagline leading-none tabular-nums text-hairline">{groups.length + 1}</span>
@@ -613,6 +703,27 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
                 )}
               </div>
               {selectedExisting && <span className="text-fine text-ink-tertiary" data-id="fw-consult-plan-detail-existing" title={selected.existing_code ?? undefined}>{t("fwConsult.existing")} · {t("fwConsult.reviseHint")}</span>}
+              {selectedExternal && selected.external ? (
+                // 외부 참조는 원본(다른 L5)에서 편집한다 — 여기서는 출처만 보이고 선행·삭제만 된다
+                <div className="flex flex-col gap-2" data-id="fw-consult-plan-detail-external">
+                  <div className="flex flex-col gap-1">
+                    <span className={LABEL}>{t("fwConsult.cardName")}</span>
+                    <span className="text-body-strong text-ink">{selected.name}</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className={LABEL}>{t("fwConsult.externalOrigin")}</span>
+                    <span className="flex items-center gap-1 text-caption text-ink">
+                      <ExternalLink size={14} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                      <span className="min-w-0 truncate">{selected.external.l5_label || selected.external.l5_code}</span>
+                      <span className="shrink-0 text-fine text-ink-tertiary">{selected.external.l5_code}</span>
+                    </span>
+                  </div>
+                  <span className="text-fine text-ink-tertiary">
+                    {t(selected.external.map_id !== null ? "fwConsult.externalKindMap" : "fwConsult.externalKindL5")} · {t("fwConsult.externalReadOnly")}
+                  </span>
+                </div>
+              ) : (
+              <>
               <label className="flex flex-col gap-1">
                 <span className={LABEL}>{t("fwConsult.cardName")}</span>
                 <input className={`${FIELD} text-body-strong`} data-id="fw-consult-plan-name" value={selected.name} placeholder={t("fwConsult.cardName")} onChange={(e) => rename(selected.clientId, e.target.value)} />
@@ -644,6 +755,8 @@ export function PlanEditor({ session, busy, proposing = false, onCardsChange, on
                   )}
                 </div>
               </div>
+              </>
+              )}
               {/* 선행 카드 — 읽기 전용. 바꾸는 길은 타일 우클릭 메뉴와 드래그 하나뿐(편집 경로가 둘이면 서로 꼬인다) */}
               <div className="flex flex-col gap-1">
                 <span className={LABEL}>{t("fwConsult.dependsOn")}</span>

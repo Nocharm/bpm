@@ -245,6 +245,44 @@ def test_skip_ready_task_from_questionnaire(client: TestClient, monkeypatch) -> 
     assert detail["answers"] is None and detail["row"]["actions"][0]["label"] == "요청 접수"
 
 
+def test_external_cards_join_the_flow_without_tasks(client: TestClient, monkeypatch) -> None:
+    """외부 참조 타일: 잠금 시 태스크 없이 task_id=refId, 캔버스 노드·relations 끝점이 되고, 문서에는 externalTasks로 나간다 (2026-09-29)."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")
+    sid = client.post("/api/framework-interviews", json={"category_id": l5}, headers=HEADERS).json()["id"]
+    ext = {"name": "OOS 접수", "summary": "", "owner_role": "", "department": "", "depends_on": [], "mode": "external",
+           "external": {"ref_id": "ext-oos", "l5_code": "20-02-01-01-01", "l5_label": "시험 일탈", "l6": "OOS 접수", "map_id": None}}
+    cards = [ext, {"name": "A", "summary": "", "owner_role": "", "department": "", "depends_on": ["OOS 접수"]}]
+    # 외부 카드에 external이 없거나, 일반 카드에 external이 있으면 422
+    bad = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": [{**ext, "external": None}], "lock": False}, headers=HEADERS)
+    assert bad.status_code == 422
+    body = client.put(f"/api/framework-interviews/{sid}/plan", json={"cards": cards, "lock": True}, headers=HEADERS).json()
+    assert [t["name"] for t in body["tasks"]] == ["A"]  # 외부 참조는 태스크가 아니다
+    assert body["plan"][0]["task_id"] == "ext-oos" and body["plan"][1]["task_id"] == body["tasks"][0]["task_id"]
+    t1 = body["tasks"][0]
+    _fake_ai_queue(monkeypatch, [Q_JSON, ROW_JSON,
+                                 '{"entry":{"taskId":"ext-oos","triggerType":"manual","label":""},'
+                                 '"edges":[{"src":"ext-oos","dst":"%s","kind":"seq"}]}' % t1["task_id"]])
+    _step(sid)
+    full = {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "요청서", "q6": ""}
+    client.post(f"/api/framework-interviews/{sid}/tasks/{t1['id']}/answers", json={"answers": full}, headers=HEADERS)
+    _step(sid)
+    linked = client.post(f"/api/framework-interviews/{sid}/relations", headers=HEADERS)
+    assert linked.status_code == 200, linked.text
+    rel = linked.json()["relations"]
+    assert rel["entry"]["taskId"] == t1["task_id"]  # 외부 참조는 진입점이 못 된다 — 계획 정합이 내부 카드로 바꾼다
+    assert {(e["src"], e["dst"]) for e in rel["edges"]} == {("ext-oos", t1["task_id"])}
+    canvas = linked.json()["canvas"]
+    assert any(n["task_id"] == "ext-oos" and n["node_type"] == "subprocess" for n in canvas["nodes"])
+    confirmed = client.put(f"/api/framework-interviews/{sid}/relations", headers=HEADERS, json={"canvas": canvas})
+    assert confirmed.status_code == 200, confirmed.text
+    doc = client.get(f"/api/framework-interviews/{sid}/document", headers=HEADERS).json()
+    assert doc["externalTasks"] == [{"refId": "ext-oos", "l5": {"nodeCode": "20-02-01-01-01", "label": "시험 일탈"}, "l6": "OOS 접수"}]
+    assert [r["taskId"] for r in doc["rows"]] == [t1["task_id"]]
+    assert any(e["src"] == "ext-oos" for e in doc["relations"]["edges"])
+
+
 def test_save_plan_stores_brief(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     l5 = _make_l5(client, f"fw-{uuid4().hex[:6]}")

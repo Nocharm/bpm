@@ -285,7 +285,16 @@ async def _create_locked_tasks(db: AsyncSession, row: FrameworkInterviewSession,
     has_keep = any(card["mode"] == "keep" for card in cards)
     chain = await load_category_chain(db, row.category_id) if has_keep else []
     l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]} if chain else {}
-    for seq, card in enumerate(cards, start=1):
+    # 외부 참조는 태스크가 없다 — refId를 task_id 자리에 박아 캔버스·relations가 같은 키로 가리키게(2026-09-29)
+    ref_ids = [card["external"]["ref_id"] for card in cards if card["mode"] == "external"]
+    if len(ref_ids) != len(set(ref_ids)):
+        raise HTTPException(status_code=422, detail="duplicate external ref_id")
+    seq = 0
+    for card in cards:
+        if card["mode"] == "external":
+            card["task_id"] = card["external"]["ref_id"]
+            continue
+        seq += 1
         task_id = card["existing_code"] if card["mode"] != "new" else next(ids)
         card["task_id"] = task_id
         task = FrameworkInterviewTask(
@@ -316,7 +325,8 @@ async def save_plan(
         if not cards:
             raise HTTPException(status_code=422, detail="plan needs at least one card")
         # 기존 맵끼리는 이름이 같아도 코드로 구분된다 — 새 카드가 낀 충돌만 막는다
-        clashing = {name for name, count in Counter(c["name"] for c in cards).items() if count > 1}
+        # 외부 참조 타일은 다른 L5의 업무라 이름이 겹쳐도 충돌이 아니다
+        clashing = {name for name, count in Counter(c["name"] for c in cards if c["mode"] != "external").items() if count > 1}
         if any(c["name"] in clashing and c["mode"] == "new" for c in cards):
             raise HTTPException(status_code=422, detail="duplicate card names")
         await _create_locked_tasks(db, row, cards)
@@ -537,17 +547,32 @@ def _assert_all_drawn(row: FrameworkInterviewSession) -> None:
         raise HTTPException(status_code=409, detail="all tasks must be drawn first")
 
 
+def _external_cards(row: FrameworkInterviewSession) -> list[dict]:
+    """잠금된 계획의 외부 참조 카드(task_id=refId) — 태스크는 없지만 캔버스·relations·externalTasks에는 있다."""
+    return [c for c in row.plan or [] if c.get("mode") == "external" and c.get("task_id")]
+
+
+def _known_task_names(row: FrameworkInterviewSession) -> dict[str, str]:
+    """taskId → 이름. 태스크(seq 순) 뒤에 외부 참조가 온다 — 캔버스 전개·relations 정규화·검증의 단일 소스."""
+    known = {t.task_id: t.name for t in sorted(row.tasks, key=lambda t: t.seq)}
+    for card in _external_cards(row):
+        known.setdefault(str(card["task_id"]), str(card.get("name") or ""))
+    return known
+
+
 def _has_known_task_ids(row: FrameworkInterviewSession, relations: RelationsOut) -> bool:
-    """entry/edge가 이 세션의 task_id만 가리키는지. 조립기는 미지의 id를 해석할 수 없다."""
-    known = {t.task_id for t in row.tasks}
-    return relations.entry.taskId in known and all(
+    """entry/edge가 이 세션의 task_id(외부 참조 포함)만 가리키는지. 조립기는 미지의 id를 해석할 수 없다.
+    진입점은 외부 참조가 될 수 없다(연계 캔버스에서 다른 L5의 L6는 플레이스홀더/링크라 시작이 아니다)."""
+    known = set(_known_task_names(row))
+    internal = {t.task_id for t in row.tasks}
+    return relations.entry.taskId in internal and all(
         e.src in known and e.dst in known for e in relations.edges
     )
 
 
 def _ordered_tasks(row: FrameworkInterviewSession) -> list[tuple[str, str]]:
-    """캔버스 전개용 [(task_id, name)] — seq 순."""
-    return [(t.task_id, t.name) for t in sorted(row.tasks, key=lambda t: t.seq)]
+    """캔버스 전개용 [(task_id, name)] — seq 순, 외부 참조는 뒤에."""
+    return list(_known_task_names(row).items())
 
 
 @router.post("/{session_id}/relations", response_model=FrameworkInterviewOut)
@@ -566,7 +591,7 @@ async def generate_relations(
         lang=row.lang, plan=row.plan or [], rows=rows_by_task, overrides=await get_prompt_overrides(db),
         comment=comment, previous=row.relations if comment else None,
     )
-    known = {t.task_id: t.name for t in sorted(row.tasks, key=lambda t: t.seq)}
+    known = _known_task_names(row)
     # 미지의 taskId·이름 참조는 정규화가 해석하거나 버린다 — 502 대신 부분 결과를 편집 표로 넘긴다
     out = await _ask(messages, RelationsOut, db, user, normalizer=lambda raw: normalize_relations(raw, known))
     reproposed = row.canvas is not None  # 이미 캔버스가 있었다면 리셋 — 채팅 이력에 한 줄 남겨 두 경로가 한 곳에 보이게
@@ -595,7 +620,7 @@ async def save_canvas(
     if row.status == "applied":
         raise HTTPException(status_code=409, detail="session is already applied")
     _assert_all_drawn(row)
-    errors = validate_canvas(payload.canvas, {t.task_id for t in row.tasks})
+    errors = validate_canvas(payload.canvas, set(_known_task_names(row)))
     if errors:
         raise HTTPException(status_code=422, detail={"errors": errors})
     row.canvas = payload.canvas
@@ -616,7 +641,7 @@ async def confirm_relations(
     if row.status == "applied":
         raise HTTPException(status_code=409, detail="session is already applied")
     _assert_all_drawn(row)
-    known_ids = {t.task_id for t in row.tasks}
+    known_ids = set(_known_task_names(row))
     raw_relations = payload.relations
     if payload.canvas is not None:
         errors = validate_canvas(payload.canvas, known_ids)
