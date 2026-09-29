@@ -12,6 +12,7 @@ import { deriveProgress, type FwStep } from "@/lib/framework-interview";
 import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { formatElapsedSeconds, useNowTick } from "@/lib/use-now-tick";
+import { CardModeChip } from "@/components/framework-interview/card-mode-chip";
 
 const STATUS_TONE: Record<FwTaskStatus, { pill: string; dot: string; key: MessageKey }> = {
   pending: { pill: "bg-surface-alt text-ink-secondary", dot: "bg-ink-tertiary", key: "fwConsult.statusPending" },
@@ -144,10 +145,8 @@ export function TaskBoard({
                   <SkipForward size={14} strokeWidth={1.5} />
                 </button>
               )}
-              {task.mode !== "new" && (
-                <span className="shrink-0 rounded-full border border-hairline px-1.5 py-[2px] text-[11px] leading-none text-ink-tertiary" data-id={`fw-consult-task-mode-${task.id}`}>
-                  {t(task.mode === "keep" ? "fwConsult.existing" : "fwConsult.revise")}
-                </span>
+              {(task.mode === "keep" || task.mode === "revise") && (
+                <CardModeChip mode={task.mode} size="row" dataId={`fw-consult-task-mode-${task.id}`} />
               )}
               {task.mode === "keep" && onRevise && (
                 <button type="button" data-id={`fw-consult-revise-${task.id}`} className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-secondary hover:bg-surface-alt" title={t("fwConsult.reviseHint")} onClick={(e) => { e.stopPropagation(); onRevise(task); }}>

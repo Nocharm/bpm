@@ -26,6 +26,7 @@ import {
 } from "@/lib/plan-cards";
 import { useFlipOrder } from "@/lib/use-flip-order";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
+import { CardModeChip } from "@/components/framework-interview/card-mode-chip";
 import { SearchSelect } from "@/components/search-select";
 
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none focus:border-accent";
@@ -45,14 +46,15 @@ const TILE_KEPT = "border-dashed border-hairline bg-surface-alt/60 opacity-70";
 const TILE_REMOVED = "border-error/60 bg-error/5";
 // 외부 참조 타일 — 업무 체계(L5 하늘) 남색 톤의 점선 타일. 기존 유지(회색 점선)·일반(흰색)과 한눈에 갈린다(사용자 요청 2026-09-29)
 const EXTERNAL_TONE = "var(--color-canvas-l5-sky)";
+// 선택·호버 무리 상태에서도 남색을 유지한다 — 액센트 틴트로 바뀌면 일반 타일과 구분이 사라진다(사용자 지적 2026-09-29)
 const TILE_EXTERNAL =
   "border-dashed border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_55%,white)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_8%,white)] " +
   "hover:bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_14%,white)]";
-const EXTERNAL_CHIP =
-  "shrink-0 rounded-full border border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_55%,white)] bg-surface px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-[var(--color-canvas-l5-sky)]";
+const TILE_EXTERNAL_LINKED =
+  "border-dashed border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_75%,white)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_14%,white)]";
+const TILE_EXTERNAL_SELECTED =
+  "border-dashed border-[var(--color-canvas-l5-sky)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_20%,white)] ring-2 ring-[color-mix(in_srgb,var(--color-canvas-l5-sky)_30%,white)]";
 const LIBRARY_MIME = "application/bpm-process";  // 체계 피커(framework-tree-picker) 행 드래그 규약
-const MODE_CHIP_KEEP = "shrink-0 rounded-full border border-border-strong bg-surface-alt px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-ink-secondary";
-const MODE_CHIP_REVISE = "shrink-0 rounded-full bg-accent-tint px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-accent";
 const REMOVED_CHIP = "shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-error";
 // 추가 버튼은 그 행에 마우스가 올라왔을 때만 페이드인 — 빈 자리가 늘 점선으로 채워져 있지 않게(사용자 요청 2026-09-24)
 const ADD_TILE = "flex items-center justify-center rounded-md border border-dashed border-hairline bg-surface-pearl text-fine text-ink-tertiary hover:border-accent hover:text-accent opacity-0 transition-opacity duration-150 group-hover/stage:opacity-100 focus-visible:opacity-100";
@@ -507,10 +509,12 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
     const isDragging = drag?.clientId === card.clientId;
     const isLinked = !isSelected && linkedIds.has(card.clientId);
     const motion = addedId === card.clientId ? "plan-tile-in" : settledId === card.clientId ? "plan-tile-settle" : "";
-    // 룩 우선순위: 삭제 예정 > 선택 > 호버 무리 > 기존 유지 > 기본. 삭제 예정이 선택되면 붉은 테두리에 액센트 링만 더한다
+    // 룩 우선순위: 삭제 예정 > 선택 > 호버 무리 > 기존 유지 > 기본. 삭제 예정이 선택되면 붉은 테두리에 액센트 링만 더한다.
+    // 외부 타일은 선택·무리 상태에서도 남색 계열 안에서만 진해진다
     const look = isRemoved
       ? `${TILE_REMOVED} ${isSelected ? "ring-2 ring-accent/40" : ""}`
-      : isSelected ? `${TILE_SELECTED} ${isExternal ? "border-dashed" : ""}` : isLinked ? TILE_LINKED : isKept ? TILE_KEPT : isExternal ? TILE_EXTERNAL : TILE_QUIET;
+      : isExternal ? (isSelected ? TILE_EXTERNAL_SELECTED : isLinked ? TILE_EXTERNAL_LINKED : TILE_EXTERNAL)
+      : isSelected ? TILE_SELECTED : isLinked ? TILE_LINKED : isKept ? TILE_KEPT : TILE_QUIET;
     const cursor = isDraggable(card) ? "cursor-grab" : "cursor-pointer";
     return (
       <div
@@ -562,13 +566,9 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
               <span className={REMOVED_CHIP} data-id={`fw-consult-plan-removed-${flatIndex}`}>{t("fwConsult.pendingRemoval")}</span>
             )}
             {isExisting && !isRemoved && (
-              <span className={isKept ? MODE_CHIP_KEEP : MODE_CHIP_REVISE} data-id={`fw-consult-plan-existing-${flatIndex}`} title={card.existing_code ?? undefined}>
-                {t("fwConsult.existing")} · {t(isKept ? "fwConsult.keep" : "fwConsult.revise")}
-              </span>
+              <CardModeChip mode={isKept ? "keep" : "revise"} dataId={`fw-consult-plan-existing-${flatIndex}`} title={card.existing_code ?? undefined} />
             )}
-            {isExternal && !isRemoved && (
-              <span className={EXTERNAL_CHIP} data-id={`fw-consult-plan-external-${flatIndex}`}>{t("fwConsult.externalChip")}</span>
-            )}
+            {isExternal && !isRemoved && <CardModeChip mode="external" dataId={`fw-consult-plan-external-${flatIndex}`} />}
           </span>
           {/* 보조 2줄은 비어도 자리를 지킨다(높이 고정). 외부 타일은 첫 줄이 소속 L5 배지 */}
           {isExternal && card.external ? (

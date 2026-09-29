@@ -4,7 +4,7 @@
 
 > 생성 파일 — 손으로 고치지 말고 `node scripts/build-component-catalog.mjs`(frontend/)로 재생성한다. 컴포넌트를 추가·이동·삭제하거나 사용처가 바뀌면 같은 커밋에서 재생성. `--check`는 최신 여부만 검사. 역할 열이 비어 있으면 그 파일에 머리 주석(한 줄 역할 설명)이 없다는 뜻 — 주석을 채운다.
 
-총 287개 · 2026-09-29 기준
+총 288개 · 2026-09-29 기준
 
 ## components/
 
@@ -206,6 +206,7 @@
 | 파일 | 컴포넌트 | 역할 | 사용처 |
 |------|----------|------|--------|
 | `answer-review.tsx` | `AnswerReview` | 캠페인 설문 확인 화면 | `components/framework-interview/task-panel.tsx` |
+| `card-mode-chip.tsx` | `CardModeChip` | 캠페인 카드 상태 칩 | `components/framework-interview/plan-editor.tsx`, `components/framework-interview/task-board.tsx` |
 | `feedback-chat.tsx` | `FeedbackChat` | 피드백 채팅 | `components/framework-interview/relations-step.tsx`, `components/framework-interview/task-panel.tsx` |
 | `interview-json-prompt-button.tsx` | `InterviewJsonPromptButton` | 외부 AI 프롬프트 복사 버튼 | `app/framework/consult/[sessionId]/page.tsx`, `components/admin/framework-panel.tsx` |
 | `plan-brief-panel.tsx` | `PlanBriefPanel` | 캠페인 ① 좌측 brief+첨부 패널 | `app/framework/consult/[sessionId]/page.tsx` |
