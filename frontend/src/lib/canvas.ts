@@ -33,6 +33,14 @@ export function getExternalL5Color(categoryId: number): string {
   return COLOR_PRESETS[1 + (categoryId % (COLOR_PRESETS.length - 1))];
 }
 
+// 같은 팔레트를 L5 코드로 고른다 — 카테고리 id가 없는 표면(AI 캠페인 외부 참조 카드)용. 같은 코드=같은 색.
+// FNV-1a — 곱셈 31 해시는 mod 8이 자릿수 교대합으로 퇴화해 비슷한 코드끼리 잘 겹친다
+export function getExternalL5ColorByCode(code: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < code.length; i++) hash = Math.imul(hash ^ code.charCodeAt(i), 0x01000193) >>> 0;
+  return COLOR_PRESETS[1 + (hash % (COLOR_PRESETS.length - 1))];
+}
+
 export type NodeData = {
   label: string;
   description: string;

@@ -13,7 +13,7 @@
 // 외부 참조 타일(2026-09-29): 다른 L5의 L6(체계 피커에서 드래그/피크 추가) 또는 L5만 아는 플레이스홀더. 점선 타일에 소속 L5 배지,
 // 설문·드로잉 없이 선행 관계와 연결 캔버스에만 참여한다. 추가 경로는 page가 넘기는 addExternalRef(피크·L5 지정)와 이 목록으로의 드롭.
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ExternalLink, GripVertical, Link2, Loader2, Plus, Trash2, Undo2 } from "lucide-react";
 
 import { getCategoryChain, getDirectory, type CategoryNode, type FwCardMode, type FwInterviewSession, type FwPlanCard } from "@/lib/api";
@@ -27,6 +27,7 @@ import {
 import { useFlipOrder } from "@/lib/use-flip-order";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { CardModeChip } from "@/components/framework-interview/card-mode-chip";
+import { getExternalL5ColorByCode } from "@/lib/canvas";
 import { SearchSelect } from "@/components/search-select";
 
 const FIELD = "w-full rounded-sm border border-hairline bg-surface px-2 py-1 text-caption text-ink outline-none focus:border-accent";
@@ -44,16 +45,13 @@ const TILE_LINKED = "border-accent/40 bg-accent-tint/40";
 const TILE_KEPT = "border-dashed border-hairline bg-surface-alt/60 opacity-70";
 // 삭제 예정 타일 — 붉은 테두리·옅은 붉은 바탕, 제목 취소선. 복구 버튼이 그립 자리에 온다
 const TILE_REMOVED = "border-error/60 bg-error/5";
-// 외부 참조 타일 — 업무 체계(L5 하늘) 남색 톤의 점선 타일. 기존 유지(회색 점선)·일반(흰색)과 한눈에 갈린다(사용자 요청 2026-09-29)
-const EXTERNAL_TONE = "var(--color-canvas-l5-sky)";
-// 선택·호버 무리 상태에서도 남색을 유지한다 — 액센트 틴트로 바뀌면 일반 타일과 구분이 사라진다(사용자 지적 2026-09-29)
+// 외부 참조 타일 — 소속 L5별 색(연계 캔버스 외부 L6 팔레트 `getExternalL5ColorByCode`)의 파스텔 노드 룩. 점선·회색은 비활성처럼
+// 읽혀 폐기(사용자 피드백 2026-09-29). 색은 타일 `--ext-tone`로 넣고, 선택·호버 무리 상태에서도 같은 색 안에서만 진해진다
 const TILE_EXTERNAL =
-  "border-dashed border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_55%,white)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_8%,white)] " +
-  "hover:bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_14%,white)]";
-const TILE_EXTERNAL_LINKED =
-  "border-dashed border-[color-mix(in_srgb,var(--color-canvas-l5-sky)_75%,white)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_14%,white)]";
+  "border-[color-mix(in_srgb,var(--ext-tone)_70%,white)] bg-[color-mix(in_srgb,var(--ext-tone)_16%,white)] hover:bg-[color-mix(in_srgb,var(--ext-tone)_24%,white)]";
+const TILE_EXTERNAL_LINKED = "border-[var(--ext-tone)] bg-[color-mix(in_srgb,var(--ext-tone)_24%,white)]";
 const TILE_EXTERNAL_SELECTED =
-  "border-dashed border-[var(--color-canvas-l5-sky)] bg-[color-mix(in_srgb,var(--color-canvas-l5-sky)_20%,white)] ring-2 ring-[color-mix(in_srgb,var(--color-canvas-l5-sky)_30%,white)]";
+  "border-[var(--ext-tone)] bg-[color-mix(in_srgb,var(--ext-tone)_32%,white)] ring-2 ring-[color-mix(in_srgb,var(--ext-tone)_35%,white)]";
 const LIBRARY_MIME = "application/bpm-process";  // 체계 피커(framework-tree-picker) 행 드래그 규약
 const REMOVED_CHIP = "shrink-0 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-error";
 // 추가 버튼은 그 행에 마우스가 올라왔을 때만 페이드인 — 빈 자리가 늘 점선으로 채워져 있지 않게(사용자 요청 2026-09-24)
@@ -504,6 +502,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
     const isExisting = Boolean(card.existing_code);
     const isKept = isExisting && (card.mode ?? "keep") === "keep";
     const isExternal = card.mode === "external";
+    const externalTone = isExternal && card.external ? getExternalL5ColorByCode(card.external.l5_code) : undefined;
     const isRemoved = removedIds.has(card.clientId);
     const isSelected = selected?.clientId === card.clientId;
     const isDragging = drag?.clientId === card.clientId;
@@ -533,6 +532,7 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
           data-external={isExternal || undefined}
           data-removed={isRemoved || undefined}
           className={`${TILE} ${cursor} ${look}`}
+          style={externalTone ? ({ "--ext-tone": externalTone } as CSSProperties) : undefined}
           onPointerDown={(event) => handleTilePointerDown(event, card.clientId)}
           onPointerEnter={() => { if (!drag) setHoverId(card.clientId); }}
           onPointerLeave={() => setHoverId((cur) => (cur === card.clientId ? null : cur))}
@@ -568,12 +568,12 @@ export function PlanEditor({ session, busy, proposing = false, addExternalRef, o
             {isExisting && !isRemoved && (
               <CardModeChip mode={isKept ? "keep" : "revise"} dataId={`fw-consult-plan-existing-${flatIndex}`} title={card.existing_code ?? undefined} />
             )}
-            {isExternal && !isRemoved && <CardModeChip mode="external" dataId={`fw-consult-plan-external-${flatIndex}`} />}
+            {isExternal && !isRemoved && <CardModeChip mode="external" color={externalTone} dataId={`fw-consult-plan-external-${flatIndex}`} />}
           </span>
           {/* 보조 2줄은 비어도 자리를 지킨다(높이 고정). 외부 타일은 첫 줄이 소속 L5 배지 */}
           {isExternal && card.external ? (
             // 소속 L5 배지 — 연계 캔버스의 외부 L6 출처 배지와 같은 정보(이름). L6 미지정이면 이름 자체가 그것을 말한다
-            <span className="flex min-h-4 min-w-0 items-center gap-1 text-fine" style={{ color: EXTERNAL_TONE }} data-id={`fw-consult-plan-external-origin-${flatIndex}`}>
+            <span className="flex min-h-4 min-w-0 items-center gap-1 text-fine" style={{ color: `color-mix(in srgb, ${externalTone} 72%, black)` }} data-id={`fw-consult-plan-external-origin-${flatIndex}`}>
               <ExternalLink size={12} strokeWidth={1.5} className="shrink-0" />
               <span className="min-w-0 truncate">{card.external.l5_label || card.external.l5_code}</span>
             </span>

@@ -29,7 +29,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ContextMenu, type ContextMenuItem } from "@/components/context-menu";
 import { ProcessNode } from "@/components/process-node";
 import type { FwCanvas, FwPlanCard } from "@/lib/api";
-import type { AppNode } from "@/lib/canvas";
+import { type AppNode, getExternalL5ColorByCode } from "@/lib/canvas";
 import { copyText } from "@/lib/clipboard";
 import { buildFlowHandleStyle } from "@/lib/flow-handle-style";
 import { autoLayoutFlow } from "@/lib/flow-layout";
@@ -89,7 +89,9 @@ function buildFlow(canvas: FwCanvas, taskNames: Map<string, string>, taskCards: 
           ...(name ? { label: name } : {}),
           ...(card ? { description: card.summary, spAssigneeRole: card.owner_role || null, spDepartment: card.department || null } : {}),
           // 외부 참조 카드는 연계 캔버스의 외부 L6 룩(출처 L5 배지·외부 스타일)으로 — 등록 후 플레이스홀더/링크가 되는 자리(2026-09-29)
-          ...(card?.mode === "external" && card.external ? { spOriginPath: card.external.l5_label || card.external.l5_code } : {}),
+          ...(card?.mode === "external" && card.external
+            ? { spOriginPath: card.external.l5_label || card.external.l5_code, color: getExternalL5ColorByCode(card.external.l5_code) }
+            : {}),
           sideHandles: true,
           hideLinkBanner: true,
         },

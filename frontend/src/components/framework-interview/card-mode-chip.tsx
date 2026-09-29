@@ -19,18 +19,23 @@ const SIZE = {
   row: "px-1.5 py-[2px] text-[11px] leading-none",
 } as const;
 
-export function CardModeChip({ mode, size = "tile", dataId, title }: {
+export function CardModeChip({ mode, size = "tile", dataId, title, color }: {
   mode: CardModeChipMode;
   size?: keyof typeof SIZE;
   dataId?: string;
   title?: string;
+  // 외부 칩의 소속 L5 색(캔버스 팔레트) — 주면 남색 대신 그 색으로 물든다
+  color?: string;
 }) {
   const { t } = useI18n();
   const label = mode === "external"
     ? t("fwConsult.externalChip")
     : `${t("fwConsult.existing")} · ${t(mode === "keep" ? "fwConsult.keep" : "fwConsult.revise")}`;
+  const tint = color
+    ? { borderColor: `color-mix(in srgb, ${color} 60%, white)`, background: `color-mix(in srgb, ${color} 16%, white)`, color: `color-mix(in srgb, ${color} 72%, black)` }
+    : undefined;
   return (
-    <span className={`shrink-0 rounded-full border font-semibold ${SIZE[size]} ${TONE[mode]}`} data-id={dataId} data-mode={mode} title={title}>
+    <span className={`shrink-0 rounded-full border font-semibold ${SIZE[size]} ${TONE[mode]}`} style={tint} data-id={dataId} data-mode={mode} title={title}>
       {label}
     </span>
   );
