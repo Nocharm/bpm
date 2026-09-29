@@ -6,12 +6,13 @@ import { chromium } from "playwright-core";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const maps = await (await ctx.request.get(`${BASE}/api/maps`, { headers: { "X-Dev-User": ADMIN } })).json();
 const demo = maps.find((m) => /비교 데모|comparison/i.test(m.name));  // scripts.seed_compare_demo
 if (!demo) { console.log("FAIL compare demo map not found"); await browser.close(); process.exit(1); }
@@ -62,7 +63,7 @@ const changedStroke = await page.evaluate(() => {
 });
 check("changed node border uses the diff token (not amber)", changedStroke !== null && changedStroke !== "rgb(154, 107, 0)", String(changedStroke));
 
-await page.screenshot({ path: "../docs/qa/screens/compare-inspector-resized.png" });
+await page.screenshot({ path: "../.shots/compare-inspector-resized.png" });
 
 // L5 하늘 캔버스 드롭존 — framework 맵의 노드 하나를 드래그 중인 프레임을 캡처
 const fw = maps.find((m) => m.mode === "framework");
@@ -87,7 +88,7 @@ if (fw) {
     await page.mouse.move(bx + 1, by, { steps: 2 });
     await page.waitForTimeout(300);
     check("L5 drop-zone fan renders while dragging", (await page.locator(".zone-fan").count()) > 0);
-    await page.screenshot({ path: "../docs/qa/screens/l5-dropzone-dark.png" });
+    await page.screenshot({ path: "../.shots/l5-dropzone-dark.png" });
     await page.keyboard.press("Escape");
     await page.mouse.up();
   } else {

@@ -8,6 +8,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -29,7 +30,7 @@ const session = await post("/api/framework-interviews", { category_id: l5.id, la
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/framework/consult/${session.id}`);
 
@@ -53,7 +54,7 @@ check("selected tile is highlighted", (await page.locator('[data-id="fw-consult-
 check("detail lists the preceding card as a chip", (await page.locator('[data-id="fw-consult-plan-deps"] [data-id^="fw-consult-plan-dep-"]').count()) === 1);
 await page.locator('[data-id="fw-consult-plan-detail"] [data-id="fw-consult-plan-name"]').fill(`${detailName} 편집`);
 check("detail edits show on the tile", (await page.locator('[data-id="fw-consult-plan-title-1"]').innerText()).trim() === `${detailName} 편집`);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-plan-cards.png" });
+await page.screenshot({ path: "../.shots/fw-consult-plan-cards.png" });
 
 // Alt+↑ = 단계 이동: 2단계 카드가 1단계 행으로 올라와 동시 진행이 되고 FLIP transform이 걸린다(rAF 전 동기 측정)
 await page.locator('[data-id="fw-consult-plan-row-1"]').focus();
@@ -111,7 +112,7 @@ await page.waitForTimeout(1500 - 300 + 120);
 const partial = await q4.inputValue();
 check("AI suggestion types progressively", partial.length > 0 && partial.length < "요청서 도착".length, JSON.stringify(partial));
 await page.locator('[data-id="fw-consult-answer-label-q3-s2"]').hover();  // 체크 행 hover 상태를 캡처에 담는다
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-answer-typing.png" });
+await page.screenshot({ path: "../.shots/fw-consult-answer-typing.png" });
 const view = page.locator('[data-id="fw-consult-answer-view-q4"]');
 await view.waitFor({ timeout: 3000 });
 check("typed answer commits to the read view", (await view.innerText()) === "요청서 도착");
@@ -147,7 +148,7 @@ await page.locator('[data-id="fw-consult-task-list"] li[data-status="drawn"]').f
 const previewSvg = page.locator('[data-id="fw-consult-task-panel-canvas"] [data-id="scope-preview-pane"] > svg');
 await previewSvg.waitFor({ timeout: 15000 });
 check("L6 panel draws the decision node as a diamond", (await previewSvg.locator("polygon").count()) >= 1);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations-diamond.png" });
+await page.screenshot({ path: "../.shots/fw-consult-relations-diamond.png" });
 const returnTile = page.locator('[data-id="fw-consult-return-flow"]');
 check("board offers a tile back to the connections step while a card is open", await returnTile.isVisible());
 await returnTile.click();

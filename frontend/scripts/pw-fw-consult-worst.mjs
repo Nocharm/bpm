@@ -2,15 +2,16 @@
 // 연결 12노드+분기/루프·피드백 로그 8건(마크다운)·카드 피드백 5건·등록 리포트 12맵. 화면 밀도·줄바꿈·스크롤 확인용.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-fw-consult-worst.mjs
 // 전제: 가짜 AI를 FAKE_AI_WORST=1 로 기동(scripts/fake-ai-server.mjs, :9999) + backend(AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1
-// AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend. 캡처는 docs/qa/screens/worst/ 에 남긴다.
+// AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS="") + frontend. 캡처는 .shots/worst/ 에 남긴다(gitignore).
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
-const OUT = "../docs/qa/screens/worst";
+const OUT = "../.shots/worst";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -58,7 +59,7 @@ await api("PUT", `/api/framework-interviews/${sid}/plan`, { cards, lock: false, 
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/framework/consult/${sid}`);
 

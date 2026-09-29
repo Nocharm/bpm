@@ -7,6 +7,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -35,7 +36,7 @@ await put(`/api/framework-interviews/${session.id}/plan`, { cards, lock: true })
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/framework/consult/${session.id}`);
 const second = page.locator('[data-id="fw-consult-task-list"] li').nth(1);
@@ -58,7 +59,7 @@ await page.locator('[data-id="fw-consult-task-close"]').click();
 await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().waitFor({ timeout: 10000 });
 const backTo = (await page.locator('[data-id="fw-consult-task-panel"] .text-body-strong').first().textContent().catch(() => "")) ?? "";
 check("close falls back to the first ready card", backTo.includes("요청 접수"), backTo.trim());
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-pick-card.png" });
+await page.screenshot({ path: "../.shots/fw-consult-pick-card.png" });
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

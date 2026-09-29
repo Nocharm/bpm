@@ -11,6 +11,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sample = path.resolve(here, "../../docs/samples/consultant-interview-sample/utility-l5.json");
@@ -39,10 +40,10 @@ if (!l5) {
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-await ctx.addInitScript((user) => {
+await ctx.addInitScript(([user, lang]) => {
   window.localStorage.setItem("bpm.devUser", user);
-  window.localStorage.setItem("bpm.lang", "en");
-}, ADMIN);
+  window.localStorage.setItem("bpm.lang", lang);
+}, [ADMIN, LANG]);
 const page = await ctx.newPage();
 
 // ── 1) 휴지 상태 — 선택 없음, 안내문 + 액션 6종 비활성 ──────────────────────
@@ -56,7 +57,7 @@ const restDisabled = await Promise.all(
 );
 check("rest: every detail action is disabled", restDisabled.every(Boolean), restDisabled.join(","));
 check("rest: level actions show the empty hint", await page.locator('[data-id="fw-level-empty"]').isVisible());
-await page.screenshot({ path: "../docs/qa/screens/framework-admin-rest.png" });
+await page.screenshot({ path: "../.shots/framework-admin-rest.png" });
 
 // ── 2) L5 선택 — 검색 히트 클릭으로 체인 펼침 + 선택 ────────────────────────
 await page.locator('[data-id="framework-admin-search"]').fill(l5.name);
@@ -69,7 +70,7 @@ check("selected: add child disabled at L5 (max depth)", await page.locator('[dat
 // 시드된 L5는 이전 스모크가 연 세션이 붙어 있을 수 있다 — 그러면 "이어서" 타일이 대신 뜬다
 check("selected: L5 shows the work-with-AI or resume tile", (await page.locator('[data-id="fw-level-start"], [data-id="fw-level-resume"]').count()) === 1);
 await page.waitForTimeout(400);
-await page.screenshot({ path: "../docs/qa/screens/framework-admin-selected.png" });
+await page.screenshot({ path: "../.shots/framework-admin-selected.png" });
 
 // ── 3) 임포트 — 버튼이 파일 탐색기를 열고, 고른 파일은 전폭 스트립에 필로 ────
 const [chooser] = await Promise.all([
@@ -86,7 +87,7 @@ await page.locator('[data-id="interview-import-report"]').first().waitFor({ time
 check("dry run report rendered under the strip", true);
 await page.locator('[data-id="interview-import-strip"]').scrollIntoViewIfNeeded();
 await page.waitForTimeout(400);
-await page.screenshot({ path: "../docs/qa/screens/framework-import-section.png" });
+await page.screenshot({ path: "../.shots/framework-import-section.png" });
 
 await browser.close();
 const failed = results.filter((ok) => !ok).length;

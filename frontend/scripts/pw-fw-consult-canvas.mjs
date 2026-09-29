@@ -10,6 +10,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
 // 남은 검사를 밟을 수 없을 때(선행 조건 실패) — 지금까지의 결과를 요약하고 실패로 끝낸다
@@ -54,7 +55,7 @@ check("seed L1..L5 chain", true, l5Name);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 // 디바운스 저장이 실제로 서버에 닿는지 — 응답 상태를 모아 본다
 const canvasPuts = [];
@@ -130,7 +131,7 @@ const canvas = page.locator('[data-id="fw-consult-relations-canvas"]');
 await canvas.locator(".react-flow__edge").first().waitFor({ state: "attached", timeout: 30000 });
 const nodeCount = await canvas.locator(".react-flow__node").count();
 check("auto proposal drew the canvas", nodeCount >= 4, `${nodeCount} nodes`);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations-canvas.png" });
+await page.screenshot({ path: "../.shots/fw-consult-relations-canvas.png" });
 
 // [다시 제안]은 리셋이라 캔버스가 있으면 확인을 먼저 묻는다 — 취소하면 캔버스는 그대로(부분 수정은 채팅 한 게이트)
 await page.locator('[data-id="fw-consult-propose-relations"]').click();
@@ -318,7 +319,7 @@ check("board row hides (not unmounts) the register step", registerHidden);
 await page.locator('[data-id="fw-consult-task-panel-canvas"]').waitFor({ timeout: 15000 });
 const feedbackChatShown = await page.locator('[data-id="fw-feedback-chat"]').isVisible();
 check("done board card opens preview + feedback chat after registration", feedbackChatShown);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-canvas-feedback.png" });
+await page.screenshot({ path: "../.shots/fw-consult-canvas-feedback.png" });
 
 // ⑧-b 카드 패널을 닫으면 등록 리포트가 그대로 돌아온다 — 드라이런 재실행 없음, 리포트 상태 유지
 await page.locator('[data-id="fw-consult-task-close"]').click();

@@ -8,6 +8,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -35,7 +36,7 @@ const browser = await chromium.launch({ executablePath: CHROME, headless: true }
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 // 헤드리스 Chrome은 클립보드 쓰기를 기본 거부한다 — 복사 성공 경로(토스트)를 밟으려면 권한을 준다
 await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
 await page.locator('[data-id="framework-admin-detail"]').waitFor();
@@ -48,7 +49,7 @@ const l2Tile = page.locator(`[data-id="fw-level-tile-${chain[1].id}"]`);
 await l2Tile.waitFor({ timeout: 10000 });
 check("L1 selection lists L2 child tiles", true);
 check("subtree session badge rolls up to the L2 tile", (await page.locator(`[data-id="fw-level-tile-badge-${chain[1].id}"]`).innerText()) === "1");
-await page.screenshot({ path: "../docs/qa/screens/fw-level-tiles.png" });
+await page.screenshot({ path: "../.shots/fw-level-tiles.png" });
 
 // 타일 클릭 → 선택 이동 + 좌측 트리 aria-current 싱크
 await l2Tile.click();
@@ -65,7 +66,7 @@ const input = page.locator('[data-id="prompt-dialog-input"]');
 await input.fill(`Taken-${tag}`);
 check("duplicate sibling name shows the inline error", await page.getByText("already exists here").isVisible());
 check("confirm is disabled while the name is a duplicate", await page.locator('[data-id="prompt-dialog-confirm"]').isDisabled());
-await page.screenshot({ path: "../docs/qa/screens/fw-level-create-l5.png" });
+await page.screenshot({ path: "../.shots/fw-level-create-l5.png" });
 await input.fill(`fresh-${tag}`);
 await page.locator('[data-id="prompt-dialog-confirm"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/, { timeout: 20000 });
@@ -77,7 +78,7 @@ await page.locator('[data-id="framework-admin-search"]').fill(existingL5.name);
 await page.locator(`[data-id="framework-admin-search-result-${existingL5.id}"]`).click();
 await page.locator('[data-id="fw-level-resume"]').waitFor({ timeout: 10000 });
 check("L5 with a live session shows the resume tile", true);
-await page.screenshot({ path: "../docs/qa/screens/framework-admin-selected.png" });
+await page.screenshot({ path: "../.shots/framework-admin-selected.png" });
 
 // 임포트 섹션 + 프롬프트 복사 토스트
 check("interview import section is its own card", await page.locator('[data-id="interview-import-section"] [data-id="interview-import-pick"]').isVisible());

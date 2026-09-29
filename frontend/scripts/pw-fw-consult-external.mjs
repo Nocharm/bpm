@@ -9,6 +9,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -59,7 +60,7 @@ check("seeded a foreign L5 with one L6 map", Boolean(mapB?.id), `map=${mapB?.id}
 // ── UI ──────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1.5 });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 const session = await post("/api/framework-interviews", { category_id: l5A.id, brief: "외부 참조 스모크" });
 await page.goto(`${BASE}/framework/consult/${session.id}`);
@@ -94,7 +95,7 @@ if (!dropped) { await browser.close(); console.log(`${results.filter(Boolean).le
 check("external tile carries the origin L5 badge", (await page.locator('[data-id^="fw-consult-plan-external-origin-"]').first().innerText()).includes(l5B.name));
 check("the tile sits in the second stage row", (await stageRow.locator("[data-external]").count()) === 1);
 check("inspector shows the external card as read-only", await page.locator('[data-id="fw-consult-plan-detail-external"]').isVisible());
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-external-plan.png" });
+await page.screenshot({ path: "../.shots/fw-consult-external-plan.png" });
 
 // 잠금 → 태스크는 내부 카드 2장, 보드에 외부 참조 1건
 await page.locator('[data-id="fw-consult-plan-lock"]').click();
@@ -124,7 +125,7 @@ check("canvas holds a node for the external reference", linked.canvas.nodes.some
 check("entry point is an internal card", linked.relations.entry.taskId !== extCard.task_id);
 check("the external node is wired by the plan predecessors", linked.relations.edges.some((e) => e.dst === extCard.task_id || e.src === extCard.task_id));
 await page.waitForTimeout(500);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-external-canvas.png" });
+await page.screenshot({ path: "../.shots/fw-consult-external-canvas.png" });
 
 // 확정 → 문서의 externalTasks
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();

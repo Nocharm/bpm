@@ -7,6 +7,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -27,7 +28,7 @@ const l5 = await post("/api/categories", { name: `drill-L5-${tag}`, parent_id: l
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
 await page.locator('[data-id="framework-admin-tree"]').waitFor();
@@ -41,7 +42,7 @@ check("opening L1 auto-drills through the single-child L2 to L3", chainOpened);
 await page.waitForTimeout(500);
 check("L4 siblings are shown (L3 auto-opened too)", (await row(l4a.id).count()) === 1 && (await row(l4b.id).count()) === 1);
 check("the fork at L4 stops the drill (L5 not opened)", (await row(l5.id).count()) === 0);
-await page.screenshot({ path: "../docs/qa/screens/fw-tree-autodrill.png" });
+await page.screenshot({ path: "../.shots/fw-tree-autodrill.png" });
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length}`);
 process.exit(results.every(Boolean) ? 0 : 1);

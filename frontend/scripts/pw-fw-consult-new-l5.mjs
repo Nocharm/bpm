@@ -8,6 +8,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -30,7 +31,7 @@ const newName = `newl5-L5-${tag}`;
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 await page.goto(`${BASE}/settings?tab=framework`);
 await page.locator('[data-id="framework-admin-detail"]').waitFor();
@@ -43,7 +44,7 @@ await page.locator('[data-id="framework-admin-search"]').fill(l4Name);
 await page.locator(`[data-id="framework-admin-search-result-${l4.id}"]`).click();
 await page.locator(`[data-id="framework-admin-node-${l4.id}"][aria-current="true"]`).waitFor({ timeout: 10000 });
 check("admin tree search reveals and selects the L4 row", true);
-await page.screenshot({ path: "../docs/qa/screens/framework-admin-tree.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/framework-admin-tree.png" }).catch(() => undefined);
 
 // L4 선택 = "L5 만들고 AI로 시작" 타일만 보이고, L5용 AI로 작업 타일은 없다
 const createTile = page.locator('[data-id="fw-level-create-l5"]');
@@ -53,7 +54,7 @@ await createTile.click();
 const confirmBtn = page.locator('[data-id="prompt-dialog-confirm"]');
 check("confirm disabled until a name is typed", await confirmBtn.isDisabled());
 await page.locator('[data-id="prompt-dialog-input"]').fill(newName);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry-new.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-entry-new.png" }).catch(() => undefined);
 await confirmBtn.click();
 await page.waitForURL(/\/framework\/consult\/\d+/, { timeout: 20000 });
 const sessionId = Number(page.url().split("/").pop());

@@ -9,6 +9,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
 const api = (path, init = {}) => fetch(`${BACKEND}/api${path}`, {
@@ -38,7 +39,7 @@ check("seed L1..L5 chain", true, l5Name);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 980 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 // 카드 상세(GET /tasks/{pk}) 재조회 횟수 — 피드백 뒤 패널이 실제로 다시 받았는지 본다
 const detailGets = [];
@@ -107,7 +108,7 @@ await page.locator('[data-id="fw-consult-task-panel-canvas"]').waitFor({ timeout
 const chatShown = await page.locator('[data-id="fw-feedback-chat"]').isVisible();
 const drawnReview = await page.locator('[data-id="fw-consult-task-drawn"] [data-id="fw-consult-review-list"]').isVisible();
 check("drawn row shows answers, preview and feedback chat", chatShown && drawnReview, `chat=${chatShown} review=${drawnReview}`);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-task-panel.png" });
+await page.screenshot({ path: "../.shots/fw-consult-task-panel.png" });
 
 // ⑤ 카드 피드백은 제자리 수정 — 행이 바뀌고 패널이 상세를 다시 받는다(상태는 drawn 유지)
 const beforeL6 = (await readTask(sessionId, first.id)).row?.l6 ?? "";

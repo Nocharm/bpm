@@ -8,8 +8,9 @@ import { chromium } from "playwright-core";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
-const SHOTS = process.env.SHOT_DIR ?? "../docs/qa/screens";
+const SHOTS = process.env.SHOT_DIR ?? "../.shots";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "ko"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 const results = [];
 const check = (name, ok, detail = "") => { results.push(ok); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
@@ -58,7 +59,7 @@ check("seeded a foreign L5 with one L6 map", Boolean(mapB?.id), `map=${mapB?.id}
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1.5 });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "ko"); window.localStorage.removeItem("bpm.fwRelationsChatGeom"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); window.localStorage.removeItem("bpm.fwRelationsChatGeom"); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 const session = await post("/api/framework-interviews", { category_id: l5A.id, brief: "외부 지름길 스모크" });
 await page.goto(`${BASE}/framework/consult/${session.id}`);

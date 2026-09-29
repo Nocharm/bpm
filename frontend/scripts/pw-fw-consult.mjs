@@ -10,6 +10,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` - ${detail}` : ""}`); };
 
@@ -38,7 +39,7 @@ check("seed L1..L5 chain", true, l5Name);
 
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 
 await page.goto(`${BASE}/settings?tab=framework`);
@@ -51,7 +52,7 @@ await page.locator('[data-id="framework-admin-search"]').fill(l5Name);
 await page.locator(`[data-id="framework-admin-search-result-${l5.id}"]`).click();
 await page.locator(`[data-id="framework-admin-node-${l5.id}"][aria-current="true"]`).waitFor({ timeout: 10000 });
 check("L5 row selected in the admin tree", true);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-entry.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-entry.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-level-start"]').click();
 await page.waitForURL(/\/framework\/consult\/\d+/);
 check("session page opened", true, page.url());
@@ -77,7 +78,7 @@ const firstUnanswered = await answerOneCard();
 check("fill-all leaves no unanswered text question", firstUnanswered === 0, String(firstUnanswered));
 await page.locator('[data-id="fw-consult-task-list"] li[data-status="drawn"]').first().waitFor({ timeout: 30000 });
 check("first card drawn", true);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-board.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-board.png" }).catch(() => undefined);
 
 // 남은 카드 전부 제출 — questionnaire가 뜨는 동안 반복(카드 2장 고정이라 최대 1회 더).
 while (await page.locator('[data-id="fw-consult-questions"]').isVisible().catch(() => false)) {
@@ -92,14 +93,14 @@ check("relations step reached", true);
 await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__edge').first().waitFor({ state: "attached", timeout: 30000 });
 check("relations proposed", true);
 check("canvas nodes rendered", (await page.locator('[data-id="fw-consult-relations-canvas"] .react-flow__node').count()) >= 4);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-relations.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-relations.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-confirm-relations"]').click();
 await page.locator('[data-id="fw-consult-register"]').waitFor();
 check("register step reached", true);
 await page.locator('[data-id="fw-consult-dryrun"]').click();
 await page.locator('[data-id="interview-import-report"]').first().waitFor({ timeout: 20000 });
 check("dry-run report rendered", true);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-register.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-register.png" }).catch(() => undefined);
 
 await browser.close();
 const failed = results.filter((r) => !r.ok);

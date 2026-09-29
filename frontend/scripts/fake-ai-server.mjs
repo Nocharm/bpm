@@ -138,9 +138,54 @@ function rowFeedbackFor(userText) {
   return { ...row, l6: `${row.l6 ?? ""}(수정)` };
 }
 
+// 비교 화면 AI 보고서(compare_summary.py 계약) — 매뉴얼 캡처용. user 라인 "- [n1] added …"의 ref를 그대로 인용한다.
+function compareReportFor(system, userText) {
+  const refs = [...userText.matchAll(/^- \[([ne]\d+)\]/gm)].map((m) => m[1]);
+  const en = system.includes("Output language: English");
+  const pick = (i) => (refs.length ? [refs[i % refs.length]] : []);
+  return en
+    ? {
+        title: "Order handling revision: tighter quality control before shipment",
+        opening: "Draft moves inspection ahead of shipment and adds an approval gate for exceptions",
+        sections: [
+          { heading: "Quality control before shipment", points: [
+            { point: "Inspection step inserted before shipping", kind: "added", refs: pick(0) },
+            { point: "Rework loop for failed inspection", kind: "flow", refs: pick(1) } ], refs: [] },
+          { heading: "Exception approval", points: [
+            { point: "Manager approval gate for out-of-spec orders", kind: "added", refs: pick(2) } ], refs: [] },
+        ],
+        impacts: [
+          { point: "Lead time +0.5h per order from the added inspection", kind: "metric", refs: [] },
+          { point: "No control gap: every path to shipment now passes inspection", kind: "flow", refs: pick(0) },
+        ],
+        unmentioned: [ { point: "Removal of the manual packing check", kind: "removed", refs: pick(3) } ],
+        questions: ["Who owns the rework loop when inspection fails twice?", "Is the added inspection time already budgeted?"],
+        closing: "Recommend approval after confirming rework ownership",
+      }
+    : {
+        title: "주문 처리 개정: 출고 전 품질 통제 강화",
+        opening: "출고 전 검수 단계 신설과 예외 승인 게이트 추가",
+        sections: [
+          { heading: "출고 전 품질 통제 강화", points: [
+            { point: "출고 앞에 검수 단계 삽입", kind: "added", refs: pick(0) },
+            { point: "검수 불합격 시 재작업 되돌림 경로 신설", kind: "flow", refs: pick(1) } ], refs: [] },
+          { heading: "예외 주문 승인", points: [
+            { point: "규격 외 주문의 관리자 승인 게이트 추가", kind: "added", refs: pick(2) } ], refs: [] },
+        ],
+        impacts: [
+          { point: "검수 추가로 건당 리드타임 0.5h 증가", kind: "metric", refs: [] },
+          { point: "출고로 가는 모든 경로가 검수를 통과, 통제 공백 없음", kind: "flow", refs: pick(0) },
+        ],
+        unmentioned: [ { point: "수동 포장 확인 단계 삭제", kind: "removed", refs: pick(3) } ],
+        questions: ["검수 2회 불합격 시 재작업 책임 부서는?", "추가된 검수 시간은 예산에 반영되었는지?"],
+        closing: "재작업 책임 확인 후 승인 권고",
+      };
+}
+
 function route(messages) {
   const system = messages.find((m) => m.role === "system")?.content ?? "";
   const user = messages.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+  if (system.includes("개조식 업무 보고서")) return compareReportFor(system, user);
   if (system.includes("L6 단위 업무")) return planFor(user);
   if (system.includes("설문지를 만드세요")) return WORST ? worstQuestionnaire() : QUESTIONNAIRE;
   // 피드백 계약(연계 캔버스(노드·엣지)를 사용자 피드백대로 / rows[] 원소를 사용자 피드백대로)은

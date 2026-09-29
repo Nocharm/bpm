@@ -42,3 +42,6 @@ dist/
 
 # SDD 격리 워크스페이스 (git worktree)
 .worktrees/
+
+# Playwright 캡처 산출물(스모크·매뉴얼 캡처, frontend/scripts 기준 ../.shots) — 저장소 밖
+.shots/

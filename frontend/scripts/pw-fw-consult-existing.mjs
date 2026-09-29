@@ -12,6 +12,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const BACKEND = process.env.BACKEND_URL ?? "http://localhost:8000";
 const ADMIN = "admin.sys";
+const LANG = process.env.PW_LANG ?? "en"; // 캡처 언어(매뉴얼 ko/en 덱)
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
 // fake-ai.mjs planJson()이 돌려주는 카드 이름 — 이름이 같아야 merge_existing_cards가 keep으로 찍는다
 const L6_NAMES = ["요청 접수", "결과 통보"];
@@ -76,7 +77,7 @@ check("seeded two existing L6 maps by interview import", createdMaps === 2, `cre
 // ── UI ───────────────────────────────────────────────────────────────────────
 const browser = await chromium.launch({ executablePath: CHROME, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 950 } });
-await ctx.addInitScript((user) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", "en"); }, ADMIN);
+await ctx.addInitScript(([user, lang]) => { window.localStorage.setItem("bpm.devUser", user); window.localStorage.setItem("bpm.lang", lang); }, [ADMIN, LANG]);
 const page = await ctx.newPage();
 
 await page.goto(`${BASE}/settings?tab=framework`);
@@ -105,7 +106,7 @@ check("existing cards cannot be removed", await page.locator('[data-id="fw-consu
 await page.locator('[data-id="fw-consult-plan-row-1"]').click();
 await page.locator('[data-id="fw-consult-plan-mode-revise"]').click();
 await page.waitForTimeout(200);
-await page.screenshot({ path: "../docs/qa/screens/fw-consult-existing.png" }).catch(() => undefined);
+await page.screenshot({ path: "../.shots/fw-consult-existing.png" }).catch(() => undefined);
 await page.locator('[data-id="fw-consult-plan-lock"]').click();
 
 // 잠금 직후 — 유지 태스크는 설문 없이 바로 drawn
