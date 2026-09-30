@@ -381,10 +381,11 @@ function resolveFanEnd(p: Vec, position: Position, other: Vec, lane: FanLane | u
 
 /**
  * 소형 직각 라우터 — P에서 d1 방향으로 출발해 Q에 d2 방향으로 도착하는 직각 폴리라인.
- * 직교면 코너 1개, 같은 방향이면 중간(절반)에서 코너 2개, 반대 방향·역행이면 null.
- * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁을 확보해야 한다.
+ * 직교면 코너 1개, 같은 방향이면 중간(절반 + bias)에서 코너 2개, 반대 방향·역행이면 null.
+ * raw 끝(팬 없는 실제 핸들)은 RF와 같은 20px 스텁을 확보해야 한다. bias는 소스 레인만큼 중간 구간을
+ * 비켜 세우는 값 — 같은 두 노드를 반대로 잇는 양끝 팬 엣지 쌍의 중간 구간이 정확히 포개지지 않게 한다.
  */
-function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: boolean): Vec[] | null {
+function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: boolean, bias = 0): Vec[] | null {
   const pMin = pIsRaw ? FAN_STUB : 0;
   const qMin = qIsRaw ? FAN_STUB : 0;
   const rel = { x: Q.x - P.x, y: Q.y - P.y };
@@ -403,12 +404,14 @@ function routeOrth(P: Vec, d1: Vec, Q: Vec, d2: Vec, pIsRaw: boolean, qIsRaw: bo
   }
   if (align > 0.5) {
     const along = dot(rel, d1);
-    const a = along / 2;
-    if (a < Math.max(pMin, qMin, 1)) {
+    const lead = Math.max(pMin, 1);
+    const tail = Math.max(qMin, 1);
+    if (along < lead + tail) {
       return null;
     }
+    const a = Math.min(Math.max(along / 2 + bias, lead), along - tail);
     const c1 = add(P, d1, a);
-    const c2 = add(Q, d1, -a);
+    const c2 = add(Q, d1, -(along - a));
     return [P, c1, c2, Q];
   }
   return null;
@@ -437,7 +440,7 @@ export function buildFanStepPath(
   const d1 = head ? add({ x: 0, y: 0 }, head.lat, head.side) : sourceAxes.out;
   const Q = tail ? tail.gate : E;
   const d2 = tail ? add({ x: 0, y: 0 }, tail.lat, -tail.side) : add({ x: 0, y: 0 }, targetAxes.out, -1);
-  const rawRoute = routeOrth(P, d1, Q, d2, !head, !tail);
+  const rawRoute = routeOrth(P, d1, Q, d2, !head, !tail, head ? head.r - FAN_R0 : 0);
   if (!rawRoute) {
     return null;
   }
@@ -446,7 +449,22 @@ export function buildFanStepPath(
   if (route.length < 2) {
     return null;
   }
-  const [inner, labelX, labelY] = buildRoundedOrthPath(route, labelObstacles);
+  const [inner, labelMidX, labelMidY] = buildRoundedOrthPath(route, labelObstacles);
+  let labelX = labelMidX;
+  let labelY = labelMidY;
+  // 양끝 팬 4점 경로(같은 쌍의 왕복 엣지가 나란히 달리는 경우)는 중간 구간이 최장이라 라벨도 같은 자리에
+  // 포개진다 — 소스 레인만큼(×4) 구간 방향으로 비켜 둔다. 안쪽 레인(R0)은 그대로.
+  if (head && tail && route.length === 4) {
+    const a = route[1];
+    const b = route[2];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const isMid = labelX === (a.x + b.x) / 2 && labelY === (a.y + b.y) / 2;
+    if (isMid && len > 0) {
+      const shift = Math.min((head.r - FAN_R0) * 4, Math.max(0, len / 2 - FAN_STUB));
+      labelX += ((b.x - a.x) / len) * shift;
+      labelY += ((b.y - a.y) / len) * shift;
+    }
+  }
   let d = inner;
   if (head) {
     const sweep = sweepOf(head.out, d1);

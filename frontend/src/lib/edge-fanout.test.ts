@@ -297,6 +297,19 @@ describe("buildFanStepPath - 꺾은선 게이트 포인트 + 원호", () => {
     expect([result!.labelX, result!.labelY]).toEqual([285, 118]);
   });
 
+  it("양끝 팬에서 같은 방향 2코너 경로의 중간 구간은 소스 레인(r-14)만큼 비켜 선다 — 같은 쌍의 왕복 엣지가 겹치지 않게", () => {
+    // 소스 r=24(k=1)·타깃 r=14: 중간 수평이 절반(118)이 아니라 +10 → 128... 게이트 y가 42/204라 절반은 123, 편향 후 133
+    const result = buildFanStepPath(LR, { s: laneR(1, 24), t: lane(0) });
+    expect(result!.d).toBe(
+      "M 170,18 A 24 24 0 0 1 194,42 L 194,128 Q 194,133 199,133 L 381,133 Q 386,133 386,138 L 386,204 A 14 14 0 0 0 400,218",
+    );
+    // 라벨도 중간 구간 중앙(290)에서 소스 레인 × 4 = 40px 앞으로 — 나란한 왕복 엣지의 라벨이 포개지지 않게
+    expect([result!.labelX, result!.labelY]).toEqual([330, 133]);
+    // 소스 레인이 안쪽(14)이면 그대로 중앙
+    const inner = buildFanStepPath(LR, { s: lane(0), t: lane(0) });
+    expect([inner!.labelX, inner!.labelY]).toEqual([285, 118]);
+  });
+
   it("루프백(top→top, 동측 가족): 레인은 스텁 20 뒤에서 시작(반경 34+10k), 무지개로 위쪽 핸들에 진입", () => {
     const back: FanPathArgs = {
       sourceX: 385,
