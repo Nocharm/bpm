@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDetourPoints,
   buildRoundedOrthPath,
+  isPolylineBlocked,
   toEdgeObstacle,
   type ObstacleRect,
 } from "@/lib/edge-detour";
@@ -154,5 +155,28 @@ describe("buildRoundedOrthPath", () => {
     ]);
     expect(path).toContain("L 3,0");
     expect(path).toContain("Q 6,0 6,3");
+  });
+});
+
+describe("isPolylineBlocked - 팬 경로 폴리라인의 장애물 관통 판정", () => {
+  const polyline = [
+    { x: 0, y: 0 },
+    { x: 300, y: 0 },
+    { x: 300, y: 200 },
+  ];
+
+  it("수평 구간이 장애물(여백 12 포함)을 지나면 true", () => {
+    expect(isPolylineBlocked(polyline, inflateAll([{ x: 100, y: -20, w: 50, h: 40 }]))).toBe(true);
+  });
+
+  it("세로 구간이 지나도 true, 어느 구간도 안 지나면 false", () => {
+    expect(isPolylineBlocked(polyline, inflateAll([{ x: 280, y: 100, w: 60, h: 40 }]))).toBe(true);
+    expect(isPolylineBlocked(polyline, inflateAll([{ x: 100, y: 100, w: 50, h: 40 }]))).toBe(false);
+  });
+
+  it("양끝 노드 id는 건너뛴다", () => {
+    const obstacles = inflateAll([{ x: 100, y: -20, w: 50, h: 40 }]);
+    expect(isPolylineBlocked(polyline, obstacles, "o0", "x")).toBe(false);
+    expect(isPolylineBlocked(polyline, obstacles, "x", "o0")).toBe(false);
   });
 });
