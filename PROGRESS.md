@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-30 — 홈 대시보드 연동 액센트 바 등장 애니메이션·빛띠 (main)
+
+- 500ms 지연 뒤 inset box-shadow가 150ms에 그냥 켜져 "갑자기 생기는" 느낌 → `globals.css .hover-linked`로 교체: 좌측 2px 바(::before)가 세로 중앙에서 350ms spring으로 자라나고, 같은 순간 옅은 액센트 빛띠(::after, background-position만 이동이라 overflow 불필요)가 행을 한 번 훑는다. 지연은 keyframe delay라 스쳐 가는 호버엔 안 뜨고 이탈 시 즉시 사라지는 동작은 그대로. reduced-motion은 모션 없이 지연만 유지. 스모크 `pw-shot-home-linked-hover.mjs`는 pseudo 요소 computed style로 판정.
+
 ## 2026-09-30 — 매뉴얼 슬라이드 PDF 앱 내 다운로드 (main)
 
 - 슬라이드 PDF 4종은 저장소에만 있고 앱에서 받을 길이 없었다 → `frontend/public/manuals/`로 옮겨 `/manuals/<deck>.pdf`로 정적 서빙(Dockerfile이 `public/` 복사·nginx `/`→Next라 배포 파일 변경 없음, 스탠드얼론 조립으로 4종 200 확인). `/manual` 뷰어의 "한눈에 보기" 메뉴를 env 없이도 상시 표시로 바꾸고 사용자·관리자 PDF 항목을 추가 — 클릭 시 바로 받지 않고 한국어/English 선택 다이얼로그(`ManualPdfDialog`, 사용자 결정)를 거친다. `export-pdf.mjs` 출력 경로도 `public/manuals/`로. 파일명 계약은 `lib/manual-pdf.ts`(vitest가 실존 검사), 스모크 `pw-manual-pdf.mjs`.
