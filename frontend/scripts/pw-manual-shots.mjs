@@ -1,7 +1,7 @@
 // 매뉴얼 슬라이드 캡처(사용자 덱, 5차 2026-09-30 기준) — 홈 필터 2줄·연동 액센트 바·비교 눈 아이콘 카드·비교 AI 보고서·
 // 연계 캔버스 맵 설정 편집 가능자 탭·엣지 라벨 강조·내보내기. 산출물은 ../.shots/manual/<lang>/ (gitignore).
 // 관리자 덱 캡처는 pw-fw-level-actions·pw-fw-admin-layout-shot·pw-fw-consult(-external/-ux/-existing)를 PW_LANG=ko|en으로 돌린 ../.shots/*.png.
-// 덱 수술은 docs/manual/slides/build_slides.py, 넘침 검사는 scripts/check-deck-overflow.mjs, PDF는 docs/manual/slides/export-pdf.mjs.
+// 덱 빌드는 docs/manual/slides/build_deck.py(content/*.py 카피 + theme.css), 넘침 검사는 scripts/check-deck-overflow.mjs, PDF는 docs/manual/slides/export-pdf.mjs.
 // 실행(frontend/ 에서): PW_LANG=ko BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-manual-shots.mjs
 // 전제: reset_db + seed_compare_demo 시드, 가짜 AI(:9999)+backend(AI_ENABLED=true …)+frontend 기동.
 import fs from "node:fs";

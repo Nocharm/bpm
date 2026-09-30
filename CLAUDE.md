@@ -39,7 +39,7 @@ node scripts/build-component-catalog.mjs --check   # COMPONENTS.md 최신 검사
 # 브라우저 검증: frontend/에서 BASE_URL=http://localhost:3000 node scripts/pw-<name>.mjs
 # 스모크·매뉴얼 캡처 산출물은 저장소 루트 `.shots/`(gitignore, 스크립트 기준 `../.shots`) — docs/qa에 PNG를 커밋하지 않는다.
 # 캡처 언어는 PW_LANG=ko|en(캠페인 스모크·pw-manual-shots*.mjs). 매뉴얼 슬라이드 재생성:
-#   캡처 → python3 docs/manual/slides/build_slides.py(회차별 ops 교체, 재실행 전 git checkout) → node scripts/check-deck-overflow.mjs → export-pdf.mjs
+#   캡처 → content/*.py 카피·shot 갱신 → python3 docs/manual/slides/build_deck.py(이미지는 직전 덱 순번 이월) → node scripts/check-deck-overflow.mjs → export-pdf.mjs
 # dev 인증 = localStorage `bpm.devUser` / 헤더 `X-Dev-User`. 역할 차등을 보려면 backend를
 # DEV_ENFORCE_PERMISSIONS=true BPM_SYSADMINS=admin.sys 로 기동 (시드의 sysadmin은 admin.sys)
 ```
