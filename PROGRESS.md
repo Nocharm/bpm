@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-09-30 — 매뉴얼 슬라이드 PDF 앱 내 다운로드 (main)
+
+- 슬라이드 PDF 4종은 저장소에만 있고 앱에서 받을 길이 없었다 → `frontend/public/manuals/`로 옮겨 `/manuals/<deck>.pdf`로 정적 서빙(Dockerfile이 `public/` 복사·nginx `/`→Next라 배포 파일 변경 없음, 스탠드얼론 조립으로 4종 200 확인). `/manual` 뷰어의 "한눈에 보기" 메뉴를 env 없이도 상시 표시로 바꾸고 사용자·관리자 PDF 항목을 추가 — 클릭 시 바로 받지 않고 한국어/English 선택 다이얼로그(`ManualPdfDialog`, 사용자 결정)를 거친다. `export-pdf.mjs` 출력 경로도 `public/manuals/`로. 파일명 계약은 `lib/manual-pdf.ts`(vitest가 실존 검사), 스모크 `pw-manual-pdf.mjs`.
+
 ## 2026-09-30 — 정리 라운드: 메모리·md 문서·매뉴얼 5차 (main)
 
 - **md 정리**: main 머지 완료된 AI L5 캠페인 스펙 3종(`docs/superpowers/specs/`, 코드 주석은 파일명만 유지)과 0.4 결과 핸드오프(`design/2026-09-01-interview-import-v04-result.md`. 불변식은 qa 필드맵·lessons에 흡수 완료, 실서버 점검 4항목은 git history)·템플릿 잔재 `.claude/commands/setup-from-template.md` 폐기. PROGRESS는 09-28 폴리시 라운드 항목을 4줄로 압축하고 09-24 릴리스 이전 항목(09-14~09-18)을 아카이브로 이동.
