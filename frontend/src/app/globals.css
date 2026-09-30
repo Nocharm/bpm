@@ -753,7 +753,7 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
 @keyframes linked-bar-in {
   0% {
     opacity: 0;
-    transform: scaleY(0.2);
+    transform: scaleY(0.4);
   }
   100% {
     opacity: 1;
@@ -765,7 +765,10 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     background-position: 150% 0;
     opacity: 0;
   }
-  20% {
+  35% {
+    opacity: 1;
+  }
+  65% {
     opacity: 1;
   }
   100% {
@@ -783,21 +786,23 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
   background: var(--color-accent);
   transform-origin: center;
   pointer-events: none;
-  animation: linked-bar-in 350ms var(--ease-spring) 500ms 1 both;
+  /* 700ms smooth — spring 350ms는 살짝 튀어 보였다(사용자 피드백 2026-09-30: 더 부드럽고 은은하게) */
+  animation: linked-bar-in 700ms var(--ease-smooth) 500ms 1 both;
 }
 .hover-linked::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* 넓고 옅은 띠(20→80%, 액센트 7%)가 1.8초에 걸쳐 ease-in-out으로 지나간다 — 12%·0.9초는 눈에 띄게 번쩍였다(사용자 피드백 2026-09-30) */
   background: linear-gradient(
     100deg,
-    transparent 35%,
-    color-mix(in srgb, var(--color-accent) 12%, transparent) 50%,
-    transparent 65%
+    transparent 20%,
+    color-mix(in srgb, var(--color-accent) 7%, transparent) 50%,
+    transparent 80%
   );
   background-size: 250% 100%;
-  animation: linked-shimmer 900ms var(--ease-smooth) 500ms 1 both;
+  animation: linked-shimmer 1800ms ease-in-out 500ms 1 both;
 }
 @media (prefers-reduced-motion: reduce) {
   /* 모션은 빼되 500ms 지연은 유지 — 1ms 키프레임으로 delay만 남긴다 */

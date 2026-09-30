@@ -53,7 +53,7 @@ if (best.i >= 0) {
   await page.mouse.move(0, 0);
   await page.waitForTimeout(400);
   await row.hover();
-  // 표식(::before 바)은 500ms 지연 후 350ms로 자라난다 — 200ms 시점엔 opacity 0, 1000ms엔 1이어야 한다
+  // 표식(::before 바)은 500ms 지연 후 700ms로 자라난다 — 200ms 시점엔 opacity 0, 1400ms엔 1이어야 한다
   await page.waitForTimeout(200);
   const barStyle = () =>
     page.locator("[data-linked]").first().evaluate((el) => {
@@ -62,7 +62,7 @@ if (best.i >= 0) {
     });
   const early = await barStyle();
   check(`accent bar not yet visible at 200ms (delay, opacity=${early.opacity})`, early.opacity === 0);
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(1200);
   check("hovered row itself is NOT marked linked", (await row.getAttribute("data-linked")) === null);
   const late = await barStyle();
   check(
@@ -76,8 +76,8 @@ if (best.i >= 0) {
   await page.waitForTimeout(200);
   check("no linked rows right after leaving", (await page.locator("[data-linked]").count()) === 0);
   await row.hover();
-  // 빛띠가 지나가는 중간(500ms 지연 + 900ms 중 절반)에 캡처 — 바+빛띠가 함께 보인다
-  await page.waitForTimeout(800);
+  // 빛띠가 지나가는 중간(500ms 지연 + 1800ms 중 절반)에 캡처 — 바+빛띠가 함께 보인다
+  await page.waitForTimeout(1400);
   const bg = await row.evaluate((el) => getComputedStyle(el).backgroundColor);
   console.log(`hovered row bg=${bg}`);
   await dash.screenshot({ path: `${OUT}/home-linked-hover.png` });

@@ -5,7 +5,7 @@
 
 ## 2026-09-30 — 홈 대시보드 연동 액센트 바 등장 애니메이션·빛띠 (main)
 
-- 500ms 지연 뒤 inset box-shadow가 150ms에 그냥 켜져 "갑자기 생기는" 느낌 → `globals.css .hover-linked`로 교체: 좌측 2px 바(::before)가 세로 중앙에서 350ms spring으로 자라나고, 같은 순간 옅은 액센트 빛띠(::after, background-position만 이동이라 overflow 불필요)가 행을 한 번 훑는다. 지연은 keyframe delay라 스쳐 가는 호버엔 안 뜨고 이탈 시 즉시 사라지는 동작은 그대로. reduced-motion은 모션 없이 지연만 유지. 스모크 `pw-shot-home-linked-hover.mjs`는 pseudo 요소 computed style로 판정.
+- 500ms 지연 뒤 inset box-shadow가 150ms에 그냥 켜져 "갑자기 생기는" 느낌 → `globals.css .hover-linked`로 교체: 좌측 2px 바(::before)가 세로 중앙에서 700ms smooth로 자라나고, 같은 순간 옅은 액센트 빛띠(::after 7%·1.8초 ease-in-out, background-position만 이동이라 overflow 불필요)가 행을 한 번 훑는다(1차 spring 350ms·12%·0.9초는 튀어 보여 완화, 사용자 피드백). 지연은 keyframe delay라 스쳐 가는 호버엔 안 뜨고 이탈 시 즉시 사라지는 동작은 그대로. reduced-motion은 모션 없이 지연만 유지. 스모크 `pw-shot-home-linked-hover.mjs`는 pseudo 요소 computed style로 판정.
 
 ## 2026-09-30 — 매뉴얼 슬라이드 PDF 앱 내 다운로드 (main)
 
