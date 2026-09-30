@@ -21,6 +21,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useNodes,
   useReactFlow,
   useStore,
   ViewportPortal,
@@ -116,6 +117,18 @@ import { findPublishedAt } from "@/components/version/requester-comment-banner";
 import { formatKst, formatKstShort } from "@/lib/datetime";
 import { VERSION_STATUS_LABEL, VERSION_STATUS_STYLE } from "@/lib/version-status";
 import { exportFramedPng } from "@/lib/export";
+import { getObstacles } from "@/components/multiline-edge";
+import { isPolylineBlocked } from "@/lib/edge-detour";
+import {
+  FAN_GAP,
+  buildFanBezierPath,
+  buildFanStepPath,
+  injectFanLanes,
+  isEdgeFan,
+  spreadStraightEndpoints,
+  type FanNodeGeom,
+  type FanStepResult,
+} from "@/lib/edge-fanout";
 import { alignBackbone, computeSpine, isBackEdge, pickHandleSide } from "@/lib/flow-layout";
 import { useI18n } from "@/lib/i18n";
 import { CheckInput } from "@/components/check-input";
@@ -158,25 +171,34 @@ const COMPARE_EDGE_LABEL_MAX_WIDTH = 120;
 // passthrough-removed(양끝이 모두 유지 노드) 엣지 — 삽입 노드를 피해 우회하는 아크(red 점선). C2b.
 // 삭제된 직접 연결이 새 경로(A→X→B)와 겹치지 않게 부풀린 베지어. 방향은 핸들 변으로 결정:
 //   LR(bottom 핸들)=아래로 dip / TB(right 핸들)=오른쪽으로 bulge.
+// 같은 핸들에 삭제 아크가 여럿이면 팬 레인(data.fan, lib/edge-fanout)만큼 불룩함을 더해 겹치지 않게 한다.
 function RemovedArcEdge({
-  sourceX, sourceY, targetX, targetY, sourcePosition, markerEnd, style,
+  sourceX, sourceY, targetX, targetY, sourcePosition, markerEnd, style, data,
 }: EdgeProps) {
+  const fan = isEdgeFan(data?.fan) ? data.fan : undefined;
+  const lane = Math.max(fan?.s?.k ?? 0, fan?.t?.k ?? 0, 0);
+  const reach = 52 + lane * FAN_GAP;
   const side = sourcePosition === Position.Right || sourcePosition === Position.Left;
   const path = side
     ? (() => {
-        const bulge = Math.max(sourceX, targetX) + 52;
+        const bulge = Math.max(sourceX, targetX) + reach;
         return `M${sourceX},${sourceY} C${bulge},${sourceY} ${bulge},${targetY} ${targetX},${targetY}`;
       })()
     : (() => {
-        const dip = Math.max(sourceY, targetY) + 52;
+        const dip = Math.max(sourceY, targetY) + reach;
         return `M${sourceX},${sourceY} C${sourceX},${dip} ${targetX},${dip} ${targetX},${targetY}`;
       })();
   return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
 }
 
 // 라벨 있는 일반 엣지 — 저장된 line_style(곡선/꺾은선/직선)대로 경로를 그린다(""=레거시는 꺾은선).
+// 같은 핸들 형제(data.fan)가 있으면 에디터와 같은 팬 규칙(lib/edge-fanout). 팬 꺾은선이 다른 노드를 관통하면
+// 그 엣지만 RF 기본 경로로 되돌리고, 라벨은 가려지지 않는 구간에 둔다(에디터 DetourSmoothstepEdge와 동일 정책 —
+// 장애물 캐시는 multiline-edge의 것을 공유: 비교와 에디터는 다른 라우트라 RF 인스턴스가 겹치지 않는다).
 // HTML 라벨(EdgeLabelRenderer)은 반투명+블러 배경으로 선이 라벨에서 "끊긴" 느낌을 줄이며 가독성 확보.
 function LabeledSmoothEdge({
+  source,
+  target,
   sourceX,
   sourceY,
   sourcePosition,
@@ -189,6 +211,8 @@ function LabeledSmoothEdge({
   data,
 }: EdgeProps) {
   const lineStyle = data && "lineStyle" in data ? data.lineStyle : undefined;
+  const fan = isEdgeFan(data?.fan) ? data.fan : undefined;
+  const nodes = useNodes<AppNode>();
   const pathArgs = {
     sourceX,
     sourceY,
@@ -197,12 +221,21 @@ function LabeledSmoothEdge({
     targetY,
     targetPosition,
   };
+  let fannedStep: FanStepResult | null = null;
+  if (lineStyle !== "straight" && lineStyle !== "default" && fan) {
+    const obstacles = getObstacles(nodes);
+    const others = obstacles.filter((o) => o.id !== source && o.id !== target);
+    const candidate = buildFanStepPath(pathArgs, fan, others);
+    fannedStep = candidate && !isPolylineBlocked(candidate.points, obstacles, source, target) ? candidate : null;
+  }
   const [path, labelX, labelY] =
     lineStyle === "straight"
-      ? getStraightPath(pathArgs)
+      ? getStraightPath(fan ? spreadStraightEndpoints(pathArgs, fan) : pathArgs)
       : lineStyle === "default"
-        ? getBezierPath(pathArgs)
-        : getSmoothStepPath(pathArgs);
+        ? ((fan && buildFanBezierPath(pathArgs, fan)) ?? getBezierPath(pathArgs))
+        : fannedStep
+          ? [fannedStep.d, fannedStep.labelX, fannedStep.labelY]
+          : getSmoothStepPath(pathArgs);
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
@@ -1086,10 +1119,26 @@ function ComparePane({
     }
   }, [laidNodes, flow]);
 
-  // 포커스된 엣지는 굵게 강조
+  // 팬 레인 배정용 노드 기하 — nodeCenters와 같은 소스(세션 드래그 위치·실측 크기, 없으면 비교 렌더 상수)
+  const fanGeom = useMemo(() => {
+    const geom = new Map<string, FanNodeGeom>();
+    for (const node of laidNodes) {
+      const type = node.data.nodeType;
+      geom.set(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+        w: node.measured?.width ?? COMPARE_RENDER_W[type] ?? nodeSizeOf(type).w,
+        h: node.measured?.height ?? COMPARE_RENDER_H[type] ?? 38,
+        nodeType: type,
+      });
+    }
+    return geom;
+  }, [laidNodes]);
+
+  // 포커스된 엣지는 굵게 강조. 마지막에 같은 핸들 형제 팬 레인(data.fan)을 얹는다 — 에디터 styledEdges와 동일 규칙.
   const appEdges = useMemo(
     () =>
-      buildAppEdges(merged.edges, keptKeys).map((edge) => {
+      injectFanLanes(buildAppEdges(merged.edges, keptKeys).map((edge) => {
         let styled = edge;
         // handleSides가 정한 변으로 핸들 지정. 비교뷰 하위프로세스 노드는 4변 핸들(NodeHandles)을 렌더하므로
         // 편집기용 전용 핸들 remap(withSubprocessHandles)은 쓰지 않는다(TB에서 상/하 진입이 막히던 원인).
@@ -1105,8 +1154,8 @@ function ComparePane({
           styled = { ...styled, selected: true, style: { ...(styled.style ?? {}), strokeWidth: 3 } };
         }
         return styled;
-      }),
-    [merged, focusId, keptKeys, handleSides],
+      }), fanGeom),
+    [merged, focusId, keptKeys, handleSides, fanGeom],
   );
 
   const titleByKey = useMemo(
