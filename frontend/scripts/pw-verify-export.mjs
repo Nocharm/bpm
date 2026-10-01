@@ -223,23 +223,30 @@ try {
   const chipCount2 = await chips2.locator("span").count();
   check("reload: node card still shows 5 param chips", chipCount2 === 5, `count=${chipCount2}`);
 
-  // ── ③ CSV 다운로드 → 14컬럼·숫자값 확인 → 재임포트 → 머지 프리뷰 변경 0 ────────
+  // ── ③ CSV 다운로드(열 선택 모달 경유, 전 열) → 25컬럼·숫자값 확인 → 재임포트 → 머지 프리뷰 변경 0 ────────
   await ensureMapTab();
-  const csvDlPromise = page.waitForEvent("download");
   await page.locator('[data-id="export-csv"]').click();
+  await page.waitForSelector('[data-id="csv-export-modal"]', { timeout: 5000 });
+  // 이전 실행이 남긴 열 선택(localStorage)을 지우고 전 열로 — 헤더 단언이 저장 선택에 흔들리지 않게
+  await page.locator('[data-id="export-columns-csv-select-all"]').click();
+  const csvDlPromise = page.waitForEvent("download");
+  await page.locator('[data-id="csv-export-download"]').click();
   const csvDl = await csvDlPromise;
   const csvPath = `${SHOTS}/export.csv`;
   await csvDl.saveAs(csvPath);
   const csvText = readFileSync(csvPath, "utf8").replace(/^﻿/, "");
   const csvLines = csvText.split("\r\n").filter((l) => l.length > 0);
   const header = csvLines[0]?.split(",") ?? [];
+  // lib/export-columns.ts CSV_COLUMNS와 같은 순서 — 열을 추가하면 여기도 같이 옮긴다
   const expectedHeader = [
-    "Name", "Description", "Assignee", "Department", "System", "Duration",
-    "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE", "URL", "URL_Label", "Next",
+    "Name", "Description", "Assignee", "Role", "Department", "System", "Duration", "Touch_Time",
+    "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE",
+    "Input", "Input_Flags", "Input_Forms", "Output", "Output_Forms", "Start_Condition", "End_Condition", "GMP",
+    "URL", "URL_Label", "Parallel", "Next",
   ];
   check(
-    "CSV header has 14 columns in expected order",
-    header.length === 14 && expectedHeader.every((h, i) => header[i] === h),
+    "CSV header has 25 columns in expected order",
+    header.length === expectedHeader.length && expectedHeader.every((h, i) => header[i] === h),
     header.join(","),
   );
   const colIdx = Object.fromEntries(header.map((h, i) => [h, i]));
@@ -307,6 +314,9 @@ try {
   await page.locator('[data-id="export-excel"]').click();
   await page.waitForSelector('[data-id="excel-export-modal"]', { timeout: 5000 });
   await page.locator('[data-id="excel-format-map"]').click();
+  // 열 선택을 전 열로(이전 실행 잔여 선택 무력화) — 접이식 Columns 섹션을 펴서 Select all
+  await page.locator('[data-id="excel-export-columns-toggle"]').click();
+  await page.locator('[data-id="export-columns-excel-select-all"]').click();
   const xlsxDlPromiseA = page.waitForEvent("download");
   await page.locator('[data-id="excel-export-download"]').click();
   const xlsxDlA = await xlsxDlPromiseA;
@@ -316,33 +326,38 @@ try {
   await wbA.xlsx.readFile(xlsxPathA);
   const sheetA = wbA.worksheets[0];
   const headerRowA = sheetA.getRow(4).values.slice(1).map(String);
+  // lib/export-columns.ts EXCEL_COLUMNS와 같은 순서 — 셀 위치는 이 목록에서 찾는다(인덱스 하드코딩 금지)
   const expectedXlsxHeader = [
-    "No", "Name", "Type", "Description", "Assignee", "Department", "System", "Duration (h)",
-    "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE", "URL", "Groups", "Next",
+    "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
+    "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
+    "Input", "Output", "Start condition", "End condition", "GMP", "Parallel", "URL", "Groups", "Next",
   ];
   check(
-    "Excel header row (row 4) has 16 expected columns",
-    expectedXlsxHeader.every((h, i) => headerRowA[i] === h),
+    `Excel header row (row 4) has ${expectedXlsxHeader.length} expected columns`,
+    headerRowA.length === expectedXlsxHeader.length && expectedXlsxHeader.every((h, i) => headerRowA[i] === h),
     headerRowA.join(","),
   );
+  const xlsxCol = (header) => expectedXlsxHeader.indexOf(header) + 1;
   let widgetXlsxRow = null;
   sheetA.eachRow({ includeEmpty: false }, (row) => {
     if (row.getCell(2).value === "Widget Step") widgetXlsxRow = row;
   });
+  const numericCols = ["Duration (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"].map(xlsxCol);
+  const cellOf = (header) => widgetXlsxRow?.getCell(xlsxCol(header)).value;
   check(
     "Excel numeric cells (duration/cost_krw/headcount/annual_count/fte) are real numbers, cost_usd empty",
     widgetXlsxRow !== null &&
-      typeof widgetXlsxRow.getCell(8).value === "number" && widgetXlsxRow.getCell(8).value === 1.15 &&
-      typeof widgetXlsxRow.getCell(9).value === "number" && widgetXlsxRow.getCell(9).value === 300 &&
-      (widgetXlsxRow.getCell(10).value ?? "") === "" &&
-      typeof widgetXlsxRow.getCell(11).value === "number" && widgetXlsxRow.getCell(11).value === 2 &&
-      typeof widgetXlsxRow.getCell(12).value === "number" && widgetXlsxRow.getCell(12).value === 7 &&
-      typeof widgetXlsxRow.getCell(13).value === "number" && widgetXlsxRow.getCell(13).value === 1.5,
+      cellOf("Duration (h)") === 1.15 &&
+      cellOf("Cost (KRW)") === 300 &&
+      (cellOf("Cost (USD)") ?? "") === "" &&
+      cellOf("Headcount") === 2 &&
+      cellOf("Annual volume") === 7 &&
+      cellOf("FTE") === 1.5,
     widgetXlsxRow
-      ? [8, 9, 10, 11, 12, 13].map((c) => `${c}:${widgetXlsxRow.getCell(c).value}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ")
+      ? numericCols.map((c) => `${c}:${widgetXlsxRow.getCell(c).value}(${typeof widgetXlsxRow.getCell(c).value})`).join(" ")
       : "row not found",
   );
-  const urlCell = widgetXlsxRow?.getCell(14);
+  const urlCell = widgetXlsxRow?.getCell(xlsxCol("URL"));
   check(
     "Excel hyperlink cell carries {text, hyperlink}",
     urlCell?.value?.hyperlink === "https://example.com/doc" && urlCell?.value?.text === "Doc",

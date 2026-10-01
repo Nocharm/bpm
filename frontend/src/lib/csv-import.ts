@@ -4,7 +4,10 @@ import type { AiEdge, AiGroup, AiNode, Catalogs, Directory, Graph, GraphEdge, Gr
 import { driftedAssignees, formatAssignees, parseAssignees } from "./assignee";
 import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDagre, normalizeNodeType } from "./canvas";
 import { commitRole, commitSystem } from "./catalogs";
+import { escapeCsvCell } from "./csv";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
+import { CSV_COLUMNS, type CsvColumnKey } from "./export-columns";
+import { GMP_OPTIONS } from "./gmp";
 import { genId } from "./id";
 import { applyParallelFlag } from "./output-rules";
 import {
@@ -71,22 +74,23 @@ export interface CsvImportContext {
   catalogs?: Catalogs;
 }
 
-// 21컬럼 스키마 (design 2026-07-13 §5.1, 승격 필드 2026-08-19, Role 2026-09-12) — Input/Output은 셀 내 개행으로 복수.
-// 폴백 컬럼(system_fallback 등)은 CSV 표면 제외 — 병합이 기존값을 보존한다 (design 2026-08-19 §3).
-// 단 System 셀이 Other 미일치 원문이면 commitSystem이 메모(system_fallback)를 채운다.
-const HEADER_COLUMNS = [
-  "name", "description", "assignee", "role", "department", "system", "duration", "touch_time",
-  "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
-  "input", "input_flags", "output", "start_condition", "end_condition",
-  "url", "url_label", "parallel", "next",
-] as const;
-type HeaderColumn = (typeof HEADER_COLUMNS)[number];
+// 25컬럼 스키마 — 열 정의 단일 소스는 lib/export-columns.ts CSV_COLUMNS(내보내기·템플릿·프롬프트 공용).
+// (design 2026-07-13 §5.1, 승격 필드 2026-08-19, Role 2026-09-12, Parallel 2026-10-01, GMP·폼 2026-10-02)
+// Input/Output은 셀 내 개행으로 복수, Input_Flags·Input_Forms·Output_Forms는 그 줄과 1:1 정렬.
+// system_fallback 전용 열은 없다 — Other 노드는 System 셀 원문이 commitSystem으로 메모에 복원된다.
+export const HEADER_COLUMNS: readonly CsvColumnKey[] = CSV_COLUMNS.map((column) => column.key);
+type HeaderColumn = CsvColumnKey;
 
 // 데이터 행 상한 — 초대형 파일 오업로드 방지
 const MAX_DATA_ROWS = 500;
 // 백엔드 NodeIn 제약 미러. description·input/output·조건은 Text 컬럼(무상한)이라 제외한다.
+// gmp는 길이 대신 3값 검증(무효=경고 후 무시)이라 제외.
 const MAX_LEN: Record<
-  Exclude<HeaderColumn, "next" | "parallel" | "description" | "input" | "input_flags" | "output" | "start_condition" | "end_condition">,
+  Exclude<
+    HeaderColumn,
+    | "next" | "parallel" | "description" | "input" | "input_flags" | "input_forms" | "output" | "output_forms"
+    | "start_condition" | "end_condition" | "gmp"
+  >,
   number
 > = {
   name: 200,
@@ -121,6 +125,8 @@ const PARAM_FIELD_LABEL: Record<ParamField, string> = {
 // SP 노드에서 링크 맵이 원천인 텍스트 필드 — CSV/AI 후보를 드롭하고 기존값 유지 (design 2026-08-19 §3)
 const SP_INHERITED_TEXT_FIELDS = ["input", "output", "start_condition", "end_condition"] as const;
 type SpInheritedTextField = (typeof SP_INHERITED_TEXT_FIELDS)[number];
+// SP에서 드롭되는 CSV 후보 필드 전체 — 링크 맵이 원천(IO 텍스트·조건·플래그·폼·GMP)
+type SpDroppedTextField = SpInheritedTextField | "input_flags" | "input_forms" | "output_forms" | "gmp";
 
 export function decodeCsvBuffer(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -188,7 +194,7 @@ const NODE_DEFAULTS = {
   description: "",
   color: "",
   assignee: "",
-  assignee_role: "",  // CSV/AI 표면 제외 — 병합은 기존값 보존 (design 2026-09-11 §4.3)
+  assignee_role: "",  // CSV Role 열·AI attributes.assignee_role로 왕복(2026-09-12), 빈값은 mergeNode pick이 기존 유지
   department: "",
   system: "",
   duration: "",
@@ -200,7 +206,7 @@ const NODE_DEFAULTS = {
   fte: "",
   input: "",
   output: "",
-  input_forms: "",  // CSV/AI 표면 제외 — 항목별 폼, 병합은 기존값 보존 (2026-08-20)
+  input_forms: "",  // CSV Input_Forms 열(2026-10-02)·AI 표면 제외 — 빈 셀이면 mergeNode가 텍스트 불변 시 기존 보존
   output_forms: "",
   output_ids: "",  // CSV/AI 표면 제외 — IO 링크 (io-linking §3)
   input_links: "",
@@ -209,7 +215,7 @@ const NODE_DEFAULTS = {
   start_condition: "",
   end_condition: "",
   system_fallback: "",
-  gmp: "",  // CSV/AI 표면 제외 — 검토값, 병합은 기존값 보존 (design 2026-08-20)
+  gmp: "",  // CSV GMP 열(2026-10-02)·AI 표면 제외 — 빈 셀이면 기존 보존, 색은 바꾸지 않는다
   url: "",
   url_label: "",
   pos_x: 0,
@@ -224,17 +230,41 @@ const NODE_DEFAULTS = {
 // 빈 값은 "건드리지 않음" — 제안/CSV가 모르는 속성이 기존 값을 지우지 않게 (CSV·AI 병합 공용)
 const pick = (next: string, existing: string): string => (next === "" ? existing : next);
 
-// Input_Flags를 대상 Input 줄 수에 맞춰 자름 — 초과 줄의 고아 값 방지, 후행 공백 줄 소거 (io-linking §3)
+// 줄 정렬 값(Input_Flags·Input_Forms·Output_Forms)을 대상 텍스트 줄 수에 맞춰 자름 — 초과 줄의 고아 값 방지,
+// 후행 공백 줄 소거 (io-linking §3)
+const countTextLines = (text: string): number => (text === "" ? 0 : text.split("\n").length);
 const alignFlagLines = (flags: string, text: string): string => {
   if (flags === "") return "";
-  const count = text === "" ? 0 : text.split("\n").length;
-  return flags.split("\n").slice(0, count).join("\n").replace(/\s+$/, "");
+  return flags.split("\n").slice(0, countTextLines(text)).join("\n").replace(/\s+$/, "");
 };
+
+// 폼 셀 정규화 — 줄 단위 trim, 선행 빈 줄은 의미("1번째 항목은 폼 없음")라 보존, 후행 빈 줄만 소거
+const normalizeFormsCell = (cell: string): string =>
+  cell.split("\n").map((line) => line.trim()).join("\n").replace(/\s+$/, "");
+
+// 줄 정렬 병합 — 셀 제공 시 병합된 텍스트 줄 수에 정렬해 착지, 미제공이면 텍스트 불변일 때만 기존 보존
+// (변경되면 줄 정렬이 깨지므로 폐기 — 백엔드 재임포트 승계(import_consultant)와 동일 규칙, 2026-08-20)
+const mergeAlignedLines = (provided: string, mergedText: string, existingText: string, existingValue: string): string => {
+  if (provided !== "") return alignFlagLines(provided, mergedText);
+  return mergedText === existingText ? existingValue : "";
+};
+
+// GMP 셀 → 저장값(lib/gmp.ts GMP_OPTIONS = backend schemas.GMP_VALUES 미러). 값·표시 라벨 대소문자 무시, 무효면 null
+function parseGmpCell(cell: string): string | null {
+  const needle = cell.trim().toLowerCase();
+  const option = GMP_OPTIONS.find(
+    (candidate) => candidate.value === needle || candidate.label.toLowerCase() === needle,
+  );
+  return option?.value ?? null;
+}
+
+// 분기·끝 노드는 병렬 출구 대상이 아니다(에디터 우클릭 메뉴도 금지) — 켜는 요청은 무시하고 호출부가 경고한다
+const isParallelForbidden = (nodeType: string): boolean => nodeType === "decision" || nodeType === "end";
 
 // 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
 // 서브프로세스 노드는 node_type도 보존 — 추론/제안값으로 덮으면 Call Activity 렌더가 깨진다.
-// 서브프로세스는 duration/cost_krw/cost_usd/headcount가 링크 맵 지정값(읽기전용)이라 CSV/AI 값을
-// dropUneditableParams로 걸러낸다 — droppedFields는 caller가 경고를 낼 수 있게 그대로 반환.
+// 서브프로세스는 duration/touch_time/cost_krw/cost_usd/headcount 5필드(SP_PARAM_FIELDS)가 링크 맵 지정값(읽기전용)이라
+// CSV/AI 값을 dropUneditableParams로 걸러낸다 — droppedFields는 caller가 경고를 낼 수 있게 그대로 반환.
 // 시스템 병합 — 후보가 비면 기존(시스템+메모) 유지, 카탈로그가 있으면 commitSystem(별칭→정식 표기,
 // 미일치→Other+원문 메모), 없으면 원문 그대로. keptNote=기존 메모가 달라 지킨 경우(호출부가 경고).
 const resolveSystemFields = (
@@ -251,7 +281,7 @@ const resolveSystemFields = (
 interface MergeResult {
   node: GraphNode;
   droppedParamFields: ParamField[];
-  droppedTextFields: (SpInheritedTextField | "input_flags")[];
+  droppedTextFields: SpDroppedTextField[];
   // 시스템 자유값인데 기존 원문 메모가 다른 내용이라 메모를 지켰다 — 호출부가 경고
   keptSystemNote: boolean;
 }
@@ -270,6 +300,8 @@ const mergeNode = (
         system: system.system,
         system_fallback: system.system_fallback,
         input_flags: alignFlagLines(next.input_flags ?? "", next.input ?? ""),
+        input_forms: alignFlagLines(next.input_forms ?? "", next.input ?? ""),
+        output_forms: alignFlagLines(next.output_forms ?? "", next.output ?? ""),
       },
       droppedParamFields: [],
       droppedTextFields: [],
@@ -285,17 +317,19 @@ const mergeNode = (
     annual_count: next.annual_count ?? "",
     fte: next.fte ?? "",
   });
-  // SP 노드의 IO/조건/형식은 링크 맵이 원천(read-only 상속) — 후보를 드롭하고 기존값 유지.
-  // system_fallback은 CSV/AI 표면 제외라 항상 기존값(...existing 스프레드)이 남는다 (design 2026-08-19 §3)
+  // SP 노드의 IO/조건/폼/GMP는 링크 맵이 원천(read-only 상속) — 후보를 드롭하고 기존값 유지.
+  // system_fallback은 전용 열·AI 필드가 없어 System 셀 경유(resolveSystemFields)로만 바뀐다 (design 2026-08-19 §3)
   const isSubprocess = existing.node_type === "subprocess";
-  // SP는 IO 자체가 링크 맵 상속이라 플래그도 무의미 — 제공 시 함께 드롭·경고 (io-linking §3)
-  const droppedTextFields: (SpInheritedTextField | "input_flags")[] = isSubprocess
+  // SP는 IO 자체가 링크 맵 상속이라 플래그·폼도 무의미 — 제공 시 함께 드롭·경고 (io-linking §3)
+  const droppedTextFields: SpDroppedTextField[] = isSubprocess
     ? [
         ...SP_INHERITED_TEXT_FIELDS.filter((f) => (next[f] ?? "") !== ""),
-        ...((next.input_flags ?? "") !== "" ? (["input_flags"] as const) : []),
+        ...(["input_flags", "input_forms", "output_forms", "gmp"] as const).filter((f) => (next[f] ?? "") !== ""),
       ]
     : [];
   const nextFlags = isSubprocess ? "" : (next.input_flags ?? "");
+  const nextInputForms = isSubprocess ? "" : (next.input_forms ?? "");
+  const nextOutputForms = isSubprocess ? "" : (next.output_forms ?? "");
   const mergedText = Object.fromEntries(
     SP_INHERITED_TEXT_FIELDS.map((f) => [
       f,
@@ -310,12 +344,7 @@ const mergeNode = (
     node: {
       ...existing,
       title: next.title,
-      node_type:
-        existing.linked_map_id !== null
-          ? existing.node_type
-          : next.node_type === "start" || next.node_type === "end"
-            ? next.node_type
-            : next.node_type,
+      node_type: existing.linked_map_id !== null ? existing.node_type : next.node_type,
       // 기존 링크 우선, 없으면 후보의 링크 채택(P2 유사 SP 수락 스레딩)
       linked_map_id: existing.linked_map_id ?? next.linked_map_id ?? null,
       description: pick(next.description, existing.description),
@@ -333,10 +362,13 @@ const mergeNode = (
       annual_count: pick(allowed.annual_count ?? "", existing.annual_count ?? ""),
       fte: pick(allowed.fte ?? "", existing.fte ?? ""),
       ...mergedText,
-      // 항목별 데이터 폼 — CSV/AI 표면 제외(...existing 보존). 단, 병합으로 해당 측 항목이 바뀌면
-      // 줄 정렬이 깨지므로 폐기 — 백엔드 재임포트 승계(import_consultant)와 동일 규칙 (2026-08-20)
-      input_forms: mergedText.input === (existing.input ?? "") ? existing.input_forms ?? "" : "",
-      output_forms: mergedText.output === (existing.output ?? "") ? existing.output_forms ?? "" : "",
+      // 항목별 데이터 폼 — CSV Input_Forms/Output_Forms 셀 제공 시 병합된 줄 수에 정렬해 착지(2026-10-02),
+      // 빈 셀·AI(표면 제외)는 텍스트 불변이면 기존 보존, 바뀌면 폐기
+      input_forms: mergeAlignedLines(nextInputForms, mergedText.input, existing.input ?? "", existing.input_forms ?? ""),
+      output_forms: mergeAlignedLines(nextOutputForms, mergedText.output, existing.output ?? "", existing.output_forms ?? ""),
+      // GMP — 빈 셀은 기존 유지, SP는 링크 맵 상속이라 기존 유지(드롭 경고). 노드 색은 건드리지 않는다
+      // (에디터의 GMP→색 자동 확정은 CSV에 적용하지 않음, 2026-10-02)
+      gmp: isSubprocess ? existing.gmp ?? "" : pick(next.gmp ?? "", existing.gmp ?? ""),
       // IO 링크 — 해당 측 텍스트가 바뀌면 줄 정렬이 깨지므로 폐기(보수적 해산), 안 바뀌면 보존 (io-linking §3)
       output_ids: mergedText.output === (existing.output ?? "") ? existing.output_ids ?? "" : "",
       output_links: mergedText.output === (existing.output ?? "") ? existing.output_links ?? "" : "",
@@ -457,6 +489,58 @@ function layoutAddedOnly(
   return applyPositions(seeded, layoutSubsetWithDagre(toLayoutNodes(seeded), toFlowEdges(edges), added, "LR"));
 }
 
+interface BaseEdgeQueue {
+  // 같은 (출발→도착) 쌍의 base 엣지를 원래 순서대로 하나 꺼낸다 — 없으면 undefined(신규 엣지)
+  take: (source: string, target: string) => GraphEdge | undefined;
+  // 아무 재생성 엣지에도 이월되지 않은 base 엣지 — lostEdges
+  getUnconsumed: () => GraphEdge[];
+}
+
+/** base 엣지를 (출발→도착) 쌍별 큐로 — CSV·AI 머지가 같은 규칙으로 변·핸들·선 모양·게이트웨이를 이월한다. */
+function createBaseEdgeQueue(baseEdges: readonly GraphEdge[]): BaseEdgeQueue {
+  const queues = new Map<string, GraphEdge[]>();
+  for (const edge of baseEdges) {
+    const key = `${edge.source_node_id}→${edge.target_node_id}`;
+    const queue = queues.get(key);
+    if (queue) queue.push(edge);
+    else queues.set(key, [edge]);
+  }
+  const consumed = new Set<GraphEdge>();
+  return {
+    take: (source, target) => {
+      const edge = queues.get(`${source}→${target}`)?.shift();
+      if (edge) consumed.add(edge);
+      return edge;
+    },
+    getUnconsumed: () => baseEdges.filter((edge) => !consumed.has(edge)),
+  };
+}
+
+/**
+ * 재생성 엣지 — 이월 대상(carried)이 있으면 그 변·핸들(SP 끝 키·in 변형 포함)·선 모양·게이트웨이를 그대로,
+ * 없으면 기본값(우→좌, 핸들 없음: SP는 로드 정규화 toAppEdges가 대표 끝/in으로 착지). id는 새로 발급.
+ */
+function buildRegeneratedEdge(
+  source: string,
+  target: string,
+  label: string,
+  carried: GraphEdge | undefined,
+  fallbackLineStyle: GraphEdge["line_style"],
+): GraphEdge {
+  return {
+    id: genId(),
+    source_node_id: source,
+    target_node_id: target,
+    label,
+    source_side: carried?.source_side ?? "right",
+    target_side: carried?.target_side ?? "left",
+    source_handle: carried?.source_handle ?? null,
+    target_handle: carried?.target_handle ?? null,
+    line_style: carried ? carried.line_style : fallbackLineStyle,
+    gateway: carried?.gateway ?? null,
+  };
+}
+
 /** CSV 텍스트 → 검증 + 그래프(자동 Start/End, decision 추론, dagre LR 배치). 에러 있으면 graph=null. */
 export function buildGraphFromCsv(text: string, context?: CsvImportContext): CsvImportOutcome {
   // 매번 새 객체를 만든다 — 공유 배열이면 한 호출자의 실수(mutate)가 이후 모든 실패 결과를 오염시킨다.
@@ -535,9 +619,12 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     fte: numCellOf(r, "fte"),
     input: cellOf(r, "input"),
     input_flags: rawCellOf(r, "input_flags"),
+    input_forms: normalizeFormsCell(rawCellOf(r, "input_forms")),
     output: cellOf(r, "output"),
+    output_forms: normalizeFormsCell(rawCellOf(r, "output_forms")),
     start_condition: cellOf(r, "start_condition"),
     end_condition: cellOf(r, "end_condition"),
+    gmpRaw: cellOf(r, "gmp"),
     url: cellOf(r, "url"),
     url_label: cellOf(r, "url_label"),
     parallelRaw: cellOf(r, "parallel"),
@@ -632,6 +719,17 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       warnings.push({ line: row.line, message: `Parallel "${row.name}" needs two or more Next targets - add another branch or set N` });
     }
   }
+  // GMP 셀 — direct/indirect/non_gmp(표시 라벨도 허용)만 인정, 그 외는 경고 후 무시(빈 칸과 같이 기존 유지)
+  const gmpOf = new Map<string, string>();
+  for (const row of rows) {
+    if (row.gmpRaw === "") continue;
+    const value = parseGmpCell(row.gmpRaw);
+    if (value === null) {
+      warnings.push({ line: row.line, message: `GMP "${row.gmpRaw}" is not direct, indirect or non_gmp - ignored` });
+    } else {
+      gmpOf.set(row.name, value);
+    }
+  }
   const resolved = new Map<string, { assignee: string; department: string }>();
   for (const row of rows) {
     if (!names.has(row.name)) continue; // 이름 에러 행은 스킵
@@ -694,18 +792,29 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     mergeNode(baseStart, { ...NODE_DEFAULTS, id: startId, title: baseStart?.title ?? "Start", node_type: "start", sort_order: 0 }, catalogs).node,
     ...rows.map((row, i) => {
       const normalizedFlags = normalizeInputFlagsCell(row.input_flags, row.line, warnings);
-      const { node, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(byTitle.get(row.name) ?? null, {
+      const existingRow = byTitle.get(row.name) ?? null;
+      // Next 2개 이상은 분기(decision) — 단 병렬(Parallel=Y, 빈 칸이면 기존 노드의 병렬 설정)이면
+      // 동시 진행이라 병렬 출구를 켠 일반 노드. 링크된 SP는 mergeNode가 기존 타입을 지킨다.
+      const inferredType =
+        (nextsOf.get(row.name) ?? []).length >= 2 &&
+        !(parallelOf.get(row.name) ?? (existingRow?.parallel_outputs ?? []).includes("__primary__"))
+          ? "decision"
+          : "process";
+      const finalType = existingRow?.linked_map_id != null ? existingRow.node_type : inferredType;
+      const parallelFlag = parallelOf.get(row.name);
+      // 분기·끝으로 남는 행에 Parallel=Y는 적용하지 않는다(에디터 메뉴와 같은 금지) — N(끄기)은 그대로 반영
+      if (parallelFlag === true && isParallelForbidden(finalType)) {
+        warnings.push({ line: row.line, message: `Parallel "${row.name}" applies only to process nodes - ignored on a ${finalType} node` });
+      }
+      const { node, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(existingRow, {
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
         title: row.name,
-        // Next 2개 이상은 분기(decision) — 단 병렬(Parallel=Y, 빈 칸이면 기존 노드의 병렬 설정)이면
-        // 동시 진행이라 병렬 출구를 켠 일반 노드
-        node_type:
-          (nextsOf.get(row.name) ?? []).length >= 2 &&
-          !(parallelOf.get(row.name) ?? (byTitle.get(row.name)?.parallel_outputs ?? []).includes("__primary__"))
-            ? "decision"
-            : "process",
-        parallel_outputs: applyParallelFlag(byTitle.get(row.name)?.parallel_outputs, parallelOf.get(row.name)),
+        node_type: inferredType,
+        parallel_outputs: applyParallelFlag(
+          existingRow?.parallel_outputs,
+          parallelFlag === true && isParallelForbidden(finalType) ? undefined : parallelFlag,
+        ),
         description: row.description,
         assignee: resolved.get(row.name)?.assignee ?? "",
         // 역할 — 별칭→정식 표기, 미일치는 자유값 그대로 (commitRole)
@@ -721,9 +830,12 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         fte: normalizeNumericParam(row.fte) ?? "",
         input: row.input,
         input_flags: normalizedFlags,
+        input_forms: row.input_forms,
         output: row.output,
+        output_forms: row.output_forms,
         start_condition: row.start_condition,
         end_condition: row.end_condition,
+        gmp: gmpOf.get(row.name) ?? "",
         url: row.url,
         url_label: row.url_label,
         sort_order: i + 1,
@@ -732,6 +844,17 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       // 정규화되면 mergeNode가 "셀 생략"으로 읽어 기존 optional을 지키던 결함 픽스 (QA 이슈 #2)
       if (row.input_flags.trim() !== "" && node.node_type !== "subprocess") {
         node.input_flags = alignFlagLines(normalizedFlags, node.input ?? "");
+      }
+      // 폼 셀이 병합된 항목 줄보다 길면 초과 줄은 잘렸다 — 조용히 버리지 않게 알린다
+      if (node.node_type !== "subprocess") {
+        for (const [cell, text, column] of [
+          [row.input_forms, node.input ?? "", "Input_Forms"],
+          [row.output_forms, node.output ?? "", "Output_Forms"],
+        ] as const) {
+          if (countTextLines(cell) > countTextLines(text)) {
+            warnings.push({ line: row.line, message: `${column} has more lines than the items it describes - extra lines were dropped` });
+          }
+        }
       }
       // 서브프로세스 매칭 행 — 상속 파라미터·IO/조건/형식은 링크 맵 지정값이라 CSV로 못 바꾼다
       if (droppedParamFields.length > 0 || droppedTextFields.length > 0) {
@@ -770,31 +893,15 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   });
 
   const edges: GraphEdge[] = [];
-  // 엣지는 전량 재생성되므로 기존 선 모양을 (source→target) 쌍으로 이월 — 머지에서 매칭 노드는
-  // base id를 재사용해 쌍 대조가 성립한다(lostEdges 키잉과 동일). 미이월 시 임포트마다 스타일 증발.
-  const baseLineStyles = new Map(
-    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
-  );
-  // gateway도 line_style과 동일하게 (source→target) 쌍으로 이월 — 안 하면 재임포트마다 증발
-  const baseGateways = new Map(
-    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.gateway]),
-  );
+  // 엣지는 전량 재생성되므로 기존 엣지의 변·핸들·선 모양·게이트웨이를 (source→target) 쌍 큐로 이월 —
+  // 머지에서 매칭 노드는 base id를 재사용해 쌍 대조가 성립한다. 미이월 시 SP 보조 끝 출구가 대표 끝으로
+  // 모여 출력 규칙 위반이 되고 스타일도 증발한다 (D3, 2026-10-02)
+  const baseEdgeQueue = createBaseEdgeQueue(context?.base?.edges ?? []);
   // 대응 쌍 없는 신규 엣지 — 머지(에디터 컨텍스트)는 맵의 새 엣지 기본값(일괄 변경 모달의
   // "새 연결선도 이 모양" 약속), 신규 맵 생성(base 없음)은 ""(다른 맵 기본값 유입 방지)
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
   const addEdge = (source: string, target: string, label: string) => {
-    edges.push({
-      id: genId(),
-      source_node_id: source,
-      target_node_id: target,
-      label,
-      source_side: "right",
-      target_side: "left",
-      source_handle: null,
-      target_handle: null,
-      line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
-      gateway: baseGateways.get(`${source}→${target}`) ?? null,
-    });
+    edges.push(buildRegeneratedEdge(source, target, label, baseEdgeQueue.take(source, target), fallbackLineStyle));
   };
   const hasIncoming = new Set<string>();
   for (const row of rows) {
@@ -822,10 +929,8 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     : layoutEverything(finalNodes, edges);
 
   const removedNodes = baseNodes.filter((node) => !matchedIds.has(node.id));
-  const keptEdgeKeys = new Set(edges.map((e) => `${e.source_node_id}→${e.target_node_id}`));
-  const lostEdges = (context?.base?.edges ?? []).filter(
-    (e) => !keptEdgeKeys.has(`${e.source_node_id}→${e.target_node_id}`),
-  );
+  // 이월되지 않은 base 엣지 = 사라질 엣지(프리뷰 빨간 점선) — 같은 쌍의 두 번째 엣지(예: SP 두 끝)도 여기에 남는다
+  const lostEdges = baseEdgeQueue.getUnconsumed();
 
   // 부서 불일치 경고 — resolveAssignee가 이미 경고한 미해석 토큰은 제외(중복 경고 방지)
   if (context?.directory) {
@@ -887,19 +992,25 @@ export function buildGraphFromAiProposal(
   const baseNodes = context?.base?.nodes ?? [];
   const isMerge = baseNodes.length > 0;
 
-  // start/end는 타입 우선 매칭 (CSV와 동일 규칙 — validate_process 기본 지정과 정합)
+  // start는 타입 매칭, end는 제목 우선·대표 끝 폴백 — 다중 끝 맵에서 첫 end 제안을 무조건 대표 끝에 붙이면
+  // 보조 끝이 대표 id를 가로채 끝 제목 중복(422)이나 보조 끝 소멸이 난다 (C02)
   const baseStart = baseNodes.find((node) => node.node_type === "start") ?? null;
   const baseEnds = baseNodes.filter((node) => node.node_type === "end");
   const baseEnd =
     baseEnds.find((node) => node.is_primary_end) ??
     [...baseEnds].sort((a, b) => a.sort_order - b.sort_order)[0] ??
     null;
-  const reservedIds = new Set([baseStart?.id, baseEnd?.id].filter((id): id is string => id !== undefined));
   const byTitle = new Map<string, GraphNode>();
   for (const node of [...baseNodes].sort((a, b) => a.sort_order - b.sort_order)) {
-    if (reservedIds.has(node.id)) continue;
+    if (node.id === baseStart?.id) continue;
     if (!byTitle.has(node.title)) byTitle.set(node.title, node);
   }
+  // 제목으로 base 끝을 집을 end 제안 — 대표 끝 폴백은 그 제목이 다른 제안에 예약되지 않았을 때만
+  const endTitleClaims = new Set(
+    proposal.nodes
+      .filter((node) => node.node_type === "end" && byTitle.get(node.title)?.node_type === "end")
+      .map((node) => node.title),
+  );
 
   // 빈 캔버스 전용 — AI 그룹 생성(임시키 → 실제 id)
   const groupKeyToId = new Map<string, string>();
@@ -931,13 +1042,21 @@ export function buildGraphFromAiProposal(
       matchedIds.add(baseStart.id);
       return baseStart.id;
     }
-    if (node.node_type === "end" && baseEnd && !endUsed) {
-      endUsed = true;
-      matchedIds.add(baseEnd.id);
-      return baseEnd.id;
-    }
     const existing = byTitle.get(node.title);
-    if (existing && !matchedIds.has(existing.id)) {
+    if (node.node_type === "end") {
+      if (existing?.node_type === "end" && !matchedIds.has(existing.id)) {
+        if (existing.id === baseEnd?.id) endUsed = true;
+        matchedIds.add(existing.id);
+        return existing.id;
+      }
+      // 제목이 안 맞는 첫 end는 대표 끝으로 폴백 — 대표 끝 제목을 쥔 제안이 따로 있으면 그쪽에 양보
+      if (baseEnd && !endUsed && !matchedIds.has(baseEnd.id) && !endTitleClaims.has(baseEnd.title)) {
+        endUsed = true;
+        matchedIds.add(baseEnd.id);
+        return baseEnd.id;
+      }
+    } else if (existing && existing.node_type !== "end" && !matchedIds.has(existing.id)) {
+      // 끝 노드는 end 제안만 잡는다 — 일반 제안이 끝 id를 가져가면 끝이 일반 노드로 바뀐다
       matchedIds.add(existing.id);
       return existing.id;
     }
@@ -968,17 +1087,18 @@ export function buildGraphFromAiProposal(
       warnings.push({ line: 0, message: `"${title}": fill only one of Cost_KRW / Cost_USD - both were ignored` });
     }
 
+    // 링크 없는 subprocess는 process로 강등(coerceAiNewNodeType) — 신규 노드도, 아직 링크가 없는
+    // 매칭 노드도 이 candidate.node_type을 그대로 쓰므로 한 곳에서 막으면 두 경로가 대칭 유지된다.
+    // 링크가 실린 subprocess(P2 유사 SP 수락)는 실제 Call Activity로 생성.
+    const candidateType =
+      node.node_type === "subprocess" && node.linked_map_id ? "subprocess" : coerceAiNewNodeType(node.node_type);
+    // 병합 후 타입 — 링크된 매칭 SP는 mergeNode가 기존 타입을 지킨다
+    const finalType = existing && existing.linked_map_id !== null ? existing.node_type : candidateType;
     const candidate: GraphNode = {
       ...NODE_DEFAULTS,
       id,
       title,
-      // 링크 없는 subprocess는 process로 강등(coerceAiNewNodeType) — 신규 노드도, 아직 링크가 없는
-      // 매칭 노드도 이 candidate.node_type을 그대로 쓰므로 한 곳에서 막으면 두 경로가 대칭 유지된다.
-      // 링크가 실린 subprocess(P2 유사 SP 수락)는 실제 Call Activity로 생성.
-      node_type:
-        node.node_type === "subprocess" && node.linked_map_id
-          ? "subprocess"
-          : coerceAiNewNodeType(node.node_type),
+      node_type: candidateType,
       linked_map_id: node.node_type === "subprocess" ? node.linked_map_id ?? null : NODE_DEFAULTS.linked_map_id,
       description: node.description,
       // 담당자 실명은 AI 표면 제외 — 항상 ""(=mergeNode pick이 기존값 유지, 신규는 빈값). 사람 필드는 역할만 (2026-09-12)
@@ -1005,9 +1125,16 @@ export function buildGraphFromAiProposal(
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,
-      // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔
-      parallel_outputs: applyParallelFlag(existing?.parallel_outputs, attr?.parallel),
+      // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔.
+      // 분기·끝 노드에 켜는 요청은 무시(에디터 메뉴와 같은 금지, 아래 경고)
+      parallel_outputs: applyParallelFlag(
+        existing?.parallel_outputs,
+        attr?.parallel === true && isParallelForbidden(finalType) ? undefined : attr?.parallel,
+      ),
     };
+    if (attr?.parallel === true && isParallelForbidden(finalType)) {
+      warnings.push({ line: 0, message: `"${title}": parallel exits apply only to process nodes - ignored on a ${finalType} node` });
+    }
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
     // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.
     const { node: merged, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(existing, candidate, catalogs);
@@ -1031,8 +1158,8 @@ export function buildGraphFromAiProposal(
     return merged;
   });
 
-  // 제안이 start/end 타입 노드를 누락하면 기존 start/end를 무변경으로 유지 — 지우면 백엔드
-  // validate_process(start/end 정확히 1개)에 걸려 Apply가 불투명한 422로 끝난다. 엣지는 합성하지
+  // 제안이 start/end 타입 노드를 누락하면 기존 start/대표 끝을 무변경으로 유지 — 지우면 백엔드
+  // validate_process(start 1개·끝 이름 유니크·대표 끝 ≤1)에 걸려 Apply가 불투명한 422로 끝난다. 엣지는 합성하지
   // 않는다 — 끊긴 기존 엣지는 lostEdges로 프리뷰에 남는 것이 의도된 동작. 복사본을 넣어 이후
   // "대표 끝 보장" 등의 후속 변형이 caller가 쥔 base 그래프 객체를 직접 mutate하지 않게 한다.
   if (!startUsed && baseStart) {
@@ -1050,32 +1177,15 @@ export function buildGraphFromAiProposal(
     ends[0].is_primary_end = true;
   }
 
-  // CSV 경로와 동일한 선 모양 이월/신규 기본값 — AI 머지도 엣지를 전량 재생성한다
-  const baseLineStyles = new Map(
-    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.line_style]),
-  );
-  // gateway도 line_style과 동일하게 (source→target) 쌍으로 이월 — 안 하면 재임포트마다 증발
-  const baseGateways = new Map(
-    (context?.base?.edges ?? []).map((e) => [`${e.source_node_id}→${e.target_node_id}`, e.gateway]),
-  );
+  // CSV 경로와 동일한 쌍 큐 이월(변·핸들·선 모양·게이트웨이)/신규 기본값 — AI 머지도 엣지를 전량 재생성한다
+  const baseEdgeQueue = createBaseEdgeQueue(context?.base?.edges ?? []);
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
   const edges: GraphEdge[] = proposal.edges
     .map((edge): GraphEdge | null => {
       const source = keyToId.get(edge.source);
       const target = keyToId.get(edge.target);
       if (!source || !target) return null;
-      return {
-        id: genId(),
-        source_node_id: source,
-        target_node_id: target,
-        label: edge.label,
-        source_side: "right",
-        target_side: "left",
-        source_handle: null,
-        target_handle: null,
-        line_style: baseLineStyles.get(`${source}→${target}`) ?? fallbackLineStyle,
-        gateway: baseGateways.get(`${source}→${target}`) ?? null,
-      };
+      return buildRegeneratedEdge(source, target, edge.label, baseEdgeQueue.take(source, target), fallbackLineStyle);
     })
     .filter((edge): edge is GraphEdge => edge !== null);
 
@@ -1084,10 +1194,7 @@ export function buildGraphFromAiProposal(
     : layoutEverything(nodes, edges);
 
   const removedNodes = baseNodes.filter((node) => !matchedIds.has(node.id));
-  const keptEdgeKeys = new Set(edges.map((e) => `${e.source_node_id}→${e.target_node_id}`));
-  const lostEdges = (context?.base?.edges ?? []).filter(
-    (e) => !keptEdgeKeys.has(`${e.source_node_id}→${e.target_node_id}`),
-  );
+  const lostEdges = baseEdgeQueue.getUnconsumed();
 
   return {
     graph: { nodes: positioned, edges, groups: isMerge ? context?.base?.groups ?? [] : aiGroups },
@@ -1102,8 +1209,8 @@ export function buildGraphFromAiProposal(
 
 /**
  * 삭제 대신 유지 — 소멸 노드를 엣지 없이 되돌린다.
- * 엣지를 못 살리는 이유: 노드 출력은 1개로 고정이라(canvas.ts `removeOutgoingEdges`)
- * 들어오던 엣지를 살리면 출발 노드가 출력 2개가 된다. 나가던 엣지는 CSV가 흐름 전체를 규정하므로 사라진다.
+ * 엣지를 못 살리는 이유: 출구당 출력은 1개(병렬 출구만 2+, lib/output-rules.ts getOutputViolations)라
+ * 들어오던 엣지를 살리면 출발 노드가 출력 규칙 위반이 돼 저장 체크리스트에 걸린다. 나가던 엣지는 CSV가 흐름 전체를 규정하므로 사라진다.
  * 대표 끝은 이미 결과 그래프의 End가 쥐고 있으므로 유지 노드에서 떼어낸다(validate_process: 대표 끝 ≤1).
  */
 export function withKeptNodes(graph: Graph, kept: GraphNode[]): Graph {
@@ -1145,28 +1252,42 @@ export function toCsvDirectory(dir: Directory): CsvDirectory {
   };
 }
 
-/** 다운로드용 템플릿 — 구매 프로세스 예시. Excel 호환 CRLF(BOM은 다운로드 시 접두).
- *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다. */
+type TemplateRow = Partial<Record<CsvColumnKey, string>>;
+
+// 템플릿 예시 행 — 열 키로 적어 헤더 순서(CSV_COLUMNS)에 맞춰 셀을 조립한다(손 콤마 어긋남 방지).
+// 분기(라벨 Next)·병렬 출구(Parallel=Y)·여러 줄 IO·플래그·폼·GMP를 한 번씩 보여 준다.
+const TEMPLATE_ROWS: readonly TemplateRow[] = [
+  {
+    name: "Review request", description: "Check the request against the purchasing policy", assignee: "hong.gd",
+    role: "Buyer", department: "Quality Part 1", system: "SAP ERP", duration: "16", touch_time: "8", cost_krw: "50000",
+    headcount: "1", input: "Purchase request\nBudget plan", input_flags: "\noptional", input_forms: "Paper\nExcel",
+    output: "Review result", output_forms: "Word", start_condition: "PR submitted", end_condition: "Review recorded",
+    gmp: "indirect", next: "Approval decision",
+  },
+  {
+    name: "Approval decision", assignee: "hong.gd, kim.cs", role: "Approver", department: "Quality Part 1",
+    duration: "0.30", cost_usd: "20", headcount: "2", next: "Sign contract:approved;Notify rejection:rejected",
+  },
+  {
+    name: "Sign contract", assignee: "lee.yh", department: "Finance Part", duration: "24", headcount: "1",
+    url: "https://example.com/contract", url_label: "Contract", parallel: "Y", next: "Register vendor;Notify requester",
+  },
+  { name: "Register vendor", duration: "2", gmp: "non_gmp" },
+  { name: "Notify requester", duration: "0.10" },
+  { name: "Notify rejection", duration: "8" },
+];
+
+const formatTemplateCsv = (rows: readonly TemplateRow[]): string =>
+  [
+    CSV_COLUMNS.map((column) => column.header).join(","),
+    ...rows.map((row) => CSV_COLUMNS.map((column) => escapeCsvCell(row[column.key] ?? "")).join(",")),
+  ].join("\r\n");
+
+/** 다운로드용 템플릿 — 구매 프로세스 예시, 헤더는 CSV_COLUMNS 25열 전부. Excel 호환 CRLF(BOM은 다운로드 시 접두).
+ *  Assignee는 사내 계정 id, Department는 정식 부서명. 값은 예시라 실제 디렉터리에 없으면 경고가 뜬다.
+ *  자료 형식은 IO 항목별 값(Input_Forms/Output_Forms)이다(Data_Form 열 폐기, 2026-09-03). */
 export function buildTemplateCsv(): string {
-  // 셀 배열로 조립 — 21컬럼을 손 콤마로 맞추다 어긋나는 실수 방지(따옴표 셀은 리터럴 유지).
-  // 자료 형식은 IO 항목별 값이라 CSV 표면에 없다(Data_Form 열 폐기, 2026-09-03). Role 열 2026-09-12.
-  const rows: string[][] = [
-    ["Name", "Description", "Assignee", "Role", "Department", "System", "Duration", "Touch_Time",
-     "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE",
-     "Input", "Input_Flags", "Output", "Start_Condition", "End_Condition",
-     "URL", "URL_Label", "Next"],
-    ["Review request", "Check the request against the purchasing policy", "hong.gd", "Buyer", "Quality Part 1",
-     "SAP ERP", "16", "8", "50000", "", "1", "", "",
-     "Purchase request", "", "Review result", "PR submitted", "Review recorded",
-     "", "", "Approval decision"],
-    ["Approval decision", "", '"hong.gd, kim.cs"', "Approver", "Quality Part 1", "", "0.30", "",
-     "", "20", "2", "", "", "", "", "", "", "", "", "",
-     "Sign contract:approved;Notify rejection:rejected"],
-    ["Sign contract", "", "lee.yh", "", "Finance Part", "", "24", "", "", "", "1", "", "",
-     "", "", "", "", "", "https://example.com/contract", "Contract", ""],
-    ["Notify rejection", "", "", "", "", "", "8", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-  ];
-  return rows.map((cells) => cells.join(",")).join("\r\n");
+  return formatTemplateCsv(TEMPLATE_ROWS);
 }
 
 /** 붙여넣은 텍스트의 코드펜스 관용 처리 — 외부 AI 답변이 ```csv … ``` 로 감싸 오는 경우 본문만 추출. */
@@ -1177,21 +1298,24 @@ export function stripCsvFences(text: string): string {
 }
 
 /** 외부 AI에게 줄 절차 추출 프롬프트 — 임포트 스펙(컬럼·상한·규칙)과 동일 소스에서 파생.
- *  사용 흐름: 이 프롬프트 + 업무 문서를 외부 AI에 붙여넣기 → 받은 CSV를 임포트 붙여넣기 입력에. */
+ *  사용 흐름: 이 프롬프트 + 업무 문서를 외부 AI에 붙여넣기 → 받은 CSV를 임포트 붙여넣기 입력에.
+ *  담당자 실명(Assignee)은 AI에게 쓰게 하지 않는다 — 사람 정보는 Role로만 (사용자 결정 2026-09-12, 읽기·외부 프롬프트 확장 2026-10-02) */
 export function buildAiPromptText(): string {
+  // 예시도 같은 규칙 — Assignee 셀을 비운 템플릿
+  const example = formatTemplateCsv(TEMPLATE_ROWS.map((row) => ({ ...row, assignee: "" })));
   return [
     "당신은 업무 절차 분석가입니다. 아래에 첨부하는 업무 문서(규정·지침·절차서 등)를 읽고,",
     "문서에 기술된 업무 프로세스 흐름을 추출해 CSV 한 개로 작성하세요.",
     "",
     "[출력 형식 - 반드시 지킬 것]",
     "- 다른 설명·코드블록(```) 없이 CSV 텍스트만 출력하세요.",
-    `- 첫 행(헤더)은 정확히: ${buildTemplateCsv().split("\r\n")[0]}`,
+    `- 첫 행(헤더)은 정확히: ${CSV_COLUMNS.map((column) => column.header).join(",")}`,
     "- 한 행 = 프로세스 단계 1개. 셀에 쉼표가 들어가면 그 셀을 큰따옴표로 감싸세요.",
     "",
     "[컬럼 규칙]",
     `- Name: 필수, 단계 이름. 파일 안에서 유일해야 하며 ${MAX_LEN.name}자 이하. 이 이름이 연결 참조 키입니다.`,
     "- Description: 선택, 그 단계가 무엇을 하는지 한두 문장. 콤마나 줄바꿈이 들어가면 셀 전체를 큰따옴표로 감싸세요. 길이 제한은 없습니다.",
-    `- Assignee: 선택, 담당자의 사내 계정 id(login id). 여러 명이면 콤마로 나열하고 셀 전체를 큰따옴표로 감싸세요 - 예: "hong.gd, kim.cs". 한 행의 담당자는 모두 같은 부서여야 합니다. 모르면 비워두세요.`,
+    "- Assignee: 항상 비워두세요. 사람 이름이나 계정은 쓰지 말고 사람 정보는 Role(역할)로만 적으세요(담당자는 가져온 뒤 에디터에서 지정합니다).",
     `- Role: 선택, 그 단계를 수행하는 역할명(예: 구매 담당자, QA 검토자 - ${MAX_LEN.role}자 이하). 실명이 아니라 역할로 적으세요. 모르면 비워두세요.`,
     `- Department: 선택, 담당 부서의 정식 부서명(${MAX_LEN.department}자 이하). 모르면 비워두세요.`,
     `- System: 선택, 사용 시스템(${MAX_LEN.system}자 이하). 문서에 적힌 시스템명 그대로 쓰세요(등록된 목록과 대조해 정식 표기로 맞추고, 없는 시스템은 Other로 분류해 원문을 메모로 남깁니다). 모르면 비워두세요.`,
@@ -1204,22 +1328,25 @@ export function buildAiPromptText(): string {
     "- FTE: 선택, 전일환산 투입 인원(숫자만). 모르면 비워두세요.",
     "- Input / Output: 선택, 단계의 입력물/산출물. 여러 개면 셀 안에서 줄바꿈으로 나열하고 셀 전체를 큰따옴표로 감싸세요.",
     "- Input_Flags: 선택, Input 항목별 필수/선택 표시. Input과 같은 순서로 줄바꿈 나열하고 각 줄에 optional 또는 required(비움=required). 전부 필수면 셀을 비워두세요.",
+    "- Input_Forms / Output_Forms: 선택, Input/Output 항목별 자료 형식(예: Paper, Excel, Word, PDF, System). 항목과 같은 순서로 줄바꿈 나열하고 모르는 줄은 비워두세요.",
     "- Start_Condition / End_Condition: 선택, 단계의 시작/종료 조건 한 문장. 모르면 비워두세요.",
+    "- GMP: 선택, direct·indirect·non_gmp 중 하나. 문서에 근거가 없으면 비워두세요.",
     `- URL: 선택, 관련 링크. http:// 또는 https:// 로 시작(${MAX_LEN.url}자 이하).`,
     `- URL_Label: 선택, 링크 표시 이름(${MAX_LEN.url_label}자 이하). URL이 있는 행에서만 의미(URL 없으면 무시됩니다).`,
+    "- Parallel: 선택, Y 또는 N. Next 대상이 2개 이상이고 모두 동시에 진행되면 Y(분기 대신 병렬 출구). 택일이면 비워두고 Next에 분기 라벨을 붙이세요.",
     "- Next: 선택, 다음 단계의 Name을 세미콜론(;)으로 나열. 분기 조건은 \"대상이름:라벨\" 형식(라벨 200자 이하).",
     "  예: 승인 여부 단계가 승인/반려로 갈라지면 → 계약 체결:승인;반려 통보:반려",
     "",
     "[작성 규칙]",
     "- Start·End(시작/종료) 행은 쓰지 마세요 - 시스템이 자동 생성합니다.",
-    "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요.",
+    "- 다음 단계가 2개 이상인 행은 자동으로 분기(판단) 노드가 되므로, 각 대상에 분기 라벨을 붙이세요. 동시에 진행되는 갈래면 Parallel=Y로 두세요.",
     "- Next의 대상 이름은 반드시 같은 CSV에 있는 Name이어야 합니다(오타 금지).",
     `- 데이터 행은 최대 ${MAX_DATA_ROWS}개입니다.`,
-    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Assignee·Department·System·Duration·URL)은 비워두세요.",
+    "- 문서에 없는 단계를 지어내지 말고, 불명확한 속성(Description·Role·Department·System·Duration·GMP·URL)은 비워두세요.",
     "- 빈 칸은 기존 값을 지웁니다가 아니라 '건드리지 않음'입니다 - 이미 있는 맵에 임포트해도 기존 값이 보존됩니다.",
     "",
     "[예시]",
-    buildTemplateCsv().replace(/\r\n/g, "\n"),
+    example.replace(/\r\n/g, "\n"),
     "",
     "[업무 문서]",
     "(여기에 문서 내용을 붙여넣거나 파일을 첨부하세요)",

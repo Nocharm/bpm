@@ -107,8 +107,15 @@ try {
     await page.locator('button[aria-label="Map"]').first().click();
     await page.waitForSelector('[data-id="export-excel"]', { timeout: 5000 });
   }
-  const dlPromise = page.waitForEvent("download");
+  // Excel은 형식 선택 모달 경유 — 1안(Process Map) + 전 열 선택 후 다운로드
   await page.locator('[data-id="export-excel"]').click();
+  await page.waitForSelector('[data-id="excel-export-modal"]', { timeout: 5000 });
+  await page.locator('[data-id="excel-format-map"]').click();
+  await page.locator('[data-id="excel-export-columns-toggle"]').click();
+  await page.locator('[data-id="export-columns-excel-select-all"]').click();
+  await page.waitForSelector('[data-id="excel-export-download"]:not([disabled])', { timeout: 8000 });
+  const dlPromise = page.waitForEvent("download");
+  await page.locator('[data-id="excel-export-download"]').click();
   const dl = await dlPromise;
   const xlsxPath = `${OUT}/export.xlsx`;
   await dl.saveAs(xlsxPath);
@@ -116,10 +123,14 @@ try {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(xlsxPath);
   const sheet = wb.worksheets[0];
+  const header = sheet.getRow(4).values.slice(1).map(String);
+  // 열 위치는 헤더에서 찾는다 — 열 선택·열 추가에 인덱스가 흔들리지 않게
+  const typeCol = header.indexOf("Type") + 1;
+  const nextCol = header.indexOf("Next") + 1;
   const rows = []; // { no, name, type, next }
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber < 5) return;
-    rows.push({ no: row.getCell(1).value, name: String(row.getCell(2).value ?? ""), type: String(row.getCell(3).value ?? ""), next: String(row.getCell(16).value ?? "") });
+    rows.push({ no: row.getCell(1).value, name: String(row.getCell(2).value ?? ""), type: String(row.getCell(typeCol).value ?? ""), next: String(row.getCell(nextCol).value ?? "") });
   });
 
   check("규칙1: 무라벨 디시전(Par) 행 없음", rows.every((r) => !r.name.startsWith("Par")), rows.map((r) => r.name).join("|"));
@@ -137,8 +148,7 @@ try {
   check("규칙4: 삭제 행(기본 End) 주석 소멸", rows.every((r) => !r.name.includes(":no]")));
   check("No 재부여 1..n 연속", rows.map((r) => r.no).join(",") === rows.map((_, i) => i + 1).join(","),
     rows.map((r) => r.no).join(","));
-  const header = sheet.getRow(4).values.slice(1, 17).map(String);
-  check("헤더 16컬럼 무변경", header[0] === "No" && header[1] === "Name" && header[15] === "Next", header.join(","));
+  check("헤더 No·Name 선두, Next 끝", header[0] === "No" && header[1] === "Name" && header[header.length - 1] === "Next", header.join(","));
 } catch (err) {
   results.push({ name: "fatal", ok: false });
   console.error(`FATAL ${err instanceof Error ? err.message : String(err)}`);

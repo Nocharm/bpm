@@ -190,10 +190,11 @@ try {
   await wbMap.xlsx.readFile(mapXlsxPath);
   const mapSheet = wbMap.worksheets[0];
   check("체크3a: 시트명 Process Map", mapSheet.name === "Process Map", mapSheet.name);
-  const mapHeader = mapSheet.getRow(4).values.slice(1, 17).map(String);
+  // 열 수는 열 선택(localStorage)에 따라 달라진다 — 잠금 열 No·Name 위치와 마지막 열 Next만 고정 단언
+  const mapHeader = mapSheet.getRow(4).values.slice(1).map(String);
   check(
-    "체크3b: 헤더 16컬럼",
-    mapHeader.length === 16 && mapHeader[0] === "No" && mapHeader[1] === "Name" && mapHeader[15] === "Next",
+    "체크3b: 헤더 No·Name 선두, Next 끝",
+    mapHeader[0] === "No" && mapHeader[1] === "Name" && mapHeader[mapHeader.length - 1] === "Next",
     mapHeader.join(","),
   );
   const mapRows = [];

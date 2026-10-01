@@ -2,16 +2,20 @@
 // exceljs 기록(다운로드)은 별도 모듈(Task 7) — 모델과 분리해 vitest로 검증한다.
 // 설계: 2026-07-11-numeric-params-excel-csv-export-design.md §4,
 //       2026-07-13-node-params-redefinition-design.md §5.2,
-//       2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석)
+//       2026-07-17-excel-export-format-v1-design.md (구조 노드 정리+분기 주석),
+//       export-column-picker-design(2026-10-02, 열 선택·IO/조건/GMP/병렬 열)
 import type { Graph, GraphEdge, GraphNode } from "./api";
-import { orderNodesByFlow } from "./csv-export";
+import { formatSystemCell, orderNodesByFlow } from "./csv-export";
+import { EXCEL_COLUMNS, type ExcelColumnKey, normalizeExportColumns } from "./export-columns";
+import { formatGmp } from "./gmp";
+import { getIoLine } from "./io-items";
 import { getInheritedParams } from "./params";
+import { deriveSubEnds, endKeyOfEdge, PRIMARY_END_HANDLE } from "./subprocess-embed";
 import { mergeSubprocessDescription } from "./subprocess-description";
 
-export interface ExcelNodeRow {
-  kind: "node";
+/** 1안·WBS 노드 행이 공유하는 셀 값 — 열 정의(COLUMNS)의 cell이 이 필드만 읽는다. */
+export interface ExcelRowFields {
   no: number; // 최종 행 번호(1..n) — 삭제 규칙 적용 후 모델에서 부여, 시트는 그대로 기록
-  depth: number; // 0=현재 맵, 서브프로세스 인라인마다 +1
   title: string;
   type: string;
   description: string;
@@ -27,10 +31,23 @@ export interface ExcelNodeRow {
   headcount: string;
   annual_count: string;
   fte: string;
+  // IO 셀 — 줄마다 `항목[ [optional]][ · 폼]` (에디터 SP 상속 표기 관례), 조건·GMP는 표시 문자열
+  input: string;
+  output: string;
+  start_condition: string;
+  end_condition: string;
+  gmp: string;
+  // 병렬 출구 — 일반 노드는 기본 출구가 병렬이면 "Y", SP는 병렬로 켠 끝 이름 목록
+  parallel: string;
   url: string;
   urlLabel: string;
   groups: string; // 그룹 라벨 ", " 조인
   next: string; // "대상" | "대상:라벨" ";" 조인 — End 포함(읽기용)
+}
+
+export interface ExcelNodeRow extends ExcelRowFields {
+  kind: "node";
+  depth: number; // 0=현재 맵, 서브프로세스 인라인마다 +1
 }
 
 export interface ExcelNoteRow {
@@ -52,11 +69,11 @@ export interface ExcelModel {
 export const EXCEL_MAX_ROWS = 2000;
 
 /**
- * 노드가 노출하는 회당 4필드(duration/cost_krw/cost_usd/headcount) — 서브프로세스는 자기 행이 아니라
+ * 노드가 노출하는 회당 5필드(duration/touch_time/cost_krw/cost_usd/headcount) — 서브프로세스는 자기 행이 아니라
  * 링크 맵의 sp_* 라이브 참조(g.subprocess_refs)에서 가져온다(캔버스 인스펙터·Σ 합산과 동일 소스,
  * design 2026-07-13 §3.1). annual_count·fte는 부모 맥락 값이라 노드 행 그대로 별도 취급.
  */
-export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, "duration" | "touch_time" | "cost_krw" | "cost_usd" | "headcount"> {
+export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelRowFields, "duration" | "touch_time" | "cost_krw" | "cost_usd" | "headcount"> {
   if (node.node_type === "subprocess" && node.linked_map_id !== null) {
     return getInheritedParams(g.subprocess_refs?.[node.linked_map_id]);
   }
@@ -66,6 +83,153 @@ export function getNodeRunParams(g: Graph, node: GraphNode): Pick<ExcelNodeRow, 
     cost_krw: node.cost_krw ?? "",
     cost_usd: node.cost_usd ?? "",
     headcount: node.headcount ?? "",
+  };
+}
+
+const isLinkedSubprocess = (node: GraphNode): node is GraphNode & { linked_map_id: number } =>
+  node.node_type === "subprocess" && node.linked_map_id !== null;
+
+/** 노드 표시 제목 — SP는 링크 맵 현재 이름(캔버스 라이브 라벨과 같은 규칙, 삭제 맵은 저장 제목). */
+export function getNodeDisplayTitle(g: Graph, node: GraphNode): string {
+  if (!isLinkedSubprocess(node)) return node.title;
+  // 빈 이름도 미수신으로 본다(캔버스 liveLabel의 truthy 판정과 같음)
+  return g.subprocess_refs?.[node.linked_map_id]?.name || node.title;
+}
+
+/**
+ * 행 식별 필드 — SP는 캔버스가 보여 주는 링크 맵 지정값(담당·역할·부서·시스템·URL), 미지정이면 노드 값.
+ * 시스템은 CSV와 같은 표기(Other면 원문 메모, formatSystemCell).
+ */
+export function getNodeIdentityFields(
+  g: Graph,
+  node: GraphNode,
+): Pick<ExcelRowFields, "title" | "assignee" | "assignee_role" | "department" | "system" | "url" | "urlLabel"> {
+  const ref = isLinkedSubprocess(node) ? g.subprocess_refs?.[node.linked_map_id] : undefined;
+  const title = getNodeDisplayTitle(g, node);
+  if (ref?.designated) {
+    return {
+      title,
+      assignee: ref.assignee ?? "",
+      assignee_role: ref.assignee_role ?? "",
+      department: ref.department ?? "",
+      system: ref.system ?? "",
+      url: ref.url ?? "",
+      urlLabel: ref.url_label ?? "",
+    };
+  }
+  return {
+    title,
+    assignee: node.assignee,
+    assignee_role: node.assignee_role ?? "",
+    department: node.department,
+    system: formatSystemCell(node.system, node.system_fallback ?? ""),
+    url: node.url ?? "",
+    urlLabel: node.url_label ?? "",
+  };
+}
+
+/** IO 셀 — 항목 줄마다 `[optional]`·` · 폼`을 붙인다. 플래그·폼은 항목과 1:1 줄 정렬. */
+export function formatIoCell(
+  items: string | null | undefined,
+  flags: string | null | undefined,
+  forms: string | null | undefined,
+): string {
+  const text = items ?? "";
+  if (text === "") return "";
+  return text
+    .split("\n")
+    .map((item, index) => {
+      const optional = getIoLine(flags, index) === "optional" ? " [optional]" : "";
+      const form = getIoLine(forms, index);
+      return `${item}${optional}${form !== "" ? ` · ${form}` : ""}`;
+    })
+    .join("\n");
+}
+
+// GMP 표시 라벨(lib/gmp.ts) — 미지 값은 원문 그대로
+const formatGmpCell = (value: string | null | undefined): string => formatGmp(value) || (value ?? "");
+
+/** IO·조건·GMP — SP는 링크 맵 지정값(파라미터와 같은 상속 규칙), 미지정이면 노드 값. */
+export function getNodeDetailFields(
+  g: Graph,
+  node: GraphNode,
+): Pick<ExcelRowFields, "input" | "output" | "start_condition" | "end_condition" | "gmp"> {
+  const ref = isLinkedSubprocess(node) ? g.subprocess_refs?.[node.linked_map_id] : undefined;
+  if (ref?.designated) {
+    return {
+      input: formatIoCell(ref.input, "", ref.input_forms),
+      output: formatIoCell(ref.output, "", ref.output_forms),
+      start_condition: ref.start_condition ?? "",
+      end_condition: ref.end_condition ?? "",
+      gmp: formatGmpCell(ref.gmp),
+    };
+  }
+  return {
+    input: formatIoCell(node.input, node.input_flags, node.input_forms),
+    output: formatIoCell(node.output, "", node.output_forms),
+    start_condition: node.start_condition ?? "",
+    end_condition: node.end_condition ?? "",
+    gmp: formatGmpCell(node.gmp),
+  };
+}
+
+/**
+ * SP 출구 끝 키 → 끝 제목. 링크 맵을 읽었으면 그 끝 목록(2개 이상일 때만, 캔버스 출구 라벨 미러와 같은 조건),
+ * 못 읽었으면(순환·권한) 보조 끝 키 자체가 끝 제목이라 그것만 안다. 해당 없으면 null.
+ */
+export function getSubprocessExitTitles(
+  outgoing: readonly GraphEdge[],
+  resolved: Graph | null,
+): ReadonlyMap<string, string> | null {
+  if (resolved && !resolved.locked) {
+    const ends = deriveSubEnds(resolved);
+    return ends.length >= 2 ? new Map(ends.map((end) => [end.key, end.title])) : null;
+  }
+  const keys = outgoing
+    .map((edge) => endKeyOfEdge({ sourceHandle: edge.source_handle }))
+    .filter((key) => key !== PRIMARY_END_HANDLE);
+  return keys.length > 0 ? new Map(keys.map((key) => [key, key])) : null;
+}
+
+/** Next 셀의 엣지 라벨 — SP에서 나가는 무라벨 엣지는 끝 제목을 라벨처럼 표기(에디터 출구 라벨 미러, 데이터 불변). */
+export function getExcelEdgeLabel(
+  edge: GraphEdge,
+  source: GraphNode,
+  exitTitles: ReadonlyMap<string, string> | null,
+): string {
+  if (edge.label !== "" || source.node_type !== "subprocess" || exitTitles === null) return edge.label;
+  return exitTitles.get(endKeyOfEdge({ sourceHandle: edge.source_handle })) ?? "";
+}
+
+/** 병렬 셀 — 분기·끝은 병렬 대상이 아니라 빈칸, SP는 병렬로 켠 끝 이름(제목을 모르는 대표 끝은 "Y"). */
+export function formatParallelCell(node: GraphNode, exitTitles: ReadonlyMap<string, string> | null): string {
+  if (node.node_type === "decision" || node.node_type === "end") return "";
+  const keys = node.parallel_outputs ?? [];
+  if (node.node_type !== "subprocess") return keys.includes(PRIMARY_END_HANDLE) ? "Y" : "";
+  return keys.map((key) => exitTitles?.get(key) ?? (key === PRIMARY_END_HANDLE ? "Y" : key)).join(", ");
+}
+
+/** 노드 → 행 셀 필드(번호 제외). 1안·WBS가 같은 소스로 SP 상속·설명 합성·그룹 라벨을 만든다. */
+export function buildNodeRowFields(
+  g: Graph,
+  node: GraphNode,
+  opts: { groupLabel: ReadonlyMap<string, string>; next: string; exitTitles: ReadonlyMap<string, string> | null },
+): Omit<ExcelRowFields, "no"> {
+  return {
+    ...getNodeIdentityFields(g, node),
+    type: node.node_type,
+    // subprocess는 노드에 이 맵의 추가분만 저장됨 — 링크 맵 description(베이스, SubprocessRefOut.sp_description 키)과
+    // 줄바꿈 합성해 출력
+    description: isLinkedSubprocess(node)
+      ? mergeSubprocessDescription(g.subprocess_refs?.[node.linked_map_id]?.sp_description, node.description)
+      : node.description,
+    ...getNodeRunParams(g, node),
+    annual_count: node.annual_count ?? "",
+    fte: node.fte ?? "",
+    ...getNodeDetailFields(g, node),
+    parallel: formatParallelCell(node, opts.exitTitles),
+    groups: node.group_ids.map((id) => opts.groupLabel.get(id) ?? "").filter(Boolean).join(", "),
+    next: opts.next,
   };
 }
 
@@ -112,7 +276,8 @@ export async function buildExcelModel({
       else outgoing.set(e.source_node_id, [e]);
     }
     const ordered = orderNodesByFlow(g.nodes, g.edges);
-    // 규칙1: 나가는 엣지가 있고 전부 무라벨인 디시전 = 단순 병렬 분기 — 행 미생성(엣지 없는 디시전은 WIP로 유지)
+    // 규칙1: 나가는 엣지가 있고 전부 무라벨인 디시전(라벨 없는 택일) = 행 미생성(엣지 없는 디시전은 WIP로 유지).
+    // 병렬 출구는 parallel_outputs 노드 속성이라 process 행으로 남고 Parallel 열에 표기된다 (출력 규칙 2026-10-01)
     const isRemovedDecision = (n: GraphNode): boolean => {
       if (n.node_type !== "decision") return false;
       const out = outgoing.get(n.id) ?? [];
@@ -152,56 +317,46 @@ export async function buildExcelModel({
         truncated = true;
         break;
       }
+      // SP는 행을 만들기 전에 링크 맵을 읽는다 — 출구 끝 제목(Next 라벨 미러·병렬 끝 이름)이 그 끝 목록에서 나온다
+      let resolved: Graph | null = null;
+      let note: "circular" | "denied" | null = null;
+      if (isLinkedSubprocess(node) && !truncated) {
+        if (ancestry.has(node.linked_map_id)) {
+          note = "circular";
+        } else {
+          try {
+            resolved = await fetchMemo(node.linked_map_id, node.follow_latest, node.linked_version_id);
+            if (resolved.locked) note = "denied";
+          } catch {
+            note = "denied";
+          }
+        }
+      }
+      const out = outgoing.get(node.id) ?? [];
+      const exitTitles =
+        node.node_type === "subprocess" ? getSubprocessExitTitles(out, note === null ? resolved : null) : null;
       // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨)이 2회 도달("B;B") 방지
       const next = Array.from(new Set(
-        (outgoing.get(node.id) ?? [])
-          .flatMap((e) => resolveTargets(e, e.label, new Set()))
-          .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`)),
+        out
+          .flatMap((e) => resolveTargets(e, getExcelEdgeLabel(e, node, exitTitles), new Set()))
+          .map(({ node: t, label }) => {
+            const targetTitle = getNodeDisplayTitle(g, t);
+            return label === "" ? targetTitle : `${targetTitle}:${label}`;
+          }),
       )).join(";");
       const row: ExcelNodeRow = {
         kind: "node",
         no: 0, // finalize에서 부여
         depth,
-        title: node.title,
-        type: node.node_type,
-        // subprocess는 노드에 이 맵의 추가분만 저장됨 — 링크 맵 sp_description(베이스)과 줄바꿈 합성해 출력
-        description:
-          node.node_type === "subprocess" && node.linked_map_id !== null
-            ? mergeSubprocessDescription(
-                g.subprocess_refs?.[node.linked_map_id]?.sp_description,
-                node.description,
-              )
-            : node.description,
-        assignee: node.assignee,
-        assignee_role: node.assignee_role ?? "",
-        department: node.department,
-        system: node.system,
-        ...getNodeRunParams(g, node),
-        annual_count: node.annual_count ?? "",
-        fte: node.fte ?? "",
-        url: node.url ?? "",
-        urlLabel: node.url_label ?? "",
-        groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
-        next,
+        ...buildNodeRowFields(g, node, { groupLabel, next, exitTitles }),
       };
       rows.push(row);
       rowByNodeId.set(node.id, row);
-      if (node.node_type === "subprocess" && node.linked_map_id !== null && !truncated) {
-        if (ancestry.has(node.linked_map_id)) {
-          rows.push({ kind: "circular", depth: depth + 1, title: node.title });
-          continue;
-        }
-        let resolved: Graph;
-        try {
-          resolved = await fetchMemo(node.linked_map_id, node.follow_latest, node.linked_version_id);
-        } catch {
-          rows.push({ kind: "denied", depth: depth + 1, title: node.title });
-          continue;
-        }
-        if (resolved.locked) {
-          rows.push({ kind: "denied", depth: depth + 1, title: node.title });
-          continue;
-        }
+      if (note !== null) {
+        rows.push({ kind: note, depth: depth + 1, title: row.title });
+        continue;
+      }
+      if (resolved && isLinkedSubprocess(node)) {
         await emit(resolved, depth + 1, new Set([...ancestry, node.linked_map_id]));
       }
     }
@@ -247,35 +402,96 @@ export async function buildExcelModel({
 
 // 셀 색은 출력물이라 raw hex 허용 (design.md §1 예외 — csv-export.ts와 동일 논리)
 export const HEADER_FILL = "FFF3F0FA"; // 연보라 헤더 (ARGB)
+const LINK_FONT_ARGB = "FF6A41FF";
 export const NOTE_TEXT: Record<ExcelNoteRow["kind"], string> = {
   circular: "(circular reference)",
   denied: "(access denied)",
   rowLimit: `(row limit ${EXCEL_MAX_ROWS} reached - output truncated)`,
 };
-// 컬럼 순서·서식 단일 소스(design 2026-07-13 §5.2) — numFmt는 셀 인덱스 대신 이 정의에서 파생시켜
-// 컬럼 추가/재배열 시 인덱스가 조용히 어긋나는 사고를 막는다.
-export const COLUMNS = [
-  { header: "No", width: 6 }, { header: "Name", width: 32 }, { header: "Type", width: 12 },
-  { header: "Description", width: 44 }, { header: "Assignee", width: 16 }, { header: "Role", width: 14 },
-  { header: "Department", width: 18 },
-  { header: "System", width: 14 },
-  { header: "Duration (h)", width: 12, numFmt: "0.00" }, // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
-  { header: "Touch time (h)", width: 13, numFmt: "0.00" },
-  { header: "Cost (KRW)", width: 14, numFmt: "#,##0" },
-  { header: "Cost (USD)", width: 14, numFmt: "#,##0.00" },
-  { header: "Headcount", width: 11, numFmt: "0.00" },
-  { header: "Annual volume", width: 13, numFmt: "#,##0" },
-  { header: "FTE", width: 8, numFmt: "0.00" },
-  { header: "URL", width: 24 }, { header: "Groups", width: 18 }, { header: "Next", width: 32 },
-] as const;
 
-const URL_COLUMN = COLUMNS.findIndex((c) => c.header === "URL") + 1; // 1-based — exceljs getCell 인덱스
+export interface ExcelColumnSpec {
+  key: ExcelColumnKey;
+  header: string;
+  required?: boolean;
+  width: number;
+  numFmt?: string;
+  // 셀 안 개행(여러 항목)이 보이도록 줄바꿈 표시
+  wrap?: boolean;
+  cell: (row: ExcelRowFields) => string | number;
+}
+
+const toNumberCell = (value: string): string | number => (value === "" ? "" : Number(value));
+
+// 열별 폭·서식·셀 — 키·헤더·순서는 lib/export-columns.ts EXCEL_COLUMNS가 단일 소스(design 2026-07-13 §5.2).
+// Record라 열을 추가하면 tsc가 서식·셀 누락을 잡고, numFmt·하이퍼링크 위치는 셀 인덱스가 아닌 이 정의에서 파생한다.
+const EXCEL_COLUMN_FORMATS: Record<ExcelColumnKey, Omit<ExcelColumnSpec, "key" | "header" | "required">> = {
+  no: { width: 6, cell: (row) => row.no },
+  name: { width: 32, cell: (row) => row.title },
+  type: { width: 12, cell: (row) => row.type },
+  description: { width: 44, cell: (row) => row.description },
+  assignee: { width: 16, cell: (row) => row.assignee },
+  role: { width: 14, cell: (row) => row.assignee_role },
+  department: { width: 18, cell: (row) => row.department },
+  system: { width: 14, cell: (row) => row.system },
+  // H.MM 표기 보존 — "1.30"이 1.3으로 뭉개지지 않게
+  duration: { width: 12, numFmt: "0.00", cell: (row) => toNumberCell(row.duration) },
+  touch_time: { width: 13, numFmt: "0.00", cell: (row) => toNumberCell(row.touch_time) },
+  cost_krw: { width: 14, numFmt: "#,##0", cell: (row) => toNumberCell(row.cost_krw) },
+  cost_usd: { width: 14, numFmt: "#,##0.00", cell: (row) => toNumberCell(row.cost_usd) },
+  headcount: { width: 11, numFmt: "0.00", cell: (row) => toNumberCell(row.headcount) },
+  annual_count: { width: 13, numFmt: "#,##0", cell: (row) => toNumberCell(row.annual_count) },
+  fte: { width: 8, numFmt: "0.00", cell: (row) => toNumberCell(row.fte) },
+  input: { width: 28, wrap: true, cell: (row) => row.input },
+  output: { width: 28, wrap: true, cell: (row) => row.output },
+  start_condition: { width: 20, cell: (row) => row.start_condition },
+  end_condition: { width: 20, cell: (row) => row.end_condition },
+  gmp: { width: 12, cell: (row) => row.gmp },
+  parallel: { width: 10, cell: (row) => row.parallel },
+  // 하이퍼링크 셀은 applyExcelCellFormats가 덮는다(텍스트=라벨 또는 URL)
+  url: { width: 24, cell: () => "" },
+  groups: { width: 18, cell: (row) => row.groups },
+  next: { width: 32, cell: (row) => row.next },
+};
+
+export const COLUMNS: readonly ExcelColumnSpec[] = EXCEL_COLUMNS.map((def) => ({
+  ...def,
+  ...EXCEL_COLUMN_FORMATS[def.key],
+}));
+
+/** 선택 키 → 열 정의(정식 순서, No·Name 강제). 미지정이면 전부. */
+export function selectExcelColumns(keys?: readonly ExcelColumnKey[]): ExcelColumnSpec[] {
+  const selected = new Set<string>(normalizeExportColumns(EXCEL_COLUMNS, keys));
+  return COLUMNS.filter((column) => selected.has(column.key));
+}
+
+/** 데이터 행 셀 서식 — numFmt·줄바꿈·URL 하이퍼링크를 열 정의에서 파생(1안·WBS 공용). firstCol=첫 열 위치(1-based). */
+export function applyExcelCellFormats(
+  r: import("exceljs").Row,
+  columns: readonly ExcelColumnSpec[],
+  firstCol: number,
+  row: ExcelRowFields,
+): void {
+  columns.forEach((column, i) => {
+    const cell = r.getCell(firstCol + i);
+    if (column.numFmt) cell.numFmt = column.numFmt;
+    if (column.wrap) cell.alignment = { wrapText: true, vertical: "top" };
+    if (column.key === "url" && row.url) {
+      cell.value = { text: row.urlLabel || row.url, hyperlink: row.url };
+      cell.font = { color: { argb: LINK_FONT_ARGB }, underline: true };
+    }
+  });
+}
 
 /**
  * ExcelModel → 워크시트 기록(시트 생성·스타일·셀 값). Blob/anchor(브라우저 다운로드)와 분리해
- * DOM 없이도(vitest) 컬럼 서식·값을 검증할 수 있게 한다.
+ * DOM 없이도(vitest) 컬럼 서식·값을 검증할 수 있게 한다. columnKeys 미지정이면 전 열.
  */
-export function writeExcelSheet(workbook: import("exceljs").Workbook, model: ExcelModel): void {
+export function writeExcelSheet(
+  workbook: import("exceljs").Workbook,
+  model: ExcelModel,
+  columnKeys?: readonly ExcelColumnKey[],
+): void {
+  const columns = selectExcelColumns(columnKeys);
   const sheet = workbook.addWorksheet("Process Map", {
     views: [{ state: "frozen", ySplit: 4 }],
     properties: { outlineLevelRow: 1, defaultRowHeight: 16 },
@@ -284,13 +500,13 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
   sheet.getRow(1).font = { bold: true, size: 14 };
   sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
   sheet.addRow([]);
-  const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
+  const headerRow = sheet.addRow(columns.map((c) => c.header));
   headerRow.eachCell((cell) => {
     cell.font = { bold: true };
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
     cell.border = { bottom: { style: "thin" } };
   });
-  COLUMNS.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });
+  columns.forEach((c, i) => { sheet.getColumn(i + 1).width = c.width; });
 
   for (const row of model.rows) {
     if (row.kind !== "node") {
@@ -300,20 +516,9 @@ export function writeExcelSheet(workbook: import("exceljs").Workbook, model: Exc
       r.outlineLevel = Math.min(row.depth, 7);
       continue;
     }
-    const num = (v: string) => (v === "" ? "" : Number(v));
-    const r = sheet.addRow([
-      row.no, row.title, row.type, row.description, row.assignee, row.assignee_role, row.department, row.system,
-      num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
-      "", row.groups, row.next,
-    ]);
-    r.getCell(2).alignment = { indent: row.depth * 2 };
-    COLUMNS.forEach((c, i) => {
-      if ("numFmt" in c) r.getCell(i + 1).numFmt = c.numFmt;
-    });
-    if (row.url) {
-      r.getCell(URL_COLUMN).value = { text: row.urlLabel || row.url, hyperlink: row.url };
-      r.getCell(URL_COLUMN).font = { color: { argb: "FF6A41FF" }, underline: true };
-    }
+    const r = sheet.addRow(columns.map((column) => column.cell(row)));
+    applyExcelCellFormats(r, columns, 1, row);
+    r.getCell(2).alignment = { indent: row.depth * 2 }; // Name은 잠금 열이라 항상 2번째
     r.outlineLevel = Math.min(row.depth, 7); // Excel outline 한계 7
   }
 }
@@ -339,7 +544,11 @@ export async function downloadWorkbookXlsx(
   URL.revokeObjectURL(url);
 }
 
-/** ExcelModel → .xlsx 파일 다운로드. */
-export async function downloadExcel(model: ExcelModel, fileName: string): Promise<void> {
-  await downloadWorkbookXlsx((workbook) => writeExcelSheet(workbook, model), fileName);
+/** ExcelModel → .xlsx 파일 다운로드(선택 열, 미지정이면 전 열). */
+export async function downloadExcel(
+  model: ExcelModel,
+  fileName: string,
+  columns?: readonly ExcelColumnKey[],
+): Promise<void> {
+  await downloadWorkbookXlsx((workbook) => writeExcelSheet(workbook, model, columns), fileName);
 }
