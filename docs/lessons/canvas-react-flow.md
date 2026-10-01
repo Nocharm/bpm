@@ -31,7 +31,7 @@
 - 노드 타입마다 렌더하는 핸들이 다르다. **하위프로세스(subprocess) 노드는 들어오는 문 `in`·`in:top/right/bottom`(받기 전용)과 링크 맵 끝마다 하나인 끝 키 핸들(`__primary__`=대표 끝, 그 외=끝 제목, 우측 한 점에 겹침)만** 낸다(`frontend/src/lib/subprocess-embed.ts` `subprocessInHandle`·`isSubprocessEndHandle`). 서버가 만드는 SP 출구 엣지의 `source_handle`은 끝 키, 들어오는 엣지의 `target_handle`은 `in` 변형이어야 한다. 계약 전문은 CLAUDE.md "하위프로세스 핸들 계약".
 - 서버(임포트·시드)가 `source_handle`/`target_handle` 없이 SP 끝점 엣지를 만들면 **React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다** — 프로덕션 빌드에선 에러도 경고도 없다(dev 빌드만 console.warn 008). DB엔 행이 멀쩡히 있는데 캔버스에만 선이 안 보이므로 "저장이 안 됐나?"로 오진하기 쉽다.
 - 판별: `page.locator(".react-flow__edge").count()`와 DB 엣지 수를 대조. 어긋나면 핸들부터 본다.
-- 백엔드 상수·정규화는 `app/subprocess.py`의 `SUBPROCESS_IN_HANDLE`·`PRIMARY_END_HANDLE`·`get_output_key`(레거시 변 id·`in`·없음은 대표 끝으로, FE `endKeyOfEdge`/`getOutputKey`와 동치, 프론트와 수동 동기). 2026-09-01 L5 연계 캔버스 시드에서 실제로 밟았다.
+- 백엔드 상수·정규화는 `app/subprocess.py`의 `SUBPROCESS_IN_HANDLE`·`PRIMARY_END_HANDLE`·`subprocess_in_handle`(변 → `in`/`in:<변>`, FE `subprocessInHandle`과 동치, L6 임포트가 배치 변으로 쓴다)·`get_output_key`(레거시 변 id·`in`·없음은 대표 끝으로, FE `endKeyOfEdge`/`getOutputKey`와 동치, 프론트와 수동 동기). 2026-09-01 L5 연계 캔버스 시드에서 실제로 밟았다.
 - 프론트 로드 경로는 `toAppEdges`가 정규화한다(SP 소스의 변 id→`__primary__`, SP 타깃의 변 id→`in` 변형). 이게 없으면 CSV·AI가 만든 핸들 없는 엣지도 같은 방식으로 사라진다.
 - 핸들이 맞아도 사라질 수 있다: **끝 핸들은 링크 맵 해석(resolved)이 도착한 뒤에 늘어나므로**, `SubprocessHandles`가 끝 키 집합이 바뀔 때마다 `updateNodeInternals`를 호출해야 보조 끝 저장 엣지가 로드 직후 렌더된다(RF handleBounds가 스테일).
 

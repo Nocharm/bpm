@@ -231,7 +231,7 @@ Groups let you grant map access to several people in one step.
 - **Why can't I create a new version?** Finish the current draft cycle through publish first. Only one draft may exist at a time.
 - **I deleted a map by mistake.** Restore it within 7 days from Settings → Scheduled deletion.
 - **The Copy button is disabled.** Copy works only on maps that have been **published at least once**. Run the cycle through publish first.
-- **The canvas won't save.** Check the save checklist: one start node, one primary end, unique end names, and one connection per exit (per end on subprocesses, two or more on parallel exits, Decision nodes exempt). (For details, see "Saving and Validation" in the **Editing Maps** manual.)
+- **The canvas won't save.** Check the save checklist: one start node, one primary end, unique end names, and splits use a decision or a parallel exit (one next step per end on subprocesses, two or more on parallel exits, Decision and Start nodes exempt). (For details, see "Saving and Validation" in the **Editing Maps** manual.)
 - **I can't enter cost in both KRW and USD.** A per-run cost uses a single currency. Clear one, then enter the other.
 - **A linked subprocess is locked.** That map is not **designated** as a subprocess yet. Use **Request registration** in the node inspector to ask its owner, or, if it's your map, publish it and designate it in Map Settings.
 - **Why can't I change a collaborator's permission?** If that person holds the checkout or submitted the version for approval, permission changes against them are blocked until the active version workflow is resolved. Conversely, while a downgrade of your own permission is pending approval, checkout and submission are blocked for you.

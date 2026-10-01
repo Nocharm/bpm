@@ -24,7 +24,7 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 - attributes.parallel은 병렬 출구를 켜거나 끌 때만 true/false로 적고, 그 외에는 null로 두세요(false는 기존 병렬 출구를 끕니다).
 - [현재 그래프]가 비어있지 않으면 groups는 무시되고 기존 그룹이 그대로 유지됩니다.
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
-- 연결 규칙: process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
+- 연결 규칙: process 노드에서 나가는 연결은 하나, subprocess 노드는 끝마다 하나입니다(AI가 그리는 연결은 대표 끝에서 나가므로 subprocess에서도 하나만 그리세요). 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
   모두 동시에 진행하는 갈래만 예외로, 갈래가 **출발하는** 노드의 attributes.parallel=true로 두고 그 노드에서 연결을 2개 이상 그립니다.
   start 노드는 원래 병렬이라 여러 활동을 동시에 시작하는 연결을 parallel 없이 바로 그려도 됩니다(택일 시작이면 start 뒤에 decision).
   갈래의 도착 노드에는 parallel을 쓰지 마세요. start·decision 노드에도 쓰지 마세요. 출발 노드가 기존 노드면 ops의 set_attr로 parallel=true를 넣고,
