@@ -17,6 +17,7 @@ import {
   type ParamField,
   resolveCostFields,
 } from "./params";
+import { isSubprocessEndHandle, isSubprocessInHandle } from "./subprocess-embed";
 
 export interface CsvRecord {
   cells: string[];
@@ -258,8 +259,11 @@ function parseGmpCell(cell: string): string | null {
   return option?.value ?? null;
 }
 
-// 분기·끝 노드는 병렬 출구 대상이 아니다(에디터 우클릭 메뉴도 금지) — 켜는 요청은 무시하고 호출부가 경고한다
-const isParallelForbidden = (nodeType: string): boolean => nodeType === "decision" || nodeType === "end";
+// 분기·끝 노드는 병렬 출구 대상이 아니다(에디터 우클릭 메뉴도 금지) — 켜는 요청은 무시하고 호출부가 경고한다.
+// 시작은 기본 병렬(output-rules)이라 플래그가 무의미 — 같이 무시하되 경고는 내지 않는다(isParallelWarned)
+const isParallelForbidden = (nodeType: string): boolean =>
+  nodeType === "decision" || nodeType === "end" || nodeType === "start";
+const isParallelWarned = (nodeType: string): boolean => nodeType === "decision" || nodeType === "end";
 
 // 매칭 노드: id·좌표·색·그룹·서브프로세스 링크 보존.
 // 서브프로세스 노드는 node_type도 보존 — 추론/제안값으로 덮으면 Call Activity 렌더가 깨진다.
@@ -519,6 +523,9 @@ function createBaseEdgeQueue(baseEdges: readonly GraphEdge[]): BaseEdgeQueue {
 /**
  * 재생성 엣지 — 이월 대상(carried)이 있으면 그 변·핸들(SP 끝 키·in 변형 포함)·선 모양·게이트웨이를 그대로,
  * 없으면 기본값(우→좌, 핸들 없음: SP는 로드 정규화 toAppEdges가 대표 끝/in으로 착지). id는 새로 발급.
+ * SP 전용 핸들(출발 끝 키, 도착 in/in:*)은 머지 후에도 그 끝점이 SP일 때만 이월한다 — 플레이스홀더 SP가
+ * process로 바뀌면 일반 노드엔 그 핸들이 없고 toAppEdges도 SP만 정규화해 React Flow가 엣지를 조용히 버린다.
+ * 변 id(s-*·t-*)·선 모양·게이트웨이는 노드 타입과 무관하게 이월한다.
  */
 function buildRegeneratedEdge(
   source: string,
@@ -526,7 +533,10 @@ function buildRegeneratedEdge(
   label: string,
   carried: GraphEdge | undefined,
   fallbackLineStyle: GraphEdge["line_style"],
+  subprocessIds: ReadonlySet<string>,
 ): GraphEdge {
+  const sourceHandle = carried?.source_handle ?? null;
+  const targetHandle = carried?.target_handle ?? null;
   return {
     id: genId(),
     source_node_id: source,
@@ -534,8 +544,8 @@ function buildRegeneratedEdge(
     label,
     source_side: carried?.source_side ?? "right",
     target_side: carried?.target_side ?? "left",
-    source_handle: carried?.source_handle ?? null,
-    target_handle: carried?.target_handle ?? null,
+    source_handle: !isSubprocessEndHandle(sourceHandle) || subprocessIds.has(source) ? sourceHandle : null,
+    target_handle: !isSubprocessInHandle(targetHandle) || subprocessIds.has(target) ? targetHandle : null,
     line_style: carried ? carried.line_style : fallbackLineStyle,
     gateway: carried?.gateway ?? null,
   };
@@ -803,7 +813,7 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
       const finalType = existingRow?.linked_map_id != null ? existingRow.node_type : inferredType;
       const parallelFlag = parallelOf.get(row.name);
       // 분기·끝으로 남는 행에 Parallel=Y는 적용하지 않는다(에디터 메뉴와 같은 금지) — N(끄기)은 그대로 반영
-      if (parallelFlag === true && isParallelForbidden(finalType)) {
+      if (parallelFlag === true && isParallelWarned(finalType)) {
         warnings.push({ line: row.line, message: `Parallel "${row.name}" applies only to process nodes - ignored on a ${finalType} node` });
       }
       const { node, droppedParamFields, droppedTextFields, keptSystemNote } = mergeNode(existingRow, {
@@ -900,8 +910,9 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
   // 대응 쌍 없는 신규 엣지 — 머지(에디터 컨텍스트)는 맵의 새 엣지 기본값(일괄 변경 모달의
   // "새 연결선도 이 모양" 약속), 신규 맵 생성(base 없음)은 ""(다른 맵 기본값 유입 방지)
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
+  const subprocessIds = new Set(finalNodes.filter((node) => node.node_type === "subprocess").map((node) => node.id));
   const addEdge = (source: string, target: string, label: string) => {
-    edges.push(buildRegeneratedEdge(source, target, label, baseEdgeQueue.take(source, target), fallbackLineStyle));
+    edges.push(buildRegeneratedEdge(source, target, label, baseEdgeQueue.take(source, target), fallbackLineStyle, subprocessIds));
   };
   const hasIncoming = new Set<string>();
   for (const row of rows) {
@@ -1000,15 +1011,19 @@ export function buildGraphFromAiProposal(
     baseEnds.find((node) => node.is_primary_end) ??
     [...baseEnds].sort((a, b) => a.sort_order - b.sort_order)[0] ??
     null;
+  // 제목 → 기존 노드를 끝/일반 두 맵으로 — 한 맵이면 제목이 같은 끝과 일반 노드 중 sort_order가 앞선 쪽만
+  // 남아, 끝이 앞서면 일반 제안이 기존 일반 노드를 못 잡고 새 id로 들어가 base 노드가 removedNodes로 빠진다
+  const byEndTitle = new Map<string, GraphNode>();
   const byTitle = new Map<string, GraphNode>();
   for (const node of [...baseNodes].sort((a, b) => a.sort_order - b.sort_order)) {
-    if (node.id === baseStart?.id) continue;
-    if (!byTitle.has(node.title)) byTitle.set(node.title, node);
+    if (node.node_type === "start") continue;
+    const titleMap = node.node_type === "end" ? byEndTitle : byTitle;
+    if (!titleMap.has(node.title)) titleMap.set(node.title, node);
   }
   // 제목으로 base 끝을 집을 end 제안 — 대표 끝 폴백은 그 제목이 다른 제안에 예약되지 않았을 때만
   const endTitleClaims = new Set(
     proposal.nodes
-      .filter((node) => node.node_type === "end" && byTitle.get(node.title)?.node_type === "end")
+      .filter((node) => node.node_type === "end" && byEndTitle.has(node.title))
       .map((node) => node.title),
   );
 
@@ -1042,9 +1057,9 @@ export function buildGraphFromAiProposal(
       matchedIds.add(baseStart.id);
       return baseStart.id;
     }
-    const existing = byTitle.get(node.title);
     if (node.node_type === "end") {
-      if (existing?.node_type === "end" && !matchedIds.has(existing.id)) {
+      const existing = byEndTitle.get(node.title);
+      if (existing && !matchedIds.has(existing.id)) {
         if (existing.id === baseEnd?.id) endUsed = true;
         matchedIds.add(existing.id);
         return existing.id;
@@ -1055,10 +1070,13 @@ export function buildGraphFromAiProposal(
         matchedIds.add(baseEnd.id);
         return baseEnd.id;
       }
-    } else if (existing && existing.node_type !== "end" && !matchedIds.has(existing.id)) {
-      // 끝 노드는 end 제안만 잡는다 — 일반 제안이 끝 id를 가져가면 끝이 일반 노드로 바뀐다
-      matchedIds.add(existing.id);
-      return existing.id;
+    } else {
+      // 끝 노드는 end 제안만 잡는다(byTitle엔 끝이 없다) — 일반 제안이 끝 id를 가져가면 끝이 일반 노드로 바뀐다
+      const existing = byTitle.get(node.title);
+      if (existing && !matchedIds.has(existing.id)) {
+        matchedIds.add(existing.id);
+        return existing.id;
+      }
     }
     const id = genId();
     addedNodeIds.push(id);
@@ -1132,7 +1150,7 @@ export function buildGraphFromAiProposal(
         attr?.parallel === true && isParallelForbidden(finalType) ? undefined : attr?.parallel,
       ),
     };
-    if (attr?.parallel === true && isParallelForbidden(finalType)) {
+    if (attr?.parallel === true && isParallelWarned(finalType)) {
       warnings.push({ line: 0, message: `"${title}": parallel exits apply only to process nodes - ignored on a ${finalType} node` });
     }
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
@@ -1180,12 +1198,15 @@ export function buildGraphFromAiProposal(
   // CSV 경로와 동일한 쌍 큐 이월(변·핸들·선 모양·게이트웨이)/신규 기본값 — AI 머지도 엣지를 전량 재생성한다
   const baseEdgeQueue = createBaseEdgeQueue(context?.base?.edges ?? []);
   const fallbackLineStyle = context?.base ? getNewEdgeLineStyle() : "";
+  const subprocessIds = new Set(nodes.filter((node) => node.node_type === "subprocess").map((node) => node.id));
   const edges: GraphEdge[] = proposal.edges
     .map((edge): GraphEdge | null => {
       const source = keyToId.get(edge.source);
       const target = keyToId.get(edge.target);
       if (!source || !target) return null;
-      return buildRegeneratedEdge(source, target, edge.label, baseEdgeQueue.take(source, target), fallbackLineStyle);
+      return buildRegeneratedEdge(
+        source, target, edge.label, baseEdgeQueue.take(source, target), fallbackLineStyle, subprocessIds,
+      );
     })
     .filter((edge): edge is GraphEdge => edge !== null);
 

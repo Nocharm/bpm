@@ -417,6 +417,35 @@ describe("buildCsvFromGraph - structures the table cannot hold", () => {
     ]);
   });
 
+  it("omits the primary End clause when the row keeps another Next target", () => {
+    // Arrange — 분기가 B와 보조 끝으로 갈라진다. Next에 B가 남으니 재임포트는 이 행을 End에 잇지 않는다
+    const graph: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("d1", "D", "decision", 1),
+        makeNode("b1", "B", "process", 2),
+        makeNode("e1", "End", "end", 3, { is_primary_end: true }),
+        makeNode("e2", "Extra End", "end", 4, { is_primary_end: false }),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "d1"),
+        makeEdge("x2", "d1", "e2", "reject"),
+        makeEdge("x3", "d1", "b1", "ok"),
+        makeEdge("x4", "b1", "e1"),
+      ],
+      groups: [],
+    };
+
+    // Act
+    const { warnings } = buildCsvFromGraph(graph);
+
+    // Assert
+    expect(warnings).toContain(
+      'Edge "D" → secondary end "Extra End" (label "reject") is not expressible in CSV - dropped',
+    );
+    expect(warnings.some((w) => w.includes("re-import connects this row"))).toBe(false);
+  });
+
   it("does not write Parallel=Y for a decision node with a stray flag", () => {
     const graph: Graph = {
       nodes: [
