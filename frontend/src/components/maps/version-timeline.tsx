@@ -57,6 +57,8 @@ const EVENT_CHIP: Record<string, string> = {
 
 // 만료 버전의 우측 게시 필 — 상태 필(expired)과 같은 중립 톤
 const EXPIRED_CHIP = "border-hairline bg-surface-alt text-ink-tertiary";
+// 만료 버전의 타임라인 노드 — 채움 green 대신 중립 테두리
+const EXPIRED_NODE: { cls: string; Icon: LucideIcon } = { cls: "border-hairline bg-surface-alt text-ink-tertiary", Icon: Upload };
 
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green, 담당자확정=채움 액센트).
 function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
@@ -270,7 +272,8 @@ export function VersionTimeline({
           while (i + span < rawRows.length && rawRows[i + span]?.date === r.date) span += 1;
           return { ...r, dateSpan: span };
         });
-        const node = nodeFor(events[0]?.event_type);
+        // 만료 버전은 마지막 이벤트(게시)와 무관하게 중립 노드 — 우측 Expired 필과 같은 톤, 아이콘은 게시 그대로
+        const node = isExpired ? EXPIRED_NODE : nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         // 코멘트(note) 있는 이벤트 수 — 0건이면 버튼 숨김(설정 패널과 동일 규칙)
         const commentCount = version.events.filter((evt) => evt.note).length;
