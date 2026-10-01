@@ -240,7 +240,7 @@ const pillBox = await page.locator(`.react-flow__node[data-id="${SP}"] [data-id=
 await page.mouse.move(pillBox.x + pillBox.width / 2, pillBox.y + pillBox.height / 2);
 await sleep(400);
 const hovered = await excessLayers();
-check("hovering the excess pill fades to the exit ratio (3/3)", hovered?.[1]?.text === "3/3" && hovered[1].opacity === "1" && hovered[0].opacity === "0", JSON.stringify(hovered));
+check("hovering the excess pill fades to connections over ends (4/3)", hovered?.[1]?.text === "4/3" && hovered[1].opacity === "1" && hovered[0].opacity === "0", JSON.stringify(hovered));
 await page.screenshot({ path: `${OUT}/output-rules-badge-excess-hover.png`, clip: badgeClip });
 await page.mouse.move(5, 500);
 await page.locator('[data-id="save-checklist-toggle"]').click();

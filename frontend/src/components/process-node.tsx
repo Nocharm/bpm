@@ -1132,8 +1132,8 @@ function SubprocessHandles({
   );
 }
 
-// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `연결된 출구/전체`,
-// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `연결/전체`로 페이드(사용자 결정 2026-10-01).
+// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `나가는 엣지 수/끝 수`,
+// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `엣지 수/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
 // 판정은 저장 체크리스트와 같은 lib/output-rules. 엣지는 RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교) 드래그 중 재렌더를 막는다.
 function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
   const { t } = useI18n();
@@ -1152,16 +1152,16 @@ function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends
   const groups = getOutputGroups({ id: nodeId, nodeType: "subprocess", parallelOutputs }, edges);
   const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
   const total = Math.max(1, ends.length);
-  const endKeys = new Set(ends.length > 0 ? ends.map((end) => end.key) : [PRIMARY_END_HANDLE]);
-  const used = groups.filter((group) => endKeys.has(group.key)).length;
+  // 분자 = 나가는 엣지 수 — 초과가 없으면 연결된 출구 수와 같고, 초과면 끝 수를 넘어(예: 4/3) 정상(3/3)과 구분된다
+  const connected = edges.length;
   if (ends.length < 2 && excess === 0) return null;
-  const ratio = `${used}/${total}`;
+  const ratio = `${connected}/${total}`;
   const pillBase = "ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";
   if (excess === 0) {
     return (
       <span
         data-id="sp-output-count"
-        title={t("subprocess.outputCount", { used, total })}
+        title={t("subprocess.outputCount", { connected, total })}
         className={`${pillBase} border-hairline bg-surface-alt text-ink-tertiary`}
       >
         {ratio}
@@ -1172,7 +1172,7 @@ function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends
   return (
     <span
       data-id="sp-output-excess"
-      title={`${t("subprocess.outputExcess", { count: excess })} ${t("subprocess.outputCount", { used, total })}`}
+      title={`${t("subprocess.outputExcess", { count: excess })} ${t("subprocess.outputCount", { connected, total })}`}
       className={`${pillBase} group/sp-out border-error/40 bg-error/10 text-error`}
     >
       <span className="col-start-1 row-start-1 text-center transition-opacity duration-150 ease-smooth group-hover/sp-out:opacity-0">
