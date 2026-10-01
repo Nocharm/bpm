@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 
-import { ArrowRight, BadgeCheck, Check, ChevronRight, Clock, GitCommit, Layers, Link2, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, Undo2, Upload, X } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, ChevronRight, Clock, GitCommit, Layers, Link2, type LucideIcon, MessageSquare, MousePointerClick, Plus, Send, TimerOff, Undo2, Upload, X } from "lucide-react";
 
 import type { VersionDetail, VersionEvent } from "@/lib/api";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
@@ -57,8 +57,8 @@ const EVENT_CHIP: Record<string, string> = {
 
 // 만료 버전의 우측 게시 필 — 상태 필(expired)과 같은 중립 톤
 const EXPIRED_CHIP = "border-hairline bg-surface-alt text-ink-tertiary";
-// 만료 버전의 타임라인 노드 — 채움 green 대신 중립 테두리
-const EXPIRED_NODE: { cls: string; Icon: LucideIcon } = { cls: "border-hairline bg-surface-alt text-ink-tertiary", Icon: Upload };
+// 만료 버전의 타임라인 노드 — 중립 테두리 + TimerOff(홈 최근 변경 카드의 만료 아이콘과 동일, 게시 Upload와 구분)
+const EXPIRED_NODE: { cls: string; Icon: LucideIcon } = { cls: "border-hairline bg-surface-alt text-ink-tertiary", Icon: TimerOff };
 
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green, 담당자확정=채움 액센트).
 function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
@@ -272,7 +272,7 @@ export function VersionTimeline({
           while (i + span < rawRows.length && rawRows[i + span]?.date === r.date) span += 1;
           return { ...r, dateSpan: span };
         });
-        // 만료 버전은 마지막 이벤트(게시)와 무관하게 중립 노드 — 우측 Expired 필과 같은 톤, 아이콘은 게시 그대로
+        // 만료 버전은 마지막 이벤트(게시)와 무관하게 만료 노드 — 우측 Expired 필과 같은 톤·아이콘
         const node = isExpired ? EXPIRED_NODE : nodeFor(events[0]?.event_type);
         const NodeIcon = node.Icon;
         // 코멘트(note) 있는 이벤트 수 — 0건이면 버튼 숨김(설정 패널과 동일 규칙)
@@ -427,7 +427,7 @@ export function VersionTimeline({
                               isExpired ? EXPIRED_CHIP : (EVENT_CHIP[publishedEvt.event_type] ?? EVENT_CHIP.published)
                             }`}
                           >
-                            <EventIcon type={publishedEvt.event_type} />
+                            {isExpired ? <TimerOff size={12} strokeWidth={1.5} /> : <EventIcon type={publishedEvt.event_type} />}
                             {isExpired ? t("home.verStatus.expired") : publishedLabel}
                           </span>
                         )}
