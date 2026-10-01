@@ -738,6 +738,23 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 
+  it("applies the AI parallel flag to the node's main exit and keeps it when omitted", () => {
+    const kept = baseNode("n1", "A", { parallel_outputs: ["__primary__"] });
+    const off = baseNode("n2", "B", { sort_order: 2, parallel_outputs: ["__primary__"] });
+    const outcome = buildGraphFromAiProposal(
+      {
+        nodes: [aiNode("a", "A"), aiNode("b", "B", "process", { parallel: false }), aiNode("c", "C", "process", { parallel: true })],
+        edges: [],
+        groups: [],
+      },
+      { base: base([kept, off]) },
+    );
+    const byTitle = (title: string) => outcome.graph?.nodes.find((n) => n.title === title);
+    expect(byTitle("A")?.parallel_outputs).toEqual(["__primary__"]);
+    expect(byTitle("B")?.parallel_outputs).toEqual([]);
+    expect(byTitle("C")?.parallel_outputs).toEqual(["__primary__"]);
+  });
+
   it("carries per-edge line style across AI merge by endpoint pair", () => {
     const a = baseNode("n1", "A");
     const b = baseNode("n2", "B", { sort_order: 2 });

@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 
 from app.schemas import AiChatTurn, GraphOut, NodeOut
+from app.subprocess import find_output_rule_violations
 
 _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 반드시 JSON 한 개만 반환하세요(설명 텍스트 금지).
@@ -16,10 +17,12 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
  "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee_role":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":""},
+           "attributes":{"assignee_role":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":"","parallel":false},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
+- 연결 규칙: start·process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
+  모두 동시에 진행하는 갈래만 예외로, 그 노드의 attributes.parallel=true로 두고 연결을 2개 이상 그립니다. decision 노드에는 parallel을 쓰지 마세요.
 
 [ops - 증분 편집]
 {"kind":"ops","message":<설명>,"ops":[
@@ -116,6 +119,8 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"링크={node.url}" + (f' "{node.url_label}"' if node.url_label else ""))
     if node.group_ids:
         meta.append(f"그룹={','.join(node.group_ids)}")
+    if "__primary__" in (node.parallel_outputs or []):
+        meta.append("병렬출구")
     suffix = f" {{{', '.join(meta)}}}" if meta else ""
     # 서브프로세스 참조는 읽기전용 컨텍스트로만 노출 (계약 규칙 ④)
     if node.node_type == "subprocess" and node.linked_map_id is not None:
@@ -236,6 +241,11 @@ def _structure_hints(graph: GraphOut) -> list[str]:
     )
     if unlabeled:
         hints.append(f"분기 라벨 없는 판단 노드: {_fmt_ids(unlabeled)}")
+
+    # 출력 규칙 — 출구당 연결 1개(병렬 출구는 2개 이상), 저장·확정 게이트와 같은 판정
+    overflow = sorted(find_output_rule_violations(list(graph.nodes), list(graph.edges)))
+    if overflow:
+        hints.append(f"출구 연결 규칙 위반(출구당 1개, 병렬 출구는 2개 이상): {_fmt_ids(overflow)}")
 
     # 막다른 일반 노드 — end가 아닌데 출력 0 (고아 제외)
     dead_ends = sorted(

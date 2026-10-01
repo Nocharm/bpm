@@ -1051,3 +1051,33 @@ def test_serialize_node_clips_long_io() -> None:
     text = _serialize_node(node)
     assert "…" in text  # 상한 초과분은 말줄임
     assert "입력항목29" not in text  # 꼬리 항목은 잘려나감
+
+
+def test_structure_hints_flag_output_rule_violations_and_show_parallel_exits() -> None:
+    """출구당 연결 1개 위반을 힌트로, 병렬 출구는 메타로 노출한다 (출력 규칙 2026-10-01)."""
+    from app.ai_prompt import _serialize_node, _structure_hints
+    from app.schemas import EdgeIn, GraphOut, NodeOut
+
+    graph = GraphOut(
+        nodes=[
+            NodeOut(id="s", title="시작", node_type="start"),
+            NodeOut(id="a", title="접수", node_type="process"),
+            NodeOut(id="p", title="동시 처리", node_type="process", parallel_outputs=["__primary__"]),
+            NodeOut(id="b", title="B", node_type="process"),
+            NodeOut(id="c", title="C", node_type="process"),
+            NodeOut(id="e", title="끝", node_type="end"),
+        ],
+        edges=[
+            EdgeIn(id="1", source_node_id="s", target_node_id="a"),
+            EdgeIn(id="2", source_node_id="a", target_node_id="p"),
+            EdgeIn(id="3", source_node_id="a", target_node_id="b"),
+            EdgeIn(id="4", source_node_id="p", target_node_id="b"),
+            EdgeIn(id="5", source_node_id="p", target_node_id="c"),
+            EdgeIn(id="6", source_node_id="b", target_node_id="e"),
+            EdgeIn(id="7", source_node_id="c", target_node_id="e"),
+        ],
+        groups=[],
+    )
+    hints = _structure_hints(graph)
+    assert any("출구 연결 규칙 위반" in h and "a" in h and "p" not in h.split(":")[1] for h in hints)
+    assert "병렬출구" in _serialize_node(graph.nodes[2])

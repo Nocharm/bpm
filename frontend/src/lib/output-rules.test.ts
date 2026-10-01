@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getOutputGroups, getOutputViolations } from "./output-rules";
+import { applyParallelFlag, getOutputGroups, getOutputViolations } from "./output-rules";
 
 const node = (id: string, nodeType: string, parallelOutputs?: string[]) => ({ id, nodeType, parallelOutputs });
 
@@ -91,5 +91,13 @@ describe("getOutputGroups", () => {
       { key: "__primary__", count: 1, parallel: false },
       { key: "Hold", count: 2, parallel: false },
     ]);
+  });
+});
+
+describe("applyParallelFlag", () => {
+  it("keeps the current value when the flag is omitted and only touches the main exit", () => {
+    expect(applyParallelFlag(["Hold"], undefined)).toBeUndefined();
+    expect(applyParallelFlag(["Hold"], true)).toEqual(["Hold", "__primary__"]);
+    expect(applyParallelFlag(["Hold", "__primary__"], false)).toEqual(["Hold"]);
   });
 });

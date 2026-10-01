@@ -322,7 +322,7 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
-import { getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+import { applyParallelFlag, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
 import { assignEdgePulses } from "@/lib/edge-pulse";
 import {
   NodeActionsContext,
@@ -888,7 +888,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
-    parallel_outputs: [],
+    parallel_outputs: applyParallelFlag([], attr?.parallel) ?? [],
   };
 }
 
@@ -2573,6 +2573,10 @@ function MapEditor({ mapId }: { mapId: number }) {
             data: {
               ...node.data,
               ...(title !== undefined ? { label: title } : {}),
+              // 병렬 출구 플래그 — 생략이면 유지, true/false면 기본 출구 켬/끔 (출력 규칙 2026-10-01)
+              ...(attr?.parallel != null
+                ? { parallelOutputs: applyParallelFlag(node.data.parallelOutputs, attr.parallel) }
+                : {}),
               ...(desc !== undefined ? { description: desc } : {}),
               ...(attr
                 ? {

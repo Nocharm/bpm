@@ -6,6 +6,7 @@ import { type AppNode, getNewEdgeLineStyle, layoutSubsetWithDagre, layoutWithDag
 import { commitRole, commitSystem } from "./catalogs";
 import { normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import { genId } from "./id";
+import { applyParallelFlag } from "./output-rules";
 import {
   coerceAiNewNodeType,
   dropConflictingCurrency,
@@ -218,7 +219,6 @@ const NODE_DEFAULTS = {
   follow_latest: true,
   linked_version_id: null,
   is_primary_end: false,
-  parallel_outputs: [] as string[],
 };
 
 // 빈 값은 "건드리지 않음" — 제안/CSV가 모르는 속성이 기존 값을 지우지 않게 (CSV·AI 병합 공용)
@@ -350,6 +350,8 @@ const mergeNode = (
             : "",
       url: pick(next.url ?? "", existing.url ?? ""),
       url_label: pick(next.url_label ?? "", existing.url_label ?? ""),
+      // 병렬 출구 — 후보가 지정했을 때만(undefined=유지). CSV·AI 공용 (출력 규칙 2026-10-01)
+      parallel_outputs: next.parallel_outputs ?? existing.parallel_outputs ?? [],
       sort_order: next.sort_order,
     },
     droppedParamFields: droppedFields,
@@ -982,6 +984,8 @@ export function buildGraphFromAiProposal(
       color: attr?.color ?? "",
       group_ids: groupId ? [groupId] : [],
       sort_order: index,
+      // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔
+      parallel_outputs: applyParallelFlag(existing?.parallel_outputs, attr?.parallel),
     };
     // AI 계약: SP 노드는 annual_count·fte만 수정 가능 — dropUneditableParams(mergeNode 내부)로
     // 프롬프트와 무관하게 다시 강제하고, 실제로 드롭된 값이 있으면 CSV와 같은 문구로 경고한다.

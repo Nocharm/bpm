@@ -80,3 +80,16 @@ export function getOutputViolations(
   }
   return violations;
 }
+
+/**
+ * AI·CSV의 병렬 플래그 → parallel_outputs. 플래그는 노드 기본 출구(`__primary__`)만 다룬다 — SP 끝별
+ * 병렬은 에디터 우클릭 전용. null/undefined=기존 유지(undefined 반환), true=켬, false=끔(다른 끝 키는 보존).
+ */
+export function applyParallelFlag(
+  current: readonly string[] | undefined,
+  flag: boolean | null | undefined,
+): string[] | undefined {
+  if (flag == null) return undefined;
+  const rest = (current ?? []).filter((key) => key !== PRIMARY_END_HANDLE);
+  return flag ? [...rest, PRIMARY_END_HANDLE] : rest;
+}

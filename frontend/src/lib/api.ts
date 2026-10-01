@@ -2364,6 +2364,8 @@ export interface AiNodeAttributes {
   color?: string | null;
   url?: string | null;
   url_label?: string | null;
+  // 병렬 출구(노드 기본 출구) — null/생략=유지, true/false=켬/끔 (lib/output-rules applyParallelFlag)
+  parallel?: boolean | null;
 }
 
 export interface AiNode {

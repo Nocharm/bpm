@@ -2333,6 +2333,8 @@ class AiNodeAttributes(BaseModel):
     # 참조 링크 — NodeIn과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str | None = Field(default=None, max_length=500)
     url_label: str | None = Field(default=None, max_length=100)
+    # 병렬 출구(노드 기본 출구) — None=유지, true/false=켬/끔. 프론트가 parallel_outputs로 변환 (출력 규칙 2026-10-01)
+    parallel: bool | None = None
 
     @field_validator("duration", "touch_time", mode="after")
     @classmethod
