@@ -40,7 +40,6 @@ const RF_CURVATURE = 0.25;
 const ON_ROW_EPS = 4;
 /** 렌더 전용 복제 노드 접두(에디터 Ctrl 드래그 고스트) — 기하는 원본 노드 것을 쓴다 */
 const GHOST_PREFIX = "ctrl-ghost:";
-const SIDE_HANDLE_ID = /^[st]-(left|right|top|bottom)$/;
 /** 프로세스·하위프로세스 좌/우 핸들의 라벨 라인 앵커(px) — process-node.tsx sideAnchorTop과 동기 */
 const SIDE_ANCHOR_TOP = 18;
 
@@ -66,8 +65,6 @@ export interface FanNodeGeom {
   w: number;
   h: number;
   nodeType: ProcessNodeType;
-  /** 변 id가 아닌 핸들(하위프로세스 끝)의 세로 위치(px, 노드 top 기준) — 없으면 라벨 라인 앵커 */
-  handleTops?: Record<string, number>;
 }
 
 interface Vec {
@@ -90,10 +87,9 @@ function axesOf(side: HandleSide): { out: Vec; lat: Vec } {
 }
 
 /** 핸들 앵커 추정 — 실측 handleBounds 없이 노드 bbox와 타입으로 (정렬용, 픽셀 정확도 불필요) */
-function anchorOf(g: FanNodeGeom, side: HandleSide, handleId?: string | null): Vec {
+function anchorOf(g: FanNodeGeom, side: HandleSide): Vec {
   const anchoredTop = g.nodeType === "process" || g.nodeType === "subprocess";
-  const handleTop = handleId ? g.handleTops?.[handleId] : undefined;
-  const ay = handleTop ?? (anchoredTop ? Math.min(SIDE_ANCHOR_TOP, g.h / 2) : g.h / 2);
+  const ay = anchoredTop ? Math.min(SIDE_ANCHOR_TOP, g.h / 2) : g.h / 2;
   switch (side) {
     case "left":
       return { x: g.x, y: g.y + ay };
@@ -110,10 +106,9 @@ function stripGhost(id: string): string {
   return id.startsWith(GHOST_PREFIX) ? id.slice(GHOST_PREFIX.length) : id;
 }
 
-/** 앵커 그룹 키 — 같은 변의 s-/t- 핸들은 같은 픽셀이라 한 그룹, 변 id가 아닌 핸들(SP 끝)은 id별로 분리 */
-function groupKeyOf(nodeId: string, side: HandleSide, handleId: string | null | undefined): string {
-  const distinct = handleId && !SIDE_HANDLE_ID.test(handleId) ? handleId : "";
-  return `${nodeId}|${side}|${distinct}`;
+/** 앵커 그룹 키 — 한 변의 핸들은 전부 같은 픽셀(s-/t- 겹침, SP 끝 핸들도 우측 한 점에 겹침, 2026-10-01)이라 변 단위 한 그룹 */
+function groupKeyOf(nodeId: string, side: HandleSide): string {
+  return `${nodeId}|${side}`;
 }
 
 interface EndRef {
@@ -228,14 +223,14 @@ export function assignFanLanes(
     }
     const sourceSide = sideFromHandleId(edge.sourceHandle, "right");
     const targetSide = sideFromHandleId(edge.targetHandle, "left");
-    const sourceAnchor = anchorOf(sourceGeom, sourceSide, edge.sourceHandle);
-    const targetAnchor = anchorOf(targetGeom, targetSide, edge.targetHandle);
-    push(groupKeyOf(edge.source, sourceSide, edge.sourceHandle), {
+    const sourceAnchor = anchorOf(sourceGeom, sourceSide);
+    const targetAnchor = anchorOf(targetGeom, targetSide);
+    push(groupKeyOf(edge.source, sourceSide), {
       edgeId: edge.id,
       end: "s",
       ...toLocal(sourceAnchor, sourceSide, targetAnchor),
     });
-    push(groupKeyOf(edge.target, targetSide, edge.targetHandle), {
+    push(groupKeyOf(edge.target, targetSide), {
       edgeId: edge.id,
       end: "t",
       ...toLocal(targetAnchor, targetSide, sourceAnchor),
@@ -263,11 +258,6 @@ export function buildFanGeom(nodes: readonly AppNode[]): Map<string, FanNodeGeom
       h,
       nodeType: node.data.nodeType,
     };
-    // 하위프로세스 끝 핸들 2개 이상은 (i+1)/(n+1) 세로 분산(process-node.tsx SubprocessHandles) — 정렬에 실위치를 쓴다
-    const ends = node.data.nodeType === "subprocess" ? (node.data.subEnds ?? []) : [];
-    if (ends.length >= 2) {
-      entry.handleTops = Object.fromEntries(ends.map((end, i) => [end.key, (h * (i + 1)) / (ends.length + 1)]));
-    }
     geom.set(node.id, entry);
   }
   return geom;

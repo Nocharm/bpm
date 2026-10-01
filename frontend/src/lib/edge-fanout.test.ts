@@ -42,19 +42,6 @@ describe("assignFanLanes - 그룹 키", () => {
     expect(lanes.get("out")?.s?.n).toBe(2);
   });
 
-  it("하위프로세스 끝 핸들은 id별로 별도 앵커 — 다른 끝 핸들끼리는 형제가 아니다", () => {
-    const geom = new Map([
-      ["S", { x: 0, y: 0, w: 180, h: 64, nodeType: "subprocess" as const }],
-      ["A", proc(400, -100)],
-      ["B", proc(400, 100)],
-    ]);
-    const lanes = assignFanLanes(
-      [edge("e1", "S", "A", "__primary__", "t-left"), edge("e2", "S", "B", "end-2", "t-left")],
-      geom,
-    );
-    expect(lanes.size).toBe(0);
-  });
-
   it("하위프로세스 들어오는 문 변형(in:top)은 위 변 앵커 — 같은 문으로 오는 엣지끼리 형제, 좌측 in과는 별도", () => {
     const geom = new Map([
       ["S", { x: 0, y: 200, w: 180, h: 64, nodeType: "subprocess" as const }],
@@ -190,18 +177,13 @@ describe("assignFanLanes - 가족과 정렬", () => {
     expect(lanes.get("a")?.t).toMatchObject({ r: 44 });
   });
 
-  it("하위프로세스 끝 핸들은 실제 세로 위치((i+1)/(n+1))로 정렬한다 — 동률 id 순이 아니라", () => {
-    // SP(0,200) 높이 64, 끝 3개: __primary__ 16px·e2 32px·e3 48px. 타깃 T는 위쪽(좌측 핸들 y=18)
-    const sp: FanNodeGeom = { x: 0, y: 200, w: 180, h: 64, nodeType: "subprocess", handleTops: { __primary__: 16, e2: 32, e3: 48 } };
-    const geom = new Map([["S", sp], ["T", proc(400, 0)]]);
-    const lanes = assignFanLanes(
-      [edge("p", "S", "T", "__primary__"), edge("e2", "S", "T", "e2"), edge("e3", "S", "T", "e3")],
-      geom,
-    );
-    // 가장 아래 끝(e3)이 가장 멀다 → 안쪽 k=0, 맨 위 끝(__primary__)이 가장 가깝다 → 바깥 k=2
-    expect(lanes.get("e3")?.t?.k).toBe(0);
-    expect(lanes.get("e2")?.t?.k).toBe(1);
-    expect(lanes.get("p")?.t?.k).toBe(2);
+  it("하위프로세스 끝 핸들은 우측 한 점에 겹치므로 끝 키가 달라도 한 팬 그룹이다", () => {
+    const sp: FanNodeGeom = { x: 0, y: 200, w: 180, h: 64, nodeType: "subprocess" };
+    const geom = new Map([["S", sp], ["T", proc(400, 0)], ["U", proc(400, 400)]]);
+    const lanes = assignFanLanes([edge("p", "S", "T", "__primary__"), edge("e2", "S", "U", "e2")], geom);
+    expect(lanes.get("p")?.s?.n).toBe(2);
+    expect(lanes.get("e2")?.s?.n).toBe(2);
+    expect(lanes.get("p")?.s?.idx).not.toBe(lanes.get("e2")?.s?.idx);
   });
 
   it("TB 흐름(bottom→top)에서도 측면축은 x — 먼 소스가 안쪽", () => {
@@ -236,15 +218,6 @@ describe("buildFanGeom / injectFanLanes - 표면 배선 헬퍼", () => {
     const geom = buildFanGeom([node("A", "process", 10, 20, { width: 200, height: 80 }), node("D", "decision", 0, 0)]);
     expect(geom.get("A")).toMatchObject({ x: 10, y: 20, w: 200, h: 80, nodeType: "process" });
     expect(geom.get("D")).toMatchObject({ x: 0, y: 0, w: 116, h: 96, nodeType: "decision" });
-  });
-
-  it("하위프로세스 끝 핸들 2개 이상이면 (i+1)/(n+1) 세로 위치를 handleTops로 넘긴다(process-node SubprocessHandles 규칙)", () => {
-    const sp = { ...node("S", "subprocess", 0, 0, { width: 180, height: 80 }), data: { label: "S", nodeType: "subprocess", subEnds: [{ key: "__primary__" }, { key: "e2" }, { key: "e3" }] } } as unknown as AppNode;
-    const geom = buildFanGeom([sp]);
-    expect(geom.get("S")?.handleTops).toEqual({ __primary__: 20, e2: 40, e3: 60 });
-    // 끝 1개 이하는 라벨 라인 앵커(18px) 규칙이라 handleTops 없음
-    const single = { ...sp, data: { label: "S", nodeType: "subprocess", subEnds: [{ key: "__primary__" }] } } as unknown as AppNode;
-    expect(buildFanGeom([single]).get("S")?.handleTops).toBeUndefined();
   });
 
   it("팬이 있는 엣지에만 data.fan을 얹고 기존 data는 보존, 팬 없는 엣지는 같은 객체를 돌려준다", () => {

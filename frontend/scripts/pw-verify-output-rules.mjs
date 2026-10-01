@@ -146,15 +146,29 @@ const handleStyle = (nodeId, handleId) =>
   }, [nodeId, handleId]);
 const center = (b) => ({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
 
+// ── (0) 끝 개수 배지: 끝 3개 중 대표·반려 연결 → 2/3, 초과 없음
+const badgeText = (dataId) =>
+  page.locator(`.react-flow__node[data-id="${SP}"] [data-id="${dataId}"]`).textContent({ timeout: 3000 }).catch(() => null);
+check("badge shows connected exits out of ends (2/3)", (await badgeText("sp-output-count")) === "2/3", String(await badgeText("sp-output-count")));
+check("no excess badge when every end has at most one output", (await badgeText("sp-output-excess")) === null);
+const checkOk = (key) => page.locator(`[data-id="save-check-${key}"]`).getAttribute("data-ok");
+check("save checklist output rule passes on load", (await checkOk("singleOutput")) === "true");
+
 // ── (1) 호버: 우측 끝 핸들만 보이고 in 핸들은 숨김·클릭 통과
 const spBox = await nodeBox(SP);
 await page.mouse.move(spBox.x + spBox.width / 2, spBox.y + spBox.height / 2);
 await sleep(300);
 const inTop = await handleStyle(SP, "in:top");
 const inLeft = await handleStyle(SP, "in");
+const endPrimary = await handleStyle(SP, "__primary__");
 const endHold = await handleStyle(SP, "보류");
 check("hover hides in handles and lets clicks through", inTop?.opacity === "0" && inTop?.pe === "none" && inLeft?.opacity === "0", JSON.stringify({ inTop, inLeft }));
-check("hover shows the right end handles", endHold?.opacity === "1", JSON.stringify(endHold));
+check("hover shows one right handle (primary end on top, other ends stacked and hidden)", endPrimary?.opacity === "1" && endHold?.opacity === "0" && endHold?.pe === "none", JSON.stringify({ endPrimary, endHold }));
+const stacked = await page.evaluate((id) => {
+  const tops = [...document.querySelectorAll(`.react-flow__node[data-id="${id}"] .react-flow__handle.source`)].map((h) => Math.round(h.getBoundingClientRect().top));
+  return new Set(tops).size;
+}, SP);
+check("all end handles share one point", stacked === 1, `${stacked} distinct tops`);
 await page.screenshot({ path: `${OUT}/output-rules-hover.png`, clip: { x: spBox.x - 60, y: spBox.y - 60, width: spBox.width + 120, height: spBox.height + 120 } });
 
 // ── (2) SP 상단(in:top 자리)에서 끌어 다른 노드 몸체에 놓아도 연결이 생기지 않는다(역방향 입력 엣지 회귀)
@@ -186,16 +200,56 @@ await sleep(900);
 const incoming = await edgeCount();
 check("dropping on the top in handle adds an incoming edge", incoming === before + 1, `${before} -> ${incoming}`);
 
-// ── (4) 우측 끝 핸들에서 끌기는 그대로 동작(보류 끝 → 보완 요청)
-const holdPoint = center(await handleBox(SP, "보류"));
+// ── (4) 우측 한 점에서 끌어 놓으면 출구 목록 → 보류 선택 → SP(보류)→보류 처리
+const rightPoint = center(await handleBox(SP, "__primary__"));
 const before4 = await edgeCount();
 const yBox = await nodeBox(nid("y2"));
-await page.mouse.move(holdPoint.x, holdPoint.y);
+await page.mouse.move(rightPoint.x, rightPoint.y);
 await page.mouse.down();
 await page.mouse.move(center(yBox).x, center(yBox).y, { steps: 12 });
 await page.mouse.up();
+await sleep(700);
+const endModal = page.locator('[data-id="edge-end-modal"]');
+check("dropping from the right handle opens the end list", await endModal.isVisible().catch(() => false));
+await page.screenshot({ path: `${OUT}/output-rules-end-list.png` });
+await page.locator('[data-id="edge-end-row-보류"]').click();
 await sleep(900);
-check("dragging from a right end handle still connects", (await edgeCount()) === before4 + 1, `${before4} -> ${await edgeCount()}`);
+check("picking an end connects from that end", (await edgeCount()) === before4 + 1, `${before4} -> ${await edgeCount()}`);
+await sleep(1500);
+const savedAfter = await api("GET", `/api/versions/${host.draft.id}/graph`);
+check("the new edge leaves from the picked end", savedAfter.edges.some((e) => e.source_node_id === SP && e.target_node_id === nid("y2") && e.source_handle === "보류"), JSON.stringify(savedAfter.edges.filter((e) => e.source_node_id === SP).map((e) => e.source_handle)));
+check("badge counts the newly connected end (3/3)", (await badgeText("sp-output-count")) === "3/3", String(await badgeText("sp-output-count")));
+
+// ── (5) 한 출구에 엣지 2개(삽입 재연결이 만드는 상태)를 API로 만들고 다시 열면 +1 배지·체크리스트 미충족·수동 저장 차단
+const graph = await api("GET", `/api/versions/${host.draft.id}/graph`);
+graph.edges.push({ id: nid("e-extra"), source_node_id: SP, target_node_id: nid("n"), source_handle: "__primary__" });
+await api("PUT", `/api/versions/${host.draft.id}/graph`, { nodes: graph.nodes, edges: graph.edges, groups: graph.groups ?? [] });
+await openEditor();
+const excessLayers = () =>
+  page.evaluate((id) => {
+    const pill = document.querySelector(`.react-flow__node[data-id="${id}"] [data-id="sp-output-excess"]`);
+    return pill ? [...pill.children].map((el) => ({ text: el.textContent, opacity: getComputedStyle(el).opacity })) : null;
+  }, SP);
+const layers = await excessLayers();
+check("excess pill shows +1 (ratio layer hidden)", layers?.[0]?.text === "+1" && layers[0].opacity === "1" && layers[1].opacity === "0", JSON.stringify(layers));
+check("save checklist output rule fails", (await checkOk("singleOutput")) === "false");
+const spBox5 = await nodeBox(SP);
+const badgeClip = { x: spBox5.x - 40, y: spBox5.y - 40, width: spBox5.width + 80, height: spBox5.height + 80 };
+await page.screenshot({ path: `${OUT}/output-rules-badge-excess.png`, clip: badgeClip });
+const pillBox = await page.locator(`.react-flow__node[data-id="${SP}"] [data-id="sp-output-excess"]`).boundingBox();
+await page.mouse.move(pillBox.x + pillBox.width / 2, pillBox.y + pillBox.height / 2);
+await sleep(400);
+const hovered = await excessLayers();
+check("hovering the excess pill fades to the exit ratio (3/3)", hovered?.[1]?.text === "3/3" && hovered[1].opacity === "1" && hovered[0].opacity === "0", JSON.stringify(hovered));
+await page.screenshot({ path: `${OUT}/output-rules-badge-excess-hover.png`, clip: badgeClip });
+await page.mouse.move(5, 500);
+await page.locator('[data-id="save-checklist-toggle"]').click();
+await sleep(500);
+await page.screenshot({ path: `${OUT}/output-rules-checklist.png`, clip: { x: 0, y: 0, width: 700, height: 300 } });
+await page.locator('[data-id="editor-save"]').click();
+await sleep(600);
+const toast = await page.getByText(/Cannot save/).first().textContent({ timeout: 3000 }).catch(() => null);
+check("manual save is blocked with the output rule", !!toast && toast.includes("No invalid branching"), String(toast));
 
 check("no console errors", errors.length === 0, errors.join(" | "));
 await browser.close();

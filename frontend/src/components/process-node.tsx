@@ -9,6 +9,7 @@ import {
   Position,
   useConnection,
   useNodeId,
+  useStore,
   useStoreApi,
   useUpdateNodeInternals,
 } from "@xyflow/react";
@@ -64,6 +65,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
+import { getOutputGroups } from "@/lib/output-rules";
 import {
   collectNodeWarnings,
   hasAssigneeWarning,
@@ -1107,25 +1109,79 @@ function SubprocessHandles({
           style={anchorStyle}
         />
       ) : (
-        ends.map((end, i) => (
+        // 출구는 우측 한 점 — 끝마다 핸들을 두되(엣지 앵커·끝 키 보존) 전부 라벨 라인에 겹쳐 놓고, 대표 끝 하나만
+        // 보이고 잡힌다(DOM 마지막=최상단). 끝 ≥2에서 끌어 놓으면 page.tsx가 출구 목록으로 끝을 고른다.
+        // 세로 분산은 우측 폭 조절 그립과 겹쳐 폐기 (사용자 결정 2026-10-01)
+        [...ends].reverse().map((end) => (
           <Handle
             key={end.key}
             id={end.key}
             type="source"
             position={Position.Right}
-            // 단일 끝은 라벨 라인 앵커(좌 인핸들과 동일) — 50% 중앙 dot이 엣지 앵커와 어긋나던 것.
-            // 다중 끝만 세로 분산 유지 (사용자 리포트 2026-08-25)
             style={
-              ends.length === 1 && anchorStyle
+              end.key === ends[0].key
                 ? anchorStyle
-                : { top: `${((i + 1) / (ends.length + 1)) * 100}%` }
+                : { ...anchorStyle, opacity: 0, pointerEvents: "none" }
             }
-            title={end.title}
+            title={ends.length === 1 ? end.title : undefined}
             isConnectable={connectable}
           />
         ))
       )}
     </>
+  );
+}
+
+// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `연결된 출구/전체`,
+// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `연결/전체`로 페이드(사용자 결정 2026-10-01).
+// 판정은 저장 체크리스트와 같은 lib/output-rules. 엣지는 RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교) 드래그 중 재렌더를 막는다.
+function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
+  const { t } = useI18n();
+  const outputSig = useStore((state) =>
+    state.edges
+      .filter((edge) => edge.source === nodeId)
+      .map((edge) => `${edge.sourceHandle ?? ""}\u0001${(edge.data?.gateway as string | null | undefined) ?? ""}`)
+      .join("\u0000"),
+  );
+  const edges = outputSig
+    ? outputSig.split("\u0000").map((entry) => {
+        const [sourceHandle, gateway] = entry.split("\u0001");
+        return { source: nodeId, sourceHandle, gateway };
+      })
+    : [];
+  const groups = getOutputGroups({ id: nodeId, nodeType: "subprocess", parallelOutputs }, edges);
+  const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
+  const total = Math.max(1, ends.length);
+  const endKeys = new Set(ends.length > 0 ? ends.map((end) => end.key) : [PRIMARY_END_HANDLE]);
+  const used = groups.filter((group) => endKeys.has(group.key)).length;
+  if (ends.length < 2 && excess === 0) return null;
+  const ratio = `${used}/${total}`;
+  const pillBase = "ml-1 inline-grid rounded-xs border px-1 py-px align-[1px] text-fine leading-none";
+  if (excess === 0) {
+    return (
+      <span
+        data-id="sp-output-count"
+        title={t("subprocess.outputCount", { used, total })}
+        className={`${pillBase} border-hairline bg-surface-alt text-ink-tertiary`}
+      >
+        {ratio}
+      </span>
+    );
+  }
+  // 두 글자를 같은 칸에 겹쳐 크로스페이드 — 폭은 둘 중 긴 쪽으로 고정돼 호버 때 제목 줄이 흔들리지 않는다
+  return (
+    <span
+      data-id="sp-output-excess"
+      title={`${t("subprocess.outputExcess", { count: excess })} ${t("subprocess.outputCount", { used, total })}`}
+      className={`${pillBase} group/sp-out border-error/40 bg-error/10 text-error`}
+    >
+      <span className="col-start-1 row-start-1 text-center transition-opacity duration-150 ease-smooth group-hover/sp-out:opacity-0">
+        +{excess}
+      </span>
+      <span className="col-start-1 row-start-1 text-center opacity-0 transition-opacity duration-150 ease-smooth group-hover/sp-out:opacity-100">
+        {ratio}
+      </span>
+    </span>
   );
 }
 
@@ -1326,6 +1382,9 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
           <div className="min-w-0">
             {/* 타이틀 = 링크된 맵 이름 고정 — 인라인 이름 편집 차단 (F5) */}
             <NodeTitle id={id} label={data.label} editable={false} />
+            {!diff && data.sideHandles !== true && (
+              <SpOutputBadge nodeId={id} ends={data.subEnds ?? []} parallelOutputs={data.parallelOutputs} />
+            )}
           </div>
           {/* 업무체계 필 — 일반 맵에서 링크맵이 프레임워크 소속일 때, 3초 호버로 체계 피크 (2026-08-30) */}
           {data.spFrameworkCategoryId != null && data.linkedMapId != null && (

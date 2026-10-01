@@ -322,6 +322,7 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
+import type { OutputRuleEdge, OutputRuleNode } from "@/lib/output-rules";
 import {
   NodeActionsContext,
   type IoListDisplayState,
@@ -777,6 +778,19 @@ const EDGE_LINE_STYLE_OPTIONS = [
   { value: "smoothstep", labelKey: "edgeStyle.step", icon: CornerDownRight },
   { value: "straight", labelKey: "edgeStyle.straight", icon: Slash },
 ] as const;
+
+// 저장 체크리스트·출력 규칙 입력 — 노드는 병렬 출구, 엣지는 출구 키·레거시 게이트웨이까지 넘긴다(lib/output-rules.ts).
+function buildCheckNode(node: AppNode): OutputRuleNode & { label: string } {
+  return { id: node.id, nodeType: node.data.nodeType, label: node.data.label, parallelOutputs: node.data.parallelOutputs };
+}
+
+function buildCheckEdge(edge: Edge): OutputRuleEdge {
+  return {
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    gateway: (edge.data?.gateway as string | null | undefined) ?? null,
+  };
+}
 
 export function toAppEdges(graph: Graph): Edge[] {
   const subprocessIds = new Set(
@@ -3296,10 +3310,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     if (ns.length === 0) {
       return [];
     }
-    const states = getSaveCheckStates(
-      ns.map((node) => ({ id: node.id, nodeType: node.data.nodeType, label: node.data.label })),
-      edgesRef.current.map((edge) => ({ source: edge.source })),
-    );
+    const states = getSaveCheckStates(ns.map(buildCheckNode), edgesRef.current.map(buildCheckEdge));
     const blockers: string[] = [];
     // 연계 캔버스는 start·대표끝이 없는 게 정상 — 두 조건은 일반 맵에만 (2026-08-28 개선)
     if (!isFrameworkMap && !states.start) blockers.push(t("save.checkOneStart"));
@@ -3379,12 +3390,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   );
 
   const saveCheckItems = useMemo<SaveCheckItem[]>(() => {
-    const simpleNodes = nodes.map((node) => ({
-      id: node.id,
-      nodeType: node.data.nodeType,
-      label: node.data.label,
-    }));
-    const simpleEdges = edges.map((edge) => ({ source: edge.source }));
+    const simpleNodes = nodes.map(buildCheckNode);
+    const simpleEdges = edges.map(buildCheckEdge);
     const states = getSaveCheckStates(simpleNodes, simpleEdges);
     const problemIds = getMultiOutputNodeIds(simpleNodes, simpleEdges);
     return [
@@ -3887,6 +3894,23 @@ function MapEditor({ mapId }: { mapId: number }) {
     return !violatesTerminalRule(sourceType, targetType);
   }, []);
 
+  // 캔버스 연결(핸들 드래그·몸체 드롭) 입구 — SP 출구는 우측 한 점이라 끝이 2개 이상이면 어느 끝인지 모른다.
+  // 출구 선택 목록으로 끝을 고른 뒤 연결한다(사용자 결정 2026-10-01). 끝 1개 이하·일반 노드는 그대로.
+  const handleFlowConnect = useCallback(
+    (connection: Connection) => {
+      const sourceId = connection.source;
+      const isSubprocessSource =
+        nodesRef.current.find((node) => node.id === sourceId)?.data.nodeType === "subprocess";
+      const ends = sourceId && isSubprocessSource ? subEndsOf(sourceId) : [];
+      if (sourceId && ends.length >= 2) {
+        openEndPrompt(sourceId, ends, (endKey) => onConnect({ ...connection, sourceHandle: endKey }));
+        return;
+      }
+      onConnect(connection);
+    },
+    [onConnect, subEndsOf, openEndPrompt],
+  );
+
   // 몸체 드롭 빠른 연결 — 핸들 미포착 드롭(isValid 아님)이 노드 위에서 끝나면 기본 핸들
   // (정방향=왼쪽 타깃, 역방향=오른쪽 소스)로 연결. 판정은 미리보기(QuickConnectLine)와 공유.
   const handleConnectEnd = useCallback(
@@ -3921,15 +3945,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             targetHandle: getQuickTargetHandleId(over.data.nodeType),
           };
       if (!isValidConnection(connection)) return;
-      // 역방향 몸체 드롭의 소스가 끝 2개 이상인 하위프로세스면 출구 목록으로 끝을 고른 뒤 연결
-      const ends = reverse && over.data.nodeType === "subprocess" ? subEndsOf(over.id) : [];
-      if (ends.length >= 2) {
-        openEndPrompt(over.id, ends, (endKey) => onConnect({ ...connection, sourceHandle: endKey }));
-        return;
-      }
-      onConnect(connection);
+      handleFlowConnect(connection);
     },
-    [readOnly, isValidConnection, onConnect, subEndsOf, openEndPrompt],
+    [readOnly, isValidConnection, handleFlowConnect],
   );
 
   // 드롭존 흐름 삽입이 시작/끝 규칙을 어기는지 — front=A→B(드래그→대상), back=B→A(대상→드래그).
@@ -9289,6 +9307,7 @@ function MapEditor({ mapId }: { mapId: number }) {
             );
           })()}
           <button
+            data-id="editor-save"
             className="inline-flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-caption font-semibold text-on-accent hover:bg-accent-focus disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
             disabled={readOnly}
@@ -9673,7 +9692,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       nodesConnectable={!readOnly}
                       onNodesChange={handleNodesChange}
                       onEdgesChange={onEdgesChange}
-                      onConnect={onConnect}
+                      onConnect={handleFlowConnect}
                       onConnectEnd={handleConnectEnd}
                       connectionLineComponent={QuickConnectLine}
                       isValidConnection={isValidConnection}
