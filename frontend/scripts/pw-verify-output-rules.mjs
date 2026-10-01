@@ -319,6 +319,19 @@ const clocks = await page.evaluate(() =>
 const spread = Math.max(...clocks) - Math.min(...clocks);
 check("pulse clocks stay in phase across edges added later", clocks.length >= 2 && spread < 0.15, `spread ${spread.toFixed(3)}s over ${clocks.length}`);
 
+// ── (10) SP 끝별 병렬 — 우클릭 "Parallel exit" 하위 메뉴에 끝 이름 체크(승인은 병렬 켜짐)
+const sp10 = await nodeBox(SP);
+await page.mouse.click(sp10.x + sp10.width / 2, sp10.y + sp10.height / 2, { button: "right" });
+await sleep(400);
+await page.locator('[data-id="context-menu"]').getByText("Parallel exit", { exact: true }).hover();
+await sleep(500);
+const endChecks = await page.evaluate(() =>
+  [...document.querySelectorAll('[role="menuitemcheckbox"]')].map((el) => `${el.textContent?.trim()}:${el.getAttribute("aria-checked")}`),
+);
+check("subprocess menu lists each end as a parallel check (primary on)", ["승인:true", "반려:false", "보류:false"].every((v) => endChecks.includes(v)), endChecks.join(","));
+await page.screenshot({ path: `${OUT}/output-rules-sp-parallel-menu.png`, clip: { x: sp10.x - 20, y: sp10.y - 20, width: 640, height: 460 } });
+await page.keyboard.press("Escape");
+
 check("no console errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 if (!KEEP) {
