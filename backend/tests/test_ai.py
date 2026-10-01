@@ -423,7 +423,7 @@ def test_serialize_graph_exposes_node_id_attributes_and_groups() -> None:
     )
     system = build_messages("M", graph, True, "?", [])[0]["content"]
     assert "N_real_1" in system  # 캐노니컬 id 노출 (규칙 ②)
-    assert "담당=김철수" in system
+    assert "김철수" not in system  # 담당자 실명은 읽기에도 싣지 않는다 (사용자 결정 2026-10-02, D2)
     assert "그룹=G1" in system
     assert "구매" in system  # groups 섹션 라벨
 
@@ -957,6 +957,31 @@ def test_ai_node_attributes_parses_new_params() -> None:
     assert attr.cost_usd is None  # 미제공 = 기존값 유지(부분 갱신 시맨틱)
 
 
+def test_ai_node_attributes_accepts_parallel_tristate() -> None:
+    """parallel은 true=켬·false=끔·생략(None)=유지 — 부분 갱신 시맨틱 (출력 규칙 2026-10-01)."""
+    from app.schemas import AiNodeAttributes
+
+    assert AiNodeAttributes.model_validate({"parallel": True}).parallel is True
+    assert AiNodeAttributes.model_validate({"parallel": False}).parallel is False
+    assert AiNodeAttributes.model_validate({"parallel": None}).parallel is None
+    assert AiNodeAttributes.model_validate({}).parallel is None
+
+
+def test_ops_set_attr_parses_parallel_and_keeps_omitted_fields() -> None:
+    from app.schemas import AiProposal
+
+    proposal = AiProposal.model_validate(
+        {
+            "kind": "ops",
+            "ops": [{"action": "set_attr", "node_id": "n1", "attributes": {"parallel": True}}],
+        }
+    )
+    attr = proposal.ops[0].attributes
+    assert attr is not None
+    assert attr.parallel is True
+    assert attr.duration is None  # 생략 = 유지
+
+
 def test_ai_node_attributes_rejects_both_currencies() -> None:
     from pydantic import ValidationError
 
@@ -1081,3 +1106,78 @@ def test_structure_hints_flag_output_rule_violations_and_show_parallel_exits() -
     hints = _structure_hints(graph)
     assert any("출구 연결 규칙 위반" in h and "a" in h and "p" not in h.split(":")[1] for h in hints)
     assert "병렬출구" in _serialize_node(graph.nodes[2])
+
+
+def test_ai_prompt_graph_template_keeps_parallel_by_default() -> None:
+    """graph 템플릿이 parallel=false를 기본값처럼 보이면 재생성 병합이 기존 병렬 출구를 끈다."""
+    from app.ai_prompt import _INSTRUCTIONS
+
+    assert '"parallel":null' in _INSTRUCTIONS
+    assert '"parallel":false' not in _INSTRUCTIONS
+    assert "그 외에는 null로 두세요" in _INSTRUCTIONS
+
+
+def test_ai_prompt_states_subprocess_regeneration_rules() -> None:
+    """graph 재생성은 제목 매칭으로 기존 SP·그룹을 보존하므로 그 조건을 프롬프트가 알려야 한다 (C11)."""
+    from app.ai_prompt import _INSTRUCTIONS
+
+    assert '"node_type":"start|process|decision|end|subprocess"' in _INSTRUCTIONS
+    assert "제목을 한 글자도 바꾸지 말고" in _INSTRUCTIONS
+    assert "새 subprocess 노드를 만들거나 linked_map_id를 지어내지 마세요" in _INSTRUCTIONS
+    assert "groups는 무시되고 기존 그룹이 그대로 유지됩니다" in _INSTRUCTIONS
+
+
+def test_serialize_node_marks_primary_end() -> None:
+    """끝이 여럿인 맵에서 대표 끝을 구분해 보여 준다 — 읽기 표식만, 스키마 쓰기 없음 (C02)."""
+    from app.ai_prompt import _serialize_node
+    from app.schemas import AiNodeAttributes, NodeOut
+
+    primary = NodeOut(id="e1", title="완료", node_type="end", is_primary_end=True)
+    other = NodeOut(id="e2", title="반려", node_type="end")
+
+    assert "대표끝" in _serialize_node(primary)
+    assert "대표끝" not in _serialize_node(other)
+    assert "is_primary_end" not in AiNodeAttributes.model_fields
+
+
+def test_serialize_graph_shows_subprocess_per_end_parallel_and_names_broken_end() -> None:
+    """SP 끝별 병렬·끝별 연결을 이름으로 노출하고, 위반 힌트가 걸린 끝을 짚는다."""
+    from app.ai_prompt import _serialize_graph, _structure_hints
+    from app.schemas import EdgeIn, GraphOut, NodeOut
+
+    graph = GraphOut(
+        nodes=[
+            NodeOut(id="s", title="시작", node_type="start"),
+            NodeOut(
+                id="sp",
+                title="검사",
+                node_type="subprocess",
+                linked_map_id=7,
+                parallel_outputs=["Hold"],
+            ),
+            NodeOut(id="a", title="A", node_type="process"),
+            NodeOut(id="b", title="B", node_type="process"),
+            NodeOut(id="c", title="C", node_type="process"),
+            NodeOut(id="e", title="끝", node_type="end", is_primary_end=True),
+        ],
+        edges=[
+            EdgeIn(id="1", source_node_id="s", target_node_id="sp"),
+            # 대표 끝에 연결 2개 = 위반, 병렬 끝 Hold에 연결 1개 = 위반
+            EdgeIn(id="2", source_node_id="sp", target_node_id="a", source_handle="__primary__"),
+            EdgeIn(id="3", source_node_id="sp", target_node_id="b", source_handle="s-right"),
+            EdgeIn(id="4", source_node_id="sp", target_node_id="c", source_handle="Hold"),
+            EdgeIn(id="5", source_node_id="a", target_node_id="e"),
+            EdgeIn(id="6", source_node_id="b", target_node_id="e"),
+            EdgeIn(id="7", source_node_id="c", target_node_id="e"),
+        ],
+        groups=[],
+    )
+
+    text = _serialize_graph(graph)
+    hints = "\n".join(_structure_hints(graph))
+
+    assert "병렬출구=Hold" in text
+    assert "- sp -> c (끝: Hold)" in text
+    assert "- sp -> a\n" in text  # 대표 끝 엣지는 끝 표기 없음
+    assert '끝 "대표 끝"에 연결 2개' in hints
+    assert '병렬 끝 "Hold"에 연결 1개' in hints

@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AiPrompt
 
-# 편집 가능한 프롬프트 key — API·UI 노출 순서 그대로
+# 편집 가능한 프롬프트 key — API·UI 노출 순서 그대로. 표시명·설명은 FE가 소유하므로 key를 추가하면
+# frontend/src/lib/ai-prompt-keys.ts(AI_PROMPT_KEYS·라벨)와 i18n en/ko를 같이 옮긴다(ai-prompt-keys.test.ts가 대조)
 PROMPT_KEYS: tuple[str, ...] = (
     "ai_chat_instructions",
     "interviewer_contract",

@@ -2310,9 +2310,10 @@ class AiNodeAttributes(BaseModel):
     부분 갱신 시맨틱(증분 편집): None(생략)=기존 값 유지, ""=지움, 값=설정.
     graph 생성/ops add에서는 None을 빈값으로 취급한다(프론트 aiNodeToGraphNode).
 
-    담당자(assignee)는 AI 표면에서 제외 — 실명은 에디터 피커 전용이라 모델이 지어내지 못하게
-    스키마에서 아예 받지 않는다(에코해도 pydantic이 버림). 사람 필드는 역할(assignee_role)만
-    (사용자 결정 2026-09-12).
+    담당자(assignee)는 AI 표면에서 쓰기·읽기 모두 제외 — 실명은 에디터 피커 전용이라 모델이 지어내지
+    못하게 스키마에서 아예 받지 않고(에코해도 pydantic이 버림), 프롬프트 직렬화(ai_prompt._serialize_node)·
+    비교 AI 페이로드에도 싣지 않는다. 사람 필드는 역할(assignee_role)만
+    (사용자 결정 2026-09-12, 읽기 확장 2026-10-02).
     """
 
     assignee_role: str | None = Field(default=None, max_length=100)
@@ -2365,8 +2366,10 @@ class AiNode(BaseModel):
     attributes: AiNodeAttributes | None = None
     # 소속 그룹 — AiProposal.groups[].key 참조 (단일 태그). null=무소속
     group_key: str | None = Field(default=None, max_length=50)
-    # 서브프로세스 링크 대상 — 진실원은 서버(orchestrator._sanitize_subprocess가 이전 작업본
-    # 기준으로 강제). AI 에코가 값을 실어 보낼 수 있게만 열어둔다 (design 2026-07-23 §7 P2)
+    # 서브프로세스 링크 대상 — AI 에코가 값을 실어 보낼 수 있게 열어둔다 (design 2026-07-23 §7 P2).
+    # 서버 보정은 인터뷰 draw 턴뿐이다(orchestrator._sanitize_subprocess가 이전 작업본에 있던 링크만 남김).
+    # 에디터 챗(routers/ai.py)은 검증 없이 통과시키고, FE 변환(aiNodeToGraphNode·buildGraphFromAiProposal)이
+    # 실린 linked_map_id로 Call Activity를 만든다 — 매칭된 기존 노드는 기존 링크가 우선. 의도적 현행 유지(사용자 결정 2026-10-02)
     linked_map_id: int | None = None
 
 
