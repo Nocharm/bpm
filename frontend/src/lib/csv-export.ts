@@ -119,6 +119,8 @@ export function buildCsvFromGraph(graph: Graph, options: CsvExportOptions = {}):
     const seenTargets = new Set<string>();
     const isParallelRow = CSV_CELL.parallel(node, "") === "Y";
     const isSubprocess = node.node_type === "subprocess";
+    // 보조 끝 경고의 자리 — 재임포트가 대표 End에 잇는지는 남는 Next가 있는지에 달려 루프 뒤에 문구를 확정한다
+    const secondaryEndWarnings: { index: number; message: string }[] = [];
     for (const e of outs) {
       if (primaryEnd && e.target_node_id === primaryEnd.id) {
         if (e.label !== "" || outs.length > 1) {
@@ -128,12 +130,13 @@ export function buildCsvFromGraph(graph: Graph, options: CsvExportOptions = {}):
       }
       const target = byId.get(e.target_node_id);
       if (target && target.node_type === "end") {
-        // 보조 끝으로 들어가는 연결 — CSV엔 End 행이 없어 빠지고, 재임포트는 이 행을 대표 End에 잇는다
-        warnings.push(
-          `Edge "${node.title}" → secondary end "${target.title}" ${e.label ? `(label "${e.label}") ` : ""}` +
-            `is not expressible in CSV - dropped (re-import connects this row to the primary End)` +
-            (isParallelRow ? " - Parallel row will re-import with fewer than 2 Next targets" : ""),
-        );
+        // 보조 끝으로 들어가는 연결 — CSV엔 End 행이 없어 빠진다. 재임포트는 Next가 빈 행만 대표 End에 잇는다
+        secondaryEndWarnings.push({
+          index: warnings.length,
+          message: `Edge "${node.title}" → secondary end "${target.title}" ${e.label ? `(label "${e.label}") ` : ""}` +
+            "is not expressible in CSV - dropped",
+        });
+        warnings.push("");
         continue;
       }
       if (!target || !rowIds.has(target.id)) continue;
@@ -158,6 +161,12 @@ export function buildCsvFromGraph(graph: Graph, options: CsvExportOptions = {}):
         warnings.push(`Edge label "${e.label}" (from "${node.title}") contains ";" - re-import will misparse this reference`);
       }
       parts.push(e.label === "" ? target.title : `${target.title}:${e.label}`);
+    }
+    for (const { index, message } of secondaryEndWarnings) {
+      warnings[index] =
+        message +
+        (parts.length === 0 ? " (re-import connects this row to the primary End)" : "") +
+        (isParallelRow ? " - Parallel row will re-import with fewer than 2 Next targets" : "");
     }
     if (node.node_type === "decision" && parts.length < 2) {
       warnings.push(`Decision "${node.title}" has fewer than 2 branches - re-import will infer process`);

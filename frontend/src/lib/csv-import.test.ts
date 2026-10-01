@@ -1452,6 +1452,65 @@ describe("머지 엣지 이월 - 변·핸들 (D3)", () => {
     expect(o.merge.lostEdges).toEqual([]);
     expect(violationsOf(o.graph!)).toEqual([]);
   });
+
+  // 링크 없는 플레이스홀더 SP는 머지에서 process가 된다 — SP 전용 핸들이 남으면 React Flow가 엣지를 조용히 버린다
+  const placeholderBase = (): Graph => ({
+    nodes: [
+      node("s1", "Start", "start", 0),
+      node("p1", "P", "process", 1),
+      node("sp", "SP", "subprocess", 2, { linked_map_id: null }),
+      node("a1", "A", "process", 3),
+      node("e1", "End", "end", 4, { is_primary_end: true }),
+    ],
+    edges: [
+      edge("x1", "s1", "p1"),
+      edge("x2", "p1", "sp", { source_side: "bottom", target_side: "top", source_handle: "s-bottom", target_handle: "in:top" }),
+      edge("x3", "sp", "a1", { source_handle: "__primary__", line_style: "straight" }),
+      edge("x4", "a1", "e1"),
+    ],
+    groups: [],
+  });
+
+  it("CSV 머지 - SP가 일반 노드가 되면 SP 전용 핸들은 버리고 변 id·변·선 모양은 이월한다", () => {
+    // Act
+    const o = buildGraphFromCsv(["Name,Next", "P,SP", "SP,A", "A,"].join("\n"), { base: placeholderBase() });
+
+    // Assert
+    expect(o.errors).toEqual([]);
+    const pair = (s: string, t: string) => o.graph!.edges.find((e) => e.source_node_id === s && e.target_node_id === t);
+    expect(o.graph!.nodes.find((n) => n.id === "sp")?.node_type).toBe("process");
+    expect(pair("p1", "sp")).toMatchObject({
+      source_side: "bottom", target_side: "top", source_handle: "s-bottom", target_handle: null,
+    });
+    expect(pair("sp", "a1")).toMatchObject({ source_handle: null, line_style: "straight" });
+    expect(o.merge.lostEdges).toEqual([]);
+  });
+
+  it("AI 머지 - SP가 일반 노드가 되면 SP 전용 핸들은 버린다", () => {
+    // Arrange
+    const ai = (key: string, title: string, node_type = "process"): AiNode => ({
+      key, title, node_type, description: "", attributes: null, group_key: null,
+    });
+
+    // Act
+    const o = buildGraphFromAiProposal(
+      {
+        nodes: [ai("s", "Start", "start"), ai("p", "P"), ai("sp", "SP"), ai("a", "A"), ai("e", "End", "end")],
+        edges: [
+          { source: "s", target: "p", label: "" }, { source: "p", target: "sp", label: "" },
+          { source: "sp", target: "a", label: "" }, { source: "a", target: "e", label: "" },
+        ],
+        groups: [],
+      },
+      { base: placeholderBase() },
+    );
+
+    // Assert
+    const pair = (s: string, t: string) => o.graph!.edges.find((e) => e.source_node_id === s && e.target_node_id === t);
+    expect(o.graph!.nodes.find((n) => n.id === "sp")?.node_type).toBe("process");
+    expect(pair("p1", "sp")).toMatchObject({ source_handle: "s-bottom", target_handle: null, target_side: "top" });
+    expect(pair("sp", "a1")?.source_handle).toBeNull();
+  });
 });
 
 describe("buildGraphFromAiProposal - 다중 끝 매칭 (C02)", () => {
@@ -1516,6 +1575,32 @@ describe("buildGraphFromAiProposal - 다중 끝 매칭 (C02)", () => {
     expect(o.graph!.nodes.find((n) => n.id === "n1")?.parallel_outputs).toEqual(["__primary__"]);
     expect(o.graph!.edges.map((e) => e.target_node_id).sort()).toEqual(["done", "rej"]);
   });
+
+  it("일반 노드와 끝이 제목을 같이 써도(끝이 앞서도) 각자 기존 id에 매칭된다", () => {
+    // Arrange — 끝 "완료"가 sort_order로 일반 노드 "완료"보다 앞선다
+    const g: Graph = {
+      nodes: [
+        { ...NODE_BASE, id: "st", title: "시작", node_type: "start", sort_order: 0 },
+        { ...NODE_BASE, id: "done", title: "완료", node_type: "end", sort_order: 1, is_primary_end: true },
+        { ...NODE_BASE, id: "p", title: "완료", node_type: "process", sort_order: 2 },
+      ],
+      edges: [],
+      groups: [],
+    };
+
+    // Act
+    const o = buildGraphFromAiProposal(
+      { nodes: [ai("s", "Start", "start"), ai("n", "완료"), ai("d", "완료", "end")], edges: [], groups: [] },
+      { base: g },
+    );
+
+    // Assert
+    expect(o.graph!.nodes.map((n) => [n.id, n.node_type]).sort()).toEqual([
+      ["done", "end"], ["p", "process"], ["st", "start"],
+    ]);
+    expect(o.merge.addedNodeIds).toEqual([]);
+    expect(o.merge.removedNodes).toEqual([]);
+  });
 });
 
 describe("병렬 플래그 - 분기·끝 노드 금지", () => {
@@ -1538,6 +1623,25 @@ describe("병렬 플래그 - 분기·끝 노드 금지", () => {
       '"판단": parallel exits apply only to process nodes - ignored on a decision node',
       '"끝": parallel exits apply only to process nodes - ignored on a end node',
     ]);
+  });
+
+  it("시작 노드의 parallel=true는 경고 없이 무시한다(시작은 기본 병렬)", () => {
+    // Arrange
+    const attrs = { assignee_role: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, parallel: true };
+
+    // Act
+    const o = buildGraphFromAiProposal(
+      {
+        nodes: [{ key: "s", title: "Start", node_type: "start", description: "", attributes: attrs, group_key: null }],
+        edges: [],
+        groups: [],
+      },
+      { base: { nodes: [], edges: [], groups: [] } },
+    );
+
+    // Assert
+    expect(o.graph!.nodes.find((n) => n.node_type === "start")?.parallel_outputs ?? []).toEqual([]);
+    expect(o.warnings).toEqual([]);
   });
 });
 

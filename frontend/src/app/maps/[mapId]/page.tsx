@@ -891,10 +891,12 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
-    // 분기·끝은 출력 규칙 밖이라 병렬 플래그를 무시(에디터 우클릭 메뉴와 같은 조건) — 저장되면 CSV 왕복에서
-    // Parallel=Y가 분기 노드를 병렬 일반 노드로 뒤집는다
+    // 분기·끝·시작은 병렬 플래그를 무시(에디터 우클릭 메뉴와 같은 조건) — 분기에 저장되면 CSV 왕복에서
+    // Parallel=Y가 분기 노드를 병렬 일반 노드로 뒤집고, 시작은 기본 병렬이라 플래그가 무의미한데 UI로 못 끈다
     parallel_outputs:
-      nodeType === "decision" || nodeType === "end" ? [] : applyParallelFlag([], attr?.parallel) ?? [],
+      nodeType === "decision" || nodeType === "end" || nodeType === "start"
+        ? []
+        : applyParallelFlag([], attr?.parallel) ?? [],
   };
 }
 
@@ -2582,8 +2584,12 @@ function MapEditor({ mapId }: { mapId: number }) {
               ...node.data,
               ...(title !== undefined ? { label: title } : {}),
               // 병렬 출구 플래그 — 생략이면 유지, true/false면 기본 출구 켬/끔 (출력 규칙 2026-10-01).
-              // 분기·끝은 무시(에디터 우클릭 메뉴와 같은 조건) — 저장되면 CSV 왕복이 분기를 병렬 일반 노드로 뒤집는다
-              ...(attr?.parallel != null && node.data.nodeType !== "decision" && node.data.nodeType !== "end"
+              // 분기·끝·시작은 무시(에디터 우클릭 메뉴와 같은 조건) — 분기에 저장되면 CSV 왕복이 분기를 병렬 일반
+              // 노드로 뒤집고, 시작은 기본 병렬이라 플래그를 UI로 못 끈다
+              ...(attr?.parallel != null &&
+              node.data.nodeType !== "decision" &&
+              node.data.nodeType !== "end" &&
+              node.data.nodeType !== "start"
                 ? { parallelOutputs: applyParallelFlag(node.data.parallelOutputs, attr.parallel) }
                 : {}),
               ...(desc !== undefined ? { description: desc } : {}),
