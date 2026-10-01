@@ -15,6 +15,9 @@ FILES = sorted((SAMPLES / "consultant-interview-sample").glob("*.json")) + sorte
 INTENDED_WARNINGS: dict[str, list[str]] = {
     "qc-raw-material-l5.json": ["external L5 '22-01-01-01-01' not in framework.categories"],
 }
+# 모든 샘플 공통 의도 경고 — 샘플은 행마다 loop를 싣고(규격), 되돌아가기+다음 단계가 한 활동에서 나가면
+# 어댑터가 뒤에 ◇를 자동 생성한다(출력 규칙 2026-10-01). 변환 안내라 규격 이탈이 아니다
+COMMON_INTENDED_WARNINGS = ["auto-generated branch node"]
 
 
 def _load(path: Path) -> dict:
@@ -26,7 +29,7 @@ def test_sample_converts_without_errors_or_unintended_warnings(path: Path) -> No
     res = convert_interview(_load(path))
     errors = [(i.path, i.message) for i in res.issues if i.severity == "error"]
     assert not errors, errors
-    allowed = INTENDED_WARNINGS.get(path.name, [])
+    allowed = [*INTENDED_WARNINGS.get(path.name, []), *COMMON_INTENDED_WARNINGS]
     unexpected = [(i.path, i.message) for i in res.issues
                   if i.severity == "warning" and not any(a in i.message for a in allowed)]
     assert not unexpected, unexpected

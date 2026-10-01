@@ -434,3 +434,26 @@ def test_map_to_row_emits_parallel_branches_from_a_parallel_exit() -> None:
         {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
         {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel", "condition": "동시"},
     ]
+
+
+def test_map_to_row_folds_auto_generated_fanout_branch_node() -> None:
+    """어댑터가 세운 팬아웃 ◇('{활동} 결과')는 행으로 되돌리지 않고 A→B·A→C로 접는다 (2026-10-01)."""
+    nodes = [
+        Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
+        Node(id="a", version_id=1, title="A", node_type="process", sort_order=1),
+        Node(id="af", version_id=1, title="A 결과", node_type="decision", sort_order=2),
+        Node(id="b", version_id=1, title="B", node_type="process", sort_order=3),
+        Node(id="c", version_id=1, title="C", node_type="process", sort_order=4),
+    ]
+    edges = [
+        Edge(id="1", version_id=1, source_node_id="s", target_node_id="a"),
+        Edge(id="2", version_id=1, source_node_id="a", target_node_id="af"),
+        Edge(id="3", version_id=1, source_node_id="af", target_node_id="b"),
+        Edge(id="4", version_id=1, source_node_id="af", target_node_id="c", label="예외"),
+    ]
+    row = map_to_row("맵", "품질팀", nodes, edges)
+    assert [a["label"] for a in row["actions"]] == ["A", "B", "C"]
+    assert row["relations"]["edges"] == [
+        {"src": 1, "dst": 2, "kind": "seq"},
+        {"src": 1, "dst": 3, "kind": "seq", "label": "예외"},
+    ]

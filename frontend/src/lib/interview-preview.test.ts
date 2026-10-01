@@ -86,6 +86,41 @@ describe("buildPreviewGraph", () => {
     expect(graph?.nodes.find((n) => n.id === "a01")?.node_type).toBe("process");
   });
 
+  it("splits a loop-plus-next fan-out at an auto-generated loop branch node", () => {
+    const graph = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: {
+        edges: [
+          { src: 1, dst: 2, kind: "seq" },
+          { src: 2, dst: 3, kind: "seq" },
+          { src: 2, dst: 1, kind: "loop", condition: "보완" },
+        ],
+      },
+    });
+
+    expect(pairsOf(graph!)).toEqual(expect.arrayContaining(["a02>a02f", "a02f>a03", "a02f>a01"]));
+    expect(graph?.nodes.find((n) => n.id === "a02f")).toMatchObject({ node_type: "decision", title: PREVIEW_LOOP_BRANCH_NAME });
+  });
+
+  it("names a plain fan-out branch node after its activity and leaves an all-parallel fan-out alone", () => {
+    const plain = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: { edges: [{ src: 1, dst: 2, kind: "seq" }, { src: 1, dst: 3, kind: "seq" }] },
+    });
+    expect(plain?.nodes.find((n) => n.id === "a01f")?.title).toBe("A 결과");
+
+    const parallel = buildPreviewGraph({
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: {
+        edges: [
+          { src: 1, dst: 2, kind: "branch", gateway: "parallel" },
+          { src: 1, dst: 3, kind: "branch", gateway: "parallel" },
+        ],
+      },
+    });
+    expect(parallel?.nodes.some((n) => n.id === "a01f")).toBe(false);
+  });
+
   it("turns a self edge into a synthesized loop branch right after its anchor", () => {
     const graph = buildPreviewGraph({
       actions: [action(1, "A"), action(2, "B"), action(3, "C")],

@@ -10,6 +10,7 @@
 - P4: `nodes.parallel_outputs`(JSON 출구 키 목록, `_ADDED_COLUMNS` 등록) — 스키마 정규화(공백·중복 제거)·upsert·클론·확정 서명·FE 왕복·CSV 기본값. 비교 diff는 `getFieldValue`로 배열을 내용 비교(`parallel` 필드, "__primary__"는 "기본 출구"로 표시).
 - P6: 확정 게이트 6 `plain_fanout`을 출구별 판정(`find_output_rule_violations`, FE `getOutputViolations` 동치)으로 — 끝마다 1개씩 정상 연결된 다중 끝 SP가 막히던 것. 임포트는 병행 갈래 출발에 `parallel_outputs`를 켠다: L5 연계(`gateway=parallel` 엣지), L6(어댑터 `CanonicalNode.parallel` — 종전엔 gateway가 canonical에서 증발해 흔적이 없었다 — + 연계 부착원점), 출력 ≥2일 때만. 역변환 `map_to_row`는 병렬 출구를 branch/parallel로 되돌림. 재임포트 서명에 포함(첫 재임포트는 새 버전). 배지 분자는 병렬 출구를 1로 세는 출구 사용량(초과 호버 4/3).
 - P5: 병렬 출구 토글(노드 우클릭 체크, SP 끝 ≥2는 끝별 하위 메뉴)·병렬 출구엔 갈래 추가 시 삽입/교체 모달 생략·호버 배지('동시 N갈래'). 시각 강조는 시안 4라운드 끝에 **흐름 펄스**(`lib/edge-pulse`·`EdgePulseDot`, SMIL): 병렬=형제 갈래에 반투명 점이 같은 박자로 끝까지, 분기=출구에서 천천히 나타나 머문 뒤 한 갈래로 56px만 나아가며 사라짐(회차마다 다음 갈래). 갈래점 하나에 묶는 시안(막대·⊕)은 출구가 여러 변일 수 있어 폐기. RF가 엣지마다 svg를 따로 그려 SMIL 시계가 엣지별 — 마운트 때 `setCurrentTime(performance.now())`로 맞춘다. 모션 축소 시 숨김.
+- 0.5 임포트 자동 분기 검토: L5(`expand_linkage_branches`)·자기 반복·택일 승격은 이미 출구당 1개를 지키고 L6만 구멍(되돌아가기+다음 단계·순차 여러 개가 일반 활동에서 출력 2개). L6 어댑터에 팬아웃 post-pass — 전부 병행이 아니면 뒤에 ◇(되돌아가기 섞이면 반복 이름, 아니면 "{활동} 결과", L5와 같은 이름 규칙), FE 미리보기 미러, `map_to_row`는 유일 선행 "{활동} 결과" ◇도 접는다. 저장소 샘플은 행마다 loop라 이 경고가 공통 의도 경고.
 
 ## 2026-10-01 — 홈 한 줄 행 말줄임 정리 (dev)
 

@@ -62,6 +62,8 @@ _EXTERNAL_L5_KEYS = {"nodeCode", "label"}
 
 # self 루프에서 합성되는 분기 노드 고정 이름 — dry-run 노티와 L5 창작부(import_consultant)가 공유
 LOOP_BRANCH_NODE_NAME = "반복 여부(자동 생성됨)"
+# 팬아웃 ◇ 이름 접미 — "{활동명} 결과". L5 연계 캔버스 분기 노드와 같은 이름 규칙, 역변환이 이 이름으로 접는다
+FANOUT_BRANCH_SUFFIX = "결과"
 
 # 예외 variant 노드 stroke — 에디터 COLOR_PRESETS의 rose와 수동 동기
 # (frontend/src/app/maps/[mapId]/page.tsx COLOR_PRESETS — 색은 chrome이 아니라 노드 데이터)
@@ -387,6 +389,8 @@ def _build_flow_edges(
     # 승격 전 스냅샷 — self edge로 진출이 ◇로 이설된 노드의 승격을 원상 복구할 때 기준
     declared_decisions = {node.code for node in by_seq.values() if node.type == "decision"}
     self_specs: list[tuple[CanonicalNode, str]] = []
+    # 병행 갈래(branch+parallel) 쌍 — 팬아웃 post-pass가 "전부 병렬"인 출구는 ◇ 없이 둔다
+    parallel_pairs: set[tuple[str, str]] = set()
     edges: list[CanonicalEdge] = []
     notes: list[InterviewNote] = []
     seen: set[tuple[str, str]] = set()
@@ -436,6 +440,7 @@ def _build_flow_edges(
             # 병행 갈래는 마름모 대신 출발 활동의 출구를 병렬로 켠다 — 출구당 1개 규칙의 예외 (2026-10-01)
             if kind == "branch" and gateway == "parallel":
                 src_node.parallel = True
+                parallel_pairs.add(pair)
             if kind == "branch" and gateway != "parallel" and src_node.type != "decision":
                 src_node.type = "decision"
                 issues.append(AdapterIssue(
@@ -484,6 +489,37 @@ def _build_flow_edges(
         # 진출이 ◇로 이설돼 A에는 A→◇ 하나만 남는다 — 병렬 표시를 남기면 "병렬인데 1개" 위반이 된다
         src_node.parallel = False
         loop_nodes.append((src_node.code, branch))
+    # 팬아웃 post-pass — 일반 활동에서 연결이 2개 이상 나가는데 전부 병행은 아니면(되돌아가기+다음 단계,
+    # 순차 여러 개) 뒤에 ◇를 세워 갈래를 ◇에서 나눈다. 출구당 1개 규칙(출력 규칙 2026-10-01)과
+    # L5 expand_linkage_branches의 같은 결정. 되돌아가기가 섞이면 반복 이름, 아니면 "{활동} 결과".
+    by_code = {node.code: node for node in by_seq.values()}
+    out_by_src: dict[str, list[CanonicalEdge]] = {}
+    for edge in edges:
+        out_by_src.setdefault(edge.source, []).append(edge)
+    for src_code, group in out_by_src.items():
+        src_node = by_code.get(src_code)
+        if src_node is None or src_node.type == "decision" or len(group) < 2:
+            continue
+        if all((edge.source, edge.target) in parallel_pairs for edge in group):
+            continue
+        has_loop = any(edge.kind == "loop" for edge in group)
+        branch = CanonicalNode(
+            code=f"{src_code}f",
+            name=LOOP_BRANCH_NODE_NAME if has_loop else f"{src_node.name} {FANOUT_BRANCH_SUFFIX}"[:200],
+            type="decision",
+            seq=src_node.seq,
+        )
+        for edge in group:
+            edge.source = branch.code
+        edges.append(CanonicalEdge.model_validate(
+            {"from": src_code, "to": branch.code, "label": "", "kind": "seq"}))
+        # 병행이 섞인 출구는 ◇에서 갈라지므로 활동 자신은 출구 하나 — 병렬 표시를 지운다
+        src_node.parallel = False
+        loop_nodes.append((src_code, branch))
+        issues.append(AdapterIssue(
+            "warning", f"{path}.relations.edges",
+            f"{src_code} has {len(group)} outgoing edges - auto-generated branch node {branch.code} "
+            f"(한 활동에서 나가는 연결이 {len(group)}개 - 분기 노드 '{branch.name}'를 자동 생성해 갈래를 나눔)"))
     if not edges and by_seq:
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges", "no usable edges - seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))
