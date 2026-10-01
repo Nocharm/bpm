@@ -86,7 +86,7 @@
 | `kind: loop` | 엣지. **Start 배선 판정에서 제외**(End 판정엔 포함) | 엣지. **랭크 계산에서 제외** — SP 노드끼리 사이클이 생기면 배치가 전달 순서를 따라가 버린다 |
 | `kind: bypass` | 일반 엣지 | 엣지 |
 | `gateway: exclusive` | decision 승격으로 표현 | 분기 노드로 표현 |
-| `gateway: parallel` | 다중 out-edge로 표현(승격 안 함) | 분기 노드 없이 다중 out-edge (전부 parallel일 때) |
+| `gateway: parallel` | 다중 out-edge + 출발 노드 `parallel_outputs` 켬(승격 안 함, 출력 2개 이상일 때) | 분기 노드 없이 다중 out-edge + SP 출구 `parallel_outputs` 켬 (전부 parallel일 때) |
 | `quote` | `map_notes` kind=`flow`(title=`src → dst`, text=quote+`kind/gateway · condition`) | 동일, L5 스코프 |
 
 ---
