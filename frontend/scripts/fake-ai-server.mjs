@@ -1,5 +1,11 @@
 // 캠페인 스모크용 가짜 AI — OpenAI 호환 /v1/chat/completions. system 프롬프트의 계약 마커로 어떤 단계인지 알아
 // backend 테스트(tests/test_framework_interview_runner.py Q_JSON·ROW_JSON)와 같은 모양의 JSON을 돌려준다.
+// 미러하는 계약(route() 마커): 캠페인 6종(l5_plan·l6_questionnaire·l6_row_drafter·l5_relations·
+//   l5_canvas_feedback·l6_row_feedback) + 비교 AI 보고서(compare_summary, 매뉴얼 캡처용).
+// 미러하지 않는 계약은 {}로 폴백한다: 에디터 AI 챗(AiProposal, kind 필수라 백엔드가 재시도 후 502)·
+//   레거시 인터뷰(interviewer·drafter·extract)·제출 코멘트 초안(submit_note). 에디터 챗 스모크는
+//   page.route("**/ai/chat") 주입(pw-verify-ai-graph-merge·pw-smoke-ai-chat-history)을 쓰고,
+//   계약 드리프트 가드는 pytest(test_ai.py·test_interview_api.py·test_ai_submit_note.py)가 맡는다.
 // 실행(frontend/ 에서): node scripts/fake-ai-server.mjs
 //   → backend는 AI_ENABLED=true AI_BASE_URL=http://localhost:9999/v1 AI_MODEL=fake AI_API_TOKEN=fake AI_ENDPOINTS=""
 //     (ai_client는 토큰이 비어도 Bearer 헤더를 보내므로 빈 토큰이면 "Illegal header value"로 502가 난다)

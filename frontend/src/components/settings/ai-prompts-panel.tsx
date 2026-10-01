@@ -8,45 +8,13 @@ import { AlertTriangle, Eye, Pencil, RotateCcw } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { MarkdownView } from "@/components/markdown-view";
+import { getAiPromptLabel } from "@/lib/ai-prompt-keys";
 import { getAiPrompts, putAiPrompt, resetAiPrompt, type AiPromptItem } from "@/lib/api";
 import { formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
-import type { MessageKey } from "@/lib/i18n-messages";
 
 const OUTLINE_BTN =
   "flex items-center gap-1.5 rounded-sm border border-hairline px-2.5 py-1.5 text-caption text-ink-secondary hover:bg-surface-alt";
-
-// key → i18n 라벨 — 백엔드는 key만 주고 표시명·설명은 프론트가 소유
-const PROMPT_LABELS: Record<string, { name: MessageKey; hint: MessageKey }> = {
-  ai_chat_instructions: {
-    name: "aiPrompts.name.ai_chat_instructions",
-    hint: "aiPrompts.hint.ai_chat_instructions",
-  },
-  interviewer_contract: {
-    name: "aiPrompts.name.interviewer_contract",
-    hint: "aiPrompts.hint.interviewer_contract",
-  },
-  drafter_contract: {
-    name: "aiPrompts.name.drafter_contract",
-    hint: "aiPrompts.hint.drafter_contract",
-  },
-  extract_contract: {
-    name: "aiPrompts.name.extract_contract",
-    hint: "aiPrompts.hint.extract_contract",
-  },
-  anti_repeat_nudge: {
-    name: "aiPrompts.name.anti_repeat_nudge",
-    hint: "aiPrompts.hint.anti_repeat_nudge",
-  },
-  compare_summary_contract: {
-    name: "aiPrompts.name.compare_summary_contract",
-    hint: "aiPrompts.hint.compare_summary_contract",
-  },
-  submit_note_contract: {
-    name: "aiPrompts.name.submit_note_contract",
-    hint: "aiPrompts.hint.submit_note_contract",
-  },
-};
 
 interface AiPromptsPanelProps {
   onToast: (message: string) => void;
@@ -160,10 +128,10 @@ export function AiPromptsPanel({ onToast }: AiPromptsPanelProps) {
           >
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="text-caption-strong text-ink">
-                {t(PROMPT_LABELS[item.key]?.name ?? "aiPrompts.title")}
+                {t(getAiPromptLabel(item.key)?.name ?? "aiPrompts.title")}
               </span>
               <span className="truncate text-fine text-ink-tertiary">
-                {t(PROMPT_LABELS[item.key]?.hint ?? "aiPrompts.desc")}
+                {t(getAiPromptLabel(item.key)?.hint ?? "aiPrompts.desc")}
               </span>
             </span>
             {item.is_customized ? (
