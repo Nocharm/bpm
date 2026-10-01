@@ -128,7 +128,7 @@ export interface GraphNode {
   node_type: string;
   color: string;
   assignee: string;
-  assignee_role?: string; // 단일값 역할 — 담당자 옆 표시, CSV/AI 표면 제외(패스스루) (design 2026-09-11)
+  assignee_role?: string; // 단일값 역할 — 담당자 옆 표시. CSV Role 열·AI attributes.assignee_role로 왕복(2026-09-12), 빈값은 mergeNode pick이 기존 유지
   department: string;
   system: string;
   duration: string;
@@ -165,6 +165,7 @@ export interface GraphNode {
   sort_order: number;
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   group_ids: string[];
+  // 서버 미전송(a60e18ee 평면화 이후) — 항상 undefined라 hasChildren은 늘 false. 구 인라인 계층 잔재
   has_children?: boolean;
   // 하위프로세스 참조 (node_type==="subprocess")
   linked_map_id: number | null;
@@ -182,7 +183,8 @@ export interface GraphNode {
   parallel_outputs?: string[];
 }
 
-// 전체 그래프(모든 계층) 조회용 — 계층/계보 정보 포함 (검색·버전 diff)
+// 평면 그래프 조회용(검색·버전 diff) — 서버 응답(FlatNodeOut)은 계보(source_node_id)만 싣는다.
+// parent_node_id는 서버 응답에 없고 FE가 합성한다(page.tsx 루트=null, lib/subprocess-embed buildCompositeTree의 임베드 자식)
 export interface FlatNode extends GraphNode {
   parent_node_id: string | null;
   source_node_id: string | null;
@@ -202,7 +204,8 @@ export interface GraphEdge {
   target_handle: string | null;
   // ""=레거시 미지정(렌더는 꺾은선) — 백엔드 schemas.LineStyle과 동일 어휘
   line_style: EdgeLineStyle | "";
-  // 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외) — 표시 UI 없음, 데이터 보존만
+  // 임포트 출처의 게이트웨이 종별. "parallel"만 앱이 해석(§4 게이트 6 예외). 속성 없는 레거시 출구의 병렬 도출
+  // (lib/output-rules.ts getOutputGroups)·병렬 배지·펄스·연결 판정에 쓰인다. 편집 UI 없음, 복사·복제 사본도 물려받는다
   gateway?: string | null;
 }
 
