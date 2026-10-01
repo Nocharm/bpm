@@ -224,6 +224,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - 분기 답이 있으면 판단 activity에 kind=decision을 주고 relations.edges에 kind=branch, gateway=exclusive, condition을 적으세요.
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - 첫 활동(seq 1)은 흐름의 시작이다: 앞으로 가는 연결만 받고, 뒤 활동에서 앞 활동으로 되돌아가는 연결(반려·보완·재수행)은 반드시 kind=loop로 적는다.
+- 한 활동에서 나가는 연결은 하나다. 둘 이상으로 갈라지면, 하나만 가는 경우 그 활동을 kind=decision으로 두고 kind=branch + gateway=exclusive + condition으로, 모두 동시에 진행하면 kind=branch + gateway=parallel로 적는다. 되돌아가는 loop와 다음 단계가 같은 활동에서 나가면 그 활동은 decision이다.
 - fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
 - ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
 - 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.
@@ -239,6 +240,7 @@ L5_RELATIONS_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 규칙
 - entry.taskId: 가장 먼저 시작되는 L6의 taskId. triggerType은 manual·timer·message·condition.
 - edges: src/dst는 taskId. 순차는 kind=seq, 갈림은 kind=branch + gateway=exclusive + condition, 되돌아감은 kind=loop.
+- 한 L6에서 나가는 연결은 하나다. 갈래가 둘 이상이면 모두 kind=branch로 적고, 하나만 가면 gateway=exclusive + condition, 모두 동시에 진행하면 gateway=parallel.
 - 모든 L6가 최소 한 번은 등장해야 하고, 각 카드의 depends_on과 시작/종료 조건을 존중하세요.
 - "(외부 L6 ...)" 표시가 붙은 항목은 다른 L5의 업무다. entry가 될 수 없고, 앞뒤 이웃이나 분기 대상으로만 잇는다.
 - 다른 설명 없이 JSON 한 개만: {"entry":{"taskId":"","triggerType":"manual","label":""},"edges":[{"src":"","dst":"","kind":"seq"}]}"""
@@ -250,6 +252,7 @@ CANVAS_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니�
 - 새 분기 노드 id는 `__branch__` 접두, node_type은 decision, task_id는 null.
 - start/end는 유지(id는 __start__·__end__ 그대로).
 - 엣지 label은 갈림·되돌아감의 조건 한 줄(없으면 빈 문자열), gateway는 필요할 때만 exclusive·parallel.
+- 분기 노드가 아닌 노드에서 나가는 엣지는 하나다. 동시에 진행하는 갈래만 예외로 모두 gateway=parallel. 하나만 가는 갈래는 분기 노드를 두고 거기서 나눈다.
 - 이미 있는 엣지의 gateway는 피드백이 바꾸라고 하지 않으면 그대로 다시 적으세요.
 - 전면 재구성 요청("처음부터", "전부 다시" 등)이면 흐름을 새로 제안하되 기존 노드 id와 task_id는 그대로 쓰고 좌표는 0으로 둡니다.
 - 좌표는 0으로 두어도 됨(서버가 다시 배치).
