@@ -93,6 +93,8 @@
 - **입력 엣지**는 현행대로 전면 교환. 둘을 직접 잇는 엣지(A→B)는 끝점 교환(B→A)하고 짝 목록에서는 뺀다.
 - **확인을 눌러야 실행**(위치 교환 + 엣지 재배정 + 히스토리 1건). **취소 또는 Esc·바깥 클릭이면 스왑 자체가 취소**되어 엣지·위치 모두 변경 없음(A는 드롭 지점에 그대로, 현행 swapSelect 취소와 동일).
 - 행 hover 시 캔버스의 해당 엣지를 강조(`hoveredEdgeId`, 출력선 선택 모달과 동일). SP 행은 대표 끝 뱃지와 미러 라벨 알약(§3.5)을 그대로 쓴다.
+- **연결선 기하**: 가운데 열의 연결선은 양쪽 행의 **세로 중앙**(행 DOM rect 중심, `EdgeSidesPad`의 `orthConnector`처럼 레이아웃 후 측정)에 붙는 S자 곡선. 행 수가 달라도 각 짝은 자기 행 중앙끼리 잇는다.
+- **시선 유도 모션**: 짝이 만들어지면 연결선이 왼쪽에서 오른쪽으로 그려지고(`stroke-dashoffset` 350ms `ease-smooth`) 작은 점 하나가 선을 따라 한 번 흐른다(700ms). 양쪽 번호 배지는 `edge-tile-pop`으로 튀어 오른다. 해제 시 150ms 페이드. 모달이 열릴 때 "순서대로 짝짓기" 기본 짝은 60ms 간격으로 순차 등장. `prefers-reduced-motion`이면 전부 즉시 표시.
 - 분기 ↔ 일반에서 바뀌는 점: 종전에는 가져간 엣지가 노드를 옮겨 라벨도 함께 갔지만(일반 노드에 "Yes" 라벨 엣지), 새 규칙은 타깃만 바꿔 **Yes/No가 분기 노드에 남는다**. 의미상 더 맞고 결과 그림은 같다.
 
 구현: 새 컴포넌트 `swap-outputs-modal.tsx`(props `{ position; left: SwapSide; right: SwapSide; initialPairs; onConfirm(pairs: [leftEdgeId, rightEdgeId][]); onClose; onHoverEdge? }`, `SwapSide = { nodeLabel; nodeType; outputs: { edgeId; label; mirrored; isPrimary; targetLabel; branchKind? }[] }`). `swapNodeEdges(edges, aId, bId, typeOf, pairs)`로 시그니처 변경: 입력 전면 교환 + 직접 엣지 끝점 교환 + 짝 타깃 교환, 그 외 출력은 그대로. `swapSelect` state를 `swapOutputs` state(`{aId, bId, aStart, left, right, at}`)로 교체 — 드래그 시작 좌표 `aStart` 캡처는 기존 랜드마인 그대로(모달로 미루면 `dragStartPosRef`가 비워진다). 테스트: `canvas.test.ts`의 스왑 5케이스를 pairs 시그니처로 옮기고 SP·다출력끼리·전부 남김 케이스 3종 추가.
