@@ -59,6 +59,7 @@ from app.schemas import (
     InterviewTurnIn,
 )
 from app.settings import settings
+from app.subprocess import PRIMARY_END_HANDLE
 
 router = APIRouter(prefix="/api", tags=["interviews"], dependencies=[Depends(get_current_user)])
 
@@ -117,10 +118,12 @@ _EXISTING_GREETING_OPTIONS = {
 # 패스트트랙 진입 보기 — FE lib/interview.ts FAST_TRACK_START_LABELS와 글자 단위 동일 (design 2026-07-29)
 _FAST_TRACK_OPTION = {"ko": "문서로 바로 그리기", "en": "Draw from a document"}
 
-# 시드 시 작업본에 싣는 노드 속성 — AiNode.attributes 계약과 동일 키(담당자 실명은 AI 표면 제외, 역할만)
+# 시드 시 작업본에 싣는 노드 속성 — AiNodeAttributes 중 color·url·url_label을 뺀 컬럼 직역 키
+# (담당자 실명은 AI 표면 제외, 역할만). parallel은 컬럼이 아니라 parallel_outputs에서 파생해 아래에서 싣는다
 _SEED_ATTRS = (
     "assignee_role", "department", "system",
-    "duration", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+    "duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+    "input", "output", "start_condition", "end_condition",
 )
 
 # AI 계약(AI_NODE_TYPES) 밖 타입은 process로 강등. subprocess는 링크가 있으면 유지(P2 —
@@ -136,6 +139,9 @@ def _seed_working_graph(graph) -> dict | None:
         if n.node_type == "note":
             continue
         attributes = {k: v for k in _SEED_ATTRS if (v := getattr(n, k))}
+        # 주 출구가 병렬이면 AI 계약의 attributes.parallel로 — 빠지면 작업본·드래프터가 동시 갈래를 모른다
+        if PRIMARY_END_HANDLE in (n.parallel_outputs or []):
+            attributes["parallel"] = True
         node_type = n.node_type if n.node_type in _SEED_TYPES else "process"
         if node_type == "subprocess" and not n.linked_map_id:
             node_type = "process"

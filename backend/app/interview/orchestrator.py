@@ -274,6 +274,8 @@ def _graph_signature(graph: dict | None, include_content: bool = False) -> tuple
     include_content=True면 설명·attributes까지 포함 — 전멸 필터용. "설명만 병기해줘" 같은
     내용 변경 요청이 '같은 맵'으로 걸러지지 않게 한다. 에코 노드는 _expand_delta가 이전
     내용을 그대로 복원하므로 진짜 무변화 안은 여전히 걸러진다 (실사용 피드백 2026-07-30).
+    attributes.parallel(병렬 출구)도 attributes라 기본(구조) 모드에선 보지 않는다 — 병렬 여부만
+    다른 두 안은 같은 안으로 묶인다(알려진 한계, 엣지 구성이 다르면 구조로 갈린다).
     """
     if not graph:
         return ()
@@ -345,7 +347,8 @@ def _expand_delta(proposal: AiProposal, prev: dict | None) -> AiProposal:
             logger.warning("interview delta node dropped (unknown key, no title): %s", node.key)
             continue
         merged = {**(base or {}), **{k: v for k, v in data.items() if k != "key"}, "key": node.key}
-        # attributes는 딥머지 — 드래프터는 컴팩트 목록(키|타입|제목)만 봐서 params를 모른다.
+        # attributes는 딥머지 — 드래프터는 작업본을 컴팩트 목록(키|타입|제목, 병렬 출구만 꼬리표)으로만 봐서
+        # 노드에 쌓인 attributes를 모른다([확정 facts]의 params_table은 보지만 작업본 값과는 별개).
         # 통짜 교체면 수정 노드에서 apply-params로 쌓은 duration·cost가 증발 (hardening T6).
         base_attrs = (base or {}).get("attributes") or {}
         if base_attrs:
