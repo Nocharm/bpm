@@ -181,11 +181,15 @@ class _Exit(NamedTuple):
     gateway: str
 
 
-def collapse_canvas_to_relations(canvas: dict, known_task_ids: set[str]) -> dict:
+def collapse_canvas_to_relations(
+    canvas: dict, known_task_ids: set[str], previous_entry: dict | None = None,
+) -> dict:
     """캔버스 → relations. 분기 노드는 접어 branch 엣지로, end 엣지는 버린다.
 
     분기 노드가 연쇄면(◇→◇) 재귀로 전개하고 안쪽 라벨·gateway를 우선한다. 알 수 없는 task_id를
     가리키는 엣지는 버린다 — 조립기가 해석할 수 없는 끝점이다.
+    캔버스는 진입 트리거·라벨을 싣지 않는다 — previous_entry(직전 relations.entry)와 진입 L6가 같으면
+    그 triggerType·label을 잇는다. 안 그러면 확정 한 번에 어댑터의 entry 노트가 조용히 사라진다.
     """
     nodes = [n for n in (canvas.get("nodes") or []) if isinstance(n, dict)]
     by_id = {str(n.get("id")): n for n in nodes}
@@ -267,7 +271,11 @@ def collapse_canvas_to_relations(canvas: dict, known_task_ids: set[str]) -> dict
     if not entry_task:
         ordered_tasks = sorted(task_of, key=lambda nid: order[nid])
         entry_task = task_of[ordered_tasks[0]] if ordered_tasks else ""
-    return {"entry": {"taskId": entry_task, "triggerType": "manual", "label": ""}, "edges": edges}
+    entry: dict[str, Any] = {"taskId": entry_task, "triggerType": "manual", "label": ""}
+    if previous_entry and entry_task and previous_entry.get("taskId") == entry_task:
+        entry["triggerType"] = previous_entry.get("triggerType") or "manual"
+        entry["label"] = previous_entry.get("label") or ""
+    return {"entry": entry, "edges": edges}
 
 
 def validate_canvas(canvas: dict, known_task_ids: set[str]) -> list[str]:

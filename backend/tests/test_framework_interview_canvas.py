@@ -41,6 +41,21 @@ def test_collapse_round_trips_expand() -> None:
     assert sorted(back["edges"], key=key) == sorted(relations["edges"], key=key)
 
 
+def test_collapse_keeps_previous_entry_trigger_when_entry_task_is_unchanged() -> None:
+    # Arrange — 캔버스는 entry의 trigger·label을 싣지 않는다
+    entry = {"taskId": "t1", "triggerType": "message", "label": "고객 요청서 도착"}
+    relations = {"entry": entry, "edges": [{"src": "t1", "dst": "t2", "kind": "seq"}]}
+    canvas = expand_relations_to_canvas(relations, TASKS)
+
+    # Act
+    kept = collapse_canvas_to_relations(canvas, KNOWN, entry)
+    moved = collapse_canvas_to_relations(canvas, KNOWN, {**entry, "taskId": "t2"})
+
+    # Assert — 진입 L6가 같으면 승계, 바뀌면 기본값(manual·빈 라벨)
+    assert kept["entry"] == entry
+    assert moved["entry"] == {"taskId": "t1", "triggerType": "manual", "label": ""}
+
+
 def _edge_key(edge: dict) -> tuple[str, str]:
     return (edge["src"], edge["dst"])
 

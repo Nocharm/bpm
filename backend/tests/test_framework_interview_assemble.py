@@ -9,6 +9,8 @@ from app.db import SessionLocal
 from app.framework_interview.assemble import (
     allocate_task_ids, build_document, load_category_chain, load_existing_codes, validate_row,
 )
+from app.framework_interview.contracts import ROW_FIELD_KEYS, RowOut
+from app.framework_interview.normalize import normalize_row
 from app.models import ProcessMap
 from scripts.consultant_interview import convert_interview
 
@@ -85,3 +87,35 @@ def test_existing_codes_reserve_trashed_maps(client: TestClient) -> None:
     codes = asyncio.run(_seed_and_load())
     assert f"{l5_code}-03" in codes
     assert allocate_task_ids(l5_code, codes, 1) == [f"{l5_code}-04"]
+
+
+def test_every_contract_field_survives_the_ai_gate_and_lands_in_the_adapter(client: TestClient) -> None:
+    """프롬프트 fields 한 벌(ROW_FIELD_KEYS)이 normalize_row를 지나 어댑터에 모르는 키 없이 착지한다."""
+    # Arrange — 모델이 낼 법한 모양(분 정수·숫자·IO 배열)
+    l5_id, l5_code = _make_l5(client, "asmfull")
+
+    async def _chain() -> list[dict]:
+        async with SessionLocal() as db:
+            return await load_category_chain(db, l5_id)
+    chain = asyncio.run(_chain())
+    raw_fields = {
+        "start_condition": "요청서 도착", "input_data": ["요청서", "첨부"], "output_data": "접수증",
+        "done_criteria": "접수증 발급", "systems": "ERP", "frequency": "주 2회",
+        "total_time": "반나절", "total_time_min": 90, "touch_time": "45분", "touch_time_min": 45,
+        "annual_count": 100, "headcount": 2, "fte": 0.5, "gmp": "GMP 대상", "artifact_role": "접수 기록",
+    }
+    assert set(raw_fields) == set(ROW_FIELD_KEYS)
+
+    # Act
+    row = RowOut.model_validate(normalize_row({**ROW, "fields": raw_fields})).model_dump(exclude_none=True)
+    task_id = f"{l5_code}-01"
+    doc = build_document(chain, {"label": chain[-1]["name"], "nodeCode": l5_code},
+                         [{"taskId": task_id, **row}], None, label="t", session_id=1)
+    result = convert_interview(doc)
+
+    # Assert
+    assert set(row["fields"]) == set(ROW_FIELD_KEYS)
+    assert not [i.message for i in result.issues if "unknown key" in i.message or "not a number" in i.message]
+    params = result.maps[0].params
+    assert (params.duration, params.touch_time) == ("1.30", "0.45")
+    assert params.input == "요청서\n첨부"

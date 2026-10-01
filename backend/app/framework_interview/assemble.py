@@ -94,14 +94,59 @@ def external_tasks_of(plan: list[dict] | None) -> list[dict]:
     return out
 
 
-def finalize_row_output(out: RowOut, card: dict) -> dict:
+# AI 스키마(RowAction)에 없는 기록성 키 — 노드 설명 KV 줄(Screen:/Quote:)로만 착지한다.
+# AI에게 되돌려 받지 않고 이전 행에서 서버가 잇는다(창작 여지를 열지 않는다)
+_INHERITED_ACTION_KEYS = ("screen", "quote")
+
+
+def _labels_by_seq(actions: list[dict]) -> dict[object, str]:
+    return {a.get("seq"): str(a.get("label") or "").strip() for a in actions}
+
+
+def _inherit_from_previous(row: dict, previous: dict) -> None:
+    """정정·피드백 응답에 이전 행의 screen/quote와 병행 갈래 표시를 잇는다 (label 일치 기준).
+
+    seq는 활동이 끼어들면 밀리므로 쓰지 않는다. gateway는 같은 두 활동 사이의 branch 엣지가
+    모델 응답에서 표시만 빠졌을 때만 잇는다 — 빠지면 어댑터가 병렬 출구를 택일 분기(◇)로 바꾼다.
+    """
+    prev_actions = [a for a in previous.get("actions") or [] if isinstance(a, dict)]
+    prev_by_label: dict[str, dict] = {}
+    for action in prev_actions:
+        prev_by_label.setdefault(str(action.get("label") or "").strip(), action)
+    for action in row.get("actions") or []:
+        origin = prev_by_label.get(str(action.get("label") or "").strip())
+        if origin is None:
+            continue
+        for key in _INHERITED_ACTION_KEYS:
+            if not action.get(key) and origin.get(key):
+                action[key] = origin[key]
+
+    prev_labels = _labels_by_seq(prev_actions)
+    prev_gateway: dict[tuple[str, str], str] = {}
+    for edge in (previous.get("relations") or {}).get("edges") or []:
+        if edge.get("kind") == "branch" and edge.get("gateway"):
+            pair = (prev_labels.get(edge.get("src"), ""), prev_labels.get(edge.get("dst"), ""))
+            prev_gateway.setdefault(pair, edge["gateway"])
+    new_labels = _labels_by_seq(row.get("actions") or [])
+    for edge in (row.get("relations") or {}).get("edges") or []:
+        if edge.get("kind") != "branch" or edge.get("gateway"):
+            continue
+        gateway = prev_gateway.get((new_labels.get(edge.get("src"), ""), new_labels.get(edge.get("dst"), "")))
+        if gateway:
+            edge["gateway"] = gateway
+
+
+def finalize_row_output(out: RowOut, card: dict, previous_row: dict | None = None) -> dict:
     """RowOut → 저장용 rows[] 원소. 드로잉(runner)과 피드백 라우트가 같이 쓰는 마감 규칙.
 
     한쪽만 부서를 메우면 피드백 한 번에 부서가 조용히 지워진다(어댑터는 부서를 요구하지 않는다).
+    previous_row(정정의 현재 등록된 행·피드백 직전 행)가 있으면 AI가 되돌려 주지 못하는 키를 잇는다.
     """
     row = out.model_dump(by_alias=True, exclude_none=True)
     row.pop("owner", None)  # 담당자 실명은 AI가 짓지 않는다 — 역할(ownerRole)만 받는다
     row["department"] = row.get("department") or str(card.get("department") or "")
+    if previous_row:
+        _inherit_from_previous(row, previous_row)
     return row
 
 

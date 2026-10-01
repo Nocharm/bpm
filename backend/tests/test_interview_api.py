@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -309,14 +308,19 @@ def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, 
         "nodes": [
             {"id": "n-s", "title": "Start", "node_type": "start"},
             # 담당자 실명은 시드 제외(AI 표면 밖) — 역할만 작업본으로 (2026-09-12)
-            {"id": "n-1", "title": "요청서 작성", "node_type": "process", "assignee": "김담당", "assignee_role": "구매 담당자"},
+            {"id": "n-1", "title": "요청서 작성", "node_type": "process", "assignee": "김담당", "assignee_role": "구매 담당자",
+             "touch_time": "0.45", "input": "요청서", "start_condition": "예산 확보",
+             "color": "#5b8def", "url": "https://example.com", "parallel_outputs": ["__primary__"]},
             {"id": "n-2", "title": "승인 여부", "node_type": "decision"},
+            {"id": "n-3", "title": "견적 요청", "node_type": "process"},
             {"id": "n-e", "title": "End", "node_type": "end"},
         ],
         "edges": [
             {"id": "e-1", "source_node_id": "n-s", "target_node_id": "n-1"},
             {"id": "e-2", "source_node_id": "n-1", "target_node_id": "n-2"},
+            {"id": "e-4", "source_node_id": "n-1", "target_node_id": "n-3"},
             {"id": "e-3", "source_node_id": "n-2", "target_node_id": "n-e", "label": "승인"},
+            {"id": "e-5", "source_node_id": "n-3", "target_node_id": "n-e"},
         ],
     }
     assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
@@ -326,12 +330,19 @@ def test_create_seeds_working_graph_and_data_aware_greeting(client: TestClient, 
     ).json()
     seeded = state["working_graph"]
     assert seeded is not None
-    assert {n["key"] for n in seeded["nodes"]} == {"n-s", "n-1", "n-2", "n-e"}
+    assert {n["key"] for n in seeded["nodes"]} == {"n-s", "n-1", "n-2", "n-3", "n-e"}
     by_key = {n["key"]: n for n in seeded["nodes"]}
-    assert by_key["n-1"]["attributes"]["assignee_role"] == "구매 담당자"
-    assert "assignee" not in by_key["n-1"]["attributes"]
+    seeded_attrs = by_key["n-1"]["attributes"]
+    assert seeded_attrs["assignee_role"] == "구매 담당자"
+    assert "assignee" not in seeded_attrs
+    # 컬럼 직역 키는 전부 싣고, 병렬 출구는 attributes.parallel로 파생 — 색·URL은 시드 밖
+    assert (seeded_attrs["touch_time"], seeded_attrs["input"], seeded_attrs["start_condition"]) == (
+        "0.45", "요청서", "예산 확보")
+    assert seeded_attrs["parallel"] is True
+    assert "color" not in seeded_attrs and "url" not in seeded_attrs
+    assert "parallel" not in (by_key["n-3"].get("attributes") or {})
     assert {(e["source"], e["target"]) for e in seeded["edges"]} == {
-        ("n-s", "n-1"), ("n-1", "n-2"), ("n-2", "n-e")
+        ("n-s", "n-1"), ("n-1", "n-2"), ("n-1", "n-3"), ("n-2", "n-e"), ("n-3", "n-e")
     }
     greeting = state["messages"][0]
     assert "요청서 작성" in greeting["content"]  # 파악한 활동을 오프닝에 제시

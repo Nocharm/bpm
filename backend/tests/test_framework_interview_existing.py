@@ -1,6 +1,7 @@
 """기존 L6 맵 → 인터뷰 행 역변환 + 계획 카드 병합 (spec 2026-09-22 §2.1·§2.3)."""
 
 import asyncio
+import copy
 import json
 
 from fastapi.testclient import TestClient
@@ -8,8 +9,10 @@ from sqlalchemy import select
 
 from app.app_settings import SYSTEMS_KEY
 from app.db import SessionLocal
-from app.framework_interview.assemble import build_document, load_category_chain, validate_row
+from app.framework_interview.assemble import build_document, finalize_row_output, load_category_chain, validate_row
+from app.framework_interview.contracts import RowOut
 from app.framework_interview.existing import existing_row_of, load_existing_l6, map_to_row, merge_existing_cards
+from app.framework_interview.normalize import normalize_row
 from app.models import AppSetting, Edge, MapVersion, Node, ProcessMap
 
 HEADERS = {"X-Dev-User": "admin.sys"}
@@ -331,6 +334,68 @@ def test_keep_row_carries_every_map_field(client: TestClient) -> None:
     assert (m.sp_system, m.sp_system_fallback) == ("Other", "LIMS")
     assert (m.sp_total_time_fallback, m.sp_touch_time_fallback) == ("반나절", "45분 내외")
     assert (m.sp_frequency_fallback, m.sp_gmp_fallback) == ("주 2회", "GMP 대상")
+
+
+REVISE_ROW = {
+    **FULL_FIELDS_ROW,
+    "actions": [
+        {"seq": 1, "label": "요청 확인", "kind": "action", "screen": "요청 조회 화면", "quote": "요청서부터 본다",
+         "output": ["확인 메모"], "dataForm": "전자 서식"},
+        {"seq": 2, "label": "점검 수행", "kind": "action", "input": ["확인 메모"]},
+        {"seq": 3, "label": "기록 보관", "kind": "action", "input": ["확인 메모"]},
+    ],
+    "relations": {"edges": [
+        {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
+        {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel"},
+    ]},
+}
+
+
+def _load_nodes(code: str) -> dict[str, Node]:
+    async def _run() -> dict[str, Node]:
+        async with SessionLocal() as db:
+            m = (await db.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+            version = (await db.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id).order_by(MapVersion.id.desc()))).first()
+            nodes = (await db.scalars(select(Node).where(Node.version_id == version.id))).all()
+            return {n.title: n for n in nodes}
+    return asyncio.run(_run())
+
+
+def test_revise_echo_through_the_ai_gate_keeps_every_field(client: TestClient) -> None:
+    """정정 왕복(map_to_row → AI 에코 → normalize_row → finalize)이 아무것도 잃지 않는다.
+
+    AI는 Screen/Quote·dataForm을 되돌려 주지 못하고 gateway를 빠뜨릴 수 있다 — 서버 승계로 메운다.
+    *_min이 정규화에서 버려지면 sp_duration·sp_touch_time이 빈 값으로 덮인다(C03).
+    """
+    # Arrange — 회당 시간·Screen/Quote·데이터 폼·병렬 출구가 있는 맵
+    l5_id = _make_l5(client, "exrevise")
+    task_id = f"{_l5_code(client, l5_id)}-01"
+    _import_row(client, l5_id, REVISE_ROW, task_id)
+    existing = _load_existing(l5_id)[0]["row"]
+    assert existing["actions"][0]["screen"] == "요청 조회 화면"
+    echo = copy.deepcopy(existing)
+    for action in echo["actions"]:
+        action.pop("screen", None)
+        action.pop("quote", None)
+    for edge in echo["relations"]["edges"]:
+        edge.pop("gateway", None)
+
+    # Act — 정정 드로잉과 같은 게이트를 지난 뒤 재임포트
+    out = RowOut.model_validate(normalize_row(echo))
+    row = finalize_row_output(out, {"department": ""}, existing)
+    report = _import_row(client, l5_id, row, task_id)
+
+    # Assert
+    assert row["fields"]["total_time_min"] == 90 and row["fields"]["touch_time_min"] == 45
+    assert _action_of(report, task_id) == "unchanged", report["rows"]
+    m = _load_map(task_id)
+    assert (m.sp_duration, m.sp_touch_time) == ("1.30", "0.45")
+    nodes = _load_nodes(task_id)
+    assert "Screen: 요청 조회 화면" in nodes["요청 확인"].description
+    assert "Quote: 요청서부터 본다" in nodes["요청 확인"].description
+    assert nodes["요청 확인"].output_forms == "전자 서식"
+    assert nodes["요청 확인"].parallel_outputs == ["__primary__"]
 
 
 def _set_system_catalog(entries: list[dict] | None) -> None:

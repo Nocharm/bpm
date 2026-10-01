@@ -659,7 +659,8 @@ async def confirm_relations(
         errors = validate_canvas(payload.canvas, known_ids)
         if errors:
             raise HTTPException(status_code=422, detail={"errors": errors})
-        raw_relations = collapse_canvas_to_relations(payload.canvas, known_ids)
+        raw_relations = collapse_canvas_to_relations(
+            payload.canvas, known_ids, (row.relations or {}).get("entry"))
     if raw_relations is None:
         raise HTTPException(status_code=422, detail="relations or canvas is required")
     try:
@@ -722,7 +723,7 @@ async def feedback_session(
         )
         out = await _ask(messages, RowOut, db, user, normalizer=normalize_row)
         card = next((c for c in row.plan or [] if c.get("task_id") == task.task_id), {})
-        new_row = finalize_row_output(out, card)
+        new_row = finalize_row_output(out, card, task.row)
         chain = await load_category_chain(db, row.category_id)
         l5 = {"label": chain[-1]["name"], "nodeCode": chain[-1]["code"]}
         issues = validate_row(chain, l5, {"taskId": task.task_id, **new_row})

@@ -352,6 +352,48 @@ def test_revise_task_feeds_existing_row_to_questionnaire(client: TestClient, mon
     assert seen["existing_row"] == existing_row
 
 
+def test_revise_draw_keeps_minutes_and_inherits_screen_quote(client: TestClient, monkeypatch) -> None:
+    """정정 드로잉은 *_min을 지키고(C03) AI가 못 돌려주는 Screen/Quote를 현재 행에서 잇는다(C20)."""
+    # Arrange — 현재 등록된 행에 회당 시간·Screen/Quote가 있다
+    _enable(monkeypatch)
+    sid = _make_locked_session(client, ["A"])
+    existing_row = {
+        "l6": "요청 접수", "ownerRole": "담당자", "department": "",
+        "fields": {"total_time_min": 90, "touch_time_min": 45},
+        "actions": [{"seq": 1, "label": "요청 확인", "kind": "action", "screen": "조회 화면", "quote": "먼저 본다"},
+                    {"seq": 2, "label": "완결성 판정", "kind": "decision"},
+                    {"seq": 3, "label": "접수 등록", "kind": "action"}],
+    }
+
+    async def _mark_revise() -> None:
+        async with SessionLocal() as db:
+            s = await db.get(FrameworkInterviewSession, sid)
+            await db.refresh(s, ["tasks"])
+            task = s.tasks[0]
+            s.existing = [{"map_id": 1, "code": task.task_id, "name": "A", "summary": "",
+                           "activities": [], "row": existing_row}]
+            task.mode = "revise"
+            await db.commit()
+
+    asyncio.run(_mark_revise())
+    echoed = ROW_JSON.replace('"fields":{"start_condition":"요청서 도착"}',
+                              '"fields":{"start_condition":"요청서 도착","total_time_min":90,"touch_time_min":45}')
+    _fake_ai_queue(monkeypatch, [Q_JSON, echoed])
+    _step(sid)
+    first = client.get(f"/api/framework-interviews/{sid}", headers=HEADERS).json()["tasks"][0]
+    client.post(f"/api/framework-interviews/{sid}/tasks/{first['id']}/answers",
+                json={"answers": {"q1": ["a1", "a2", "a3"], "q2": "r1", "q3": ["s1"], "q4": "", "q5": "", "q6": ""}},
+                headers=HEADERS)
+
+    # Act
+    assert _step(sid) is True
+
+    # Assert
+    row = client.get(f"/api/framework-interviews/{sid}/tasks/{first['id']}", headers=HEADERS).json()["row"]
+    assert row["fields"]["total_time_min"] == 90 and row["fields"]["touch_time_min"] == 45
+    assert row["actions"][0]["screen"] == "조회 화면" and row["actions"][0]["quote"] == "먼저 본다"
+
+
 def test_new_task_gets_no_existing_row(client: TestClient, monkeypatch) -> None:
     _enable(monkeypatch)
     sid = _make_locked_session(client, ["A"])

@@ -1,7 +1,9 @@
-"""AI L5 캠페인 프롬프트 계약 4종 + 응답 스키마 + 메시지 빌더 (spec 2026-09-21 §4·§5).
+"""AI L5 캠페인 프롬프트 계약 6종(계획·설문·행 드래프트·연계·캔버스 피드백·행 피드백) + 응답 스키마 + 메시지 빌더
+(spec 2026-09-21-ai-consultant-l5-campaign-design.md §4·§5, git history).
 
 계약 문구는 prompt_registry 오버라이드로 교체 가능. 출력은 전부 JSON 한 개.
 키 이름은 인터뷰 JSON 0.4/0.5 계약(scripts/consultant_interview.py)과 같다 — 어댑터가 바뀌면 여기도 같이.
+출구당 연결 1개·gateway=parallel 문구도 어댑터의 병렬 출구 해석(CanonicalNode.parallel·팬아웃 ◇ 자동 생성)과 짝이다(2026-10-01).
 """
 
 import json
@@ -175,6 +177,23 @@ class CanvasOut(BaseModel):
 
 # ── 계약 문구 (관리자 오버라이드 가능) ──
 
+# rows[].fields 키 — 어댑터 _FIELD_KEYS와 같은 집합(별칭 done_criterial 제외). 드래프터·피드백 프롬프트,
+# normalize_row 통과 목록, FE 외부 프롬프트(interview-json-prompt.ts)가 이 한 벌을 쓴다
+ROW_FIELD_KEYS: tuple[str, ...] = (
+    "start_condition", "input_data", "output_data", "done_criteria", "systems", "frequency",
+    "total_time", "total_time_min", "touch_time", "touch_time_min",
+    "annual_count", "headcount", "fte", "gmp", "artifact_role",
+)
+# 드래프터·피드백 공용 fields 규칙 — 계약 문구가 오버라이드돼도 기본값은 한 곳에서 자란다
+_ROW_FIELDS_RULE = (
+    "- fields 키: " + ", ".join(ROW_FIELD_KEYS) + ". 값이 있는 것만 적는다.\n"
+    "- total_time_min·touch_time_min은 분 단위 정수(1시간 30분이면 90)이고 회당 소요·실작업 시간의 대표값이다."
+    " total_time·touch_time에는 답의 원문 표현을 그대로 둔다.\n"
+    "- input_data·output_data는 개행으로 구분한 문자열 또는 배열(한 항목 = 한 줄)."
+    " frequency는 수행 빈도 원문, annual_count(연간 수행 횟수)·headcount·fte는 숫자,"
+    " gmp는 GMP 해당 여부 원문, artifact_role은 이 L6 산출물의 역할 한 줄.\n"
+)
+
 # 동결 맵 꼬리표 — 캔버스에 하위 맵 링크가 있어 역변환할 수 없는 L6 (existing.load_existing_l6)
 FROZEN_MAP_NOTE = "(캔버스에 하위 맵 링크가 있어 편집 불가, 카드를 만들지 않는다)"
 
@@ -225,8 +244,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - 첫 활동(seq 1)은 흐름의 시작이다: 앞으로 가는 연결만 받고, 뒤 활동에서 앞 활동으로 되돌아가는 연결(반려·보완·재수행)은 반드시 kind=loop로 적는다.
 - 한 활동에서 나가는 연결은 하나다. 둘 이상으로 갈라지면, 하나만 가는 경우 그 활동을 kind=decision으로 두고 kind=branch + gateway=exclusive + condition으로, 모두 동시에 진행하면 kind=branch + gateway=parallel로 적는다. 되돌아가는 loop와 다음 단계가 같은 활동에서 나가면 그 활동은 decision이다.
-- fields: start_condition, input_data, output_data, done_criteria, systems, frequency, total_time, headcount 중 답이 있는 것만.
-- ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
+""" + _ROW_FIELDS_RULE + """- ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
 - 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.
 - input/output은 항목 배열입니다. 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 캔버스에서 자동으로 이어집니다.
 - 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이다. 같은 활동의 input과 output에 같은 항목을 적지 말 것.
@@ -264,7 +282,7 @@ ROW_FEEDBACK_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다. 
 규칙
 - 키 집합·seq 규칙은 유지: actions의 seq는 1부터 중복 없이, relations.edges의 src/dst는 actions의 seq 정수.
 - 피드백이 가리키지 않은 부분은 그대로 두세요.
-- owner는 넣지 마세요(실명 금지). input/output은 항목 배열.
+""" + _ROW_FIELDS_RULE + """- owner는 넣지 마세요(실명 금지). input/output은 항목 배열.
 - 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이다. 같은 활동의 input과 output에 같은 항목을 적지 말 것.
 - 다른 설명 없이 JSON 한 개만:
 {"l6":"","ownerRole":"","department":"","fields":{},"actions":[{"seq":1,"label":"","kind":"action"}],"relations":{"edges":[{"src":1,"dst":2,"kind":"seq"}]}}"""
@@ -333,8 +351,10 @@ def render_existing_row(row: dict) -> str:
     for key, value in (row.get("fields") or {}).items():
         lines.append(f"- {key}: {value}")
     for edge in (row.get("relations") or {}).get("edges") or []:
+        # gateway를 빼면 병렬 출구가 kind=branch로만 에코돼 어댑터가 택일 분기(◇)로 바꾼다
+        gateway = f" {edge['gateway']}" if edge.get("gateway") else ""
         condition = f" {edge['condition']}" if edge.get("condition") else ""
-        lines.append(f"- {edge.get('src')}→{edge.get('dst')} {edge.get('kind', 'seq')}{condition}")
+        lines.append(f"- {edge.get('src')}→{edge.get('dst')} {edge.get('kind', 'seq')}{gateway}{condition}")
     return "\n".join(lines)
 
 

@@ -91,8 +91,9 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
 {"kind": "graph", "message": <이 안만의 차별점 한 줄 - 어떤 안에나 해당할 일반 설명은 금지, [이 안의 방향]이 그래프에 어떻게 반영됐는지만 간결히>,
  "nodes": [{"key": <임시키>, "title": <제목>, "node_type": "start|process|decision|end",
             "description": <설명>, "attributes": {"assignee_role": …, "department": …, "system": …,
-            "duration": …, "touch_time": …, "cost_krw": …, "headcount": …, "annual_count": …, "fte": …,
-            "input": <개행 구분 복수>, "output": <개행 구분 복수>, "start_condition": …, "end_condition": …} 또는 생략,
+            "duration": …, "touch_time": …, "cost_krw": …, "cost_usd": …, "headcount": …, "annual_count": …, "fte": …,
+            "input": <개행 구분 복수>, "output": <개행 구분 복수>, "start_condition": …, "end_condition": …,
+            "parallel": <true 또는 생략>} 또는 생략,
             "group_key": <그룹키 또는 생략>}],
  "edges": [{"source": <키>, "target": <키>, "label": <분기 라벨 또는 "">}],
  "groups": [{"key": <키>, "label": <레인/묶음 이름>}]}
@@ -101,8 +102,10 @@ _DRAFTER_CONTRACT = """당신은 프로세스 맵 드래프터입니다. 확정�
 1. start 1개로 시작, end 1개 이상으로 끝나는 연결 그래프.
 2. 좌표는 넣지 마세요(자동 배치). 노드 제목은 조직 표준 '명사+동사' 명사구('요청서 작성') -
    '~하기' 동명사형·존댓말 금지, start/end 제목은 자유. (톤 검수는 별도 단계 없이 여기서 완결)
-3. 분기는 node_type="decision" + 나가는 엣지에 라벨.
-4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** - 확인되지 않은 역할·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다. 담당자 실명(assignee)은 attributes에 넣지 않습니다(에디터 피커 전용) - 사람은 역할(assignee_role)로만 적으세요.
+3. 분기는 node_type="decision" + 나가는 엣지에 라벨. process·subprocess 노드에서 나가는 연결은 하나입니다 - 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
+   모두 동시에 진행하는 갈래만 예외로, 갈래가 출발하는 노드의 attributes.parallel=true로 두고 그 노드에서 연결을 2개 이상 그립니다. 도착 노드와 decision 노드에는 parallel을 쓰지 않습니다.
+   [현재 작업본]에서 "| 병렬출구"가 붙은 노드는 이미 동시 갈래가 출발하는 노드입니다.
+4. **attributes에는 [확정 facts]에서 사용자가 확인해준 값만 채우세요** - 확인되지 않은 역할·소요시간·비용 등을 임의로 지어내지 마세요. 모르면 attributes를 생략합니다. 비용은 한 통화만(cost_krw 또는 cost_usd 중 하나) 채웁니다. 담당자 실명(assignee)은 attributes에 넣지 않습니다(에디터 피커 전용) - 사람은 역할(assignee_role)로만 적으세요.
 5. **기존 작업본 보존**: [현재 작업본]에 이미 노드가 있으면 백지 재생성 금지 - 확정 facts와 모순되지 않는 노드·흐름·attributes는 그대로 유지하고 필요한 부분만 추가·수정하세요.
 6. **델타 출력**: 최종 그래프에 포함할 노드 전체 목록을 쓰되, [현재 작업본]에 이미 있고 그대로
    유지할 노드는 {"key":"<키>"}만 쓰세요(다른 필드 생략 - 시스템이 기존 내용을 복원합니다).
@@ -126,11 +129,16 @@ def _context_block(context_text: str) -> str:
 
 
 def format_graph_compact(graph: dict | None) -> str:
-    """작업본 컴팩트 목록('키 | 타입 | 제목') — 드래프터 입력 토큰 다이어트 + 델타 키 참조용."""
+    """작업본 컴팩트 목록('키 | 타입 | 제목') — 드래프터 입력 토큰 다이어트 + 델타 키 참조용.
+
+    attributes는 싣지 않지만 병렬 출구만 '| 병렬출구' 꼬리표로 보인다 — 모르면 드래프터가 동시 갈래를
+    택일 분기로 재구성한다(에디터 AI 직렬화 ai_prompt._serialize_node의 '병렬출구'와 같은 표지).
+    """
     if not graph or not graph.get("nodes"):
         return "(없음)"
     lines = [
         f"{n.get('key')} | {n.get('node_type')} | {n.get('title')}"
+        + (" | 병렬출구" if (n.get("attributes") or {}).get("parallel") is True else "")
         for n in graph["nodes"]
     ]
     edges = graph.get("edges") or []

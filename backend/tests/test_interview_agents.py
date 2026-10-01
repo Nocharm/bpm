@@ -8,6 +8,7 @@ from app.interview.agents import (
     build_drafter_messages,
     build_interviewer_messages,
     extract_json,
+    format_graph_compact,
 )
 
 
@@ -214,5 +215,30 @@ def test_drafter_contract_lists_promoted_fields() -> None:
         context_text="", variant_hint="표준",
     )
     content = messages[0]["content"]
-    for field in ("touch_time", "input", "output", "start_condition", "end_condition"):
-        assert field in content
+    # 7종 파라미터 전부(_PARAM_FIELDS) + 승격 텍스트 필드 — 한 표면이 빠지면 수집값이 조용히 걸러진다
+    for field in ("duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte",
+                  "input", "output", "start_condition", "end_condition"):
+        assert f'"{field}"' in content
+    assert "비용은 한 통화만" in content
+
+
+def test_drafter_contract_states_the_output_rule_and_parallel_attribute() -> None:
+    """출구당 연결 1개·동시 갈래는 출발 노드 attributes.parallel — 에디터 AI(ai_prompt)와 같은 계약."""
+    content = build_drafter_messages(
+        stage_key="activities", lang="ko", facts={}, working_graph=None,
+        context_text="", variant_hint="표준",
+    )[0]["content"]
+    assert '"parallel"' in content
+    assert "나가는 연결은 하나" in content and "attributes.parallel=true" in content
+    assert "process·subprocess 노드에서 나가는 연결은 하나" in content
+    assert "start·process" not in content  # 시작 노드의 출력 규칙은 보류 중(사용자 결정 D7)
+
+
+def test_format_graph_compact_tags_parallel_exits() -> None:
+    graph = {"nodes": [
+        {"key": "n1", "node_type": "process", "title": "회계 등록", "attributes": {"parallel": True}},
+        {"key": "n2", "node_type": "process", "title": "A"},
+    ], "edges": [{"source": "n1", "target": "n2"}]}
+    assert format_graph_compact(graph).splitlines()[:2] == [
+        "n1 | process | 회계 등록 | 병렬출구", "n2 | process | A",
+    ]

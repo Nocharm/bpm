@@ -107,6 +107,19 @@ def test_plan_accepts_titles_and_dedupes() -> None:
     assert out["cards"][0]["owner_role"] == "담당자"
 
 
+def test_plan_keeps_existing_code() -> None:
+    """AI가 돌려준 기존 맵 코드를 지킨다 — 버리면 병합이 이름 일치로만 묶어 중복 L6가 생긴다."""
+    out = normalize_plan({"cards": [
+        {"name": "요청접수 처리", "existing_code": "L5-01"},
+        {"name": "검토", "existingCode": "L5-02"},
+        {"name": "발주", "code": "L5-03"},
+        {"name": "신규", "existing_code": ""},
+    ]})
+    PlanOut.model_validate(out)
+    assert [c["existing_code"] for c in out["cards"]] == ["L5-01", "L5-02", "L5-03", None]
+    assert all("mode" not in c for c in out["cards"])  # keep/new 판정은 merge_existing_cards 몫
+
+
 def test_plan_blanks_role_that_copies_the_department() -> None:
     """역할이 부서명과 같으면 역할을 비운다 — 역할은 사람의 롤(사용자 지적 2026-09-28)."""
     out = normalize_plan({"cards": [
@@ -181,6 +194,68 @@ def test_normalize_row_splits_io_into_lists() -> None:
     assert out["actions"][0]["output"] == ["확인 메모"]
     assert out["actions"][1]["input"] == ["확인 메모"]
     assert "output" not in out["actions"][1]
+
+
+def test_normalize_row_keeps_minutes_aliases_and_parallel_gateway() -> None:
+    """어댑터 _FIELD_KEYS와 같은 집합 — *_min은 분 정수로 남아야 sp_duration·sp_touch_time에 착지한다."""
+    raw = {"l6": "x", "fields": {
+        "total_time_min": 90, "touch_time_min": "30", "total_time": "반나절",
+        "done_criterial": "보고서 발행", "annual_count": 120, "artifact_role": "품질 기록",
+    }, "actions": [{"seq": 1, "label": "A"}, {"seq": 2, "label": "B"}, {"seq": 3, "label": "C"}],
+        "relations": {"edges": [{"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
+                                {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel"}]}}
+
+    out = normalize_row(raw)
+
+    RowOut.model_validate(out)
+    assert out["fields"] == {
+        "total_time_min": 90, "touch_time_min": 30, "total_time": "반나절",
+        "done_criteria": "보고서 발행", "annual_count": "120", "artifact_role": "품질 기록",
+    }
+    assert {e["gateway"] for e in out["relations"]["edges"]} == {"parallel"}
+
+
+def test_normalize_row_drops_minutes_that_are_not_whole_numbers() -> None:
+    out = normalize_row({"fields": {"total_time_min": "1시간", "touch_time_min": -5}, "actions": []})
+    assert out["fields"] == {}
+
+
+def test_normalize_row_joins_field_io_lists_with_newlines() -> None:
+    """fields.input_data/output_data 배열은 어댑터 _join_multi처럼 개행으로 — 쉼표면 sp_input 여러 줄이 한 줄로 뭉개진다."""
+    out = normalize_row({"fields": {"input_data": ["요청서", " ", "첨부"], "output_data": "보고서\n사본"}, "actions": []})
+    assert out["fields"] == {"input_data": "요청서\n첨부", "output_data": "보고서\n사본"}
+
+
+def test_finalize_row_output_inherits_screen_quote_and_parallel_from_the_previous_row() -> None:
+    """AI가 되돌려 주지 못하는 키는 이전 행에서 잇는다 — seq가 밀려도 label로 맞춘다."""
+    previous = {
+        "actions": [
+            {"seq": 1, "label": "접수", "screen": "접수 화면", "quote": "먼저 받는다"},
+            {"seq": 2, "label": "검토"}, {"seq": 3, "label": "보관"},
+        ],
+        "relations": {"edges": [
+            {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
+            {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel"},
+        ]},
+    }
+    out = RowOut.model_validate({
+        "l6": "x", "actions": [
+            {"seq": 1, "label": "사전 확인"}, {"seq": 2, "label": "접수", "rule": "새 규칙"},
+            {"seq": 3, "label": "검토"}, {"seq": 4, "label": "보관"},
+        ],
+        "relations": {"edges": [
+            {"src": 1, "dst": 2, "kind": "seq"},
+            {"src": 2, "dst": 3, "kind": "branch"},
+            {"src": 2, "dst": 4, "kind": "branch", "gateway": "exclusive", "condition": "바뀜"},
+        ]},
+    })
+
+    row = finalize_row_output(out, {}, previous)
+
+    assert row["actions"][1]["screen"] == "접수 화면" and row["actions"][1]["quote"] == "먼저 받는다"
+    assert "screen" not in row["actions"][0]
+    gateways = [e.get("gateway") for e in row["relations"]["edges"]]
+    assert gateways == [None, "parallel", "exclusive"]  # 모델이 명시한 값은 이긴다
 
 
 # ── normalize_canvas (AI 피드백이 고친 캔버스) ──

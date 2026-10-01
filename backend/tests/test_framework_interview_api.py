@@ -502,6 +502,8 @@ def test_relations_flow_fills_canvas_and_confirms_from_canvas(client: TestClient
     confirmed = client.put(f"/api/framework-interviews/{sid}/relations", json={"canvas": canvas}, headers=HEADERS).json()
     assert confirmed["status"] == "ready"
     assert {(e["src"], e["dst"]) for e in confirmed["relations"]["edges"]} == {(t2["task_id"], t1["task_id"])}
+    # 캔버스는 진입 트리거·라벨을 싣지 않는다 — 진입 L6가 그대로면 직전 제안의 entry를 잇는다
+    assert confirmed["relations"]["entry"] == {"taskId": t2["task_id"], "triggerType": "manual", "label": "시작"}
     # 확정 뒤 캔버스를 고치면 조립본이 낡는다 → 연결 단계로 되돌아간다
     reopened = client.put(f"/api/framework-interviews/{sid}/canvas", json={"canvas": canvas}, headers=HEADERS).json()
     assert reopened["status"] == "linking"
@@ -570,11 +572,24 @@ def test_feedback_relations_rewrites_canvas_and_task_redraws_row(client: TestCli
     assert {n["id"]: (n["pos_x"], n["pos_y"]) for n in fb.json()["canvas"]["nodes"]} == base_pos
     assert fb.json()["feedback_log"][-1]["scope"] == "relations"
 
-    fb2 = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
+    # 행에 AI 스키마 밖 키(Screen)가 있다 — 피드백 응답이 못 돌려줘도 직전 행에서 이어야 한다
+    async def _add_screen() -> None:
+        async with SessionLocal() as db:
+            s = await db.get(FrameworkInterviewSession, sid)
+            await db.refresh(s, ["tasks"])
+            task = next(t for t in s.tasks if t.id == t1["id"])
+            row = dict(task.row)
+            row["actions"] = [{**row["actions"][0], "screen": "접수 화면"}, *row["actions"][1:]]
+            task.row = row
+            await db.commit()
+    asyncio.run(_add_screen())
+
+    fb2 =client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
     assert fb2.status_code == 200, fb2.text
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
     assert detail["row"]["l6"] == "요청 접수(수정)" and detail["status"] == "drawn"
     assert detail["row"]["department"] == "품질팀"  # AI가 빈 부서를 줘도 카드 값이 남는다
+    assert detail["row"]["actions"][0]["screen"] == "접수 화면"
     assert len(fb2.json()["feedback_log"]) == 2
 
     bad = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "message": "x"}, headers=HEADERS)
@@ -666,6 +681,29 @@ def test_generated_plan_merges_existing_map(client: TestClient, monkeypatch) -> 
     assert f"- {code}-01 · 요청 접수" in user_message
     assert [(c["name"], c["mode"], c["existing_code"]) for c in planned.json()["plan"]] == [
         ("요청 접수", "keep", f"{code}-01"), ("검토 승인", "new", None),
+    ]
+
+
+def test_generated_plan_matches_existing_by_code(client: TestClient, monkeypatch) -> None:
+    """AI가 이름을 조금 바꿔도 existing_code로 같은 맵에 묶인다 — 정규화가 코드를 버리면 중복 카드가 생긴다."""
+    _enable(monkeypatch)
+    monkeypatch.setattr(runner, "kick", lambda session_id: None)
+    l5_id, code = _make_l5_with_existing(client, ["요청 접수"])
+    sid = client.post("/api/framework-interviews", json={"category_id": l5_id}, headers=HEADERS).json()["id"]
+    plan_json = json.dumps({"cards": [
+        {"name": "요청접수 처리", "summary": "", "owner_role": "", "department": "", "depends_on": [],
+         "existing_code": f"{code}-01"},
+        {"name": "검토 승인", "summary": "", "owner_role": "", "department": "", "depends_on": ["요청접수 처리"]},
+    ]}, ensure_ascii=False)
+
+    async def _call(messages, model=None, *, reasoning=None, max_tokens=None):
+        return ai_client.AiReply(content=plan_json, prompt_tokens=1, completion_tokens=1)
+
+    monkeypatch.setattr(ai_client, "call_ai", _call)
+    planned = client.post(f"/api/framework-interviews/{sid}/plan", headers=HEADERS)
+    assert planned.status_code == 200, planned.text
+    assert [(c["name"], c["mode"], c["existing_code"]) for c in planned.json()["plan"]] == [
+        ("요청접수 처리", "keep", f"{code}-01"), ("검토 승인", "new", None),
     ]
 
 

@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from app.framework_interview.canvas import BRANCH_PREFIX, END_ID, START_ID
+from app.framework_interview.contracts import ROW_FIELD_KEYS as CONTRACT_ROW_FIELD_KEYS
 
 QUESTION_KINDS = {"single", "multi", "text", "ordered"}
 KIND_SYNONYMS = {
@@ -37,14 +38,16 @@ EDGE_KIND_SYNONYMS = {"sequence": "seq", "next": "seq", "default": "seq", "condi
                       "back": "loop", "return": "loop", "repeat": "loop", "skip": "bypass"}
 GATEWAYS = {"exclusive", "parallel"}
 TRIGGERS = {"message", "timer", "condition", "manual"}
-ROW_FIELD_KEYS = {
-    "start_condition", "input_data", "output_data", "done_criteria", "systems", "total_time",
-    "touch_time", "frequency", "annual_count", "headcount", "fte", "gmp", "artifact_role",
-}
+# 프롬프트와 같은 한 벌(contracts.ROW_FIELD_KEYS, 별칭 done_criterial은 동의어로 접는다) — 빠진 키는 정정 왕복에서 조용히 버려진다
+ROW_FIELD_KEYS = set(CONTRACT_ROW_FIELD_KEYS)
+# 회당 시간의 대표값(분 정수) — 어댑터가 이 둘만 sp_duration·sp_touch_time으로 착지시킨다
+ROW_MINUTE_KEYS = {"total_time_min", "touch_time_min"}
+# 다중 항목 문자열 — 배열이면 어댑터 _join_multi처럼 개행으로 합친다(쉼표로 합치면 sp_input 여러 줄이 한 줄로 뭉개진다)
+ROW_MULTILINE_KEYS = {"input_data", "output_data"}
 ROW_FIELD_SYNONYMS = {"start": "start_condition", "trigger": "start_condition", "input": "input_data",
                       "inputs": "input_data", "output": "output_data", "outputs": "output_data",
-                      "done": "done_criteria", "end_condition": "done_criteria", "system": "systems",
-                      "duration": "total_time", "time": "total_time"}
+                      "done": "done_criteria", "end_condition": "done_criteria", "done_criterial": "done_criteria",
+                      "system": "systems", "duration": "total_time", "time": "total_time"}
 
 
 def _text(value: Any) -> str:
@@ -55,6 +58,18 @@ def _text(value: Any) -> str:
     if isinstance(value, dict):
         return _text(value.get("label") or value.get("text") or value.get("name") or "")
     return str(value).strip()
+
+
+def _minutes(value: Any) -> int | None:
+    """분 정수 — 어댑터 _parse_minutes와 같은 규칙(음수·소수·자유텍스트는 버린다)."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value) if value >= 0 and value == int(value) else None
+    text = str(value).strip()
+    return int(text) if text.isdigit() else None
 
 
 def _lower(value: Any) -> str:
@@ -200,6 +215,9 @@ def normalize_plan(raw: Any) -> dict:
             "owner_role": owner_role,
             "department": department,
             "depends_on": [_text(d) for d in (depends if isinstance(depends, list) else [depends]) if _text(d)],
+            # 기존 맵 매칭의 1차 키 — 버리면 merge_existing_cards가 이름 일치로만 묶어 이름이 조금 바뀐 카드가
+            # 같은 맵을 새 L6로 중복 등록한다. mode는 넣지 않는다(병합이 keep/new를 판정)
+            "existing_code": _text(item.get("existing_code") or item.get("existingCode") or item.get("code"))[:40] or None,
         })
     return {"cards": cards[:40]}
 
@@ -213,7 +231,17 @@ def normalize_row(raw: Any) -> dict:
     fields: dict[str, Any] = {}
     for key, value in fields_raw.items():
         name = ROW_FIELD_SYNONYMS.get(_lower(key), _lower(key))
-        if name in ROW_FIELD_KEYS and _text(value):
+        if name not in ROW_FIELD_KEYS:
+            continue
+        if name in ROW_MINUTE_KEYS:
+            minutes = _minutes(value)
+            if minutes is not None:
+                fields[name] = minutes
+        elif name in ROW_MULTILINE_KEYS and isinstance(value, list):
+            joined = "\n".join(_text(v) for v in value if _text(v))
+            if joined:
+                fields[name] = joined
+        elif _text(value):
             fields[name] = _text(value)
     actions: list[dict] = []
     label_to_seq: dict[str, int] = {}
