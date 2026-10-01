@@ -158,4 +158,90 @@ describe("buildMergedGraph", () => {
     expect(kept?.lineStyle).toBe("default"); // target 우선
     expect(removed?.lineStyle).toBe(""); // base만 있으면 base 값
   });
+
+  it("reports URL and link identity changes as field changes", () => {
+    const base: VersionGraph = {
+      nodes: [mkNode({ id: "s", node_type: "subprocess", url: "https://a", linked_map_id: 1, follow_latest: false })],
+      edges: [],
+    };
+    const target: VersionGraph = {
+      nodes: [
+        mkNode({ id: "s2", source_node_id: "s", node_type: "subprocess", url: "https://b", linked_map_id: 2, follow_latest: true }),
+      ],
+      edges: [],
+    };
+
+    const merged = buildMergedGraph(base, target);
+
+    expect(merged.nodes[0].fieldChanges).toEqual([
+      { field: "url", before: "https://a", after: "https://b" },
+      { field: "linked_map", before: "1", after: "2" },
+      { field: "follow_latest", before: "false", after: "true" },
+    ]);
+  });
+});
+
+describe("buildMergedGraph - 엣지 정체성(D4: SP 출구 끝 키만 내용)", () => {
+  // SP s → B. 같은 쌍에 대표 끝·보조 끝 두 엣지가 있을 수 있다.
+  function spGraph(suffix: string, edges: GraphEdge[]): VersionGraph {
+    const lineage = suffix ? { s: "s", b: "b" } : { s: null, b: null };
+    return {
+      nodes: [
+        mkNode({ id: `s${suffix}`, source_node_id: lineage.s, node_type: "subprocess", title: "Call" }),
+        mkNode({ id: `b${suffix}`, source_node_id: lineage.b, title: "B" }),
+      ],
+      edges,
+    };
+  }
+  function spEdge(id: string, suffix: string, sourceHandle: string | null, targetHandle: string | null = null): GraphEdge {
+    return { ...mkEdge(id, `s${suffix}`, `b${suffix}`), source_handle: sourceHandle, target_handle: targetHandle };
+  }
+
+  it("keeps two ends of the same pair as two edges", () => {
+    const base = spGraph("", [spEdge("e1", "", "__primary__"), spEdge("e2", "", "Rejected")]);
+
+    const merged = buildMergedGraph(base, base);
+
+    expect(merged.edges.map((e) => [e.id, e.exit, e.status])).toEqual([
+      ["s->b", "__primary__", "unchanged"],
+      ["s->b@Rejected", "Rejected", "unchanged"],
+    ]);
+  });
+
+  it("flags an end key change on the same pair as changed with before/after", () => {
+    const base = spGraph("", [spEdge("e1", "", "Rejected")]);
+    const target = spGraph("2", [spEdge("e2", "2", "Approved")]);
+
+    const merged = buildMergedGraph(base, target);
+
+    expect(merged.edges).toHaveLength(1);
+    expect(merged.edges[0]).toMatchObject({
+      id: "s->b@Approved",
+      status: "changed",
+      exit: "Approved",
+      exitChange: { before: "Rejected", after: "Approved" },
+    });
+    expect(merged.edges[0].labelChange).toBeUndefined();
+  });
+
+  it("treats side ids, in-handle variants and a null SP handle as layout (unchanged)", () => {
+    const base = spGraph("", [spEdge("e1", "", null, "t-left")]);
+    const target = spGraph("2", [spEdge("e2", "2", "s-bottom", "t-top")]);
+
+    const merged = buildMergedGraph(base, target);
+
+    expect(merged.edges.map((e) => [e.id, e.status])).toEqual([["s->b", "unchanged"]]);
+  });
+
+  it("ignores side ids on normal nodes and SP in-handle variants", () => {
+    const { base, target } = buildFixture();
+    base.nodes[1] = mkNode({ id: "b", title: "B", node_type: "subprocess" });
+    target.nodes[1] = mkNode({ id: "b2", source_node_id: "b", title: "B-new", node_type: "subprocess" });
+    base.edges[0] = { ...mkEdge("e1", "a", "b"), source_handle: "s-right", target_handle: "in" };
+    target.edges[0] = { ...mkEdge("e3", "a2", "b2"), source_handle: "s-top", target_handle: "in:top" };
+
+    const merged = buildMergedGraph(base, target);
+
+    expect(merged.edges.find((e) => e.id === "a->b")?.status).toBe("unchanged");
+  });
 });

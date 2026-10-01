@@ -2147,6 +2147,9 @@ class CompareDiffEdge(BaseModel):
     target: str = Field(max_length=200)
     label: str = Field(default="", max_length=200)
     label_before: str = Field(default="", max_length=200)
+    # SP 출구 끝("main exit"=대표 끝) — 대표 끝이 아닌 끝이나 끝이 바뀐 엣지만, 그 외 "" (사용자 결정 D4)
+    exit: str = Field(default="", max_length=200)
+    exit_before: str = Field(default="", max_length=200)
 
 
 # 버전 파라미터 합계 before/after — FE 요약 탭(sumVersionParam)이 계산한 사실. AI는 해석만 한다.

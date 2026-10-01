@@ -85,8 +85,9 @@ export type NodeData = {
   urlLabel?: string;
   // 다중 그룹(태그) 소속 — 노드가 여러 그룹에 동시 소속. 빈 배열=무소속
   groupIds: string[];
+  // 구 인라인 계층(parent_node_id) 잔재 — 서버가 has_children을 보내지 않아(⑦ 평면화) 에디터에선 항상 false. 소비처 정리는 별도
   hasChildren: boolean;
-  // 이 노드가 속한 스코프(parent_node_id). 인라인 펼침·scope-split 저장 식별용. null=루트, undefined=미지정(현재 스코프 취급)
+  // 이 노드가 속한 스코프(합성 parent_node_id). 임베드(읽기전용) 스코프 식별용. null=루트, undefined=미지정(현재 스코프 취급)
   scopeId?: string | null;
   // 비교 화면 전용 — diff 하이라이트 (spec §7 Phase B). 에디터에서는 미설정.
   diffStatus?: "added" | "removed" | "changed";

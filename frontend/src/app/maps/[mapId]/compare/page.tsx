@@ -297,8 +297,17 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
 
 // duration·touch_time은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
-const displayFieldValue = (t: (key: MessageKey) => string, field: ChangedField, value: string): string => {
+const displayFieldValue = (
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+  field: ChangedField,
+  value: string,
+): string => {
   if (field === "duration" || field === "touch_time") return formatDurationHm(value) || value;
+  // 링크 정체성(백엔드 확정 서명과 같은 4필드) — 원시 id·불리언을 읽을 말로. 빈 값/거짓은 None
+  if (field === "linked_map") return value ? t("compare.mapRef", { id: value }) : "";
+  if (field === "placeholder") return value ? t("compare.categoryRef", { id: value }) : "";
+  if (field === "primary_end") return value === "true" ? t("field.primaryEnd") : "";
+  if (field === "follow_latest") return t(value === "true" ? "compare.followLatestOn" : "compare.followLatestOff");
   // 병렬 출구 키 목록 — 일반 노드·SP 대표 끝의 "__primary__"는 사람이 읽는 이름으로
   if (field === "parallel") {
     return value
@@ -450,6 +459,11 @@ function buildAppNodes(
       // 노드 위 조건 줄 — 인스펙터와 같은 값(target 우선). 입출력은 ioDiff 요약으로만.
       start_condition: m.node.start_condition,
       end_condition: m.node.end_condition,
+      url: m.node.url ?? "",
+      urlLabel: m.node.url_label ?? "",
+      // 병렬 호버 배지(ProcessNode, 무변경 노드만) — 에디터와 같은 판정. SP는 비교 엣지가 변 id로 재매핑돼
+      // 끝 키가 전부 대표 끝으로 접히므로(끝별 갈래 수가 틀림) 넘기지 않는다
+      ...(m.node.node_type !== "subprocess" ? { parallelOutputs: m.node.parallel_outputs ?? [] } : {}),
       ...(m.status === "changed"
         ? {
             ioDiff: buildIoDiffOf(m) ?? undefined,
@@ -512,7 +526,7 @@ const compareRenderH = (node: AppNode) => {
 const compareRenderW = (node: AppNode) =>
   node.measured?.width ?? COMPARE_RENDER_W[node.data.nodeType] ?? nodeSizeOf(node.data.nodeType).w;
 
-function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
+function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>, spKeys: Set<string>): Edge[] {
   return merged.map((e) => {
     // 양끝이 모두 유지 노드인 removed 엣지 = 삽입 등으로 끊긴 직접 연결 → 우회 아크로 렌더.
     const passthrough =
@@ -531,8 +545,12 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>): Edge[] {
       target: e.target,
       label: e.label || undefined,
       type: passthrough ? "removedArc" : "labeled",
-      // 저장된 선 모양 그대로 렌더 — LabeledSmoothEdge가 경로 함수를 고른다
-      data: { lineStyle: e.lineStyle },
+      // 저장된 선 모양 그대로 렌더 — LabeledSmoothEdge가 경로 함수를 고른다.
+      // gateway는 병렬 배지의 레거시 도출 입력 — 대상 버전 갈래만 세도록 removed 제외, SP 출발은 위 배지와 같은 이유로 제외
+      data: {
+        lineStyle: e.lineStyle,
+        gateway: e.status !== "removed" && !spKeys.has(e.source) ? (e.gateway ?? null) : null,
+      },
       markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
       style:
         e.status === "added"
@@ -928,6 +946,11 @@ function ComparePane({
     () => new Set(merged.nodes.filter((n) => n.status !== "removed").map((n) => n.id)),
     [merged],
   );
+  // SP 노드 계보키 — 비교 엣지가 끝 키를 잃으므로 병렬 배지 레거시 도출에서 뺀다(buildAppEdges)
+  const spKeys = useMemo(
+    () => new Set(merged.nodes.filter((n) => n.node.node_type === "subprocess").map((n) => n.id)),
+    [merged],
+  );
 
   // spine(척추) — 유지 노드 + 인라인 삽입. 직선화(alignBackbone)·진입 변(handleSides) 공유. removed는 off-spine.
   const spineIds = useMemo(() => {
@@ -1007,7 +1030,7 @@ function ComparePane({
           spVisual,
         ),
       ),
-      buildAppEdges(layoutEdges, keptKeys),
+      buildAppEdges(layoutEdges, keptKeys, spKeys),
       flowDir,
       spacing,
     );
@@ -1051,7 +1074,7 @@ function ComparePane({
       return { ...node, position: { x, y } };
     });
     return [...aligned, ...removed];
-  }, [merged, noteOf, fieldsOf, keptKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes]);
+  }, [merged, noteOf, fieldsOf, keptKeys, spKeys, flowDir, spineIds, mapMeta, baseGraph, targetGraph, measuredSizes]);
 
   // 레이아웃된 노드 중심 좌표 — 엣지 핸들 변 산정용. 실측 렌더 폭/높이(COMPARE_RENDER_*)로 계산해야
   // 핸들 중심이 실제와 일치(nodeSizeOf는 dagre 박스라 어긋남). 세션 드래그 위치가 있으면 그 좌표를
@@ -1147,7 +1170,7 @@ function ComparePane({
   // 포커스된 엣지는 굵게 강조. 마지막에 같은 핸들 형제 팬 레인(data.fan)을 얹는다 — 에디터 styledEdges와 동일 규칙.
   const appEdges = useMemo(
     () =>
-      injectFanLanes(buildAppEdges(merged.edges, keptKeys).map((edge) => {
+      injectFanLanes(buildAppEdges(merged.edges, keptKeys, spKeys).map((edge) => {
         let styled = edge;
         // handleSides가 정한 변으로 핸들 지정. 비교뷰 하위프로세스 노드는 4변 핸들(NodeHandles)을 렌더하므로
         // 편집기용 전용 핸들 remap(withSubprocessHandles)은 쓰지 않는다(TB에서 상/하 진입이 막히던 원인).
@@ -1164,7 +1187,7 @@ function ComparePane({
         }
         return styled;
       }), fanGeom),
-    [merged, focusId, keptKeys, handleSides, fanGeom],
+    [merged, focusId, keptKeys, spKeys, handleSides, fanGeom],
   );
 
   const titleByKey = useMemo(
@@ -1219,18 +1242,35 @@ function ComparePane({
             ? t("compare.edgeAdded")
             : e.status === "removed"
               ? t("compare.edgeRemoved")
-              : t("compare.edgeLabelChanged"),
-        // 라벨 변경 엣지 — 노드 필드 변경과 같은 before→after 행으로 표시
-        fields: e.labelChange
-          ? [
-              {
-                label: t("compare.edgeLabelField"),
-                before: e.labelChange.before || t("summary.none"),
-                after: e.labelChange.after || t("summary.none"),
-                status: classifyFieldDiff(e.labelChange.before, e.labelChange.after),
-              },
-            ]
-          : undefined,
+              : e.exitChange
+                ? t("compare.edgeExitChanged")
+                : t("compare.edgeLabelChanged"),
+        // 라벨·SP 출구 변경 엣지 — 노드 필드 변경과 같은 before→after 행으로 표시
+        fields:
+          e.labelChange || e.exitChange
+            ? [
+                ...(e.labelChange
+                  ? [
+                      {
+                        label: t("compare.edgeLabelField"),
+                        before: e.labelChange.before || t("summary.none"),
+                        after: e.labelChange.after || t("summary.none"),
+                        status: classifyFieldDiff(e.labelChange.before, e.labelChange.after),
+                      },
+                    ]
+                  : []),
+                ...(e.exitChange
+                  ? [
+                      {
+                        label: t("compare.edgeExitField"),
+                        before: displayFieldValue(t, "parallel", e.exitChange.before),
+                        after: displayFieldValue(t, "parallel", e.exitChange.after),
+                        status: classifyFieldDiff(e.exitChange.before, e.exitChange.after),
+                      },
+                    ]
+                  : []),
+              ]
+            : undefined,
       }));
     const pick = (items: ChangeItem[], status: MergedNodeStatus) =>
       items.filter((i) => i.status === status);
@@ -2348,6 +2388,26 @@ function ComparePane({
                       </span>
                     )}
                   </InspectorRow>
+                  {/* SP 출구 — 끝이 바뀌었거나 대표 끝이 아닌 끝에서 나갈 때만 (사용자 결정 D4) */}
+                  {(selectedEdge.exitChange || selectedEdge.exit !== PRIMARY_END_HANDLE) && (
+                    <InspectorRow label={t("compare.edgeExitField")}>
+                      {selectedEdge.exitChange ? (
+                        <span data-id="compare-inspector-edge-exit">
+                          <span className="text-ink-muted line-through">
+                            {displayFieldValue(t, "parallel", selectedEdge.exitChange.before)}
+                          </span>
+                          <span className="mx-1 text-ink-tertiary">→</span>
+                          <span className="font-semibold text-diff-changed">
+                            {displayFieldValue(t, "parallel", selectedEdge.exitChange.after)}
+                          </span>
+                        </span>
+                      ) : (
+                        <span data-id="compare-inspector-edge-exit" className="text-ink-secondary">
+                          {selectedEdge.exit}
+                        </span>
+                      )}
+                    </InspectorRow>
+                  )}
                   <InspectorRow label={t("inspector.edgeStyle")}>
                     {t(
                       selectedEdge.lineStyle === "straight"
@@ -2491,6 +2551,24 @@ function ComparePane({
                       </InspectorRow>
                     );
                   })()}
+                  {/* 링크 정체성 — 확정 서명이 세는 필드라 바뀐 경우만 행으로 드러낸다(값 자체는 SP 노드가 보여 준다) */}
+                  {(["linked_map", "placeholder", "primary_end", "follow_latest"] as const).map((key) => {
+                    const change = selectedNode.fieldChanges.find((fc) => fc.field === key);
+                    if (!change) return null;
+                    return (
+                      <InspectorRow key={key} label={t(FIELD_MSG[key])}>
+                        <span data-id={`compare-inspector-${key}`}>
+                          <span className="text-ink-muted line-through">
+                            {displayFieldValue(t, key, change.before) || t("summary.none")}
+                          </span>
+                          <span className="mx-1 text-ink-tertiary">→</span>
+                          <span className="font-semibold text-diff-changed">
+                            {displayFieldValue(t, key, change.after) || t("summary.none")}
+                          </span>
+                        </span>
+                      </InspectorRow>
+                    );
+                  })}
                 </div>
                 {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화) */}
                 {(() => {
@@ -2501,6 +2579,8 @@ function ComparePane({
                     "output_forms",
                     "start_condition",
                     "end_condition",
+                    "url",
+                    "url_label",
                   ] as const;
                   const rows = longFields
                     .map((key) => ({

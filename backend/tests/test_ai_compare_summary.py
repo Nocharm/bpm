@@ -219,6 +219,51 @@ def test_prompt_carries_flow_context_metrics_and_io(client: TestClient, monkeypa
     assert "발주서" in user and "QA 검토" in user and "removed" in user  # 입출력 변경 + 소비처
 
 
+def test_prompt_glossary_covers_promoted_fields_url_and_exits(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """용어표가 FIELD_KEYS 필드(touch_time H.MM·gmp·forms·url·링크 정체성·parallel)와 엣지 exit를 설명한다."""
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+
+    assert _post(client, map_id, base, target).status_code == 200
+
+    system = seen[0][0]["content"]
+    assert "duration·touch_time 값은 H.MM" in system
+    for term in ("touch_time=", "gmp=", "input_forms/output_forms=", "url=", "url_label=",
+                 "linked_map=", "primary_end=", "follow_latest=", "parallel=", "exit는"):
+        assert term in system, term
+    glossary = [line for line in system.splitlines() if "gmp=" in line or "linked_map=" in line or "exit는" in line]
+    assert glossary and all("—" not in line for line in glossary)  # 새 용어줄에 긴 대시 없음
+
+
+def test_prompt_carries_edge_exit_change_without_fake_label_change(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SP 출구 끝만 바뀐 엣지는 exit before -> after로 싣고 라벨 변경 줄을 지어내지 않는다 (사용자 결정 D4)."""
+    _enable_ai(monkeypatch)
+    seen: list[list[dict]] = []
+    monkeypatch.setattr(ai_client, "call_ai", _spy_ai(seen))
+    map_id, base, target = _map_with_two_versions(client)
+    diff = _diff_payload()
+    diff["edges"] = [
+        {"ref": "e1", "status": "changed", "source": "심사", "target": "보완", "label": "재검토",
+         "label_before": "재검토", "exit": "main exit", "exit_before": "반려"},
+        {"ref": "e2", "status": "unchanged", "source": "심사", "target": "출고", "label": "",
+         "exit": "승인"},
+        {"ref": "e3", "status": "changed", "source": "A", "target": "B", "label": "yes", "label_before": "no"},
+    ]
+
+    assert _post(client, map_id, base, target, diff=diff).status_code == 200
+
+    user = seen[0][-1]["content"]
+    assert "[e1] changed \"심사\" -> \"보완\" | label: '재검토' | exit: '반려' -> 'main exit'" in user
+    assert "[e2] unchanged \"심사\" -> \"출고\" | exit: '승인'" in user
+    assert "[e3] changed \"A\" -> \"B\" | label: 'no' -> 'yes'" in user
+
+
 def test_same_diff_is_served_from_cache_without_model_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

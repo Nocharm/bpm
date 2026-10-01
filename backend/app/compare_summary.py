@@ -24,7 +24,9 @@ _CONTRACT = """당신은 BPM 프로세스맵 변경 보고서를 작성합니다
 - submitted_by / submit_note: 제출자와 제출 시 적은 변경 사유. 없으면 submit_note 줄이 없습니다.
 - nodes: 활동(노드). status가 added/removed/changed면 변경, unchanged면 흐름 문맥용 이웃(변경 노드의 상하류).
   changed는 바뀐 필드의 before→after 값을 담습니다. 추가된 활동에는 desc·role·dept·system이 붙을 수 있습니다.
-- edges: 흐름(연결). unchanged 엣지는 문맥입니다. source/target은 활동 제목입니다.
+- edges: 흐름(연결). unchanged 엣지는 문맥입니다. source/target은 활동 제목입니다. exit는 하위프로세스 활동에서 나가는
+  출구(그 하위프로세스의 끝 이름, "main exit"=대표 끝)이고, exit가 before -> after로 바뀐 changed 엣지는 같은 두 활동 사이
+  연결이 다른 결과(끝)에서 나가도록 바뀐 흐름 변경(kind flow)입니다.
 - metrics: **버전 전체** 파라미터 합계 before→after(시스템이 계산한 사실). 특정 활동의 값이 아니므로 "총 소요시간 3시간 → 4시간 30분"처럼 전체 합계로만 쓰고, 활동 하나의 변화는 그 노드의 changes에서 읽으세요.
 - io: 입출력 항목 변경. output removed의 peers는 그 산출물을 입력으로 쓰는 하위 활동(끊김 후보), input의 peers는 산출처.
 - ref: 각 항목의 인용 키(n1, e2 …). 근거로 삼은 항목의 ref를 refs에 그대로 적으세요(지어내지 말 것). metrics·io에는 ref가 없으니 합계만 근거인 항목은 refs를 빈 배열로.
@@ -57,7 +59,9 @@ _CONTRACT = """당신은 BPM 프로세스맵 변경 보고서를 작성합니다
 - 한 항목 한 줄, 30자 안팎. 관형절을 길게 늘이지 말고 항목을 나누기.
 - 1인칭·화자 없음(제출자를 화자로 쓰지 말 것). 이모지·머리기호·마크다운·긴 대시(—) 금지. 구분은 쉼표·가운뎃점·괄호로.
 - 수치는 방향과 크기를 짧게 병기(예: "소요시간 1시간 → 2시간 30분", "연간 건수 120 → 200건").
-- duration 값은 H.MM 표기(소수부 2자리가 분)이므로 반드시 시·분으로 풀어 쓸 것: 1.30은 "1시간 30분", 0.50은 "50분", 2.00은 "2시간"(원문 "1.30 → 0.50" 그대로 옮기지 말 것). cost_krw/usd=회당 비용, headcount=회당 인원, annual_count=연간 건수, fte=FTE.
+- duration·touch_time 값은 H.MM 표기(소수부 2자리가 분)이므로 반드시 시·분으로 풀어 쓸 것: 1.30은 "1시간 30분", 0.50은 "50분", 2.00은 "2시간"(원문 "1.30 → 0.50" 그대로 옮기지 말 것). duration=회당 소요시간, touch_time=회당 실작업시간(duration과 동일 H.MM 표기), cost_krw/usd=회당 비용, headcount=회당 인원, annual_count=연간 건수, fte=FTE.
+- gmp=GMP 분류(direct=GMP 직접, indirect=GMP 간접, non_gmp=비GMP, 빈 값=미분류). input_forms/output_forms=입력·출력 항목별 자료 형식(input/output과 줄 단위로 짝). url=참조 링크 주소, url_label=그 링크의 표시 이름(링크 교체·삭제는 changed로 쓰고 주소 원문은 옮기지 말 것).
+- linked_map=하위프로세스가 가리키는 맵 번호, placeholder=플레이스홀더 출처 카테고리 번호(링크 전 자리), primary_end=대표 끝 여부(true/false), follow_latest=링크 맵의 최신 게시본을 따르는지(true) 버전을 고정했는지(false). 번호는 그대로 옮기지 말고 "하위프로세스 링크 대상 변경"처럼 쓸 것.
 - parallel=병렬 출구(그 출구에서 나가는 갈래가 모두 동시에 진행). 값은 병렬로 켠 출구 목록이고 "main exit"는 노드의 기본 출구, 그 외 값은 하위프로세스 끝 이름. 빈 값은 병렬 없음(갈래 하나 또는 택일 분기). 예: 병렬 해제는 "동시 진행 해제", 켬은 "동시 진행으로 변경". 병렬 전환만으로 소요시간이 늘거나 단계가 삭제된 것으로 쓰지 말 것(엣지 재배선은 흐름 변경이고, 활동 삭제는 nodes의 removed만).
 - 추가된 활동은 괄호로 담당·부서·시스템 병기 가능(예: "QA 검토 단계 신설(품질팀·LIMS)").
 - 변경이 없으면 title에 "변경 없음", opening에 "두 버전 동일", 나머지 배열은 빈 배열, closing은 빈 문자열.
@@ -78,7 +82,8 @@ _SUBMIT_NOTE_CONTRACT = """당신은 BPM 프로세스맵 개정안을 제출하�
 - 첫 줄은 개정 목적 한 줄(명사형). 이어서 핵심 변경 1~3줄(무엇을 어떻게 — 담당·부서·시스템·수치 변화 포함).
 - 명사형 종결("~ 신설", "~로 변경", "~ 삭제"). "~함"·"~높임" 같은 용언 명사형이 아니라 체언으로 끝낼 것. 서술형 문장·1인칭·이모지·머리기호·마크다운·긴 대시(—) 금지.
 - 활동 이름은 따옴표 없이 쓰고, 여러 활동은 "재고 예약·배송 준비 단계 신설"처럼 가운뎃점으로 묶기.
-- duration 값은 H.MM 표기(소수부 2자리가 분)이므로 시·분으로 풀어 쓸 것(1.30 → "1시간 30분").
+- duration·touch_time 값은 H.MM 표기(소수부 2자리가 분)이므로 시·분으로 풀어 쓸 것(1.30 → "1시간 30분").
+- edges의 exit는 하위프로세스의 출구 끝 이름("main exit"=대표 끝). exit가 바뀌면 "출구를 '반려'로 변경"처럼 쓸 것.
 - parallel 필드는 병렬 출구 목록("main exit"=기본 출구). 켜지면 "동시 진행으로 변경", 꺼지면 "동시 진행 해제"로 쓸 것.
 - 변경 목록을 전부 나열하지 말 것 — 결재자가 알아야 할 것만. 변경이 없으면 note는 "변경 없음".
 """
@@ -155,10 +160,15 @@ def _serialize_diff(diff: CompareDiffPayload) -> str:
     lines.append("edges:")
     for edge in diff.edges:
         head = f"- [{edge.ref}] {edge.status} \"{edge.source}\" -> \"{edge.target}\""
-        if edge.status == "changed":
+        # 출구만 바뀐 changed 엣지는 label_before==label — 라벨 변경 줄을 그리지 않는다
+        if edge.status == "changed" and edge.label_before != edge.label:
             head = f"{head} | label: {edge.label_before!r} -> {edge.label!r}"
         elif edge.label:
             head = f"{head} | label: {edge.label!r}"
+        if edge.exit_before:
+            head = f"{head} | exit: {edge.exit_before!r} -> {edge.exit!r}"
+        elif edge.exit:
+            head = f"{head} | exit: {edge.exit!r}"
         lines.append(head)
     if diff.omitted_edges:
         lines.append(f"- (외 {diff.omitted_edges}건 생략)")

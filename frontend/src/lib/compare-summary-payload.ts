@@ -118,15 +118,16 @@ function buildIoChanges(
   return changes;
 }
 
+// 출구 키 → 모델이 읽을 말: 기본 출구(`__primary__`)는 "main exit", 그 외는 SP 끝 제목 그대로.
+function formatExitKey(key: string): string {
+  return key === PRIMARY_END_HANDLE ? "main exit" : key;
+}
+
 // 병렬 출구 값은 출구 키 목록("__primary__", SP 끝 제목) — 모델이 읽을 말로: 기본 출구는 "main exit".
 // 의미(그 출구의 갈래가 동시 진행)는 compare_summary.py 프롬프트가 설명한다 (출력 규칙 2026-10-01)
 function formatPayloadValue(field: string, value: string): string {
   if (field !== "parallel") return value;
-  return value
-    .split(", ")
-    .filter(Boolean)
-    .map((key) => (key === PRIMARY_END_HANDLE ? "main exit" : key))
-    .join(", ");
+  return value.split(", ").filter(Boolean).map(formatExitKey).join(", ");
 }
 
 export function buildCompareSummaryPayload(
@@ -196,7 +197,11 @@ export function buildCompareSummaryPayload(
       source: (titleByKey.get(e.source) ?? "?").slice(0, 200),
       target: (titleByKey.get(e.target) ?? "?").slice(0, 200),
       label: (e.labelChange?.after ?? e.label).slice(0, 200),
-      label_before: (e.labelChange?.before ?? "").slice(0, 200),
+      // 출구만 바뀐 changed 엣지는 label_before=label — 서버가 라벨 변경 줄을 그리지 않게
+      label_before: (e.labelChange?.before ?? (e.exitChange ? e.label : "")).slice(0, 200),
+      // SP 출구 — 대표 끝이 아닌 끝에서 나가거나 끝이 바뀐 엣지만(일반 노드는 출구가 하나라 생략)
+      exit: e.exitChange || e.exit !== PRIMARY_END_HANDLE ? formatExitKey(e.exit).slice(0, 200) : "",
+      exit_before: e.exitChange ? formatExitKey(e.exitChange.before).slice(0, 200) : "",
     };
   });
 

@@ -244,3 +244,67 @@ describe("buildCompareSummaryPayload - 병렬 출구", () => {
     expect(payload.nodes[0].changes).toEqual([{ field: "parallel", before: "", after: "main exit" }]);
   });
 });
+
+describe("buildCompareSummaryPayload - SP 출구·URL", () => {
+  // SP s → B(대표 끝 "Done"), s → C(보조 끝). target에서 보조 끝이 "Rejected" → 대표 끝으로 바뀐다.
+  function spFixture(): { base: VersionGraph; target: VersionGraph } {
+    const spEdge = (id: string, source: string, target: string, handle: string | null, label = ""): GraphEdge => ({
+      ...mkEdge(id, source, target, label),
+      source_handle: handle,
+    });
+    const base: VersionGraph = {
+      nodes: [
+        mkNode({ id: "s", title: "Call", node_type: "subprocess" }),
+        mkNode({ id: "b", title: "B" }),
+        mkNode({ id: "c", title: "C", url: "https://old" }),
+      ],
+      edges: [spEdge("e1", "s", "b", "Hold", "wait"), spEdge("e2", "s", "c", "Rejected", "no")],
+    };
+    const target: VersionGraph = {
+      nodes: [
+        mkNode({ id: "s2", source_node_id: "s", title: "Call", node_type: "subprocess" }),
+        mkNode({ id: "b2", source_node_id: "b", title: "B" }),
+        mkNode({ id: "c2", source_node_id: "c", title: "C", url: "https://new" }),
+      ],
+      edges: [spEdge("f1", "s2", "b2", "Hold", "wait"), spEdge("f2", "s2", "c2", "s-right", "no")],
+    };
+    return { base, target };
+  }
+
+  it("carries an end key change as exit_before -> exit with readable names, label untouched", () => {
+    const { base, target } = spFixture();
+
+    const { payload } = buildCompareSummaryPayload(buildMergedGraph(base, target));
+    const toC = payload.edges.find((e) => e.target === "C");
+
+    expect(toC).toMatchObject({
+      status: "changed",
+      exit: "main exit",
+      exit_before: "Rejected",
+      label: "no",
+      label_before: "no",
+    });
+    expect(payload.totals.edges_changed).toBe(1);
+  });
+
+  it("names a non-primary end on unchanged edges and leaves normal-node edges without exit", () => {
+    const { base, target } = spFixture();
+
+    const { payload } = buildCompareSummaryPayload(buildMergedGraph(base, target));
+    const toB = payload.edges.find((e) => e.target === "B");
+
+    expect(toB).toMatchObject({ status: "unchanged", exit: "Hold", exit_before: "", label_before: "" });
+    const { payload: plain } = buildCompareSummaryPayload(buildMergedGraph(buildFixture().base, buildFixture().target));
+    expect(plain.edges.every((e) => e.exit === "" && e.exit_before === "")).toBe(true);
+  });
+
+  it("reports a URL change as a url field change", () => {
+    const { base, target } = spFixture();
+
+    const { payload } = buildCompareSummaryPayload(buildMergedGraph(base, target));
+
+    expect(payload.nodes.find((n) => n.title === "C")?.changes).toEqual([
+      { field: "url", before: "https://old", after: "https://new" },
+    ]);
+  });
+});

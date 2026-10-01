@@ -41,6 +41,9 @@ def test_draft_returns_note_and_records_usage(client: TestClient, monkeypatch: p
     user = seen[0][-1]["content"]
     assert "QA 검토" in user and "2.30" in user  # diff 본문
     assert "명사형" in seen[0][0]["content"]  # 개조식 계약
+    # touch_time도 H.MM 풀어쓰기, SP 출구(exit) 변경 서술 규칙 (C30·D4)
+    assert "duration·touch_time 값은 H.MM" in seen[0][0]["content"]
+    assert "exit" in seen[0][0]["content"]
 
 
 def test_draft_without_published_base(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -2502,6 +2502,9 @@ export interface CompareDiffEdge {
   target: string;
   label: string;
   label_before: string;
+  // SP 출구 끝("main exit"=대표 끝) — 대표 끝이 아닌 끝이나 끝이 바뀐 엣지만, 그 외 "" (사용자 결정 D4)
+  exit: string;
+  exit_before: string;
 }
 
 // 버전 파라미터 합계 before/after — 요약 탭(sumVersionParam)과 같은 값. AI는 해석만.
