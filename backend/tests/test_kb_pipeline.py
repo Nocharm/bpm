@@ -239,6 +239,88 @@ def test_publish_spawns_map_indexing(client: TestClient, monkeypatch) -> None:
     assert spawned == ["index_map_version"]
 
 
+# ---------- 이름·설명 변경 재인덱싱 (C60) ----------
+
+
+def _publish_directly(version_id: int) -> None:
+    async def _run() -> None:
+        async with SessionLocal() as session:
+            version = await session.get(MapVersion, version_id)
+            version.status = "published"
+            await session.commit()
+
+    asyncio.run(_run())
+
+
+def _capture_spawn(monkeypatch: pytest.MonkeyPatch) -> list:
+    """spawn을 가로채 코루틴을 모은다 — 테스트가 asyncio.run으로 직접 돌려 결과 청크를 확인한다."""
+    captured: list = []
+    monkeypatch.setattr(indexing, "spawn", captured.append)
+    return captured
+
+
+def _run_spawned(captured: list) -> list[str]:
+    names = [coro.__name__ for coro in captured]
+    for coro in captured:
+        asyncio.run(coro)
+    captured.clear()
+    return names
+
+
+def test_map_rename_and_description_edit_reindex_published_chunks(
+    client: TestClient, monkeypatch
+) -> None:
+    """직접 이름·설명 변경은 게시본을 재인덱싱한다 — 청크 첫 줄·meta.map_name이 다음 게시까지 옛 값이면 안 된다."""
+    _enable_kb(monkeypatch)
+    created = _make_map(client)
+    map_id = created["id"]
+    _publish_directly(created["versions"][0]["id"])
+    captured = _capture_spawn(monkeypatch)
+
+    new_name = f"{created['name']} renamed"
+    assert client.patch(f"/api/maps/{map_id}", json={"name": new_name}).status_code == 200
+    assert _run_spawned(captured) == ["reindex_published_map"]
+    chunks = _chunks("map", map_id)
+    assert chunks and chunks[0].meta["map_name"] == new_name
+    assert chunks[0].chunk_text.splitlines()[0] == f"프로세스 맵: {new_name}"
+
+    assert client.patch(f"/api/maps/{map_id}", json={"description": "입고 검수 절차 설명"}).status_code == 200
+    assert _run_spawned(captured) == ["reindex_published_map"]
+    assert "입고 검수 절차 설명" in _chunks("map", map_id)[0].chunk_text
+
+    # 값이 그대로면 재인덱싱하지 않는다
+    assert client.patch(f"/api/maps/{map_id}", json={"name": new_name}).status_code == 200
+    assert captured == []
+
+
+def test_approved_map_rename_reindexes_after_commit(client: TestClient, monkeypatch) -> None:
+    """승인된 이름 변경(map_rename 적용기)도 승인 커밋 뒤 게시본을 재인덱싱한다."""
+    _enable_kb(monkeypatch)
+    created = _make_map(client)
+    map_id = created["id"]
+    _publish_directly(created["versions"][0]["id"])
+    to_name = f"{created['name']} approved"
+    request = client.post(f"/api/maps/{map_id}/rename-requests", json={"to_name": to_name})
+    assert request.status_code in (200, 201), request.text
+    captured = _capture_spawn(monkeypatch)
+
+    decided = client.post(
+        f"/api/approval-requests/{request.json()['id']}/decide", json={"decision": "approve"}
+    )
+    assert decided.status_code == 200, decided.text
+    assert _run_spawned(captured) == ["reindex_published_map"]
+    assert _chunks("map", map_id)[0].meta["map_name"] == to_name
+
+
+def test_reindex_published_map_skips_maps_without_published_version(
+    client: TestClient, monkeypatch
+) -> None:
+    _enable_kb(monkeypatch)
+    created = _make_map(client)  # 초안만 — 검색 코퍼스는 게시본 전용
+    asyncio.run(indexing.reindex_published_map(created["id"]))
+    assert _chunks("map", created["id"]) == []
+
+
 # ---------- 인터뷰 검색 주입 ----------
 
 _Q = json.dumps({"message": "다음 질문입니다.", "facts_patch": {}})

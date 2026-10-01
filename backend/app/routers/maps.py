@@ -810,6 +810,7 @@ async def update_map(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    before_text = (found_map.name, found_map.description)
     if payload.name is not None:
         new_name = payload.name.strip()
         if not new_name:
@@ -833,6 +834,12 @@ async def update_map(
         found_map.description = payload.description
     await session.commit()
     await session.refresh(found_map)
+    if (found_map.name, found_map.description) != before_text:
+        # 이름·설명은 KB 청크 첫 줄·meta.map_name에 박혀 있다 — 다음 게시까지 옛 값이 검색되지 않게 (C60)
+        from app.kb import embed_client, indexing
+
+        if embed_client.is_embed_enabled():
+            indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 
@@ -1779,15 +1786,7 @@ async def restore_map(
     from app.kb import embed_client, indexing
 
     if embed_client.is_embed_enabled():
-        published_ids = (
-            await session.scalars(
-                select(MapVersion.id).where(
-                    MapVersion.map_id == map_id, MapVersion.status == workflow.PUBLISHED
-                )
-            )
-        ).all()
-        for version_id in published_ids:
-            indexing.spawn(indexing.index_map_version(version_id))
+        indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 
