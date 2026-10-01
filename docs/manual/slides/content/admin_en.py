@@ -169,7 +169,7 @@ DECK = {
                 ]},
                 {"title": "Confirmation governance", "shot": True, "pts": [
                     ("confirmed state", "Apart from publishing. Snapshots and the draft can't be deleted. Regular workflows are blocked server-side."),
-                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · one connection per exit."),
+                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · splits use a decision or a parallel exit."),
                     ("Single source", "The Approval tab's <b>Confirm readiness</b> checklist. One failing gate disables Confirm."),
                     ("Who confirms", "The checkout holder if <b>direct admin</b> or sysadmin. Higher admins send a confirm request."),
                     ("Draft visibility", "Admins and sysadmins only. Everyone else lands on the latest confirmed snapshot."),
@@ -183,7 +183,7 @@ DECK = {
                 ]},
                 {"title": "Status board", "shot": True, "pts": [
                     ("One table", "Every L5 in scope. Path / Latest confirmed / Status (Ready · Blocked · No canvas) + <b>Open</b>."),
-                    ("Negative pills", "Failing gates: Missing L6 · Placeholders · Stale links · Unpublished L6 · Exit-less loop · Direct fan-out."),
+                    ("Negative pills", "Failing gates: Missing L6 · Placeholders · Stale links · Unpublished L6 · Exit-less loop · Split without a decision or parallel exit."),
                     ("Home link", "The category summary card shows the same verdicts under Subtree confirmation."),
                     ("Delegated scope", "Delegated admins see their own subtree only."),
                 ]},

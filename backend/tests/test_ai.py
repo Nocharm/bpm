@@ -1117,6 +1117,14 @@ def test_ai_prompt_graph_template_keeps_parallel_by_default() -> None:
     assert "그 외에는 null로 두세요" in _INSTRUCTIONS
 
 
+def test_ai_prompt_states_connection_rule_per_node_type() -> None:
+    """연결 규칙이 출력 규칙(output-rules)과 같은 노드 유형 구분을 말해야 한다 — process 1개·SP 끝마다·start 기본 병렬."""
+    from app.ai_prompt import _INSTRUCTIONS
+
+    assert "process 노드에서 나가는 연결은 하나, subprocess 노드는 끝마다 하나입니다" in _INSTRUCTIONS
+    assert "start 노드는 원래 병렬이라" in _INSTRUCTIONS
+
+
 def test_ai_prompt_states_subprocess_regeneration_rules() -> None:
     """graph 재생성은 제목 매칭으로 기존 SP·그룹을 보존하므로 그 조건을 프롬프트가 알려야 한다 (C11)."""
     from app.ai_prompt import _INSTRUCTIONS

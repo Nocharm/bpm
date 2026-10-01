@@ -133,7 +133,7 @@ DECK = {
                 ]},
                 {"title": "Connecting nodes", "shot": True, "pts": [
                     ("Drag a handle", "Dropping on a node's body connects to the default handle (snap preview)."),
-                    ("One connection per exit", "One-of-several uses a <b>Decision</b> (Yes/No labels); concurrent work uses a right-click <b>Parallel exit</b> (two or more)."),
+                    ("Splits use a decision or a parallel exit", "One-of-several uses a <b>Decision</b> (Yes/No labels); concurrent work uses a right-click <b>Parallel exit</b> (two or more). Start is parallel by default."),
                     ("Edge labels", "Right-click or <code>F2</code>. Line breaks supported."),
                     ("Line style", "Per edge: curved / stepped / straight. Change all in the Map tab's <b>Edge style</b>."),
                     ("Drop zones", "Drag a node near another to insert before / after / swap / group."),
@@ -153,7 +153,7 @@ DECK = {
                 ]},
                 {"title": "Saving &amp; validation", "pts": [
                     ("Autosave", "About 2 s after you stop. The Save button shows Saving / Saved / Failed."),
-                    ("Save checklist", "One Start · one primary End · unique End names · one connection per exit (parallel exits two or more, Decisions exempt)."),
+                    ("Save checklist", "One Start · one primary End · unique End names · splits use a decision or a parallel exit (parallel exits two or more)."),
                     ("Editing needs", "A draft (#Draft / #Rejected) plus <b>your checkout</b>. Otherwise read-only."),
                     ("Pending downgrade", "While your permission downgrade is pending, checkout and submission are refused."),
                 ]},
@@ -352,7 +352,7 @@ DECK = {
                 {"title": "Export (PNG · Excel · CSV)", "shot": True, "pts": [
                     ("PNG", "2× resolution with a map info card. <code>Ctrl+Shift+E</code>."),
                     ("Excel", "<b>Process Map</b> / <b>WBS</b>, then <b>pick columns</b>. Per-currency number formatting. 2,000-row cap."),
-                    ("CSV", "The same 25 columns as import, <b>picked columns</b> only. Round-trips; left-out columns keep their values."),
+                    ("CSV", "The same 25 columns as import, <b>picked columns</b> only. Round-trips; left-out columns keep their values (except Next)."),
                     ("CSV skips", "Non-primary End nodes, edges into End, duplicate titles, with a warning. Secondary SP end links warn; per-end parallel is not carried."),
                 ]},
                 {"title": "AI assistant", "shot": True, "pts": [
@@ -415,7 +415,7 @@ DECK = {
                     ("Origin badge", "Click for that L5's drill-in peek. \"Search other frameworks\" opens the browse modal."),
                 ]},
                 {"title": "Confirm &amp; versions", "shot": True, "pts": [
-                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · one connection per exit."),
+                    ("Six gates", "All L6 placed · no placeholders · no stale links · all L6 published · no exit-less loops · splits use a decision or a parallel exit."),
                     ("Who confirms", "The checkout holder if they are the <b>direct admin</b> (or a sysadmin). Higher admins send a confirm request."),
                     ("Versions", "v1.0 → v1.1 …, <b>Major</b> makes v2.0 and prunes intermediate minors."),
                     ("Changes required", "Layout-only moves can't confirm. The section shows changes since the last confirm."),
@@ -468,7 +468,7 @@ DECK = {
                     ("Can't submit?", "Assign at least one approver first."),
                     ("Can't create a version?", "Finish the current draft cycle through publish."),
                     ("Copy disabled?", "Only maps published at least once can be copied."),
-                    ("Won't save?", "One Start · one primary End · unique End names · one connection per exit."),
+                    ("Won't save?", "One Start · one primary End · unique End names · splits use a decision or a parallel exit."),
                     ("Subprocess locked?", "It's undesignated. Request registration, or publish and designate."),
                     ("No draft on the canvas?", "Drafts are admin / sysadmin only. Everyone else lands on the latest confirmed snapshot."),
                     ("\"Owner unconfirmed\"?", "An interview-imported map. Map Settings → Danger Zone → Transfer ownership."),
