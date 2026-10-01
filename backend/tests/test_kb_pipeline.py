@@ -17,6 +17,7 @@ from app.models import (
     KbChunk,
     KbDocument,
     MapVersion,
+    ProcessMap,
 )
 from app.settings import settings
 
@@ -103,6 +104,7 @@ def test_index_map_version_serializes_published_content(client: TestClient, monk
         ],
     }
     assert client.put(f"/api/versions/{version_id}/graph", json=graph).status_code == 200
+    _publish_directly(version_id)
     asyncio.run(indexing.index_map_version(version_id))
     chunks = _chunks("map", created["id"])
     assert chunks and chunks[0].meta["map_name"] == created["name"]
@@ -329,6 +331,36 @@ def test_approved_map_rename_reindexes_after_commit(client: TestClient, monkeypa
     assert decided.status_code == 200, decided.text
     assert _run_spawned(captured) == ["reindex_published_map"]
     assert _chunks("map", map_id)[0].meta["map_name"] == to_name
+
+
+def test_index_map_version_skips_versions_no_longer_published(
+    client: TestClient, monkeypatch
+) -> None:
+    """줄 선 작업이 돌 때 이미 게시본이 아니면(새 게시로 만료) 맵 청크를 덮어쓰지 않는다."""
+    _enable_kb(monkeypatch)
+    created = _make_map(client)
+    version_id = created["versions"][0]["id"]
+    _publish_directly(version_id)
+    asyncio.run(indexing.index_map_version(version_id))
+    indexed = [chunk.chunk_text for chunk in _chunks("map", created["id"])]
+    assert indexed
+
+    async def _expire_and_rename() -> None:
+        # 이름까지 바꿔 둔다 — 가드가 없으면 재실행이 새 이름으로 청크를 다시 구워 차이가 드러난다
+        async with SessionLocal() as session:
+            version = await session.get(MapVersion, version_id)
+            version.status = "expired"
+            found_map = await session.get(ProcessMap, created["id"])
+            found_map.name = f"{created['name']} stale"
+            await session.commit()
+
+    asyncio.run(_expire_and_rename())
+    asyncio.run(indexing.index_map_version(version_id))
+    assert [chunk.chunk_text for chunk in _chunks("map", created["id"])] == indexed
+
+    draft = _make_map(client)  # 초안 단독 호출도 무시 — 검색 코퍼스는 게시본 전용
+    asyncio.run(indexing.index_map_version(draft["versions"][0]["id"]))
+    assert _chunks("map", draft["id"]) == []
 
 
 def test_reindex_published_map_skips_maps_without_published_version(

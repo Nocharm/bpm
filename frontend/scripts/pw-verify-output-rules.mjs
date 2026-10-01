@@ -1,7 +1,10 @@
 // 출력 규칙 통일 검증(feat/output-rules) — SP 들어오는 핸들 시작 불가·드래그 중에만 노출(P1).
 // 시드는 pw-verify-sp-ends.mjs와 같은 3끝(승인*·반려·보류) 링크 맵 + 호스트 맵.
+// (11)~(14)는 복제·붙여넣기·AI 병렬 출구 배선: 시작 노드 기본 병렬·⌘/Ctrl 드래그 단독 복제는 병렬 해제·
+// 레거시 gateway 병렬 묶음 복사·AI ops(set_attr parallel) 적용 후 저장.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-verify-output-rules.mjs
 //   산출물 .shots/output-rules-*.png (gitignore). 전제: admin.sys 시드(reset_db).
+//   (14)는 AI 패널 입력이 열려야 해서 backend AI_ENABLED=true가 필요하다(응답은 page.route 목). 꺼져 있으면 SKIP.
 import { mkdirSync } from "node:fs";
 
 import { chromium } from "playwright-core";
@@ -14,6 +17,8 @@ const OUT = "../.shots";
 const KEEP = process.env.KEEP === "1";
 const NAME = "Output rules";
 const H = { "X-Dev-User": ADMIN, "Content-Type": "application/json" };
+// ⌘/Ctrl — 드래그 복제·다중 선택·복사/붙여넣기 조합키(앱은 ctrlKey || metaKey를 받는다)
+const MOD_KEY = process.platform === "darwin" ? "Meta" : "Control";
 
 const results = [];
 const check = (name, ok, detail = "") => {
@@ -331,6 +336,153 @@ const endChecks = await page.evaluate(() =>
 check("subprocess menu lists each end as a parallel check (primary on)", ["승인:true", "반려:false", "보류:false"].every((v) => endChecks.includes(v)), endChecks.join(","));
 await page.screenshot({ path: `${OUT}/output-rules-sp-parallel-menu.png`, clip: { x: sp10.x - 20, y: sp10.y - 20, width: 640, height: 460 } });
 await page.keyboard.press("Escape");
+
+// ── (11) 시드 추가: 시작에 갈래 2개(속성 없음) · 레거시 gateway 병렬 묶음 G(속성 없이 두 엣지 gateway=parallel) ·
+//         단독 복제용 병렬 노드 L(속성 켜짐, 갈래 2개). 시작은 기본 병렬이라(172e8c69) 체크리스트를 통과해야 한다
+await sleep(1500); // (9) 자동 저장이 끝난 뒤 덮어쓴다
+const graph11 = await api("GET", `/api/versions/${host.draft.id}/graph`);
+const G = nid("g");
+const L = nid("l");
+graph11.nodes.push(
+  { id: G, title: "병렬 시작", node_type: "process", pos_x: 1500, pos_y: 640 },
+  { id: nid("g1"), title: "병렬 갈래 1", node_type: "process", pos_x: 1820, pos_y: 560 },
+  { id: nid("g2"), title: "병렬 갈래 2", node_type: "process", pos_x: 1820, pos_y: 760 },
+  { id: L, title: "단독 병렬", node_type: "process", pos_x: 1500, pos_y: 1160, parallel_outputs: ["__primary__"] },
+  { id: nid("l1"), title: "단독 갈래 1", node_type: "process", pos_x: 1820, pos_y: 1080 },
+  { id: nid("l2"), title: "단독 갈래 2", node_type: "process", pos_x: 1820, pos_y: 1260 },
+);
+graph11.edges.push(
+  { id: nid("e-s2"), source_node_id: nid("start"), target_node_id: nid("i") },
+  { id: nid("e-g1"), source_node_id: G, target_node_id: nid("g1"), gateway: "parallel" },
+  { id: nid("e-g2"), source_node_id: G, target_node_id: nid("g2"), gateway: "parallel" },
+  { id: nid("e-l1"), source_node_id: L, target_node_id: nid("l1") },
+  { id: nid("e-l2"), source_node_id: L, target_node_id: nid("l2") },
+);
+await api("PUT", `/api/versions/${host.draft.id}/graph`, { nodes: graph11.nodes, edges: graph11.edges, groups: graph11.groups ?? [] });
+await openEditor();
+check("a two-edge start and a legacy gateway bundle pass the checklist on load", (await checkOk("singleOutput")) === "true");
+const startBox = await nodeBox(nid("start"));
+await page.mouse.click(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2, { button: "right" });
+await sleep(400);
+const startMenuOpen = await page.locator('[data-id="context-menu"]').isVisible().catch(() => false);
+const startParallelItems = await page.locator('[data-id="context-menu"]').getByText("Parallel exit", { exact: true }).count();
+check("the start node menu has no parallel exit item", startMenuOpen && startParallelItems === 0, `menu=${startMenuOpen} items=${startParallelItems}`);
+await page.keyboard.press("Escape");
+await sleep(300);
+
+// ── (12) ⌘/Ctrl 드래그로 병렬 노드 L만 복제 — 갈래가 같이 오지 않으니 사본의 병렬 출구는 꺼지고 원본은 그대로
+const nodeIds = () => page.evaluate(() => [...document.querySelectorAll(".react-flow__node")].map((el) => el.getAttribute("data-id")));
+const idsBefore12 = new Set(await nodeIds());
+const lBox = await nodeBox(L);
+const l1Box = await nodeBox(nid("l1"));
+const flowScale = (center(l1Box).x - center(lBox).x) / 320; // L→L1 저장 x 간격 320으로 화면 배율 환산(폭이 같은 노드)
+const lFrom = center(lBox);
+const lTo = { x: lFrom.x, y: lFrom.y - 150 * flowScale }; // 위쪽 빈 자리(갈래 엣지는 L 오른쪽에서 출발)
+await page.keyboard.down(MOD_KEY);
+await page.mouse.move(lFrom.x, lFrom.y);
+await page.mouse.down();
+for (let i = 1; i <= 10; i += 1) {
+  await page.mouse.move(lFrom.x, lFrom.y + ((lTo.y - lFrom.y) * i) / 10, { steps: 1 });
+}
+await sleep(120);
+await page.mouse.up();
+await page.keyboard.up(MOD_KEY);
+await sleep(600);
+const copyId12 = (await nodeIds()).find((id) => !idsBefore12.has(id));
+check("modifier-dragging a lone parallel node adds one copy", !!copyId12, String(copyId12));
+if (copyId12) {
+  const copyBox = await nodeBox(copyId12);
+  await page.mouse.click(copyBox.x + copyBox.width / 2, copyBox.y + copyBox.height / 2, { button: "right" });
+  await sleep(400);
+  const copyChecked = await page.locator('[data-id="context-menu-check-Parallel exit"]').getAttribute("aria-checked").catch(() => null);
+  check("the copy's parallel exit is off in the context menu", copyChecked === "false", String(copyChecked));
+  await page.keyboard.press("Escape");
+  await sleep(1500);
+  const saved12 = await api("GET", `/api/versions/${host.draft.id}/graph`);
+  const copy12 = saved12.nodes.find((n) => n.id === copyId12);
+  const original12 = saved12.nodes.find((n) => n.id === L);
+  check(
+    "the saved copy has no parallel exit and the original keeps it",
+    JSON.stringify(copy12?.parallel_outputs ?? null) === "[]" && JSON.stringify(original12?.parallel_outputs) === '["__primary__"]',
+    `copy=${JSON.stringify(copy12?.parallel_outputs)} original=${JSON.stringify(original12?.parallel_outputs)}`,
+  );
+  check("the checklist stays green after the duplicate", (await checkOk("singleOutput")) === "true");
+}
+
+// ── (13) 레거시 gateway 병렬 묶음(G+갈래 2) 복사·붙여넣기 — gateway가 같이 와서 사본도 병렬로 읽히고 체크리스트 유지
+await openEditor();
+const idsBefore13 = new Set(await nodeIds());
+await page.locator(`.react-flow__node[data-id="${G}"]`).click({ force: true });
+await page.keyboard.down(MOD_KEY);
+await page.locator(`.react-flow__node[data-id="${nid("g1")}"]`).click({ force: true });
+await page.locator(`.react-flow__node[data-id="${nid("g2")}"]`).click({ force: true });
+await page.keyboard.up(MOD_KEY);
+await sleep(150);
+check("the legacy bundle is selected (3 nodes)", (await page.locator(".react-flow__node.selected").count()) === 3);
+await page.keyboard.press(`${MOD_KEY}+C`);
+await sleep(150);
+await page.keyboard.press(`${MOD_KEY}+V`);
+await sleep(600);
+const pasted13 = (await nodeIds()).filter((id) => !idsBefore13.has(id));
+check("pasting the bundle adds 3 nodes", pasted13.length === 3, `${pasted13.length}`);
+check("the checklist stays green after pasting a legacy parallel bundle", (await checkOk("singleOutput")) === "true");
+await sleep(1500);
+const saved13 = await api("GET", `/api/versions/${host.draft.id}/graph`);
+const pastedSet13 = new Set(pasted13);
+const pastedEdges13 = saved13.edges.filter((e) => pastedSet13.has(e.source_node_id) && pastedSet13.has(e.target_node_id));
+check("the pasted branches keep gateway parallel", pastedEdges13.length === 2 && pastedEdges13.every((e) => e.gateway === "parallel"), JSON.stringify(pastedEdges13.map((e) => e.gateway)));
+await page.screenshot({ path: `${OUT}/output-rules-paste-legacy-bundle.png` });
+
+// ── (14) AI ops 적용: 새 노드 P 추가 + 기존 I에 set_attr {parallel:true} + I→P·P→보류 처리 연결 → 저장 후
+//         GET /graph의 I.parallel_outputs가 ['__primary__']이고 체크리스트 통과(I는 Q·P 두 갈래).
+//         set_attr는 기존 노드에만 적용되므로(applyAiOps) 병렬 대상은 새 노드가 아니라 I다
+await openEditor();
+const opsReply = {
+  kind: "ops",
+  message: "병렬 갈래를 추가했습니다.",
+  nodes: [],
+  edges: [],
+  groups: [],
+  ops: [
+    { action: "add", node_id: null, node: { key: "p", title: "병렬 통보", node_type: "process", description: "", attributes: null, group_key: null }, source: null, target: null, label: null, title: null, attributes: null, description: null },
+    { action: "set_attr", node_id: nid("i"), node: null, source: null, target: null, label: null, title: null, attributes: { parallel: true }, description: null },
+    { action: "connect", node_id: null, node: null, source: nid("i"), target: "p", label: null, title: null, attributes: null, description: null },
+    { action: "connect", node_id: null, node: null, source: "p", target: nid("y2"), label: null, title: null, attributes: null, description: null },
+  ],
+  steps: [],
+  findings: [],
+  session_id: null,
+};
+await page.route("**/ai/chat", (route) =>
+  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(opsReply) }),
+);
+await page.locator('button[title="AI 도우미"], button[title="AI assistant"]').first().click();
+await page.waitForSelector('[data-id="ai-chat-list"]', { timeout: 8000 });
+await sleep(800); // AI 활성 여부(aiEnabled)는 비동기로 도착 — 초기 비활성 상태를 SKIP으로 오판하지 않게
+const chatInput = page.locator('textarea[maxlength="2000"]');
+if (await chatInput.isDisabled()) {
+  console.log("SKIP (14) AI ops parallel - AI panel disabled (start backend with AI_ENABLED=true)");
+} else {
+  await chatInput.fill("접수 확인 뒤에 병렬로 통보를 추가해줘");
+  await chatInput.locator("xpath=following-sibling::button").click();
+  const addToMap = page.getByRole("button", { name: "Add to map" }).first();
+  await addToMap.waitFor({ state: "visible", timeout: 10_000 });
+  await page.screenshot({ path: `${OUT}/output-rules-ai-ops-preview.png` });
+  await addToMap.click();
+  await sleep(2000);
+  const saved14 = await api("GET", `/api/versions/${host.draft.id}/graph`);
+  const iNode = saved14.nodes.find((n) => n.id === nid("i"));
+  const added14 = saved14.nodes.find((n) => n.title === "병렬 통보");
+  const iOut = saved14.edges.filter((e) => e.source_node_id === nid("i"));
+  check("AI set_attr parallel saves the primary exit as parallel", JSON.stringify(iNode?.parallel_outputs) === '["__primary__"]', JSON.stringify(iNode?.parallel_outputs));
+  check(
+    "AI add and connects land (I has 2 branches, P to the hold step)",
+    !!added14 && iOut.length === 2 && saved14.edges.some((e) => e.source_node_id === added14.id && e.target_node_id === nid("y2")),
+    `out=${iOut.length} added=${!!added14}`,
+  );
+  check("the checklist passes after the AI parallel edit", (await checkOk("singleOutput")) === "true");
+}
+await page.unroute("**/ai/chat");
 
 check("no console errors", errors.length === 0, errors.join(" | "));
 await browser.close();

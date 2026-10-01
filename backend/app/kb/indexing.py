@@ -117,7 +117,9 @@ async def index_map_version(version_id: int) -> None:
         try:
             async with SessionLocal() as session:
                 version = await session.get(MapVersion, version_id)
-                if version is None:
+                # 실행 시점에 다시 게시본인지 본다 — 재인덱싱이 게시본 id를 고른 뒤 새 버전이 게시되면,
+                # 줄 서 있던 옛 작업이 이미 만료된 내용으로 맵 청크를 덮어쓴다(이름 변경·게시 경합)
+                if version is None or version.status != "published":
                     return
                 found_map = await session.get(ProcessMap, version.map_id)
                 if found_map is None or found_map.deleted_at is not None:
