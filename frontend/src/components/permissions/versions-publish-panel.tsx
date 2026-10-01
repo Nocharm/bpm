@@ -343,7 +343,7 @@ function VersionRow({
 
   if (wf === null) {
     return (
-      <div className="grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-md border border-l-0 border-hairline bg-surface">
+      <div className="grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-r-md border border-l-0 border-hairline bg-surface">
         <span className="bg-hairline" />
         <span className="px-3.5 py-3 text-caption text-ink">{label}</span>
         <span className="flex items-center justify-center border-l border-divider bg-surface-pearl text-fine text-ink-tertiary">…</span>
@@ -378,11 +378,11 @@ function VersionRow({
     <>
     <div
       data-id={`version-card-${versionId}`}
-      className={`grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-md border border-l-0 border-hairline bg-surface ${
+      className={`grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-r-md border border-l-0 border-hairline bg-surface ${
         status === "expired" ? "opacity-75" : ""
       }`}
     >
-      {/* 상태 스트라이프 — 카드 좌측 모서리 자체(외곽 보더 없음, 사용자 결정 2026-10-01) */}
+      {/* 상태 스트라이프 — 카드 좌측 모서리 자체(외곽 보더 없음·좌측 모서리 직각, 손톱처럼 보이지 않게, 사용자 결정 2026-10-01) */}
       <span className={STRIPE[status]} />
 
       <div className="min-w-0 px-3.5 py-2.5">

@@ -321,9 +321,10 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     <div data-id="subprocess-designation-panel" className="flex flex-col gap-3">
       <p className="text-caption text-ink-tertiary">{t("perm.sp.hint")}</p>
 
-      <div className="overflow-hidden rounded-md border border-hairline">
+      {/* @container — 타일 열 수는 섹션 폭에 따라 2열↔4열(헤더 액션도 좁으면 줄바꿈), 사용자 요청 2026-10-01 */}
+      <div className="@container overflow-hidden rounded-md border border-hairline">
         {/* 헤더 — 지정 상태(Designated/미지정) + 게시본 기준 + 노출 안내, 우측 액션 */}
-        <div className="flex items-center gap-3 border-b border-hairline bg-surface-pearl px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-3 border-b border-hairline bg-surface-pearl px-3.5 py-2.5">
           <span
             className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
               designated ? "bg-accent-tint text-accent" : "bg-surface-alt text-ink-tertiary"
@@ -382,7 +383,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
         </div>
 
         {/* 타일 그리드 — 부서는 DeptPill(조직 카드), 승격 필드는 클릭 편집, 나머지는 읽기 타일 */}
-        <div className="grid grid-cols-4 gap-2 p-3">
+        <div className="grid grid-cols-2 gap-2 p-3 @[44rem]:grid-cols-4">
           <SpFieldTile
             dataId="sp-tile-department"
             icon={Building2}
