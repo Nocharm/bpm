@@ -202,8 +202,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "입고 검사 의뢰서",
-          "output": "검사 의뢰 확인 기록",
+          "input": [
+            "입고 검사 의뢰서"
+          ],
+          "output": [
+            "검사 의뢰 확인 기록"
+          ],
           "system": "SAP",
           "screen": null,
           "dataForm": "structured",
@@ -216,8 +220,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "검사 의뢰 확인 기록",
-          "output": "부스 예약",
+          "input": [
+            "검사 의뢰 확인 기록"
+          ],
+          "output": [
+            "부스 예약"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -230,8 +238,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "자재 성적서(공급사 COA)",
-          "output": "COA 대사 결과",
+          "input": [
+            "자재 성적서(공급사 COA)"
+          ],
+          "output": [
+            "COA 대사 결과"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -244,8 +256,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "부스 여유 있으면 채취, 긴급 요청이면 우선 채취",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -258,8 +270,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "부스 예약",
-          "output": "접수된 검체",
+          "input": [
+            "부스 예약"
+          ],
+          "output": [
+            "접수된 검체"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "structured",
@@ -272,8 +288,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "생산 긴급 요청 시 > 당일 계획과 무관하게 우선 채취",
-          "input": "부스 예약",
-          "output": "접수된 검체",
+          "input": [
+            "부스 예약"
+          ],
+          "output": [
+            "접수된 검체"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -286,8 +306,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "접수된 검체",
-          "output": "LIMS 시험 오더",
+          "input": [
+            "접수된 검체"
+          ],
+          "output": [
+            "LIMS 시험 오더"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -315,7 +339,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -422,8 +446,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "LIMS 시험 오더",
-          "output": "시험 준비 기록",
+          "input": [
+            "LIMS 시험 오더"
+          ],
+          "output": [
+            "시험 준비 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -436,8 +464,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "SST 통과면 시험, 실패면 재평형",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -450,8 +478,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험 준비 기록",
-          "output": "이화학 시험 원시데이터",
+          "input": [
+            "시험 준비 기록"
+          ],
+          "output": [
+            "이화학 시험 원시데이터"
+          ],
           "system": "Empower",
           "screen": null,
           "dataForm": null,
@@ -464,8 +496,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "SST 실패 > 재평형 후 재시험, 3회 실패면 장비 일탈",
-          "input": "시험 준비 기록",
-          "output": "재평형 기록",
+          "input": [
+            "시험 준비 기록"
+          ],
+          "output": [
+            "재평형 기록"
+          ],
           "system": "Empower",
           "screen": null,
           "dataForm": null,
@@ -478,8 +514,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "이화학 시험 원시데이터",
-          "output": "시험 결과값",
+          "input": [
+            "이화학 시험 원시데이터"
+          ],
+          "output": [
+            "시험 결과값"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -492,8 +532,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "시험 결과값",
-          "output": "검토 의뢰",
+          "input": [
+            "시험 결과값"
+          ],
+          "output": [
+            "검토 의뢰"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -601,8 +645,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "LIMS 시험 오더",
-          "output": "출입 기록",
+          "input": [
+            "LIMS 시험 오더"
+          ],
+          "output": [
+            "출입 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "structured",
@@ -615,8 +663,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "검체 상태 양호면 접종, 이탈이면 재채취 의뢰",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -629,8 +677,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "접수 검체",
-          "output": "배양 기록",
+          "input": [
+            "접수 검체"
+          ],
+          "output": [
+            "배양 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -643,8 +695,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "포장 파손·온도 이탈 > 재채취 의뢰",
-          "input": "접수 검체",
-          "output": "재채취 의뢰",
+          "input": [
+            "접수 검체"
+          ],
+          "output": [
+            "재채취 의뢰"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -657,8 +713,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "배양 기록",
-          "output": "미생물 시험 결과값",
+          "input": [
+            "배양 기록"
+          ],
+          "output": [
+            "미생물 시험 결과값"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -671,8 +731,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "미생물 시험 결과값",
-          "output": "판정 의뢰",
+          "input": [
+            "미생물 시험 결과값"
+          ],
+          "output": [
+            "판정 의뢰"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -780,8 +844,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "이화학·미생물 시험 결과값",
-          "output": "취합 결과",
+          "input": [
+            "이화학·미생물 시험 결과값"
+          ],
+          "output": [
+            "취합 결과"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -794,8 +862,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "전 항목 적합이면 승인, 일부 진행 중이면 조건부 검토",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -808,8 +876,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "취합 결과",
-          "output": "시험 성적서",
+          "input": [
+            "취합 결과"
+          ],
+          "output": [
+            "시험 성적서"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -822,8 +894,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "QA 사전 승인 있을 때만 > 조건부 사용 전환",
-          "input": "취합 결과",
-          "output": "조건부 사용 승인",
+          "input": [
+            "취합 결과"
+          ],
+          "output": [
+            "조건부 사용 승인"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -836,8 +912,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험 성적서",
-          "output": "SAP 사용 결정",
+          "input": [
+            "시험 성적서"
+          ],
+          "output": [
+            "SAP 사용 결정"
+          ],
           "system": "SAP",
           "screen": null,
           "dataForm": "structured",
@@ -850,8 +930,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "SAP 사용 결정",
-          "output": "통보 기록",
+          "input": [
+            "SAP 사용 결정"
+          ],
+          "output": [
+            "통보 기록"
+          ],
           "system": "SAP",
           "screen": null,
           "dataForm": null,

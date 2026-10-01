@@ -1,5 +1,6 @@
-"""인터뷰 결과 JSON(0.4-bpm-interface-draft) → canonical 변환 어댑터 — DB 무관 순수 함수.
+"""인터뷰 결과 JSON(0.4/0.5-bpm-interface-draft) → canonical 변환 어댑터 — DB 무관 순수 함수.
 
+계약: docs/samples/interview-json-0.5.md(0.5 델타) · 착지: docs/qa/interview-import-field-map.md.
 설계: 2026-09-01-interview-import-v04-design.md(0.4 흐름 그래프) +
 docs/design/2026-08-18-interview-import-design.md §2·§3(원설계). 한 파일 = L5 1건.
 구조 치명 오류는 error issue + 빈 maps로 반환하고 예외를 던지지 않는다 — 파일별 독립
@@ -186,7 +187,7 @@ def _warn_unknown_keys(obj: dict, allowed: set[str], path: str, issues: list[Ada
 
 
 def _join_multi(value: object) -> str:
-    """str 또는 list → 개행 join — IO 복수 시맨틱(현 전달은 str, list는 확장 대비)."""
+    """str 또는 list → 개행 join — IO 복수 시맨틱. list가 정본(문자열 배열, 2026-09-23), str은 하위호환."""
     if isinstance(value, list):
         return "\n".join(v for v in (_clean(item) for item in value) if v)
     return _clean(value)
@@ -503,6 +504,12 @@ def _build_flow_edges(
         if all((edge.source, edge.target) in parallel_pairs for edge in group):
             continue
         has_loop = any(edge.kind == "loop" for edge in group)
+        # 병행 갈래가 다른 연결과 섞인 출구 — ◇ 뒤로 옮기면 병행 표시가 택일로 바뀐다. 개수만 말하는 아래
+        # 경고로는 안 보이므로 버려지는 병행 갈래를 따로 알린다(출구 이설 전 원래 쌍으로 판정)
+        dropped_parallel = [
+            by_code[edge.target].name if edge.target in by_code else edge.target
+            for edge in group if (edge.source, edge.target) in parallel_pairs
+        ]
         branch = CanonicalNode(
             code=f"{src_code}f",
             name=LOOP_BRANCH_NODE_NAME if has_loop else f"{src_node.name} {FANOUT_BRANCH_SUFFIX}"[:200],
@@ -520,6 +527,13 @@ def _build_flow_edges(
             "warning", f"{path}.relations.edges",
             f"{src_code} has {len(group)} outgoing edges - auto-generated branch node {branch.code} "
             f"(한 활동에서 나가는 연결이 {len(group)}개 - 분기 노드 '{branch.name}'를 자동 생성해 갈래를 나눔)"))
+        if dropped_parallel:
+            names = ", ".join(f"'{name}'" for name in dropped_parallel)
+            issues.append(AdapterIssue(
+                "warning", f"{path}.relations.edges",
+                f"{src_code} parallel edges to {names} dropped - mixed with other outgoing edges, "
+                f"now exclusive branches of {branch.code} (병행 갈래 {len(dropped_parallel)}건이 다른 연결과 "
+                "섞여 택일 분기로 바뀜 - 동시 진행이면 되돌아가기·건너뛰기를 다른 활동에서 나가게 고칠 것)"))
     if not edges and by_seq:
         issues.append(AdapterIssue(
             "warning", f"{path}.relations.edges", "no usable edges - seq chain fallback (사용할 연결이 없어 순번 순서로 자동 연결)"))

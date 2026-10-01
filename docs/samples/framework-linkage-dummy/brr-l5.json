@@ -252,8 +252,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "출하 요청서",
-          "output": "대상 배치 목록",
+          "input": [
+            "출하 요청서"
+          ],
+          "output": [
+            "대상 배치 목록"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": "structured",
@@ -266,8 +270,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "EBR 완결이면 편성, 미완결이면 반송",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -280,8 +284,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "대상 배치 목록",
-          "output": "편성표",
+          "input": [
+            "대상 배치 목록"
+          ],
+          "output": [
+            "편성표"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -294,8 +302,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "기록 미완결 > 제조 완결 요청 후 재확인",
-          "input": "대상 배치 목록",
-          "output": "완결 요청",
+          "input": [
+            "대상 배치 목록"
+          ],
+          "output": [
+            "완결 요청"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": null,
@@ -308,8 +320,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "편성표",
-          "output": "편성 확정 배치 목록",
+          "input": [
+            "편성표"
+          ],
+          "output": [
+            "편성 확정 배치 목록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -322,8 +338,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "편성 확정 배치 목록",
-          "output": "인계 기록",
+          "input": [
+            "편성 확정 배치 목록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -434,8 +454,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "편성 확정 배치 목록",
-          "output": "검토 착수 기록",
+          "input": [
+            "편성 확정 배치 목록"
+          ],
+          "output": [
+            "검토 착수 기록"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": "structured",
@@ -448,8 +472,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "검토 착수 기록",
-          "output": "공정 구획 점검 결과",
+          "input": [
+            "검토 착수 기록"
+          ],
+          "output": [
+            "공정 구획 점검 결과"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": null,
@@ -462,8 +490,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "검토 착수 기록",
-          "output": "포장 구획 점검 결과",
+          "input": [
+            "검토 착수 기록"
+          ],
+          "output": [
+            "포장 구획 점검 결과"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": null,
@@ -476,8 +508,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "이상 없으면 취합, 있으면 소명 요청",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -490,8 +522,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "공정 구획 점검 결과",
-          "output": "제조기록 검토 완료 목록",
+          "input": [
+            "공정 구획 점검 결과"
+          ],
+          "output": [
+            "제조기록 검토 완료 목록"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": "structured",
@@ -504,8 +540,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "기록 이상 > 제조 소명 요청 후 재검토",
-          "input": "포장 구획 점검 결과",
-          "output": "소명 요청",
+          "input": [
+            "포장 구획 점검 결과"
+          ],
+          "output": [
+            "소명 요청"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -518,8 +558,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "제조기록 검토 완료 목록",
-          "output": "인계 기록",
+          "input": [
+            "제조기록 검토 완료 목록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -547,7 +591,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -656,8 +700,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "제조기록 검토 완료 목록",
-          "output": "수령 기록",
+          "input": [
+            "제조기록 검토 완료 목록"
+          ],
+          "output": [
+            "수령 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -670,8 +718,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "결과 일치면 대조 확인, 불일치면 QC 확인 요청",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -684,8 +732,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "수령 기록",
-          "output": "시험기록 대조 완료 목록",
+          "input": [
+            "수령 기록"
+          ],
+          "output": [
+            "시험기록 대조 완료 목록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -698,8 +750,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "결과 불일치 > QC 확인 후 재대조",
-          "input": "수령 기록",
-          "output": "확인 요청",
+          "input": [
+            "수령 기록"
+          ],
+          "output": [
+            "확인 요청"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -712,8 +768,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험기록 대조 완료 목록",
-          "output": "교차 서명 기록",
+          "input": [
+            "시험기록 대조 완료 목록"
+          ],
+          "output": [
+            "교차 서명 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -726,8 +786,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "교차 서명 기록",
-          "output": "인계 기록",
+          "input": [
+            "교차 서명 기록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -837,8 +901,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험기록 대조 완료 목록",
-          "output": "연계 목록",
+          "input": [
+            "시험기록 대조 완료 목록"
+          ],
+          "output": [
+            "연계 목록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -851,8 +919,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "연계 일탈 전부 종결이면 확인서, 아니면 보류",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -865,8 +933,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "연계 목록",
-          "output": "일탈 연계 확인서",
+          "input": [
+            "연계 목록"
+          ],
+          "output": [
+            "일탈 연계 확인서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -879,8 +951,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "미종결 일탈 > 배치 보류 전환, 종결 후 재확인",
-          "input": "연계 목록",
-          "output": "보류 기록",
+          "input": [
+            "연계 목록"
+          ],
+          "output": [
+            "보류 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -893,8 +969,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "일탈 연계 확인서",
-          "output": "등록 기록",
+          "input": [
+            "일탈 연계 확인서"
+          ],
+          "output": [
+            "등록 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -907,8 +987,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "등록 기록",
-          "output": "인계 기록",
+          "input": [
+            "등록 기록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1019,8 +1103,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "일탈 연계 확인서",
-          "output": "판정 자료",
+          "input": [
+            "일탈 연계 확인서"
+          ],
+          "output": [
+            "판정 자료"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -1033,8 +1121,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "보완 사항 없으면 종결",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -1047,8 +1135,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "판정 자료",
-          "output": "종결 판정 결과",
+          "input": [
+            "판정 자료"
+          ],
+          "output": [
+            "종결 판정 결과"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": null,
@@ -1061,8 +1153,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "보완 필요 > 해당 구획 재검토 지시",
-          "input": "판정 자료",
-          "output": "재검토 지시",
+          "input": [
+            "판정 자료"
+          ],
+          "output": [
+            "재검토 지시"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1075,8 +1171,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "종결 판정 결과",
-          "output": "판정 기록",
+          "input": [
+            "종결 판정 결과"
+          ],
+          "output": [
+            "판정 기록"
+          ],
           "system": "EBR",
           "screen": null,
           "dataForm": "structured",
@@ -1089,8 +1189,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "판정 기록",
-          "output": "인계 기록",
+          "input": [
+            "판정 기록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1200,8 +1304,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "종결 판정 결과",
-          "output": "접수 기록",
+          "input": [
+            "종결 판정 결과"
+          ],
+          "output": [
+            "접수 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -1214,8 +1322,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "필수 기재 충족 시 발행",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -1228,8 +1336,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "접수 기록",
-          "output": "적합 판정서",
+          "input": [
+            "접수 기록"
+          ],
+          "output": [
+            "적합 판정서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1242,8 +1354,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "기재 누락 > 보정 후 재발행",
-          "input": "접수 기록",
-          "output": "보정 기록",
+          "input": [
+            "접수 기록"
+          ],
+          "output": [
+            "보정 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1256,8 +1372,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "적합 판정서",
-          "output": "상태 변경 기록",
+          "input": [
+            "적합 판정서"
+          ],
+          "output": [
+            "상태 변경 기록"
+          ],
           "system": "ERP",
           "screen": null,
           "dataForm": "structured",
@@ -1270,8 +1390,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "상태 변경 기록",
-          "output": "통보 기록",
+          "input": [
+            "상태 변경 기록"
+          ],
+          "output": [
+            "통보 기록"
+          ],
           "system": "ERP",
           "screen": null,
           "dataForm": null,

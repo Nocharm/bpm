@@ -246,8 +246,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "변경 요청서(CR)",
-          "output": "접수 대장 등재",
+          "input": [
+            "변경 요청서(CR)"
+          ],
+          "output": [
+            "접수 대장 등재"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -260,8 +264,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "사유·범위·근거 자료가 모두 있으면 접수",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -274,8 +278,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "접수 대장 등재",
-          "output": "분류 확정 CR",
+          "input": [
+            "접수 대장 등재"
+          ],
+          "output": [
+            "분류 확정 CR"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -288,8 +296,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "사유·범위·근거 중 하나라도 비면 접수하지 않고 보완 요청",
-          "input": "접수 대장 등재",
-          "output": "보완 요청",
+          "input": [
+            "접수 대장 등재"
+          ],
+          "output": [
+            "보완 요청"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -302,8 +314,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "분류 확정 CR",
-          "output": "평가 담당 지정",
+          "input": [
+            "분류 확정 CR"
+          ],
+          "output": [
+            "평가 담당 지정"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -316,8 +332,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "평가 담당 지정",
-          "output": "인계 기록",
+          "input": [
+            "평가 담당 지정"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -428,8 +448,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "평가 담당 지정",
-          "output": "평가 착수 기록",
+          "input": [
+            "평가 담당 지정"
+          ],
+          "output": [
+            "평가 착수 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -442,8 +466,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "평가 착수 기록",
-          "output": "품질 영향 평가서",
+          "input": [
+            "평가 착수 기록"
+          ],
+          "output": [
+            "품질 영향 평가서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -456,8 +484,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "평가 착수 기록",
-          "output": "규제 영향 평가서",
+          "input": [
+            "평가 착수 기록"
+          ],
+          "output": [
+            "규제 영향 평가서"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -470,8 +502,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "심의 통과면 승인, 자료 부족이면 반려",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -484,8 +516,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "품질 영향 평가서",
-          "output": "승인된 변경계획",
+          "input": [
+            "품질 영향 평가서"
+          ],
+          "output": [
+            "승인된 변경계획"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -498,8 +534,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "근거 부족 > 평가 중단 후 접수로 반려",
-          "input": "규제 영향 평가서",
-          "output": "반려 기록",
+          "input": [
+            "규제 영향 평가서"
+          ],
+          "output": [
+            "반려 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -512,8 +552,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "승인된 변경계획",
-          "output": "실행 인계 기록",
+          "input": [
+            "승인된 변경계획"
+          ],
+          "output": [
+            "실행 인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -541,7 +585,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -650,8 +694,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "승인된 변경계획",
-          "output": "실행 체크리스트",
+          "input": [
+            "승인된 변경계획"
+          ],
+          "output": [
+            "실행 체크리스트"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": "structured",
@@ -664,8 +712,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "체크리스트 2차 검토 통과 시 실행",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -678,8 +726,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "실행 체크리스트",
-          "output": "검증 데이터",
+          "input": [
+            "실행 체크리스트"
+          ],
+          "output": [
+            "검증 데이터"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": null,
@@ -692,8 +744,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "검증 데이터 기준 미달 > 즉시 원복 후 재실행 계획",
-          "input": "실행 체크리스트",
-          "output": "원복 기록",
+          "input": [
+            "실행 체크리스트"
+          ],
+          "output": [
+            "원복 기록"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": null,
@@ -706,8 +762,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "검증 데이터",
-          "output": "검증 완료 기록",
+          "input": [
+            "검증 데이터"
+          ],
+          "output": [
+            "검증 완료 기록"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": "structured",
@@ -720,8 +780,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "검증 완료 기록",
-          "output": "완료 인계 기록",
+          "input": [
+            "검증 완료 기록"
+          ],
+          "output": [
+            "완료 인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -831,8 +895,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "검증 완료 기록",
-          "output": "완료 인수 기록",
+          "input": [
+            "검증 완료 기록"
+          ],
+          "output": [
+            "완료 인수 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -845,8 +913,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "SOP 문구 영향 있으면 개정",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -859,8 +927,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완료 인수 기록",
-          "output": "변경 완료 보고서",
+          "input": [
+            "완료 인수 기록"
+          ],
+          "output": [
+            "변경 완료 보고서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -873,8 +945,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "SOP 영향 > 개정본 작성 후 문서관리 승인",
-          "input": "완료 인수 기록",
-          "output": "SOP 개정본",
+          "input": [
+            "완료 인수 기록"
+          ],
+          "output": [
+            "SOP 개정본"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -887,8 +963,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "변경 완료 보고서",
-          "output": "종결 CR",
+          "input": [
+            "변경 완료 보고서"
+          ],
+          "output": [
+            "종결 CR"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -901,8 +981,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "SOP 개정본",
-          "output": "교육 의뢰",
+          "input": [
+            "SOP 개정본"
+          ],
+          "output": [
+            "교육 의뢰"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,

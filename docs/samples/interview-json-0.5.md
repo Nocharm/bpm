@@ -2,7 +2,7 @@
 
 컨설턴트 전달용. 0.4(흐름 그래프)와의 델타만 다룬다 — 나머지 키는 0.4와 동일하며 `docs/qa/interview-import-field-map.md`가 착지를 설명한다.
 설계: `2026-09-07-interview-external-refs-design.md`(폐기 — git history).
-`actions[].input`/`output`은 문자열 배열이다(한 항목 = 한 줄) — 앞 활동의 output 항목을 다음 활동 input에 같은 표기로 다시 쓰면 캔버스에서 IO가 자동으로 연결된다. 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이라 같은 활동의 양쪽에 같은 항목을 적지 않는다(어댑터가 warning으로 잡는다). L6 전체의 입력물·산출물은 `fields.input_data`/`output_data`에 두고, 활동에는 첫 활동 input·마지막 활동 output으로만 넣는다.
+`actions[].input`/`output`은 문자열 배열이 정본이다(한 항목 = 한 줄, 문자열 하나도 하위호환으로 받는다) — 앞 활동의 output 항목을 다음 활동 input에 같은 표기로 다시 쓰면 캔버스에서 IO가 자동으로 연결된다. 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것이라 같은 활동의 양쪽에 같은 항목을 적지 않는다(어댑터가 warning으로 잡는다). L6 전체의 입력물·산출물은 `fields.input_data`/`output_data`에 두고, 활동에는 첫 활동 input·마지막 활동 output으로만 넣는다.
 
 ## 1. 왜 필요한가
 
@@ -58,6 +58,10 @@
 
 한 활동(L6 흐름) 또는 한 L6(최상위 흐름)에서 나가는 연결은 하나다. 갈래가 둘 이상이면 `kind: branch`로 적고, 택일은 `gateway: exclusive` + `condition`(L6 흐름에선 출발 활동이 `decision`), 동시 진행은 `gateway: parallel`. 이 규칙을 어긴 전달물(되돌아가기 + 다음 단계, 순차 여러 개)은 BPM 어댑터가 출발 활동 뒤에 분기 노드를 자동으로 세워(되돌아가기가 섞이면 "반복 여부(자동 생성됨)", 아니면 "{활동명} 결과") 경고와 함께 받아들인다. 동시 진행 갈래는 분기 노드 없이 출발 활동의 출구를 병렬로 켠다.
 
+동시 진행 갈래와 되돌아가기·건너뛰기를 **같은 활동에서** 함께 내보내면 분기 노드가 그 갈래들을 택일로 나누고 병행 표시는 버려진다(경고 `parallel edges to ... dropped`). 동시 진행을 지키려면 되돌아가기·건너뛰기는 다른 활동(예: 판정 활동)에서 나가게 적는다.
+
+**하위프로세스(SP) 끝점.** 최상위 `relations.edges`는 L5 연계 캔버스의 SP 노드 사이 엣지가 되며, 출구는 대표 끝(`__primary__`), 들어오는 문은 좌측 `in`으로 정해진다. `gateway: parallel` 출발도 대표 끝만 병렬로 켠다(`parallel_outputs=["__primary__"]`). 엣지에 끝 키 개념이 없어 **보조 끝으로의 연결과 SP 끝별 병렬은 0.5로 표현할 수 없다**. 캔버스 편집(우클릭) 전용이고, 재전달 보강은 추가만 하므로 캔버스에서 바꾼 끝 키·들어오는 변은 유지된다. 역변환(기존 L6 학습)도 대표 끝만 되돌린다. 끝 키를 실을지는 다음 버전 후보다.
+
 ## 4. 외부 L5의 계보
 
 외부 L5의 L1~L5 체인을 **`framework.categories`에 그대로 이어서** 넣는다(새 형식 없음). BPM은 홈 `l5.nodeCode`의 조상 체인 밖 항목을 외부 계보로 판정해 **없을 때만 생성하고, 있으면 이름·부모를 절대 바꾸지 않는다**. 체인이 끊긴 외부 항목(부모가 파일에 없음)은 경고 후 제외하고, `nodeCode`는 BPM의 기존 체계에서 찾는다. 계보를 안 넣어도 되지만, BPM에도 그 L5가 없으면 플레이스홀더는 출처 없이(제목만) 놓인다.
@@ -96,6 +100,6 @@
 | `framework-linkage-dummy/change-control-l5.json` | qa-deviation "일탈 종결 및 효과성 평가" · brr "적합 판정서 발행 및 통보" | 한 캔버스에 외부 L6 2종(L5 색 2개) |
 | `framework-linkage-dummy/brr-l5.json` | qc-finished-product "시험 성적서 발행 및 출하 승인" · qa-deviation "일탈 종결 및 효과성 평가" | 정확 일치 |
 
-모든 샘플은 L5당 L6 ≥4, 각 L6의 L7 흐름에 `decision`+`branch(exclusive)`·`loop`, 파일마다 `parallel` 게이트웨이·`bypass`·`variant: exception`·`handoff`를 포함한다(`backend/tests/test_samples_0_5.py`가 고정).
+모든 샘플은 L5당 L6 ≥4, 각 L6의 L7 흐름에 `decision`+`branch(exclusive)`·`loop`, 파일마다 `parallel` 게이트웨이(분기 노드 없이 병렬 출구로 착지)·`bypass`·`variant: exception`·`handoff`를 포함하고, `actions[].input`/`output`은 문자열 배열로 적는다(`backend/tests/test_samples_0_5.py`가 고정).
 
 **후차 해소 시연**: 설정 > Framework > Interview import에 `framework-linkage-dummy/` 중 `qa-deviation-oos-l5.json`을 **빼고** 4파일 apply → 각 캔버스에 OOS·일탈 종결 플레이스홀더(출처 배지) → `qa-deviation-oos-l5.json`만 apply → 리포트에 `resolved 4 external placeholder node(s)`, 캔버스의 플레이스홀더가 실 노드(외부 L6 색)로 바뀐다. `입고 검수`(출처 없음)와 `변경요청 접수`(근사 불일치)는 남아 Connect 배너로 잇는다.

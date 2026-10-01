@@ -223,8 +223,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "배치 생산 완료 통보",
-          "output": "배치 확인 기록",
+          "input": [
+            "배치 생산 완료 통보"
+          ],
+          "output": [
+            "배치 확인 기록"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": "structured",
@@ -237,8 +241,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "출하 일정표 기준 3일 이내면 긴급",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -251,8 +255,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "출하 일정표",
-          "output": "시험 일정 계획",
+          "input": [
+            "출하 일정표"
+          ],
+          "output": [
+            "시험 일정 계획"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -265,8 +273,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "긴급 출하 > 시험 순서 조정, 파트 리더 확인 필수",
-          "input": "출하 일정표",
-          "output": "긴급 일정 계획",
+          "input": [
+            "출하 일정표"
+          ],
+          "output": [
+            "긴급 일정 계획"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -279,8 +291,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험 일정 계획",
-          "output": "LIMS 배치 오더",
+          "input": [
+            "시험 일정 계획"
+          ],
+          "output": [
+            "LIMS 배치 오더"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -293,8 +309,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "LIMS 배치 오더",
-          "output": "일정 공유 기록",
+          "input": [
+            "LIMS 배치 오더"
+          ],
+          "output": [
+            "일정 공유 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -402,8 +422,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "LIMS 배치 오더",
-          "output": "시험 착수 기록",
+          "input": [
+            "LIMS 배치 오더"
+          ],
+          "output": [
+            "시험 착수 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -416,8 +440,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완제품 검체",
-          "output": "역가 결과",
+          "input": [
+            "완제품 검체"
+          ],
+          "output": [
+            "역가 결과"
+          ],
           "system": "SoftMax",
           "screen": null,
           "dataForm": null,
@@ -430,8 +458,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완제품 검체",
-          "output": "순도 결과",
+          "input": [
+            "완제품 검체"
+          ],
+          "output": [
+            "순도 결과"
+          ],
           "system": "Empower",
           "screen": null,
           "dataForm": null,
@@ -444,8 +476,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "규격 내면 입력, 이탈이면 OOS 보고",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -458,8 +490,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "역가 결과",
-          "output": "완제품 시험 결과값",
+          "input": [
+            "역가 결과"
+          ],
+          "output": [
+            "완제품 시험 결과값"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -472,8 +508,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "규격 이탈 > 원시데이터 동결, OOS 보고서 작성",
-          "input": "순도 결과",
-          "output": "OOS 보고서",
+          "input": [
+            "순도 결과"
+          ],
+          "output": [
+            "OOS 보고서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -486,8 +526,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "완제품 시험 결과값",
-          "output": "검토 의뢰",
+          "input": [
+            "완제품 시험 결과값"
+          ],
+          "output": [
+            "검토 의뢰"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -515,7 +559,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -622,8 +666,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "안정성 프로토콜",
-          "output": "등재 확인 기록",
+          "input": [
+            "안정성 프로토콜"
+          ],
+          "output": [
+            "등재 확인 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -636,8 +684,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "온습도 규정 내면 보관, 이탈이면 예비 챔버",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -650,8 +698,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "등재 배치 검체",
-          "output": "보관 개시 기록",
+          "input": [
+            "등재 배치 검체"
+          ],
+          "output": [
+            "보관 개시 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -664,8 +716,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "온습도 이탈 > 예비 챔버 이동 후 일탈 보고",
-          "input": "등재 배치 검체",
-          "output": "챔버 이탈 기록",
+          "input": [
+            "등재 배치 검체"
+          ],
+          "output": [
+            "챔버 이탈 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -678,8 +734,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "보관 개시 기록",
-          "output": "인출 시험 오더",
+          "input": [
+            "보관 개시 기록"
+          ],
+          "output": [
+            "인출 시험 오더"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -692,8 +752,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "인출 시험 오더",
-          "output": "시험 의뢰 기록",
+          "input": [
+            "인출 시험 오더"
+          ],
+          "output": [
+            "시험 의뢰 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -801,8 +865,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완제품 시험 결과값",
-          "output": "취합 결과",
+          "input": [
+            "완제품 시험 결과값"
+          ],
+          "output": [
+            "취합 결과"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -815,8 +883,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "전 항목 적합이면 발행, 보류 사유 있으면 보류",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -829,8 +897,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "취합 결과",
-          "output": "완제품 COA",
+          "input": [
+            "취합 결과"
+          ],
+          "output": [
+            "완제품 COA"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -843,8 +915,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "사전 통보 계약 고객사만 > COA 초안 선송부",
-          "input": "취합 결과",
-          "output": "COA 초안",
+          "input": [
+            "취합 결과"
+          ],
+          "output": [
+            "COA 초안"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -857,8 +933,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완제품 COA",
-          "output": "출하 승인 기록",
+          "input": [
+            "완제품 COA"
+          ],
+          "output": [
+            "출하 승인 기록"
+          ],
           "system": "SAP",
           "screen": null,
           "dataForm": "structured",
@@ -871,8 +951,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "출하 승인 기록",
-          "output": "물류 인계 기록",
+          "input": [
+            "출하 승인 기록"
+          ],
+          "output": [
+            "물류 인계 기록"
+          ],
           "system": "SAP",
           "screen": null,
           "dataForm": null,

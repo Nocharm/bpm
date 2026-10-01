@@ -547,6 +547,35 @@ def test_plain_fanout_branch_node_is_named_after_its_activity() -> None:
     assert next(n for n in m2.nodes if n.code == "a01").parallel is True
 
 
+def test_parallel_mixed_with_bypass_is_folded_with_an_explicit_warning() -> None:
+    """병행 2 + 건너뛰기 1이 한 활동에서 나가면 ◇가 갈래를 택일로 나눈다(현행 유지) — 병행 표시가 버려진다는
+    사실을 개수 경고와 별개로 갈래 이름까지 알린다. 전부 병행이면 이 경고가 없다."""
+    data = _interview()
+    data["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2, kind="branch", gateway="parallel"),
+        _edge(1, 3, kind="branch", gateway="parallel"),
+        _edge(1, 4, kind="bypass"),
+        _edge(2, 4), _edge(3, 4),
+    ]
+    res = convert_interview(data)
+    m = res.maps[0]
+    assert next(n for n in m.nodes if n.code == "a01").parallel is False
+    assert any(n.code == "a01f" for n in m.nodes)
+    names = {n.code: n.name for n in m.nodes}
+    dropped = [i.message for i in res.issues if "parallel edges to" in i.message]
+    assert len(dropped) == 1
+    assert f"'{names['a02']}'" in dropped[0] and f"'{names['a03']}'" in dropped[0]
+    assert names["a04"] not in dropped[0].split(" dropped")[0]
+
+    pure = _interview()
+    pure["rows"][0]["relations"]["edges"] = [
+        _edge(1, 2, kind="branch", gateway="parallel"),
+        _edge(1, 3, kind="branch", gateway="parallel"),
+        _edge(2, 4), _edge(3, 4),
+    ]
+    assert not any("parallel edges to" in i.message for i in convert_interview(pure).issues)
+
+
 def test_l6_self_edge_becomes_loop_branch() -> None:
     """L6 self edge도 분기 판단 노드(a02r)를 세워 ◇→자기 루프백으로 — 진출 엣지는 ◇로 이설 (2026-09-02)."""
     data = _interview()

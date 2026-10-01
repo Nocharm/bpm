@@ -241,8 +241,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "그 주 작업지시",
-          "output": "대상 계측기와 측정 범위",
+          "input": [
+            "그 주 작업지시"
+          ],
+          "output": [
+            "대상 계측기와 측정 범위"
+          ],
           "system": "EAM",
           "screen": "작업지시 조회화면",
           "dataForm": "structured",
@@ -255,8 +259,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "대상 계측기와 측정 범위",
-          "output": "표준기 후보",
+          "input": [
+            "대상 계측기와 측정 범위"
+          ],
+          "output": [
+            "표준기 후보"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -269,8 +277,10 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "여유가 있으면 사전 출력, 급하면 현장 수기",
-          "input": null,
-          "output": "양식 준비 방식",
+          "input": [],
+          "output": [
+            "양식 준비 방식"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -283,8 +293,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "양식 준비 방식",
-          "output": "성적서 양식",
+          "input": [
+            "양식 준비 방식"
+          ],
+          "output": [
+            "성적서 양식"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -297,8 +311,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "급할 때 > 양식을 미리 안 뽑고 현장에서 손으로 적어온다",
-          "input": "양식 준비 방식",
-          "output": "수기 기록지",
+          "input": [
+            "양식 준비 방식"
+          ],
+          "output": [
+            "수기 기록지"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -311,8 +329,13 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "성적서 양식\n수기 기록지",
-          "output": "지참 목록",
+          "input": [
+            "성적서 양식",
+            "수기 기록지"
+          ],
+          "output": [
+            "지참 목록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -325,8 +348,13 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "유효기간 내면 진행, 아니면 교체",
-          "input": "표준기 후보\n지참 목록",
-          "output": "확정 표준기",
+          "input": [
+            "표준기 후보",
+            "지참 목록"
+          ],
+          "output": [
+            "확정 표준기"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -339,8 +367,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "확정 표준기",
-          "output": "준비 목록",
+          "input": [
+            "확정 표준기"
+          ],
+          "output": [
+            "준비 목록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -477,8 +509,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "준비 목록",
-          "output": "작업 허가 확인",
+          "input": [
+            "준비 목록"
+          ],
+          "output": [
+            "작업 허가 확인"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -491,8 +527,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "작업 허가 확인",
-          "output": "계측기 상태",
+          "input": [
+            "작업 허가 확인"
+          ],
+          "output": [
+            "계측기 상태"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -505,8 +545,13 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "계측기 상태\n확정 표준기",
-          "output": "교정 측정값",
+          "input": [
+            "계측기 상태",
+            "확정 표준기"
+          ],
+          "output": [
+            "교정 측정값"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -519,8 +564,12 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "허용오차 초과면 재측정, 이내면 기록 확정",
-          "input": "교정 측정값",
-          "output": "판정 결과",
+          "input": [
+            "교정 측정값"
+          ],
+          "output": [
+            "판정 결과"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -533,8 +582,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "허용오차 초과 시에만",
-          "input": "판정 결과",
-          "output": "재측정값",
+          "input": [
+            "판정 결과"
+          ],
+          "output": [
+            "재측정값"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -547,8 +600,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "판정 결과",
-          "output": "현장 기록지",
+          "input": [
+            "판정 결과"
+          ],
+          "output": [
+            "현장 기록지"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -561,8 +618,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "현장 기록지",
-          "output": "현장 기록지",
+          "input": [
+            "현장 기록지"
+          ],
+          "output": [
+            "현장 기록지"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -673,8 +734,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "현장 기록지",
-          "output": "교정 성적서(초안)",
+          "input": [
+            "현장 기록지"
+          ],
+          "output": [
+            "교정 성적서(초안)"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -687,8 +752,12 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "불일치나 누락이 있으면 보완",
-          "input": "교정 성적서(초안)",
-          "output": "검토 결과",
+          "input": [
+            "교정 성적서(초안)"
+          ],
+          "output": [
+            "검토 결과"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "tacit",
@@ -701,8 +770,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "검토 지적 발생 시에만",
-          "input": "검토 결과",
-          "output": "교정 성적서(수정)",
+          "input": [
+            "검토 결과"
+          ],
+          "output": [
+            "교정 성적서(수정)"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -715,8 +788,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "검토 결과",
-          "output": "교정 성적서",
+          "input": [
+            "검토 결과"
+          ],
+          "output": [
+            "교정 성적서"
+          ],
           "system": null,
           "screen": null,
           "dataForm": "document",
@@ -729,8 +806,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "교정 성적서",
-          "output": "EAM 교정 이력",
+          "input": [
+            "교정 성적서"
+          ],
+          "output": [
+            "EAM 교정 이력"
+          ],
           "system": "EAM",
           "screen": "교정 이력 등록화면",
           "dataForm": "structured",
@@ -743,8 +824,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "EAM 교정 이력",
-          "output": "통보 기록",
+          "input": [
+            "EAM 교정 이력"
+          ],
+          "output": [
+            "통보 기록"
+          ],
           "system": "EAM",
           "screen": null,
           "dataForm": null,
@@ -845,8 +930,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "표준기 관리대장",
-          "output": "유효기간 확인 결과",
+          "input": [
+            "표준기 관리대장"
+          ],
+          "output": [
+            "유효기간 확인 결과"
+          ],
           "system": "EAM",
           "screen": null,
           "dataForm": "structured",
@@ -859,8 +948,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "유효기간 내면 계속 사용, 경과면 교체",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -873,8 +962,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "유효기간 확인 결과",
-          "output": "대체 표준기",
+          "input": [
+            "유효기간 확인 결과"
+          ],
+          "output": [
+            "대체 표준기"
+          ],
           "system": "EAM",
           "screen": null,
           "dataForm": null,
@@ -887,8 +980,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "대체 표준기 없음 > QA 임시 사용 승인",
-          "input": "유효기간 확인 결과",
-          "output": "임시 사용 승인서",
+          "input": [
+            "유효기간 확인 결과"
+          ],
+          "output": [
+            "임시 사용 승인서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -901,8 +998,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "대체 표준기",
-          "output": "갱신된 관리대장",
+          "input": [
+            "대체 표준기"
+          ],
+          "output": [
+            "갱신된 관리대장"
+          ],
           "system": "EAM",
           "screen": null,
           "dataForm": "structured",
@@ -915,8 +1016,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "갱신된 관리대장",
-          "output": "유효 표준기 확정 목록",
+          "input": [
+            "갱신된 관리대장"
+          ],
+          "output": [
+            "유효 표준기 확정 목록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -1036,8 +1141,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "현장 기록지",
-          "output": "부적합 접수 기록",
+          "input": [
+            "현장 기록지"
+          ],
+          "output": [
+            "부적합 접수 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -1050,8 +1159,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "부적합 접수 기록",
-          "output": "통보 기록",
+          "input": [
+            "부적합 접수 기록"
+          ],
+          "output": [
+            "통보 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1064,8 +1177,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "부적합 접수 기록",
-          "output": "격리 태그 사진",
+          "input": [
+            "부적합 접수 기록"
+          ],
+          "output": [
+            "격리 태그 사진"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -1078,8 +1195,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "조정 가능하면 재교정, 불가면 폐기",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -1092,8 +1209,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "통보 기록",
-          "output": "재교정 결과",
+          "input": [
+            "통보 기록"
+          ],
+          "output": [
+            "재교정 결과"
+          ],
           "system": "EAM",
           "screen": null,
           "dataForm": "structured",
@@ -1106,8 +1227,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "수리 불가 > 폐기 승인 후 자산 제거",
-          "input": "통보 기록",
-          "output": "폐기 승인서",
+          "input": [
+            "통보 기록"
+          ],
+          "output": [
+            "폐기 승인서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1120,8 +1245,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "재교정 결과",
-          "output": "부적합 처리 결과서",
+          "input": [
+            "재교정 결과"
+          ],
+          "output": [
+            "부적합 처리 결과서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -1149,7 +1278,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,

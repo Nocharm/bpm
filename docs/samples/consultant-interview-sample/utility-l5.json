@@ -214,8 +214,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "점검 체크리스트",
-          "output": "계기값 대조 결과",
+          "input": [
+            "점검 체크리스트"
+          ],
+          "output": [
+            "계기값 대조 결과"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -228,8 +232,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "경보 한계 내면 정상, 벗어나면 재측정",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -242,8 +246,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "계기값 대조 결과",
-          "output": "점검 기록",
+          "input": [
+            "계기값 대조 결과"
+          ],
+          "output": [
+            "점검 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -256,8 +264,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "한계 초과 > 5분 뒤 재측정, 두 번 연속이면 수질 이상 대응으로",
-          "input": "계기값 대조 결과",
-          "output": "재측정 기록",
+          "input": [
+            "계기값 대조 결과"
+          ],
+          "output": [
+            "재측정 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": null,
@@ -270,8 +282,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "점검 기록",
-          "output": "라운드 마감 기록",
+          "input": [
+            "점검 기록"
+          ],
+          "output": [
+            "라운드 마감 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -284,8 +300,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "라운드 마감 기록",
-          "output": "인계 기록",
+          "input": [
+            "라운드 마감 기록"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -393,8 +413,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "재측정 기록",
-          "output": "이상 접수 기록",
+          "input": [
+            "재측정 기록"
+          ],
+          "output": [
+            "이상 접수 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -407,8 +431,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "이상 접수 기록",
-          "output": "차단 기록",
+          "input": [
+            "이상 접수 기록"
+          ],
+          "output": [
+            "차단 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": null,
@@ -421,8 +449,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "이상 접수 기록",
-          "output": "검체 의뢰서",
+          "input": [
+            "이상 접수 기록"
+          ],
+          "output": [
+            "검체 의뢰서"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -435,8 +467,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "계기 오류면 재개, 실제 오염이면 소독",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -449,8 +481,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "차단 기록",
-          "output": "재개 기록",
+          "input": [
+            "차단 기록"
+          ],
+          "output": [
+            "재개 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -463,8 +499,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "실제 오염 > 소독 운전 의뢰 후 재검",
-          "input": "검체 의뢰서",
-          "output": "소독 의뢰서",
+          "input": [
+            "검체 의뢰서"
+          ],
+          "output": [
+            "소독 의뢰서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -477,8 +517,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "재개 기록",
-          "output": "이상 대응 기록",
+          "input": [
+            "재개 기록"
+          ],
+          "output": [
+            "이상 대응 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -506,7 +550,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -613,8 +657,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "소독 의뢰서",
-          "output": "차단 확인 기록",
+          "input": [
+            "소독 의뢰서"
+          ],
+          "output": [
+            "차단 확인 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -627,8 +675,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "규정 온도 도달이면 유지, 미도달이면 재가열",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -641,8 +689,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "차단 확인 기록",
-          "output": "소독 유지 기록",
+          "input": [
+            "차단 확인 기록"
+          ],
+          "output": [
+            "소독 유지 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": null,
@@ -655,8 +707,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "온도 미도달 > 히터 점검 후 재가열",
-          "input": "차단 확인 기록",
-          "output": "재가열 기록",
+          "input": [
+            "차단 확인 기록"
+          ],
+          "output": [
+            "재가열 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": null,
@@ -669,8 +725,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "소독 유지 기록",
-          "output": "재검 결과",
+          "input": [
+            "소독 유지 기록"
+          ],
+          "output": [
+            "재검 결과"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": "structured",
@@ -683,8 +743,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "재검 결과",
-          "output": "소독 운전 기록",
+          "input": [
+            "재검 결과"
+          ],
+          "output": [
+            "소독 운전 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -792,8 +856,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "점검 기록",
-          "output": "수집 기록",
+          "input": [
+            "점검 기록"
+          ],
+          "output": [
+            "수집 기록"
+          ],
           "system": "BMS",
           "screen": null,
           "dataForm": "structured",
@@ -806,8 +874,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "누락 없으면 승인, 있으면 보완 요청",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -820,8 +888,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "수집 기록",
-          "output": "승인된 점검 기록",
+          "input": [
+            "수집 기록"
+          ],
+          "output": [
+            "승인된 점검 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -834,8 +906,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "누락 > 운전원 보완 후 재검토",
-          "input": "수집 기록",
-          "output": "보완 요청 기록",
+          "input": [
+            "수집 기록"
+          ],
+          "output": [
+            "보완 요청 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -848,8 +924,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "승인된 점검 기록",
-          "output": "보관 등록 기록",
+          "input": [
+            "승인된 점검 기록"
+          ],
+          "output": [
+            "보관 등록 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -862,8 +942,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "보관 등록 기록",
-          "output": "월간 요약",
+          "input": [
+            "보관 등록 기록"
+          ],
+          "output": [
+            "월간 요약"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
