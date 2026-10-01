@@ -26,32 +26,37 @@ export interface SelectOption {
 
 const FLYOUT_W = 224; // w-56
 const FLYOUT_H = 300; // 대략 높이(화면 하단 클램프용) — 검색 입력 + max-h-56 목록
-const GAP = 4; // 트리거와 메뉴 사이
+const GAP = 0; // 트리거와 메뉴 사이 — 간극 없이 바로 아래(사용자 결정 2026-10-01)
 const MARGIN = 8; // 뷰포트 가장자리 최소 여백
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** 기본 모드 메뉴 좌표 — 트리거 rect 기준. 아래 우선, 공간 없으면 위, 그래도 없으면 화면 안으로 클램프. */
+interface MenuPos {
+  left: number;
+  width: number;
+  /** 아래로 펼칠 때 — 트리거 하단에 밀착 */
+  top?: number;
+  /** 위로 뒤집을 때 — 트리거 상단에 밀착(실제 높이가 추정치보다 작아도 간극이 안 생긴다) */
+  bottom?: number;
+}
+
+/** 기본 모드 메뉴 좌표 — 트리거 rect 기준. 아래 우선, 공간 없으면 위(bottom 앵커), 그래도 없으면 화면 안으로 클램프. */
 function computeMenuPos(
   rect: DOMRect,
   viewport: { width: number; height: number },
   alignRight: boolean,
-): { left: number; top: number; width: number } {
-  const width = Math.max(FLYOUT_W, rect.width);
+): MenuPos {
+  // 메뉴 폭 = 트리거 폭(사용자 결정 2026-10-01). 우측 정렬 좁은 트리거(fitContent)만 검색창 최소폭 보장
+  const width = alignRight ? Math.max(FLYOUT_W, rect.width) : rect.width;
   const rawLeft = alignRight ? rect.right - width : rect.left;
   const left = clamp(rawLeft, MARGIN, Math.max(MARGIN, viewport.width - MARGIN - width));
 
   const below = rect.bottom + GAP;
-  const above = rect.top - GAP - FLYOUT_H;
-  const top =
-    below + FLYOUT_H <= viewport.height - MARGIN
-      ? below
-      : above >= MARGIN
-        ? above
-        : Math.max(MARGIN, viewport.height - MARGIN - FLYOUT_H);
-  return { left, top, width };
+  if (below + FLYOUT_H <= viewport.height - MARGIN) return { left, width, top: below };
+  if (rect.top - GAP - FLYOUT_H >= MARGIN) return { left, width, bottom: viewport.height - rect.top + GAP };
+  return { left, width, top: Math.max(MARGIN, viewport.height - MARGIN - FLYOUT_H) };
 }
 
 export function SearchSelect({
@@ -83,7 +88,7 @@ export function SearchSelect({
   const [flyoutPos, setFlyoutPos] = useState<{ left: number; top: number } | null>(null);
   // 기본 모드 메뉴의 fixed 좌표(트리거 rect 기준) — 열려 있는 동안 스크롤·리사이즈에 재계산.
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [menuPos, setMenuPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
 
   useEffect(() => {
     if (addMode || !open) return;
@@ -294,7 +299,7 @@ export function SearchSelect({
               <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
                 data-id="search-select-flyout"
-                className="fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                className="dropdown-in fixed z-[1350] w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
                 style={flyoutPos ? { left: flyoutPos.left, top: flyoutPos.top } : undefined}
               >
                 {menu}
@@ -312,8 +317,8 @@ export function SearchSelect({
               <div className="fixed inset-0 z-[1340]" onClick={closeMenu} />
               <div
                 data-id="search-select-menu"
-                className="fixed z-[1350] rounded-md border border-hairline bg-surface py-1 shadow-lg"
-                style={{ left: menuPos.left, top: menuPos.top, width: menuPos.width }}
+                className="dropdown-in fixed z-[1350] rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                style={{ left: menuPos.left, top: menuPos.top, bottom: menuPos.bottom, width: menuPos.width }}
               >
                 {menu}
               </div>

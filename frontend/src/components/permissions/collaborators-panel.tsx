@@ -7,9 +7,11 @@
 // 그건 서버 상태, 스택 태그는 아직 서버에 보내지 않은 로컬 의도라 별개다.
 // 표시명·피커 후보: 사용자·부서는 실 /api/directory, 그룹은 실 active 그룹(Layer 4 Task 4). /
 // Display names / picker: users+departments from real /api/directory; groups from real active groups.
+// 행 = 아바타 · 이름(언어별 주/보조명)+아이디·직급 · 소속/구성원 · 부여자·일시 · 역할 메뉴(MenuSelect). 유저 행은
+// PersonHoverCard(호버/클릭), 부서 행은 OrgInfoModal(클릭). Owner 항목은 TransferOwnerDialog 게이트 (2026-10-01).
 
-import { useCallback, useEffect, useState } from "react";
-import { Hourglass, Loader2, LockKeyhole, RotateCcw, X, Zap } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Building2, Crown, Eye, Hourglass, Loader2, LockKeyhole, Pencil, RotateCcw, User, Users, X, Zap } from "lucide-react";
 
 import {
   getDirectory,
@@ -24,7 +26,10 @@ import {
   type PrincipalType,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
+import { formatKst } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
+import { formatTitleWithPosition } from "@/lib/korean-dept";
+import { belongsToDepartment } from "@/lib/owner-candidates";
 import {
   applyStagedOps,
   forecastStagedOp,
@@ -35,6 +40,11 @@ import {
   type StagedOp,
 } from "@/lib/permission-staging";
 import { buildUndoPlan, executeUndoPlan } from "@/lib/permission-undo";
+import { useKoreanDeptByPath } from "@/components/map-ownership-section";
+import { deptLeaf } from "@/components/maps/dept-level-icon";
+import { MenuSelect, type MenuSelectItem } from "@/components/menu-select";
+import { OrgInfoModal } from "@/components/org-info-modal";
+import { PersonHoverCard } from "@/components/person-hover-card";
 
 import { AddCollaborator } from "./add-collaborator";
 import { HoverSwapPill } from "./hover-swap-pill";
@@ -42,6 +52,7 @@ import { PendingChangePill } from "./pending-change-pill";
 import { PrincipalIcon } from "./principal-picker";
 import { RoleBadge } from "./role-badge";
 import { SkeletonRows } from "./loading-skeleton";
+import { TransferOwnerDialog } from "./transfer-owner-dialog";
 import { UndoLastApplyModal } from "./undo-last-apply-modal";
 
 interface CollaboratorsPanelProps {
@@ -53,13 +64,18 @@ interface CollaboratorsPanelProps {
   /** 현재 유저가 이 맵의 오너인지 — forecastStagedOp 예측에 사용 / Owner status, feeds forecastStagedOp. */
   isOwner: boolean;
   /** 토스트 발행 콜백 / Callback to show a toast message. */
-  onToast: (msg: string) => void;
+  onToast: (msg: string, tone?: "error") => void;
   /** 공개 맵이면 viewer 그랜트 비활성 — 전원 열람 가능 / Disable viewer role when map is public. */
   viewerGrantDisabled?: boolean;
   /** 오우닝 부서 org_path — 있으면 잠금 행(합성 표시, MapPermission 아님)을 목록 맨 위에 표시 /
    * Owning department org_path — when set, renders a synthetic locked row (not a MapPermission). */
   owningDepartment?: string | null;
+  /** 행 수(잠금 행 포함) — 섹션 헤더 카운트 / Row count incl. the locked row, for the section header. */
+  onCountChange?: (count: number) => void;
 }
+
+// 행 그리드 — 아바타 · 이름 · 소속 · 부여 · 역할(+태그) · 제거. 역할 열은 내용 폭(태그가 붙으면 늘어난다)
+const ROW_GRID = "grid grid-cols-[28px_minmax(0,1fr)_150px_112px_auto_24px] items-center gap-2.5";
 
 // 표시명 해석 — 실 디렉터리/그룹 우선, 없으면 principalId 폴백 /
 // Resolve display name from real directory (users/depts) and real groups; fall back to id.
@@ -79,7 +95,67 @@ function resolvePrincipalName(
   return groups.find((g) => String(g.id) === principalId)?.name ?? principalId;
 }
 
-// 개별 행 — 이름, 아이콘, 역할, 변경/제거 컨트롤 / Individual permission row.
+// 이니셜 — 영문 이름의 단어 머리글자 2개(없으면 아이디 앞 2글자)
+function initialsOf(name: string, fallback: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const text = words.length >= 2 ? `${words[0][0]}${words[1][0]}` : (words[0] ?? fallback).slice(0, 2);
+  return text.toUpperCase();
+}
+
+function Avatar({ principalType, name, id }: { principalType: PrincipalType; name: string; id: string }) {
+  if (principalType === "user") {
+    return (
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-tint text-[11px] font-semibold text-accent">
+        {initialsOf(name, id)}
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-surface-alt text-ink-tertiary">
+      {principalType === "department" ? (
+        <Building2 size={15} strokeWidth={1.5} />
+      ) : (
+        <Users size={15} strokeWidth={1.5} />
+      )}
+    </span>
+  );
+}
+
+// 부여 열 — 작은 라벨 + 부여자·일시 / Granted column: tiny label + grantor · date.
+function GrantedCell({ label, by, at }: { label: string; by: string; at?: string | null }) {
+  const date = at ? formatKst(at).slice(5, 10) : "";
+  return (
+    <span className="min-w-0 text-fine leading-tight text-ink-tertiary">
+      <span className="block text-[10px] uppercase tracking-wide text-ink-muted">{label}</span>
+      <span className="block truncate" title={at ? formatKst(at) : undefined}>
+        {by}
+        {date ? ` · ${date}` : ""}
+      </span>
+    </span>
+  );
+}
+
+// 부서 이름 — 클릭 시 조직 정보 모달 / Department name opens the org info modal on click.
+function DeptNameButton({ path, label, koreanDeptByPath }: { path: string; label: string; koreanDeptByPath: Map<string, string> }) {
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        data-id={`collab-dept-info-${path}`}
+        className="truncate rounded-xs text-left text-caption text-ink hover:text-accent"
+        onClick={(e) => setOrigin({ x: e.clientX, y: e.clientY })}
+      >
+        {label}
+      </button>
+      {origin && (
+        <OrgInfoModal orgPath={path} koreanDeptByPath={koreanDeptByPath} origin={origin} onClose={() => setOrigin(null)} />
+      )}
+    </>
+  );
+}
+
+// 개별 행 — 아바타·이름·소속·부여·역할·제거 / Individual permission row.
 function CollaboratorRow({
   perm,
   currentUserId,
@@ -91,7 +167,9 @@ function CollaboratorRow({
   dirUsers,
   dirDepts,
   groups,
+  koreanDeptByPath,
   onChangeRole,
+  onTransferOwner,
   onRemove,
   onCancelStaged,
   onWithdrawPending,
@@ -105,19 +183,22 @@ function CollaboratorRow({
   /** 퍼블릭 맵이면 viewer 선택지 숨김 — 단, 현재 역할이 viewer면 표시(editor로 교정 가능) /
    * Public map: hide viewer option (unless this grant is already viewer, so it can be fixed to editor). */
   viewerGrantDisabled?: boolean;
-  /** 현재 유저가 이 맵의 오너인지 — forecastStagedOp의 즉시적용/승인 예측에 사용 / Owner status for forecast. */
+  /** 현재 유저가 이 맵의 오너인지 — forecastStagedOp의 즉시적용/승인 예측 + Owner 항목 노출 / Owner status. */
   actorIsOwner: boolean;
   dirUsers: DirectoryUser[];
   dirDepts: DirectoryDept[];
   groups: Group[];
+  koreanDeptByPath: Map<string, string>;
   onChangeRole: (perm: ApiPermission, toRole: MapRole) => void;
+  onTransferOwner: (perm: ApiPermission) => void;
   onRemove: (perm: ApiPermission) => void;
   onCancelStaged: (op: StagedOp) => void;
   onWithdrawPending: (perm: ApiPermission) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const principalType = perm.principal_type as PrincipalType;
   const displayName = resolvePrincipalName(principalType, perm.principal_id, dirUsers, dirDepts, groups);
+  const user = principalType === "user" ? dirUsers.find((u) => u.id === perm.principal_id) : undefined;
   // 유령 principal — 디렉터리에서 사라진 유저(퇴사) / 현 조직에 없는 부서(조직개편).
   // 목록 로딩 전(빈 배열) 오탐 방지를 위해 로드된 뒤에만 판정.
   const isGhost =
@@ -139,102 +220,185 @@ function CollaboratorRow({
   const stagedRemove = stagedOp?.kind === "remove";
   const stagedChange = stagedOp?.kind === "change" ? stagedOp : null;
   const forecast = stagedOp ? forecastStagedOp(stagedOp, perm.role, actorIsOwner) : "instant";
+  const grantedByName = dirUsers.find((u) => u.id === perm.granted_by)?.name ?? perm.granted_by;
+
+  // 이름 — 언어설정 기준 주 이름, 다른 언어 이름은 보조(PersonHoverCard와 같은 규칙)
+  const koreanName = user?.korean_name ?? "";
+  const primaryName = lang === "ko" ? koreanName || displayName : displayName;
+  const secondaryName = lang === "ko" ? (koreanName ? displayName : "") : koreanName;
+  const titleLine = user ? formatTitleWithPosition(user.title ?? "", user.position ?? "") : "";
+  const group = principalType === "group" ? groups.find((g) => String(g.id) === perm.principal_id) : undefined;
+  const deptMembers =
+    principalType === "department"
+      ? dirUsers.filter((u) => belongsToDepartment(u.org_path ?? "", perm.principal_id)).length
+      : 0;
+  const deptKorean = principalType === "department" ? (koreanDeptByPath.get(perm.principal_id) ?? "") : "";
+  const deptParents = principalType === "department" ? perm.principal_id.split("/").slice(0, -1).join(" / ") : "";
+
+  // 역할 메뉴 항목 — viewer(공개 맵이면 기존 viewer만)·editor·Owner(오너가 editor 행에서만, 빨간 계열 → 이전 확인 모달)
+  const roleItems: MenuSelectItem[] = [
+    ...((!viewerGrantDisabled || role === "viewer")
+      ? [{ value: "viewer", label: t("perm.roleViewer"), icon: <Eye size={13} strokeWidth={1.5} /> }]
+      : []),
+    { value: "editor", label: t("perm.roleEditor"), icon: <Pencil size={13} strokeWidth={1.5} /> },
+    ...(actorIsOwner && principalType === "user" && !isGhost && role === "editor"
+      ? [{ value: "owner", label: t("perm.roleOwner"), icon: <Crown size={13} strokeWidth={1.5} />, tone: "danger" as const }]
+      : []),
+  ];
+
+  const ghostBadge = isGhost && (
+    <span
+      data-id="ghost-badge"
+      className="ml-1 shrink-0 rounded-sm border border-hairline px-1 py-px text-[10px] text-error"
+      title={t(principalType === "department" ? "perm.badgeMissingNote" : "perm.badgeDepartedNote")}
+    >
+      {t(principalType === "department" ? "perm.badgeMissing" : "perm.badgeDeparted")}
+    </span>
+  );
+
+  // 이름 블록 — 유저는 호버 카드(카드 상단 배너에 이 맵 권한 1줄) / name block; users get the hover card
+  const nameBlock: ReactNode =
+    principalType === "user" ? (
+      <PersonHoverCard
+        userId={perm.principal_id}
+        className="block min-w-0"
+        notice={
+          <span className="flex items-center gap-1.5">
+            <RoleBadge role={role} />
+            <span className="truncate text-fine text-ink-tertiary">
+              {t("perm.collab.grantedBy")} {grantedByName}
+              {perm.granted_at ? ` · ${formatKst(perm.granted_at).slice(0, 10)}` : ""}
+            </span>
+          </span>
+        }
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-caption text-ink">{primaryName}</span>
+          {secondaryName && <span className="truncate text-fine text-ink-tertiary">{secondaryName}</span>}
+          {ghostBadge}
+        </span>
+        <span className="block truncate text-fine text-ink-tertiary">
+          {perm.principal_id}
+          {titleLine ? ` · ${titleLine}` : ""}
+        </span>
+      </PersonHoverCard>
+    ) : principalType === "department" ? (
+      <span className="block min-w-0">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <DeptNameButton path={perm.principal_id} label={deptLeaf(perm.principal_id) || displayName} koreanDeptByPath={koreanDeptByPath} />
+          {deptKorean && <span className="truncate text-fine text-ink-tertiary">{deptKorean}</span>}
+          {ghostBadge}
+        </span>
+        {deptParents && <span className="block truncate text-fine text-ink-tertiary">{deptParents}</span>}
+      </span>
+    ) : (
+      <span className="block min-w-0">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-caption text-ink">{displayName}</span>
+          {ghostBadge}
+        </span>
+        <span className="block truncate text-fine text-ink-tertiary">{t("perm.collab.userGroup")}</span>
+      </span>
+    );
+
+  // 소속 열 — 유저는 말단 부서, 부서/그룹은 구성원 수 / affiliation column
+  const affiliation: ReactNode =
+    principalType === "user" ? (
+      user ? (
+        <span className="flex min-w-0 items-center gap-1 text-fine text-ink-secondary">
+          <Building2 size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+          <span className="truncate">{deptLeaf(user.org_path ?? "") || user.department}</span>
+        </span>
+      ) : (
+        <span className="text-fine text-ink-muted">{t("perm.collab.notInDirectory")}</span>
+      )
+    ) : (
+      <span className="flex min-w-0 items-center gap-1 text-fine text-ink-secondary">
+        <User size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+        <span className="truncate">
+          {t("perm.collab.members", { n: principalType === "department" ? deptMembers : (group?.members.length ?? 0) })}
+        </span>
+      </span>
+    );
 
   return (
-    // relative+group+pr-8 — 제거 X는 absolute라 공간을 차지하지 않는다, 공통 pr로 오너/본인(뱃지)
-    // 행과 편집(select) 행의 우측 요소가 같은 x좌표에서 끝나 정렬이 흔들리지 않는다 (U4).
     <div
-      className={`group relative flex items-center gap-2 rounded-sm py-1.5 pl-2 pr-8 hover:bg-surface-alt ${stagedRemove ? "opacity-60" : ""}`}
+      data-id={`collab-row-${perm.id}`}
+      className={`group relative ${ROW_GRID} rounded-sm py-1.5 pl-1.5 pr-1 hover:bg-surface-alt ${stagedRemove ? "opacity-60" : ""}`}
     >
-      {/* 유형 아이콘 / Type icon */}
-      <PrincipalIcon type={principalType} />
+      <Avatar principalType={principalType} name={displayName} id={perm.principal_id} />
+      {nameBlock}
+      {affiliation}
+      <GrantedCell label={t("perm.collab.grantedBy")} by={grantedByName} at={perm.granted_at} />
 
-      {/* 이름 / Display name */}
-      <span className="min-w-0 flex-1 truncate text-caption text-ink">
-        {displayName}
-        {isGhost && (
-          <span
-            data-id="ghost-badge"
-            className="ml-1.5 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-error"
-            title={t(principalType === "department" ? "perm.badgeMissingNote" : "perm.badgeDepartedNote")}
-          >
-            {t(principalType === "department" ? "perm.badgeMissing" : "perm.badgeDeparted")}
-          </span>
+      {/* 역할 열 — 뱃지 또는 메뉴 + pending/스택 태그 / role column: badge or menu, plus pending/staged tags */}
+      <span className="flex items-center justify-end gap-1.5">
+        {pendingChange && (
+          <PendingChangePill
+            dataId={`perm-pending-withdraw-${perm.id}`}
+            role={perm.role}
+            toRole={pendingChange.to_role ?? null}
+            requesterName={pendingByName}
+            canWithdraw={pendingChange.requested_by === currentUserId}
+            onWithdraw={() => onWithdrawPending(perm)}
+          />
+        )}
+        {stagedOp && (
+          <HoverSwapPill
+            dataId={`perm-staged-cancel-${perm.id}`}
+            title={t(forecast === "approval" ? "perm.staged.forecastApproval" : "perm.staged.forecastInstant")}
+            swapLabel={t("perm.staged.cancelPill")}
+            onActivate={() => onCancelStaged(stagedOp)}
+            base={
+              <span
+                className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                  stagedRemove ? "border-error text-error" : "border-changed text-changed"
+                }`}
+              >
+                {forecast === "approval" ? (
+                  <Hourglass size={12} strokeWidth={1.5} />
+                ) : (
+                  <Zap size={12} strokeWidth={1.5} />
+                )}
+                {stagedChange
+                  ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
+                  : t("perm.staged.remove")}
+              </span>
+            }
+          />
+        )}
+        {isOwner || isPending || stagedRemove || controlsDisabled ? (
+          <RoleBadge
+            role={role}
+            className={isOwner ? "inline-flex items-center gap-1" : ""}
+          />
+        ) : (
+          <MenuSelect
+            dataId={`collab-role-${perm.id}`}
+            className="w-[92px]"
+            value={stagedChange?.toRole ?? role}
+            items={roleItems}
+            onChange={(next) => {
+              if (next === "owner") onTransferOwner(perm);
+              else onChangeRole(perm, next as MapRole);
+            }}
+          />
         )}
       </span>
 
-      {/* 역할 뱃지 or 드롭다운 / Role badge or dropdown */}
-      {isOwner || isPending || stagedRemove ? (
-        <RoleBadge role={role} />
-      ) : controlsDisabled ? (
-        <RoleBadge role={role} />
-      ) : (
-        <select
-          className="rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink"
-          value={stagedChange?.toRole ?? role}
-          onChange={(e) => onChangeRole(perm, e.target.value as MapRole)}
-        >
-          {/* 퍼블릭 맵은 viewer 선택지 숨김 — 단 기존 viewer는 표시(editor로 교정 가능) */}
-          {(!viewerGrantDisabled || role === "viewer") && (
-            <option value="viewer">{t("perm.roleViewer")}</option>
-          )}
-          <option value="editor">{t("perm.roleEditor")}</option>
-        </select>
-      )}
-
-      {/* 상세 태그 — 서버 진실(pending_change)일 때만, staged remove 여부와 무관하게 항상 렌더
-          (하드 제약: R2 서버-진실 마커는 스택 태그와 별개로 유지) / detail tag only once server-confirmed,
-          rendered unconditionally regardless of any staged op on this row. */}
-      {pendingChange && (
-        <PendingChangePill
-          dataId={`perm-pending-withdraw-${perm.id}`}
-          role={perm.role}
-          toRole={pendingChange.to_role ?? null}
-          requesterName={pendingByName}
-          canWithdraw={pendingChange.requested_by === currentUserId}
-          onWithdraw={() => onWithdrawPending(perm)}
-        />
-      )}
-
-      {/* 스택 태그 — 로컬 예정(change/remove), 호버 시 Cancel로 스왑 / staged tag, hover-swaps to Cancel */}
-      {stagedOp && (
-        <HoverSwapPill
-          dataId={`perm-staged-cancel-${perm.id}`}
-          title={t(forecast === "approval" ? "perm.staged.forecastApproval" : "perm.staged.forecastInstant")}
-          swapLabel={t("perm.staged.cancelPill")}
-          onActivate={() => onCancelStaged(stagedOp)}
-          base={
-            <span
-              className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
-                stagedRemove ? "border-error text-error" : "border-changed text-changed"
-              }`}
-            >
-              {forecast === "approval" ? (
-                <Hourglass size={12} strokeWidth={1.5} />
-              ) : (
-                <Zap size={12} strokeWidth={1.5} />
-              )}
-              {stagedChange
-                ? `${t(role === "editor" ? "perm.roleEditor" : "perm.roleViewer")} → ${t(stagedChange.toRole === "editor" ? "perm.roleEditor" : "perm.roleViewer")} · ${t("perm.staged.change")}`
-                : t("perm.staged.remove")}
-            </span>
-          }
-        />
-      )}
-
-      {/* 제거 버튼 — absolute+hover라 flex 공간을 차지하지 않는다(정렬 교정, U4). display 아닌
-          opacity 토글이라 Tab 포커스는 유지되고 focus:/group-focus-within:로 키보드 사용자도 도달 가능. /
-          Remove button: absolute + opacity-hover so it reserves no flex space; opacity (not display)
-          keeps it tab-reachable, revealed via focus:/group-focus-within: for keyboard users. */}
-      {!isOwner && !controlsDisabled && !stagedRemove && !isPending && (
+      {/* 제거 버튼 — opacity 토글이라 Tab 포커스는 유지되고 focus:/group-focus-within:로 키보드 사용자도 도달 가능 /
+          Remove button: opacity (not display) keeps it tab-reachable, revealed on hover/focus. */}
+      {!isOwner && !controlsDisabled && !stagedRemove && !isPending ? (
         <button
           type="button"
           title={t("perm.removeButton")}
-          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          className="justify-self-center rounded-sm p-0.5 text-ink-tertiary opacity-0 pointer-events-none transition-opacity duration-150 hover:bg-surface-alt hover:text-error focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
           onClick={() => onRemove(perm)}
         >
           <X size={16} strokeWidth={1.5} />
         </button>
+      ) : (
+        <span />
       )}
     </div>
   );
@@ -248,9 +412,11 @@ export function CollaboratorsPanel({
   onToast,
   viewerGrantDisabled = false,
   owningDepartment,
+  onCountChange,
 }: CollaboratorsPanelProps) {
   const { t } = useI18n();
   const mapIdNum = Number(mapId);
+  const koreanDeptByPath = useKoreanDeptByPath();
 
   // 서버 권한 목록 / Server-sourced permissions list.
   const [perms, setPerms] = useState<ApiPermission[]>([]);
@@ -274,12 +440,20 @@ export function CollaboratorsPanel({
   const [lastApply, setLastApply] = useState<AppliedOpRecord[] | null>(null);
   const [undoOpen, setUndoOpen] = useState(false);
   const [undoBusy, setUndoBusy] = useState(false);
+  // 역할 메뉴 Owner 항목 → 소유권 이전 확인 모달(위험 구역과 같은 게이트) / Owner item → transfer confirm gate.
+  const [transferTarget, setTransferTarget] = useState<ApiPermission | null>(null);
 
   // 방금 적립된 고스트 행을 화면 안으로 — 페이지 이탈 없이 "nearest"만 사용.
   useEffect(() => {
     if (!lastAddedKey) return;
     document.querySelector(`[data-id="staged-add-${lastAddedKey}"]`)?.scrollIntoView({ block: "nearest" });
   }, [lastAddedKey]);
+
+  // 섹션 헤더 카운트 — 실 권한 행 + 오우닝 부서 잠금 행 / header count: grants + locked row
+  useEffect(() => {
+    if (loading) return;
+    onCountChange?.(perms.length + (owningDepartment ? 1 : 0));
+  }, [loading, perms.length, owningDepartment, onCountChange]);
 
   const reload = useCallback(async () => {
     try {
@@ -327,7 +501,7 @@ export function CollaboratorsPanel({
   }
 
   function handleChangeRole(perm: ApiPermission, toRole: MapRole) {
-    if (toRole === "owner") return; // select는 viewer/editor만 제공 — 방어적 가드
+    if (toRole === "owner") return; // owner는 이전 모달 경로 — 방어적 가드
     setStagedOps((ops) => stageRoleChange(ops, perm.id, toRole, perm.role));
   }
 
@@ -406,6 +580,9 @@ export function CollaboratorsPanel({
   for (const op of stagedOps) {
     if (op.kind !== "add") stagedByPermId.set(op.permissionId, op);
   }
+  const owningMembers = owningDepartment
+    ? dirUsers.filter((u) => belongsToDepartment(u.org_path ?? "", owningDepartment)).length
+    : 0;
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -421,24 +598,41 @@ export function CollaboratorsPanel({
       {/* 오우닝 부서 잠금 행 — 합성 표시(MapPermission 아님), 실 권한 목록 위에 고정 /
           Owning-department locked row: synthetic display, not a real permission, pinned above the list. */}
       {!loading && owningDepartment && (
-        <div
-          data-id="owning-dept-locked-row"
-          className="flex items-center gap-2 rounded-sm bg-surface-alt px-2 py-1.5"
-        >
-          <PrincipalIcon type="department" />
-          <span className="min-w-0 flex-1 truncate text-caption text-ink">
-            {resolvePrincipalName("department", owningDepartment, dirUsers, dirDepts, groups)}
-            <span className="ml-1.5 rounded-sm border border-hairline px-1.5 py-0.5 text-fine text-ink-tertiary">
-              {t("perm.owningDept.title")}
+        <div data-id="owning-dept-locked-row" className={`${ROW_GRID} rounded-sm bg-surface-alt py-1.5 pl-1.5 pr-1`}>
+          <Avatar principalType="department" name={owningDepartment} id={owningDepartment} />
+          <span className="block min-w-0">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <DeptNameButton
+                path={owningDepartment}
+                label={deptLeaf(owningDepartment) || resolvePrincipalName("department", owningDepartment, dirUsers, dirDepts, groups)}
+                koreanDeptByPath={koreanDeptByPath}
+              />
+              {koreanDeptByPath.get(owningDepartment) && (
+                <span className="truncate text-fine text-ink-tertiary">{koreanDeptByPath.get(owningDepartment)}</span>
+              )}
+              <span className="shrink-0 rounded-sm border border-hairline px-1 py-px text-[10px] text-ink-tertiary">
+                {t("perm.owningDept.title")}
+              </span>
+            </span>
+            <span className="block truncate text-fine text-ink-tertiary">
+              {owningDepartment.split("/").slice(0, -1).join(" / ")}
             </span>
           </span>
-          <span
-            title={t("perm.owningDept.lockedNote")}
-            className="inline-flex shrink-0 items-center gap-1 text-fine text-ink-tertiary"
-          >
-            <LockKeyhole size={14} strokeWidth={1.5} />
-            {t("perm.owningDept.lockedEditor")}
+          <span className="flex min-w-0 items-center gap-1 text-fine text-ink-secondary">
+            <User size={13} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+            <span className="truncate">{t("perm.collab.membersAllEditors", { n: owningMembers })}</span>
           </span>
+          <GrantedCell label={t("perm.collab.grantedBy")} by={t("perm.collab.autoOnCreate")} />
+          <span className="flex justify-end">
+            <span
+              title={t("perm.owningDept.lockedNote")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-hairline bg-surface px-1.5 py-0.5 text-fine text-ink-tertiary"
+            >
+              <LockKeyhole size={13} strokeWidth={1.5} />
+              {t("perm.owningDept.lockedEditor")}
+            </span>
+          </span>
+          <span />
         </div>
       )}
 
@@ -455,7 +649,9 @@ export function CollaboratorsPanel({
           dirUsers={dirUsers}
           dirDepts={dirDepts}
           groups={groups}
+          koreanDeptByPath={koreanDeptByPath}
           onChangeRole={handleChangeRole}
+          onTransferOwner={setTransferTarget}
           onRemove={handleRemove}
           onCancelStaged={handleCancelStaged}
           onWithdrawPending={(p) => void handleWithdrawPending(p)}
@@ -555,6 +751,15 @@ export function CollaboratorsPanel({
           busy={undoBusy}
           onClose={() => setUndoOpen(false)}
           onConfirm={() => void handleUndoConfirm()}
+        />
+      )}
+      {transferTarget && (
+        <TransferOwnerDialog
+          mapId={mapIdNum}
+          targetId={transferTarget.principal_id}
+          targetName={resolvePrincipalName("user", transferTarget.principal_id, dirUsers, dirDepts, groups)}
+          onToast={onToast}
+          onClose={() => setTransferTarget(null)}
         />
       )}
     </div>

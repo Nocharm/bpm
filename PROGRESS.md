@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 맵 설정 UX 라운드: 오너 이전 후보 버그·협업자 행·드롭다운·SP 타일·버전 카드 (feat/map-settings-ux)
+
+- **버그** — 소유권 이전 후보가 명시 user 권한 행(editor/owner)만 모아 오우닝 부서 소속(권한 행 없는 파생 editor)이 빠졌고, 백엔드 `transfer-owner`도 권한 행이 없으면 409였다. 표시명도 목 시드라 아이디로 보였다. 수정: FE 후보 = 명시 editor+ ∪ 디렉터리에서 오우닝 부서(하위 포함, BE `belongs_to_department` 미러 `lib/owner-candidates.ts`) 소속, BE는 파생 editor 대상이면 owner 행을 새로 만들어 이전(테스트 2건). 권한 응답에 `granted_at` 추가(협업자 행 메타).
+- **UX(목업 A~E 승인, 사용자 보정 2건: 버전 카드 스트라이프 변 보더 제거·우측 액션 200px 등폭, 드롭다운은 트리거 등폭·간극 0)** — 레일+h2 섹션 아이콘·요약 카운트, 협업자 행(아바타·언어별 주/보조명·아이디·직급·소속/구성원 수·부여자·일시) + `PersonHoverCard`(배너에 이 맵 권한 1줄)·부서는 `OrgInfoModal`, 네이티브 select 3곳(역할·GMP·이전)을 `MenuSelect`(신규)·`SearchSelect`로 교체하고 `.dropdown-in` 등장을 한 벌로(위로 뒤집힐 땐 bottom 앵커로 밀착), 역할 메뉴 Owner 항목(빨간 호버) → `TransferOwnerDialog`(위험 구역과 공용) 게이트, SP 지정 정보는 `SpFieldTile(readOnly)` 4열 그리드(빈 필드 "미입력" 유지), 버전은 상태 스트라이프·메타·결재자 아바타·진행 단계 칩 카드. 본문 폭 680→920. 스모크 `pw-smoke-map-settings.mjs` 26/26(임시 맵 e2e 이전 포함).
+- **"조건 · GMP" 카드를 서브프로세스 섹션에 흡수(사용자 결정)** — 둘 다 같은 `sp_*` 컬럼을 읽고 썼는데(카드는 2026-08-19 인터뷰 필드 승격이 지정 없이도 검토하라고 붙인 것) 같은 값이 두 번 보이고 GMP·원문 메모는 한쪽에만 있었다. 이제 SP 타일 그리드가 단일 표면: 지정 여부와 무관하게 항상 보이고, 승격 필드(GMP·시작/종료 조건·소요/실작업시간·시스템)는 타일 클릭 팝오버(`SpFieldPopover`)로 바로 `PATCH /process-fields`, 원문 메모는 타일 아이콘 슬롯(`FallbackHint`), 나머지는 지정 모달 경로. `ProcessFieldsCard` 삭제, GMP 변경 알림 팝오버(되돌리기)는 팝오버 확정/취소로 대체. `pw-smoke-field-promotion.mjs` [17][18][19]를 타일 기준으로 갱신.
+
 ## 2026-10-01 — 하위프로세스 출구 다중 연결 + 들어오는 문 네 방향 (feat/subprocess-ends → dev)
 
 - SP 노드는 들어오는 문이 좌측 하나뿐이고 끝이 여러 개여도 출구 엣지가 전부 대표 끝으로 덮여(`withSubprocessHandles`) 끝별 흐름을 그릴 수 없었다. 사용자 결정 10건(설계 `2026-10-01-subprocess-ends-design.md`, main 머지와 함께 폐기): in만 네 방향(`in`·`in:top/right/bottom`), 끝마다 출구 엣지+끝당 출력 1개 규칙, 끝을 모르는 경로(드롭존 앞/뒤·역방향 몸체 드롭)는 출구 선택 목록 `EdgeEndModal`(대표 끝 첫 행), 출구 라벨 기본값은 끝 제목 **미러**(점선 알약·링크 아이콘, 저장 안 함), 스왑 다출력은 두 열 짝짓기 모달 `SwapOutputsModal`(짝=타깃만 교환, 라벨·끝 키는 노드 잔류, 확인해야 실행·취소=스왑 취소, 행 중앙 연결선+그려지는 모션), 펼침 게이트웨이는 끝별 호스트 엣지에만 매핑+점선 애니메이션, 합성 `sp-ends:` 안내 엣지 제거.

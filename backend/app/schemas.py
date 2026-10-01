@@ -261,6 +261,7 @@ class PermissionOut(BaseModel):
     principal_id: str
     role: str
     granted_by: str
+    granted_at: datetime | None = None  # 협업자 행 메타(부여 일시) — 레거시 행은 None 가능
     pending_change: PendingChangeOut | None = None
 
 

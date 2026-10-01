@@ -6,11 +6,26 @@
 // 게이팅은 워크플로 상태 + (approvers/submitted_by ↔ currentUserId)에서 파생하되, 서버가 최종 게이트(403/409)다.
 // 전이 확인은 에디터와 동일한 5종 공용 다이얼로그(components/version/) 경유 — 이전엔 패널만 자체 ConfirmDialog/직행/
 // PromptDialog를 써서 승인요청 시 승인자 목록·동봉 가시성 변경이 안 보이는 등 표면 드리프트가 있었다(원 신고 건).
+// 행 = 카드: 좌측 상태 스트라이프(외곽 보더 없음) · 제목(마커·라벨·상태 필·현재 게시본) · 메타(생성·요청/게시/반려자
+// PersonHoverCard·결재자 아바타 체크·코멘트 수) · 진행 단계 칩 · 우측 200px 고정 액션 영역 (2026-10-01).
 
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, MessageSquare, XCircle, Send, Upload, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  AlertCircle,
+  Check,
+  CheckCircle,
+  Clock,
+  MessageSquare,
+  Plus,
+  Send,
+  Undo2,
+  Upload,
+  Workflow,
+  X,
+  XCircle,
+} from "lucide-react";
 
-import type { VersionDetail, VersionEvent, VersionSummary, WorkflowState } from "@/lib/api";
+import type { VersionDetail, VersionEvent, VersionStatus, VersionSummary, WorkflowState } from "@/lib/api";
 import {
   approveVersion,
   getDirectory,
@@ -22,11 +37,14 @@ import {
   withdrawVersion,
 } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
+import { formatKst, formatKstShort } from "@/lib/datetime";
 import { useI18n } from "@/lib/i18n";
 import { useMe } from "@/lib/me";
+import { formatVersionMarker } from "@/lib/version-name";
+import { VERSION_STATUS_LABEL, VERSION_STATUS_TONE } from "@/lib/version-status";
 import { isSoleSelfApprover, runSelfPublishChain } from "@/lib/self-publish";
 import { draftSubmitNote } from "@/lib/submit-note-draft";
-import { StatusBadge } from "@/components/status-badge";
+import { PersonHoverCard } from "@/components/person-hover-card";
 import { SelfPublishPopover } from "@/components/self-publish-popover";
 import { VisibilityBundlePicker } from "@/components/visibility-bundle-picker";
 import { CommentHistoryModal } from "@/components/version/comment-history-modal";
@@ -56,7 +74,71 @@ interface VersionsPublishPanelProps {
   onToast?: (msg: string, tone?: "error") => void;
   /** 액션 성공 후 호출 — 동봉 가시성 변경이 맵 레벨 상태(visibility)를 바꿀 수 있어 호스트가 재조회하도록 신호 / Notify host after a successful action, since bundled visibility changes affect map-level state. */
   onChanged?: () => void;
+  /** SP 지정 맵이면 게시본 카드에 "SP 지정 기준" 메타 / Mark the published card as the subprocess basis. */
+  spDesignated?: boolean;
 }
+
+// ── 카드 표현 헬퍼 / Card presentation helpers ───────────────
+
+// 좌측 상태 스트라이프 색 — 홈 카드 상태 톤과 같은 시맨틱 / left stripe color per status.
+const STRIPE: Record<VersionStatus, string> = {
+  draft: "bg-hairline",
+  pending: "bg-changed",
+  approved: "bg-accent",
+  published: "bg-added",
+  confirmed: "bg-accent",
+  rejected: "bg-error",
+  expired: "bg-hairline",
+};
+
+function latestEvent(events: VersionEvent[] | undefined, type: string): VersionEvent | null {
+  if (!events) return null;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i].event_type === type) return events[i];
+  }
+  return null;
+}
+
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return (words.length >= 2 ? `${words[0][0]}${words[1][0]}` : (words[0] ?? "?").slice(0, 2)).toUpperCase();
+}
+
+// 메타 항목 — 아이콘 + 라벨 + (호버 카드 이름) + 시각 / meta item: icon + label + optional person + stamp.
+function Meta({ icon, label, actor, actorName, stamp }: { icon: ReactNode; label: string; actor?: string | null; actorName?: string; stamp?: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1 text-fine text-ink-tertiary">
+      <span className="shrink-0">{icon}</span>
+      <span className="shrink-0">{label}</span>
+      {actor && (
+        <PersonHoverCard userId={actor} className="truncate text-ink-secondary underline decoration-dotted underline-offset-2">
+          {actorName ?? actor}
+        </PersonHoverCard>
+      )}
+      {stamp && <span className="shrink-0">· {stamp}</span>}
+    </span>
+  );
+}
+
+// 진행 단계 칩 / progress step chip.
+function Step({ icon, label, state }: { icon: ReactNode; label: string; state: "done" | "now" | "ok" | "todo" }) {
+  const cls =
+    state === "done"
+      ? "border-transparent bg-surface-alt text-ink-secondary"
+      : state === "now"
+        ? "border-changed bg-changed/5 text-changed"
+        : state === "ok"
+          ? "border-transparent bg-added/10 text-added"
+          : "border-dashed border-hairline text-ink-muted";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${cls}`}>
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+const StepLink = () => <span aria-hidden className="h-px w-3 shrink-0 bg-hairline" />;
 
 // ── 메인 컴포넌트 / Main component ───────────────────────────
 
@@ -69,6 +151,7 @@ export function VersionsPublishPanel({
   canBundle,
   onToast,
   onChanged,
+  spDesignated = false,
 }: VersionsPublishPanelProps) {
   const { t } = useI18n();
 
@@ -130,7 +213,7 @@ export function VersionsPublishPanel({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="mb-2 text-caption text-ink-secondary">{t("perm.version.hint")}</p>
+      <p className="mb-1 text-caption text-ink-tertiary">{t("perm.version.hint")}</p>
       {versions.map((version) => (
         <VersionRow
           key={version.id}
@@ -144,6 +227,7 @@ export function VersionsPublishPanel({
           canBundle={canBundle}
           nameById={nameById}
           events={versionsProp ? undefined : fetchedVersions.find((v) => v.id === version.id)?.events}
+          spDesignated={spDesignated}
           onToast={onToast}
           onChanged={() => {
             setEventsReloadKey((k) => k + 1);
@@ -169,6 +253,7 @@ interface VersionRowProps {
   nameById: Map<string, string>;
   /** 이 버전의 전이 이벤트 — 코멘트 이력 모달용. props 버전 목록 사용 시엔 events가 없어 버튼 미노출. */
   events?: VersionEvent[];
+  spDesignated?: boolean;
   onToast?: (msg: string, tone?: "error") => void;
   onChanged?: () => void;
 }
@@ -184,6 +269,7 @@ function VersionRow({
   canBundle,
   nameById,
   events,
+  spDesignated = false,
   onToast,
   onChanged,
 }: VersionRowProps) {
@@ -252,11 +338,15 @@ function VersionRow({
   const [commentsOrigin, setCommentsOrigin] = useState<{ x: number; y: number } | null>(null);
   const commentCount = (events ?? []).filter((e) => e.note).length;
 
+  const summary = versions.find((v) => v.id === versionId) ?? null;
+  const nameOf = (id: string | null | undefined) => (id ? (nameById.get(id) ?? id) : "");
+
   if (wf === null) {
     return (
-      <div className="flex items-center gap-3 rounded-sm border border-hairline bg-surface px-3 py-2.5">
-        <span className="flex-1 text-caption text-ink">{label}</span>
-        <span className="text-fine text-ink-tertiary">…</span>
+      <div className="grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-md border border-l-0 border-hairline bg-surface">
+        <span className="bg-hairline" />
+        <span className="px-3.5 py-3 text-caption text-ink">{label}</span>
+        <span className="flex items-center justify-center border-l border-divider bg-surface-pearl text-fine text-ink-tertiary">…</span>
       </div>
     );
   }
@@ -271,33 +361,157 @@ function VersionRow({
   // 게시 확인의 만료 경고 대상 — 맵 내 현재 게시본(에디터와 동일 계산).
   const priorPublished = versions.find((v) => v.status === "published") ?? null;
 
+  const submitted = latestEvent(events, "submitted");
+  const published = latestEvent(events, "published");
+  const rejected = latestEvent(events, "rejected");
+  const tone = VERSION_STATUS_TONE[status];
+  const marker = summary ? formatVersionMarker(summary, versions) : "";
+  const hasApprovers = wf.approvers.length > 0;
+  const tally = `${wf.approvals.length}/${wf.approvers.length}`;
+  const showSteps = status === "draft" || status === "pending" || status === "approved" || status === "published";
+  const isCurrentPublished = status === "published";
+
+  // 액션 버튼 공통 클래스 / shared action button class
+  const btn = "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-fine transition-colors disabled:opacity-50";
+
   return (
-    <div className="flex items-center gap-3 rounded-sm border border-hairline bg-surface px-3 py-2.5">
-      {/* 버전 라벨 / Version label */}
-      <span className="flex-1 text-caption text-ink">{label}</span>
+    <>
+    <div
+      data-id={`version-card-${versionId}`}
+      className={`grid grid-cols-[4px_minmax(0,1fr)_200px] overflow-hidden rounded-md border border-l-0 border-hairline bg-surface ${
+        status === "expired" ? "opacity-75" : ""
+      }`}
+    >
+      {/* 상태 스트라이프 — 카드 좌측 모서리 자체(외곽 보더 없음, 사용자 결정 2026-10-01) */}
+      <span className={STRIPE[status]} />
 
-      {/* 승인 집계 (pending일 때) / Approval tally while pending */}
-      {status === "pending" && wf.approvers.length > 0 && (
-        <span className="text-fine text-ink-tertiary">
-          {wf.approvals.length}/{wf.approvers.length}
-        </span>
-      )}
+      <div className="min-w-0 px-3.5 py-2.5">
+        {/* 제목 행 — 마커 · 라벨 · 상태 필 · 현재 게시본 */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {marker && (
+            <span
+              className={`rounded-sm px-1.5 py-0.5 text-[11px] font-semibold ${
+                status === "published" || status === "approved" ? "bg-accent-tint text-accent" : "bg-ink/5 text-ink-tertiary"
+              }`}
+            >
+              {marker}
+            </span>
+          )}
+          <span className="truncate text-caption-strong text-ink">{label}</span>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${tone.pill}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+            {t(VERSION_STATUS_LABEL[status])}
+          </span>
+          {isCurrentPublished && (
+            <span className="rounded-full border border-added px-1.5 py-px text-[10px] text-added">
+              {t("perm.version.currentPublished")}
+            </span>
+          )}
+        </div>
 
-      {/* 상태 배지 / Status badge */}
-      <StatusBadge status={status} />
+        {/* 메타 행 — 생성 · 요청/게시/반려 · 결재 아바타 · 코멘트 */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1">
+          {summary && (
+            <Meta icon={<Plus size={12} strokeWidth={1.5} />} label={t("perm.version.createdAt")} stamp={formatKst(summary.created_at).slice(5, 10)} />
+          )}
+          {published && (
+            <Meta icon={<Upload size={12} strokeWidth={1.5} />} label={t("perm.version.publishedBy")} actor={published.actor} actorName={nameOf(published.actor)} stamp={formatKstShort(published.created_at)} />
+          )}
+          {!published && submitted && (status === "pending" || status === "approved") && (
+            <Meta icon={<Send size={12} strokeWidth={1.5} />} label={t("perm.version.requestedBy")} actor={submitted.actor} actorName={nameOf(submitted.actor)} stamp={formatKstShort(submitted.created_at)} />
+          )}
+          {status === "rejected" && (rejected || wf.rejected_by) && (
+            <Meta icon={<X size={12} strokeWidth={1.5} />} label={t("perm.version.rejectedBy")} actor={rejected?.actor ?? wf.rejected_by} actorName={nameOf(rejected?.actor ?? wf.rejected_by)} stamp={rejected ? formatKstShort(rejected.created_at) : undefined} />
+          )}
+          {hasApprovers && (status === "pending" || status === "approved" || status === "published" || status === "expired") && (
+            <span className="inline-flex items-center gap-1 text-fine text-ink-tertiary">
+              {t("perm.version.approvalsTally")}
+              <span className="inline-flex items-center gap-0.5">
+                {wf.approvers.map((id) => {
+                  const ok = wf.approvals.includes(id) || status === "published" || status === "expired";
+                  return (
+                    <PersonHoverCard key={id} userId={id} className="inline-flex">
+                      <span
+                        title={nameOf(id)}
+                        className={`flex h-[18px] w-[18px] items-center justify-center rounded-full border text-[8px] ${
+                          ok ? "border-added bg-added/10 text-added" : "border-hairline bg-surface text-ink-tertiary"
+                        }`}
+                      >
+                        {ok ? <Check size={10} strokeWidth={2} /> : initialsOf(nameOf(id))}
+                      </span>
+                    </PersonHoverCard>
+                  );
+                })}
+              </span>
+              {tally}
+            </span>
+          )}
+          {commentCount > 0 && (
+            <Meta icon={<MessageSquare size={12} strokeWidth={1.5} />} label={`${t("perm.version.comments")} ${commentCount}`} />
+          )}
+          {spDesignated && isCurrentPublished && (
+            <Meta icon={<Workflow size={12} strokeWidth={1.5} />} label={t("perm.version.spBasis")} />
+          )}
+        </div>
 
-      {/* 액션 버튼 — 상태·역할별 조건부 / Action buttons: conditional on status and role */}
-      <div className="flex items-center gap-1.5">
+        {/* 진행 단계 칩 — 생성 → 승인 요청 → 결재 → 게시 (반려·만료는 생략) */}
+        {showSteps && (
+          <div className="mt-2 flex flex-wrap items-center gap-y-1">
+            <Step icon={<Plus size={11} strokeWidth={1.5} />} label={t("perm.version.stepCreated")} state="done" />
+            <StepLink />
+            <Step
+              icon={<Send size={11} strokeWidth={1.5} />}
+              label={t("perm.version.stepSubmitted")}
+              state={status === "draft" ? "todo" : "done"}
+            />
+            <StepLink />
+            <Step
+              icon={status === "pending" ? <Clock size={11} strokeWidth={1.5} /> : <Check size={11} strokeWidth={1.5} />}
+              label={
+                status === "pending"
+                  ? t("perm.version.stepApproving", { a: wf.approvals.length, b: wf.approvers.length })
+                  : status === "draft"
+                    ? t("perm.version.approve")
+                    : t("perm.version.stepApproved", { a: wf.approvals.length, b: wf.approvers.length })
+              }
+              state={status === "pending" ? "now" : status === "draft" ? "todo" : "done"}
+            />
+            <StepLink />
+            <Step
+              icon={<Upload size={11} strokeWidth={1.5} />}
+              label={
+                isCurrentPublished
+                  ? t("perm.version.stepPublished", { d: published ? formatKst(published.created_at).slice(5, 10) : "" })
+                  : t("perm.version.stepPublish")
+              }
+              state={isCurrentPublished ? "ok" : status === "approved" ? "now" : "todo"}
+            />
+          </div>
+        )}
+
+        {/* 반려 사유 */}
+        {status === "rejected" && wf.reject_reason && (
+          <div className="mt-2 flex items-start gap-1.5 rounded-sm bg-error/5 px-2 py-1 text-fine text-error">
+            <AlertCircle size={12} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+            <span>
+              {t("perm.version.rejectReason")}: {wf.reject_reason}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 액션 영역 — 200px 고정 폭, 모든 카드가 같은 선에서 정렬 / fixed-width action area */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5 border-l border-divider bg-surface-pearl px-3 py-2.5">
         {/* 코멘트 있는 이벤트가 하나라도 있으면 이력 모달 열기 버튼 노출 / Shown only when at least one event has a comment. */}
         {commentCount > 0 && (
           <button
             type="button"
             data-id={`version-comments-open-${versionId}`}
             title={t("wf.viewComments")}
-            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt"
+            className={`${btn} border-hairline bg-surface text-ink-secondary hover:bg-surface-alt`}
             onClick={(event) => setCommentsOrigin({ x: event.clientX, y: event.clientY })}
           >
-            <MessageSquare size={16} strokeWidth={1.5} />
+            <MessageSquare size={14} strokeWidth={1.5} />
             {commentCount}
           </button>
         )}
@@ -307,7 +521,7 @@ function VersionRow({
           <button
             type="button"
             disabled={busy}
-            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink hover:bg-surface-alt disabled:opacity-50"
+            className={`${btn} border-accent bg-surface text-accent hover:bg-accent-tint`}
             onClick={(event) => {
               // 동봉 선택은 오픈 시점에 리셋 — dismiss 경로는 confirm과 달리 값을 지우지 않으므로,
               // 이전 취소된 선택이 다음 오픈에 미리 선택된 채로 남아 의도치 않은 동봉을 유발할 수 있다.
@@ -321,8 +535,8 @@ function VersionRow({
               setSubmitConfirmOpen(true);
             }}
           >
-            <Send size={16} strokeWidth={1.5} />
-            {t("perm.version.request")}
+            <Send size={14} strokeWidth={1.5} />
+            {t(status === "rejected" ? "perm.version.resubmit" : "perm.version.request")}
           </button>
         )}
 
@@ -332,22 +546,22 @@ function VersionRow({
             <button
               type="button"
               disabled={busy}
-              className="flex items-center gap-1 rounded-sm border border-added px-2 py-1 text-fine text-added hover:bg-surface-alt disabled:opacity-50"
+              className={`${btn} border-added bg-surface text-added hover:bg-added/10`}
               onClick={() => {
                 setTransitionComment("");
                 setApproveConfirmOpen(true);
               }}
             >
-              <CheckCircle size={16} strokeWidth={1.5} />
+              <CheckCircle size={14} strokeWidth={1.5} />
               {t("perm.version.approve")}
             </button>
             <button
               type="button"
               disabled={busy}
-              className="flex items-center gap-1 rounded-sm border border-error px-2 py-1 text-fine text-error hover:bg-surface-alt disabled:opacity-50"
+              className={`${btn} border-error bg-surface text-error hover:bg-error/10`}
               onClick={() => setRejecting(true)}
             >
-              <XCircle size={16} strokeWidth={1.5} />
+              <XCircle size={14} strokeWidth={1.5} />
               {t("perm.version.reject")}
             </button>
           </>
@@ -355,12 +569,12 @@ function VersionRow({
 
         {/* pending → 이미 승인한 승인자: 타인 승인 대기 / approver who already approved: awaiting others */}
         {status === "pending" && isApprover && hasApproved && (
-          <span className="text-fine text-ink-tertiary">{t("perm.version.approvedByYou")}</span>
+          <span className="text-center text-fine text-ink-tertiary">{t("perm.version.approvedByYou")}</span>
         )}
 
         {/* pending → 비승인자: 대기 표시 / non-approver: waiting label */}
         {status === "pending" && !isApprover && (
-          <span className="text-fine text-ink-tertiary">{t("perm.version.waitingApproval")}</span>
+          <span className="text-center text-fine text-ink-tertiary">{t("perm.version.waitingApproval")}</span>
         )}
 
         {/* approved → 제출자: 게시 버튼 / submitter: publish button */}
@@ -368,20 +582,20 @@ function VersionRow({
           <button
             type="button"
             disabled={busy}
-            className="flex items-center gap-1 rounded-sm border border-accent px-2 py-1 text-fine text-accent hover:bg-surface-alt disabled:opacity-50"
+            className={`${btn} border-accent bg-accent text-on-accent hover:bg-accent-focus`}
             onClick={() => {
               setTransitionComment("");
               setPublishConfirmOpen(true);
             }}
           >
-            <Upload size={16} strokeWidth={1.5} />
+            <Upload size={14} strokeWidth={1.5} />
             {t("perm.version.publish")}
           </button>
         )}
 
         {/* approved → 비제출자: 대기 표시 / non-submitter: waiting label */}
         {status === "approved" && !isSubmitter && (
-          <span className="text-fine text-ink-tertiary">{t("perm.version.approvedWaiting")}</span>
+          <span className="text-center text-fine text-ink-tertiary">{t("perm.version.approvedWaiting")}</span>
         )}
 
         {/* pending/approved/rejected → 제출자: 회수(withdraw)로 draft 복귀 / submitter can withdraw back to draft */}
@@ -389,19 +603,23 @@ function VersionRow({
           <button
             type="button"
             disabled={busy}
-            className="flex items-center gap-1 rounded-sm border border-hairline px-2 py-1 text-fine text-ink-secondary hover:bg-surface-alt disabled:opacity-50"
+            className={`${btn} border-hairline bg-surface text-ink-secondary hover:bg-surface-alt`}
             onClick={() => {
               setTransitionComment("");
               setWithdrawConfirmOpen(true);
             }}
           >
-            <Undo2 size={16} strokeWidth={1.5} />
+            <Undo2 size={14} strokeWidth={1.5} />
             {t("perm.version.withdraw")}
           </button>
         )}
 
-        {/* published: 별도 액션 없음 / published: no actions */}
+        {/* published / expired: 액션 없음, 안내만 / no actions, note only */}
+        {isCurrentPublished && (
+          <span className="text-center text-fine text-ink-tertiary">{t("perm.version.publishedNote")}</span>
+        )}
       </div>
+    </div>
       {selfPublishAt && (
         <SelfPublishPopover
           position={selfPublishAt}
@@ -538,6 +756,6 @@ function VersionRow({
           onClose={() => setCommentsOrigin(null)}
         />
       )}
-    </div>
+    </>
   );
 }

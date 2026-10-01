@@ -615,6 +615,39 @@ def test_owner_transfer_new_owner_not_editor_409(
     assert r.status_code == 409
 
 
+def test_owner_transfer_to_owning_department_member_creates_grant(
+    client: TestClient, enforce: None
+) -> None:
+    """오우닝 부서 소속은 권한 행 없는 파생 editor — 이전 대상이 되면 owner 행을 새로 만든다 (2026-10-01)."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner")], owner_id="owner.u")
+
+    async def _set_owning(session) -> None:
+        # conftest 앵커 직원 owning.anchor 가 이 부서 소속 — 권한 행은 없다
+        (await session.get(ProcessMap, map_id)).owning_department = "Owning Anchor Division"
+
+    _seed(_set_owning)
+    assert grant_role(map_id, "owning.anchor") is None
+    act_as("owner.u")
+    r = client.post(f"/api/maps/{map_id}/transfer-owner", json={"new_owner": "owning.anchor"})
+    assert r.status_code == 200, r.json()
+    assert grant_role(map_id, "owning.anchor") == "owner"
+    assert grant_role(map_id, "owner.u") == "editor"
+    assert owner_grant_count(map_id) == 1
+    owner_id, _ = map_owner_and_visibility(map_id)
+    assert owner_id == "owning.anchor"
+    # 목록 응답에 부여 일시가 실린다(협업자 행 메타)
+    listed = client.get(f"/api/maps/{map_id}/permissions").json()
+    assert all(p["granted_at"] for p in listed)
+
+
+def test_owner_transfer_outsider_without_grant_409(client: TestClient, enforce: None) -> None:
+    """오우닝 부서 밖 + 권한 행 없음 → 여전히 409."""
+    map_id = seed_map(grants=[("user", "owner.u", "owner")], owner_id="owner.u")
+    act_as("owner.u")
+    r = client.post(f"/api/maps/{map_id}/transfer-owner", json={"new_owner": "a"})
+    assert r.status_code == 409
+
+
 # ── C/D. Visibility request + approval decide ─────────────────
 
 

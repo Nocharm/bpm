@@ -21,7 +21,8 @@ from app.framework_slots import (
     remaining_sides,
     validate_slot_change,
 )
-from app.models import ApprovalRequest, MapPermission, MapVersion, ProcessMap, _now
+from app.models import ApprovalRequest, Employee, MapPermission, MapVersion, ProcessMap, _now
+from app.orgchart import load_dept_index, resolve_org_path
 from app.permissions import logic
 from app.permissions.access import (
     assert_map_role,
@@ -403,6 +404,19 @@ async def _supersede_pending_downgrades(
 # ── B. Owner transfer ─────────────────────────────────────────
 
 
+async def _is_owning_department_member(
+    session: AsyncSession, login_id: str, owning_department: str | None
+) -> bool:
+    """오우닝 부서(하위 포함) 소속 여부 — effective_role 의 파생 editor 판정과 같은 접두 규칙."""
+    if not owning_department:
+        return False
+    emp = await session.get(Employee, login_id)
+    if emp is None:
+        return False
+    emp_org_path = resolve_org_path(emp, await load_dept_index(session))
+    return logic.belongs_to_department(emp_org_path, owning_department)
+
+
 @router.post(
     "/maps/{map_id}/transfer-owner",
     dependencies=[Depends(require_map_role("owner"))],
@@ -415,7 +429,8 @@ async def transfer_owner(
 ) -> dict:
     """소유권 이전 — 즉시. 기존 owner grant → editor, new_owner grant → owner, owner_id 갱신.
 
-    new_owner 는 현재 editor+ 보유자여야 한다. 결과적으로 owner grant 는 정확히 1개 남는다.
+    new_owner 는 현재 editor+ 보유자여야 한다. 오우닝 부서 소속(권한 행 없는 파생 editor)도
+    대상이 된다 — 그땐 owner 행을 새로 만든다(2026-10-01). 결과적으로 owner grant 는 정확히 1개 남는다.
     """
     found_map = await _get_map_or_404(session, map_id)
     new_owner = payload.new_owner
@@ -432,6 +447,18 @@ async def transfer_owner(
         (g for g in grants if g.principal_type == "user" and g.principal_id == new_owner),
         None,
     )
+    if new_owner_grant is None and await _is_owning_department_member(
+        session, new_owner, found_map.owning_department
+    ):
+        new_owner_grant = MapPermission(
+            map_id=map_id,
+            principal_type="user",
+            principal_id=new_owner,
+            role="editor",
+            granted_by=user,
+        )
+        session.add(new_owner_grant)
+        await session.flush()  # id 확보 — pending 다운그레이드 대체 조회가 grant id 로 묶인다
     if new_owner_grant is None or logic.role_rank(new_owner_grant.role) < logic.role_rank("editor"):
         raise HTTPException(
             status_code=409, detail="new_owner must already hold editor or higher"
