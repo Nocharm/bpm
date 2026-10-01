@@ -30,10 +30,9 @@
 캔버스 에디터(React Flow) 시행착오 방지 — 좌표·렌더·검증 함정. 에디터(`page.tsx`) 수정 전 필독.
 
 ## 설계 기록 ([`design/`](design/README.md))
-- [`design/2026-08-24-data-surface-parity-design.md`](design/2026-08-24-data-surface-parity-design.md) — 검토값 CSV 왕복·Excel 컬럼 확장 **미구현 이관 트랙**.
 - [`design/2026-08-08-governance-ux-design.md`](design/2026-08-08-governance-ux-design.md) — 거버넌스 UX 확장 A/B/C **미구현 트랙**.
 
-아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX·데이터 표면 패리티) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
+아직 소비될 설계 문서만 유지(컨설턴트 계약·인터뷰 임포트 어댑터·거버넌스 UX) — 전체 목록은 [`design/README.md`](design/README.md). **main 머지된 기능의 스냅샷은 폐기** — git history에서 조회(`rules/common/documentation.md`).
 
 ## 릴리스 공지 ([`notices/`](notices/))
 - [2026-07-06](notices/2026-07-06-release.md) · [2026-07-13](notices/2026-07-13-release.md) · [2026-07 2차](notices/2026-07-release-2.md) · [2026-08-14](notices/2026-08-14-release.md) · [2026-08-19](notices/2026-08-19-release.md) · [2026-08-25](notices/2026-08-25-release.md) · [2026-09-12](notices/2026-09-12-release.md)
