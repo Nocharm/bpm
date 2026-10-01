@@ -493,3 +493,43 @@ def test_process_fields_requires_owner(client: TestClient, enforce) -> None:
     act_as(OTHER)
     res = client.patch(f"/api/maps/{map_id}/process-fields", json={"gmp": "direct"})
     assert res.status_code == 403
+
+
+@pytest.fixture
+def system_catalog() -> Iterator[None]:
+    """시스템 관리 목록 시드(SAP ERP·별칭 sap) — 테스트 후 비워 다른 테스트의 Other 폴백 가정을 지킨다."""
+    from app.app_settings import SYSTEMS_KEY, set_managed_entries
+
+    async def _set(entries: list[object]) -> None:
+        async with SessionLocal() as session:
+            await set_managed_entries(session, SYSTEMS_KEY, entries, SYSADMIN)
+            await session.commit()
+
+    asyncio.run(_set([{"value": "SAP ERP", "aliases": ["sap"]}]))
+    yield
+    asyncio.run(_set([]))
+
+
+def test_process_fields_system_commits_through_catalog(
+    client: TestClient, enforce, system_catalog
+) -> None:
+    """설정 SP 타일 시스템 PATCH도 commit_system 규칙 — 별칭→정식, 미일치→Other+원문 메모 (critic:01)."""
+    map_id = seed_map("proc-fields-system", published=False)
+    act_as(OWNER)
+    url = f"/api/maps/{map_id}/process-fields"
+
+    aliased = client.patch(url, json={"system": " sap "}).json()
+    assert (aliased["sp_system"], aliased["sp_system_fallback"]) == ("SAP ERP", None)
+
+    unmatched = client.patch(url, json={"system": "Legacy ledger"}).json()
+    assert (unmatched["sp_system"], unmatched["sp_system_fallback"]) == ("Other", "Legacy ledger")
+
+    # 메모가 이미 다른 원문이면 유지 — FE는 교체/추가 선택 후 Other+메모를 함께 보낸다
+    kept = client.patch(url, json={"system": "Another tool"}).json()
+    assert (kept["sp_system"], kept["sp_system_fallback"]) == ("Other", "Legacy ledger")
+    chosen = client.patch(url, json={"system": "Other", "system_fallback": "Another tool"}).json()
+    assert (chosen["sp_system"], chosen["sp_system_fallback"]) == ("Other", "Another tool")
+
+    # 빈 값은 시스템만 비우고 메모는 남긴다
+    cleared = client.patch(url, json={"system": ""}).json()
+    assert (cleared["sp_system"], cleared["sp_system_fallback"]) == (None, "Another tool")

@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app import ref_audit, workflow
+from app.app_settings import commit_system, get_systems
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
@@ -1560,7 +1561,15 @@ async def update_process_fields(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "system" in updates:
+        # 경계에서 카탈로그 커밋 규칙 집행(별칭→정식 표기, 미일치→Other+원문 메모) — FE commitSystem과 동치.
+        # 정규화된 값을 다시 보내도 결과가 같아(Other는 항상 목록에 있다) FE 경로와 겹쳐도 안전하다
+        current_fallback = updates.get("system_fallback", found_map.sp_system_fallback) or ""
+        updates["system"], updates["system_fallback"] = commit_system(
+            updates["system"] or "", await get_systems(session), current_fallback
+        )
+    for field, value in updates.items():
         setattr(found_map, f"sp_{field}", value or None)
     await session.commit()
     await session.refresh(found_map)
