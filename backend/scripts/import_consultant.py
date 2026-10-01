@@ -191,9 +191,11 @@ def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int
 # 전달물이 싣지 않는 노드 필드 — 재전달 재빌드가 직전 게시본의 같은 계보 노드에서 승계한다
 # (사용자 결정 D1 2026-10-02, gmp·IO 폼 승계의 일반화). 전달물이 싣는 필드는 전달분이 진실이라 넣지 않는다.
 # 승계 조건: None=항상, "input"/"output"=그 측 IO 텍스트가 그대로일 때(줄 정렬 기반이라 텍스트가 바뀌면 폐기),
-# "link"=같은 링크 맵을 가리킬 때(버전 고정은 그 맵 기준). output_ids는 사용자가 건 미러가 가리키는 원본
-# 항목 id라 output 측 링크와 같이 옮겨야 링크가 산다. output_forms는 전달물(dataForm)도 싣지만 검토 입력값이
-# 이기는 기존 계약(2026-08-20)을 유지한다. group_ids는 그룹 행 복제·리맵이 필요해 `_inherit_prior_fields`가 따로 다룬다.
+# "link"=같은 링크 맵을 가리킬 때(버전 고정은 그 맵 기준), "nonlink"=링크 노드가 아닐 때(링크 노드의 연간 건수·FTE는
+# 전달물 params가 진실이라 승계하지 않는다 — L7 활동·Start/End에 오너가 넣은 값만 옮긴다). output_ids는 사용자가 건 미러가 가리키는 원본
+# 항목 id라 output 측 링크와 같이 옮겨야 링크가 산다. 폼 두 필드는 줄 정렬 승계만 공유하고 성격이 다르다 —
+# input_forms는 검토 입력값이라 `_graph_signature` 밖, output_forms는 전달 필드(dataForm)라 서명 안이다(C40).
+# 아웃풋 텍스트가 그대로면 검토 입력값이 전달분을 이기는 기존 계약(2026-08-20)을 유지한다. group_ids는 그룹 행 복제·리맵이 필요해 `_inherit_prior_fields`가 따로 다룬다.
 INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
     ("gmp", None),
     ("assignee_role", None),
@@ -204,6 +206,8 @@ INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
     ("cost_krw", None),
     ("cost_usd", None),
     ("headcount", None),
+    ("annual_count", "nonlink"),
+    ("fte", "nonlink"),
     ("start_condition", None),
     ("end_condition", None),
     ("width", None),
@@ -244,6 +248,8 @@ def _inherit_prior_fields(
             if guard == "input" and (node.input or "") != (old.input or ""):
                 continue
             if guard == "output" and (node.output or "") != (old.output or ""):
+                continue
+            if guard == "nonlink" and node.linked_map_id is not None:
                 continue
             if guard == "link":
                 if node.linked_map_id is None or node.linked_map_id != old.linked_map_id:
@@ -789,6 +795,7 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
         sorted(
             (n.source_node_id or n.id, n.title, n.node_type, n.description or "", n.color or "",
              n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
+             # 연간 건수·FTE — 링크 노드는 전달 params라 진실, 그 외 노드는 서명 전에 승계돼 직전 값과 같다
              n.annual_count or "", n.fte or "", bool(n.is_primary_end),
              # 승격 필드 — 전달분이 진실이라 변경=새 버전(사용자 수기 편집도 재임포트가 덮음,
              # 기존 description과 동일 계약) (design 2026-08-19 §4.1). 노드 수준 touch_time·조건은
@@ -907,6 +914,9 @@ async def _take_reusable_draft(
     await session.execute(delete(Edge).where(Edge.version_id == draft.id))
     await session.execute(delete(Node).where(Node.version_id == draft.id))
     await session.execute(delete(Group).where(Group.version_id == draft.id))
+    # 벌크 delete는 selectinload로 채운 관계 컬렉션을 비우지 않는다 — 남겨 두면 이 버전을 복제하는
+    # `_ensure_trailing_draft`(같은 identity map 객체를 받음)가 지운 직전 그래프로 새 draft를 만든다
+    session.expire(draft, ["nodes", "edges", "groups"])
     draft.label = label
     return draft
 

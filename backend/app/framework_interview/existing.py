@@ -117,7 +117,11 @@ def map_to_row(
 
     def _is_fanout_branch(n: Node) -> bool:
         sources = preds.get(n.id, set())
-        return len(sources) == 1 and (n.title or "").strip() == f"{title_by_id.get(next(iter(sources)), '')} {FANOUT_BRANCH_SUFFIX}"
+        if len(sources) != 1:
+            return False
+        # 어댑터가 이름을 200자로 자른다 — 긴 활동명이면 접미사가 잘린 채 저장돼 있어 같은 절단으로 비교
+        expected = f"{title_by_id.get(next(iter(sources)), '')} {FANOUT_BRANCH_SUFFIX}"[:200].strip()
+        return (n.title or "").strip() == expected
 
     synthetic = {
         n.id for n in nodes
@@ -187,7 +191,9 @@ def map_to_row(
             if label:
                 item["condition"] = label
         elif PRIMARY_END_HANDLE in (by_id[source].parallel_outputs or []) or gateway == "parallel":
-            # 병렬 출구에서 나가는 엣지는 병행 갈래 — 어댑터가 다시 출구를 병렬로 켠다 (출력 규칙 2026-10-01)
+            # 병렬 출구에서 나가는 엣지는 병행 갈래 — 어댑터가 다시 출구를 병렬로 켠다 (출력 규칙 2026-10-01).
+            # 2026-10-01 이전에 임포트된 L6 맵은 parallel_outputs·gateway가 둘 다 비어 있어 아래 seq로 읽힌다
+            # (마이그레이션 없음 — 필드 대조표 §4)
             item = {"src": src, "dst": dst, "kind": "branch", "gateway": "parallel"}
             if label:
                 item["condition"] = label

@@ -47,6 +47,15 @@
 | 정책 | **추가만, 제거 없음.** 파일의 로그인을 그 카테고리 관리자로 더하고, 이미 있는 관리자(사람·그룹)는 그대로 둔다. 빼는 건 설정 › Framework › 관리자 화면에서 |
 | 리포트 | `category admin 'login' added @ 코드` 행(추가된 것만) · 직원 목록에 없는 로그인은 `not found in employees` 경고(그래도 추가됨 — 나중에 직원 동기화되면 유효) |
 
+## 2-2. 행 필드 — `rows[].fields`
+
+키는 15개다(AI 캠페인 조립기 `contracts.ROW_FIELD_KEYS`와 같은 목록). 값이 있는 것만 적는다.
+
+`start_condition` · `input_data` · `output_data` · `done_criteria` · `systems` · `frequency` · `total_time` · `total_time_min` · `touch_time` · `touch_time_min` · `annual_count` · `headcount` · `fte` · `gmp` · `artifact_role`
+
+- `total_time_min`/`touch_time_min`은 분 단위 정수(1시간 30분이면 90)로 회당 소요·실작업 시간의 대표값이다. `total_time`/`touch_time`은 답의 원문 표현 그대로다.
+- `input_data`/`output_data`는 개행으로 구분한 문자열 또는 문자열 배열(한 항목 = 한 줄)을 받는다. 배열은 개행으로 합쳐 저장한다.
+
 ## 3. 엣지 끝점 해석
 
 `relations.edges[].src|dst`는 **① `rows[].taskId` → ② `externalTasks[].refId` → ③ 둘 다 아님** 순으로 해석한다.

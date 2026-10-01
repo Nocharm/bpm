@@ -522,3 +522,27 @@ def test_map_to_row_folds_auto_generated_fanout_branch_node() -> None:
         {"src": 1, "dst": 2, "kind": "seq"},
         {"src": 1, "dst": 3, "kind": "seq", "label": "예외"},
     ]
+
+
+def test_map_to_row_folds_fanout_branch_node_of_a_long_activity_name() -> None:
+    """어댑터는 ◇ 이름 '{활동} 결과'를 200자로 자른다 — 198자 활동명이면 접미사가 잘린 ◇도 합성으로 접혀야 한다."""
+    long_name = "가" * 198
+    nodes = [
+        Node(id="s", version_id=1, title="Start", node_type="start", sort_order=0),
+        Node(id="a", version_id=1, title=long_name, node_type="process", sort_order=1),
+        Node(id="af", version_id=1, title=f"{long_name} 결과"[:200], node_type="decision", sort_order=2),
+        Node(id="b", version_id=1, title="B", node_type="process", sort_order=3),
+        Node(id="c", version_id=1, title="C", node_type="process", sort_order=4),
+    ]
+    edges = [
+        Edge(id="1", version_id=1, source_node_id="s", target_node_id="a"),
+        Edge(id="2", version_id=1, source_node_id="a", target_node_id="af"),
+        Edge(id="3", version_id=1, source_node_id="af", target_node_id="b"),
+        Edge(id="4", version_id=1, source_node_id="af", target_node_id="c"),
+    ]
+    row = map_to_row("맵", "품질팀", nodes, edges)
+    assert [a["label"] for a in row["actions"]] == [long_name, "B", "C"]
+    assert row["relations"]["edges"] == [
+        {"src": 1, "dst": 2, "kind": "seq"},
+        {"src": 1, "dst": 3, "kind": "seq"},
+    ]

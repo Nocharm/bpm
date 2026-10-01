@@ -1289,13 +1289,18 @@ _ALWAYS_INHERITED_VALUES: dict[str, object] = {
     "start_condition": "교정 주기 도래",
     "end_condition": "목록 확정",
     "width": 200,
+    # 링크 노드가 아닐 때만 승계("nonlink") — 링크 노드는 전달 params가 진실
+    "annual_count": "240",
+    "fte": "0.5",
 }
 
 
 def test_always_inherited_values_cover_the_inheritance_list() -> None:
     from scripts.import_consultant import INHERITED_NODE_FIELDS
 
-    always = {name for name, guard in INHERITED_NODE_FIELDS if guard is None} - {"group_ids"}
+    always = {
+        name for name, guard in INHERITED_NODE_FIELDS if guard in (None, "nonlink")
+    } - {"group_ids"}
     assert always == set(_ALWAYS_INHERITED_VALUES)
 
 
@@ -1371,6 +1376,45 @@ def test_inherited_node_field_edit_alone_keeps_redelivery_unchanged(client) -> N
     report = _run(_import_once(maps=[_canonical_map(code="IV-INH-NOOP")]))
     assert report.counts() == {"unchanged": 1}
     assert next(n for n in _published_nodes("IV-INH-NOOP") if n.title == "요청").start_condition == "현업 보정 조건"
+
+
+def test_activity_annual_count_edit_alone_keeps_redelivery_unchanged(client) -> None:
+    """연간 건수·FTE는 서명 안 필드지만 L7 활동에선 서명 전에 승계된다 — 게시본에서 그 값만 고친 뒤
+    같은 전달물을 다시 넣어도 새 버전이 찍히지 않는다(찍히면 편집값이 덮이던 경로)."""
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="IV-INH-ANN")]))
+
+    def _edit(_s, _v, nodes) -> None:
+        node = next(n for n in nodes if n.title == "요청")
+        node.annual_count, node.fte = "240", "0.5"
+
+    _edit_published("IV-INH-ANN", _edit)
+
+    report = _run(_import_once(maps=[_canonical_map(code="IV-INH-ANN")]))
+    assert report.counts() == {"unchanged": 1}
+    node = next(n for n in _published_nodes("IV-INH-ANN") if n.title == "요청")
+    assert (node.annual_count, node.fte) == ("240", "0.5")
+
+
+def test_link_node_annual_count_follows_the_delivery(client) -> None:
+    """링크 노드의 연간 건수·FTE는 전달물(대상 맵 params)이 진실 — 게시본 편집값을 승계하지 않는다."""
+    _seed_import_employees()
+    a = _canonical_map(code="IV-INH-LNK", links=[{"to_map": "IV-INH-LNK-B"}])
+    b = _canonical_map(code="IV-INH-LNK-B", params={"annual_count": "12", "fte": "1.0"})
+    _run(_import_once(maps=[a, b]))
+
+    def _edit(_s, _v, nodes) -> None:
+        sp = next(n for n in nodes if n.node_type == "subprocess")
+        sp.annual_count, sp.fte = "999", "9.9"
+
+    _edit_published("IV-INH-LNK", _edit)
+
+    changed = _canonical_map(code="IV-INH-LNK", links=[{"to_map": "IV-INH-LNK-B"}])
+    changed.nodes[0].description = "개정된 설명"
+    report = _run(_import_once(maps=[changed, b]))
+    assert ("IV-INH-LNK", "updated", "graph") in report.rows
+    sp = next(n for n in _published_nodes("IV-INH-LNK") if n.node_type == "subprocess")
+    assert (sp.annual_count, sp.fte) == ("12", "1.0")
 
 
 def test_io_bound_fields_survive_only_while_io_text_is_unchanged(client) -> None:
@@ -1565,6 +1609,56 @@ def test_trailing_draft_is_created_and_reused_on_redelivery(client) -> None:
     second = _run(_versions())
     assert [v.status for v in second] == ["expired", "published", "draft"]
     assert second[1].id == first[1].id  # 손 안 댄 draft가 새 게시 버전으로 재사용됨
+
+
+def test_reused_draft_carries_the_new_delivery_into_the_trailing_draft(client) -> None:
+    """재사용한 draft의 그래프 행을 지운 뒤 관계 캐시가 남으면, 그 버전을 복제하는 새 trailing draft가
+    직전 전달분 그래프를 받는다. 재전달을 두 번 거듭해도 게시본과 새 draft가 이번 전달분(노드·그룹)이어야 한다."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Group, MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="L6-DRAFT-RE")]))
+
+    async def _add_group_to_both() -> None:
+        # 게시본·draft 양쪽에 같은 그룹을 넣어 draft는 "손 안 댄" 상태로 둔다(재사용 대상 유지)
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-DRAFT-RE"))).one()
+            for v in (await session.scalars(select(MapVersion).where(MapVersion.map_id == m.id))).all():
+                gid = f"grp-{v.id}"
+                session.add(Group(id=gid, version_id=v.id, label="구매 묶음", color=""))
+                node = (await session.scalars(
+                    select(Node).where(Node.version_id == v.id, Node.title == "요청"))).one()
+                node.group_ids = [gid]
+            await session.commit()
+
+    _run(_add_group_to_both())
+
+    async def _graphs():
+        async with SessionLocal() as session:
+            m = (await session.scalars(
+                select(ProcessMap).where(ProcessMap.consultant_code == "L6-DRAFT-RE"))).one()
+            out = {}
+            for status in ("published", "draft"):
+                v = (await session.scalars(
+                    select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == status))).one()
+                titles = sorted((await session.scalars(select(Node.title).where(Node.version_id == v.id))).all())
+                labels = sorted((await session.scalars(select(Group.label).where(Group.version_id == v.id))).all())
+                out[status] = (titles, labels)
+            return out
+
+    for title in ("요청(2차)", "요청(3차)"):
+        changed = _canonical_map(code="L6-DRAFT-RE")
+        changed.nodes[0].name = title
+        report = _run(_import_once(maps=[changed], label=title))
+        assert report.counts() == {"updated": 1}
+        graphs = _run(_graphs())
+        assert title in graphs["published"][0]
+        assert graphs["draft"] == graphs["published"]
+        assert graphs["draft"][1] == ["구매 묶음"]
 
 
 def test_edited_draft_survives_redelivery(client) -> None:
