@@ -295,17 +295,45 @@ const COMPARE_NODE_ACTIONS: NodeActions = {
 
 // FIELD_MSG는 lib/diff.ts로 승격 — 확정 요약(연계 캔버스)과 공용 (2026-08-28)
 
+// 링크 정체성 id → 사람이 읽는 이름. 비교 두 그래프가 이미 싣는 값만 쓴다(추가 요청 없음).
+interface RefNames {
+  maps: ReadonlyMap<string, string>;
+  categories: ReadonlyMap<string, string>;
+}
+
+// 맵 이름은 subprocess_refs(라이브 이름, 영구삭제 맵은 null), 카테고리는 노드의 placeholder_category_path.
+// target을 뒤에 넣어 같은 id면 대상 버전 쪽 이름이 이긴다.
+function buildRefNames(graphs: VersionGraph[]): RefNames {
+  const maps = new Map<string, string>();
+  const categories = new Map<string, string>();
+  for (const graph of graphs) {
+    for (const [id, ref] of Object.entries(graph.subprocess_refs ?? {})) {
+      if (ref.name) maps.set(id, ref.name);
+    }
+    for (const node of graph.nodes) {
+      if (node.placeholder_category_id != null && node.placeholder_category_path) {
+        categories.set(String(node.placeholder_category_id), node.placeholder_category_path);
+      }
+    }
+  }
+  return { maps, categories };
+}
+
 // duration·touch_time은 1h30m, 비용 2필드는 천단위 콤마(라벨에 통화가 있어 기호는 생략) — 나머지는 원문 그대로.
 // 포맷 실패(무효 레거시 값)는 원문 노출(빈 표시보다 진단 가능).
 const displayFieldValue = (
   t: (key: MessageKey, vars?: Record<string, string | number>) => string,
   field: ChangedField,
   value: string,
+  names?: RefNames,
 ): string => {
   if (field === "duration" || field === "touch_time") return formatDurationHm(value) || value;
-  // 링크 정체성(백엔드 확정 서명과 같은 4필드) — 원시 id·불리언을 읽을 말로. 빈 값/거짓은 None
-  if (field === "linked_map") return value ? t("compare.mapRef", { id: value }) : "";
-  if (field === "placeholder") return value ? t("compare.categoryRef", { id: value }) : "";
+  // 링크 정체성(백엔드 확정 서명과 같은 4필드) — 원시 id·불리언을 읽을 말로. 빈 값/거짓은 None.
+  // 이름을 못 찾으면(삭제 맵·경로 없는 카테고리) id 표기로 폴백
+  if (field === "linked_map") return value ? (names?.maps.get(value) ?? t("compare.mapRef", { id: value })) : "";
+  if (field === "placeholder") {
+    return value ? (names?.categories.get(value) ?? t("compare.categoryRef", { id: value })) : "";
+  }
   if (field === "primary_end") return value === "true" ? t("field.primaryEnd") : "";
   if (field === "follow_latest") return t(value === "true" ? "compare.followLatestOn" : "compare.followLatestOff");
   // 병렬 출구 키 목록 — 일반 노드·SP 대표 끝의 "__primary__"는 사람이 읽는 이름으로
@@ -546,10 +574,12 @@ function buildAppEdges(merged: MergedEdge[], keptKeys: Set<string>, spKeys: Set<
       label: e.label || undefined,
       type: passthrough ? "removedArc" : "labeled",
       // 저장된 선 모양 그대로 렌더 — LabeledSmoothEdge가 경로 함수를 고른다.
-      // gateway는 병렬 배지의 레거시 도출 입력 — 대상 버전 갈래만 세도록 removed 제외, SP 출발은 위 배지와 같은 이유로 제외
+      // gateway는 병렬 배지의 레거시 도출 입력 — 대상 버전 갈래만 세도록 removed 제외, SP 출발은 위 배지와 같은 이유로 제외.
+      // diffRemoved: 삭제 갈래는 유지 노드를 source로 스토어에 남으므로 배지 개수(useNodeOutputGroups)에서 빼게 표시
       data: {
         lineStyle: e.lineStyle,
         gateway: e.status !== "removed" && !spKeys.has(e.source) ? (e.gateway ?? null) : null,
+        diffRemoved: e.status === "removed",
       },
       markerEnd: { type: MarkerType.ArrowClosed, color: markerColor },
       style:
@@ -940,6 +970,8 @@ function ComparePane({
     () => buildMergedGraph(baseGraph, targetGraph),
     [baseGraph, targetGraph],
   );
+  // 링크 정체성 행(linked_map·placeholder)의 id → 맵 이름·카테고리 경로
+  const refNames = useMemo(() => buildRefNames([baseGraph, targetGraph]), [baseGraph, targetGraph]);
 
   // 유지(non-removed) 노드 계보키 — passthrough-removed 엣지(양끝 유지) 판정용.
   const keptKeys = useMemo(
@@ -986,8 +1018,8 @@ function ComparePane({
     (m: MergedNode): DiffFieldRow[] | undefined =>
       m.status === "changed"
         ? m.fieldChanges.map((fc) => {
-            const rawBefore = displayFieldValue(t, fc.field, fc.before);
-            const rawAfter = displayFieldValue(t, fc.field, fc.after);
+            const rawBefore = displayFieldValue(t, fc.field, fc.before, refNames);
+            const rawAfter = displayFieldValue(t, fc.field, fc.after, refNames);
             return {
               label: t(FIELD_MSG[fc.field]),
               before: rawBefore || t("summary.none"),
@@ -996,7 +1028,7 @@ function ComparePane({
             };
           })
         : undefined,
-    [t],
+    [t, refNames],
   );
 
   // 좌표 없는 union 노드 → dagre 배치 (연결 기반, 저장 pos 무시). focus와 무관하게 1회만 계산.
@@ -1209,8 +1241,8 @@ function ComparePane({
         fields:
           m.status === "changed"
             ? m.fieldChanges.map((fc) => {
-                const rawBefore = displayFieldValue(t, fc.field, fc.before);
-                const rawAfter = displayFieldValue(t, fc.field, fc.after);
+                const rawBefore = displayFieldValue(t, fc.field, fc.before, refNames);
+                const rawAfter = displayFieldValue(t, fc.field, fc.after, refNames);
                 return {
                   label: t(FIELD_MSG[fc.field]),
                   before: rawBefore || t("summary.none"),
@@ -1282,7 +1314,7 @@ function ComparePane({
       ...pick(nodeItems, "changed"),
       ...pick(edgeItems, "changed"),
     ];
-  }, [merged, titleByKey, t]);
+  }, [merged, titleByKey, t, refNames]);
 
   const focusNode = useCallback(
     (id: string) => {
@@ -2559,18 +2591,19 @@ function ComparePane({
                       <InspectorRow key={key} label={t(FIELD_MSG[key])}>
                         <span data-id={`compare-inspector-${key}`}>
                           <span className="text-ink-muted line-through">
-                            {displayFieldValue(t, key, change.before) || t("summary.none")}
+                            {displayFieldValue(t, key, change.before, refNames) || t("summary.none")}
                           </span>
                           <span className="mx-1 text-ink-tertiary">→</span>
                           <span className="font-semibold text-diff-changed">
-                            {displayFieldValue(t, key, change.after) || t("summary.none")}
+                            {displayFieldValue(t, key, change.after, refNames) || t("summary.none")}
                           </span>
                         </span>
                       </InspectorRow>
                     );
                   })}
                 </div>
-                {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화) */}
+                {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화).
+                    공백 없는 긴 URL이 고정폭 인스펙터를 넘지 않게 값 블록은 아무 데서나 줄바꿈 */}
                 {(() => {
                   const longFields = [
                     "input",
@@ -2605,15 +2638,15 @@ function ComparePane({
                           <div className="mb-1 text-fine text-ink-tertiary">{t(FIELD_MSG[key])}</div>
                           {change ? (
                             <div className="rounded-sm border border-diff-changed/30 bg-diff-changed/10 px-2 py-1.5 text-caption">
-                              <div className="whitespace-pre-wrap text-ink-muted line-through">
+                              <div className="whitespace-pre-wrap [overflow-wrap:anywhere] text-ink-muted line-through">
                                 {change.before || t("summary.none")}
                               </div>
-                              <div className="whitespace-pre-wrap font-semibold text-ink">
+                              <div className="whitespace-pre-wrap [overflow-wrap:anywhere] font-semibold text-ink">
                                 {change.after || t("summary.none")}
                               </div>
                             </div>
                           ) : (
-                            <div className="whitespace-pre-wrap rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
+                            <div className="whitespace-pre-wrap [overflow-wrap:anywhere] rounded-sm bg-surface-alt px-2 py-1.5 text-caption text-ink-secondary">
                               {current}
                             </div>
                           )}

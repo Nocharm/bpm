@@ -1135,10 +1135,11 @@ function SubprocessHandles({
 
 // 이 노드의 출구별 엣지 그룹(lib/output-rules) — RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교)
 // 드래그 중 재렌더를 막는다. SP 끝 배지·병렬 호버 배지가 공유.
+// 비교 화면의 삭제 엣지(diffRemoved)는 대상 버전 갈래가 아니라 세지 않는다 — 에디터는 이 표시를 쓰지 않는다.
 function useNodeOutputGroups(nodeId: string, nodeType: string, parallelOutputs?: string[]): OutputGroup[] {
   const outputSig = useStore((state) =>
     state.edges
-      .filter((edge) => edge.source === nodeId)
+      .filter((edge) => edge.source === nodeId && edge.data?.diffRemoved !== true)
       .map((edge) => `${edge.sourceHandle ?? ""}\u0001${(edge.data?.gateway as string | null | undefined) ?? ""}`)
       .join("\u0000"),
   );
@@ -1422,7 +1423,8 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: color }}
           />
         )}
-        {!diff && (
+        {/* 비교 화면 SP는 끝 핸들 없이 변 핸들로 그려 끝 키가 사라진다 — SpOutputBadge와 같은 가드 */}
+        {!diff && data.sideHandles !== true && (
           <ParallelHoverBadge
             nodeId={id}
             nodeType="subprocess"
