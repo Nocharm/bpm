@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 홈 한 줄 행 말줄임 정리 (dev)
+
+- 영/한 실측 프로브(뷰포트 1920~1100)로 두 줄 넘침·카드 밖 밀림을 수집해 3곳 수정: 대시보드 섹션 헤더(6카드 공용) 제목은 한 줄 고정·더보기 라벨이 말줄임으로 양보("My documents"·"My department" 두 줄 해소), 내 부서 범위 필 `min-w-0`(긴 부서명이 상태|버전 탭을 카드 밖으로 밀던 것), 맵 상세 버전 이벤트 칩 줄은 반쯤 잘린 칩 대신 들어가는 칩만 통째로(1줄 높이 wrap). 뒤 칩부터 말줄임(flexShrink 가중)은 칩이 전부 최소폭으로 찌그러져 폐기.
+
 ## 2026-10-01 — 맵 설정 UX 라운드: 오너 이전 후보 버그·협업자 행·드롭다운·SP 타일·버전 카드 (feat/map-settings-ux)
 
 - **버그** — 소유권 이전 후보가 명시 user 권한 행(editor/owner)만 모아 오우닝 부서 소속(권한 행 없는 파생 editor)이 빠졌고, 백엔드 `transfer-owner`도 권한 행이 없으면 409였다. 표시명도 목 시드라 아이디로 보였다. 수정: FE 후보 = 명시 editor+ ∪ 디렉터리에서 오우닝 부서(하위 포함, BE `belongs_to_department` 미러 `lib/owner-candidates.ts`) 소속, BE는 파생 editor 대상이면 owner 행을 새로 만들어 이전(테스트 2건). 권한 응답에 `granted_at` 추가(협업자 행 메타).

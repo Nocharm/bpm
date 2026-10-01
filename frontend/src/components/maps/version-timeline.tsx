@@ -391,20 +391,21 @@ export function VersionTimeline({
                     }`}
                   >
                     <div className="overflow-hidden">
-                      {/* 1줄 고정 — 넘치는 칩은 잘림. 게시 칩은 우측 고정·이름 생략(이름은 툴팁) */}
+                      {/* 1줄 고정(칩 높이 18px) — 안 들어가는 칩은 통째로 숨은 둘째 줄로 넘어가 반쯤 잘린 칩이 남지 않는다.
+                          칩 하나가 줄보다 넓을 때만 이름 말줄임. 게시 칩은 우측 고정·이름 생략(이름은 툴팁) */}
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        <div className="flex min-w-0 flex-1 flex-nowrap gap-1.5 overflow-hidden">
+                        <div className="flex h-[18px] min-w-0 flex-1 flex-wrap gap-x-1.5 gap-y-2 overflow-hidden">
                           {chipEvents.map((evt) => (
                             <span
                               key={evt.id}
                               data-id={`version-event-${evt.id}`}
-                              className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                              className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm border [&>svg]:shrink-0 px-1.5 py-0.5 text-fine ${
                                 EVENT_CHIP[evt.event_type] ?? "border-hairline bg-surface-alt text-ink-secondary"
                               }`}
-                              title={EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type}
+                              title={`${EVENT_LABEL[evt.event_type] ? t(EVENT_LABEL[evt.event_type]) : evt.event_type} - ${nameOf(evt.actor)}`}
                             >
                               <EventIcon type={evt.event_type} />
-                              {nameOf(evt.actor)}
+                              <span className="truncate">{nameOf(evt.actor)}</span>
                             </span>
                           ))}
                         </div>

@@ -89,7 +89,7 @@ export function DistributionTabs({ card, value, onChange }: DistributionTabsProp
     { id: "version", label: t("home.dash.distTabVersion") },
   ];
   return (
-    <span role="tablist" data-id={`${card}-dist-tabs`} className="inline-flex h-6 gap-0.5 rounded-sm bg-surface-alt p-0.5">
+    <span role="tablist" data-id={`${card}-dist-tabs`} className="inline-flex h-6 shrink-0 gap-0.5 rounded-sm bg-surface-alt p-0.5">
       {tabs.map((tab) => {
         const active = tab.id === value;
         return (
@@ -100,7 +100,7 @@ export function DistributionTabs({ card, value, onChange }: DistributionTabsProp
             aria-selected={active}
             data-id={`${card}-dist-tab-${tab.id}`}
             onClick={(e) => { e.stopPropagation(); onChange(tab.id); }}
-            className={`rounded-[3px] px-2 text-fine transition-colors duration-150 ${
+            className={`whitespace-nowrap rounded-[3px] px-2 text-fine transition-colors duration-150 ${
               active ? "bg-surface font-semibold text-ink shadow-sm" : "text-ink-tertiary hover:text-ink"
             }`}
           >

@@ -53,7 +53,8 @@ interface DeptMapsCardProps {
   onRevealDept: (path: string) => void; // 좌측 부서 트리에서 해당 부서까지 펼침
 }
 
-const SCOPE_PILL = "inline-flex h-6 max-w-48 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 text-fine text-ink-secondary";
+// min-w-0 — 헤더가 좁으면 부서명이 말줄임으로 줄어 우측 상태|버전 탭이 카드 밖으로 밀리지 않는다
+const SCOPE_PILL = "inline-flex h-6 min-w-0 max-w-48 items-center gap-1 rounded-sm border border-hairline bg-surface px-2 text-fine text-ink-secondary";
 
 export function DeptMapsCard({ maps, orgPath, deptLabel, onSelect, onShowInTree, onRevealDept }: DeptMapsCardProps) {
   const { t } = useI18n();

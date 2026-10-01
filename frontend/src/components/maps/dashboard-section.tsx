@@ -94,12 +94,13 @@ export function DashboardSection({ dataId, icon, title, count, countHot, aside, 
         onClick={showToggle ? toggleExpanded : undefined}
         className={`flex shrink-0 items-center gap-2 px-3 pb-2 pt-2.5 ${showToggle ? "cursor-pointer select-none" : ""}`}
       >
-        <span className="inline-flex items-center gap-1.5 text-caption-strong text-ink">
+        {/* 제목은 한 줄 고정(shrink-0) — 헤더가 붐비면 우측 슬롯(부서 필·더보기 라벨)이 말줄임으로 양보한다 */}
+        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-caption-strong text-ink">
           <span className="text-ink-tertiary">{icon}</span>
           {title}
         </span>
         {count != null && (
-          <span className={`rounded-full px-1.5 py-px text-[11px] font-semibold ${countHot ? "bg-accent-tint text-accent-elevated" : "bg-surface-alt text-ink-tertiary"}`}>
+          <span className={`shrink-0 rounded-full px-1.5 py-px text-[11px] font-semibold ${countHot ? "bg-accent-tint text-accent-elevated" : "bg-surface-alt text-ink-tertiary"}`}>
             {count}
           </span>
         )}
@@ -109,10 +110,10 @@ export function DashboardSection({ dataId, icon, title, count, countHot, aside, 
             <SectionNavButton
               dataId={`${dataId}-more`}
               link={more}
-              className="inline-flex items-center gap-0.5 text-fine text-ink-tertiary hover:text-accent"
+              className="inline-flex min-w-0 items-center gap-0.5 whitespace-nowrap text-fine text-ink-tertiary hover:text-accent"
             >
-              {more.label}
-              <ChevronRight size={14} strokeWidth={1.5} />
+              <span className="truncate">{more.label}</span>
+              <ChevronRight size={14} strokeWidth={1.5} className="shrink-0" />
             </SectionNavButton>
           )}
           {showToggle && (
@@ -122,7 +123,7 @@ export function DashboardSection({ dataId, icon, title, count, countHot, aside, 
               aria-expanded={expanded}
               title={expanded ? t("home.dash.collapse") : t("home.dash.expand")}
               onClick={(e) => { e.stopPropagation(); toggleExpanded(); }}
-              className="inline-grid h-5 w-5 place-items-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-accent"
+              className="inline-grid h-5 w-5 shrink-0 place-items-center rounded-sm text-ink-tertiary hover:bg-surface-alt hover:text-accent"
             >
               <ChevronDown size={14} strokeWidth={1.5} className={`transition-transform duration-350 ease-smooth ${expanded ? "rotate-180" : ""}`} />
             </button>
