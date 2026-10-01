@@ -206,7 +206,7 @@ import {
   type ProcessNodeType,
 } from "@/lib/canvas";
 import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
-import { buildPaste, readClipboard, writeClipboard } from "@/lib/node-clipboard";
+import { buildPaste, pickParallelForCopy, readClipboard, writeClipboard } from "@/lib/node-clipboard";
 import {
   acquireCheckout,
   ApiError,
@@ -839,16 +839,17 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
   const { values: cost } = dropConflictingCurrency({ cost_krw: num(attr?.cost_krw), cost_usd: num(attr?.cost_usd) });
   // 시스템 — 카탈로그 정규화(별칭→정식 표기, 미일치→Other+원문 메모). 신규 노드라 기존 메모 없음
   const sys = commitSystem(attr?.system ?? "", catalogs.systems, "");
+  // 링크 없는 subprocess는 process로 강등 — 링크가 실린 subprocess(P2 유사 SP 수락)만
+  // 실제 Call Activity로 생성 (csv-import buildGraphFromAiProposal과 대칭)
+  const nodeType =
+    node.node_type === "subprocess" && node.linked_map_id
+      ? "subprocess"
+      : coerceAiNewNodeType(node.node_type);
   return {
     id,
     title: node.title,
     description: node.description,
-    // 링크 없는 subprocess는 process로 강등 — 링크가 실린 subprocess(P2 유사 SP 수락)만
-    // 실제 Call Activity로 생성 (csv-import buildGraphFromAiProposal과 대칭)
-    node_type:
-      node.node_type === "subprocess" && node.linked_map_id
-        ? "subprocess"
-        : coerceAiNewNodeType(node.node_type),
+    node_type: nodeType,
     color: attr?.color ?? "",
     assignee: "",  // 담당자 실명은 AI 표면 제외 — 사람 필드는 역할만 (2026-09-12)
     assignee_role: commitRole(attr?.assignee_role ?? "", catalogs.assignee_roles),
@@ -888,7 +889,10 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
-    parallel_outputs: applyParallelFlag([], attr?.parallel) ?? [],
+    // 분기·끝은 출력 규칙 밖이라 병렬 플래그를 무시(에디터 우클릭 메뉴와 같은 조건) — 저장되면 CSV 왕복에서
+    // Parallel=Y가 분기 노드를 병렬 일반 노드로 뒤집는다
+    parallel_outputs:
+      nodeType === "decision" || nodeType === "end" ? [] : applyParallelFlag([], attr?.parallel) ?? [],
   };
 }
 
@@ -2573,8 +2577,9 @@ function MapEditor({ mapId }: { mapId: number }) {
             data: {
               ...node.data,
               ...(title !== undefined ? { label: title } : {}),
-              // 병렬 출구 플래그 — 생략이면 유지, true/false면 기본 출구 켬/끔 (출력 규칙 2026-10-01)
-              ...(attr?.parallel != null
+              // 병렬 출구 플래그 — 생략이면 유지, true/false면 기본 출구 켬/끔 (출력 규칙 2026-10-01).
+              // 분기·끝은 무시(에디터 우클릭 메뉴와 같은 조건) — 저장되면 CSV 왕복이 분기를 병렬 일반 노드로 뒤집는다
+              ...(attr?.parallel != null && node.data.nodeType !== "decision" && node.data.nodeType !== "end"
                 ? { parallelOutputs: applyParallelFlag(node.data.parallelOutputs, attr.parallel) }
                 : {}),
               ...(desc !== undefined ? { description: desc } : {}),
@@ -2592,7 +2597,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                     ...(systemPatch
                       ? { system: systemPatch.system, system_fallback: systemPatch.system_fallback }
                       : {}),
-                    // 파라미터 6종 — SP 노드는 annual_count·fte만 수정 가능(design 2026-07-13 §6) + 통화
+                    // 파라미터 7종(PARAM_FIELDS) — SP 노드는 annual_count·fte만 수정 가능(design 2026-07-13 §6) + 통화
                     // 배타를 resolveAiParamPatch(buildGraphFromAiProposal과 같은 규칙 재사용)로 강제.
                     // 위반 필드는 색과 같은 방식으로 조용히 드롭 — 이 경로엔 프리뷰 경고 채널이 없다.
                     ...resolveAiParamPatch(node.data.nodeType, attr),
@@ -4142,6 +4147,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           sourceHandle: edge.sourceHandle ?? undefined,
           targetHandle: edge.targetHandle ?? undefined,
           type: edge.type,
+          // 레거시 병렬 출구(속성 없이 gateway="parallel")의 도출 재료 — 버리면 사본이 일반 팬아웃 위반이 된다
+          gateway: (edge.data?.gateway as string | null | undefined) ?? null,
         })),
     });
     // 새로 복사하면 다음 붙여넣기는 누적 오프셋 없이 1부터 다시 시작.
@@ -4226,6 +4233,8 @@ function MapEditor({ mapId }: { mapId: number }) {
           label: edge.label || undefined,
           // 원본 엣지의 선 모양 보존 — 구 클립보드(type 없음)는 생성 기본값
           type: edge.type ?? getNewEdgeLineStyle(),
+          // gateway 왕복(toAppEdges와 같은 형태) — 구 클립보드(gateway 없음)는 null
+          data: { gateway: edge.gateway ?? null },
         })),
       ]);
     }
@@ -4302,6 +4311,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     // 원위치를 복원해야 표시좌표가 저장좌표로 박히는 드리프트가 없다(#3b). 미펼침이면 오프셋 0(동일).
     // height-shift(#1) 오프셋도 같은 이유로 빼야 한다(C2) — inline offset을 먼저 뺀 뒤 y만 역변환.
     const rootOffsets = inlineCompositionRef.current?.rootOffsets;
+    // 병렬 출구는 buildPaste와 같은 규칙(pickParallelForCopy) — 단독 복제는 해제, 갈래 2개 이상 동반 복제만 유지
+    const parallelByGhost = pickParallelForCopy(
+      ghosts,
+      edgesRef.current.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        gateway: (edge.data?.gateway as string | null | undefined) ?? null,
+      })),
+    );
     const plans = new Map<string, { copyId: string; label: string; resetPos: { x: number; y: number } }>();
     for (const ghost of ghosts) {
       const label = makeCopyLabel(ghost.data.label, existingLabels);
@@ -4335,7 +4354,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           selected: true,
           // 사본은 원본 그룹 소속·대표끝 지정을 물려받지 않음 — Ctrl+C/V 붙여넣기와 동일 관례(node-clipboard.ts buildPaste).
           // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
-          data: { ...ghost.data, label: plan.label, groupIds: [], isPrimaryEnd: false, output_ids: "" },
+          data: {
+            ...ghost.data,
+            label: plan.label,
+            groupIds: [],
+            isPrimaryEnd: false,
+            output_ids: "",
+            parallelOutputs: parallelByGhost.get(ghost.id) ?? [],
+          },
         });
         return { ...node, position: plan.resetPos, selected: false };
       });
@@ -4355,6 +4381,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         targetHandle: edge.targetHandle ?? targetHandleId("left"),
         label: typeof edge.label === "string" ? edge.label : undefined,
         type: edge.type ?? getNewEdgeLineStyle(),
+        // gateway 보존(toAppEdges와 같은 형태) — 레거시 병렬 출구의 도출 재료, Ctrl+C/V(handlePaste)와 동일
+        data: { gateway: (edge.data?.gateway as string | null | undefined) ?? null },
       }));
     if (newEdges.length > 0) {
       setEdges((current) => [...current, ...newEdges]);
