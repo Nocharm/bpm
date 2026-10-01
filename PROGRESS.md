@@ -3,6 +3,10 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 출력 규칙 통일: 끝당 1개·병렬 출구·SP 핸들 (feat/output-rules, 진행 중)
+
+- 계획 `docs/superpowers/plans/2026-10-01-output-rules.md`(사용자 결정 8건). P1: SP 들어오는 핸들은 드래그 시작 불가(`isConnectableStart=false`)·연결 드래그 중에만 노출 — target에서 시작하면 역방향 빠른 연결이 되어, 좌·상·하에서 끌어간 노드가 SP 입력으로 붙던 문제. 스모크 `pw-verify-output-rules.mjs`.
+
 ## 2026-10-01 — 홈 한 줄 행 말줄임 정리 (dev)
 
 - 영/한 실측 프로브(뷰포트 1920~1100)로 두 줄 넘침·카드 밖 밀림을 수집해 3곳 수정: 대시보드 섹션 헤더(6카드 공용) 제목은 한 줄 고정·더보기 라벨이 말줄임으로 양보("My documents"·"My department" 두 줄 해소), 내 부서 범위 필 `min-w-0`(긴 부서명이 상태|버전 탭을 카드 밖으로 밀던 것), 맵 상세 버전 이벤트 칩 줄은 반쯤 잘린 칩 대신 들어가는 칩만 통째로(1줄 높이 wrap). 뒤 칩부터 말줄임(flexShrink 가중)은 칩이 전부 최소폭으로 찌그러져 폐기.

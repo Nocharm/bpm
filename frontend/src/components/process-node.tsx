@@ -7,6 +7,7 @@ import {
   Handle,
   type NodeProps,
   Position,
+  useConnection,
   useNodeId,
   useStoreApi,
   useUpdateNodeInternals,
@@ -1070,6 +1071,10 @@ function SubprocessHandles({
   anchorTop?: number;
 }) {
   const anchorStyle = anchorTop !== undefined ? { top: anchorTop } : undefined;
+  // 들어오는 문은 연결을 받기만 한다 — 평소엔 숨기고 클릭도 통과(노드 드래그), 연결 드래그 중에만 드롭 대상으로 드러낸다.
+  // 시작 가능하면 target에서 출발한 역방향 연결이 되어, 끌어간 노드가 SP의 입력으로 붙던 문제(사용자 리포트 2026-10-01).
+  const isConnecting = useConnection((connection) => connection.inProgress);
+  const inHiddenStyle = isConnecting ? undefined : { opacity: 0, pointerEvents: "none" as const };
   // 끝 핸들은 링크 맵 resolved가 도착한 뒤 늘어난다 — RF는 핸들 추가를 스스로 재측정하지 않아(handleBounds 스테일)
   // 보조 끝(반려 등)으로 나가는 저장 엣지가 로드 직후 조용히 안 그려진다. 끝 키 집합이 바뀔 때 내부 측정을 갱신한다.
   const nodeId = useNodeId();
@@ -1089,7 +1094,8 @@ function SubprocessHandles({
           type="target"
           position={position}
           isConnectable={connectable}
-          style={side === "left" || side === "right" ? anchorStyle : undefined}
+          isConnectableStart={false}
+          style={{ ...(side === "left" || side === "right" ? anchorStyle : undefined), ...inHiddenStyle }}
         />
       ))}
       {ends.length === 0 ? (
