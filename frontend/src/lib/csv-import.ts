@@ -627,6 +627,10 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
     if (["y", "yes", "true", "1"].includes(value)) parallelOf.set(row.name, true);
     else if (["n", "no", "false", "0"].includes(value)) parallelOf.set(row.name, false);
     else warnings.push({ line: row.line, message: `Parallel "${row.parallelRaw}" is not Y or N - ignored` });
+    // 병렬 출구는 갈래 2개 이상이 규칙 — 1개 이하면 저장 체크리스트가 막으니 임포트 때 알린다
+    if (parallelOf.get(row.name) === true && (nextsOf.get(row.name) ?? []).length < 2) {
+      warnings.push({ line: row.line, message: `Parallel "${row.name}" needs two or more Next targets - add another branch or set N` });
+    }
   }
   const resolved = new Map<string, { assignee: string; department: string }>();
   for (const row of rows) {
@@ -694,9 +698,13 @@ export function buildGraphFromCsv(text: string, context?: CsvImportContext): Csv
         ...NODE_DEFAULTS,
         id: idOf.get(row.name) as string,
         title: row.name,
-        // Next 2개 이상은 분기(decision) — 단 Parallel=Y면 동시 진행이라 병렬 출구를 켠 일반 노드
+        // Next 2개 이상은 분기(decision) — 단 병렬(Parallel=Y, 빈 칸이면 기존 노드의 병렬 설정)이면
+        // 동시 진행이라 병렬 출구를 켠 일반 노드
         node_type:
-          (nextsOf.get(row.name) ?? []).length >= 2 && parallelOf.get(row.name) !== true ? "decision" : "process",
+          (nextsOf.get(row.name) ?? []).length >= 2 &&
+          !(parallelOf.get(row.name) ?? (byTitle.get(row.name)?.parallel_outputs ?? []).includes("__primary__"))
+            ? "decision"
+            : "process",
         parallel_outputs: applyParallelFlag(byTitle.get(row.name)?.parallel_outputs, parallelOf.get(row.name)),
         description: row.description,
         assignee: resolved.get(row.name)?.assignee ?? "",

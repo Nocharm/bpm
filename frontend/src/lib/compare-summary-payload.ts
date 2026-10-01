@@ -17,6 +17,7 @@ import { buildIoDiffSide } from "@/lib/io-diff";
 import type { MergedEdge, MergedGraph, MergedNode } from "@/lib/merge-diff";
 import { sumVersionParam } from "@/lib/param-sum";
 import { PARAM_FIELDS } from "@/lib/params";
+import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 
 // 백엔드 스키마 상한(nodes 200 / edges 400 / io 80) — 초과분은 개수만 알린다
 export const COMPARE_SUMMARY_CAP = 200;
@@ -117,6 +118,17 @@ function buildIoChanges(
   return changes;
 }
 
+// 병렬 출구 값은 출구 키 목록("__primary__", SP 끝 제목) — 모델이 읽을 말로: 기본 출구는 "main exit".
+// 의미(그 출구의 갈래가 동시 진행)는 compare_summary.py 프롬프트가 설명한다 (출력 규칙 2026-10-01)
+function formatPayloadValue(field: string, value: string): string {
+  if (field !== "parallel") return value;
+  return value
+    .split(", ")
+    .filter(Boolean)
+    .map((key) => (key === PRIMARY_END_HANDLE ? "main exit" : key))
+    .join(", ");
+}
+
 export function buildCompareSummaryPayload(
   merged: MergedGraph,
   options: CompareSummaryOptions = {},
@@ -152,8 +164,8 @@ export function buildCompareSummaryPayload(
               .slice(0, 40)
               .map((fc) => ({
                 field: fc.field,
-                before: fc.before.slice(0, 500),
-                after: fc.after.slice(0, 500),
+                before: formatPayloadValue(fc.field, fc.before).slice(0, 500),
+                after: formatPayloadValue(fc.field, fc.after).slice(0, 500),
               }))
           : [],
     };

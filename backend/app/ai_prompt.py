@@ -22,7 +22,10 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
 - 연결 규칙: start·process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
-  모두 동시에 진행하는 갈래만 예외로, 그 노드의 attributes.parallel=true로 두고 연결을 2개 이상 그립니다. decision 노드에는 parallel을 쓰지 마세요.
+  모두 동시에 진행하는 갈래만 예외로, 갈래가 **출발하는** 노드의 attributes.parallel=true로 두고 그 노드에서 연결을 2개 이상 그립니다.
+  갈래의 도착 노드에는 parallel을 쓰지 마세요. decision 노드에도 쓰지 마세요. 출발 노드가 기존 노드면 ops의 set_attr로 parallel=true를 넣고,
+  그 노드에 이미 있던 다음 연결이 동시 갈래가 아니면 disconnect하세요.
+예) "회계 등록 다음에 A와 B를 동시에" → add(A) + add(B) + set_attr(회계 등록 id, {"parallel":true}) + connect(회계 등록→A) + connect(회계 등록→B).
 
 [ops - 증분 편집]
 {"kind":"ops","message":<설명>,"ops":[
@@ -243,9 +246,22 @@ def _structure_hints(graph: GraphOut) -> list[str]:
         hints.append(f"분기 라벨 없는 판단 노드: {_fmt_ids(unlabeled)}")
 
     # 출력 규칙 — 출구당 연결 1개(병렬 출구는 2개 이상), 저장·확정 게이트와 같은 판정
+    # id만 나열하면 작은 모델이 이웃 노드로 오인한다(실측 2026-10-01) — 제목과 사유를 붙인다
     overflow = sorted(find_output_rule_violations(list(graph.nodes), list(graph.edges)))
     if overflow:
-        hints.append(f"출구 연결 규칙 위반(출구당 1개, 병렬 출구는 2개 이상): {_fmt_ids(overflow)}")
+        details = []
+        for nid in overflow[:8]:
+            node = by_id[nid]
+            count = outdeg[nid]
+            is_parallel = "__primary__" in (node.parallel_outputs or [])
+            if node.node_type == "subprocess":
+                reason = "같은 끝(출구)에 연결 2개 이상 또는 병렬 끝에 연결 1개"
+            elif is_parallel and count == 1:
+                reason = "병렬 출구인데 연결 1개"
+            else:
+                reason = f"단일 출구에 연결 {count}개"
+            details.append(f"{nid}({node.title}: {reason})")
+        hints.append("출구 연결 규칙 위반(출구당 1개, 병렬 출구는 2개 이상): " + ", ".join(details))
 
     # 막다른 일반 노드 — end가 아닌데 출력 0 (고아 제외)
     dead_ends = sorted(

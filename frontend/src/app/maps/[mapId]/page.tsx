@@ -322,7 +322,7 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
-import { applyParallelFlag, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+import { applyParallelFlag, getOutputGroups, getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
 import { assignEdgePulses } from "@/lib/edge-pulse";
 import {
   NodeActionsContext,
@@ -3879,8 +3879,14 @@ function MapEditor({ mapId }: { mapId: number }) {
           (edge) => sourceHandle === undefined || edge.sourceHandle === sourceHandle,
         );
         // 병렬 출구는 갈래를 더하는 게 정상 — 삽입/교체 모달 없이 바로 추가(lib/output-rules)
+        // 판정은 출력 규칙과 같은 소스(getOutputGroups) — 플래그 없이 gateway=parallel만 가진 레거시 출구도 병렬
         const exitKey = getOutputKey(source?.data.nodeType ?? "process", connection.sourceHandle);
-        const isParallelExit = source?.data.parallelOutputs?.includes(exitKey) ?? false;
+        const isParallelExit =
+          source !== undefined &&
+          (source.data.parallelOutputs?.includes(exitKey) ||
+            getOutputGroups(buildCheckNode(source), edgesRef.current.map(buildCheckEdge)).some(
+              (group) => group.key === exitKey && group.parallel,
+            ));
         if (outgoing.length > 0 && !isParallelExit) {
           setEdgeAction({
             source: connection.source,

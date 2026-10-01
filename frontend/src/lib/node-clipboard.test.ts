@@ -92,3 +92,24 @@ describe("buildPaste", () => {
     expect(out.nodes[0].data.input_flags).toBe("optional");
   });
 });
+
+describe("buildPaste - 병렬 출구", () => {
+  it("clears parallel on a lone copy but keeps it when two branches are copied along", () => {
+    const parallel = { ...mkData("P"), parallelOutputs: ["__primary__"] } as NodeData;
+    const lone: NodeClipboard = { sourceMapId: 1, nodes: [{ id: "p", position: { x: 0, y: 0 }, data: parallel }], edges: [] };
+    let n = 0;
+    expect(buildPaste(lone, { newId: () => `n${n++}`, existingLabels: [], offset: { x: 0, y: 0 } }).nodes[0].data.parallelOutputs).toEqual([]);
+
+    const bundle: NodeClipboard = {
+      sourceMapId: 1,
+      nodes: [
+        { id: "p", position: { x: 0, y: 0 }, data: parallel },
+        { id: "b", position: { x: 40, y: 0 }, data: mkData("B") },
+        { id: "c", position: { x: 40, y: 40 }, data: mkData("C") },
+      ],
+      edges: [{ source: "p", target: "b" }, { source: "p", target: "c" }],
+    };
+    const pasted = buildPaste(bundle, { newId: () => `m${n++}`, existingLabels: [], offset: { x: 0, y: 0 } });
+    expect(pasted.nodes.find((node) => node.data.label.startsWith("P"))?.data.parallelOutputs).toEqual(["__primary__"]);
+  });
+});

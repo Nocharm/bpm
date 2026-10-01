@@ -2,6 +2,7 @@
 // localStorage는 평문 HTTP(insecure context)에서도 동작(Web Crypto만 제약).
 
 import { makeCopyLabel, type NodeData } from "@/lib/canvas";
+import { getOutputKey } from "@/lib/output-rules";
 
 const KEY = "bpm.nodeClipboard";
 const MAX_NODES = 200; // 과대 payload 방지
@@ -51,6 +52,19 @@ export function buildPaste(
 ): { nodes: ClipboardNode[]; edges: (ClipboardEdge & { id: string })[] } {
   const idMap = new Map<string, string>();
   const taken = [...opts.existingLabels];
+  // 병렬 출구는 갈래 2개 이상이 함께 복사된 출구만 사본에 남긴다 — 단독 사본은 엣지 없이 붙어
+  // 엣지 1개만 이으면 "병렬인데 1개"로 저장이 막힌다(사용자 결정 2026-10-01: 해제). 묶음 복사로 갈래가
+  // 같이 붙으면 해제하는 쪽이 오히려 "출구에 엣지 2개" 위반이라 유지한다.
+  const copiedIds = new Set(clip.nodes.map((n) => n.id));
+  const copiedBranches = new Map<string, number>();
+  for (const edge of clip.edges) {
+    if (!copiedIds.has(edge.source) || !copiedIds.has(edge.target)) continue;
+    const source = clip.nodes.find((n) => n.id === edge.source);
+    const key = `${edge.source}|${getOutputKey(source?.data.nodeType ?? "process", edge.sourceHandle)}`;
+    copiedBranches.set(key, (copiedBranches.get(key) ?? 0) + 1);
+  }
+  const keepParallel = (n: ClipboardNode): string[] =>
+    (n.data.parallelOutputs ?? []).filter((key) => (copiedBranches.get(`${n.id}|${key}`) ?? 0) >= 2);
   const nodes = clip.nodes.map((n) => {
     const id = opts.newId();
     idMap.set(n.id, id);
@@ -61,7 +75,7 @@ export function buildPaste(
       position: { x: n.position.x + opts.offset.x, y: n.position.y + opts.offset.y },
       // 대표 끝(isPrimaryEnd)은 맵당 1개 — 사본이 상속하면 대표끝이 중복된다. 사본은 항상 해제.
       // output_ids는 소거 — itemId가 중복되면 원본 판정이 깨진다(io-linking §6). *_links/input_flags는 유지(사본도 같은 원본의 미러).
-      data: { ...n.data, label, groupIds: [] as string[], isPrimaryEnd: false, output_ids: "" },
+      data: { ...n.data, label, groupIds: [] as string[], isPrimaryEnd: false, output_ids: "", parallelOutputs: keepParallel(n) },
     };
   });
   const edges = clip.edges

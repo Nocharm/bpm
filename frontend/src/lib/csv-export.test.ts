@@ -104,6 +104,15 @@ describe("buildCsvFromGraph - round trip", () => {
     expect(again.nodes.find((n) => n.title === "A")).toMatchObject({ node_type: "process", parallel_outputs: ["__primary__"] });
   });
 
+  it("Parallel 빈 칸은 기존 병렬 설정을 유지하고, Y인데 Next가 1개면 경고한다", () => {
+    const first = buildGraphFromCsv(["Name,Parallel,Next", "A,Y,B;C", "B,,", "C,,"].join("\r\n")).graph!;
+    const blank = buildGraphFromCsv(["Name,Next", "A,B;C", "B,", "C,"].join("\r\n"), { base: first }).graph!;
+    expect(blank.nodes.find((n) => n.title === "A")).toMatchObject({ node_type: "process", parallel_outputs: ["__primary__"] });
+
+    const single = buildGraphFromCsv(["Name,Parallel,Next", "A,Y,B", "B,,"].join("\r\n"));
+    expect(single.warnings.some((w) => w.message.includes("needs two or more Next targets"))).toBe(true);
+  });
+
   it("따옴표·쉼표·줄바꿈 셀 이스케이프 - export → re-import에서 원문 보존", () => {
     const rawDescription = 'Review, "carefully" and\nreport to manager';
     const graph: Graph = {

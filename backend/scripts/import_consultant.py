@@ -1914,12 +1914,12 @@ async def apply_interview_linkage(
                                f"{c}: {attr} {current!r} kept (delivery has {incoming!r})")
 
         await session.flush()  # 신규 노드 id 확정 후 엣지를 건다
-        existing_pairs = {
-            (e.source_node_id, e.target_node_id)
-            for e in (await session.scalars(
-                select(Edge).where(Edge.version_id == draft.id)
-            )).all()
-        }
+        existing_edges = (await session.scalars(
+            select(Edge).where(Edge.version_id == draft.id)
+        )).all()
+        existing_pairs = {(e.source_node_id, e.target_node_id) for e in existing_edges}
+        # 캔버스에 이미 있던 비병렬 진출 — 보강이 그 출구를 병렬로 켜면 수동 엣지까지 병렬 갈래로 흡수된다
+        plain_sources = {e.source_node_id for e in existing_edges if e.gateway != "parallel"}
         def _node_of(key: str) -> Node | None:
             if key in branch_of:
                 return branch_nodes.get(make_node_id(code, key))
@@ -1938,8 +1938,13 @@ async def apply_interview_linkage(
                            f"linkage edge {src_key}→{dst_key} dropped - node not on canvas")
                 continue
             # 병행 팬아웃은 출발 출구를 병렬로 켠다 — 출력 규칙(출구당 1개)의 예외를 gateway 표시가 아니라
-            # 노드 속성으로 들고 가야 이후 수동으로 다시 그린 엣지도 병렬 출구로 판정된다 (2026-10-01)
-            if gateway == "parallel" and PRIMARY_END_HANDLE not in (src.parallel_outputs or []):
+            # 노드 속성으로 들고 가야 이후 수동으로 다시 그린 엣지도 병렬 출구로 판정된다 (2026-10-01).
+            # 보강 시 그 노드에 기존 비병렬 진출이 있으면 켜지 않는다 — 수동 엣지 의미를 바꾸지 않고 체크리스트가 알린다
+            if (
+                gateway == "parallel"
+                and src.id not in plain_sources
+                and PRIMARY_END_HANDLE not in (src.parallel_outputs or [])
+            ):
                 src.parallel_outputs = [*(src.parallel_outputs or []), PRIMARY_END_HANDLE]
             if (src.id, dst.id) in existing_pairs:
                 continue

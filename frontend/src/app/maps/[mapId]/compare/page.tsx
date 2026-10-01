@@ -2468,6 +2468,29 @@ function ComparePane({
                       </InspectorRow>
                     );
                   })}
+                  {/* 병렬 출구 — 배열 필드라 위 문자열 목록과 따로. 값이 있거나 바뀐 노드만 (출력 규칙 2026-10-01) */}
+                  {(() => {
+                    const change = selectedNode.fieldChanges.find((fc) => fc.field === "parallel");
+                    const current = displayFieldValue(t, "parallel", (selectedNode.node.parallel_outputs ?? []).join(", "));
+                    if (!show("parallel") || (!change && !current)) return null;
+                    return (
+                      <InspectorRow label={t(FIELD_MSG.parallel)}>
+                        {change ? (
+                          <span data-id="compare-inspector-parallel">
+                            <span className="text-ink-muted line-through">
+                              {displayFieldValue(t, "parallel", change.before) || t("summary.none")}
+                            </span>
+                            <span className="mx-1 text-ink-tertiary">→</span>
+                            <span className="font-semibold text-diff-changed">
+                              {displayFieldValue(t, "parallel", change.after) || t("summary.none")}
+                            </span>
+                          </span>
+                        ) : (
+                          <span data-id="compare-inspector-parallel" className="text-ink-secondary">{current}</span>
+                        )}
+                      </InspectorRow>
+                    );
+                  })()}
                 </div>
                 {/* I/O·조건 — 긴 텍스트 필드는 블록형, 값이나 변경이 있는 것만 (인터뷰 승격 필드 최신화) */}
                 {(() => {

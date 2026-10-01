@@ -80,9 +80,16 @@ export function assignEdgePulses(
   edges: readonly (OutputRuleEdge & { id: string; hidden?: boolean })[],
 ): Map<string, EdgePulse> {
   const out = new Map<string, EdgePulse>();
-  const visible = edges.filter((edge) => !edge.hidden);
+  // 소스별 1회 그룹화 — 노드×엣지 필터는 큰 맵에서 styledEdges 재계산마다 비싸다
+  const bySource = new Map<string, (OutputRuleEdge & { id: string })[]>();
+  for (const edge of edges) {
+    if (edge.hidden) continue;
+    const list = bySource.get(edge.source);
+    if (list) list.push(edge);
+    else bySource.set(edge.source, [edge]);
+  }
   for (const node of nodes) {
-    const outgoing = visible.filter((edge) => edge.source === node.id);
+    const outgoing = bySource.get(node.id) ?? [];
     if (outgoing.length < 2) continue;
     if (node.nodeType === "decision") {
       outgoing.forEach((edge, index) => {
