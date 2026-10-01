@@ -14,6 +14,33 @@ export interface SubEnd {
   nodeId: string;
 }
 
+export type SubprocessInSide = "left" | "right" | "top" | "bottom";
+const IN_SIDES: readonly string[] = ["left", "right", "top", "bottom"];
+
+/** 들어오는 문 핸들 id — 좌측은 레거시 `in` 그대로(저장 데이터 호환), 나머지 변은 `in:<side>`. */
+export function subprocessInHandle(side: SubprocessInSide): string {
+  return side === "left" ? SUBPROCESS_IN_HANDLE : `${SUBPROCESS_IN_HANDLE}:${side}`;
+}
+
+/** `in`·`in:<side>` → 변. 들어오는 문이 아니면 null. */
+export function parseSubprocessInHandle(id: string | null | undefined): SubprocessInSide | null {
+  if (!id) return null;
+  if (id === SUBPROCESS_IN_HANDLE) return "left";
+  const prefix = `${SUBPROCESS_IN_HANDLE}:`;
+  if (!id.startsWith(prefix)) return null;
+  const side = id.slice(prefix.length);
+  return IN_SIDES.includes(side) ? (side as SubprocessInSide) : null;
+}
+
+export function isSubprocessInHandle(id: string | null | undefined): boolean {
+  return parseSubprocessInHandle(id) !== null;
+}
+
+/** 끝 핸들(대표 끝 `__primary__` 또는 끝 제목) — 변 id(`s-*`/`t-*`)·들어오는 문·빈 값은 아니다. */
+export function isSubprocessEndHandle(id: string | null | undefined): boolean {
+  return !!id && !/^[st]-/.test(id) && !isSubprocessInHandle(id);
+}
+
 /** 임베드 자식 id 네임스페이싱 — 같은 맵을 여러 곳/중첩 임베드해도 React Flow id 충돌 없게. */
 export function embedId(hostId: string, originalId: string): string {
   return `${hostId}${EMBED_SEP}${originalId}`;

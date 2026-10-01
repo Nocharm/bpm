@@ -9,6 +9,9 @@ import type { IoDiffSummary } from "@/lib/io-diff";
 import { genId } from "@/lib/id";
 import type { MessageKey } from "@/lib/i18n-messages";
 import {
+  isSubprocessEndHandle,
+  isSubprocessInHandle,
+  parseSubprocessInHandle,
   PRIMARY_END_HANDLE,
   SUBPROCESS_IN_HANDLE,
   type SubEnd,
@@ -712,13 +715,18 @@ export function targetHandleId(side: HandleSide): string {
 
 const HANDLE_SIDES: HandleSide[] = ["left", "right", "top", "bottom"];
 
-// "s-top"/"t-left" → "top"/"left". 미일치 시 fallback(구 데이터·null 대비).
+// "s-top"/"t-left" → "top"/"left", 하위프로세스 들어오는 문 "in"/"in:top" → "left"/"top".
+// 미일치(끝 키 등)·null은 fallback(구 데이터 대비).
 export function sideFromHandleId(
   id: string | null | undefined,
   fallback: HandleSide,
 ): HandleSide {
   if (!id) {
     return fallback;
+  }
+  const inSide = parseSubprocessInHandle(id);
+  if (inSide) {
+    return inSide;
   }
   const side = id.replace(/^[st]-/, "");
   return (HANDLE_SIDES as string[]).includes(side) ? (side as HandleSide) : fallback;
@@ -879,10 +887,21 @@ export function getFlowPathBackward(edges: Edge[], startId: string, hops: number
 
 // 자기루프·중복 없이 엣지 추가. 기본 핸들 변을 명시(source=right/target=left) —
 // 미지정 시 React Flow가 첫 렌더 핸들(left)에 붙어, toAppEdges·buildGraph의 right/left 폴백과 어긋난다.
-function withEdge(edges: Edge[], source: string, target: string): Edge[] {
+// sourceHandle(하위프로세스 끝 키)을 주면 중복 판정도 그 끝에 한정 — 다른 끝에서 같은 타깃은 허용.
+function withEdge(
+  edges: Edge[],
+  source: string,
+  target: string,
+  sourceHandle?: string,
+): Edge[] {
   if (
     source === target ||
-    edges.some((edge) => edge.source === source && edge.target === target) ||
+    edges.some(
+      (edge) =>
+        edge.source === source &&
+        edge.target === target &&
+        (sourceHandle === undefined || edge.sourceHandle === sourceHandle),
+    ) ||
     hasReciprocalEdge(edges, source, target)
   ) {
     return edges;
@@ -894,7 +913,7 @@ function withEdge(edges: Edge[], source: string, target: string): Edge[] {
       id: genId(),
       source,
       target,
-      sourceHandle: sourceHandleId("right"),
+      sourceHandle: sourceHandle ?? sourceHandleId("right"),
       targetHandle: targetHandleId("left"),
     },
   ];
@@ -902,7 +921,8 @@ function withEdge(edges: Edge[], source: string, target: string): Edge[] {
 
 /**
  * 엣지의 source/target 핸들을 현재 끝점 노드 타입에 맞춘다 — 드롭존/삽입/swap 경로 전용.
- * 하위프로세스(subprocess) 끝점은 전용 핸들(in=입력 / __primary__=대표끝 출력)을 써야 RF가 붙인다.
+ * 하위프로세스(subprocess) 끝점은 전용 핸들(in 변형=들어오는 문 / 끝 키=출구)을 써야 RF가 붙인다.
+ * 이미 전용 핸들이면 보존(보조 끝·in:top 등), 변 id·없음일 때만 기본(in / 대표 끝)으로.
  * 끝점이 하위프로세스가 아니게 되면(swap 등) 남은 전용 핸들을 변 기본값으로 되돌린다.
  * onConnect(수동 핸들 드래그)와 decision 분기 라벨 source는 건드리지 않는다(이 함수는 드롭존만 호출).
  */
@@ -915,14 +935,21 @@ export function withSubprocessHandles(
   let targetHandle = edge.targetHandle;
   let sourceHandle = edge.sourceHandle;
   if (targetSub) {
-    targetHandle = SUBPROCESS_IN_HANDLE;
-  } else if (targetHandle === SUBPROCESS_IN_HANDLE) {
-    // 더 이상 하위프로세스가 아닌데 in 핸들이 남음(swap) → 변 기본값으로
-    targetHandle = targetHandleId("left");
+    if (!isSubprocessInHandle(targetHandle)) {
+      targetHandle = SUBPROCESS_IN_HANDLE;
+    }
+  } else {
+    // 더 이상 하위프로세스가 아닌데 들어오는 문 핸들이 남음(swap) → 같은 변의 기본 핸들로
+    const inSide = parseSubprocessInHandle(targetHandle);
+    if (inSide) {
+      targetHandle = targetHandleId(inSide);
+    }
   }
   if (sourceSub) {
-    sourceHandle = PRIMARY_END_HANDLE;
-  } else if (sourceHandle === PRIMARY_END_HANDLE) {
+    if (!isSubprocessEndHandle(sourceHandle)) {
+      sourceHandle = PRIMARY_END_HANDLE;
+    }
+  } else if (isSubprocessEndHandle(sourceHandle)) {
     sourceHandle = sourceHandleId("right");
   }
   if (targetHandle === edge.targetHandle && sourceHandle === edge.sourceHandle) {
@@ -931,77 +958,77 @@ export function withSubprocessHandles(
   return { ...edge, sourceHandle, targetHandle };
 }
 
+/** 출력 자리 바꾸기 짝 — [A의 출력 엣지 id, B의 출력 엣지 id] (순서 무관, 서로 다른 노드의 출력이어야 함). */
+export type SwapOutputPair = [string, string];
+
 /**
- * 스왑(드롭존 중앙) 시 엣지 연결 교환 — A의 연결은 B로, B의 연결은 A로.
- * decision↔일반(활동) 노드 스왑은 부분 이관: 입력(target)은 전면 교환하되, 출력(source)은
- * 일반 노드가 decision의 출력 1개만 가져가고 나머지는 decision에 라벨째 그대로 남는다
- * (일반 노드 출력=1개 관례 유지). 가져갈 엣지는 takenEdgeId(선택 모달 픽)로 지정하며,
- * 미지정·불일치면 배열 순서상 첫 출력. decision은 일반 노드의 출력을 라벨 그대로 넘겨받는다.
- * 둘을 직접 잇는 엣지는 끝점째 교환(D→N ⇒ N→D)되어 그 자체가 "가져간 1개"가 된다
- * (추가 이관 없음 — takenEdgeId도 무시, 아니면 D→D 자기루프). 끝점이 바뀐 엣지는
- * 하위프로세스 핸들 규칙 재적용.
+ * 스왑(드롭존 중앙) 시 엣지 연결 교환.
+ * pairs 미지정: A의 연결은 B로, B의 연결은 A로 전면 교환(둘 다 출력 ≤ 1인 현행 경로).
+ * pairs 지정(출력 자리 바꾸기 모달): 입력(target)은 전면 교환, 둘을 직접 잇는 엣지는 끝점째 교환,
+ * 짝지은 출력 둘은 가는 곳(target·targetHandle)만 서로 바꾸고 라벨·소스 핸들(분기 라벨·끝 키)은
+ * 자기 노드에 남는다. 짝 없는 출력은 그대로. 직접 엣지·모르는 id·같은 노드끼리의 짝은 무시.
+ * 끝점이 바뀐 엣지는 하위프로세스 핸들 규칙 재적용.
  */
 export function swapNodeEdges(
   edges: Edge[],
   aId: string,
   bId: string,
   typeOf: (nodeId: string) => ProcessNodeType | undefined,
-  takenEdgeId?: string | null,
+  pairs?: SwapOutputPair[],
 ): Edge[] {
-  const aType = typeOf(aId);
-  const bType = typeOf(bId);
-  const decisionId =
-    aType === "decision" && bType !== "decision"
-      ? aId
-      : bType === "decision" && aType !== "decision"
-        ? bId
-        : null;
-  const otherId = decisionId === aId ? bId : aId;
-  // 일반 노드가 가져갈 decision 출력 1개 — 직접 연결(D→N)이 있으면 그 엣지가 교환으로
-  // N의 출력이 되므로 추가 이관 없음, 없으면 지정된 엣지(유효할 때) 또는 첫 출력 엣지.
-  let takenId: string | null = null;
-  if (decisionId) {
-    const hasPairOut = edges.some(
-      (edge) => edge.source === decisionId && edge.target === otherId,
-    );
-    if (!hasPairOut) {
-      const requested = takenEdgeId
-        ? edges.find((edge) => edge.id === takenEdgeId && edge.source === decisionId)
-        : undefined;
-      takenId = (requested ?? edges.find((edge) => edge.source === decisionId))?.id ?? null;
-    }
-  }
   const isSubprocess = (nodeId: string): boolean => typeOf(nodeId) === "subprocess";
+  const isPair = (nodeId: string): boolean => nodeId === aId || nodeId === bId;
   const swapEnd = (nodeId: string): string =>
     nodeId === aId ? bId : nodeId === bId ? aId : nodeId;
-  return edges.map((edge) => {
-    const target = swapEnd(edge.target);
-    let source: string;
-    if (!decisionId) {
-      source = swapEnd(edge.source);
-    } else if (edge.source === otherId) {
-      // 일반 노드의 출력은 전부 decision으로(라벨 보존)
-      source = decisionId;
-    } else if (edge.source === decisionId && (edge.id === takenId || edge.target === otherId)) {
-      // 가져갈 1개(또는 직접 연결 엣지)만 일반 노드로
-      source = otherId;
-    } else {
-      // 나머지 decision 출력은 라벨째 decision에 잔류
-      source = edge.source;
-    }
-    if (source === edge.source && target === edge.target) {
+  const finish = (edge: Edge, source: string, target: string, targetHandle = edge.targetHandle): Edge => {
+    if (source === edge.source && target === edge.target && targetHandle === edge.targetHandle) {
       return edge;
     }
-    return withSubprocessHandles({ ...edge, source, target }, isSubprocess);
+    return withSubprocessHandles({ ...edge, source, target, targetHandle }, isSubprocess);
+  };
+  if (pairs === undefined) {
+    return edges.map((edge) => finish(edge, swapEnd(edge.source), swapEnd(edge.target)));
+  }
+  const byId = new Map(edges.map((edge) => [edge.id, edge]));
+  const isPairable = (edge: Edge | undefined): edge is Edge =>
+    !!edge && isPair(edge.source) && !isPair(edge.target);
+  // 짝 상대 엣지 — 서로 다른 노드의 출력끼리만, 한 엣지는 한 짝에만
+  const partnerOf = new Map<string, Edge>();
+  for (const [x, y] of pairs) {
+    const ex = byId.get(x);
+    const ey = byId.get(y);
+    if (!isPairable(ex) || !isPairable(ey) || ex.source === ey.source) continue;
+    if (partnerOf.has(ex.id) || partnerOf.has(ey.id)) continue;
+    partnerOf.set(ex.id, ey);
+    partnerOf.set(ey.id, ex);
+  }
+  return edges.map((edge) => {
+    const sourceIn = isPair(edge.source);
+    const targetIn = isPair(edge.target);
+    if (sourceIn && targetIn) {
+      return finish(edge, swapEnd(edge.source), swapEnd(edge.target)); // 직접 엣지: 끝점째 교환
+    }
+    if (targetIn) {
+      return finish(edge, edge.source, swapEnd(edge.target)); // 입력: 전면 교환
+    }
+    const partner = sourceIn ? partnerOf.get(edge.id) : undefined;
+    if (partner) {
+      return finish(edge, edge.source, partner.target, partner.targetHandle); // 짝: 가는 곳만 교환
+    }
+    return edge;
   });
 }
 
-/** A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B. */
+/**
+ * A를 B의 선행으로 삽입. rewire면 B의 기존 incoming(단, A발 제외)을 A로 재연결 → …→A→B.
+ * sourceHandle은 A가 하위프로세스일 때 새 A→B 엣지가 나갈 끝 키.
+ */
 export function insertNodeBefore(
   edges: Edge[],
   aId: string,
   bId: string,
   rewire: boolean,
+  sourceHandle?: string,
 ): Edge[] {
   let next = edges;
   if (rewire) {
@@ -1009,13 +1036,14 @@ export function insertNodeBefore(
       edge.target === bId && edge.source !== aId ? { ...edge, target: aId } : edge,
     );
   }
-  return withEdge(next, aId, bId);
+  return withEdge(next, aId, bId, sourceHandle);
 }
 
 /**
  * A를 B의 후행으로 삽입. rewire면 B의 기존 outgoing(단, A행 제외)을 A로 재연결 → B→A→….
  * bIsDecision(=B가 마름모)이면 분기 라벨이 항상 마름모에서 출발하도록 유지한다:
  * 기존 B--Yes-->C 를 B--Yes-->A 로 재타깃하고 A-->C 는 일반 엣지로 잇는다(라벨을 A로 옮기지 않음).
+ * sourceHandle(B가 하위프로세스일 때 선택한 끝 키)을 주면 재연결·새 엣지 모두 그 끝에 한정한다.
  */
 export function insertNodeAfter(
   edges: Edge[],
@@ -1023,11 +1051,16 @@ export function insertNodeAfter(
   bId: string,
   rewire: boolean,
   bIsDecision = false,
+  sourceHandle?: string,
 ): Edge[] {
+  const isFromB = (edge: Edge): boolean =>
+    edge.source === bId &&
+    edge.target !== aId &&
+    (sourceHandle === undefined || edge.sourceHandle === sourceHandle);
   if (rewire && bIsDecision) {
-    const branchEdges = edges.filter((edge) => edge.source === bId && edge.target !== aId);
+    const branchEdges = edges.filter(isFromB);
     if (branchEdges.length > 0) {
-      let next = edges.filter((edge) => !(edge.source === bId && edge.target !== aId));
+      let next = edges.filter((edge) => !isFromB(edge));
       for (const edge of branchEdges) {
         next = [...next, { ...edge, target: aId }]; // B--label-->A (source·라벨 유지)
         next = withEdge(next, aId, edge.target); // A-->기존 타깃 (일반)
@@ -1037,11 +1070,9 @@ export function insertNodeAfter(
   }
   let next = edges;
   if (rewire) {
-    next = next.map((edge) =>
-      edge.source === bId && edge.target !== aId ? { ...edge, source: aId } : edge,
-    );
+    next = next.map((edge) => (isFromB(edge) ? { ...edge, source: aId } : edge));
   }
-  return withEdge(next, bId, aId);
+  return withEdge(next, bId, aId, sourceHandle);
 }
 
 /** 선후(엣지) 흐름 기준 좌→우 자동 배치 (spec §3.3). */

@@ -3,6 +3,12 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 하위프로세스 출구 다중 연결 + 들어오는 문 네 방향 (feat/subprocess-ends, 진행 중)
+
+- **왜** — SP 노드는 들어오는 문이 좌측 하나뿐이고, 끝이 여러 개여도 출구 엣지는 전부 대표 끝으로 덮여(`withSubprocessHandles`) 끝별 흐름을 그릴 수 없었다. 사용자 요구: in 네 방향(1단계), 끝마다 별도 출구 엣지, 끝이 모호한 생성 경로는 분기처럼 목록 모달, 출구 라벨 기본값은 끝 제목 미러링, 스왑 다출력은 짝짓기 모달. 설계 `docs/design/2026-10-01-subprocess-ends-design.md`(결정 10건).
+- **1단계(순수 함수)** — `subprocess-embed.ts` in 변형 헬퍼(`in`·`in:top/right/bottom`, 파서, 끝 핸들 판정) · `canvas.ts` `sideFromHandleId` in 파싱, `withSubprocessHandles`는 끝 키·in 변형 **보존**(변 id·없음일 때만 기본값), `withEdge`/`insertNodeAfter`/`insertNodeBefore`에 끝 키 인자(끝 한정 rewire·중복 판정). `swapNodeEdges(…, pairs)`: 미지정=전면 교환, 지정=입력 교환+직접 엣지 끝점 교환+짝은 타깃만 교환(라벨·끝 키는 노드에 남음). 기존 분기 스왑 7케이스를 pairs 의미로 이전.
+- **스왑 출력 자리 바꾸기 모달** — `swap-outputs-modal.tsx`(두 열 짝짓기·순서대로 짝짓기·남김·대표 끝 배지·미러 알약·행 hover 캔버스 강조). 연결선은 행 DOM 중심 측정 S자 곡선, 새 짝은 왼→오로 그려지고 점 하나가 흐름(`swap-pair-*` 키프레임, reduced-motion 즉시). 진입: 양쪽 출력 + 한쪽 ≥ 2(직접 엣지 제외) → 모달, 둘 다 ≤ 1 → 전면 교환, 한쪽 0 → 모달 없이 전부 남김. 확인해야 실행, 취소면 스왑 자체 취소(`swapSelect` 폐기, `aStart` 캡처 유지).
+
 ## 2026-09-30 — 엣지 팬아웃: 같은 핸들로 모이는 엣지의 나선 펼침 (feat/edge-fanout)
 
 - **왜** — 한 변에는 핸들이 하나뿐이라 같은 핸들로 오가는 엣지(실데이터 13%, 최대 4개)가 RF 기본 경로에서 스텁·회랑·화살촉·라벨까지 완전히 포개졌다(루프백 top→top은 100%). 사용자 요청: 나선형으로 펼쳐 겹침 최소화, 모든 선 모양·표면.
