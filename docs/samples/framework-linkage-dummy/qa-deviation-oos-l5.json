@@ -232,8 +232,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "OOS 보고서",
-          "output": "OOS 접수 번호",
+          "input": [
+            "OOS 보고서"
+          ],
+          "output": [
+            "OOS 접수 번호"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -246,8 +250,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "명백 오류 증빙 있으면 무효, 없으면 정식 조사",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -260,8 +264,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "OOS 접수 번호",
-          "output": "초동 평가 기록",
+          "input": [
+            "OOS 접수 번호"
+          ],
+          "output": [
+            "초동 평가 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -274,8 +282,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "명백 오류 > 무효 처리 후 재시험 지시",
-          "input": "OOS 접수 번호",
-          "output": "무효 처리 기록",
+          "input": [
+            "OOS 접수 번호"
+          ],
+          "output": [
+            "무효 처리 기록"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -288,8 +300,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "초동 평가 기록",
-          "output": "초동 평가 완료 기록",
+          "input": [
+            "초동 평가 기록"
+          ],
+          "output": [
+            "초동 평가 완료 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -302,8 +318,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "초동 평가 완료 기록",
-          "output": "조사 인계 기록",
+          "input": [
+            "초동 평가 완료 기록"
+          ],
+          "output": [
+            "조사 인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -411,8 +431,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "초동 평가 기록",
-          "output": "조사 계획",
+          "input": [
+            "초동 평가 기록"
+          ],
+          "output": [
+            "조사 계획"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -425,8 +449,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험 전 과정 기록",
-          "output": "기록 검토 결과",
+          "input": [
+            "시험 전 과정 기록"
+          ],
+          "output": [
+            "기록 검토 결과"
+          ],
           "system": "LIMS",
           "screen": null,
           "dataForm": null,
@@ -439,8 +467,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "시험 전 과정 기록",
-          "output": "면담 기록",
+          "input": [
+            "시험 전 과정 기록"
+          ],
+          "output": [
+            "면담 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -453,8 +485,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "실험실 원인 확정이면 보고, 아니면 확대",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -467,8 +499,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "기록 검토 결과",
-          "output": "Phase 1 조사 보고서",
+          "input": [
+            "기록 검토 결과"
+          ],
+          "output": [
+            "Phase 1 조사 보고서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -481,8 +517,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "원인 미확정 > Phase 2 확대 결정",
-          "input": "면담 기록",
-          "output": "Phase 2 확대 결정",
+          "input": [
+            "면담 기록"
+          ],
+          "output": [
+            "Phase 2 확대 결정"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -495,8 +535,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "Phase 1 조사 보고서",
-          "output": "인계 기록",
+          "input": [
+            "Phase 1 조사 보고서"
+          ],
+          "output": [
+            "인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -524,7 +568,7 @@
             "quote": null
           },
           {
-            "src": 1,
+            "src": 4,
             "dst": 7,
             "kind": "bypass",
             "gateway": null,
@@ -631,8 +675,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "Phase 1 조사 보고서",
-          "output": "합동 조사 일정",
+          "input": [
+            "Phase 1 조사 보고서"
+          ],
+          "output": [
+            "합동 조사 일정"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -645,8 +693,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "기출하 배치 영향 있으면 규제 보고 검토",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -659,8 +707,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "배치 제조 기록",
-          "output": "확대 조사 보고서",
+          "input": [
+            "배치 제조 기록"
+          ],
+          "output": [
+            "확대 조사 보고서"
+          ],
           "system": "MES",
           "screen": null,
           "dataForm": null,
@@ -673,8 +725,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "기출하 배치 영향 시 > 보고 필요성 검토 수행",
-          "input": "배치 제조 기록",
-          "output": "보고 필요성 검토서",
+          "input": [
+            "배치 제조 기록"
+          ],
+          "output": [
+            "보고 필요성 검토서"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -687,8 +743,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "확대 조사 보고서",
-          "output": "CAPA 계획",
+          "input": [
+            "확대 조사 보고서"
+          ],
+          "output": [
+            "CAPA 계획"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -701,8 +761,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "CAPA 계획",
-          "output": "CAPA 인계 기록",
+          "input": [
+            "CAPA 계획"
+          ],
+          "output": [
+            "CAPA 인계 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -810,8 +874,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "CAPA 완료 증빙",
-          "output": "완료 접수 기록",
+          "input": [
+            "CAPA 완료 증빙"
+          ],
+          "output": [
+            "완료 접수 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -824,8 +892,8 @@
           "kind": "decision",
           "variant": "normal",
           "rule": "증빙 충족이면 종결, 미비면 보완",
-          "input": null,
-          "output": null,
+          "input": [],
+          "output": [],
           "system": null,
           "screen": null,
           "dataForm": null,
@@ -838,8 +906,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "완료 접수 기록",
-          "output": "종결 승인 기록",
+          "input": [
+            "완료 접수 기록"
+          ],
+          "output": [
+            "종결 승인 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -852,8 +924,12 @@
           "kind": "action",
           "variant": "exception",
           "rule": "증빙 미비 > 보완 요청 후 재접수",
-          "input": "완료 접수 기록",
-          "output": "보완 요청 기록",
+          "input": [
+            "완료 접수 기록"
+          ],
+          "output": [
+            "보완 요청 기록"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": null,
@@ -866,8 +942,12 @@
           "kind": "action",
           "variant": "normal",
           "rule": null,
-          "input": "종결 승인 기록",
-          "output": "효과성 평가 보고",
+          "input": [
+            "종결 승인 기록"
+          ],
+          "output": [
+            "효과성 평가 보고"
+          ],
           "system": "QMS",
           "screen": null,
           "dataForm": "structured",
@@ -880,8 +960,12 @@
           "kind": "handoff",
           "variant": "normal",
           "rule": null,
-          "input": "효과성 평가 보고",
-          "output": "보고 기록",
+          "input": [
+            "효과성 평가 보고"
+          ],
+          "output": [
+            "보고 기록"
+          ],
           "system": null,
           "screen": null,
           "dataForm": null,

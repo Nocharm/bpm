@@ -12,8 +12,10 @@ from app.permissions.access import get_framework_category_id
 from app.schemas import NodeIn, SubprocessRefOut
 
 
-# 하위프로세스 노드 전용 핸들 — SP 노드는 이 두 핸들만 렌더한다(입력 "in" / 대표끝 출력 "__primary__").
-# 서버가 SP 끝점 엣지를 만들 때 이 값을 안 넣으면 React Flow가 붙일 핸들을 못 찾아 **엣지를 조용히
+# 하위프로세스 노드 전용 핸들의 서버 기본값 — 들어오는 문 "in"(좌) / 대표 끝 출구 "__primary__".
+# 실제 어휘는 더 넓다: 들어오는 문은 네 변(`in`·`in:top/right/bottom`, `subprocess_in_handle`), 출구는
+# 끝마다 하나(`__primary__` 또는 끝 제목, `get_output_key`) — CLAUDE.md 하위프로세스 핸들 계약(2026-10-01).
+# 서버가 SP 끝점 엣지를 만들 때 핸들을 안 넣으면 React Flow가 붙일 핸들을 못 찾아 **엣지를 조용히
 # 버린다**(노드만 뜨고 선이 안 보임). frontend/src/lib/subprocess-embed.ts와 수동 동기.
 SUBPROCESS_IN_HANDLE = "in"
 PRIMARY_END_HANDLE = "__primary__"
@@ -23,8 +25,18 @@ DEFAULT_TARGET_HANDLE = "t-left"
 
 
 def side_source_handle(side: str) -> str:
-    """변 이름 → 출구 핸들 id. 분기 노드는 4면을 다 쓴다(SP는 __primary__ 고정)."""
+    """변 이름 → 출구 핸들 id. 분기 노드는 4면을 다 쓴다(SP 출구는 끝 키라 이 함수 대상 아님)."""
     return f"s-{side}"
+
+
+def subprocess_in_handle(side: str) -> str:
+    """변 이름 → SP 들어오는 문 핸들 id — 좌측은 레거시 `in` 그대로, 나머지 변은 `in:<side>`.
+
+    FE `subprocessInHandle`(lib/subprocess-embed.ts)과 동치 — 임포트 배치(build_graph_rows)가
+    에디터 자동정렬(autoLayoutFlow)과 같은 변을 고르게 한다.
+    """
+    return SUBPROCESS_IN_HANDLE if side == "left" else f"{SUBPROCESS_IN_HANDLE}:{side}"
+
 
 # L5 연계 캔버스 그리드 레이아웃 — 캔버스 열기(routers/categories)와 인터뷰 임포트(scripts/import_consultant)가
 # 같은 좌표 규칙을 쓴다. 한쪽만 바꾸면 임포트가 보강한 노드가 사용자 캔버스와 어긋난 격자에 놓인다.
@@ -454,6 +466,7 @@ def _find_scc_iterative(node_ids: list[str], adj: dict[str, list[str]]) -> list[
 
 
 _SIDE_HANDLE_RE = re.compile(r"^[st]-")
+# "in:left"는 FE가 내지 않는 값(좌측은 `in`)이지만 FE `parseSubprocessInHandle`이 수용하므로 같이 받는다
 _IN_HANDLES = {"in", "in:left", "in:right", "in:top", "in:bottom"}
 
 

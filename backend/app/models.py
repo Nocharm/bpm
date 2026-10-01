@@ -171,7 +171,7 @@ class ProcessMap(Base):
     sp_url_label: Mapped[str | None] = mapped_column(String(100), default=None)
     # 지정 설명은 별도 컬럼(sp_description)을 두지 않고 맵 description을 그대로 쓴다 —
     # 운영에서 둘을 따로 채우는 사례가 없어 이중 관리만 남았다. 지정 화면에서 고치면 맵 설명이
-    # 함께 바뀐다 (사용자 결정 2026-08-31). 구 컬럼은 nullable이라 DB에 남겨둔 채 무시.
+    # 함께 바뀐다 (사용자 결정 2026-08-31). 물리 컬럼은 db._drop_legacy_sp_description이 기동 시 정리.
     # 최근 지정/해제/수정 1건 기록 — 이력 테이블 없이 맵과 1:1
     sp_changed_by: Mapped[str | None] = mapped_column(String(100), default=None)
     sp_changed_at: Mapped[datetime | None] = mapped_column(
@@ -421,8 +421,10 @@ class Edge(Base):
     # 엣지 핸들이 붙는 노드 변 — 시각 전용, diff 비교 제외(2026-06-17)
     source_side: Mapped[str] = mapped_column(String(10), default="right")
     target_side: Mapped[str] = mapped_column(String(10), default="left")
-    # 다중 출구 식별 — 하위프로세스 노드의 끝별 출력 핸들 id(대표끝="__primary__", 그 외=끝 이름)
+    # 다중 출구 식별 — 하위프로세스 노드의 끝별 출력 핸들 id(대표끝="__primary__", 그 외=끝 이름).
+    # 이 끝 키가 Node.parallel_outputs의 키다(subprocess.get_output_key). 일반 노드는 변 id `s-<side>`
     source_handle: Mapped[str | None] = mapped_column(String(200), default=None)
+    # 들어오는 핸들 — SP는 들어오는 문 `in`(좌)·`in:top/right/bottom`, 일반 노드는 변 id `t-<side>`
     target_handle: Mapped[str | None] = mapped_column(String(200), default=None)
     # 엣지별 선 모양(React Flow type: default=곡선, smoothstep=꺾은선, straight=직선, ""=레거시 기본).
     # source_side와 동일하게 시각 전용 — diff 비교 제외

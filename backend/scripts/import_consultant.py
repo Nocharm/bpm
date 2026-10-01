@@ -53,7 +53,7 @@ from app.orgchart import (
     sanitize_org_segment,
 )
 from app.settings import settings
-from app.schemas import NUMERIC_RE
+from app.schemas import NUMERIC_RE, EdgeIn, NodeIn
 from app.subprocess import (
     DEFAULT_TARGET_HANDLE,
     LINKAGE_Y0,
@@ -62,6 +62,7 @@ from app.subprocess import (
     SUBPROCESS_IN_HANDLE,
     grid_positions,
     side_source_handle,
+    subprocess_in_handle,
     unique_linkage_name,
 )
 from app.routers.versions import clone_graph
@@ -186,11 +187,114 @@ def link_matching_io(nodes: list[Node], edges: list[Edge], map_code: str) -> int
             node.input_links = _join_lines(links)
     return linked
 
+
+# 전달물이 싣지 않는 노드 필드 — 재전달 재빌드가 직전 게시본의 같은 계보 노드에서 승계한다
+# (사용자 결정 D1 2026-10-02, gmp·IO 폼 승계의 일반화). 전달물이 싣는 필드는 전달분이 진실이라 넣지 않는다.
+# 승계 조건: None=항상, "input"/"output"=그 측 IO 텍스트가 그대로일 때(줄 정렬 기반이라 텍스트가 바뀌면 폐기),
+# "link"=같은 링크 맵을 가리킬 때(버전 고정은 그 맵 기준). output_ids는 사용자가 건 미러가 가리키는 원본
+# 항목 id라 output 측 링크와 같이 옮겨야 링크가 산다. output_forms는 전달물(dataForm)도 싣지만 검토 입력값이
+# 이기는 기존 계약(2026-08-20)을 유지한다. group_ids는 그룹 행 복제·리맵이 필요해 `_inherit_prior_fields`가 따로 다룬다.
+INHERITED_NODE_FIELDS: tuple[tuple[str, str | None], ...] = (
+    ("gmp", None),
+    ("assignee_role", None),
+    ("url", None),
+    ("url_label", None),
+    ("duration", None),
+    ("touch_time", None),
+    ("cost_krw", None),
+    ("cost_usd", None),
+    ("headcount", None),
+    ("start_condition", None),
+    ("end_condition", None),
+    ("width", None),
+    ("group_ids", None),
+    ("input_forms", "input"),
+    ("input_flags", "input"),
+    ("input_links", "input"),
+    ("output_forms", "output"),
+    ("output_ids", "output"),
+    ("output_links", "output"),
+    ("follow_latest", "link"),
+    ("linked_version_id", "link"),
+)
+
+
+def _legacy_group_ids(node: Node) -> list[str]:
+    """다중 그룹 + 레거시 단일 group_id 병합 — clone_graph와 같은 규칙."""
+    if node.group_ids:
+        return list(node.group_ids)
+    return [node.group_id] if node.group_id else []
+
+
+def _inherit_prior_fields(
+    nodes: list[Node], prior_nodes: list[Node], prior_groups: list[Group]
+) -> list[Group]:
+    """INHERITED_NODE_FIELDS를 직전 게시본의 같은 계보 노드에서 옮긴다. 반환: 새 버전에 넣을 그룹 행.
+
+    IO 자동 연결(link_matching_io)보다 먼저 돌아야 한다 — 자동 연결은 이미 있는 링크·원본 id를 존중하므로
+    승계한 사용자 링크 위에서만 빈 줄을 채운다. 그룹은 버전 소속 행이라 참조된 그룹(+조상)만 새 id로
+    복제해 노드 group_ids를 리맵한다(version_id는 호출자가 채움).
+    """
+    old_by_root = {(n.source_node_id or n.id): n for n in prior_nodes}
+    for node in nodes:
+        old = old_by_root.get(node.source_node_id or node.id)
+        if old is None:
+            continue
+        for name, guard in INHERITED_NODE_FIELDS:
+            if guard == "input" and (node.input or "") != (old.input or ""):
+                continue
+            if guard == "output" and (node.output or "") != (old.output or ""):
+                continue
+            if guard == "link":
+                if node.linked_map_id is None or node.linked_map_id != old.linked_map_id:
+                    continue
+                setattr(node, name, getattr(old, name))
+                continue
+            value = _legacy_group_ids(old) if name == "group_ids" else getattr(old, name)
+            if value in (None, "", []):
+                continue  # 빈 값은 승계하지 않는다 — 전달분(예: 산출물 폼)이 남는다
+            setattr(node, name, list(value) if isinstance(value, list) else value)
+
+    # 원본 쪽 아웃풋이 바뀌어 원본 id를 못 옮긴 그래프 안 링크는 비운다 — 빈 줄은 이어 도는 자동 연결이
+    # 새 위치로 다시 잇는다. 그래프 밖 원본(SP 지정 IO)을 가리키는 링크는 직전 게시본 output_ids에 없어 남는다
+    stale = {
+        line.strip() for n in prior_nodes for line in _io_lines(n.output_ids) if line.strip()
+    } - {line.strip() for n in nodes for line in _io_lines(n.output_ids) if line.strip()}
+    for node in nodes:
+        for name in ("input_links", "output_links"):
+            lines = _io_lines(getattr(node, name))
+            if any(line.strip() in stale for line in lines):
+                setattr(node, name, _join_lines(["" if line.strip() in stale else line for line in lines]))
+
+    group_by_id = {g.id: g for g in prior_groups}
+    wanted: set[str] = set()
+    for node in nodes:
+        for gid in node.group_ids or []:
+            while gid in group_by_id and gid not in wanted:
+                wanted.add(gid)
+                gid = group_by_id[gid].parent_group_id or ""
+    id_map = {gid: uuid.uuid4().hex for gid in sorted(wanted)}
+    groups = [
+        Group(
+            id=id_map[g.id], parent_group_id=id_map.get(g.parent_group_id or ""),
+            label=g.label, color=g.color,
+        )
+        for g in prior_groups if g.id in id_map
+    ]
+    for node in nodes:
+        if node.group_ids:
+            node.group_ids = [id_map[g] for g in node.group_ids if g in id_map]
+    return groups
+
+
 def build_graph_rows(
     cmap: CanonicalMap,
     link_targets: dict[str, tuple[int, CanonicalParams]],
 ) -> tuple[list[Node], list[Edge], list[str]]:
-    """canonical 맵 1건 → Node/Edge ORM 행(version_id는 호출자가 채움) + 경고."""
+    """canonical 맵 1건 → Node/Edge ORM 행(version_id는 호출자가 채움) + 경고.
+
+    IO 자동 연결은 하지 않는다 — 호출자가 직전 게시본 승계(`_inherit_prior_fields`) 뒤에 `link_matching_io`를 돈다.
+    """
     warnings: list[str] = []
     ordered = sorted(cmap.nodes, key=lambda n: (n.seq, n.code))
     l7_codes = [n.code for n in ordered]
@@ -311,15 +415,15 @@ def build_graph_rows(
             label=label,
             source_side=source_side,
             target_side=target_side,
-            # SP 끝점은 전용 핸들 필수 — 없으면 React Flow가 엣지를 통째로 못 붙인다
+            # SP 끝점은 전용 핸들 필수 — 없으면 React Flow가 엣지를 통째로 못 붙인다. 출구는 임포트 기본값
+            # 대표 끝, 들어오는 문은 배치가 고른 변(좌=`in`, 그 외 `in:<side>`) — FE autoLayoutFlow와 동치
             source_handle=(
                 PRIMARY_END_HANDLE if node_types.get(src) == "subprocess" else None
             ),
             target_handle=(
-                SUBPROCESS_IN_HANDLE if node_types.get(dst) == "subprocess" else None
+                subprocess_in_handle(target_side) if node_types.get(dst) == "subprocess" else None
             ),
         ))
-    link_matching_io(nodes, edges, cmap.code)
     return nodes, edges, warnings
 
 
@@ -673,6 +777,8 @@ def _normalize_params(cmap: CanonicalMap, report: ImportReport) -> CanonicalPara
 
 
 def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
+    """전달 필드 변경 감지(graph_changed) — 전달물이 싣는 값만. 승계 필드(INHERITED_NODE_FIELDS)는 재빌드가
+    직전 게시본 값을 옮겨 오므로 넣지 않는다. 작업본 재사용 판정은 `_draft_untouched_signature`(전 필드)."""
     # pos_x/pos_y 제외 — 레이아웃은 콘텐츠 diff 대상이 아님(엔진 규칙 5).
     # 식별은 Node.id(빌드마다 새 uuid)가 아닌 source_node_id 계보 루트로 — diff.ts getLineageKey와
     # 동일 규약(node.source_node_id ?? node.id). 엣지도 끝점을 id→계보 루트로 매핑해 비교한다.
@@ -685,9 +791,9 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
              n.department or "", n.assignee or "", n.system or "", n.linked_map_id,
              n.annual_count or "", n.fte or "", bool(n.is_primary_end),
              # 승격 필드 — 전달분이 진실이라 변경=새 버전(사용자 수기 편집도 재임포트가 덮음,
-             # 기존 description과 동일 계약) (design 2026-08-19 §4.1)
-             n.touch_time or "", n.input or "", n.output or "",
-             n.start_condition or "", n.end_condition or "",
+             # 기존 description과 동일 계약) (design 2026-08-19 §4.1). 노드 수준 touch_time·조건은
+             # 전달물에 없어 승계 대상이다(D1 2026-10-02) — 서명에 넣으면 게시본 편집만으로 "변경"이 된다
+             n.input or "", n.output or "",
              n.output_forms or "", n.system_fallback or "",
              # 병렬 출구 — 흐름 의미라 전달분이 진실(출력 규칙 2026-10-01). 이전 게시본엔 없어 첫 재임포트는 새 버전
              tuple(sorted(n.parallel_outputs or [])))
@@ -697,6 +803,45 @@ def _graph_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
             (id_to_root[e.source_node_id], id_to_root[e.target_node_id], e.label or "")
             for e in edges
         ),
+    )
+
+
+# 작업본 재사용 판정 비교 컬럼 — 편집 API(NodeIn/EdgeIn)가 쓰는 전 필드. 스키마에서 뽑아 새 컬럼도 자동 포함된다.
+# 식별자(id·끝점 id)는 계보 루트로, group_ids는 그룹 (label, color)로 바꿔 비교한다(버전마다 새 id).
+_DRAFT_NODE_FIELDS = tuple(f for f in NodeIn.model_fields if f not in ("id", "group_ids"))
+_DRAFT_EDGE_FIELDS = tuple(
+    f for f in EdgeIn.model_fields if f not in ("id", "source_node_id", "target_node_id"))
+
+
+def _comparable(value: object) -> object:
+    """DB 행 비교용 정규화 — None/"" 동일시, JSON 리스트는 튜플(해시 가능)."""
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
+def _draft_untouched_signature(nodes: list[Node], edges: list[Edge], groups: list[Group]) -> tuple:
+    """작업본이 게시본에서 한 글자도 안 바뀌었는지 — 편집 가능한 전 필드(좌표·핸들·url·역할·파라미터·
+    GMP·폼·플래그·링크·버전 고정·병렬 출구·그룹) 비교. `_graph_signature`는 전달 필드만 봐서
+    좌표·핸들 같은 편집을 못 잡는다 — 그걸로 판정하면 편집한 draft를 비워 버린다."""
+    group_key = {g.id: (g.label or "", g.color or "") for g in groups}
+    id_to_root = {n.id: (n.source_node_id or n.id) for n in nodes}
+    return (
+        sorted(
+            (n.source_node_id or n.id,
+             *(_comparable(getattr(n, f)) for f in _DRAFT_NODE_FIELDS),
+             tuple(sorted(group_key.get(g, ("?", g)) for g in _legacy_group_ids(n))))
+            for n in nodes
+        ),
+        sorted(
+            (id_to_root.get(e.source_node_id, e.source_node_id),
+             id_to_root.get(e.target_node_id, e.target_node_id),
+             *(_comparable(getattr(e, f)) for f in _DRAFT_EDGE_FIELDS))
+            for e in edges
+        ),
+        sorted((*group_key[g.id], group_key.get(g.parent_group_id or "", ("", ""))) for g in groups),
     )
 
 
@@ -730,6 +875,7 @@ async def _take_reusable_draft(
     map_id: int,
     prior_nodes: list[Node],
     prior_edges: list[Edge],
+    prior_groups: list[Group],
     label: str,
 ) -> MapVersion | None:
     """재사용 가능한 자동 draft를 비워서 돌려준다 — 없으면 None(새 버전 생성).
@@ -739,19 +885,24 @@ async def _take_reusable_draft(
     끼어 이력이 지저분해진다(재전달마다 1건씩 누적).
 
     재사용 조건 — ① 점유권자 없음(누가 체크아웃했으면 남의 작업 시작으로 본다)
-    ② 그래프가 직전 게시본과 **완전 동일**(편집 흔적 0). 하나라도 어긋나면 건드리지 않는다.
+    ② 노드·엣지·그룹의 편집 가능한 전 필드가 직전 게시본과 같다(`_draft_untouched_signature` —
+    좌표·핸들·url 하나만 바꿔도 편집으로 본다). 하나라도 어긋나면 건드리지 않는다.
     """
     draft = await session.scalar(
         select(MapVersion)
         .where(MapVersion.map_id == map_id, MapVersion.status == "draft")
-        .options(selectinload(MapVersion.nodes), selectinload(MapVersion.edges))
+        .options(
+            selectinload(MapVersion.nodes),
+            selectinload(MapVersion.edges),
+            selectinload(MapVersion.groups),
+        )
         .order_by(MapVersion.id.desc())
     )
     if draft is None or draft.checked_out_by is not None or not prior_nodes:
         return None
-    if _graph_signature(list(draft.nodes), list(draft.edges)) != _graph_signature(
-        prior_nodes, prior_edges
-    ):
+    if _draft_untouched_signature(
+        list(draft.nodes), list(draft.edges), list(draft.groups)
+    ) != _draft_untouched_signature(prior_nodes, prior_edges, prior_groups):
         return None  # 사용자가 편집한 작업본 — 보존
     await session.execute(delete(Edge).where(Edge.version_id == draft.id))
     await session.execute(delete(Node).where(Node.version_id == draft.id))
@@ -1247,9 +1398,11 @@ async def import_delivery(
         latest = await _latest_published(session, found_map.id)
         old_nodes: list[Node] = []
         old_edges: list[Edge] = []
+        old_groups: list[Group] = []
         if latest is not None:
             old_nodes = list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
             old_edges = list((await session.scalars(select(Edge).where(Edge.version_id == latest.id))).all())
+            old_groups = list((await session.scalars(select(Group).where(Group.version_id == latest.id))).all())
 
         # DB-only 연계 대상(이번 전달분에 없어 canonical params가 빈 값으로 폴백)의 annual_count/fte를
         # 직전 게시본의 같은 연계 노드에서 이어받는다 — 안 그러면 부분 재전달마다 값이 초기화되고
@@ -1269,20 +1422,11 @@ async def import_delivery(
                 if new_link_node is not None:
                     new_link_node.annual_count = old_link_node.annual_count
                     new_link_node.fte = old_link_node.fte
-            # 활동별 GMP 이어받기 — 전달물에 없는 검토 선정값이라 재빌드 노드가 늘 비어 있다.
-            # 직전 게시본의 같은 계보 노드에서 승계해 재전달이 검토값을 덮지 않게 한다
-            # (맵 sp_gmp를 엔진이 안 건드리는 것과 동일 계약 — 시그니처에도 미포함, design 2026-08-20)
-            for n in nodes:
-                old_node = old_by_root.get(n.source_node_id or n.id)
-                if old_node is not None and old_node.gmp:
-                    n.gmp = old_node.gmp
-                # IO 항목별 데이터 폼 이어받기 — gmp와 동일 계약(검토 입력값·시그니처 미포함).
-                # 단, 줄 정렬(index) 기반이라 해당 측 항목 텍스트가 재전달로 바뀌면 폐기(검토 재정렬)
-                if old_node is not None:
-                    if old_node.input_forms and n.input == old_node.input:
-                        n.input_forms = old_node.input_forms
-                    if old_node.output_forms and n.output == old_node.output:
-                        n.output_forms = old_node.output_forms
+        # 전달물 밖 노드 필드(GMP·역할·url·파라미터·조건·IO 폼/플래그/링크·폭·그룹·버전 고정) 승계 —
+        # 재빌드 노드는 늘 비어 있어 안 옮기면 재전달 새 게시본이 오너 편집을 떨어뜨린다(D1 2026-10-02).
+        # 승계 뒤에 IO 자동 연결을 돌려야 사용자가 건 링크를 덮지 않는다.
+        groups = _inherit_prior_fields(nodes, old_nodes, old_groups)
+        link_matching_io(nodes, edges, cmap.code)
 
         graph_changed = True
         if latest is not None:
@@ -1359,13 +1503,13 @@ async def import_delivery(
             # 새로 발급한 uuid Node/Edge.id를 쓰므로(계보는 source_node_id) PK 충돌이 없고,
             # 버전 비교 화면이 만료본 그래프를 그대로 조회할 수 있어야 한다(append-only 이력).
             version = await _take_reusable_draft(
-                session, found_map.id, old_nodes, old_edges, label)
+                session, found_map.id, old_nodes, old_edges, old_groups, label)
             if version is None:
                 version = MapVersion(map_id=found_map.id, label=label, status="draft")
                 session.add(version)
                 await session.flush()
                 record_version_event(session, version.id, "created", actor)
-            for row in (*nodes, *edges):
+            for row in (*nodes, *edges, *groups):
                 row.version_id = version.id
                 session.add(row)
             await _publish(session, found_map.id, version, actor)
@@ -1568,7 +1712,9 @@ def expand_linkage_branches(
 
     끼우는 기준: 나가는 엣지 2개 이상 && 전부 `gateway="parallel"`은 아님. 병행 팬아웃은 택일이
     아니므로 마름모를 세우면 오독된다(L6의 승격 제외 규칙과 같은 판단). 이 비-fork·전부-parallel
-    그룹은 저장 시 gateway="parallel"을 기록해 확정 게이트 6(plain_fanout 예외)이 소비한다.
+    그룹은 저장 시 gateway="parallel"을 기록하고 apply_interview_linkage가 출발 노드 parallel_outputs를
+    켠다. 확정 게이트 6(subprocess.find_output_rule_violations)은 parallel_outputs가 1차 판정이고,
+    전부-parallel gateway는 속성 없는 구 데이터용 레거시 도출이다(출력 규칙 2026-10-01).
 
     반환: (재작성 엣지 [(src,dst,label,gateway)], 분기노드키→원본 src code, 되돌아가는 쌍).
     되돌아가는 쌍은 재작성 좌표계 기준 — 안 넘기면 사이클이 되살아나 랭크가 무너진다.
@@ -1951,7 +2097,7 @@ async def apply_interview_linkage(
             session.add(Edge(
                 id=uuid.uuid4().hex, version_id=draft.id,
                 source_node_id=src.id, target_node_id=dst.id, label=label, gateway=gateway,
-                # 끝점 타입별 핸들 — SP는 전용(in/__primary__), 분기는 변별(s-/t-).
+                # 끝점 타입별 핸들 — SP는 임포트 기본값(입구 `in`·출구 `__primary__`), 분기는 변별(s-/t-).
                 # 안 맞추면 React Flow가 붙일 핸들을 못 찾아 엣지를 통째로 버린다
                 source_side=fan_sides.get((src_key, dst_key), "right"),
                 source_handle=(

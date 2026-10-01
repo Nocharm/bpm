@@ -68,7 +68,9 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("process_maps", "sp_cost_usd", "VARCHAR(50)"),
     ("process_maps", "sp_headcount", "VARCHAR(50)"),
     # sp_description은 2026-08-31에 폐기(맵 description으로 일원화) — 보강 대상에서 제외한다.
-    # 기존 DB의 컬럼은 nullable이라 남아 있어도 INSERT를 깨지 않는다(드랍은 별도 정리 시점에).
+    # 드랍은 아래 `_drop_legacy_sp_description` 부트스트랩 스텝이 수행한다. 폐기 정책은 두 갈래다:
+    # nullable 구 컬럼(sp_description·nodes.data_form)=드랍 스텝, create_all NOT NULL 컬럼
+    # (Word doc_*·section_anchor·interview_sessions.mode)=모델 매핑 유지+여기서 보강.
     # [폐기 컬럼] Word 맵 모드(2026-09-29 제거) — 모델이 매핑을 유지하므로(models.py ProcessMap 주석)
     # 컬럼이 없는 DB엔 계속 보강해야 INSERT가 깨지지 않는다. mode는 framework 캔버스가 계속 쓴다.
     ("nodes", "section_anchor", "VARCHAR(200) DEFAULT ''"),

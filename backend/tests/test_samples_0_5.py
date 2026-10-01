@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.consultant_interview import convert_interview
+from scripts.consultant_interview import LOOP_BRANCH_NODE_NAME, convert_interview
 
 SAMPLES = Path(__file__).resolve().parents[2] / "docs" / "samples"
 FILES = sorted((SAMPLES / "consultant-interview-sample").glob("*.json")) + sorted(
@@ -14,10 +14,13 @@ FILES = sorted((SAMPLES / "consultant-interview-sample").glob("*.json")) + sorte
 # 파일별 의도된 warning 부분 문자열 — 그 외 warning은 규격 이탈
 INTENDED_WARNINGS: dict[str, list[str]] = {
     "qc-raw-material-l5.json": ["external L5 '22-01-01-01-01' not in framework.categories"],
+    # 활동에서 건너뛰기+다음 단계가 나가는 택일 — "{활동} 결과" ◇ 자동 생성 시연(대체 표준기 선정)
+    "calibration-l5.json": ["auto-generated branch node a03f"],
 }
 # 모든 샘플 공통 의도 경고 — 샘플은 행마다 loop를 싣고(규격), 되돌아가기+다음 단계가 한 활동에서 나가면
-# 어댑터가 뒤에 ◇를 자동 생성한다(출력 규칙 2026-10-01). 변환 안내라 규격 이탈이 아니다
-COMMON_INTENDED_WARNINGS = ["auto-generated branch node"]
+# 어댑터가 뒤에 "반복 여부" ◇를 자동 생성한다(출력 규칙 2026-10-01). 변환 안내라 규격 이탈이 아니다.
+# 반복 이름으로만 좁힌다 — 병행 갈래가 다른 연결과 섞여 "{활동} 결과" ◇로 접히는 회귀를 잡기 위해
+COMMON_INTENDED_WARNINGS = [LOOP_BRANCH_NODE_NAME]
 
 
 def _load(path: Path) -> dict:
@@ -33,6 +36,8 @@ def test_sample_converts_without_errors_or_unintended_warnings(path: Path) -> No
     unexpected = [(i.path, i.message) for i in res.issues
                   if i.severity == "warning" and not any(a in i.message for a in allowed)]
     assert not unexpected, unexpected
+    # 병행 갈래가 ◇ 없이 출발 활동의 병렬 출구로 착지하는 시연이 파일마다 하나 이상 있다
+    assert any(n.parallel for m in res.maps for n in m.nodes), path.name
 
 
 @pytest.mark.parametrize("path", FILES, ids=lambda p: p.name)
@@ -42,6 +47,10 @@ def test_sample_shape_meets_the_0_5_spec(path: Path) -> None:
     rows = doc["rows"]
     assert len(rows) >= 4
     for row in rows:
+        # actions IO는 문자열 배열이 정본(2026-09-23) — fields.input_data/output_data는 문자열 그대로
+        for action in row["actions"]:
+            assert isinstance(action["input"], list) and isinstance(action["output"], list), (
+                row["taskId"], action["seq"])
         kinds = [e["kind"] for e in row["relations"]["edges"]]
         assert "loop" in kinds, row["taskId"]
         assert "branch" in kinds, row["taskId"]
@@ -61,8 +70,8 @@ def test_calibration_keeps_smoke_anchors() -> None:
     doc = _load(SAMPLES / "consultant-interview-sample" / "calibration-l5.json")
     row = next(r for r in doc["rows"] if r["taskId"] == "smp-cal-task-0001")
     assert row["l6"] == "교정 준비" and row["owner"] is None
-    assert row["actions"][0]["input"] == "그 주 작업지시"
-    assert row["actions"][0]["output"] == "대상 계측기와 측정 범위"
+    assert row["actions"][0]["input"] == ["그 주 작업지시"]
+    assert row["actions"][0]["output"] == ["대상 계측기와 측정 범위"]
     assert row["fields"]["annual_count"] == 52 and row["fields"]["artifact_role"] == "deliverable"
     assert row["fields"]["start_condition"].startswith("교정 주기 도래")
     util = _load(SAMPLES / "consultant-interview-sample" / "utility-l5.json")

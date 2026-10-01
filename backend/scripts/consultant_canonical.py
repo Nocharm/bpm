@@ -73,7 +73,8 @@ class CanonicalEdge(BaseModel):
     target: str = Field(alias="to")
     label: str = Field(default="", max_length=200)  # Edge.label은 String(200)
     # 전달 흐름 종류 — Edge 테이블에는 없고 배선 판정에만 쓴다(loop은 Start 배선에서 제외,
-    # design 2026-09-01 §2). 저장 시점엔 label만 남는다.
+    # design 2026-09-01 §2). 저장 시점엔 label만 남는다. gateway도 싣지 않는다 — 병행은 출발 노드의
+    # CanonicalNode.parallel(→ Node.parallel_outputs)로 가고 L6 Edge.gateway는 비워 둔다(L5 연계 캔버스만 기록)
     kind: Literal["seq", "branch", "loop", "bypass"] = "seq"
 
 
