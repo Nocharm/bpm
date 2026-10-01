@@ -776,6 +776,10 @@ async def _apply_request(session: AsyncSession, req: ApprovalRequest) -> None:
         await workflow.notify_map_renamed(
             session, req.map_id, old_name=old_name, new_name=to_name, actor=req.decided_by
         )
+        # KB 청크는 이름을 박아 둔다 — 승인 커밋 뒤 게시본 재인덱싱(직접 rename과 대칭, C60)
+        from app.kb import indexing
+
+        indexing.spawn_reindex_after_commit(session, req.map_id)
     elif req.kind == "sp_designation":
         found_map = await session.get(ProcessMap, req.map_id)
         if found_map is None or found_map.deleted_at is not None:

@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import set_committed_value
 
 from app import ref_audit, workflow
+from app.app_settings import commit_system, get_systems
 from app.clock import now as now_kst
 from app.auth import get_current_user
 from app.db import get_session
@@ -810,6 +811,7 @@ async def update_map(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
+    before_text = (found_map.name, found_map.description)
     if payload.name is not None:
         new_name = payload.name.strip()
         if not new_name:
@@ -833,6 +835,12 @@ async def update_map(
         found_map.description = payload.description
     await session.commit()
     await session.refresh(found_map)
+    if (found_map.name, found_map.description) != before_text:
+        # 이름·설명은 KB 청크 첫 줄·meta.map_name에 박혀 있다 — 다음 게시까지 옛 값이 검색되지 않게 (C60)
+        from app.kb import embed_client, indexing
+
+        if embed_client.is_embed_enabled():
+            indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 
@@ -1475,8 +1483,13 @@ async def designate_subprocess(
         found_map.sp_end_condition = payload.end_condition.strip() or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
-    # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31)
-    found_map.description = payload.description or ""
+    # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31).
+    # 생략(None)은 미변경 — 설명 없이 부르는 스크립트·구 클라이언트가 맵 설명을 지우지 않게 (critic:02)
+    description_changed = (
+        payload.description is not None and payload.description != (found_map.description or "")
+    )
+    if payload.description is not None:
+        found_map.description = payload.description
     found_map.sp_input = payload.input or None
     found_map.sp_output = payload.output or None
     found_map.sp_input_forms = payload.input_forms or None
@@ -1507,6 +1520,12 @@ async def designate_subprocess(
         )
     await session.commit()
     await session.refresh(found_map)
+    if description_changed:
+        # 맵 설명은 KB 청크에 박혀 있다 — 직접 설명 수정(update_map)과 같은 재인덱싱 (C60)
+        from app.kb import embed_client, indexing
+
+        if embed_client.is_embed_enabled():
+            indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 
@@ -1553,7 +1572,15 @@ async def update_process_fields(
     found_map = await session.get(ProcessMap, map_id)
     if found_map is None or found_map.deleted_at is not None:
         raise HTTPException(status_code=404, detail=f"map {map_id} not found")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "system" in updates:
+        # 경계에서 카탈로그 커밋 규칙 집행(별칭→정식 표기, 미일치→Other+원문 메모) — FE commitSystem과 동치.
+        # 정규화된 값을 다시 보내도 결과가 같아(Other는 항상 목록에 있다) FE 경로와 겹쳐도 안전하다
+        current_fallback = updates.get("system_fallback", found_map.sp_system_fallback) or ""
+        updates["system"], updates["system_fallback"] = commit_system(
+            updates["system"] or "", await get_systems(session), current_fallback
+        )
+    for field, value in updates.items():
         setattr(found_map, f"sp_{field}", value or None)
     await session.commit()
     await session.refresh(found_map)
@@ -1779,15 +1806,7 @@ async def restore_map(
     from app.kb import embed_client, indexing
 
     if embed_client.is_embed_enabled():
-        published_ids = (
-            await session.scalars(
-                select(MapVersion.id).where(
-                    MapVersion.map_id == map_id, MapVersion.status == workflow.PUBLISHED
-                )
-            )
-        ).all()
-        for version_id in published_ids:
-            indexing.spawn(indexing.index_map_version(version_id))
+        indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 

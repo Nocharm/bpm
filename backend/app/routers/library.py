@@ -104,7 +104,8 @@ async def list_processes(
                 ProcessMap.sp_cost_krw,
                 ProcessMap.sp_cost_usd,
                 ProcessMap.sp_headcount,
-                # 담당자 참고치 2종 — 피커 미리보기용 (design 2026-09-03 §4)
+                # 담당자 참고치 2종(SP_CONTEXT_FIELDS, design 2026-09-03 §4) — 지정 참고치 동봉.
+                # 현재 FE 라이브러리 소비처 없음(LibraryProcess·피크는 SP_PARAM_FIELDS 5종까지만 받는다)
                 ProcessMap.sp_annual_count,
                 ProcessMap.sp_fte,
             )

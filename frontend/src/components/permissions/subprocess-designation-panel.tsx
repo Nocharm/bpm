@@ -48,6 +48,7 @@ import {
   SubprocessDesignationModal,
   type DesignationForm,
 } from "@/components/permissions/subprocess-designation-modal";
+import { SystemSuggestInput } from "@/components/system-suggest-input";
 import { buildPopoverActionLabels } from "@/components/popover-action-bar";
 import { formatKst } from "@/lib/datetime";
 import { formatDurationHm, formatThousands } from "@/lib/duration";
@@ -103,8 +104,10 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
   const [showUndesignate, setShowUndesignate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 타일 편집 팝오버 — 로컬 초안, 확정 시에만 PATCH. Esc면 폐기
-  const [editing, setEditing] = useState<{ key: EditableKey; at: { x: number; y: number }; draft: string } | null>(null);
+  // 타일 편집 팝오버 — 로컬 초안, 확정 시에만 PATCH. Esc면 폐기. note는 시스템 원문 메모 초안(commitSystem이 함께 정함)
+  const [editing, setEditing] = useState<
+    { key: EditableKey; at: { x: number; y: number }; draft: string; note: string } | null
+  >(null);
 
   useEffect(() => {
     let active = true;
@@ -242,7 +245,8 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
             : key === "touch_time"
               ? str(detail.sp_touch_time)
               : str(detail.sp_system);
-  const openEdit = (key: EditableKey) => (at: { x: number; y: number }) => setEditing({ key, at, draft: currentOf(key) });
+  const openEdit = (key: EditableKey) => (at: { x: number; y: number }) =>
+    setEditing({ key, at, draft: currentOf(key), note: str(detail.sp_system_fallback) });
 
   // 타일 명세 — 짧은 값 1칸, 문장·목록은 2칸(wide). 비어도 타일을 남겨 어떤 항목이 빠졌는지 보인다
   interface Tile {
@@ -287,10 +291,15 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
     { key: "description", icon: FileText, label: t("field.description"), value: str(detail.description), wide: true, valueSize: "fine" },
   ];
 
-  const editingDirty = editing !== null && editing.draft !== currentOf(editing.key);
+  const editingDirty =
+    editing !== null &&
+    (editing.draft !== currentOf(editing.key) ||
+      (editing.key === "system" && editing.note !== str(detail.sp_system_fallback)));
   const commitEdit = () => {
-    if (!editing) return;
-    if (editingDirty) void saveFields({ [editing.key]: editing.draft.trim() });
+    if (!editing || !editingDirty) return;
+    // 시스템은 지정 모달과 같은 커밋 규칙(별칭→정식, 자유값→Other+원문 메모) — 값·메모를 한 번에 보낸다
+    if (editing.key === "system") void saveFields({ system: editing.draft, system_fallback: editing.note });
+    else void saveFields({ [editing.key]: editing.draft.trim() });
   };
   const editTitle = (key: EditableKey) =>
     key === "gmp"
@@ -450,7 +459,7 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
         )}
       </div>
 
-      {/* 승격 필드 편집 팝오버 — GMP는 분류 목록, 시간은 ParamInput(H.MM), 나머지는 텍스트 */}
+      {/* 승격 필드 편집 팝오버 — GMP는 분류 목록, 시간은 ParamInput(H.MM), 시스템은 카탈로그 자동완성, 조건은 텍스트 */}
       {editing && (
         <SpFieldPopover
           dataId={`sp-popover-${editing.key}`}
@@ -501,11 +510,23 @@ export function SubprocessDesignationPanel({ mapId, onToast }: SubprocessDesigna
               ariaLabel={editTitle(editing.key)}
               onCommit={(next) => setEditing((prev) => (prev ? { ...prev, draft: next } : prev))}
             />
+          ) : editing.key === "system" ? (
+            <div className="flex flex-col gap-1">
+              <SystemSuggestInput
+                mode="field"
+                autoFocus
+                dataId="sp-input-system"
+                system={editing.draft}
+                systemFallback={editing.note}
+                onCommit={(patch) =>
+                  setEditing((prev) => (prev ? { ...prev, draft: patch.system, note: patch.system_fallback } : prev))
+                }
+              />
+            </div>
           ) : (
             <input
               data-id={`sp-input-${editing.key}`}
               className={INPUT_CLASS}
-              maxLength={editing.key === "system" ? 100 : undefined}
               value={editing.draft}
               onChange={(e) => setEditing((prev) => (prev ? { ...prev, draft: e.target.value } : prev))}
             />

@@ -7,7 +7,8 @@
 import asyncio
 import logging
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
 from app.kb import chunking, embed_client, retrieval
@@ -135,6 +136,39 @@ async def index_map_version(version_id: int) -> None:
             logger.warning("kb index map version %d skipped: %s", version_id, exc)
         except Exception:  # noqa: BLE001
             logger.exception("kb index map version %d failed", version_id)
+
+
+async def reindex_published_map(map_id: int) -> None:
+    """맵의 현재 게시본 재인덱싱 — 이름·설명은 청크 첫 줄과 meta.map_name에 박히므로 게시 밖의 메타 변경
+    (휴지통 복구·이름/설명 수정·승인된 이름 변경)도 다시 굽는다. 게시본은 자체 세션으로 찾는다."""
+    if not embed_client.is_embed_enabled():
+        return
+    try:
+        async with SessionLocal() as session:
+            published_ids = list(await session.scalars(
+                select(MapVersion.id).where(
+                    MapVersion.map_id == map_id, MapVersion.status == "published"
+                )
+            ))
+    except Exception:  # noqa: BLE001 -- 백그라운드 실패는 서비스에 무해해야 한다
+        logger.exception("kb reindex map %d failed to load published versions", map_id)
+        return
+    for version_id in published_ids:
+        await index_map_version(version_id)
+
+
+def spawn_reindex_after_commit(session: AsyncSession, map_id: int) -> None:
+    """호출부 트랜잭션 커밋 직후 재인덱싱을 띄운다 — 커밋 전에 띄우면 백그라운드 세션이 옛 이름을 읽는다.
+    적용 함수가 커밋을 소유하지 않는 경로(승인 적용기)용. 요청 단위 세션이라 적용이 409로 롤백되면
+    그 세션은 다시 커밋하지 않아 훅도 발화하지 않는다."""
+    if not embed_client.is_embed_enabled():
+        return
+    event.listen(
+        session.sync_session,
+        "after_commit",
+        lambda _sync_session: spawn(reindex_published_map(map_id)),
+        once=True,
+    )
 
 
 async def index_attachment(attachment_id: int) -> None:

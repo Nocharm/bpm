@@ -31,6 +31,11 @@ VIEWER = "sp.viewer"
 STRANGER = "sp.stranger"
 APPROVER = "sp.approver"
 
+# 라이브러리 행 회당 파라미터 7종 — FE `PARAM_FIELDS`(lib/params.ts)와 같은 키 집합
+SP_PARAM_KEYS = ("duration", "touch_time", "cost_krw", "cost_usd", "headcount", "annual_count", "fte")
+# 미지정 행 잔존값 — 마스킹이 없으면 그대로 새어 나올 유효한 값들(키 순서 대응)
+STALE_PARAM_VALUES = ("1.30", "0.30", "1000", "10", "2", "12", "0.5")
+
 
 @pytest.fixture
 def enforce(client: TestClient) -> Iterator[None]:
@@ -65,10 +70,12 @@ def seed_sp_map(
     visibility: str = "public",
     published: bool = True,
     stale_department: str | None = None,
+    stale_params: dict[str, str] | None = None,
 ) -> int:
     """owner/editor/viewer 그랜트 + (옵션) 게시 버전이 있는 맵 시드. map_id 반환.
 
-    stale_department: 미지정 맵에 남은 직전 지정 잔존값 재현용(마스킹 검증).
+    stale_department·stale_params(sp_ 접두 없는 파라미터 키→값): 미지정 맵에 남은 직전 지정
+    잔존값 재현용(마스킹 검증).
     """
 
     async def _factory(session):
@@ -83,6 +90,9 @@ def seed_sp_map(
             m.sp_department = "Design Dept"
         elif stale_department is not None:
             m.sp_department = stale_department
+        if not designated:
+            for key, value in (stale_params or {}).items():
+                setattr(m, f"sp_{key}", value)
         session.add(m)
         await session.flush()
         if published:
@@ -176,7 +186,9 @@ class TestLibraryUndesignated:
 
     def test_flag_includes_visible_undesignated_with_masked_attrs(self, client, enforce):
         undesignated_id = seed_sp_map(
-            "Lib Undesignated B", stale_department="Stale Dept"
+            "Lib Undesignated B",
+            stale_department="Stale Dept",
+            stale_params=dict(zip(SP_PARAM_KEYS, STALE_PARAM_VALUES)),
         )
         act_as(VIEWER)
         rows = _rows_by_id(
@@ -189,11 +201,8 @@ class TestLibraryUndesignated:
         assert row["assignee"] is None
         assert row["system"] is None
         assert row["duration"] is None
-        # SP 파라미터 4종(피커 미리보기 목업 소스)도 동일 마스킹 (2026-08-30)
-        assert row["touch_time"] is None
-        assert row["cost_krw"] is None
-        assert row["cost_usd"] is None
-        assert row["headcount"] is None
+        # 회당 파라미터 7종 전부 동일 마스킹 — 잔존값을 실제로 심어 확인 (2026-08-30, C61)
+        assert {key: row[key] for key in SP_PARAM_KEYS} == dict.fromkeys(SP_PARAM_KEYS)
 
     def test_flag_hides_private_undesignated_from_stranger(self, client, enforce):
         private_id = seed_sp_map("Lib Private Undesignated", visibility="private")
