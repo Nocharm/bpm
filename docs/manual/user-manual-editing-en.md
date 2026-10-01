@@ -37,9 +37,9 @@ Right-click the canvas and choose a shape, or use **Add node** in the inspector.
 | --- | --- | --- |
 | **Start** | pill | The single entry point (only one start node is allowed) |
 | **Process** | rectangle | A regular step or task |
-| **Decision** | diamond | A branching question (the only node allowed multiple outputs) |
+| **Decision** | diamond | A branching question (only one path is followed; exempt from the one-connection-per-exit rule) |
 | **End** | pill | An exit point (exactly one **primary end** per process) |
-| **Subprocess** | framed box | A step that references another map (see section 5) |
+| **Subprocess** | framed box | A step that references another map, with one exit per end of the linked map (see section 5) |
 
 Renaming a Start or End node shows a **Start / End type pill** next to the title on the node, so the type stays visible. Start/End descriptions (notes) never render on the canvas; they show only in the inspector and the node edit dialog.
 
@@ -68,11 +68,11 @@ Select a node and edit in the right inspector:
 - When all branches run **at the same time**, right-click the node and turn on **Parallel exit**. A parallel exit needs **two or more** connections, and extra branches are added without the insert prompt. Hovering the node shows a **N in parallel** badge.
 - Connections show a flow pulse. Parallel branches carry a faint dot that crosses **every branch in step** to the end; decision branches show a dot that pauses at the exit, then moves a short way down **one branch at a time**, taking turns (hidden when the OS reduce-motion setting is on).
 - **Subprocess nodes**: incoming connections can land on any of the four sides, and the incoming handles appear only while you drag a connection in (you cannot start a connection from the left, top, or bottom). Outgoing connections start from **one exit point on the right**; when the linked map has several ends, dropping the line asks **which end continues here**. Each end takes one connection, and per-end parallel is set by ticking end names in the right-click **Parallel exit** submenu.
-- A subprocess with two or more ends shows an **exits used/ends** badge after its title (for example `2/3`). If an end gets too many connections the same badge turns into a red **+N**, and hovering shows the usage (for example `4/3`).
+- A subprocess with two or more ends shows an **exits used/ends** badge after its title (for example `2/3`). If an end gets too many connections the same badge turns into a red **+N**, and hovering shows the usage (for example `4/3`). On such a subprocess, an unlabeled exit connector shows the **end name as a dashed pill** (it is not a saved label; a label you add yourself replaces it).
 - Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`. Labels take line breaks the same way: `Enter` commits, **`Shift+Enter` / `Alt+Enter`** breaks the line.
 - **Line style is per edge**: Curved, Stepped, or Straight. Select an edge and pick it in the inspector's **Line style** row, or from the edge's right-click menu. The choice is saved with the map, so everyone sees the same shape.
 - To change them all at once, use the inspector's **Map tab → Edge style**: a confirm dialog summarizes how many connections will change, and the style you confirm also becomes the default for newly drawn connections.
-- Dragging a node close to another reveals **drop zones** (**Before** / **After** / **Swap** / **Group**) to insert it into the flow in one motion, or swap the two nodes' places.
+- Dragging a node close to another reveals **drop zones** (**Before** / **After** / **Swap** / **Group**) to insert it into the flow in one motion, or swap the two nodes' places. When both nodes have outputs and one has two or more, a **Swap outputs** window lets you pair which outputs trade places (unpaired outputs stay on their node, and nothing happens until you confirm).
 - Dropping an edge onto a node that already has connections asks whether to **Insert between** or **Keep** the existing link; dropping onto a **Decision** node offers **Branch** (a new outgoing edge) or **Intercept** (splice into an existing outgoing edge; a picker follows when there are several).
 
 ### Copying and duplicating nodes
@@ -105,7 +105,7 @@ Write duration as **hours and minutes**. The fractional part is **minutes, not a
 
 - `2` → 2 hours, `0.30` → 30 minutes, `1.30` → 1 hour 30 minutes.
 - Minutes past 60 carry into hours (`0.90` → 1 hour 30 minutes).
-- While editing, it appears as you typed it (`1.30`); everywhere else it shows as `1h30m`.
+- While editing, it appears as you typed it (`1.30`); everywhere else it shows as `1h30m` (CSV and Excel exports keep the typed form `1.30`, fraction = minutes).
 
 ### One currency only
 
@@ -215,16 +215,16 @@ You can fill a map by pasting in a process that's already organized as a table o
 ### CSV import
 
 - Open it with **Import CSV** in the top bar. Use **Download template** to get a blank form, fill it, and upload.
-- The CSV uses **22 columns**: `name` (required), `description`, `assignee`, `role`, `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `input_flags` (per-item required/optional flags), `output`, `start_condition`, `end_condition`, `url`, `url_label`, `parallel` (`Y` makes a row with two or more `next` targets a parallel exit instead of a decision; blank keeps the current setting), `next` (the successor to connect to). A column outside this list, such as the `data_form` column in older files, is rejected with an "Unknown column" error, so remove it before uploading (data forms are per item and not part of the CSV). Older files with fewer columns still import (columns match by name, case-insensitively). Data rows are capped at **500**. Put multiple `input`/`output` items on separate lines inside the cell.
-- Import **merges by name**. An existing node with the same title keeps its color, comments, and group, updating only its values, and **blank cells keep the existing value**. New titles not already in the map are added as nodes.
-- **Assignee** written as a name is matched against the org directory. **Role (`role`)** becomes the canonical spelling when it is an alias in the role list and is stored as typed otherwise. **System (`system`)** is checked against the system list: aliases become the canonical spelling, and a value not in the list is stored as **Other + source note** (if a different note already exists, the existing note is kept and a warning is raised). **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run metrics plus input/output/conditions/data form) are ignored even if supplied in the CSV. Per-item data forms are app-only. The CSV has no column for them, and an import keeps the existing ones as long as the item lines are unchanged.
+- The CSV uses **25 columns**: `name` (required), `description`, `assignee`, `role`, `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `input_flags` (per-item required/optional flags), `input_forms` (per-item data forms of the inputs), `output`, `output_forms` (per-item data forms of the outputs), `start_condition`, `end_condition`, `gmp` (`direct` / `indirect` / `non_gmp`), `url`, `url_label`, `parallel` (`Y` makes a row with two or more `next` targets a parallel exit instead of a decision; blank keeps the current setting), `next` (the successor to connect to). A column outside this list, such as the `data_form` column in older files, is rejected with an "Unknown column" error, so remove it before uploading (data forms go per item in the `input_forms`/`output_forms` columns). Older files with fewer columns still import (columns match by name, case-insensitively). Data rows are capped at **500**. Put multiple `input`/`output` items on separate lines inside the cell.
+- Import **merges by name**. An existing node with the same title keeps its color, comments, and group, updating only its values, and **blank cells keep the existing value**. New titles not already in the map are added as nodes. Connections that stay keep their exit (the end, on subprocesses), incoming side, and line style, and connections the CSV drops are listed in the preview.
+- **Assignee** written as a name is matched against the org directory. **Role (`role`)** becomes the canonical spelling when it is an alias in the role list and is stored as typed otherwise. **System (`system`)** is checked against the system list: aliases become the canonical spelling, and a value not in the list is stored as **Other + source note** (if a different note already exists, the existing note is kept and a warning is raised). **Cost is one currency only** (KRW or USD), and **duration follows the h.mm rule** (section 3). Fields a subprocess node inherits (the five per-run metrics plus input/output/conditions/data form/GMP) are ignored with a warning even if supplied in the CSV. Per-item data forms (`input_forms`/`output_forms`) pair line by line with the item lines, and when left blank the existing ones are kept as long as the item lines are unchanged. `gmp` is stored as a value only; unlike picking a class in the editor, it does not change the node color.
 - Review the **Added / Matched / Removed** summary and warnings in the preview tab before applying.
 
-> **Make a CSV with an external AI:** In the import window, **Ask another AI** copies a prompt you can paste, along with your document, into an external AI (ChatGPT, etc.); paste the CSV it returns back here.
+> **Make a CSV with an external AI:** In the import window, **Ask another AI** copies a prompt you can paste, along with your document, into an external AI (ChatGPT, etc.); paste the CSV it returns back here. The prompt asks the AI to leave the assignee (`assignee`) column blank and fill the role (`role`).
 
 ### Create a new map from CSV
 
-On the map list (home), pick **Create from CSV** from the dropdown next to **New map** to drop in a CSV and create a new map straight away (see the map list in the Getting Around manual).
+On the map list (home), pick **Create from CSV** from the dropdown next to **New map** to drop in a CSV and create a new map straight away (see the map list in the Getting Around manual). Attributes the table does not carry (node color, groups, width, subprocess links, IO links, connector sides and line style) start at their defaults, rows that were subprocesses become process or decision nodes, and their connections leave from the main exit.
 
 ### AI proposal merge
 
@@ -234,15 +234,15 @@ Flowchart proposals from the AI assistant merge the same way, **by name**, prese
 
 ## 9. Export (PNG · Excel · CSV)
 
-Save the current map to a file from the export button in the right inspector (or the right-click menu).
+Save the current map to a file from the export button in the right inspector (or the right-click menu). Excel and CSV let you pick the columns to include with **column** checkboxes before downloading. All columns start selected, columns you untick are remembered in this browser, and the `Name` column (plus `No` in Excel) is always included.
 
 | Format | Contents |
 | --- | --- |
 | **PNG** | The current canvas as a 2× resolution image (every connector renders as a solid black line). Drawn on the canvas background (dot grid) with a **map info card** at the bottom (map name, owning department, owner, version, published date, framework path). Screen state such as the selection ring, I/O details, and flow highlight is left out of the capture (the selection is restored afterwards). `Ctrl+Shift+E`. |
-| **Excel** | **Choose one of two formats**: ① **Process Map** (structured): a node table (assignee, department, system, per-run metrics) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
-| **CSV** | The same 22-column table as import (Role and Parallel columns included; parallel exits export Parallel=Y). You can round-trip by editing an exported CSV and importing it again. On nodes whose system is **Other**, the System cell carries the source note, so re-importing brings back the same Other + note. |
+| **Excel** | **Choose one of two formats**: ① **Process Map** (structured): a node table (assignee, role, department, system, per-run metrics, inputs, outputs, start/end conditions, GMP, parallel exit) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns (same column set). A format picker opens on export, with **column** selection below it. Costs are saved in per-currency columns with number formatting, and duration and touch time are `h.mm` numbers (fraction = minutes), so do not sum them as decimals. Input and output cells list one `item [optional] · data form` per line. An unlabeled connection leaving a subprocess shows the end name in the label spot, as on the canvas. |
+| **CSV** | The same 25-column table as import (Role, GMP, per-item data form, and Parallel columns included; parallel exits export Parallel=Y), limited to **the columns you pick**. You can round-trip by editing an exported CSV and importing it again, and columns you left out are not in the file, so re-importing keeps their existing values. On nodes whose system is **Other**, the System cell carries the source note, so re-importing brings back the same Other + note. |
 
-> CSV export warns about, and skips, structure a table can't represent: end nodes other than the primary end, edges into an End node, duplicate node titles, and titles or labels containing `;` / `:`. Excel is cut at a 2,000-row cap and marked as truncated.
+> CSV export warns about, and skips, structure a table can't represent: end nodes other than the primary end, edges into an End node, duplicate node titles, and titles or labels containing `;` / `:`. It also warns where a re-import will differ: a decision with fewer than two branches is inferred as a process node, Start connections that differ from the computed roots are recomputed, and connections leaving a **subprocess end other than the primary end** keep their end when re-imported into the same map but merge into the primary end when you create a new map from the CSV. **Per-end parallel** settings on subprocesses are not carried by the CSV (the Parallel column covers the main exit only; re-importing into the same map keeps the existing setting). Node color, groups, width, subprocess links, IO links, and connector sides and line style are kept only when re-importing into the same map by title. Excel is cut at a 2,000-row cap and marked as truncated.
 
 ---
 
@@ -250,8 +250,8 @@ Save the current map to a file from the export button in the right inspector (or
 
 Open the **AI assistant** from the editor top bar (it appears only when AI is enabled on the server).
 
-- **Generate** a flowchart from a plain-language description: nodes, edges, groups, and BPM attributes (role, department, system, per-run metrics) are filled in. **The AI never assigns real people**. Person-related values are filled as a **Role** only (the admin-managed role list's spelling takes precedence, role names outside the list are allowed), and you pick assignees yourself in the editor's assignee picker. Systems are matched to the system list's canonical spelling; values not in the list land as Other + source note.
-- **Edit incrementally**: ask for changes and the existing layout, colors, assignees, and groups are preserved (asking for a real name, such as "set the assignee to Jane Doe", only returns a pointer to the picker). Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions, inputs/outputs, start/end conditions, and links (URL). Review the preview, then **Add to map (Apply)** or Discard.
+- **Generate** a flowchart from a plain-language description: nodes, edges, groups, and BPM attributes (role, department, system, per-run metrics) are filled in. **The AI never assigns real people, and real names are never sent to it**. Person-related values are filled as a **Role** only (the admin-managed role list's spelling takes precedence, role names outside the list are allowed), and you pick assignees yourself in the editor's assignee picker. Systems are matched to the system list's canonical spelling; values not in the list land as Other + source note.
+- **Edit incrementally**: ask for changes and the existing layout, colors, assignees, and groups are preserved (asking for a real name, such as "set the assignee to Jane Doe", only returns a pointer to the picker). Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions, role, department, system, per-run metrics (annual count and FTE only on subprocesses), inputs/outputs, start/end conditions, color, links (URL), and parallel exits. Review the preview, then **Add to map (Apply)** or Discard.
 - You can also ask for **parallel work** ("after A, do B and C at the same time"). The AI turns on the **Parallel exit** of the node the branches leave from and connects them. Per-end parallel on subprocesses is set only from the editor's right-click menu.
 - **Analyze** ("Find issues"), **summarize**, **walk through** the flow step by step (prev / next / autoplay), and **suggest improvements**. Analysis names nodes that break the one-connection-per-exit rule, with the reason.
 - Ask **how-to questions**: answers are grounded in this manual; anything outside the manual it reports it doesn't know.
@@ -339,4 +339,4 @@ Every leaf category (L5) of the business **Framework** can open a **linkage canv
 
 ---
 
-*Business Process Map · Editing Maps · Updated 2026-09-24*
+*Business Process Map · Editing Maps · Updated 2026-10-02*
