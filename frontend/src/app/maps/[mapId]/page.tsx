@@ -6644,7 +6644,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       };
       const parallelEnds = parallelTarget?.data.nodeType === "subprocess" ? (parallelTarget.data.subEnds ?? []) : [];
       const parallelItems: ContextMenuItem[] =
-        readOnly || !parallelTarget || menuNodeType === "decision" || menuNodeType === "end"
+        // start는 항상 병렬(출력 규칙 lib/output-rules.ts)이라 토글이 없다 — decision·end와 함께 숨김
+        readOnly || !parallelTarget || menuNodeType === "decision" || menuNodeType === "end" || menuNodeType === "start"
           ? []
           : parallelEnds.length >= 2
             ? [

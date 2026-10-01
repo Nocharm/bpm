@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-02 — 데이터 입출력 계약 최신화 (feat/io-contract-refresh, 진행 중)
+
+- 전수 감사(10표면 93건 → 62건 반박 검증, 출력 규칙 머지 후 재검증 52건 + 병렬 출구 신규 43건) 결과를 클러스터별로 반영 중.
+- **Start 기본 병렬**(사용자 결정): start는 출력 규칙 밖(연결 1개 이상 허용, 팬아웃은 병렬로 읽고 펄스·배지), 우클릭 병렬 토글은 숨김 — CSV 루트 여러 개가 만든 Start 팬아웃이 저장을 막던 문제 해소. FE `output-rules.ts` ↔ BE `find_output_rule_violations` 동치, AI 연결 규칙 문구 갱신. 체크리스트·확정 게이트 라벨은 "갈래는 판단 노드나 병렬 출구로"(en "Splits use a decision or a parallel exit").
+
 ## 2026-10-01 — 출력 규칙 통일: 출구당 1개·병렬 출구·SP 출구 한 점 (feat/output-rules → dev)
 
 - **규칙**(사용자 결정, 일반 맵·L5 캔버스 공통): 출구(일반 노드 `__primary__`, SP는 끝 키)마다 엣지 1개, 병렬 출구는 2개 이상, decision은 예외. 단일 소스 `lib/output-rules.ts` ↔ BE `find_output_rule_violations`(확정 게이트 6, 끝마다 정상 연결된 다중 끝 SP가 막히던 것 해소). 삽입 재연결의 일시 초과는 허용하고 저장 체크리스트(수동 저장·승인 시작)가 막는다 — 종전엔 SP를 통째로 면제해 대표 끝 2엣지가 새어 나갔다.

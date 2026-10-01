@@ -1,5 +1,7 @@
 // 노드 출력 규칙 — 일반 맵·L5 연계 캔버스 공통, 저장 체크리스트·SP 끝 개수 배지가 같은 판정을 쓴다.
 // 출구(출력 그룹)마다 엣지 1개, 병렬 출구는 2개 이상. 분기(decision)는 다중 출력이 정상이라 규칙 밖.
+// 시작(start)은 기본 병렬이고 연결 수(1개 이상)를 따지지 않는다 — 여러 활동을 동시에 시작하는 것이 정상이고
+// (BPMN 시작 이벤트의 다중 흐름 = 동시 진행), CSV의 루트 여러 개도 Start 팬아웃으로 들어온다(사용자 결정 2026-10-02).
 // 백엔드 확정 게이트 6(`backend/app/subprocess.py` plain_fanout)과 동치 — 한쪽을 고치면 양쪽+테스트를 같이 옮긴다.
 // 계획: docs/superpowers/plans/2026-10-01-output-rules.md
 
@@ -38,7 +40,7 @@ export function getOutputKey(nodeType: string, sourceHandle: string | null | und
   return nodeType === "subprocess" ? endKeyOfEdge({ sourceHandle }) : PRIMARY_END_HANDLE;
 }
 
-/** 한 노드의 출구별 엣지 수와 병렬 여부. 병렬 = 속성에 켜짐 ∪ (엣지 ≥2이고 전부 gateway="parallel"). */
+/** 한 노드의 출구별 엣지 수와 병렬 여부. 병렬 = 시작 노드 ∪ 속성에 켜짐 ∪ (엣지 ≥2이고 전부 gateway="parallel"). */
 export function getOutputGroups(node: OutputRuleNode, edges: readonly OutputRuleEdge[]): OutputGroup[] {
   const groups = new Map<string, { count: number; allParallel: boolean }>();
   for (const edge of edges) {
@@ -50,21 +52,25 @@ export function getOutputGroups(node: OutputRuleNode, edges: readonly OutputRule
     groups.set(key, group);
   }
   const flagged = new Set(node.parallelOutputs ?? []);
+  const isStart = node.nodeType === "start";
   return [...groups].map(([key, group]) => ({
     key,
     count: group.count,
-    parallel: flagged.has(key) || (group.count >= 2 && group.allParallel),
+    parallel: isStart || flagged.has(key) || (group.count >= 2 && group.allParallel),
   }));
 }
 
-/** 출력 규칙 위반 노드 — 비병렬 출구에 엣지 2개 이상, 또는 병렬 출구에 엣지 1개. 출력 0개 출구는 미연결일 뿐 위반 아님. */
+/**
+ * 출력 규칙 위반 노드 — 비병렬 출구에 엣지 2개 이상, 또는 병렬 출구에 엣지 1개. 출력 0개 출구는 미연결일 뿐 위반 아님.
+ * decision(다중 출력이 정상)과 start(기본 병렬, 연결 1개도 허용)는 판정하지 않는다.
+ */
 export function getOutputViolations(
   nodes: readonly OutputRuleNode[],
   edges: readonly OutputRuleEdge[],
 ): OutputViolation[] {
   const violations: OutputViolation[] = [];
   for (const node of nodes) {
-    if (node.nodeType === "decision") continue;
+    if (node.nodeType === "decision" || node.nodeType === "start") continue;
     let excess = 0;
     let shortParallel = 0;
     for (const group of getOutputGroups(node, edges)) {

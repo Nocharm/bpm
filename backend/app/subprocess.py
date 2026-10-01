@@ -470,8 +470,9 @@ def get_output_key(node_type: str, source_handle: str | None) -> str:
 
 
 def find_output_rule_violations(nodes: list[Node], edges: list[Edge]) -> list[str]:
-    """출력 규칙 위반 노드 id — 비병렬 출구에 엣지 ≥2, 또는 병렬 출구에 엣지 1개. decision은 규칙 밖.
+    """출력 규칙 위반 노드 id — 비병렬 출구에 엣지 ≥2, 또는 병렬 출구에 엣지 1개.
 
+    decision(다중 출력이 정상)과 start(기본 병렬, 연결 1개도 허용 — 사용자 결정 2026-10-02)는 규칙 밖.
     병렬 출구 = 노드 `parallel_outputs`에 켜짐 ∪ (엣지 ≥2이고 전부 gateway="parallel", 레거시 임포트 도출).
     FE `getOutputViolations`(lib/output-rules.ts)와 동치 — 한쪽을 고치면 양쪽+테스트를 같이 옮긴다.
     """
@@ -479,7 +480,7 @@ def find_output_rule_violations(nodes: list[Node], edges: list[Edge]) -> list[st
     groups: dict[tuple[str, str], list[Edge]] = {}
     for e in edges:
         node = node_by_id.get(e.source_node_id)
-        if node is None or node.node_type == "decision":
+        if node is None or node.node_type in ("decision", "start"):
             continue
         key = get_output_key(node.node_type, e.source_handle)
         groups.setdefault((node.id, key), []).append(e)

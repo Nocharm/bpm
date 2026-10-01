@@ -36,6 +36,15 @@ describe("getOutputViolations", () => {
     expect(violations).toEqual([{ nodeId: "S", excess: 1, shortParallel: 0 }]);
   });
 
+  it("treats the start node as parallel by default and accepts one or more connections", () => {
+    const start = node("S0", "start");
+    expect(getOutputViolations([start], [{ source: "S0" }])).toEqual([]);
+    expect(getOutputViolations([start], [{ source: "S0" }, { source: "S0" }, { source: "S0" }])).toEqual([]);
+    expect(getOutputGroups(start, [{ source: "S0" }, { source: "S0" }])).toEqual([
+      { key: "__primary__", count: 2, parallel: true },
+    ]);
+  });
+
   it("exempts decision nodes", () => {
     expect(getOutputViolations([node("D", "decision")], [{ source: "D" }, { source: "D" }])).toEqual([]);
   });

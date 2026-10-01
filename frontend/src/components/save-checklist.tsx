@@ -17,7 +17,7 @@ export interface SaveCheckItem {
   onLocate?: () => void;
 }
 
-// 출력 규칙 위반 노드 id — 출구마다 1개·병렬 출구 2개 이상(`lib/output-rules.ts`, 분기는 규칙 밖).
+// 출력 규칙 위반 노드 id — 출구마다 1개·병렬 출구 2개 이상(`lib/output-rules.ts`, 분기·시작은 규칙 밖).
 export function getMultiOutputNodeIds(
   nodes: readonly OutputRuleNode[],
   edges: readonly OutputRuleEdge[],

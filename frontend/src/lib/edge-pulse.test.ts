@@ -20,6 +20,15 @@ describe("assignEdgePulses", () => {
     expect(pulses.get("e2")).toEqual({ kind: "parallel" });
   });
 
+  it("pulses a start fan-out as parallel without a flag", () => {
+    const pulses = assignEdgePulses(
+      [node("S0", "start")],
+      [{ id: "s1", source: "S0" }, { id: "s2", source: "S0" }],
+    );
+    expect(pulses.get("s1")).toEqual({ kind: "parallel" });
+    expect(pulses.get("s2")).toEqual({ kind: "parallel" });
+  });
+
   it("numbers decision branches in order and skips hidden edges", () => {
     const pulses = assignEdgePulses(
       [node("D", "decision")],

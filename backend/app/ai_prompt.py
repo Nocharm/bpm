@@ -21,9 +21,10 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
-- 연결 규칙: start·process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
+- 연결 규칙: process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
   모두 동시에 진행하는 갈래만 예외로, 갈래가 **출발하는** 노드의 attributes.parallel=true로 두고 그 노드에서 연결을 2개 이상 그립니다.
-  갈래의 도착 노드에는 parallel을 쓰지 마세요. decision 노드에도 쓰지 마세요. 출발 노드가 기존 노드면 ops의 set_attr로 parallel=true를 넣고,
+  start 노드는 원래 병렬이라 여러 활동을 동시에 시작하는 연결을 parallel 없이 바로 그려도 됩니다(택일 시작이면 start 뒤에 decision).
+  갈래의 도착 노드에는 parallel을 쓰지 마세요. start·decision 노드에도 쓰지 마세요. 출발 노드가 기존 노드면 ops의 set_attr로 parallel=true를 넣고,
   그 노드에 이미 있던 다음 연결이 동시 갈래가 아니면 disconnect하세요.
 예) "회계 등록 다음에 A와 B를 동시에" → add(A) + add(B) + set_attr(회계 등록 id, {"parallel":true}) + connect(회계 등록→A) + connect(회계 등록→B).
 
