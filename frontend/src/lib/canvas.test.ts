@@ -510,6 +510,27 @@ describe("styleEdgeLabelPill", () => {
   });
 });
 
+describe("styleEdgeLabelPill (미러 라벨 변형)", () => {
+  const mirrored = () =>
+    styleEdgeLabelPill({ id: "e1", source: "S", target: "b", label: "반려", data: { labelMirrored: true } } as Edge);
+  it("미러 라벨은 점선 테두리·옅은 글자·대체 배경으로 직접 라벨과 구분", () => {
+    const out = mirrored();
+    expect(out.labelStyle).toMatchObject({ fill: "var(--color-ink-tertiary)", fontWeight: 400 });
+    expect(out.labelBgStyle).toMatchObject({
+      fill: "var(--color-surface-alt)",
+      stroke: "var(--color-hairline)",
+      strokeDasharray: "3 2",
+    });
+    // 미러 제목이 Yes/No와 같아도 분기색을 입히지 않는다(분기가 아니라 끝 제목)
+    const yesLike = styleEdgeLabelPill({ id: "e2", source: "S", target: "b", label: "Yes", data: { labelMirrored: true } } as Edge);
+    expect(yesLike.style?.stroke).toBeUndefined();
+  });
+  it("강조 중에도 점선은 유지된다", () => {
+    const out = highlightEdgeLabel(mirrored(), "in");
+    expect(out.labelBgStyle).toMatchObject({ stroke: "var(--color-edge-in)", strokeDasharray: "3 2" });
+  });
+});
+
 describe("highlightEdgeLabel", () => {
   const labeled = () =>
     styleEdgeLabelPill({ id: "e1", source: "a", target: "b", label: "custom" } as Edge);

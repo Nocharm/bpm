@@ -626,6 +626,19 @@ export function branchKindOf(label: unknown): BranchKind {
 const EDGE_LABEL_STYLE = { fill: "var(--color-ink)", fontWeight: 600, fontSize: 11 };
 const EDGE_LABEL_BG_STYLE = { fill: "var(--color-surface)", stroke: "var(--color-hairline)" };
 const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
+// 미러 라벨(하위프로세스 끝 제목, 저장 안 됨) — 옅은 글자·대체 배경·점선 테두리로 직접 라벨과 구분.
+// strokeDasharray는 HTML 라벨(multiline-edge)이 border-style dashed로 번역한다.
+const EDGE_LABEL_MIRROR_STYLE = { fill: "var(--color-ink-tertiary)", fontWeight: 400, fontSize: 11 };
+const EDGE_LABEL_MIRROR_DASH = "3 2";
+const EDGE_LABEL_MIRROR_BG_STYLE = {
+  fill: "var(--color-surface-alt)",
+  stroke: "var(--color-hairline)",
+  strokeDasharray: EDGE_LABEL_MIRROR_DASH,
+};
+
+export function isMirroredEdgeLabel(edge: Edge): boolean {
+  return edge.data?.labelMirrored === true;
+}
 
 /**
  * 라벨 있는 엣지에 디자인 알약 스타일 적용 — 메인 엣지·인라인 펼침 자식 엣지 공용.
@@ -634,6 +647,16 @@ const EDGE_LABEL_BG_PADDING: [number, number] = [6, 3];
 export function styleEdgeLabelPill(edge: Edge): Edge {
   if (!edge.label) {
     return edge;
+  }
+  if (isMirroredEdgeLabel(edge)) {
+    // 끝 제목이 Yes/No와 같아도 분기색은 입히지 않는다 — 분기가 아니라 미러
+    return {
+      ...edge,
+      labelStyle: EDGE_LABEL_MIRROR_STYLE,
+      labelBgStyle: EDGE_LABEL_MIRROR_BG_STYLE,
+      labelBgPadding: EDGE_LABEL_BG_PADDING,
+      labelBgBorderRadius: 6,
+    };
   }
   const branch = branchKindOf(edge.label);
   const branchColor =
@@ -678,12 +701,15 @@ export function highlightEdgeLabel(edge: Edge, kind: EdgeLabelHighlight): Edge {
     return edge;
   }
   const color = EDGE_LABEL_HIGHLIGHT_COLOR[kind];
+  const mirrored = isMirroredEdgeLabel(edge);
   return {
     ...edge,
-    labelStyle: { ...EDGE_LABEL_STYLE, fill: color },
+    labelStyle: { ...(mirrored ? EDGE_LABEL_MIRROR_STYLE : EDGE_LABEL_STYLE), fill: color },
     labelBgStyle: {
       fill: `color-mix(in srgb, ${color} 12%, white)`,
       stroke: color,
+      // 미러 라벨은 강조 중에도 점선 유지
+      ...(mirrored ? { strokeDasharray: EDGE_LABEL_MIRROR_DASH } : {}),
       ...(kind === "selected"
         ? { boxShadow: `0 0 0 2px color-mix(in srgb, ${color} 22%, transparent)` }
         : {}),

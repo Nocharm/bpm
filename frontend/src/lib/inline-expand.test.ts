@@ -57,6 +57,34 @@ describe("buildGatewayEdges", () => {
     expect(entry?.targetHandle).toBe("t-left");
   });
 
+  it("exit gateways match each end to the host edge leaving that end key; unconnected ends get none", () => {
+    const multi = [
+      mkChild("c-start", "start", "host"),
+      { ...mkChild("c-ok", "end", "host"), data: { ...mkChild("c-ok", "end", "host").data, label: "승인", isPrimaryEnd: true } },
+      { ...mkChild("c-reject", "end", "host"), data: { ...mkChild("c-reject", "end", "host").data, label: "반려" } },
+      { ...mkChild("c-hold", "end", "host"), data: { ...mkChild("c-hold", "end", "host").data, label: "보류" } },
+    ];
+    const edges: Edge[] = [
+      { id: "e1", source: "c-start", target: "c-ok" },
+      { id: "p", source: "host", target: "succ", sourceHandle: "__primary__" },
+      { id: "r", source: "host", target: "retry", sourceHandle: "반려", targetHandle: "in:top" },
+    ];
+    const exits = buildGatewayEdges(expanded, multi, edges).filter((g) => g.source !== "host");
+    expect(exits.map((g) => [g.source, g.target, g.sourceHandle, g.targetHandle])).toEqual([
+      ["c-ok", "succ", "s-right", "t-left"],
+      ["c-reject", "retry", "s-right", "in:top"], // 타깃 핸들은 실제 엣지에서 상속
+    ]);
+  });
+
+  it("a legacy host edge without a stored handle counts as the primary end", () => {
+    const multi = [
+      { ...mkChild("c-ok", "end", "host"), data: { ...mkChild("c-ok", "end", "host").data, isPrimaryEnd: true } },
+      { ...mkChild("c-reject", "end", "host"), data: { ...mkChild("c-reject", "end", "host").data, label: "반려" } },
+    ];
+    const exits = buildGatewayEdges(expanded, multi, [{ id: "e3", source: "host", target: "succ" }]).filter((g) => g.source !== "host");
+    expect(exits.map((g) => [g.source, g.target])).toEqual([["c-ok", "succ"]]);
+  });
+
   describe("buildStepFlowEdges", () => {
     // 루트 스코프 엣지 = host→succ(펼치면 가려짐), 자식 스코프 내부 엣지 = e1·e2.
     const rootEdges: Edge[] = [{ id: "e3", source: "host", target: "succ" }];

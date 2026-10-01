@@ -313,6 +313,7 @@ import {
   checkExpansionLimits,
 } from "@/lib/inline-expand";
 import {
+  applyMirroredEndLabels,
   buildCompositeTree,
   deriveSubEnds,
   isSubprocessEndHandle,
@@ -386,8 +387,6 @@ const REGION_GAP = 48; // A↔영역, 영역↔우측 노드 간격
 const REGION_MARGIN = 48; // 영역 세로 레인이 콘텐츠 위아래로 더 뻗는 여백
 const REGION_CROSSING_OPACITY = 0.35; // 영역을 가로지르는 엣지 반투명
 const INACTIVE_SCOPE_OPACITY = 0.4; // 포커스 모드 — 비활성(인라인 자식) 스코프 노드/엣지 dim. 활성 스코프만 또렷·편집
-// 접힘 SP 다중 끝 표시 엣지 id 접두 — 파생(비영속) 엣지 판별용(게이트웨이 gw:와 동급, 인스펙터 안내)
-const SP_ENDS_EDGE_PREFIX = "sp-ends:";
 const ZONE_RADIUS_PAD = 32; // 링 반경 = max(노드 변) + 이 값 — 부채꼴 배치 반경(오버레이 렌더·hit-test 공용)
 const ZONE_TILE_H = 58; // 링을 시야로 끌어오는 패닝 여유(ensureRingVisible) 계산용
 const AI_WINDOW_KEY = "ai"; // windowGeom 맵에서 AI 플로팅 창 기하 키 (스코프 키와 충돌 없음)
@@ -3758,9 +3757,9 @@ function MapEditor({ mapId }: { mapId: number }) {
   // ── 편집 조작 (모두 히스토리 + 자동 저장 대상) ─────────
 
   // 하위프로세스 노드의 끝 목록(링크 맵 resolved 캐시 기준) — 미로드면 빈 배열.
-  const subEndsOf = useCallback(
-    (nodeId: string): SubEnd[] => {
-      const node = nodesRef.current.find((n) => n.id === nodeId);
+  // endsOfNode는 렌더(useMemo)에서 nodes state로, subEndsOf는 이벤트 핸들러에서 nodesRef로 쓴다(렌더 중 ref 금지).
+  const endsOfNode = useCallback(
+    (node: AppNode | undefined): SubEnd[] => {
       if (!node || node.data.nodeType !== "subprocess") {
         return [];
       }
@@ -3773,6 +3772,10 @@ function MapEditor({ mapId }: { mapId: number }) {
       return resolved ? deriveSubEnds(resolved) : [];
     },
     [resolvedCache],
+  );
+  const subEndsOf = useCallback(
+    (nodeId: string): SubEnd[] => endsOfNode(nodesRef.current.find((n) => n.id === nodeId)),
+    [endsOfNode],
   );
 
   // 하위프로세스 출구 선택 목록 열기 — 끝별 현재 타깃 제목(정보용)을 붙여 포인터 위치에 띄우고, 선택 시 resume(끝 키).
@@ -7121,12 +7124,13 @@ function MapEditor({ mapId }: { mapId: number }) {
     const gateways = buildGatewayEdges(expandedInline, childNodes, combinedEdges).map((edge) => ({
       ...EDGE_DEFAULTS,
       ...withSubprocessHandles(edge, (nodeId) => subprocessIds.has(nodeId)),
-      animated: false,
+      // 점선이 흐르는 애니메이션 — 다른 엣지와 통일(결정 9). dasharray는 RF `.animated`가 준다.
+      animated: true,
       // 선택 허용 — 인스펙터가 "흐름 안내 엣지" 안내를 띄운다(2026-09-02). 삭제·포커스는 계속 차단.
       selectable: true,
       deletable: false,
       focusable: false,
-      style: { opacity: INLINE_GATEWAY_OPACITY, strokeDasharray: "5 4" },
+      style: { opacity: INLINE_GATEWAY_OPACITY },
     }));
     const hiddenIds = new Set(
       combinedEdges.filter((edge) => expandedInline.has(edge.source)).map((edge) => edge.id),
@@ -7208,10 +7212,16 @@ function MapEditor({ mapId }: { mapId: number }) {
     }
     return inlineComposition?.childEdges.find((edge) => edge.id === selectedEdgeId) ?? null;
   }, [selectedEdgeId, selectedEdge, inlineComposition]);
-  // 파생 엣지(게이트웨이 gw:·접힘 SP 표시 끝 sp-ends:) 선택 — 인스펙터에 "흐름 안내 엣지" 안내만
-  const isGuideEdgeSelected =
-    selectedEdgeId !== null &&
-    (selectedEdgeId.startsWith(GATEWAY_PREFIX) || selectedEdgeId.startsWith(SP_ENDS_EDGE_PREFIX));
+  // 파생 엣지(게이트웨이 gw:) 선택 — 인스펙터에 "흐름 안내 엣지" 안내만
+  const isGuideEdgeSelected = selectedEdgeId !== null && selectedEdgeId.startsWith(GATEWAY_PREFIX);
+  // 선택 엣지의 미러 라벨(끝 제목) — 라벨 입력은 값은 비운 채 placeholder로 보여 준다(§3.5)
+  const selectedEdgeMirrorTitle = useMemo((): string | null => {
+    if (!selectedEdge || selectedEdge.label) {
+      return null;
+    }
+    const mirrored = applyMirroredEndLabels([selectedEdge], (id) => endsOfNode(nodes.find((n) => n.id === id)))[0];
+    return typeof mirrored.label === "string" ? mirrored.label : null;
+  }, [selectedEdge, nodes, endsOfNode]);
 
   // 펼침 영역 헤더의 업무체계 라벨 소스 — hostId → 링크맵의 지정 체계(카테고리 id + 5단계 전체 경로).
   // 지정(designated) 링크맵만 category를 갖는다. 라벨 클릭 시 FrameworkPeekTrigger가 체계 피크를 연다.
@@ -7574,54 +7584,12 @@ function MapEditor({ mapId }: { mapId: number }) {
   const styledEdges = useMemo(() => {
     const hiddenIds = inlineComposition?.hiddenIds;
     const crossingIds = inlineComposition?.crossingIds;
-    // 접힘 subprocess의 모든 끝(대표 포함)이 다음 노드로 연결돼 보이게 — 명시 엣지가 없는 끝 핸들에
-    // 표시 전용 엣지를 파생(저장 없음). 임베드 끝의 수동 배선이 차단되므로 기본 진출 흐름을 시각화 (F3).
-    // 선택은 허용 — 인스펙터가 "흐름 안내 엣지" 안내를 띄운다(2026-09-02). 하이라이트 순회에도 참여.
-    const syntheticEndEdges: Edge[] = [];
-    for (const node of nodes) {
-      if (node.data.nodeType !== "subprocess" || expandedInline.has(node.id)) {
-        continue;
-      }
-      const k = linkKey({
-        linked_map_id: node.data.linkedMapId ?? null,
-        follow_latest: node.data.followLatest ?? false,
-        linked_version_id: node.data.linkedVersionId ?? null,
-      });
-      const resolved = k ? resolvedCache.get(k) : undefined;
-      const ends = resolved ? deriveSubEnds(resolved) : [];
-      if (ends.length <= 1) {
-        continue;
-      }
-      const outgoing = edges.filter((edge) => edge.source === node.id);
-      if (outgoing.length === 0) {
-        continue;
-      }
-      // sourceHandle 미지정(레거시)은 첫 핸들(=대표끝)에 앵커되므로 대표끝을 커버한 것으로 본다
-      const covered = new Set(outgoing.map((edge) => edge.sourceHandle ?? PRIMARY_END_HANDLE));
-      const anchor =
-        outgoing.find((edge) => (edge.sourceHandle ?? PRIMARY_END_HANDLE) === PRIMARY_END_HANDLE) ??
-        outgoing[0];
-      for (const end of ends) {
-        if (covered.has(end.key)) {
-          continue;
-        }
-        syntheticEndEdges.push({
-          ...EDGE_DEFAULTS,
-          id: `${SP_ENDS_EDGE_PREFIX}${node.id}:${end.key}`,
-          source: node.id,
-          sourceHandle: end.key,
-          target: anchor.target,
-          targetHandle: anchor.targetHandle,
-          // 같은 노드의 실제 출력 엣지(anchor)와 선 모양을 맞춤 — 표시 전용이라 영속 없음
-          type: normalizeEdgeLineStyle(anchor.type),
-          selectable: true,
-          deletable: false,
-          focusable: false,
-        } as Edge);
-      }
-    }
+    // 출구 라벨 기본값 미러링(렌더 전용) — 끝 ≥ 2 SP에서 나가는 라벨 없는 엣지에 끝 제목 + data.labelMirrored.
+    // edges state는 건드리지 않으므로 buildGraph 직렬화·서명·비교 diff에 섞이지 않는다(§3.5).
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const mirroredEdges = applyMirroredEndLabels(edges, (id) => endsOfNode(nodeById.get(id)));
     // F14 플로우 경로 하이라이트 — 선택 노드에서 전방 (reach+1)홉 / 후방 (-reach)홉 엣지 집합.
-    // 순회 입력은 메인(펼침으로 숨긴 SP 진출 엣지 제외)+자식+게이트웨이+표시 끝 합집합 — 게이트웨이가
+    // 순회 입력은 메인(펼침으로 숨긴 SP 진출 엣지 제외)+자식+게이트웨이 합집합 — 게이트웨이가
     // SP↔자식 시작/끝↔후속을 이어 경로가 펼침 경계를 관통한다(사용자 요청 2026-09-02).
     const fwdHops = flowReach >= 0 ? flowReach + 1 : 1;
     const bwdHops = flowReach < 0 ? -flowReach : 0;
@@ -7631,7 +7599,6 @@ function MapEditor({ mapId }: { mapId: number }) {
         ? inlineComposition.childEdges.filter((edge) => !hiddenIds?.has(edge.id))
         : []),
       ...(inlineComposition?.gateways ?? []),
-      ...syntheticEndEdges,
     ];
     const forwardIds = selectedId
       ? new Set(getFlowPathForward(traversalEdges, selectedId, fwdHops))
@@ -7701,7 +7668,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
     }
     const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(list), fanGeom);
-    const currentStyled = edges.map((edge) => {
+    const currentStyled = mirroredEdges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
         return { ...edge, hidden: true } as Edge;
@@ -7722,11 +7689,8 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       return applyFlowHighlight(next);
     });
-    const syntheticStyled = syntheticEndEdges.map((edge) =>
-      applyFlowHighlight({ ...edge, selected: edge.id === selectedEdgeId }),
-    );
     if (!inlineComposition) {
-      return finishEdges([...currentStyled, ...syntheticStyled]);
+      return finishEdges(currentStyled);
     }
     // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김. 선 모양은 자식 맵 저장값 그대로(toAppEdges가 주입).
     // 포커스 모드: 비활성 스코프라 dim, 선택은 허용(시각+인스펙터 읽기전용 — 편집·삭제는 메인 edges
@@ -7762,8 +7726,8 @@ function MapEditor({ mapId }: { mapId: number }) {
         true,
       ),
     );
-    return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticStyled]);
-  }, [edges, nodes, resolvedCache, expandedInline, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
+    return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled]);
+  }, [edges, nodes, endsOfNode, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),
   // z는 멤버 적은 그룹이 위(노드보다는 뒤). 반투명 fill이라 겹쳐도 모두 보임.
@@ -10343,7 +10307,7 @@ function MapEditor({ mapId }: { mapId: number }) {
               left={editingEdgePos.left}
               top={editingEdgePos.top}
               initial={editingEdgeInitial}
-              placeholder={t("editor.edgeLabelPlaceholder")}
+              placeholder={selectedEdgeMirrorTitle ?? t("editor.edgeLabelPlaceholder")}
               onCommit={(value) => commitEdgeLabel(editingEdgeId, value)}
               onCancel={cancelEdgeLabelEdit}
             />
@@ -11228,7 +11192,8 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.label")}</label>
                         <textarea
-                          className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption"
+                          className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption placeholder:text-ink-tertiary"
+                          placeholder={selectedEdgeMirrorTitle ?? undefined}
                           value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
                           rows={Math.min(
                             5,
