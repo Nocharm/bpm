@@ -49,15 +49,22 @@ function makeSeqChain(ordered: PreviewNode[]): PreviewEdge[] {
   return ordered.slice(1).map((node, i) => ({ from: ordered[i].code, to: node.code, label: "", kind: "seq" }));
 }
 
+interface PreviewFlow {
+  edges: PreviewEdge[];
+  loopNodes: { anchor: string; node: PreviewNode }[];
+  // 어댑터 경고 중 미리보기가 그리는 모양 변화를 설명하는 것만 미러 — 문구는 backend와 같다
+  notices: string[];
+}
+
 // relations.edges → 흐름 엣지 + 자기 반복 분기 노드. 택일 branch의 src는 decision으로 승격, self edge는
 // ◇(a{seq}r)를 합성해 A→◇→A 루프백으로 바꾸고 A의 기존 진출은 ◇로 이설한다(backend _build_flow_edges).
 function buildFlowEdges(
   relations: Record<string, unknown> | null,
   bySeq: Map<number, PreviewNode>,
   ordered: PreviewNode[],
-): { edges: PreviewEdge[]; loopNodes: { anchor: string; node: PreviewNode }[] } {
+): PreviewFlow {
   const rawEdges = relations?.edges;
-  if (!Array.isArray(rawEdges)) return { edges: makeSeqChain(ordered), loopNodes: [] };
+  if (!Array.isArray(rawEdges)) return { edges: makeSeqChain(ordered), loopNodes: [], notices: [] };
   const declared = new Set(ordered.filter((n) => n.type === "decision").map((n) => n.code));
   const edges: PreviewEdge[] = [];
   const seen = new Set<string>();
@@ -114,10 +121,15 @@ function buildFlowEdges(
     if (list) list.push(edge);
     else outBySrc.set(edge.from, [edge]);
   }
+  const notices: string[] = [];
   for (const [srcCode, group] of outBySrc) {
     const src = byCode.get(srcCode);
     if (!src || src.type === "decision" || group.length < 2) continue;
     if (group.every((edge) => parallelPairs.has(`${edge.from}>${edge.to}`))) continue;
+    // 병행 갈래가 다른 연결과 섞이면 ◇ 뒤 택일로 바뀐다 — 그림만으로는 안 보여 어댑터 경고를 미러한다(이설 전 원래 쌍으로 판정)
+    const droppedParallel = group
+      .filter((edge) => parallelPairs.has(`${edge.from}>${edge.to}`))
+      .map((edge) => byCode.get(edge.to)?.name ?? edge.to);
     const branch: PreviewNode = {
       code: `${srcCode}f`,
       name: group.some((edge) => edge.kind === "loop") ? PREVIEW_LOOP_BRANCH_NAME : `${src.name} 결과`,
@@ -128,9 +140,17 @@ function buildFlowEdges(
     for (const edge of group) edge.from = branch.code;
     edges.push({ from: srcCode, to: branch.code, label: "", kind: "seq" });
     loopNodes.push({ anchor: srcCode, node: branch });
+    if (droppedParallel.length > 0) {
+      const names = droppedParallel.map((name) => `'${name}'`).join(", ");
+      notices.push(
+        `${srcCode} parallel edges to ${names} dropped - mixed with other outgoing edges, ` +
+          `now exclusive branches of ${branch.code} (병행 갈래 ${droppedParallel.length}건이 다른 연결과 ` +
+          "섞여 택일 분기로 바뀜 - 동시 진행이면 되돌아가기·건너뛰기를 다른 활동에서 나가게 고칠 것)",
+      );
+    }
   }
-  if (edges.length === 0) return { edges: makeSeqChain(ordered), loopNodes: [] };
-  return { edges, loopNodes };
+  if (edges.length === 0) return { edges: makeSeqChain(ordered), loopNodes: [], notices: [] };
+  return { edges, loopNodes, notices };
 }
 
 function makeFlatNode(id: string, title: string, nodeType: string, color: string, sortOrder: number): FlatNode {
@@ -157,8 +177,8 @@ function makeFlatNode(id: string, title: string, nodeType: string, color: string
   };
 }
 
-/** rows[i] 한 행 → 배치 전(pos 0) 그래프. actions가 없으면 null. 노드 id는 백엔드 코드(a01·a01r·__start__·__end__). */
-export function buildPreviewGraph(row: unknown): VersionGraph | null {
+// rows[i] 한 행 → 활동 노드(seq 순) + 흐름. actions가 없으면 null — 그래프와 노티가 같은 해석을 공유한다
+function parsePreviewRow(row: unknown): { ordered: PreviewNode[]; flow: PreviewFlow } | null {
   const rec = asRecord(row);
   if (!rec) return null;
   const rawActions = Array.isArray(rec.actions) ? rec.actions : [];
@@ -179,7 +199,19 @@ export function buildPreviewGraph(row: unknown): VersionGraph | null {
   });
   if (bySeq.size === 0) return null;
   const ordered = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
-  const { edges: flowEdges, loopNodes } = buildFlowEdges(asRecord(rec.relations), bySeq, ordered);
+  return { ordered, flow: buildFlowEdges(asRecord(rec.relations), bySeq, ordered) };
+}
+
+/** rows[i] 한 행의 흐름 노티(어댑터 경고 미러). 병행 갈래가 되돌아가기·건너뛰기와 섞여 택일로 바뀌는 경우 등. */
+export function readPreviewNotices(row: unknown): string[] {
+  return parsePreviewRow(row)?.flow.notices ?? [];
+}
+
+/** rows[i] 한 행 → 배치 전(pos 0) 그래프. actions가 없으면 null. 노드 id는 백엔드 코드(a01·a01r·__start__·__end__). */
+export function buildPreviewGraph(row: unknown): VersionGraph | null {
+  const parsed = parsePreviewRow(row);
+  if (!parsed) return null;
+  const { ordered, flow: { edges: flowEdges, loopNodes } } = parsed;
   // 합성 분기 노드는 앵커 바로 뒤에 끼운다(어댑터 호출부와 동일)
   const withLoops: PreviewNode[] = [];
   for (const node of ordered) {

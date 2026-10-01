@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.clock import now as now_kst
 from app.db import SessionLocal
 from app.framework_interview.assemble import (
-    allocate_task_ids, build_document, load_category_chain, load_existing_codes, validate_row,
+    allocate_task_ids, build_document, finalize_row_output, load_category_chain, load_existing_codes, validate_row,
 )
 from app.framework_interview.contracts import ROW_FIELD_KEYS, RowOut
 from app.framework_interview.normalize import normalize_row
@@ -119,3 +119,61 @@ def test_every_contract_field_survives_the_ai_gate_and_lands_in_the_adapter(clie
     params = result.maps[0].params
     assert (params.duration, params.touch_time) == ("1.30", "0.45")
     assert params.input == "요청서\n첨부"
+
+
+# 이전 행: 접수에서 검토·보관으로 동시에 가는 병행 갈래
+PARALLEL_PREVIOUS = {
+    "actions": [{"seq": 1, "label": "접수"}, {"seq": 2, "label": "검토"}, {"seq": 3, "label": "보관"}],
+    "relations": {"edges": [
+        {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel"},
+        {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel"},
+    ]},
+}
+
+
+def _gateways_after_finalize(actions: list[dict], edges: list[dict]) -> list[str | None]:
+    out = RowOut.model_validate({"l6": "x", "actions": actions, "relations": {"edges": edges}})
+    row = finalize_row_output(out, {}, PARALLEL_PREVIOUS)
+    return [edge.get("gateway") for edge in row["relations"]["edges"]]
+
+
+def test_finalize_restores_parallel_when_the_whole_branch_group_lost_its_gateway() -> None:
+    """모델이 갈래 묶음 전체에서 표시만 빠뜨리면 이전 행의 parallel을 잇는다 (seq가 밀려도 label 기준)."""
+    # Arrange
+    actions = [{"seq": 1, "label": "사전 확인"}, {"seq": 2, "label": "접수"},
+               {"seq": 3, "label": "검토"}, {"seq": 4, "label": "보관"}]
+    edges = [{"src": 1, "dst": 2, "kind": "seq"},
+             {"src": 2, "dst": 3, "kind": "branch"}, {"src": 2, "dst": 4, "kind": "branch"}]
+
+    # Act
+    gateways = _gateways_after_finalize(actions, edges)
+
+    # Assert
+    assert gateways == [None, "parallel", "parallel"]
+
+
+def test_finalize_keeps_a_mixed_branch_group_as_the_model_wrote_it() -> None:
+    """형제 하나라도 gateway를 적었으면 묶음 전체를 모델 판단으로 둔다 — parallel·exclusive 혼재 행 금지."""
+    # Arrange
+    actions = [{"seq": 1, "label": "접수"}, {"seq": 2, "label": "검토"}, {"seq": 3, "label": "보관"}]
+    edges = [{"src": 1, "dst": 2, "kind": "branch"},
+             {"src": 1, "dst": 3, "kind": "branch", "gateway": "exclusive", "condition": "바뀜"}]
+
+    # Act
+    gateways = _gateways_after_finalize(actions, edges)
+
+    # Assert
+    assert gateways == [None, "exclusive"]
+
+
+def test_finalize_does_not_restore_parallel_from_a_decision_source() -> None:
+    """출발 활동을 decision으로 바꿨으면 택일로 다시 정한 것이라 병행 표시를 잇지 않는다."""
+    # Arrange
+    actions = [{"seq": 1, "label": "접수", "kind": "decision"}, {"seq": 2, "label": "검토"}, {"seq": 3, "label": "보관"}]
+    edges = [{"src": 1, "dst": 2, "kind": "branch"}, {"src": 1, "dst": 3, "kind": "branch"}]
+
+    # Act
+    gateways = _gateways_after_finalize(actions, edges)
+
+    # Assert
+    assert gateways == [None, None]

@@ -584,7 +584,7 @@ def test_feedback_relations_rewrites_canvas_and_task_redraws_row(client: TestCli
             await db.commit()
     asyncio.run(_add_screen())
 
-    fb2 =client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
+    fb2 = client.post(f"/api/framework-interviews/{sid}/feedback", json={"scope": "task", "task_pk": t1["id"], "message": "이름 고쳐"}, headers=HEADERS)
     assert fb2.status_code == 200, fb2.text
     detail = client.get(f"/api/framework-interviews/{sid}/tasks/{t1['id']}", headers=HEADERS).json()
     assert detail["row"]["l6"] == "요청 접수(수정)" and detail["status"] == "drawn"

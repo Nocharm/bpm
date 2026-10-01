@@ -108,6 +108,9 @@ def _inherit_from_previous(row: dict, previous: dict) -> None:
 
     seq는 활동이 끼어들면 밀리므로 쓰지 않는다. gateway는 같은 두 활동 사이의 branch 엣지가
     모델 응답에서 표시만 빠졌을 때만 잇는다 — 빠지면 어댑터가 병렬 출구를 택일 분기(◇)로 바꾼다.
+    잇는 단위는 출발 활동의 branch 갈래 묶음 전체다. 형제 하나라도 gateway를 적었거나 출발 활동이
+    decision이면 모델이 분기 방식을 다시 정한 것이라 잇지 않는다 — 한 출발에 parallel·exclusive가
+    섞인 행이 저장되면 render_existing_row가 모순된 줄을 다음 라운드 모델에 되먹인다.
     """
     prev_actions = [a for a in previous.get("actions") or [] if isinstance(a, dict)]
     prev_by_label: dict[str, dict] = {}
@@ -127,13 +130,20 @@ def _inherit_from_previous(row: dict, previous: dict) -> None:
         if edge.get("kind") == "branch" and edge.get("gateway"):
             pair = (prev_labels.get(edge.get("src"), ""), prev_labels.get(edge.get("dst"), ""))
             prev_gateway.setdefault(pair, edge["gateway"])
-    new_labels = _labels_by_seq(row.get("actions") or [])
+    new_actions = row.get("actions") or []
+    new_labels = _labels_by_seq(new_actions)
+    decision_seqs = {a.get("seq") for a in new_actions if a.get("kind") == "decision"}
+    branch_groups: dict[object, list[dict]] = {}
     for edge in (row.get("relations") or {}).get("edges") or []:
-        if edge.get("kind") != "branch" or edge.get("gateway"):
+        if edge.get("kind") == "branch":
+            branch_groups.setdefault(edge.get("src"), []).append(edge)
+    for src, group in branch_groups.items():
+        if src in decision_seqs or any(edge.get("gateway") for edge in group):
             continue
-        gateway = prev_gateway.get((new_labels.get(edge.get("src"), ""), new_labels.get(edge.get("dst"), "")))
-        if gateway:
-            edge["gateway"] = gateway
+        for edge in group:
+            gateway = prev_gateway.get((new_labels.get(src, ""), new_labels.get(edge.get("dst"), "")))
+            if gateway:
+                edge["gateway"] = gateway
 
 
 def finalize_row_output(out: RowOut, card: dict, previous_row: dict | None = None) -> dict:
