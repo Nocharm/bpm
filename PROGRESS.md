@@ -3,6 +3,24 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 엣지 팬아웃: 같은 핸들로 모이는 엣지의 나선 펼침 (feat/edge-fanout → dev)
+
+- 같은 (노드·변·핸들) 앵커로 오가는 엣지(실데이터 13%, 루프백은 100%)가 스텁·화살촉·라벨까지 포개지던 것을 **렌더 전용 레인 배정**(`lib/edge-fanout.ts` `assignFanLanes` → `edge.data.fan`)으로 펼쳤다: 꺾은선은 게이트 포인트+원호, 곡선은 제어점 중첩, 직선은 끝점 ±3.5px. 에디터·비교·SVG 미리보기(역행) 세 표면, 저장 데이터·변·백엔드 무변경. 사용자 확정 4건(양쪽 끝·A 나선 아크·곡선 A/직선 분산/화살촉 한 점·세 표면). 반경은 배정 단계에서 압축 확정(끝마다 클램프하면 교차·NaN), 왕복 쌍(양끝 팬)은 중간 구간·라벨을 소스 레인만큼 비켜 세움. 스모크 `pw-smoke-edge-fanout.mjs` 25/25·펼침 `pw-verify-edge-fanout-expand.mjs` 10/10. 불변식은 CLAUDE.md Lessons, 설계 스냅샷은 main 머지 시 폐기.
+
+## 2026-09-30 — 슬라이드 매뉴얼 리스타일·카피 전면 요약 (main)
+
+- **왜** — PDF를 실제로 내려받아 보니 슬라이드당 평균 5불릿·한국어 300자(영어 570자)의 문장형 텍스트에 레이아웃이 전부 같아 벽처럼 읽히고, 선언만 된 Pretendard가 설치돼 있지 않아 PDF는 시스템 폰트로 찍히고 페이지 번호도 없었다(사용자 지적 "글이 너무 많고 가시성이 떨어지고 단조롭다").
+- **무엇** — 덱을 **카피 데이터(`docs/manual/slides/content/*.py`) + `theme.css` + `build_deck.py`**로 다시 빌드. 불릿 858개를 "리드 키워드 + 한 줄 설명" 포인트로 전면 요약(UI 요소명은 바이올렛 필 `<b>`, 키는 `<code>` 칩), 표지·챕터 구분은 L5 대시보드와 같은 네이비→차콜 하늘, 이미지 없는 슬라이드는 카드 2열, 표는 헤더 배경+얼룩 행, 슬라이드마다 푸터(덱 이름·페이지 번호), 스크린샷은 브라우저 창 프레임, Pretendard Variable data URI 임베드. 이미지 111컷은 직전 덱에서 순번 이월(재촬영 없음). 사용자 덱 ⑧ 구분 문구의 "네 가지 형식(Word 포함)" 잔재도 세 가지로 정정.
+- **결정** — 증분 수술 도구 `build_slides.py`는 폐기(카피가 데이터로 들어가면서 수술 대상이 사라짐). 다음 회차부터는 content의 카피/`shot` 경로만 고치고 빌더를 돌린다. 넘침 검사 4덱 0건, PDF 4종 재출력.
+
+## 2026-09-30 — 홈 대시보드 연동 액센트 바 등장 애니메이션·빛띠 (main)
+
+- 500ms 지연 뒤 inset box-shadow가 150ms에 그냥 켜져 "갑자기 생기는" 느낌 → `globals.css .hover-linked`로 교체: 좌측 2px 바(::before)가 세로 중앙에서 700ms smooth로 자라나고, 같은 순간 옅은 액센트 빛띠(::after 7%·1.8초 ease-in-out, background-position만 이동이라 overflow 불필요)가 행을 한 번 훑는다(1차 spring 350ms·12%·0.9초는 튀어 보여 완화, 사용자 피드백). 지연은 keyframe delay라 스쳐 가는 호버엔 안 뜨고 이탈 시 즉시 사라지는 동작은 그대로. reduced-motion은 모션 없이 지연만 유지. 스모크 `pw-shot-home-linked-hover.mjs`는 pseudo 요소 computed style로 판정.
+
+## 2026-09-30 — 매뉴얼 슬라이드 PDF 앱 내 다운로드 (main)
+
+- 슬라이드 PDF 4종은 저장소에만 있고 앱에서 받을 길이 없었다 → `frontend/public/manuals/`로 옮겨 `/manuals/<deck>.pdf`로 정적 서빙(Dockerfile이 `public/` 복사·nginx `/`→Next라 배포 파일 변경 없음, 스탠드얼론 조립으로 4종 200 확인). `/manual` 뷰어의 "한눈에 보기" 메뉴를 env 없이도 상시 표시로 바꾸고 사용자·관리자 PDF 항목을 추가 — 클릭 시 바로 받지 않고 한국어/English 선택 다이얼로그(`ManualPdfDialog`, 사용자 결정)를 거친다. `export-pdf.mjs` 출력 경로도 `public/manuals/`로. 파일명 계약은 `lib/manual-pdf.ts`(vitest가 실존 검사), 스모크 `pw-manual-pdf.mjs`.
+
 ## 2026-09-30 — 정리 라운드: 메모리·md 문서·매뉴얼 5차 (main)
 
 - **md 정리**: main 머지 완료된 AI L5 캠페인 스펙 3종(`docs/superpowers/specs/`, 코드 주석은 파일명만 유지)과 0.4 결과 핸드오프(`design/2026-09-01-interview-import-v04-result.md`. 불변식은 qa 필드맵·lessons에 흡수 완료, 실서버 점검 4항목은 git history)·템플릿 잔재 `.claude/commands/setup-from-template.md` 폐기. PROGRESS는 09-28 폴리시 라운드 항목을 4줄로 압축하고 09-24 릴리스 이전 항목(09-14~09-18)을 아카이브로 이동.

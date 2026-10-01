@@ -35,10 +35,79 @@ function clipToBox(from: { cx: number; cy: number }, target: PreviewBox): { x: n
   return { x: target.cx - dx * k, y: target.cy - dy * k };
 }
 
-/** 프리뷰 엣지 경로 — 앞으로 가는 엣지는 직선(타겟 테두리에서 끝), 역행 엣지는 소스 위→두 노드 위 통로→타겟 위로 도는 직각 경로. */
-export function buildPreviewEdgePath(source: PreviewBox, target: PreviewBox): { d: string; back: boolean } {
+/** 역행 엣지가 같은 노드 위에서 출발·도착할 때 통로를 레인별로 띄우는 간격(px) — 에디터 팬아웃 FAN_GAP과 동일 */
+const BACK_EDGE_LANE_GAP = 10;
+
+interface PreviewEdgeRef {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+}
+
+/**
+ * 역행 엣지 레인 — 같은 타깃(또는 같은 소스)의 역행 엣지끼리 가까운 상대가 안쪽(무지개 중첩, 교차 없는 유일한
+ * 순서). 두 그룹에 모두 속하면 큰 레인. 정방향 엣지는 중심→중심 직선이라 이미 갈라져 대상 아님(맵에 없음).
+ */
+export function assignPreviewBackLanes(
+  edges: readonly PreviewEdgeRef[],
+  centerById: ReadonlyMap<string, { cx: number }>,
+): Map<string, number> {
+  const back = edges.filter((edge) => {
+    const source = centerById.get(edge.source_node_id);
+    const target = centerById.get(edge.target_node_id);
+    return !!source && !!target && target.cx < source.cx - BACK_EDGE_MIN_DX;
+  });
+  const lanes = new Map<string, number>();
+  const span = (e: PreviewEdgeRef) =>
+    (centerById.get(e.source_node_id)?.cx ?? 0) - (centerById.get(e.target_node_id)?.cx ?? 0);
+  const byId = (a: PreviewEdgeRef, b: PreviewEdgeRef) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const groupsBy = (key: (edge: PreviewEdgeRef) => string) => {
+    const groups = new Map<string, PreviewEdgeRef[]>();
+    for (const edge of back) {
+      const k = key(edge);
+      groups.set(k, [...(groups.get(k) ?? []), edge]);
+    }
+    return [...groups.values()];
+  };
+  const groups = [...groupsBy((edge) => `t:${edge.target_node_id}`), ...groupsBy((edge) => `s:${edge.source_node_id}`)];
+  for (const group of groups) {
+    group.sort((a, b) => span(a) - span(b) || byId(a, b)).forEach((edge, k) => lanes.set(edge.id, Math.max(lanes.get(edge.id) ?? 0, k)));
+  }
+  // 두 그룹(같은 타깃·같은 소스)에 걸친 엣지가 같은 레인에 겹치면 긴 쪽을 한 칸 올린다 — 수렴할 때까지(역행 엣지는 소수)
+  for (let pass = 0; pass < 8; pass += 1) {
+    let changed = false;
+    for (const group of groups) {
+      let prev = -1;
+      for (const edge of [...group].sort((a, b) => (lanes.get(a.id) ?? 0) - (lanes.get(b.id) ?? 0) || span(a) - span(b) || byId(a, b))) {
+        const lane = lanes.get(edge.id) ?? 0;
+        if (lane <= prev) {
+          lanes.set(edge.id, prev + 1);
+          changed = true;
+          prev += 1;
+        } else {
+          prev = lane;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return lanes;
+}
+
+/** 프리뷰 viewBox 위쪽 여백 — 가장 바깥 역행 레인의 통로가 잘리지 않게 레인만큼 더 띄운다 */
+export function previewPadTop(lanes: ReadonlyMap<string, number>): number {
+  let maxLane = 0;
+  for (const lane of lanes.values()) {
+    maxLane = Math.max(maxLane, lane);
+  }
+  return 40 + maxLane * BACK_EDGE_LANE_GAP;
+}
+
+/** 프리뷰 엣지 경로 — 앞으로 가는 엣지는 직선(타겟 테두리에서 끝), 역행 엣지는 소스 위→두 노드 위 통로→타겟 위로 도는 직각 경로.
+ *  lane(assignPreviewBackLanes)만큼 통로를 더 띄워 같은 노드의 역행 엣지가 포개지지 않게 한다. */
+export function buildPreviewEdgePath(source: PreviewBox, target: PreviewBox, lane = 0): { d: string; back: boolean } {
   if (target.cx < source.cx - BACK_EDGE_MIN_DX) {
-    const yTop = Math.min(source.y, target.y) - BACK_EDGE_CLEARANCE;
+    const yTop = Math.min(source.y, target.y) - BACK_EDGE_CLEARANCE - lane * BACK_EDGE_LANE_GAP;
     const [d] = buildRoundedOrthPath([
       { x: source.cx, y: source.y },
       { x: source.cx, y: yTop },
@@ -150,10 +219,12 @@ export function ScopePreview({
   const edges = (fullGraph?.edges ?? []).filter(
     (edge) => ids.has(edge.source_node_id) && ids.has(edge.target_node_id),
   );
+  // 같은 노드 위로 도는 역행 엣지 레인(무지개 중첩) — 에디터 팬아웃과 같은 규칙의 SVG 판
+  const backLanes = assignPreviewBackLanes(edges, centerById);
 
   const pad = 40;  // 역행 경로 통로(BACK_EDGE_CLEARANCE)보다 넉넉해 위로 도는 선이 잘리지 않는다
   const minX = Math.min(...boxes.map((box) => box.x)) - pad;
-  const minY = Math.min(...boxes.map((box) => box.y)) - pad;
+  const minY = Math.min(...boxes.map((box) => box.y)) - previewPadTop(backLanes); // 바깥 레인만큼 위 여백 추가
   const maxX = Math.max(...boxes.map((box) => box.x + box.w)) + pad;
   const maxY = Math.max(...boxes.map((box) => box.y + box.h)) + pad;
   const viewBox = `${minX} ${minY} ${Math.max(1, maxX - minX)} ${Math.max(1, maxY - minY)}`;
@@ -220,7 +291,7 @@ export function ScopePreview({
           if (!source || !target) {
             return null;
           }
-          const { d, back } = buildPreviewEdgePath(source, target);
+          const { d, back } = buildPreviewEdgePath(source, target, backLanes.get(edge.id) ?? 0);
           return (
             <path
               key={edge.id}

@@ -1,5 +1,7 @@
 // Print the standalone slide decks to PDF — one 1280×720 page per slide — with the system Chrome.
 // Uses frontend/node_modules/playwright-core (the project's browser harness; no browser download).
+// Output lands in frontend/public/manuals/ so the app serves it at /manuals/<deck>.pdf
+// (manual viewer "At a glance" menu; file names are the contract in frontend/src/lib/manual-pdf.ts).
 //
 //   bash:        cd frontend && node ../docs/manual/slides/export-pdf.mjs ../docs/manual/slides/bpm-manual-*.html
 //   PowerShell:  cd frontend; node ..\docs\manual\slides\export-pdf.mjs (Get-Item ..\docs\manual\slides\bpm-manual-*.html).FullName
@@ -14,6 +16,7 @@ const require = createRequire(path.resolve(here, "../../../frontend/package.json
 const { chromium } = require("playwright-core");
 
 const CHROME = process.env.CHROME_PATH ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const OUT_DIR = path.resolve(here, "../../../frontend/public/manuals");
 const files = process.argv.slice(2);
 if (!files.length) {
   console.error("usage: node export-pdf.mjs <deck.html>...");
@@ -24,7 +27,7 @@ const browser = await chromium.launch({ executablePath: CHROME, headless: true }
 try {
   for (const file of files) {
     const abs = path.resolve(file);
-    const out = abs.replace(/\.html$/, ".pdf");
+    const out = path.join(OUT_DIR, path.basename(abs).replace(/\.html$/, ".pdf"));
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     await page.goto("file://" + abs, { waitUntil: "load" });
     await page.emulateMedia({ media: "print" }); // the deck's @media print lays every slide out as its own page

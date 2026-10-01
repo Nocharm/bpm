@@ -746,6 +746,74 @@ li[data-tree-node]:has(li:hover) > div > div > div > [data-tree-head] [data-tree
     animation: none;
   }
 }
+/* 홈 대시보드 연동 행 표식(components/maps/dashboard-hover.tsx HOVER_LINKED_CLASS) — 다른 섹션의 같은 맵 행에 500ms 머문 뒤
+   좌측 2px 액센트 바가 세로 중앙에서 자라나고(::before), 같은 순간 옅은 액센트 빛띠가 행을 왼쪽→오른쪽으로 한 번 훑는다(::after)
+   — "찾았다"는 신호를 주되 갑자기 튀지 않게(사용자 지시 2026-09-30). 지연은 keyframe delay라 스쳐 가는 호버엔 아무것도 안 뜨고,
+   클래스가 떨어지면(마우스 이탈) 즉시 사라진다. 호스트에 position:relative. 빛띠는 background-position만 움직여 overflow 불필요. */
+@keyframes linked-bar-in {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+@keyframes linked-shimmer {
+  0% {
+    background-position: 150% 0;
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  65% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -150% 0;
+    opacity: 0;
+  }
+}
+.hover-linked::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-accent);
+  transform-origin: center;
+  pointer-events: none;
+  /* 700ms smooth — spring 350ms는 살짝 튀어 보였다(사용자 피드백 2026-09-30: 더 부드럽고 은은하게) */
+  animation: linked-bar-in 700ms var(--ease-smooth) 500ms 1 both;
+}
+.hover-linked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 넓고 옅은 띠(20→80%, 액센트 7%)가 1.8초에 걸쳐 ease-in-out으로 지나간다 — 12%·0.9초는 눈에 띄게 번쩍였다(사용자 피드백 2026-09-30) */
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--color-accent) 7%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 250% 100%;
+  animation: linked-shimmer 1800ms ease-in-out 500ms 1 both;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 모션은 빼되 500ms 지연은 유지 — 1ms 키프레임으로 delay만 남긴다 */
+  .hover-linked::before {
+    animation-duration: 1ms;
+  }
+  .hover-linked::after {
+    animation: none;
+    opacity: 0;
+  }
+}
 /* 선택 맵 스트립(업무 체계 뷰 좌측 하단) — 마운트 시 테두리를 따라 액센트 하이라이트가 한 번 지나간다(사용자 지시
    2026-09-21). 오버레이(::after)를 mask-composite로 테두리 두께만 남기고 그라데이션 배경을 가로로 흘린 뒤 사라진다.
    호스트에 position:relative + border-radius가 있어야 한다(inherit). */

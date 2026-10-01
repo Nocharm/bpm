@@ -192,6 +192,7 @@ import {
   type OutlineNode,
   type ProcessNodeType,
 } from "@/lib/canvas";
+import { buildFanGeom, injectFanLanes } from "@/lib/edge-fanout";
 import { buildPaste, readClipboard, writeClipboard } from "@/lib/node-clipboard";
 import {
   acquireCheckout,
@@ -7547,6 +7548,19 @@ function MapEditor({ mapId }: { mapId: number }) {
               : edge;
           })
         : list;
+    // 같은 핸들 형제 팬 레인(렌더 전용, lib/edge-fanout) — ghost 재매핑 뒤 최종 배열에 data.fan으로 얹는다.
+    // 기하는 합성(펼침) 노드 또는 현재 노드 + Ctrl 고스트(원위치 사본). displayNodes의 라이브 드래그
+    // 오버레이는 일부러 안 본다 — 프레임마다 재배정하면 레인이 흔들리고 전 엣지가 리렌더된다.
+    const fanGeom = buildFanGeom(inlineComposition ? inlineComposition.nodes : nodes);
+    if (ctrlGhostIds) {
+      for (const ghost of ctrlDragGhosts) {
+        const origin = fanGeom.get(ghost.id);
+        if (origin) {
+          fanGeom.set(`ctrl-ghost:${ghost.id}`, { ...origin, x: ghost.position.x, y: ghost.position.y });
+        }
+      }
+    }
+    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(list), fanGeom);
     const currentStyled = edges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {
@@ -7572,7 +7586,7 @@ function MapEditor({ mapId }: { mapId: number }) {
       applyFlowHighlight({ ...edge, selected: edge.id === selectedEdgeId }),
     );
     if (!inlineComposition) {
-      return anchorEdgesToGhosts([...currentStyled, ...syntheticStyled]);
+      return finishEdges([...currentStyled, ...syntheticStyled]);
     }
     // 자식 엣지: 펼친 노드 출발(A→B)이면 숨김. 선 모양은 자식 맵 저장값 그대로(toAppEdges가 주입).
     // 포커스 모드: 비활성 스코프라 dim, 선택은 허용(시각+인스펙터 읽기전용 — 편집·삭제는 메인 edges
@@ -7608,7 +7622,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         true,
       ),
     );
-    return anchorEdgesToGhosts([...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticStyled]);
+    return finishEdges([...currentStyled, ...childStyled, ...gatewayStyled, ...syntheticStyled]);
   }, [edges, nodes, resolvedCache, expandedInline, selectedId, selectedEdgeId, inlineComposition, flowReach, hoveredEdgeId, ioHighlight, ctrlDragActive, ctrlDragGhosts]);
 
   // 그룹 박스 — 태그(다중 소속) 멤버 bbox로 산정. 멤버 많은 그룹일수록 패딩↑(작은 그룹을 감쌈),

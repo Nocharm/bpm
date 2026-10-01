@@ -61,6 +61,36 @@ function crossesV(x: number, y1: number, y2: number, r: EdgeObstacle): boolean {
   return x > r.left && x < r.right && hi > r.top && lo < r.bottom;
 }
 
+/**
+ * 축 정렬 폴리라인이 장애물을 지나는가 — 팬아웃 경로(라운드 전 꼭짓점, lib/edge-fanout)용.
+ * 대각 구간은 bbox로 보수 판정. skipA/skipB = 양끝 노드 id(자기 노드는 장애물이 아니다).
+ */
+export function isPolylineBlocked(
+  points: readonly { x: number; y: number }[],
+  obstacles: readonly EdgeObstacle[],
+  skipA?: string,
+  skipB?: string,
+): boolean {
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    for (const r of obstacles) {
+      if (r.id === skipA || r.id === skipB) continue;
+      const hit =
+        a.y === b.y
+          ? crossesH(a.y, a.x, b.x, r)
+          : a.x === b.x
+            ? crossesV(a.x, a.y, b.y, r)
+            : Math.max(a.x, b.x) > r.left &&
+              Math.min(a.x, b.x) < r.right &&
+              Math.max(a.y, b.y) > r.top &&
+              Math.min(a.y, b.y) < r.bottom;
+      if (hit) return true;
+    }
+  }
+  return false;
+}
+
 /** 수평쌍(H·V·H) 경로가 mid 회랑에서 장애물과 교차하는가. */
 function isBlockedH(mid: number, a: DetourArgs, rects: readonly EdgeObstacle[]): boolean {
   return rects.some(

@@ -4,7 +4,7 @@
 // 언어 전환 시 직전 문서와 같은 순번의 문서를 열어 유지(한/영 페어 동일 소팅 가정). 문서가 없으면 번들 manual.md fallback.
 // 좌 TOC(H2/H3 파생) + 우 MarkdownView. 본문검색(/ 포커스)·읽기폭·본문 한정 읽기 테마 토글. (design 2026-07-05)
 
-import { BookOpen, ChevronDown, Contrast, ExternalLink, LayoutGrid, MoveHorizontal } from "lucide-react";
+import { BookOpen, ChevronDown, Contrast, ExternalLink, FileDown, LayoutGrid, MoveHorizontal } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -18,12 +18,14 @@ import {
 } from "@/lib/api";
 import { genId } from "@/lib/id";
 import { useI18n } from "@/lib/i18n";
+import { MANUAL_PDF_KINDS, type ManualPdfKind } from "@/lib/manual-pdf";
 import { useSlashFocus } from "@/lib/use-slash-focus";
 import { HtmlView } from "@/components/html-view";
 import { MarkdownView } from "@/components/markdown-view";
 import { SearchBox } from "@/components/search-box";
 import { TimePills } from "@/components/time-pills";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
+import { ManualPdfDialog } from "@/components/manual-pdf-dialog";
 import { Tooltip } from "@/components/tooltip";
 
 interface TocEntry {
@@ -70,6 +72,8 @@ export default function ManualPage() {
   const [manualUrl, setManualUrl] = useState("");
   const [csvManualUrl, setCsvManualUrl] = useState("");
   const [extOpen, setExtOpen] = useState(false);
+  // PDF 언어 선택 다이얼로그 — 메뉴에서 고른 덱 종류(null=닫힘)
+  const [pdfKind, setPdfKind] = useState<ManualPdfKind | null>(null);
   const [nowMs] = useState(() => Date.now());
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -265,63 +269,81 @@ export default function ManualPage() {
           {/* 검색은 본문 상단 중앙으로 이동(F11) — 헤더는 제목(좌)·읽기 도구(우)만 */}
           <div className="flex-1" />
 
-          {/* 한눈에 보기 — 외부 매뉴얼(편집사이트·CSV안내) 바로가기. 둘 다 없으면 숨김. */}
-          {(manualUrl || csvManualUrl) && (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                data-id="manual-external-menu"
-                className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
-                aria-haspopup="menu"
-                aria-expanded={extOpen}
-                onClick={() => setExtOpen((v) => !v)}
-              >
-                <LayoutGrid size={16} strokeWidth={1.5} />
-                {t("manual.externalMenu")}
-                <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
-              </button>
-              {extOpen && (
-                <>
-                  <div className="fixed inset-0 z-[1000]" onClick={() => setExtOpen(false)} />
-                  <div
-                    role="menu"
-                    className="absolute right-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
-                  >
-                    {manualUrl && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                        onClick={() => {
-                          window.open(manualUrl, "_blank", "noopener,noreferrer");
-                          setExtOpen(false);
-                        }}
-                      >
-                        <BookOpen size={14} strokeWidth={1.5} className="shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{t("manual.editSite")}</span>
-                        <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                      </button>
-                    )}
-                    {csvManualUrl && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
-                        onClick={() => {
-                          window.open(csvManualUrl, "_blank", "noopener,noreferrer");
-                          setExtOpen(false);
-                        }}
-                      >
-                        <BookOpen size={14} strokeWidth={1.5} className="shrink-0" />
-                        <span className="min-w-0 flex-1 truncate">{t("csvImport.manualLink")}</span>
-                        <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+          {/* 한눈에 보기 — 슬라이드 PDF 다운로드(현재 언어의 사용자·관리자 덱, 항상) + 외부 매뉴얼(편집사이트·CSV안내, env 있을 때만). */}
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              data-id="manual-external-menu"
+              className="inline-flex items-center gap-1 rounded-sm border border-hairline px-2.5 py-1 text-caption text-ink-secondary hover:bg-surface-alt"
+              aria-haspopup="menu"
+              aria-expanded={extOpen}
+              onClick={() => setExtOpen((v) => !v)}
+            >
+              <LayoutGrid size={16} strokeWidth={1.5} />
+              {t("manual.externalMenu")}
+              <ChevronDown size={14} strokeWidth={1.5} className="text-ink-tertiary" />
+            </button>
+            {extOpen && (
+              <>
+                <div className="fixed inset-0 z-[1000]" onClick={() => setExtOpen(false)} />
+                <div
+                  role="menu"
+                  className="absolute right-0 z-[1001] mt-1 w-56 rounded-md border border-hairline bg-surface py-1 shadow-lg"
+                >
+                  {/* PDF는 바로 받지 않고 언어 선택 다이얼로그(ManualPdfDialog)를 거친다 — 한/영 덱을 고르게(사용자 결정 2026-09-30) */}
+                  {MANUAL_PDF_KINDS.map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      role="menuitem"
+                      data-id={`manual-pdf-${kind}`}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                      onClick={() => {
+                        setPdfKind(kind);
+                        setExtOpen(false);
+                      }}
+                    >
+                      <FileDown size={14} strokeWidth={1.5} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {t(kind === "user" ? "manual.pdfUser" : "manual.pdfAdmin")}
+                      </span>
+                    </button>
+                  ))}
+                  {(manualUrl || csvManualUrl) && <div className="my-1 border-t border-hairline" />}
+                  {manualUrl && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                      onClick={() => {
+                        window.open(manualUrl, "_blank", "noopener,noreferrer");
+                        setExtOpen(false);
+                      }}
+                    >
+                      <BookOpen size={14} strokeWidth={1.5} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{t("manual.editSite")}</span>
+                      <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    </button>
+                  )}
+                  {csvManualUrl && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-caption text-ink hover:bg-surface-alt"
+                      onClick={() => {
+                        window.open(csvManualUrl, "_blank", "noopener,noreferrer");
+                        setExtOpen(false);
+                      }}
+                    >
+                      <BookOpen size={14} strokeWidth={1.5} className="shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{t("csvImport.manualLink")}</span>
+                      <ExternalLink size={12} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* 읽기 도구 — 읽기폭·본문 한정 읽기 테마 */}
           <div className="flex shrink-0 items-center gap-1">
@@ -425,6 +447,7 @@ export default function ManualPage() {
         </div>
       </div>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      {pdfKind && <ManualPdfDialog kind={pdfKind} onClose={() => setPdfKind(null)} />}
     </div>
   );
 }
