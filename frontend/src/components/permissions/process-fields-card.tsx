@@ -4,12 +4,13 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { getMap, patchProcessFields, type MapSummary, type ProcessFieldsBody } from "@/lib/api";
 import { humanizeApiError } from "@/lib/api-errors";
 import { FallbackHint } from "@/components/fallback-hint";
+import { MenuSelect } from "@/components/menu-select";
 import { ParamInput } from "@/components/param-input";
 import { formatGmp, getGmpBadgeStyle, GMP_OPTIONS } from "@/lib/gmp";
 import { useI18n } from "@/lib/i18n";
@@ -29,10 +30,9 @@ export function ProcessFieldsCard({ mapId, onToast }: ProcessFieldsCardProps) {
   // 편집 버퍼 — 서버 값에서 시작, blur 시 변경분만 PATCH
   const [startCondition, setStartCondition] = useState("");
   const [endCondition, setEndCondition] = useState("");
-  // GMP 변경 안내 — 분류가 색을 자동 지정하므로, 바뀐 색을 마우스 위치에서 알리고 되돌리기 제공
+  // GMP 변경 안내 — 분류가 색을 자동 지정하므로, 바뀐 색을 메뉴 항목 클릭 위치에서 알리고 되돌리기 제공
   // (사용자 결정 2026-08-20: 닫기 버튼이 마우스 지점에 오도록 배치)
   const [gmpNotice, setGmpNotice] = useState<{ prev: string; next: string; x: number; y: number } | null>(null);
-  const gmpPointer = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   useEffect(() => {
     let active = true;
@@ -72,32 +72,27 @@ export function ProcessFieldsCard({ mapId, onToast }: ProcessFieldsCardProps) {
       </div>
       {error && <p className="text-caption text-error">{error}</p>}
 
-      {/* GMP — 3값 셀렉트(+미분류), 폴백 원문 보고 선정. 분류가 배지 색을 자동 지정 */}
+      {/* GMP — 3값 메뉴(+미분류, MenuSelect), 폴백 원문 보고 선정. 분류가 배지 색을 자동 지정 */}
       <div className="flex items-center gap-2">
         <span className="w-32 shrink-0 text-caption text-ink-secondary">GMP</span>
-        <select
-          data-id="process-fields-gmp"
-          className={INPUT_CLASS}
+        <MenuSelect
+          dataId="process-fields-gmp"
+          className="min-w-0 flex-1 py-1 text-caption"
           value={detail.sp_gmp ?? ""}
-          onPointerDown={(e) => {
-            gmpPointer.current = { x: e.clientX, y: e.clientY };
-          }}
-          onChange={(e) => {
+          items={[
+            { value: "", label: t("perm.processFields.gmpUnset") },
+            ...GMP_OPTIONS.map((option) => ({
+              value: option.value,
+              label: option.label,
+              icon: <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: `var(${option.colorVar})` }} />,
+            })),
+          ]}
+          onChange={(next, at) => {
             const prev = detail.sp_gmp ?? "";
-            const next = e.target.value;
             void save({ gmp: next });
-            if (next !== prev) {
-              setGmpNotice({ prev, next, ...gmpPointer.current });
-            }
+            setGmpNotice({ prev, next, ...at });
           }}
-        >
-          <option value="">{t("perm.processFields.gmpUnset")}</option>
-          {GMP_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        />
         {formatGmp(detail.sp_gmp) && (
           <span
             data-id="process-fields-gmp-badge"

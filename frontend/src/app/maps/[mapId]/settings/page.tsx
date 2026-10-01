@@ -3,7 +3,19 @@
 // 맵 설정 화면 — 권한 관리 탭 셸 / Map settings page: tabbed shell for permission management.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Info } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BadgeCheck,
+  Globe,
+  Inbox,
+  Info,
+  KeyRound,
+  Layers,
+  Users,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -25,6 +37,7 @@ import { VersionsPublishPanel } from "@/components/permissions/versions-publish-
 import { PendingApprovalsPanel } from "@/components/permissions/pending-approvals-panel";
 import { CheckoutRequestsPanel } from "@/components/map-settings/checkout-requests-panel";
 import { genId } from "@/lib/id";
+import { formatVersionMarker } from "@/lib/version-name";
 
 // ── 탭 정의 / Tab definitions ────────────────────────────────────
 
@@ -33,21 +46,23 @@ type TabId = "details" | "subprocess" | "collaborators" | "approvers" | "visibil
 interface Tab {
   id: TabId;
   labelKey: "perm.tabDetails" | "perm.tabSubprocess" | "perm.tabCollaborators" | "perm.tabApprovers" | "perm.tabVisibility" | "perm.tabVersions" | "perm.tabDanger" | "perm.tabPendingApprovals" | "perm.tabCheckoutRequests";
+  /** 레일 항목과 본문 h2가 공유하는 섹션 아이콘 (Lucide 16/1.5) / shared section icon for rail + heading. */
+  icon: LucideIcon;
 }
 
 // 전체 탭 목록 — approvals·checkout은 조건부 노출로 별도 처리 /
 // Full tab list — approvals and checkout are shown conditionally, filtered at render.
 // 순서: 정보 > 서브프로세스(오너) > 공개범위 > 협업자 > 결재자 > 버전 > 결재 대기 > 점유권 요청 > 위험 구역
 const ALL_TABS: Tab[] = [
-  { id: "details", labelKey: "perm.tabDetails" },
-  { id: "subprocess", labelKey: "perm.tabSubprocess" },
-  { id: "visibility", labelKey: "perm.tabVisibility" },
-  { id: "collaborators", labelKey: "perm.tabCollaborators" },
-  { id: "approvers", labelKey: "perm.tabApprovers" },
-  { id: "versions", labelKey: "perm.tabVersions" },
-  { id: "approvals", labelKey: "perm.tabPendingApprovals" },
-  { id: "checkout", labelKey: "perm.tabCheckoutRequests" },
-  { id: "danger", labelKey: "perm.tabDanger" },
+  { id: "details", labelKey: "perm.tabDetails", icon: Info },
+  { id: "subprocess", labelKey: "perm.tabSubprocess", icon: Workflow },
+  { id: "visibility", labelKey: "perm.tabVisibility", icon: Globe },
+  { id: "collaborators", labelKey: "perm.tabCollaborators", icon: Users },
+  { id: "approvers", labelKey: "perm.tabApprovers", icon: BadgeCheck },
+  { id: "versions", labelKey: "perm.tabVersions", icon: Layers },
+  { id: "approvals", labelKey: "perm.tabPendingApprovals", icon: Inbox },
+  { id: "checkout", labelKey: "perm.tabCheckoutRequests", icon: KeyRound },
+  { id: "danger", labelKey: "perm.tabDanger", icon: AlertTriangle },
 ];
 
 // ── 메인 페이지 컴포넌트 / Main page component ────────────────────
@@ -74,8 +89,18 @@ export default function SettingsPage() {
   const [linkage, setLinkage] = useState<{ id: number; path: string | null } | null>(null);
   const [canConfirm, setCanConfirm] = useState(false);
   const [canDecideSlot, setCanDecideSlot] = useState(false);
+  // 섹션 헤더 요약 — 버전 수·게시본 마커·SP 지정 여부(맵 상세에서), 협업자 수(패널 콜백)
+  const [versionSummary, setVersionSummary] = useState<{ count: number; published: string | null }>({ count: 0, published: null });
+  const [spDesignated, setSpDesignated] = useState(false);
+  const [collabCount, setCollabCount] = useState<number | null>(null);
   const applyDetail = (detail: MapDetail) => {
     setMapName(detail.name);
+    const publishedVersion = detail.versions.find((v) => v.status === "published") ?? null;
+    setVersionSummary({
+      count: detail.versions.length,
+      published: publishedVersion ? formatVersionMarker(publishedVersion, detail.versions) : null,
+    });
+    setSpDesignated(detail.sp_designated_at != null);
     setServerRole(detail.my_role);
     setVisibility(detail.visibility);
     setUnderApproval(detail.versions.some((v) => v.status === "pending" || v.status === "approved"));
@@ -333,10 +358,13 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               type="button"
-              className={`flex items-center rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
+              data-id={`settings-nav-${tab.id}`}
+              className={`flex items-center gap-2 rounded-sm px-3 py-1.5 text-left text-caption transition-colors ${
                 activeSection === tab.id
                   ? "bg-accent-tint text-accent"
-                  : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
+                  : tab.id === "danger"
+                    ? "text-error hover:bg-error/5"
+                    : "text-ink-tertiary hover:bg-surface-alt hover:text-ink"
               }`}
               onClick={() =>
                 document
@@ -344,6 +372,7 @@ export default function SettingsPage() {
                   ?.scrollIntoView({ behavior: "smooth", block: "start" })
               }
             >
+              <tab.icon size={15} strokeWidth={1.5} className="shrink-0" />
               {tab.id === "collaborators" && isFramework ? t("perm.tabFrameworkAccess") : t(tab.labelKey)}
               {tab.id === "approvals" && approvalsCount > 0 && (
                 <span
@@ -389,15 +418,37 @@ export default function SettingsPage() {
           {!currentMockUser ? (
             <p className="text-caption text-ink-tertiary">…</p>
           ) : (
-            <div className="flex w-full max-w-[680px] flex-col gap-10 pb-24">
+            <div className="flex w-full max-w-[920px] flex-col gap-10 pb-24">
               {visibleTabs.map((tab) => (
                 <section
                   key={tab.id}
                   id={`sec-${tab.id}`}
                   className="flex scroll-mt-6 flex-col gap-3"
                 >
-                  <h2 className="border-b border-hairline pb-2 text-body-strong text-ink">
+                  {/* 섹션 헤더 — 레일과 같은 아이콘 + 우측 요약 카운트(협업자·버전) / heading: shared icon + summary count */}
+                  <h2 className="flex items-center gap-2 border-b border-hairline pb-2 text-body-strong text-ink">
+                    <span
+                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                        tab.id === "danger" ? "bg-error/10 text-error" : "bg-accent-tint text-accent"
+                      }`}
+                    >
+                      <tab.icon size={15} strokeWidth={1.5} />
+                    </span>
                     {tab.id === "collaborators" && isFramework ? t("perm.tabFrameworkAccess") : t(tab.labelKey)}
+                    {tab.id === "subprocess" && spDesignated && (
+                      <span className="ml-1 rounded-full bg-accent-tint px-2 py-0.5 text-fine font-normal text-accent">Designated</span>
+                    )}
+                    {tab.id === "collaborators" && !isFramework && collabCount !== null && (
+                      <span data-id="settings-collab-count" className="ml-auto text-fine font-normal text-ink-tertiary">
+                        {t("perm.collab.headerCount", { n: collabCount })}
+                      </span>
+                    )}
+                    {tab.id === "versions" && versionSummary.count > 0 && (
+                      <span data-id="settings-version-count" className="ml-auto text-fine font-normal text-ink-tertiary">
+                        {t("perm.version.headerCount", { n: versionSummary.count })}
+                        {versionSummary.published ? ` · ${t("perm.version.headerPublished", { v: versionSummary.published })}` : ""}
+                      </span>
+                    )}
                   </h2>
                   {tab.id === "details" ? (
                     <>
@@ -440,6 +491,7 @@ export default function SettingsPage() {
                       onToast={showToast}
                       viewerGrantDisabled={isPublic}
                       owningDepartment={owningDepartment}
+                      onCountChange={setCollabCount}
                     />
                   ) : tab.id === "approvers" ? (
                     <ApproversPanel
@@ -470,6 +522,7 @@ export default function SettingsPage() {
                       canEdit={canEdit}
                       visibility={visibility}
                       canBundle={isOwner}
+                      spDesignated={spDesignated}
                       onToast={showToast}
                       onChanged={() => void refreshMap()}
                     />
@@ -484,6 +537,7 @@ export default function SettingsPage() {
                         <DangerZone
                           mapId={mapIdStr}
                           currentUserId={currentMockUser.id}
+                          owningDepartment={owningDepartment}
                           onToast={showToast}
                         />
                       </>

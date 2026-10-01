@@ -240,6 +240,24 @@ button:not(:disabled):active {
   animation: window-open 180ms var(--ease-overshoot);
 }
 
+/* 드롭다운 메뉴 등장 — 트리거 아래(간극 0)에서 살짝 내려오며 펼침. 설정 화면 역할·GMP·소유권 이전 메뉴와
+   SearchSelect 포털 메뉴가 공유한다 (2026-10-01). */
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown-in {
+  transform-origin: top center;
+  animation: dropdown-in 180ms var(--ease-overshoot);
+}
+
 /* 피커 선택 항목 추가 — 아래로 부드럽게 페이드인(신규 항목만 마운트 시 재생) */
 @keyframes item-fade-in {
   from {

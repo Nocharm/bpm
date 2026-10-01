@@ -1207,6 +1207,8 @@ export interface MapPermission {
   principal_id: string;
   role: string;
   granted_by: string;
+  // 부여 일시(KST ISO) — 협업자 행 메타. 레거시 행은 null 가능 (2026-10-01)
+  granted_at?: string | null;
   // 서버 진실 pending 마커 — 다른 유저가 낸 다운그레이드/제거 요청도 조회 즉시 보이도록 (session-local 아님)
   pending_change?: { to_role: string | null; requested_by: string; request_id: number } | null;
 }
