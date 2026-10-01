@@ -339,6 +339,7 @@ export function SwapOutputsModal({
           {/* 가운데 연결선 — 열 컨테이너 상단(헤더 포함) 기준 좌표. 헤더 높이는 양쪽 동일. */}
           <div className="relative self-stretch">
             <svg
+              data-id="swap-outputs-connectors"
               className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
               viewBox={`0 0 ${MID_W} ${colsH + 30}`}
               preserveAspectRatio="none"

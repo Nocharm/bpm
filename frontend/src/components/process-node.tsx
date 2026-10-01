@@ -3,7 +3,14 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
+import {
+  Handle,
+  type NodeProps,
+  Position,
+  useNodeId,
+  useStoreApi,
+  useUpdateNodeInternals,
+} from "@xyflow/react";
 import {
   AlertTriangle,
   BriefcaseBusiness,
@@ -1063,6 +1070,16 @@ function SubprocessHandles({
   anchorTop?: number;
 }) {
   const anchorStyle = anchorTop !== undefined ? { top: anchorTop } : undefined;
+  // 끝 핸들은 링크 맵 resolved가 도착한 뒤 늘어난다 — RF는 핸들 추가를 스스로 재측정하지 않아(handleBounds 스테일)
+  // 보조 끝(반려 등)으로 나가는 저장 엣지가 로드 직후 조용히 안 그려진다. 끝 키 집합이 바뀔 때 내부 측정을 갱신한다.
+  const nodeId = useNodeId();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const endKeys = ends.map((end) => end.key).join("\u0000");
+  useEffect(() => {
+    if (nodeId) {
+      updateNodeInternals(nodeId);
+    }
+  }, [nodeId, endKeys, updateNodeInternals]);
   return (
     <>
       {SUBPROCESS_IN_SIDES.map(({ side, position }) => (

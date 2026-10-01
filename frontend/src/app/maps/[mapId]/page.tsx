@@ -11192,6 +11192,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <div>
                         <label className="mb-1 block text-fine text-ink-tertiary">{t("inspector.label")}</label>
                         <textarea
+                          data-id="inspector-edge-label"
                           className="w-full resize-none rounded-sm border border-hairline px-2 py-1.5 text-caption placeholder:text-ink-tertiary"
                           placeholder={selectedEdgeMirrorTitle ?? undefined}
                           value={typeof selectedEdge.label === "string" ? selectedEdge.label : ""}
