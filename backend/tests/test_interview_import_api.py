@@ -922,3 +922,126 @@ def test_linkage_augment_keeps_existing_plain_exit_unflagged(client: TestClient)
     nodes, _ = _linkage_graph("19-01-06-01-12")
     source = next(n for n in nodes if n.title == "pa 업무 a")
     assert source.parallel_outputs in ([], None)
+
+
+def test_linkage_reimport_keeps_user_rewired_handles_without_duplicating(client: TestClient) -> None:
+    """캔버스에서 끝 키·들어오는 변을 바꾼 엣지는 재임포트가 같은 쌍으로 보고 건너뛴다 — 핸들 보존, 중복 없음."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Edge
+
+    doc = _parallel_linkage_doc("19-01-06-01-13", "rw", [("a", "b", None)])
+    assert _post(client, [{"name": "rw.json", "content": doc}], apply=True).status_code == 200
+    nodes, edges = _linkage_graph("19-01-06-01-13")
+    by_title = {n.title: n.id for n in nodes}
+    edge_id = next(e.id for e in edges
+                   if (e.source_node_id, e.target_node_id) == (by_title["rw 업무 a"], by_title["rw 업무 b"]))
+
+    async def _rewire() -> None:
+        async with SessionLocal() as session:
+            edge = await session.get(Edge, edge_id)
+            edge.source_handle, edge.target_handle = "반려", "in:top"
+            await session.commit()
+
+    _run(_rewire())
+    assert _post(client, [{"name": "rw.json", "content": doc}], apply=True).status_code == 200
+
+    async def _pair_edges() -> list[Edge]:
+        async with SessionLocal() as session:
+            return list((await session.scalars(select(Edge).where(
+                Edge.source_node_id == by_title["rw 업무 a"],
+                Edge.target_node_id == by_title["rw 업무 b"])) ).all())
+
+    pair = _run(_pair_edges())
+    assert [(e.id, e.source_handle, e.target_handle) for e in pair] == [(edge_id, "반려", "in:top")]
+
+
+def _published_l6_node(code: str, title: str):
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node
+
+    map_id = _map_row(code).id
+
+    async def _load():
+        async with SessionLocal() as session:
+            version = await session.scalar(select(MapVersion).where(
+                MapVersion.map_id == map_id, MapVersion.status == "published"))
+            return await session.scalar(select(Node).where(
+                Node.version_id == version.id, Node.title == title))
+
+    return _run(_load())
+
+
+def _existing_rows(l5_code: str) -> list[dict]:
+    from app.db import SessionLocal
+    from app.framework_interview.existing import load_existing_l6
+
+    category_id = _category_id(l5_code)
+
+    async def _load() -> list[dict]:
+        async with SessionLocal() as session:
+            return await load_existing_l6(session, category_id)
+
+    return _run(_load())
+
+
+def test_parallel_exit_round_trips_adapter_engine_and_reverse_conversion(client: TestClient) -> None:
+    """0.5 branch+parallel → 어댑터(parallel) → 엔진(parallel_outputs) → map_to_row(branch/parallel)
+    → 재변환에서도 ◇ 없이 parallel — 캠페인 '기존 L6 정정' 왕복이 병행을 택일로 바꾸지 않는다."""
+    from scripts.consultant_interview import convert_interview
+
+    data = _single_row_doc("19-01-06-01-14", "task-rt-0001")
+    data["schema_version"] = "0.5-bpm-interface-draft"
+    data["rows"][0]["relations"]["edges"] = [
+        {"src": 1, "dst": 2, "kind": "branch", "gateway": "parallel", "condition": None, "label": None, "quote": None},
+        {"src": 1, "dst": 3, "kind": "branch", "gateway": "parallel", "condition": None, "label": None, "quote": None},
+        {"src": 2, "dst": 4, "kind": "seq", "gateway": None, "condition": None, "label": None, "quote": None},
+        {"src": 3, "dst": 4, "kind": "seq", "gateway": None, "condition": None, "label": None, "quote": None},
+    ]
+    assert _post(client, [{"name": "p.json", "content": data}], apply=True).status_code == 200
+    assert _published_l6_node("task-rt-0001", "작업지시 확인").parallel_outputs == ["__primary__"]
+
+    existing = _existing_rows("19-01-06-01-14")
+    row = existing[0]["row"]
+    label_of = {a["seq"]: a["label"] for a in row["actions"]}
+    parallel = sorted((label_of[e["src"]], label_of[e["dst"]])
+                      for e in row["relations"]["edges"] if e.get("gateway") == "parallel")
+    assert parallel == [("작업지시 확인", "양식 준비"), ("작업지시 확인", "표준기 선정")]
+
+    again = _single_row_doc("19-01-06-01-14", "task-rt-0001")
+    again["rows"][0] = {**again["rows"][0], **row}
+    res = convert_interview(again)
+    nodes = {n.name: n for n in res.maps[0].nodes}
+    assert nodes["작업지시 확인"].parallel is True
+    assert not any(n.code.endswith("f") for n in res.maps[0].nodes)
+
+
+def _single_row_doc(l5_code: str, task_id: str) -> dict:
+    """픽스처 행 1건을 고유 L5·taskId로 — 세션 공유 DB에서 다른 테스트의 같은 맵과 섞이지 않게."""
+    data = _interview()
+    data["l5"]["nodeCode"] = l5_code
+    data["framework"]["categories"].append(
+        {"code": l5_code, "name": f"{task_id} 왕복", "level": 5, "parent": "19-01-06-01"})
+    data["rows"][0] = {**data["rows"][0], "taskId": task_id, "unitId": f"unit-{task_id}"}
+    data["relations"]["entry"]["taskId"] = task_id
+    data["tasks"][0]["id"] = task_id
+    data["sideNotes"] = []
+    return data
+
+
+def test_plain_fanout_branch_node_folds_back_through_the_real_import(client: TestClient) -> None:
+    """비병렬 팬아웃은 어댑터가 '{활동} 결과' ◇를 세워 임포트되고, 역변환은 그 ◇를 접어 원래 행으로 돌린다
+    (수기 Node가 아니라 실제 임포트 경로)."""
+    data = _single_row_doc("19-01-06-01-15", "task-fo-0001")  # 행: 1→2, 1→3 순차 — 출구당 1개 위반이라 ◇ 자동 생성
+    assert _post(client, [{"name": "f.json", "content": data}], apply=True).status_code == 200
+    assert _published_l6_node("task-fo-0001", "작업지시 확인 결과").node_type == "decision"
+
+    row = _existing_rows("19-01-06-01-15")[0]["row"]
+    assert [a["label"] for a in row["actions"]] == ["작업지시 확인", "표준기 선정", "양식 준비", "표준기 유효성 판정"]
+    label_of = {a["seq"]: a["label"] for a in row["actions"]}
+    out_of_first = sorted((label_of[e["dst"]], e["kind"]) for e in row["relations"]["edges"]
+                          if label_of[e["src"]] == "작업지시 확인")
+    assert out_of_first == [("양식 준비", "seq"), ("표준기 선정", "seq")]

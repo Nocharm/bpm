@@ -429,3 +429,44 @@ def test_solo_self_edge_still_gets_branch_node() -> None:
     assert branch_of == {"__branch__A": "A"}
     assert flow == [("A", "__branch__A", "", None), ("__branch__A", "A", "재수행", None)]
     assert back == {("__branch__A", "A")}
+
+
+def test_subprocess_in_handle_mirrors_the_frontend_helper() -> None:
+    """FE `subprocessInHandle`과 동치 — 좌측은 레거시 `in`, 나머지 변은 `in:<side>`."""
+    from app.subprocess import subprocess_in_handle
+
+    assert [subprocess_in_handle(side) for side in ("left", "top", "right", "bottom")] == [
+        "in", "in:top", "in:right", "in:bottom"]
+
+
+def test_build_graph_rows_sp_target_handle_follows_the_layout_side(monkeypatch) -> None:
+    """임포트 배치가 SP 들어오는 변을 고르면 핸들도 그 변의 in 변형으로 — 에디터 autoLayoutFlow와 같은 계약.
+    출구는 임포트 기본값 대표 끝 그대로."""
+    import scripts.import_consultant as engine
+    from scripts.consultant_canonical import CanonicalMap, CanonicalParams
+
+    cmap = CanonicalMap.model_validate({
+        "code": "L6-SP", "name": "SP 핸들", "category": "A1",
+        "nodes": [{"code": "N1", "name": "요청", "type": "process", "seq": 1}],
+        "edges": [], "links": [{"to_map": "L6-B", "after_node": "N1"}],
+    })
+    targets = {"L6-B": (99, CanonicalParams())}
+
+    def _sp_edge(edges: list[Edge], nodes: list[Node]) -> Edge:
+        sp = next(n for n in nodes if n.node_type == "subprocess")
+        return next(e for e in edges if e.target_node_id == sp.id)
+
+    nodes, edges, _ = engine.build_graph_rows(cmap, targets)
+    forward = _sp_edge(edges, nodes)
+    assert (forward.target_side, forward.target_handle) == ("left", "in")
+
+    real = engine.resolve_handles
+
+    def _top_into_sp(layout_nodes, pairs, spine):
+        sides = real(layout_nodes, pairs, spine)
+        return {pair: (s, "top" if pair[1].startswith("__link__") else t) for pair, (s, t) in sides.items()}
+
+    monkeypatch.setattr(engine, "resolve_handles", _top_into_sp)
+    nodes, edges, _ = engine.build_graph_rows(cmap, targets)
+    top = _sp_edge(edges, nodes)
+    assert (top.target_side, top.target_handle) == ("top", "in:top")

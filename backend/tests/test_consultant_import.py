@@ -1,5 +1,6 @@
 """컨설턴트 임포트 — 스키마·엔진 테스트. 설계: docs/design/2026-08-08-consultant-hierarchy-design.md"""
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -1274,53 +1275,211 @@ def test_map_promoted_fields_land_and_gmp_review_survives(client) -> None:
     assert m3.sp_gmp == "direct" and m3.sp_gmp_fallback == "GMP 기록으로 재분류"
 
 
-def test_node_gmp_survives_redelivery(client) -> None:
-    """활동별 GMP는 검토값 — 전달물에 없어 재전달의 새 버전이 덮으면 안 된다.
-    엔진이 직전 게시본에서 계보(source_node_id)로 이어받는다 (design 2026-08-20)."""
+# 항상 승계(조건 None) 필드별 게시본 편집값 — D1 승계 목록과 1:1로 맞춘다(아래 핀 테스트)
+_ALWAYS_INHERITED_VALUES: dict[str, object] = {
+    "gmp": "direct",
+    "assignee_role": "검토자",
+    "url": "https://sop.example/cal",
+    "url_label": "SOP",
+    "duration": "1.30",
+    "touch_time": "0.30",
+    "cost_krw": "15000",
+    "cost_usd": "12.5",
+    "headcount": "2",
+    "start_condition": "교정 주기 도래",
+    "end_condition": "목록 확정",
+    "width": 200,
+}
+
+
+def test_always_inherited_values_cover_the_inheritance_list() -> None:
+    from scripts.import_consultant import INHERITED_NODE_FIELDS
+
+    always = {name for name, guard in INHERITED_NODE_FIELDS if guard is None} - {"group_ids"}
+    assert always == set(_ALWAYS_INHERITED_VALUES)
+
+
+def _published_nodes(code: str):
+    """맵 consultant_code의 최신 게시본 노드(세션 밖에서 읽을 수 있게 expunge)."""
     from sqlalchemy import select
 
     from app.db import SessionLocal
     from app.models import MapVersion, Node, ProcessMap
 
+    async def _load():
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            return list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
+
+    return _run(_load())
+
+
+def _edit_published(code: str, edit) -> None:
+    """최신 게시본 노드를 직접 고친다 — 오너가 게시본에 값을 넣은 상황 재현. edit(session, version_id, nodes)."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import MapVersion, Node, ProcessMap
+
+    async def _apply() -> None:
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+            latest = (await session.scalars(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
+            )).one()
+            nodes = list((await session.scalars(select(Node).where(Node.version_id == latest.id))).all())
+            edit(session, latest.id, nodes)
+            await session.commit()
+
+    _run(_apply())
+
+
+@pytest.mark.parametrize("field", sorted(_ALWAYS_INHERITED_VALUES))
+def test_node_field_outside_delivery_survives_redelivery(client, field: str) -> None:
+    """전달물에 없는 노드 필드는 재전달 새 버전이 덮으면 안 된다 — 엔진이 직전 게시본에서
+    계보(source_node_id)로 이어받는다 (gmp design 2026-08-20 → D1 2026-10-02 일반화)."""
     _seed_import_employees()
+    code = f"IV-INH-{field}"
 
     def _make(desc: str = ""):
-        cmap = _canonical_map(code="IV-G1", name="GMP 승계")
+        cmap = _canonical_map(code=code, name=f"승계 {field}")
         cmap.nodes[0].description = desc
         return cmap
 
     _run(_import_once(maps=[_make()]))
+    value = _ALWAYS_INHERITED_VALUES[field]
+    _edit_published(code, lambda _s, _v, nodes: setattr(
+        next(n for n in nodes if n.title == "요청"), field, value))
 
-    async def _classify() -> None:
-        # 검토자가 게시본 노드(N1 계보)에 GMP 분류를 지정한 상황 재현
-        async with SessionLocal() as session:
-            m = (await session.scalars(
-                select(ProcessMap).where(ProcessMap.consultant_code == "IV-G1"))).one()
-            latest = (await session.scalars(
-                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
-            )).one()
-            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
-            target = next(n for n in nodes if n.title == "요청")
-            target.gmp = "direct"
-            await session.commit()
-
-    _run(_classify())
-
-    # 노드 설명 변경 재전달 → 새 버전 게시 — 새 버전에도 분류가 승계돼야 한다
+    # 노드 설명 변경 재전달 → 새 버전 게시 — 새 버전에도 편집값이 승계돼야 한다
     report = _run(_import_once(maps=[_make("개정된 설명")]))
     assert report.counts() == {"updated": 1}
+    assert getattr(next(n for n in _published_nodes(code) if n.title == "요청"), field) == value
 
-    async def _load_latest_gmp() -> str:
+
+def test_inherited_node_field_edit_alone_keeps_redelivery_unchanged(client) -> None:
+    """승계 필드는 전달 변경 감지(_graph_signature) 밖 — 게시본에서 조건만 고친 뒤 같은 전달물을
+    다시 넣어도 새 버전이 찍히지 않는다(찍히면 그 순간 편집값이 덮이던 경로, C05)."""
+    _seed_import_employees()
+    _run(_import_once(maps=[_canonical_map(code="IV-INH-NOOP")]))
+    _edit_published("IV-INH-NOOP", lambda _s, _v, nodes: setattr(
+        next(n for n in nodes if n.title == "요청"), "start_condition", "현업 보정 조건"))
+
+    report = _run(_import_once(maps=[_canonical_map(code="IV-INH-NOOP")]))
+    assert report.counts() == {"unchanged": 1}
+    assert next(n for n in _published_nodes("IV-INH-NOOP") if n.title == "요청").start_condition == "현업 보정 조건"
+
+
+def test_io_bound_fields_survive_only_while_io_text_is_unchanged(client) -> None:
+    """IO 플래그·사용자가 건 IO 링크(미러 + 원본 항목 id)는 줄 정렬 기반 — 그 측 텍스트가 그대로면 승계,
+    바뀌면 폐기한다(폼과 같은 조건, D1). 승계가 자동 연결보다 먼저라 사용자 링크가 덮이지 않는다."""
+    _seed_import_employees()
+
+    def _make(desc: str = "", n2_input: str = "현장 요청서"):
+        cmap = _canonical_map(code="IV-INH-IO", name="IO 승계")
+        cmap.nodes[0].description = desc
+        cmap.nodes[0].output = "요청 원본"
+        cmap.nodes[1].input = n2_input
+        return cmap
+
+    _run(_import_once(maps=[_make()]))
+
+    def _link(_s, _v, nodes) -> None:
+        src = next(n for n in nodes if n.title == "요청")
+        dst = next(n for n in nodes if n.title == "발주")
+        src.output_ids = "user-item-1"  # 텍스트가 달라 자동 연결이 못 잇는 항목을 사용자가 수동으로 이은 상황
+        dst.input_links = "user-item-1"
+        dst.input_flags = "optional"
+
+    _edit_published("IV-INH-IO", _link)
+
+    report = _run(_import_once(maps=[_make("개정된 설명")]))
+    assert report.counts() == {"updated": 1}
+    nodes = _published_nodes("IV-INH-IO")
+    src = next(n for n in nodes if n.title == "요청")
+    dst = next(n for n in nodes if n.title == "발주")
+    assert (src.output_ids, dst.input_links, dst.input_flags) == ("user-item-1", "user-item-1", "optional")
+
+    # 인풋 텍스트가 바뀐 재전달 → 줄 정렬이 깨지므로 미러·플래그 폐기(원본 쪽 출력은 그대로라 원본 id는 유지)
+    report = _run(_import_once(maps=[_make("개정된 설명", n2_input="수정 요청서")]))
+    assert report.counts() == {"updated": 1}
+    nodes = _published_nodes("IV-INH-IO")
+    dst = next(n for n in nodes if n.title == "발주")
+    assert (dst.input_links, dst.input_flags) == ("", "")
+    assert next(n for n in nodes if n.title == "요청").output_ids == "user-item-1"
+
+
+def test_inherited_link_to_a_moved_origin_is_relinked_not_left_dangling(client) -> None:
+    """원본 아웃풋 줄이 재전달로 바뀌면(원본 id 미승계) 그 id를 가리키던 승계 링크는 비우고 자동 연결이 새 줄로
+    다시 잇는다 — 안 그러면 미러가 사라진 id를 붙든 채 자동 연결도 건너뛴다."""
+    _seed_import_employees()
+
+    def _make(n1_output: str):
+        cmap = _canonical_map(code="IV-INH-MOVE", name="원본 이동")
+        cmap.nodes[0].output = n1_output
+        cmap.nodes[1].input = "발주 요청서"
+        return cmap
+
+    _run(_import_once(maps=[_make("발주 요청서")]))
+    before = {n.title: n for n in _published_nodes("IV-INH-MOVE")}
+    assert before["발주"].input_links == before["요청"].output_ids != ""
+
+    report = _run(_import_once(maps=[_make("검토 메모\n발주 요청서")]))
+    assert report.counts() == {"updated": 1}
+    after = {n.title: n for n in _published_nodes("IV-INH-MOVE")}
+    origin_ids = after["요청"].output_ids.split("\n")
+    assert len(origin_ids) == 2 and origin_ids[1] != ""
+    assert after["발주"].input_links == origin_ids[1]
+
+
+def test_link_node_version_pin_and_groups_survive_redelivery(client) -> None:
+    """링크 노드의 버전 고정(follow_latest/linked_version_id)은 같은 링크 맵이면 승계, 그룹은 새 버전에
+    그룹 행을 복제해 소속을 리맵한다(버전마다 그룹 id가 다르다, D1)."""
+    from app.models import Group
+
+    _seed_import_employees()
+    a = _canonical_map(code="IV-INH-PIN", links=[{"to_map": "IV-INH-PIN-B"}])
+    b = _canonical_map(code="IV-INH-PIN-B")
+    _run(_import_once(maps=[a, b]))
+
+    def _pin_and_group(session, version_id: int, nodes) -> None:
+        sp = next(n for n in nodes if n.node_type == "subprocess")
+        sp.follow_latest = False
+        sp.linked_version_id = 4242
+        session.add(Group(id="grp-parent", version_id=version_id, label="상위", color=""))
+        session.add(Group(id="grp-child", version_id=version_id, label="구매 묶음", color="#aabbcc",
+                          parent_group_id="grp-parent"))
+        next(n for n in nodes if n.title == "요청").group_ids = ["grp-child"]
+
+    _edit_published("IV-INH-PIN", _pin_and_group)
+
+    changed = _canonical_map(code="IV-INH-PIN", links=[{"to_map": "IV-INH-PIN-B"}])
+    changed.nodes[0].description = "개정된 설명"
+    report = _run(_import_once(maps=[changed]))
+    assert ("IV-INH-PIN", "updated", "graph") in report.rows
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+
+    nodes = _published_nodes("IV-INH-PIN")
+    sp = next(n for n in nodes if n.node_type == "subprocess")
+    assert (sp.follow_latest, sp.linked_version_id) == (False, 4242)
+    member = next(n for n in nodes if n.title == "요청")
+
+    async def _groups():
         async with SessionLocal() as session:
-            m = (await session.scalars(
-                select(ProcessMap).where(ProcessMap.consultant_code == "IV-G1"))).one()
-            latest = (await session.scalars(
-                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "published")
-            )).one()
-            nodes = (await session.scalars(select(Node).where(Node.version_id == latest.id))).all()
-            return next(n for n in nodes if n.title == "요청").gmp
+            return list((await session.scalars(
+                select(Group).where(Group.version_id == nodes[0].version_id))).all())
 
-    assert _run(_load_latest_gmp()) == "direct"
+    groups = {g.id: g for g in _run(_groups())}
+    assert len(member.group_ids) == 1 and member.group_ids[0] in groups
+    child = groups[member.group_ids[0]]
+    assert (child.label, child.color) == ("구매 묶음", "#aabbcc") and child.id != "grp-child"
+    assert groups[child.parent_group_id].label == "상위"
 
 
 def test_node_io_forms_survive_redelivery_unless_io_changed(client) -> None:
@@ -1445,6 +1604,101 @@ def test_edited_draft_survives_redelivery(client) -> None:
 
     status, titles = _run(_load())
     assert status == "draft" and "현업이 고친 제목" in titles
+
+
+def _edit_pos(nodes, _edges) -> None:
+    next(n for n in nodes if n.node_type == "process").pos_x += 40
+
+
+def _edit_url(nodes, _edges) -> None:
+    next(n for n in nodes if n.node_type == "process").url = "https://sop.example"
+
+
+def _edit_sp_end_key(nodes, edges) -> None:
+    sp = next(n for n in nodes if n.node_type == "subprocess")
+    next(e for e in edges if e.source_node_id == sp.id).source_handle = "반려"  # 보조 끝으로 재배선
+
+
+def _edit_sp_in_side(nodes, edges) -> None:
+    sp = next(n for n in nodes if n.node_type == "subprocess")
+    next(e for e in edges if e.target_node_id == sp.id).target_handle = "in:top"
+
+
+def _edit_parallel(nodes, _edges) -> None:
+    next(n for n in nodes if n.node_type == "process").parallel_outputs = ["__primary__"]
+
+
+def _add_sp_exit_edges(code: str) -> None:
+    import uuid
+
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Edge, MapVersion, Node, ProcessMap
+
+    async def _add() -> None:
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+            versions = (await session.scalars(select(MapVersion).where(MapVersion.map_id == m.id))).all()
+            for v in versions:
+                nodes = (await session.scalars(select(Node).where(Node.version_id == v.id))).all()
+                sp = next(n for n in nodes if n.node_type == "subprocess")
+                end = next(n for n in nodes if n.node_type == "end")
+                session.add(Edge(id=uuid.uuid4().hex, version_id=v.id, source_node_id=sp.id,
+                                 target_node_id=end.id, label="", source_handle="__primary__"))
+            await session.commit()
+
+    _run(_add())
+
+
+@pytest.mark.parametrize(
+    "edit", [_edit_pos, _edit_url, _edit_sp_end_key, _edit_sp_in_side, _edit_parallel],
+    ids=["pos-only", "url-only", "sp-end-key-only", "sp-in-side-only", "parallel-only"],
+)
+def test_draft_edited_outside_delivered_fields_survives_redelivery(client, edit) -> None:
+    """전달 필드 밖(좌표·url·SP 끝 키·병렬 토글)만 고친 작업본도 편집본이다 — 재전달이 점유권자 없는
+    작업본을 "손 안 댄" 것으로 오판해 비우면 안 된다(C04). 판정은 편집 가능한 전 필드 비교."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import Edge, MapVersion, Node, ProcessMap
+
+    _seed_import_employees()
+    code = f"L6-DRAFT-{edit.__name__}"
+    links = [{"to_map": f"{code}-B"}]
+    _run(_import_once(maps=[_canonical_map(code=code, links=links), _canonical_map(code=f"{code}-B")]))
+    if edit is _edit_sp_end_key:
+        # 연계 SP는 임포트상 싱크라 출구 엣지가 없다 — 게시본·작업본에 똑같이 SP→End(대표 끝)를 그려 둔
+        # 상태(편집 흔적 0)에서 시작한다. 작업본 끝 키만 바꾼 것이 편집으로 잡혀야 한다
+        _add_sp_exit_edges(code)
+
+    async def _edit_draft() -> tuple[int, tuple]:
+        async with SessionLocal() as session:
+            m = (await session.scalars(select(ProcessMap).where(ProcessMap.consultant_code == code))).one()
+            draft = await session.scalar(
+                select(MapVersion).where(MapVersion.map_id == m.id, MapVersion.status == "draft"))
+            nodes = list((await session.scalars(select(Node).where(Node.version_id == draft.id))).all())
+            edges = list((await session.scalars(select(Edge).where(Edge.version_id == draft.id))).all())
+            edit(nodes, edges)
+            await session.commit()
+            snapshot = sorted((n.title, n.pos_x, n.url, tuple(n.parallel_outputs or [])) for n in nodes)
+            return draft.id, (snapshot, sorted(e.source_handle or "" for e in edges))
+
+    draft_id, before = _run(_edit_draft())
+    changed = _canonical_map(code=code, links=links)
+    changed.nodes[0].name = "요청(개정)"
+    _run(_import_once(maps=[changed], label="Delivery 2"))
+
+    async def _load():
+        async with SessionLocal() as session:
+            kept = await session.get(MapVersion, draft_id)
+            nodes = (await session.scalars(select(Node).where(Node.version_id == draft_id))).all()
+            edges = (await session.scalars(select(Edge).where(Edge.version_id == draft_id))).all()
+            snapshot = sorted((n.title, n.pos_x, n.url, tuple(n.parallel_outputs or [])) for n in nodes)
+            return kept.status, (snapshot, sorted(e.source_handle or "" for e in edges))
+
+    status, after = _run(_load())
+    assert status == "draft" and after == before  # 편집본 그대로, 새 게시 버전은 따로
 
 
 def test_upsert_categories_external_is_create_only(client) -> None:

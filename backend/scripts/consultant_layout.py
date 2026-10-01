@@ -433,7 +433,7 @@ def plan_branch_fanout(
     """분기 노드 출구를 위/아래/옆으로 벌린다 — 반환: (노드별 행, 엣지별 출구 변).
 
     연계 캔버스는 노드가 전부 한 줄이라 분기가 어디로 갈라지는지 선만으로 안 읽힌다. 분기 노드는
-    일반 노드라 4면 핸들을 다 쓸 수 있으므로(SP는 좌 in·우 __primary__ 고정) 출구를 실제로 벌린다.
+    일반 노드라 4면 핸들을 다 쓸 수 있으므로(SP 출구는 끝 키 한 점, 연계 임포트 기본값은 `__primary__`) 출구를 실제로 벌린다.
 
     행 배정은 **먼저 배정된 쪽이 이긴다** — 한 노드가 두 분기의 대상이면(예: 두 갈래가 같은 L6로
     합류) 나중 분기가 위치를 흔들면 안 된다. 출구 변은 최종 행에서 되뽑아 기하와 항상 일치시킨다.
@@ -468,7 +468,11 @@ def resolve_handles(
     pairs: list[tuple[str, str]],
     spine: set[str],
 ) -> dict[tuple[str, str], tuple[str, str]]:
-    """엣지별 (source_side, target_side) — 배치가 끝난 좌표 기준."""
+    """엣지별 (source_side, target_side) — 배치가 끝난 좌표 기준.
+
+    SP 타깃의 target_side는 호출자가 들어오는 문 변형(`subprocess_in_handle`: 좌=`in`, 그 외 `in:<side>`)으로
+    옮긴다 — TS `autoLayoutFlow`의 `subprocessInHandle(targetSide)`와 같은 계약.
+    """
     by_id = {n.id: n for n in nodes}
     sides: dict[tuple[str, str], tuple[str, str]] = {}
     for src, dst in pairs:
