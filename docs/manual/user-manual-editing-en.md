@@ -64,7 +64,11 @@ Select a node and edit in the right inspector:
 
 - Drag from a node's handle onto another node to connect them.
 - No need to aim for the handle. **Drop the line anywhere on a node's body** and it connects to the default handle. While hovering the body, a preview snaps to where the connection will land.
-- A plain node has a **single output**. To branch, use a **Decision** node. Its outgoing edges get branch labels (**Yes** / **No** / **Other**).
+- **Each exit takes one connection.** To split into one-of-several paths, use a **Decision** node. Its outgoing edges get branch labels (**Yes** / **No** / **Other**).
+- When all branches run **at the same time**, right-click the node and turn on **Parallel exit**. A parallel exit needs **two or more** connections, and extra branches are added without the insert prompt. Hovering the node shows a **N in parallel** badge.
+- Connections show a flow pulse. Parallel branches carry a faint dot that crosses **every branch in step** to the end; decision branches show a dot that pauses at the exit, then moves a short way down **one branch at a time**, taking turns (hidden when the OS reduce-motion setting is on).
+- **Subprocess nodes**: incoming connections can land on any of the four sides, and the incoming handles appear only while you drag a connection in (you cannot start a connection from the left, top, or bottom). Outgoing connections start from **one exit point on the right**; when the linked map has several ends, dropping the line asks **which end continues here**. Each end takes one connection, and per-end parallel is set by ticking end names in the right-click **Parallel exit** submenu.
+- A subprocess with two or more ends shows an **exits used/ends** badge after its title (for example `2/3`). If an end gets too many connections the same badge turns into a red **+N**, and hovering shows the usage (for example `4/3`).
 - Edge labels (branch conditions etc.) are edited via the edge context menu or `F2`. Labels take line breaks the same way: `Enter` commits, **`Shift+Enter` / `Alt+Enter`** breaks the line.
 - **Line style is per edge**: Curved, Stepped, or Straight. Select an edge and pick it in the inspector's **Line style** row, or from the edge's right-click menu. The choice is saved with the map, so everyone sees the same shape.
 - To change them all at once, use the inspector's **Map tab → Edge style**: a confirm dialog summarizes how many connections will change, and the style you confirm also becomes the default for newly drawn connections.
@@ -77,6 +81,7 @@ Select a node and edit in the right inspector:
 - You can paste into **another tab or another map**. The copied content is kept in the browser across tabs.
 - **`Ctrl`+drag to duplicate**: drag a node while holding `Ctrl`; a ghost with a `+` badge follows, and a duplicate lands where you drop.
 - Both paste and duplicate **preserve edge handle directions** (connection points), and the added nodes are selected right away so you can keep editing.
+- A parallel exit stays on the copy **only when two or more of its branches are copied along**; pasting the node alone turns it off.
 
 ---
 
@@ -185,7 +190,7 @@ You can link a map that is **not yet designated** as a placeholder first, and so
   - exactly **one** start node
   - **one** primary end
   - **no duplicate** end names
-  - no invalid branching: plain nodes have a **single output** (multiple outputs only on Decision nodes)
+  - no invalid multiple connections: **one connection per exit** (per end on subprocesses, two or more on parallel exits, Decision nodes exempt). Inserting may leave two for a moment; click the item to jump to the node. Autosave is not blocked; **Save** and submitting for approval are.
 - Editing is possible only while the version is a draft (#Draft / #Rejected) and you hold the **checkout**. If someone else is editing or an approval is in progress, the canvas locks read-only (see the Getting Around manual for versions and approval).
 - The checkout request/transfer UI lives in the **Checkout** card of the Approval tab's **Approval workflow** panel and is interactive **only on a draft**. A rejected version shows no checkout UI. **Withdraw** returns it to draft and hands the checkout back to you automatically.
 - While a change that lowers your own permission is pending approval, checkout and submitting for approval are refused ("Your permission change is still pending approval."). Once the request is decided, refresh or switch versions to continue.
@@ -235,7 +240,7 @@ Save the current map to a file from the export button in the right inspector (or
 | --- | --- |
 | **PNG** | The current canvas as a 2× resolution image (every connector renders as a solid black line). Drawn on the canvas background (dot grid) with a **map info card** at the bottom (map name, owning department, owner, version, published date, framework path). Screen state such as the selection ring, I/O details, and flow highlight is left out of the capture (the selection is restored afterwards). `Ctrl+Shift+E`. |
 | **Excel** | **Choose one of two formats**: ① **Process Map** (structured): a node table (assignee, department, system, per-run metrics) with branch conditions folded into `[branchNo:label]` annotations ② **WBS**: a work-breakdown sheet that expands subprocesses into level columns. A format picker opens on export; costs are saved in per-currency columns with number formatting. |
-| **CSV** | The same 21-column table as import (Role column included). You can round-trip by editing an exported CSV and importing it again. On nodes whose system is **Other**, the System cell carries the source note, so re-importing brings back the same Other + note. |
+| **CSV** | The same 22-column table as import (Role and Parallel columns included; parallel exits export Parallel=Y). You can round-trip by editing an exported CSV and importing it again. On nodes whose system is **Other**, the System cell carries the source note, so re-importing brings back the same Other + note. |
 
 > CSV export warns about, and skips, structure a table can't represent: end nodes other than the primary end, edges into an End node, duplicate node titles, and titles or labels containing `;` / `:`. Excel is cut at a 2,000-row cap and marked as truncated.
 
@@ -247,7 +252,8 @@ Open the **AI assistant** from the editor top bar (it appears only when AI is en
 
 - **Generate** a flowchart from a plain-language description: nodes, edges, groups, and BPM attributes (role, department, system, per-run metrics) are filled in. **The AI never assigns real people**. Person-related values are filled as a **Role** only (the admin-managed role list's spelling takes precedence, role names outside the list are allowed), and you pick assignees yourself in the editor's assignee picker. Systems are matched to the system list's canonical spelling; values not in the list land as Other + source note.
 - **Edit incrementally**: ask for changes and the existing layout, colors, assignees, and groups are preserved (asking for a real name, such as "set the assignee to Jane Doe", only returns a pointer to the picker). Supports adding/removing nodes, connecting/disconnecting, inserting between two nodes, branch-label changes, and setting node descriptions, inputs/outputs, start/end conditions, and links (URL). Review the preview, then **Add to map (Apply)** or Discard.
-- **Analyze** ("Find issues"), **summarize**, **walk through** the flow step by step (prev / next / autoplay), and **suggest improvements**.
+- You can also ask for **parallel work** ("after A, do B and C at the same time"). The AI turns on the **Parallel exit** of the node the branches leave from and connects them. Per-end parallel on subprocesses is set only from the editor's right-click menu.
+- **Analyze** ("Find issues"), **summarize**, **walk through** the flow step by step (prev / next / autoplay), and **suggest improvements**. Analysis names nodes that break the one-connection-per-exit rule, with the reason.
 - Ask **how-to questions**: answers are grounded in this manual; anything outside the manual it reports it doesn't know.
 - **Multiple chats**: Chats are stored on the server and follow you across devices. Open past chats from the list in the chat bar, or start a new one with the **+** icon in the window header. Titles are derived from the first question, and you can delete chats from the list.
 - **Chats from other maps**: The "Chats from other maps" section in the list opens conversations from other maps read-only; use "Open this map" to go there and continue.
