@@ -168,6 +168,14 @@ def test_designate_description_writes_map_description(client: TestClient, enforc
     assert res2.status_code == 200
     assert client.get(f"/api/maps/{map_id}").json()["description"] == "고친 설명"
 
+    # 생략은 미변경(형제 메모·조건과 같은 규약), ""는 명시적 지움 (critic:02)
+    assert client.put(f"/api/maps/{map_id}/subprocess-designation", json=BODY).status_code == 200
+    assert client.get(f"/api/maps/{map_id}").json()["description"] == "고친 설명"
+    cleared = client.put(
+        f"/api/maps/{map_id}/subprocess-designation", json={**BODY, "description": "  "}
+    )
+    assert cleared.json()["description"] == ""
+
 
 def test_designate_roundtrips_io_item_forms(client: TestClient, enforce) -> None:
     """SP IO 항목별 데이터 폼 — sp_input/sp_output 줄과 1:1 정렬 왕복 (2026-08-20)."""

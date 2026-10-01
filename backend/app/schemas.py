@@ -98,8 +98,9 @@ class SubprocessDesignationIn(BaseModel):
     # 지정 URL — 노드 url과 동일하게 길이만 서버 검증(스킴은 클라이언트) (url-label design 2026-07-07)
     url: str = Field(default="", max_length=500)
     url_label: str = Field(default="", max_length=100)
-    # 지정 설명 — 자유 텍스트, 선택 (design 2026-07-17)
-    description: str = Field(default="")
+    # 지정 설명 = 맵 설명 — None=미변경(형제 메모·조건과 같은 규약), ""=지움. 생략 호출이 맵 설명을
+    # 비우지 않게 (design 2026-07-17, critic:02)
+    description: str | None = None
     # L6 Input/Output — 자유 텍스트, 길이 캡 없음 (design 2026-08-08)
     input: str = Field(default="")
     output: str = Field(default="")
@@ -137,8 +138,8 @@ class SubprocessDesignationIn(BaseModel):
 
     @field_validator("description", "input", "output", mode="after")
     @classmethod
-    def _trim_description(cls, value: str) -> str:
-        return value.strip()
+    def _trim_description(cls, value: str | None) -> str | None:
+        return None if value is None else value.strip()
 
     @model_validator(mode="after")
     def _drop_label_without_url(self) -> "SubprocessDesignationIn":

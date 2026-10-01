@@ -293,6 +293,25 @@ def test_map_rename_and_description_edit_reindex_published_chunks(
     assert captured == []
 
 
+def test_designation_description_edit_reindexes_published_chunks(
+    client: TestClient, monkeypatch
+) -> None:
+    """SP 지정 설명 = 맵 설명 — 지정 PUT으로 설명이 바뀌어도 재인덱싱, 생략(미변경)이면 띄우지 않는다."""
+    _enable_kb(monkeypatch)
+    created = _make_map(client)
+    map_id = created["id"]
+    _publish_directly(created["versions"][0]["id"])
+    captured = _capture_spawn(monkeypatch)
+    url = f"/api/maps/{map_id}/subprocess-designation"
+
+    assert client.put(url, json={"department": "Sales", "description": "지정 설명"}).status_code == 200
+    assert _run_spawned(captured) == ["reindex_published_map"]
+    assert "지정 설명" in _chunks("map", map_id)[0].chunk_text
+
+    assert client.put(url, json={"department": "Sales"}).status_code == 200
+    assert captured == []
+
+
 def test_approved_map_rename_reindexes_after_commit(client: TestClient, monkeypatch) -> None:
     """승인된 이름 변경(map_rename 적용기)도 승인 커밋 뒤 게시본을 재인덱싱한다."""
     _enable_kb(monkeypatch)

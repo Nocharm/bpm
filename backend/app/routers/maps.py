@@ -1483,8 +1483,13 @@ async def designate_subprocess(
         found_map.sp_end_condition = payload.end_condition.strip() or None
     found_map.sp_url = payload.url
     found_map.sp_url_label = payload.url_label
-    # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31)
-    found_map.description = payload.description or ""
+    # 지정 설명은 맵 설명 그 자체 — 여기서 고치면 맵 설명이 함께 바뀐다 (사용자 결정 2026-08-31).
+    # 생략(None)은 미변경 — 설명 없이 부르는 스크립트·구 클라이언트가 맵 설명을 지우지 않게 (critic:02)
+    description_changed = (
+        payload.description is not None and payload.description != (found_map.description or "")
+    )
+    if payload.description is not None:
+        found_map.description = payload.description
     found_map.sp_input = payload.input or None
     found_map.sp_output = payload.output or None
     found_map.sp_input_forms = payload.input_forms or None
@@ -1515,6 +1520,12 @@ async def designate_subprocess(
         )
     await session.commit()
     await session.refresh(found_map)
+    if description_changed:
+        # 맵 설명은 KB 청크에 박혀 있다 — 직접 설명 수정(update_map)과 같은 재인덱싱 (C60)
+        from app.kb import embed_client, indexing
+
+        if embed_client.is_embed_enabled():
+            indexing.spawn(indexing.reindex_published_map(map_id))
     return found_map
 
 
