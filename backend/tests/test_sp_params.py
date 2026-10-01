@@ -174,9 +174,12 @@ def test_legacy_free_text_sp_duration_cleared_in_library_list(
     async def _set_legacy(db_session: Any) -> None:
         found_map = await db_session.get(ProcessMap, published_map_id)
         found_map.sp_duration = "3일"
+        found_map.sp_touch_time = "30분"
 
     session(_set_legacy)
 
     rows = client.get("/api/library/processes").json()
     mine = next(r for r in rows if r["map_id"] == published_map_id)
     assert mine["duration"] is None
+    # touch_time도 같은 H.MM 계약 — raw dict 조립부에서 함께 소거 (C61)
+    assert mine["touch_time"] is None
