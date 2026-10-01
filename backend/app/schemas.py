@@ -1459,6 +1459,8 @@ class SubprocessRefOut(BaseModel):
     category_path: str | None = None
     # 홈 L5 카테고리 id — 외부 L6 색상 키(같은 L5=같은 색), 경로 rename에도 안정 (2026-08-28 개선)
     category_id: int | None = None
+    # 값은 링크 맵 description(지정 설명=맵 설명). 키 이름만 폐기 컬럼(sp_description, 2026-08-31 드랍)의
+    # 레거시 — 개명은 FE SubprocessRef 소비처와 동시 배포가 필요해 유지 (critic:04)
     sp_description: str | None = None
 
     @field_validator("duration", "touch_time", mode="after")
