@@ -7,6 +7,7 @@
 
 - 계획 `docs/superpowers/plans/2026-10-01-output-rules.md`(사용자 결정 8건). P1: SP 들어오는 핸들은 드래그 시작 불가(`isConnectableStart=false`)·연결 드래그 중에만 노출 — target에서 시작하면 역방향 빠른 연결이 되어, 좌·상·하에서 끌어간 노드가 SP 입력으로 붙던 문제. 스모크 `pw-verify-output-rules.mjs`.
 - P2·P3: 출력 규칙 순수 함수 `lib/output-rules.ts`(출구별 1개·병렬 출구 ≥2·레거시 parallel 도출)로 저장 체크리스트가 SP를 통째로 면제하던 구멍을 막음(삽입 재연결이 대표 끝에 엣지 2개를 만들던 상태). SP 출구는 우측 한 점(끝 핸들 겹침, 세로 분산이 폭 조절 그립과 겹친다는 피드백) + 끌어 놓으면 출구 목록, 팬아웃 그룹 키는 (노드·변)으로. 라벨 끝 인라인 배지 `2/3`, 초과는 같은 알약이 `+N`(호버 시 비율로 페이드). 스모크 20/20·sp-ends 23/23·fanout 24/24.
+- P4: `nodes.parallel_outputs`(JSON 출구 키 목록, `_ADDED_COLUMNS` 등록) — 스키마 정규화(공백·중복 제거)·upsert·클론·확정 서명·FE 왕복·CSV 기본값. 비교 diff는 `getFieldValue`로 배열을 내용 비교(`parallel` 필드, "__primary__"는 "기본 출구"로 표시).
 
 ## 2026-10-01 — 홈 한 줄 행 말줄임 정리 (dev)
 

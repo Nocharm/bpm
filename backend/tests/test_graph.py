@@ -861,3 +861,23 @@ def test_assignee_role_roundtrips_and_clears_when_omitted(client: TestClient) ->
     client.put(f"/api/versions/{version_id}/graph", json={"nodes": nodes, "edges": []})
     saved = client.get(f"/api/versions/{version_id}/graph").json()
     assert next(n for n in saved["nodes"] if n["title"] == "칭량")["assignee_role"] == ""
+
+
+def test_parallel_outputs_roundtrip_trims_and_dedupes(client: TestClient) -> None:
+    # 병렬 출구 키는 공백·빈 값 제거, 중복 1회로 저장되고, 미지정 노드는 빈 배열 (출력 규칙 2026-10-01)
+    version_id = _create_version(client)
+    graph = {
+        "nodes": [
+            {"id": "ps", "title": "시작", "node_type": "start"},
+            {"id": "pa", "title": "병렬 갈래", "parallel_outputs": [" __primary__ ", "__primary__", ""]},
+            {"id": "pb", "title": "일반"},
+        ],
+        "edges": [],
+    }
+
+    response = client.put(f"/api/versions/{version_id}/graph", json=graph)
+
+    assert response.status_code == 200
+    nodes = {n["id"]: n for n in client.get(f"/api/versions/{version_id}/graph").json()["nodes"]}
+    assert nodes["pa"]["parallel_outputs"] == ["__primary__"]
+    assert nodes["pb"]["parallel_outputs"] == []

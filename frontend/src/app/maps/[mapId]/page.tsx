@@ -754,6 +754,7 @@ function toAppNodes(graph: Graph, scopeId: string | null = null): AppNode[] {
       placeholderCategoryPath: node.placeholder_category_path ?? null,
       nodeWidth: node.width ?? null,
       isPrimaryEnd: node.is_primary_end,
+      parallelOutputs: node.parallel_outputs ?? [],
     },
   }));
 }
@@ -886,6 +887,7 @@ function aiNodeToGraphNode(node: AiNode, id: string, groupId: string | undefined
     follow_latest: true,
     linked_version_id: null,
     is_primary_end: false,
+    parallel_outputs: [],
   };
 }
 
@@ -946,6 +948,8 @@ export function buildGraph(nodes: AppNode[], edges: Edge[], groups: GraphGroup[]
       placeholder_category_id: node.data.placeholderCategoryId ?? null,
       width: node.data.nodeWidth ?? null,
       is_primary_end: node.data.isPrimaryEnd ?? false,
+      // 미직렬화 시 저장마다 서버 소거 — 왕복 필수
+      parallel_outputs: node.data.parallelOutputs ?? [],
     })),
     // 양 끝이 모두 payload 노드인 엣지만 — 누락 노드 참조 제거
     edges: edges

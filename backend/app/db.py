@@ -30,6 +30,7 @@ _ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("map_versions", "checked_out_from", "VARCHAR(100)"),
     ("groups", "parent_group_id", "VARCHAR(50)"),  # 그룹 중첩(하위 그룹핑) — design 2026-06-15
     ("nodes", "group_ids", "JSON"),  # 다중 그룹(태그) 소속 — design 2026-06-15
+    ("nodes", "parallel_outputs", "JSON"),  # 병렬 출구 키 — 출력 규칙 2026-10-01
     ("user_groups", "deleted_at", "TIMESTAMP"),  # 그룹 소프트삭제(7일 보존) — 2026-06-27
     ("user_groups", "name_changed_at", "TIMESTAMP"),  # 주 1회 rename 제한 — 2026-06-27
     # 매뉴얼 다중 문서 — 제목·언어·정렬 (F10, 2026-07-06). 레거시 단일 게시본 행은 ko로 흡수

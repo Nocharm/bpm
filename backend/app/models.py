@@ -400,6 +400,9 @@ class Node(Base):
     width: Mapped[int | None] = mapped_column(Integer, default=None)
     # 끝 노드(node_type="end") — 대표 끝(프로세스당 1개, 버전업에도 유지되는 주 출구)
     is_primary_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 병렬로 켠 출구 키 — 일반 노드는 "__primary__" 하나, SP는 끝 키별. 병렬 출구는 엣지 ≥2(동시 진행),
+    # 그 외 출구는 엣지 1개 — 확정 게이트 6·FE lib/output-rules.ts가 판정 (2026-10-01)
+    parallel_outputs: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     version: Mapped[MapVersion] = relationship(back_populates="nodes")
 

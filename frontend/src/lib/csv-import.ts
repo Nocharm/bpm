@@ -218,6 +218,7 @@ const NODE_DEFAULTS = {
   follow_latest: true,
   linked_version_id: null,
   is_primary_end: false,
+  parallel_outputs: [] as string[],
 };
 
 // 빈 값은 "건드리지 않음" — 제안/CSV가 모르는 속성이 기존 값을 지우지 않게 (CSV·AI 병합 공용)

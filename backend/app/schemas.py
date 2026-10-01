@@ -1287,6 +1287,20 @@ class NodeIn(BaseModel):
     width: int | None = Field(default=None, ge=100, le=400)
     # 대표 끝 (node_type="end")
     is_primary_end: bool = False
+    # 병렬로 켠 출구 키("__primary__" 또는 SP 끝 키) — 출력 규칙(확정 게이트 6) 입력
+    parallel_outputs: list[Annotated[str, StringConstraints(max_length=200)]] = Field(default_factory=list, max_length=50)
+
+    @field_validator("parallel_outputs", mode="before")
+    @classmethod
+    def _coerce_parallel_outputs(cls, value: object) -> object:
+        # 레거시 DB(컬럼 NULL)에서 from_attributes 로드 시 None → []
+        return [] if value is None else value
+
+    @field_validator("parallel_outputs", mode="after")
+    @classmethod
+    def _dedupe_parallel_outputs(cls, value: list[str]) -> list[str]:
+        # 빈 키 제거·중복 제거(순서 유지) — 같은 출구를 두 번 켜도 한 번
+        return list(dict.fromkeys(key.strip() for key in value if key.strip()))
 
     @field_validator("assignee_role", mode="after")
     @classmethod

@@ -121,6 +121,8 @@ async def clone_graph(
             width=node.width,
             # 대표 끝 플래그 보존
             is_primary_end=node.is_primary_end,
+            # 병렬 출구 보존 — 끝 키·"__primary__"라 노드 id 리맵 불필요
+            parallel_outputs=list(node.parallel_outputs or []),
         )
         session.add(clone)
         cloned[node.id] = clone

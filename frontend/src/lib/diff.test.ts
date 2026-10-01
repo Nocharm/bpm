@@ -83,3 +83,20 @@ describe("computeVersionDiff - assignee_role", () => {
     expect(entry?.changedFields).toContain("assignee_role");
   });
 });
+
+describe("computeVersionDiff - 병렬 출구", () => {
+  const graphWith = (id: string, sourceId: string | null, parallel: string[]): VersionGraph => ({
+    nodes: [{ ...FLAT, id, title: "Fork", node_type: "process", source_node_id: sourceId, parallel_outputs: parallel }],
+    edges: [],
+  });
+
+  it("compares parallel exits by content, not array identity", () => {
+    const diff = computeVersionDiff(graphWith("p1", null, ["b", "a"]), graphWith("p2", "p1", ["a", "b"]));
+    expect(diff.entries).toEqual([]);
+  });
+
+  it("reports a parallel toggle as a parallel field change", () => {
+    const diff = computeVersionDiff(graphWith("p1", null, []), graphWith("p2", "p1", ["__primary__"]));
+    expect(diff.entries.map((entry) => entry.changedFields)).toEqual([["parallel"]]);
+  });
+});
