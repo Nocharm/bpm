@@ -2,15 +2,16 @@
 
 // 기준 버전 대비 변경 요약 — 접힘 1줄(아이콘+카운트) → 펼침 상세 (2026-08-30 #3).
 // 연계 캔버스 확정 섹션에서 추출해 일반 맵 승인 탭(승인자 아래)과 공유한다.
-// 노드는 computeVersionDiff(좌표 제외 계약), 엣지는 라벨·핸들 시그니처 비교 — 서버
-// _canvas_content_signature와 판정 기준을 맞춘다 (2026-08-28).
+// 노드는 computeVersionDiff(좌표 제외 계약), 엣지는 비교 화면과 같은 buildMergedGraph(계보 쌍+라벨+SP 출구 끝 키,
+// 변 id·in 변형 제외) — 서버 _canvas_content_signature와 판정 기준을 맞춘다 (2026-08-28, 사용자 결정 D4).
 import { ChevronRight, GitCompare, Info, Spline } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { getFullGraph, type FlatNode, type VersionGraph } from "@/lib/api";
-import { sourceHandleId, targetHandleId, type AppNode, type HandleSide } from "@/lib/canvas";
+import { getFullGraph, type FlatNode, type GraphEdge, type VersionGraph } from "@/lib/api";
+import { type AppNode } from "@/lib/canvas";
 import { computeVersionDiff, FIELD_MSG, type NodeDiffEntry } from "@/lib/diff";
 import { useI18n } from "@/lib/i18n";
+import { buildMergedGraph } from "@/lib/merge-diff";
 
 // 요약에 넘길 라이브 엣지 최소 형태 — 에디터 RF 엣지에서 구조만 취한다(결합 최소화)
 export interface LiveEdgeShape {
@@ -66,9 +67,10 @@ export function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<strin
     sort_order: index,
     group_ids: node.data.groupIds,
     linked_map_id: node.data.linkedMapId ?? null,
-    follow_latest: node.data.followLatest ?? true,
+    follow_latest: node.data.followLatest ?? false, // 저장 직렬화(page.tsx)와 같은 폴백
     linked_version_id: node.data.linkedVersionId ?? null,
     is_primary_end: node.data.isPrimaryEnd ?? false,
+    placeholder_category_id: node.data.placeholderCategoryId ?? null,
     parallel_outputs: node.data.parallelOutputs ?? [],
     parent_node_id: null,
     source_node_id: lineageById?.get(node.id) ?? null, // 미상이면 자기 id가 계보 루트
@@ -76,19 +78,20 @@ export function buildLiveGraph(nodes: AppNode[], lineageById?: ReadonlyMap<strin
   return { nodes: flat, edges: [], subprocess_refs: {} };
 }
 
-// 엣지 콘텐츠 시그니처 — (출발 계보→도착 계보) 키에 라벨·핸들. 좌표성 필드(side/line_style)는 제외.
-function buildEdgeSignatures(
-  edges: { src: string; tgt: string; label: string; sh: string; th: string }[],
-  lineageOf: (nodeId: string) => string,
-): Map<string, string> {
-  const out = new Map<string, string>();
-  for (const edge of edges) {
-    out.set(
-      `${lineageOf(edge.src)}→${lineageOf(edge.tgt)}`,
-      `${edge.label}|${edge.sh}|${edge.th}`,
-    );
-  }
-  return out;
+// 라이브 RF 엣지 → diff 입력 엣지. 정체성은 buildMergedGraph가 계보 쌍+라벨+출구 키로만 판정하므로
+// 변·선 모양·gateway(레거시 병렬 도출 입력, 진실은 노드 parallel 필드)는 빈 값으로 둔다.
+function buildLiveEdges(edges: LiveEdgeShape[]): GraphEdge[] {
+  return edges.map((edge) => ({
+    id: edge.id,
+    source_node_id: edge.source,
+    target_node_id: edge.target,
+    label: typeof edge.label === "string" ? edge.label : "",
+    source_side: "",
+    target_side: "",
+    source_handle: edge.sourceHandle ?? null,
+    target_handle: edge.targetHandle ?? null,
+    line_style: "",
+  }));
 }
 
 // 기준 버전 그래프를 조회해 라이브 대비 요약 산출 — base가 null이면 null(기준 없음)
@@ -123,42 +126,11 @@ export function useChangeSummary(
     if (snapshotGraph === null) return null;
     const liveGraph = buildLiveGraph(liveNodes, lineageById);
     const diff = computeVersionDiff(snapshotGraph, liveGraph);
-    const snapById = new Map(snapshotGraph.nodes.map((n) => [n.id, n]));
-    const snapSig = buildEdgeSignatures(
-      snapshotGraph.edges.map((e) => ({
-        src: e.source_node_id,
-        tgt: e.target_node_id,
-        label: e.label,
-        // 레거시 null 핸들은 저장 시 변 파생 id로 채워지므로 동일 규칙으로 정규화
-        sh: e.source_handle ?? sourceHandleId((e.source_side as HandleSide) || "right"),
-        th: e.target_handle ?? targetHandleId((e.target_side as HandleSide) || "left"),
-      })),
-      (id) => {
-        const node = snapById.get(id);
-        return node ? (node.source_node_id ?? node.id) : id;
-      },
-    );
-    const liveSig = buildEdgeSignatures(
-      liveEdges.map((e) => ({
-        src: e.source,
-        tgt: e.target,
-        label: typeof e.label === "string" ? e.label : "",
-        sh: e.sourceHandle ?? sourceHandleId("right"),
-        th: e.targetHandle ?? targetHandleId("left"),
-      })),
-      (id) => lineageById?.get(id) ?? id, // 라이브 계보 루트 — 스냅샷 쪽 번역과 대칭
-    );
-    let edgesAdded = 0;
-    let edgesRemoved = 0;
-    let edgesChanged = 0;
-    for (const [key, sig] of liveSig) {
-      const prev = snapSig.get(key);
-      if (prev === undefined) edgesAdded += 1;
-      else if (prev !== sig) edgesChanged += 1;
-    }
-    for (const key of snapSig.keys()) {
-      if (!liveSig.has(key)) edgesRemoved += 1;
-    }
+    // 엣지 끝점은 노드 계보(라이브는 lineageById 주입분)로 번역된다 — 스냅샷과 대칭
+    const mergedEdges = buildMergedGraph(snapshotGraph, { ...liveGraph, edges: buildLiveEdges(liveEdges) }).edges;
+    const edgesAdded = mergedEdges.filter((e) => e.status === "added").length;
+    const edgesRemoved = mergedEdges.filter((e) => e.status === "removed").length;
+    const edgesChanged = mergedEdges.filter((e) => e.status === "changed").length;
     return {
       entries: diff.entries,
       edgesAdded,

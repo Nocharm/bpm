@@ -100,3 +100,72 @@ describe("computeVersionDiff - 병렬 출구", () => {
     expect(diff.entries.map((entry) => entry.changedFields)).toEqual([["parallel"]]);
   });
 });
+
+describe("computeVersionDiff - URL·링크 정체성(백엔드 확정 서명과 같은 필드)", () => {
+  const pair = (left: Partial<FlatNode>, right: Partial<FlatNode>) =>
+    computeVersionDiff(
+      { nodes: [{ ...FLAT, id: "n1", title: "Call", node_type: "subprocess", source_node_id: null, ...left }], edges: [] },
+      { nodes: [{ ...FLAT, id: "n2", title: "Call", node_type: "subprocess", source_node_id: "n1", ...right }], edges: [] },
+    ).entries.map((entry) => entry.changedFields);
+
+  it("reports a URL-only change as url / url_label", () => {
+    expect(pair({ url: "https://a" }, { url: "https://b" })).toEqual([["url"]]);
+    expect(pair({ url_label: "Old" }, { url_label: "New" })).toEqual([["url_label"]]);
+  });
+
+  it("reports each link identity field on its own", () => {
+    expect(pair({ linked_map_id: 1 }, { linked_map_id: 2 })).toEqual([["linked_map"]]);
+    expect(pair({ placeholder_category_id: 7 }, { placeholder_category_id: 8 })).toEqual([["placeholder"]]);
+    expect(pair({ is_primary_end: false }, { is_primary_end: true })).toEqual([["primary_end"]]);
+    expect(pair({ follow_latest: false }, { follow_latest: true })).toEqual([["follow_latest"]]);
+  });
+
+  it("treats a missing optional field as null (no false change)", () => {
+    expect(pair({}, { placeholder_category_id: null })).toEqual([]);
+  });
+});
+
+describe("computeVersionDiff - 엣지 정체성(D4: SP 출구 끝 키만 내용)", () => {
+  const sp = (id: string, sourceId: string | null): FlatNode => ({
+    ...FLAT, id, title: "Call", node_type: "subprocess", source_node_id: sourceId,
+  });
+  const proc = (id: string, sourceId: string | null, title: string): FlatNode => ({
+    ...FLAT, id, title, node_type: "process", source_node_id: sourceId,
+  });
+  const handled = (id: string, source: string, target: string, sh: string | null, th: string | null): GraphEdge => ({
+    ...edge(id, source, target), source_handle: sh, target_handle: th,
+  });
+
+  it("ignores side ids and SP in-handle variants", () => {
+    const left: VersionGraph = {
+      nodes: [proc("a", null, "A"), sp("s", null)],
+      edges: [handled("x", "a", "s", "s-right", "in")],
+    };
+    const right: VersionGraph = {
+      nodes: [proc("a2", "a", "A"), sp("s2", "s")],
+      edges: [handled("y", "a2", "s2", "s-top", "in:top")],
+    };
+
+    const diff = computeVersionDiff(left, right);
+
+    expect(diff.leftEdgeStatus.size).toBe(0);
+    expect(diff.rightEdgeStatus.size).toBe(0);
+  });
+
+  it("keeps two ends of one SP toward the same target apart and sees an end key change", () => {
+    const left: VersionGraph = {
+      nodes: [sp("s", null), proc("b", null, "B")],
+      edges: [handled("x1", "s", "b", null, null), handled("x2", "s", "b", "Rejected", null)],
+    };
+    const right: VersionGraph = {
+      nodes: [sp("s2", "s"), proc("b2", "b", "B")],
+      edges: [handled("y1", "s2", "b2", "__primary__", null), handled("y2", "s2", "b2", "Approved", null)],
+    };
+
+    const diff = computeVersionDiff(left, right);
+
+    // null 핸들 = 대표 끝이라 x1↔y1은 같은 엣지, 보조 끝만 바뀌었다
+    expect([...diff.leftEdgeStatus.keys()]).toEqual(["x2"]);
+    expect([...diff.rightEdgeStatus.keys()]).toEqual(["y2"]);
+  });
+});

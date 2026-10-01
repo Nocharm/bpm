@@ -192,6 +192,31 @@ class TestDecideFwConfirmRequest:
         assert "placeholder" in r.json()["detail"]
         assert _pending(map_id) is not None
 
+    def test_decide_approve_needs_content_change_since_last_snapshot(
+        self, client: TestClient, enforce: None
+    ) -> None:
+        """승인 경로도 무변경 게이트를 탄다 — 좌표만 이동은 409(pending 유지), URL만 바꾸면 확정 (D5)."""
+        map_id, draft_id = _make_hierarchical_canvas(client, "FWCF-NOCHG", "무변경")
+        act_as(DIRECT)
+        assert client.post(f"/api/maps/{map_id}/framework-confirm", json={}).status_code == 200
+        graph = client.get(f"/api/versions/{draft_id}/graph").json()
+        moved = [dict(n, pos_x=n["pos_x"] + 120) for n in graph["nodes"]]
+        _put_graph(client, draft_id, moved, graph["edges"])
+        rid = self._make_request(client, map_id)
+
+        act_as(DIRECT)
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 409
+        assert "no content changes" in r.json()["detail"]
+        assert _pending(map_id) is not None
+
+        linked = [dict(moved[0], url="https://example.com/sop"), *moved[1:]]
+        _put_graph(client, draft_id, linked, graph["edges"])
+        r = client.post(f"/api/approval-requests/{rid}/decide", json={"decision": "approve"})
+        assert r.status_code == 200, r.text
+        labels = [v["label"] for v in client.get(f"/api/maps/{map_id}").json()["versions"]]
+        assert "v1.1" in labels
+
     def test_decide_reject_records_reason(self, client: TestClient, enforce: None) -> None:
         map_id, _ = _make_hierarchical_canvas(client, "FWCF-REJ", "반려확정")
         rid = self._make_request(client, map_id)

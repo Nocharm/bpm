@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.permissions import logic
 from app.permissions.access import get_framework_category_id, is_direct_l5_admin
-from app.subprocess import validate_confirm_readiness
+from app.subprocess import get_output_key, validate_confirm_readiness
 from app.version_events import record_version_event
 
 
@@ -34,17 +34,21 @@ def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
     """레이아웃 무시 콘텐츠 시그니처 — 확정 게이트용 (2026-08-28 개선).
 
     노드는 계보 키(source_node_id∥id)로 정렬해 FE computeVersionDiff(FIELD_KEYS)와 같은
-    콘텐츠 필드 + 링크 정체성만 비교한다. 좌표·sort_order·엣지 시각 필드(side/line_style)·
-    그룹 멤버십은 배치 취급이라 제외 — FE 게이트와 판정 기준을 맞춘다(lib/diff.ts).
+    콘텐츠 필드(url·url_label 포함) + 링크 정체성만 비교한다. 엣지는 (출발 계보, 도착 계보, 라벨,
+    출구 키)이고 출구 키는 `get_output_key`(SP 끝 키, 그 외는 대표 끝 하나)라 변 id(s-*/t-*)·
+    SP 입구 변형(in/in:*)·target_handle은 들어가지 않는다(사용자 결정 D4, FE merge-diff와 같은 규칙).
+    좌표·sort_order·엣지 시각 필드(side/line_style)·엣지 gateway(레거시 병렬 도출 입력, 진실은
+    parallel_outputs)·그룹 멤버십은 배치 취급이라 제외 — FE 게이트와 판정 기준을 맞춘다(lib/diff.ts).
     """
     lineage = {n.id: (n.source_node_id or n.id) for n in nodes}
+    node_type = {n.id: n.node_type for n in nodes}
     node_sig = sorted(
         (
             n.source_node_id or n.id, n.title, n.description, n.node_type, n.color,
             n.assignee, n.assignee_role, n.department, n.system, n.duration, n.touch_time,
             n.cost_krw, n.cost_usd, n.headcount, n.annual_count, n.fte,
             n.input, n.output, n.input_forms, n.output_forms, n.gmp,
-            n.start_condition, n.end_condition,
+            n.start_condition, n.end_condition, n.url or "", n.url_label or "",
             n.linked_map_id, n.follow_latest, n.is_primary_end,
             tuple(sorted(n.parallel_outputs or [])),  # 병렬 출구는 흐름 의미 — FE diff FIELD_KEYS와 같이
             n.placeholder_category_id,  # 플레이스홀더 출처도 링크 정체성 (design §10.1)
@@ -55,7 +59,7 @@ def _canvas_content_signature(nodes: list[Node], edges: list[Edge]) -> tuple:
         (
             lineage.get(e.source_node_id, e.source_node_id),
             lineage.get(e.target_node_id, e.target_node_id),
-            e.label, e.source_handle or "", e.target_handle or "",
+            e.label, get_output_key(node_type.get(e.source_node_id, ""), e.source_handle),
         )
         for e in edges
     )

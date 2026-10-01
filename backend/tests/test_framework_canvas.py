@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import app.auth as auth_mod
 from app.framework_confirm import _canvas_content_signature
 from app.main import app
-from app.models import Node
+from app.models import Edge, Node
 from app.settings import settings
 
 SYSADMIN = "fwc.sysadmin"
@@ -1229,6 +1229,83 @@ def test_canvas_content_signature_detects_assignee_role_only_change() -> None:
     base = [_make_node("n1", "")]
     changed = [_make_node("n1", "Reviewer")]
     assert _canvas_content_signature(base, []) != _canvas_content_signature(changed, [])
+
+
+def _sig_graph(source_type: str, *edge_specs: tuple[str | None, str | None], **node_attrs: object) -> tuple:
+    """출발 노드(source_type) → 도착 노드 엣지들의 시그니처. edge_specs = (source_handle, target_handle)."""
+    source = _make_node("src", "")
+    source.node_type = source_type
+    for key, value in node_attrs.items():
+        setattr(source, key, value)
+    target = _make_node("dst", "")
+    edges = [
+        Edge(id=f"e{i}", source_node_id="src", target_node_id="dst", label="",
+             source_handle=sh, target_handle=th, gateway=None)
+        for i, (sh, th) in enumerate(edge_specs)
+    ]
+    return _canvas_content_signature([source, target], edges)
+
+
+def test_canvas_content_signature_ignores_side_ids_and_in_variants() -> None:
+    """변 id(s-*/t-*)·SP 입구 변형(in/in:*)·target_handle은 레이아웃 — 바꿔도 같은 서명 (사용자 결정 D4)."""
+    assert _sig_graph("decision", ("s-right", "t-left")) == _sig_graph("decision", ("s-top", "t-bottom"))
+    assert _sig_graph("process", (None, "in")) == _sig_graph("process", ("s-bottom", "in:top"))
+    # SP 출발의 변 id·없음은 대표 끝과 같다
+    assert _sig_graph("subprocess", (None, None)) == _sig_graph("subprocess", ("__primary__", "t-top"))
+    assert _sig_graph("subprocess", ("s-right", None)) == _sig_graph("subprocess", ("__primary__", None))
+
+
+def test_canvas_content_signature_counts_subprocess_end_key() -> None:
+    """SP 출구 끝 키는 내용 — 대표 끝→보조 끝 전환, 같은 쌍의 두 끝은 서로 다른 서명."""
+    assert _sig_graph("subprocess", ("__primary__", None)) != _sig_graph("subprocess", ("반려", None))
+    assert _sig_graph("subprocess", ("__primary__", None), ("반려", None)) != _sig_graph(
+        "subprocess", ("__primary__", None), ("__primary__", None)
+    )
+
+
+def test_canvas_content_signature_counts_url_and_link_identity() -> None:
+    """url·url_label(D5)과 링크 정체성 4필드는 내용, 엣지 gateway는 비교 제외(병렬의 진실은 parallel_outputs)."""
+    base = _sig_graph("subprocess", ("__primary__", None))
+    assert _sig_graph("subprocess", ("__primary__", None), url="https://example.com/a") != base
+    assert _sig_graph("subprocess", ("__primary__", None), url_label="Guide") != base
+    assert _sig_graph("subprocess", ("__primary__", None), linked_map_id=99) != base
+    assert _sig_graph("subprocess", ("__primary__", None), is_primary_end=True) != base
+    assert _sig_graph("subprocess", ("__primary__", None), follow_latest=False) != base
+    assert _sig_graph("subprocess", ("__primary__", None), placeholder_category_id=5) != base
+    source = _make_node("src", "")
+    target = _make_node("dst", "")
+    plain = Edge(id="e0", source_node_id="src", target_node_id="dst", label="", gateway=None)
+    gated = Edge(id="e0", source_node_id="src", target_node_id="dst", label="", gateway="parallel")
+    assert _canvas_content_signature([source, target], [plain]) == _canvas_content_signature(
+        [source, target], [gated]
+    )
+
+
+def test_framework_confirm_edge_identity(client: TestClient, enforce: None) -> None:
+    """변만 바꾼 PUT은 무변경 409, SP 출구 끝 키를 바꾸면 마이너 확정 통과 (사용자 결정 D4)."""
+    code = "FWC-EID"
+    map_id, draft_id, node, ends = _fan_canvas(client, code, "엣지정체성")
+    edges = [
+        _fan_edge(code, 1, node["id"], ends[0]["id"], source_handle="__primary__", target_handle="t-left"),
+        _fan_edge(code, 2, node["id"], ends[1]["id"], source_handle="반려", target_handle="t-left"),
+    ]
+    _put_graph(client, draft_id, [node, *ends], edges)
+    v1 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+    assert v1.status_code == 200, v1.text
+
+    # 레이아웃만 — SP 출발 변 id(=대표 끝), 도착 변 변경
+    relaid = [dict(edges[0], source_handle="s-right", target_handle="t-top"),
+              dict(edges[1], target_handle="t-bottom")]
+    _put_graph(client, draft_id, [node, *ends], relaid)
+    res = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+    assert res.status_code == 409 and "no content changes" in res.json()["detail"]
+
+    # 끝 키 교체 — 같은 쌍이라도 다른 출구에서 나가면 내용 변경
+    swapped = [dict(edges[0], source_handle="반려"), dict(edges[1], source_handle="__primary__")]
+    _put_graph(client, draft_id, [node, *ends], swapped)
+    v2 = client.post(f"/api/maps/{map_id}/framework-confirm", json={"major": False})
+    assert v2.status_code == 200, v2.text
+    assert v2.json()["version"]["label"] == "v1.1"
 
 
 def test_category_admin_department_inherits_and_derives_canvas_owning_dept(

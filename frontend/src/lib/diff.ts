@@ -1,7 +1,11 @@
 // 버전 간 그래프 diff — 복제 계보(source_node_id) 우선 매칭, 없으면 (부모 계보, 제목) 매칭 (spec §7 Phase B).
+// ⑦ 평면 노드 이후 서버 FlatNodeOut은 parent_node_id를 보내지 않고 buildLiveGraph도 null 고정이라, fallback은
+// 항상 ('root', 제목)이고 location·path·*DescendantChanged는 호환용으로 남긴 미발생 경로다(제거는 별도 정리).
 
-import type { FlatNode, VersionGraph } from "@/lib/api";
+import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n-messages";
+import { getOutputKey } from "@/lib/output-rules";
+import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 
 export type DiffStatus = "added" | "removed" | "changed";
 
@@ -30,6 +34,12 @@ export type ChangedField =
   | "start_condition"
   | "end_condition"
   | "parallel"
+  | "url"
+  | "url_label"
+  | "linked_map"
+  | "placeholder"
+  | "primary_end"
+  | "follow_latest"
   | "location";
 
 export interface NodeDiffEntry {
@@ -82,12 +92,23 @@ export const FIELD_KEYS: [keyof FlatNode, ChangedField][] = [
   ["end_condition", "end_condition"],
   // 병렬 출구 — 흐름 의미라 콘텐츠 diff 대상(백엔드 확정 서명과 같이). 배열이라 getFieldValue로 비교
   ["parallel_outputs", "parallel"],
+  // 참조 링크 — 내용으로 센다(사용자 결정 D5, 백엔드 확정 서명과 같이)
+  ["url", "url"],
+  ["url_label", "url_label"],
+  // 링크 정체성 — 백엔드 _canvas_content_signature와 같은 4필드. 빠지면 링크만 바꾼 캔버스의 확정 버튼이 잠긴다
+  ["linked_map_id", "linked_map"],
+  ["placeholder_category_id", "placeholder"],
+  ["is_primary_end", "primary_end"],
+  ["follow_latest", "follow_latest"],
 ];
 
-/** diff 비교·표시용 필드 값 — 배열(병렬 출구)은 정렬 후 ", " 결합해 참조 동일성 대신 내용으로 비교한다. */
+/**
+ * diff 비교·표시용 필드 값 — 배열(병렬 출구)은 정렬 후 ", " 결합해 참조 동일성 대신 내용으로 비교한다.
+ * 없음(undefined)은 null로 접는다 — 선택 필드(placeholder_category_id 등)가 응답에 없을 때와 null을 같게.
+ */
 export function getFieldValue(node: FlatNode, field: keyof FlatNode): unknown {
   const value = node[field];
-  return Array.isArray(value) ? [...value].sort().join(", ") : value;
+  return Array.isArray(value) ? [...value].sort().join(", ") : (value ?? null);
 }
 
 // 변경 필드 라벨 키 — compare 화면·연계 캔버스 확정 요약 공용 (2026-08-28 승격)
@@ -115,6 +136,12 @@ export const FIELD_MSG: Record<ChangedField, MessageKey> = {
   start_condition: "field.startCondition",
   end_condition: "field.endCondition",
   parallel: "field.parallel",
+  url: "field.url",
+  url_label: "field.urlLabel",
+  linked_map: "field.linkedMap",
+  placeholder: "field.placeholderSource",
+  primary_end: "field.primaryEnd",
+  follow_latest: "field.followLatest",
   location: "field.location",
 };
 
@@ -266,27 +293,26 @@ export function computeVersionDiff(
     }
   }
 
-  // 엣지 — (출발 계보 → 도착 계보) 키로 존재 비교
-  const edgeKey = (sourceId: string, targetId: string, byId: Map<string, FlatNode>) => {
-    const source = byId.get(sourceId);
-    const target = byId.get(targetId);
-    return `${source ? getLineageKey(source) : sourceId}→${target ? getLineageKey(target) : targetId}`;
+  // 엣지 — (출발 계보 → 도착 계보 + 출구 키) 키로 존재 비교. 출구 키는 SP 끝 키만 내용이고
+  // 변 id·in 변형은 레이아웃이라 무시한다(사용자 결정 D4, merge-diff·확정 서명과 같은 규칙)
+  const edgeKey = (edge: GraphEdge, byId: Map<string, FlatNode>) => {
+    const source = byId.get(edge.source_node_id);
+    const target = byId.get(edge.target_node_id);
+    const exit = getOutputKey(source?.node_type ?? "", edge.source_handle);
+    const base = `${source ? getLineageKey(source) : edge.source_node_id}→${target ? getLineageKey(target) : edge.target_node_id}`;
+    return exit === PRIMARY_END_HANDLE ? base : `${base}@${exit}`;
   };
-  const leftEdgeKeys = new Set(
-    left.edges.map((edge) => edgeKey(edge.source_node_id, edge.target_node_id, leftById)),
-  );
-  const rightEdgeKeys = new Set(
-    right.edges.map((edge) => edgeKey(edge.source_node_id, edge.target_node_id, rightById)),
-  );
+  const leftEdgeKeys = new Set(left.edges.map((edge) => edgeKey(edge, leftById)));
+  const rightEdgeKeys = new Set(right.edges.map((edge) => edgeKey(edge, rightById)));
   const leftEdgeStatus = new Map<string, DiffStatus>();
   const rightEdgeStatus = new Map<string, DiffStatus>();
   for (const edge of left.edges) {
-    if (!rightEdgeKeys.has(edgeKey(edge.source_node_id, edge.target_node_id, leftById))) {
+    if (!rightEdgeKeys.has(edgeKey(edge, leftById))) {
       leftEdgeStatus.set(edge.id, "removed");
     }
   }
   for (const edge of right.edges) {
-    if (!leftEdgeKeys.has(edgeKey(edge.source_node_id, edge.target_node_id, rightById))) {
+    if (!leftEdgeKeys.has(edgeKey(edge, rightById))) {
       rightEdgeStatus.set(edge.id, "added");
     }
   }
