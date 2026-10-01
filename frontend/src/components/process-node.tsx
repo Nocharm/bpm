@@ -33,6 +33,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Pin,
+  Pause,
   Play,
   Plus,
   RefreshCw,
@@ -65,7 +66,7 @@ import { useI18n } from "@/lib/i18n";
 import type { MessageKey } from "@/lib/i18n-messages";
 import { FrameworkPeekPill, FrameworkPeekTrigger } from "@/components/framework-peek-pill";
 import { type NodeDisplayField, useNodeActions } from "@/lib/node-actions";
-import { getOutputGroups } from "@/lib/output-rules";
+import { getOutputGroups, type OutputGroup } from "@/lib/output-rules";
 import {
   collectNodeWarnings,
   hasAssigneeWarning,
@@ -1132,11 +1133,9 @@ function SubprocessHandles({
   );
 }
 
-// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
-// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
-// 판정은 저장 체크리스트와 같은 lib/output-rules. 엣지는 RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교) 드래그 중 재렌더를 막는다.
-function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
-  const { t } = useI18n();
+// 이 노드의 출구별 엣지 그룹(lib/output-rules) — RF 스토어에서 이 노드 출력만 문자열로 뽑아(원시값 비교)
+// 드래그 중 재렌더를 막는다. SP 끝 배지·병렬 호버 배지가 공유.
+function useNodeOutputGroups(nodeId: string, nodeType: string, parallelOutputs?: string[]): OutputGroup[] {
   const outputSig = useStore((state) =>
     state.edges
       .filter((edge) => edge.source === nodeId)
@@ -1149,7 +1148,59 @@ function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends
         return { source: nodeId, sourceHandle, gateway };
       })
     : [];
-  const groups = getOutputGroups({ id: nodeId, nodeType: "subprocess", parallelOutputs }, edges);
+  return getOutputGroups({ id: nodeId, nodeType, parallelOutputs }, edges);
+}
+
+// 병렬 출구 호버 배지 — 노드 위에 '동시 N갈래'(SP는 끝 제목 앞에). 엣지 펄스(lib/edge-pulse)와 짝, 분기 노드엔 없음.
+function ParallelHoverBadge({
+  nodeId,
+  nodeType,
+  parallelOutputs,
+  ends,
+  visible,
+}: {
+  nodeId: string;
+  nodeType: string;
+  parallelOutputs?: string[];
+  ends?: SubEnd[];
+  visible: boolean;
+}) {
+  const { t } = useI18n();
+  const groups = useNodeOutputGroups(nodeId, nodeType, parallelOutputs).filter(
+    (group) => group.parallel && group.count >= 2,
+  );
+  if (groups.length === 0) return null;
+  const titleOf = (key: string): string | null =>
+    (ends?.length ?? 0) >= 2 ? (ends?.find((end) => end.key === key)?.title ?? key) : null;
+  return (
+    <div
+      data-id="node-parallel-badge"
+      className={`pointer-events-none absolute -top-6 left-0 flex gap-1 transition-opacity duration-150 ease-smooth ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      {groups.map((group) => {
+        const endTitle = titleOf(group.key);
+        return (
+          <span
+            key={group.key}
+            className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full border border-accent-tint-border bg-accent-tint px-1.5 py-px text-fine text-accent"
+          >
+            <Pause size={11} strokeWidth={1.5} className="shrink-0" />
+            {endTitle ? `${endTitle} · ` : ""}
+            {t("node.parallelCount", { count: group.count })}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// SP 끝 개수 배지 — 제목 끝에 인라인으로 붙는 알약 하나(제목 폭을 따로 먹지 않게). 끝 ≥2면 `출구 사용량/끝 수`(병렬 출구는 1로 셈),
+// 한 출구에 엣지가 넘치면 끝 1개여도 같은 알약이 에러 톤 `+N`이 되고 호버 시 틴트 그대로 `출구 사용량/끝 수`(예: 4/3)로 페이드(사용자 결정 2026-10-01).
+function SpOutputBadge({ nodeId, ends, parallelOutputs }: { nodeId: string; ends: SubEnd[]; parallelOutputs?: string[] }) {
+  const { t } = useI18n();
+  const groups = useNodeOutputGroups(nodeId, "subprocess", parallelOutputs);
   const excess = groups.reduce((sum, group) => sum + (group.parallel ? 0 : Math.max(0, group.count - 1)), 0);
   const total = Math.max(1, ends.length);
   // 분자 = 출구 사용량 — 병렬 출구는 엣지가 여럿이어도 1(정상), 일반 출구는 엣지 수 그대로라
@@ -1369,6 +1420,15 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
             aria-hidden
             className="pointer-events-none absolute rounded-l-sm"
             style={{ left: -1.5, top: -1.5, bottom: -1.5, width: 5, background: color }}
+          />
+        )}
+        {!diff && (
+          <ParallelHoverBadge
+            nodeId={id}
+            nodeType="subprocess"
+            parallelOutputs={data.parallelOutputs}
+            ends={data.subEnds}
+            visible={hovered}
           />
         )}
         <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
@@ -1648,6 +1708,14 @@ export function ProcessNode({ id, data, isConnectable, selected }: NodeProps<App
     >
       {diff && <DiffBadge status={diff} />}
       {diffFields.length > 0 && <DiffFieldPills fields={diffFields} />}
+      {!diff && (
+        <ParallelHoverBadge
+          nodeId={id}
+          nodeType={data.nodeType}
+          parallelOutputs={data.parallelOutputs}
+          visible={hovered}
+        />
+      )}
       <div className="mb-0.5 empty:hidden"><GmpPill nodeId={id} data={data} /></div>
       {customTerminal && (
         // 타입 필 — GMP 필과 같은 자리(본문 첫 줄 좌측). 노드색 테두리+틴트로 소속을 드러낸다.

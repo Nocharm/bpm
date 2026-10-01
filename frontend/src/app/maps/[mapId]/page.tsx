@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalDistributeCenter, AlignStartHorizontal, AlignStartVertical, AlignVerticalDistributeCenter, Archive, ArrowLeft, ArrowLeftRight, ArrowRight, BadgeCheck, Boxes, Check, ChevronRight, Circle, CircleCheck, CircleDot, CornerDownRight, Diamond, Download, ExternalLink, Eye, FileDown, FileSpreadsheet, FolderTree, GitCompare, Group, Hand, Headset, Hourglass, LayoutGrid, Link2, Lock, Maximize2, MessageSquare, Monitor, Moon, MoreHorizontal, MoveHorizontal, MoveVertical, Network, Palette, PanelLeft, PanelRight, Paperclip, Pause, Pencil, PencilLine, Plus, Redo2, RotateCcw, ShieldCheck, Slash, SlidersHorizontal, Sparkles, Spline, Square, SquarePen, Sun, Trash2, Type, Undo2, Ungroup, User, Workflow, X, XCircle, type LucideIcon } from "lucide-react";
 import {
   addEdge,
   applyNodeChanges,
@@ -322,7 +322,8 @@ import {
   subprocessInHandle,
   type SubEnd,
 } from "@/lib/subprocess-embed";
-import type { OutputRuleEdge, OutputRuleNode } from "@/lib/output-rules";
+import { getOutputKey, type OutputRuleEdge, type OutputRuleNode } from "@/lib/output-rules";
+import { assignEdgePulses } from "@/lib/edge-pulse";
 import {
   NodeActionsContext,
   type IoListDisplayState,
@@ -3873,7 +3874,10 @@ function MapEditor({ mapId }: { mapId: number }) {
         const outgoing = getOutgoingEdges(edgesRef.current, connection.source).filter(
           (edge) => sourceHandle === undefined || edge.sourceHandle === sourceHandle,
         );
-        if (outgoing.length > 0) {
+        // 병렬 출구는 갈래를 더하는 게 정상 — 삽입/교체 모달 없이 바로 추가(lib/output-rules)
+        const exitKey = getOutputKey(source?.data.nodeType ?? "process", connection.sourceHandle);
+        const isParallelExit = source?.data.parallelOutputs?.includes(exitKey) ?? false;
+        if (outgoing.length > 0 && !isParallelExit) {
           setEdgeAction({
             source: connection.source,
             target: connection.target ?? "",
@@ -6613,6 +6617,46 @@ function MapEditor({ mapId }: { mapId: number }) {
               },
             ]
           : [];
+      // 병렬 출구 토글 — 출구 엣지가 모두 동시 진행(2개 이상 필수, lib/output-rules). 분기·끝은 대상 아님.
+      // SP 끝 ≥2면 끝별 하위 체크(출구가 끝마다 따로라서), 그 외는 노드 출구 하나 (사용자 결정 2026-10-01)
+      const parallelTarget = injectedTarget;
+      const parallelKeys = parallelTarget?.data.parallelOutputs ?? [];
+      const toggleParallel = (key: string) => {
+        if (!menu.targetId) return;
+        patchNode(
+          menu.targetId,
+          {
+            parallelOutputs: parallelKeys.includes(key)
+              ? parallelKeys.filter((item) => item !== key)
+              : [...parallelKeys, key],
+          },
+        );
+      };
+      const parallelEnds = parallelTarget?.data.nodeType === "subprocess" ? (parallelTarget.data.subEnds ?? []) : [];
+      const parallelItems: ContextMenuItem[] =
+        readOnly || !parallelTarget || menuNodeType === "decision" || menuNodeType === "end"
+          ? []
+          : parallelEnds.length >= 2
+            ? [
+                {
+                  label: t("ctx.parallelOutput"),
+                  icon: Pause,
+                  submenu: parallelEnds.map((end) => ({
+                    check: true as const,
+                    label: end.title,
+                    checked: parallelKeys.includes(end.key),
+                    onToggle: () => toggleParallel(end.key),
+                  })),
+                },
+              ]
+            : [
+                {
+                  check: true as const,
+                  label: t("ctx.parallelOutput"),
+                  checked: parallelKeys.includes(PRIMARY_END_HANDLE),
+                  onToggle: () => toggleParallel(PRIMARY_END_HANDLE),
+                },
+              ];
       // 이름 변경 — 인라인 타이틀 편집 진입(startRename). 편집 전용이라 readOnly에선 숨김(F2 전역키와 동일).
       // subprocess는 타이틀=링크된 맵 이름 고정이라 항목 자체 숨김 (F5)
       const renameItems: ContextMenuItem[] = readOnly || menuNodeType === "subprocess"
@@ -6643,6 +6687,7 @@ function MapEditor({ mapId }: { mapId: number }) {
           },
         },
         ...renameItems,
+        ...parallelItems,
         { divider: true },
         ...colorItems,
         ...openChildItems,
@@ -6693,6 +6738,7 @@ function MapEditor({ mapId }: { mapId: number }) {
     applyAutoLayout,
     reactFlow,
     promptOpenLinkedMap,
+    patchNode,
     t,
   ]);
 
@@ -7689,7 +7735,22 @@ function MapEditor({ mapId }: { mapId: number }) {
         }
       }
     }
-    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(list), fanGeom);
+    // 흐름 펄스(렌더 전용, lib/edge-pulse) — 메인 스코프 노드의 병렬 출구·분기 갈래. 펼침 자식·게이트웨이는 제외.
+    const pulses = assignEdgePulses(
+      nodes.map((node) => ({
+        ...buildCheckNode(node),
+        color: resolveNodeStroke(node.data.color, node.data.nodeType),
+      })),
+      edges.map((edge) => ({ ...buildCheckEdge(edge), id: edge.id, hidden: hiddenIds?.has(edge.id) })),
+    );
+    const withPulse = (list: Edge[]): Edge[] =>
+      pulses.size === 0
+        ? list
+        : list.map((edge) => {
+            const pulse = pulses.get(edge.id);
+            return pulse ? { ...edge, data: { ...edge.data, pulse } } : edge;
+          });
+    const finishEdges = (list: Edge[]): Edge[] => injectFanLanes(anchorEdgesToGhosts(withPulse(list)), fanGeom);
     const currentStyled = mirroredEdges.map((edge) => {
       // 인라인 펼침 시 A→B는 렌더에서만 숨김(데이터 보존)
       if (hiddenIds?.has(edge.id)) {

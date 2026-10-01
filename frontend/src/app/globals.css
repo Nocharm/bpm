@@ -368,6 +368,13 @@ button:not(:disabled):active {
   }
 }
 
+/* 엣지 흐름 펄스(병렬·분기, components/edge-pulse-dot) — SMIL이라 animation:none이 안 먹어 점 자체를 숨긴다 */
+@media (prefers-reduced-motion: reduce) {
+  .bpm-edge-pulse {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-filter-flash,
   .animate-item-in,

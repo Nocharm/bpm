@@ -260,6 +260,65 @@ check("a parallel end with two edges shows no excess", (await badgeText("sp-outp
 check("a parallel end counts once (3/3)", (await badgeText("sp-output-count")) === "3/3", String(await badgeText("sp-output-count")));
 check("save checklist passes with the parallel end", (await checkOk("singleOutput")) === "true");
 
+// ── (7) 흐름 펄스: 병렬 출구(SP 대표 끝 2갈래)·분기(Q의 Yes/No) 엣지마다 점 1개, 일반 엣지엔 없음
+const pulseCount = (edgeId) =>
+  page.evaluate((id) => document.querySelectorAll(`.react-flow__edge[data-id="${id}"] .bpm-edge-pulse`).length, edgeId);
+check("parallel branches carry a pulse", (await pulseCount(nid("e-d"))) === 1 && (await pulseCount(nid("e-extra"))) === 1);
+check("decision branches carry a pulse", (await pulseCount(nid("e-yes"))) === 1 && (await pulseCount(nid("e-no"))) === 1);
+check("plain edges carry no pulse", (await pulseCount(nid("e-a"))) === 0 && (await pulseCount(nid("e-r"))) === 0);
+const sp7 = await nodeBox(SP);
+await page.mouse.move(sp7.x + sp7.width / 2, sp7.y + sp7.height / 2);
+await sleep(400);
+const badge7 = page.locator(`.react-flow__node[data-id="${SP}"] [data-id="node-parallel-badge"]`);
+const badgeText7 = await badge7.textContent().catch(() => null);
+check("hovering a parallel node shows the parallel badge", !!badgeText7 && badgeText7.includes("2 in parallel"), String(badgeText7));
+await page.screenshot({ path: `${OUT}/output-rules-parallel-hover.png`, clip: { x: sp7.x - 60, y: sp7.y - 80, width: 760, height: 520 } });
+await page.mouse.move(5, 500);
+
+// ── (8) 우클릭 메뉴 토글: 요청 접수(출력 1개)에 병렬 출구를 켜면 "병렬인데 1개"로 체크리스트 미충족, 끄면 복구
+const aBox = await nodeBox(nid("a"));
+await page.mouse.click(aBox.x + aBox.width / 2, aBox.y + aBox.height / 2, { button: "right" });
+await sleep(400);
+const parallelCheck = page.locator('[data-id="context-menu-check-Parallel exit"]');
+check("node context menu offers the parallel exit toggle", await parallelCheck.isVisible().catch(() => false));
+await page.screenshot({ path: `${OUT}/output-rules-context-menu.png`, clip: { x: aBox.x - 20, y: aBox.y - 20, width: 420, height: 460 } });
+await parallelCheck.click();
+await page.keyboard.press("Escape");
+await sleep(500);
+check("a parallel exit with one edge fails the checklist", (await checkOk("singleOutput")) === "false");
+await page.mouse.click(aBox.x + aBox.width / 2, aBox.y + aBox.height / 2, { button: "right" });
+await sleep(400);
+await parallelCheck.click();
+await page.keyboard.press("Escape");
+await sleep(500);
+check("turning it off restores the checklist", (await checkOk("singleOutput")) === "true");
+
+// ── (9) 병렬 출구에선 갈래를 더해도 삽입/교체 모달 없이 바로 추가 + 나중에 생긴 갈래도 펄스 박자가 형제와 같다
+const nNode = nid("n");
+const nBox9 = await nodeBox(nNode);
+await page.mouse.click(nBox9.x + nBox9.width / 2, nBox9.y + nBox9.height / 2, { button: "right" });
+await sleep(400);
+await page.locator('[data-id="context-menu-check-Parallel exit"]').click();
+await page.keyboard.press("Escape");
+await sleep(400);
+const before9 = await edgeCount();
+for (const target of [nid("y1"), nid("end")]) {
+  const from = center(await handleBox(nNode, "s-right"));
+  const to = center(await nodeBox(target));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 12 });
+  await page.mouse.up();
+  await sleep(900);
+}
+check("a parallel exit takes a second branch without the conflict modal", (await edgeCount()) === before9 + 2, `${before9} -> ${await edgeCount()}`);
+await sleep(1500);
+const clocks = await page.evaluate(() =>
+  [...document.querySelectorAll(".react-flow__edge .bpm-edge-pulse")].map((dot) => dot.ownerSVGElement.getCurrentTime()),
+);
+const spread = Math.max(...clocks) - Math.min(...clocks);
+check("pulse clocks stay in phase across edges added later", clocks.length >= 2 && spread < 0.15, `spread ${spread.toFixed(3)}s over ${clocks.length}`);
+
 check("no console errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 if (!KEEP) {
