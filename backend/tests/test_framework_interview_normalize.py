@@ -255,7 +255,8 @@ def test_finalize_row_output_inherits_screen_quote_and_parallel_from_the_previou
     assert row["actions"][1]["screen"] == "접수 화면" and row["actions"][1]["quote"] == "먼저 받는다"
     assert "screen" not in row["actions"][0]
     gateways = [e.get("gateway") for e in row["relations"]["edges"]]
-    assert gateways == [None, "parallel", "exclusive"]  # 모델이 명시한 값은 이긴다
+    # 형제가 gateway를 적은 묶음은 잇지 않는다 — 모델이 그 출발의 분기 방식을 다시 정했다
+    assert gateways == [None, None, "exclusive"]
 
 
 # ── normalize_canvas (AI 피드백이 고친 캔버스) ──

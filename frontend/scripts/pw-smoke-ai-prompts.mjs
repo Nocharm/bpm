@@ -51,6 +51,8 @@ try {
   const listRes = await fetch(`${API_BASE}/api/admin/ai-prompts`, { headers: { "X-Dev-User": DEV_USER } });
   const apiCount = listRes.ok ? (await listRes.json()).length : -1;
   check("list shows every prompt key", apiCount > 0 && rows === apiCount, `rows=${rows} api=${apiCount}`);
+  // 키 계약 13종(backend/app/prompt_registry.py PROMPT_KEYS ↔ frontend/src/lib/ai-prompt-keys.ts)
+  check("registry carries 13 prompt keys", apiCount === 13, `api=${apiCount}`);
 
   // 2) 항목 선택 → 편집기에 기본값 로드
   await page.locator('[data-id="ai-prompt-row-anti_repeat_nudge"]').click();

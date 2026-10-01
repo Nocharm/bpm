@@ -308,7 +308,7 @@ def _structure_hints(graph: GraphOut) -> list[str]:
             else:
                 reason = f"단일 출구에 연결 {count}개"
             details.append(f"{nid}({node.title}: {reason})")
-        hints.append("출구 연결 규칙 위반(출구당 1개, 병렬 출구는 2개 이상): " + ", ".join(details))
+        hints.append("갈래 규칙 위반(판단·병렬 없이 갈라짐, 병렬 출구는 2개 이상): " + ", ".join(details))
 
     # 막다른 일반 노드 — end가 아닌데 출력 0 (고아 제외)
     dead_ends = sorted(

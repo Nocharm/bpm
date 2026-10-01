@@ -1144,7 +1144,7 @@ export function buildGraphFromAiProposal(
       group_ids: groupId ? [groupId] : [],
       sort_order: index,
       // 병렬 출구 플래그 — 생략이면 undefined(mergeNode가 기존 유지), true/false면 기본 출구 켬/끔.
-      // 분기·끝 노드에 켜는 요청은 무시(에디터 메뉴와 같은 금지, 아래 경고)
+      // 분기·끝·시작 노드에 켜는 요청은 무시(에디터 메뉴와 같은 금지). 분기·끝만 아래 경고, 시작은 기본 병렬이라 무경고
       parallel_outputs: applyParallelFlag(
         existing?.parallel_outputs,
         attr?.parallel === true && isParallelForbidden(finalType) ? undefined : attr?.parallel,

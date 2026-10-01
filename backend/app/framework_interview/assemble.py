@@ -140,10 +140,13 @@ def _inherit_from_previous(row: dict, previous: dict) -> None:
     for src, group in branch_groups.items():
         if src in decision_seqs or any(edge.get("gateway") for edge in group):
             continue
+        # 묶음 전체가 한 값으로 풀릴 때만 잇는다 — 새 갈래(이전에 없던 dst)가 섞이면 일부만 parallel이 되어
+        # 같은 출발에 표시 있는 갈래와 없는 갈래가 섞인다(어댑터가 택일 ◇로 접는다)
+        restored = [prev_gateway.get((new_labels.get(src, ""), new_labels.get(edge.get("dst"), ""))) for edge in group]
+        if not restored[0] or any(value != restored[0] for value in restored):
+            continue
         for edge in group:
-            gateway = prev_gateway.get((new_labels.get(src, ""), new_labels.get(edge.get("dst"), "")))
-            if gateway:
-                edge["gateway"] = gateway
+            edge["gateway"] = restored[0]
 
 
 def finalize_row_output(out: RowOut, card: dict, previous_row: dict | None = None) -> dict:

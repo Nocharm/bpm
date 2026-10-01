@@ -3,9 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
-## 2026-10-02 — 데이터 입출력 계약 최신화 (feat/io-contract-refresh, 진행 중)
+## 2026-10-02 — 데이터 입출력 계약 최신화 (feat/io-contract-refresh, 일시 중지·dev 미머지)
 
-- 전수 감사(10표면 93건 → 62건 반박 검증, 출력 규칙 머지 후 재검증 52건 + 병렬 출구 신규 43건) 결과를 클러스터별로 반영 중.
+- 전수 감사(10표면 93건 → 62건 반박 검증, 출력 규칙 머지 후 재검증 52건 + 병렬 출구 신규 43건)를 8+6 클러스터로 반영. 사용자 결정: **CSV·Excel 내보내기 전 열 체크박스**(`lib/export-columns.ts` 단일 소스, CSV 25열에 GMP·Input_Forms·Output_Forms 추가, Excel에 IO·조건·GMP·Parallel), **재전달 승계**(`INHERITED_NODE_FIELDS`), AI 담당자 실명 읽기도 제거, SP 끝별 출구는 머지 시 핸들 이월+내보내기 경고, 비교·요약·확정 엣지 정체성 통일(변·입구 위치 제외, SP 끝 키만)+URL 비교, AI 챗 linked_map_id는 현행(주석만 정정).
+- 그 밖에 캠페인 정정 경로 분 단위 시간·Screen/Quote 손실, draft 재사용 판정(전 필드)·관계 캐시 만료, 클립보드·Alt 복제 gateway, 설정 SP 시스템 타일 카탈로그 정규화, 지정 PUT 설명 생략=미변경(critic 결정), 이름·설명 변경 KB 재인덱싱, 계약 문서·매뉴얼·슬라이드 html 갱신(구 패리티 설계 문서 흡수 후 삭제).
+- 검증: pytest 1697·ruff·tsc·vitest 1217·lint·카탈로그. **남은 일**: 브라우저 스모크(열 선택·내보내기 3종·맵 설정·AI 프롬프트·출력 규칙)와 캡처 공유, 매뉴얼 PDF 재출력, 인터뷰 미리보기 `readPreviewNotices` UI 배선, dev 머지.
 - **Start 기본 병렬**(사용자 결정): start는 출력 규칙 밖(연결 1개 이상 허용, 팬아웃은 병렬로 읽고 펄스·배지), 우클릭 병렬 토글은 숨김 — CSV 루트 여러 개가 만든 Start 팬아웃이 저장을 막던 문제 해소. FE `output-rules.ts` ↔ BE `find_output_rule_violations` 동치, AI 연결 규칙 문구 갱신. 체크리스트·확정 게이트 라벨은 "갈래는 판단 노드나 병렬 출구로"(en "Splits use a decision or a parallel exit").
 
 ## 2026-10-01 — 출력 규칙 통일: 출구당 1개·병렬 출구·SP 출구 한 점 (feat/output-rules → dev)

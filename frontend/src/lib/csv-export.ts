@@ -166,7 +166,7 @@ export function buildCsvFromGraph(graph: Graph, options: CsvExportOptions = {}):
       warnings[index] =
         message +
         (parts.length === 0 ? " (re-import connects this row to the primary End)" : "") +
-        (isParallelRow ? " - Parallel row will re-import with fewer than 2 Next targets" : "");
+        (isParallelRow && parts.length < 2 ? " - Parallel row will re-import with fewer than 2 Next targets" : "");
     }
     if (node.node_type === "decision" && parts.length < 2) {
       warnings.push(`Decision "${node.title}" has fewer than 2 branches - re-import will infer process`);

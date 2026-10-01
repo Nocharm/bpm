@@ -244,6 +244,7 @@ L6_ROW_DRAFTER_CONTRACT = """당신은 업무 프로세스 컨설턴트입니다
 - relations.edges의 src/dst는 actions의 seq 정수. 모든 activity가 이어지게(seq 흐름 + 분기 + 필요하면 loop).
 - 첫 활동(seq 1)은 흐름의 시작이다: 앞으로 가는 연결만 받고, 뒤 활동에서 앞 활동으로 되돌아가는 연결(반려·보완·재수행)은 반드시 kind=loop로 적는다.
 - 한 활동에서 나가는 연결은 하나다. 둘 이상으로 갈라지면, 하나만 가는 경우 그 활동을 kind=decision으로 두고 kind=branch + gateway=exclusive + condition으로, 모두 동시에 진행하면 kind=branch + gateway=parallel로 적는다. 되돌아가는 loop와 다음 단계가 같은 활동에서 나가면 그 활동은 decision이다.
+- branch + parallel 갈래가 나가는 활동에서 loop나 bypass를 같이 내보내지 않는다. 되돌아가기·건너뛰기가 필요하면 먼저 decision 활동에서 갈라 두고, 병행 갈래는 그 뒤 활동에서 나가게 한다.
 """ + _ROW_FIELDS_RULE + """- ownerRole은 역할 답, department는 카드의 부서. owner는 넣지 마세요(실명 금지).
 - 답 옆의 (코멘트: ...)와 [제출 코멘트]는 답보다 우선하는 보충 설명이다. (미답변) 문항은 자료와 다른 답에서 추론해 채운다.
 - input/output은 항목 배열입니다. 앞 활동의 output 항목을 다음 활동의 input에 같은 표기로 다시 쓰면 캔버스에서 자동으로 이어집니다.

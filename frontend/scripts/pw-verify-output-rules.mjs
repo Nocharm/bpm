@@ -456,7 +456,9 @@ const opsReply = {
 await page.route("**/ai/chat", (route) =>
   route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(opsReply) }),
 );
-await page.locator('button[title="AI 도우미"], button[title="AI assistant"]').first().click();
+// 상단 AI 메뉴(드롭다운)에서 채팅 항목을 골라야 채팅 창이 열린다
+await page.locator('[data-id="ai-menu"]').click();
+await page.locator('[data-id="ai-menu-chat"]').click();
 await page.waitForSelector('[data-id="ai-chat-list"]', { timeout: 8000 });
 await sleep(800); // AI 활성 여부(aiEnabled)는 비동기로 도착 — 초기 비활성 상태를 SKIP으로 오판하지 않게
 const chatInput = page.locator('textarea[maxlength="2000"]');

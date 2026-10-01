@@ -1104,7 +1104,7 @@ def test_structure_hints_flag_output_rule_violations_and_show_parallel_exits() -
         groups=[],
     )
     hints = _structure_hints(graph)
-    assert any("출구 연결 규칙 위반" in h and "a" in h and "p" not in h.split(":")[1] for h in hints)
+    assert any("갈래 규칙 위반" in h and "a" in h and "p" not in h.split(":")[1] for h in hints)
     assert "병렬출구" in _serialize_node(graph.nodes[2])
 
 

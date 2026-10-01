@@ -166,6 +166,21 @@ def test_finalize_keeps_a_mixed_branch_group_as_the_model_wrote_it() -> None:
     assert gateways == [None, "exclusive"]
 
 
+def test_finalize_skips_restore_when_a_new_branch_joins_the_group() -> None:
+    """이전에 없던 갈래가 섞이면 묶음이 한 값으로 풀리지 않아 잇지 않는다 — 일부만 parallel인 행 금지."""
+    # Arrange
+    actions = [{"seq": 1, "label": "접수"}, {"seq": 2, "label": "검토"},
+               {"seq": 3, "label": "보관"}, {"seq": 4, "label": "통보"}]
+    edges = [{"src": 1, "dst": 2, "kind": "branch"}, {"src": 1, "dst": 3, "kind": "branch"},
+             {"src": 1, "dst": 4, "kind": "branch"}]
+
+    # Act
+    gateways = _gateways_after_finalize(actions, edges)
+
+    # Assert
+    assert gateways == [None, None, None]
+
+
 def test_finalize_does_not_restore_parallel_from_a_decision_source() -> None:
     """출발 활동을 decision으로 바꿨으면 택일로 다시 정한 것이라 병행 표시를 잇지 않는다."""
     # Arrange
