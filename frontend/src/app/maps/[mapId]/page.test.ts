@@ -49,6 +49,49 @@ function makeGraph(gateway: string | null): Graph {
   };
 }
 
+describe("toAppEdges subprocess handle normalization", () => {
+  const typed = (id: string, nodeType: string) => ({ id, node_type: nodeType }) as unknown as Graph["nodes"][number];
+  const rawEdge = (id: string, source: string, target: string, extra: Partial<Graph["edges"][number]> = {}) =>
+    ({ ...makeGraph(null).edges[0], id, source_node_id: source, target_node_id: target, ...extra }) as Graph["edges"][number];
+
+  it("subprocess source without a stored handle (CSV/AI) lands on the primary end, stored end keys stay", () => {
+    const graph: Graph = {
+      nodes: [typed("S", "subprocess"), typed("B", "process"), typed("C", "process")],
+      edges: [rawEdge("e1", "S", "B"), rawEdge("e2", "S", "C", { source_handle: "반려" })],
+      groups: [],
+    };
+    const [e1, e2] = toAppEdges(graph);
+    expect(e1.sourceHandle).toBe("__primary__");
+    expect(e2.sourceHandle).toBe("반려");
+  });
+
+  it("subprocess target maps the stored side to the in-handle variant; side ids are rewritten too", () => {
+    const graph: Graph = {
+      nodes: [typed("A", "process"), typed("S", "subprocess")],
+      edges: [
+        rawEdge("e1", "A", "S", { target_side: "top" }),
+        rawEdge("e2", "A", "S", { target_handle: "t-bottom", target_side: "bottom" }),
+        rawEdge("e3", "A", "S", { target_handle: "in:right", target_side: "right" }),
+        rawEdge("e4", "A", "S"),
+      ],
+      groups: [],
+    };
+    const handles = toAppEdges(graph).map((edge) => edge.targetHandle);
+    expect(handles).toEqual(["in:top", "in:bottom", "in:right", "in"]);
+  });
+
+  it("non-subprocess endpoints keep the existing side derivation", () => {
+    const graph: Graph = {
+      nodes: [typed("A", "process"), typed("B", "process")],
+      edges: [rawEdge("e1", "A", "B", { source_side: "bottom", target_side: "top" })],
+      groups: [],
+    };
+    const [edge] = toAppEdges(graph);
+    expect(edge.sourceHandle).toBe("s-bottom");
+    expect(edge.targetHandle).toBe("t-top");
+  });
+});
+
 describe("gateway round-trip (load→save)", () => {
   it("toAppEdges carries the server gateway value into edge.data", () => {
     const [edge] = toAppEdges(makeGraph("parallel"));

@@ -55,6 +55,26 @@ describe("assignFanLanes - 그룹 키", () => {
     expect(lanes.size).toBe(0);
   });
 
+  it("하위프로세스 들어오는 문 변형(in:top)은 위 변 앵커 — 같은 문으로 오는 엣지끼리 형제, 좌측 in과는 별도", () => {
+    const geom = new Map([
+      ["S", { x: 0, y: 200, w: 180, h: 64, nodeType: "subprocess" as const }],
+      ["A", proc(-100, 0)],
+      ["B", proc(100, 0)],
+      ["L", proc(-400, 200)],
+    ]);
+    const lanes = assignFanLanes(
+      [
+        edge("a", "A", "S", "s-bottom", "in:top"),
+        edge("b", "B", "S", "s-bottom", "in:top"),
+        edge("l", "L", "S", "s-right", "in"),
+      ],
+      geom,
+    );
+    expect(lanes.get("a")?.t?.n).toBe(2);
+    expect(lanes.get("b")?.t?.n).toBe(2);
+    expect(lanes.get("l")).toBeUndefined();
+  });
+
   it("hidden 엣지는 그룹에서 제외된다", () => {
     const geom = new Map([["A", proc(0, 0)], ["B", proc(0, 120)], ["T", proc(400, 60)]]);
     const lanes = assignFanLanes([edge("e1", "A", "T"), { ...edge("e2", "B", "T"), hidden: true }], geom);

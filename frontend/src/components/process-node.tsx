@@ -3,7 +3,14 @@
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { Handle, type NodeProps, Position, useStoreApi } from "@xyflow/react";
+import {
+  Handle,
+  type NodeProps,
+  Position,
+  useNodeId,
+  useStoreApi,
+  useUpdateNodeInternals,
+} from "@xyflow/react";
 import {
   AlertTriangle,
   BriefcaseBusiness,
@@ -74,8 +81,9 @@ import { parseAssignees } from "@/lib/assignee";
 import { OTHER_SYSTEM } from "@/lib/catalogs";
 import {
   PRIMARY_END_HANDLE,
-  SUBPROCESS_IN_HANDLE,
+  subprocessInHandle,
   type SubEnd,
+  type SubprocessInSide,
 } from "@/lib/subprocess-embed";
 
 const FIELD_ICON: Record<Exclude<NodeDisplayField, "conditions">, LucideIcon> = {
@@ -1040,9 +1048,17 @@ function CopyDragBadge({ className = "-right-2 -top-2" }: { className?: string }
   );
 }
 
-// 하위프로세스 노드의 핸들 — 좌측 단일 입력, 우측 끝 노드별 출력 (끝 없으면 단일 PRIMARY_END_HANDLE)
+const SUBPROCESS_IN_SIDES: { side: SubprocessInSide; position: Position }[] = [
+  { side: "left", position: Position.Left },
+  { side: "right", position: Position.Right },
+  { side: "top", position: Position.Top },
+  { side: "bottom", position: Position.Bottom },
+];
+
+// 하위프로세스 노드의 핸들 — 들어오는 문(target)은 네 변(좌=레거시 `in`, 그 외 `in:<side>`), 우측 끝 노드별 출력
+// (끝 없으면 단일 PRIMARY_END_HANDLE). 우측 `in:right`는 대표 끝과 같은 픽셀에 겹친다(일반 노드 s-/t- 겹침과 동일).
 // connectable — 노드 레벨 connectable(임베드 읽기전용 자식 false)을 Handle에 전달해야 실제로 끌기가 막힌다 (F3)
-// anchorTop — 좌 인핸들·단일 대표출력을 세로 중앙 대신 라벨 라인 높이(px)에 고정. 다중 끝 핸들은
+// anchorTop — 좌·우 인핸들·단일 대표출력을 세로 중앙 대신 라벨 라인 높이(px)에 고정. 다중 끝 핸들은
 // 종료 지점별 분산 배치가 기능이라 유지 (사용자 요청 2026-08-25 — 프로세스 노드 18px 고정과 정합).
 function SubprocessHandles({
   ends,
@@ -1054,15 +1070,28 @@ function SubprocessHandles({
   anchorTop?: number;
 }) {
   const anchorStyle = anchorTop !== undefined ? { top: anchorTop } : undefined;
+  // 끝 핸들은 링크 맵 resolved가 도착한 뒤 늘어난다 — RF는 핸들 추가를 스스로 재측정하지 않아(handleBounds 스테일)
+  // 보조 끝(반려 등)으로 나가는 저장 엣지가 로드 직후 조용히 안 그려진다. 끝 키 집합이 바뀔 때 내부 측정을 갱신한다.
+  const nodeId = useNodeId();
+  const updateNodeInternals = useUpdateNodeInternals();
+  const endKeys = ends.map((end) => end.key).join("\u0000");
+  useEffect(() => {
+    if (nodeId) {
+      updateNodeInternals(nodeId);
+    }
+  }, [nodeId, endKeys, updateNodeInternals]);
   return (
     <>
-      <Handle
-        id={SUBPROCESS_IN_HANDLE}
-        type="target"
-        position={Position.Left}
-        isConnectable={connectable}
-        style={anchorStyle}
-      />
+      {SUBPROCESS_IN_SIDES.map(({ side, position }) => (
+        <Handle
+          key={side}
+          id={subprocessInHandle(side)}
+          type="target"
+          position={position}
+          isConnectable={connectable}
+          style={side === "left" || side === "right" ? anchorStyle : undefined}
+        />
+      ))}
       {ends.length === 0 ? (
         <Handle
           id={PRIMARY_END_HANDLE}

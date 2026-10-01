@@ -12,6 +12,7 @@ import {
   sourceHandleId,
   targetHandleId,
 } from "@/lib/canvas";
+import { subprocessInHandle } from "@/lib/subprocess-embed";
 
 export type FlowDir = "LR" | "TB";
 
@@ -217,13 +218,15 @@ export function autoLayoutFlow(
     const back = !!s && !!t && isBackEdge(dir, s, t);
     const sourceSide = pickHandleSide(dir, s, t, spine.has(edge.source), spine.has(edge.target), back);
     const targetSide = pickHandleSide(dir, t, s, spine.has(edge.target), spine.has(edge.source), back);
-    // 서브프로세스 노드는 전용 핸들(좌 in·엔드별 우 out)이라 그 끝만 기존 핸들 유지.
+    // 서브프로세스 소스는 끝 핸들(끝 키)이라 기존 핸들 유지, 타깃은 고른 변의 들어오는 문 변형(in / in:<side>).
     return {
       ...edge,
       sourceHandle:
         sourceNode.data.nodeType === "subprocess" ? edge.sourceHandle : sourceHandleId(sourceSide),
       targetHandle:
-        targetNode.data.nodeType === "subprocess" ? edge.targetHandle : targetHandleId(targetSide),
+        targetNode.data.nodeType === "subprocess"
+          ? subprocessInHandle(targetSide)
+          : targetHandleId(targetSide),
     };
   });
   return { nodes: aligned, edges: nextEdges };

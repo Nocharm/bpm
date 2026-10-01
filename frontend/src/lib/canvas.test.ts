@@ -13,18 +13,86 @@ import {
   hasCustomTerminalLabel,
   hasReciprocalEdge,
   insertNodeAfter,
+  insertNodeBefore,
   isCopyableNodeType,
   makeCopyLabel,
   normalizeNodeType,
   removeOutgoingEdges,
   highlightEdgeLabel,
+  sideFromHandleId,
   styleEdgeLabelPill,
   swapNodeEdges,
   terminalDisplayLabel,
   violatesTerminalRule,
+  withSubprocessHandles,
   type ProcessNodeType,
 } from "@/lib/canvas";
-import { PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
+import { PRIMARY_END_HANDLE, SUBPROCESS_IN_HANDLE } from "@/lib/subprocess-embed";
+
+describe("sideFromHandleId (하위프로세스 in 변형 포함)", () => {
+  it("s-/t- 변 id와 in 변형을 변으로 읽고, 끝 키·null은 폴백", () => {
+    expect(sideFromHandleId("t-top", "left")).toBe("top");
+    expect(sideFromHandleId("in", "right")).toBe("left");
+    expect(sideFromHandleId("in:bottom", "left")).toBe("bottom");
+    expect(sideFromHandleId(PRIMARY_END_HANDLE, "right")).toBe("right");
+    expect(sideFromHandleId("반려", "right")).toBe("right");
+    expect(sideFromHandleId(null, "left")).toBe("left");
+  });
+});
+
+describe("withSubprocessHandles (끝 키·in 변형 보존)", () => {
+  const isSub = (id: string) => id.startsWith("S");
+
+  it("SP 타깃: in 변형은 그대로, 변 id·없음은 in", () => {
+    expect(withSubprocessHandles({ id: "e", source: "A", target: "S1", targetHandle: "in:top" } as Edge, isSub).targetHandle).toBe("in:top");
+    expect(withSubprocessHandles({ id: "e", source: "A", target: "S1", targetHandle: "t-bottom" } as Edge, isSub).targetHandle).toBe(SUBPROCESS_IN_HANDLE);
+    expect(withSubprocessHandles({ id: "e", source: "A", target: "S1" } as Edge, isSub).targetHandle).toBe(SUBPROCESS_IN_HANDLE);
+  });
+
+  it("SP 소스: 끝 키(대표·보조)는 그대로, 변 id·없음은 대표 끝", () => {
+    expect(withSubprocessHandles({ id: "e", source: "S1", target: "B", sourceHandle: "반려" } as Edge, isSub).sourceHandle).toBe("반려");
+    expect(withSubprocessHandles({ id: "e", source: "S1", target: "B", sourceHandle: PRIMARY_END_HANDLE } as Edge, isSub).sourceHandle).toBe(PRIMARY_END_HANDLE);
+    expect(withSubprocessHandles({ id: "e", source: "S1", target: "B", sourceHandle: "s-right" } as Edge, isSub).sourceHandle).toBe(PRIMARY_END_HANDLE);
+    expect(withSubprocessHandles({ id: "e", source: "S1", target: "B" } as Edge, isSub).sourceHandle).toBe(PRIMARY_END_HANDLE);
+  });
+
+  it("SP가 아니게 된 끝점(스왑): in 변형은 같은 변의 t-, 끝 키는 s-right로 복원", () => {
+    expect(withSubprocessHandles({ id: "e", source: "A", target: "B", targetHandle: "in:top" } as Edge, isSub).targetHandle).toBe("t-top");
+    expect(withSubprocessHandles({ id: "e", source: "A", target: "B", sourceHandle: "반려" } as Edge, isSub).sourceHandle).toBe("s-right");
+    // 변경 없으면 같은 객체
+    const same = { id: "e", source: "A", target: "B", sourceHandle: "s-bottom", targetHandle: "t-top" } as Edge;
+    expect(withSubprocessHandles(same, isSub)).toBe(same);
+  });
+});
+
+describe("insertNodeAfter / insertNodeBefore (하위프로세스 끝 한정)", () => {
+  const edges = [
+    { id: "p", source: "S", target: "X", sourceHandle: PRIMARY_END_HANDLE },
+    { id: "r", source: "S", target: "Y", sourceHandle: "반려" },
+  ] as Edge[];
+
+  it("sourceHandle을 주면 그 끝의 엣지만 A로 옮기고 새 S→A 엣지도 그 끝에서 나간다", () => {
+    const result = insertNodeAfter(edges, "A", "S", true, false, "반려");
+    expect(result.find((e) => e.id === "p")).toBe(edges[0]);
+    expect(result.find((e) => e.id === "r")).toMatchObject({ source: "A", target: "Y" });
+    const fresh = result.find((e) => e.id !== "p" && e.id !== "r");
+    expect(fresh).toMatchObject({ source: "S", target: "A", sourceHandle: "반려" });
+  });
+
+  it("sourceHandle 없이 호출하면 기존처럼 모든 출력을 옮긴다", () => {
+    const result = insertNodeAfter(edges, "A", "S", true);
+    expect(result.filter((e) => e.source === "A")).toHaveLength(2);
+  });
+
+  it("insertNodeBefore: 새 S→B 엣지가 지정한 끝에서 나가고, 다른 끝에서 같은 타깃으로 가는 엣지와 중복 판정하지 않는다", () => {
+    const withPrimary = [{ id: "p", source: "S", target: "B", sourceHandle: PRIMARY_END_HANDLE }] as Edge[];
+    const result = insertNodeBefore(withPrimary, "S", "B", false, "반려");
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({ source: "S", target: "B", sourceHandle: "반려" });
+    // 같은 끝에서 같은 타깃은 중복 → 추가 없음
+    expect(insertNodeBefore(withPrimary, "S", "B", false, PRIMARY_END_HANDLE)).toHaveLength(1);
+  });
+});
 
 describe("violatesTerminalRule (source→target 방향)", () => {
   it("blocks connecting INTO a start node (start cannot receive)", () => {
@@ -102,7 +170,32 @@ describe("swapNodeEdges (스왑 시 엣지 교환)", () => {
     ]);
   });
 
-  it("decision↔process: 일반 노드는 decision 출력 1개만 가져가고 나머지는 라벨째 잔류", () => {
+  it("pairs: 짝지은 출력은 가는 곳(타깃·타깃 핸들)만 서로 바꾸고 라벨·소스 핸들은 노드에 남는다", () => {
+    const edges = [
+      { id: "e0", source: "I", target: "D" },
+      { id: "e1", source: "D", target: "X", label: "Yes", sourceHandle: "s-right", targetHandle: "t-left" },
+      { id: "e2", source: "D", target: "Y", label: "No", sourceHandle: "s-bottom" },
+      { id: "e3", source: "J", target: "N" },
+      { id: "e4", source: "N", target: "S2", sourceHandle: "s-right", targetHandle: SUBPROCESS_IN_HANDLE },
+    ] as Edge[];
+    const result = swapNodeEdges(
+      edges,
+      "N",
+      "D",
+      typeOf({ D: "decision", N: "process", S2: "subprocess" }),
+      [["e4", "e1"]],
+    );
+    expect(result.map((e) => [e.source, e.target, e.label ?? "", e.sourceHandle ?? "", e.targetHandle ?? ""])).toEqual([
+      ["I", "N", "", "", ""], // 입력은 전면 교환
+      ["D", "S2", "Yes", "s-right", SUBPROCESS_IN_HANDLE], // Yes는 분기에 남고 가는 곳만 N의 타깃으로(타깃 핸들 동반)
+      ["D", "Y", "No", "s-bottom", ""], // 짝 없는 출력은 그대로
+      ["J", "D", "", "", ""],
+      ["N", "X", "", "s-right", "t-left"], // N의 출력은 Yes가 가던 곳으로
+    ]);
+    expect(result[2]).toBe(edges[2]);
+  });
+
+  it("pairs []: 입력만 교환되고 출력은 전부 제자리(모두 남김)", () => {
     const edges = [
       { id: "e0", source: "I", target: "D" },
       { id: "e1", source: "D", target: "X", label: "Yes" },
@@ -110,103 +203,94 @@ describe("swapNodeEdges (스왑 시 엣지 교환)", () => {
       { id: "e3", source: "J", target: "N" },
       { id: "e4", source: "N", target: "Z" },
     ] as Edge[];
-    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }));
-    expect(result.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
-      ["I", "N", ""], // 입력은 전면 교환
-      ["N", "X", "Yes"], // 첫 출력 1개만 일반 노드로(라벨 유지)
-      ["D", "Y", "No"], // 나머지 분기는 decision에 라벨째 잔류
-      ["J", "D", ""],
-      ["D", "Z", ""], // 일반 노드의 출력은 decision이 그대로 넘겨받음
+    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), []);
+    expect(result.map((e) => [e.source, e.target])).toEqual([
+      ["I", "N"],
+      ["D", "X"],
+      ["D", "Y"],
+      ["J", "D"],
+      ["N", "Z"],
     ]);
-    // 잔류 분기는 객체 동일성까지 유지(라벨·핸들 무변경)
-    expect(result[2]).toBe(edges[2]);
+    expect(result[1]).toBe(edges[1]);
   });
 
-  it("decision↔process: 드래그 방향(a/b)이 바뀌어도 결과는 동일", () => {
+  it("pairs: 드래그 방향(a/b)이 바뀌어도 결과는 동일", () => {
     const edges = [
       { id: "e1", source: "D", target: "X", label: "Yes" },
       { id: "e2", source: "D", target: "Y", label: "No" },
       { id: "e3", source: "N", target: "Z" },
     ] as Edge[];
     const types = typeOf({ D: "decision", N: "process" });
-    const forward = swapNodeEdges(edges, "N", "D", types);
-    const backward = swapNodeEdges(edges, "D", "N", types);
-    expect(backward.map((e) => [e.source, e.target])).toEqual(
-      forward.map((e) => [e.source, e.target]),
-    );
+    const forward = swapNodeEdges(edges, "N", "D", types, [["e3", "e1"]]);
+    const backward = swapNodeEdges(edges, "D", "N", types, [["e1", "e3"]]);
+    expect(backward.map((e) => [e.source, e.target])).toEqual(forward.map((e) => [e.source, e.target]));
     expect(forward.map((e) => [e.source, e.target])).toEqual([
-      ["N", "X"],
-      ["D", "Y"],
       ["D", "Z"],
+      ["D", "Y"],
+      ["N", "X"],
     ]);
   });
 
-  it("decision↔process: 둘을 직접 잇는 분기(D→N)가 있으면 그 엣지가 가져간 1개(추가 이관 없음)", () => {
+  it("pairs: 둘을 직접 잇는 엣지(D→N)는 끝점째 교환되고 짝 대상이 아니다(짝에 넣어도 무시), 나머지 출력은 짝 규칙", () => {
     const edges = [
       { id: "e0", source: "I", target: "D" },
       { id: "e1", source: "D", target: "N", label: "Yes" },
       { id: "e2", source: "D", target: "Y", label: "No" },
       { id: "e3", source: "N", target: "Z" },
     ] as Edge[];
-    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }));
-    expect(result.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
+    const types = typeOf({ D: "decision", N: "process" });
+    const kept = swapNodeEdges(edges, "N", "D", types, []);
+    expect(kept.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
       ["I", "N", ""],
-      ["N", "D", "Yes"], // 직접 연결은 끝점째 교환 → N의 유일한 출력
-      ["D", "Y", "No"], // 다른 분기는 이관 없이 잔류
-      ["D", "Z", ""],
+      ["N", "D", "Yes"], // 직접 연결은 끝점째 교환
+      ["D", "Y", "No"], // 짝 없는 출력은 잔류
+      ["N", "Z", ""],
     ]);
-    // 일반 노드 출력은 정확히 1개
-    expect(result.filter((e) => e.source === "N")).toHaveLength(1);
+    const paired = swapNodeEdges(edges, "N", "D", types, [["e3", "e2"]]);
+    expect(paired.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
+      ["I", "N", ""],
+      ["N", "D", "Yes"],
+      ["D", "Z", "No"], // No는 분기에 남고 가는 곳만 N의 타깃으로
+      ["N", "Y", ""],
+    ]);
+    // 직접 엣지를 짝에 넣으면 그 짝만 무시(자기루프 방지)
+    expect(swapNodeEdges(edges, "N", "D", types, [["e3", "e1"]])).toEqual(kept);
   });
 
-  it("takenEdgeId 지정 시 그 출력선을 일반 노드가 가져간다(선택 모달 픽)", () => {
+  it("pairs: 짝에 모르는 id가 섞이면 그 짝만 무시", () => {
     const edges = [
       { id: "e1", source: "D", target: "X", label: "Yes" },
-      { id: "e2", source: "D", target: "Y", label: "No" },
       { id: "e3", source: "N", target: "Z" },
     ] as Edge[];
-    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e2");
-    expect(result.map((e) => [e.source, e.target, e.label ?? ""])).toEqual([
-      ["D", "X", "Yes"], // 선택 안 된 분기는 라벨째 잔류
-      ["N", "Y", "No"], // 지정한 출력선을 일반 노드가 가져감
-      ["D", "Z", ""],
-    ]);
-  });
-
-  it("takenEdgeId가 decision 출력이 아니면 첫 출력으로 폴백", () => {
-    const edges = [
-      { id: "e1", source: "D", target: "X", label: "Yes" },
-      { id: "e2", source: "D", target: "Y", label: "No" },
-      { id: "e3", source: "N", target: "Z" },
-    ] as Edge[];
-    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e3");
-    expect(result[0]).toMatchObject({ source: "N", target: "X" });
-    expect(result[1]).toBe(edges[1]);
-  });
-
-  it("직접 분기(D→N)가 있으면 takenEdgeId를 무시하고 그 엣지가 가져간 1개(자기루프 방지)", () => {
-    const edges = [
-      { id: "e1", source: "D", target: "N", label: "Yes" },
-      { id: "e2", source: "D", target: "Y", label: "No" },
-    ] as Edge[];
-    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), "e2");
+    const result = swapNodeEdges(edges, "N", "D", typeOf({ D: "decision", N: "process" }), [["e3", "nope"]]);
     expect(result.map((e) => [e.source, e.target])).toEqual([
-      ["N", "D"],
-      ["D", "Y"],
+      ["D", "X"],
+      ["N", "Z"],
     ]);
   });
 
-  it("decision↔subprocess: 끝점이 바뀐 엣지는 하위프로세스 전용 핸들로 재조정", () => {
+  it("subprocess↔decision: 짝지은 끝 엣지는 끝 키를 유지한 채 타깃만 바뀌고, 끝점이 바뀐 직접 엣지는 전용 핸들로 재조정", () => {
     const edges = [
       { id: "e1", source: "D", target: "X", label: "Yes", sourceHandle: "s-right" },
       { id: "e2", source: "D", target: "Y", label: "No", sourceHandle: "s-bottom" },
       { id: "e3", source: "S", target: "Z", sourceHandle: PRIMARY_END_HANDLE },
+      { id: "e4", source: "S", target: "W", sourceHandle: "반려" },
     ] as Edge[];
-    const result = swapNodeEdges(edges, "S", "D", typeOf({ D: "decision", S: "subprocess" }));
-    // 첫 분기를 가져간 subprocess는 대표끝 핸들, decision이 넘겨받은 출력은 변 기본값으로 복원
-    expect(result[0]).toMatchObject({ source: "S", target: "X", sourceHandle: PRIMARY_END_HANDLE });
+    const result = swapNodeEdges(edges, "S", "D", typeOf({ D: "decision", S: "subprocess" }), [["e4", "e1"]]);
+    expect(result[0]).toMatchObject({ source: "D", target: "W", sourceHandle: "s-right" });
     expect(result[1]).toBe(edges[1]);
-    expect(result[2]).toMatchObject({ source: "D", target: "Z", sourceHandle: "s-right" });
+    expect(result[2]).toBe(edges[2]);
+    expect(result[3]).toMatchObject({ source: "S", target: "X", sourceHandle: "반려" });
+  });
+
+  it("pairs 미지정 + 직접 엣지(S→N): S가 SP가 아닌 노드로 들어가는 쪽은 변 핸들로, SP로 들어오는 쪽은 in", () => {
+    const edges = [
+      { id: "e1", source: "S", target: "N", sourceHandle: PRIMARY_END_HANDLE, targetHandle: "t-left" },
+      { id: "e2", source: "N", target: "Z", sourceHandle: "s-right" },
+    ] as Edge[];
+    const result = swapNodeEdges(edges, "N", "S", typeOf({ S: "subprocess", N: "process" }));
+    expect(result[0]).toMatchObject({ source: "N", target: "S", sourceHandle: "s-right", targetHandle: SUBPROCESS_IN_HANDLE });
+    expect(result[1]).toMatchObject({ source: "S", target: "Z", sourceHandle: PRIMARY_END_HANDLE });
   });
 });
 
@@ -271,6 +355,16 @@ describe("removeOutgoingEdges (single-output auto-swap)", () => {
 
   it("returns the same edges when the source has no outgoing edge", () => {
     expect(removeOutgoingEdges(edges, "B")).toHaveLength(2);
+  });
+
+  it("sourceHandle을 주면 그 끝에서 나가는 엣지만 제거(하위프로세스 끝당 교체)", () => {
+    const ends = [
+      { id: "p", source: "S", target: "X", sourceHandle: PRIMARY_END_HANDLE },
+      { id: "r", source: "S", target: "Y", sourceHandle: "반려" },
+      { id: "o", source: "O", target: "S" },
+    ] as Edge[];
+    expect(removeOutgoingEdges(ends, "S", "반려").map((e) => e.id)).toEqual(["p", "o"]);
+    expect(removeOutgoingEdges(ends, "S").map((e) => e.id)).toEqual(["o"]);
   });
 });
 
@@ -413,6 +507,27 @@ describe("styleEdgeLabelPill", () => {
     } as Edge);
     expect(styled.style?.strokeDasharray).toBe("6 3");
     expect(styled.style?.stroke).toBe("var(--color-branch-yes)");
+  });
+});
+
+describe("styleEdgeLabelPill (미러 라벨 변형)", () => {
+  const mirrored = () =>
+    styleEdgeLabelPill({ id: "e1", source: "S", target: "b", label: "반려", data: { labelMirrored: true } } as Edge);
+  it("미러 라벨은 점선 테두리·옅은 글자·대체 배경으로 직접 라벨과 구분", () => {
+    const out = mirrored();
+    expect(out.labelStyle).toMatchObject({ fill: "var(--color-ink-tertiary)", fontWeight: 400 });
+    expect(out.labelBgStyle).toMatchObject({
+      fill: "var(--color-surface-alt)",
+      stroke: "var(--color-hairline)",
+      strokeDasharray: "3 2",
+    });
+    // 미러 제목이 Yes/No와 같아도 분기색을 입히지 않는다(분기가 아니라 끝 제목)
+    const yesLike = styleEdgeLabelPill({ id: "e2", source: "S", target: "b", label: "Yes", data: { labelMirrored: true } } as Edge);
+    expect(yesLike.style?.stroke).toBeUndefined();
+  });
+  it("강조 중에도 점선은 유지된다", () => {
+    const out = highlightEdgeLabel(mirrored(), "in");
+    expect(out.labelBgStyle).toMatchObject({ stroke: "var(--color-edge-in)", strokeDasharray: "3 2" });
   });
 });
 

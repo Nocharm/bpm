@@ -14,6 +14,7 @@ import {
   type EdgeProps,
   type EdgeTypes,
 } from "@xyflow/react";
+import { Link2 } from "lucide-react";
 
 import { type AppNode, EDGE_LABEL_MAX_WIDTH } from "@/lib/canvas";
 import {
@@ -88,7 +89,7 @@ export function getObstacles(nodes: AppNode[]): EdgeObstacle[] {
 // 관통하면 이 엣지만 현행(우회/RF) 경로로 돌아간다 — 겹침 최소화는 장애물 회피보다 우선순위가 낮다.
 // useNodes 훅 때문에 별도 컴포넌트 — variant 분기 안에서 훅을 조건 호출할 수 없다(Rules of Hooks).
 function DetourSmoothstepEdge(props: EdgeProps) {
-  const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius } =
+  const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
     props;
   const nodes = useNodes<AppNode>();
   const obstacles = getObstacles(nodes);
@@ -109,7 +110,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
     );
     if (fanned && !isPolylineBlocked(fanned.points, obstacles, props.source, props.target)) {
       return renderEdge(
-        { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius },
+        { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
         fanned.d,
         fanned.labelX,
         fanned.labelY,
@@ -135,7 +136,7 @@ function DetourSmoothstepEdge(props: EdgeProps) {
       )
     : buildPath("smoothstep", props);
   return renderEdge(
-    { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius },
+    { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
     path,
     labelX,
     labelY,
@@ -146,15 +147,18 @@ function DetourSmoothstepEdge(props: EdgeProps) {
 function renderEdge(
   props: Pick<
     EdgeProps,
-    "label" | "markerEnd" | "style" | "labelStyle" | "labelBgStyle" | "labelBgPadding" | "labelBgBorderRadius"
+    "label" | "markerEnd" | "style" | "labelStyle" | "labelBgStyle" | "labelBgPadding" | "labelBgBorderRadius" | "data"
   >,
   path: string,
   labelX: number,
   labelY: number,
 ) {
-  const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius } =
+  const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
     props;
   const [padX, padY] = labelBgPadding ?? [6, 3];
+  // 미러 라벨(하위프로세스 끝 제목 기본값, 저장 안 됨) — 점선 테두리 + 링크 아이콘으로 직접 라벨과 구분
+  const mirrored = data?.labelMirrored === true;
+  const borderStyle = labelBgStyle?.strokeDasharray ? "dashed" : "solid";
   return (
     <>
       <BaseEdge path={path} markerEnd={markerEnd} style={style} />
@@ -164,6 +168,7 @@ function renderEdge(
               아래 엣지 path로 그대로 통과해야 선택·라벨편집·컨텍스트 메뉴가 유지된다 */}
           <div
             className="nodrag nopan pointer-events-none absolute whitespace-pre-wrap text-center leading-tight"
+            data-mirrored={mirrored ? "true" : undefined}
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               // 최대폭 + 자동 줄바꿈 — 긴 라벨이 이웃 노드를 덮지 않게 (사용자 요청 2026-08-23 #6).
@@ -175,14 +180,21 @@ function renderEdge(
               fontWeight: labelStyle?.fontWeight,
               fontSize: labelStyle?.fontSize,
               background: labelBgStyle?.fill,
-              border: labelBgStyle?.stroke ? `1px solid ${labelBgStyle.stroke}` : undefined,
+              border: labelBgStyle?.stroke ? `1px ${borderStyle} ${labelBgStyle.stroke}` : undefined,
               // 선택 라벨 링 — 선의 글로우와 짝(lib/canvas highlightEdgeLabel)
               boxShadow: labelBgStyle?.boxShadow,
               borderRadius: labelBgBorderRadius,
               padding: `${padY}px ${padX}px`,
             }}
           >
-            {label}
+            {mirrored ? (
+              <span className="inline-flex items-center gap-1">
+                <Link2 size={11} strokeWidth={1.5} className="shrink-0" aria-hidden />
+                <span>{label}</span>
+              </span>
+            ) : (
+              label
+            )}
           </div>
         </EdgeLabelRenderer>
       ) : null}
@@ -192,11 +204,11 @@ function renderEdge(
 
 function createLineEdge(variant: LineVariant) {
   function LineEdge(props: EdgeProps) {
-    const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius } =
+    const { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data } =
       props;
     const [path, labelX, labelY] = buildPath(variant, props);
     return renderEdge(
-      { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius },
+      { label, markerEnd, style, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, data },
       path,
       labelX,
       labelY,

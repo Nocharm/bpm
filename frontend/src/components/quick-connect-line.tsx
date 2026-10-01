@@ -19,15 +19,20 @@ import {
   type AppNode,
   type ProcessNodeType,
 } from "@/lib/canvas";
-import { SUBPROCESS_IN_HANDLE } from "@/lib/subprocess-embed";
+import { PRIMARY_END_HANDLE, SUBPROCESS_IN_HANDLE } from "@/lib/subprocess-embed";
 
 /** 몸체 드롭 시 기본 타깃 핸들 — 일반 노드는 왼쪽, subprocess는 전용 인 핸들(왼쪽). */
 export function getQuickTargetHandleId(nodeType: ProcessNodeType): string {
   return nodeType === "subprocess" ? SUBPROCESS_IN_HANDLE : targetHandleId("left");
 }
 
+/** 역방향 몸체 드롭 시 기본 소스 핸들 — 일반 노드는 오른쪽, subprocess는 대표 끝(끝 ≥ 2면 호출부가 목록으로 바꾼다). */
+export function getQuickSourceHandleId(nodeType: ProcessNodeType): string {
+  return nodeType === "subprocess" ? PRIMARY_END_HANDLE : sourceHandleId("right");
+}
+
 /** 몸체 드롭 허용 판정 — 터미널 규칙 + section 제외. 역방향(타깃 핸들에서 시작)이면 드롭
- *  노드가 소스가 되며, subprocess는 끝 핸들이 여러 개라 기본 소스를 못 정해 제외한다. */
+ *  노드가 소스가 된다. subprocess 소스는 끝이 2개 이상이면 호출부가 출구 선택 목록(EdgeEndModal)으로 끝을 정한다. */
 export function canQuickConnect(
   fromType: ProcessNodeType | undefined,
   overType: ProcessNodeType | undefined,
@@ -35,7 +40,7 @@ export function canQuickConnect(
 ): boolean {
   if (!overType) return false;
   if (reverse) {
-    return overType !== "subprocess" && !violatesTerminalRule(overType, fromType);
+    return !violatesTerminalRule(overType, fromType);
   }
   return !violatesTerminalRule(fromType, overType);
 }
@@ -67,11 +72,12 @@ export function QuickConnectLine({
       if (toX < x || toX > x + width || toY < y || toY > y + height) continue;
       const overData = node.data as AppNode["data"];
       if (!canQuickConnect(fromNode.data.nodeType, overData.nodeType, reverse)) break;
-      const wantedId = reverse ? sourceHandleId("right") : getQuickTargetHandleId(overData.nodeType);
+      const wantedId = reverse ? getQuickSourceHandleId(overData.nodeType) : getQuickTargetHandleId(overData.nodeType);
       const bounds = reverse
         ? node.internals.handleBounds?.source
         : node.internals.handleBounds?.target;
-      const handle = bounds?.find((entry) => entry.id === wantedId);
+      // subprocess 역방향은 끝 핸들 중 첫 번째(대표 끝)에 미리보기를 붙인다 — 실제 끝은 드롭 뒤 목록에서 고른다
+      const handle = bounds?.find((entry) => entry.id === wantedId) ?? (reverse && overData.nodeType === "subprocess" ? bounds?.[0] : undefined);
       if (!handle) break;
       targetX = x + handle.x + handle.width / 2;
       targetY = y + handle.y + handle.height / 2;

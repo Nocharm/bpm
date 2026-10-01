@@ -3,6 +3,11 @@
 프로젝트 진행 로그. 커밋 직전 갱신 (`rules/common/git.md`). **한 줄 요약만** — 상세는 git 이력·`docs/spec.md` 참조.
 최근 요약만 유지하고, 이전 상세 이력은 [`docs/history/PROGRESS-archive.md`](docs/history/PROGRESS-archive.md)(2026-07-20 전체 스냅샷 + 이후 이동분) + git history로 아카이브한다.
 
+## 2026-10-01 — 하위프로세스 출구 다중 연결 + 들어오는 문 네 방향 (feat/subprocess-ends → dev)
+
+- SP 노드는 들어오는 문이 좌측 하나뿐이고 끝이 여러 개여도 출구 엣지가 전부 대표 끝으로 덮여(`withSubprocessHandles`) 끝별 흐름을 그릴 수 없었다. 사용자 결정 10건(설계 `docs/design/2026-10-01-subprocess-ends-design.md`): in만 네 방향(`in`·`in:top/right/bottom`), 끝마다 출구 엣지+끝당 출력 1개 규칙, 끝을 모르는 경로(드롭존 앞/뒤·역방향 몸체 드롭)는 출구 선택 목록 `EdgeEndModal`(대표 끝 첫 행), 출구 라벨 기본값은 끝 제목 **미러**(점선 알약·링크 아이콘, 저장 안 함), 스왑 다출력은 두 열 짝짓기 모달 `SwapOutputsModal`(짝=타깃만 교환, 라벨·끝 키는 노드 잔류, 확인해야 실행·취소=스왑 취소, 행 중앙 연결선+그려지는 모션), 펼침 게이트웨이는 끝별 호스트 엣지에만 매핑+점선 애니메이션, 합성 `sp-ends:` 안내 엣지 제거.
+- 구현 축: 끝 키·in 변형 보존(`withSubprocessHandles`), 끝 한정 `sourceHandle` 인자 한 벌(`withEdge`·`insertNodeAfter/Before`·`removeOutgoingEdges`·`edgeAction/edgeSelect/pending`·`applyFlowEdges`), `swapNodeEdges(…, pairs)`, `toAppEdges` 로드 정규화(CSV·AI SP 엣지가 조용히 안 그려지던 잠재 버그 수정), `applyMirroredEndLabels` 렌더 전용. **실사고 1건**: 보조 끝 저장 엣지가 로드 직후 콘솔 에러 없이 사라짐 — 끝 핸들이 resolved 도착 뒤 늘어나는데 RF가 handleBounds를 재측정하지 않아서, `SubprocessHandles`가 끝 키 집합 변화마다 `updateNodeInternals`. 스모크 `pw-verify-sp-ends.mjs` 23/23(끝 3개 링크 맵 발행·지정, 로드·펼침·출구 목록·스왑 확인/취소·저장 payload). 불변식은 CLAUDE.md Lessons·spec §3.1, 설계 스냅샷은 main 머지 시 폐기.
+
 ## 2026-10-01 — 엣지 팬아웃: 같은 핸들로 모이는 엣지의 나선 펼침 (feat/edge-fanout → dev)
 
 - 같은 (노드·변·핸들) 앵커로 오가는 엣지(실데이터 13%, 루프백은 100%)가 스텁·화살촉·라벨까지 포개지던 것을 **렌더 전용 레인 배정**(`lib/edge-fanout.ts` `assignFanLanes` → `edge.data.fan`)으로 펼쳤다: 꺾은선은 게이트 포인트+원호, 곡선은 제어점 중첩, 직선은 끝점 ±3.5px. 에디터·비교·SVG 미리보기(역행) 세 표면, 저장 데이터·변·백엔드 무변경. 사용자 확정 4건(양쪽 끝·A 나선 아크·곡선 A/직선 분산/화살촉 한 점·세 표면). 반경은 배정 단계에서 압축 확정(끝마다 클램프하면 교차·NaN), 왕복 쌍(양끝 팬)은 중간 구간·라벨을 소스 레인만큼 비켜 세움. 스모크 `pw-smoke-edge-fanout.mjs` 25/25·펼침 `pw-verify-edge-fanout-expand.mjs` 10/10. 불변식은 CLAUDE.md Lessons, 설계 스냅샷은 main 머지 시 폐기.

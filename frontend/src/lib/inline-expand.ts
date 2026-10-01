@@ -6,6 +6,7 @@ import type { Edge } from "@xyflow/react";
 import type { FlatNode, GraphEdge, VersionGraph } from "@/lib/api";
 import { sourceHandleId, targetHandleId, type AppNode } from "@/lib/canvas";
 import { EXPANSION_LIMITS } from "@/lib/expansion-config";
+import { endKeyOfEdge, PRIMARY_END_HANDLE } from "@/lib/subprocess-embed";
 
 /** expanded에 속한 노드들의 후손(재귀) 노드 + 그 사이 엣지. 중첩 펼침 지원. */
 export function collectExpandedDescendants(
@@ -88,21 +89,34 @@ export function buildGatewayEdges(
     const inferredEntries = children.filter((child) => !hasIncoming.has(child.id));
     const inferredExits = children.filter((child) => !hasOutgoing.has(child.id));
     const entries = starts.length > 0 ? starts : inferredEntries.length > 0 ? inferredEntries : children;
-    const exits = ends.length > 0 ? ends : inferredExits.length > 0 ? inferredExits : children;
-    // 후속 T = P가 출발인 엣지의 타깃(펼침 시 숨기는 A→B의 B)
-    const successors = scopeEdges
-      .filter((edge) => edge.source === parent)
-      .map((edge) => edge.target);
+    // 호스트에서 나가는 루트 엣지(펼침 시 숨기는 A→B) — 진출 게이트웨이의 타깃·타깃 핸들 출처
+    const hostEdges = scopeEdges.filter((edge) => edge.source === parent);
     for (const entry of entries) {
       // 진입(host→start) — 도착은 좌측 변. 출발 핸들은 host(subprocess) 기본(우측 PRIMARY_END)로 폴백.
       gateways.push(makeGateway(parent, entry.id, undefined, targetHandleId("left")));
     }
-    for (const exit of exits) {
-      for (const target of successors) {
-        // 진출(끝노드→후속) — 출발은 우측 변(기본), 도착은 좌측 변. 핸들 미지정 시 RF가 첫 핸들(좌)에 붙던 버그 수정.
-        gateways.push(
-          makeGateway(exit.id, target, sourceHandleId("right"), targetHandleId("left")),
-        );
+    // 진출(끝노드→후속) — 출발은 우측 변(기본), 도착 핸들은 실제 호스트 엣지에서 상속(SP 타깃 in 변형 포함).
+    // 끝 노드가 있으면 끝별로 그 끝 키(대표=__primary__, 그 외=끝 제목)에서 나가는 호스트 엣지만 잇는다 —
+    // 연결되지 않은 끝은 게이트웨이 없음(결정 6). 끝 노드가 없는 스코프는 추론 진출점 전부 × 후속 전부(종전 규칙).
+    if (ends.length > 0) {
+      const primary = ends.find((end) => end.data.isPrimaryEnd) ?? ends[0];
+      for (const exit of ends) {
+        const key = exit === primary ? PRIMARY_END_HANDLE : exit.data.label;
+        for (const edge of hostEdges) {
+          if (endKeyOfEdge(edge) !== key) continue;
+          gateways.push(
+            makeGateway(exit.id, edge.target, sourceHandleId("right"), edge.targetHandle ?? targetHandleId("left")),
+          );
+        }
+      }
+    } else {
+      const exits = inferredExits.length > 0 ? inferredExits : children;
+      for (const exit of exits) {
+        for (const edge of hostEdges) {
+          gateways.push(
+            makeGateway(exit.id, edge.target, sourceHandleId("right"), edge.targetHandle ?? targetHandleId("left")),
+          );
+        }
       }
     }
   }

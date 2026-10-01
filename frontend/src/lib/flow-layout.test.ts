@@ -89,13 +89,20 @@ describe("autoLayoutFlow", () => {
     expect(mainEdge?.targetHandle).toBe("t-left");
   });
 
-  it("keeps stored handles on subprocess endpoints", () => {
+  it("subprocess target takes the picked side as an in-handle variant, subprocess source keeps its end key", () => {
+    // TB에서는 하류 진입이 위 변 — 좌측 "in" 그대로면 자동정렬이 SP 타깃을 재지정하지 않은 것
+    const asProcess = autoLayoutFlow([...nodes, makeNode("sub", "process")], [...edges, { id: "e4", source: "a", target: "sub" }], "TB");
+    const pickedSide = asProcess.edges.find((edge) => edge.id === "e4")?.targetHandle?.replace(/^t-/, "");
+    expect(pickedSide).not.toBe("left");
     const withSub = [...nodes, makeNode("sub", "subprocess")];
     const subEdge: Edge = { id: "e4", source: "a", target: "sub", targetHandle: "in" };
-    const result = autoLayoutFlow(withSub, [...edges, subEdge], "LR");
+    const outEdge: Edge = { id: "e5", source: "sub", target: "c", sourceHandle: "반려" };
+    const result = autoLayoutFlow(withSub, [...edges, subEdge, outEdge], "TB");
     const laidSubEdge = result.edges.find((edge) => edge.id === "e4");
-    expect(laidSubEdge?.targetHandle).toBe("in"); // 서브프로세스 끝은 전용 핸들 유지
-    // 일반 노드 끝은 재지정 — a는 척추라 곁가지(sub) 진입은 cross측(top/bottom)이 정상
-    expect(laidSubEdge?.sourceHandle).toMatch(/^s-(top|bottom|right)$/);
+    // 같은 자리의 일반 노드가 받았을 변을 들어오는 문 변형으로(left → "in")
+    expect(laidSubEdge?.targetHandle).toBe(`in:${pickedSide}`);
+    expect(laidSubEdge?.sourceHandle).toMatch(/^s-(top|bottom|right|left)$/);
+    // 소스 끝(끝 키)은 보존
+    expect(result.edges.find((edge) => edge.id === "e5")?.sourceHandle).toBe("반려");
   });
 });
