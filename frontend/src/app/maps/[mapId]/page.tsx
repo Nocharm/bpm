@@ -306,7 +306,15 @@ import {
   buildStepFlowEdges,
   checkExpansionLimits,
 } from "@/lib/inline-expand";
-import { buildCompositeTree, deriveSubEnds, PRIMARY_END_HANDLE, type SubEnd } from "@/lib/subprocess-embed";
+import {
+  buildCompositeTree,
+  deriveSubEnds,
+  isSubprocessEndHandle,
+  isSubprocessInHandle,
+  PRIMARY_END_HANDLE,
+  subprocessInHandle,
+  type SubEnd,
+} from "@/lib/subprocess-embed";
 import {
   NodeActionsContext,
   type IoListDisplayState,
@@ -766,20 +774,37 @@ const EDGE_LINE_STYLE_OPTIONS = [
 ] as const;
 
 export function toAppEdges(graph: Graph): Edge[] {
-  return graph.edges.map((edge) => ({
-    ...EDGE_DEFAULTS,
-    id: edge.id,
-    source: edge.source_node_id,
-    target: edge.target_node_id,
-    label: edge.label || undefined,
-    // 백엔드가 raw handle id를 보내면 우선 사용(subprocess end 핸들); 없으면 side에서 파생
-    sourceHandle: edge.source_handle ?? sourceHandleId((edge.source_side as HandleSide) || "right"),
-    targetHandle: edge.target_handle ?? targetHandleId((edge.target_side as HandleSide) || "left"),
-    // 엣지별 저장 선 모양 — ""(레거시)는 기본 꺾은선
-    type: normalizeEdgeLineStyle(edge.line_style),
-    // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (§4 게이트 6 plain_fanout 예외 판정 재료)
-    data: { gateway: edge.gateway ?? null },
-  }));
+  const subprocessIds = new Set(
+    graph.nodes.filter((node) => node.node_type === "subprocess").map((node) => node.id),
+  );
+  return graph.edges.map((edge) => {
+    // 백엔드가 raw handle id를 보내면 우선 사용(subprocess 끝 핸들·in 변형); 없으면 side에서 파생.
+    // 하위프로세스 끝점 정규화 — CSV·AI 임포트 엣지는 handle 없이 저장되는데(s-right/t-left 폴백)
+    // SP에는 그 핸들이 없어 RF가 조용히 버렸다: 소스는 대표 끝, 타깃은 저장된 변의 들어오는 문으로.
+    const sourceSide = (edge.source_side as HandleSide) || "right";
+    const targetSide = (edge.target_side as HandleSide) || "left";
+    let sourceHandle = edge.source_handle ?? sourceHandleId(sourceSide);
+    let targetHandle = edge.target_handle ?? targetHandleId(targetSide);
+    if (subprocessIds.has(edge.source_node_id) && !isSubprocessEndHandle(sourceHandle)) {
+      sourceHandle = PRIMARY_END_HANDLE;
+    }
+    if (subprocessIds.has(edge.target_node_id) && !isSubprocessInHandle(targetHandle)) {
+      targetHandle = subprocessInHandle(sideFromHandleId(targetHandle, targetSide));
+    }
+    return {
+      ...EDGE_DEFAULTS,
+      id: edge.id,
+      source: edge.source_node_id,
+      target: edge.target_node_id,
+      label: edge.label || undefined,
+      sourceHandle,
+      targetHandle,
+      // 엣지별 저장 선 모양 — ""(레거시)는 기본 꺾은선
+      type: normalizeEdgeLineStyle(edge.line_style),
+      // 미직렬화 시 저장마다 서버 소거 — 왕복 필수 (§4 게이트 6 plain_fanout 예외 판정 재료)
+      data: { gateway: edge.gateway ?? null },
+    };
+  });
 }
 
 
@@ -5814,16 +5839,20 @@ function MapEditor({ mapId }: { mapId: number }) {
       }
       pushHistory();
       setEdges((current) =>
-        current.map((edge) =>
-          edge.id === edgeId
-            ? {
-                ...edge,
-                ...(end === "source"
-                  ? { sourceHandle: sourceHandleId(side) }
-                  : { targetHandle: targetHandleId(side) }),
-              }
-            : edge,
-        ),
+        current.map((edge) => {
+          if (edge.id !== edgeId) {
+            return edge;
+          }
+          // 하위프로세스 타깃은 들어오는 문 변형(in / in:<side>) — 변 id는 SP에 없다
+          const targetSub =
+            nodesRef.current.find((n) => n.id === edge.target)?.data.nodeType === "subprocess";
+          return {
+            ...edge,
+            ...(end === "source"
+              ? { sourceHandle: sourceHandleId(side) }
+              : { targetHandle: targetSub ? subprocessInHandle(side) : targetHandleId(side) }),
+          };
+        }),
       );
       scheduleAutoSave();
     },
@@ -6343,11 +6372,9 @@ function MapEditor({ mapId }: { mapId: number }) {
       if (readOnly) {
         return [];
       }
-      // 하위프로세스(라이브러리) 끝점은 전용 핸들(in=좌/__primary__=우) 고정 → 면 선택 잠금
+      // 하위프로세스 소스 끝점은 끝 핸들(끝 키) 고정 → 면 선택 잠금. 타깃은 들어오는 문 네 방향이라 열림.
       const sourceLocked =
         nodes.find((n) => n.id === edge.source)?.data.nodeType === "subprocess";
-      const targetLocked =
-        nodes.find((n) => n.id === edge.target)?.data.nodeType === "subprocess";
       return [
         { caption: t("edge.connection") },
         {
@@ -6357,7 +6384,6 @@ function MapEditor({ mapId }: { mapId: number }) {
           sourceSide: sideFromHandleId(edge.sourceHandle, "right"),
           targetSide: sideFromHandleId(edge.targetHandle, "left"),
           sourceLocked,
-          targetLocked,
           onPickSource: (side: HandleSide) => setEdgeSide(edge.id, "source", side),
           onPickTarget: (side: HandleSide) => setEdgeSide(edge.id, "target", side),
         },
@@ -11084,12 +11110,9 @@ function MapEditor({ mapId }: { mapId: number }) {
                                 targetLabel: t("edge.endBox"),
                                 sourceSide: sideFromHandleId(selectedEdge.sourceHandle, "right"),
                                 targetSide: sideFromHandleId(selectedEdge.targetHandle, "left"),
-                                // 하위프로세스 끝점은 전용 핸들 고정 — 컨텍스트 메뉴와 동일 잠금
+                                // 하위프로세스 소스 끝점(끝 키)만 고정 — 컨텍스트 메뉴와 동일 잠금. 타깃은 네 방향.
                                 sourceLocked:
                                   nodes.find((n) => n.id === selectedEdge.source)?.data.nodeType ===
-                                  "subprocess",
-                                targetLocked:
-                                  nodes.find((n) => n.id === selectedEdge.target)?.data.nodeType ===
                                   "subprocess",
                                 onPickSource: (side: HandleSide) =>
                                   setEdgeSide(selectedEdge.id, "source", side),
