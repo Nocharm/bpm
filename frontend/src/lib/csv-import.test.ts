@@ -1,4 +1,7 @@
 // CSV 임포트 파서·그래프 변환 단위 테스트 (설계: 2026-07-10-csv-import-merge-design.md)
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import type { AiNode, Directory, Graph, GraphEdge, GraphNode } from "./api";
@@ -10,12 +13,14 @@ import {
   buildTemplateCsv,
   type CsvDirectory,
   decodeCsvBuffer,
+  HEADER_COLUMNS,
   parseCsvRecords,
   stripCsvExtension,
   stripCsvFences,
   toCsvDirectory,
   withKeptNodes,
 } from "./csv-import";
+import { getOutputViolations } from "./output-rules";
 
 const HEADER = "Name,System,Duration,URL,Next";
 
@@ -110,7 +115,18 @@ describe("buildGraphFromCsv - 그래프 변환", () => {
   it("템플릿 CSV는 에러 없이 변환된다", () => {
     const outcome = buildGraphFromCsv(buildTemplateCsv());
     expect(outcome.errors).toEqual([]);
+    expect(outcome.warnings).toEqual([]);
     expect(outcome.graph).not.toBeNull();
+    // 병렬 예시 행 — Next 2개 + Parallel=Y는 분기가 아니라 병렬 출구 일반 노드
+    expect(outcome.graph!.nodes.find((n) => n.title === "Sign contract")).toMatchObject({
+      node_type: "process", parallel_outputs: ["__primary__"],
+    });
+  });
+
+  it("템플릿 모든 행의 셀 수가 헤더 열 수와 같다 (결측 열이 조용히 통과하지 않게)", () => {
+    const records = parseCsvRecords(buildTemplateCsv());
+    expect(records[0].cells.map((c) => c.toLowerCase())).toEqual([...HEADER_COLUMNS]);
+    for (const record of records) expect(record.cells).toHaveLength(HEADER_COLUMNS.length);
   });
 
   it("임포트 노드는 follow_latest 기본 ON(최신본 추종)으로 생성된다", () => {
@@ -231,14 +247,17 @@ describe("buildGraphFromCsv - 검증 에러", () => {
 describe("외부 AI 왕복 - 프롬프트·펜스 스트립", () => {
   it("buildAiPromptText: 헤더·규칙·예시가 스펙에서 파생된다", () => {
     const prompt = buildAiPromptText();
-    expect(prompt).toContain(
-      "Name,Description,Assignee,Role,Department,System,Duration,Touch_Time,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,Input,Input_Flags,Output,Start_Condition,End_Condition,URL,URL_Label,Next",
-    ); // 헤더 명시(Role 열 2026-09-12)
+    expect(prompt).toContain(`첫 행(헤더)은 정확히: ${buildTemplateCsv().split("\r\n")[0]}`); // 템플릿과 같은 25열 헤더
     expect(prompt).toContain("- Role: 선택, 그 단계를 수행하는 역할명"); // 실명 대신 역할
+    expect(prompt).toContain("- Assignee: 항상 비워두세요"); // 담당자 실명은 AI가 쓰지 않는다 (D2)
+    expect(prompt).not.toContain("hong.gd"); // 예시에서도 Assignee를 비운다
+    expect(prompt).toContain("- Parallel: 선택, Y 또는 N"); // 병렬 출구 열
+    expect(prompt).toContain("- GMP: 선택, direct·indirect·non_gmp");
+    expect(prompt).toContain("- Input_Forms / Output_Forms:");
     expect(prompt).toContain("Start·End(시작/종료) 행은 쓰지 마세요"); // 자동 생성 규칙
     expect(prompt).toContain("세미콜론(;)"); // Next 구분 규칙
     expect(prompt).toContain("최대 500개"); // MAX_DATA_ROWS 파생
-    expect(prompt).toContain(buildTemplateCsv().split("\r\n")[1]); // 예시 행 포함
+    expect(prompt).toContain("Approval decision,,,Approver"); // 예시 행 포함(Assignee 비움)
   });
 
   it("stripCsvFences: ```csv 펜스를 벗기고 본문만 반환", () => {
@@ -497,7 +516,7 @@ describe("buildGraphFromCsv - 머지", () => {
     expect(node.linked_map_id).toBe(7);
   });
 
-  it("서브프로세스 매칭 행은 annual_count·fte만 반영하고 나머지 4필드는 드롭 + 경고 (링크 맵 지정값 보호)", () => {
+  it("서브프로세스 매칭 행은 annual_count·fte만 반영하고 나머지 5필드는 드롭 + 경고 (링크 맵 지정값 보호)", () => {
     const base = baseGraph();
     base.nodes[1] = {
       ...base.nodes[1], node_type: "subprocess", linked_map_id: 7,
@@ -734,7 +753,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
     expect(merged?.color).toBe("#6a9985");
     expect(merged?.group_ids).toEqual(["g1"]);
     expect(merged?.assignee).toBe("홍길동"); // AI가 비우면 기존 유지
-    expect(merged?.assignee_role).toBe("Reviewer"); // 역할은 AI 표면 제외 — 기존 유지
+    expect(merged?.assignee_role).toBe("Reviewer"); // AI가 역할을 비우면 기존 유지
     expect(outcome.merge.matchedCount).toBeGreaterThanOrEqual(1);
   });
 
@@ -991,7 +1010,7 @@ describe("buildGraphFromAiProposal (2026-07-11 AI graph merge)", () => {
   });
 
   // AI 계약 강제(design 2026-07-13 §6) — 프롬프트만 믿지 않고 변환단에서 다시 막는다
-  it("subprocess 노드는 annual_count·fte만 반영 - 나머지 4필드는 드롭 + 경고", () => {
+  it("subprocess 노드는 annual_count·fte만 반영 - 나머지 5필드는 드롭 + 경고", () => {
     const sub = baseNode("s1", "구매 승인", {
       node_type: "subprocess", linked_map_id: 7,
       duration: "2", cost_krw: "5000", headcount: "3", annual_count: "10", fte: "0.2",
@@ -1296,5 +1315,241 @@ describe("승격 필드 컬럼 (design 2026-08-19)", () => {
     expect(node.output).toBe("");
     expect(node.touch_time).toBe("");
     expect(o.warnings.some((w) => w.message.includes("come from the linked map"))).toBe(true);
+  });
+});
+
+// GMP·항목별 폼 열 (export-column-picker-design 2026-10-02) — CSV 왕복 표면, AI 표면은 여전히 제외
+describe("GMP·Input_Forms·Output_Forms 열", () => {
+  it("신규 노드는 GMP 저장값·폼을 항목 줄에 맞춰 싣고, 표시 라벨·대소문자도 받는다", () => {
+    const csv = [
+      "Name,Input,Input_Forms,Output,Output_Forms,GMP",
+      'A,"PR\nBudget","\nExcel",Result,Word,Direct',
+      "B,,,,,Non-GMP",
+    ].join("\n");
+    const o = buildGraphFromCsv(csv);
+    expect(o.errors).toEqual([]);
+    expect(o.warnings).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "A")).toMatchObject({
+      input_forms: "\nExcel", output_forms: "Word", gmp: "direct", color: "",
+    });
+    expect(o.graph!.nodes.find((n) => n.title === "B")?.gmp).toBe("non_gmp");
+  });
+
+  it("무효 GMP는 경고 후 무시하고 기존 값을 지킨다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], gmp: "indirect" };
+    const o = mergeOf(["Name,GMP", "Review request,maybe"].join("\n"), base);
+    expect(o.errors).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.id === "a1")?.gmp).toBe("indirect");
+    expect(o.warnings.some((w) => w.message === 'GMP "maybe" is not direct, indirect or non_gmp - ignored')).toBe(true);
+  });
+
+  it("GMP 셀은 노드 색을 바꾸지 않는다", () => {
+    const o = mergeOf(["Name,GMP", "Review request,direct"].join("\n"));
+    expect(o.graph!.nodes.find((n) => n.id === "a1")).toMatchObject({ gmp: "direct", color: "#334155" });
+  });
+
+  it("폼 셀이 항목 줄보다 길면 초과 줄을 자르고 경고한다", () => {
+    const o = buildGraphFromCsv(["Name,Input,Input_Forms", 'A,PR,"Excel\nWord"'].join("\n"));
+    expect(o.graph!.nodes.find((n) => n.title === "A")?.input_forms).toBe("Excel");
+    expect(o.warnings.some((w) => w.message.startsWith("Input_Forms has more lines"))).toBe(true);
+  });
+
+  it("머지 - 폼 셀이 있으면 병합된 항목 줄에 정렬해 덮고, 빈 셀은 항목 불변일 때만 기존 폼을 지킨다", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], input: "PR\nBudget", input_forms: "Paper\nExcel", output: "Result", output_forms: "Word" };
+    const provided = mergeOf(["Name,Input_Forms", 'Review request,"\nPDF\nExtra"'].join("\n"), base);
+    expect(provided.graph!.nodes.find((n) => n.id === "a1")?.input_forms).toBe("\nPDF");
+    const blankSame = mergeOf(["Name,Output", "Review request,Result"].join("\n"), base);
+    expect(blankSame.graph!.nodes.find((n) => n.id === "a1")?.output_forms).toBe("Word");
+    const blankChanged = mergeOf(["Name,Output", "Review request,New result"].join("\n"), base);
+    expect(blankChanged.graph!.nodes.find((n) => n.id === "a1")?.output_forms).toBe("");
+  });
+
+  it("서브프로세스 매칭 행은 GMP·폼 후보를 드롭하고 경고한다 (링크 맵 상속)", () => {
+    const base = baseGraph();
+    base.nodes[1] = { ...base.nodes[1], node_type: "subprocess", linked_map_id: 7, gmp: "", input_forms: "" };
+    const o = mergeOf(["Name,Input_Forms,GMP", "Review request,Excel,direct"].join("\n"), base);
+    expect(o.graph!.nodes.find((n) => n.id === "a1")).toMatchObject({ gmp: "", input_forms: "" });
+    const warning = o.warnings.find((w) => w.message.includes("come from the linked map"));
+    expect(warning?.message).toContain("input_forms");
+    expect(warning?.message).toContain("gmp");
+  });
+});
+
+// D3 — CSV·AI 머지는 엣지를 전량 재생성하되 base 엣지의 변·핸들·선 모양·게이트웨이를 (출발→도착) 쌍 큐로 이월
+describe("머지 엣지 이월 - 변·핸들 (D3)", () => {
+  const node = (id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode => ({
+    ...NODE_BASE, id, title, node_type, sort_order, ...over,
+  });
+  const edge = (id: string, source: string, target: string, over: Partial<GraphEdge> = {}): GraphEdge => ({
+    id, source_node_id: source, target_node_id: target, label: "", source_side: "right", target_side: "left",
+    source_handle: null, target_handle: null, line_style: "", ...over,
+  });
+  // 끝이 2개인 SP — 승인(대표 끝)→A, 반려→B, 각 출구 1개(출력 규칙 준수). P는 아래 변에서 SP 위 입구로 들어간다
+  const spBase = (): Graph => ({
+    nodes: [
+      node("s1", "Start", "start", 0),
+      node("p1", "P", "process", 1),
+      node("sp", "SP", "subprocess", 2, { linked_map_id: 7 }),
+      node("a1", "A", "process", 3),
+      node("b1", "B", "process", 4),
+      node("e1", "End", "end", 5, { is_primary_end: true }),
+    ],
+    edges: [
+      edge("x1", "s1", "p1"),
+      edge("x2", "p1", "sp", { source_side: "bottom", target_side: "top", target_handle: "in:top", line_style: "straight" }),
+      edge("x3", "sp", "a1", { source_handle: "__primary__" }),
+      edge("x4", "sp", "b1", { source_handle: "반려", gateway: "exclusive" }),
+      edge("x5", "a1", "e1"),
+      edge("x6", "b1", "e1"),
+    ],
+    groups: [],
+  });
+  const violationsOf = (graph: Graph) =>
+    getOutputViolations(
+      graph.nodes.map((n) => ({ id: n.id, nodeType: n.node_type, parallelOutputs: n.parallel_outputs })),
+      graph.edges.map((e) => ({ source: e.source_node_id, sourceHandle: e.source_handle, gateway: e.gateway })),
+    );
+
+  it("CSV 머지 - SP 끝 키·in 변형·변·선 모양·게이트웨이를 이월하고 출력 규칙 위반을 만들지 않는다", () => {
+    const o = buildGraphFromCsv(["Name,Next", "P,SP", "SP,A;B", "A,", "B,"].join("\n"), { base: spBase() });
+    expect(o.errors).toEqual([]);
+    const pair = (s: string, t: string) => o.graph!.edges.find((e) => e.source_node_id === s && e.target_node_id === t);
+    expect(pair("p1", "sp")).toMatchObject({
+      source_side: "bottom", target_side: "top", target_handle: "in:top", line_style: "straight",
+    });
+    expect(pair("sp", "a1")?.source_handle).toBe("__primary__");
+    expect(pair("sp", "b1")).toMatchObject({ source_handle: "반려", gateway: "exclusive" });
+    expect(o.merge.lostEdges).toEqual([]);
+    expect(violationsOf(o.graph!)).toEqual([]);
+  });
+
+  it("CSV 머지 - 이월되지 않은 base 엣지는 lostEdges로 남는다", () => {
+    const o = buildGraphFromCsv(["Name,Next", "P,SP", "SP,A", "A,", "B,"].join("\n"), { base: spBase() });
+    expect(o.merge.lostEdges.map((e) => e.id)).toEqual(["x4"]);
+  });
+
+  it("AI 머지 - 같은 쌍 큐 이월로 SP 보조 끝 출구가 대표 끝으로 모이지 않는다", () => {
+    const ai = (key: string, title: string, node_type = "process"): AiNode => ({
+      key, title, node_type, description: "", attributes: null, group_key: null,
+    });
+    const o = buildGraphFromAiProposal(
+      {
+        nodes: [ai("s", "Start", "start"), ai("p", "P"), ai("sp", "SP"), ai("a", "A"), ai("b", "B"), ai("e", "End", "end")],
+        edges: [
+          { source: "s", target: "p", label: "" }, { source: "p", target: "sp", label: "" },
+          { source: "sp", target: "a", label: "" }, { source: "sp", target: "b", label: "" },
+          { source: "a", target: "e", label: "" }, { source: "b", target: "e", label: "" },
+        ],
+        groups: [],
+      },
+      { base: spBase() },
+    );
+    const pair = (s: string, t: string) => o.graph!.edges.find((e) => e.source_node_id === s && e.target_node_id === t);
+    expect(pair("sp", "b1")?.source_handle).toBe("반려");
+    expect(pair("p1", "sp")?.target_handle).toBe("in:top");
+    expect(o.merge.lostEdges).toEqual([]);
+    expect(violationsOf(o.graph!)).toEqual([]);
+  });
+});
+
+describe("buildGraphFromAiProposal - 다중 끝 매칭 (C02)", () => {
+  const ai = (key: string, title: string, node_type = "process", parallel: boolean | null = null): AiNode => ({
+    key, title, node_type, description: "",
+    attributes: parallel === null ? null : {
+      assignee_role: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, parallel,
+    },
+    group_key: null,
+  });
+  const base = (): Graph => ({
+    nodes: [
+      { ...NODE_BASE, id: "st", title: "시작", node_type: "start", sort_order: 0 },
+      { ...NODE_BASE, id: "n1", title: "검토", node_type: "process", sort_order: 1 },
+      { ...NODE_BASE, id: "done", title: "완료", node_type: "end", sort_order: 2, is_primary_end: true },
+      { ...NODE_BASE, id: "rej", title: "반려 종료", node_type: "end", sort_order: 3 },
+    ],
+    edges: [],
+    groups: [],
+  });
+
+  it("보조 끝이 먼저 와도 두 끝 모두 제목으로 기존 id에 매칭된다", () => {
+    const o = buildGraphFromAiProposal(
+      { nodes: [ai("s", "Start", "start"), ai("n", "검토"), ai("r", "반려 종료", "end"), ai("d", "완료", "end")], edges: [], groups: [] },
+      { base: base() },
+    );
+    const ends = o.graph!.nodes.filter((n) => n.node_type === "end");
+    expect(ends.map((n) => [n.id, n.title]).sort()).toEqual([["done", "완료"], ["rej", "반려 종료"]]);
+    expect(ends.filter((n) => n.is_primary_end).map((n) => n.id)).toEqual(["done"]);
+    expect(o.merge.addedNodeIds).toEqual([]);
+    expect(o.merge.removedNodes).toEqual([]);
+  });
+
+  it("제목이 안 맞는 첫 끝은 대표 끝으로 폴백한다 (대표 끝 제목을 쥔 제안이 없을 때)", () => {
+    const o = buildGraphFromAiProposal(
+      { nodes: [ai("n", "검토"), ai("x", "End", "end"), ai("r", "반려 종료", "end")], edges: [], groups: [] },
+      { base: base() },
+    );
+    const ends = o.graph!.nodes.filter((n) => n.node_type === "end");
+    expect(ends.map((n) => [n.id, n.title]).sort()).toEqual([["done", "완료"], ["rej", "반려 종료"]]);
+  });
+
+  it("대표 끝 제목을 다른 제안이 쥐면 이름 없는 끝은 새 끝이 되어 제목이 겹치지 않는다", () => {
+    const o = buildGraphFromAiProposal(
+      { nodes: [ai("x", "보류 종료", "end"), ai("d", "완료", "end")], edges: [], groups: [] },
+      { base: base() },
+    );
+    const titles = o.graph!.nodes.filter((n) => n.node_type === "end").map((n) => n.title);
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(o.graph!.nodes.find((n) => n.id === "done")?.title).toBe("완료");
+  });
+
+  it("병렬 출발 노드에서 두 끝으로 나가는 제안도 끝 id와 병렬 출구를 지킨다", () => {
+    const o = buildGraphFromAiProposal(
+      {
+        nodes: [ai("n", "검토", "process", true), ai("r", "반려 종료", "end"), ai("d", "완료", "end")],
+        edges: [{ source: "n", target: "r", label: "" }, { source: "n", target: "d", label: "" }],
+        groups: [],
+      },
+      { base: base() },
+    );
+    expect(o.graph!.nodes.find((n) => n.id === "n1")?.parallel_outputs).toEqual(["__primary__"]);
+    expect(o.graph!.edges.map((e) => e.target_node_id).sort()).toEqual(["done", "rej"]);
+  });
+});
+
+describe("병렬 플래그 - 분기·끝 노드 금지", () => {
+  it("AI가 분기·끝 노드에 parallel=true를 보내면 무시하고 경고한다", () => {
+    const attrs = { assignee_role: null, department: null, system: null, duration: null, color: null, url: null, url_label: null, parallel: true };
+    const o = buildGraphFromAiProposal(
+      {
+        nodes: [
+          { key: "d", title: "판단", node_type: "decision", description: "", attributes: attrs, group_key: null },
+          { key: "e", title: "끝", node_type: "end", description: "", attributes: attrs, group_key: null },
+        ],
+        edges: [],
+        groups: [],
+      },
+      { base: { nodes: [], edges: [], groups: [] } },
+    );
+    expect(o.graph!.nodes.find((n) => n.title === "판단")?.parallel_outputs ?? []).toEqual([]);
+    expect(o.graph!.nodes.find((n) => n.title === "끝")?.parallel_outputs ?? []).toEqual([]);
+    expect(o.warnings.map((w) => w.message)).toEqual([
+      '"판단": parallel exits apply only to process nodes - ignored on a decision node',
+      '"끝": parallel exits apply only to process nodes - ignored on a end node',
+    ]);
+  });
+});
+
+// docs/samples CSV 3종 — 현행 25열 헤더로 에러 없이 들어오고 병렬 예시가 병렬 출구가 되는지(샘플 드리프트 가드)
+describe("docs/samples CSV", () => {
+  const samples = ["csv-sample-01-procurement.csv", "csv-sample-02-recruitment.csv", "csv-sample-03-incident-change.csv"];
+  it.each(samples)("%s는 현행 헤더로 에러 없이 변환되고 병렬 행을 담는다", (fileName) => {
+    const buffer = readFileSync(resolve(__dirname, "../../../docs/samples", fileName));
+    const text = decodeCsvBuffer(new Uint8Array(buffer).buffer);
+    const outcome = buildGraphFromCsv(text);
+    expect(outcome.errors).toEqual([]);
+    expect(parseCsvRecords(text)[0].cells.map((c) => c.toLowerCase())).toEqual([...HEADER_COLUMNS]);
+    expect(outcome.graph!.nodes.some((n) => (n.parallel_outputs ?? []).includes("__primary__"))).toBe(true);
   });
 });

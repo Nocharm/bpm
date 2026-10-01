@@ -1,4 +1,4 @@
-// 회당 단가 파라미터 6종 메타 — 필드·순서·라벨·노드 타입별 편집 가능 집합의 단일 소스
+// 회당 단가 파라미터 7종 메타 — 필드·순서·라벨·노드 타입별 편집 가능 집합의 단일 소스
 // (design 2026-07-13 §2.1, §3.1)
 import { formatDurationHm, formatThousands, normalizeDuration, normalizeNumericParam, stripThousands } from "./duration";
 import type { MessageKey } from "./i18n-messages";
@@ -22,7 +22,7 @@ export type SpParamField = (typeof SP_PARAM_FIELDS)[number];
 export const SP_CONTEXT_FIELDS = ["annual_count", "fte"] as const;
 export type SpContextField = (typeof SP_CONTEXT_FIELDS)[number];
 
-/** 서브프로세스 노드에서 사람이 직접 입력하는 필드 — 나머지 4개는 링크 맵 지정값(읽기전용) */
+/** 서브프로세스 노드에서 사람이 직접 입력하는 필드 — 나머지 5개(SP_PARAM_FIELDS)는 링크 맵 지정값(읽기전용) */
 export const SUBPROCESS_OWN_FIELDS = ["annual_count", "fte"] as const;
 
 export const COST_FIELDS = ["cost_krw", "cost_usd"] as const;
@@ -270,7 +270,7 @@ export function coerceAiNewNodeType(nodeType: string): string {
   return nodeType === "subprocess" ? "process" : nodeType;
 }
 
-/** 서브프로세스 노드가 링크 맵에서 상속하는 회당 4필드의 원천(subprocess_refs 행의 부분집합). */
+/** 서브프로세스 노드가 링크 맵에서 상속하는 회당 5필드(SP_PARAM_FIELDS)의 원천(subprocess_refs 행의 부분집합). */
 export interface InheritedParamSource {
   designated: boolean;
   duration: string | null;

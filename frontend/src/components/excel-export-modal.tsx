@@ -1,13 +1,16 @@
-// Excel 내보내기 형식 선택 모달 — 토글 탭(top-nav 한/영 세그먼트 디자인) + 첫 8행 미리보기 + 다운로드.
-// 모델은 탭 활성화 시 lazy 빌드(모달 열려있는 동안 캐시). 설계: 2026-07-17-excel-export-wbs-v2-design.md
+// Excel 내보내기 형식 선택 모달 — 토글 탭(top-nav 한/영 세그먼트 디자인) + 열 선택(접이식, 두 형식 공유) +
+// 첫 8행 미리보기 + 다운로드. 모델은 탭 활성화 시 lazy 빌드(모달 열려있는 동안 캐시).
+// 설계: 2026-07-17-excel-export-wbs-v2-design.md, 열 선택 export-column-picker-design(2026-10-02)
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { X } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 
+import { ExportColumnPicker } from "@/components/export-column-picker";
 import { ModalBackdrop } from "@/components/modal-backdrop";
 import { downloadExcel, type ExcelModel } from "@/lib/excel-export";
 import { downloadWbsExcel, type WbsModel } from "@/lib/excel-wbs";
+import { EXCEL_COLUMNS, loadExportColumns, saveExportColumns } from "@/lib/export-columns";
 import { useI18n } from "@/lib/i18n";
 
 export type ExcelExportFormat = "map" | "wbs";
@@ -34,6 +37,9 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
   const [mapState, setMapState] = useState<PreviewState<ExcelModel>>({ status: "idle" });
   const [wbsState, setWbsState] = useState<PreviewState<WbsModel>>({ status: "idle" });
   const [downloading, setDownloading] = useState(false);
+  // 열 선택 — 저장된 제외 키로 시작(실패·SSR이면 전부), 섹션은 기본 접힘(미리보기가 주 내용)
+  const [columns, setColumns] = useState<string[]>(() => loadExportColumns("excel"));
+  const [columnsOpen, setColumnsOpen] = useState(false);
   // 세대 카운터 — 리셋(닫힘)마다 증가. in-flight 중 닫고 재오픈해도 구 promise의 resolve가
   // 세대 불일치로 무시되어 새 모델을 덮지 못한다.
   const mapGenRef = useRef(0);
@@ -101,12 +107,18 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
 
   const active = format === "map" ? mapState : wbsState;
 
+  const handleColumnsChange = (keys: string[]) => {
+    setColumns(keys);
+    saveExportColumns("excel", keys);
+  };
+
   const handleDownload = async () => {
     if (active.status !== "ready" || downloading) return;
     setDownloading(true);
+    const columnKeys = EXCEL_COLUMNS.filter((column) => columns.includes(column.key)).map((column) => column.key);
     try {
-      if (format === "map") await downloadExcel((active as { model: ExcelModel }).model, fileNameFor("map"));
-      else await downloadWbsExcel((active as { model: WbsModel }).model, fileNameFor("wbs"));
+      if (format === "map") await downloadExcel((active as { model: ExcelModel }).model, fileNameFor("map"), columnKeys);
+      else await downloadWbsExcel((active as { model: WbsModel }).model, fileNameFor("wbs"), columnKeys);
       onClose();
     } finally {
       setDownloading(false);
@@ -147,6 +159,30 @@ export function ExcelExportModal({ open, onClose, buildMap, buildWbs, fileNameFo
           <button type="button" aria-label="Close" className="rounded-sm p-1 text-ink-muted hover:bg-surface-alt" onClick={onClose}>
             <X size={16} strokeWidth={1.5} />
           </button>
+        </div>
+
+        <div className="shrink-0 border-b border-hairline px-4 py-2">
+          <button
+            type="button"
+            data-id="excel-export-columns-toggle"
+            aria-expanded={columnsOpen}
+            className="flex items-center gap-1 text-caption text-ink-secondary hover:text-ink"
+            onClick={() => setColumnsOpen((value) => !value)}
+          >
+            {columnsOpen ? <ChevronDown size={16} strokeWidth={1.5} /> : <ChevronRight size={16} strokeWidth={1.5} />}
+            {t("export.columnsLabel")} ({columns.length}/{EXCEL_COLUMNS.length})
+          </button>
+          {columnsOpen && (
+            <div className="mt-2">
+              <ExportColumnPicker
+                kind="excel"
+                defs={EXCEL_COLUMNS}
+                selected={columns}
+                onChange={handleColumnsChange}
+                showLabel={false}
+              />
+            </div>
+          )}
         </div>
 
         <div className="min-h-40 flex-1 overflow-auto px-4 py-3">

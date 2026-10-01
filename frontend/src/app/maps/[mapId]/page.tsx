@@ -84,6 +84,7 @@ import {
   type SwapSide,
 } from "@/components/swap-outputs-modal";
 import { IoImportModal } from "@/components/io-import-modal";
+import { CsvExportModal } from "@/components/csv-export-modal";
 import { ExcelExportModal, type ExcelExportFormat } from "@/components/excel-export-modal";
 import { EdgeDecisionModal } from "@/components/edge-decision-modal";
 import { EdgeLabelEditor } from "@/components/edge-label-editor";
@@ -270,6 +271,7 @@ import { exportCanvasPng } from "@/lib/export";
 import { buildExcelModel } from "@/lib/excel-export";
 import { buildWbsModel } from "@/lib/excel-wbs";
 import { buildCsvFromGraph } from "@/lib/csv-export";
+import type { CsvColumnKey } from "@/lib/export-columns";
 import { formatKst } from "@/lib/datetime";
 import { constrainToAxis } from "@/lib/drag-constrain";
 import { autoLayoutFlow, type FlowDir } from "@/lib/flow-layout";
@@ -1230,6 +1232,8 @@ function MapEditor({ mapId }: { mapId: number }) {
   const [csvKeepRemoved, setCsvKeepRemoved] = useState(false);
   // Excel 내보내기 형식 선택 모달(Process Map/WBS 토글) — design 2026-07-17-excel-export-wbs-v2
   const [excelExportOpen, setExcelExportOpen] = useState(false);
+  // CSV 내보내기 열 선택 모달 — export-column-picker-design(2026-10-02)
+  const [csvExportOpen, setCsvExportOpen] = useState(false);
   // 신원·워크플로우 상태 (spec §workflow 2026-06-14)
   const [username, setUsername] = useState<string | null>(null);
   const [mapOwner, setMapOwner] = useState<string | null>(null);
@@ -6175,10 +6179,10 @@ function MapEditor({ mapId }: { mapId: number }) {
     setChildNodes,
   ]);
 
-  const handleExportCsv = useCallback(() => {
-    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영
+  const handleExportCsv = useCallback((columns: CsvColumnKey[]) => {
+    // 저장 경로와 동일 소스(buildGraph)로 조립 — 캔버스 미저장 편집분까지 반영. 열은 CSV 모달에서 고른 것만
     const graph = buildGraph(nodesRef.current, edgesRef.current, groupsRef.current);
-    const { csv, warnings } = buildCsvFromGraph(graph);
+    const { csv, warnings } = buildCsvFromGraph(graph, { columns });
     // BOM은 이스케이프로 명시 — 보이지 않는 리터럴은 포매터/편집에서 증발할 수 있다
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -11697,7 +11701,7 @@ function MapEditor({ mapId }: { mapId: number }) {
                       <button
                         type="button"
                         data-id="export-csv"
-                        onClick={handleExportCsv}
+                        onClick={() => setCsvExportOpen(true)}
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2 text-caption font-semibold text-on-accent hover:bg-accent-focus"
                       >
                         <FileDown size={16} strokeWidth={1.5} />
@@ -12527,6 +12531,7 @@ function MapEditor({ mapId }: { mapId: number }) {
         buildWbs={buildWbsExcelModel}
         fileNameFor={excelFileNameFor}
       />
+      <CsvExportModal open={csvExportOpen} onClose={() => setCsvExportOpen(false)} onDownload={handleExportCsv} />
       {/* 링크 미리보기 — 액션 바 "링크 열기"로 오픈, 인스펙터 포함 우측 전체를 덮는 오버레이 */}
       <LinkPreviewPanel url={linkPreviewUrl} onClose={() => setLinkPreviewUrl(null)} />
       {/* GMP 분류 피커 — 캔버스 필 클릭 좌표 앵커, 분류가 필 색을 자동 확정 (design 2026-08-20) */}

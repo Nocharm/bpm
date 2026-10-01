@@ -1,33 +1,26 @@
 // WBS(레벨 컬럼) Excel 모델 — 잎 업무 행 + 조상 경로(levels). 규칙 엔진은 1안(excel-export.ts)과
 // 동형이되 start/end 전부 삭제·SP 무행이 다르다. 시트 기록은 Task 2에서 추가.
-// 설계: 2026-07-17-excel-export-wbs-v2-design.md
+// 설계: 2026-07-17-excel-export-wbs-v2-design.md, 열 선택은 export-column-picker-design(2026-10-02)
 import type { Graph, GraphEdge, GraphNode } from "./api";
 import { orderNodesByFlow } from "./csv-export";
-import { COLUMNS, EXCEL_MAX_ROWS, HEADER_FILL, NOTE_TEXT, downloadWorkbookXlsx, getNodeRunParams } from "./excel-export";
-import { mergeSubprocessDescription } from "./subprocess-description";
+import {
+  applyExcelCellFormats,
+  buildNodeRowFields,
+  EXCEL_MAX_ROWS,
+  type ExcelRowFields,
+  downloadWorkbookXlsx,
+  getExcelEdgeLabel,
+  getNodeDisplayTitle,
+  getSubprocessExitTitles,
+  HEADER_FILL,
+  NOTE_TEXT,
+  selectExcelColumns,
+} from "./excel-export";
+import type { ExcelColumnKey } from "./export-columns";
 
-export interface WbsNodeRow {
+export interface WbsNodeRow extends ExcelRowFields {
   kind: "node";
-  no: number; // 최종 행 번호(1..n) — 삭제 규칙 적용 후 모델에서 부여
-  levels: string[]; // 조상 경로 — [루트 맵 이름, SP 노드 타이틀…]. 길이 = 소속 레벨
-  title: string;
-  type: string;
-  description: string;
-  assignee: string;
-  assignee_role: string;
-  department: string;
-  system: string;
-  duration: string;
-  touch_time: string;
-  cost_krw: string;
-  cost_usd: string;
-  headcount: string;
-  annual_count: string;
-  fte: string;
-  url: string;
-  urlLabel: string;
-  groups: string;
-  next: string;
+  levels: string[]; // 조상 경로 — [루트 맵 이름, SP 노드 표시 제목…]. 길이 = 소속 레벨
 }
 
 export interface WbsNoteRow {
@@ -88,7 +81,8 @@ export async function buildWbsModel({
       else outgoing.set(e.source_node_id, [e]);
     }
     const ordered = orderNodesByFlow(g.nodes, g.edges);
-    // 1안과 동일: 나가는 엣지가 있고 전부 무라벨인 디시전 = 단순 병렬 분기(엣지 없는 디시전은 WIP로 유지)
+    // 1안과 동일: 나가는 엣지가 있고 전부 무라벨인 디시전(라벨 없는 택일) = 행 미생성(엣지 없는 디시전은 WIP로 유지).
+    // 병렬 출구는 parallel_outputs 노드 속성이라 process 행으로 남는다 (출력 규칙 2026-10-01)
     const isRemovedDecision = (n: GraphNode): boolean => {
       if (n.node_type !== "decision") return false;
       const out = outgoing.get(n.id) ?? [];
@@ -114,12 +108,16 @@ export async function buildWbsModel({
 
     const rowByNodeId = new Map<string, WbsNodeRow>(); // 스코프(맵 인스턴스) 한정
 
-    // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨) 2회 도달 방지(1안과 동일)
-    const nextOf = (node: GraphNode): string =>
+    // Set 중복 제거 — 삭제 디시전 경유 재수렴 시 같은 (대상, 라벨) 2회 도달 방지(1안과 동일).
+    // SP 출구의 무라벨 엣지는 끝 제목을 라벨로(1안과 같은 미러), 대상 SP는 링크 맵 현재 이름
+    const nextOf = (node: GraphNode, exitTitles: ReadonlyMap<string, string> | null): string =>
       Array.from(new Set(
         (outgoing.get(node.id) ?? [])
-          .flatMap((e) => resolveTargets(e, e.label, new Set()))
-          .map(({ node: t, label }) => (label === "" ? t.title : `${t.title}:${label}`)),
+          .flatMap((e) => resolveTargets(e, getExcelEdgeLabel(e, node, exitTitles), new Set()))
+          .map(({ node: t, label }) => {
+            const targetTitle = getNodeDisplayTitle(g, t);
+            return label === "" ? targetTitle : `${targetTitle}:${label}`;
+          }),
       )).join(";");
 
     for (const node of ordered) {
@@ -131,9 +129,10 @@ export async function buildWbsModel({
         break;
       }
       if (node.node_type === "subprocess" && node.linked_map_id !== null) {
-        // SP는 행 미차지 — 레벨 경로에 노드 타이틀을 붙이고 링크 맵의 잎 행들을 제자리 전개
+        const displayTitle = getNodeDisplayTitle(g, node);
+        // SP는 행 미차지 — 레벨 경로에 노드 표시 제목을 붙이고 링크 맵의 잎 행들을 제자리 전개
         if (ancestry.has(node.linked_map_id)) {
-          rows.push({ kind: "circular", levels, title: node.title });
+          rows.push({ kind: "circular", levels, title: displayTitle });
           continue;
         }
         let resolved: Graph | undefined;
@@ -143,57 +142,28 @@ export async function buildWbsModel({
           resolved = undefined;
         }
         if (resolved && !resolved.locked) {
-          await emit(resolved, [...levels, node.title], new Set([...ancestry, node.linked_map_id]));
+          await emit(resolved, [...levels, displayTitle], new Set([...ancestry, node.linked_map_id]));
           continue;
         }
         // 잠김(권한 마스킹)·해석 실패 SP는 전개 불가 — 자신이 잎 행이 되어 흐름을 보존하고(1안 SP 행과
-        // 동일 소스: 파라미터 지정정보 상속·설명 베이스+추가분 합성) 아래 denied 노트로 하위 가림을 표시
+        // 동일 소스: 식별·파라미터·IO 지정정보 상속·설명 베이스+추가분 합성) 아래 denied 노트로 하위 가림을 표시
+        const exitTitles = getSubprocessExitTitles(outgoing.get(node.id) ?? [], null);
         const spRow: WbsNodeRow = {
           kind: "node",
           no: 0, // finalize에서 부여
           levels,
-          title: node.title,
-          type: node.node_type,
-          description: mergeSubprocessDescription(
-            g.subprocess_refs?.[node.linked_map_id]?.sp_description,
-            node.description,
-          ),
-          assignee: node.assignee,
-          assignee_role: node.assignee_role ?? "",
-          department: node.department,
-          system: node.system,
-          ...getNodeRunParams(g, node),
-          annual_count: node.annual_count ?? "",
-          fte: node.fte ?? "",
-          url: node.url ?? "",
-          urlLabel: node.url_label ?? "",
-          groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
-          next: nextOf(node),
+          ...buildNodeRowFields(g, node, { groupLabel, next: nextOf(node, exitTitles), exitTitles }),
         };
         rows.push(spRow);
         rowByNodeId.set(node.id, spRow);
-        rows.push({ kind: "denied", levels: [...levels, node.title], title: node.title });
+        rows.push({ kind: "denied", levels: [...levels, displayTitle], title: displayTitle });
         continue;
       }
-      const next = nextOf(node);
       const row: WbsNodeRow = {
         kind: "node",
         no: 0, // finalize에서 부여
         levels,
-        title: node.title,
-        type: node.node_type,
-        description: node.description,
-        assignee: node.assignee,
-        assignee_role: node.assignee_role ?? "",
-        department: node.department,
-        system: node.system,
-        ...getNodeRunParams(g, node),
-        annual_count: node.annual_count ?? "",
-        fte: node.fte ?? "",
-        url: node.url ?? "",
-        urlLabel: node.url_label ?? "",
-        groups: node.group_ids.map((id) => groupLabel.get(id) ?? "").filter(Boolean).join(", "),
-        next,
+        ...buildNodeRowFields(g, node, { groupLabel, next: nextOf(node, null), exitTitles: null }),
       };
       rows.push(row);
       rowByNodeId.set(node.id, row);
@@ -241,15 +211,21 @@ export async function buildWbsModel({
 
 const LEVEL_FONT_ARGB = "FF9CA3AF"; // 레벨 경로 회색 톤다운 — 출력물이라 raw hex 허용(design.md §1 예외)
 
-/** WbsModel → "WBS" 워크시트 기록 — 동적 레벨 컬럼(No | Level 1..N | Task | 1안 속성 꼬리). */
-export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsModel): void {
+/**
+ * WbsModel → "WBS" 워크시트 기록 — 동적 레벨 컬럼(No | Level 1..N | Task | 속성 꼬리).
+ * 꼬리는 1안 열 정의의 Type 이후 선택분(No·Name은 구조 열이 대신한다) — 서식은 정의에서 파생(1안 교훈).
+ */
+export function writeWbsSheet(
+  workbook: import("exceljs").Workbook,
+  model: WbsModel,
+  columnKeys?: readonly ExcelColumnKey[],
+): void {
   const sheet = workbook.addWorksheet("WBS", { views: [{ state: "frozen", ySplit: 4 }] });
   sheet.addRow([model.mapName]);
   sheet.getRow(1).font = { bold: true, size: 14 };
   sheet.addRow([`Version: ${model.versionLabel}    Exported: ${model.exportedAt}${model.truncated ? "    (truncated)" : ""}`]);
   sheet.addRow([]);
-  // 속성 꼬리는 1안 COLUMNS의 Type~Next 정의 재사용 — numFmt를 인덱스가 아닌 정의에서 파생(1안 교훈)
-  const tail = COLUMNS.slice(2);
+  const tail = selectExcelColumns(columnKeys).filter((c) => c.key !== "no" && c.key !== "name");
   const headerRow = sheet.addRow([
     "No",
     ...Array.from({ length: model.maxLevel }, (_, i) => `Level ${i + 1}`),
@@ -268,7 +244,6 @@ export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsMo
   tail.forEach((c, i) => {
     sheet.getColumn(taskCol + 1 + i).width = c.width;
   });
-  const urlCol = taskCol + 1 + tail.findIndex((c) => c.header === "URL");
 
   for (const row of model.rows) {
     const levelCells = Array.from({ length: model.maxLevel }, (_, i) => row.levels[i] ?? "");
@@ -278,24 +253,17 @@ export function writeWbsSheet(workbook: import("exceljs").Workbook, model: WbsMo
       for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
       continue;
     }
-    const num = (v: string) => (v === "" ? "" : Number(v));
-    const r = sheet.addRow([
-      row.no, ...levelCells, row.title, row.type, row.description, row.assignee, row.assignee_role, row.department, row.system,
-      num(row.duration), num(row.touch_time), num(row.cost_krw), num(row.cost_usd), num(row.headcount), num(row.annual_count), num(row.fte),
-      "", row.groups, row.next,
-    ]);
+    const r = sheet.addRow([row.no, ...levelCells, row.title, ...tail.map((column) => column.cell(row))]);
     for (let i = 0; i < model.maxLevel; i += 1) r.getCell(2 + i).font = { color: { argb: LEVEL_FONT_ARGB } };
-    tail.forEach((c, i) => {
-      if ("numFmt" in c) r.getCell(taskCol + 1 + i).numFmt = c.numFmt;
-    });
-    if (row.url) {
-      r.getCell(urlCol).value = { text: row.urlLabel || row.url, hyperlink: row.url };
-      r.getCell(urlCol).font = { color: { argb: "FF6A41FF" }, underline: true };
-    }
+    applyExcelCellFormats(r, tail, taskCol + 1, row);
   }
 }
 
-/** WbsModel → .xlsx 다운로드 — 1안과 동일한 공용 다운로드 경로. */
-export async function downloadWbsExcel(model: WbsModel, fileName: string): Promise<void> {
-  await downloadWorkbookXlsx((workbook) => writeWbsSheet(workbook, model), fileName);
+/** WbsModel → .xlsx 다운로드 — 1안과 동일한 공용 다운로드 경로(선택 열). */
+export async function downloadWbsExcel(
+  model: WbsModel,
+  fileName: string,
+  columns?: readonly ExcelColumnKey[],
+): Promise<void> {
+  await downloadWorkbookXlsx((workbook) => writeWbsSheet(workbook, model, columns), fileName);
 }

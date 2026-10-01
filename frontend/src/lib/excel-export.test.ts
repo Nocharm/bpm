@@ -1,5 +1,5 @@
 // Excel 모델 빌더 단위 테스트 — 재귀 인라인·순환·다이아몬드 메모이즈·locked·행 상한·next End 표기·
-// 회당 파라미터 6종(서브프로세스 sp_* 소스 포함)·컬럼 헤더/서식(Task 9).
+// 회당 파라미터 7종(서브프로세스 sp_* 소스 포함)·컬럼 헤더/서식(Task 9)·열 선택·IO/GMP/병렬 열.
 // 설계: 2026-07-11-numeric-params-excel-csv-export-design.md §4,
 //       2026-07-13-node-params-redefinition-design.md §5.2
 import { Workbook } from "exceljs";
@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphEdge, GraphGroup, GraphNode } from "./api";
 import { buildExcelModel, COLUMNS, writeExcelSheet } from "./excel-export";
+import { EXCEL_COLUMNS } from "./export-columns";
 
 /** GraphNode 조립 헬퍼 — csv-export.test.ts 스타일 재사용. */
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
@@ -409,7 +410,7 @@ describe("buildExcelModel", () => {
     expect(pRow?.groups).toBe("ChildGroupLabel"); // 부모(gp1)가 아니라 map2 자신의 groups에서 해석
   });
 
-  it("일반 노드 행이 회당 파라미터 6종을 담는다", async () => {
+  it("일반 노드 행이 회당 파라미터 7종을 담는다", async () => {
     const map1: Graph = {
       nodes: [
         makeNode("s1", "Start", "start", 0),
@@ -440,7 +441,7 @@ describe("buildExcelModel", () => {
         makeNode("s1", "Start", "start", 0),
         // 노드 자신에 남은 duration/cost_krw/cost_usd/headcount(비편집 필드의 잔존값)는 무시돼야 한다
         makeSubNode("sub1", "Sub", 1, 2, {
-          duration: "9.99", cost_krw: "999", cost_usd: "999", headcount: "99",
+          duration: "9.99", touch_time: "9.99", cost_krw: "999", cost_usd: "999", headcount: "99",
           annual_count: "1200", fte: "0.8",
         }),
         makeNode("e1", "End", "end", 2, { is_primary_end: true }),
@@ -451,7 +452,7 @@ describe("buildExcelModel", () => {
       subprocess_refs: {
         2: {
           name: null, designated: true, department: null, assignee: null, system: null,
-          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", touch_time: null, input: null, output: null, input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
+          duration: "2.15", cost_krw: "500000", cost_usd: null, headcount: "3", touch_time: "0.30", input: null, output: null, input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
           sp_description: null,
         },
       },
@@ -469,12 +470,12 @@ describe("buildExcelModel", () => {
     });
     const subRow = model.rows.find((r) => r.kind === "node" && r.title === "Sub");
     expect(subRow).toMatchObject({
-      duration: "2.15", cost_krw: "500000", cost_usd: "", headcount: "3",
+      duration: "2.15", touch_time: "0.30", cost_krw: "500000", cost_usd: "", headcount: "3",
       annual_count: "1200", fte: "0.8",
     });
   });
 
-  it("서브프로세스 행 description은 링크 맵 sp_description(베이스)+줄바꿈+노드 추가분으로 합성된다", async () => {
+  it("서브프로세스 행 description은 링크 맵 description(베이스, SubprocessRefOut.sp_description 키)+줄바꿈+노드 추가분으로 합성된다", async () => {
     const map1: Graph = {
       nodes: [
         makeNode("s1", "Start", "start", 0),
@@ -904,14 +905,26 @@ describe("buildExcelModel", () => {
 });
 
 describe("COLUMNS", () => {
-  it("헤더가 새 라벨·순서를 따른다(design 2026-07-13 §5.2)", () => {
+  it("헤더가 새 라벨·순서를 따른다(design 2026-07-13 §5.2, 열 선택 2026-10-02)", () => {
     expect(COLUMNS.map((c) => c.header)).toEqual([
       "No", "Name", "Type", "Description", "Assignee", "Role", "Department", "System",
       "Duration (h)", "Touch time (h)", "Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE",
+      "Input", "Output", "Start condition", "End condition", "GMP", "Parallel",
       "URL", "Groups", "Next",
     ]);
   });
+
+  it("열 정의는 export-columns의 EXCEL_COLUMNS 키·헤더 순서를 그대로 따른다", () => {
+    expect(COLUMNS.map((c) => [c.key, c.header])).toEqual(EXCEL_COLUMNS.map((c) => [c.key, c.header]));
+  });
 });
+
+const emptyRowFields = {
+  no: 1, title: "P", type: "process", description: "", assignee: "", assignee_role: "", department: "", system: "",
+  duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "",
+  input: "", output: "", start_condition: "", end_condition: "", gmp: "", parallel: "",
+  url: "", urlLabel: "", groups: "", next: "",
+};
 
 describe("writeExcelSheet", () => {
   function findColumnIndex(header: string): number {
@@ -921,27 +934,25 @@ describe("writeExcelSheet", () => {
   }
 
   // exceljs Workbook 대상 순수 검증(다운로드 Blob/anchor와 분리) — 메타 3행+헤더 1행 다음이 첫 데이터 행(5)
-  function buildSheetWithOneRow(over: Partial<Record<string, string>> = {}) {
+  function buildSheetWithOneRow(over: Partial<Record<string, string>> = {}, columns?: Parameters<typeof writeExcelSheet>[2]) {
     const base = {
-      duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+      duration: "1.30", touch_time: "0.45", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
       ...over,
     };
     const workbook = new Workbook();
     writeExcelSheet(workbook, {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-13T00:00:00+09:00", truncated: false,
-      rows: [{
-        kind: "node", no: 1, depth: 0, title: "P", type: "process", description: "", assignee: "", assignee_role: "",
-        department: "", system: "", url: "", urlLabel: "", groups: "", next: "", ...base,
-      }],
-    });
+      rows: [{ kind: "node", depth: 0, ...emptyRowFields, next: "Q", ...base }],
+    }, columns);
     const sheet = workbook.getWorksheet("Process Map");
     if (!sheet) throw new Error("sheet missing");
-    return sheet.getRow(5);
+    return sheet;
   }
 
-  it("6개 숫자 컬럼에 지정된 numFmt를 적용하고, 텍스트 컬럼엔 서식을 남기지 않는다", () => {
-    const dataRow = buildSheetWithOneRow();
+  it("7개 숫자 컬럼에 지정된 numFmt를 적용하고, 텍스트 컬럼엔 서식을 남기지 않는다", () => {
+    const dataRow = buildSheetWithOneRow().getRow(5);
     expect(dataRow.getCell(findColumnIndex("Duration (h)")).numFmt).toBe("0.00");
+    expect(dataRow.getCell(findColumnIndex("Touch time (h)")).numFmt).toBe("0.00");
     expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).numFmt).toBe("#,##0");
     expect(dataRow.getCell(findColumnIndex("Cost (USD)")).numFmt).toBe("#,##0.00");
     expect(dataRow.getCell(findColumnIndex("Headcount")).numFmt).toBe("0.00");
@@ -951,30 +962,163 @@ describe("writeExcelSheet", () => {
   });
 
   it("숫자 셀은 텍스트가 아니라 실제 숫자로 들어간다", () => {
-    const dataRow = buildSheetWithOneRow();
+    const dataRow = buildSheetWithOneRow().getRow(5);
     expect(dataRow.getCell(findColumnIndex("Cost (KRW)")).value).toBe(1250000);
+    expect(dataRow.getCell(findColumnIndex("Touch time (h)")).value).toBe(0.45);
     expect(dataRow.getCell(findColumnIndex("FTE")).value).toBe(0.8);
   });
 
   it("빈 파라미터 값은 0이 아니라 빈 셀로 남는다", () => {
-    const dataRow = buildSheetWithOneRow({ cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "" });
+    const dataRow = buildSheetWithOneRow({ cost_krw: "", cost_usd: "", headcount: "", annual_count: "", fte: "" }).getRow(5);
     for (const header of ["Cost (KRW)", "Cost (USD)", "Headcount", "Annual volume", "FTE"]) {
       const value = dataRow.getCell(findColumnIndex(header)).value;
       expect(value).not.toBe(0);
     }
   });
 
+  it("데이터 행 셀 수 = 열 수, 마지막 셀은 Next (값 배열 수기 복제 가드)", () => {
+    const values = (buildSheetWithOneRow().getRow(5).values as unknown[]).slice(1);
+    expect(values).toHaveLength(COLUMNS.length);
+    expect(values[values.length - 1]).toBe("Q");
+  });
+
   it("No 셀은 모델의 row.no를 그대로 기록한다", () => {
     const workbook = new Workbook();
     writeExcelSheet(workbook, {
       mapName: "Map1", versionLabel: "v1", exportedAt: "2026-07-17T00:00:00+09:00", truncated: false,
-      rows: [{
-        kind: "node", no: 7, depth: 0, title: "P", type: "process", description: "", assignee: "", assignee_role: "",
-        department: "", system: "", duration: "", touch_time: "", cost_krw: "", cost_usd: "", headcount: "",
-        annual_count: "", fte: "", url: "", urlLabel: "", groups: "", next: "",
-      }],
+      rows: [{ kind: "node", depth: 0, ...emptyRowFields, no: 7 }],
     });
     const sheet = workbook.getWorksheet("Process Map");
     expect(sheet?.getRow(5).getCell(1).value).toBe(7);
+  });
+
+  it("열 선택 - 선택한 열만 정식 순서로(No·Name 강제), 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
+    const sheet = buildSheetWithOneRow({ url: "https://example.com/doc", urlLabel: "Doc" }, ["next", "url", "cost_krw"]);
+    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual(["No", "Name", "Cost (KRW)", "URL", "Next"]);
+    const r = sheet.getRow(5);
+    expect(r.getCell(3).numFmt).toBe("#,##0");
+    expect(r.getCell(4).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    expect(r.getCell(5).value).toBe("Q");
+    expect(sheet.getColumn(3).width).toBe(14);
+  });
+});
+
+describe("buildExcelModel - IO·조건·GMP·병렬·식별 열", () => {
+  const unusedFetch = async (): Promise<Graph> => {
+    throw new Error("unused");
+  };
+  const spRef = (over: Record<string, unknown> = {}) => ({
+    name: null, designated: true, department: null, assignee: null, system: null,
+    duration: null, cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null,
+    input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null,
+    frequency_fallback: null, gmp: null, url: null, url_label: null, sp_description: null,
+    ...over,
+  });
+
+  it("일반 노드 - IO 셀은 항목마다 [optional]·폼을 붙이고, 조건·GMP 라벨·병렬 Y·Other 원문 시스템을 싣는다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("p1", "P", "process", 1, {
+          input: "PR\nBudget", input_flags: "\noptional", input_forms: "Paper\nExcel",
+          output: "Result", output_forms: "Word", start_condition: "PR submitted", end_condition: "Done",
+          gmp: "direct", parallel_outputs: ["__primary__"], system: "Other", system_fallback: "Legacy ledger",
+        }),
+        makeNode("d1", "D", "decision", 2, { parallel_outputs: ["__primary__"] }),
+      ],
+      edges: [],
+      groups: [],
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved: unusedFetch,
+    });
+    const rows = model.rows.filter((r) => r.kind === "node");
+    expect(rows.find((r) => r.title === "P")).toMatchObject({
+      input: "PR · Paper\nBudget [optional] · Excel",
+      output: "Result · Word",
+      start_condition: "PR submitted",
+      end_condition: "Done",
+      gmp: "GMP Direct",
+      parallel: "Y",
+      system: "Legacy ledger",
+    });
+    // 분기 노드에 남은 병렬 플래그는 표기하지 않는다(병렬 대상 아님)
+    expect(rows.find((r) => r.title === "D")?.parallel).toBe("");
+  });
+
+  it("지정된 SP 행 - 이름·담당·역할·부서·시스템·URL·IO·조건·GMP는 링크 맵 지정값, Next의 SP 대상도 현재 이름", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("a1", "A", "process", 0),
+        makeSubNode("sub1", "Old name", 1, 2, {
+          assignee: "stale", department: "Stale dept", system: "Stale", url: "https://stale.example.com",
+          input: "stale input",
+        }),
+      ],
+      edges: [makeEdge("x1", "a1", "sub1")],
+      groups: [],
+      subprocess_refs: {
+        2: spRef({
+          name: "Renamed", assignee: "kim", assignee_role: "Owner", department: "Ops", system: "SAP",
+          url: "https://sp.example.com", url_label: "SP doc", input: "Order\nSpec", input_forms: "\nPDF",
+          start_condition: "Order in", gmp: "non_gmp",
+        }),
+      },
+    };
+    const fetchResolved = async (): Promise<Graph> => ({ nodes: [makeNode("k1", "Child", "process", 0)], edges: [], groups: [] });
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved,
+    });
+    const rows = model.rows.filter((r) => r.kind === "node");
+    expect(rows.find((r) => r.title === "A")?.next).toBe("Renamed");
+    expect(rows.find((r) => r.type === "subprocess")).toMatchObject({
+      title: "Renamed", assignee: "kim", assignee_role: "Owner", department: "Ops", system: "SAP",
+      url: "https://sp.example.com", urlLabel: "SP doc", input: "Order\nSpec · PDF", start_condition: "Order in",
+      gmp: "Non-GMP",
+    });
+  });
+
+  it("미지정 SP 행은 노드 값으로 폴백한다", async () => {
+    const map1: Graph = {
+      nodes: [makeSubNode("sub1", "Sub", 1, 2, { assignee: "lee", department: "QA" })],
+      edges: [],
+      groups: [],
+      subprocess_refs: { 2: spRef({ designated: false, assignee: "kim", department: "Ops" }) },
+    };
+    const fetchResolved = async (): Promise<Graph> => ({ nodes: [], edges: [], groups: [] });
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00", fetchResolved,
+    });
+    expect(model.rows.find((r) => r.kind === "node")).toMatchObject({ assignee: "lee", department: "QA" });
+  });
+
+  it("SP 출구 - 무라벨 엣지는 끝 제목을 라벨로 표기하고, 병렬 셀은 병렬로 켠 끝 이름을 나열한다", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeSubNode("sub1", "Sub", 0, 2, { parallel_outputs: ["반려"] }),
+        makeNode("b1", "B", "process", 1),
+        makeNode("c1", "C", "process", 2),
+        makeNode("d1", "D", "process", 3),
+      ],
+      edges: [
+        { ...makeEdge("x1", "sub1", "b1"), source_handle: "__primary__" },
+        { ...makeEdge("x2", "sub1", "c1"), source_handle: "반려" },
+        { ...makeEdge("x3", "sub1", "d1", "직접 라벨"), source_handle: "반려" },
+      ],
+      groups: [],
+    };
+    const child: Graph = {
+      nodes: [
+        makeNode("ce1", "승인 완료", "end", 0, { is_primary_end: true }),
+        makeNode("ce2", "반려", "end", 1),
+      ],
+      edges: [],
+      groups: [],
+    };
+    const model = await buildExcelModel({
+      graph: map1, mapName: "Map1", versionLabel: "v1", exportedAt: "2026-10-02T00:00:00+09:00",
+      fetchResolved: async () => child,
+    });
+    const subRow = model.rows.find((r) => r.kind === "node" && r.type === "subprocess");
+    expect(subRow).toMatchObject({ next: "B:승인 완료;C:반려;D:직접 라벨", parallel: "반려" });
   });
 });

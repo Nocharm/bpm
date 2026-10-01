@@ -3,8 +3,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { Graph, GraphEdge, GraphNode } from "./api";
-import { buildGraphFromCsv } from "./csv-import";
+import { buildGraphFromCsv, buildTemplateCsv, HEADER_COLUMNS } from "./csv-import";
 import { buildCsvFromGraph, orderNodesByFlow } from "./csv-export";
+import { CSV_COLUMNS } from "./export-columns";
+import { getOutputViolations } from "./output-rules";
 
 /** GraphNode 조립 헬퍼 — CSV가 다루는 필드는 over로 채우고 나머지는 빈 기본값. */
 function makeNode(id: string, title: string, node_type: string, sort_order: number, over: Partial<GraphNode> = {}): GraphNode {
@@ -17,8 +19,16 @@ function makeNode(id: string, title: string, node_type: string, sort_order: numb
   };
 }
 
-function makeEdge(id: string, source: string, target: string, label = ""): GraphEdge {
-  return { id, source_node_id: source, target_node_id: target, label, source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "" };
+function makeEdge(id: string, source: string, target: string, label = "", over: Partial<GraphEdge> = {}): GraphEdge {
+  return { id, source_node_id: source, target_node_id: target, label, source_side: "right", target_side: "left", source_handle: null, target_handle: null, line_style: "", ...over };
+}
+
+/** 헤더 이름으로 행 셀을 집는다 — 열 추가·선택에도 인덱스가 안 어긋나게(따옴표 없는 단순 행 전용). */
+function cellsByHeader(csv: string, rowPrefix: string): Record<string, string> {
+  const lines = csv.split("\r\n");
+  const header = lines[0].split(",");
+  const cells = lines.find((line) => line.startsWith(rowPrefix))?.split(",") ?? [];
+  return Object.fromEntries(header.map((name, i) => [name, cells[i] ?? ""]));
 }
 
 describe("buildCsvFromGraph - round trip", () => {
@@ -60,7 +70,7 @@ describe("buildCsvFromGraph - round trip", () => {
     };
     const { csv: exported, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([]);
-    expect(exported.split("\r\n")[0]).toContain("Input,Input_Flags,Output");
+    expect(exported.split("\r\n")[0]).toContain("Input,Input_Flags,Input_Forms,Output,Output_Forms");
     const re = buildGraphFromCsv(exported, { base: graph });
     expect(re.errors).toEqual([]);
     const a = re.graph!.nodes.find((n) => n.title === "A")!;
@@ -78,9 +88,9 @@ describe("buildCsvFromGraph - round trip", () => {
     ].join("\r\n");
     const graph = buildGraphFromCsv(csv).graph!;
     const { csv: exported } = buildCsvFromGraph(graph);
-    const bCells = exported.split("\r\n").find((line) => line.startsWith("B,"))?.split(",");
-    expect(bCells?.[0]).toBe("B"); // Name
-    expect(bCells?.[21]).toBe("C:approved;D:rejected"); // Next (22번째 컬럼 — Role·Parallel 열 추가)
+    const bCells = cellsByHeader(exported, "B,");
+    expect(bCells.Name).toBe("B");
+    expect(bCells.Next).toBe("C:approved;D:rejected");
   });
 
   it("Parallel=Y 행은 Next가 2개여도 분기가 아니라 병렬 출구 일반 노드로 왕복한다", () => {
@@ -98,8 +108,7 @@ describe("buildCsvFromGraph - round trip", () => {
     expect(imported.warnings.some((w) => w.message.includes('Parallel "maybe"'))).toBe(true);
 
     const { csv: exported } = buildCsvFromGraph(imported.graph!);
-    const aCells = exported.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[20]).toBe("Y"); // Parallel (21번째)
+    expect(cellsByHeader(exported, "A,").Parallel).toBe("Y");
     const again = buildGraphFromCsv(exported, { base: imported.graph! }).graph!;
     expect(again.nodes.find((n) => n.title === "A")).toMatchObject({ node_type: "process", parallel_outputs: ["__primary__"] });
   });
@@ -161,9 +170,9 @@ describe("buildCsvFromGraph - round trip", () => {
       'Edge "A" → End (label "reject") is not expressible in CSV - dropped',
       'Decision "A" has fewer than 2 branches - re-import will infer process',
     ]);
-    const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[0]).toBe("A"); // Name
-    expect(aCells?.[21]).toBe("B:approve"); // Next(22번째) — reject 브랜치는 드롭됨
+    const aCells = cellsByHeader(csv, "A,");
+    expect(aCells.Name).toBe("A");
+    expect(aCells.Next).toBe("B:approve"); // reject 브랜치는 드롭됨
   });
 
   it("무라벨 End행 엣지도 다른 outgoing과 병존하면 경고와 함께 생략", () => {
@@ -179,8 +188,7 @@ describe("buildCsvFromGraph - round trip", () => {
     };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual(['Edge "A" → End is not expressible in CSV - dropped']);
-    const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[21]).toBe("B"); // Next(22번째) — End행 엣지는 드랍, B만 남는다
+    expect(cellsByHeader(csv, "A,").Next).toBe("B"); // End행 엣지는 드랍, B만 남는다
   });
 
   it("Next 대상 제목의 ;/:와 라벨의 ;는 그대로 내보내되 오파싱 경고", () => {
@@ -199,8 +207,8 @@ describe("buildCsvFromGraph - round trip", () => {
       'Next target "C:review" contains ";" or ":" - re-import will misparse this reference',
       'Edge label "ok;fine" (from "A") contains ";" - re-import will misparse this reference',
     ]);
-    const aCells = csv.split("\r\n").find((line) => line.startsWith("A,"))?.split(",");
-    expect(aCells?.[21]).toBe("C:review;B:ok;fine"); // Next(22번째) — 드랍 없이 그대로 직렬화
+    // 드랍 없이 그대로 직렬화 — 라벨의 ";"까지 셀에 들어간다(단순 split이라 Next 뒤를 이어 붙여 확인)
+    expect(csv.split("\r\n").find((line) => line.startsWith("A,"))?.endsWith(",C:review;B:ok;fine")).toBe(true);
   });
 
   it("제목 중복 노드는 그대로 내보내되 경고", () => {
@@ -229,7 +237,7 @@ describe("buildCsvFromGraph - round trip", () => {
     expect(warnings).toEqual(["Start connections differ from computed roots - re-import will recompute them"]);
   });
 
-  it("숫자 파라미터 4필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {
+  it("숫자 파라미터 필드가 undefined일 때도 안전하게 빈 문자열로 직렬화된다", () => {
     const bare: GraphNode = {
       id: "n1", title: "N", description: "", node_type: "process", color: "",
       assignee: "", department: "", system: "", duration: "",
@@ -240,9 +248,10 @@ describe("buildCsvFromGraph - round trip", () => {
     const graph: Graph = { nodes: [bare], edges: [], groups: [] };
     const { csv, warnings } = buildCsvFromGraph(graph);
     expect(warnings).toEqual([]);
-    const cells = csv.split("\r\n")[1].split(",");
-    // Name,Description,Assignee,Department,System,Duration,Cost_KRW,Cost_USD,Headcount,Annual_Count,FTE,URL,URL_Label,Next
-    expect(cells.slice(6, 11)).toEqual(["", "", "", "", ""]);
+    const cells = cellsByHeader(csv, "N,");
+    for (const header of ["Duration", "Touch_Time", "Cost_KRW", "Cost_USD", "Headcount", "Annual_Count", "FTE"]) {
+      expect(cells[header]).toBe("");
+    }
   });
 });
 
@@ -309,5 +318,196 @@ describe("buildCsvFromGraph - role and system catalog round trip", () => {
     expect(a?.system).toBe("SAP ERP");
     expect(b?.system).toBe("Other");
     expect(b?.system_fallback).toBe("Legacy ledger");
+  });
+});
+
+// 열 정의 단일 소스 가드 — 임포트 HEADER_COLUMNS·내보내기 헤더·템플릿 헤더가 한 목록에서 나온다 (C45)
+describe("CSV column single source", () => {
+  it("export header, template header and import columns are the same 25 columns", () => {
+    const graph: Graph = { nodes: [makeNode("a1", "A", "process", 1)], edges: [], groups: [] };
+    const exportHeader = buildCsvFromGraph(graph).csv.split("\r\n")[0];
+    const templateLines = buildTemplateCsv().split("\r\n");
+    expect(exportHeader).toBe(CSV_COLUMNS.map((c) => c.header).join(","));
+    expect(templateLines[0]).toBe(exportHeader);
+    expect(exportHeader.toLowerCase().split(",")).toEqual([...HEADER_COLUMNS]);
+    expect(HEADER_COLUMNS).toHaveLength(25);
+  });
+});
+
+// 내보내기 컬럼 선택 (export-column-picker-design 2026-10-02)
+describe("buildCsvFromGraph - column selection", () => {
+  const graph: Graph = {
+    nodes: [
+      makeNode("s1", "Start", "start", 0),
+      makeNode("a1", "A", "process", 1, { description: "first", system: "SAP" }),
+      makeNode("b1", "B", "process", 2),
+      makeNode("e1", "End", "end", 3, { is_primary_end: true }),
+    ],
+    edges: [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "b1"), makeEdge("x3", "b1", "e1")],
+    groups: [],
+  };
+
+  it("writes only the selected columns in canonical order and always keeps Name", () => {
+    const { csv } = buildCsvFromGraph(graph, { columns: ["next", "description"] });
+    const lines = csv.split("\r\n");
+    expect(lines[0]).toBe("Name,Description,Next");
+    expect(lines[1]).toBe("A,first,B");
+    expect(lines.every((line) => line.split(",").length === 3)).toBe(true);
+  });
+
+  it("writes every column when no selection is given", () => {
+    const { csv } = buildCsvFromGraph(graph);
+    expect(csv.split("\r\n")[1].split(",")).toHaveLength(CSV_COLUMNS.length);
+  });
+
+  it("a subset file re-imports into the same map without changing the omitted columns", () => {
+    const { csv } = buildCsvFromGraph(graph, { columns: ["next"] });
+    const merged = buildGraphFromCsv(csv, { base: graph });
+    expect(merged.errors).toEqual([]);
+    expect(merged.graph!.nodes.find((n) => n.id === "a1")).toMatchObject({ description: "first", system: "SAP" });
+    expect(merged.merge.lostEdges).toEqual([]);
+  });
+});
+
+describe("buildCsvFromGraph - GMP and data form columns", () => {
+  it("round-trips GMP and per-item forms (leading blank line kept)", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1, {
+          input: "PR\nBudget", input_forms: "\nExcel", output: "Result", output_forms: "Word", gmp: "direct", color: "#16794f",
+        }),
+        makeNode("e1", "End", "end", 2, { is_primary_end: true }),
+      ],
+      edges: [makeEdge("x1", "s1", "a1"), makeEdge("x2", "a1", "e1")],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual([]);
+    expect(csv.split("\r\n")[0]).toContain("Input_Forms");
+    const fresh = buildGraphFromCsv(csv);
+    expect(fresh.errors).toEqual([]);
+    expect(fresh.graph!.nodes.find((n) => n.title === "A")).toMatchObject({
+      input_forms: "\nExcel", output_forms: "Word", gmp: "direct",
+    });
+    const merged = buildGraphFromCsv(csv, { base: graph }).graph!;
+    // 색은 CSV GMP로 바뀌지 않는다(에디터 자동 색 확정은 CSV 미적용)
+    expect(merged.nodes.find((n) => n.id === "a1")).toMatchObject({
+      input_forms: "\nExcel", output_forms: "Word", gmp: "direct", color: "#16794f",
+    });
+  });
+});
+
+describe("buildCsvFromGraph - structures the table cannot hold", () => {
+  it("warns about an edge into a secondary end and keeps the node warning first", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("a1", "A", "process", 1),
+        makeNode("e1", "End", "end", 2, { is_primary_end: true }),
+        makeNode("e2", "Extra End", "end", 3, { is_primary_end: false }),
+      ],
+      edges: [makeEdge("x1", "s1", "a1"), makeEdge("x3", "a1", "e2", "reject")],
+      groups: [],
+    };
+    const { warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual([
+      'Secondary end node "Extra End" is not expressible in CSV - skipped',
+      'Edge "A" → secondary end "Extra End" (label "reject") is not expressible in CSV - dropped (re-import connects this row to the primary End)',
+    ]);
+  });
+
+  it("does not write Parallel=Y for a decision node with a stray flag", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("d1", "D", "decision", 1, { parallel_outputs: ["__primary__"] }),
+        makeNode("b1", "B", "process", 2),
+        makeNode("c1", "C", "process", 3),
+      ],
+      edges: [makeEdge("x1", "d1", "b1", "yes"), makeEdge("x2", "d1", "c1", "no")],
+      groups: [],
+    };
+    const { csv } = buildCsvFromGraph(graph);
+    expect(cellsByHeader(csv, "D,").Parallel).toBe("");
+    // 재임포트해도 분기가 병렬 일반 노드로 뒤집히지 않는다
+    expect(buildGraphFromCsv(csv).graph!.nodes.find((n) => n.title === "D")?.node_type).toBe("decision");
+  });
+
+  // D3 — SP 끝별 출구는 Next로 표현되지 않으니 경고하고, 같은 맵 재가져오기는 기존 연결의 끝·변을 그대로 이월한다
+  it("warns about subprocess exits from secondary ends and keeps them when re-imported into the same map", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("s1", "Start", "start", 0),
+        makeNode("p1", "P", "process", 1),
+        makeNode("sp", "SP", "subprocess", 2, { linked_map_id: 7 }),
+        makeNode("a1", "A", "process", 3),
+        makeNode("b1", "B", "process", 4),
+        makeNode("e1", "End", "end", 5, { is_primary_end: true }),
+      ],
+      edges: [
+        makeEdge("x1", "s1", "p1"),
+        makeEdge("x2", "p1", "sp", "", { source_side: "bottom", target_handle: "in:top" }),
+        makeEdge("x3", "sp", "a1", "", { source_handle: "__primary__" }),
+        makeEdge("x4", "sp", "b1", "", { source_handle: "반려" }),
+        makeEdge("x5", "a1", "e1"),
+        makeEdge("x6", "b1", "e1"),
+      ],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toEqual([
+      'Subprocess "SP" exit "반려" → "B" is not expressible in CSV - re-import keeps it only when the same connection already exists',
+    ]);
+    const merged = buildGraphFromCsv(csv, { base: graph });
+    expect(merged.errors).toEqual([]);
+    expect(merged.merge.lostEdges).toEqual([]);
+    const edges = merged.graph!.edges;
+    const pairOf = (source: string, target: string) =>
+      edges.find((e) => e.source_node_id === source && e.target_node_id === target);
+    expect(pairOf("sp", "b1")?.source_handle).toBe("반려");
+    expect(pairOf("sp", "a1")?.source_handle).toBe("__primary__");
+    expect(pairOf("p1", "sp")).toMatchObject({ source_side: "bottom", target_handle: "in:top" });
+    // 끝별 출구가 대표 끝으로 모이지 않으니 출력 규칙 위반이 새로 생기지 않는다
+    const nodes = merged.graph!.nodes.map((n) => ({ id: n.id, nodeType: n.node_type, parallelOutputs: n.parallel_outputs }));
+    const ruleEdges = edges.map((e) => ({ source: e.source_node_id, sourceHandle: e.source_handle }));
+    expect(getOutputViolations(nodes, ruleEdges)).toEqual([]);
+  });
+
+  it("warns that a per-end parallel exit is not expressible and keeps it on re-import", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("sp", "SP", "subprocess", 1, { linked_map_id: 7, parallel_outputs: ["반려"] }),
+        makeNode("a1", "A", "process", 2),
+        makeNode("b1", "B", "process", 3),
+      ],
+      edges: [
+        makeEdge("x1", "sp", "a1", "", { source_handle: "반려" }),
+        makeEdge("x2", "sp", "b1", "", { source_handle: "반려" }),
+      ],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(warnings).toContain('Subprocess "SP" has a parallel exit on end "반려" - per-end parallel is not expressible in CSV');
+    const merged = buildGraphFromCsv(csv, { base: graph }).graph!;
+    expect(merged.nodes.find((n) => n.id === "sp")?.parallel_outputs).toEqual(["반려"]);
+    expect(merged.edges.every((e) => e.source_node_id !== "sp" || e.source_handle === "반려")).toBe(true);
+  });
+
+  it("folds two subprocess exits that reach the same target into one Next entry", () => {
+    const graph: Graph = {
+      nodes: [
+        makeNode("sp", "SP", "subprocess", 1, { linked_map_id: 7 }),
+        makeNode("a1", "A", "process", 2),
+      ],
+      edges: [
+        makeEdge("x1", "sp", "a1", "", { source_handle: "__primary__" }),
+        makeEdge("x2", "sp", "a1", "", { source_handle: "반려" }),
+      ],
+      groups: [],
+    };
+    const { csv, warnings } = buildCsvFromGraph(graph);
+    expect(cellsByHeader(csv, "SP,").Next).toBe("A");
+    expect(warnings).toContain('"SP" reaches "A" more than once - kept once in Next');
+    expect(buildGraphFromCsv(csv).errors).toEqual([]);
   });
 });

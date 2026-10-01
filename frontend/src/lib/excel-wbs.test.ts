@@ -214,8 +214,42 @@ describe("buildWbsModel", () => {
     expect(model.rows[0]).toMatchObject({
       type: "subprocess", duration: "72", cost_krw: "2000000", headcount: "6",
       annual_count: "12", description: "base desc\nlocal add", next: "SubGone",
+      department: "Ops", // 식별 필드도 지정정보(캔버스와 같은 소스, C19)
     });
     expect(model.maxLevel).toBe(2); // denied 노트의 레벨 경로가 2단을 차지
+  });
+
+  it("SP 레벨 경로·Next 대상은 링크 맵 현재 이름, 잠긴 SP 잎 행의 무라벨 보조 끝 출구는 끝 제목을 라벨로 표기", async () => {
+    const map1: Graph = {
+      nodes: [
+        makeNode("a1", "A", "process", 0),
+        makeSubNode("sub1", "Old name", 1, 2),
+        makeSubNode("sub2", "Locked SP", 2, 3),
+        makeNode("b1", "B", "process", 3),
+        makeNode("c1", "C", "process", 4),
+      ],
+      edges: [
+        makeEdge("x1", "a1", "sub1"),
+        makeEdge("x2", "sub1", "sub2"),
+        { ...makeEdge("x3", "sub2", "b1"), source_handle: "__primary__" },
+        { ...makeEdge("x4", "sub2", "c1"), source_handle: "반려" },
+      ],
+      groups: [],
+      subprocess_refs: {
+        2: {
+          name: "New name", designated: false, department: null, assignee: null, system: null, duration: null,
+          cost_krw: null, cost_usd: null, headcount: null, touch_time: null, input: null, output: null, input_forms: null, output_forms: null, input_ids: null, output_ids: null, start_condition: null, end_condition: null, frequency_fallback: null, gmp: null, url: null, url_label: null,
+          sp_description: null,
+        },
+      },
+    };
+    const child: Graph = { nodes: [makeNode("k1", "Child", "process", 0)], edges: [], groups: [] };
+    const fetchResolved = async (mapId: number): Promise<Graph> => (mapId === 2 ? child : { nodes: [], edges: [], groups: [], locked: true });
+    const model = await build(map1, { fetchResolved });
+    const nodeRows = model.rows.filter((r) => r.kind === "node");
+    expect(nodeRows.find((r) => r.title === "A")?.next).toBe("New name");
+    expect(nodeRows.find((r) => r.title === "Child")?.levels).toEqual(["Root", "New name"]);
+    expect(nodeRows.find((r) => r.title === "Locked SP")?.next).toBe("B;C:반려");
   });
 
   it("행 상한 도달 시 rowLimit 1개 + truncated, 이미 출력된 행의 주석은 보존", async () => {
@@ -276,9 +310,9 @@ describe("buildWbsModel", () => {
 });
 
 describe("writeWbsSheet", () => {
-  function buildSheet(model: Parameters<typeof writeWbsSheet>[1]) {
+  function buildSheet(model: Parameters<typeof writeWbsSheet>[1], columns?: Parameters<typeof writeWbsSheet>[2]) {
     const workbook = new Workbook();
-    writeWbsSheet(workbook, model);
+    writeWbsSheet(workbook, model, columns);
     const sheet = workbook.getWorksheet("WBS");
     if (!sheet) throw new Error("sheet missing");
     return sheet;
@@ -286,7 +320,8 @@ describe("writeWbsSheet", () => {
   const baseRow = {
     kind: "node" as const, no: 1, levels: ["Root", "Sub"], title: "P", type: "process",
     description: "", assignee: "", assignee_role: "", department: "", system: "",
-    duration: "1.30", touch_time: "", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+    duration: "1.30", touch_time: "0.45", cost_krw: "1250000", cost_usd: "", headcount: "2", annual_count: "1200", fte: "0.8",
+    input: "", output: "", start_condition: "", end_condition: "", gmp: "", parallel: "",
     url: "https://example.com/doc", urlLabel: "Doc", groups: "", next: "Next step",
   };
   const model = {
@@ -325,6 +360,27 @@ describe("writeWbsSheet", () => {
     const krwCol = 5 + tail.findIndex((c) => c.header === "Cost (KRW)");
     expect(r.getCell(krwCol).numFmt).toBe("#,##0");
     expect(r.getCell(krwCol).value).toBe(1250000);
+    const touchCol = 5 + tail.findIndex((c) => c.header === "Touch time (h)");
+    expect(r.getCell(touchCol).numFmt).toBe("0.00");
+    expect(r.getCell(touchCol).value).toBe(0.45);
+  });
+
+  it("데이터 행 셀 수 = No + 레벨 + Task + 꼬리, 마지막 셀은 Next", () => {
+    const sheet = buildSheet(model);
+    const values = (sheet.getRow(5).values as unknown[]).slice(1);
+    expect(values).toHaveLength(1 + model.maxLevel + 1 + COLUMNS.slice(2).length);
+    expect(values[values.length - 1]).toBe("Next step");
+  });
+
+  it("열 선택 - 꼬리는 선택한 열만 정식 순서로, 서식·하이퍼링크 위치도 선택 열에서 파생", () => {
+    const sheet = buildSheet(model, ["next", "url", "duration"]);
+    expect((sheet.getRow(4).values as unknown[]).slice(1)).toEqual([
+      "No", "Level 1", "Level 2", "Task", "Duration (h)", "URL", "Next",
+    ]);
+    const r = sheet.getRow(5);
+    expect(r.getCell(5).numFmt).toBe("0.00");
+    expect(r.getCell(6).value).toEqual({ text: "Doc", hyperlink: "https://example.com/doc" });
+    expect(r.getCell(7).value).toBe("Next step");
   });
 
   it("URL 하이퍼링크·노트 행 이탤릭이 시프트된 위치에 기록된다", () => {
