@@ -55,6 +55,9 @@ const EVENT_CHIP: Record<string, string> = {
   external_linked: "border-accent-tint-border bg-accent-tint text-accent",
 };
 
+// 만료 버전의 우측 게시 필 — 상태 필(expired)과 같은 중립 톤
+const EXPIRED_CHIP = "border-hairline bg-surface-alt text-ink-tertiary";
+
 // 타임라인 노드 — 최신 이벤트 기준 색·아이콘(승인/게시=채움 green, 담당자확정=채움 액센트).
 function nodeFor(eventType: string | undefined): { cls: string; Icon: LucideIcon } {
   switch (eventType) {
@@ -245,6 +248,9 @@ export function VersionTimeline({
         const publishedEvt = events.find(
           (evt) => evt.event_type === "published" || evt.event_type === "confirmed",
         );
+        // 다음 버전이 게시되면 이 버전은 expired — 우측 필도 게시(green) 대신 만료(중립)로. 게시 이력은 툴팁·펼침 상세에 남는다
+        const isExpired = version.status === "expired";
+        const publishedLabel = t(publishedEvt?.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published");
         const chipEvents = events.filter(
           (evt) => evt.event_type !== "published" && evt.event_type !== "confirmed",
         );
@@ -412,11 +418,14 @@ export function VersionTimeline({
                         {publishedEvt && (
                           <span
                             data-id={`version-event-${publishedEvt.id}`}
-                            title={`${t(publishedEvt.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published")} - ${nameOf(publishedEvt.actor)}`}
-                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${EVENT_CHIP[publishedEvt.event_type] ?? EVENT_CHIP.published}`}
+                            data-expired={isExpired || undefined}
+                            title={`${publishedLabel} - ${nameOf(publishedEvt.actor)}${isExpired ? ` · ${t("home.verStatus.expired")}` : ""}`}
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-0.5 text-fine ${
+                              isExpired ? EXPIRED_CHIP : (EVENT_CHIP[publishedEvt.event_type] ?? EVENT_CHIP.published)
+                            }`}
                           >
                             <EventIcon type={publishedEvt.event_type} />
-                            {t(publishedEvt.event_type === "confirmed" ? "home.verEvent.confirmed" : "home.verEvent.published")}
+                            {isExpired ? t("home.verStatus.expired") : publishedLabel}
                           </span>
                         )}
                       </div>
