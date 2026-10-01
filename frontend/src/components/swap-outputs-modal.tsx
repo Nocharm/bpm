@@ -4,7 +4,7 @@
 // 왼쪽 행 → 오른쪽 행 순으로 누르면 짝, 다시 누르면 해제. 짝 없는 출력은 지금 타깃에 남는다(남김).
 // 가운데 열 연결선은 행 DOM 중심을 측정해 S자 곡선으로 잇고, 새 짝은 왼→오로 그려지며 점 하나가 흐른다(시선 유도).
 // 확인을 눌러야 onConfirm(pairs) — 취소/Esc/바깥은 스왑 자체 취소. 행 hover 시 onHoverEdge로 캔버스 엣지 강조.
-// 설계: docs/design/2026-10-01-subprocess-ends-design.md §3.4a
+// 설계: 2026-10-01-subprocess-ends-design.md §3.4a(폐기, git history)
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

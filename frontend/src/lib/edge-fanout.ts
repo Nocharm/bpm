@@ -1,5 +1,5 @@
 // 같은 핸들(앵커)로 모이는 엣지의 팬아웃 — 렌더 전용 레인 배정(순수)과 팬 경로 기하.
-// 저장 데이터·핸들 변은 건드리지 않는다. 설계: docs/design/2026-09-30-edge-fanout-design.md
+// 저장 데이터·핸들 변은 건드리지 않는다. 설계: 2026-09-30-edge-fanout-design.md(폐기, git history)
 import { Position, type Edge } from "@xyflow/react";
 
 import {

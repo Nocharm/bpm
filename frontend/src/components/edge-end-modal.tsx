@@ -3,7 +3,7 @@
 // 하위프로세스 출구 선택 — 끝이 2개 이상인 SP에서 끝을 모르는 경로(드롭존 앞/뒤·역방향 몸체 드롭)로 엣지가 생길 때
 // 어느 끝에서 이어질지 고르는 목록. 크롬은 EdgeSelectModal과 동일(포털·투명 백드롭 z-1200·포인터 위치·Esc·취소 바).
 // 대표 끝은 항상 첫 행 + 뱃지 + 틴트 배경. 이미 연결된 끝은 현재 타깃을 흐리게 표시(정보용, 선택은 가능).
-// 설계: docs/design/2026-10-01-subprocess-ends-design.md §3.3
+// 설계: 2026-10-01-subprocess-ends-design.md §3.3(폐기, git history)
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";

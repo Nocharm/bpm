@@ -1,7 +1,7 @@
 // 하위프로세스 출구 다중 연결 + 들어오는 문 네 방향 검증 — 끝 3개(대표 "승인"·"반려"·"보류") 링크 맵을 발행·지정한 뒤
 // 호스트 맵에서 (1) in 핸들 4변·미러 라벨·인스펙터 placeholder, (2) 펼침 게이트웨이 끝별 매핑·애니메이션,
 // (3) 드롭존 뒤 → 출구 선택 목록 → 보류 끝 연결, (4) 분기↔SP 스왑 → 출력 자리 바꾸기 모달(확인·취소),
-// (5) 저장 payload에 미러 라벨 없음을 실측한다. 설계: docs/design/2026-10-01-subprocess-ends-design.md §4-10.
+// (5) 저장 payload에 미러 라벨 없음을 실측한다. 설계: 2026-10-01-subprocess-ends-design.md §4-10(폐기, git history).
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3047 BACKEND_URL=http://localhost:8048 node scripts/pw-verify-sp-ends.mjs
 //   KEEP=1 이면 시드 맵 유지. 산출물 .shots/sp-ends-*.png (gitignore). 전제: admin.sys 시드(reset_db), employees에 admin.sys active.
 import { mkdirSync } from "node:fs";
