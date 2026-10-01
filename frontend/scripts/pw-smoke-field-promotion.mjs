@@ -126,21 +126,25 @@ try {
       && calDetail.sp_frequency_fallback === "주 1회"
       && calDetail.sp_system_fallback === "EAM");
 
-  // ── [17][18][19] 설정 Conditions & GMP 카드 ─────────────────────────────
+  // ── [17][18][19] 설정 서브프로세스 섹션 타일(종전 Conditions & GMP 카드, 2026-10-01 통합) ──────
   await page.goto(`${BASE}/maps/${calMap.id}/settings`, { waitUntil: "networkidle" });
-  const cardVisible = await page.locator('[data-id="settings-process-fields"]')
+  const cardVisible = await page.locator('[data-id="subprocess-designation-panel"]')
     .waitFor({ state: "visible", timeout: 10000 }).then(() => true).catch(() => false);
-  const startPrefill = await page.locator('[data-id="process-fields-start-condition"]').inputValue();
-  check("[17] settings card renders with imported prefill",
-    cardVisible && startPrefill.startsWith("교정 주기 도래"), startPrefill.slice(0, 30));
-  await page.locator('[data-id="process-fields-gmp-hint"]').click();
-  const gmpHintText = (await page.locator('[data-id="process-fields-gmp-hint-popover"]').textContent()) ?? "";
+  const startPrefill = (await page.locator('[data-id="sp-tile-start"]').getAttribute("title")) ?? "";
+  check("[17] settings tiles render with imported prefill",
+    cardVisible && startPrefill.includes("교정 주기 도래"), startPrefill.slice(0, 40));
+  await page.locator('[data-id="sp-tile-gmp"]').hover();
+  await page.locator('[data-id="sp-note-gmp"]').click();
+  const gmpHintText = (await page.locator('[data-id="sp-note-gmp-popover"]').textContent()) ?? "";
   check("[19] gmp fallback popover shows raw text", gmpHintText.includes("GMP 문서 맞음"));
-  await page.mouse.click(5, 5); // 오버레이 클릭으로 팝오버 닫기(Escape 핸들러 없음)
-  await page.locator('[data-id="process-fields-gmp"]').selectOption("direct");
+  await page.keyboard.press("Escape");
+  await page.mouse.click(5, 5);
+  await page.locator('[data-id="sp-tile-gmp"]').click();
+  await page.locator('[data-id="sp-gmp-option-direct"]').click();
+  await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
   const afterGmp = await api(`/maps/${calMap.id}`);
-  check("[18] gmp select saves via PATCH", afterGmp.sp_gmp === "direct");
+  check("[18] gmp tile popover saves via PATCH", afterGmp.sp_gmp === "direct");
 
   // ── [6][18b] 홈 상세 카드 — 조건/터치타임 행 + GMP 배지 ─────────────────
   // 홈은 L5 포커스 드릴다운(2026-09-19) — L1은 형제 열, L2~L4는 하위 열, L5는 카드,

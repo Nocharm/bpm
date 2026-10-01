@@ -26,7 +26,6 @@ import { useI18n } from "@/lib/i18n";
 import { useCurrentMockUser } from "@/lib/mock/current-mock-user";
 import { ToastStack, type ToastItem } from "@/components/toast-stack";
 import { MapDetailsPanel } from "@/components/permissions/map-details-panel";
-import { ProcessFieldsCard } from "@/components/permissions/process-fields-card";
 import { SubprocessDesignationPanel } from "@/components/permissions/subprocess-designation-panel";
 import { CollaboratorsPanel } from "@/components/permissions/collaborators-panel";
 import { FrameworkAccessPanel } from "@/components/permissions/framework-access-panel";
@@ -470,9 +469,7 @@ export default function SettingsPage() {
                           isFramework ? { categoryPath: linkage?.path ?? null, department: owningDepartment } : undefined
                         }
                       />
-                      {/* 인터뷰 승격 필드 검토 편집 — PATCH가 오너 전용 (design 2026-08-19 §5) */}
-                      {/* GMP·조건·소요 등 L6 인터뷰 필드 — 캔버스엔 해당 없음 */}
-                      {isOwner && !isFramework && <ProcessFieldsCard mapId={mapIdStr} onToast={showToast} />}
+                      {/* 인터뷰 승격 필드(GMP·조건·소요)는 서브프로세스 섹션 타일에서 편집 (2026-10-01 통합) */}
                     </>
                   ) : tab.id === "subprocess" && isOwner ? (
                     <SubprocessDesignationPanel mapId={mapIdStr} onToast={showToast} />
