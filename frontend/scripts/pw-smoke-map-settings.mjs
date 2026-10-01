@@ -111,24 +111,52 @@ await sp.scrollIntoViewIfNeeded();
 await page.waitForTimeout(500);
 await sp.screenshot({ path: `${OUT}/map-settings-07-sp-tiles.png` });
 check("sp tiles rendered", (await page.locator('[data-id^="sp-tile-"]').count()) >= 10);
-// 타일 편집 — 시스템 텍스트 팝오버 → Enter 저장 → API 확인 → 원복 (종전 조건·GMP 카드 흡수, 2026-10-01)
+// 타일 편집 — 시스템 자동완성 팝오버 → 입력 커밋 → 저장 → API 확인 → 원복 (종전 조건·GMP 카드 흡수, 2026-10-01)
 const before38 = (await api("/maps/38")).body;
 await page.locator('[data-id="sp-tile-system"]').click();
 await page.waitForTimeout(300);
 check("system tile popover open", (await page.locator('[data-id="sp-popover-system"]').count()) === 1);
 await page.screenshot({ path: `${OUT}/map-settings-10-sp-edit-popover.png` });
 await page.locator('[data-id="sp-input-system"]').fill("SmokeSys");
+// 시스템 칸은 SuggestInput이라 Enter가 입력 커밋만 하고 전파를 끊는다(stopPropagation) — 팝오버 저장은 주 버튼으로.
+// 맵에 다른 원문 메모가 이미 있으면 인라인 교체/추가 선택이 먼저 뜨므로 교체를 고른다.
 await page.keyboard.press("Enter");
+await page.waitForTimeout(250);
+const noteReplace = page.locator('[data-id="system-note-replace"]');
+if ((await noteReplace.count()) > 0) await noteReplace.click();
+await page.locator('[data-id="sp-popover-system-commit"]').click();
 await page.waitForTimeout(800);
-check("system tile saved via PATCH", (await api("/maps/38")).body.sp_system === "SmokeSys");
+// 'SmokeSys'는 카탈로그 밖이라 경계(commit_system)가 Other + 원문 메모로 저장한다
+const saved38 = (await api("/maps/38")).body;
+check(
+  "system tile saved via PATCH (Other + note)",
+  saved38.sp_system === "Other" && saved38.sp_system_fallback === "SmokeSys",
+  `${saved38.sp_system}/${saved38.sp_system_fallback}`,
+);
 await page.locator('[data-id="sp-tile-gmp"]').click();
 await page.waitForTimeout(300);
 await page.locator('[data-id="sp-gmp-option-direct"]').click();
 await page.keyboard.press("Enter");
 await page.waitForTimeout(800);
 check("gmp tile saved via PATCH", (await api("/maps/38")).body.sp_gmp === "direct");
-await api("/maps/38/process-fields", { method: "PATCH", body: JSON.stringify({ system: before38.sp_system ?? "", gmp: before38.sp_gmp ?? "" }) });
-check("map 38 fields restored", (await api("/maps/38")).body.sp_system === (before38.sp_system ?? ""));
+const beforeSystem = before38.sp_system ?? "";
+const beforeNote = before38.sp_system_fallback ?? "";
+await api("/maps/38/process-fields", {
+  method: "PATCH",
+  body: JSON.stringify({ system: beforeSystem, system_fallback: beforeNote, gmp: before38.sp_gmp ?? "" }),
+});
+// 원복도 commit_system을 거친다 — 카탈로그 값·Other·빈값은 그대로 돌아오고, 카탈로그 밖 레거시 값은
+// Other + 메모(메모가 비었거나 같으면 원문, 다르면 기존 메모 유지)로 정규화된 쌍이 기대값이다
+const systemValues = new Set(["", "Other", ...((await api("/catalogs")).body?.systems ?? []).map((entry) => entry.value)]);
+const isCatalogSystem = systemValues.has(beforeSystem);
+const expectedSystem = isCatalogSystem ? beforeSystem : "Other";
+const expectedNote = isCatalogSystem || (beforeNote.trim() !== "" && beforeNote.trim() !== beforeSystem.trim()) ? beforeNote : beforeSystem.trim();
+const restored38 = (await api("/maps/38")).body;
+check(
+  "map 38 fields restored",
+  (restored38.sp_system ?? "") === expectedSystem && (restored38.sp_system_fallback ?? "") === expectedNote,
+  `${restored38.sp_system}/${restored38.sp_system_fallback}`,
+);
 // 미지정 맵(2)도 타일 그리드 + 편집 가능 안내
 await page.goto(`${BASE}/maps/2/settings`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1000);

@@ -1,4 +1,4 @@
-// AI 프롬프트 관리 스모크 — 설정 탭 진입 → 7종 목록 → 편집·저장(커스텀 배지) →
+// AI 프롬프트 관리 스모크 — 설정 탭 진입 → 13종 목록(API 응답 길이와 대조) → 편집·저장(커스텀 배지) →
 // 마크다운 프리뷰 → 새로고침 지속성 → 기본값 복원(배지 해제) → 정리.
 // 실행(frontend/ 에서): BASE_URL=http://localhost:3000 SHOT_DIR=<dir> node scripts/pw-smoke-ai-prompts.mjs
 // 전제: backend(8000)+frontend(3000) 네이티브 기동, 로컬 기본(전원 sysadmin). 언어 en 고정.
@@ -47,7 +47,10 @@ try {
   await page.getByRole("button", { name: "AI prompts" }).click();
   await page.waitForSelector('[data-id="ai-prompts-list"]', { timeout: 8000 });
   const rows = await page.locator('[data-id^="ai-prompt-row-"]').count();
-  check("list shows 7 prompts", rows === 7, `rows=${rows}`);
+  // 키 수는 하드코딩하지 않고 API(PROMPT_KEYS 순회) 응답 길이와 대조한다 — 키 추가 때마다 스모크가 깨지지 않게.
+  const listRes = await fetch(`${API_BASE}/api/admin/ai-prompts`, { headers: { "X-Dev-User": DEV_USER } });
+  const apiCount = listRes.ok ? (await listRes.json()).length : -1;
+  check("list shows every prompt key", apiCount > 0 && rows === apiCount, `rows=${rows} api=${apiCount}`);
 
   // 2) 항목 선택 → 편집기에 기본값 로드
   await page.locator('[data-id="ai-prompt-row-anti_repeat_nudge"]').click();
