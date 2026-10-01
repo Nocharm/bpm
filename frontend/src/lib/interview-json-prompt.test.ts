@@ -41,6 +41,32 @@ describe("external AI prompt for interview JSON 0.5", () => {
     expect(text).toContain("branch + parallel");
   });
 
+  it("forbids loop or bypass next to parallel branches of the same activity", () => {
+    const text = buildInterviewJsonPromptText();
+    const ruleLine = text.split("\n").find((line) => line.includes("loop나 bypass를 같이 내보내지 마세요")) ?? "";
+    expect(ruleLine).toContain("branch + parallel");
+    expect(ruleLine).toContain("decision");
+    expect(ruleLine).not.toContain("—");
+  });
+
+  it("uses only adapter action keys in the skeleton action", () => {
+    // 어댑터 backend/scripts/consultant_interview.py _ACTION_KEYS 사본 — 어댑터가 바뀌면 같이 옮긴다
+    const adapterActionKeys = [
+      "seq", "label", "name", "kind", "variant", "rule", "input", "output", "system", "screen", "dataForm", "quote",
+    ];
+    // 골격에 일부러 싣지 않는 키 — 인터뷰 현장 기록(화면·데이터 폼·발언 인용)이라 문서를 읽는 외부 AI가 지어내지 않게 한다
+    const omittedFromSkeleton = ["screen", "dataForm", "quote"];
+    const text = buildInterviewJsonPromptText();
+    const skeleton: unknown = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    const rows = typeof skeleton === "object" && skeleton !== null && "rows" in skeleton ? skeleton.rows : [];
+    const firstRow: unknown = Array.isArray(rows) ? rows[0] : undefined;
+    const actions = typeof firstRow === "object" && firstRow !== null && "actions" in firstRow ? firstRow.actions : [];
+    const firstAction: unknown = Array.isArray(actions) ? actions[0] : undefined;
+    const actionKeys = typeof firstAction === "object" && firstAction !== null ? Object.keys(firstAction) : [];
+
+    expect(actionKeys.sort()).toEqual(adapterActionKeys.filter((key) => !omittedFromSkeleton.includes(key)).sort());
+  });
+
   it("works without a target", () => {
     expect(buildInterviewJsonPromptText()).toContain("nodeCode");
   });

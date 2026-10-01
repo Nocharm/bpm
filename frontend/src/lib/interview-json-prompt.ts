@@ -84,6 +84,8 @@ export function buildInterviewJsonPromptText(target?: InterviewPromptTarget): st
     "- 활동의 input은 그 활동이 받는 것, output은 그 활동이 만들어 내는 것입니다. 같은 활동의 input과 output에 같은 항목을 적지 마세요. L6 전체의 입력물·산출물은 fields.input_data/output_data에 적고, 활동에는 첫 활동의 input과 마지막 활동의 output으로만 넣습니다.",
     "- relations.edges의 src/dst는 actions의 seq 정수. kind는 seq, branch, loop, bypass. 분기는 gateway exclusive 또는 parallel과 condition.",
     "- 한 활동에서 나가는 연결은 하나입니다. 둘 이상으로 갈라지면 하나만 가는 경우 그 활동을 kind decision으로 두고 branch + exclusive + condition, 모두 동시에 진행하면 branch + parallel로 적으세요. 되돌아가는 loop와 다음 단계가 같은 활동에서 나가면 그 활동은 decision입니다.",
+    // 병행 갈래가 loop/bypass와 섞이면 어댑터가 ◇ 뒤 택일로 접는다(consultant_interview 팬아웃 경고) — 쓰기 전에 막는다
+    "- branch + parallel 갈래가 나가는 활동에서 loop나 bypass를 같이 내보내지 마세요. 되돌아가기나 건너뛰기가 필요하면 먼저 decision 활동에서 갈라 두고, 병행 갈래는 그 뒤 활동에서 나가게 하세요.",
     "- 모든 활동이 이어지도록 edges를 채우세요. 비우면 순번 순서로 자동 연결됩니다.",
     "",
     "[최상위 relations, L6 사이의 흐름]",

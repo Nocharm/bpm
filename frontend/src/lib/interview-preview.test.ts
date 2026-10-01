@@ -6,6 +6,7 @@ import {
   layoutPreviewGraph,
   PREVIEW_EXCEPTION_COLOR,
   PREVIEW_LOOP_BRANCH_NAME,
+  readPreviewNotices,
 } from "./interview-preview";
 
 const action = (seq: number, label: string, extra: Record<string, unknown> = {}) => ({
@@ -119,6 +120,51 @@ describe("buildPreviewGraph", () => {
       },
     });
     expect(parallel?.nodes.some((n) => n.id === "a01f")).toBe(false);
+  });
+
+  it("warns like the adapter when parallel branches fold into a fan-out branch node next to a bypass", () => {
+    // Arrange — 병행 2 + 건너뛰기 1이 같은 활동에서 나간다
+    const row = {
+      actions: [action(1, "A"), action(2, "B"), action(3, "C"), action(4, "D")],
+      relations: {
+        edges: [
+          { src: 1, dst: 2, kind: "branch", gateway: "parallel" },
+          { src: 1, dst: 3, kind: "branch", gateway: "parallel" },
+          { src: 1, dst: 4, kind: "bypass" },
+        ],
+      },
+    };
+
+    // Act
+    const graph = buildPreviewGraph(row);
+    const notices = readPreviewNotices(row);
+
+    // Assert — backend consultant_interview._build_flow_edges 경고와 같은 문구
+    expect(pairsOf(graph!)).toEqual(expect.arrayContaining(["a01>a01f", "a01f>a02", "a01f>a03", "a01f>a04"]));
+    expect(notices).toEqual([
+      "a01 parallel edges to 'B', 'C' dropped - mixed with other outgoing edges, now exclusive branches of a01f " +
+        "(병행 갈래 2건이 다른 연결과 섞여 택일 분기로 바뀜 - 동시 진행이면 되돌아가기·건너뛰기를 다른 활동에서 나가게 고칠 것)",
+    ]);
+  });
+
+  it("has no flow notice for an all-parallel fan-out or a plain fan-out", () => {
+    const parallel = {
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: {
+        edges: [
+          { src: 1, dst: 2, kind: "branch", gateway: "parallel" },
+          { src: 1, dst: 3, kind: "branch", gateway: "parallel" },
+        ],
+      },
+    };
+    const plain = {
+      actions: [action(1, "A"), action(2, "B"), action(3, "C")],
+      relations: { edges: [{ src: 1, dst: 2, kind: "seq" }, { src: 1, dst: 3, kind: "seq" }] },
+    };
+
+    expect(readPreviewNotices(parallel)).toEqual([]);
+    expect(readPreviewNotices(plain)).toEqual([]);
+    expect(readPreviewNotices(null)).toEqual([]);
   });
 
   it("turns a self edge into a synthesized loop branch right after its anchor", () => {

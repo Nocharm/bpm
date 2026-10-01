@@ -56,7 +56,7 @@ function worstQuestionnaire() {
 function worstRow(name) {
   const labels = ["요청서 수령 및 등록", "첨부 규격서 대조", "이전 회차 승인 이력 조회", "완결성 판정", "보완 요청 발송", "긴급 여부 판정", "견적 산출 의뢰", "계약 조건 검토 의뢰", "검토 결과 취합", "결과 통보서 작성", "고객 회신 접수", "접수 종결 처리"];
   return {
-    l6: name, ownerRole: "담당자", department: "고객지원", fields: { start_condition: "요청서 도착", done_criteria: "접수 종결", frequency: "일 20건", total_time: "2.30" },
+    l6: name, ownerRole: "담당자", department: "고객지원", fields: { start_condition: "요청서 도착", done_criteria: "접수 종결", frequency: "일 20건", total_time: "2.30", total_time_min: 150 },
     actions: labels.map((label, i) => ({ seq: i + 1, label, kind: label.endsWith("판정") ? "decision" : (i === 4 ? "handoff" : "action"), input: i === 0 ? ["요청서", "첨부 규격서"] : [`${labels[i - 1]} 결과`], output: [`${label} 결과`], system: i % 3 === 0 ? "ERP" : "" })),
     relations: { edges: [
       ...labels.slice(1).map((_, i) => ({ src: i + 1, dst: i + 2, kind: "seq" })).filter((e) => e.src !== 4 && e.src !== 6),
