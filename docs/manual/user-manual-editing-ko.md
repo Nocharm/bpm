@@ -210,7 +210,7 @@
 ### CSV 가져오기
 
 - 상단 바 **가져오기(Import CSV)**로 엽니다. **템플릿 다운로드**로 빈 양식을 받아 채운 뒤 올리세요.
-- CSV는 **21개 열**을 씁니다: `name`(필수), `description`, `assignee`, `role`(역할), `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `input_flags`(입력물 항목별 필수/선택 플래그), `output`, `start_condition`, `end_condition`, `url`, `url_label`, `next`(선후 연결 대상). 예전 파일의 `data_form` 열처럼 목록에 없는 열이 있으면 "Unknown column" 오류로 거부되니 그 열을 지우고 올리세요(자료 형식은 항목별 값이라 CSV에 없음). 열이 적은 이전 파일은 그대로 읽힙니다(열은 이름으로 매칭, 대소문자 무관). 데이터 행은 **최대 500행**입니다. `input`/`output`은 셀 안 줄바꿈으로 여러 항목을 적습니다.
+- CSV는 **22개 열**을 씁니다: `name`(필수), `description`, `assignee`, `role`(역할), `department`, `system`, `duration`, `touch_time`, `cost_krw`, `cost_usd`, `headcount`, `annual_count`, `fte`, `input`, `input_flags`(입력물 항목별 필수/선택 플래그), `output`, `start_condition`, `end_condition`, `url`, `url_label`, `parallel`(`Y`면 `next` 대상이 2개 이상인 행을 분기 대신 병렬 출구로, 빈 칸은 현재 설정 유지), `next`(선후 연결 대상). 예전 파일의 `data_form` 열처럼 목록에 없는 열이 있으면 "Unknown column" 오류로 거부되니 그 열을 지우고 올리세요(자료 형식은 항목별 값이라 CSV에 없음). 열이 적은 이전 파일은 그대로 읽힙니다(열은 이름으로 매칭, 대소문자 무관). 데이터 행은 **최대 500행**입니다. `input`/`output`은 셀 안 줄바꿈으로 여러 항목을 적습니다.
 - 가져오기는 **제목(name)으로 병합**합니다. 같은 제목의 기존 노드는 색·댓글·그룹을 그대로 두고 값만 갱신하며, **빈 칸은 기존 값을 유지**합니다. CSV에 없는 새 제목은 노드로 추가됩니다.
 - **담당자**는 이름으로 적으면 조직 디렉터리와 매칭됩니다. **역할(`role`)**은 역할 목록의 별칭이면 정식 표기로 바뀌고, 목록에 없으면 적은 그대로 들어갑니다. **시스템(`system`)**은 시스템 목록과 대조해 별칭은 정식 표기로, 목록에 없는 값은 **Other + 원문 메모**로 저장합니다(기존 메모가 다르면 기존 메모를 지키고 경고). **비용은 원/달러 중 한쪽만**, **소요시간은 시.분** 규칙을 그대로 따릅니다(3장). 하위프로세스 노드가 상속하는 필드(수행 지표 5종과 입력물/산출물/조건/자료 형식)는 CSV로 넣어도 무시됩니다. 항목별 자료 형식은 앱 전용입니다. CSV에는 해당 열이 없고, 항목 줄이 그대로면 임포트 병합이 기존 값을 보존합니다.
 - 미리보기 탭에서 **추가 / 매칭 / 삭제** 요약과 경고를 확인한 뒤 적용합니다.
