@@ -2,8 +2,8 @@
 
 from collections.abc import Mapping
 
-from app.schemas import AiChatTurn, GraphOut, NodeOut
-from app.subprocess import find_output_rule_violations
+from app.schemas import AiChatTurn, EdgeIn, GraphOut, NodeOut
+from app.subprocess import PRIMARY_END_HANDLE, find_output_rule_violations, get_output_key
 
 _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 반드시 JSON 한 개만 반환하세요(설명 텍스트 금지).
@@ -16,10 +16,13 @@ _INSTRUCTIONS = """당신은 BPM 프로세스맵 편집 도우미입니다.
 [graph - 전체 생성]
 {"kind":"graph","message":<설명>,
  "groups":[{"key":<임시키>,"label":<그룹명>,"color":"","parent_key":null}],
- "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end","description":"",
-           "attributes":{"assignee_role":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":"","parallel":false},
+ "nodes":[{"key":<임시키>,"title":<제목>,"node_type":"start|process|decision|end|subprocess","description":"",
+           "attributes":{"assignee_role":"","department":"","system":"","duration":"","touch_time":"","cost_krw":"","cost_usd":"","headcount":"","annual_count":"","fte":"","input":"","output":"","start_condition":"","end_condition":"","url":"","url_label":"","color":"","parallel":null},
            "group_key":<groups의 key 또는 null>}],
  "edges":[{"source":<key>,"target":<key>,"label":""}]}
+- node_type "subprocess"는 [현재 그래프]의 기존 하위프로세스 노드를 다시 넣을 때만 씁니다(규칙 4).
+- attributes.parallel은 병렬 출구를 켜거나 끌 때만 true/false로 적고, 그 외에는 null로 두세요(false는 기존 병렬 출구를 끕니다).
+- [현재 그래프]가 비어있지 않으면 groups는 무시되고 기존 그룹이 그대로 유지됩니다.
 예) "구매 발주 프로세스 그려줘" → start "발주 요청" → process "견적 검토" → end.
 - 연결 규칙: start·process·subprocess 노드에서 나가는 연결은 하나입니다. 둘 중 하나로 갈라지면 decision 노드를 두고 거기서 나누세요.
   모두 동시에 진행하는 갈래만 예외로, 갈래가 **출발하는** 노드의 attributes.parallel=true로 두고 그 노드에서 연결을 2개 이상 그립니다.
@@ -68,9 +71,12 @@ node_ids는 [현재 그래프]의 기존 id만 사용. suggestion은 실행 가�
    역할은 [역할 목록]의 표기를 우선 사용하고(목록 밖 역할명도 허용), 시스템(system)은 [시스템 목록]의 정식 표기로 적으세요 - 목록에 없는 시스템은 원문 그대로 적으면 시스템이 "Other"로 분류하고 원문을 메모로 남깁니다.
 3. [현재 그래프]에 없는 노드를 참조하지 말고, 부득이하면 message에 그 사실을 적으세요.
 4. node_type="subprocess" 노드는 다른 맵의 읽기전용 참조 - 내부를 편집(ops 대상)하지 말고 루트만 다루세요.
+   graph(전체 재생성)에 기존 subprocess 노드를 다시 넣을 때는 제목을 한 글자도 바꾸지 말고 node_type을 "subprocess"로 적으세요(제목으로 기존 노드와 매칭돼 링크가 유지됩니다).
+   새 subprocess 노드를 만들거나 linked_map_id를 지어내지 마세요.
 5. answer는 [제품 매뉴얼]에 근거해 답하고 가능하면 섹션(예: "3. 승인 워크플로우")을 인용하세요. 매뉴얼에 없는 내용은 모른다고 답하세요(지어내지 말 것).
 6. 모든 message는 마크다운으로 서식화하세요 - 소제목(##)·불릿·**굵게**·표를 적극 사용해 읽기 쉽게(특히 answer·분석 요약·긴 설명). 한두 문장짜리 짧은 답은 평문도 무방합니다.
-7. [현재 그래프]에 링크=가 표시된 노드를 graph(전체 재생성)에 다시 포함할 때는 그 url/url_label을 attributes에 그대로 에코해 보존하세요. 링크를 새로 지어내지는 마세요."""
+7. [현재 그래프]에 링크=가 표시된 노드를 graph(전체 재생성)에 다시 포함할 때는 그 url/url_label을 attributes에 그대로 에코해 보존하세요. 링크를 새로 지어내지는 마세요.
+8. 끝(end) 노드가 여럿이면 [현재 그래프]에서 대표끝으로 표시된 노드가 이 맵의 기본 출구입니다. graph(전체 재생성)에 기존 끝 노드를 다시 넣을 때는 제목을 그대로 두세요."""
 
 
 _META_VALUE_CAP = 80  # 노드 메타 값 길이 상한(자) — IO/조건이 길어도 프롬프트가 팽창하지 않게
@@ -82,10 +88,14 @@ def _clip(text: str, cap: int = _META_VALUE_CAP) -> str:
     return joined if len(joined) <= cap else joined[: cap - 1] + "…"
 
 
+def _format_end_key(key: str) -> str:
+    """SP 출구 키 표시 — 대표 끝 센티널은 사람이 읽는 이름으로."""
+    return "대표 끝" if key == PRIMARY_END_HANDLE else key
+
+
 def _serialize_node(node: NodeOut) -> str:
     meta: list[str] = []
-    if node.assignee:
-        meta.append(f"담당={node.assignee}")
+    # 담당자 실명(assignee)은 읽기에서도 싣지 않는다 — AI 표면은 역할만 (사용자 결정 2026-09-12, 2026-10-02 읽기 확장)
     if node.assignee_role:
         meta.append(f"역할={node.assignee_role}")
     if node.department:
@@ -122,8 +132,14 @@ def _serialize_node(node: NodeOut) -> str:
         meta.append(f"링크={node.url}" + (f' "{node.url_label}"' if node.url_label else ""))
     if node.group_ids:
         meta.append(f"그룹={','.join(node.group_ids)}")
-    if "__primary__" in (node.parallel_outputs or []):
+    if node.node_type == "subprocess" and node.parallel_outputs:
+        # SP는 끝마다 출구가 따로라 어느 끝이 병렬인지 이름으로 보여 준다(끝별 병렬은 에디터 전용, 읽기 노출만)
+        meta.append("병렬출구=" + ",".join(_format_end_key(key) for key in node.parallel_outputs))
+    elif PRIMARY_END_HANDLE in (node.parallel_outputs or []):
         meta.append("병렬출구")
+    if node.node_type == "end" and node.is_primary_end:
+        # 끝이 여럿인 맵에서 대표 끝을 구분해 재생성 시 끝 제목을 섞지 않게 (읽기 노출 전용, 스키마 쓰기 없음)
+        meta.append("대표끝")
     suffix = f" {{{', '.join(meta)}}}" if meta else ""
     # 서브프로세스 참조는 읽기전용 컨텍스트로만 노출 (계약 규칙 ④)
     if node.node_type == "subprocess" and node.linked_map_id is not None:
@@ -139,9 +155,17 @@ def _serialize_graph(graph: GraphOut) -> str:
         for group in graph.groups
     )
     nodes = "\n".join(_serialize_node(node) for node in graph.nodes)
+    type_by_id = {node.id: node.node_type for node in graph.nodes}
+
+    def _end_suffix(edge: EdgeIn) -> str:
+        # SP 보조 끝에서 나가는 엣지는 끝 이름을 붙인다 — 노드 메타의 병렬출구=끝 이름과 짝을 맞추는 단서
+        key = get_output_key(type_by_id.get(edge.source_node_id, ""), edge.source_handle)
+        return "" if key == PRIMARY_END_HANDLE else f" (끝: {key})"
+
     edges = "\n".join(
         f"- {edge.source_node_id} -> {edge.target_node_id}"
         + (f' "{edge.label}"' if edge.label else "")
+        + _end_suffix(edge)
         for edge in graph.edges
     )
     return (
@@ -174,6 +198,26 @@ def _fmt_ids(ids: list[str], cap: int = 8) -> str:
     shown = ", ".join(ids[:cap])
     rest = len(ids) - cap
     return f"{shown} 외 {rest}개" if rest > 0 else shown
+
+
+def _describe_subprocess_exit_breaks(node: NodeOut, edges: list[EdgeIn]) -> str:
+    """SP 위반 사유에 걸린 끝 이름을 붙인다 — 끝 구분 없는 일반 사유는 모델이 어느 끝을 고칠지 모른다.
+
+    판정은 `find_output_rule_violations`(app/subprocess.py)와 같은 (노드, 출구 키) 그룹·병렬 규칙을 따른다.
+    """
+    groups: dict[str, list[EdgeIn]] = {}
+    for edge in edges:
+        if edge.source_node_id == node.id:
+            groups.setdefault(get_output_key(node.node_type, edge.source_handle), []).append(edge)
+    parts: list[str] = []
+    for key, group in groups.items():
+        flagged = key in (node.parallel_outputs or [])
+        is_parallel = flagged or (len(group) >= 2 and all(e.gateway == "parallel" for e in group))
+        if is_parallel and len(group) == 1:
+            parts.append(f'병렬 끝 "{_format_end_key(key)}"에 연결 1개')
+        elif not is_parallel and len(group) >= 2:
+            parts.append(f'끝 "{_format_end_key(key)}"에 연결 {len(group)}개')
+    return ", ".join(parts)
 
 
 def _structure_hints(graph: GraphOut) -> list[str]:
@@ -253,9 +297,11 @@ def _structure_hints(graph: GraphOut) -> list[str]:
         for nid in overflow[:8]:
             node = by_id[nid]
             count = outdeg[nid]
-            is_parallel = "__primary__" in (node.parallel_outputs or [])
+            is_parallel = PRIMARY_END_HANDLE in (node.parallel_outputs or [])
             if node.node_type == "subprocess":
-                reason = "같은 끝(출구)에 연결 2개 이상 또는 병렬 끝에 연결 1개"
+                reason = _describe_subprocess_exit_breaks(node, graph.edges) or (
+                    "같은 끝(출구)에 연결 2개 이상 또는 병렬 끝에 연결 1개"
+                )
             elif is_parallel and count == 1:
                 reason = "병렬 출구인데 연결 1개"
             else:
